@@ -3,9 +3,17 @@
   "version": "0.0.0",
   "private": true,
   "license": "MIT",
+  "files": [
+    "base.json",
+    "strict.json",
+    "nextjs.json"
+  ],
   "exports": {
     "./base": "./base.json",
+    "./base.json": "./base.json",
     "./strict": "./strict.json",
-    "./nextjs": "./nextjs.json"
+    "./strict.json": "./strict.json",
+    "./nextjs": "./nextjs.json",
+    "./nextjs.json": "./nextjs.json"
   }
 }
