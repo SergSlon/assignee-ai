@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { createMcpClient, getMcpTools } from './mcp-client.js';
 
+const TEST_TIMEOUT_MS = 20000; // 20s timeout since 'uvx' might need to download the package on the first run
+
 // Skip in CI unless MCP servers are explicitly available
 describe.skipIf(!!process.env['CI'])('MCP integration', () => {
   let exitSpy: ReturnType<typeof vi.spyOn>;
@@ -40,5 +42,5 @@ describe.skipIf(!!process.env['CI'])('MCP integration', () => {
       }
       throw err;
     }
-  }, 20000); // 20s timeout since 'uvx' might need to download the package on the first run
+  }, TEST_TIMEOUT_MS);
 });

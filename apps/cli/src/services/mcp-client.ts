@@ -1,5 +1,6 @@
 import { MultiServerMCPClient, type ClientConfig } from '@langchain/mcp-adapters';
 import { MCP_SERVER_CONFIGS } from '../config/mcp-servers.js';
+import { ProcessExitCode } from '../constants/errors.js';
 import type { StructuredTool } from '@langchain/core/tools';
 
 let client: MultiServerMCPClient | null = null;
@@ -30,13 +31,6 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
 
   client = new MultiServerMCPClient(clientConfig);
 
-  const INSTALL_COMMANDS: Record<string, string> = {
-    'ccapi-mcp-server':          'uvx awslabs.ccapi-mcp-server@latest',
-    'cfn-mcp-server':            'uvx awslabs.cfn-mcp-server@latest',
-    'aws-knowledge-mcp-server':  'uvx awslabs.aws-knowledge-mcp-server@latest',
-    'aws-pricing-mcp-server':    'uvx awslabs.aws-pricing-mcp-server@latest',
-  };
-
   try {
     // PERFORMANCE NOTE (NFR-05):
     // MCP stdio process cold-start time is EXCLUDED from the <3s goal.
@@ -51,11 +45,22 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
     const errMsg = err instanceof Error ? err.message : String(err);
     
     // Find matching server name from config keys
-    const failedServer = Object.keys(MCP_SERVER_CONFIGS).find((key) => errMsg.includes(key)) || 'unknown-server';
-    const installCmd = INSTALL_COMMANDS[failedServer] ?? 'See docs';
+    const failedServer = Object.keys(MCP_SERVER_CONFIGS).find((key) => errMsg.includes(key));
     
-    console.error(`\n✖ MCP server '${failedServer}' failed to start.\n  Is it installed? Run: ${installCmd}\n`);
-    process.exit(1);
+    if (failedServer) {
+        const config = MCP_SERVER_CONFIGS[failedServer];
+        // Ensure config is defined before accessing properties
+        if (config) {
+            const installCmd = `${config.command} ${config.args.join(' ')}`;
+            console.error(`\n✖ MCP server '${failedServer}' failed to start.\n  Is it installed? Run: ${installCmd}\n`);
+        } else {
+            console.error(`\n✖ MCP server '${failedServer}' failed to start.\n  Please check your installation.\n`);
+        }
+    } else {
+        console.error(`\n✖ An unknown MCP server failed to start.\n  Error details: ${errMsg}\n`);
+    }
+
+    process.exit(ProcessExitCode.MCP_STARTUP_FAILED);
   }
 
   return client;

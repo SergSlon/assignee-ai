@@ -2,6 +2,7 @@
 import { Command } from 'commander'
 import { planCommand } from './commands/plan.js'
 import { applyCommand } from './commands/apply.js'
+import { ProcessExitCode } from './constants/errors.js'
 
 import { closeMcpClient } from './services/mcp-client.js'
 
@@ -18,12 +19,12 @@ program.addCommand(applyCommand)
 // Graceful shutdown handlers for MCP servers
 process.on('SIGINT', async () => {
   await closeMcpClient()
-  process.exit(0)
+  process.exit(ProcessExitCode.SUCCESS)
 })
 
 process.on('SIGTERM', async () => {
   await closeMcpClient()
-  process.exit(0)
+  process.exit(ProcessExitCode.SUCCESS)
 })
 
 program.parseAsync(process.argv)
