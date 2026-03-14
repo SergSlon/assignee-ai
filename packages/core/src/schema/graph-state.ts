@@ -36,7 +36,7 @@ export const GraphStateSchema = z.object({
   errorMessage: z.string().optional(),
 
   // LangGraph message history
-  messages: z.array(z.any()).default([]),
+  messages: z.array(z.unknown()).default([]),
 })
 
 export type GraphState = z.infer<typeof GraphStateSchema>
