@@ -30,7 +30,34 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
 
   client = new MultiServerMCPClient(clientConfig);
 
-  await client.initializeConnections();
+  const INSTALL_COMMANDS: Record<string, string> = {
+    'ccapi-mcp-server':          'uvx awslabs.ccapi-mcp-server@latest',
+    'cfn-mcp-server':            'uvx awslabs.cfn-mcp-server@latest',
+    'aws-knowledge-mcp-server':  'uvx awslabs.aws-knowledge-mcp-server@latest',
+    'aws-pricing-mcp-server':    'uvx awslabs.aws-pricing-mcp-server@latest',
+  };
+
+  try {
+    // PERFORMANCE NOTE (NFR-05):
+    // MCP stdio process cold-start time is EXCLUDED from the <3s goal.
+    // The <3s budget begins AFTER all 4 MCP servers have responded to tools/list.
+    // Rationale: MCP servers are infrastructure (like a database connection), not part
+    // of the user-facing plan generation pipeline.
+    // Typical cold-start: 200–800ms. Optimize with process pooling post-POC if needed.
+    await client.initializeConnections();
+  } catch (err) {
+    // Attempt to extract the failing server name from the error message
+    // @langchain/mcp-adapters error thrown format may vary, but typically hints at the server dict key
+    const errMsg = err instanceof Error ? err.message : String(err);
+    
+    // Find matching server name from config keys
+    const failedServer = Object.keys(MCP_SERVER_CONFIGS).find((key) => errMsg.includes(key)) || 'unknown-server';
+    const installCmd = INSTALL_COMMANDS[failedServer] ?? 'See docs';
+    
+    console.error(`\n✖ MCP server '${failedServer}' failed to start.\n  Is it installed? Run: ${installCmd}\n`);
+    process.exit(1);
+  }
+
   return client;
 }
 
@@ -43,4 +70,14 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
  */
 export async function getMcpTools(mcpClient: MultiServerMCPClient): Promise<StructuredTool[]> {
   return mcpClient.getTools();
+}
+
+/**
+ * Closes the MCP client connections gracefully.
+ */
+export async function closeMcpClient(): Promise<void> {
+  if (client) {
+    await client.close();
+    client = null;
+  }
 }

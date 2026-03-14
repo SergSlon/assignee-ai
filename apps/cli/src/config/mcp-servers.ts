@@ -21,18 +21,22 @@ export interface McpServerConfig {
  * Must match the MCP server configs used in .gemini/mcp_config.json.
  */
 export const MCP_SERVER_CONFIGS: Record<string, McpServerConfig> = {
+  // Install: uvx awslabs.ccapi-mcp-server@latest
   [McpServerName.CCAPI]: {
     command: McpCommand.UVX,
     args: ['awslabs.ccapi-mcp-server@latest'],
   },
+  // Install: uvx awslabs.cfn-mcp-server@latest
   [McpServerName.CFN]: {
     command: McpCommand.UVX,
     args: ['awslabs.cfn-mcp-server@latest'],
   },
+  // Install: uvx awslabs.aws-knowledge-mcp-server@latest
   [McpServerName.KNOWLEDGE]: {
     command: McpCommand.UVX,
     args: ['awslabs.aws-knowledge-mcp-server@latest'],
   },
+  // Install: uvx awslabs.aws-pricing-mcp-server@latest
   [McpServerName.PRICING]: {
     command: McpCommand.UVX,
     args: ['awslabs.aws-pricing-mcp-server@latest'],
