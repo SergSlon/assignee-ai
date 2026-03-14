@@ -1,8 +1,9 @@
 import { Command } from 'commander'
+import { CommandName, CommandDescription, CommandArgs } from '../constants/commands.js'
 
-export const planCommand = new Command('plan')
-  .description('Generate an infrastructure plan from natural language')
-  .argument('[intent]', 'Natural language description of desired infrastructure')
+export const planCommand = new Command(CommandName.PLAN)
+  .description(CommandDescription.PLAN)
+  .argument(CommandArgs.INTENT.NAME, CommandArgs.INTENT.DESC)
   .option('-o, --output <format>', 'Output format (json|text)', 'text')
   .action(async (intent: string | undefined) => {
     if (!intent) {

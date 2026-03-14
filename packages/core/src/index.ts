@@ -1,5 +1,5 @@
 // Schemas
-export { GraphStateSchema, type GraphState } from './schema/graph-state.js'
+export { GraphStateSchema, type GraphState, ExecutionMode, type ExecutionModeType, ExecutionStatus, type ExecutionStatusType, PreflightMode, type PreflightModeType } from './schema/graph-state.js'
 export { AuditEventSchema, type AuditEvent } from './schema/audit.js'
 
 // Types

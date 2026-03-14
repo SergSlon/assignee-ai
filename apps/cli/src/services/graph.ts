@@ -1,23 +1,24 @@
 import { StateGraph, START, END, Annotation, MemorySaver } from '@langchain/langgraph'
-import { type GraphState } from '@assignee/core'
+import { type GraphState, ExecutionMode, type ExecutionModeType, ExecutionStatus, type ExecutionStatusType, PreflightMode, type PreflightModeType } from '@assignee/core'
 import type { StructuredTool } from '@langchain/core/tools'
+import { GraphNode } from '../constants/graph.js'
 
 // Convert Zod schema fields to LangGraph reducers to create the true State Annotation
 // Defaults match the GraphStateSchema defaults in @assignee/core
 export const graphAnnotation = Annotation.Root({
   userIntent:           Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
   runId:                Annotation<string>({ reducer: (_, b) => b, default: () => crypto.randomUUID() }),
-  executionMode:        Annotation<'plan' | 'apply'>({ reducer: (_, b) => b, default: () => 'apply' }),
+  executionMode:        Annotation<ExecutionModeType>({ reducer: (_, b) => b, default: () => ExecutionMode.APPLY }),
   resourceType:         Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
   resourceSchema:       Annotation<Record<string, unknown> | undefined>({ reducer: (_, b) => b }),
   desiredState:         Annotation<Record<string, unknown> | undefined>({ reducer: (_, b) => b }),
   estimatedMonthlyCost: Annotation<string | undefined>({ reducer: (_, b) => b }),
   preflightPassed:      Annotation<boolean>({ reducer: (_, b) => b, default: () => false }),
   preflightErrors:      Annotation<string[]>({ reducer: (_, b) => b, default: () => [] }),
-  preflightMode:        Annotation<'local' | 'saas'>({ reducer: (_, b) => b, default: () => 'local' }),
+  preflightMode:        Annotation<PreflightModeType>({ reducer: (_, b) => b, default: () => PreflightMode.LOCAL }),
   requestToken:         Annotation<string | undefined>({ reducer: (_, b) => b }),
   resourceArn:          Annotation<string | undefined>({ reducer: (_, b) => b }),
-  executionStatus:      Annotation<GraphState['executionStatus']>({ reducer: (_, b) => b, default: () => 'PENDING' }),
+  executionStatus:      Annotation<ExecutionStatusType>({ reducer: (_, b) => b, default: () => ExecutionStatus.PENDING }),
   errorMessage:         Annotation<string | undefined>({ reducer: (_, b) => b }),
   startedAt:            Annotation<number | undefined>({ reducer: (_, b) => b }),
   messages:             Annotation<unknown[]>({ reducer: (a, b) => [...a, ...b], default: () => [] }),
@@ -35,48 +36,48 @@ export const planGeneratorStub: NodeFn  = async () => ({})
 export const preflightGuardStub: NodeFn = async () => ({ preflightPassed: true })
 export const humanApprovalStub: NodeFn  = async () => ({})
 export const resourceProvisionerStub: NodeFn = async () => ({})
-export const statusPollerStub: NodeFn   = async () => ({ executionStatus: 'SUCCESS' as const })
+export const statusPollerStub: NodeFn   = async () => ({ executionStatus: ExecutionStatus.SUCCESS })
 export const resultFormatterStub: NodeFn = async () => ({})
 
 // Conditional routing for preflight_guard
-function routePreflightGuard(state: AgentState): 'human_approval' | 'result_formatter' {
-  return state.preflightPassed ? 'human_approval' : 'result_formatter'
+function routePreflightGuard(state: AgentState): typeof GraphNode.HUMAN_APPROVAL | typeof GraphNode.RESULT_FORMATTER {
+  return state.preflightPassed ? GraphNode.HUMAN_APPROVAL : GraphNode.RESULT_FORMATTER
 }
 
 // Conditional routing for status_poller (self-loop — see Story 2.3)
-function routeStatusPoller(state: AgentState): 'status_poller' | 'result_formatter' {
-  return state.executionStatus === 'IN_PROGRESS' ? 'status_poller' : 'result_formatter'
+function routeStatusPoller(state: AgentState): typeof GraphNode.STATUS_POLLER | typeof GraphNode.RESULT_FORMATTER {
+  return state.executionStatus === ExecutionStatus.IN_PROGRESS ? GraphNode.STATUS_POLLER : GraphNode.RESULT_FORMATTER
 }
 
 export function createGraph(tools: StructuredTool[] = []) {
   const workflow = new StateGraph(graphAnnotation)
-    .addNode('intent_parser',       intentParserStub)
-    .addNode('schema_fetcher',      schemaFetcherStub)
-    .addNode('plan_generator',      planGeneratorStub)
-    .addNode('preflight_guard',     preflightGuardStub)
-    .addNode('human_approval',      humanApprovalStub)
-    .addNode('resource_provisioner',resourceProvisionerStub)
-    .addNode('status_poller',       statusPollerStub)
-    .addNode('result_formatter',    resultFormatterStub)
-    .addEdge(START, 'intent_parser')
-    .addEdge('intent_parser', 'schema_fetcher')
-    .addEdge('schema_fetcher', 'plan_generator')
-    .addEdge('plan_generator', 'preflight_guard')
-    .addConditionalEdges('preflight_guard', routePreflightGuard, {
-      human_approval:    'human_approval',
-      result_formatter:  'result_formatter',
+    .addNode(GraphNode.INTENT_PARSER,       intentParserStub)
+    .addNode(GraphNode.SCHEMA_FETCHER,      schemaFetcherStub)
+    .addNode(GraphNode.PLAN_GENERATOR,      planGeneratorStub)
+    .addNode(GraphNode.PREFLIGHT_GUARD,     preflightGuardStub)
+    .addNode(GraphNode.HUMAN_APPROVAL,      humanApprovalStub)
+    .addNode(GraphNode.RESOURCE_PROVISIONER,resourceProvisionerStub)
+    .addNode(GraphNode.STATUS_POLLER,       statusPollerStub)
+    .addNode(GraphNode.RESULT_FORMATTER,    resultFormatterStub)
+    .addEdge(START, GraphNode.INTENT_PARSER)
+    .addEdge(GraphNode.INTENT_PARSER, GraphNode.SCHEMA_FETCHER)
+    .addEdge(GraphNode.SCHEMA_FETCHER, GraphNode.PLAN_GENERATOR)
+    .addEdge(GraphNode.PLAN_GENERATOR, GraphNode.PREFLIGHT_GUARD)
+    .addConditionalEdges(GraphNode.PREFLIGHT_GUARD, routePreflightGuard, {
+      [GraphNode.HUMAN_APPROVAL]:    GraphNode.HUMAN_APPROVAL,
+      [GraphNode.RESULT_FORMATTER]:  GraphNode.RESULT_FORMATTER,
     })
-    .addEdge('human_approval', 'resource_provisioner')
-    .addEdge('resource_provisioner', 'status_poller')
+    .addEdge(GraphNode.HUMAN_APPROVAL, GraphNode.RESOURCE_PROVISIONER)
+    .addEdge(GraphNode.RESOURCE_PROVISIONER, GraphNode.STATUS_POLLER)
     // Self-loop: poller node routes to itself when IN_PROGRESS (Story 2.3)
-    .addConditionalEdges('status_poller', routeStatusPoller, {
-      status_poller:    'status_poller',
-      result_formatter: 'result_formatter',
+    .addConditionalEdges(GraphNode.STATUS_POLLER, routeStatusPoller, {
+      [GraphNode.STATUS_POLLER]:    GraphNode.STATUS_POLLER,
+      [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,
     })
-    .addEdge('result_formatter', END)
+    .addEdge(GraphNode.RESULT_FORMATTER, END)
 
   return workflow.compile({
-    interruptBefore: ['resource_provisioner'],  // HITL pause (Story 2.1)
+    interruptBefore: [GraphNode.RESOURCE_PROVISIONER],  // HITL pause (Story 2.1)
     checkpointer: new MemorySaver(),
   })
 }

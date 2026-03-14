@@ -5,6 +5,7 @@
  * @see architecture.md — MCP Servers Catalog section
  * @see Story 1.1 — imports this constant to wire MCP tools into LangGraph
  */
+import { McpServerName, McpCommand } from '../constants/mcp.js'
 
 export interface McpServerConfig {
   /** The command to execute (e.g. 'uvx', 'npx') */
@@ -20,20 +21,20 @@ export interface McpServerConfig {
  * Must match the MCP server configs used in .gemini/mcp_config.json.
  */
 export const MCP_SERVER_CONFIGS: Record<string, McpServerConfig> = {
-  'ccapi-mcp-server': {
-    command: 'uvx',
+  [McpServerName.CCAPI]: {
+    command: McpCommand.UVX,
     args: ['awslabs.ccapi-mcp-server@latest'],
   },
-  'cfn-mcp-server': {
-    command: 'uvx',
+  [McpServerName.CFN]: {
+    command: McpCommand.UVX,
     args: ['awslabs.cfn-mcp-server@latest'],
   },
-  'aws-knowledge-mcp-server': {
-    command: 'uvx',
+  [McpServerName.KNOWLEDGE]: {
+    command: McpCommand.UVX,
     args: ['awslabs.aws-knowledge-mcp-server@latest'],
   },
-  'aws-pricing-mcp-server': {
-    command: 'uvx',
+  [McpServerName.PRICING]: {
+    command: McpCommand.UVX,
     args: ['awslabs.aws-pricing-mcp-server@latest'],
   },
 } as const

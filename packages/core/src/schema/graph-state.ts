@@ -1,10 +1,33 @@
 import { z } from 'zod'
 
+export const ExecutionMode = {
+  PLAN: 'plan',
+  APPLY: 'apply',
+} as const
+export type ExecutionModeType = typeof ExecutionMode[keyof typeof ExecutionMode]
+
+export const ExecutionStatus = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUCCESS: 'SUCCESS',
+  FAILED: 'FAILED',
+  POLICY_BLOCKED: 'POLICY_BLOCKED',
+  UNSUPPORTED_RESOURCE: 'UNSUPPORTED_RESOURCE',
+  CANCELLED: 'CANCELLED',
+} as const
+export type ExecutionStatusType = typeof ExecutionStatus[keyof typeof ExecutionStatus]
+
+export const PreflightMode = {
+  LOCAL: 'local',
+  SAAS: 'saas',
+} as const
+export type PreflightModeType = typeof PreflightMode[keyof typeof PreflightMode]
+
 export const GraphStateSchema = z.object({
   // Core intent
   userIntent: z.string().default(''),
   runId: z.string().uuid().default(() => crypto.randomUUID()),
-  executionMode: z.enum(['plan', 'apply']).default('apply'),
+  executionMode: z.nativeEnum(ExecutionMode).default(ExecutionMode.APPLY),
 
   // Schema resolution
   resourceType: z.string().default(''),
@@ -17,22 +40,12 @@ export const GraphStateSchema = z.object({
   // Preflight
   preflightPassed: z.boolean().default(false),
   preflightErrors: z.array(z.string()).default([]),
-  preflightMode: z.enum(['local', 'saas']).default('local'), // 'saas' in MVP (Story 4.3b)
+  preflightMode: z.nativeEnum(PreflightMode).default(PreflightMode.LOCAL), // 'saas' in MVP (Story 4.3b)
 
   // Execution
   requestToken: z.string().optional(), // CloudControl async token
   resourceArn: z.string().optional(),
-  executionStatus: z
-    .enum([
-      'PENDING',
-      'IN_PROGRESS',
-      'SUCCESS',
-      'FAILED',
-      'POLICY_BLOCKED',
-      'UNSUPPORTED_RESOURCE',
-      'CANCELLED',
-    ])
-    .default('PENDING'),
+  executionStatus: z.nativeEnum(ExecutionStatus).default(ExecutionStatus.PENDING),
   errorMessage: z.string().optional(),
 
   // LangGraph message history
