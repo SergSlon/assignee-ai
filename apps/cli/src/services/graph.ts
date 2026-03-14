@@ -27,7 +27,7 @@ export const graphAnnotation = Annotation.Root({
 export type AgentState = typeof graphAnnotation.State
 
 // Node signature — ALL nodes must match this LangGraph Runnable contract
-type NodeFn = (state: AgentState) => Promise<Partial<AgentState>>
+type NodeFn = (state: AgentState, tools?: StructuredTool[]) => Promise<Partial<AgentState>>
 
 // All node stubs — return empty partial (LangGraph merges into state)
 export const intentParserStub: NodeFn   = async () => ({})
@@ -51,14 +51,14 @@ function routeStatusPoller(state: AgentState): typeof GraphNode.STATUS_POLLER | 
 
 export function createGraph(tools: StructuredTool[] = []) {
   const workflow = new StateGraph(graphAnnotation)
-    .addNode(GraphNode.INTENT_PARSER,       intentParserStub)
-    .addNode(GraphNode.SCHEMA_FETCHER,      schemaFetcherStub)
-    .addNode(GraphNode.PLAN_GENERATOR,      planGeneratorStub)
-    .addNode(GraphNode.PREFLIGHT_GUARD,     preflightGuardStub)
-    .addNode(GraphNode.HUMAN_APPROVAL,      humanApprovalStub)
-    .addNode(GraphNode.RESOURCE_PROVISIONER,resourceProvisionerStub)
-    .addNode(GraphNode.STATUS_POLLER,       statusPollerStub)
-    .addNode(GraphNode.RESULT_FORMATTER,    resultFormatterStub)
+    .addNode(GraphNode.INTENT_PARSER,       (state) => intentParserStub(state, tools))
+    .addNode(GraphNode.SCHEMA_FETCHER,      (state) => schemaFetcherStub(state, tools))
+    .addNode(GraphNode.PLAN_GENERATOR,      (state) => planGeneratorStub(state, tools))
+    .addNode(GraphNode.PREFLIGHT_GUARD,     (state) => preflightGuardStub(state, tools))
+    .addNode(GraphNode.HUMAN_APPROVAL,      (state) => humanApprovalStub(state, tools))
+    .addNode(GraphNode.RESOURCE_PROVISIONER,(state) => resourceProvisionerStub(state, tools))
+    .addNode(GraphNode.STATUS_POLLER,       (state) => statusPollerStub(state, tools))
+    .addNode(GraphNode.RESULT_FORMATTER,    (state) => resultFormatterStub(state, tools))
     .addEdge(START, GraphNode.INTENT_PARSER)
     .addEdge(GraphNode.INTENT_PARSER, GraphNode.SCHEMA_FETCHER)
     .addEdge(GraphNode.SCHEMA_FETCHER, GraphNode.PLAN_GENERATOR)
