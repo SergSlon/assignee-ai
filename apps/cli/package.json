@@ -1,0 +1,27 @@
+{
+  "name": "@assignee/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "assignee": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "start": "node ./dist/index.js",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@assignee/core": "workspace:*",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@assignee/tsconfig": "workspace:*",
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.1.0"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@assignee/tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "exports": {
+    "./base": "./base.json",
+    "./strict": "./strict.json",
+    "./nextjs": "./nextjs.json"
+  }
+}
