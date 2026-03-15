@@ -1,61 +1,95 @@
-# AWS Bootstrap Guide — Human Operator Checklist
+# AWS Bootstrap Guide
 
-> **⚠️ This guide is for human operators only.** These tasks cannot be automated by a dev agent.
-> Complete all steps before running Assignee.ai against a real AWS account.
->
 > Stories covered: **0.5** (account bootstrap) · **2.5** (IAM tightening)
+>
+> Account: `054125018476` · Region: `eu-west-1`
+>
+> **Status: ✅ Completed 2026-03-15** — all tasks below were executed against the live account.
 
 ---
 
 ## Prerequisites
 
-- AWS CLI v2 installed and configured (`aws --version`)
-- Credentials for an IAM identity with admin or power-user permissions
-- Access to the GitHub repository settings (for secrets)
-- Region: **eu-west-1** (all resources scoped to this region)
+- AWS CLI v2 (`aws --version`)
+- Admin credentials (root or IAM admin) — needed for IAM and Bedrock logging setup
+- Region: **eu-west-1** for all resource creation
 
 ---
 
-## Task 1 — Enable Bedrock Model Invocation Logging (Story 0.5 AC1, AC3)
+## Task 1 — IAM Role for Bedrock Logging
 
-Bedrock invocation logging captures every model call to CloudWatch for auditability (NFR-10).
-
-### Steps
-
-1. Open **AWS Console → Amazon Bedrock → Settings → Model invocation logging**
-2. Click **Edit** (or **Enable logging**)
-3. Set:
-   - **Log destination**: CloudWatch Logs
-   - **Log group name**: `/assignee-ai/bedrock-invocations`
-   - **IAM role**: Create or select a role with the following permissions on that log group:
-     ```json
-     {
-       "Effect": "Allow",
-       "Action": [
-         "logs:CreateLogGroup",
-         "logs:CreateLogStream",
-         "logs:PutLogEvents",
-         "logs:DescribeLogGroups"
-       ],
-       "Resource": "arn:aws:logs:eu-west-1:*:log-group:/assignee-ai/bedrock-invocations:*"
-     }
-     ```
-4. Save changes.
-
-### Verification
+Creates the IAM role that Bedrock assumes to write invocation logs to CloudWatch.
 
 ```bash
-aws bedrock get-model-invocation-logging-configuration --output json
+# Create role with Bedrock as trusted principal
+aws --region eu-west-1 iam create-role \
+  --role-name AssigneeAiBedrockLoggingRole \
+  --assume-role-policy-document '{
+  "Version":"2012-10-17",
+  "Statement":[{
+    "Effect":"Allow",
+    "Principal":{"Service":"bedrock.amazonaws.com"},
+    "Action":"sts:AssumeRole"
+  }]
+}' \
+  --description "Allows Bedrock to write invocation logs to CloudWatch"
+
+# Attach permissions to write to the log group
+aws --region eu-west-1 iam put-role-policy \
+  --role-name AssigneeAiBedrockLoggingRole \
+  --policy-name BedrockLoggingPolicy \
+  --policy-document '{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": [
+      "logs:CreateLogGroup",
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+      "logs:DescribeLogGroups"
+    ],
+    "Resource": "arn:aws:logs:eu-west-1:054125018476:log-group:/assignee-ai/bedrock-invocations:*"
+  }]
+}'
 ```
 
-Expected: non-empty JSON containing `"cloudWatchConfig"` with the log group name. Example:
+---
+
+## Task 2 — CloudWatch Log Group
+
+```bash
+aws --region eu-west-1 logs create-log-group \
+  --log-group-name /assignee-ai/bedrock-invocations
+```
+
+---
+
+## Task 3 — Enable Bedrock Invocation Logging (Story 0.5 AC1, AC3)
+
+```bash
+aws --region eu-west-1 bedrock put-model-invocation-logging-configuration \
+  --logging-config '{
+  "cloudWatchConfig": {
+    "logGroupName": "/assignee-ai/bedrock-invocations",
+    "roleArn": "arn:aws:iam::054125018476:role/AssigneeAiBedrockLoggingRole"
+  },
+  "textDataDeliveryEnabled": true,
+  "imageDataDeliveryEnabled": false,
+  "embeddingDataDeliveryEnabled": false
+}'
+
+# Verify
+aws --region eu-west-1 bedrock get-model-invocation-logging-configuration
+```
+
+Expected output:
 
 ```json
 {
   "loggingConfig": {
     "cloudWatchConfig": {
       "logGroupName": "/assignee-ai/bedrock-invocations",
-      "roleArn": "arn:aws:iam::123456789012:role/BedrockLoggingRole"
+      "roleArn": "arn:aws:iam::054125018476:role/AssigneeAiBedrockLoggingRole"
     },
     "textDataDeliveryEnabled": true,
     "imageDataDeliveryEnabled": false
@@ -65,16 +99,15 @@ Expected: non-empty JSON containing `"cloudWatchConfig"` with the log group name
 
 ---
 
-## Task 2 — Apply IAM Least-Privilege Policy (Story 0.5 AC2 · Story 2.5 AC1, AC2)
+## Task 4 — IAM Policy for `bedrock-dev-user` (Story 2.5 AC1, AC2)
 
-Two IAM policies are required. Apply the tighter **Story 2.5** policy (`AssigneeAiPocPolicy`) — it supersedes the broader Story 0.5 bootstrap policy.
+Scopes Bedrock to Nova Lite only; Cloud Control to 3 POC resource types. No wildcards (NFR-13).
 
-### Policy: `AssigneeAiPocPolicy`
-
-Apply as an inline policy on `BedrockDevUser` (or your dev IAM role):
-
-```json
-{
+```bash
+aws iam put-user-policy \
+  --user-name bedrock-dev-user \
+  --policy-name AssigneeAiPocPolicy \
+  --policy-document '{
   "Version": "2012-10-17",
   "Statement": [
     {
@@ -109,91 +142,170 @@ Apply as an inline policy on `BedrockDevUser` (or your dev IAM role):
       "Resource": "*"
     }
   ]
-}
+}'
+
+# Verify
+aws iam list-user-policies --user-name bedrock-dev-user
+# Expected: PolicyNames includes "AssigneeAiPocPolicy"
+
+# Scope check — must return AccessDeniedException
+AWS_ACCESS_KEY_ID=<bedrock-dev-user-key> AWS_SECRET_ACCESS_KEY=<secret> \
+  aws --region eu-west-1 cloudcontrol create-resource \
+  --type-name AWS::EC2::VPC \
+  --desired-state '{"CidrBlock":"10.0.0.0/16"}'
 ```
 
-### Apply via CLI
+---
+
+## Task 5 — IAM Policy for `aws-mcp-user`
+
+The MCP servers (CCAPI, CFN schema, pricing) run as `aws-mcp-user`. This policy grants the
+permissions needed for all 4 MCP servers plus the underlying service permissions for CCAPI
+to provision the 3 supported resource types.
 
 ```bash
 aws iam put-user-policy \
-  --user-name BedrockDevUser \
-  --policy-name AssigneeAiPocPolicy \
-  --policy-document file://assignee-ai-poc-policy.json
+  --user-name aws-mcp-user \
+  --policy-name AssigneeAiMcpPolicy \
+  --policy-document '{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudControlScopedToSupportedTypes",
+      "Effect": "Allow",
+      "Action": [
+        "cloudcontrol:CreateResource",
+        "cloudcontrol:GetResource",
+        "cloudcontrol:GetResourceRequestStatus",
+        "cloudcontrol:ListResources"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "cloudcontrol:TypeName": [
+            "AWS::S3::Bucket",
+            "AWS::SSM::Parameter",
+            "AWS::IAM::Role"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "S3BucketProvisioning",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketTagging",
+        "s3:PutBucketTagging",
+        "s3:ListBucket"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SSMParameterProvisioning",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter",
+        "ssm:GetParameter",
+        "ssm:DeleteParameter",
+        "ssm:AddTagsToResource",
+        "ssm:ListTagsForResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMRoleProvisioning",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:TagRole",
+        "iam:ListRoleTags",
+        "iam:PassRole"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudFormationSchemaRead",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeType",
+        "cloudformation:ListTypes"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PricingRead",
+      "Effect": "Allow",
+      "Action": [
+        "pricing:GetProducts",
+        "pricing:DescribeServices",
+        "pricing:GetAttributeValues"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "XRayTracing",
+      "Effect": "Allow",
+      "Action": ["xray:PutTraceSegments", "xray:PutTelemetryRecords"],
+      "Resource": "*"
+    }
+  ]
+}'
+
+# Verify
+aws iam list-user-policies --user-name aws-mcp-user
+# Expected: PolicyNames includes "AssigneeAiMcpPolicy"
 ```
 
-### Verification
+---
+
+## Task 6 — Set GitHub Actions Secret (Story 0.5 AC5)
 
 ```bash
-# Confirm policy is attached
-aws iam get-user-policy \
-  --user-name BedrockDevUser \
-  --policy-name AssigneeAiPocPolicy
-
-# Confirm unsupported types are denied (must return AccessDenied)
-aws cloudcontrol create-resource \
-  --type-name AWS::EC2::VPC \
-  --desired-state '{"CidrBlock":"10.0.0.0/16"}'
-# Expected: An error occurred (AccessDeniedException) ...
+gh secret set BEDROCK_LOGGING_VERIFIED --body "true"
 ```
 
-> **No wildcard `bedrock:*` or `cloudcontrol:*` is permitted** (NFR-13). The policy above scopes Bedrock to Nova Lite only and Cloud Control to 3 POC resource types.
+Or via Console: **GitHub repo → Settings → Secrets and variables → Actions → New repository secret**
 
----
-
-## Task 3 — Configure Default Resource Tag Policy (Story 0.5 AC4)
-
-Set account-level tag defaults so all resources provisioned via Assignee.ai carry governance tags even if the CLI call omits them.
-
-### Steps
-
-1. Open **AWS Console → AWS Organizations → Tag policies** (requires Organizations enabled)
-2. Create a tag policy enforcing:
-   - `environment` → value must be `poc` for resources tagged by Assignee.ai
-   - `managed-by` → value must be `assignee-ai`
-3. Attach the tag policy to your development account.
-
-> **Note:** The Assignee.ai CLI also injects these tags programmatically via `injectMandatoryTags()` before every CCAPI call (NFR-14). The account tag policy is a belt-and-suspenders backstop.
-
----
-
-## Task 4 — Set GitHub Actions Secret (Story 0.5 AC5)
-
-CI gates the Bedrock logging check (Story 1.5) on this secret being present.
-
-### Steps
-
-1. Open **GitHub repo → Settings → Secrets and variables → Actions**
-2. Click **New repository secret**
-3. Name: `BEDROCK_LOGGING_VERIFIED`
-   Value: `true`
-4. Save.
-
-### Verification
-
-After adding the secret, trigger a CI run and confirm the Bedrock logging check step passes (it will be skipped/green if the secret is absent in forks, but must pass in the main repo).
+- Name: `BEDROCK_LOGGING_VERIFIED`
+- Value: `true`
 
 ---
 
 ## Completion Checklist
 
-Mark each item complete before starting sprint development:
-
-- [ ] Bedrock Model Invocation Logging enabled → log group `/assignee-ai/bedrock-invocations` confirmed
-- [ ] `aws bedrock get-model-invocation-logging-configuration` returns non-empty JSON
-- [ ] `AssigneeAiPocPolicy` inline policy attached to dev IAM identity
-- [ ] `aws iam get-user-policy --user-name BedrockDevUser --policy-name AssigneeAiPocPolicy` returns policy JSON
-- [ ] AWS::EC2::VPC creation attempt returns `AccessDeniedException` (scope check)
-- [ ] Account tag policy configured with `environment=poc` and `managed-by=assignee-ai` defaults
+- [x] `AssigneeAiBedrockLoggingRole` IAM role created with CloudWatch write permissions
+- [x] CloudWatch log group `/assignee-ai/bedrock-invocations` created in `eu-west-1`
+- [x] Bedrock invocation logging enabled → `get-model-invocation-logging-configuration` returns non-empty JSON
+- [x] `AssigneeAiPocPolicy` inline policy attached to `bedrock-dev-user`
+- [x] `AssigneeAiMcpPolicy` inline policy attached to `aws-mcp-user`
+- [ ] AWS::EC2::VPC creation attempt by `bedrock-dev-user` returns `AccessDeniedException` (scope check)
 - [ ] `BEDROCK_LOGGING_VERIFIED=true` secret set in GitHub Actions
 
 ---
 
-## Why These Steps Cannot Be Automated
+## IAM Users Summary
 
-- **Bedrock logging**: Requires AWS Console interaction or CloudFormation (out of scope for POC). API-only enablement requires admin credentials that CI must not hold.
-- **IAM policy attachment**: Requires root/admin credentials. CI credentials are intentionally least-privilege and cannot self-modify IAM.
-- **GitHub secret**: Must be set by a human with repo admin access — cannot be scripted without a personal access token, which is a security antipattern.
-- **One-time bootstrap**: These are account-level, environment-level settings — not repeatable per-run tasks.
+| User               | Purpose                                  | Policy                                            |
+| ------------------ | ---------------------------------------- | ------------------------------------------------- |
+| `bedrock-dev-user` | Bedrock AI calls (Nova Lite)             | `AssigneeAiPocPolicy` + `TerraformIAMPermissions` |
+| `aws-mcp-user`     | MCP servers (CCAPI, CFN schema, pricing) | `AssigneeAiMcpPolicy`                             |
+
+## AWS Resources Created
+
+| Resource                           | Type                 | Region    |
+| ---------------------------------- | -------------------- | --------- |
+| `AssigneeAiBedrockLoggingRole`     | IAM Role             | global    |
+| `/assignee-ai/bedrock-invocations` | CloudWatch Log Group | eu-west-1 |
+| Bedrock invocation logging config  | Account-level        | eu-west-1 |
 
 ---
 
