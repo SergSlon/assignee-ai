@@ -48,6 +48,9 @@ export const GraphStateSchema = z.object({
   executionStatus: z.nativeEnum(ExecutionStatus).default(ExecutionStatus.PENDING),
   errorMessage: z.string().optional(),
 
+  // Timing — set at graph start for NFR-05 performance tracking (Story 1.5)
+  startedAt: z.number().optional(),
+
   // LangGraph message history
   messages: z.array(z.unknown()).default([]),
 })
