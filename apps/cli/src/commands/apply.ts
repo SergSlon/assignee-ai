@@ -1,15 +1,117 @@
-import { Command } from 'commander'
-import { CommandName, CommandDescription, CommandArgs, CommandOptions } from '../constants/commands.js'
+/**
+ * `assignee apply` command — two-phase HITL invoke pattern.
+ *
+ * Phase 1: graph runs intent_parser → schema_fetcher → plan_generator →
+ *          preflight_guard → human_approval, then pauses (interruptBefore: resource_provisioner).
+ * Phase 2: if user confirmed, graph resumes from resource_provisioner →
+ *          status_poller → result_formatter.
+ *
+ * No --yes flag: HITL is mandatory per spec.
+ *
+ * @see Story 2-6
+ */
+
+import { Command } from "commander";
+import { ExecutionMode, ExecutionStatus } from "@assignee/core";
+import {
+  CommandName,
+  CommandDescription,
+  CommandArgs,
+} from "../constants/commands.js";
+import { ProcessExitCode } from "../constants/errors.js";
+import {
+  createMcpClient,
+  getMcpTools,
+  closeMcpClient,
+} from "../services/mcp-client.js";
+import { createGraph } from "../services/graph.js";
+import { renderIntro, renderError, renderOutro } from "../utils/ui.js";
+import { log } from "../utils/logger.js";
 
 export const applyCommand = new Command(CommandName.APPLY)
   .description(CommandDescription.APPLY)
   .argument(CommandArgs.INTENT.NAME, CommandArgs.INTENT.DESC)
-  .option(CommandOptions.DRY_RUN.FLAGS, CommandOptions.DRY_RUN.DESC)
   .action(async (intent: string | undefined) => {
     if (!intent) {
-      console.log('Usage: assignee apply "Create an S3 bucket named my-bucket"')
-      return
+      console.error(
+        'Usage: assignee apply "Create an S3 bucket named my-bucket"',
+      );
+      process.exit(ProcessExitCode.GENERIC_ERROR);
     }
-    console.log(`[apply stub] Intent: "${intent}"`)
-    console.log('[apply stub] Apply execution will be implemented in Story 2.6')
-  })
+
+    renderIntro();
+
+    const runId = crypto.randomUUID();
+
+    log({
+      ts: new Date().toISOString(),
+      runId,
+      level: "info",
+      action: "apply_started",
+      intent,
+    });
+
+    process.stderr.write(`[run:${runId}] Starting apply...\n`);
+
+    try {
+      const mcpClient = await createMcpClient();
+      const tools = await getMcpTools(mcpClient);
+      const graph = createGraph(tools);
+
+      const config = { configurable: { thread_id: runId } };
+
+      // ── Phase 1: run until HITL interrupt (after human_approval) ─────────
+      const phase1State = await graph.invoke(
+        {
+          userIntent: intent,
+          runId,
+          executionMode: ExecutionMode.APPLY,
+          startedAt: Date.now(),
+        },
+        config,
+      );
+
+      // User declined or Ctrl+C in human_approval
+      if (phase1State.executionStatus === ExecutionStatus.CANCELLED) {
+        renderOutro(true); // intentional — not an error
+        await closeMcpClient();
+        process.exit(ProcessExitCode.SUCCESS);
+      }
+
+      // Early failure (intent parse, schema fetch, plan gen, preflight)
+      if (
+        phase1State.executionStatus === ExecutionStatus.FAILED ||
+        phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
+      ) {
+        renderError(
+          phase1State.errorMessage ?? "Apply failed during planning phase",
+          phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
+            ? "Supported types: AWS::S3::Bucket, AWS::SSM::Parameter, AWS::IAM::Role"
+            : undefined,
+        );
+        renderOutro(false);
+        await closeMcpClient();
+        process.exit(ProcessExitCode.GENERIC_ERROR);
+      }
+
+      // ── Phase 2: resume from resource_provisioner ─────────────────────────
+      const finalState = await graph.invoke(null, config);
+
+      await closeMcpClient();
+
+      const success = finalState.executionStatus === ExecutionStatus.SUCCESS;
+      renderOutro(success);
+      process.exit(
+        success ? ProcessExitCode.SUCCESS : ProcessExitCode.GENERIC_ERROR,
+      );
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      renderError(
+        `Apply failed: ${errMsg}`,
+        "Check that AWS credentials are configured and all MCP servers are running.",
+      );
+      renderOutro(false);
+      await closeMcpClient();
+      process.exit(ProcessExitCode.GENERIC_ERROR);
+    }
+  });
