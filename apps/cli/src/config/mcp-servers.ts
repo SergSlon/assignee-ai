@@ -21,42 +21,49 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
-/** AWS credential env block forwarded to every MCP server subprocess. */
-function mcpEnv(): Record<string, string> {
+/** AWS credential env block forwarded to AWS MCP server subprocesses. */
+function mcpEnv(
+  region = process.env["AWS_REGION"] ?? "eu-west-1",
+): Record<string, string> {
   return {
     AWS_ACCESS_KEY_ID: process.env["MCP_AWS_ACCESS_KEY_ID"] ?? "",
     AWS_SECRET_ACCESS_KEY: process.env["MCP_AWS_SECRET_ACCESS_KEY"] ?? "",
-    AWS_DEFAULT_REGION: process.env["AWS_REGION"] ?? "eu-west-1",
+    AWS_DEFAULT_REGION: region,
+    FASTMCP_LOG_LEVEL: "ERROR",
   };
 }
 
 /**
  * Single source of truth for MCP server process configurations.
- * Must match the MCP server configs used in .gemini/mcp_config.json.
+ * Must match the MCP server configs used in .gemini/antigravity/mcp_config.json.
+ *
+ * Region notes:
+ *   - CCAPI: eu-west-1 — provisioning is regional, must match target region
+ *   - CFN:   eu-west-1 — schema fetches are global but region arg required
+ *   - Pricing: us-east-1 — AWS Pricing API only available in us-east-1
+ *   - Knowledge: no AWS creds — public remote API via fastmcp
  */
 export const MCP_SERVER_CONFIGS: Record<string, McpServerConfig> = {
-  // Install: uvx awslabs.ccapi-mcp-server@latest
   [McpServerName.CCAPI]: {
     command: McpCommand.UVX,
     args: ["awslabs.ccapi-mcp-server@latest"],
-    env: mcpEnv(),
+    env: mcpEnv("eu-west-1"),
   },
-  // Install: uvx awslabs.cfn-mcp-server@latest
   [McpServerName.CFN]: {
     command: McpCommand.UVX,
     args: ["awslabs.cfn-mcp-server@latest"],
-    env: mcpEnv(),
+    env: mcpEnv("eu-west-1"),
   },
-  // Install: uvx awslabs.aws-knowledge-mcp-server@latest
+  // Knowledge server: yanked uvx package — use remote API via fastmcp instead
+  // Matches .gemini/antigravity/mcp_config.json "aws-knowledge-mcp-server"
   [McpServerName.KNOWLEDGE]: {
     command: McpCommand.UVX,
-    args: ["awslabs.aws-knowledge-mcp-server@latest"],
-    env: mcpEnv(),
+    args: ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"],
   },
-  // Install: uvx awslabs.aws-pricing-mcp-server@latest
+  // Pricing API is only available in us-east-1
   [McpServerName.PRICING]: {
     command: McpCommand.UVX,
     args: ["awslabs.aws-pricing-mcp-server@latest"],
-    env: mcpEnv(),
+    env: mcpEnv("us-east-1"),
   },
 } as const;
