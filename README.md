@@ -1,159 +1,181 @@
-# Turborepo starter
+# Assignee.ai
 
-This Turborepo starter is maintained by the Turborepo core team.
+> AI-Native Cloud Operator — convert natural language into AWS infrastructure, safely.
 
-## Using this example
-
-Run the following command:
-
-```sh
-npx create-turbo@latest
+```
+assignee plan "Create an S3 bucket named my-app-assets"
+assignee apply "Create an S3 bucket named my-app-assets"
 ```
 
-## What's inside?
+[![CI](https://github.com/SergSlon/assignee-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/SergSlon/assignee-ai/actions/workflows/ci.yml)
 
-This Turborepo includes the following packages/apps:
+---
 
-### Apps and Packages
+## How it works
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+1. **Plan** — you describe intent in plain English; Bedrock Nova Lite parses it, fetches the CloudFormation schema, and generates a validated `desiredState` JSON with a cost estimate
+2. **Approve** — you review the plan in the terminal and confirm (HITL)
+3. **Apply** — Cloud Control API provisions the resource; tags are injected, State Guard prevents stale-plan overwrites, status is polled until terminal state
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```
+intent_parser → schema_fetcher → plan_generator → preflight_guard
+    → human_approval ─[HITL interrupt]─ → resource_provisioner → status_poller → result_formatter
 ```
 
-Without global `turbo`, use your package manager:
+All AI calls stay local — no AWS credentials ever leave your machine.
 
-```sh
-cd my-turborepo
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+---
+
+## Quick start
+
+### Prerequisites
+
+- Node.js 22+
+- pnpm 10+
+- Python 3.10+ with `uvx` (`pip install uv`)
+- AWS credentials for `bedrock-dev-user` and `aws-mcp-user` (see [docs/aws-bootstrap.md](docs/aws-bootstrap.md))
+
+### Install
+
+```bash
+pnpm install
+pnpm build
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### Configure
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+```bash
+cp .env.example .env
+# Fill in AWS credentials — see .env.example for field descriptions
 ```
 
-Without global `turbo`:
+### Run
 
-```sh
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+```bash
+# Plan only (no AWS resources created)
+node apps/cli/dist/index.js plan "Create an S3 bucket named my-test-bucket"
+
+# Plan + apply with HITL confirmation
+node apps/cli/dist/index.js apply "Create an S3 bucket named my-test-bucket"
 ```
 
-### Develop
+### Supported resource types (POC)
 
-To develop all apps and packages, run the following command:
+| Type                  | Notes |
+| --------------------- | ----- |
+| `AWS::S3::Bucket`     |       |
+| `AWS::SSM::Parameter` |       |
+| `AWS::IAM::Role`      |       |
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+---
 
-```sh
-cd my-turborepo
-turbo dev
+## Architecture
+
+```
+apps/
+  cli/
+    src/
+      commands/     plan.ts · apply.ts
+      nodes/        intent-parser · schema-fetcher · plan-generator
+                    preflight-guard · human-approval · resource-provisioner
+                    status-poller · result-formatter
+      services/     graph.ts (LangGraph) · mcp-client.ts
+      config/       mcp-servers.ts
+      utils/        display.ts · logger.ts · tags.ts
+packages/
+  core/
+    src/
+      schema/       graph-state.ts (Zod — single source of truth)
+      types/        result.ts (Result<T,E> monad)
+      config/       resource-identifiers.ts
+      errors.ts
 ```
 
-Without global `turbo`, use your package manager:
+**Key dependencies:**
 
-```sh
-cd my-turborepo
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
+- [`@langchain/langgraph`](https://langchain-ai.github.io/langgraphjs/) — agentic workflow orchestration
+- [`@ai-sdk/amazon-bedrock`](https://sdk.vercel.ai/providers/ai-sdk-providers/amazon-bedrock) + [`ai`](https://sdk.vercel.ai/) — Bedrock Nova Lite via Vercel AI SDK
+- [`@langchain/mcp-adapters`](https://github.com/langchain-ai/langchainjs/tree/main/libs/langchain-mcp-adapters) — MCP server bridge
+- [`@clack/prompts`](https://github.com/bombshell-dev/clack) + `chalk` + `boxen` — terminal UX
+
+**MCP servers (spawned at runtime via `uvx`):**
+
+- `awslabs.ccapi-mcp-server` — Cloud Control API (provision)
+- `awslabs.cfn-mcp-server` — CloudFormation schemas (plan validation)
+- `awslabs.aws-pricing-mcp-server` — cost estimates
+- `awslabs.aws-knowledge-mcp-server` — AWS docs _(yanked — skipped)_
+
+**Credential separation:**
+
+- `AWS_*` env vars → `bedrock-dev-user` → Bedrock AI calls only
+- `MCP_AWS_*` env vars → `aws-mcp-user` → MCP server subprocesses (CCAPI, CFN, pricing)
+
+---
+
+## Development
+
+```bash
+pnpm test          # run all tests (Vitest)
+pnpm check-types   # TypeScript type check
+pnpm build         # compile all packages
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Pre-commit hook runs: prettier → check-types → test.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+---
 
-```sh
-turbo dev --filter=web
-```
+## Project status
 
-Without global `turbo`:
+### POC scope — Epics 0–2 ✅ Complete
 
-```sh
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
+| Epic                  | Stories                                                                                                                                                | Status  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| **0 — Foundation**    | Monorepo, `@assignee/core`, CLI scaffold, Vitest/CI, AWS bootstrap                                                                                     | ✅ Done |
+| **1 — Plan command**  | LangGraph graph, MCP integration, `intent_parser`, `schema_fetcher`, `plan_generator`, `preflight_guard`, `assignee plan` CLI, terminal UX             | ✅ Done |
+| **2 — Apply command** | `human_approval` (HITL), `resource_provisioner` (State Guard), `status_poller`, `result_formatter`, `assignee apply` CLI, IAM policy, resource tagging | ✅ Done |
 
-### Remote Caching
+**AWS bootstrap (eu-west-1, account 112233445566):**
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+- [x] Bedrock invocation logging → `/assignee-ai/bedrock-invocations` CloudWatch log group
+- [x] `AssigneeAiPocPolicy` applied to `bedrock-dev-user`
+- [x] `AssigneeAiMcpPolicy` applied to `aws-mcp-user`
+- [x] CI green on GitHub Actions
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+### Not yet done (POC smoke test)
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+- [ ] End-to-end smoke test: `assignee plan "..."` against real Bedrock → verify <3s (NFR-05)
+- [ ] End-to-end smoke test: `assignee apply "..."` → confirm HITL → verify resource created with mandatory tags
+- [ ] State Guard smoke test: run apply twice → second run must abort with "Stale Plan"
+- [ ] Unsupported resource smoke test: `assignee plan "Create EC2 instance"` → verify error + supported types hint
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+---
 
-```sh
-cd my-turborepo
-turbo login
-```
+### MVP scope — Epics 3–6 ❌ Not started
 
-Without global `turbo`, use your package manager:
+| Epic                        | Description                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **3 — Auth & Identity**     | `assignee login` via Browser OIDC; User ID / Org ID; Zero-Trust SaaS (no AWS keys server-side)                                  |
+| **4 — Policy & Governance** | SaaS policy engine; Admin Block rules; `preflight_guard` → SaaS round-trip (<500ms); Panic Limit / cost cap; Bedrock Guardrails |
+| **5 — Team & Spend**        | Admin invites developers; org monthly spend dashboard                                                                           |
+| **6 — Audit & Compliance**  | Immutable WORM audit log; AWS X-Ray distributed tracing; Cost Anomaly Detection                                                 |
 
-```sh
-cd my-turborepo
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
+---
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+## NFR compliance (POC)
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+| NFR    | Requirement                                 | Status                                |
+| ------ | ------------------------------------------- | ------------------------------------- |
+| NFR-05 | `assignee plan` yields result in <3s        | ⚠️ Untested against live Bedrock      |
+| NFR-10 | All Bedrock calls logged to CloudWatch      | ✅ Configured                         |
+| NFR-11 | Every apply generates UUID v4 runId         | ✅ Implemented                        |
+| NFR-12 | Structured JSON logs to stderr              | ✅ Implemented                        |
+| NFR-13 | IAM least-privilege (no wildcards)          | ✅ Applied                            |
+| NFR-14 | Mandatory tags on all provisioned resources | ✅ Implemented                        |
+| NFR-15 | LLM calls capped at `maxTokens: 1024`       | ✅ Implemented                        |
+| NFR-16 | Bedrock Guardrails                          | ⚠️ Optional for POC — deferred to MVP |
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+---
 
-```sh
-turbo link
-```
+## Ops reference
 
-Without global `turbo`:
-
-```sh
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the full AWS account setup runbook (IAM policies, Bedrock logging, CloudWatch log group).
