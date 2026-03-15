@@ -14,16 +14,17 @@
 
 import { ExecutionStatus, getPrimaryIdentifier } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
+import { ToolName } from "../constants/tools.js";
 import { injectMandatoryTags } from "../utils/tags.js";
-import { log } from "../utils/logger.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
 const REQUIRED_TOOLS = [
-  "get_aws_account_info",
-  "generate_infrastructure_code",
-  "explain",
-  "run_checkov",
-  "create_resource",
+  ToolName.GET_AWS_ACCOUNT_INFO,
+  ToolName.GENERATE_INFRASTRUCTURE_CODE,
+  ToolName.EXPLAIN,
+  ToolName.RUN_CHECKOV,
+  ToolName.CREATE_RESOURCE,
 ] as const;
 
 export async function resourceProvisionerNode(
@@ -55,7 +56,7 @@ export async function resourceProvisionerNode(
     state.desiredState,
   );
 
-  const getResource = get("get_resource");
+  const getResource = get(ToolName.GET_RESOURCE);
   if (getResource && identifier) {
     try {
       await getResource.invoke({
@@ -67,7 +68,7 @@ export async function resourceProvisionerNode(
         ts: new Date().toISOString(),
         runId: state.runId,
         level: "warn",
-        action: "state_guard_abort",
+        action: LOG_ACTIONS.STATE_GUARD_ABORT,
         identifier,
         resourceType: state.resourceType,
       });
@@ -81,7 +82,7 @@ export async function resourceProvisionerNode(
         ts: new Date().toISOString(),
         runId: state.runId,
         level: "info",
-        action: "state_guard_skipped",
+        action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
         reason: "not_found",
       });
     }
@@ -96,11 +97,11 @@ export async function resourceProvisionerNode(
   // ── CCAPI 4-step provisioning workflow ───────────────────────────────────
   try {
     // Step 1: validate credentials
-    const accountRaw = await get("get_aws_account_info")!.invoke({});
+    const accountRaw = await get(ToolName.GET_AWS_ACCOUNT_INFO)!.invoke({});
     const { credentials_token } = JSON.parse(accountRaw as string);
 
     // Step 2: generate infrastructure code
-    const codeRaw = await get("generate_infrastructure_code")!.invoke({
+    const codeRaw = await get(ToolName.GENERATE_INFRASTRUCTURE_CODE)!.invoke({
       resource_type: state.resourceType,
       properties: propertiesWithTags,
       credentials_token,
@@ -108,18 +109,20 @@ export async function resourceProvisionerNode(
     const { generated_code_token } = JSON.parse(codeRaw as string);
 
     // Step 3: explain (produces explained_token required by create_resource)
-    const explainRaw = await get("explain")!.invoke({
+    const explainRaw = await get(ToolName.EXPLAIN)!.invoke({
       generated_code_token,
       operation: "create",
     });
     const { explained_token } = JSON.parse(explainRaw as string);
 
     // Step 4: security scan
-    const checkovRaw = await get("run_checkov")!.invoke({ explained_token });
+    const checkovRaw = await get(ToolName.RUN_CHECKOV)!.invoke({
+      explained_token,
+    });
     const { security_scan_token } = JSON.parse(checkovRaw as string);
 
     // Step 5: create resource (async — poll via status_poller)
-    const createRaw = await get("create_resource")!.invoke({
+    const createRaw = await get(ToolName.CREATE_RESOURCE)!.invoke({
       resource_type: state.resourceType,
       credentials_token,
       explained_token,
@@ -131,7 +134,7 @@ export async function resourceProvisionerNode(
       ts: new Date().toISOString(),
       runId: state.runId,
       level: "info",
-      action: "resource_provision_started",
+      action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
       requestToken,
       resourceType: state.resourceType,
     });

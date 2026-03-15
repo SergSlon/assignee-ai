@@ -1,5 +1,7 @@
 import { ExecutionStatus } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
+import { ToolName } from "../constants/tools.js";
+import { unwrapMcpText } from "../utils/mcp.js";
 import type { AgentState } from "../services/graph.js";
 
 export async function schemaFetcherNode(
@@ -9,7 +11,7 @@ export async function schemaFetcherNode(
   if (state.executionStatus !== ExecutionStatus.PENDING) return {}; // skip if already failed
 
   const getResourceSchema = tools?.find(
-    (t) => t.name === "get_resource_schema_information",
+    (t) => t.name === ToolName.GET_RESOURCE_SCHEMA,
   );
   if (!getResourceSchema) {
     return {
@@ -22,15 +24,7 @@ export async function schemaFetcherNode(
     const raw = await getResourceSchema.invoke({
       resource_type: state.resourceType,
     });
-    // aws-iac-mcp-server returns { type: "text", text: "<json>" }; unwrap accordingly
-    const rawObj = raw as Record<string, unknown>;
-    const text =
-      typeof rawObj?.["text"] === "string"
-        ? rawObj["text"]
-        : typeof raw === "string"
-          ? raw
-          : JSON.stringify(raw);
-    const schema = JSON.parse(text) as Record<string, unknown>;
+    const schema = JSON.parse(unwrapMcpText(raw)) as Record<string, unknown>;
     return { resourceSchema: schema };
   } catch (err: unknown) {
     return {

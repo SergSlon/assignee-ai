@@ -11,7 +11,7 @@ import {
   renderError,
   renderPlanBox,
 } from "../utils/display.js";
-import { log } from "../utils/logger.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
 /** Maps known error substrings to actionable "How to Fix" hints. */
@@ -54,7 +54,7 @@ export async function resultFormatterNode(
     ts: new Date().toISOString(),
     runId: state.runId,
     level: "info",
-    action: "result_formatted",
+    action: LOG_ACTIONS.RESULT_FORMATTED,
     executionStatus: state.executionStatus,
   });
 
@@ -65,7 +65,7 @@ export async function resultFormatterNode(
         ts: new Date().toISOString(),
         runId: state.runId,
         level: "info",
-        action: "apply_succeeded",
+        action: LOG_ACTIONS.APPLY_SUCCEEDED,
         resourceArn: state.resourceArn,
       });
       break;
@@ -85,7 +85,7 @@ export async function resultFormatterNode(
         ts: new Date().toISOString(),
         runId: state.runId,
         level: "error",
-        action: "apply_failed",
+        action: LOG_ACTIONS.APPLY_FAILED,
         errorMessage: state.errorMessage,
       });
       break;

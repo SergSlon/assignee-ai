@@ -8,11 +8,20 @@
 
 import { ExecutionStatus } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
-import { log } from "../utils/logger.js";
+import { ToolName } from "../constants/tools.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { unwrapMcpText } from "../utils/mcp.js";
 import type { AgentState } from "../services/graph.js";
 
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const POLL_INTERVAL_MS = 2_000; // 2 seconds
+
+/** Provisioning operation status values returned by ccapi-mcp-server */
+const ProvisioningStatus = {
+  SUCCESS: "SUCCESS",
+  FAILED: "FAILED",
+  CANCEL_COMPLETE: "CANCEL_COMPLETE",
+} as const;
 
 export async function statusPollerNode(
   state: AgentState,
@@ -37,7 +46,7 @@ export async function statusPollerNode(
   }
 
   const getStatus = tools?.find(
-    (t) => t.name === "get_resource_request_status",
+    (t) => t.name === ToolName.GET_RESOURCE_REQUEST_STATUS,
   );
   if (!getStatus) {
     return {
@@ -54,16 +63,7 @@ export async function statusPollerNode(
       request_token: state.requestToken,
     });
 
-    // ccapi-mcp-server v1+: response is { type: "text", text: "<json>" }
-    // or a plain string; unwrap accordingly
-    const raw = result as Record<string, unknown>;
-    const text =
-      typeof raw?.["text"] === "string"
-        ? raw["text"]
-        : typeof result === "string"
-          ? result
-          : JSON.stringify(result);
-    const parsed = JSON.parse(text) as Record<string, unknown>;
+    const parsed = JSON.parse(unwrapMcpText(result)) as Record<string, unknown>;
 
     const status = parsed?.["status"] as string | undefined;
     const isComplete = parsed?.["is_complete"] as boolean | undefined;
@@ -77,13 +77,16 @@ export async function statusPollerNode(
       ts: new Date().toISOString(),
       runId: state.runId,
       level: "info",
-      action: "provisioning_status_checked",
+      action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
       durationMs,
       status,
       isComplete,
     });
 
-    if (status === "FAILED" || status === "CANCEL_COMPLETE") {
+    if (
+      status === ProvisioningStatus.FAILED ||
+      status === ProvisioningStatus.CANCEL_COMPLETE
+    ) {
       const errorMessage = parsed?.["error_message"] ?? parsed?.["message"];
       return {
         executionStatus: ExecutionStatus.FAILED,
@@ -94,7 +97,7 @@ export async function statusPollerNode(
       };
     }
 
-    if (status === "SUCCESS" || isComplete === true) {
+    if (status === ProvisioningStatus.SUCCESS || isComplete === true) {
       return {
         executionStatus: ExecutionStatus.SUCCESS,
         resourceArn: resourceIdentifier,

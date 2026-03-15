@@ -8,7 +8,7 @@
 
 import { ExecutionStatus } from "@assignee/core";
 import { renderPlanBox, renderHitlConfirm } from "../utils/display.js";
-import { log } from "../utils/logger.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
 export async function humanApprovalNode(
@@ -24,7 +24,7 @@ export async function humanApprovalNode(
       ts: new Date().toISOString(),
       runId: state.runId,
       level: "info",
-      action: "plan_rejected_by_user",
+      action: LOG_ACTIONS.PLAN_REJECTED,
     });
     return { executionStatus: ExecutionStatus.CANCELLED };
   }
@@ -33,7 +33,7 @@ export async function humanApprovalNode(
     ts: new Date().toISOString(),
     runId: state.runId,
     level: "info",
-    action: "plan_approved",
+    action: LOG_ACTIONS.PLAN_APPROVED,
   });
 
   return {};

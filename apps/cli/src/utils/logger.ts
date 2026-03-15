@@ -7,30 +7,34 @@
  */
 
 export const LOG_ACTIONS = {
-  PLAN_STARTED: 'plan_started',
-  SCHEMA_FETCHED: 'schema_fetched',
-  PLAN_GENERATED: 'plan_generated',
-  PLAN_APPROVED: 'plan_approved',
-  PLAN_REJECTED: 'plan_rejected_by_user',
-  APPLY_STARTED: 'apply_started',
-  RESOURCE_PROVISIONING_STARTED: 'resource_provisioning_started',
-  PROVISIONING_STATUS_CHECKED: 'provisioning_status_checked',
-  STATE_GUARD_SKIPPED: 'state_guard_skipped',
-  PRICING_UNAVAILABLE: 'pricing_unavailable',
-  APPLY_SUCCEEDED: 'apply_succeeded',
-  APPLY_FAILED: 'apply_failed',
-} as const
+  PLAN_STARTED: "plan_started",
+  SCHEMA_FETCHED: "schema_fetched",
+  GUARDRAIL_DISABLED: "guardrail_disabled",
+  PLAN_GENERATED: "plan_generated",
+  PREFLIGHT_COMPLETED: "preflight_completed",
+  PRICING_UNAVAILABLE: "pricing_unavailable",
+  PLAN_APPROVED: "plan_approved",
+  PLAN_REJECTED: "plan_rejected_by_user",
+  APPLY_STARTED: "apply_started",
+  STATE_GUARD_ABORT: "state_guard_abort",
+  STATE_GUARD_SKIPPED: "state_guard_skipped",
+  RESOURCE_PROVISION_STARTED: "resource_provision_started",
+  PROVISIONING_STATUS_CHECKED: "provisioning_status_checked",
+  RESULT_FORMATTED: "result_formatted",
+  APPLY_SUCCEEDED: "apply_succeeded",
+  APPLY_FAILED: "apply_failed",
+} as const;
 
-export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS]
+export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
 
 export interface LogEvent {
-  ts: string
-  runId: string
-  level: 'info' | 'warn' | 'error'
-  action: string
-  durationMs?: number
-  result?: string
-  [key: string]: unknown
+  ts: string;
+  runId: string;
+  level: "info" | "warn" | "error";
+  action: string;
+  durationMs?: number;
+  result?: string;
+  [key: string]: unknown;
 }
 
 /**
@@ -40,5 +44,5 @@ export interface LogEvent {
  * @param event - The log event to write
  */
 export function log(event: LogEvent): void {
-  process.stderr.write(JSON.stringify(event) + '\n')
+  process.stderr.write(JSON.stringify(event) + "\n");
 }

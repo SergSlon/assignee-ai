@@ -8,7 +8,10 @@
 
 import { ExecutionStatus } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
-import { log } from "../utils/logger.js";
+import { ToolName } from "../constants/tools.js";
+import { AWS_REGION } from "../config/constants.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { unwrapMcpText } from "../utils/mcp.js";
 import type { AgentState } from "../services/graph.js";
 
 const PRICING_TIMEOUT_MS = 3000;
@@ -91,7 +94,7 @@ export async function preflightGuardNode(
   if (pricingConfig === "Free") {
     costEstimate = "Free";
   } else if (pricingConfig && tools) {
-    const pricingTool = tools.find((t) => t.name === "get_pricing");
+    const pricingTool = tools.find((t) => t.name === ToolName.GET_PRICING);
     if (pricingTool) {
       try {
         const timeout = new Promise<null>((resolve) =>
@@ -99,24 +102,18 @@ export async function preflightGuardNode(
         );
         const query = pricingTool.invoke({
           service_code: pricingConfig.serviceCode,
-          region: process.env["AWS_REGION"] ?? "us-east-1",
+          region: AWS_REGION,
           filters: pricingConfig.filters,
           output_options: { pricing_terms: ["OnDemand"] },
         });
         const result = await Promise.race([query, timeout]);
         if (result !== null) {
-          const raw = result as Record<string, unknown>;
-          const text =
-            typeof raw["text"] === "string"
-              ? raw["text"]
-              : typeof result === "string"
-                ? result
-                : null;
-          if (text) {
-            const data = JSON.parse(text) as Record<string, unknown>;
-            costEstimate =
-              extractFirstTierPrice(data, pricingConfig.unit) ?? "N/A";
-          }
+          const data = JSON.parse(unwrapMcpText(result)) as Record<
+            string,
+            unknown
+          >;
+          costEstimate =
+            extractFirstTierPrice(data, pricingConfig.unit) ?? "N/A";
         }
         // null means timeout — leave costEstimate as 'N/A'
       } catch {
@@ -125,7 +122,7 @@ export async function preflightGuardNode(
           ts: new Date().toISOString(),
           runId: state.runId,
           level: "warn",
-          action: "pricing_unavailable",
+          action: LOG_ACTIONS.PRICING_UNAVAILABLE,
           resourceType: state.resourceType,
         });
       }
@@ -136,7 +133,7 @@ export async function preflightGuardNode(
     ts: new Date().toISOString(),
     runId: state.runId,
     level: "info",
-    action: "preflight_completed",
+    action: LOG_ACTIONS.PREFLIGHT_COMPLETED,
     costEstimate,
     resourceType: state.resourceType,
   });
