@@ -70,15 +70,6 @@ export const planCommand = new Command(CommandName.PLAN)
       );
 
       stopSpinner();
-
-      log({
-        ts: new Date().toISOString(),
-        runId,
-        level: "info",
-        action: "schema_fetched",
-        resourceType: finalState.resourceType,
-      });
-
       await closeMcpClient();
 
       const failed =

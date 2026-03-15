@@ -2,7 +2,7 @@
 
 > Stories covered: **0.5** (account bootstrap) · **2.5** (IAM tightening)
 >
-> Account: `112233445566` · Region: `eu-west-1`
+> Account: `112233445566` · Region: `us-east-1`
 >
 > **Status: ✅ Completed 2026-03-15** — all tasks below were executed against the live account.
 
@@ -12,7 +12,7 @@
 
 - AWS CLI v2 (`aws --version`)
 - Admin credentials (root or IAM admin) — needed for IAM and Bedrock logging setup
-- Region: **eu-west-1** for all resource creation
+- Region: **us-east-1** for all resource creation
 
 ---
 
@@ -22,7 +22,7 @@ Creates the IAM role that Bedrock assumes to write invocation logs to CloudWatch
 
 ```bash
 # Create role with Bedrock as trusted principal
-aws --region eu-west-1 iam create-role \
+aws --region us-east-1 iam create-role \
   --role-name AssigneeAiBedrockLoggingRole \
   --assume-role-policy-document '{
   "Version":"2012-10-17",
@@ -35,7 +35,7 @@ aws --region eu-west-1 iam create-role \
   --description "Allows Bedrock to write invocation logs to CloudWatch"
 
 # Attach permissions to write to the log group
-aws --region eu-west-1 iam put-role-policy \
+aws --region us-east-1 iam put-role-policy \
   --role-name AssigneeAiBedrockLoggingRole \
   --policy-name BedrockLoggingPolicy \
   --policy-document '{
@@ -48,7 +48,7 @@ aws --region eu-west-1 iam put-role-policy \
       "logs:PutLogEvents",
       "logs:DescribeLogGroups"
     ],
-    "Resource": "arn:aws:logs:eu-west-1:112233445566:log-group:/assignee-ai/bedrock-invocations:*"
+    "Resource": "arn:aws:logs:us-east-1:112233445566:log-group:/assignee-ai/bedrock-invocations:*"
   }]
 }'
 ```
@@ -58,7 +58,7 @@ aws --region eu-west-1 iam put-role-policy \
 ## Task 2 — CloudWatch Log Group
 
 ```bash
-aws --region eu-west-1 logs create-log-group \
+aws --region us-east-1 logs create-log-group \
   --log-group-name /assignee-ai/bedrock-invocations
 ```
 
@@ -67,7 +67,7 @@ aws --region eu-west-1 logs create-log-group \
 ## Task 3 — Enable Bedrock Invocation Logging (Story 0.5 AC1, AC3)
 
 ```bash
-aws --region eu-west-1 bedrock put-model-invocation-logging-configuration \
+aws --region us-east-1 bedrock put-model-invocation-logging-configuration \
   --logging-config '{
   "cloudWatchConfig": {
     "logGroupName": "/assignee-ai/bedrock-invocations",
@@ -79,7 +79,7 @@ aws --region eu-west-1 bedrock put-model-invocation-logging-configuration \
 }'
 
 # Verify
-aws --region eu-west-1 bedrock get-model-invocation-logging-configuration
+aws --region us-east-1 bedrock get-model-invocation-logging-configuration
 ```
 
 Expected output:
@@ -150,7 +150,7 @@ aws iam list-user-policies --user-name bedrock-dev-user
 
 # Scope check — must return AccessDeniedException
 AWS_ACCESS_KEY_ID=<bedrock-dev-user-key> AWS_SECRET_ACCESS_KEY=<secret> \
-  aws --region eu-west-1 cloudcontrol create-resource \
+  aws --region us-east-1 cloudcontrol create-resource \
   --type-name AWS::EC2::VPC \
   --desired-state '{"CidrBlock":"10.0.0.0/16"}'
 ```
@@ -283,7 +283,7 @@ Or via Console: **GitHub repo → Settings → Secrets and variables → Actions
 ## Completion Checklist
 
 - [x] `AssigneeAiBedrockLoggingRole` IAM role created with CloudWatch write permissions
-- [x] CloudWatch log group `/assignee-ai/bedrock-invocations` created in `eu-west-1`
+- [x] CloudWatch log group `/assignee-ai/bedrock-invocations` created in `us-east-1`
 - [x] Bedrock invocation logging enabled → `get-model-invocation-logging-configuration` returns non-empty JSON
 - [x] `AssigneeAiPocPolicy` inline policy attached to `bedrock-dev-user`
 - [x] `AssigneeAiMcpPolicy` inline policy attached to `aws-mcp-user`
@@ -304,8 +304,8 @@ Or via Console: **GitHub repo → Settings → Secrets and variables → Actions
 | Resource                           | Type                 | Region    |
 | ---------------------------------- | -------------------- | --------- |
 | `AssigneeAiBedrockLoggingRole`     | IAM Role             | global    |
-| `/assignee-ai/bedrock-invocations` | CloudWatch Log Group | eu-west-1 |
-| Bedrock invocation logging config  | Account-level        | eu-west-1 |
+| `/assignee-ai/bedrock-invocations` | CloudWatch Log Group | us-east-1 |
+| Bedrock invocation logging config  | Account-level        | us-east-1 |
 
 ---
 

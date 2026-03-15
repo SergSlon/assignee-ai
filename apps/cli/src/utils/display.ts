@@ -8,6 +8,16 @@
 import * as clack from "@clack/prompts";
 import chalk from "chalk";
 import boxen from "boxen";
+import { AWS_REGION, BEDROCK_MODEL_ID } from "../config/constants.js";
+
+/** Returns the region label for the plan box.
+ *  Cross-regional inference profiles (us.*, eu.*, ap.*) are annotated. */
+function regionLabel(): string {
+  const crossRegionalPrefix = BEDROCK_MODEL_ID.match(/^(us|eu|ap)\./)?.[1];
+  return crossRegionalPrefix
+    ? `${AWS_REGION} (cross-regional inference: ${crossRegionalPrefix}.*)`
+    : AWS_REGION;
+}
 
 /** Minimal state shape needed for rendering — avoids circular imports with graph.ts */
 export interface RenderableState {
@@ -60,6 +70,7 @@ export function renderIntro(): void {
 export function renderPlanBox(state: RenderableState): void {
   const content = [
     `Resource Type:   ${state.resourceType}`,
+    `Region:          ${regionLabel()}`,
     `Config:          ${JSON.stringify(state.desiredState, null, 2)}`,
     `Estimated Cost:  ${state.estimatedMonthlyCost ?? "N/A"}`,
     `Run ID:          ${state.runId}`,

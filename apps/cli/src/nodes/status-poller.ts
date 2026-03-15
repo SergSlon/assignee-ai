@@ -37,7 +37,7 @@ export async function statusPollerNode(
   }
 
   const getStatus = tools?.find(
-    (t) => t.name === "aws_ccapi_get_resource_request_status",
+    (t) => t.name === "get_resource_request_status",
   );
   if (!getStatus) {
     return {
@@ -53,17 +53,23 @@ export async function statusPollerNode(
     const result = await getStatus.invoke({
       request_token: state.requestToken,
     });
-    const parsed =
-      typeof result === "string"
-        ? (JSON.parse(result) as Record<string, unknown>)
-        : result;
-    const event =
-      (parsed as Record<string, unknown>)?.["ProgressEvent"] ??
-      (parsed as Record<string, unknown>);
 
-    const operationStatus =
-      (event as Record<string, unknown>)?.["OperationStatus"] ??
-      (event as Record<string, unknown>)?.["operationStatus"];
+    // ccapi-mcp-server v1+: response is { type: "text", text: "<json>" }
+    // or a plain string; unwrap accordingly
+    const raw = result as Record<string, unknown>;
+    const text =
+      typeof raw?.["text"] === "string"
+        ? raw["text"]
+        : typeof result === "string"
+          ? result
+          : JSON.stringify(result);
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+
+    const status = parsed?.["status"] as string | undefined;
+    const isComplete = parsed?.["is_complete"] as boolean | undefined;
+    const resourceIdentifier = parsed?.["resource_identifier"] as
+      | string
+      | undefined;
 
     const durationMs = Date.now() - startedAt;
 
@@ -73,36 +79,25 @@ export async function statusPollerNode(
       level: "info",
       action: "provisioning_status_checked",
       durationMs,
-      operationStatus,
+      status,
+      isComplete,
     });
 
-    if (operationStatus === "SUCCESS") {
-      const resourceArn =
-        (
-          (event as Record<string, unknown>)?.["ResourceModel"] as Record<
-            string,
-            unknown
-          >
-        )?.["Arn"] ??
-        (event as Record<string, unknown>)?.["Identifier"] ??
-        undefined;
-
-      return {
-        executionStatus: ExecutionStatus.SUCCESS,
-        resourceArn: typeof resourceArn === "string" ? resourceArn : undefined,
-      };
-    }
-
-    if (operationStatus === "FAILED" || operationStatus === "CANCEL_COMPLETE") {
-      const statusMessage = (event as Record<string, unknown>)?.[
-        "StatusMessage"
-      ];
+    if (status === "FAILED" || status === "CANCEL_COMPLETE") {
+      const errorMessage = parsed?.["error_message"] ?? parsed?.["message"];
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage:
-          typeof statusMessage === "string"
-            ? statusMessage
+          typeof errorMessage === "string"
+            ? errorMessage
             : "Resource provisioning failed.",
+      };
+    }
+
+    if (status === "SUCCESS" || isComplete === true) {
+      return {
+        executionStatus: ExecutionStatus.SUCCESS,
+        resourceArn: resourceIdentifier,
       };
     }
 

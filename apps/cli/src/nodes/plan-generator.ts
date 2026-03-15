@@ -8,12 +8,11 @@
 import { generateText } from "ai";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { ExecutionStatus } from "@assignee/core";
+import { BEDROCK_MODEL_ID, AWS_REGION } from "../config/constants.js";
 import { log } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
-const bedrock = createAmazonBedrock({
-  region: process.env["AWS_REGION"] ?? "eu-west-1",
-});
+const bedrock = createAmazonBedrock({ region: AWS_REGION });
 
 export async function planGeneratorNode(
   state: AgentState,
@@ -56,7 +55,7 @@ export async function planGeneratorNode(
       : {};
 
     const { text } = await generateText({
-      model: bedrock("amazon.nova-lite-v1:0"),
+      model: bedrock(BEDROCK_MODEL_ID),
       // @ts-expect-error NFR-15: maxTokens may not be typed in this SDK version
       maxTokens: 1024,
       ...guardrailOpts,

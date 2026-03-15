@@ -1,6 +1,6 @@
 /**
  * preflight_guard node — cost estimation + basic validation gate.
- * Pricing query has a 500ms hard timeout (non-blocking: never delays the plan).
+ * Pricing query has a 3s hard timeout (non-blocking: never blocks apply on failure).
  * SaaS policy validation is Epic 4; POC always passes.
  *
  * @see Story 1-7
@@ -11,14 +11,73 @@ import type { StructuredTool } from "@langchain/core/tools";
 import { log } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
-const PRICING_TIMEOUT_MS = 500;
+const PRICING_TIMEOUT_MS = 3000;
 
-/** Maps resource type → AWS Pricing service code (or "Free" to skip). */
-const PRICING_SERVICE_MAP: Record<string, string | "Free"> = {
-  "AWS::S3::Bucket": "AmazonS3",
-  "AWS::SSM::Parameter": "AWSSystemsManager",
+interface PricingConfig {
+  serviceCode: string;
+  /** AWS Pricing API filters to narrow to the relevant SKU */
+  filters: Array<{ Field: string; Value: string; Type: "TERM_MATCH" }>;
+  /** Human-readable unit label appended to the price, e.g. "/GB-month" */
+  unit: string;
+}
+
+/** Maps resource type → pricing query config (or "Free" to skip). */
+const PRICING_CONFIG: Record<string, PricingConfig | "Free"> = {
+  "AWS::S3::Bucket": {
+    serviceCode: "AmazonS3",
+    filters: [
+      { Field: "productFamily", Value: "Storage", Type: "TERM_MATCH" },
+      { Field: "usagetype", Value: "TimedStorage-ByteHrs", Type: "TERM_MATCH" },
+    ],
+    unit: "/GB-month",
+  },
+  "AWS::SSM::Parameter": {
+    serviceCode: "AWSSystemsManager",
+    filters: [
+      {
+        Field: "productFamily",
+        Value: "AWS Systems Manager",
+        Type: "TERM_MATCH",
+      },
+    ],
+    unit: "/param-hour",
+  },
   "AWS::IAM::Role": "Free",
 };
+
+/** Extracts the lowest first-tier (beginRange=0) non-zero price from a get_pricing response. */
+function extractFirstTierPrice(
+  data: Record<string, unknown>,
+  unit: string,
+): string | null {
+  const items = (data["data"] as unknown[]) ?? [];
+  for (const item of items) {
+    const onDemand = (item as Record<string, unknown>)?.["terms"] as
+      | Record<string, unknown>
+      | undefined;
+    const terms = Object.values(
+      (onDemand?.["OnDemand"] as Record<string, unknown>) ?? {},
+    );
+    for (const term of terms) {
+      const dims = Object.values(
+        ((term as Record<string, unknown>)?.["priceDimensions"] as Record<
+          string,
+          unknown
+        >) ?? {},
+      );
+      for (const dim of dims) {
+        const d = dim as Record<string, unknown>;
+        if (d["beginRange"] === "0") {
+          const usd = parseFloat(
+            (d["pricePerUnit"] as Record<string, string>)?.["USD"] ?? "0",
+          );
+          if (usd > 0) return `$${usd.toFixed(4)}${unit}`;
+        }
+      }
+    }
+  }
+  return null;
+}
 
 export async function preflightGuardNode(
   state: AgentState,
@@ -26,37 +85,38 @@ export async function preflightGuardNode(
 ): Promise<Partial<AgentState>> {
   if (state.executionStatus !== ExecutionStatus.PENDING) return {};
 
-  const serviceCode = PRICING_SERVICE_MAP[state.resourceType];
+  const pricingConfig = PRICING_CONFIG[state.resourceType];
   let costEstimate = "N/A";
 
-  if (serviceCode === "Free") {
+  if (pricingConfig === "Free") {
     costEstimate = "Free";
-  } else if (serviceCode && tools) {
-    const pricingTool = tools.find(
-      (t) =>
-        t.name.toLowerCase().includes("pricing") ||
-        t.name.toLowerCase().includes("price"),
-    );
+  } else if (pricingConfig && tools) {
+    const pricingTool = tools.find((t) => t.name === "get_pricing");
     if (pricingTool) {
       try {
         const timeout = new Promise<null>((resolve) =>
           setTimeout(() => resolve(null), PRICING_TIMEOUT_MS),
         );
         const query = pricingTool.invoke({
-          serviceCode,
-          region: process.env["AWS_REGION"] ?? "eu-west-1",
+          service_code: pricingConfig.serviceCode,
+          region: process.env["AWS_REGION"] ?? "us-east-1",
+          filters: pricingConfig.filters,
+          output_options: { pricing_terms: ["OnDemand"] },
         });
         const result = await Promise.race([query, timeout]);
         if (result !== null) {
-          const parsed =
-            typeof result === "string"
-              ? (JSON.parse(result) as Record<string, unknown>)
-              : result;
-          const estimate = (parsed as Record<string, unknown>)?.[
-            "estimatedMonthlyCost"
-          ];
-          costEstimate =
-            typeof estimate === "string" ? estimate : "~$0.01/month";
+          const raw = result as Record<string, unknown>;
+          const text =
+            typeof raw["text"] === "string"
+              ? raw["text"]
+              : typeof result === "string"
+                ? result
+                : null;
+          if (text) {
+            const data = JSON.parse(text) as Record<string, unknown>;
+            costEstimate =
+              extractFirstTierPrice(data, pricingConfig.unit) ?? "N/A";
+          }
         }
         // null means timeout — leave costEstimate as 'N/A'
       } catch {
