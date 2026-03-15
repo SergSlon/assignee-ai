@@ -38,6 +38,16 @@ export async function planGeneratorNode(
     (state.resourceSchema["required"] as string[] | undefined) ?? [];
 
   try {
+    if (!process.env["BEDROCK_GUARDRAIL_ID"]) {
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "warn",
+        action: "guardrail_disabled",
+        message: "BEDROCK_GUARDRAIL_ID not set — guardrail disabled for POC",
+      });
+    }
+
     const guardrailOpts = process.env["BEDROCK_GUARDRAIL_ID"]
       ? {
           guardrailIdentifier: process.env["BEDROCK_GUARDRAIL_ID"],

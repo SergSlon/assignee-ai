@@ -2,7 +2,7 @@
  * `assignee plan` command — Sprint 1 demo gate.
  * Runs the graph in plan mode (no HITL, no provisioning), outputs a formatted plan box.
  *
- * @see Story 1-6
+ * @see Story 1-6, Story 1-8
  */
 
 import { Command } from "commander";
@@ -19,7 +19,13 @@ import {
   closeMcpClient,
 } from "../services/mcp-client.js";
 import { createGraph } from "../services/graph.js";
-import { renderIntro, renderError, renderOutro } from "../utils/ui.js";
+import {
+  renderIntro,
+  renderError,
+  renderOutro,
+  startSpinner,
+  stopSpinner,
+} from "../utils/display.js";
 import { log } from "../utils/logger.js";
 
 export const planCommand = new Command(CommandName.PLAN)
@@ -51,6 +57,8 @@ export const planCommand = new Command(CommandName.PLAN)
       const tools = await getMcpTools(mcpClient);
       const graph = createGraph(tools);
 
+      startSpinner("Generating plan...");
+
       const finalState = await graph.invoke(
         {
           userIntent: intent,
@@ -60,6 +68,8 @@ export const planCommand = new Command(CommandName.PLAN)
         },
         { configurable: { thread_id: runId } },
       );
+
+      stopSpinner();
 
       log({
         ts: new Date().toISOString(),
@@ -90,6 +100,7 @@ export const planCommand = new Command(CommandName.PLAN)
       renderOutro(true);
       process.exit(ProcessExitCode.SUCCESS);
     } catch (err: unknown) {
+      stopSpinner();
       const errMsg = err instanceof Error ? err.message : String(err);
       renderError(
         `Plan generation failed: ${errMsg}`,

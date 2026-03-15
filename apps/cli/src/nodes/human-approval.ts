@@ -7,7 +7,7 @@
  */
 
 import { ExecutionStatus } from "@assignee/core";
-import { renderPlanBox, renderHitlConfirm } from "../utils/ui.js";
+import { renderPlanBox, renderHitlConfirm } from "../utils/display.js";
 import { log } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 

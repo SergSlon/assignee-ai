@@ -8,7 +8,7 @@
  *
  * No --yes flag: HITL is mandatory per spec.
  *
- * @see Story 2-6
+ * @see Story 2-6, Story 1-8
  */
 
 import { Command } from "commander";
@@ -25,7 +25,14 @@ import {
   closeMcpClient,
 } from "../services/mcp-client.js";
 import { createGraph } from "../services/graph.js";
-import { renderIntro, renderError, renderOutro } from "../utils/ui.js";
+import {
+  renderIntro,
+  renderError,
+  renderOutro,
+  startSpinner,
+  updateSpinner,
+  stopSpinner,
+} from "../utils/display.js";
 import { log } from "../utils/logger.js";
 
 export const applyCommand = new Command(CommandName.APPLY)
@@ -60,7 +67,9 @@ export const applyCommand = new Command(CommandName.APPLY)
 
       const config = { configurable: { thread_id: runId } };
 
-      // ── Phase 1: run until HITL interrupt (after human_approval) ─────────
+      // ── Phase 1: plan + HITL confirmation ────────────────────────────────
+      startSpinner("Generating plan...");
+
       const phase1State = await graph.invoke(
         {
           userIntent: intent,
@@ -70,6 +79,8 @@ export const applyCommand = new Command(CommandName.APPLY)
         },
         config,
       );
+
+      stopSpinner();
 
       // User declined or Ctrl+C in human_approval
       if (phase1State.executionStatus === ExecutionStatus.CANCELLED) {
@@ -94,8 +105,13 @@ export const applyCommand = new Command(CommandName.APPLY)
         process.exit(ProcessExitCode.GENERIC_ERROR);
       }
 
-      // ── Phase 2: resume from resource_provisioner ─────────────────────────
+      // ── Phase 2: provision ────────────────────────────────────────────────
+      startSpinner("Provisioning resource...");
+      updateSpinner("Waiting for AWS Cloud Control API...");
+
       const finalState = await graph.invoke(null, config);
+
+      stopSpinner();
 
       await closeMcpClient();
 
@@ -105,6 +121,7 @@ export const applyCommand = new Command(CommandName.APPLY)
         success ? ProcessExitCode.SUCCESS : ProcessExitCode.GENERIC_ERROR,
       );
     } catch (err: unknown) {
+      stopSpinner();
       const errMsg = err instanceof Error ? err.message : String(err);
       renderError(
         `Apply failed: ${errMsg}`,

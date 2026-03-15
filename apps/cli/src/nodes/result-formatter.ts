@@ -6,7 +6,11 @@
  */
 
 import { ExecutionStatus, ExecutionMode } from "@assignee/core";
-import { renderApplySuccess, renderError, renderPlanBox } from "../utils/ui.js";
+import {
+  renderApplySuccess,
+  renderError,
+  renderPlanBox,
+} from "../utils/display.js";
 import { log } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 

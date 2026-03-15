@@ -83,14 +83,12 @@ export async function resourceProvisionerNode(
     }
   }
 
-  // ── Inject mandatory tags ─────────────────────────────────────────────────
-  const desiredStateWithTags = { ...state.desiredState };
-  const existingTags =
-    typeof desiredStateWithTags["Tags"] === "object" &&
-    desiredStateWithTags["Tags"] !== null
-      ? (desiredStateWithTags["Tags"] as Record<string, string>)
-      : {};
-  desiredStateWithTags["Tags"] = injectMandatoryTags(existingTags, state.runId);
+  // ── Inject mandatory tags (NFR-14) ───────────────────────────────────────
+  // injectMandatoryTags handles the full desiredState and produces [{Key,Value}] format
+  const desiredStateWithTags = injectMandatoryTags(
+    state.desiredState,
+    state.runId,
+  );
 
   // ── Create resource ───────────────────────────────────────────────────────
   try {
