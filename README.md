@@ -33,7 +33,153 @@ All AI calls stay local — no AWS credentials ever leave your machine.
 - Node.js 22+
 - pnpm 10+
 - Python 3.10+ with `uvx` (`pip install uv`)
-- AWS credentials for `bedrock-dev-user` and `aws-mcp-user` (see [docs/aws-bootstrap.md](docs/aws-bootstrap.md))
+- Two IAM users with the policies below (full setup: [docs/aws-bootstrap.md](docs/aws-bootstrap.md))
+
+#### Required IAM users and policies
+
+Two users are required — one for Bedrock AI calls, one for MCP server subprocesses:
+
+| User               | Env vars                                              | Policy                | Purpose                                |
+| ------------------ | ----------------------------------------------------- | --------------------- | -------------------------------------- |
+| `bedrock-dev-user` | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`         | `AssigneeAiPocPolicy` | Bedrock Nova Lite invocation           |
+| `aws-mcp-user`     | `MCP_AWS_ACCESS_KEY_ID` / `MCP_AWS_SECRET_ACCESS_KEY` | `AssigneeAiMcpPolicy` | CCAPI, CFN schema, pricing MCP servers |
+
+**`AssigneeAiPocPolicy`** (attach to `bedrock-dev-user`):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BedrockInvokeNovaScopedOnly",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel"],
+      "Resource": "arn:aws:bedrock:*::foundation-model/amazon.nova-lite-v1:0"
+    },
+    {
+      "Sid": "CloudControlScopedToSupportedTypes",
+      "Effect": "Allow",
+      "Action": [
+        "cloudcontrol:CreateResource",
+        "cloudcontrol:GetResourceRequestStatus",
+        "cloudcontrol:GetResource"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "cloudcontrol:TypeName": [
+            "AWS::S3::Bucket",
+            "AWS::SSM::Parameter",
+            "AWS::IAM::Role"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "XRayTracing",
+      "Effect": "Allow",
+      "Action": ["xray:PutTraceSegments", "xray:PutTelemetryRecords"],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+**`AssigneeAiMcpPolicy`** (attach to `aws-mcp-user`):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudControlScopedToSupportedTypes",
+      "Effect": "Allow",
+      "Action": [
+        "cloudcontrol:CreateResource",
+        "cloudcontrol:GetResource",
+        "cloudcontrol:GetResourceRequestStatus",
+        "cloudcontrol:ListResources"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "cloudcontrol:TypeName": [
+            "AWS::S3::Bucket",
+            "AWS::SSM::Parameter",
+            "AWS::IAM::Role"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "S3BucketProvisioning",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketTagging",
+        "s3:PutBucketTagging",
+        "s3:ListBucket"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SSMParameterProvisioning",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter",
+        "ssm:GetParameter",
+        "ssm:DeleteParameter",
+        "ssm:AddTagsToResource",
+        "ssm:ListTagsForResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMRoleProvisioning",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:TagRole",
+        "iam:ListRoleTags",
+        "iam:PassRole"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudFormationSchemaRead",
+      "Effect": "Allow",
+      "Action": ["cloudformation:DescribeType", "cloudformation:ListTypes"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PricingRead",
+      "Effect": "Allow",
+      "Action": [
+        "pricing:GetProducts",
+        "pricing:DescribeServices",
+        "pricing:GetAttributeValues"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "XRayTracing",
+      "Effect": "Allow",
+      "Action": ["xray:PutTraceSegments", "xray:PutTelemetryRecords"],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+> No wildcards on `Action` — all permissions follow least-privilege (NFR-13).
 
 ### Install
 
