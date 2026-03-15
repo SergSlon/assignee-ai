@@ -33,7 +33,8 @@ import {
   updateSpinner,
   stopSpinner,
 } from "../utils/display.js";
-import { log } from "../utils/logger.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { SUPPORTED_TYPES_HINT } from "../config/constants.js";
 
 export const applyCommand = new Command(CommandName.APPLY)
   .description(CommandDescription.APPLY)
@@ -54,7 +55,7 @@ export const applyCommand = new Command(CommandName.APPLY)
       ts: new Date().toISOString(),
       runId,
       level: "info",
-      action: "apply_started",
+      action: LOG_ACTIONS.APPLY_STARTED,
       intent,
     });
 
@@ -97,7 +98,7 @@ export const applyCommand = new Command(CommandName.APPLY)
         renderError(
           phase1State.errorMessage ?? "Apply failed during planning phase",
           phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
-            ? "Supported types: AWS::S3::Bucket, AWS::SSM::Parameter, AWS::IAM::Role"
+            ? SUPPORTED_TYPES_HINT
             : undefined,
         );
         renderOutro(false);

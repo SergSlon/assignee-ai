@@ -26,7 +26,8 @@ import {
   startSpinner,
   stopSpinner,
 } from "../utils/display.js";
-import { log } from "../utils/logger.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { SUPPORTED_TYPES_HINT } from "../config/constants.js";
 
 export const planCommand = new Command(CommandName.PLAN)
   .description(CommandDescription.PLAN)
@@ -48,7 +49,7 @@ export const planCommand = new Command(CommandName.PLAN)
       ts: new Date().toISOString(),
       runId,
       level: "info",
-      action: "plan_started",
+      action: LOG_ACTIONS.PLAN_STARTED,
       intent,
     });
 
@@ -80,7 +81,7 @@ export const planCommand = new Command(CommandName.PLAN)
         renderError(
           finalState.errorMessage ?? "Plan generation failed",
           finalState.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
-            ? "Supported types: AWS::S3::Bucket, AWS::SSM::Parameter, AWS::IAM::Role"
+            ? SUPPORTED_TYPES_HINT
             : undefined,
         );
         renderOutro(false);

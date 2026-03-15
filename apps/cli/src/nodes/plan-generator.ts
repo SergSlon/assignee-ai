@@ -8,8 +8,12 @@
 import { generateText } from "ai";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { ExecutionStatus } from "@assignee/core";
-import { BEDROCK_MODEL_ID, AWS_REGION } from "../config/constants.js";
-import { log } from "../utils/logger.js";
+import {
+  BEDROCK_MODEL_ID,
+  AWS_REGION,
+  SCHEMA_EXCERPT_MAX_CHARS,
+} from "../config/constants.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
 const bedrock = createAmazonBedrock({ region: AWS_REGION });
@@ -42,7 +46,7 @@ export async function planGeneratorNode(
         ts: new Date().toISOString(),
         runId: state.runId,
         level: "warn",
-        action: "guardrail_disabled",
+        action: LOG_ACTIONS.GUARDRAIL_DISABLED,
         message: "BEDROCK_GUARDRAIL_ID not set — guardrail disabled for POC",
       });
     }
@@ -75,7 +79,7 @@ export async function planGeneratorNode(
             "3. Include ALL Required properties",
             "4. For S3 BucketName: use only lowercase letters, digits, hyphens (3–63 chars)",
             "",
-            `Schema excerpt:\n${JSON.stringify(state.resourceSchema, null, 2).slice(0, 3000)}`,
+            `Schema excerpt:\n${JSON.stringify(state.resourceSchema, null, 2).slice(0, SCHEMA_EXCERPT_MAX_CHARS)}`,
             "",
             "Output the JSON object now:",
           ].join("\n"),
@@ -115,7 +119,7 @@ export async function planGeneratorNode(
       ts: new Date().toISOString(),
       runId: state.runId,
       level: "info",
-      action: "plan_generated",
+      action: LOG_ACTIONS.PLAN_GENERATED,
       durationMs,
       resourceType: state.resourceType,
     });

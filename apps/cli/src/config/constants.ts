@@ -10,3 +10,9 @@ export const SUPPORTED_POC_TYPES = [
 ] as const;
 
 export type SupportedPocType = (typeof SUPPORTED_POC_TYPES)[number];
+
+/** Human-readable hint shown when an unsupported resource type is requested. */
+export const SUPPORTED_TYPES_HINT = `Supported types: ${SUPPORTED_POC_TYPES.join(", ")}`;
+
+/** Maximum characters of the CFN schema excerpt passed to the plan generator prompt. */
+export const SCHEMA_EXCERPT_MAX_CHARS = 3000;
