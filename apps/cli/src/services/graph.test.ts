@@ -1,6 +1,26 @@
-import { describe, it, expect } from 'vitest'
-import { createGraph } from './graph.js'
+import { describe, it, expect, vi } from 'vitest'
 import { ExecutionMode, ExecutionStatus } from '@assignee/core'
+
+vi.mock('ai', () => ({
+  generateText: vi.fn().mockResolvedValue({
+    output: { resourceType: 'AWS::S3::Bucket' }
+  }),
+  Output: {
+    object: vi.fn()
+  }
+}))
+
+vi.mock('@ai-sdk/amazon-bedrock', () => ({
+  createAmazonBedrock: vi.fn(() => vi.fn()),
+}))
+
+vi.mock('../nodes/schema-fetcher.js', () => ({
+  schemaFetcherNode: vi.fn().mockResolvedValue({
+    resourceSchema: { Properties: {} }
+  })
+}))
+
+import { createGraph } from './graph.js'
 
 describe('createGraph', () => {
   it('graph compiles and executes all nodes correctly with plan executionMode', async () => {

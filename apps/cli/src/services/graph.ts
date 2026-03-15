@@ -29,9 +29,10 @@ export type AgentState = typeof graphAnnotation.State
 // Node signature — ALL nodes must match this LangGraph Runnable contract
 type NodeFn = (state: AgentState, tools?: StructuredTool[]) => Promise<Partial<AgentState>>
 
+import { intentParserNode } from '../nodes/intent-parser.js'
+import { schemaFetcherNode } from '../nodes/schema-fetcher.js'
+
 // All node stubs — return empty partial (LangGraph merges into state)
-export const intentParserStub: NodeFn   = async () => ({})
-export const schemaFetcherStub: NodeFn  = async () => ({})
 export const planGeneratorStub: NodeFn  = async () => ({})
 export const preflightGuardStub: NodeFn = async () => ({ preflightPassed: true })
 export const humanApprovalStub: NodeFn  = async () => ({})
@@ -51,8 +52,8 @@ function routeStatusPoller(state: AgentState): typeof GraphNode.STATUS_POLLER | 
 
 export function createGraph(tools: StructuredTool[] = []) {
   const workflow = new StateGraph(graphAnnotation)
-    .addNode(GraphNode.INTENT_PARSER,       (state) => intentParserStub(state, tools))
-    .addNode(GraphNode.SCHEMA_FETCHER,      (state) => schemaFetcherStub(state, tools))
+    .addNode(GraphNode.INTENT_PARSER,       (state) => intentParserNode(state))
+    .addNode(GraphNode.SCHEMA_FETCHER,      (state) => schemaFetcherNode(state, tools))
     .addNode(GraphNode.PLAN_GENERATOR,      (state) => planGeneratorStub(state, tools))
     .addNode(GraphNode.PREFLIGHT_GUARD,     (state) => preflightGuardStub(state, tools))
     .addNode(GraphNode.HUMAN_APPROVAL,      (state) => humanApprovalStub(state, tools))
