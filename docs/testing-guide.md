@@ -22,6 +22,10 @@ cat .env
 pnpm test
 ```
 
+> **AWS credentials for verification commands:** The `aws` CLI commands below rely on
+> credentials already exported in your shell (e.g. via `source .env`, `aws configure`,
+> or an AWS SSO session). Do not paste credentials directly into commands.
+
 **Helper alias** (optional — save typing):
 
 ```bash
@@ -127,10 +131,7 @@ At the confirmation prompt:
 **Verify resource and tags in AWS:**
 
 ```bash
-# Bucket exists
-AWS_ACCESS_KEY_ID=***REDACTED_ACCESS_KEY*** \
-AWS_SECRET_ACCESS_KEY='***REDACTED_SECRET_KEY***' \
-  aws s3api get-bucket-tagging \
+aws s3api get-bucket-tagging \
   --bucket $BUCKET \
   --region eu-west-1
 ```
@@ -169,9 +170,7 @@ aws logs filter-log-events \
 **Cleanup:**
 
 ```bash
-AWS_ACCESS_KEY_ID=***REDACTED_ACCESS_KEY*** \
-AWS_SECRET_ACCESS_KEY='***REDACTED_SECRET_KEY***' \
-  aws s3 rb s3://$BUCKET --region eu-west-1
+aws s3 rb s3://$BUCKET --region eu-west-1
 ```
 
 ---
@@ -226,9 +225,7 @@ assignee apply "Create an S3 bucket named $BUCKET"
 **Cleanup:**
 
 ```bash
-AWS_ACCESS_KEY_ID=***REDACTED_ACCESS_KEY*** \
-AWS_SECRET_ACCESS_KEY='***REDACTED_SECRET_KEY***' \
-  aws s3 rb s3://$BUCKET --region eu-west-1
+aws s3 rb s3://$BUCKET --region eu-west-1
 ```
 
 ---
@@ -267,9 +264,7 @@ assignee apply "Create an SSM parameter named /poc/test/greeting with value hell
 **Verify:**
 
 ```bash
-AWS_ACCESS_KEY_ID=***REDACTED_ACCESS_KEY*** \
-AWS_SECRET_ACCESS_KEY='***REDACTED_SECRET_KEY***' \
-  aws ssm get-parameter \
+aws ssm get-parameter \
   --name /poc/test/greeting \
   --region eu-west-1 \
   --query 'Parameter.Value' \
@@ -280,14 +275,68 @@ AWS_SECRET_ACCESS_KEY='***REDACTED_SECRET_KEY***' \
 **Cleanup:**
 
 ```bash
-AWS_ACCESS_KEY_ID=***REDACTED_ACCESS_KEY*** \
-AWS_SECRET_ACCESS_KEY='***REDACTED_SECRET_KEY***' \
-  aws ssm delete-parameter --name /poc/test/greeting --region eu-west-1
+aws ssm delete-parameter --name /poc/test/greeting --region eu-west-1
 ```
 
 ---
 
-## Test 7 — Non-TTY mode (CI compatibility)
+## Test 7 — IAM Role (third resource type)
+
+**Purpose:** Verify end-to-end provisioning for `AWS::IAM::Role` — the third supported POC type.
+
+```bash
+ROLE="poc-test-role-$(date +%s)"
+assignee apply "Create an IAM role named $ROLE that allows Lambda to assume it"
+```
+
+→ approve with `y`
+
+**Verify role exists:**
+
+```bash
+aws iam get-role \
+  --role-name "$ROLE" \
+  --query 'Role.{Arn:Arn,CreateDate:CreateDate}' \
+  --output json
+```
+
+**Verify tags (NFR-14):**
+
+```bash
+aws iam list-role-tags \
+  --role-name "$ROLE" \
+  --query 'Tags'
+```
+
+Expected tags:
+
+```json
+[
+  { "Key": "managed-by", "Value": "assignee-ai" },
+  { "Key": "assignee-run-id", "Value": "<uuid>" },
+  { "Key": "environment", "Value": "poc" }
+]
+```
+
+**Cost check:** IAM Roles are free — plan box should show `Estimated Cost: Free`.
+
+**Check:**
+
+- [ ] Role ARN printed to terminal
+- [ ] Role visible in AWS Console → IAM → Roles
+- [ ] All 3 mandatory tags present
+- [ ] Plan box shows `Estimated Cost: Free`
+- [ ] Exits 0: `echo $?` → `0`
+
+**Cleanup:**
+
+```bash
+aws iam delete-role --role-name "$ROLE"
+```
+
+---
+
+## Test 8 — Non-TTY mode (CI compatibility)
 
 **Purpose:** Verify plain-text output without ANSI codes when stdout is piped (NFR-12).
 
@@ -311,11 +360,12 @@ Run all tests and mark pass/fail:
 | #   | Test                                                          | Result |
 | --- | ------------------------------------------------------------- | ------ |
 | 1   | `plan` renders box in <3s                                     | ⬜     |
-| 2   | `apply` + approve → resource created with 3 tags              | ⬜     |
+| 2   | `apply` + approve → S3 bucket created with 3 tags             | ⬜     |
 | 3   | `apply` + decline → exits 0, no resource                      | ⬜     |
 | 4   | State Guard — second apply aborts with "Stale Plan"           | ⬜     |
 | 5   | Unsupported type → actionable error with supported types list | ⬜     |
 | 6   | SSM Parameter provisioning                                    | ⬜     |
-| 7   | Non-TTY / pipe → no ANSI codes                                | ⬜     |
+| 7   | IAM Role provisioning, cost shows Free                        | ⬜     |
+| 8   | Non-TTY / pipe → no ANSI codes                                | ⬜     |
 
-All 7 passing = POC demo-ready. ✅
+All 8 passing = POC demo-ready. ✅
