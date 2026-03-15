@@ -7,8 +7,12 @@
  *   - MCP server processes use MCP_AWS_* env vars (aws-mcp-user)
  *   Both sets live in .env — see .env.example.
  *
+ * IMPORTANT: getMcpServerConfigs() is a factory function (not a const) so that
+ * process.env is read at call time, after process.loadEnvFile() has run in index.ts.
+ * ESM static imports execute before the module body, so a top-level const would
+ * capture empty env vars on startup.
+ *
  * @see architecture.md — MCP Servers Catalog section
- * @see Story 1.1 — imports this constant to wire MCP tools into LangGraph
  */
 import { McpServerName, McpCommand } from "../constants/mcp.js";
 
@@ -23,7 +27,7 @@ export interface McpServerConfig {
 
 /** AWS credential env block forwarded to AWS MCP server subprocesses. */
 function mcpEnv(
-  region = process.env["AWS_REGION"] ?? "eu-west-1",
+  region = process.env["AWS_REGION"] ?? "us-east-1",
 ): Record<string, string> {
   return {
     AWS_ACCESS_KEY_ID: process.env["MCP_AWS_ACCESS_KEY_ID"] ?? "",
@@ -34,36 +38,38 @@ function mcpEnv(
 }
 
 /**
- * Single source of truth for MCP server process configurations.
- * Must match the MCP server configs used in .gemini/antigravity/mcp_config.json.
+ * Factory that returns MCP server process configurations.
+ * Called at runtime (not module load) so MCP_AWS_* env vars are available.
  *
  * Region notes:
- *   - CCAPI: eu-west-1 — provisioning is regional, must match target region
- *   - CFN:   eu-west-1 — schema fetches are global but region arg required
+ *   - CCAPI: us-east-1 — provisioning is regional, must match target region
+ *   - IAC:   us-east-1 — CloudFormation validation/docs (replaces deprecated cfn-mcp-server)
  *   - Pricing: us-east-1 — AWS Pricing API only available in us-east-1
  *   - Knowledge: no AWS creds — public remote API via fastmcp
  */
-export const MCP_SERVER_CONFIGS: Record<string, McpServerConfig> = {
-  [McpServerName.CCAPI]: {
-    command: McpCommand.UVX,
-    args: ["awslabs.ccapi-mcp-server@latest"],
-    env: mcpEnv("eu-west-1"),
-  },
-  [McpServerName.CFN]: {
-    command: McpCommand.UVX,
-    args: ["awslabs.cfn-mcp-server@latest"],
-    env: mcpEnv("eu-west-1"),
-  },
-  // Knowledge server: yanked uvx package — use remote API via fastmcp instead
-  // Matches .gemini/antigravity/mcp_config.json "aws-knowledge-mcp-server"
-  [McpServerName.KNOWLEDGE]: {
-    command: McpCommand.UVX,
-    args: ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"],
-  },
-  // Pricing API is only available in us-east-1
-  [McpServerName.PRICING]: {
-    command: McpCommand.UVX,
-    args: ["awslabs.aws-pricing-mcp-server@latest"],
-    env: mcpEnv("us-east-1"),
-  },
-} as const;
+export function getMcpServerConfigs(): Record<string, McpServerConfig> {
+  return {
+    [McpServerName.CCAPI]: {
+      command: McpCommand.UVX,
+      args: ["awslabs.ccapi-mcp-server@latest"],
+      env: mcpEnv("us-east-1"),
+    },
+    [McpServerName.IAC]: {
+      command: McpCommand.UVX,
+      args: ["awslabs.aws-iac-mcp-server@latest"],
+      env: mcpEnv("us-east-1"),
+    },
+    // Knowledge server: yanked uvx package — use remote API via fastmcp instead
+    // Matches .gemini/antigravity/mcp_config.json "aws-knowledge-mcp-server"
+    [McpServerName.KNOWLEDGE]: {
+      command: McpCommand.UVX,
+      args: ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"],
+    },
+    // Pricing API is only available in us-east-1
+    [McpServerName.PRICING]: {
+      command: McpCommand.UVX,
+      args: ["awslabs.aws-pricing-mcp-server@latest"],
+      env: mcpEnv("us-east-1"),
+    },
+  };
+}

@@ -94,6 +94,17 @@ function routePreflightGuard(
   return GraphNode.HUMAN_APPROVAL;
 }
 
+// Conditional routing for resource_provisioner:
+// - IN_PROGRESS → status_poller (async poll)
+// - FAILED      → result_formatter (state guard abort or provisioning error)
+function routeResourceProvisioner(
+  state: AgentState,
+): typeof GraphNode.STATUS_POLLER | typeof GraphNode.RESULT_FORMATTER {
+  return state.executionStatus === ExecutionStatus.IN_PROGRESS
+    ? GraphNode.STATUS_POLLER
+    : GraphNode.RESULT_FORMATTER;
+}
+
 // Conditional routing for status_poller (self-loop — see Story 2.3)
 function routeStatusPoller(
   state: AgentState,
@@ -128,7 +139,14 @@ export function createGraph(tools: StructuredTool[] = []) {
       [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,
     })
     .addEdge(GraphNode.HUMAN_APPROVAL, GraphNode.RESOURCE_PROVISIONER)
-    .addEdge(GraphNode.RESOURCE_PROVISIONER, GraphNode.STATUS_POLLER)
+    .addConditionalEdges(
+      GraphNode.RESOURCE_PROVISIONER,
+      routeResourceProvisioner,
+      {
+        [GraphNode.STATUS_POLLER]: GraphNode.STATUS_POLLER,
+        [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,
+      },
+    )
     // Self-loop: poller node routes to itself when IN_PROGRESS (Story 2.3)
     .addConditionalEdges(GraphNode.STATUS_POLLER, routeStatusPoller, {
       [GraphNode.STATUS_POLLER]: GraphNode.STATUS_POLLER,

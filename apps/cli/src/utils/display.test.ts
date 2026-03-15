@@ -77,7 +77,7 @@ describe("display.ts — non-TTY (CI) mode", () => {
     expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
   });
 
-  it("renderPlanBox includes Resource Type, Config, Estimated Cost, Run ID fields", async () => {
+  it("renderPlanBox includes Resource Type, Region, Config, Estimated Cost, Run ID fields", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
 
@@ -86,6 +86,7 @@ describe("display.ts — non-TTY (CI) mode", () => {
 
     const output = chunks.join("");
     expect(output).toContain("Resource Type");
+    expect(output).toContain("Region");
     expect(output).toContain("Config");
     expect(output).toContain("Estimated Cost");
     expect(output).toContain("Run ID");

@@ -1,7 +1,10 @@
-import { MultiServerMCPClient, type ClientConfig } from '@langchain/mcp-adapters';
-import { MCP_SERVER_CONFIGS } from '../config/mcp-servers.js';
-import { ProcessExitCode } from '../constants/errors.js';
-import type { StructuredTool } from '@langchain/core/tools';
+import {
+  MultiServerMCPClient,
+  type ClientConfig,
+} from "@langchain/mcp-adapters";
+import { getMcpServerConfigs } from "../config/mcp-servers.js";
+import { ProcessExitCode } from "../constants/errors.js";
+import type { StructuredTool } from "@langchain/core/tools";
 
 let client: MultiServerMCPClient | null = null;
 
@@ -15,17 +18,19 @@ let client: MultiServerMCPClient | null = null;
 export async function createMcpClient(): Promise<MultiServerMCPClient> {
   if (client) return client;
 
+  const serverConfigs = getMcpServerConfigs();
   const clientConfig: ClientConfig = {
     mcpServers: Object.fromEntries(
-      Object.entries(MCP_SERVER_CONFIGS).map(([name, config]) => [
+      Object.entries(serverConfigs).map(([name, config]) => [
         name,
         {
-          transport: 'stdio' as const,
+          transport: "stdio" as const,
           command: config.command,
           args: config.args,
           env: config.env,
+          stderr: "pipe" as const,
         },
-      ])
+      ]),
     ),
   };
 
@@ -43,21 +48,29 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
     // Attempt to extract the failing server name from the error message
     // @langchain/mcp-adapters error thrown format may vary, but typically hints at the server dict key
     const errMsg = err instanceof Error ? err.message : String(err);
-    
+
     // Find matching server name from config keys
-    const failedServer = Object.keys(MCP_SERVER_CONFIGS).find((key) => errMsg.includes(key));
-    
+    const failedServer = Object.keys(serverConfigs).find((key) =>
+      errMsg.includes(key),
+    );
+
     if (failedServer) {
-        const config = MCP_SERVER_CONFIGS[failedServer];
-        // Ensure config is defined before accessing properties
-        if (config) {
-            const installCmd = `${config.command} ${config.args.join(' ')}`;
-            console.error(`\n✖ MCP server '${failedServer}' failed to start.\n  Is it installed? Run: ${installCmd}\n`);
-        } else {
-            console.error(`\n✖ MCP server '${failedServer}' failed to start.\n  Please check your installation.\n`);
-        }
+      const config = serverConfigs[failedServer];
+      // Ensure config is defined before accessing properties
+      if (config) {
+        const installCmd = `${config.command} ${config.args.join(" ")}`;
+        console.error(
+          `\n✖ MCP server '${failedServer}' failed to start.\n  Is it installed? Run: ${installCmd}\n`,
+        );
+      } else {
+        console.error(
+          `\n✖ MCP server '${failedServer}' failed to start.\n  Please check your installation.\n`,
+        );
+      }
     } else {
-        console.error(`\n✖ An unknown MCP server failed to start.\n  Error details: ${errMsg}\n`);
+      console.error(
+        `\n✖ An unknown MCP server failed to start.\n  Error details: ${errMsg}\n`,
+      );
     }
 
     process.exit(ProcessExitCode.MCP_STARTUP_FAILED);
@@ -73,7 +86,9 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
  * @param {MultiServerMCPClient} mcpClient - The initialized MCP client.
  * @returns {Promise<StructuredTool[]>} Array of tools ready for use by a LangGraph node.
  */
-export async function getMcpTools(mcpClient: MultiServerMCPClient): Promise<StructuredTool[]> {
+export async function getMcpTools(
+  mcpClient: MultiServerMCPClient,
+): Promise<StructuredTool[]> {
   return mcpClient.getTools();
 }
 

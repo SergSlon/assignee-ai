@@ -72,7 +72,7 @@ assignee plan "Create an S3 bucket named poc-smoke-test"
 **Structured logs check** (stderr):
 
 ```bash
-assignee plan "Create an S3 bucket named poc-smoke-test" 2>&1 1>/dev/null | jq .
+assignee plan "Create an S3 bucket named poc-smoke-test" 2>/tmp/assignee-logs.txt 1>/dev/null; jq . /tmp/assignee-logs.txt
 ```
 
 Expected log sequence:
