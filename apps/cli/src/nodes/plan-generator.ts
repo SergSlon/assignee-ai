@@ -32,10 +32,15 @@ export async function planGeneratorNode(
   }
 
   const startedAt = Date.now();
+  // cfn-mcp-server returns lowercase "properties"; older servers used "Properties"
   const schemaProperties =
     (state.resourceSchema["properties"] as
       | Record<string, unknown>
-      | undefined) ?? {};
+      | undefined) ??
+    (state.resourceSchema["Properties"] as
+      | Record<string, unknown>
+      | undefined) ??
+    {};
   const schemaKeys = Object.keys(schemaProperties);
   const requiredKeys: string[] =
     (state.resourceSchema["required"] as string[] | undefined) ?? [];
@@ -67,7 +72,7 @@ export async function planGeneratorNode(
         {
           role: "user",
           content: [
-            `You are an AWS CloudFormation expert. Generate a valid JSON configuration object for resource type "${state.resourceType}".`,
+            `You are an AWS resource configuration expert. Generate the resource properties JSON for a "${state.resourceType}" resource.`,
             `User intent: "${state.userIntent}"`,
             "",
             `Required properties: ${JSON.stringify(requiredKeys)}`,
@@ -75,13 +80,17 @@ export async function planGeneratorNode(
             "",
             "RULES:",
             "1. Output ONLY valid JSON — no markdown fences, no explanation",
-            "2. Include ONLY properties from the Available properties list",
-            "3. Include ALL Required properties",
-            "4. For S3 BucketName: use only lowercase letters, digits, hyphens (3–63 chars)",
+            "2. Output a FLAT JSON object with ONLY the resource properties directly — do NOT wrap in a CloudFormation Resources block or nest under a logical resource ID",
+            "3. Include ONLY properties from the Available properties list",
+            "4. Include ALL Required properties",
+            "5. For S3 BucketName: use only lowercase letters, digits, hyphens (3–63 chars)",
+            "",
+            'CORRECT format example: { "BucketName": "my-bucket" }',
+            'WRONG format example: { "MyBucket": { "Type": "AWS::S3::Bucket", "Properties": { "BucketName": "my-bucket" } } }',
             "",
             `Schema excerpt:\n${JSON.stringify(state.resourceSchema, null, 2).slice(0, SCHEMA_EXCERPT_MAX_CHARS)}`,
             "",
-            "Output the JSON object now:",
+            "Output the flat properties JSON object now:",
           ].join("\n"),
         },
       ],
@@ -100,6 +109,24 @@ export async function planGeneratorNode(
         errorMessage:
           "Plan generator returned invalid JSON. Hint: try rephrasing your intent.",
       };
+    }
+
+    // Safety net: unwrap CloudFormation Resources section format if LLM generated it.
+    // Detects: { "LogicalId": { "Type": "AWS::...", "Properties": {...} } }
+    const topValues = Object.values(desiredState);
+    if (
+      topValues.length === 1 &&
+      typeof topValues[0] === "object" &&
+      topValues[0] !== null
+    ) {
+      const inner = topValues[0] as Record<string, unknown>;
+      if (
+        typeof inner["Type"] === "string" &&
+        (inner["Type"] as string).startsWith("AWS::") &&
+        typeof inner["Properties"] === "object"
+      ) {
+        desiredState = inner["Properties"] as Record<string, unknown>;
+      }
     }
 
     // Validate against schema — drop hallucinated fields (Zod.strict equivalent)

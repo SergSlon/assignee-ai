@@ -126,9 +126,9 @@ export function createGraph(tools: StructuredTool[] = []) {
     )
     .addNode(GraphNode.HUMAN_APPROVAL, (state) => humanApprovalNode(state))
     .addNode(GraphNode.RESOURCE_PROVISIONER, (state) =>
-      resourceProvisionerNode(state, tools),
+      resourceProvisionerNode(state),
     )
-    .addNode(GraphNode.STATUS_POLLER, (state) => statusPollerNode(state, tools))
+    .addNode(GraphNode.STATUS_POLLER, (state) => statusPollerNode(state))
     .addNode(GraphNode.RESULT_FORMATTER, (state) => resultFormatterNode(state))
     .addEdge(START, GraphNode.INTENT_PARSER)
     .addEdge(GraphNode.INTENT_PARSER, GraphNode.SCHEMA_FETCHER)

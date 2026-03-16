@@ -1,55 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ExecutionStatus } from "@assignee/core";
+
+// ── SDK mock ──────────────────────────────────────────────────────────────────
+const mockSend = vi.fn();
+
+vi.mock("../services/cloudcontrol-client.js", () => ({
+  getCloudControlClient: () => ({ send: mockSend }),
+}));
+
+vi.mock("@aws-sdk/client-cloudcontrol", () => ({
+  CloudControlClient: vi.fn(),
+  GetResourceCommand: vi
+    .fn()
+    .mockImplementation((input: unknown) => ({ input })),
+  CreateResourceCommand: vi
+    .fn()
+    .mockImplementation((input: unknown) => ({ input })),
+}));
+
 import { resourceProvisionerNode } from "./resource-provisioner.js";
-import type { StructuredTool } from "@langchain/core/tools";
-
-// ── Real MCP response shapes captured from ccapi-mcp-server v1+ ──────────────
-//
-// ccapi-mcp-server returns plain JSON strings (no { type:"text", text } wrapper),
-// unlike aws-iac-mcp-server and aws-pricing-mcp-server which use the wrapper.
-
-/** get_aws_account_info response — account metadata + opaque credentials token */
-const REAL_ACCOUNT_INFO_RESPONSE = JSON.stringify({
-  account_id: "112233445566",
-  region: "us-east-1",
-  credentials_token:
-    "eyJhY2NvdW50X2lkIjoiMDU0MTI1MDE4NDc2IiwicmVnaW9uIjoidXMtZWFzdC0xIn0=",
-});
-
-/** generate_infrastructure_code response — CDK/CFN code + opaque code token */
-const REAL_GENERATE_CODE_RESPONSE = JSON.stringify({
-  generated_code_token:
-    "eyJyZXNvdXJjZV90eXBlIjoiQVdTOjpTMzo6QnVja2V0IiwicHJvcGVydGllcyI6eyJCdWNrZXROYW1lIjoicG9jLXNtb2tlLXRlc3QifX0=",
-  resource_type: "AWS::S3::Bucket",
-  code_summary:
-    "Creates an S3 bucket named poc-smoke-test with mandatory tags.",
-});
-
-/** explain response — human-readable explanation + opaque explained token */
-const REAL_EXPLAIN_RESPONSE = JSON.stringify({
-  explained_token:
-    "eyJvcGVyYXRpb24iOiJjcmVhdGUiLCJyZXNvdXJjZV90eXBlIjoiQVdTOjpTMzo6QnVja2V0In0=",
-  operation: "create",
-  explanation:
-    "This operation will create a new S3 bucket named poc-smoke-test in us-east-1.",
-});
-
-/** run_checkov response — security scan results + opaque scan token */
-const REAL_CHECKOV_RESPONSE = JSON.stringify({
-  security_scan_token: "eyJwYXNzZWQiOnRydWUsImZpbmRpbmdzIjpbXX0=",
-  passed: true,
-  findings: [],
-  summary: "0 failed, 12 passed",
-});
-
-/** create_resource response — async operation started, poll via request_token */
-const REAL_CREATE_RESOURCE_RESPONSE = JSON.stringify({
-  request_token: "0ff011d6-654f-4110-8a37-9754bd6aad59",
-  status: "IN_PROGRESS",
-  is_complete: false,
-  resource_type: "AWS::S3::Bucket",
-  operation: "CREATE",
-});
+import {
+  GetResourceCommand,
+  CreateResourceCommand,
+} from "@aws-sdk/client-cloudcontrol";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -75,32 +48,20 @@ function makeState(overrides: Record<string, unknown> = {}) {
   } as unknown as Parameters<typeof resourceProvisionerNode>[0];
 }
 
-function makeTool(name: string, response: unknown): StructuredTool {
-  return {
-    name,
-    invoke: vi.fn().mockResolvedValue(response),
-  } as unknown as StructuredTool;
+/** ResourceNotFoundException error — SDK throws this when resource is not found */
+function makeResourceNotFoundError(): Error {
+  return Object.assign(new Error("Resource not found"), {
+    name: "ResourceNotFoundException",
+  });
 }
 
-/** Full happy-path tool set — all 5 required CCAPI tools */
-function makeAllTools(overrides: Partial<Record<string, unknown>> = {}) {
-  return [
-    makeTool(
-      "get_aws_account_info",
-      overrides["get_aws_account_info"] ?? REAL_ACCOUNT_INFO_RESPONSE,
-    ),
-    makeTool(
-      "generate_infrastructure_code",
-      overrides["generate_infrastructure_code"] ?? REAL_GENERATE_CODE_RESPONSE,
-    ),
-    makeTool("explain", overrides["explain"] ?? REAL_EXPLAIN_RESPONSE),
-    makeTool("run_checkov", overrides["run_checkov"] ?? REAL_CHECKOV_RESPONSE),
-    makeTool(
-      "create_resource",
-      overrides["create_resource"] ?? REAL_CREATE_RESOURCE_RESPONSE,
-    ),
-  ];
-}
+/** Default happy-path create response */
+const CREATE_RESPONSE = {
+  ProgressEvent: {
+    RequestToken: "0ff011d6-654f-4110-8a37-9754bd6aad59",
+    OperationStatus: "IN_PROGRESS",
+  },
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -113,184 +74,121 @@ describe("resourceProvisionerNode", () => {
     it("returns empty when executionStatus is CANCELLED", async () => {
       const result = await resourceProvisionerNode(
         makeState({ executionStatus: ExecutionStatus.CANCELLED }),
-        makeAllTools(),
       );
       expect(result).toEqual({});
+      expect(mockSend).not.toHaveBeenCalled();
     });
 
     it("fails when desiredState is missing", async () => {
       const result = await resourceProvisionerNode(
         makeState({ desiredState: undefined }),
-        makeAllTools(),
       );
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/desiredState is missing/);
-    });
-
-    it("fails when a required CCAPI tool is missing", async () => {
-      // Drop 'run_checkov' from the tool list
-      const tools = makeAllTools().filter((t) => t.name !== "run_checkov");
-      const result = await resourceProvisionerNode(makeState(), tools);
-      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(/missing tool 'run_checkov'/);
-    });
-
-    it("fails when ALL tools are absent", async () => {
-      const result = await resourceProvisionerNode(makeState(), []);
-      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(/ccapi-mcp-server not available/);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 
   describe("state guard (FR-15 Read-Before-Write)", () => {
-    it("aborts with Stale Plan error when get_resource succeeds (resource exists)", async () => {
-      // Real get_resource response when the S3 bucket already exists
-      const getResourceTool = makeTool(
-        "get_resource",
-        JSON.stringify({
-          resource_type: "AWS::S3::Bucket",
-          identifier: "poc-smoke-test",
-          properties: {
-            BucketName: "poc-smoke-test",
-            Arn: "arn:aws:s3:::poc-smoke-test",
-          },
-        }),
-      );
-      const tools = [...makeAllTools(), getResourceTool];
+    it("aborts with Stale Plan error when GetResourceCommand succeeds (resource exists)", async () => {
+      // GetResourceCommand succeeds → resource already exists
+      mockSend.mockResolvedValueOnce({
+        ResourceDescription: { Identifier: "poc-smoke-test" },
+      });
 
-      const result = await resourceProvisionerNode(makeState(), tools);
+      const result = await resourceProvisionerNode(makeState());
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/Stale Plan/);
       expect(result.errorMessage).toMatch(/poc-smoke-test/);
-      // Provisioning tools must NOT have been called
-      const createTool = tools.find((t) => t.name === "create_resource")!;
-      expect(
-        createTool.invoke as ReturnType<typeof vi.fn>,
-      ).not.toHaveBeenCalled();
+      // CreateResourceCommand must NOT have been called
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(GetResourceCommand).toHaveBeenCalledWith({
+        TypeName: "AWS::S3::Bucket",
+        Identifier: "poc-smoke-test",
+      });
     });
 
-    it("proceeds when get_resource throws (resource not found — safe to create)", async () => {
-      // Real error thrown by ccapi-mcp-server when resource does not exist
-      const getResourceTool = {
-        name: "get_resource",
-        invoke: vi
-          .fn()
-          .mockRejectedValue(
-            new Error(
-              "Resource not found: AWS::S3::Bucket/poc-smoke-test (HandlerErrorCode: NotFound)",
-            ),
-          ),
-      } as unknown as StructuredTool;
-      const tools = [...makeAllTools(), getResourceTool];
+    it("proceeds when GetResourceCommand throws ResourceNotFoundException (resource not found — safe to create)", async () => {
+      // First call: GetResourceCommand throws ResourceNotFoundException
+      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
+      // Second call: CreateResourceCommand succeeds
+      mockSend.mockResolvedValueOnce(CREATE_RESPONSE);
 
-      const result = await resourceProvisionerNode(makeState(), tools);
+      const result = await resourceProvisionerNode(makeState());
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("0ff011d6-654f-4110-8a37-9754bd6aad59");
+      expect(mockSend).toHaveBeenCalledTimes(2);
     });
 
-    it("skips state guard when get_resource tool is not provided", async () => {
-      // No get_resource in tool list — guard is silently bypassed
-      const result = await resourceProvisionerNode(makeState(), makeAllTools());
+    it("fails when GetResourceCommand throws a non-ResourceNotFoundException error", async () => {
+      const accessDenied = Object.assign(new Error("Access denied"), {
+        name: "AccessDeniedException",
+      });
+      mockSend.mockRejectedValueOnce(accessDenied);
 
-      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      const result = await resourceProvisionerNode(makeState());
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(/State Guard failed/);
+      // CreateResourceCommand must NOT have been called
+      expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
     it("skips state guard when identifier cannot be derived (no BucketName)", async () => {
-      const getResourceTool = makeTool("get_resource", "{}");
-      const tools = [...makeAllTools(), getResourceTool];
+      // No BucketName → getPrimaryIdentifier returns undefined → skip state guard
+      mockSend.mockResolvedValueOnce(CREATE_RESPONSE);
 
-      // desiredState has no BucketName — getPrimaryIdentifier returns undefined
       const result = await resourceProvisionerNode(
         makeState({ desiredState: { Tags: [] } }),
-        tools,
       );
 
-      expect(
-        getResourceTool.invoke as ReturnType<typeof vi.fn>,
-      ).not.toHaveBeenCalled();
+      // Only CreateResourceCommand was called (no GetResourceCommand)
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(CreateResourceCommand).toHaveBeenCalled();
+      expect(GetResourceCommand).not.toHaveBeenCalled();
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     });
   });
 
-  describe("happy path — full 4-step CCAPI workflow", () => {
-    it("calls all 5 tools in order and returns IN_PROGRESS with requestToken", async () => {
-      const tools = makeAllTools();
-      const result = await resourceProvisionerNode(makeState(), tools);
+  describe("happy path — CloudControl create workflow", () => {
+    it("calls GetResourceCommand then CreateResourceCommand and returns IN_PROGRESS with requestToken", async () => {
+      mockSend.mockRejectedValueOnce(makeResourceNotFoundError()); // state guard
+      mockSend.mockResolvedValueOnce(CREATE_RESPONSE); // create
+
+      const result = await resourceProvisionerNode(makeState());
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("0ff011d6-654f-4110-8a37-9754bd6aad59");
       expect(result.startedAt).toBeDefined();
 
-      const [accountTool, codeTool, explainTool, checkovTool, createTool] =
-        tools as [
-          StructuredTool,
-          StructuredTool,
-          StructuredTool,
-          StructuredTool,
-          StructuredTool,
-        ];
-
-      // Step 1: get_aws_account_info — no input required
-      expect(accountTool.invoke).toHaveBeenCalledWith({});
-
-      // Step 2: generate_infrastructure_code — receives credentials_token from step 1
-      expect(codeTool.invoke).toHaveBeenCalledWith(
+      expect(GetResourceCommand).toHaveBeenCalledWith({
+        TypeName: "AWS::S3::Bucket",
+        Identifier: "poc-smoke-test",
+      });
+      expect(CreateResourceCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          resource_type: "AWS::S3::Bucket",
-          credentials_token:
-            "eyJhY2NvdW50X2lkIjoiMDU0MTI1MDE4NDc2IiwicmVnaW9uIjoidXMtZWFzdC0xIn0=",
-        }),
-      );
-
-      // Step 3: explain — receives generated_code_token from step 2
-      expect(explainTool.invoke).toHaveBeenCalledWith(
-        expect.objectContaining({
-          generated_code_token:
-            "eyJyZXNvdXJjZV90eXBlIjoiQVdTOjpTMzo6QnVja2V0IiwicHJvcGVydGllcyI6eyJCdWNrZXROYW1lIjoicG9jLXNtb2tlLXRlc3QifX0=",
-          operation: "create",
-        }),
-      );
-
-      // Step 4: run_checkov — receives explained_token from step 3
-      expect(checkovTool.invoke).toHaveBeenCalledWith(
-        expect.objectContaining({
-          explained_token:
-            "eyJvcGVyYXRpb24iOiJjcmVhdGUiLCJyZXNvdXJjZV90eXBlIjoiQVdTOjpTMzo6QnVja2V0In0=",
-        }),
-      );
-
-      // Step 5: create_resource — receives all 3 tokens
-      expect(createTool.invoke).toHaveBeenCalledWith(
-        expect.objectContaining({
-          resource_type: "AWS::S3::Bucket",
-          credentials_token:
-            "eyJhY2NvdW50X2lkIjoiMDU0MTI1MDE4NDc2IiwicmVnaW9uIjoidXMtZWFzdC0xIn0=",
-          explained_token:
-            "eyJvcGVyYXRpb24iOiJjcmVhdGUiLCJyZXNvdXJjZV90eXBlIjoiQVdTOjpTMzo6QnVja2V0In0=",
-          security_scan_token: "eyJwYXNzZWQiOnRydWUsImZpbmRpbmdzIjpbXX0=",
+          TypeName: "AWS::S3::Bucket",
+          ClientToken: "run-prov-test-001",
         }),
       );
     });
 
-    it("injects mandatory tags into generate_infrastructure_code properties", async () => {
-      const tools = makeAllTools();
-      await resourceProvisionerNode(makeState(), tools);
+    it("injects mandatory tags into CreateResourceCommand DesiredState", async () => {
+      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
+      mockSend.mockResolvedValueOnce(CREATE_RESPONSE);
 
-      const codeTool = tools.find(
-        (t) => t.name === "generate_infrastructure_code",
-      )!;
-      const callArgs = (
-        (codeTool.invoke as ReturnType<typeof vi.fn>).mock.calls[0] as [
-          Record<string, unknown>,
-        ]
-      )[0];
-      const properties = callArgs["properties"] as Record<string, unknown>;
+      await resourceProvisionerNode(makeState());
+
+      const createCall = vi.mocked(CreateResourceCommand).mock.calls[0]![0];
+      const desiredState = JSON.parse(
+        (createCall as { DesiredState: string }).DesiredState,
+      ) as Record<string, unknown>;
 
       // NFR-14: mandatory traceability tags must be injected
-      expect(properties).toHaveProperty("Tags");
-      expect(properties["Tags"]).toEqual(
+      expect(desiredState).toHaveProperty("Tags");
+      expect(desiredState["Tags"]).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             Key: "assignee-run-id",
@@ -302,12 +200,13 @@ describe("resourceProvisionerNode", () => {
     });
 
     it("works for AWS::SSM::Parameter with Name as identifier", async () => {
-      const createResponse = JSON.stringify({
-        request_token: "ssm-req-token-abc",
-        status: "IN_PROGRESS",
-        is_complete: false,
+      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
+      mockSend.mockResolvedValueOnce({
+        ProgressEvent: {
+          RequestToken: "ssm-req-token-abc",
+          OperationStatus: "IN_PROGRESS",
+        },
       });
-      const tools = makeAllTools({ create_resource: createResponse });
 
       const result = await resourceProvisionerNode(
         makeState({
@@ -318,20 +217,30 @@ describe("resourceProvisionerNode", () => {
             Type: "String",
           },
         }),
-        tools,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("ssm-req-token-abc");
+
+      // NFR-14: SSM Parameter uses flat map Tags, not [{Key, Value}] array
+      const createCall = vi.mocked(CreateResourceCommand).mock.calls[0]![0];
+      const desiredState = JSON.parse(
+        (createCall as { DesiredState: string }).DesiredState,
+      ) as Record<string, unknown>;
+      expect(Array.isArray(desiredState["Tags"])).toBe(false);
+      expect(
+        (desiredState["Tags"] as Record<string, string>)["managed-by"],
+      ).toBe("assignee-ai");
     });
 
     it("works for AWS::IAM::Role with RoleName as identifier", async () => {
-      const createResponse = JSON.stringify({
-        request_token: "iam-req-token-xyz",
-        status: "IN_PROGRESS",
-        is_complete: false,
+      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
+      mockSend.mockResolvedValueOnce({
+        ProgressEvent: {
+          RequestToken: "iam-req-token-xyz",
+          OperationStatus: "IN_PROGRESS",
+        },
       });
-      const tools = makeAllTools({ create_resource: createResponse });
 
       const result = await resourceProvisionerNode(
         makeState({
@@ -341,7 +250,6 @@ describe("resourceProvisionerNode", () => {
             AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] },
           },
         }),
-        tools,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
@@ -349,68 +257,58 @@ describe("resourceProvisionerNode", () => {
     });
   });
 
-  describe("error handling — each step can fail independently", () => {
-    it("fails when get_aws_account_info throws (bad credentials)", async () => {
-      // Real error from ccapi-mcp-server when AWS credentials are invalid
-      const tools = makeAllTools();
-      const accountTool = tools.find((t) => t.name === "get_aws_account_info")!;
-      (accountTool as unknown as { invoke: ReturnType<typeof vi.fn> }).invoke =
-        vi
-          .fn()
-          .mockRejectedValue(
-            new Error(
-              "Unable to locate credentials. You can configure credentials by running 'aws configure'.",
-            ),
-          );
+  describe("missing RequestToken guard", () => {
+    it("fails when CreateResourceCommand returns no RequestToken in ProgressEvent", async () => {
+      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
+      // Response with no ProgressEvent at all
+      mockSend.mockResolvedValueOnce({});
 
-      const result = await resourceProvisionerNode(makeState(), tools);
+      const result = await resourceProvisionerNode(makeState());
+
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(/Resource creation failed/);
-      expect(result.errorMessage).toMatch(/Unable to locate credentials/);
+      expect(result.errorMessage).toMatch(/no RequestToken/);
     });
 
-    it("fails when generate_infrastructure_code throws", async () => {
-      const tools = makeAllTools();
-      const codeTool = tools.find(
-        (t) => t.name === "generate_infrastructure_code",
-      )!;
-      (codeTool as unknown as { invoke: ReturnType<typeof vi.fn> }).invoke = vi
-        .fn()
-        .mockRejectedValue(
-          new Error(
-            "Invalid resource type: AWS::S3::Bucket is not supported in this region",
-          ),
-        );
+    it("fails when CreateResourceCommand returns ProgressEvent with no RequestToken", async () => {
+      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
+      mockSend.mockResolvedValueOnce({ ProgressEvent: {} });
 
-      const result = await resourceProvisionerNode(makeState(), tools);
+      const result = await resourceProvisionerNode(makeState());
+
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(/Resource creation failed/);
+      expect(result.errorMessage).toMatch(/no RequestToken/);
     });
+  });
 
-    it("fails when run_checkov returns invalid JSON", async () => {
-      const tools = makeAllTools({ run_checkov: "not-valid-json{{" });
+  describe("error handling — CreateResourceCommand failures", () => {
+    it("fails when CreateResourceCommand throws (e.g. BucketAlreadyExists race condition)", async () => {
+      mockSend.mockRejectedValueOnce(makeResourceNotFoundError()); // state guard passes
+      mockSend.mockRejectedValueOnce(
+        new Error(
+          'Resource handler returned message: "BucketAlreadyOwnedByYou" (HandlerErrorCode: AlreadyExists)',
+        ),
+      );
 
-      const result = await resourceProvisionerNode(makeState(), tools);
+      const result = await resourceProvisionerNode(makeState());
+
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(/Resource creation failed/);
-    });
-
-    it("fails when create_resource throws (e.g. BucketAlreadyExists race condition)", async () => {
-      // Real error from CCAPI when S3 bucket name is already taken
-      const tools = makeAllTools();
-      const createTool = tools.find((t) => t.name === "create_resource")!;
-      (createTool as unknown as { invoke: ReturnType<typeof vi.fn> }).invoke =
-        vi
-          .fn()
-          .mockRejectedValue(
-            new Error(
-              'Resource handler returned message: "BucketAlreadyOwnedByYou" (HandlerErrorCode: AlreadyExists)',
-            ),
-          );
-
-      const result = await resourceProvisionerNode(makeState(), tools);
-      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(/CloudControl provisioning failed/);
       expect(result.errorMessage).toMatch(/BucketAlreadyOwnedByYou/);
+    });
+
+    it("fails when CreateResourceCommand throws with non-Error (bad credentials)", async () => {
+      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
+      mockSend.mockRejectedValueOnce(
+        new Error(
+          "Unable to locate credentials. You can configure credentials by running 'aws configure'.",
+        ),
+      );
+
+      const result = await resourceProvisionerNode(makeState());
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(/CloudControl provisioning failed/);
+      expect(result.errorMessage).toMatch(/Unable to locate credentials/);
     });
   });
 });

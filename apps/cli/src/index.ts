@@ -25,6 +25,12 @@ program
 program.addCommand(planCommand);
 program.addCommand(applyCommand);
 
+// EPIPE: stdout pipe closed (e.g. piped to grep/head that exits early).
+// Node.js throws by default; suppress and exit cleanly instead.
+process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EPIPE") process.exit(ProcessExitCode.SUCCESS);
+});
+
 // Graceful shutdown handlers for MCP servers
 process.on("SIGINT", async () => {
   await closeMcpClient();

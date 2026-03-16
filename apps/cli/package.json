@@ -17,6 +17,7 @@
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^4.0.77",
     "@assignee/core": "workspace:*",
+    "@aws-sdk/client-cloudcontrol": "^3.1009.0",
     "@clack/prompts": "^1.1.0",
     "@langchain/core": "^1.1.32",
     "@langchain/langgraph": "^1.2.2",

@@ -92,7 +92,7 @@ Expected log sequence:
 
 ## Test 2 — Apply command — approve (creates real resource)
 
-**Purpose:** Verify the full apply pipeline: plan → HITL confirm → CCAPI provisioning → tag injection → status polling → success output.
+**Purpose:** Verify the full apply pipeline: plan → HITL confirm → CloudControl SDK provisioning → tag injection → status polling → success output.
 
 > ⚠️ This creates a real S3 bucket in `eu-west-1`. Clean up afterwards.
 
@@ -153,11 +153,12 @@ Expected tags (NFR-14):
 ```bash
 aws logs filter-log-events \
   --log-group-name /assignee-ai/bedrock-invocations \
-  --region eu-west-1 \
+  --region us-east-1 \
   --start-time $(date -v -5M +%s000) \
-  --query 'events[0].message' \
-  --output text | jq .
+  --output json | jq '.events[0].message // "No log events found" | fromjson? // .'
 ```
+
+> Bedrock runs in `us-east-1` (`AWS_REGION` in `.env`) — logs are written there, not in `eu-west-1`. `--output text --query 'events[0].message'` returns the literal string `None` when no events match (breaking `jq`); use `--output json` and extract via jq instead.
 
 **Check:**
 
@@ -347,8 +348,8 @@ assignee plan "Create an S3 bucket named poc-ci-test" | cat
 **Expected:** Plain text without escape sequences or box-drawing characters.
 
 ```bash
-# Confirm no ANSI codes
-assignee plan "Create an S3 bucket named poc-ci-test" | cat | grep -P '\x1b\[' && echo "FAIL: ANSI found" || echo "PASS: no ANSI"
+# Confirm no ANSI codes (macOS-compatible — BSD grep does not support -P)
+assignee plan "Create an S3 bucket named poc-ci-test" | cat | grep $'\033[' && echo "FAIL: ANSI found" || echo "PASS: no ANSI"
 ```
 
 ---
