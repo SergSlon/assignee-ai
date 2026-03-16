@@ -42,21 +42,19 @@ function mcpEnv(
  * Called at runtime (not module load) so MCP_AWS_* env vars are available.
  *
  * Region notes:
- *   - CCAPI: us-east-1 — provisioning is regional, must match target region
- *   - IAC:   us-east-1 — CloudFormation validation/docs (replaces deprecated cfn-mcp-server)
+ *   - IAC (cfn-mcp-server): us-east-1 — provides get_resource_schema_information for schema fetching.
+ *     NOTE: cfn-mcp-server is deprecated by AWS in favour of aws-iac-mcp-server, but aws-iac-mcp-server
+ *     v3+ dropped get_resource_schema_information (replaced by text-search tool search_cloudformation_documentation).
+ *     Retained until schema-fetcher is migrated to CloudFormation Registry direct HTTP/SDK fetch (follow-up story).
  *   - Pricing: us-east-1 — AWS Pricing API only available in us-east-1
  *   - Knowledge: no AWS creds — public remote API via fastmcp
+ *   - Docs:    no AWS creds — public documentation API via uvx subprocess
  */
 export function getMcpServerConfigs(): Record<string, McpServerConfig> {
   return {
-    [McpServerName.CCAPI]: {
-      command: McpCommand.UVX,
-      args: ["awslabs.ccapi-mcp-server@latest"],
-      env: mcpEnv("us-east-1"),
-    },
     [McpServerName.IAC]: {
       command: McpCommand.UVX,
-      args: ["awslabs.aws-iac-mcp-server@latest"],
+      args: ["awslabs.cfn-mcp-server@latest"],
       env: mcpEnv("us-east-1"),
     },
     // Knowledge server: yanked uvx package — use remote API via fastmcp instead
@@ -70,6 +68,13 @@ export function getMcpServerConfigs(): Record<string, McpServerConfig> {
       command: McpCommand.UVX,
       args: ["awslabs.aws-pricing-mcp-server@latest"],
       env: mcpEnv("us-east-1"),
+    },
+    // Documentation server: targeted section-level access to AWS official docs via read_sections.
+    // Complements the Knowledge server (which adds blogs/What's New/Builder Center/regional data).
+    // No AWS credentials needed — public documentation API.
+    [McpServerName.DOCS]: {
+      command: McpCommand.UVX,
+      args: ["awslabs.aws-documentation-mcp-server@latest"],
     },
   };
 }

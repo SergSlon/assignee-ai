@@ -1,22 +1,23 @@
 /**
- * status_poller node — polls CCAPI for async operation status.
+ * status_poller node — polls CloudControl for async operation status.
  * LangGraph self-loop: returns IN_PROGRESS to re-invoke itself, or routes to result_formatter.
  * Timeout: 5 minutes; poll interval: 2 seconds.
  *
- * @see Story 2-3
+ * Uses @aws-sdk/client-cloudcontrol directly (replaces deprecated ccapi-mcp-server).
+ *
+ * @see Story 7-6
  */
 
 import { ExecutionStatus } from "@assignee/core";
-import type { StructuredTool } from "@langchain/core/tools";
-import { ToolName } from "../constants/tools.js";
+import { GetResourceRequestStatusCommand } from "@aws-sdk/client-cloudcontrol";
+import { getCloudControlClient } from "../services/cloudcontrol-client.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
-import { unwrapMcpText } from "../utils/mcp.js";
 import type { AgentState } from "../services/graph.js";
 
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const POLL_INTERVAL_MS = 2_000; // 2 seconds
 
-/** Provisioning operation status values returned by ccapi-mcp-server */
+/** Provisioning operation status values returned by CloudControl SDK */
 const ProvisioningStatus = {
   SUCCESS: "SUCCESS",
   FAILED: "FAILED",
@@ -25,7 +26,6 @@ const ProvisioningStatus = {
 
 export async function statusPollerNode(
   state: AgentState,
-  tools?: StructuredTool[],
 ): Promise<Partial<AgentState>> {
   if (!state.requestToken) {
     return {
@@ -45,31 +45,22 @@ export async function statusPollerNode(
     };
   }
 
-  const getStatus = tools?.find(
-    (t) => t.name === ToolName.GET_RESOURCE_REQUEST_STATUS,
-  );
-  if (!getStatus) {
-    return {
-      executionStatus: ExecutionStatus.FAILED,
-      errorMessage: "ccapi-mcp-server not available for status polling.",
-    };
-  }
-
   // Wait between polls
   await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 
+  const client = getCloudControlClient();
+
   try {
-    const result = await getStatus.invoke({
-      request_token: state.requestToken,
-    });
+    const result = await client.send(
+      new GetResourceRequestStatusCommand({
+        RequestToken: state.requestToken,
+      }),
+    );
 
-    const parsed = JSON.parse(unwrapMcpText(result)) as Record<string, unknown>;
-
-    const status = parsed?.["status"] as string | undefined;
-    const isComplete = parsed?.["is_complete"] as boolean | undefined;
-    const resourceIdentifier = parsed?.["resource_identifier"] as
-      | string
-      | undefined;
+    const event = result.ProgressEvent;
+    const status = event?.OperationStatus as string | undefined;
+    const resourceIdentifier = event?.Identifier;
+    const errorMessage = event?.StatusMessage;
 
     const durationMs = Date.now() - startedAt;
 
@@ -80,14 +71,12 @@ export async function statusPollerNode(
       action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
       durationMs,
       status,
-      isComplete,
     });
 
     if (
       status === ProvisioningStatus.FAILED ||
       status === ProvisioningStatus.CANCEL_COMPLETE
     ) {
-      const errorMessage = parsed?.["error_message"] ?? parsed?.["message"];
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage:
@@ -97,7 +86,7 @@ export async function statusPollerNode(
       };
     }
 
-    if (status === ProvisioningStatus.SUCCESS || isComplete === true) {
+    if (status === ProvisioningStatus.SUCCESS) {
       return {
         executionStatus: ExecutionStatus.SUCCESS,
         resourceArn: resourceIdentifier,
@@ -109,7 +98,7 @@ export async function statusPollerNode(
   } catch (err: unknown) {
     return {
       executionStatus: ExecutionStatus.FAILED,
-      errorMessage: `Status polling failed: ${err instanceof Error ? err.message : String(err)}`,
+      errorMessage: `CloudControl polling failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }

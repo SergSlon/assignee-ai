@@ -122,4 +122,42 @@ describe("planGeneratorNode", () => {
 
     expect(result.desiredState).toEqual({ BucketName: "clean-bucket" });
   });
+
+  it("unwraps CloudFormation Resources section format if LLM generates it", async () => {
+    vi.mocked(generateText).mockResolvedValueOnce({
+      text: JSON.stringify({
+        MyBucket: {
+          Type: "AWS::S3::Bucket",
+          Properties: { BucketName: "my-test-bucket" },
+        },
+      }),
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    const result = await planGeneratorNode(makeState());
+
+    expect(result.desiredState).toEqual({ BucketName: "my-test-bucket" });
+  });
+
+  it("reads schema from uppercase Properties key as fallback", async () => {
+    vi.mocked(generateText).mockResolvedValueOnce({
+      text: JSON.stringify({
+        BucketName: "my-bucket",
+        HallucinatedField: "bad",
+      }),
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    const result = await planGeneratorNode(
+      makeState({
+        resourceSchema: {
+          Properties: {
+            BucketName: { type: "string" },
+            Tags: { type: "array" },
+          },
+          required: ["BucketName"],
+        },
+      }),
+    );
+
+    expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
+  });
 });

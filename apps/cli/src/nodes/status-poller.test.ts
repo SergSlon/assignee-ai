@@ -1,7 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ExecutionStatus } from "@assignee/core";
+
+// ── SDK mock ──────────────────────────────────────────────────────────────────
+const mockSend = vi.fn();
+
+vi.mock("../services/cloudcontrol-client.js", () => ({
+  getCloudControlClient: () => ({ send: mockSend }),
+}));
+
+vi.mock("@aws-sdk/client-cloudcontrol", () => ({
+  CloudControlClient: vi.fn(),
+  GetResourceRequestStatusCommand: vi
+    .fn()
+    .mockImplementation((input: unknown) => ({ input })),
+}));
+
 import { statusPollerNode } from "./status-poller.js";
-import type { StructuredTool } from "@langchain/core/tools";
+import { GetResourceRequestStatusCommand } from "@aws-sdk/client-cloudcontrol";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
@@ -25,16 +42,11 @@ function makeState(overrides: Record<string, unknown> = {}) {
   } as unknown as Parameters<typeof statusPollerNode>[0];
 }
 
-function makeStatusTool(response: unknown): StructuredTool {
-  return {
-    name: "get_resource_request_status",
-    invoke: vi.fn().mockResolvedValue(response),
-  } as unknown as StructuredTool;
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
 });
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("statusPollerNode", () => {
   it("fails immediately when requestToken is missing", async () => {
@@ -43,162 +55,129 @@ describe("statusPollerNode", () => {
     );
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/No request token/);
-  });
-
-  it("fails immediately when status tool is not available", async () => {
-    const result = await statusPollerNode(makeState(), []);
-    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(result.errorMessage).toMatch(/ccapi-mcp-server not available/);
+    expect(mockSend).not.toHaveBeenCalled();
   });
 
   it("fails when startedAt exceeds 5-minute timeout", async () => {
-    const tool = makeStatusTool({
-      type: "text",
-      text: JSON.stringify({ status: "IN_PROGRESS", is_complete: false }),
-    });
     const result = await statusPollerNode(
       makeState({ startedAt: Date.now() - 6 * 60 * 1000 }),
-      [tool],
     );
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/timed out/);
-    expect(tool.invoke).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
   });
 
-  it("parses real IN_PROGRESS MCP response and returns IN_PROGRESS", async () => {
-    // Real response shape returned by ccapi-mcp-server get_resource_request_status.
-    // Captured from a live call during S3 bucket creation — operation still running.
-    const realMcpResponse = {
-      type: "text",
-      text: JSON.stringify({
-        status: "IN_PROGRESS",
-        is_complete: false,
-        request_token: "tok-abc123",
-        operation: "CREATE",
-        resource_type: "AWS::S3::Bucket",
-      }),
-    };
+  it("returns IN_PROGRESS for IN_PROGRESS OperationStatus", async () => {
+    mockSend.mockResolvedValueOnce({
+      ProgressEvent: {
+        RequestToken: "tok-abc123",
+        OperationStatus: "IN_PROGRESS",
+        TypeName: "AWS::S3::Bucket",
+      },
+    });
 
-    const tool = makeStatusTool(realMcpResponse);
-    const result = await statusPollerNode(makeState(), [tool]);
+    const result = await statusPollerNode(makeState());
 
     expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     expect(result.resourceArn).toBeUndefined();
-    expect(tool.invoke).toHaveBeenCalledWith({ request_token: "tok-abc123" });
+    expect(GetResourceRequestStatusCommand).toHaveBeenCalledWith({
+      RequestToken: "tok-abc123",
+    });
   }, 5000);
 
-  it("parses real SUCCESS MCP response and returns SUCCESS with identifier", async () => {
-    // Real response shape returned by ccapi-mcp-server get_resource_request_status.
-    // Captured from a live call after S3 bucket creation completed successfully.
-    const realMcpResponse = {
-      type: "text",
-      text: JSON.stringify({
-        status: "SUCCESS",
-        is_complete: true,
-        request_token: "tok-abc123",
-        operation: "CREATE",
-        resource_type: "AWS::S3::Bucket",
-        resource_identifier: "poc-smoke-test",
-      }),
-    };
+  it("returns SUCCESS with Identifier when OperationStatus is SUCCESS", async () => {
+    mockSend.mockResolvedValueOnce({
+      ProgressEvent: {
+        RequestToken: "tok-abc123",
+        OperationStatus: "SUCCESS",
+        TypeName: "AWS::S3::Bucket",
+        Identifier: "poc-smoke-test",
+      },
+    });
 
-    const tool = makeStatusTool(realMcpResponse);
-    const result = await statusPollerNode(makeState(), [tool]);
+    const result = await statusPollerNode(makeState());
 
     expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
     expect(result.resourceArn).toBe("poc-smoke-test");
   }, 5000);
 
-  it("parses SUCCESS via is_complete flag even when status field is absent", async () => {
-    // Some ccapi-mcp-server versions only set is_complete without a status string.
-    const realMcpResponse = {
-      type: "text",
-      text: JSON.stringify({
-        is_complete: true,
-        request_token: "tok-abc123",
-        resource_type: "AWS::SSM::Parameter",
-        resource_identifier: "/app/config/env",
-      }),
-    };
-
-    const tool = makeStatusTool(realMcpResponse);
-    const result = await statusPollerNode(
-      makeState({ resourceType: "AWS::SSM::Parameter" }),
-      [tool],
-    );
-
-    expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
-    expect(result.resourceArn).toBe("/app/config/env");
-  }, 5000);
-
-  it("parses real FAILED MCP response and returns FAILED with error_message", async () => {
-    // Real response shape returned by ccapi-mcp-server when creation fails.
-    const realMcpResponse = {
-      type: "text",
-      text: JSON.stringify({
-        status: "FAILED",
-        is_complete: true,
-        request_token: "tok-abc123",
-        operation: "CREATE",
-        resource_type: "AWS::S3::Bucket",
-        error_message:
+  it("returns FAILED with StatusMessage when OperationStatus is FAILED", async () => {
+    mockSend.mockResolvedValueOnce({
+      ProgressEvent: {
+        RequestToken: "tok-abc123",
+        OperationStatus: "FAILED",
+        TypeName: "AWS::S3::Bucket",
+        StatusMessage:
           'Resource handler returned message: "BucketAlreadyExists" (HandlerErrorCode: AlreadyExists)',
-      }),
-    };
+      },
+    });
 
-    const tool = makeStatusTool(realMcpResponse);
-    const result = await statusPollerNode(makeState(), [tool]);
+    const result = await statusPollerNode(makeState());
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/BucketAlreadyExists/);
   }, 5000);
 
-  it("parses CANCEL_COMPLETE status and returns FAILED", async () => {
-    const realMcpResponse = {
-      type: "text",
-      text: JSON.stringify({
-        status: "CANCEL_COMPLETE",
-        is_complete: true,
-        request_token: "tok-abc123",
-        resource_type: "AWS::IAM::Role",
-      }),
-    };
+  it("returns FAILED with fallback message when FAILED and no StatusMessage", async () => {
+    mockSend.mockResolvedValueOnce({
+      ProgressEvent: {
+        RequestToken: "tok-abc123",
+        OperationStatus: "FAILED",
+        TypeName: "AWS::S3::Bucket",
+      },
+    });
 
-    const tool = makeStatusTool(realMcpResponse);
+    const result = await statusPollerNode(makeState());
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toMatch(/provisioning failed/);
+  }, 5000);
+
+  it("returns FAILED when OperationStatus is CANCEL_COMPLETE", async () => {
+    mockSend.mockResolvedValueOnce({
+      ProgressEvent: {
+        RequestToken: "tok-abc123",
+        OperationStatus: "CANCEL_COMPLETE",
+        TypeName: "AWS::IAM::Role",
+      },
+    });
+
     const result = await statusPollerNode(
       makeState({ resourceType: "AWS::IAM::Role" }),
-      [tool],
     );
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/provisioning failed/);
   }, 5000);
 
-  it("handles plain JSON string response (no text wrapper)", async () => {
-    // Some MCP server versions return a raw JSON string directly.
-    const plainStringResponse = JSON.stringify({
-      status: "SUCCESS",
-      is_complete: true,
-      request_token: "tok-abc123",
-      resource_identifier: "my-ssm-param",
-    });
+  it("returns FAILED with error message on SDK send error", async () => {
+    mockSend.mockRejectedValueOnce(new Error("Network timeout"));
 
-    const tool = makeStatusTool(plainStringResponse);
-    const result = await statusPollerNode(makeState(), [tool]);
-
-    expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
-    expect(result.resourceArn).toBe("my-ssm-param");
-  }, 5000);
-
-  it("returns FAILED on tool invoke error", async () => {
-    const tool = {
-      name: "get_resource_request_status",
-      invoke: vi.fn().mockRejectedValue(new Error("Network timeout")),
-    } as unknown as StructuredTool;
-
-    const result = await statusPollerNode(makeState(), [tool]);
+    const result = await statusPollerNode(makeState());
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toMatch(/CloudControl polling failed/);
     expect(result.errorMessage).toMatch(/Network timeout/);
+  }, 5000);
+
+  it("works for AWS::SSM::Parameter — returns SUCCESS with Identifier", async () => {
+    mockSend.mockResolvedValueOnce({
+      ProgressEvent: {
+        RequestToken: "tok-ssm-999",
+        OperationStatus: "SUCCESS",
+        TypeName: "AWS::SSM::Parameter",
+        Identifier: "/app/config/env",
+      },
+    });
+
+    const result = await statusPollerNode(
+      makeState({
+        requestToken: "tok-ssm-999",
+        resourceType: "AWS::SSM::Parameter",
+      }),
+    );
+
+    expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(result.resourceArn).toBe("/app/config/env");
   }, 5000);
 });

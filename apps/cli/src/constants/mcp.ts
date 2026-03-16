@@ -1,8 +1,8 @@
 export const McpServerName = {
-  CCAPI: "ccapi-mcp-server",
-  IAC: "aws-iac-mcp-server",
+  IAC: "cfn-mcp-server",
   KNOWLEDGE: "aws-knowledge-mcp-server",
   PRICING: "aws-pricing-mcp-server",
+  DOCS: "aws-documentation-mcp-server",
 } as const;
 
 export type McpServerNameType =

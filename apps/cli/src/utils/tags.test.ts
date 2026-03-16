@@ -12,6 +12,32 @@ function findTag(tags: CfnTag[], key: string): CfnTag | undefined {
 describe("injectMandatoryTags", () => {
   const runId = "test-run-id-123";
 
+  describe("AWS::SSM::Parameter — flat map format", () => {
+    it("produces Tags as flat { key: value } map", () => {
+      const result = injectMandatoryTags(
+        { Name: "/poc/test/greeting", Value: "hello", Type: "String" },
+        runId,
+        "AWS::SSM::Parameter",
+      );
+      const tags = result["Tags"] as Record<string, string>;
+      expect(Array.isArray(tags)).toBe(false);
+      expect(tags["managed-by"]).toBe("assignee-ai");
+      expect(tags["assignee-run-id"]).toBe(runId);
+      expect(tags["environment"]).toBe("poc");
+    });
+
+    it("merges existing flat map tags, mandatory overwrite duplicates", () => {
+      const result = injectMandatoryTags(
+        { Name: "/x", Tags: { team: "platform", environment: "staging" } },
+        runId,
+        "AWS::SSM::Parameter",
+      );
+      const tags = result["Tags"] as Record<string, string>;
+      expect(tags["team"]).toBe("platform");
+      expect(tags["environment"]).toBe("poc"); // mandatory overwrites
+    });
+  });
+
   it("adds all 3 mandatory tags in [{Key, Value}] CloudFormation format", () => {
     const result = injectMandatoryTags({ BucketName: "my-bucket" }, runId);
     const tags = getTags(result);
