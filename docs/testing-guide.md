@@ -1,7 +1,7 @@
 # Testing Guide — Assignee.ai POC
 
 > End-to-end smoke tests for the `assignee plan` and `assignee apply` commands.
-> All tests run against real AWS (eu-west-1, account 112233445566).
+> All tests run against real AWS (us-east-1, account 112233445566).
 
 ---
 
@@ -94,7 +94,7 @@ Expected log sequence:
 
 **Purpose:** Verify the full apply pipeline: plan → HITL confirm → CloudControl SDK provisioning → tag injection → status polling → success output.
 
-> ⚠️ This creates a real S3 bucket in `eu-west-1`. Clean up afterwards.
+> ⚠️ This creates a real S3 bucket in `us-east-1`. Clean up afterwards.
 
 ```bash
 BUCKET="poc-apply-test-$(date +%s)"
@@ -133,7 +133,7 @@ At the confirmation prompt:
 ```bash
 aws s3api get-bucket-tagging \
   --bucket $BUCKET \
-  --region eu-west-1
+  --region us-east-1
 ```
 
 Expected tags (NFR-14):
@@ -158,7 +158,7 @@ aws logs filter-log-events \
   --output json | jq '.events[0].message // "No log events found" | fromjson? // .'
 ```
 
-> Bedrock runs in `us-east-1` (`AWS_REGION` in `.env`) — logs are written there, not in `eu-west-1`. `--output text --query 'events[0].message'` returns the literal string `None` when no events match (breaking `jq`); use `--output json` and extract via jq instead.
+> Bedrock runs in `us-east-1` (`AWS_REGION` in `.env`) — logs are written there, not in `us-east-1`. `--output text --query 'events[0].message'` returns the literal string `None` when no events match (breaking `jq`); use `--output json` and extract via jq instead.
 
 **Check:**
 
@@ -171,7 +171,7 @@ aws logs filter-log-events \
 **Cleanup:**
 
 ```bash
-aws s3 rb s3://$BUCKET --region eu-west-1
+aws s3 rb s3://$BUCKET --region us-east-1
 ```
 
 ---
@@ -226,7 +226,7 @@ assignee apply "Create an S3 bucket named $BUCKET"
 **Cleanup:**
 
 ```bash
-aws s3 rb s3://$BUCKET --region eu-west-1
+aws s3 rb s3://$BUCKET --region us-east-1
 ```
 
 ---
@@ -235,22 +235,21 @@ aws s3 rb s3://$BUCKET --region eu-west-1
 
 **Purpose:** Verify intent parser rejects unsupported types with an actionable error (NFR-08).
 
-> Note: EC2, RDS, and Lambda are now supported (added in Epic 7). Use DynamoDB as the unsupported type.
-
 ```bash
-assignee plan "Create a DynamoDB table for user sessions"
+assignee plan "Create an EC2 instance with 2 CPUs"
 ```
 
 **Expected:**
 
 ```
-✖ Error: Unsupported resource type. Supported types: AWS::S3::Bucket, AWS::SSM::Parameter, AWS::IAM::Role, AWS::EC2::Instance, AWS::RDS::DBInstance, AWS::Lambda::Function.
+✖ Error: Unsupported resource type: AWS::EC2::Instance
+  How to Fix: Supported in POC: AWS::S3::Bucket, AWS::SSM::Parameter, AWS::IAM::Role
 ```
 
 **Check:**
 
 - [ ] Exits 1: `echo $?` → `1`
-- [ ] Error lists all 6 supported types
+- [ ] Error lists all 3 supported POC types
 - [ ] No AWS call attempted
 
 ---
@@ -268,7 +267,7 @@ assignee apply "Create an SSM parameter named /poc/test/greeting with value hell
 ```bash
 aws ssm get-parameter \
   --name /poc/test/greeting \
-  --region eu-west-1 \
+  --region us-east-1 \
   --query 'Parameter.Value' \
   --output text
 # Expected: hello-world
@@ -277,7 +276,7 @@ aws ssm get-parameter \
 **Cleanup:**
 
 ```bash
-aws ssm delete-parameter --name /poc/test/greeting --region eu-west-1
+aws ssm delete-parameter --name /poc/test/greeting --region us-east-1
 ```
 
 ---
@@ -338,57 +337,7 @@ aws iam delete-role --role-name "$ROLE"
 
 ---
 
-## Test 8 — Option elicitor interactive prompts (TTY only)
-
-**Purpose:** Verify `option_elicitor` node presents resource-specific prompts before plan generation.
-
-> ⚠️ Requires a real TTY — run directly in your terminal, not piped.
-
-```bash
-assignee plan "create an S3 bucket"
-```
-
-**Expected prompt sequence (S3 — common tier):**
-
-```
-◆  Bucket name
-│  my-bucket (leave blank for auto-generated)
-│
-◆  Enable server-side encryption?
-│  ● Yes / ○ No
-│
-◆  Block all public access?
-│  ● Yes / ○ No
-│
-◆  Enable versioning?
-│  ● Yes / ○ No
-│
-◆  Tags
-│
-◆  Configure advanced options?
-│  ○ Yes / ● No
-```
-
-**Check:**
-
-- [ ] Prompts appear before "Generating plan..."
-- [ ] Answering encryption = Yes shows the KMS Key ID prompt (showIf conditional)
-- [ ] Answering encryption = No skips the KMS Key ID prompt
-- [ ] Answering "Configure advanced options?" = Yes shows lifecycle, CORS, replication prompts
-- [ ] Values entered in prompts appear in plan Config output (elicitedOptions override LLM values)
-- [ ] Ctrl+C at any prompt exits gracefully (exit code 0, no stack trace)
-
-**Non-TTY CI check:**
-
-```bash
-assignee plan "create an S3 bucket" | cat
-```
-
-- [ ] No prompts shown — plan generates immediately using LLM-only desiredState
-
----
-
-## Test 9 — Non-TTY mode (CI compatibility)
+## Test 8 — Non-TTY mode (CI compatibility)
 
 **Purpose:** Verify plain-text output without ANSI codes when stdout is piped (NFR-12).
 
@@ -399,8 +348,8 @@ assignee plan "Create an S3 bucket named poc-ci-test" | cat
 **Expected:** Plain text without escape sequences or box-drawing characters.
 
 ```bash
-# Confirm no ANSI codes (macOS-compatible — BSD grep does not support -P)
-assignee plan "Create an S3 bucket named poc-ci-test" | cat | grep $'\033[' && echo "FAIL: ANSI found" || echo "PASS: no ANSI"
+# Confirm no ANSI codes
+assignee plan "Create an S3 bucket named poc-ci-test" | cat | grep -P '\x1b\[' && echo "FAIL: ANSI found" || echo "PASS: no ANSI"
 ```
 
 ---
@@ -409,16 +358,15 @@ assignee plan "Create an S3 bucket named poc-ci-test" | cat | grep $'\033[' && e
 
 Run all tests and mark pass/fail:
 
-| #   | Test                                                              | Result |
-| --- | ----------------------------------------------------------------- | ------ |
-| 1   | `plan` renders box in <3s                                         | ⬜     |
-| 2   | `apply` + approve → S3 bucket created with 3 tags                 | ⬜     |
-| 3   | `apply` + decline → exits 0, no resource                          | ⬜     |
-| 4   | State Guard — second apply aborts with "Stale Plan"               | ⬜     |
-| 5   | Unsupported type (DynamoDB) → error lists all 6 supported types   | ⬜     |
-| 6   | SSM Parameter provisioning                                        | ⬜     |
-| 7   | IAM Role provisioning, cost shows Free                            | ⬜     |
-| 8   | Option elicitor — S3 prompts appear; showIf KMS conditional works | ⬜     |
-| 9   | Non-TTY / pipe → no ANSI codes, no prompts                        | ⬜     |
+| #   | Test                                                          | Result |
+| --- | ------------------------------------------------------------- | ------ |
+| 1   | `plan` renders box in <3s                                     | ⬜     |
+| 2   | `apply` + approve → S3 bucket created with 3 tags             | ⬜     |
+| 3   | `apply` + decline → exits 0, no resource                      | ⬜     |
+| 4   | State Guard — second apply aborts with "Stale Plan"           | ⬜     |
+| 5   | Unsupported type → actionable error with supported types list | ⬜     |
+| 6   | SSM Parameter provisioning                                    | ⬜     |
+| 7   | IAM Role provisioning, cost shows Free                        | ⬜     |
+| 8   | Non-TTY / pipe → no ANSI codes                                | ⬜     |
 
-All 9 passing = POC demo-ready. ✅
+All 8 passing = POC demo-ready. ✅

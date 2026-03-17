@@ -1,24 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ExecutionStatus } from "@assignee/core";
+import type { CloudControlClient } from "@aws-sdk/client-cloudcontrol";
 
 // ── SDK mock ──────────────────────────────────────────────────────────────────
-const mockSend = vi.fn();
-
-vi.mock("../services/cloudcontrol-client.js", () => ({
-  getCloudControlClient: () => ({ send: mockSend }),
-}));
-
-vi.mock("@aws-sdk/client-cloudcontrol", () => ({
-  CloudControlClient: vi.fn(),
-  GetResourceRequestStatusCommand: vi
-    .fn()
-    .mockImplementation((input: unknown) => ({ input })),
-}));
+vi.mock("@aws-sdk/client-cloudcontrol", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@aws-sdk/client-cloudcontrol")>();
+  return {
+    ...actual,
+    CloudControlClient: vi.fn(),
+    GetResourceRequestStatusCommand: vi
+      .fn()
+      .mockImplementation((input: unknown) => ({ input })),
+  };
+});
 
 import { statusPollerNode } from "./status-poller.js";
 import { GetResourceRequestStatusCommand } from "@aws-sdk/client-cloudcontrol";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const mockSend = vi.fn();
+const mockClient = { send: mockSend } as unknown as CloudControlClient;
 
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
@@ -52,6 +55,7 @@ describe("statusPollerNode", () => {
   it("fails immediately when requestToken is missing", async () => {
     const result = await statusPollerNode(
       makeState({ requestToken: undefined }),
+      mockClient,
     );
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/No request token/);
@@ -61,6 +65,7 @@ describe("statusPollerNode", () => {
   it("fails when startedAt exceeds 5-minute timeout", async () => {
     const result = await statusPollerNode(
       makeState({ startedAt: Date.now() - 6 * 60 * 1000 }),
+      mockClient,
     );
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/timed out/);
@@ -76,7 +81,7 @@ describe("statusPollerNode", () => {
       },
     });
 
-    const result = await statusPollerNode(makeState());
+    const result = await statusPollerNode(makeState(), mockClient);
 
     expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     expect(result.resourceArn).toBeUndefined();
@@ -95,7 +100,7 @@ describe("statusPollerNode", () => {
       },
     });
 
-    const result = await statusPollerNode(makeState());
+    const result = await statusPollerNode(makeState(), mockClient);
 
     expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
     expect(result.resourceArn).toBe("poc-smoke-test");
@@ -112,7 +117,7 @@ describe("statusPollerNode", () => {
       },
     });
 
-    const result = await statusPollerNode(makeState());
+    const result = await statusPollerNode(makeState(), mockClient);
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/BucketAlreadyExists/);
@@ -127,7 +132,7 @@ describe("statusPollerNode", () => {
       },
     });
 
-    const result = await statusPollerNode(makeState());
+    const result = await statusPollerNode(makeState(), mockClient);
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/provisioning failed/);
@@ -144,16 +149,17 @@ describe("statusPollerNode", () => {
 
     const result = await statusPollerNode(
       makeState({ resourceType: "AWS::IAM::Role" }),
+      mockClient,
     );
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/provisioning failed/);
   }, 5000);
 
-  it("returns FAILED with error message on SDK send error", async () => {
+  it("returns FAILED with error message on SDK send error (safeTry wrapping)", async () => {
     mockSend.mockRejectedValueOnce(new Error("Network timeout"));
 
-    const result = await statusPollerNode(makeState());
+    const result = await statusPollerNode(makeState(), mockClient);
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/CloudControl polling failed/);
@@ -175,6 +181,7 @@ describe("statusPollerNode", () => {
         requestToken: "tok-ssm-999",
         resourceType: "AWS::SSM::Parameter",
       }),
+      mockClient,
     );
 
     expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);

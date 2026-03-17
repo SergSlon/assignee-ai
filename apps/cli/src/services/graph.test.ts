@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { ExecutionMode, ExecutionStatus } from "@assignee/core";
 
+// Mock cloudcontrol-client so createGraph() doesn't throw on missing env vars
+vi.mock("../services/cloudcontrol-client.js", () => ({
+  createCloudControlClient: vi.fn(() => ({ send: vi.fn() })),
+}));
+
 // Mock AI SDK (used by intent-parser and plan-generator)
 vi.mock("ai", () => ({
   generateText: vi

@@ -7,7 +7,7 @@
 
 import { generateText } from "ai";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
-import { ExecutionStatus, RESOURCE_TYPES } from "@assignee/core";
+import { ExecutionStatus, RESOURCE_TYPES, safeTry } from "@assignee/core";
 import {
   BEDROCK_MODEL_ID,
   AWS_REGION,
@@ -90,27 +90,27 @@ export async function planGeneratorNode(
   const requiredKeys: string[] =
     (state.resourceSchema["required"] as string[] | undefined) ?? [];
 
-  try {
-    if (!process.env["BEDROCK_GUARDRAIL_ID"]) {
-      log({
-        ts: new Date().toISOString(),
-        runId: state.runId,
-        level: "warn",
-        action: LOG_ACTIONS.GUARDRAIL_DISABLED,
-        message: "BEDROCK_GUARDRAIL_ID not set — guardrail disabled for POC",
-      });
-    }
+  if (!process.env["BEDROCK_GUARDRAIL_ID"]) {
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "warn",
+      action: LOG_ACTIONS.GUARDRAIL_DISABLED,
+      message: "BEDROCK_GUARDRAIL_ID not set — guardrail disabled for POC",
+    });
+  }
 
-    const guardrailOpts = process.env["BEDROCK_GUARDRAIL_ID"]
-      ? {
-          guardrailIdentifier: process.env["BEDROCK_GUARDRAIL_ID"],
-          guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"] ?? "1",
-        }
-      : {};
+  const guardrailOpts = process.env["BEDROCK_GUARDRAIL_ID"]
+    ? {
+        guardrailIdentifier: process.env["BEDROCK_GUARDRAIL_ID"],
+        guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"] ?? "1",
+      }
+    : {};
 
-    const resourceHints = getResourceHints(state.resourceType ?? "");
+  const resourceHints = getResourceHints(state.resourceType ?? "");
 
-    const { text } = await generateText({
+  const [genErr, genResult] = await safeTry(
+    generateText({
       model: bedrock(BEDROCK_MODEL_ID),
       maxOutputTokens: 1024, // TODO(ai-sdk): parameter name may change across SDK versions
       ...guardrailOpts,
@@ -149,80 +149,81 @@ export async function planGeneratorNode(
           ].join("\n"),
         },
       ],
-    });
+    }),
+  );
 
-    let desiredState: Record<string, unknown>;
-    try {
-      const cleaned = text
-        .trim()
-        .replace(/^```(?:json)?\n?/, "")
-        .replace(/\n?```$/, "");
-      desiredState = JSON.parse(cleaned) as Record<string, unknown>;
-    } catch {
-      return {
-        executionStatus: ExecutionStatus.FAILED,
-        errorMessage:
-          "Plan generator returned invalid JSON. Hint: try rephrasing your intent.",
-      };
-    }
-
-    // Safety net: unwrap CloudFormation Resources section format if LLM generated it.
-    // Detects: { "LogicalId": { "Type": "AWS::...", "Properties": {...} } }
-    const topValues = Object.values(desiredState);
-    if (
-      topValues.length === 1 &&
-      typeof topValues[0] === "object" &&
-      topValues[0] !== null
-    ) {
-      const inner = topValues[0] as Record<string, unknown>;
-      if (
-        typeof inner["Type"] === "string" &&
-        (inner["Type"] as string).startsWith("AWS::") &&
-        typeof inner["Properties"] === "object"
-      ) {
-        desiredState = inner["Properties"] as Record<string, unknown>;
-      }
-    }
-
-    // Validate against schema — drop hallucinated fields (Zod.strict equivalent)
-    if (schemaKeys.length > 0) {
-      const validated: Record<string, unknown> = {};
-      for (const [key, val] of Object.entries(desiredState)) {
-        if (schemaKeys.includes(key)) {
-          validated[key] = val;
-        }
-        // silently drop fields not in schema
-      }
-      desiredState = validated;
-    }
-
-    // Remove empty placeholders the LLM may have inserted despite the prompt rules
-    desiredState = stripEmpty(desiredState);
-
-    // Merge elicited options — user-confirmed values override LLM-generated values.
-    // elicitedOptions fields come from the schema so no hallucination risk.
-    if (
-      state.elicitedOptions &&
-      Object.keys(state.elicitedOptions).length > 0
-    ) {
-      desiredState = { ...desiredState, ...state.elicitedOptions };
-    }
-
-    const durationMs = Date.now() - startedAt;
-    log({
-      ts: new Date().toISOString(),
-      runId: state.runId,
-      level: "info",
-      action: LOG_ACTIONS.PLAN_GENERATED,
-      durationMs,
-      resourceType: state.resourceType,
-    });
-
-    return { desiredState };
-  } catch (err: unknown) {
+  if (genErr) {
     return {
       executionStatus: ExecutionStatus.FAILED,
-      errorMessage: `Plan generation failed. Hint: check Bedrock connectivity and AWS credentials. Error: ${err instanceof Error ? err.message : String(err)}`,
+      errorMessage: `Plan generation failed. Hint: check Bedrock connectivity and AWS credentials. Error: ${genErr instanceof Error ? genErr.message : String(genErr)}`,
     };
   }
+
+  const { text } = genResult;
+
+  let desiredState: Record<string, unknown>;
+  try {
+    const cleaned = text
+      .trim()
+      .replace(/^```(?:json)?\n?/, "")
+      .replace(/\n?```$/, "");
+    desiredState = JSON.parse(cleaned) as Record<string, unknown>;
+  } catch {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage:
+        "Plan generator returned invalid JSON. Hint: try rephrasing your intent.",
+    };
+  }
+
+  // Safety net: unwrap CloudFormation Resources section format if LLM generated it.
+  // Detects: { "LogicalId": { "Type": "AWS::...", "Properties": {...} } }
+  const topValues = Object.values(desiredState);
+  if (
+    topValues.length === 1 &&
+    typeof topValues[0] === "object" &&
+    topValues[0] !== null
+  ) {
+    const inner = topValues[0] as Record<string, unknown>;
+    if (
+      typeof inner["Type"] === "string" &&
+      (inner["Type"] as string).startsWith("AWS::") &&
+      typeof inner["Properties"] === "object"
+    ) {
+      desiredState = inner["Properties"] as Record<string, unknown>;
+    }
+  }
+
+  // Validate against schema — drop hallucinated fields (Zod.strict equivalent)
+  if (schemaKeys.length > 0) {
+    const validated: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(desiredState)) {
+      if (schemaKeys.includes(key)) {
+        validated[key] = val;
+      }
+      // silently drop fields not in schema
+    }
+    desiredState = validated;
+  }
+
+  // Remove empty placeholders the LLM may have inserted despite the prompt rules
+  desiredState = stripEmpty(desiredState);
+
+  // Merge elicited options — user-confirmed values override LLM-generated values.
+  // elicitedOptions fields come from the schema so no hallucination risk.
+  if (state.elicitedOptions && Object.keys(state.elicitedOptions).length > 0) {
+    desiredState = { ...desiredState, ...state.elicitedOptions };
+  }
+
+  const durationMs = Date.now() - startedAt;
+  log({
+    ts: new Date().toISOString(),
+    runId: state.runId,
+    level: "info",
+    action: LOG_ACTIONS.PLAN_GENERATED,
+    durationMs,
+    resourceType: state.resourceType,
+  });
+
+  return { desiredState };
 }
