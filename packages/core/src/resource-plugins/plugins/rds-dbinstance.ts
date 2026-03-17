@@ -13,10 +13,22 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         type: "enum",
         label: "DB instance class",
         options: [
-          { value: "db.t3.micro", label: "db.t3.micro" },
-          { value: "db.t3.small", label: "db.t3.small" },
-          { value: "db.t3.medium", label: "db.t3.medium" },
-          { value: "db.m5.large", label: "db.m5.large" },
+          {
+            value: "db.t3.micro",
+            label: "db.t3.micro  (2 vCPU,  1 GiB) — ~$0.017/hr",
+          },
+          {
+            value: "db.t3.small",
+            label: "db.t3.small  (2 vCPU,  2 GiB) — ~$0.034/hr",
+          },
+          {
+            value: "db.t3.medium",
+            label: "db.t3.medium (2 vCPU,  4 GiB) — ~$0.068/hr",
+          },
+          {
+            value: "db.m5.large",
+            label: "db.m5.large  (2 vCPU,  8 GiB) — ~$0.171/hr",
+          },
         ],
         initialValue: "db.t3.micro",
       },
@@ -62,9 +74,19 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         type: "enum",
         label: "Storage type",
         options: [
-          { value: "gp3", label: "gp3 (General Purpose SSD v3)" },
-          { value: "gp2", label: "gp2 (General Purpose SSD v2)" },
-          { value: "io1", label: "io1 (Provisioned IOPS SSD)" },
+          {
+            value: "gp3",
+            label: "gp3 (General Purpose SSD v3) — ~$0.115/GB-month",
+          },
+          {
+            value: "gp2",
+            label: "gp2 (General Purpose SSD v2) — ~$0.115/GB-month",
+          },
+          {
+            value: "io1",
+            label:
+              "io1 (Provisioned IOPS SSD)   — ~$0.125/GB-month + $0.10/IOPS",
+          },
         ],
         initialValue: "gp3",
       },

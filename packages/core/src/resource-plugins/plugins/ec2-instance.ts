@@ -13,11 +13,26 @@ export const ec2InstancePlugin: ResourcePlugin = {
         type: "enum",
         label: "Instance type",
         options: [
-          { value: "t3.micro", label: "t3.micro (2 vCPU, 1 GiB)" },
-          { value: "t3.small", label: "t3.small (2 vCPU, 2 GiB)" },
-          { value: "t3.medium", label: "t3.medium (2 vCPU, 4 GiB)" },
-          { value: "m5.large", label: "m5.large (2 vCPU, 8 GiB)" },
-          { value: "m5.xlarge", label: "m5.xlarge (4 vCPU, 16 GiB)" },
+          {
+            value: "t3.micro",
+            label: "t3.micro  (2 vCPU,  1 GiB) — ~$0.0104/hr",
+          },
+          {
+            value: "t3.small",
+            label: "t3.small  (2 vCPU,  2 GiB) — ~$0.0208/hr",
+          },
+          {
+            value: "t3.medium",
+            label: "t3.medium (2 vCPU,  4 GiB) — ~$0.0416/hr",
+          },
+          {
+            value: "m5.large",
+            label: "m5.large  (2 vCPU,  8 GiB) — ~$0.0960/hr",
+          },
+          {
+            value: "m5.xlarge",
+            label: "m5.xlarge (4 vCPU, 16 GiB) — ~$0.1920/hr",
+          },
         ],
         initialValue: "t3.micro",
       },
