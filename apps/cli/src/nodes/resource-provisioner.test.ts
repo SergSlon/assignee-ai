@@ -87,6 +87,28 @@ describe("resourceProvisionerNode", () => {
       expect(result.errorMessage).toMatch(/desiredState is missing/);
       expect(mockSend).not.toHaveBeenCalled();
     });
+
+    it("fails when resourceType is empty string (Story 9.1: isResourceType guard)", async () => {
+      const result = await resourceProvisionerNode(
+        makeState({ resourceType: "" }),
+      );
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(
+        /unsupported or missing resourceType/,
+      );
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("fails when resourceType is not a known ResourceType (Story 9.1: isResourceType guard)", async () => {
+      const result = await resourceProvisionerNode(
+        makeState({ resourceType: "AWS::Fake::Resource" }),
+      );
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(
+        /unsupported or missing resourceType/,
+      );
+      expect(mockSend).not.toHaveBeenCalled();
+    });
   });
 
   describe("state guard (FR-15 Read-Before-Write)", () => {

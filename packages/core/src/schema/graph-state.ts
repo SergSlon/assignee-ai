@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { ArchitecturePattern } from "../pattern-templates/types.js";
+import { SUPPORTED_TYPES_ARRAY } from "../config/resource-types.js";
 
 export const ExecutionMode = {
   PLAN: "plan",
@@ -36,7 +38,7 @@ export const GraphStateSchema = z.object({
   executionMode: z.nativeEnum(ExecutionMode).default(ExecutionMode.APPLY),
 
   // Schema resolution
-  resourceType: z.string().default(""),
+  resourceType: z.enum(SUPPORTED_TYPES_ARRAY).optional(),
   resourceSchema: z.record(z.unknown()).optional(),
 
   // Plan output
@@ -61,6 +63,9 @@ export const GraphStateSchema = z.object({
 
   // Option elicitation — populated by option_elicitor node (Story 7.3)
   elicitedOptions: z.record(z.unknown()).optional(),
+
+  // Compound architecture pattern — populated by intent_parser when a pattern is detected (Story 8.1)
+  resourcePattern: z.custom<ArchitecturePattern>().optional(),
 
   // LangGraph message history
   messages: z.array(z.unknown()).default([]),

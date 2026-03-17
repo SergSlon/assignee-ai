@@ -15,6 +15,7 @@ export { AuditEventSchema, type AuditEvent } from "./schema/audit.js";
 export {
   RESOURCE_TYPES,
   type ResourceType,
+  SUPPORTED_TYPES_ARRAY,
   SUPPORTED_POC_TYPES,
 } from "./config/resource-types.js";
 export {
@@ -31,6 +32,16 @@ export {
   defaultPluginRegistry,
   PluginRegistry,
 } from "./resource-plugins/index.js";
+
+// Pattern Templates (Story 8.1)
+export {
+  defaultPatternRegistry,
+  PatternRegistry,
+} from "./pattern-templates/index.js";
+export type {
+  ArchitecturePattern,
+  ResourceSpec,
+} from "./pattern-templates/types.js";
 export type {
   ResourcePlugin,
   ResourceField,
