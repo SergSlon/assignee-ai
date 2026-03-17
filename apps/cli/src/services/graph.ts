@@ -63,6 +63,9 @@ export const graphAnnotation = Annotation.Root({
     reducer: (a, b) => [...a, ...b],
     default: () => [],
   }),
+  elicitedOptions: Annotation<Record<string, unknown> | undefined>({
+    reducer: (_, b) => b,
+  }),
 });
 
 export type AgentState = typeof graphAnnotation.State;
@@ -75,6 +78,7 @@ type NodeFn = (
 
 import { intentParserNode } from "../nodes/intent-parser.js";
 import { schemaFetcherNode } from "../nodes/schema-fetcher.js";
+import { optionElicitorNode } from "../nodes/option-elicitor.js";
 import { planGeneratorNode } from "../nodes/plan-generator.js";
 import { preflightGuardNode } from "../nodes/preflight-guard.js";
 import { humanApprovalNode } from "../nodes/human-approval.js";
@@ -120,6 +124,7 @@ export function createGraph(tools: StructuredTool[] = []) {
     .addNode(GraphNode.SCHEMA_FETCHER, (state) =>
       schemaFetcherNode(state, tools),
     )
+    .addNode(GraphNode.OPTION_ELICITOR, (state) => optionElicitorNode(state))
     .addNode(GraphNode.PLAN_GENERATOR, (state) => planGeneratorNode(state))
     .addNode(GraphNode.PREFLIGHT_GUARD, (state) =>
       preflightGuardNode(state, tools),
@@ -132,7 +137,8 @@ export function createGraph(tools: StructuredTool[] = []) {
     .addNode(GraphNode.RESULT_FORMATTER, (state) => resultFormatterNode(state))
     .addEdge(START, GraphNode.INTENT_PARSER)
     .addEdge(GraphNode.INTENT_PARSER, GraphNode.SCHEMA_FETCHER)
-    .addEdge(GraphNode.SCHEMA_FETCHER, GraphNode.PLAN_GENERATOR)
+    .addEdge(GraphNode.SCHEMA_FETCHER, GraphNode.OPTION_ELICITOR)
+    .addEdge(GraphNode.OPTION_ELICITOR, GraphNode.PLAN_GENERATOR)
     .addEdge(GraphNode.PLAN_GENERATOR, GraphNode.PREFLIGHT_GUARD)
     .addConditionalEdges(GraphNode.PREFLIGHT_GUARD, routePreflightGuard, {
       [GraphNode.HUMAN_APPROVAL]: GraphNode.HUMAN_APPROVAL,

@@ -235,21 +235,22 @@ aws s3 rb s3://$BUCKET --region eu-west-1
 
 **Purpose:** Verify intent parser rejects unsupported types with an actionable error (NFR-08).
 
+> Note: EC2, RDS, and Lambda are now supported (added in Epic 7). Use DynamoDB as the unsupported type.
+
 ```bash
-assignee plan "Create an EC2 instance with 2 CPUs"
+assignee plan "Create a DynamoDB table for user sessions"
 ```
 
 **Expected:**
 
 ```
-✖ Error: Unsupported resource type: AWS::EC2::Instance
-  How to Fix: Supported in POC: AWS::S3::Bucket, AWS::SSM::Parameter, AWS::IAM::Role
+✖ Error: Unsupported resource type. Supported types: AWS::S3::Bucket, AWS::SSM::Parameter, AWS::IAM::Role, AWS::EC2::Instance, AWS::RDS::DBInstance, AWS::Lambda::Function.
 ```
 
 **Check:**
 
 - [ ] Exits 1: `echo $?` → `1`
-- [ ] Error lists all 3 supported POC types
+- [ ] Error lists all 6 supported types
 - [ ] No AWS call attempted
 
 ---
@@ -337,7 +338,57 @@ aws iam delete-role --role-name "$ROLE"
 
 ---
 
-## Test 8 — Non-TTY mode (CI compatibility)
+## Test 8 — Option elicitor interactive prompts (TTY only)
+
+**Purpose:** Verify `option_elicitor` node presents resource-specific prompts before plan generation.
+
+> ⚠️ Requires a real TTY — run directly in your terminal, not piped.
+
+```bash
+assignee plan "create an S3 bucket"
+```
+
+**Expected prompt sequence (S3 — common tier):**
+
+```
+◆  Bucket name
+│  my-bucket (leave blank for auto-generated)
+│
+◆  Enable server-side encryption?
+│  ● Yes / ○ No
+│
+◆  Block all public access?
+│  ● Yes / ○ No
+│
+◆  Enable versioning?
+│  ● Yes / ○ No
+│
+◆  Tags
+│
+◆  Configure advanced options?
+│  ○ Yes / ● No
+```
+
+**Check:**
+
+- [ ] Prompts appear before "Generating plan..."
+- [ ] Answering encryption = Yes shows the KMS Key ID prompt (showIf conditional)
+- [ ] Answering encryption = No skips the KMS Key ID prompt
+- [ ] Answering "Configure advanced options?" = Yes shows lifecycle, CORS, replication prompts
+- [ ] Values entered in prompts appear in plan Config output (elicitedOptions override LLM values)
+- [ ] Ctrl+C at any prompt exits gracefully (exit code 0, no stack trace)
+
+**Non-TTY CI check:**
+
+```bash
+assignee plan "create an S3 bucket" | cat
+```
+
+- [ ] No prompts shown — plan generates immediately using LLM-only desiredState
+
+---
+
+## Test 9 — Non-TTY mode (CI compatibility)
 
 **Purpose:** Verify plain-text output without ANSI codes when stdout is piped (NFR-12).
 
@@ -358,15 +409,16 @@ assignee plan "Create an S3 bucket named poc-ci-test" | cat | grep $'\033[' && e
 
 Run all tests and mark pass/fail:
 
-| #   | Test                                                          | Result |
-| --- | ------------------------------------------------------------- | ------ |
-| 1   | `plan` renders box in <3s                                     | ⬜     |
-| 2   | `apply` + approve → S3 bucket created with 3 tags             | ⬜     |
-| 3   | `apply` + decline → exits 0, no resource                      | ⬜     |
-| 4   | State Guard — second apply aborts with "Stale Plan"           | ⬜     |
-| 5   | Unsupported type → actionable error with supported types list | ⬜     |
-| 6   | SSM Parameter provisioning                                    | ⬜     |
-| 7   | IAM Role provisioning, cost shows Free                        | ⬜     |
-| 8   | Non-TTY / pipe → no ANSI codes                                | ⬜     |
+| #   | Test                                                              | Result |
+| --- | ----------------------------------------------------------------- | ------ |
+| 1   | `plan` renders box in <3s                                         | ⬜     |
+| 2   | `apply` + approve → S3 bucket created with 3 tags                 | ⬜     |
+| 3   | `apply` + decline → exits 0, no resource                          | ⬜     |
+| 4   | State Guard — second apply aborts with "Stale Plan"               | ⬜     |
+| 5   | Unsupported type (DynamoDB) → error lists all 6 supported types   | ⬜     |
+| 6   | SSM Parameter provisioning                                        | ⬜     |
+| 7   | IAM Role provisioning, cost shows Free                            | ⬜     |
+| 8   | Option elicitor — S3 prompts appear; showIf KMS conditional works | ⬜     |
+| 9   | Non-TTY / pipe → no ANSI codes, no prompts                        | ⬜     |
 
-All 8 passing = POC demo-ready. ✅
+All 9 passing = POC demo-ready. ✅

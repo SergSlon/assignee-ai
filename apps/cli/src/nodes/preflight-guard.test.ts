@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ExecutionStatus } from "@assignee/core";
 import { preflightGuardNode } from "./preflight-guard.js";
+import {
+  CostEstimate,
+  LambdaPricing,
+  PricingUnit,
+} from "../constants/pricing.js";
 import type { StructuredTool } from "@langchain/core/tools";
 
 function makeState(overrides: Record<string, unknown> = {}) {
@@ -30,6 +35,36 @@ beforeEach(() => {
 });
 
 describe("preflightGuardNode", () => {
+  it("fails with actionable message when required schema fields are missing from desiredState", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        resourceType: "AWS::Lambda::Function",
+        resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+        desiredState: { FunctionName: "my-fn", Runtime: "nodejs22.x" }, // Role missing
+      }),
+    );
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toContain("Role");
+    expect(result.errorMessage).toContain("AWS::Lambda::Function");
+    expect(result.preflightPassed).toBeUndefined();
+  });
+
+  it("passes preflight when all required schema fields are present", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        resourceType: "AWS::Lambda::Function",
+        resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+        desiredState: {
+          FunctionName: "my-fn",
+          Runtime: "nodejs22.x",
+          Role: "arn:aws:iam::123456789012:role/my-role",
+        },
+      }),
+    );
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.preflightPassed).toBe(true);
+  });
+
   it("sets preflightPassed: true", async () => {
     const result = await preflightGuardNode(makeState());
     expect(result.preflightPassed).toBe(true);
@@ -44,13 +79,13 @@ describe("preflightGuardNode", () => {
       makeState({ resourceType: "AWS::IAM::Role" }),
       [pricingTool],
     );
-    expect(result.estimatedMonthlyCost).toBe("Free");
+    expect(result.estimatedMonthlyCost).toBe(CostEstimate.FREE);
     expect(pricingTool.invoke).not.toHaveBeenCalled();
   });
 
   it("returns N/A when no pricing tool is available", async () => {
     const result = await preflightGuardNode(makeState(), []);
-    expect(result.estimatedMonthlyCost).toBe("N/A");
+    expect(result.estimatedMonthlyCost).toBe(CostEstimate.NA);
   });
 
   it("skips when executionStatus is already FAILED", async () => {
@@ -61,6 +96,7 @@ describe("preflightGuardNode", () => {
   });
 
   it("returns N/A on pricing timeout (non-blocking)", async () => {
+    // Uses CostEstimate.NA implicitly — verified via string equality
     const slowTool = {
       name: "get_pricing",
       invoke: vi.fn(
@@ -74,8 +110,40 @@ describe("preflightGuardNode", () => {
     const result = await preflightGuardNode(makeState(), [slowTool]);
     // Pricing timed out → N/A, preflightPassed still true
     expect(result.preflightPassed).toBe(true);
-    expect(result.estimatedMonthlyCost).toBe("N/A");
+    expect(result.estimatedMonthlyCost).toBe(CostEstimate.NA);
   }, 5000);
+
+  it("computes Lambda estimate from default memory without calling pricing API", async () => {
+    const pricingTool = {
+      name: "get_pricing",
+      invoke: vi.fn(),
+    } as unknown as StructuredTool;
+    const result = await preflightGuardNode(
+      makeState({ resourceType: "AWS::Lambda::Function" }),
+      [pricingTool],
+    );
+    // Default 128MB: duration cost = 1M × 0.1s × (128/1024) × $0.0000166667 = $0.208333
+    // Total = $0.20 (requests) + $0.208333 (duration) ≈ $0.41
+    expect(result.estimatedMonthlyCost).toMatch(/^~\$0\.41\/million req/);
+    expect(result.estimatedMonthlyCost).toContain(
+      `${LambdaPricing.DEFAULT_MEMORY_MB}MB`,
+    );
+    expect(result.preflightPassed).toBe(true);
+    expect(pricingTool.invoke).not.toHaveBeenCalled();
+  });
+
+  it("computes Lambda estimate using MemorySize from desiredState", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        resourceType: "AWS::Lambda::Function",
+        desiredState: { MemorySize: 512 },
+      }),
+    );
+    // 512MB: duration cost = 1M × 0.1s × (512/1024) × $0.0000166667 = $0.833335
+    // Total = $0.20 + $0.833335 ≈ $1.03
+    expect(result.estimatedMonthlyCost).toMatch(/^~\$1\.03\/million req/);
+    expect(result.estimatedMonthlyCost).toContain("512MB");
+  });
 
   it("parses real get_pricing MCP response and returns first-tier price", async () => {
     // Real response shape returned by awslabs.aws-pricing-mcp-server get_pricing tool.
@@ -139,7 +207,7 @@ describe("preflightGuardNode", () => {
 
     const result = await preflightGuardNode(makeState(), [pricingTool]);
 
-    expect(result.estimatedMonthlyCost).toBe("$0.0230/GB-month");
+    expect(result.estimatedMonthlyCost).toBe(`$0.0230${PricingUnit.GB_MONTH}`);
     expect(result.preflightPassed).toBe(true);
     expect(pricingTool.invoke).toHaveBeenCalledWith(
       expect.objectContaining({ service_code: "AmazonS3" }),

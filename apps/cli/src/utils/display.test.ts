@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { ResourceField, ResolvedFieldConfig } from "@assignee/core";
 
 // Capture stdout/stderr writes
 function captureStream(stream: NodeJS.WriteStream) {
@@ -158,5 +159,154 @@ describe("display.ts — non-TTY (CI) mode", () => {
     const output = chunks.join("");
     expect(output).toContain("failed");
     expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
+  });
+});
+
+// ── renderOptionPrompt tests ──────────────────────────────────────────────────
+
+vi.mock("@clack/prompts", () => ({
+  confirm: vi.fn(),
+  select: vi.fn(),
+  text: vi.fn(),
+  multiselect: vi.fn(),
+  isCancel: vi.fn(() => false),
+}));
+
+const { confirm, select, text, multiselect, isCancel } =
+  await import("@clack/prompts");
+
+function makeField(
+  overrides: Partial<ResourceField["question"]> & { name?: string } = {},
+): ResourceField {
+  const { name = "TestField", ...q } = overrides;
+  return {
+    name,
+    question: {
+      type: "string",
+      label: "Test label",
+      ...q,
+    },
+  };
+}
+
+const resolved: ResolvedFieldConfig = {
+  policy: "ask_if_not_set",
+  value: undefined,
+  source: "plugin_default",
+};
+
+describe("renderOptionPrompt — TTY mode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("calls clack.text for string type", async () => {
+    vi.mocked(text).mockResolvedValueOnce("hello");
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(
+      makeField({ type: "string" }),
+      resolved,
+    );
+    expect(text).toHaveBeenCalledOnce();
+    expect(result).toBe("hello");
+  });
+
+  it("calls clack.confirm for boolean type", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(
+      makeField({ type: "boolean", label: "Enable?" }),
+      resolved,
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Enable?" }),
+    );
+    expect(result).toBe(true);
+  });
+
+  it("calls clack.select for enum type", async () => {
+    vi.mocked(select).mockResolvedValueOnce("opt-a");
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(
+      makeField({
+        type: "enum",
+        options: [{ value: "opt-a", label: "Option A" }],
+      }),
+      resolved,
+    );
+    expect(select).toHaveBeenCalledOnce();
+    expect(result).toBe("opt-a");
+  });
+
+  it("calls clack.multiselect for multi type", async () => {
+    vi.mocked(multiselect).mockResolvedValueOnce(["a", "b"]);
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(
+      makeField({ type: "multi", options: [{ value: "a", label: "A" }] }),
+      resolved,
+    );
+    expect(multiselect).toHaveBeenCalledOnce();
+    expect(result).toEqual(["a", "b"]);
+  });
+
+  it("returns resolved.value when clack.isCancel returns true", async () => {
+    vi.mocked(text).mockResolvedValueOnce(
+      Symbol("cancel") as unknown as string,
+    );
+    vi.mocked(isCancel).mockReturnValueOnce(true);
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(makeField({ type: "string" }), {
+      ...resolved,
+      value: "fallback",
+    });
+    expect(result).toBe("fallback");
+  });
+});
+
+describe("renderOptionPrompt — non-TTY mode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("returns resolved.value without prompting", async () => {
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(makeField({ type: "string" }), {
+      ...resolved,
+      value: "preset",
+    });
+    expect(text).not.toHaveBeenCalled();
+    expect(result).toBe("preset");
+  });
+
+  it("returns field initialValue when resolved.value is undefined", async () => {
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(
+      makeField({ type: "boolean", initialValue: true }),
+      resolved,
+    );
+    expect(confirm).not.toHaveBeenCalled();
+    expect(result).toBe(true);
   });
 });

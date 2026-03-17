@@ -13,12 +13,12 @@ assignee apply "Create an S3 bucket named my-app-assets"
 
 ## How it works
 
-1. **Plan** — you describe intent in plain English; Bedrock Nova Lite parses it, fetches the CloudFormation schema, and generates a validated `desiredState` JSON with a cost estimate
+1. **Plan** — you describe intent in plain English; Bedrock Nova Lite parses it, fetches the CloudFormation schema, and interactively elicits resource options before generating a validated `desiredState` JSON with a cost estimate
 2. **Approve** — you review the plan in the terminal and confirm (HITL)
 3. **Apply** — Cloud Control API provisions the resource; tags are injected, State Guard prevents stale-plan overwrites, status is polled until terminal state
 
 ```
-intent_parser → schema_fetcher → plan_generator → preflight_guard
+intent_parser → schema_fetcher → option_elicitor → plan_generator → preflight_guard
     → human_approval ─[HITL interrupt]─ → resource_provisioner → status_poller → result_formatter
 ```
 
@@ -207,11 +207,14 @@ node apps/cli/dist/index.js apply "Create an S3 bucket named my-test-bucket"
 
 ### Supported resource types (POC)
 
-| Type                  | Notes |
-| --------------------- | ----- |
-| `AWS::S3::Bucket`     |       |
-| `AWS::SSM::Parameter` |       |
-| `AWS::IAM::Role`      |       |
+| Type                    | Notes                                                      |
+| ----------------------- | ---------------------------------------------------------- |
+| `AWS::S3::Bucket`       | Interactive prompts: encryption, versioning, public access |
+| `AWS::SSM::Parameter`   |                                                            |
+| `AWS::IAM::Role`        | Cost: Free                                                 |
+| `AWS::EC2::Instance`    | Interactive prompts: instance type, AMI, key pair, subnet  |
+| `AWS::RDS::DBInstance`  | Interactive prompts: engine, class, multi-AZ, storage      |
+| `AWS::Lambda::Function` | Interactive prompts: runtime, handler, memory, timeout     |
 
 ---
 
@@ -222,9 +225,9 @@ apps/
   cli/
     src/
       commands/     plan.ts · apply.ts
-      nodes/        intent-parser · schema-fetcher · plan-generator
-                    preflight-guard · human-approval · resource-provisioner
-                    status-poller · result-formatter
+      nodes/        intent-parser · schema-fetcher · option-elicitor
+                    plan-generator · preflight-guard · human-approval
+                    resource-provisioner · status-poller · result-formatter
       services/     graph.ts (LangGraph) · mcp-client.ts
       config/       mcp-servers.ts
       utils/        display.ts · logger.ts · tags.ts
@@ -233,7 +236,10 @@ packages/
     src/
       schema/       graph-state.ts (Zod — single source of truth)
       types/        result.ts (Result<T,E> monad)
-      config/       resource-identifiers.ts
+      config/       resource-types.ts · resource-identifiers.ts · resource-policy.ts
+      resource-plugins/  types.ts · registry.ts · index.ts
+                         plugins/  s3-bucket · ec2-instance · rds-dbinstance
+                                   lambda-function · generic
       errors.ts
 ```
 
@@ -280,6 +286,15 @@ Pre-commit hook runs: prettier → check-types → test.
 | **1 — Plan command**  | LangGraph graph, MCP integration, `intent_parser`, `schema_fetcher`, `plan_generator`, `preflight_guard`, `assignee plan` CLI, terminal UX             | ✅ Done |
 | **2 — Apply command** | `human_approval` (HITL), `resource_provisioner` (State Guard), `status_poller`, `result_formatter`, `assignee apply` CLI, IAM policy, resource tagging | ✅ Done |
 
+### Epic 7 — Resource Intelligence (Phase A) ✅ Complete
+
+| Story   | Description                                                                                                         | Status  |
+| ------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
+| **7.0** | Expand supported resource types (EC2, RDS, Lambda)                                                                  | ✅ Done |
+| **7.1** | `ResourcePlugin` interface + `PluginRegistry` + core plugins (S3, EC2, RDS, Lambda, generic)                        | ✅ Done |
+| **7.3** | `option-elicitor` node — interactive field elicitation, `showIf` conditionals, policy routing, non-TTY CI-safe path | ✅ Done |
+| **7.6** | Migrate `ccapi-mcp-server` → `@aws-sdk/client-cloudcontrol` SDK                                                     | ✅ Done |
+
 **AWS bootstrap (eu-west-1, account 112233445566):**
 
 - [x] Bedrock invocation logging → `/assignee-ai/bedrock-invocations` CloudWatch log group
@@ -292,7 +307,8 @@ Pre-commit hook runs: prettier → check-types → test.
 - [ ] End-to-end smoke test: `assignee plan "..."` against real Bedrock → verify <3s (NFR-05)
 - [ ] End-to-end smoke test: `assignee apply "..."` → confirm HITL → verify resource created with mandatory tags
 - [ ] State Guard smoke test: run apply twice → second run must abort with "Stale Plan"
-- [ ] Unsupported resource smoke test: `assignee plan "Create EC2 instance"` → verify error + supported types hint
+- [ ] Unsupported resource smoke test: `assignee plan "Create a DynamoDB table"` → verify error + supported types hint
+- [ ] Interactive option elicitor smoke test: run `assignee plan "create an S3 bucket"` in a real TTY → verify encryption/versioning/public-access prompts appear
 
 ---
 
