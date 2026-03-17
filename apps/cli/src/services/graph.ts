@@ -124,7 +124,9 @@ export function createGraph(tools: StructuredTool[] = []) {
     .addNode(GraphNode.SCHEMA_FETCHER, (state) =>
       schemaFetcherNode(state, tools),
     )
-    .addNode(GraphNode.OPTION_ELICITOR, (state) => optionElicitorNode(state))
+    .addNode(GraphNode.OPTION_ELICITOR, (state) =>
+      optionElicitorNode(state, tools),
+    )
     .addNode(GraphNode.PLAN_GENERATOR, (state) => planGeneratorNode(state))
     .addNode(GraphNode.PREFLIGHT_GUARD, (state) =>
       preflightGuardNode(state, tools),
