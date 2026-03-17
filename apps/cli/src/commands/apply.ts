@@ -39,6 +39,10 @@ import { SUPPORTED_TYPES_HINT } from "../config/constants.js";
 export const applyCommand = new Command(CommandName.APPLY)
   .description(CommandDescription.APPLY)
   .argument(CommandArgs.INTENT.NAME, CommandArgs.INTENT.DESC)
+  .addHelpText(
+    "after",
+    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee apply "Create an S3 bucket named my-bucket"\n  assignee apply "Create an EC2 t3.micro instance"\n  assignee apply "Create a Lambda function for image processing"`,
+  )
   .action(async (intent: string | undefined) => {
     if (!intent) {
       console.error(

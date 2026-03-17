@@ -18,6 +18,25 @@ import type { AgentState } from "../services/graph.js";
 
 const bedrock = createAmazonBedrock({ region: AWS_REGION });
 
+/** Recursively removes empty-placeholder values the LLM may insert despite prompt rules. */
+function stripEmpty(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null || v === undefined) continue;
+    if (typeof v === "string" && v === "") continue;
+    if (typeof v === "number" && v === 0) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (typeof v === "object" && !Array.isArray(v)) {
+      const nested = stripEmpty(v as Record<string, unknown>);
+      if (Object.keys(nested).length === 0) continue;
+      out[k] = nested;
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 export async function planGeneratorNode(
   state: AgentState,
 ): Promise<Partial<AgentState>> {
@@ -82,8 +101,10 @@ export async function planGeneratorNode(
             "1. Output ONLY valid JSON — no markdown fences, no explanation",
             "2. Output a FLAT JSON object with ONLY the resource properties directly — do NOT wrap in a CloudFormation Resources block or nest under a logical resource ID",
             "3. Include ONLY properties from the Available properties list",
-            "4. Include ALL Required properties",
-            "5. For S3 BucketName: use only lowercase letters, digits, hyphens (3–63 chars)",
+            "4. Include ALL Required properties with real values",
+            "5. Include properties clearly implied by the user's intent (e.g. InstanceType, Engine, FunctionName, Runtime)",
+            "6. OMIT any property you don't have a specific value for — do NOT use empty strings, 0, false, or [] as placeholders",
+            "7. For S3 BucketName: use only lowercase letters, digits, hyphens (3–63 chars)",
             "",
             'CORRECT format example: { "BucketName": "my-bucket" }',
             'WRONG format example: { "MyBucket": { "Type": "AWS::S3::Bucket", "Properties": { "BucketName": "my-bucket" } } }',
@@ -140,6 +161,9 @@ export async function planGeneratorNode(
       }
       desiredState = validated;
     }
+
+    // Remove empty placeholders the LLM may have inserted despite the prompt rules
+    desiredState = stripEmpty(desiredState);
 
     const durationMs = Date.now() - startedAt;
     log({

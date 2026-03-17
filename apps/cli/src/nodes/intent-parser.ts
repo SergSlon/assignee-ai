@@ -2,7 +2,8 @@ import { generateText, Output } from "ai";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { z } from "zod";
 import {
-  SUPPORTED_POC_TYPES,
+  SUPPORTED_TYPES,
+  SUPPORTED_TYPES_HINT,
   BEDROCK_MODEL_ID,
   AWS_REGION,
 } from "../config/constants.js";
@@ -12,11 +13,9 @@ import type { AgentState } from "../services/graph.js";
 const bedrock = createAmazonBedrock({ region: AWS_REGION });
 
 const intentParserSchema = z.object({
-  resourceType: z.enum([
-    "AWS::S3::Bucket",
-    "AWS::SSM::Parameter",
-    "AWS::IAM::Role",
-    "UNSUPPORTED",
+  resourceType: z.enum([...SUPPORTED_TYPES, "UNSUPPORTED"] as [
+    string,
+    ...string[],
   ]),
 });
 
@@ -31,7 +30,7 @@ export async function intentParserNode(
     messages: [
       {
         role: "user",
-        content: `Classify this AWS infrastructure request into one of these types: ${SUPPORTED_POC_TYPES.join(", ")} or UNSUPPORTED.\n\nRequest: "${state.userIntent}"`,
+        content: `Classify this AWS infrastructure request into one of these types: ${SUPPORTED_TYPES.join(", ")} or UNSUPPORTED.\n\nRequest: "${state.userIntent}"`,
       },
     ],
   });
@@ -39,10 +38,10 @@ export async function intentParserNode(
   if (output.resourceType === "UNSUPPORTED") {
     return {
       executionStatus: ExecutionStatus.UNSUPPORTED_RESOURCE,
-      errorMessage: `Unsupported resource type. Supported in POC: ${SUPPORTED_POC_TYPES.join(", ")}.`,
+      errorMessage: `Unsupported resource type. ${SUPPORTED_TYPES_HINT}.`,
     };
   }
 
-  // Type safe cast since zod enum aligns with SupportedPocType via our hardcoded array
+  // Type safe cast since zod enum is derived from SUPPORTED_TYPES
   return { resourceType: output.resourceType };
 }

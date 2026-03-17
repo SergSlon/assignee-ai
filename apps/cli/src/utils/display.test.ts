@@ -105,18 +105,18 @@ describe("display.ts — non-TTY (CI) mode", () => {
     expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
   });
 
-  it('renderError includes "Supported in POC" text for unsupported resource hint', async () => {
+  it('renderError includes "Supported types" text for unsupported resource hint', async () => {
     const { renderError } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stderr);
 
     renderError(
       "Unsupported resource type",
-      "Supported in POC: AWS::S3::Bucket, AWS::SSM::Parameter, AWS::IAM::Role",
+      "Supported types: AWS::S3::Bucket, AWS::EC2::Instance",
     );
     restore();
 
     const output = chunks.join("");
-    expect(output).toContain("Supported in POC:");
+    expect(output).toContain("Supported types:");
     expect(output).toContain("AWS::S3::Bucket");
   });
 

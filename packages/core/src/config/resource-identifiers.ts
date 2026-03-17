@@ -6,13 +6,16 @@
  * @see implementation-artifacts/2-2-implement-resource-provisioner-node-with-state-guard.md
  */
 
-import { RESOURCE_TYPES, type ResourceType } from './resource-types.js'
+import { RESOURCE_TYPES, type ResourceType } from "./resource-types.js";
 
 export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
-  [RESOURCE_TYPES.S3_BUCKET]: 'BucketName',
-  [RESOURCE_TYPES.SSM_PARAMETER]: 'Name',
-  [RESOURCE_TYPES.IAM_ROLE]: 'RoleName',
-} as const
+  [RESOURCE_TYPES.S3_BUCKET]: "BucketName",
+  [RESOURCE_TYPES.SSM_PARAMETER]: "Name",
+  [RESOURCE_TYPES.IAM_ROLE]: "RoleName",
+  [RESOURCE_TYPES.EC2_INSTANCE]: "InstanceId",
+  [RESOURCE_TYPES.RDS_DB_INSTANCE]: "DBInstanceIdentifier",
+  [RESOURCE_TYPES.LAMBDA_FUNCTION]: "FunctionName",
+} as const;
 
 /**
  * Returns the primary identifier value extracted from a desiredState object
@@ -22,8 +25,8 @@ export function getPrimaryIdentifier(
   resourceType: ResourceType,
   desiredState: Record<string, unknown>,
 ): string | undefined {
-  const key = RESOURCE_IDENTIFIER_KEYS[resourceType]
-  if (!key) return undefined
-  const val = desiredState[key]
-  return typeof val === 'string' ? val : undefined
+  const key = RESOURCE_IDENTIFIER_KEYS[resourceType];
+  if (!key) return undefined;
+  const val = desiredState[key];
+  return typeof val === "string" ? val : undefined;
 }
