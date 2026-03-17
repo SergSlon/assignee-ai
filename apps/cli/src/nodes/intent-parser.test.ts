@@ -62,13 +62,20 @@ describe("intentParserNode", () => {
     expect(result.resourceType).toBeUndefined();
   });
 
-  it("SUPPORTED_TYPES contains all 6 expected resource types", () => {
+  it("SUPPORTED_TYPES contains all expected resource types", () => {
     expect(SUPPORTED_TYPES).toContain("AWS::S3::Bucket");
     expect(SUPPORTED_TYPES).toContain("AWS::SSM::Parameter");
     expect(SUPPORTED_TYPES).toContain("AWS::IAM::Role");
     expect(SUPPORTED_TYPES).toContain("AWS::EC2::Instance");
     expect(SUPPORTED_TYPES).toContain("AWS::RDS::DBInstance");
     expect(SUPPORTED_TYPES).toContain("AWS::Lambda::Function");
-    expect(SUPPORTED_TYPES).toHaveLength(6);
+    // Story 8.1: 9 additional types added for compound architecture patterns
+    expect(SUPPORTED_TYPES).toContain("AWS::EC2::VPC");
+    expect(SUPPORTED_TYPES).toContain("AWS::EC2::SecurityGroup");
+    expect(SUPPORTED_TYPES).toContain("AWS::DynamoDB::Table");
+    expect(SUPPORTED_TYPES).toContain("AWS::SQS::Queue");
+    expect(SUPPORTED_TYPES).toContain("AWS::ECS::Cluster");
+    expect(SUPPORTED_TYPES).toContain("AWS::ECR::Repository");
+    expect(SUPPORTED_TYPES).toHaveLength(15);
   });
 });

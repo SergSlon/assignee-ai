@@ -7,7 +7,11 @@ import {
   BEDROCK_MODEL_ID,
   AWS_REGION,
 } from "../config/constants.js";
-import { ExecutionStatus, defaultPatternRegistry } from "@assignee/core";
+import {
+  ExecutionStatus,
+  defaultPatternRegistry,
+  sanitizeUserIntent,
+} from "@assignee/core";
 import type { AgentState } from "../services/graph.js";
 
 const bedrock = createAmazonBedrock({ region: AWS_REGION });
@@ -22,13 +26,16 @@ const intentParserSchema = z.object({
 export async function intentParserNode(
   state: AgentState,
 ): Promise<Partial<AgentState>> {
-  // Pattern detection FIRST — zero latency, no Bedrock call when pattern matches
-  const detectedPattern = defaultPatternRegistry.detect(state.userIntent);
+  // Sanitize user intent first (NFR-16: Prompt Injection Protection)
+  const safeIntent = sanitizeUserIntent(state.userIntent);
+
+  // Pattern detection — zero latency, no Bedrock call when pattern matches
+  const detectedPattern = defaultPatternRegistry.detect(safeIntent);
   if (detectedPattern !== null) {
-    return { resourcePattern: detectedPattern };
+    return { userIntent: safeIntent, resourcePattern: detectedPattern };
   }
 
-  // Existing single-resource Bedrock classification — UNCHANGED below this point
+  // Existing single-resource Bedrock classification — uses sanitized intent
   const { output } = await generateText({
     model: bedrock(BEDROCK_MODEL_ID),
     output: Output.object({ schema: intentParserSchema }),
@@ -36,18 +43,19 @@ export async function intentParserNode(
     messages: [
       {
         role: "user",
-        content: `Classify this AWS infrastructure request into one of these types: ${SUPPORTED_TYPES.join(", ")} or UNSUPPORTED.\n\nRequest: "${state.userIntent}"`,
+        content: `Classify this AWS infrastructure request into one of these types: ${SUPPORTED_TYPES.join(", ")} or UNSUPPORTED.\n\nRequest: "${safeIntent}"`,
       },
     ],
   });
 
   if (output.resourceType === "UNSUPPORTED") {
     return {
+      userIntent: safeIntent,
       executionStatus: ExecutionStatus.UNSUPPORTED_RESOURCE,
       errorMessage: `Unsupported resource type. ${SUPPORTED_TYPES_HINT}.`,
     };
   }
 
   // Type safe cast since zod enum is derived from SUPPORTED_TYPES
-  return { resourceType: output.resourceType };
+  return { userIntent: safeIntent, resourceType: output.resourceType };
 }
