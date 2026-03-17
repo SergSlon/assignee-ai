@@ -9,6 +9,8 @@ import * as clack from "@clack/prompts";
 import chalk from "chalk";
 import boxen from "boxen";
 import { AWS_REGION, BEDROCK_MODEL_ID } from "../config/constants.js";
+import { AssigneeError } from "@assignee/core";
+import type { ResourceField, ResolvedFieldConfig } from "@assignee/core";
 
 /** Returns the region label for the plan box.
  *  Cross-regional inference profiles (us.*, eu.*, ap.*) are annotated. */
@@ -133,6 +135,93 @@ export function renderApplySuccess(state: RenderableState): void {
       `SUCCESS\nARN: ${state.resourceArn ?? "N/A"}\nRun ID: ${state.runId}\n`,
     );
   }
+}
+
+// ── Option elicitation prompts (Story 7.3) ───────────────────────────────────
+
+/**
+ * Renders an interactive prompt for a single resource field.
+ * Dispatches to the correct @clack/prompts primitive based on question type.
+ * Non-TTY: returns resolved default without prompting (CI-safe).
+ * Cancel: returns resolved default as graceful fallback.
+ */
+export async function renderOptionPrompt(
+  field: ResourceField,
+  resolved: ResolvedFieldConfig,
+): Promise<unknown> {
+  const defaultValue = resolved.value ?? field.question.initialValue;
+
+  if (!process.stdin.isTTY) return defaultValue;
+
+  const { question } = field;
+  let result: unknown;
+
+  switch (question.type) {
+    case "boolean": {
+      result = await clack.confirm({
+        message: question.label,
+        initialValue: typeof defaultValue === "boolean" ? defaultValue : false,
+      });
+      break;
+    }
+    case "enum": {
+      result = await clack.select({
+        message: question.label,
+        options: (question.options ?? []).map((o) => ({
+          value: o.value,
+          label: o.label,
+        })),
+        initialValue:
+          typeof defaultValue === "string" ? defaultValue : undefined,
+      });
+      break;
+    }
+    case "string": {
+      result = await clack.text({
+        message: question.label,
+        placeholder: question.placeholder ?? "",
+        initialValue:
+          typeof defaultValue === "string" ? defaultValue : undefined,
+        validate: question.validate,
+      });
+      break;
+    }
+    case "multi": {
+      result = await clack.multiselect({
+        message: question.label,
+        options: (question.options ?? []).map((o) => ({
+          value: o.value,
+          label: o.label,
+        })),
+        required: false,
+      });
+      break;
+    }
+    default: {
+      const _exhaustive: never = question.type;
+      throw new AssigneeError(
+        `Unknown question type: ${String(_exhaustive)}`,
+        "UNKNOWN_QUESTION_TYPE",
+      );
+    }
+  }
+
+  if (clack.isCancel(result)) return defaultValue;
+  return result;
+}
+
+/**
+ * Prompts user to opt into configuring advanced fields.
+ * Non-TTY: returns false (CI-safe).
+ */
+export async function renderAdvancedConfirm(): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+  const result = await clack.confirm({
+    message: "Configure advanced options?",
+    initialValue: false,
+  });
+  if (clack.isCancel(result)) return false;
+  return result === true;
 }
 
 export function renderOutro(success: boolean): void {

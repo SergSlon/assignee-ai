@@ -16,6 +16,8 @@ import {
   PricingUnit,
   PricingScale,
   PricingDefault,
+  CostEstimate,
+  LambdaPricing,
 } from "../constants/pricing.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { unwrapMcpText } from "../utils/mcp.js";
@@ -36,10 +38,31 @@ interface PricingConfig {
   timeoutMs?: number;
 }
 
+/**
+ * A provider can be:
+ * - a static string (e.g. CostEstimate.FREE, or a pre-computed estimate)
+ * - a PricingConfig object (triggers a pricing API query)
+ * - a function that receives state and returns either of the above
+ */
 type PricingProvider =
   | PricingConfig
-  | "Free"
-  | ((state: AgentState) => PricingConfig | undefined);
+  | string
+  | ((state: AgentState) => PricingConfig | string | undefined);
+
+/**
+ * Compute a Lambda cost estimate from MemorySize.
+ * Shows per-million-invocations cost at assumed 100ms avg duration so the
+ * user has a concrete number to reason about for their specific config.
+ */
+function computeLambdaEstimate(memoryMb: number): string {
+  const durationCostPerMillion =
+    1_000_000 *
+    LambdaPricing.ASSUMED_AVG_DURATION_SEC *
+    (memoryMb / 1024) *
+    LambdaPricing.USD_PER_GB_SECOND;
+  const total = LambdaPricing.USD_PER_MILLION_REQUESTS + durationCostPerMillion;
+  return `~$${total.toFixed(2)}/million req (${LambdaPricing.ASSUMED_AVG_DURATION_SEC * 1000}ms avg, ${memoryMb}MB)`;
+}
 
 /** Maps resource type → static config, "Free", or a function that reads desiredState. */
 const PRICING_CONFIG: Record<string, PricingProvider> = {
@@ -70,7 +93,7 @@ const PRICING_CONFIG: Record<string, PricingProvider> = {
     ],
     unit: PricingUnit.PARAM_HOUR,
   },
-  [RESOURCE_TYPES.IAM_ROLE]: "Free",
+  [RESOURCE_TYPES.IAM_ROLE]: CostEstimate.FREE,
   [RESOURCE_TYPES.EC2_INSTANCE]: (state) => {
     const ds = (state.desiredState ?? {}) as Record<string, string>;
     const instanceType = ds["InstanceType"] ?? PricingDefault.EC2_INSTANCE_TYPE;
@@ -145,8 +168,14 @@ const PRICING_CONFIG: Record<string, PricingProvider> = {
       timeoutMs: PRICING_TIMEOUT_EXTENDED_MS,
     };
   },
-  // Lambda omitted: cost depends on memory × avg duration — cannot estimate without runtime data.
-  // Story 7.1 resource plugin will compute this from desiredState.MemorySize + assumed avg duration.
+  [RESOURCE_TYPES.LAMBDA_FUNCTION]: (state) => {
+    const ds = (state.desiredState ?? {}) as Record<string, unknown>;
+    const memoryMb =
+      typeof ds["MemorySize"] === "number"
+        ? (ds["MemorySize"] as number)
+        : LambdaPricing.DEFAULT_MEMORY_MB;
+    return computeLambdaEstimate(memoryMb);
+  },
 };
 
 /** Extracts the lowest first-tier (beginRange=0) non-zero price from a get_pricing response. */
@@ -195,13 +224,28 @@ export async function preflightGuardNode(
 ): Promise<Partial<AgentState>> {
   if (state.executionStatus !== ExecutionStatus.PENDING) return {};
 
+  // Validate all schema-required fields are present in the generated desiredState.
+  // This catches missing account-specific fields (e.g. Lambda Role ARN) before
+  // CloudControl sees them, producing an actionable error instead of a cryptic API failure.
+  const requiredFields =
+    (state.resourceSchema?.["required"] as string[] | undefined) ?? [];
+  const desiredState = (state.desiredState ?? {}) as Record<string, unknown>;
+  const missingFields = requiredFields.filter((f) => !(f in desiredState));
+
+  if (missingFields.length > 0) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: `Missing required fields for ${state.resourceType}: ${missingFields.join(", ")}. Include them in your intent, e.g. "Create a lambda with role arn:aws:iam::ACCOUNT_ID:role/my-role".`,
+    };
+  }
+
   const provider = PRICING_CONFIG[state.resourceType];
   const pricingConfig =
     typeof provider === "function" ? provider(state) : provider;
-  let costEstimate = "N/A";
+  let costEstimate: string = CostEstimate.NA;
 
-  if (pricingConfig === "Free") {
-    costEstimate = "Free";
+  if (typeof pricingConfig === "string") {
+    costEstimate = pricingConfig;
   } else if (pricingConfig && tools) {
     const pricingTool = tools.find((t) => t.name === ToolName.GET_PRICING);
     if (pricingTool) {
@@ -236,7 +280,7 @@ export async function preflightGuardNode(
               data,
               pricingConfig.unit,
               pricingConfig.scale,
-            ) ?? "N/A";
+            ) ?? CostEstimate.NA;
         }
       } catch {
         // Non-blocking: pricing failure never blocks the plan

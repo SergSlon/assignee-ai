@@ -7,7 +7,7 @@
 
 import { generateText } from "ai";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
-import { ExecutionStatus } from "@assignee/core";
+import { ExecutionStatus, RESOURCE_TYPES } from "@assignee/core";
 import {
   BEDROCK_MODEL_ID,
   AWS_REGION,
@@ -17,6 +17,32 @@ import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
 const bedrock = createAmazonBedrock({ region: AWS_REGION });
+
+/** Current Lambda runtimes as of 2025. Used to prevent the LLM from choosing deprecated ones. */
+const SUPPORTED_LAMBDA_RUNTIMES = [
+  "nodejs22.x",
+  "nodejs20.x",
+  "python3.13",
+  "python3.12",
+  "java21",
+  "dotnet8",
+  "ruby3.3",
+  "provided.al2023",
+] as const;
+
+/**
+ * Returns additional prompt rules for resource types that have known LLM failure modes.
+ * Injected into the plan_generator prompt after the standard rules.
+ */
+function getResourceHints(resourceType: string): string[] {
+  if (resourceType === RESOURCE_TYPES.LAMBDA_FUNCTION) {
+    return [
+      `Lambda Runtime MUST be one of: ${SUPPORTED_LAMBDA_RUNTIMES.join(", ")}. NEVER use deprecated runtimes (python3.8, python3.9, nodejs18.x, nodejs16.x, etc.)`,
+      "Lambda Role: if the user did not provide a specific IAM role ARN, OMIT the Role property — do NOT invent placeholder ARNs",
+    ];
+  }
+  return [];
+}
 
 /** Recursively removes empty-placeholder values the LLM may insert despite prompt rules. */
 function stripEmpty(obj: Record<string, unknown>): Record<string, unknown> {
@@ -82,6 +108,8 @@ export async function planGeneratorNode(
         }
       : {};
 
+    const resourceHints = getResourceHints(state.resourceType ?? "");
+
     const { text } = await generateText({
       model: bedrock(BEDROCK_MODEL_ID),
       // @ts-expect-error NFR-15: maxTokens may not be typed in this SDK version
@@ -105,6 +133,13 @@ export async function planGeneratorNode(
             "5. Include properties clearly implied by the user's intent (e.g. InstanceType, Engine, FunctionName, Runtime)",
             "6. OMIT any property you don't have a specific value for — do NOT use empty strings, 0, false, or [] as placeholders",
             "7. For S3 BucketName: use only lowercase letters, digits, hyphens (3–63 chars)",
+            ...(resourceHints.length > 0
+              ? [
+                  "",
+                  "RESOURCE-SPECIFIC RULES (take precedence over general rules above):",
+                  ...resourceHints.map((h, i) => `R${i + 1}. ${h}`),
+                ]
+              : []),
             "",
             'CORRECT format example: { "BucketName": "my-bucket" }',
             'WRONG format example: { "MyBucket": { "Type": "AWS::S3::Bucket", "Properties": { "BucketName": "my-bucket" } } }',
@@ -164,6 +199,15 @@ export async function planGeneratorNode(
 
     // Remove empty placeholders the LLM may have inserted despite the prompt rules
     desiredState = stripEmpty(desiredState);
+
+    // Merge elicited options — user-confirmed values override LLM-generated values.
+    // elicitedOptions fields come from the schema so no hallucination risk.
+    if (
+      state.elicitedOptions &&
+      Object.keys(state.elicitedOptions).length > 0
+    ) {
+      desiredState = { ...desiredState, ...state.elicitedOptions };
+    }
 
     const durationMs = Date.now() - startedAt;
     log({

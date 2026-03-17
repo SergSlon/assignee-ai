@@ -32,7 +32,6 @@ export const PricingFilter = {
     EC2_NO_PREINSTALL: "NA",
     RDS_PRODUCT_FAMILY: "Database Instance",
     RDS_SINGLE_AZ: "Single-AZ",
-    // Lambda constants reserved for Story 7.1 plugin-based cost estimation
     LAMBDA_PRODUCT_FAMILY: "Serverless",
     LAMBDA_REQUESTS_GROUP: "AWS-Lambda-Requests",
   },
@@ -54,4 +53,26 @@ export const PricingDefault = {
   EC2_INSTANCE_TYPE: "t3.micro",
   RDS_INSTANCE_CLASS: "db.t3.micro",
   RDS_ENGINE: "mysql",
+} as const;
+
+/** Static cost estimate labels used when no pricing API query is needed. */
+export const CostEstimate = {
+  FREE: "Free",
+  NA: "N/A",
+} as const;
+
+/**
+ * Lambda pricing rates (stable since 2014 — verified 2025).
+ * Used to compute a per-million-invocations estimate from desiredState.MemorySize.
+ * @see https://aws.amazon.com/lambda/pricing/
+ */
+export const LambdaPricing = {
+  /** USD per million invocation requests */
+  USD_PER_MILLION_REQUESTS: 0.2,
+  /** USD per GB-second of compute duration */
+  USD_PER_GB_SECOND: 0.0000166667,
+  /** Assumed average invocation duration in seconds (used for estimate display) */
+  ASSUMED_AVG_DURATION_SEC: 0.1,
+  /** Default memory when MemorySize not specified in desiredState */
+  DEFAULT_MEMORY_MB: 128,
 } as const;

@@ -1,0 +1,72 @@
+/**
+ * Core type definitions for the ResourcePlugin system.
+ * Defines the data model for field elicitation — consumed by the option-elicitor node (Story 7.3).
+ *
+ * @see project-context.md — Open/Closed Principle section
+ */
+
+/** Supported question input types for field elicitation. */
+export type QuestionType = "boolean" | "enum" | "string" | "multi";
+
+/**
+ * Conditional display rule: show this field only when another field equals a specific value.
+ * Mirrors JSON Schema if/then pattern.
+ */
+export interface ShowIfCondition {
+  /** Field name in the same plugin's commonFields or advancedFields */
+  field: string;
+  /** The value the referenced field must equal for this field to be shown */
+  value: unknown;
+}
+
+/**
+ * Configuration for how a CloudFormation property is presented to the user during elicitation.
+ */
+export interface FieldQuestion {
+  type: QuestionType;
+  /** Human-readable prompt label */
+  label: string;
+  /** Placeholder text for string/enum inputs */
+  placeholder?: string;
+  /** Required for 'enum' and 'multi' types */
+  options?: ReadonlyArray<{ value: string; label: string }>;
+  /** Pre-filled default value shown to user */
+  initialValue?: unknown;
+  /** Optional inline validation — return error string or undefined */
+  validate?: (value: unknown) => string | undefined;
+  /** If set, only show this field when the condition is met */
+  showIf?: ShowIfCondition;
+}
+
+/**
+ * Associates a CloudFormation property name with its elicitation question config.
+ */
+export interface ResourceField {
+  /** CloudFormation property name, e.g. "BucketName" */
+  name: string;
+  question: FieldQuestion;
+}
+
+/**
+ * Describes how to elicit configuration for a specific CloudFormation resource type.
+ * Consumed by the option-elicitor node to determine which questions to ask.
+ */
+export interface ResourcePlugin {
+  /** CloudFormation resource type, e.g. "AWS::S3::Bucket" */
+  resourceType: string;
+  /**
+   * Fields surfaced to all users by default (≤10).
+   * Ordered by recommended elicitation sequence.
+   */
+  commonFields: ResourceField[];
+  /**
+   * Fields surfaced only when user confirms "Configure advanced options?".
+   * Ordered by recommended elicitation sequence.
+   */
+  advancedFields: ResourceField[];
+  /**
+   * Default values for fields not explicitly set by user or org policy.
+   * Keys are CloudFormation property names (PascalCase).
+   */
+  defaults: Record<string, unknown>;
+}

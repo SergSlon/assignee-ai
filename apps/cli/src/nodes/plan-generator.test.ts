@@ -138,6 +138,50 @@ describe("planGeneratorNode", () => {
     expect(result.desiredState).toEqual({ BucketName: "my-test-bucket" });
   });
 
+  it("includes Lambda runtime constraints and role omission rule in prompt for Lambda resource type", async () => {
+    vi.mocked(generateText).mockResolvedValueOnce({
+      text: JSON.stringify({
+        FunctionName: "my-fn",
+        Runtime: "nodejs22.x",
+        Handler: "index.handler",
+      }),
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    await planGeneratorNode(
+      makeState({
+        resourceType: "AWS::Lambda::Function",
+        userIntent: "Create a lambda function",
+        resourceSchema: {
+          properties: {
+            FunctionName: { type: "string" },
+            Runtime: { type: "string" },
+            Handler: { type: "string" },
+            Role: { type: "string" },
+          },
+          required: ["FunctionName", "Runtime", "Handler", "Role"],
+        },
+      }),
+    );
+
+    const call = vi.mocked(generateText).mock.calls[0]?.[0];
+    const content = (call?.messages?.[0]?.content ?? "") as string;
+    expect(content).toContain("nodejs22.x");
+    expect(content).toContain("deprecated");
+    expect(content).toContain("OMIT the Role property");
+  });
+
+  it("does not inject resource hints for non-Lambda resource types", async () => {
+    vi.mocked(generateText).mockResolvedValueOnce({
+      text: JSON.stringify({ BucketName: "my-bucket" }),
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    await planGeneratorNode(makeState());
+
+    const call = vi.mocked(generateText).mock.calls[0]?.[0];
+    const content = (call?.messages?.[0]?.content ?? "") as string;
+    expect(content).not.toContain("RESOURCE-SPECIFIC RULES");
+  });
+
   it("reads schema from uppercase Properties key as fallback", async () => {
     vi.mocked(generateText).mockResolvedValueOnce({
       text: JSON.stringify({
