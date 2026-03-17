@@ -7,7 +7,16 @@
  * @see Story 7-6
  */
 
-import { ExecutionStatus, getPrimaryIdentifier } from "@assignee/core";
+import {
+  ExecutionStatus,
+  getPrimaryIdentifier,
+  SUPPORTED_TYPES_ARRAY,
+  type ResourceType,
+} from "@assignee/core";
+
+function isResourceType(s: string): s is ResourceType {
+  return (SUPPORTED_TYPES_ARRAY as readonly string[]).includes(s);
+}
 import {
   CreateResourceCommand,
   GetResourceCommand,
@@ -32,8 +41,14 @@ export async function resourceProvisionerNode(
   const client = getCloudControlClient();
 
   // ── State Guard (FR-15 Read-Before-Write) ────────────────────────────────
+  if (!state.resourceType || !isResourceType(state.resourceType)) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: `Cannot provision: unsupported or missing resourceType "${state.resourceType ?? ""}".`,
+    };
+  }
   const identifier = getPrimaryIdentifier(
-    state.resourceType as Parameters<typeof getPrimaryIdentifier>[0],
+    state.resourceType,
     state.desiredState,
   );
 

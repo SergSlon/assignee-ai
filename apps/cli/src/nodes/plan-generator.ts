@@ -112,8 +112,7 @@ export async function planGeneratorNode(
 
     const { text } = await generateText({
       model: bedrock(BEDROCK_MODEL_ID),
-      // @ts-expect-error NFR-15: maxTokens may not be typed in this SDK version
-      maxTokens: 1024,
+      maxOutputTokens: 1024, // TODO(ai-sdk): parameter name may change across SDK versions
       ...guardrailOpts,
       messages: [
         {

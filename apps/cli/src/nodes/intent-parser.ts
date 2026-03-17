@@ -7,7 +7,7 @@ import {
   BEDROCK_MODEL_ID,
   AWS_REGION,
 } from "../config/constants.js";
-import { ExecutionStatus } from "@assignee/core";
+import { ExecutionStatus, defaultPatternRegistry } from "@assignee/core";
 import type { AgentState } from "../services/graph.js";
 
 const bedrock = createAmazonBedrock({ region: AWS_REGION });
@@ -22,11 +22,17 @@ const intentParserSchema = z.object({
 export async function intentParserNode(
   state: AgentState,
 ): Promise<Partial<AgentState>> {
+  // Pattern detection FIRST — zero latency, no Bedrock call when pattern matches
+  const detectedPattern = defaultPatternRegistry.detect(state.userIntent);
+  if (detectedPattern !== null) {
+    return { resourcePattern: detectedPattern };
+  }
+
+  // Existing single-resource Bedrock classification — UNCHANGED below this point
   const { output } = await generateText({
     model: bedrock(BEDROCK_MODEL_ID),
     output: Output.object({ schema: intentParserSchema }),
-    // @ts-expect-error NFR-15: maxTokens might not be defined in this version's types
-    maxTokens: 1024,
+    maxOutputTokens: 1024, // TODO(ai-sdk): parameter name may change across SDK versions
     messages: [
       {
         role: "user",
