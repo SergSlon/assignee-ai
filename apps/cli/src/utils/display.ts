@@ -187,9 +187,13 @@ export async function renderOptionPrompt(
       break;
     }
     case "multi": {
+      // clack multiselect crashes with an empty options array — skip the field
+      if (!question.options || question.options.length === 0) {
+        return undefined;
+      }
       result = await clack.multiselect({
         message: question.label,
-        options: (question.options ?? []).map((o) => ({
+        options: question.options.map((o) => ({
           value: o.value,
           label: o.label,
         })),

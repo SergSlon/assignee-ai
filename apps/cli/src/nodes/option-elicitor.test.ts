@@ -49,7 +49,11 @@ const testPlugin: ResourcePlugin = {
   advancedFields: [
     {
       name: "Tags",
-      question: { type: "multi", label: "Tags", options: [] },
+      question: {
+        type: "multi",
+        label: "Tags",
+        options: [{ value: "env:prod", label: "env:prod" }],
+      },
     },
   ],
   defaults: {},
