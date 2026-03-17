@@ -260,6 +260,16 @@ describe("renderOptionPrompt — TTY mode", () => {
     expect(result).toEqual(["a", "b"]);
   });
 
+  it("returns undefined for multi type with empty options (no crash)", async () => {
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(
+      makeField({ type: "multi", options: [] }),
+      resolved,
+    );
+    expect(multiselect).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+  });
+
   it("returns resolved.value when clack.isCancel returns true", async () => {
     vi.mocked(text).mockResolvedValueOnce(
       Symbol("cancel") as unknown as string,
