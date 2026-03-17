@@ -3,16 +3,19 @@ export const BEDROCK_MODEL_ID =
 
 export const AWS_REGION = process.env["AWS_REGION"] ?? "us-east-1";
 
-export const SUPPORTED_POC_TYPES = [
+export const SUPPORTED_TYPES = [
   "AWS::S3::Bucket",
   "AWS::SSM::Parameter",
   "AWS::IAM::Role",
+  "AWS::EC2::Instance",
+  "AWS::RDS::DBInstance",
+  "AWS::Lambda::Function",
 ] as const;
 
-export type SupportedPocType = (typeof SUPPORTED_POC_TYPES)[number];
+export type SupportedType = (typeof SUPPORTED_TYPES)[number];
 
 /** Human-readable hint shown when an unsupported resource type is requested. */
-export const SUPPORTED_TYPES_HINT = `Supported types: ${SUPPORTED_POC_TYPES.join(", ")}`;
+export const SUPPORTED_TYPES_HINT = `Supported types: ${SUPPORTED_TYPES.join(", ")}`;
 
 /** Maximum characters of the CFN schema excerpt passed to the plan generator prompt. */
 export const SCHEMA_EXCERPT_MAX_CHARS = 3000;

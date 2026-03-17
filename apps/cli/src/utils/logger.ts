@@ -13,6 +13,7 @@ export const LOG_ACTIONS = {
   PLAN_GENERATED: "plan_generated",
   PREFLIGHT_COMPLETED: "preflight_completed",
   PRICING_UNAVAILABLE: "pricing_unavailable",
+  PRICING_TIMEOUT: "pricing_timeout",
   PLAN_APPROVED: "plan_approved",
   PLAN_REJECTED: "plan_rejected_by_user",
   APPLY_STARTED: "apply_started",
@@ -44,5 +45,8 @@ export interface LogEvent {
  * @param event - The log event to write
  */
 export function log(event: LogEvent): void {
+  // Structured JSON logs are for CI / log aggregation — suppress in interactive TTY sessions
+  // where @clack/prompts owns stderr rendering.
+  if (process.stderr.isTTY) return;
   process.stderr.write(JSON.stringify(event) + "\n");
 }

@@ -7,12 +7,17 @@
  */
 
 export const RESOURCE_TYPES = {
-  S3_BUCKET: 'AWS::S3::Bucket',
-  SSM_PARAMETER: 'AWS::SSM::Parameter',
-  IAM_ROLE: 'AWS::IAM::Role',
-} as const
+  S3_BUCKET: "AWS::S3::Bucket",
+  SSM_PARAMETER: "AWS::SSM::Parameter",
+  IAM_ROLE: "AWS::IAM::Role",
+  EC2_INSTANCE: "AWS::EC2::Instance",
+  RDS_DB_INSTANCE: "AWS::RDS::DBInstance",
+  LAMBDA_FUNCTION: "AWS::Lambda::Function",
+} as const;
 
-export type ResourceType = typeof RESOURCE_TYPES[keyof typeof RESOURCE_TYPES]
+export type ResourceType = (typeof RESOURCE_TYPES)[keyof typeof RESOURCE_TYPES];
 
 /** Ordered tuple of all resource types supported in the POC phase. */
-export const SUPPORTED_POC_TYPES = Object.values(RESOURCE_TYPES) as ResourceType[]
+export const SUPPORTED_POC_TYPES = Object.values(
+  RESOURCE_TYPES,
+) as ResourceType[];

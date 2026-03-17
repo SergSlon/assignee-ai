@@ -33,6 +33,10 @@ export const planCommand = new Command(CommandName.PLAN)
   .description(CommandDescription.PLAN)
   .argument(CommandArgs.INTENT.NAME, CommandArgs.INTENT.DESC)
   .option("-o, --output <format>", "Output format (json|text)", "text")
+  .addHelpText(
+    "after",
+    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee plan "Create an S3 bucket named my-bucket"\n  assignee plan "Create an EC2 t3.micro instance"\n  assignee plan "Create a Lambda function for image processing"`,
+  )
   .action(async (intent: string | undefined) => {
     if (!intent) {
       console.error(
