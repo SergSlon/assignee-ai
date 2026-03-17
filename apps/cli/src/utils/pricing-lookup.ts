@@ -131,8 +131,24 @@ export async function fetchEc2InstancePrices(
 }
 
 /**
- * Fetches live on-demand Single-AZ prices for RDS DB instance classes in parallel.
- * Uses the provided engine name (AWS pricing API value, e.g. "postgres").
+ * Maps plugin engine values (as defined in rds-dbinstance.ts) to the engine
+ * names expected by the AWS Pricing API.
+ */
+const RDS_ENGINE_API_NAME: Record<string, string> = {
+  mysql: "MySQL",
+  postgres: "PostgreSQL",
+  mariadb: "MariaDB",
+  "aurora-mysql": "Aurora MySQL",
+  "aurora-postgresql": "Aurora PostgreSQL",
+};
+
+/** Aurora engines use a different pricing SKU structure — no deploymentOption filter. */
+const AURORA_ENGINES = new Set(["aurora-mysql", "aurora-postgresql"]);
+
+/**
+ * Fetches live on-demand prices for RDS DB instance classes in parallel.
+ * Maps plugin engine values to AWS Pricing API names automatically.
+ * Aurora engines omit the deploymentOption filter (not applicable for Aurora).
  * Returns a map of instanceClass → "$X.XXXX/hr" for each successfully priced class.
  */
 export async function fetchRdsInstancePrices(
@@ -143,9 +159,12 @@ export async function fetchRdsInstancePrices(
   const pricingTool = tools.find((t) => t.name === ToolName.GET_PRICING);
   if (!pricingTool) return {};
 
+  const apiEngine = RDS_ENGINE_API_NAME[engine] ?? engine;
+  const isAurora = AURORA_ENGINES.has(engine);
+
   const results = await Promise.all(
     instanceClasses.map(async (instanceClass) => {
-      const price = await queryPrice(pricingTool, PricingServiceCode.RDS, [
+      const filters: TermMatchFilter[] = [
         {
           Field: PricingFilter.Field.PRODUCT_FAMILY,
           Value: PricingFilter.Value.RDS_PRODUCT_FAMILY,
@@ -158,15 +177,24 @@ export async function fetchRdsInstancePrices(
         },
         {
           Field: PricingFilter.Field.DATABASE_ENGINE,
-          Value: engine,
+          Value: apiEngine,
           Type: "TERM_MATCH",
         },
-        {
+      ];
+
+      if (!isAurora) {
+        filters.push({
           Field: PricingFilter.Field.DEPLOYMENT_OPTION,
           Value: PricingFilter.Value.RDS_SINGLE_AZ,
           Type: "TERM_MATCH",
-        },
-      ]);
+        });
+      }
+
+      const price = await queryPrice(
+        pricingTool,
+        PricingServiceCode.RDS,
+        filters,
+      );
       return [instanceClass, price] as const;
     }),
   );
