@@ -64,9 +64,14 @@ export function getMcpServerConfigs(): Record<string, McpServerConfig> {
       args: ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"],
     },
     // Pricing API is only available in us-east-1
+    // --with "botocore[crt]" is required for the pricing server's AWS credential chain
     [McpServerName.PRICING]: {
       command: McpCommand.UVX,
-      args: ["awslabs.aws-pricing-mcp-server@latest"],
+      args: [
+        "--with",
+        "botocore[crt]",
+        "awslabs.aws-pricing-mcp-server@latest",
+      ],
       env: mcpEnv("us-east-1"),
     },
     // Documentation server: targeted section-level access to AWS official docs via read_sections.
