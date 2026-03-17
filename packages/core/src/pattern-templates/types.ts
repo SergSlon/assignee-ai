@@ -1,0 +1,45 @@
+/**
+ * Specification for a single AWS resource within an architecture pattern.
+ * The `resourceId` is the logical name used in `dependencyOrder` ordering.
+ */
+export interface ResourceSpec {
+  /** CloudFormation resource type, e.g. "AWS::Lambda::Function" */
+  resourceType: string;
+  /** Logical identifier within the pattern, e.g. "lambda-execution-role" (used in dependencyOrder) */
+  resourceId: string;
+  /** Human-readable display name, e.g. "Lambda Execution Role" */
+  displayName: string;
+}
+
+/**
+ * Describes a compound architecture pattern that assignee.ai can recognize and provision as a unit.
+ * Consumed by PatternRegistry.detect() (intent-parser) and compound-dispatcher node (Story 8.2).
+ *
+ * @see pattern-templates/patterns/ for 5 canonical pattern implementations
+ */
+export interface ArchitecturePattern {
+  /** Unique pattern identifier (kebab-case), e.g. "serverless-api" */
+  patternId: string;
+  /** Human-readable name, e.g. "Serverless API" */
+  displayName: string;
+  /**
+   * Natural language keywords triggering this pattern (case-insensitive substring match).
+   * Must contain ≥5 variants. Order matters — first match wins across all patterns.
+   */
+  keywords: string[];
+  /** Ordered list of all resources in the pattern */
+  resourceList: ResourceSpec[];
+  /**
+   * Provisioning order groups. Each inner array is a group of resourceIds that can be
+   * provisioned in parallel. Groups are sequential — group[0] finishes before group[1] starts.
+   * All resourceId values MUST appear in resourceList.
+   *
+   * @example [["iam-execution-role"], ["lambda-fn", "dynamodb-table"], ["api-gateway"]]
+   */
+  dependencyOrder: string[][];
+  /**
+   * Default configuration values per resourceId. Keys are resourceId values from resourceList.
+   * Merged with user-elicited options in Story 8.2's compound-dispatcher node.
+   */
+  defaultOptions: Record<string, Record<string, unknown>>;
+}
