@@ -4,7 +4,7 @@
  *
  * Uses @aws-sdk/client-cloudcontrol directly (replaces deprecated ccapi-mcp-server).
  *
- * @see Story 7-6
+ * @see Story 7-6, Story 9-2
  */
 
 import {
@@ -12,22 +12,28 @@ import {
   getPrimaryIdentifier,
   SUPPORTED_TYPES_ARRAY,
   type ResourceType,
+  safeTry,
 } from "@assignee/core";
 
 function isResourceType(s: string): s is ResourceType {
   return (SUPPORTED_TYPES_ARRAY as readonly string[]).includes(s);
 }
 import {
+  type CloudControlClient,
   CreateResourceCommand,
   GetResourceCommand,
+  ResourceNotFoundException,
+  AlreadyExistsException,
+  ThrottlingException,
+  GeneralServiceException,
 } from "@aws-sdk/client-cloudcontrol";
-import { getCloudControlClient } from "../services/cloudcontrol-client.js";
 import { injectMandatoryTags } from "../utils/tags.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
 export async function resourceProvisionerNode(
   state: AgentState,
+  client: CloudControlClient,
 ): Promise<Partial<AgentState>> {
   if (state.executionStatus === ExecutionStatus.CANCELLED) return {};
 
@@ -37,8 +43,6 @@ export async function resourceProvisionerNode(
       errorMessage: "Cannot provision: desiredState is missing.",
     };
   }
-
-  const client = getCloudControlClient();
 
   // ── State Guard (FR-15 Read-Before-Write) ────────────────────────────────
   if (!state.resourceType || !isResourceType(state.resourceType)) {
@@ -53,14 +57,17 @@ export async function resourceProvisionerNode(
   );
 
   if (identifier) {
-    try {
-      await client.send(
+    const [stateGuardErr] = await safeTry(
+      client.send(
         new GetResourceCommand({
           TypeName: state.resourceType,
           Identifier: identifier,
         }),
-      );
-      // Success = resource already exists = stale plan
+      ),
+    );
+
+    if (!stateGuardErr) {
+      // No error = resource already exists = stale plan
       log({
         ts: new Date().toISOString(),
         runId: state.runId,
@@ -73,22 +80,23 @@ export async function resourceProvisionerNode(
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: `Stale Plan: Resource already exists (${identifier}). Re-run 'assignee plan' to refresh.`,
       };
-    } catch (err) {
-      if ((err as { name?: string }).name !== "ResourceNotFoundException") {
-        return {
-          executionStatus: ExecutionStatus.FAILED,
-          errorMessage: `State Guard failed: ${String(err)}`,
-        };
-      }
-      // ResourceNotFoundException = safe to proceed
-      log({
-        ts: new Date().toISOString(),
-        runId: state.runId,
-        level: "info",
-        action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
-        reason: "not_found",
-      });
     }
+
+    if (!(stateGuardErr instanceof ResourceNotFoundException)) {
+      return {
+        executionStatus: ExecutionStatus.FAILED,
+        errorMessage: `State Guard failed: ${String(stateGuardErr)}`,
+      };
+    }
+
+    // ResourceNotFoundException = safe to proceed
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
+      reason: "not_found",
+    });
   }
 
   // ── Inject mandatory tags (NFR-14) ───────────────────────────────────────
@@ -99,42 +107,62 @@ export async function resourceProvisionerNode(
   );
 
   // ── CloudControl async create ─────────────────────────────────────────────
-  try {
-    const createResult = await client.send(
+  const [createErr, createResult] = await safeTry(
+    client.send(
       new CreateResourceCommand({
         TypeName: state.resourceType,
         DesiredState: JSON.stringify(propertiesWithTags),
         ClientToken: state.runId,
       }),
-    );
+    ),
+  );
 
-    const requestToken = createResult.ProgressEvent?.RequestToken;
-    if (!requestToken) {
+  if (createErr) {
+    if (createErr instanceof AlreadyExistsException) {
       return {
         executionStatus: ExecutionStatus.FAILED,
-        errorMessage:
-          "CloudControl provisioning failed: CreateResource returned no RequestToken.",
+        errorMessage: `CloudControl provisioning failed: Resource already exists. Re-run 'assignee plan' to refresh.`,
       };
     }
-
-    log({
-      ts: new Date().toISOString(),
-      runId: state.runId,
-      level: "info",
-      action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
-      requestToken,
-      resourceType: state.resourceType,
-    });
-
-    return {
-      requestToken,
-      executionStatus: ExecutionStatus.IN_PROGRESS,
-      startedAt: Date.now(),
-    };
-  } catch (err: unknown) {
+    if (createErr instanceof ThrottlingException) {
+      return {
+        executionStatus: ExecutionStatus.FAILED,
+        errorMessage: `CloudControl provisioning failed: Request throttled by AWS. Please wait and retry.`,
+      };
+    }
+    if (createErr instanceof GeneralServiceException) {
+      return {
+        executionStatus: ExecutionStatus.FAILED,
+        errorMessage: `CloudControl provisioning failed: ${createErr.message}`,
+      };
+    }
     return {
       executionStatus: ExecutionStatus.FAILED,
-      errorMessage: `CloudControl provisioning failed: ${err instanceof Error ? err.message : String(err)}`,
+      errorMessage: `CloudControl provisioning failed: ${createErr instanceof Error ? createErr.message : String(createErr)}`,
     };
   }
+
+  const requestToken = createResult.ProgressEvent?.RequestToken;
+  if (!requestToken) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage:
+        "CloudControl provisioning failed: CreateResource returned no RequestToken.",
+    };
+  }
+
+  log({
+    ts: new Date().toISOString(),
+    runId: state.runId,
+    level: "info",
+    action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+    requestToken,
+    resourceType: state.resourceType,
+  });
+
+  return {
+    requestToken,
+    executionStatus: ExecutionStatus.IN_PROGRESS,
+    startedAt: Date.now(),
+  };
 }

@@ -13,6 +13,7 @@ import {
   type ExecutionStatusType,
   PreflightMode,
   type PreflightModeType,
+  type ArchitecturePattern,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { GraphNode } from "../constants/graph.js";
@@ -66,6 +67,9 @@ export const graphAnnotation = Annotation.Root({
   elicitedOptions: Annotation<Record<string, unknown> | undefined>({
     reducer: (_, b) => b,
   }),
+  resourcePattern: Annotation<ArchitecturePattern | undefined>({
+    reducer: (_, b) => b,
+  }),
 });
 
 export type AgentState = typeof graphAnnotation.State;
@@ -85,6 +89,7 @@ import { humanApprovalNode } from "../nodes/human-approval.js";
 import { resourceProvisionerNode } from "../nodes/resource-provisioner.js";
 import { statusPollerNode } from "../nodes/status-poller.js";
 import { resultFormatterNode } from "../nodes/result-formatter.js";
+import { createCloudControlClient } from "./cloudcontrol-client.js";
 
 // Conditional routing for preflight_guard:
 // - plan mode  → skip HITL, render plan box via result_formatter
@@ -119,6 +124,14 @@ function routeStatusPoller(
 }
 
 export function createGraph(tools: StructuredTool[] = []) {
+  // Fail fast at graph construction time if MCP AWS credentials are missing.
+  // Env vars are read here (not inside cloudcontrol-client) for centralized config.
+  const cloudClient = createCloudControlClient({
+    accessKeyId: process.env["MCP_AWS_ACCESS_KEY_ID"] ?? "",
+    secretAccessKey: process.env["MCP_AWS_SECRET_ACCESS_KEY"] ?? "",
+    region: process.env["AWS_REGION"] ?? "",
+  });
+
   const workflow = new StateGraph(graphAnnotation)
     .addNode(GraphNode.INTENT_PARSER, (state) => intentParserNode(state))
     .addNode(GraphNode.SCHEMA_FETCHER, (state) =>
@@ -133,9 +146,11 @@ export function createGraph(tools: StructuredTool[] = []) {
     )
     .addNode(GraphNode.HUMAN_APPROVAL, (state) => humanApprovalNode(state))
     .addNode(GraphNode.RESOURCE_PROVISIONER, (state) =>
-      resourceProvisionerNode(state),
+      resourceProvisionerNode(state, cloudClient),
     )
-    .addNode(GraphNode.STATUS_POLLER, (state) => statusPollerNode(state))
+    .addNode(GraphNode.STATUS_POLLER, (state) =>
+      statusPollerNode(state, cloudClient),
+    )
     .addNode(GraphNode.RESULT_FORMATTER, (state) => resultFormatterNode(state))
     .addEdge(START, GraphNode.INTENT_PARSER)
     .addEdge(GraphNode.INTENT_PARSER, GraphNode.SCHEMA_FETCHER)

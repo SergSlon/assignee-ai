@@ -5,12 +5,14 @@
  *
  * Uses @aws-sdk/client-cloudcontrol directly (replaces deprecated ccapi-mcp-server).
  *
- * @see Story 7-6
+ * @see Story 7-6, Story 9-2
  */
 
-import { ExecutionStatus } from "@assignee/core";
-import { GetResourceRequestStatusCommand } from "@aws-sdk/client-cloudcontrol";
-import { getCloudControlClient } from "../services/cloudcontrol-client.js";
+import { ExecutionStatus, safeTry } from "@assignee/core";
+import {
+  type CloudControlClient,
+  GetResourceRequestStatusCommand,
+} from "@aws-sdk/client-cloudcontrol";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
@@ -26,6 +28,7 @@ const ProvisioningStatus = {
 
 export async function statusPollerNode(
   state: AgentState,
+  client: CloudControlClient,
 ): Promise<Partial<AgentState>> {
   if (!state.requestToken) {
     return {
@@ -48,57 +51,57 @@ export async function statusPollerNode(
   // Wait between polls
   await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 
-  const client = getCloudControlClient();
-
-  try {
-    const result = await client.send(
+  const [pollErr, result] = await safeTry(
+    client.send(
       new GetResourceRequestStatusCommand({
         RequestToken: state.requestToken,
       }),
-    );
+    ),
+  );
 
-    const event = result.ProgressEvent;
-    const status = event?.OperationStatus as string | undefined;
-    const resourceIdentifier = event?.Identifier;
-    const errorMessage = event?.StatusMessage;
-
-    const durationMs = Date.now() - startedAt;
-
-    log({
-      ts: new Date().toISOString(),
-      runId: state.runId,
-      level: "info",
-      action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
-      durationMs,
-      status,
-    });
-
-    if (
-      status === ProvisioningStatus.FAILED ||
-      status === ProvisioningStatus.CANCEL_COMPLETE
-    ) {
-      return {
-        executionStatus: ExecutionStatus.FAILED,
-        errorMessage:
-          typeof errorMessage === "string"
-            ? errorMessage
-            : "Resource provisioning failed.",
-      };
-    }
-
-    if (status === ProvisioningStatus.SUCCESS) {
-      return {
-        executionStatus: ExecutionStatus.SUCCESS,
-        resourceArn: resourceIdentifier,
-      };
-    }
-
-    // Still IN_PROGRESS — LangGraph self-loop will re-invoke this node
-    return { executionStatus: ExecutionStatus.IN_PROGRESS };
-  } catch (err: unknown) {
+  if (pollErr) {
     return {
       executionStatus: ExecutionStatus.FAILED,
-      errorMessage: `CloudControl polling failed: ${err instanceof Error ? err.message : String(err)}`,
+      errorMessage: `CloudControl polling failed: ${pollErr instanceof Error ? pollErr.message : String(pollErr)}`,
     };
   }
+
+  const event = result.ProgressEvent;
+  const status = event?.OperationStatus as string | undefined;
+  const resourceIdentifier = event?.Identifier;
+  const errorMessage = event?.StatusMessage;
+
+  const durationMs = Date.now() - startedAt;
+
+  log({
+    ts: new Date().toISOString(),
+    runId: state.runId,
+    level: "info",
+    action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
+    durationMs,
+    status,
+  });
+
+  if (
+    status === ProvisioningStatus.FAILED ||
+    status === ProvisioningStatus.CANCEL_COMPLETE
+  ) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage:
+        typeof errorMessage === "string"
+          ? errorMessage
+          : "Resource provisioning failed.",
+    };
+  }
+
+  if (status === ProvisioningStatus.SUCCESS) {
+    return {
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: resourceIdentifier,
+    };
+  }
+
+  // Still IN_PROGRESS — LangGraph self-loop will re-invoke this node
+  return { executionStatus: ExecutionStatus.IN_PROGRESS };
 }

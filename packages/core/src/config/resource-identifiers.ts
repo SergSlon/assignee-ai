@@ -15,6 +15,18 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   [RESOURCE_TYPES.EC2_INSTANCE]: "InstanceId",
   [RESOURCE_TYPES.RDS_DB_INSTANCE]: "DBInstanceIdentifier",
   [RESOURCE_TYPES.LAMBDA_FUNCTION]: "FunctionName",
+  // Story 8.1: additional types for compound architecture patterns
+  // Note: auto-generated identifiers (VpcId, SubnetId, etc.) are not present in desiredState;
+  // state guard skips Read-Before-Write check when getPrimaryIdentifier returns undefined.
+  [RESOURCE_TYPES.EC2_VPC]: "VpcId",
+  [RESOURCE_TYPES.EC2_SUBNET]: "SubnetId",
+  [RESOURCE_TYPES.EC2_SECURITY_GROUP]: "GroupId",
+  [RESOURCE_TYPES.DYNAMODB_TABLE]: "TableName",
+  [RESOURCE_TYPES.SQS_QUEUE]: "QueueUrl",
+  [RESOURCE_TYPES.SNS_TOPIC]: "TopicArn",
+  [RESOURCE_TYPES.ELBV2_LOAD_BALANCER]: "LoadBalancerArn",
+  [RESOURCE_TYPES.ECS_CLUSTER]: "Arn",
+  [RESOURCE_TYPES.ECR_REPOSITORY]: "RepositoryName",
 } as const;
 
 /**
