@@ -59,6 +59,9 @@ export type {
   ResolvedFieldConfig,
 } from "./config/resource-policy.js";
 
+// Utils
+export { sanitizeUserIntent, MAX_INTENT_LENGTH } from "./utils/sanitize.js";
+
 // Errors
 export {
   AssigneeError,
@@ -66,4 +69,7 @@ export {
   BedrockError,
   StateGuardError,
   UnsupportedResourceError,
+  ConfigurationError,
+  ProvisioningError,
+  type ProvisioningErrorCode,
 } from "./errors.js";
