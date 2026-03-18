@@ -75,6 +75,7 @@ export function renderIntro(): void {
 }
 
 export function renderPlanBox(state: RenderableState): void {
+  stopSpinner();
   const content = [
     `Resource Type:   ${state.resourceType}`,
     `Region:          ${regionLabel()}`,
@@ -98,6 +99,7 @@ export function renderPlanBox(state: RenderableState): void {
 }
 
 export function renderError(message: string, hint?: string): void {
+  stopSpinner();
   if (process.stderr.isTTY) {
     process.stderr.write(chalk.red(`✖ Error: ${message}\n`));
     if (hint) {
@@ -129,6 +131,7 @@ export async function renderHitlConfirm(
 }
 
 export function renderApplySuccess(state: RenderableState): void {
+  stopSpinner();
   if (process.stdout.isTTY) {
     process.stdout.write(chalk.green("✅ Resource created successfully!\n"));
     if (state.resourceArn) {
@@ -149,6 +152,7 @@ export function renderCompoundSuccess(
   results: ResourceResult[],
   pattern: ArchitecturePattern,
 ): void {
+  stopSpinner();
   const lines = [
     chalk.green.bold(`✓ ${pattern.displayName} provisioned successfully`),
     "",
