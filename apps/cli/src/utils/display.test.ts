@@ -162,6 +162,44 @@ describe("display.ts — non-TTY (CI) mode", () => {
   });
 });
 
+it("renderCompoundSuccess writes all resource types and pattern name in plain text", async () => {
+  const { renderCompoundSuccess } = await import("./display.js");
+  const { chunks, restore } = captureStream(process.stdout);
+
+  renderCompoundSuccess(
+    [
+      {
+        resourceId: "lambda-execution-role",
+        resourceType: "AWS::IAM::Role",
+        resourceArn: "arn:aws:iam::123:role/exec-role",
+        executionStatus: "SUCCESS",
+      },
+      {
+        resourceId: "lambda-fn",
+        resourceType: "AWS::Lambda::Function",
+        resourceArn: "arn:aws:lambda::123:function:my-fn",
+        executionStatus: "SUCCESS",
+      },
+    ],
+    {
+      patternId: "serverless-api",
+      displayName: "Serverless API",
+      keywords: [],
+      resourceList: [],
+      dependencyOrder: [],
+      defaultOptions: {},
+    },
+  );
+  restore();
+
+  const output = chunks.join("");
+  expect(output).toContain("Serverless API");
+  expect(output).toContain("AWS::IAM::Role");
+  expect(output).toContain("AWS::Lambda::Function");
+  expect(output).toContain("arn:aws:iam::123:role/exec-role");
+  expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
+});
+
 // ── renderOptionPrompt tests ──────────────────────────────────────────────────
 
 vi.mock("@clack/prompts", () => ({

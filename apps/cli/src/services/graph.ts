@@ -14,6 +14,8 @@ import {
   PreflightMode,
   type PreflightModeType,
   type ArchitecturePattern,
+  type ResourceSpec,
+  type ResourceResult,
   AssigneeError,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
@@ -71,6 +73,15 @@ export const graphAnnotation = Annotation.Root({
   resourcePattern: Annotation<ArchitecturePattern | undefined>({
     reducer: (_, b) => b,
   }),
+  resourceQueue: Annotation<ResourceSpec[] | undefined>({
+    reducer: (_, b) => b,
+  }),
+  currentResourceIndex: Annotation<number | undefined>({
+    reducer: (_, b) => b,
+  }),
+  completedResources: Annotation<ResourceResult[] | undefined>({
+    reducer: (_, b) => b,
+  }),
   error: Annotation<AssigneeError | undefined>({ reducer: (_, b) => b }),
 });
 
@@ -85,6 +96,7 @@ type NodeFn = (
 import { createIntentParserNode } from "../nodes/intent-parser.js";
 import { schemaFetcherNode } from "../nodes/schema-fetcher.js";
 import { optionElicitorNode } from "../nodes/option-elicitor.js";
+import { compoundDispatcherNode } from "../nodes/compound-dispatcher.js";
 import { createPlanGeneratorNode } from "../nodes/plan-generator.js";
 import { preflightGuardNode } from "../nodes/preflight-guard.js";
 import { humanApprovalNode } from "../nodes/human-approval.js";
@@ -98,11 +110,19 @@ import { BEDROCK_MODEL_ID, AWS_REGION } from "../config/constants.js";
 // Conditional routing for preflight_guard:
 // - plan mode  → skip HITL, render plan box via result_formatter
 // - apply mode → HITL in human_approval, then pause at resource_provisioner interrupt
+// - compound loop (index > 0) → skip human_approval (already approved), go direct to resource_provisioner
 function routePreflightGuard(
   state: AgentState,
-): typeof GraphNode.HUMAN_APPROVAL | typeof GraphNode.RESULT_FORMATTER {
+):
+  | typeof GraphNode.HUMAN_APPROVAL
+  | typeof GraphNode.RESULT_FORMATTER
+  | typeof GraphNode.RESOURCE_PROVISIONER {
   if (state.executionMode === ExecutionMode.PLAN || !state.preflightPassed) {
     return GraphNode.RESULT_FORMATTER;
+  }
+  // Skip human_approval for compound loop iterations (index > 0 = already approved at index 0)
+  if (state.resourcePattern && (state.currentResourceIndex ?? 0) > 0) {
+    return GraphNode.RESOURCE_PROVISIONER;
   }
   return GraphNode.HUMAN_APPROVAL;
 }
@@ -125,6 +145,24 @@ function routeStatusPoller(
   return state.executionStatus === ExecutionStatus.IN_PROGRESS
     ? GraphNode.STATUS_POLLER
     : GraphNode.RESULT_FORMATTER;
+}
+
+// Conditional routing for result_formatter:
+// - compound mode with more resources pending (PENDING reset) → plan_generator (loop continues)
+// - otherwise → END
+function routeResultFormatter(
+  state: AgentState,
+): typeof GraphNode.PLAN_GENERATOR | typeof END {
+  if (
+    state.resourcePattern &&
+    state.resourceQueue &&
+    state.currentResourceIndex !== undefined &&
+    state.executionStatus === ExecutionStatus.PENDING &&
+    state.currentResourceIndex < state.resourceQueue.length
+  ) {
+    return GraphNode.PLAN_GENERATOR;
+  }
+  return END;
 }
 
 export function createGraph(tools: StructuredTool[] = []) {
@@ -155,6 +193,9 @@ export function createGraph(tools: StructuredTool[] = []) {
     .addNode(GraphNode.OPTION_ELICITOR, (state) =>
       optionElicitorNode(state, tools),
     )
+    .addNode(GraphNode.COMPOUND_DISPATCHER, (state) =>
+      compoundDispatcherNode(state),
+    )
     .addNode(GraphNode.PLAN_GENERATOR, (state) => planGeneratorNode(state))
     .addNode(GraphNode.PREFLIGHT_GUARD, (state) =>
       preflightGuardNode(state, tools),
@@ -170,11 +211,13 @@ export function createGraph(tools: StructuredTool[] = []) {
     .addEdge(START, GraphNode.INTENT_PARSER)
     .addEdge(GraphNode.INTENT_PARSER, GraphNode.SCHEMA_FETCHER)
     .addEdge(GraphNode.SCHEMA_FETCHER, GraphNode.OPTION_ELICITOR)
-    .addEdge(GraphNode.OPTION_ELICITOR, GraphNode.PLAN_GENERATOR)
+    .addEdge(GraphNode.OPTION_ELICITOR, GraphNode.COMPOUND_DISPATCHER)
+    .addEdge(GraphNode.COMPOUND_DISPATCHER, GraphNode.PLAN_GENERATOR)
     .addEdge(GraphNode.PLAN_GENERATOR, GraphNode.PREFLIGHT_GUARD)
     .addConditionalEdges(GraphNode.PREFLIGHT_GUARD, routePreflightGuard, {
       [GraphNode.HUMAN_APPROVAL]: GraphNode.HUMAN_APPROVAL,
       [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,
+      [GraphNode.RESOURCE_PROVISIONER]: GraphNode.RESOURCE_PROVISIONER,
     })
     .addEdge(GraphNode.HUMAN_APPROVAL, GraphNode.RESOURCE_PROVISIONER)
     .addConditionalEdges(
@@ -190,7 +233,11 @@ export function createGraph(tools: StructuredTool[] = []) {
       [GraphNode.STATUS_POLLER]: GraphNode.STATUS_POLLER,
       [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,
     })
-    .addEdge(GraphNode.RESULT_FORMATTER, END);
+    // compound loop routing: PENDING → plan_generator (next resource), otherwise END
+    .addConditionalEdges(GraphNode.RESULT_FORMATTER, routeResultFormatter, {
+      [GraphNode.PLAN_GENERATOR]: GraphNode.PLAN_GENERATOR,
+      [END]: END,
+    });
 
   return workflow.compile({
     interruptBefore: [GraphNode.RESOURCE_PROVISIONER], // HITL pause (Story 2.1)

@@ -39,6 +39,33 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
   return async function planGeneratorNode(
     state: AgentState,
   ): Promise<Partial<AgentState>> {
+    // Compound mode: short-circuit Bedrock — use pattern defaultOptions instead
+    if (
+      state.resourcePattern &&
+      state.resourceQueue &&
+      state.currentResourceIndex !== undefined
+    ) {
+      const currentResource = state.resourceQueue[state.currentResourceIndex];
+      if (!currentResource) return {};
+      const patternDefaults =
+        (state.resourcePattern.defaultOptions[currentResource.resourceId] as
+          | Record<string, unknown>
+          | undefined) ?? {};
+      const desiredState: Record<string, unknown> = {
+        ...patternDefaults,
+        ...(state.elicitedOptions ?? {}),
+      };
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.PLAN_GENERATED,
+        durationMs: 0,
+        extras: { resourceType: currentResource.resourceType, compound: true },
+      });
+      return { desiredState, resourceType: currentResource.resourceType };
+    }
+
     if (state.executionStatus !== ExecutionStatus.PENDING) return {};
 
     if (!state.resourceSchema) {
