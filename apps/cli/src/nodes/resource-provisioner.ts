@@ -13,6 +13,7 @@ import {
   SUPPORTED_TYPES_ARRAY,
   type ResourceType,
   safeTry,
+  ProvisioningError,
 } from "@assignee/core";
 
 function isResourceType(s: string): s is ResourceType {
@@ -73,19 +74,27 @@ export async function resourceProvisionerNode(
         runId: state.runId,
         level: "warn",
         action: LOG_ACTIONS.STATE_GUARD_ABORT,
-        identifier,
-        resourceType: state.resourceType,
+        extras: { identifier, resourceType: state.resourceType },
       });
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: `Stale Plan: Resource already exists (${identifier}). Re-run 'assignee plan' to refresh.`,
+        error: new ProvisioningError(
+          `Stale Plan: Resource already exists (${identifier})`,
+          "StateMismatch",
+        ),
       };
     }
 
     if (!(stateGuardErr instanceof ResourceNotFoundException)) {
+      const errMsg =
+        stateGuardErr instanceof Error
+          ? stateGuardErr.message
+          : String(stateGuardErr);
       return {
         executionStatus: ExecutionStatus.FAILED,
-        errorMessage: `State Guard failed: ${String(stateGuardErr)}`,
+        errorMessage: `State Guard failed: ${errMsg}`,
+        error: new ProvisioningError(errMsg, "Unknown"),
       };
     }
 
@@ -95,7 +104,7 @@ export async function resourceProvisionerNode(
       runId: state.runId,
       level: "info",
       action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
-      reason: "not_found",
+      extras: { reason: "not_found" },
     });
   }
 
@@ -122,23 +131,32 @@ export async function resourceProvisionerNode(
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: `CloudControl provisioning failed: Resource already exists. Re-run 'assignee plan' to refresh.`,
+        error: new ProvisioningError(
+          "Resource already exists",
+          "AlreadyExists",
+        ),
       };
     }
     if (createErr instanceof ThrottlingException) {
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: `CloudControl provisioning failed: Request throttled by AWS. Please wait and retry.`,
+        error: new ProvisioningError("Request throttled by AWS", "Throttled"),
       };
     }
     if (createErr instanceof GeneralServiceException) {
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: `CloudControl provisioning failed: ${createErr.message}`,
+        error: new ProvisioningError(createErr.message, "Unknown"),
       };
     }
+    const errMsg =
+      createErr instanceof Error ? createErr.message : String(createErr);
     return {
       executionStatus: ExecutionStatus.FAILED,
-      errorMessage: `CloudControl provisioning failed: ${createErr instanceof Error ? createErr.message : String(createErr)}`,
+      errorMessage: `CloudControl provisioning failed: ${errMsg}`,
+      error: new ProvisioningError(errMsg, "Unknown"),
     };
   }
 
@@ -156,8 +174,7 @@ export async function resourceProvisionerNode(
     runId: state.runId,
     level: "info",
     action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
-    requestToken,
-    resourceType: state.resourceType,
+    extras: { requestToken, resourceType: state.resourceType },
   });
 
   return {

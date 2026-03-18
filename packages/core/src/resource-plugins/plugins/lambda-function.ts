@@ -110,4 +110,8 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
     MemorySize: 128,
     Timeout: 30,
   },
+  configHints: [
+    "Lambda Runtime MUST be one of: nodejs22.x, nodejs20.x, python3.13, python3.12, java21, dotnet8, ruby3.3, provided.al2023. NEVER use deprecated runtimes (python3.8, python3.9, nodejs18.x, nodejs16.x, etc.)",
+    "Lambda Role: if the user did not provide a specific IAM role ARN, OMIT the Role property — do NOT invent placeholder ARNs",
+  ],
 };

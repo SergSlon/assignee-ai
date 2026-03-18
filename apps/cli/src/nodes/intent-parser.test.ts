@@ -1,31 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ExecutionStatus } from "@assignee/core";
+import { describe, it, expect } from "vitest";
+import { ExecutionStatus, MockLlmAdapter } from "@assignee/core";
 import type { AgentState } from "../services/graph.js";
 import { SUPPORTED_TYPES, SUPPORTED_TYPES_HINT } from "../config/constants.js";
-
-// Automock the ai module
-vi.mock("ai");
-
-// Mock bedrock to prevent initialization side-effects
-vi.mock("@ai-sdk/amazon-bedrock", () => ({
-  createAmazonBedrock: vi.fn(() => vi.fn()),
-}));
-
-import { intentParserNode } from "./intent-parser.js";
-import { generateText } from "ai";
+import { createIntentParserNode } from "./intent-parser.js";
 
 describe("intentParserNode", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("identifies valid resource type (S3)", async () => {
-    vi.mocked(generateText).mockResolvedValue({
-      output: { resourceType: "AWS::S3::Bucket" },
-    } as any);
+    const mock = new MockLlmAdapter({ resourceType: "AWS::S3::Bucket" });
+    const node = createIntentParserNode({ llmClient: mock });
 
     const state = { userIntent: "create an S3 bucket" } as AgentState;
-    const result = await intentParserNode(state);
+    const result = await node(state);
 
     expect(result.resourceType).toBe("AWS::S3::Bucket");
     expect(result.executionStatus).toBeUndefined();
@@ -36,30 +21,39 @@ describe("intentParserNode", () => {
     ["AWS::RDS::DBInstance", "create a MySQL RDS database"],
     ["AWS::Lambda::Function", "create a Lambda function for image processing"],
   ])("identifies %s correctly", async (resourceType, intent) => {
-    vi.mocked(generateText).mockResolvedValue({
-      output: { resourceType },
-    } as any);
+    const mock = new MockLlmAdapter({ resourceType });
+    const node = createIntentParserNode({ llmClient: mock });
 
     const state = { userIntent: intent } as AgentState;
-    const result = await intentParserNode(state);
+    const result = await node(state);
 
     expect(result.resourceType).toBe(resourceType);
     expect(result.executionStatus).toBeUndefined();
   });
 
   it("rejects unsupported resource types", async () => {
-    vi.mocked(generateText).mockResolvedValue({
-      output: { resourceType: "UNSUPPORTED" },
-    } as any);
+    const mock = new MockLlmAdapter({ resourceType: "UNSUPPORTED" });
+    const node = createIntentParserNode({ llmClient: mock });
 
     const state = { userIntent: "create an unknown resource" } as AgentState;
-    const result = await intentParserNode(state);
+    const result = await node(state);
 
     expect(result.executionStatus).toBe(ExecutionStatus.UNSUPPORTED_RESOURCE);
     expect(result.errorMessage).toBe(
       `Unsupported resource type. ${SUPPORTED_TYPES_HINT}.`,
     );
     expect(result.resourceType).toBeUndefined();
+  });
+
+  it("returns FAILED when LLM call fails", async () => {
+    const mock = new MockLlmAdapter(undefined, "", true, "ThrottlingException");
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = { userIntent: "create an S3 bucket" } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toContain("ThrottlingException");
   });
 
   it("SUPPORTED_TYPES contains all expected resource types", () => {

@@ -8,7 +8,7 @@
  *
  * No --yes flag: HITL is mandatory per spec.
  *
- * @see Story 2-6, Story 1-8
+ * @see Story 2-6, Story 1-8, Story 9-6
  */
 
 import { Command } from "commander";
@@ -54,13 +54,14 @@ export const applyCommand = new Command(CommandName.APPLY)
     renderIntro();
 
     const runId = crypto.randomUUID();
+    const startTs = Date.now();
 
     log({
       ts: new Date().toISOString(),
       runId,
       level: "info",
       action: LOG_ACTIONS.APPLY_STARTED,
-      intent,
+      extras: { intent },
     });
 
     process.stderr.write(`[run:${runId}] Starting apply...\n`);
@@ -89,6 +90,14 @@ export const applyCommand = new Command(CommandName.APPLY)
 
       // User declined or Ctrl+C in human_approval
       if (phase1State.executionStatus === ExecutionStatus.CANCELLED) {
+        log({
+          ts: new Date().toISOString(),
+          runId,
+          level: "info",
+          action: LOG_ACTIONS.APPLY_COMPLETE,
+          durationMs: Date.now() - startTs,
+          result: ExecutionStatus.CANCELLED,
+        });
         renderOutro(true); // intentional — not an error
         await closeMcpClient();
         process.exit(ProcessExitCode.SUCCESS);
@@ -99,6 +108,14 @@ export const applyCommand = new Command(CommandName.APPLY)
         phase1State.executionStatus === ExecutionStatus.FAILED ||
         phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
       ) {
+        log({
+          ts: new Date().toISOString(),
+          runId,
+          level: "info",
+          action: LOG_ACTIONS.APPLY_COMPLETE,
+          durationMs: Date.now() - startTs,
+          result: phase1State.executionStatus,
+        });
         renderError(
           phase1State.errorMessage ?? "Apply failed during planning phase",
           phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
@@ -121,6 +138,16 @@ export const applyCommand = new Command(CommandName.APPLY)
       await closeMcpClient();
 
       const success = finalState.executionStatus === ExecutionStatus.SUCCESS;
+
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "info",
+        action: LOG_ACTIONS.APPLY_COMPLETE,
+        durationMs: Date.now() - startTs,
+        result: finalState.executionStatus,
+      });
+
       renderOutro(success);
       process.exit(
         success ? ProcessExitCode.SUCCESS : ProcessExitCode.GENERIC_ERROR,
@@ -128,6 +155,14 @@ export const applyCommand = new Command(CommandName.APPLY)
     } catch (err: unknown) {
       stopSpinner();
       const errMsg = err instanceof Error ? err.message : String(err);
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "error",
+        action: LOG_ACTIONS.APPLY_COMPLETE,
+        durationMs: Date.now() - startTs,
+        result: "error",
+      });
       renderError(
         `Apply failed: ${errMsg}`,
         "Check that AWS credentials are configured and all MCP servers are running.",
