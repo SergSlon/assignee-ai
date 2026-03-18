@@ -1,3 +1,20 @@
+import type { ExecutionStatusType } from "../schema/graph-state.js";
+
+/**
+ * Outcome of provisioning a single resource within a compound provisioning loop.
+ * Accumulated in `state.completedResources` as each resource completes or fails.
+ */
+export interface ResourceResult {
+  /** Logical resource ID from the pattern definition, e.g. "lambda-execution-role" */
+  resourceId: string;
+  /** CloudFormation resource type, e.g. "AWS::IAM::Role" */
+  resourceType: string;
+  /** ARN of the created resource (undefined if provisioning failed) */
+  resourceArn?: string;
+  /** Final execution status for this resource */
+  executionStatus: ExecutionStatusType;
+}
+
 /**
  * Specification for a single AWS resource within an architecture pattern.
  * The `resourceId` is the logical name used in `dependencyOrder` ordering.

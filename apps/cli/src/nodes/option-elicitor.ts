@@ -145,6 +145,11 @@ export async function optionElicitorNode(
   state: AgentState,
   tools?: StructuredTool[],
 ): Promise<Partial<AgentState>> {
+  if (state.resourcePattern) {
+    // Compound intent: elicitation skipped — pattern defaultOptions provide configuration
+    return {};
+  }
+
   if (state.executionStatus !== ExecutionStatus.PENDING) return {};
 
   // Non-TTY (CI/pipes): skip all prompts

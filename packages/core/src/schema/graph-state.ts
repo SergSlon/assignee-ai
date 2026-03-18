@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { ArchitecturePattern } from "../pattern-templates/types.js";
+import type {
+  ArchitecturePattern,
+  ResourceSpec,
+  ResourceResult,
+} from "../pattern-templates/types.js";
 import { SUPPORTED_TYPES_ARRAY } from "../config/resource-types.js";
 
 export const ExecutionMode = {
@@ -66,6 +70,11 @@ export const GraphStateSchema = z.object({
 
   // Compound architecture pattern — populated by intent_parser when a pattern is detected (Story 8.1)
   resourcePattern: z.custom<ArchitecturePattern>().optional(),
+
+  // Story 8.2: compound provisioning loop state
+  resourceQueue: z.custom<ResourceSpec[]>().optional(), // Flattened dependency-ordered resources
+  currentResourceIndex: z.number().optional(), // Index into resourceQueue
+  completedResources: z.custom<ResourceResult[]>().optional(), // Accumulated per-resource results
 
   // LangGraph message history
   messages: z.array(z.unknown()).default([]),

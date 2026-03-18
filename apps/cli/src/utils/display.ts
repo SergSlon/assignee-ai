@@ -10,7 +10,12 @@ import chalk from "chalk";
 import boxen from "boxen";
 import { AWS_REGION, BEDROCK_MODEL_ID } from "../config/constants.js";
 import { AssigneeError } from "@assignee/core";
-import type { ResourceField, ResolvedFieldConfig } from "@assignee/core";
+import type {
+  ResourceField,
+  ResolvedFieldConfig,
+  ResourceResult,
+  ArchitecturePattern,
+} from "@assignee/core";
 
 /** Returns the region label for the plan box.
  *  Cross-regional inference profiles (us.*, eu.*, ap.*) are annotated. */
@@ -133,6 +138,38 @@ export function renderApplySuccess(state: RenderableState): void {
   } else {
     process.stdout.write(
       `SUCCESS\nARN: ${state.resourceArn ?? "N/A"}\nRun ID: ${state.runId}\n`,
+    );
+  }
+}
+
+/**
+ * Renders a success summary after all compound provisioning resources complete.
+ */
+export function renderCompoundSuccess(
+  results: ResourceResult[],
+  pattern: ArchitecturePattern,
+): void {
+  const lines = [
+    chalk.green.bold(`✓ ${pattern.displayName} provisioned successfully`),
+    "",
+    ...results.map(
+      (r, i) =>
+        `  ${i + 1}. ${r.resourceType}${r.resourceArn ? ` → ${r.resourceArn}` : ""}`,
+    ),
+  ];
+
+  if (process.stdout.isTTY) {
+    process.stdout.write(
+      boxen(lines.join("\n"), {
+        padding: 1,
+        borderColor: "green",
+        title: "Compound Provisioning Complete",
+        titleAlignment: "left",
+      }) + "\n",
+    );
+  } else {
+    process.stdout.write(
+      `=== Compound Provisioning Complete ===\n${lines.join("\n")}\n======================================\n`,
     );
   }
 }

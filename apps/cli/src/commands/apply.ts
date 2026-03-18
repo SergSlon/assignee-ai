@@ -1,10 +1,13 @@
 /**
  * `assignee apply` command — two-phase HITL invoke pattern.
  *
- * Phase 1: graph runs intent_parser → schema_fetcher → plan_generator →
- *          preflight_guard → human_approval, then pauses (interruptBefore: resource_provisioner).
- * Phase 2: if user confirmed, graph resumes from resource_provisioner →
- *          status_poller → result_formatter.
+ * Phase 1: graph runs intent_parser → schema_fetcher → option_elicitor →
+ *          compound_dispatcher → plan_generator → preflight_guard → human_approval,
+ *          then pauses (interruptBefore: resource_provisioner).
+ * Phase 2: while loop — each iteration resumes from a resource_provisioner interrupt.
+ *          Single-resource: one iteration (→ status_poller → result_formatter → END).
+ *          Compound: N iterations, one per resource in dependency order; human_approval
+ *          is skipped for iterations 2+ (already approved at index 0).
  *
  * No --yes flag: HITL is mandatory per spec.
  *
@@ -24,7 +27,7 @@ import {
   getMcpTools,
   closeMcpClient,
 } from "../services/mcp-client.js";
-import { createGraph } from "../services/graph.js";
+import { createGraph, type AgentState } from "../services/graph.js";
 import {
   renderIntro,
   renderError,
@@ -127,17 +130,40 @@ export const applyCommand = new Command(CommandName.APPLY)
         process.exit(ProcessExitCode.GENERIC_ERROR);
       }
 
-      // ── Phase 2: provision ────────────────────────────────────────────────
-      startSpinner("Provisioning resource...");
-      updateSpinner("Waiting for AWS Cloud Control API...");
+      // ── Phase 2: provision all resources (single or compound loop) ────────
+      const isCompound = !!phase1State.resourcePattern;
+      const totalResources = phase1State.resourceQueue?.length ?? 1;
+      let resourcesProvisioned = 0;
 
-      const finalState = await graph.invoke(null, config);
+      while (true) {
+        const resourceLabel = isCompound
+          ? `Provisioning resource ${resourcesProvisioned + 1} of ${totalResources} (${phase1State.resourceQueue?.[resourcesProvisioned]?.displayName ?? "..."})...`
+          : "Provisioning resource...";
+        startSpinner(resourceLabel);
+        updateSpinner("Waiting for AWS Cloud Control API...");
 
-      stopSpinner();
+        await graph.invoke(null, config);
+        stopSpinner();
+
+        // Check if graph has completed (next === []) or is paused at another interrupt
+        const graphState = await graph.getState(config);
+        const isPendingInterrupt = graphState.next.length > 0;
+
+        if (!isPendingInterrupt) break; // Graph reached END
+
+        // Another resource_provisioner interrupt pending (compound loop)
+        resourcesProvisioned++;
+      }
+
+      // Retrieve final state for exit code determination
+      const finalState = (await graph.getState(config)).values as AgentState;
 
       await closeMcpClient();
 
-      const success = finalState.executionStatus === ExecutionStatus.SUCCESS;
+      const success =
+        finalState.executionStatus === ExecutionStatus.SUCCESS ||
+        (isCompound &&
+          (finalState.completedResources?.length ?? 0) === totalResources);
 
       log({
         ts: new Date().toISOString(),
