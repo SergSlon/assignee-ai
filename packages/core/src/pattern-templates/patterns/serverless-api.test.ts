@@ -126,6 +126,23 @@ describe("Individual pattern data integrity", () => {
     ).toBeDefined();
   });
 
+  it("serverlessApiPattern api-gateway is marked provisionable: false", () => {
+    const apiGw = serverlessApiPattern.resourceList.find(
+      (r) => r.resourceId === "api-gateway",
+    );
+    expect(apiGw).toBeDefined();
+    expect(apiGw?.provisionable).toBe(false);
+  });
+
+  it("all other serverlessApiPattern resources have no provisionable: false", () => {
+    const provisionable = serverlessApiPattern.resourceList.filter(
+      (r) => r.resourceId !== "api-gateway",
+    );
+    for (const r of provisionable) {
+      expect(r.provisionable).not.toBe(false);
+    }
+  });
+
   it("messageProcessingPattern has DLQ before main-queue in dependencyOrder", () => {
     const dlqGroup = messageProcessingPattern.dependencyOrder[0];
     expect(dlqGroup).toContain("dlq");

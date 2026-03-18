@@ -1,3 +1,4 @@
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 
 export const messageProcessingPattern: ArchitecturePattern = {
@@ -13,27 +14,27 @@ export const messageProcessingPattern: ArchitecturePattern = {
   ],
   resourceList: [
     {
-      resourceType: "AWS::SQS::Queue",
+      resourceType: RESOURCE_TYPES.SQS_QUEUE,
       resourceId: "dlq",
       displayName: "Dead Letter Queue",
     },
     {
-      resourceType: "AWS::SQS::Queue",
+      resourceType: RESOURCE_TYPES.SQS_QUEUE,
       resourceId: "main-queue",
       displayName: "Main Processing Queue",
     },
     {
-      resourceType: "AWS::DynamoDB::Table",
+      resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
       resourceId: "results-table",
       displayName: "Results DynamoDB Table",
     },
     {
-      resourceType: "AWS::IAM::Role",
+      resourceType: RESOURCE_TYPES.IAM_ROLE,
       resourceId: "lambda-role",
       displayName: "Lambda Execution Role",
     },
     {
-      resourceType: "AWS::Lambda::Function",
+      resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
       resourceId: "processor-fn",
       displayName: "Message Processor Lambda",
     },

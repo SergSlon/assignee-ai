@@ -1,4 +1,12 @@
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
+
+/**
+ * AWS::ApiGatewayV2::Api — display-only in this pattern.
+ * Not in RESOURCE_TYPES (CCAPI provisioning deferred; requires route/integration config from user).
+ * provisionable: false prevents Story 8.2 compound-dispatcher from attempting CloudControl creation.
+ */
+const APIGATEWAYV2_API = "AWS::ApiGatewayV2::Api" as const;
 
 export const serverlessApiPattern: ArchitecturePattern = {
   patternId: "serverless-api",
@@ -13,24 +21,25 @@ export const serverlessApiPattern: ArchitecturePattern = {
   ],
   resourceList: [
     {
-      resourceType: "AWS::IAM::Role",
+      resourceType: RESOURCE_TYPES.IAM_ROLE,
       resourceId: "iam-execution-role",
       displayName: "Lambda Execution Role",
     },
     {
-      resourceType: "AWS::Lambda::Function",
+      resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
       resourceId: "lambda-fn",
       displayName: "Lambda Function",
     },
     {
-      resourceType: "AWS::DynamoDB::Table",
+      resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
       resourceId: "dynamodb-table",
       displayName: "DynamoDB Table",
     },
     {
-      resourceType: "AWS::ApiGatewayV2::Api",
+      resourceType: APIGATEWAYV2_API,
       resourceId: "api-gateway",
       displayName: "HTTP API Gateway",
+      provisionable: false,
     },
   ],
   dependencyOrder: [
