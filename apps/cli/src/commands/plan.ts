@@ -2,7 +2,7 @@
  * `assignee plan` command — Sprint 1 demo gate.
  * Runs the graph in plan mode (no HITL, no provisioning), outputs a formatted plan box.
  *
- * @see Story 1-6, Story 1-8
+ * @see Story 1-6, Story 1-8, Story 9-6
  */
 
 import { Command } from "commander";
@@ -48,13 +48,14 @@ export const planCommand = new Command(CommandName.PLAN)
     renderIntro();
 
     const runId = crypto.randomUUID();
+    const startTs = Date.now();
 
     log({
       ts: new Date().toISOString(),
       runId,
       level: "info",
       action: LOG_ACTIONS.PLAN_STARTED,
-      intent,
+      extras: { intent },
     });
 
     try {
@@ -81,6 +82,15 @@ export const planCommand = new Command(CommandName.PLAN)
         finalState.executionStatus === ExecutionStatus.FAILED ||
         finalState.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE;
 
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "info",
+        action: LOG_ACTIONS.PLAN_COMPLETE,
+        durationMs: Date.now() - startTs,
+        result: finalState.executionStatus,
+      });
+
       if (failed) {
         renderError(
           finalState.errorMessage ?? "Plan generation failed",
@@ -98,6 +108,14 @@ export const planCommand = new Command(CommandName.PLAN)
     } catch (err: unknown) {
       stopSpinner();
       const errMsg = err instanceof Error ? err.message : String(err);
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "error",
+        action: LOG_ACTIONS.PLAN_COMPLETE,
+        durationMs: Date.now() - startTs,
+        result: "error",
+      });
       renderError(
         `Plan generation failed: ${errMsg}`,
         "Check that AWS credentials are configured and Bedrock is accessible in your region.",

@@ -4,10 +4,12 @@
  * stdout is reserved for user-facing output (plan boxes, prompts).
  *
  * @see NFR-12 — Structured Logging requirement
+ * @see Story 9.6 — L2: LogAction exhaustive union; LogEvent index signature removed
  */
 
 export const LOG_ACTIONS = {
   PLAN_STARTED: "plan_started",
+  PLAN_COMPLETE: "plan_complete",
   SCHEMA_FETCHED: "schema_fetched",
   GUARDRAIL_DISABLED: "guardrail_disabled",
   PLAN_GENERATED: "plan_generated",
@@ -17,6 +19,7 @@ export const LOG_ACTIONS = {
   PLAN_APPROVED: "plan_approved",
   PLAN_REJECTED: "plan_rejected_by_user",
   APPLY_STARTED: "apply_started",
+  APPLY_COMPLETE: "apply_complete",
   STATE_GUARD_ABORT: "state_guard_abort",
   STATE_GUARD_SKIPPED: "state_guard_skipped",
   RESOURCE_PROVISION_STARTED: "resource_provision_started",
@@ -32,10 +35,10 @@ export interface LogEvent {
   ts: string;
   runId: string;
   level: "info" | "warn" | "error";
-  action: string;
+  action: LogAction;
   durationMs?: number;
   result?: string;
-  [key: string]: unknown;
+  extras?: Record<string, unknown>;
 }
 
 /**

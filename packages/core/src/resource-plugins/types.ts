@@ -69,4 +69,10 @@ export interface ResourcePlugin {
    * Keys are CloudFormation property names (PascalCase).
    */
   defaults: Record<string, unknown>;
+  /**
+   * Optional prompt hints injected into the plan_generator prompt as resource-specific rules.
+   * Each string is a rule that takes precedence over general LLM rules.
+   * Example: ["Runtime MUST be one of: nodejs22.x ...", "OMIT Role if user didn't provide ARN"]
+   */
+  configHints?: string[];
 }

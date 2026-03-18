@@ -79,7 +79,7 @@ export async function statusPollerNode(
     level: "info",
     action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
     durationMs,
-    status,
+    extras: { status },
   });
 
   if (

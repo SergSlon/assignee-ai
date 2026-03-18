@@ -50,5 +50,4 @@ export const RESOURCE_TYPES = {
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */
-export const SUPPORTED_POC_TYPES =
-  SUPPORTED_TYPES_ARRAY as unknown as ResourceType[];
+export const SUPPORTED_POC_TYPES: ResourceType[] = [...SUPPORTED_TYPES_ARRAY];

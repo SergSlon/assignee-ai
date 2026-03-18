@@ -62,14 +62,36 @@ export type {
 // Utils
 export { sanitizeUserIntent, MAX_INTENT_LENGTH } from "./utils/sanitize.js";
 
+// Pricing Strategy Registry
+export {
+  defaultPricingRegistry,
+  PricingStrategyRegistry,
+  extractFirstTierPrice,
+} from "./pricing/index.js";
+export type {
+  PricingStrategy,
+  PricingEstimate,
+  McpPricingConfig,
+  McpPricingFilter,
+} from "./pricing/index.js";
+
 // Errors
 export {
   AssigneeError,
   McpError,
   BedrockError,
+  LlmError,
   StateGuardError,
   UnsupportedResourceError,
   ConfigurationError,
   ProvisioningError,
   type ProvisioningErrorCode,
 } from "./errors.js";
+export {
+  ErrorHintRegistry,
+  defaultErrorHintRegistry,
+} from "./errors/hint-registry.js";
+
+// Ports (hexagonal architecture — Story 9.5)
+export type { LlmPort } from "./ports/llm-port.js";
+export { MockLlmAdapter } from "./ports/mock-llm-adapter.js";

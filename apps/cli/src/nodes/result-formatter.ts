@@ -2,10 +2,14 @@
  * result_formatter node — final rendering gate.
  * Handles all terminal outcomes: SUCCESS, FAILED, CANCELLED, and plan-mode preview.
  *
- * @see Story 2-4
+ * @see Story 2-4, Story 9-6
  */
 
-import { ExecutionStatus, ExecutionMode } from "@assignee/core";
+import {
+  ExecutionStatus,
+  ExecutionMode,
+  defaultErrorHintRegistry,
+} from "@assignee/core";
 import {
   renderApplySuccess,
   renderError,
@@ -13,39 +17,6 @@ import {
 } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
-
-/** Maps known error substrings to actionable "How to Fix" hints. */
-const ERROR_HINTS: Array<[pattern: string, hint: string]> = [
-  [
-    "BucketAlreadyExists",
-    "Choose a unique bucket name — S3 bucket names must be globally unique.",
-  ],
-  [
-    "EntityAlreadyExists",
-    "A role or entity with this name already exists. Choose a different name.",
-  ],
-  [
-    "ParameterAlreadyExists",
-    "This SSM parameter already exists. Use the --overwrite flag to update it.",
-  ],
-  [
-    "POLICY_BLOCKED",
-    "This action was blocked by organisational policy. Contact your administrator.",
-  ],
-  ["Stale Plan", "Re-run 'assignee plan' to generate a fresh plan."],
-  [
-    "already exists",
-    "The resource already exists. Choose a different name or re-run plan.",
-  ],
-];
-
-function resolveHint(errorMessage?: string): string | undefined {
-  if (!errorMessage) return undefined;
-  for (const [pattern, hint] of ERROR_HINTS) {
-    if (errorMessage.includes(pattern)) return hint;
-  }
-  return undefined;
-}
 
 export async function resultFormatterNode(
   state: AgentState,
@@ -55,7 +26,7 @@ export async function resultFormatterNode(
     runId: state.runId,
     level: "info",
     action: LOG_ACTIONS.RESULT_FORMATTED,
-    executionStatus: state.executionStatus,
+    extras: { executionStatus: state.executionStatus },
   });
 
   switch (state.executionStatus) {
@@ -66,7 +37,7 @@ export async function resultFormatterNode(
         runId: state.runId,
         level: "info",
         action: LOG_ACTIONS.APPLY_SUCCEEDED,
-        resourceArn: state.resourceArn,
+        extras: { resourceArn: state.resourceArn },
       });
       break;
 
@@ -79,14 +50,14 @@ export async function resultFormatterNode(
     case ExecutionStatus.UNSUPPORTED_RESOURCE:
       renderError(
         state.errorMessage ?? "An unknown error occurred",
-        resolveHint(state.errorMessage),
+        defaultErrorHintRegistry.getHint(state.error),
       );
       log({
         ts: new Date().toISOString(),
         runId: state.runId,
         level: "error",
         action: LOG_ACTIONS.APPLY_FAILED,
-        errorMessage: state.errorMessage,
+        extras: { errorMessage: state.errorMessage },
       });
       break;
 

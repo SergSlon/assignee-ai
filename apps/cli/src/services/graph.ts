@@ -14,6 +14,7 @@ import {
   PreflightMode,
   type PreflightModeType,
   type ArchitecturePattern,
+  AssigneeError,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { GraphNode } from "../constants/graph.js";
@@ -70,6 +71,7 @@ export const graphAnnotation = Annotation.Root({
   resourcePattern: Annotation<ArchitecturePattern | undefined>({
     reducer: (_, b) => b,
   }),
+  error: Annotation<AssigneeError | undefined>({ reducer: (_, b) => b }),
 });
 
 export type AgentState = typeof graphAnnotation.State;
@@ -80,16 +82,18 @@ type NodeFn = (
   tools?: StructuredTool[],
 ) => Promise<Partial<AgentState>>;
 
-import { intentParserNode } from "../nodes/intent-parser.js";
+import { createIntentParserNode } from "../nodes/intent-parser.js";
 import { schemaFetcherNode } from "../nodes/schema-fetcher.js";
 import { optionElicitorNode } from "../nodes/option-elicitor.js";
-import { planGeneratorNode } from "../nodes/plan-generator.js";
+import { createPlanGeneratorNode } from "../nodes/plan-generator.js";
 import { preflightGuardNode } from "../nodes/preflight-guard.js";
 import { humanApprovalNode } from "../nodes/human-approval.js";
 import { resourceProvisionerNode } from "../nodes/resource-provisioner.js";
 import { statusPollerNode } from "../nodes/status-poller.js";
 import { resultFormatterNode } from "../nodes/result-formatter.js";
 import { createCloudControlClient } from "./cloudcontrol-client.js";
+import { BedrockLlmAdapter } from "./bedrock-llm-adapter.js";
+import { BEDROCK_MODEL_ID, AWS_REGION } from "../config/constants.js";
 
 // Conditional routing for preflight_guard:
 // - plan mode  → skip HITL, render plan box via result_formatter
@@ -131,6 +135,17 @@ export function createGraph(tools: StructuredTool[] = []) {
     secretAccessKey: process.env["MCP_AWS_SECRET_ACCESS_KEY"] ?? "",
     region: process.env["AWS_REGION"] ?? "",
   });
+
+  // Construct LLM adapter once — injected into nodes (Story 9.5: M3)
+  const llmAdapter = new BedrockLlmAdapter({
+    modelId: BEDROCK_MODEL_ID,
+    region: AWS_REGION,
+    guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
+    guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],
+  });
+
+  const intentParserNode = createIntentParserNode({ llmClient: llmAdapter });
+  const planGeneratorNode = createPlanGeneratorNode({ llmClient: llmAdapter });
 
   const workflow = new StateGraph(graphAnnotation)
     .addNode(GraphNode.INTENT_PARSER, (state) => intentParserNode(state))

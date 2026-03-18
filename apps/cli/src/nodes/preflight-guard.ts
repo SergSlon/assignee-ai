@@ -1,222 +1,26 @@
 /**
  * preflight_guard node — cost estimation + basic validation gate.
+ * Pricing is delegated to PricingStrategyRegistry (Story 9.4).
  * Pricing query has a 3s hard timeout (non-blocking: never blocks apply on failure).
  * SaaS policy validation is Epic 4; POC always passes.
  *
- * @see Story 1-7
+ * @see Story 1-7, Story 9-4
  */
 
-import { ExecutionStatus, RESOURCE_TYPES } from "@assignee/core";
+import {
+  ExecutionStatus,
+  defaultPricingRegistry,
+  extractFirstTierPrice,
+} from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
 import { AWS_REGION } from "../config/constants.js";
-import {
-  PricingServiceCode,
-  PricingFilter,
-  PricingUnit,
-  PricingScale,
-  PricingDefault,
-  CostEstimate,
-  LambdaPricing,
-} from "../constants/pricing.js";
+import { CostEstimate } from "../constants/pricing.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { unwrapMcpText } from "../utils/mcp.js";
 import type { AgentState } from "../services/graph.js";
 
 const PRICING_TIMEOUT_MS = 3000;
-const PRICING_TIMEOUT_EXTENDED_MS = 8000;
-
-interface PricingConfig {
-  serviceCode: string;
-  /** AWS Pricing API filters to narrow to the relevant SKU */
-  filters: Array<{ Field: string; Value: string; Type: "TERM_MATCH" }>;
-  /** Human-readable unit label appended to the price, e.g. "/GB-month" */
-  unit: string;
-  /** Multiply the raw API price before display (e.g. 1_000_000 to convert /GB-sec → /million GB-sec) */
-  scale?: number;
-  /** Override the default 3s timeout for resource types with larger SKU catalogs */
-  timeoutMs?: number;
-}
-
-/**
- * A provider can be:
- * - a static string (e.g. CostEstimate.FREE, or a pre-computed estimate)
- * - a PricingConfig object (triggers a pricing API query)
- * - a function that receives state and returns either of the above
- */
-type PricingProvider =
-  | PricingConfig
-  | string
-  | ((state: AgentState) => PricingConfig | string | undefined);
-
-/**
- * Compute a Lambda cost estimate from MemorySize.
- * Shows per-million-invocations cost at assumed 100ms avg duration so the
- * user has a concrete number to reason about for their specific config.
- */
-function computeLambdaEstimate(memoryMb: number): string {
-  const durationCostPerMillion =
-    1_000_000 *
-    LambdaPricing.ASSUMED_AVG_DURATION_SEC *
-    (memoryMb / 1024) *
-    LambdaPricing.USD_PER_GB_SECOND;
-  const total = LambdaPricing.USD_PER_MILLION_REQUESTS + durationCostPerMillion;
-  return `~$${total.toFixed(2)}/million req (${LambdaPricing.ASSUMED_AVG_DURATION_SEC * 1000}ms avg, ${memoryMb}MB)`;
-}
-
-/** Maps resource type → static config, "Free", or a function that reads desiredState. */
-const PRICING_CONFIG: Record<string, PricingProvider> = {
-  [RESOURCE_TYPES.S3_BUCKET]: {
-    serviceCode: PricingServiceCode.S3,
-    filters: [
-      {
-        Field: PricingFilter.Field.PRODUCT_FAMILY,
-        Value: PricingFilter.Value.S3_STORAGE,
-        Type: "TERM_MATCH",
-      },
-      {
-        Field: PricingFilter.Field.USAGE_TYPE,
-        Value: PricingFilter.Value.S3_USAGE_TYPE,
-        Type: "TERM_MATCH",
-      },
-    ],
-    unit: PricingUnit.GB_MONTH,
-  },
-  [RESOURCE_TYPES.SSM_PARAMETER]: {
-    serviceCode: PricingServiceCode.SSM,
-    filters: [
-      {
-        Field: PricingFilter.Field.PRODUCT_FAMILY,
-        Value: PricingFilter.Value.SSM_PRODUCT_FAMILY,
-        Type: "TERM_MATCH",
-      },
-    ],
-    unit: PricingUnit.PARAM_HOUR,
-  },
-  [RESOURCE_TYPES.IAM_ROLE]: CostEstimate.FREE,
-  [RESOURCE_TYPES.EC2_INSTANCE]: (state) => {
-    const ds = (state.desiredState ?? {}) as Record<string, string>;
-    const instanceType = ds["InstanceType"] ?? PricingDefault.EC2_INSTANCE_TYPE;
-    return {
-      serviceCode: PricingServiceCode.EC2,
-      filters: [
-        {
-          Field: PricingFilter.Field.PRODUCT_FAMILY,
-          Value: PricingFilter.Value.EC2_PRODUCT_FAMILY,
-          Type: "TERM_MATCH",
-        },
-        {
-          Field: PricingFilter.Field.INSTANCE_TYPE,
-          Value: instanceType,
-          Type: "TERM_MATCH",
-        },
-        {
-          Field: PricingFilter.Field.OPERATING_SYSTEM,
-          Value: PricingFilter.Value.EC2_OS_LINUX,
-          Type: "TERM_MATCH",
-        },
-        {
-          Field: PricingFilter.Field.TENANCY,
-          Value: PricingFilter.Value.EC2_TENANCY_SHARED,
-          Type: "TERM_MATCH",
-        },
-        {
-          Field: PricingFilter.Field.CAPACITY_STATUS,
-          Value: PricingFilter.Value.EC2_CAPACITY_USED,
-          Type: "TERM_MATCH",
-        },
-        {
-          Field: PricingFilter.Field.PRE_INSTALLED_SW,
-          Value: PricingFilter.Value.EC2_NO_PREINSTALL,
-          Type: "TERM_MATCH",
-        },
-      ],
-      unit: PricingUnit.HOUR,
-      timeoutMs: PRICING_TIMEOUT_EXTENDED_MS,
-    };
-  },
-  [RESOURCE_TYPES.RDS_DB_INSTANCE]: (state) => {
-    const ds = (state.desiredState ?? {}) as Record<string, string>;
-    const instanceClass =
-      ds["DBInstanceClass"] ?? PricingDefault.RDS_INSTANCE_CLASS;
-    const engine = ds["Engine"] ?? PricingDefault.RDS_ENGINE;
-    return {
-      serviceCode: PricingServiceCode.RDS,
-      filters: [
-        {
-          Field: PricingFilter.Field.PRODUCT_FAMILY,
-          Value: PricingFilter.Value.RDS_PRODUCT_FAMILY,
-          Type: "TERM_MATCH",
-        },
-        {
-          Field: PricingFilter.Field.INSTANCE_TYPE,
-          Value: instanceClass,
-          Type: "TERM_MATCH",
-        },
-        {
-          Field: PricingFilter.Field.DATABASE_ENGINE,
-          Value: engine,
-          Type: "TERM_MATCH",
-        },
-        {
-          Field: PricingFilter.Field.DEPLOYMENT_OPTION,
-          Value: PricingFilter.Value.RDS_SINGLE_AZ,
-          Type: "TERM_MATCH",
-        },
-      ],
-      unit: PricingUnit.HOUR,
-      timeoutMs: PRICING_TIMEOUT_EXTENDED_MS,
-    };
-  },
-  [RESOURCE_TYPES.LAMBDA_FUNCTION]: (state) => {
-    const ds = (state.desiredState ?? {}) as Record<string, unknown>;
-    const memoryMb =
-      typeof ds["MemorySize"] === "number"
-        ? (ds["MemorySize"] as number)
-        : LambdaPricing.DEFAULT_MEMORY_MB;
-    return computeLambdaEstimate(memoryMb);
-  },
-};
-
-/** Extracts the lowest first-tier (beginRange=0) non-zero price from a get_pricing response. */
-function extractFirstTierPrice(
-  data: Record<string, unknown>,
-  unit: string,
-  scale = 1,
-): string | null {
-  const items = (data["data"] as unknown[]) ?? [];
-  for (const item of items) {
-    const onDemand = (item as Record<string, unknown>)?.["terms"] as
-      | Record<string, unknown>
-      | undefined;
-    const terms = Object.values(
-      (onDemand?.["OnDemand"] as Record<string, unknown>) ?? {},
-    );
-    for (const term of terms) {
-      const dims = Object.values(
-        ((term as Record<string, unknown>)?.["priceDimensions"] as Record<
-          string,
-          unknown
-        >) ?? {},
-      );
-      for (const dim of dims) {
-        const d = dim as Record<string, unknown>;
-        if (d["beginRange"] === "0") {
-          const usd = parseFloat(
-            (d["pricePerUnit"] as Record<string, string>)?.["USD"] ?? "0",
-          );
-          if (usd > 0) {
-            const scaled = usd * scale;
-            const decimals =
-              scaled >= 0.0001 ? 4 : Math.ceil(-Math.log10(scaled)) + 3;
-            return `$${scaled.toFixed(decimals)}${unit}`;
-          }
-        }
-      }
-    }
-  }
-  return null;
-}
 
 export async function preflightGuardNode(
   state: AgentState,
@@ -225,8 +29,6 @@ export async function preflightGuardNode(
   if (state.executionStatus !== ExecutionStatus.PENDING) return {};
 
   // Validate all schema-required fields are present in the generated desiredState.
-  // This catches missing account-specific fields (e.g. Lambda Role ARN) before
-  // CloudControl sees them, producing an actionable error instead of a cryptic API failure.
   const requiredFields =
     (state.resourceSchema?.["required"] as string[] | undefined) ?? [];
   const desiredState = (state.desiredState ?? {}) as Record<string, unknown>;
@@ -239,25 +41,27 @@ export async function preflightGuardNode(
     };
   }
 
-  const provider = PRICING_CONFIG[state.resourceType];
-  const pricingConfig =
-    typeof provider === "function" ? provider(state) : provider;
-  let costEstimate: string = CostEstimate.NA;
+  const mcpConfig = defaultPricingRegistry.getMcpConfig(
+    state.resourceType,
+    desiredState,
+  );
+  let costEstimate = defaultPricingRegistry.estimate(
+    state.resourceType,
+    desiredState,
+  ).label;
 
-  if (typeof pricingConfig === "string") {
-    costEstimate = pricingConfig;
-  } else if (pricingConfig && tools) {
+  if (mcpConfig && tools) {
     const pricingTool = tools.find((t) => t.name === ToolName.GET_PRICING);
     if (pricingTool) {
       try {
-        const timeoutMs = pricingConfig.timeoutMs ?? PRICING_TIMEOUT_MS;
+        const timeoutMs = mcpConfig.timeoutMs ?? PRICING_TIMEOUT_MS;
         const timeout = new Promise<null>((resolve) =>
           setTimeout(() => resolve(null), timeoutMs),
         );
         const query = pricingTool.invoke({
-          service_code: pricingConfig.serviceCode,
+          service_code: mcpConfig.serviceCode,
           region: AWS_REGION,
-          filters: pricingConfig.filters,
+          filters: mcpConfig.filters,
           output_options: { pricing_terms: ["OnDemand"] },
         });
         const result = await Promise.race([query, timeout]);
@@ -267,8 +71,7 @@ export async function preflightGuardNode(
             runId: state.runId,
             level: "warn",
             action: LOG_ACTIONS.PRICING_TIMEOUT,
-            resourceType: state.resourceType,
-            timeoutMs,
+            extras: { resourceType: state.resourceType, timeoutMs },
           });
         } else {
           const data = JSON.parse(unwrapMcpText(result)) as Record<
@@ -276,20 +79,16 @@ export async function preflightGuardNode(
             unknown
           >;
           costEstimate =
-            extractFirstTierPrice(
-              data,
-              pricingConfig.unit,
-              pricingConfig.scale,
-            ) ?? CostEstimate.NA;
+            extractFirstTierPrice(data, mcpConfig.unit, mcpConfig.scale) ??
+            CostEstimate.NA;
         }
       } catch {
-        // Non-blocking: pricing failure never blocks the plan
         log({
           ts: new Date().toISOString(),
           runId: state.runId,
           level: "warn",
           action: LOG_ACTIONS.PRICING_UNAVAILABLE,
-          resourceType: state.resourceType,
+          extras: { resourceType: state.resourceType },
         });
       }
     }
@@ -300,8 +99,7 @@ export async function preflightGuardNode(
     runId: state.runId,
     level: "info",
     action: LOG_ACTIONS.PREFLIGHT_COMPLETED,
-    costEstimate,
-    resourceType: state.resourceType,
+    extras: { costEstimate, resourceType: state.resourceType },
   });
 
   return {

@@ -1,17 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ExecutionStatus } from "@assignee/core";
-
-// Mock the ai SDK before importing the node
-vi.mock("ai", () => ({
-  generateText: vi.fn(),
-}));
-
-vi.mock("@ai-sdk/amazon-bedrock", () => ({
-  createAmazonBedrock: vi.fn(() => vi.fn()),
-}));
-
-const { generateText } = await import("ai");
-const { planGeneratorNode } = await import("./plan-generator.js");
+import { describe, it, expect } from "vitest";
+import { ExecutionStatus, MockLlmAdapter } from "@assignee/core";
+import { createPlanGeneratorNode } from "./plan-generator.js";
+import type { AgentState } from "../services/graph.js";
 
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
@@ -38,34 +28,31 @@ function makeState(overrides: Record<string, unknown> = {}) {
     preflightErrors: [],
     preflightMode: "local",
     ...overrides,
-  } as unknown as Parameters<typeof planGeneratorNode>[0];
+  } as unknown as Parameters<ReturnType<typeof createPlanGeneratorNode>>[0];
 }
 
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
 describe("planGeneratorNode", () => {
-  it("populates desiredState from Bedrock response", async () => {
-    vi.mocked(generateText).mockResolvedValueOnce({
-      text: JSON.stringify({ BucketName: "my-test-bucket" }),
-    } as Awaited<ReturnType<typeof generateText>>);
+  it("populates desiredState from LLM response", async () => {
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-test-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await planGeneratorNode(makeState());
+    const result = await node(makeState());
 
     expect(result.desiredState).toEqual({ BucketName: "my-test-bucket" });
     expect(result.executionStatus).toBeUndefined(); // no failure
   });
 
   it("strips hallucinated fields not in schema", async () => {
-    vi.mocked(generateText).mockResolvedValueOnce({
-      text: JSON.stringify({
-        BucketName: "my-bucket",
-        HallucinatedField: "bad",
-      }),
-    } as Awaited<ReturnType<typeof generateText>>);
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket", HallucinatedField: "bad" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await planGeneratorNode(makeState());
+    const result = await node(makeState());
 
     expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
     expect(
@@ -73,81 +60,102 @@ describe("planGeneratorNode", () => {
     ).toBeUndefined();
   });
 
-  it("returns FAILED when Bedrock returns invalid JSON", async () => {
-    vi.mocked(generateText).mockResolvedValueOnce({
-      text: "not json at all",
-    } as Awaited<ReturnType<typeof generateText>>);
+  it("returns FAILED when LLM returns invalid JSON", async () => {
+    const mock = new MockLlmAdapter(undefined, "not json at all");
+    const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await planGeneratorNode(makeState());
+    const result = await node(makeState());
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("invalid JSON");
   });
 
   it("returns FAILED when resourceSchema is missing", async () => {
-    const result = await planGeneratorNode(
-      makeState({ resourceSchema: undefined }),
-    );
+    const mock = new MockLlmAdapter(undefined, "{}");
+    const node = createPlanGeneratorNode({ llmClient: mock });
+
+    const result = await node(makeState({ resourceSchema: undefined }));
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("schema is missing");
   });
 
   it("skips processing when executionStatus is already FAILED", async () => {
-    const result = await planGeneratorNode(
+    // mock that would fail if called — ensures no LLM call is made
+    const mock = new MockLlmAdapter(
+      undefined,
+      "",
+      true,
+      "should not be called",
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+
+    const result = await node(
       makeState({ executionStatus: ExecutionStatus.FAILED }),
     );
 
-    expect(generateText).not.toHaveBeenCalled();
     expect(result).toEqual({});
   });
 
-  it("handles Bedrock errors gracefully", async () => {
-    vi.mocked(generateText).mockRejectedValueOnce(
-      new Error("ThrottlingException"),
-    );
+  it("handles LLM errors gracefully", async () => {
+    const mock = new MockLlmAdapter(undefined, "", true, "ThrottlingException");
+    const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await planGeneratorNode(makeState());
+    const result = await node(makeState());
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("ThrottlingException");
   });
 
-  it("strips markdown fences from Bedrock response", async () => {
-    vi.mocked(generateText).mockResolvedValueOnce({
-      text: '```json\n{"BucketName":"clean-bucket"}\n```',
-    } as Awaited<ReturnType<typeof generateText>>);
+  it("strips markdown fences from LLM response", async () => {
+    const mock = new MockLlmAdapter(
+      undefined,
+      '```json\n{"BucketName":"clean-bucket"}\n```',
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await planGeneratorNode(makeState());
+    const result = await node(makeState());
 
     expect(result.desiredState).toEqual({ BucketName: "clean-bucket" });
   });
 
   it("unwraps CloudFormation Resources section format if LLM generates it", async () => {
-    vi.mocked(generateText).mockResolvedValueOnce({
-      text: JSON.stringify({
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({
         MyBucket: {
           Type: "AWS::S3::Bucket",
           Properties: { BucketName: "my-test-bucket" },
         },
       }),
-    } as Awaited<ReturnType<typeof generateText>>);
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await planGeneratorNode(makeState());
+    const result = await node(makeState());
 
     expect(result.desiredState).toEqual({ BucketName: "my-test-bucket" });
   });
 
   it("includes Lambda runtime constraints and role omission rule in prompt for Lambda resource type", async () => {
-    vi.mocked(generateText).mockResolvedValueOnce({
-      text: JSON.stringify({
+    let capturedPrompt = "";
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({
         FunctionName: "my-fn",
         Runtime: "nodejs22.x",
         Handler: "index.handler",
       }),
-    } as Awaited<ReturnType<typeof generateText>>);
+    );
 
-    await planGeneratorNode(
+    // Spy on generateText to capture the prompt
+    const originalGenerateText = mock.generateText.bind(mock);
+    mock.generateText = async (prompt: string) => {
+      capturedPrompt = prompt;
+      return originalGenerateText(prompt);
+    };
+
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    await node(
       makeState({
         resourceType: "AWS::Lambda::Function",
         userIntent: "Create a lambda function",
@@ -163,34 +171,38 @@ describe("planGeneratorNode", () => {
       }),
     );
 
-    const call = vi.mocked(generateText).mock.calls[0]?.[0];
-    const content = (call?.messages?.[0]?.content ?? "") as string;
-    expect(content).toContain("nodejs22.x");
-    expect(content).toContain("deprecated");
-    expect(content).toContain("OMIT the Role property");
+    expect(capturedPrompt).toContain("nodejs22.x");
+    expect(capturedPrompt).toContain("deprecated");
+    expect(capturedPrompt).toContain("OMIT the Role property");
   });
 
   it("does not inject resource hints for non-Lambda resource types", async () => {
-    vi.mocked(generateText).mockResolvedValueOnce({
-      text: JSON.stringify({ BucketName: "my-bucket" }),
-    } as Awaited<ReturnType<typeof generateText>>);
+    let capturedPrompt = "";
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
 
-    await planGeneratorNode(makeState());
+    const originalGenerateText = mock.generateText.bind(mock);
+    mock.generateText = async (prompt: string) => {
+      capturedPrompt = prompt;
+      return originalGenerateText(prompt);
+    };
 
-    const call = vi.mocked(generateText).mock.calls[0]?.[0];
-    const content = (call?.messages?.[0]?.content ?? "") as string;
-    expect(content).not.toContain("RESOURCE-SPECIFIC RULES");
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    await node(makeState());
+
+    expect(capturedPrompt).not.toContain("RESOURCE-SPECIFIC RULES");
   });
 
   it("reads schema from uppercase Properties key as fallback", async () => {
-    vi.mocked(generateText).mockResolvedValueOnce({
-      text: JSON.stringify({
-        BucketName: "my-bucket",
-        HallucinatedField: "bad",
-      }),
-    } as Awaited<ReturnType<typeof generateText>>);
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket", HallucinatedField: "bad" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
 
-    const result = await planGeneratorNode(
+    const result = await node(
       makeState({
         resourceSchema: {
           Properties: {

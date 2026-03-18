@@ -5,6 +5,9 @@
  * @see project-context.md — Error Handling section
  */
 
+/**
+ * Base error class for all Assignee.ai errors (referred to as `AppError` in story/spec docs).
+ */
 export class AssigneeError extends Error {
   constructor(
     message: string,
@@ -28,6 +31,14 @@ export class BedrockError extends AssigneeError {
   constructor(message: string, code = "BEDROCK_ERROR") {
     super(message, code);
     this.name = "BedrockError";
+  }
+}
+
+/** Error from any LLM port call (structured or raw text generation). */
+export class LlmError extends AssigneeError {
+  constructor(message: string, code = "LLM_ERROR") {
+    super(message, code);
+    this.name = "LlmError";
   }
 }
 

@@ -1,3 +1,4 @@
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 
 /**
@@ -19,7 +20,7 @@ export const staticWebsitePattern: ArchitecturePattern = {
   ],
   resourceList: [
     {
-      resourceType: "AWS::S3::Bucket",
+      resourceType: RESOURCE_TYPES.S3_BUCKET,
       resourceId: "website-bucket",
       displayName: "S3 Website Bucket",
     },
