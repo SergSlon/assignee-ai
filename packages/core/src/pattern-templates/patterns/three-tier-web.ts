@@ -1,3 +1,4 @@
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 
 export const threeTierWebPattern: ArchitecturePattern = {
@@ -14,32 +15,32 @@ export const threeTierWebPattern: ArchitecturePattern = {
   ],
   resourceList: [
     {
-      resourceType: "AWS::EC2::SecurityGroup",
+      resourceType: RESOURCE_TYPES.EC2_SECURITY_GROUP,
       resourceId: "alb-sg",
       displayName: "ALB Security Group",
     },
     {
-      resourceType: "AWS::EC2::SecurityGroup",
+      resourceType: RESOURCE_TYPES.EC2_SECURITY_GROUP,
       resourceId: "app-sg",
       displayName: "Application Security Group",
     },
     {
-      resourceType: "AWS::IAM::Role",
+      resourceType: RESOURCE_TYPES.IAM_ROLE,
       resourceId: "instance-profile-role",
       displayName: "EC2 Instance Profile Role",
     },
     {
-      resourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
       resourceId: "alb",
       displayName: "Application Load Balancer",
     },
     {
-      resourceType: "AWS::EC2::Instance",
+      resourceType: RESOURCE_TYPES.EC2_INSTANCE,
       resourceId: "ec2-instance",
       displayName: "EC2 Application Instance",
     },
     {
-      resourceType: "AWS::RDS::DBInstance",
+      resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
       resourceId: "rds-instance",
       displayName: "RDS Database Instance",
     },

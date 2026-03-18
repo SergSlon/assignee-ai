@@ -35,6 +35,18 @@ describe("schemaFetcherNode", () => {
     expect(result).toEqual({});
   });
 
+  it("bypasses logic if resourcePattern is set (compound pattern path)", async () => {
+    const state = {
+      executionStatus: ExecutionStatus.PENDING,
+      resourceType: "",
+      resourcePattern: { patternId: "serverless-api" },
+    } as unknown as AgentState;
+    const result = await schemaFetcherNode(state);
+
+    // compound-dispatcher (Story 8.2) handles compound patterns; schema_fetcher must not run
+    expect(result).toEqual({});
+  });
+
   it("fails if get_resource_schema tool is not found", async () => {
     const state = {
       executionStatus: ExecutionStatus.PENDING,

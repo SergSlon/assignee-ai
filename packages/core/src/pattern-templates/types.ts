@@ -9,6 +9,13 @@ export interface ResourceSpec {
   resourceId: string;
   /** Human-readable display name, e.g. "Lambda Execution Role" */
   displayName: string;
+  /**
+   * Whether this resource can be provisioned via CloudControl API.
+   * Defaults to true when omitted. Set to false for display-only resources that require
+   * manual configuration and cannot be provisioned via CloudControl
+   * (e.g. AWS::ApiGatewayV2::Api requires domain/route config from the user).
+   */
+  provisionable?: boolean;
 }
 
 /**

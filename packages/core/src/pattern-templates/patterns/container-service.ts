@@ -1,3 +1,4 @@
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 
 export const containerServicePattern: ArchitecturePattern = {
@@ -13,27 +14,27 @@ export const containerServicePattern: ArchitecturePattern = {
   ],
   resourceList: [
     {
-      resourceType: "AWS::ECR::Repository",
+      resourceType: RESOURCE_TYPES.ECR_REPOSITORY,
       resourceId: "ecr-repo",
       displayName: "ECR Container Repository",
     },
     {
-      resourceType: "AWS::IAM::Role",
+      resourceType: RESOURCE_TYPES.IAM_ROLE,
       resourceId: "task-role",
       displayName: "ECS Task IAM Role",
     },
     {
-      resourceType: "AWS::EC2::SecurityGroup",
+      resourceType: RESOURCE_TYPES.EC2_SECURITY_GROUP,
       resourceId: "ecs-sg",
       displayName: "ECS Service Security Group",
     },
     {
-      resourceType: "AWS::ECS::Cluster",
+      resourceType: RESOURCE_TYPES.ECS_CLUSTER,
       resourceId: "ecs-cluster",
       displayName: "ECS Cluster",
     },
     {
-      resourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
       resourceId: "alb",
       displayName: "Application Load Balancer",
     },

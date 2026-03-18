@@ -9,6 +9,7 @@ export async function schemaFetcherNode(
   tools?: StructuredTool[],
 ): Promise<Partial<AgentState>> {
   if (state.executionStatus !== ExecutionStatus.PENDING) return {}; // skip if already failed
+  if (state.resourcePattern) return {}; // compound pattern path — schema_fetcher is single-resource only; compound-dispatcher handles this in Story 8.2
 
   const getResourceSchema = tools?.find(
     (t) => t.name === ToolName.GET_RESOURCE_SCHEMA,
