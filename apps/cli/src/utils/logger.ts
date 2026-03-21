@@ -9,6 +9,7 @@
 
 export const LOG_ACTIONS = {
   PLAN_STARTED: "plan_started",
+  INTENT_PARSED: "intent_parsed",
   PLAN_COMPLETE: "plan_complete",
   SCHEMA_FETCHED: "schema_fetched",
   GUARDRAIL_DISABLED: "guardrail_disabled",

@@ -6,6 +6,7 @@ import {
   sanitizeUserIntent,
 } from "@assignee/core";
 import type { LlmPort } from "@assignee/core";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
 const intentParserSchema = z.object({
@@ -31,6 +32,13 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
     // Pattern detection — zero latency, no LLM call when pattern matches
     const detectedPattern = defaultPatternRegistry.detect(safeIntent);
     if (detectedPattern !== null) {
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.INTENT_PARSED,
+        extras: { resourceType: null, pattern: detectedPattern.patternId },
+      });
       return { userIntent: safeIntent, resourcePattern: detectedPattern };
     }
 
@@ -58,6 +66,13 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
     }
 
     // Type safe cast since zod enum is derived from SUPPORTED_TYPES
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.INTENT_PARSED,
+      extras: { resourceType: output.resourceType, pattern: null },
+    });
     return { userIntent: safeIntent, resourceType: output.resourceType };
   };
 }
