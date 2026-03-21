@@ -1,100 +1,22 @@
-import {
-  StateGraph,
-  START,
-  END,
-  Annotation,
-  MemorySaver,
-} from "@langchain/langgraph";
-import {
-  type GraphState,
-  ExecutionMode,
-  type ExecutionModeType,
-  ExecutionStatus,
-  type ExecutionStatusType,
-  PreflightMode,
-  type PreflightModeType,
-  type ArchitecturePattern,
-  type ResourceSpec,
-  type ResourceResult,
-  AssigneeError,
-} from "@assignee/core";
+/**
+ * LangGraph agent graph — wiring only.
+ * State definition lives in graph-state.ts, routing in graph-routing.ts.
+ */
+
+import { StateGraph, START, END, MemorySaver } from "@langchain/langgraph";
 import type { StructuredTool } from "@langchain/core/tools";
 import { GraphNode } from "../constants/graph.js";
+import { graphAnnotation } from "./graph-state.js";
+import {
+  routePreflightGuard,
+  routeResourceProvisioner,
+  routeStatusPoller,
+  routeResultFormatter,
+} from "./graph-routing.js";
 
-// Convert Zod schema fields to LangGraph reducers to create the true State Annotation
-// Defaults match the GraphStateSchema defaults in @assignee/core
-export const graphAnnotation = Annotation.Root({
-  userIntent: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),
-  runId: Annotation<string>({
-    reducer: (_, b) => b,
-    default: () => crypto.randomUUID(),
-  }),
-  executionMode: Annotation<ExecutionModeType>({
-    reducer: (_, b) => b,
-    default: () => ExecutionMode.APPLY,
-  }),
-  resourceType: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),
-  resourceSchema: Annotation<Record<string, unknown> | undefined>({
-    reducer: (_, b) => b,
-  }),
-  desiredState: Annotation<Record<string, unknown> | undefined>({
-    reducer: (_, b) => b,
-  }),
-  estimatedMonthlyCost: Annotation<string | undefined>({
-    reducer: (_, b) => b,
-  }),
-  preflightPassed: Annotation<boolean>({
-    reducer: (_, b) => b,
-    default: () => false,
-  }),
-  preflightErrors: Annotation<string[]>({
-    reducer: (_, b) => b,
-    default: () => [],
-  }),
-  preflightMode: Annotation<PreflightModeType>({
-    reducer: (_, b) => b,
-    default: () => PreflightMode.LOCAL,
-  }),
-  requestToken: Annotation<string | undefined>({ reducer: (_, b) => b }),
-  resourceArn: Annotation<string | undefined>({ reducer: (_, b) => b }),
-  executionStatus: Annotation<ExecutionStatusType>({
-    reducer: (_, b) => b,
-    default: () => ExecutionStatus.PENDING,
-  }),
-  errorMessage: Annotation<string | undefined>({ reducer: (_, b) => b }),
-  startedAt: Annotation<number | undefined>({ reducer: (_, b) => b }),
-  messages: Annotation<unknown[]>({
-    reducer: (a, b) => [...a, ...b],
-    default: () => [],
-  }),
-  elicitedOptions: Annotation<Record<string, unknown> | undefined>({
-    reducer: (_, b) => b,
-  }),
-  resourcePattern: Annotation<ArchitecturePattern | undefined>({
-    reducer: (_, b) => b,
-  }),
-  resourceQueue: Annotation<ResourceSpec[] | undefined>({
-    reducer: (_, b) => b,
-  }),
-  currentResourceIndex: Annotation<number | undefined>({
-    reducer: (_, b) => b,
-  }),
-  completedResources: Annotation<ResourceResult[] | undefined>({
-    reducer: (_, b) => b,
-  }),
-  perResourceCosts: Annotation<Record<string, string> | undefined>({
-    reducer: (_, b) => b,
-  }),
-  error: Annotation<AssigneeError | undefined>({ reducer: (_, b) => b }),
-});
-
-export type AgentState = typeof graphAnnotation.State;
-
-// Node signature — ALL nodes must match this LangGraph Runnable contract
-type NodeFn = (
-  state: AgentState,
-  tools?: StructuredTool[],
-) => Promise<Partial<AgentState>>;
+// Re-export for consumers that import AgentState from graph.ts
+export { graphAnnotation } from "./graph-state.js";
+export type { AgentState } from "./graph-state.js";
 
 import { createIntentParserNode } from "../nodes/intent-parser.js";
 import { schemaFetcherNode } from "../nodes/schema-fetcher.js";
@@ -107,77 +29,18 @@ import { resourceProvisionerNode } from "../nodes/resource-provisioner.js";
 import { statusPollerNode } from "../nodes/status-poller.js";
 import { resultFormatterNode } from "../nodes/result-formatter.js";
 import { createCloudControlClient } from "./cloudcontrol-client.js";
+import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { BedrockLlmAdapter } from "./bedrock-llm-adapter.js";
 import { BEDROCK_MODEL_ID, AWS_REGION } from "../config/constants.js";
 
-// Conditional routing for preflight_guard:
-// - plan mode  → skip HITL, render plan box via result_formatter
-// - apply mode → HITL in human_approval, then pause at resource_provisioner interrupt
-// - compound loop (index > 0) → skip human_approval (already approved), go direct to resource_provisioner
-function routePreflightGuard(
-  state: AgentState,
-):
-  | typeof GraphNode.HUMAN_APPROVAL
-  | typeof GraphNode.RESULT_FORMATTER
-  | typeof GraphNode.RESOURCE_PROVISIONER {
-  if (state.executionMode === ExecutionMode.PLAN || !state.preflightPassed) {
-    return GraphNode.RESULT_FORMATTER;
-  }
-  // Skip human_approval for compound loop iterations (index > 0 = already approved at index 0)
-  if (state.resourcePattern && (state.currentResourceIndex ?? 0) > 0) {
-    return GraphNode.RESOURCE_PROVISIONER;
-  }
-  return GraphNode.HUMAN_APPROVAL;
-}
-
-// Conditional routing for resource_provisioner:
-// - IN_PROGRESS → status_poller (async poll)
-// - FAILED      → result_formatter (state guard abort or provisioning error)
-function routeResourceProvisioner(
-  state: AgentState,
-): typeof GraphNode.STATUS_POLLER | typeof GraphNode.RESULT_FORMATTER {
-  return state.executionStatus === ExecutionStatus.IN_PROGRESS
-    ? GraphNode.STATUS_POLLER
-    : GraphNode.RESULT_FORMATTER;
-}
-
-// Conditional routing for status_poller (self-loop — see Story 2.3)
-function routeStatusPoller(
-  state: AgentState,
-): typeof GraphNode.STATUS_POLLER | typeof GraphNode.RESULT_FORMATTER {
-  return state.executionStatus === ExecutionStatus.IN_PROGRESS
-    ? GraphNode.STATUS_POLLER
-    : GraphNode.RESULT_FORMATTER;
-}
-
-// Conditional routing for result_formatter:
-// - compound mode with more resources pending (PENDING reset) → plan_generator (loop continues)
-// - otherwise → END
-function routeResultFormatter(
-  state: AgentState,
-): typeof GraphNode.PLAN_GENERATOR | typeof END {
-  if (
-    state.resourcePattern &&
-    state.resourceQueue &&
-    state.currentResourceIndex !== undefined &&
-    state.executionStatus === ExecutionStatus.PENDING &&
-    state.currentResourceIndex < state.resourceQueue.length
-  ) {
-    return GraphNode.PLAN_GENERATOR;
-  }
-  return END;
-}
-
 export function createGraph(tools: StructuredTool[] = []) {
-  // Fail fast at graph construction time if MCP AWS credentials are missing.
-  // Env vars are read here (not inside cloudcontrol-client) for centralized config.
   const cloudClient = createCloudControlClient({
     accessKeyId: process.env["MCP_AWS_ACCESS_KEY_ID"] ?? "",
     secretAccessKey: process.env["MCP_AWS_SECRET_ACCESS_KEY"] ?? "",
     region: process.env["AWS_REGION"] ?? "",
   });
+  const provisioner = new CloudControlAdapter(cloudClient);
 
-  // Construct LLM adapter once — injected into nodes (Story 9.5: M3)
   const llmAdapter = new BedrockLlmAdapter({
     modelId: BEDROCK_MODEL_ID,
     region: AWS_REGION,
@@ -205,10 +68,10 @@ export function createGraph(tools: StructuredTool[] = []) {
     )
     .addNode(GraphNode.HUMAN_APPROVAL, (state) => humanApprovalNode(state))
     .addNode(GraphNode.RESOURCE_PROVISIONER, (state) =>
-      resourceProvisionerNode(state, cloudClient),
+      resourceProvisionerNode(state, provisioner),
     )
     .addNode(GraphNode.STATUS_POLLER, (state) =>
-      statusPollerNode(state, cloudClient),
+      statusPollerNode(state, provisioner),
     )
     .addNode(GraphNode.RESULT_FORMATTER, (state) => resultFormatterNode(state))
     .addEdge(START, GraphNode.INTENT_PARSER)
@@ -231,19 +94,17 @@ export function createGraph(tools: StructuredTool[] = []) {
         [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,
       },
     )
-    // Self-loop: poller node routes to itself when IN_PROGRESS (Story 2.3)
     .addConditionalEdges(GraphNode.STATUS_POLLER, routeStatusPoller, {
       [GraphNode.STATUS_POLLER]: GraphNode.STATUS_POLLER,
       [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,
     })
-    // compound loop routing: PENDING → plan_generator (next resource), otherwise END
     .addConditionalEdges(GraphNode.RESULT_FORMATTER, routeResultFormatter, {
       [GraphNode.PLAN_GENERATOR]: GraphNode.PLAN_GENERATOR,
       [END]: END,
     });
 
   return workflow.compile({
-    interruptBefore: [GraphNode.RESOURCE_PROVISIONER], // HITL pause (Story 2.1)
+    interruptBefore: [GraphNode.RESOURCE_PROVISIONER],
     checkpointer: new MemorySaver(),
   });
 }

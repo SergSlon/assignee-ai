@@ -6,32 +6,21 @@
  * @param unit   - Human-readable unit label appended to the price, e.g. "/GB-month"
  * @param scale  - Optional multiplier applied to the raw price (default 1)
  */
+import type { AwsPricingResponse } from "./types.js";
+
 export function extractFirstTierPrice(
-  data: Record<string, unknown>,
+  data: AwsPricingResponse,
   unit: string,
   scale = 1,
 ): string | null {
-  const items = (data["data"] as unknown[]) ?? [];
+  const items = data.data ?? [];
   for (const item of items) {
-    const onDemand = (item as Record<string, unknown>)?.["terms"] as
-      | Record<string, unknown>
-      | undefined;
-    const terms = Object.values(
-      (onDemand?.["OnDemand"] as Record<string, unknown>) ?? {},
-    );
-    for (const term of terms) {
-      const dims = Object.values(
-        ((term as Record<string, unknown>)?.["priceDimensions"] as Record<
-          string,
-          unknown
-        >) ?? {},
-      );
+    const onDemandTerms = Object.values(item.terms?.OnDemand ?? {});
+    for (const term of onDemandTerms) {
+      const dims = Object.values(term.priceDimensions ?? {});
       for (const dim of dims) {
-        const d = dim as Record<string, unknown>;
-        if (d["beginRange"] === "0") {
-          const usd = parseFloat(
-            (d["pricePerUnit"] as Record<string, string>)?.["USD"] ?? "0",
-          );
+        if (dim.beginRange === "0") {
+          const usd = parseFloat(dim.pricePerUnit?.USD ?? "0");
           if (usd > 0) {
             const scaled = usd * scale;
             const decimals =

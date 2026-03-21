@@ -74,6 +74,10 @@ export type {
   PricingEstimate,
   McpPricingConfig,
   McpPricingFilter,
+  AwsPricingResponse,
+  AwsPricingItem,
+  AwsPricingTerm,
+  AwsPriceDimension,
 } from "./pricing/index.js";
 
 // Errors

@@ -37,6 +37,10 @@ export const PricingFilter = {
   },
 } as const;
 
+export const PricingTerm = {
+  ON_DEMAND: "OnDemand",
+} as const;
+
 export const PricingUnit = {
   GB_MONTH: "/GB-month",
   PARAM_HOUR: "/param-hour",

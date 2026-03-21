@@ -31,10 +31,18 @@ export const LOG_ACTIONS = {
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
 
+export const LogLevel = {
+  INFO: "info",
+  WARN: "warn",
+  ERROR: "error",
+} as const;
+
+export type LogLevelType = (typeof LogLevel)[keyof typeof LogLevel];
+
 export interface LogEvent {
   ts: string;
   runId: string;
-  level: "info" | "warn" | "error";
+  level: LogLevelType;
   action: LogAction;
   durationMs?: number;
   result?: string;

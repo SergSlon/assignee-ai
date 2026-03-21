@@ -9,6 +9,7 @@
 import { ExecutionStatus, defaultPluginRegistry } from "@assignee/core";
 import type { LlmPort } from "@assignee/core";
 import { SCHEMA_EXCERPT_MAX_CHARS } from "../config/constants.js";
+import { CloudFormationKey } from "../constants/cfn-keys.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
@@ -82,7 +83,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       (state.resourceSchema["properties"] as
         | Record<string, unknown>
         | undefined) ??
-      (state.resourceSchema["Properties"] as
+      (state.resourceSchema[CloudFormationKey.PROPERTIES] as
         | Record<string, unknown>
         | undefined) ??
       {};
@@ -107,7 +108,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
 
     const prompt = [
       `You are an AWS resource configuration expert. Generate the resource properties JSON for a "${state.resourceType}" resource.`,
-      `User intent: "${state.userIntent}"`,
+      `User intent: <user_intent>${(state.userIntent ?? "").replace(/<\/user_intent>/gi, "")}</user_intent>`,
       "",
       `Required properties: ${JSON.stringify(requiredKeys)}`,
       `Available properties: ${JSON.stringify(schemaKeys)}`,
@@ -138,10 +139,10 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
 
     const [genErr, text] = await llmClient.generateText(prompt);
 
-    if (genErr) {
+    if (genErr || !text) {
       return {
         executionStatus: ExecutionStatus.FAILED,
-        errorMessage: `Plan generation failed. Hint: check Bedrock connectivity and AWS credentials. Error: ${genErr.message}`,
+        errorMessage: `Plan generation failed. Hint: check Bedrock connectivity and AWS credentials.${genErr ? ` Error: ${genErr.message}` : ""}`,
       };
     }
 
@@ -170,11 +171,14 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     ) {
       const inner = topValues[0] as Record<string, unknown>;
       if (
-        typeof inner["Type"] === "string" &&
-        (inner["Type"] as string).startsWith("AWS::") &&
-        typeof inner["Properties"] === "object"
+        typeof inner[CloudFormationKey.TYPE] === "string" &&
+        (inner[CloudFormationKey.TYPE] as string).startsWith("AWS::") &&
+        typeof inner[CloudFormationKey.PROPERTIES] === "object"
       ) {
-        desiredState = inner["Properties"] as Record<string, unknown>;
+        desiredState = inner[CloudFormationKey.PROPERTIES] as Record<
+          string,
+          unknown
+        >;
       }
     }
 

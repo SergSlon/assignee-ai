@@ -1,8 +1,8 @@
 import type { PricingStrategy, PricingEstimate } from "../types.js";
+import { LAMBDA_USD_PER_GB_SECOND } from "../../resource-plugins/plugins/lambda-function.js";
 
 // Lambda pricing rates (stable since 2014 — verified 2025)
 const USD_PER_MILLION_REQUESTS = 0.2;
-const USD_PER_GB_SECOND = 0.0000166667;
 const ASSUMED_AVG_DURATION_SEC = 0.1;
 const DEFAULT_MEMORY_MB = 128;
 
@@ -11,7 +11,7 @@ function computeLambdaLabel(memoryMb: number): string {
     1_000_000 *
     ASSUMED_AVG_DURATION_SEC *
     (memoryMb / 1024) *
-    USD_PER_GB_SECOND;
+    LAMBDA_USD_PER_GB_SECOND;
   const total = USD_PER_MILLION_REQUESTS + durationCostPerMillion;
   return `~$${total.toFixed(2)}/million req (${ASSUMED_AVG_DURATION_SEC * 1000}ms avg, ${memoryMb}MB)`;
 }

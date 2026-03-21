@@ -13,20 +13,9 @@ import {
   CommandArgs,
 } from "../constants/commands.js";
 import { ProcessExitCode } from "../constants/errors.js";
-import {
-  createMcpClient,
-  getMcpTools,
-  closeMcpClient,
-} from "../services/mcp-client.js";
-import { createGraph } from "../services/graph.js";
-import {
-  renderIntro,
-  renderError,
-  renderOutro,
-  startSpinner,
-  stopSpinner,
-} from "../utils/display.js";
+import { renderError, startSpinner, stopSpinner } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { runCommand } from "../utils/command-runner.js";
 import { SUPPORTED_TYPES_HINT } from "../config/constants.js";
 
 export const planCommand = new Command(CommandName.PLAN)
@@ -45,83 +34,51 @@ export const planCommand = new Command(CommandName.PLAN)
       process.exit(ProcessExitCode.GENERIC_ERROR);
     }
 
-    renderIntro();
-
-    const runId = crypto.randomUUID();
-    const startTs = Date.now();
-
-    log({
-      ts: new Date().toISOString(),
-      runId,
-      level: "info",
-      action: LOG_ACTIONS.PLAN_STARTED,
-      extras: { intent },
-    });
-
-    try {
-      const mcpClient = await createMcpClient();
-      const tools = await getMcpTools(mcpClient);
-      const graph = createGraph(tools);
-
-      startSpinner("Generating plan...");
-
-      const finalState = await graph.invoke(
-        {
-          userIntent: intent,
-          runId,
-          executionMode: ExecutionMode.PLAN,
-          startedAt: Date.now(),
-        },
-        { configurable: { thread_id: runId } },
-      );
-
-      stopSpinner();
-      await closeMcpClient();
-
-      const failed =
-        finalState.executionStatus === ExecutionStatus.FAILED ||
-        finalState.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE;
-
-      log({
-        ts: new Date().toISOString(),
-        runId,
-        level: "info",
-        action: LOG_ACTIONS.PLAN_COMPLETE,
-        durationMs: Date.now() - startTs,
-        result: finalState.executionStatus,
-      });
-
-      if (failed) {
-        renderError(
-          finalState.errorMessage ?? "Plan generation failed",
-          finalState.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
-            ? SUPPORTED_TYPES_HINT
-            : undefined,
-        );
-        renderOutro(false);
-        process.exit(ProcessExitCode.GENERIC_ERROR);
-      }
-
-      // result_formatter node renders the plan box in plan mode
-      renderOutro(true);
-      process.exit(ProcessExitCode.SUCCESS);
-    } catch (err: unknown) {
-      stopSpinner();
-      const errMsg = err instanceof Error ? err.message : String(err);
-      log({
-        ts: new Date().toISOString(),
-        runId,
-        level: "error",
-        action: LOG_ACTIONS.PLAN_COMPLETE,
-        durationMs: Date.now() - startTs,
-        result: "error",
-      });
-      renderError(
-        `Plan generation failed: ${errMsg}`,
+    await runCommand({
+      intent,
+      startAction: LOG_ACTIONS.PLAN_STARTED,
+      endAction: LOG_ACTIONS.PLAN_COMPLETE,
+      errorPrefix: "Plan generation failed",
+      errorHint:
         "Check that AWS credentials are configured and Bedrock is accessible in your region.",
-      );
-      renderOutro(false);
-      await closeMcpClient();
-      process.exit(ProcessExitCode.GENERIC_ERROR);
-    }
+      run: async (ctx) => {
+        startSpinner("Generating plan...");
+
+        const finalState = await ctx.graph.invoke(
+          {
+            userIntent: ctx.intent,
+            runId: ctx.runId,
+            executionMode: ExecutionMode.PLAN,
+            startedAt: Date.now(),
+          },
+          { configurable: { thread_id: ctx.runId } },
+        );
+
+        stopSpinner();
+
+        const failed =
+          finalState.executionStatus === ExecutionStatus.FAILED ||
+          finalState.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE;
+
+        log({
+          ts: new Date().toISOString(),
+          runId: ctx.runId,
+          level: "info",
+          action: LOG_ACTIONS.PLAN_COMPLETE,
+          durationMs: Date.now() - ctx.startTs,
+          result: finalState.executionStatus,
+        });
+
+        if (failed) {
+          renderError(
+            finalState.errorMessage ?? "Plan generation failed",
+            finalState.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
+              ? SUPPORTED_TYPES_HINT
+              : undefined,
+          );
+        }
+
+        return { success: !failed };
+      },
+    });
   });

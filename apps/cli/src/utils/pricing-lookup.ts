@@ -8,38 +8,31 @@
  */
 
 import type { StructuredTool } from "@langchain/core/tools";
+import type { AwsPricingResponse } from "@assignee/core";
 import { ToolName } from "../constants/tools.js";
 import { AWS_REGION } from "../config/constants.js";
-import { PricingServiceCode, PricingFilter } from "../constants/pricing.js";
+import {
+  PricingServiceCode,
+  PricingFilter,
+  PricingTerm,
+} from "../constants/pricing.js";
 import { unwrapMcpText } from "./mcp.js";
+import { withTimeout } from "./timeout.js";
 
 const LOOKUP_TIMEOUT_MS = 6000;
 
 type TermMatchFilter = { Field: string; Value: string; Type: "TERM_MATCH" };
 
 /** Extracts the lowest first-tier (beginRange=0) non-zero USD on-demand price. */
-function extractPrice(data: Record<string, unknown>): string | null {
-  const items = (data["data"] as unknown[]) ?? [];
+function extractPrice(data: AwsPricingResponse): string | null {
+  const items = data.data ?? [];
   for (const item of items) {
-    const terms = (item as Record<string, unknown>)?.["terms"] as
-      | Record<string, unknown>
-      | undefined;
-    const onDemand = Object.values(
-      (terms?.["OnDemand"] as Record<string, unknown>) ?? {},
-    );
+    const onDemand = Object.values(item.terms?.OnDemand ?? {});
     for (const term of onDemand) {
-      const dims = Object.values(
-        ((term as Record<string, unknown>)?.["priceDimensions"] as Record<
-          string,
-          unknown
-        >) ?? {},
-      );
+      const dims = Object.values(term.priceDimensions ?? {});
       for (const dim of dims) {
-        const d = dim as Record<string, unknown>;
-        if (d["beginRange"] === "0") {
-          const usd = parseFloat(
-            (d["pricePerUnit"] as Record<string, string>)?.["USD"] ?? "0",
-          );
+        if (dim.beginRange === "0") {
+          const usd = parseFloat(dim.pricePerUnit?.USD ?? "0");
           if (usd > 0) {
             const decimals =
               usd >= 0.0001 ? 4 : Math.ceil(-Math.log10(usd)) + 3;
@@ -58,18 +51,17 @@ async function queryPrice(
   filters: TermMatchFilter[],
 ): Promise<string | null> {
   try {
-    const timeout = new Promise<null>((resolve) =>
-      setTimeout(() => resolve(null), LOOKUP_TIMEOUT_MS),
+    const result = await withTimeout(
+      pricingTool.invoke({
+        service_code: serviceCode,
+        region: AWS_REGION,
+        filters,
+        output_options: { pricing_terms: [PricingTerm.ON_DEMAND] },
+      }),
+      LOOKUP_TIMEOUT_MS,
     );
-    const query = pricingTool.invoke({
-      service_code: serviceCode,
-      region: AWS_REGION,
-      filters,
-      output_options: { pricing_terms: ["OnDemand"] },
-    });
-    const result = await Promise.race([query, timeout]);
     if (!result) return null;
-    const data = JSON.parse(unwrapMcpText(result)) as Record<string, unknown>;
+    const data = JSON.parse(unwrapMcpText(result)) as AwsPricingResponse;
     return extractPrice(data);
   } catch {
     return null;

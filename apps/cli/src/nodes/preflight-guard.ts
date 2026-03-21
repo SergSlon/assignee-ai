@@ -11,13 +11,15 @@ import {
   ExecutionStatus,
   defaultPricingRegistry,
   extractFirstTierPrice,
+  type AwsPricingResponse,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
 import { AWS_REGION } from "../config/constants.js";
-import { CostEstimate } from "../constants/pricing.js";
+import { CostEstimate, PricingTerm } from "../constants/pricing.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { unwrapMcpText } from "../utils/mcp.js";
+import { withTimeout } from "../utils/timeout.js";
 import type { AgentState } from "../services/graph.js";
 
 const PRICING_TIMEOUT_MS = 3000;
@@ -55,16 +57,15 @@ export async function preflightGuardNode(
     if (pricingTool) {
       try {
         const timeoutMs = mcpConfig.timeoutMs ?? PRICING_TIMEOUT_MS;
-        const timeout = new Promise<null>((resolve) =>
-          setTimeout(() => resolve(null), timeoutMs),
+        const result = await withTimeout(
+          pricingTool.invoke({
+            service_code: mcpConfig.serviceCode,
+            region: AWS_REGION,
+            filters: mcpConfig.filters,
+            output_options: { pricing_terms: [PricingTerm.ON_DEMAND] },
+          }),
+          timeoutMs,
         );
-        const query = pricingTool.invoke({
-          service_code: mcpConfig.serviceCode,
-          region: AWS_REGION,
-          filters: mcpConfig.filters,
-          output_options: { pricing_terms: ["OnDemand"] },
-        });
-        const result = await Promise.race([query, timeout]);
         if (result === null) {
           log({
             ts: new Date().toISOString(),
@@ -74,10 +75,7 @@ export async function preflightGuardNode(
             extras: { resourceType: state.resourceType, timeoutMs },
           });
         } else {
-          const data = JSON.parse(unwrapMcpText(result)) as Record<
-            string,
-            unknown
-          >;
+          const data = JSON.parse(unwrapMcpText(result)) as AwsPricingResponse;
           costEstimate =
             extractFirstTierPrice(data, mcpConfig.unit, mcpConfig.scale) ??
             CostEstimate.NA;
