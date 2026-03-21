@@ -482,14 +482,14 @@ describe("renderOptionPrompt — TTY mode", () => {
     expect(result).toBe("hello");
   });
 
-  it("calls clack.confirm for boolean type", async () => {
-    vi.mocked(confirm).mockResolvedValueOnce(true);
+  it("calls clack.select for boolean type", async () => {
+    vi.mocked(select).mockResolvedValueOnce("true");
     const { renderOptionPrompt } = await import("./display.js");
     const result = await renderOptionPrompt(
       makeField({ type: "boolean", label: "Enable?" }),
       resolved,
     );
-    expect(confirm).toHaveBeenCalledWith(
+    expect(select).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Enable?" }),
     );
     expect(result).toBe(true);
@@ -626,7 +626,7 @@ describe("renderDocHelp", () => {
       searchTool,
       readTool,
     ]);
-    await vi.advanceTimersByTimeAsync(9000);
+    await vi.advanceTimersByTimeAsync(16000);
     await promise;
     vi.useRealTimers();
 
@@ -693,7 +693,7 @@ describe("renderDocHelp", () => {
     ]);
     // advanceTimersByTimeAsync flushes pending microtasks between steps,
     // allowing the search result to resolve before the read timeout fires
-    await vi.advanceTimersByTimeAsync(9000);
+    await vi.advanceTimersByTimeAsync(16000);
     await promise;
     vi.useRealTimers();
 

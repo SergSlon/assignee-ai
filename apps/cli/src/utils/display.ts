@@ -276,7 +276,7 @@ export function renderCompoundSuccess(
 
 // ── Documentation help (Story 7.5) ───────────────────────────────────────────
 
-const DOC_TIMEOUT_MS = 8_000;
+const DOC_TIMEOUT_MS = 15000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([
@@ -462,19 +462,36 @@ export async function renderOptionPrompt(
 
   switch (question.type) {
     case "boolean": {
-      result = await clack.confirm({
+      // Use select instead of confirm so the user can pick '?' to get field help.
+      // The '?' sentinel is caught by promptWithHelp, which shows docs and re-prompts.
+      const boolDefault =
+        typeof defaultValue === "boolean"
+          ? defaultValue
+            ? "true"
+            : "false"
+          : "false";
+      result = await clack.select({
         message: question.label,
-        initialValue: typeof defaultValue === "boolean" ? defaultValue : false,
+        options: [
+          { value: "true", label: "Yes" },
+          { value: "false", label: "No" },
+          { value: "?", label: "\u2753 ? \u2014 explain this field" },
+        ],
+        initialValue: boolDefault,
       });
       break;
     }
     case "enum": {
-      result = await clack.select({
-        message: question.label,
-        options: (question.options ?? []).map((o) => ({
+      const enumOptions = [
+        { value: "?", label: "\u2753 ? \u2014 explain this field" },
+        ...(question.options ?? []).map((o) => ({
           value: o.value,
           label: o.label,
         })),
+      ];
+      result = await clack.select({
+        message: question.label,
+        options: enumOptions,
         initialValue:
           typeof defaultValue === "string" ? defaultValue : undefined,
       });
@@ -518,6 +535,14 @@ export async function renderOptionPrompt(
   }
 
   if (clack.isCancel(result)) return defaultValue;
+
+  // Normalise boolean-select results back to actual booleans.
+  // The boolean case uses clack.select which returns "true"/"false" strings,
+  // but the rest of the app expects actual boolean values.
+  if (question.type === "boolean") {
+    if (result === "?") return "?";
+    return result === "true";
+  }
   return result;
 }
 

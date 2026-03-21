@@ -109,6 +109,7 @@ afterEach(() => {
     value: undefined,
     configurable: true,
   });
+  vi.resetAllMocks();
 });
 
 describe("optionElicitorNode", () => {
@@ -130,7 +131,7 @@ describe("optionElicitorNode", () => {
 
   it("prompts for ask_if_not_set field and stores answer", async () => {
     vi.mocked(text).mockResolvedValueOnce("my-resource");
-    vi.mocked(confirm).mockResolvedValueOnce(true); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("true"); // Encrypt
     vi.mocked(text).mockResolvedValueOnce(""); // KmsKey (shown because Encrypt=true)
     vi.mocked(select).mockResolvedValueOnce("sm"); // Size
     vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
@@ -144,7 +145,7 @@ describe("optionElicitorNode", () => {
 
   it("skips showIf field when condition not met (Encrypt=false skips KmsKey)", async () => {
     vi.mocked(text).mockResolvedValueOnce("my-resource"); // Name
-    vi.mocked(confirm).mockResolvedValueOnce(false); // Encrypt=false
+    vi.mocked(select).mockResolvedValueOnce("false"); // Encrypt=false
     vi.mocked(select).mockResolvedValueOnce("sm"); // Size
     vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
 
@@ -157,7 +158,7 @@ describe("optionElicitorNode", () => {
 
   it("shows advanced tier when user confirms", async () => {
     vi.mocked(text).mockResolvedValueOnce("my-resource");
-    vi.mocked(confirm).mockResolvedValueOnce(true); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce(true); // Encrypt
     vi.mocked(text).mockResolvedValueOnce(""); // KmsKey
     vi.mocked(select).mockResolvedValueOnce("sm");
     vi.mocked(confirm).mockResolvedValueOnce(true); // advanced confirm
@@ -173,7 +174,7 @@ describe("optionElicitorNode", () => {
 
   it("skips advanced tier when user declines", async () => {
     vi.mocked(text).mockResolvedValueOnce("my-resource");
-    vi.mocked(confirm).mockResolvedValueOnce(false); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("false"); // Encrypt
     vi.mocked(select).mockResolvedValueOnce("sm");
     vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm → skip
 
@@ -214,7 +215,7 @@ describe("optionElicitorNode — ? help flow (Story 7.5)", () => {
     vi.mocked(text)
       .mockResolvedValueOnce("?") // Name → triggers help
       .mockResolvedValueOnce("us-east-1"); // Name → valid answer
-    vi.mocked(confirm).mockResolvedValueOnce(false); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("false"); // Encrypt
     vi.mocked(select).mockResolvedValueOnce("sm"); // Size
     vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
 
@@ -226,7 +227,7 @@ describe("optionElicitorNode — ? help flow (Story 7.5)", () => {
 
   it("non-? input: renderDocHelp NOT called", async () => {
     vi.mocked(text).mockResolvedValueOnce("Standard"); // Name
-    vi.mocked(confirm).mockResolvedValueOnce(false); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("false"); // Encrypt
     vi.mocked(select).mockResolvedValueOnce("sm"); // Size
     vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
 
@@ -250,7 +251,7 @@ describe("optionElicitorNode — ? help flow (Story 7.5)", () => {
     vi.mocked(text)
       .mockResolvedValueOnce("?") // Name → triggers help (timeout handled inside renderDocHelp)
       .mockResolvedValueOnce("my-bucket"); // Name → valid answer after fallback
-    vi.mocked(confirm).mockResolvedValueOnce(false); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("false"); // Encrypt
     vi.mocked(select).mockResolvedValueOnce("sm"); // Size
     vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
 
