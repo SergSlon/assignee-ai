@@ -228,7 +228,10 @@ export async function renderOptionPrompt(
       break;
     }
     case "multi": {
-      // clack multiselect crashes with an empty options array — skip the field
+      // clack multiselect crashes with an empty options array.
+      // Plugins define Tags with options: [] as a placeholder — real options come
+      // from org policy config (Story 7.2). Until 7.2 ships, multi fields with no
+      // options are silently skipped (returned as undefined → not stored in elicitedOptions).
       if (!question.options || question.options.length === 0) {
         return undefined;
       }
