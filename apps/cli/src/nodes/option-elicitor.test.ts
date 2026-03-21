@@ -10,6 +10,14 @@ vi.mock("@clack/prompts", () => ({
   isCancel: vi.fn(() => false),
 }));
 
+vi.mock("../utils/display.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/display.js")>();
+  return {
+    ...actual,
+    renderDocHelp: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 const testPlugin: ResourcePlugin = {
   resourceType: "AWS::Test::Resource",
   commonFields: [
@@ -76,6 +84,7 @@ vi.mock("@assignee/core", async (importOriginal) => {
 const { confirm, select, text, multiselect, isCancel } =
   await import("@clack/prompts");
 const { optionElicitorNode } = await import("./option-elicitor.js");
+const { renderDocHelp } = await import("../utils/display.js");
 
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
@@ -184,5 +193,73 @@ describe("optionElicitorNode", () => {
     );
 
     expect(result.elicitedOptions).toBeDefined();
+  });
+});
+
+describe("optionElicitorNode — ? help flow (Story 7.5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setTTY(true);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("? then valid answer: calls renderDocHelp once, stores valid answer", async () => {
+    // Name field: first returns '?', second returns 'us-east-1'
+    vi.mocked(text)
+      .mockResolvedValueOnce("?") // Name → triggers help
+      .mockResolvedValueOnce("us-east-1"); // Name → valid answer
+    vi.mocked(confirm).mockResolvedValueOnce(false); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("sm"); // Size
+    vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
+
+    const result = await optionElicitorNode(makeState());
+
+    expect(vi.mocked(renderDocHelp)).toHaveBeenCalledOnce();
+    expect(result.elicitedOptions?.["Name"]).toBe("us-east-1");
+  });
+
+  it("non-? input: renderDocHelp NOT called", async () => {
+    vi.mocked(text).mockResolvedValueOnce("Standard"); // Name
+    vi.mocked(confirm).mockResolvedValueOnce(false); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("sm"); // Size
+    vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
+
+    await optionElicitorNode(makeState());
+
+    expect(vi.mocked(renderDocHelp)).not.toHaveBeenCalled();
+  });
+
+  it("non-TTY: renderDocHelp never called (? unreachable)", async () => {
+    setTTY(false);
+
+    await optionElicitorNode(makeState());
+
+    expect(vi.mocked(renderDocHelp)).not.toHaveBeenCalled();
+  });
+
+  it("timeout fallback + prompt re-presented: after renderDocHelp resolves (simulating timeout fallback), loop re-presents prompt", async () => {
+    // Simulates AC6: "timeout → fallback shown + prompt re-presented"
+    // renderDocHelp is mocked to resolve immediately (as it does on timeout fallback)
+    // The loop should continue and the second text() call becomes the answer
+    vi.mocked(text)
+      .mockResolvedValueOnce("?") // Name → triggers help (timeout handled inside renderDocHelp)
+      .mockResolvedValueOnce("my-bucket"); // Name → valid answer after fallback
+    vi.mocked(confirm).mockResolvedValueOnce(false); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("sm"); // Size
+    vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
+
+    const result = await optionElicitorNode(makeState());
+
+    // renderDocHelp was called (regardless of timeout internals) and loop continued
+    expect(vi.mocked(renderDocHelp)).toHaveBeenCalledOnce();
+    // Prompt was re-presented after renderDocHelp returned — valid answer stored
+    expect(result.elicitedOptions?.["Name"]).toBe("my-bucket");
+    expect(text).toHaveBeenCalledTimes(2); // Called twice: once for '?', once for valid answer
   });
 });

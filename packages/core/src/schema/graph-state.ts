@@ -76,6 +76,9 @@ export const GraphStateSchema = z.object({
   currentResourceIndex: z.number().optional(), // Index into resourceQueue
   completedResources: z.custom<ResourceResult[]>().optional(), // Accumulated per-resource results
 
+  // Story 8.3: per-resource cost map keyed by resourceId (populated by preflight_guard in compound mode)
+  perResourceCosts: z.record(z.string()).optional(),
+
   // LangGraph message history
   messages: z.array(z.unknown()).default([]),
 });
