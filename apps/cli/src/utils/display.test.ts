@@ -200,6 +200,226 @@ it("renderCompoundSuccess writes all resource types and pattern name in plain te
   expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
 });
 
+// ── renderDependencyPlan tests ────────────────────────────────────────────────
+
+import type { ArchitecturePattern, ResourceSpec } from "@assignee/core";
+
+const mockPattern: ArchitecturePattern = {
+  patternId: "serverless-api",
+  displayName: "Serverless API",
+  keywords: ["serverless api"],
+  resourceList: [
+    {
+      resourceType: "AWS::IAM::Role",
+      resourceId: "iam-role",
+      displayName: "Lambda Execution Role",
+    },
+    {
+      resourceType: "AWS::Lambda::Function",
+      resourceId: "lambda-fn",
+      displayName: "Lambda Function",
+    },
+    {
+      resourceType: "AWS::DynamoDB::Table",
+      resourceId: "ddb-table",
+      displayName: "DynamoDB Table",
+    },
+  ],
+  dependencyOrder: [["iam-role"], ["lambda-fn", "ddb-table"]],
+  defaultOptions: {},
+};
+
+const mockResourceQueue: ResourceSpec[] = [
+  {
+    resourceType: "AWS::IAM::Role",
+    resourceId: "iam-role",
+    displayName: "Lambda Execution Role",
+  },
+  {
+    resourceType: "AWS::Lambda::Function",
+    resourceId: "lambda-fn",
+    displayName: "Lambda Function",
+  },
+  {
+    resourceType: "AWS::DynamoDB::Table",
+    resourceId: "ddb-table",
+    displayName: "DynamoDB Table",
+  },
+];
+
+describe("renderDependencyPlan — non-TTY mode", () => {
+  beforeEach(() => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("contains pattern display name", async () => {
+    const { renderDependencyPlan } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+    renderDependencyPlan(mockPattern, mockResourceQueue);
+    restore();
+    expect(chunks.join("")).toContain("Serverless API");
+  });
+
+  it("contains resource count", async () => {
+    const { renderDependencyPlan } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+    renderDependencyPlan(mockPattern, mockResourceQueue);
+    restore();
+    expect(chunks.join("")).toContain("3");
+  });
+
+  it("contains all resource types", async () => {
+    const { renderDependencyPlan } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+    renderDependencyPlan(mockPattern, mockResourceQueue);
+    restore();
+    const output = chunks.join("");
+    expect(output).toContain("AWS::IAM::Role");
+    expect(output).toContain("AWS::Lambda::Function");
+    expect(output).toContain("AWS::DynamoDB::Table");
+  });
+
+  it("shows per-resource costs when provided", async () => {
+    const { renderDependencyPlan } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+    renderDependencyPlan(mockPattern, mockResourceQueue, {
+      "iam-role": "Free",
+      "lambda-fn": "~$0.20/month",
+    });
+    restore();
+    const output = chunks.join("");
+    expect(output).toContain("~$0.20/month");
+  });
+
+  it("does not show cost section when perResourceCosts is undefined", async () => {
+    const { renderDependencyPlan } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+    renderDependencyPlan(mockPattern, mockResourceQueue);
+    restore();
+    expect(chunks.join("")).not.toContain("Estimated cost");
+  });
+
+  it("does not emit ANSI codes in non-TTY mode", async () => {
+    const { renderDependencyPlan } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+    renderDependencyPlan(mockPattern, mockResourceQueue);
+    restore();
+    expect(chunks.join("")).not.toMatch(/\x1b\[[0-9;]*m/);
+  });
+
+  it("contains region label in non-TTY output", async () => {
+    const { renderDependencyPlan } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+    renderDependencyPlan(mockPattern, mockResourceQueue);
+    restore();
+    expect(chunks.join("")).toContain("Region:");
+  });
+
+  it("snapshot: 5-resource non-TTY output", async () => {
+    const fiveResourceQueue: ResourceSpec[] = [
+      {
+        resourceType: "AWS::IAM::Role",
+        resourceId: "iam-role",
+        displayName: "Lambda Execution Role",
+      },
+      {
+        resourceType: "AWS::Lambda::Function",
+        resourceId: "lambda-fn",
+        displayName: "Lambda Function",
+      },
+      {
+        resourceType: "AWS::DynamoDB::Table",
+        resourceId: "ddb-table",
+        displayName: "DynamoDB Table",
+      },
+      {
+        resourceType: "AWS::ApiGateway::RestApi",
+        resourceId: "apigw",
+        displayName: "API Gateway REST API",
+      },
+      {
+        resourceType: "AWS::CloudWatch::Alarm",
+        resourceId: "cw-alarm",
+        displayName: "CloudWatch Alarm",
+      },
+    ];
+    const { renderDependencyPlan } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+    renderDependencyPlan(mockPattern, fiveResourceQueue);
+    restore();
+    expect(chunks.join("")).toMatchSnapshot();
+  });
+});
+
+describe("renderHitlCompoundConfirm — non-TTY mode", () => {
+  beforeEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("returns false in non-TTY mode without prompting", async () => {
+    const { renderHitlCompoundConfirm } = await import("./display.js");
+    const result = await renderHitlCompoundConfirm(mockPattern, 3);
+    expect(result).toBe(false);
+  });
+});
+
+describe("renderHitlCompoundConfirm — TTY mode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("calls clack.confirm with compound-specific message", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+    const { renderHitlCompoundConfirm } = await import("./display.js");
+    const result = await renderHitlCompoundConfirm(mockPattern, 3);
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("Serverless API"),
+      }),
+    );
+    expect(result).toBe(true);
+  });
+
+  it("returns false when user cancels", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(
+      Symbol("cancel") as unknown as boolean,
+    );
+    vi.mocked(isCancel).mockReturnValueOnce(true);
+    const { renderHitlCompoundConfirm } = await import("./display.js");
+    const result = await renderHitlCompoundConfirm(mockPattern, 3);
+    expect(result).toBe(false);
+  });
+});
+
 // ── renderOptionPrompt tests ──────────────────────────────────────────────────
 
 vi.mock("@clack/prompts", () => ({
@@ -208,9 +428,11 @@ vi.mock("@clack/prompts", () => ({
   text: vi.fn(),
   multiselect: vi.fn(),
   isCancel: vi.fn(() => false),
+  note: vi.fn(),
+  log: { info: vi.fn() },
 }));
 
-const { confirm, select, text, multiselect, isCancel } =
+const { confirm, select, text, multiselect, isCancel, note, log } =
   await import("@clack/prompts");
 
 function makeField(
@@ -356,5 +578,199 @@ describe("renderOptionPrompt — non-TTY mode", () => {
     );
     expect(confirm).not.toHaveBeenCalled();
     expect(result).toBe(true);
+  });
+});
+
+// ── renderDocHelp tests (Story 7.5) ───────────────────────────────────────────
+
+import type { StructuredTool } from "@langchain/core/tools";
+
+function makeTool(
+  name: string,
+  invokeFn: () => Promise<unknown>,
+): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi.fn().mockImplementation(invokeFn),
+  } as unknown as StructuredTool;
+}
+
+describe("renderDocHelp", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows fallback when search tool not in tools array", async () => {
+    const { renderDocHelp } = await import("./display.js");
+
+    await renderDocHelp("BucketName", "AWS::S3::Bucket", []);
+
+    expect(vi.mocked(log.info)).toHaveBeenCalledWith(
+      expect.stringContaining("BucketName"),
+    );
+  });
+
+  it("shows fallback when search tool times out (returns null via race)", async () => {
+    // Search tool never resolves — timeout wins
+    const searchTool = makeTool(
+      "search_documentation",
+      () => new Promise(() => {}),
+    );
+    const readTool = makeTool("read_sections", () => Promise.resolve("text"));
+
+    // Use fake timers to trigger the 2s timeout immediately
+    vi.useFakeTimers();
+    const { renderDocHelp } = await import("./display.js");
+    const promise = renderDocHelp("BucketName", "AWS::S3::Bucket", [
+      searchTool,
+      readTool,
+    ]);
+    await vi.advanceTimersByTimeAsync(9000);
+    await promise;
+    vi.useRealTimers();
+
+    expect(vi.mocked(log.info)).toHaveBeenCalledWith(
+      expect.stringContaining("timeout"),
+    );
+  }, 12_000);
+
+  it("shows fallback when search returns no URL", async () => {
+    const searchTool = makeTool("search_documentation", () =>
+      Promise.resolve("No results found."),
+    );
+    const readTool = makeTool("read_sections", () => Promise.resolve("text"));
+
+    const { renderDocHelp } = await import("./display.js");
+    await renderDocHelp("BucketName", "AWS::S3::Bucket", [
+      searchTool,
+      readTool,
+    ]);
+
+    expect(vi.mocked(log.info)).toHaveBeenCalledWith(
+      expect.stringContaining("No documentation page found"),
+    );
+  });
+
+  it("calls clack.note with description when search + read succeed", async () => {
+    const searchTool = makeTool("search_documentation", () =>
+      Promise.resolve(
+        "See https://docs.aws.amazon.com/AmazonS3/latest/userguide/BucketName.html for details",
+      ),
+    );
+    const readTool = makeTool("read_sections", () =>
+      Promise.resolve(
+        "The BucketName property specifies the name of the S3 bucket.",
+      ),
+    );
+
+    const { renderDocHelp } = await import("./display.js");
+    await renderDocHelp("BucketName", "AWS::S3::Bucket", [
+      searchTool,
+      readTool,
+    ]);
+
+    expect(vi.mocked(note)).toHaveBeenCalledWith(
+      expect.stringContaining("BucketName"),
+      expect.stringContaining("📖 BucketName"),
+    );
+  });
+
+  it("shows fallback when read_sections times out", async () => {
+    const searchTool = makeTool("search_documentation", () =>
+      Promise.resolve(
+        "See https://docs.aws.amazon.com/AmazonS3/latest/userguide/BucketName.html for details",
+      ),
+    );
+    // read_sections never resolves
+    const readTool = makeTool("read_sections", () => new Promise(() => {}));
+
+    vi.useFakeTimers();
+    const { renderDocHelp } = await import("./display.js");
+    const promise = renderDocHelp("BucketName", "AWS::S3::Bucket", [
+      searchTool,
+      readTool,
+    ]);
+    // advanceTimersByTimeAsync flushes pending microtasks between steps,
+    // allowing the search result to resolve before the read timeout fires
+    await vi.advanceTimersByTimeAsync(9000);
+    await promise;
+    vi.useRealTimers();
+
+    expect(vi.mocked(log.info)).toHaveBeenCalledWith(
+      expect.stringContaining("unreachable"),
+    );
+  }, 12_000);
+
+  // ── Story 7.9: LLM synthesis tests ──────────────────────────────────────────
+
+  describe("with llmClient", () => {
+    const makeDocTools = () => ({
+      searchTool: makeTool("search_documentation", () =>
+        Promise.resolve(
+          "See https://docs.aws.amazon.com/AmazonS3/latest/userguide/BucketName.html for more",
+        ),
+      ),
+      readTool: makeTool("read_sections", () =>
+        Promise.resolve(
+          "BucketName specifies the raw CloudFormation property syntax for S3...",
+        ),
+      ),
+    });
+
+    it("calls generateText and displays synthesized hint when LLM succeeds", async () => {
+      const { searchTool, readTool } = makeDocTools();
+      const llmClient = {
+        generateText: vi
+          .fn()
+          .mockResolvedValue([
+            null,
+            "BucketName is the globally unique S3 bucket identifier. It must be 3-63 lowercase characters. Choose a name like `my-company-logs`.",
+          ] as const),
+        generateStructured: vi.fn(),
+      };
+
+      const { renderDocHelp } = await import("./display.js");
+      await renderDocHelp(
+        "BucketName",
+        "AWS::S3::Bucket",
+        [searchTool, readTool],
+        llmClient,
+      );
+
+      expect(llmClient.generateText).toHaveBeenCalledOnce();
+      expect(llmClient.generateText).toHaveBeenCalledWith(
+        expect.stringContaining("BucketName"),
+      );
+      expect(vi.mocked(note)).toHaveBeenCalledWith(
+        expect.stringContaining("globally unique"),
+        expect.stringContaining("📖 BucketName"),
+      );
+    });
+
+    it("falls back to raw doc text when generateText returns an error", async () => {
+      const { searchTool, readTool } = makeDocTools();
+      const llmClient = {
+        generateText: vi
+          .fn()
+          .mockResolvedValue([new Error("Bedrock throttled"), null] as const),
+        generateStructured: vi.fn(),
+      };
+
+      const { renderDocHelp } = await import("./display.js");
+      await renderDocHelp(
+        "BucketName",
+        "AWS::S3::Bucket",
+        [searchTool, readTool],
+        llmClient,
+      );
+
+      expect(llmClient.generateText).toHaveBeenCalledOnce();
+      // Falls back — clack.note called with the raw unwrapped doc text, not synthesized text
+      expect(vi.mocked(note)).toHaveBeenCalledWith(
+        expect.stringContaining("BucketName specifies"),
+        expect.stringContaining("📖 BucketName"),
+      );
+    });
   });
 });
