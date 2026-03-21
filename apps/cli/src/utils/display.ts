@@ -16,9 +16,9 @@ import type {
   ResourceResult,
   ArchitecturePattern,
   ResourceSpec,
+  LlmPort,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
-import type { LlmPort } from "@assignee/core";
 import { ToolName } from "../constants/tools.js";
 import { unwrapMcpText } from "./mcp.js";
 
