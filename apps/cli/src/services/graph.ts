@@ -82,6 +82,9 @@ export const graphAnnotation = Annotation.Root({
   completedResources: Annotation<ResourceResult[] | undefined>({
     reducer: (_, b) => b,
   }),
+  perResourceCosts: Annotation<Record<string, string> | undefined>({
+    reducer: (_, b) => b,
+  }),
   error: Annotation<AssigneeError | undefined>({ reducer: (_, b) => b }),
 });
 
@@ -191,7 +194,7 @@ export function createGraph(tools: StructuredTool[] = []) {
       schemaFetcherNode(state, tools),
     )
     .addNode(GraphNode.OPTION_ELICITOR, (state) =>
-      optionElicitorNode(state, tools),
+      optionElicitorNode(state, tools, llmAdapter),
     )
     .addNode(GraphNode.COMPOUND_DISPATCHER, (state) =>
       compoundDispatcherNode(state),

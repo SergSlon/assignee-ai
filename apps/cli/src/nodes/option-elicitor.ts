@@ -24,7 +24,12 @@ import type {
   ResolvedFieldConfig,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
-import { renderOptionPrompt, renderAdvancedConfirm } from "../utils/display.js";
+import type { LlmPort } from "@assignee/core";
+import {
+  renderOptionPrompt,
+  renderAdvancedConfirm,
+  renderDocHelp,
+} from "../utils/display.js";
 import {
   fetchEc2InstancePrices,
   fetchRdsInstancePrices,
@@ -141,9 +146,39 @@ async function enrichWithLivePricing(
   });
 }
 
+/**
+ * Wraps renderOptionPrompt with a `?` help loop.
+ * If the user types `?` at a string-type prompt, fetches and displays AWS
+ * documentation for the field, then re-presents the same prompt.
+ * File-private — not exported.
+ *
+ * @param field        - The resource field being prompted
+ * @param resolved     - Resolved policy/value config for the field
+ * @param resourceType - The AWS resource type (e.g. "AWS::S3::Bucket")
+ * @param tools        - LangChain tools array (passed through from node)
+ * @param llmClient    - Optional LLM client forwarded to renderDocHelp for synthesis
+ */
+async function promptWithHelp(
+  field: ResourceField,
+  resolved: ResolvedFieldConfig,
+  resourceType: string,
+  tools: StructuredTool[],
+  llmClient?: LlmPort,
+): Promise<unknown> {
+  while (true) {
+    const answer = await renderOptionPrompt(field, resolved);
+    if (answer === "?") {
+      await renderDocHelp(field.name, resourceType, tools, llmClient);
+      continue;
+    }
+    return answer;
+  }
+}
+
 export async function optionElicitorNode(
   state: AgentState,
   tools?: StructuredTool[],
+  llmClient?: LlmPort,
 ): Promise<Partial<AgentState>> {
   if (state.resourcePattern) {
     // Compound intent: elicitation skipped — pattern defaultOptions provide configuration
@@ -191,7 +226,13 @@ export async function optionElicitorNode(
       if (elicitedOptions[field.name] !== undefined) continue;
     }
 
-    const answer = await renderOptionPrompt(field, resolved);
+    const answer = await promptWithHelp(
+      field,
+      resolved,
+      state.resourceType,
+      tools ?? [],
+      llmClient,
+    );
     if (answer !== undefined && answer !== "") {
       elicitedOptions[field.name] = answer;
     }
@@ -216,7 +257,13 @@ export async function optionElicitorNode(
           continue;
         }
 
-        const answer = await renderOptionPrompt(field, resolved);
+        const answer = await promptWithHelp(
+          field,
+          resolved,
+          state.resourceType,
+          tools ?? [],
+          llmClient,
+        );
         if (answer !== undefined && answer !== "") {
           elicitedOptions[field.name] = answer;
         }
