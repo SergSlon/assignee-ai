@@ -42,7 +42,8 @@ export function routeStatusPoller(
     : GraphNode.RESULT_FORMATTER;
 }
 
-/** Routes after result_formatter: compound pending → plan_generator loop, else → END. */
+/** Routes after result_formatter: compound pending → plan_generator loop, else → END.
+ *  Plan mode shows only the first resource — no loop. */
 export function routeResultFormatter(
   state: AgentState,
 ): typeof GraphNode.PLAN_GENERATOR | typeof END {
@@ -51,7 +52,8 @@ export function routeResultFormatter(
     state.resourceQueue &&
     state.currentResourceIndex !== undefined &&
     state.executionStatus === ExecutionStatus.PENDING &&
-    state.currentResourceIndex < state.resourceQueue.length
+    state.currentResourceIndex < state.resourceQueue.length &&
+    state.executionMode !== ExecutionMode.PLAN
   ) {
     return GraphNode.PLAN_GENERATOR;
   }
