@@ -13,7 +13,13 @@
  * Handles { type: "text", text: "<json>" } content block wrappers.
  */
 export function unwrapMcpText(response: unknown): string {
-  const raw = response as Record<string, unknown>;
-  if (typeof raw?.["text"] === "string") return raw["text"];
+  if (
+    typeof response === "object" &&
+    response !== null &&
+    "text" in response &&
+    typeof (response as { text: unknown }).text === "string"
+  ) {
+    return (response as { text: string }).text;
+  }
   return JSON.stringify(response);
 }

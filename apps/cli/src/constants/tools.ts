@@ -17,6 +17,7 @@ export const ToolName = {
   // ── aws-documentation-mcp-server ───────────────────────────────────────────
   SEARCH_DOCUMENTATION: "search_documentation",
   READ_SECTIONS: "read_sections",
+  READ_DOCUMENTATION: "read_documentation",
 } as const;
 
 export type ToolNameType = (typeof ToolName)[keyof typeof ToolName];

@@ -20,7 +20,10 @@ import type {
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
+import { DOC_SECTION_TITLES } from "../constants/doc-sections.js";
 import { unwrapMcpText } from "./mcp.js";
+import { withTimeout } from "./timeout.js";
+import { extractFirstUrl } from "./mcp-types.js";
 
 /** Returns the region label for the plan box.
  *  Cross-regional inference profiles (us.*, eu.*, ap.*) are annotated. */
@@ -278,53 +281,74 @@ export function renderCompoundSuccess(
 
 const DOC_TIMEOUT_MS = 15000;
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([
-    promise,
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
-  ]);
-}
-
 /**
- * Extracts the first documentation URL from the search_documentation response.
- *
- * The aws-documentation-mcp-server returns a structured object with:
- *   response.structuredContent.search_results[0].url
- *
- * Falls back to scanning the stringified response for an https:// URL if
- * the structured shape is not present (future-proofs against schema changes).
+ * Fetches raw documentation text for a field from the AWS Documentation MCP Server.
+ * Returns null with a user-facing message on failure.
  */
-function extractFirstUrl(response: unknown): string | null {
-  // Preferred: structured content path
-  if (
-    response !== null &&
-    typeof response === "object" &&
-    "structuredContent" in response
-  ) {
-    const sc = (response as Record<string, unknown>)["structuredContent"];
-    if (
-      sc !== null &&
-      typeof sc === "object" &&
-      "search_results" in sc &&
-      Array.isArray((sc as Record<string, unknown>)["search_results"])
-    ) {
-      const results = (sc as Record<string, unknown[]>)["search_results"];
-      const first = results?.at(0);
-      if (
-        first !== undefined &&
-        typeof first === "object" &&
-        first !== null &&
-        "url" in first &&
-        typeof (first as Record<string, unknown>)["url"] === "string"
-      ) {
-        return (first as Record<string, string>)["url"] ?? null;
+async function fetchDocText(
+  fieldName: string,
+  resourceType: string,
+  tools: StructuredTool[],
+): Promise<string | null> {
+  const searchTool = tools.find(
+    (t) => t.name === ToolName.SEARCH_DOCUMENTATION,
+  );
+  const readTool = tools.find((t) => t.name === ToolName.READ_SECTIONS);
+
+  if (!searchTool || !readTool) {
+    clack.log.info(`${fieldName}: No documentation available.`);
+    return null;
+  }
+
+  const query = `${fieldName} ${resourceType}`;
+  const searchResult = await withTimeout(
+    searchTool.invoke({ search_phrase: query }),
+    DOC_TIMEOUT_MS,
+  );
+
+  if (!searchResult) {
+    clack.log.info(`${fieldName}: Documentation unavailable (timeout).`);
+    return null;
+  }
+
+  const topUrl = extractFirstUrl(searchResult);
+  if (!topUrl) {
+    clack.log.info(`${fieldName}: No documentation page found.`);
+    return null;
+  }
+
+  let sectionsResult: unknown;
+  try {
+    sectionsResult = await withTimeout(
+      readTool.invoke({ url: topUrl, section_titles: [...DOC_SECTION_TITLES] }),
+      DOC_TIMEOUT_MS,
+    );
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("No matching sections")) {
+      const fullReadTool = tools.find(
+        (t) => t.name === ToolName.READ_DOCUMENTATION,
+      );
+      if (fullReadTool) {
+        sectionsResult = await withTimeout(
+          fullReadTool.invoke({ url: topUrl }),
+          DOC_TIMEOUT_MS,
+        );
+      } else {
+        throw err;
       }
+    } else {
+      throw err;
     }
   }
 
-  // Fallback: scan stringified response for a URL (dots are valid URL chars)
-  const match = JSON.stringify(response).match(/https?:\/\/[^\s\)\"\\,;!]+/);
-  return match?.[0] ?? null;
+  if (!sectionsResult) {
+    clack.log.info(`${fieldName}: Documentation page unreachable (timeout).`);
+    return null;
+  }
+
+  return unwrapMcpText(sectionsResult)
+    .replace(/^>\s*\*\*Note\*\*:.*not found.*$/gim, "")
+    .trim();
 }
 
 /**
@@ -333,11 +357,6 @@ function extractFirstUrl(response: unknown): string | null {
  *
  * Called when the user types `?` at an option-elicitor prompt.
  * Falls back gracefully to a short notice if the server is unreachable or times out.
- *
- * @param fieldName    - The resource field name (e.g. "BucketName")
- * @param resourceType - The AWS resource type (e.g. "AWS::S3::Bucket")
- * @param tools        - LangChain tools array from the graph (injected, not imported)
- * @param llmClient    - Optional LLM client; when provided synthesizes a short hint instead of raw docs
  */
 export async function renderDocHelp(
   fieldName: string,
@@ -345,83 +364,18 @@ export async function renderDocHelp(
   tools: StructuredTool[],
   llmClient?: LlmPort,
 ): Promise<void> {
-  const searchTool = tools.find(
-    (t) => t.name === ToolName.SEARCH_DOCUMENTATION,
-  );
-  const readTool = tools.find((t) => t.name === ToolName.READ_SECTIONS);
-
-  if (!searchTool || !readTool) {
-    clack.log.info(`${fieldName}: No documentation available.`);
-    return;
-  }
-
   try {
-    const query = `${fieldName} ${resourceType}`;
-    const searchResult = await withTimeout(
-      searchTool.invoke({ search_phrase: query }),
-      DOC_TIMEOUT_MS,
-    );
+    const rawText = await fetchDocText(fieldName, resourceType, tools);
+    if (!rawText) return;
 
-    if (!searchResult) {
-      clack.log.info(`${fieldName}: Documentation unavailable (timeout).`);
-      return;
-    }
-
-    // search_documentation returns a structured response object.
-    // Try to extract the first URL from structuredContent.search_results,
-    // falling back to scanning the stringified response if needed.
-    const topUrl = extractFirstUrl(searchResult);
-    if (!topUrl) {
-      clack.log.info(`${fieldName}: No documentation page found.`);
-      return;
-    }
-
-    let sectionsResult: unknown;
-    try {
-      sectionsResult = await withTimeout(
-        readTool.invoke({
-          url: topUrl,
-          section_titles: ["Overview", "Description", "Properties", "Syntax"],
-        }),
-        DOC_TIMEOUT_MS,
-      );
-    } catch (err: any) {
-      if (err.message && err.message.includes("No matching sections")) {
-        const fullReadTool = tools.find((t) => t.name === "read_documentation");
-        if (fullReadTool) {
-          sectionsResult = await withTimeout(
-            fullReadTool.invoke({ url: topUrl }),
-            DOC_TIMEOUT_MS,
-          );
-        } else {
-          throw err;
-        }
-      } else {
-        throw err;
-      }
-    }
-
-    if (!sectionsResult) {
-      clack.log.info(`${fieldName}: Documentation page unreachable (timeout).`);
-      return;
-    }
-
-    // Strip the MCP server's 'sections not found' trailing note — noise for end users.
-    const rawText = unwrapMcpText(sectionsResult)
-      .replace(/^>\s*\*\*Note\*\*:.*not found.*$/gim, "")
-      .trim();
-
-    // When an LLM client is available, synthesize a concise field-focused hint.
-    // Falls back to raw doc text if synthesis fails or returns empty.
     const hint = llmClient
       ? await synthesizeDocHint(fieldName, resourceType, rawText, llmClient)
       : rawText;
 
     clack.note(hint, `📖 ${fieldName}`);
-  } catch (error: any) {
-    clack.log.info(
-      `${fieldName}: Documentation unavailable. (${error.message})`,
-    );
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    clack.log.info(`${fieldName}: Documentation unavailable. (${msg})`);
   }
 }
 

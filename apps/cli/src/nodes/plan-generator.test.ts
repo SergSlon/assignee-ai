@@ -107,6 +107,16 @@ describe("planGeneratorNode", () => {
     expect(result.errorMessage).toContain("ThrottlingException");
   });
 
+  it("returns FAILED when LLM returns empty text (null-check)", async () => {
+    const mock = new MockLlmAdapter(undefined, "");
+    const node = createPlanGeneratorNode({ llmClient: mock });
+
+    const result = await node(makeState());
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toContain("Plan generation failed");
+  });
+
   it("strips markdown fences from LLM response", async () => {
     const mock = new MockLlmAdapter(
       undefined,

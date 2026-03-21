@@ -34,6 +34,8 @@ import {
   fetchEc2InstancePrices,
   fetchRdsInstancePrices,
 } from "../utils/pricing-lookup.js";
+import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
+import { ResourceFieldName } from "../constants/resource-fields.js";
 import type { AgentState } from "../services/graph.js";
 
 /**
@@ -50,37 +52,35 @@ function resolveFieldConfigs(
     result[field.name] =
       pluginDefault !== undefined
         ? {
-            policy: "ask_if_not_set",
+            policy: FieldPolicy.ASK_IF_NOT_SET,
             value: pluginDefault,
-            source: "plugin_default",
+            source: FieldSource.PLUGIN_DEFAULT,
           }
-        : { policy: "always_ask", source: "plugin_default" };
+        : {
+            policy: FieldPolicy.ALWAYS_ASK,
+            source: FieldSource.PLUGIN_DEFAULT,
+          };
   }
   return result;
 }
 
-/**
- * Returns a copy of the field list with live prices injected into enum option labels.
- * Only enriches InstanceType (EC2) and DBInstanceClass (RDS) fields.
- * Falls back silently to original fields if pricing fetch fails or tools unavailable.
- */
-async function enrichWithLivePricing(
+/** Fetches live prices for a specific resource type and returns the field name + price map. */
+async function fetchPricesForResource(
   plugin: ResourcePlugin,
   tools: StructuredTool[],
-): Promise<ResourceField[]> {
+): Promise<{ fieldName: string; priceMap: Record<string, string> } | null> {
   const resourceType = plugin.resourceType;
-  let priceMap: Record<string, string> = {};
-  let enrichFieldName: string | null = null;
 
   if (resourceType === RESOURCE_TYPES.EC2_INSTANCE) {
-    enrichFieldName = "InstanceType";
     const field = plugin.commonFields.find(
-      (f) => f.name === "InstanceType" && f.question.type === "enum",
+      (f) =>
+        f.name === ResourceFieldName.INSTANCE_TYPE &&
+        f.question.type === "enum",
     );
     if (field?.question.type === "enum" && field.question.options) {
       const s = clack.spinner();
       s.start("Fetching live EC2 instance prices…");
-      priceMap = await fetchEc2InstancePrices(
+      const priceMap = await fetchEc2InstancePrices(
         tools,
         field.question.options.map((o) => o.value),
       );
@@ -89,13 +89,19 @@ async function enrichWithLivePricing(
           ? "Live prices loaded"
           : "Using estimated prices",
       );
+      return { fieldName: ResourceFieldName.INSTANCE_TYPE, priceMap };
     }
-  } else if (resourceType === RESOURCE_TYPES.RDS_DB_INSTANCE) {
-    enrichFieldName = "DBInstanceClass";
+  }
+
+  if (resourceType === RESOURCE_TYPES.RDS_DB_INSTANCE) {
     const instanceClassField = plugin.commonFields.find(
-      (f) => f.name === "DBInstanceClass" && f.question.type === "enum",
+      (f) =>
+        f.name === ResourceFieldName.DB_INSTANCE_CLASS &&
+        f.question.type === "enum",
     );
-    const engineField = plugin.commonFields.find((f) => f.name === "Engine");
+    const engineField = plugin.commonFields.find(
+      (f) => f.name === ResourceFieldName.ENGINE,
+    );
     const engine =
       engineField?.question.type === "enum"
         ? ((engineField.question.initialValue as string | undefined) ??
@@ -107,7 +113,7 @@ async function enrichWithLivePricing(
     ) {
       const s = clack.spinner();
       s.start("Fetching live RDS instance prices…");
-      priceMap = await fetchRdsInstancePrices(
+      const priceMap = await fetchRdsInstancePrices(
         tools,
         instanceClassField.question.options.map((o) => o.value),
         engine,
@@ -117,17 +123,22 @@ async function enrichWithLivePricing(
           ? "Live prices loaded"
           : "Using estimated prices",
       );
+      return { fieldName: ResourceFieldName.DB_INSTANCE_CLASS, priceMap };
     }
   }
 
-  if (!enrichFieldName || Object.keys(priceMap).length === 0) {
-    return plugin.commonFields;
-  }
+  return null;
+}
 
-  return plugin.commonFields.map((field) => {
-    if (field.name !== enrichFieldName || field.question.type !== "enum") {
+/** Injects live price labels into enum option fields. */
+function injectPriceLabels(
+  fields: ResourceField[],
+  fieldName: string,
+  priceMap: Record<string, string>,
+): ResourceField[] {
+  return fields.map((field) => {
+    if (field.name !== fieldName || field.question.type !== "enum")
       return field;
-    }
     return {
       ...field,
       question: {
@@ -135,7 +146,6 @@ async function enrichWithLivePricing(
         options: field.question.options?.map((opt) => {
           const livePrice = priceMap[opt.value];
           if (!livePrice) return opt;
-          // Replace the "~$X.XX/hr" suffix (or append if no " — " separator)
           const label = opt.label.includes(" — ")
             ? `${opt.label.split(" — ")[0]} — ${livePrice}`
             : `${opt.label} — ${livePrice}`;
@@ -144,6 +154,26 @@ async function enrichWithLivePricing(
       },
     };
   });
+}
+
+/**
+ * Returns a copy of the field list with live prices injected into enum option labels.
+ * Only enriches InstanceType (EC2) and DBInstanceClass (RDS) fields.
+ * Falls back silently to original fields if pricing fetch fails or tools unavailable.
+ */
+async function enrichWithLivePricing(
+  plugin: ResourcePlugin,
+  tools: StructuredTool[],
+): Promise<ResourceField[]> {
+  const result = await fetchPricesForResource(plugin, tools);
+  if (!result || Object.keys(result.priceMap).length === 0) {
+    return plugin.commonFields;
+  }
+  return injectPriceLabels(
+    plugin.commonFields,
+    result.fieldName,
+    result.priceMap,
+  );
 }
 
 /**
@@ -216,13 +246,13 @@ export async function optionElicitorNode(
       if (depValue !== field.question.showIf.value) continue;
     }
 
-    if (resolved.policy === "never_ask") {
+    if (resolved.policy === FieldPolicy.NEVER_ASK) {
       if (resolved.value !== undefined)
         elicitedOptions[field.name] = resolved.value;
       continue;
     }
 
-    if (resolved.policy === "ask_if_not_set") {
+    if (resolved.policy === FieldPolicy.ASK_IF_NOT_SET) {
       if (elicitedOptions[field.name] !== undefined) continue;
     }
 
@@ -251,7 +281,7 @@ export async function optionElicitorNode(
           if (depValue !== field.question.showIf.value) continue;
         }
 
-        if (resolved.policy === "never_ask") {
+        if (resolved.policy === FieldPolicy.NEVER_ASK) {
           if (resolved.value !== undefined)
             elicitedOptions[field.name] = resolved.value;
           continue;

@@ -1,37 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ExecutionStatus } from "@assignee/core";
-import type { CloudControlClient } from "@aws-sdk/client-cloudcontrol";
-
-// ── SDK mock ──────────────────────────────────────────────────────────────────
-// Use importOriginal to preserve real exception classes for instanceof checks.
-vi.mock("@aws-sdk/client-cloudcontrol", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@aws-sdk/client-cloudcontrol")>();
-  return {
-    ...actual,
-    CloudControlClient: vi.fn(),
-    GetResourceCommand: vi
-      .fn()
-      .mockImplementation((input: unknown) => ({ input })),
-    CreateResourceCommand: vi
-      .fn()
-      .mockImplementation((input: unknown) => ({ input })),
-  };
-});
-
 import { resourceProvisionerNode } from "./resource-provisioner.js";
 import {
-  GetResourceCommand,
-  CreateResourceCommand,
-  ResourceNotFoundException,
-  AlreadyExistsException,
-  ThrottlingException,
-} from "@aws-sdk/client-cloudcontrol";
+  ProvisioningErrorKind,
+  type ProvisioningPort,
+} from "../services/provisioning-port.js";
+
+// ── Mock provisioning port ──────────────────────────────────────────────────
+
+function createMockProvisioner(): ProvisioningPort & {
+  getResource: ReturnType<typeof vi.fn>;
+  createResource: ReturnType<typeof vi.fn>;
+  getRequestStatus: ReturnType<typeof vi.fn>;
+} {
+  return {
+    getResource: vi.fn(),
+    createResource: vi.fn(),
+    getRequestStatus: vi.fn(),
+  };
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const mockSend = vi.fn();
-const mockClient = { send: mockSend } as unknown as CloudControlClient;
+let mockProvisioner: ReturnType<typeof createMockProvisioner>;
 
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
@@ -55,24 +46,9 @@ function makeState(overrides: Record<string, unknown> = {}) {
   } as unknown as Parameters<typeof resourceProvisionerNode>[0];
 }
 
-/** Real ResourceNotFoundException instance for instanceof checks. */
-function makeResourceNotFoundError(): ResourceNotFoundException {
-  return new ResourceNotFoundException({
-    message: "Resource not found",
-    $metadata: {},
-  });
-}
-
-/** Default happy-path create response */
-const CREATE_RESPONSE = {
-  ProgressEvent: {
-    RequestToken: "0ff011d6-654f-4110-8a37-9754bd6aad59",
-    OperationStatus: "IN_PROGRESS",
-  },
-};
-
 beforeEach(() => {
   vi.clearAllMocks();
+  mockProvisioner = createMockProvisioner();
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -82,144 +58,167 @@ describe("resourceProvisionerNode", () => {
     it("returns empty when executionStatus is CANCELLED", async () => {
       const result = await resourceProvisionerNode(
         makeState({ executionStatus: ExecutionStatus.CANCELLED }),
-        mockClient,
+        mockProvisioner,
       );
       expect(result).toEqual({});
-      expect(mockSend).not.toHaveBeenCalled();
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
     });
 
     it("fails when desiredState is missing", async () => {
       const result = await resourceProvisionerNode(
         makeState({ desiredState: undefined }),
-        mockClient,
+        mockProvisioner,
       );
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/desiredState is missing/);
-      expect(mockSend).not.toHaveBeenCalled();
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
     });
 
     it("fails when resourceType is empty string (Story 9.1: isResourceType guard)", async () => {
       const result = await resourceProvisionerNode(
         makeState({ resourceType: "" }),
-        mockClient,
+        mockProvisioner,
       );
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(
         /unsupported or missing resourceType/,
       );
-      expect(mockSend).not.toHaveBeenCalled();
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
     });
 
     it("fails when resourceType is not a known ResourceType (Story 9.1: isResourceType guard)", async () => {
       const result = await resourceProvisionerNode(
         makeState({ resourceType: "AWS::Fake::Resource" }),
-        mockClient,
+        mockProvisioner,
       );
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(
         /unsupported or missing resourceType/,
       );
-      expect(mockSend).not.toHaveBeenCalled();
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
     });
   });
 
   describe("state guard (FR-15 Read-Before-Write)", () => {
-    it("aborts with Stale Plan error when GetResourceCommand succeeds (resource exists)", async () => {
-      // GetResourceCommand succeeds → resource already exists
-      mockSend.mockResolvedValueOnce({
-        ResourceDescription: { Identifier: "poc-smoke-test" },
-      });
+    it("aborts with Stale Plan error when getResource succeeds (resource exists)", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([null, {}]);
 
-      const result = await resourceProvisionerNode(makeState(), mockClient);
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/Stale Plan/);
       expect(result.errorMessage).toMatch(/poc-smoke-test/);
-      // CreateResourceCommand must NOT have been called
-      expect(mockSend).toHaveBeenCalledTimes(1);
-      expect(GetResourceCommand).toHaveBeenCalledWith({
-        TypeName: "AWS::S3::Bucket",
-        Identifier: "poc-smoke-test",
-      });
+      expect(mockProvisioner.getResource).toHaveBeenCalledWith(
+        "AWS::S3::Bucket",
+        "poc-smoke-test",
+      );
+      expect(mockProvisioner.createResource).not.toHaveBeenCalled();
     });
 
-    it("proceeds when GetResourceCommand throws ResourceNotFoundException (resource not found — safe to create)", async () => {
-      // First call: GetResourceCommand throws ResourceNotFoundException
-      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
-      // Second call: CreateResourceCommand succeeds
-      mockSend.mockResolvedValueOnce(CREATE_RESPONSE);
+    it("proceeds when getResource returns NOT_FOUND (resource not found — safe to create)", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "0ff011d6-654f-4110-8a37-9754bd6aad59" },
+      ]);
 
-      const result = await resourceProvisionerNode(makeState(), mockClient);
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("0ff011d6-654f-4110-8a37-9754bd6aad59");
-      expect(mockSend).toHaveBeenCalledTimes(2);
     });
 
-    it("fails when GetResourceCommand throws a non-ResourceNotFoundException error", async () => {
-      const accessDenied = Object.assign(new Error("Access denied"), {
-        name: "AccessDeniedException",
-      });
-      mockSend.mockRejectedValueOnce(accessDenied);
+    it("fails when getResource throws a non-NOT_FOUND error", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.UNKNOWN, message: "Access denied" },
+        null,
+      ]);
 
-      const result = await resourceProvisionerNode(makeState(), mockClient);
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/State Guard failed/);
-      // CreateResourceCommand must NOT have been called
-      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(mockProvisioner.createResource).not.toHaveBeenCalled();
     });
 
     it("skips state guard when identifier cannot be derived (no BucketName)", async () => {
-      // No BucketName → getPrimaryIdentifier returns undefined → skip state guard
-      mockSend.mockResolvedValueOnce(CREATE_RESPONSE);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "token-no-id" },
+      ]);
 
       const result = await resourceProvisionerNode(
         makeState({ desiredState: { Tags: [] } }),
-        mockClient,
+        mockProvisioner,
       );
 
-      // Only CreateResourceCommand was called (no GetResourceCommand)
-      expect(mockSend).toHaveBeenCalledTimes(1);
-      expect(CreateResourceCommand).toHaveBeenCalled();
-      expect(GetResourceCommand).not.toHaveBeenCalled();
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
+      expect(mockProvisioner.createResource).toHaveBeenCalled();
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     });
   });
 
   describe("happy path — CloudControl create workflow", () => {
-    it("calls GetResourceCommand then CreateResourceCommand and returns IN_PROGRESS with requestToken", async () => {
-      mockSend.mockRejectedValueOnce(makeResourceNotFoundError()); // state guard
-      mockSend.mockResolvedValueOnce(CREATE_RESPONSE); // create
+    it("calls getResource then createResource and returns IN_PROGRESS with requestToken", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "0ff011d6-654f-4110-8a37-9754bd6aad59" },
+      ]);
 
-      const result = await resourceProvisionerNode(makeState(), mockClient);
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("0ff011d6-654f-4110-8a37-9754bd6aad59");
       expect(result.startedAt).toBeDefined();
 
-      expect(GetResourceCommand).toHaveBeenCalledWith({
-        TypeName: "AWS::S3::Bucket",
-        Identifier: "poc-smoke-test",
-      });
-      expect(CreateResourceCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          TypeName: "AWS::S3::Bucket",
-          ClientToken: "run-prov-test-001",
-        }),
+      expect(mockProvisioner.getResource).toHaveBeenCalledWith(
+        "AWS::S3::Bucket",
+        "poc-smoke-test",
+      );
+      expect(mockProvisioner.createResource).toHaveBeenCalledWith(
+        "AWS::S3::Bucket",
+        expect.stringContaining("poc-smoke-test"),
+        "run-prov-test-001",
       );
     });
 
-    it("injects mandatory tags into CreateResourceCommand DesiredState", async () => {
-      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
-      mockSend.mockResolvedValueOnce(CREATE_RESPONSE);
+    it("injects mandatory tags into createResource desiredState", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "tag-test-token" },
+      ]);
 
-      await resourceProvisionerNode(makeState(), mockClient);
+      await resourceProvisionerNode(makeState(), mockProvisioner);
 
-      const createCall = vi.mocked(CreateResourceCommand).mock.calls[0]![0];
-      const desiredState = JSON.parse(
-        (createCall as { DesiredState: string }).DesiredState,
-      ) as Record<string, unknown>;
+      const desiredStateJson = mockProvisioner.createResource.mock
+        .calls[0]![1] as string;
+      const desiredState = JSON.parse(desiredStateJson) as Record<
+        string,
+        unknown
+      >;
 
       // NFR-14: mandatory traceability tags must be injected
       expect(desiredState).toHaveProperty("Tags");
@@ -235,13 +234,14 @@ describe("resourceProvisionerNode", () => {
     });
 
     it("works for AWS::SSM::Parameter with Name as identifier", async () => {
-      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
-      mockSend.mockResolvedValueOnce({
-        ProgressEvent: {
-          RequestToken: "ssm-req-token-abc",
-          OperationStatus: "IN_PROGRESS",
-        },
-      });
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "ssm-req-token-abc" },
+      ]);
 
       const result = await resourceProvisionerNode(
         makeState({
@@ -252,17 +252,19 @@ describe("resourceProvisionerNode", () => {
             Type: "String",
           },
         }),
-        mockClient,
+        mockProvisioner,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("ssm-req-token-abc");
 
       // NFR-14: SSM Parameter uses flat map Tags, not [{Key, Value}] array
-      const createCall = vi.mocked(CreateResourceCommand).mock.calls[0]![0];
-      const desiredState = JSON.parse(
-        (createCall as { DesiredState: string }).DesiredState,
-      ) as Record<string, unknown>;
+      const desiredStateJson = mockProvisioner.createResource.mock
+        .calls[0]![1] as string;
+      const desiredState = JSON.parse(desiredStateJson) as Record<
+        string,
+        unknown
+      >;
       expect(Array.isArray(desiredState["Tags"])).toBe(false);
       expect(
         (desiredState["Tags"] as Record<string, string>)["managed-by"],
@@ -270,13 +272,14 @@ describe("resourceProvisionerNode", () => {
     });
 
     it("works for AWS::IAM::Role with RoleName as identifier", async () => {
-      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
-      mockSend.mockResolvedValueOnce({
-        ProgressEvent: {
-          RequestToken: "iam-req-token-xyz",
-          OperationStatus: "IN_PROGRESS",
-        },
-      });
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "iam-req-token-xyz" },
+      ]);
 
       const result = await resourceProvisionerNode(
         makeState({
@@ -286,7 +289,7 @@ describe("resourceProvisionerNode", () => {
             AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] },
           },
         }),
-        mockClient,
+        mockProvisioner,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
@@ -295,64 +298,111 @@ describe("resourceProvisionerNode", () => {
   });
 
   describe("missing RequestToken guard", () => {
-    it("fails when CreateResourceCommand returns no RequestToken in ProgressEvent", async () => {
-      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
-      // Response with no ProgressEvent at all
-      mockSend.mockResolvedValueOnce({});
+    it("fails when createResource returns error with no RequestToken (no ProgressEvent)", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        {
+          kind: ProvisioningErrorKind.UNKNOWN,
+          message: "CreateResource returned no RequestToken",
+        },
+        null,
+      ]);
 
-      const result = await resourceProvisionerNode(makeState(), mockClient);
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/no RequestToken/);
     });
 
-    it("fails when CreateResourceCommand returns ProgressEvent with no RequestToken", async () => {
-      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
-      mockSend.mockResolvedValueOnce({ ProgressEvent: {} });
+    it("fails when createResource returns error with empty ProgressEvent", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        {
+          kind: ProvisioningErrorKind.UNKNOWN,
+          message: "CreateResource returned no RequestToken",
+        },
+        null,
+      ]);
 
-      const result = await resourceProvisionerNode(makeState(), mockClient);
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/no RequestToken/);
     });
   });
 
-  describe("error handling — typed SDK exceptions (Story 9.2: AC #3)", () => {
-    it("maps AlreadyExistsException to FAILED with 'already exists' message", async () => {
-      mockSend.mockRejectedValueOnce(makeResourceNotFoundError()); // state guard passes
-      mockSend.mockRejectedValueOnce(
-        new AlreadyExistsException({
+  describe("error handling — typed provisioning errors (Story 9.2: AC #3)", () => {
+    it("maps ALREADY_EXISTS to FAILED with 'already exists' message", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        {
+          kind: ProvisioningErrorKind.ALREADY_EXISTS,
           message: "already exists",
-          $metadata: {},
-        }),
-      );
+        },
+        null,
+      ]);
 
-      const result = await resourceProvisionerNode(makeState(), mockClient);
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/already exists/i);
       expect(result.errorMessage).toMatch(/CloudControl provisioning failed/);
     });
 
-    it("maps ThrottlingException to FAILED with 'throttled' message", async () => {
-      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
-      mockSend.mockRejectedValueOnce(
-        new ThrottlingException({ message: "Rate exceeded", $metadata: {} }),
-      );
+    it("maps THROTTLED to FAILED with 'throttled' message", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.THROTTLED, message: "Rate exceeded" },
+        null,
+      ]);
 
-      const result = await resourceProvisionerNode(makeState(), mockClient);
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/throttled/i);
     });
 
     it("falls back to generic message for unknown errors", async () => {
-      mockSend.mockRejectedValueOnce(makeResourceNotFoundError());
-      mockSend.mockRejectedValueOnce(
-        new Error("Unable to locate credentials."),
-      );
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        {
+          kind: ProvisioningErrorKind.UNKNOWN,
+          message: "Unable to locate credentials.",
+        },
+        null,
+      ]);
 
-      const result = await resourceProvisionerNode(makeState(), mockClient);
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/CloudControl provisioning failed/);

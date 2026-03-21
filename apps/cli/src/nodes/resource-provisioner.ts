@@ -2,7 +2,7 @@
  * resource_provisioner node — State Guard (FR-15 Read-Before-Write) then CloudControl create.
  * Runs in Phase 2 of apply, after the LangGraph HITL interrupt is resumed.
  *
- * Uses @aws-sdk/client-cloudcontrol directly (replaces deprecated ccapi-mcp-server).
+ * Depends on ProvisioningPort (DIP) — no direct AWS SDK imports.
  *
  * @see Story 7-6, Story 9-2
  */
@@ -12,29 +12,21 @@ import {
   getPrimaryIdentifier,
   SUPPORTED_TYPES_ARRAY,
   type ResourceType,
-  safeTry,
   ProvisioningError,
 } from "@assignee/core";
+import type { ProvisioningPort } from "../services/provisioning-port.js";
+import { ProvisioningErrorKind } from "../services/provisioning-port.js";
+import { injectMandatoryTags } from "../utils/tags.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
+import type { AgentState } from "../services/graph-state.js";
 
 function isResourceType(s: string): s is ResourceType {
   return (SUPPORTED_TYPES_ARRAY as readonly string[]).includes(s);
 }
-import {
-  type CloudControlClient,
-  CreateResourceCommand,
-  GetResourceCommand,
-  ResourceNotFoundException,
-  AlreadyExistsException,
-  ThrottlingException,
-  GeneralServiceException,
-} from "@aws-sdk/client-cloudcontrol";
-import { injectMandatoryTags } from "../utils/tags.js";
-import { log, LOG_ACTIONS } from "../utils/logger.js";
-import type { AgentState } from "../services/graph.js";
 
 export async function resourceProvisionerNode(
   state: AgentState,
-  client: CloudControlClient,
+  provisioner: ProvisioningPort,
 ): Promise<Partial<AgentState>> {
   if (state.executionStatus === ExecutionStatus.CANCELLED) return {};
 
@@ -58,17 +50,12 @@ export async function resourceProvisionerNode(
   );
 
   if (identifier) {
-    const [stateGuardErr] = await safeTry(
-      client.send(
-        new GetResourceCommand({
-          TypeName: state.resourceType,
-          Identifier: identifier,
-        }),
-      ),
+    const [stateGuardErr] = await provisioner.getResource(
+      state.resourceType,
+      identifier,
     );
 
     if (!stateGuardErr) {
-      // No error = resource already exists = stale plan
       log({
         ts: new Date().toISOString(),
         runId: state.runId,
@@ -86,19 +73,15 @@ export async function resourceProvisionerNode(
       };
     }
 
-    if (!(stateGuardErr instanceof ResourceNotFoundException)) {
-      const errMsg =
-        stateGuardErr instanceof Error
-          ? stateGuardErr.message
-          : String(stateGuardErr);
+    if (stateGuardErr.kind !== ProvisioningErrorKind.NOT_FOUND) {
       return {
         executionStatus: ExecutionStatus.FAILED,
-        errorMessage: `State Guard failed: ${errMsg}`,
-        error: new ProvisioningError(errMsg, "Unknown"),
+        errorMessage: `State Guard failed: ${stateGuardErr.message}`,
+        error: new ProvisioningError(stateGuardErr.message, "Unknown"),
       };
     }
 
-    // ResourceNotFoundException = safe to proceed
+    // NOT_FOUND = safe to proceed
     log({
       ts: new Date().toISOString(),
       runId: state.runId,
@@ -116,56 +99,36 @@ export async function resourceProvisionerNode(
   );
 
   // ── CloudControl async create ─────────────────────────────────────────────
-  const [createErr, createResult] = await safeTry(
-    client.send(
-      new CreateResourceCommand({
-        TypeName: state.resourceType,
-        DesiredState: JSON.stringify(propertiesWithTags),
-        ClientToken: state.runId,
-      }),
-    ),
+  const [createErr, createResult] = await provisioner.createResource(
+    state.resourceType,
+    JSON.stringify(propertiesWithTags),
+    state.runId,
   );
 
   if (createErr) {
-    if (createErr instanceof AlreadyExistsException) {
-      return {
-        executionStatus: ExecutionStatus.FAILED,
-        errorMessage: `CloudControl provisioning failed: Resource already exists. Re-run 'assignee plan' to refresh.`,
-        error: new ProvisioningError(
-          "Resource already exists",
-          "AlreadyExists",
-        ),
-      };
-    }
-    if (createErr instanceof ThrottlingException) {
-      return {
-        executionStatus: ExecutionStatus.FAILED,
-        errorMessage: `CloudControl provisioning failed: Request throttled by AWS. Please wait and retry.`,
-        error: new ProvisioningError("Request throttled by AWS", "Throttled"),
-      };
-    }
-    if (createErr instanceof GeneralServiceException) {
-      return {
-        executionStatus: ExecutionStatus.FAILED,
-        errorMessage: `CloudControl provisioning failed: ${createErr.message}`,
-        error: new ProvisioningError(createErr.message, "Unknown"),
-      };
-    }
-    const errMsg =
-      createErr instanceof Error ? createErr.message : String(createErr);
+    const errorCategory =
+      createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
+        ? "AlreadyExists"
+        : createErr.kind === ProvisioningErrorKind.THROTTLED
+          ? "Throttled"
+          : "Unknown";
+    const prefix =
+      createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
+        ? "Resource already exists. Re-run 'assignee plan' to refresh."
+        : createErr.kind === ProvisioningErrorKind.THROTTLED
+          ? "Request throttled by AWS. Please wait and retry."
+          : createErr.message;
     return {
       executionStatus: ExecutionStatus.FAILED,
-      errorMessage: `CloudControl provisioning failed: ${errMsg}`,
-      error: new ProvisioningError(errMsg, "Unknown"),
-    };
-  }
-
-  const requestToken = createResult.ProgressEvent?.RequestToken;
-  if (!requestToken) {
-    return {
-      executionStatus: ExecutionStatus.FAILED,
-      errorMessage:
-        "CloudControl provisioning failed: CreateResource returned no RequestToken.",
+      errorMessage: `CloudControl provisioning failed: ${prefix}`,
+      error: new ProvisioningError(
+        createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
+          ? "Resource already exists"
+          : createErr.kind === ProvisioningErrorKind.THROTTLED
+            ? "Request throttled by AWS"
+            : createErr.message,
+        errorCategory,
+      ),
     };
   }
 
@@ -174,11 +137,14 @@ export async function resourceProvisionerNode(
     runId: state.runId,
     level: "info",
     action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
-    extras: { requestToken, resourceType: state.resourceType },
+    extras: {
+      requestToken: createResult.requestToken,
+      resourceType: state.resourceType,
+    },
   });
 
   return {
-    requestToken,
+    requestToken: createResult.requestToken,
     executionStatus: ExecutionStatus.IN_PROGRESS,
     startedAt: Date.now(),
   };

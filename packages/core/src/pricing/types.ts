@@ -3,6 +3,29 @@
  * Strategies are pure data — no I/O, no LangChain dependencies.
  */
 
+/** A single price dimension within an on-demand pricing term. */
+export interface AwsPriceDimension {
+  beginRange?: string;
+  pricePerUnit?: { USD?: string };
+}
+
+/** A single on-demand pricing term containing one or more price dimensions. */
+export interface AwsPricingTerm {
+  priceDimensions?: Record<string, AwsPriceDimension>;
+}
+
+/** A single item from the AWS Pricing API response. */
+export interface AwsPricingItem {
+  terms?: {
+    OnDemand?: Record<string, AwsPricingTerm>;
+  };
+}
+
+/** Top-level shape returned by the `get_pricing` MCP server tool. */
+export interface AwsPricingResponse {
+  data?: AwsPricingItem[];
+}
+
 export interface McpPricingFilter {
   Field: string;
   Value: string;

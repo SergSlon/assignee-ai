@@ -30,4 +30,8 @@ export type {
   PricingEstimate,
   McpPricingConfig,
   McpPricingFilter,
+  AwsPricingResponse,
+  AwsPricingItem,
+  AwsPricingTerm,
+  AwsPriceDimension,
 } from "./types.js";
