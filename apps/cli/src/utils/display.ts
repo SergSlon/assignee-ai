@@ -520,7 +520,10 @@ export async function renderOptionPrompt(
         placeholder: question.placeholder ?? "",
         initialValue:
           typeof defaultValue === "string" ? defaultValue : undefined,
-        validate: question.validate,
+        validate: (value) => {
+          if (value === "?") return undefined; // Bypass validation for field help
+          return question.validate?.(value);
+        },
       });
       break;
     }
