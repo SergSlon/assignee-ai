@@ -1,6 +1,20 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin } from "../types.js";
 
+/** Lambda duration pricing rate ($/GB-second) — stable since 2014. Exported for test use. */
+export const LAMBDA_USD_PER_GB_SECOND = 0.0000166667;
+
+/**
+ * Computes the cost per 100ms for a given Lambda memory size.
+ * Formula: (memoryMb / 1024 GB) × $USD_PER_GB_SECOND/GB-s × 0.1s
+ */
+function memoryLabel(memoryMb: number): string {
+  const costPer100ms = (memoryMb / 1024) * LAMBDA_USD_PER_GB_SECOND * 0.1;
+  const decimals = Math.ceil(-Math.log10(costPer100ms)) + 1;
+  const mb = String(memoryMb).padStart(4);
+  return `${mb} MB — ~$${costPer100ms.toFixed(decimals)}/100ms`;
+}
+
 /**
  * ResourcePlugin for AWS::Lambda::Function.
  */
@@ -58,11 +72,11 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         type: "enum",
         label: "Memory (MB)",
         options: [
-          { value: "128", label: " 128 MB — ~$0.0000021/100ms" },
-          { value: "256", label: " 256 MB — ~$0.0000042/100ms" },
-          { value: "512", label: " 512 MB — ~$0.0000083/100ms" },
-          { value: "1024", label: "1024 MB — ~$0.0000167/100ms" },
-          { value: "2048", label: "2048 MB — ~$0.0000333/100ms" },
+          { value: "128", label: memoryLabel(128) },
+          { value: "256", label: memoryLabel(256) },
+          { value: "512", label: memoryLabel(512) },
+          { value: "1024", label: memoryLabel(1024) },
+          { value: "2048", label: memoryLabel(2048) },
         ],
         initialValue: "128",
       },

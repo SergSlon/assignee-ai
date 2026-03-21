@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { lambdaFunctionPlugin } from "./lambda-function.js";
+import {
+  lambdaFunctionPlugin,
+  LAMBDA_USD_PER_GB_SECOND,
+} from "./lambda-function.js";
 
 describe("lambdaFunctionPlugin", () => {
   it("has the correct resourceType", () => {
@@ -76,6 +79,27 @@ describe("lambdaFunctionPlugin", () => {
     expect(field).toBeDefined();
     expect(field?.question.type).toBe("enum");
     expect(field?.question.initialValue).toBe("128");
+  });
+
+  it("MemorySize labels show correct per-100ms cost (not 10x inflated)", () => {
+    const field = lambdaFunctionPlugin.commonFields.find(
+      (f) => f.name === "MemorySize",
+    );
+    const options = field?.question.options ?? [];
+
+    for (const opt of options) {
+      const mb = Number(opt.value);
+      const expected = (mb / 1024) * LAMBDA_USD_PER_GB_SECOND * 0.1;
+      // Extract the dollar amount from the label, e.g. "~$0.00000021/100ms"
+      const match = opt.label.match(/\$([0-9.]+)\/100ms/);
+      expect(
+        match,
+        `label for ${mb}MB missing price: ${opt.label}`,
+      ).toBeTruthy();
+      const actual = parseFloat(match![1]!);
+      // Allow rounding to the label's displayed precision (7 decimal places)
+      expect(actual).toBeCloseTo(expected, 7);
+    }
   });
 
   it("Tags field is multi type", () => {

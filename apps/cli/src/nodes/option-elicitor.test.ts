@@ -222,6 +222,12 @@ describe("optionElicitorNode — ? help flow (Story 7.5)", () => {
     const result = await optionElicitorNode(makeState());
 
     expect(vi.mocked(renderDocHelp)).toHaveBeenCalledOnce();
+    expect(vi.mocked(renderDocHelp)).toHaveBeenCalledWith(
+      "Name",
+      "AWS::Test::Resource",
+      [],
+      undefined,
+    );
     expect(result.elicitedOptions?.["Name"]).toBe("us-east-1");
   });
 
