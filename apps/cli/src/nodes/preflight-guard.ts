@@ -102,8 +102,24 @@ export async function preflightGuardNode(
     extras: { costEstimate, resourceType: state.resourceType },
   });
 
+  // Accumulate per-resource costs for compound provisioning display (Story 8.3)
+  let perResourceCosts: Record<string, string> | undefined;
+  if (
+    state.resourcePattern &&
+    state.resourceQueue &&
+    state.currentResourceIndex !== undefined &&
+    state.currentResourceIndex < state.resourceQueue.length
+  ) {
+    const currentResource = state.resourceQueue[state.currentResourceIndex]!; // bounds-checked above
+    perResourceCosts = {
+      ...(state.perResourceCosts ?? {}),
+      [currentResource.resourceId]: costEstimate,
+    };
+  }
+
   return {
     estimatedMonthlyCost: costEstimate,
     preflightPassed: true,
+    ...(perResourceCosts !== undefined ? { perResourceCosts } : {}),
   };
 }

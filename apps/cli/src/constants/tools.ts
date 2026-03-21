@@ -2,8 +2,9 @@
  * MCP tool name constants — single source of truth for all tool identifiers.
  *
  * Groups by MCP server:
- *   aws-iac-mcp-server      → schema fetching
- *   aws-pricing-mcp-server  → cost estimation
+ *   aws-iac-mcp-server            → schema fetching
+ *   aws-pricing-mcp-server        → cost estimation
+ *   aws-documentation-mcp-server  → contextual field help
  */
 
 export const ToolName = {
@@ -12,6 +13,10 @@ export const ToolName = {
 
   // ── aws-pricing-mcp-server ─────────────────────────────────────────────────
   GET_PRICING: "get_pricing",
+
+  // ── aws-documentation-mcp-server ───────────────────────────────────────────
+  SEARCH_DOCUMENTATION: "search_documentation",
+  READ_SECTIONS: "read_sections",
 } as const;
 
 export type ToolNameType = (typeof ToolName)[keyof typeof ToolName];
