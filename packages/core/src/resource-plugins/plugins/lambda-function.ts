@@ -44,10 +44,12 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         type: "string",
         label: "Execution role ARN",
         placeholder: "arn:aws:iam::123456789012:role/my-role",
-        validate: (value: unknown) =>
-          typeof value === "string" && value.startsWith("arn:aws:iam::")
+        validate: (value: unknown) => {
+          if (!value) return undefined; // Optional field
+          return typeof value === "string" && value.startsWith("arn:aws:iam::")
             ? undefined
-            : "Must be a valid IAM role ARN",
+            : "Must be a valid IAM role ARN";
+        },
       },
     },
     {
@@ -72,6 +74,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         label: "Timeout (seconds, 1-900)",
         placeholder: "30",
         validate: (value: unknown) => {
+          if (!value) return undefined; // Optional field
           const n = Number(value);
           return Number.isInteger(n) && n >= 1 && n <= 900
             ? undefined

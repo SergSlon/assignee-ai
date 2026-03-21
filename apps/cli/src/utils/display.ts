@@ -563,6 +563,12 @@ export async function renderOptionPrompt(
     if (result === "?") return "?";
     return result === "true";
   }
+
+  // Treat empty string inputs (e.g., just pressing Enter on optional fields) as skipped.
+  if (typeof result === "string" && result.trim() === "") {
+    return undefined;
+  }
+
   return result;
 }
 
