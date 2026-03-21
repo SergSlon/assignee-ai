@@ -29,13 +29,13 @@ describe("lambdaFunctionPlugin", () => {
     expect(values).toContain("python3.13");
   });
 
-  it("Role validate rejects non-ARN values", () => {
+  it("Role validate rejects non-ARN values and allows empty string", () => {
     const field = lambdaFunctionPlugin.commonFields.find(
       (f) => f.name === "Role",
     );
     expect(field?.question.validate).toBeDefined();
     expect(field?.question.validate?.("not-an-arn")).toBeDefined();
-    expect(field?.question.validate?.("")).toBeDefined();
+    expect(field?.question.validate?.("")).toBeUndefined();
   });
 
   it("Role validate accepts valid IAM role ARN", () => {
@@ -49,7 +49,7 @@ describe("lambdaFunctionPlugin", () => {
     ).toBeUndefined();
   });
 
-  it("Timeout validate rejects out-of-range values", () => {
+  it("Timeout validate rejects out-of-range values and allows empty string", () => {
     const field = lambdaFunctionPlugin.commonFields.find(
       (f) => f.name === "Timeout",
     );
@@ -57,6 +57,7 @@ describe("lambdaFunctionPlugin", () => {
     expect(field?.question.validate?.("0")).toBeDefined();
     expect(field?.question.validate?.("901")).toBeDefined();
     expect(field?.question.validate?.("abc")).toBeDefined();
+    expect(field?.question.validate?.("")).toBeUndefined();
   });
 
   it("Timeout validate accepts values within 1–900 range", () => {
