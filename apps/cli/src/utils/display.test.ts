@@ -702,6 +702,33 @@ describe("renderDocHelp", () => {
     );
   }, 12_000);
 
+  it("falls back to read_documentation when read_sections throws No matching sections", async () => {
+    const searchTool = makeTool("search_documentation", () =>
+      Promise.resolve(
+        "See https://docs.aws.amazon.com/AmazonS3/latest/userguide/BucketName.html for details",
+      ),
+    );
+    const readTool = makeTool("read_sections", () =>
+      Promise.reject(new Error("No matching sections were found")),
+    );
+    const readDocTool = makeTool("read_documentation", () =>
+      Promise.resolve("Full page content fallback"),
+    );
+
+    const { renderDocHelp } = await import("./display.js");
+    await renderDocHelp("BucketName", "AWS::S3::Bucket", [
+      searchTool,
+      readTool,
+      readDocTool,
+    ]);
+
+    expect(readDocTool.invoke).toHaveBeenCalledOnce();
+    expect(vi.mocked(note)).toHaveBeenCalledWith(
+      expect.stringContaining("Full page content fallback"),
+      expect.stringContaining("📖 BucketName"),
+    );
+  });
+
   // ── Story 7.9: LLM synthesis tests ──────────────────────────────────────────
 
   describe("with llmClient", () => {

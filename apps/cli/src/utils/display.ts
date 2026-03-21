@@ -376,15 +376,30 @@ export async function renderDocHelp(
       return;
     }
 
-    const sectionsResult = await withTimeout(
-      readTool.invoke({
-        url: topUrl,
-        // Use a broad set covering CloudFormation reference, API docs, and user guides.
-        // The MCP server returns only sections that exist and notes the rest.
-        section_titles: ["Overview", "Description", "Properties", "Syntax"],
-      }),
-      DOC_TIMEOUT_MS,
-    );
+    let sectionsResult: unknown;
+    try {
+      sectionsResult = await withTimeout(
+        readTool.invoke({
+          url: topUrl,
+          section_titles: ["Overview", "Description", "Properties", "Syntax"],
+        }),
+        DOC_TIMEOUT_MS,
+      );
+    } catch (err: any) {
+      if (err.message && err.message.includes("No matching sections")) {
+        const fullReadTool = tools.find((t) => t.name === "read_documentation");
+        if (fullReadTool) {
+          sectionsResult = await withTimeout(
+            fullReadTool.invoke({ url: topUrl }),
+            DOC_TIMEOUT_MS,
+          );
+        } else {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
+    }
 
     if (!sectionsResult) {
       clack.log.info(`${fieldName}: Documentation page unreachable (timeout).`);
@@ -403,8 +418,10 @@ export async function renderDocHelp(
       : rawText;
 
     clack.note(hint, `📖 ${fieldName}`);
-  } catch {
-    clack.log.info(`${fieldName}: Documentation unavailable.`);
+  } catch (error: any) {
+    clack.log.info(
+      `${fieldName}: Documentation unavailable. (${error.message})`,
+    );
   }
 }
 
