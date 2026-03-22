@@ -26,7 +26,7 @@ describe("createCloudControlClient", () => {
 
     expect(() =>
       createCloudControlClient({ ...VALID_CONFIG, accessKeyId: "" }),
-    ).toThrow("AWS_ACCESS_KEY_ID is missing or empty");
+    ).toThrow("ASSIGNEE_OPERATOR_ACCESS_KEY_ID is missing or empty");
   });
 
   it("throws ConfigurationError when secretAccessKey is empty", () => {
@@ -36,7 +36,7 @@ describe("createCloudControlClient", () => {
 
     expect(() =>
       createCloudControlClient({ ...VALID_CONFIG, secretAccessKey: "" }),
-    ).toThrow("AWS_SECRET_ACCESS_KEY is missing or empty");
+    ).toThrow("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY is missing or empty");
   });
 
   it("throws ConfigurationError when region is empty", () => {

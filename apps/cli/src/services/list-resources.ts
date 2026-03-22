@@ -18,6 +18,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { AWS_REGION } from "../config/constants.js";
+import { operatorCredentials } from "../config/operator-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import { fetchBillingData } from "./billing.js";
 
@@ -150,8 +151,17 @@ export async function fetchManagedResources(
   mcpTools?: StructuredTool[],
 ): Promise<ManagedResource[]> {
   const resolvedRegion = region ?? AWS_REGION;
+  const opCreds = operatorCredentials();
   const client = new ResourceGroupsTaggingAPIClient({
     region: resolvedRegion,
+    ...(opCreds.accessKeyId && opCreds.secretAccessKey
+      ? {
+          credentials: {
+            accessKeyId: opCreds.accessKeyId,
+            secretAccessKey: opCreds.secretAccessKey,
+          },
+        }
+      : {}),
   });
 
   const costMap = loadProvisionCosts();

@@ -153,11 +153,11 @@ gh secret set BEDROCK_LOGGING_VERIFIED --body "true"
 
 ## IAM Users Summary
 
-| User                | Purpose                                          | Policy                   | Trust Level | Env Vars             |
-| ------------------- | ------------------------------------------------ | ------------------------ | ----------- | -------------------- |
-| `assignee-operator` | Bedrock + CloudControl provisioning              | `AssigneeOperatorPolicy` | Highest     | `AWS_*`              |
-| `assignee-reader`   | Schema, pricing, billing (read-only)             | `AssigneeReaderPolicy`   | Read-only   | `ASSIGNEE_READER_*`  |
-| `assignee-auditor`  | IAM simulate, SecurityHub, GuardDuty (read-only) | `AssigneeAuditorPolicy`  | Read-only   | `ASSIGNEE_AUDITOR_*` |
+| User                | Purpose                                          | Policy                   | Trust Level | Env Vars              |
+| ------------------- | ------------------------------------------------ | ------------------------ | ----------- | --------------------- |
+| `assignee-operator` | Bedrock + CloudControl provisioning              | `AssigneeOperatorPolicy` | Highest     | `ASSIGNEE_OPERATOR_*` |
+| `assignee-reader`   | Schema, pricing, billing (read-only)             | `AssigneeReaderPolicy`   | Read-only   | `ASSIGNEE_READER_*`   |
+| `assignee-auditor`  | IAM simulate, SecurityHub, GuardDuty (read-only) | `AssigneeAuditorPolicy`  | Read-only   | `ASSIGNEE_AUDITOR_*`  |
 
 ## AWS Resources Created
 

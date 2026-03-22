@@ -43,8 +43,8 @@ const ROLES = [
     userName: IAM_USER_NAMES.operator,
     policyName: IAM_POLICY_NAMES.operator,
     policyFn: operatorPolicy,
-    envKeyId: "AWS_ACCESS_KEY_ID",
-    envSecretKey: "AWS_SECRET_ACCESS_KEY",
+    envKeyId: "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
+    envSecretKey: "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
     description: "CLI operator — Bedrock + CloudControl provisioning",
   },
   {

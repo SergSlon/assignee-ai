@@ -167,19 +167,21 @@ describe("ErrorMessageRegistry — AWS provisioning errors", () => {
 
 describe("ErrorMessageRegistry — configuration errors", () => {
   it("resolves missing access key", () => {
-    const err = new ConfigurationError("AWS_ACCESS_KEY_ID is missing or empty");
+    const err = new ConfigurationError(
+      "ASSIGNEE_OPERATOR_ACCESS_KEY_ID is missing or empty",
+    );
     const entry = defaultErrorMessageRegistry.resolve(err);
     expect(entry.code).toBe("MISSING_ACCESS_KEY");
-    expect(entry.howToFix).toContain("AWS_ACCESS_KEY_ID");
+    expect(entry.howToFix).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
   });
 
   it("resolves missing secret key", () => {
     const err = new ConfigurationError(
-      "AWS_SECRET_ACCESS_KEY is missing or empty",
+      "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY is missing or empty",
     );
     const entry = defaultErrorMessageRegistry.resolve(err);
     expect(entry.code).toBe("MISSING_SECRET_KEY");
-    expect(entry.howToFix).toContain("AWS_SECRET_ACCESS_KEY");
+    expect(entry.howToFix).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
   });
 
   it("resolves missing region", () => {

@@ -34,22 +34,16 @@ import { createCloudControlClient } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
 import { LiteLLMAdapter } from "./litellm-adapter.js";
+import { operatorCredentials } from "../config/operator-credentials.js";
 
 export function createGraph(tools: StructuredTool[] = []) {
-  const cloudClient = createCloudControlClient({
-    accessKeyId: process.env["AWS_ACCESS_KEY_ID"] ?? "",
-    secretAccessKey: process.env["AWS_SECRET_ACCESS_KEY"] ?? "",
-    region: process.env["AWS_REGION"] ?? "",
-  });
+  const opCreds = operatorCredentials();
+  const cloudClient = createCloudControlClient(opCreds);
   const provisioner = new CloudControlAdapter(cloudClient);
 
   let fallbackDispatcher: SDKFallbackDispatcher | undefined;
   try {
-    fallbackDispatcher = new SDKFallbackDispatcher({
-      accessKeyId: process.env["AWS_ACCESS_KEY_ID"] ?? "",
-      secretAccessKey: process.env["AWS_SECRET_ACCESS_KEY"] ?? "",
-      region: process.env["AWS_REGION"] ?? "",
-    });
+    fallbackDispatcher = new SDKFallbackDispatcher(opCreds);
   } catch {
     // SDK fallback unavailable (missing credentials) — graph works without it
   }

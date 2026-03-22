@@ -19,13 +19,13 @@ describe("mergeEnvFile", () => {
 
   it("creates a new .env file when none exists", () => {
     mergeEnvFile(envPath, {
-      AWS_ACCESS_KEY_ID: "AKIA_OP",
-      AWS_SECRET_ACCESS_KEY: "secret_op",
+      ASSIGNEE_OPERATOR_ACCESS_KEY_ID: "AKIA_OP",
+      ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY: "secret_op",
     });
 
     const content = fs.readFileSync(envPath, "utf-8");
-    expect(content).toContain("AWS_ACCESS_KEY_ID=AKIA_OP");
-    expect(content).toContain("AWS_SECRET_ACCESS_KEY=secret_op");
+    expect(content).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID=AKIA_OP");
+    expect(content).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY=secret_op");
   });
 
   it("merges into an existing .env file preserving other vars", () => {
@@ -35,29 +35,29 @@ describe("mergeEnvFile", () => {
     );
 
     mergeEnvFile(envPath, {
-      AWS_ACCESS_KEY_ID: "AKIA_NEW",
+      ASSIGNEE_OPERATOR_ACCESS_KEY_ID: "AKIA_NEW",
     });
 
     const content = fs.readFileSync(envPath, "utf-8");
     expect(content).toContain("BEDROCK_MODEL_ID=us.amazon.nova-lite-v1:0");
     expect(content).toContain("AWS_REGION=us-east-1");
-    expect(content).toContain("AWS_ACCESS_KEY_ID=AKIA_NEW");
+    expect(content).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID=AKIA_NEW");
   });
 
   it("updates existing keys in place", () => {
     fs.writeFileSync(
       envPath,
-      "AWS_ACCESS_KEY_ID=OLD_KEY\nAWS_SECRET_ACCESS_KEY=OLD_SECRET\n",
+      "ASSIGNEE_OPERATOR_ACCESS_KEY_ID=OLD_KEY\nASSIGNEE_OPERATOR_SECRET_ACCESS_KEY=OLD_SECRET\n",
     );
 
     mergeEnvFile(envPath, {
-      AWS_ACCESS_KEY_ID: "NEW_KEY",
-      AWS_SECRET_ACCESS_KEY: "NEW_SECRET",
+      ASSIGNEE_OPERATOR_ACCESS_KEY_ID: "NEW_KEY",
+      ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY: "NEW_SECRET",
     });
 
     const content = fs.readFileSync(envPath, "utf-8");
-    expect(content).toContain("AWS_ACCESS_KEY_ID=NEW_KEY");
-    expect(content).toContain("AWS_SECRET_ACCESS_KEY=NEW_SECRET");
+    expect(content).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID=NEW_KEY");
+    expect(content).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY=NEW_SECRET");
     expect(content).not.toContain("OLD_KEY");
     expect(content).not.toContain("OLD_SECRET");
   });
@@ -68,7 +68,7 @@ describe("mergeEnvFile", () => {
       "# This is a comment\n\nBEDROCK_MODEL_ID=test\n# Another comment\n",
     );
 
-    mergeEnvFile(envPath, { AWS_ACCESS_KEY_ID: "AKIA_NEW" });
+    mergeEnvFile(envPath, { ASSIGNEE_OPERATOR_ACCESS_KEY_ID: "AKIA_NEW" });
 
     const content = fs.readFileSync(envPath, "utf-8");
     expect(content).toContain("# This is a comment");
@@ -82,7 +82,7 @@ describe("mergeEnvFile", () => {
       "MCP_AWS_ACCESS_KEY_ID=OLD\nMCP_AWS_SECRET_ACCESS_KEY=OLD_SECRET\nBEDROCK_MODEL_ID=test\n",
     );
 
-    mergeEnvFile(envPath, { AWS_ACCESS_KEY_ID: "AKIA_NEW" });
+    mergeEnvFile(envPath, { ASSIGNEE_OPERATOR_ACCESS_KEY_ID: "AKIA_NEW" });
 
     const content = fs.readFileSync(envPath, "utf-8");
     expect(content).not.toContain("MCP_AWS_ACCESS_KEY_ID");
@@ -90,8 +90,24 @@ describe("mergeEnvFile", () => {
     expect(content).toContain("BEDROCK_MODEL_ID=test");
   });
 
+  it("removes deprecated AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY keys", () => {
+    fs.writeFileSync(
+      envPath,
+      "AWS_ACCESS_KEY_ID=OLD\nAWS_SECRET_ACCESS_KEY=OLD_SECRET\nBEDROCK_MODEL_ID=test\n",
+    );
+
+    mergeEnvFile(envPath, {
+      ASSIGNEE_OPERATOR_ACCESS_KEY_ID: "AKIA_NEW",
+    });
+
+    const content = fs.readFileSync(envPath, "utf-8");
+    expect(content).not.toContain("AWS_ACCESS_KEY_ID");
+    expect(content).not.toContain("AWS_SECRET_ACCESS_KEY");
+    expect(content).toContain("BEDROCK_MODEL_ID=test");
+  });
+
   it("ends the file with a newline", () => {
-    mergeEnvFile(envPath, { AWS_ACCESS_KEY_ID: "AKIA_TEST" });
+    mergeEnvFile(envPath, { ASSIGNEE_OPERATOR_ACCESS_KEY_ID: "AKIA_TEST" });
     const content = fs.readFileSync(envPath, "utf-8");
     expect(content.endsWith("\n")).toBe(true);
   });

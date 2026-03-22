@@ -32,23 +32,12 @@ import {
   resolveResource,
   createTaggingClient,
 } from "../services/resource-resolver.js";
-import type { AwsConfig } from "../services/cloudcontrol-client.js";
+import { operatorCredentials } from "../config/operator-credentials.js";
 
 /** Maximum number of polls before giving up on delete status. */
 const MAX_POLL_ATTEMPTS = 60;
 /** Delay between polls in milliseconds. */
 const POLL_INTERVAL_MS = 2000;
-
-/**
- * Reads AWS credentials from environment variables (AWS_* for assignee-operator).
- */
-function getAwsConfig(): AwsConfig {
-  return {
-    accessKeyId: process.env["AWS_ACCESS_KEY_ID"] ?? "",
-    secretAccessKey: process.env["AWS_SECRET_ACCESS_KEY"] ?? "",
-    region: process.env["AWS_REGION"] ?? "us-east-1",
-  };
-}
 
 /**
  * Renders a resource details box before confirmation.
@@ -149,14 +138,14 @@ export async function destroyAction(
   }
 
   // ── Initialize AWS clients ──────────────────────────────────────────
-  const awsConfig = getAwsConfig();
+  const awsConfig = operatorCredentials();
   let taggingClient;
   try {
     taggingClient = createTaggingClient(awsConfig);
   } catch {
     renderError(
       "AWS credentials are not configured.",
-      "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables, or run `assignee setup`.",
+      "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables, or run `assignee setup`.",
     );
     process.exit(ProcessExitCode.GENERIC_ERROR);
   }
