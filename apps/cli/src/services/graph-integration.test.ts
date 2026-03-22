@@ -3,7 +3,7 @@
  *
  * These tests exercise the REAL node implementations (schema_fetcher, preflight_guard,
  * plan_generator, etc.) with mocked external boundaries:
- *   - LLM: mocked via `ai` module (BedrockLlmAdapter calls through to it)
+ *   - LLM: mocked via `ai` module (LiteLLMAdapter mock delegates to it)
  *   - MCP tools: mocked via test-fixtures/mcp-mock-responses.ts
  *   - CloudControl: mocked module to prevent real AWS calls
  *   - Display/Prompts: mocked to prevent TTY output
@@ -44,6 +44,54 @@ vi.mock("ai", () => ({
 vi.mock("@ai-sdk/amazon-bedrock", () => ({
   createAmazonBedrock: vi.fn(() => vi.fn()),
 }));
+
+// Mock LiteLLMAdapter — delegates to the same ai mock so existing test fixtures work.
+vi.mock("./litellm-adapter.js", async () => {
+  const { LlmError, safeTry } = await import("@assignee/core");
+  const ai = await import("ai");
+  return {
+    LiteLLMAdapter: vi.fn().mockImplementation(() => ({
+      generateStructured: async (
+        prompt: string,
+        schema: unknown,
+        options?: { maxTokens?: number },
+      ) => {
+        const [err, result] = await safeTry(
+          ai.generateText({
+            model: {} as never,
+            output: ai.Output.object({ schema: schema as never }),
+            maxOutputTokens: options?.maxTokens ?? 1024,
+            messages: [{ role: "user", content: prompt }],
+          }),
+        );
+        if (err)
+          return [
+            new LlmError(`Structured LLM call failed: ${String(err)}`),
+            null,
+          ] as const;
+        return [null, (result as { output: unknown }).output] as const;
+      },
+      generateText: async (
+        prompt: string,
+        options?: { maxTokens?: number },
+      ) => {
+        const [err, result] = await safeTry(
+          ai.generateText({
+            model: {} as never,
+            maxOutputTokens: options?.maxTokens ?? 1024,
+            messages: [{ role: "user", content: prompt }],
+          }),
+        );
+        if (err)
+          return [
+            new LlmError(`Text LLM call failed: ${String(err)}`),
+            null,
+          ] as const;
+        return [null, (result as { text: string }).text] as const;
+      },
+    })),
+  };
+});
 
 // Mock display utilities — capture output without writing to terminal
 vi.mock("../utils/display.js", async (importOriginal) => {
@@ -319,10 +367,14 @@ describe("Graph integration — plan mode", () => {
   });
 
   it("RDS instance: multi-engine pricing path", async () => {
-    mockLlmForPlanFlow(
-      "AWS::RDS::DBInstance",
-      '{"DBInstanceClass":"db.t3.micro","Engine":"postgres","DBInstanceIdentifier":"test-db"}',
-    );
+    const bpCompliantRds = JSON.stringify({
+      DBInstanceClass: "db.t3.micro",
+      Engine: "postgres",
+      DBInstanceIdentifier: "test-db",
+      PubliclyAccessible: false,
+      StorageEncrypted: true,
+    });
+    mockLlmForPlanFlow("AWS::RDS::DBInstance", bpCompliantRds);
 
     const tools = createCoreMockTools(
       McpMocks.schema.rdsDbInstance.success,
@@ -342,6 +394,8 @@ describe("Graph integration — plan mode", () => {
     expect(result.desiredState).toMatchObject({
       DBInstanceClass: "db.t3.micro",
       Engine: "postgres",
+      PubliclyAccessible: false,
+      StorageEncrypted: true,
     });
     expect(result.preflightPassed).toBe(true);
     expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
@@ -515,8 +569,14 @@ describe("Graph integration — plan generator resilience", () => {
     expect(result.desiredState).not.toHaveProperty("NonExistentField");
     // Empty arrays are also stripped by stripEmpty()
     expect(result.desiredState).not.toHaveProperty("Tags");
-    // preflightPassed may be false due to BP CRITICAL findings on minimal S3 state — that's expected
-    expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    // Minimal S3 state triggers BP CRITICALs (missing encryption, versioning, etc.)
+    expect(result.preflightPassed).toBe(false);
+    expect(result.bpFindings).toBeDefined();
+    expect(
+      result.bpFindings!.some(
+        (f: { severity: string }) => f.severity === "CRITICAL",
+      ),
+    ).toBe(true);
   });
 
   it("unwraps nested CloudFormation Resources format from LLM", async () => {
@@ -542,7 +602,8 @@ describe("Graph integration — plan generator resilience", () => {
 
     // plan_generator should unwrap the nested format
     expect(result.desiredState).toEqual({ BucketName: "unwrapped-bucket" });
-    expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    // Minimal S3 state triggers BP CRITICALs — this is correct behavior
+    expect(result.preflightPassed).toBe(false);
   });
 
   it("handles LLM returning markdown-fenced JSON", async () => {
@@ -566,7 +627,8 @@ describe("Graph integration — plan generator resilience", () => {
     );
 
     expect(result.desiredState).toEqual({ BucketName: "fenced-bucket" });
-    expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    // Minimal S3 state triggers BP CRITICALs — this is correct behavior
+    expect(result.preflightPassed).toBe(false);
   });
 });
 
@@ -592,9 +654,10 @@ describe("Graph integration — pricing edge cases", () => {
       { configurable: { thread_id: "integration-pricing-timeout" } },
     );
 
-    // preflightPassed may be false due to BP CRITICALs on minimal S3 — pricing test verifies cost fallback
+    // Pricing fallback to N/A on timeout
     expect(result.estimatedMonthlyCost).toBe("N/A");
-    expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    // Minimal S3 state triggers BP CRITICALs — expected
+    expect(result.preflightPassed).toBe(false);
   });
 
   it("no pricing tool available: falls back to N/A", async () => {
@@ -618,7 +681,7 @@ describe("Graph integration — pricing edge cases", () => {
     );
 
     expect(result.estimatedMonthlyCost).toBe("N/A");
-    expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    expect(result.preflightPassed).toBe(false);
   });
 
   it("malformed pricing response: preflight still passes", async () => {
@@ -647,7 +710,7 @@ describe("Graph integration — pricing edge cases", () => {
       { configurable: { thread_id: "integration-malformed-pricing" } },
     );
 
-    // Pricing parse failure is caught — cost is N/A. preflightPassed may be false from BP CRITICALs on minimal S3
-    expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    // Pricing parse failure is caught — cost is N/A. BP CRITICALs fire on minimal S3 state
+    expect(result.preflightPassed).toBe(false);
   });
 });

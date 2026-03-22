@@ -60,6 +60,31 @@ describe("getField", () => {
     const obj = { a: null } as unknown as Record<string, unknown>;
     expect(getField(obj, "a.b")).toBeUndefined();
   });
+
+  it("traverses array index notation like BlockDeviceMappings[0].Ebs.Encrypted", () => {
+    const obj = {
+      BlockDeviceMappings: [{ Ebs: { Encrypted: true, VolumeType: "gp3" } }],
+    };
+    expect(getField(obj, "BlockDeviceMappings[0].Ebs.Encrypted")).toBe(true);
+    expect(getField(obj, "BlockDeviceMappings[0].Ebs.VolumeType")).toBe("gp3");
+  });
+
+  it("returns undefined for array index out of bounds", () => {
+    const obj = { items: [{ name: "first" }] };
+    expect(getField(obj, "items[5].name")).toBeUndefined();
+  });
+
+  it("returns undefined when field is not an array but index notation used", () => {
+    const obj = { items: "not-an-array" };
+    expect(getField(obj, "items[0]")).toBeUndefined();
+  });
+
+  it("handles nested array indices like Rules[0].Conditions[1].Value", () => {
+    const obj = {
+      Rules: [{ Conditions: [{ Value: "a" }, { Value: "b" }] }],
+    };
+    expect(getField(obj, "Rules[0].Conditions[1].Value")).toBe("b");
+  });
 });
 
 // ---------------------------------------------------------------------------

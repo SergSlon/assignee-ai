@@ -16,14 +16,20 @@ export interface EvalContext {
 }
 
 /**
- * Traverse a nested object using dot-notation path.
+ * Traverse a nested object using dot-notation path with array index support.
  * Returns `undefined` if any segment along the path is missing.
  *
+ * Supports:
+ * - Simple paths: "PublicAccessBlockConfiguration.BlockPublicAcls"
+ * - Array index paths: "BlockDeviceMappings[0].Ebs.Encrypted"
+ * - Nested arrays: "Rules[0].Conditions[1].Value"
+ *
  * @param obj - The object to traverse
- * @param path - Dot-notation path, e.g. "PublicAccessBlockConfiguration.BlockPublicAcls"
+ * @param path - Dot-notation path with optional array indices
  * @returns The value at the path, or undefined if not found
  */
 export function getField(obj: Record<string, unknown>, path: string): unknown {
+  // Split on dots, then handle array indices within each segment
   const segments = path.split(".");
   let current: unknown = obj;
 
@@ -35,7 +41,18 @@ export function getField(obj: Record<string, unknown>, path: string): unknown {
     ) {
       return undefined;
     }
-    current = (current as Record<string, unknown>)[segment];
+
+    // Check for array index notation: "fieldName[0]"
+    const arrayMatch = segment.match(/^([^[]+)\[(\d+)\]$/);
+    if (arrayMatch) {
+      const [, fieldName, indexStr] = arrayMatch;
+      const arr = (current as Record<string, unknown>)[fieldName!];
+      if (!Array.isArray(arr)) return undefined;
+      const index = parseInt(indexStr!, 10);
+      current = arr[index];
+    } else {
+      current = (current as Record<string, unknown>)[segment];
+    }
   }
 
   return current;

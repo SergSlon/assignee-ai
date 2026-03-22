@@ -335,6 +335,26 @@ const schemaResponses = {
             "The port number on which the database accepts connections.\n This setting doesn't apply to Aurora DB instances. The port number is managed by the cluster.\n Valid Values: ``1150-65535``\n Default:\n  +  RDS for Db2 - ``50000``\n  +  RDS for MariaDB - ``3306``\n  +  RDS for Microsoft SQL Server - ``1433``\n  +  RDS for MySQL - ``3306``\n  +  RDS for Oracle - ``1521``\n  +  RDS for PostgreSQL - ``5432``\n  \n Constraints:\n  +  For RDS for Microsoft SQL Server, the value can't be ``1234``, ``1434``, ``3260``, ``3343``, ``3389``, ``47001``, or ``49152-49156``.",
           pattern: "^\\d*$",
         },
+        PubliclyAccessible: {
+          type: "boolean",
+          description:
+            "Indicates whether the DB instance is publicly accessible.",
+        },
+        StorageEncrypted: {
+          type: "boolean",
+          description:
+            "A value that indicates whether the DB instance is encrypted.",
+        },
+        DeletionProtection: {
+          type: "boolean",
+          description:
+            "A value that indicates whether the DB instance has deletion protection enabled.",
+        },
+        BackupRetentionPeriod: {
+          type: "integer",
+          description:
+            "The number of days for which automated backups are retained.",
+        },
       },
       required: [],
       readOnlyProperties: [
