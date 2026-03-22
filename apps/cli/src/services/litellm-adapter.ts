@@ -113,6 +113,8 @@ async function createLanguageModel(
       const { createAmazonBedrock } = await import("@ai-sdk/amazon-bedrock");
       const bedrock = createAmazonBedrock({
         region: process.env["AWS_REGION"] ?? "us-east-1",
+        accessKeyId: process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"],
+        secretAccessKey: process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"],
       });
       return bedrock(parsed.modelId);
     }
