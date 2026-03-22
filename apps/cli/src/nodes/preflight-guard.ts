@@ -23,6 +23,7 @@ import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { unwrapMcpText } from "../utils/mcp.js";
 import { withTimeout } from "../utils/timeout.js";
 import { getFreeTierNote, loadAccountCreatedDate } from "../utils/free-tier.js";
+import { getRequiredIamActions } from "../utils/iam-actions.js";
 import type { AgentState } from "../services/graph.js";
 
 const PRICING_TIMEOUT_MS = 3000;
@@ -186,6 +187,54 @@ export async function preflightGuardNode(
         practiceIds: criticalBPFindings.map((f) => f.practiceId),
       },
     });
+  }
+
+  // Story 19.1: IAM permission pre-check (non-blocking on MCP failure)
+  let iamCheckPassed = true;
+  let missingActions: string[] = [];
+
+  if (tools && state.resourceType) {
+    const iamTool = tools.find(
+      (t) => t.name === ToolName.SIMULATE_PRINCIPAL_POLICY,
+    );
+    if (iamTool) {
+      try {
+        const requiredActions = getRequiredIamActions(state.resourceType);
+        const result = await withTimeout(
+          iamTool.invoke({
+            action_names: requiredActions,
+            resource_arns: ["*"],
+          }),
+          PRICING_TIMEOUT_MS, // reuse 3s timeout
+        );
+        if (result !== null) {
+          const simResult = JSON.parse(unwrapMcpText(result));
+          // simulate_principal_policy returns EvaluationResults with EvalDecision
+          missingActions = (simResult.EvaluationResults ?? [])
+            .filter((r: any) => r.EvalDecision !== "allowed")
+            .map((r: any) => r.EvalActionName as string);
+          if (missingActions.length > 0) {
+            iamCheckPassed = false;
+          }
+        }
+      } catch {
+        // Graceful degradation: IAM check skipped
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "warn",
+          action: LOG_ACTIONS.IAM_CHECK_SKIPPED,
+          extras: { resourceType: state.resourceType },
+        });
+      }
+    }
+  }
+
+  if (!iamCheckPassed) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: `Insufficient IAM permissions. Missing actions: ${missingActions.join(", ")}. Ask your admin to grant these permissions or use a different profile.`,
+    };
   }
 
   return {

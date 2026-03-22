@@ -6,7 +6,13 @@
  * @see Story 9.5 — LLM client decoupling (M3)
  */
 
-import { ExecutionStatus, defaultPluginRegistry } from "@assignee/core";
+import {
+  ExecutionStatus,
+  defaultPluginRegistry,
+  type ProvisionRecord,
+  type FailureRecord,
+} from "@assignee/core";
+import { defaultMemoryService } from "../services/memory.js";
 import type { LlmPort } from "@assignee/core";
 import { SCHEMA_EXCERPT_MAX_CHARS } from "../config/constants.js";
 import { CloudFormationKey } from "../constants/cfn-keys.js";
@@ -56,6 +62,25 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         ...patternDefaults,
         ...(state.elicitedOptions ?? {}),
       };
+      // Story 19.5: Read pattern memory for compound mode hints
+      const compoundMemoryHints: string[] = [];
+      try {
+        const patterns = await defaultMemoryService.readPatterns();
+        const previousPattern = patterns.find(
+          (p) => p.pattern === state.resourcePattern!.patternId,
+        );
+        if (previousPattern && previousPattern.count > 0) {
+          const dateStr = new Date(
+            previousPattern.lastUsed,
+          ).toLocaleDateString();
+          compoundMemoryHints.push(
+            `Using your usual ${previousPattern.pattern} defaults (used ${previousPattern.count} times, last ${dateStr})`,
+          );
+        }
+      } catch {
+        // Graceful degradation — pattern memory read failure is non-blocking
+      }
+
       log({
         ts: new Date().toISOString(),
         runId: state.runId,
@@ -64,7 +89,13 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         durationMs: 0,
         extras: { resourceType: currentResource.resourceType, compound: true },
       });
-      return { desiredState, resourceType: currentResource.resourceType };
+      return {
+        desiredState,
+        resourceType: currentResource.resourceType,
+        ...(compoundMemoryHints.length > 0
+          ? { memoryHints: compoundMemoryHints }
+          : {}),
+      };
     }
 
     if (state.executionStatus !== ExecutionStatus.PENDING) return {};
@@ -106,6 +137,47 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     const resourceHints =
       defaultPluginRegistry.get(state.resourceType ?? "")?.configHints ?? [];
 
+    // Story 19.3: Read provision history for cost hints
+    let provisionHintLine = "";
+    const memoryHints: string[] = [];
+    try {
+      const provisions = await defaultMemoryService.readProvisions();
+      const previousForType = provisions
+        .filter((p: ProvisionRecord) => p.resourceType === state.resourceType)
+        .sort((a: ProvisionRecord, b: ProvisionRecord) =>
+          b.timestamp.localeCompare(a.timestamp),
+        );
+      if (previousForType.length > 0) {
+        const prev = previousForType[0]!;
+        const dateStr = new Date(prev.timestamp).toLocaleDateString();
+        provisionHintLine = `Previous provision of this type: ${prev.estimatedMonthlyCost}/month (run ${prev.runId}, ${dateStr}).`;
+        memoryHints.push(provisionHintLine);
+      }
+    } catch {
+      // Graceful degradation — memory read failure is non-blocking
+    }
+
+    // Story 19.4: Read failure history for warning hints
+    try {
+      const failures = await defaultMemoryService.readFailures();
+      const previousFailuresForType = failures
+        .filter((f: FailureRecord) => f.resourceType === state.resourceType)
+        .sort((a: FailureRecord, b: FailureRecord) =>
+          b.timestamp.localeCompare(a.timestamp),
+        );
+      const latestFailure = previousFailuresForType[0];
+      if (latestFailure) {
+        const fixSuffix = latestFailure.suggestedFix
+          ? ` Fix: ${latestFailure.suggestedFix}`
+          : "";
+        memoryHints.push(
+          `\u26A0 Previous error with ${latestFailure.resourceType}: ${latestFailure.errorMessage}.${fixSuffix}`,
+        );
+      }
+    } catch {
+      // Graceful degradation — memory read failure is non-blocking
+    }
+
     const prompt = [
       `You are an AWS resource configuration expert. Generate the resource properties JSON for a "${state.resourceType}" resource.`,
       `User intent: <user_intent>${(state.userIntent ?? "").replace(/<\/user_intent>/gi, "")}</user_intent>`,
@@ -128,6 +200,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
             ...resourceHints.map((h, i) => `R${i + 1}. ${h}`),
           ]
         : []),
+      ...(provisionHintLine ? ["", `COST CONTEXT: ${provisionHintLine}`] : []),
       "",
       'CORRECT format example: { "BucketName": "my-bucket" }',
       'WRONG format example: { "MyBucket": { "Type": "AWS::S3::Bucket", "Properties": { "BucketName": "my-bucket" } } }',
@@ -216,6 +289,9 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       extras: { resourceType: state.resourceType },
     });
 
-    return { desiredState };
+    return {
+      desiredState,
+      ...(memoryHints.length > 0 ? { memoryHints } : {}),
+    };
   };
 }

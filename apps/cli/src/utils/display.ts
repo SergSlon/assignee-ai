@@ -20,6 +20,7 @@ import type {
   GuardrailFinding,
 } from "@assignee/core";
 import type { BPFinding } from "@assignee/best-practices";
+import type { SecurityFinding } from "../services/graph-state.js";
 import type { FreeTierNote } from "./free-tier.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
@@ -48,6 +49,7 @@ export interface RenderableState {
   guardrailFindings?: GuardrailFinding[];
   freeTierNote?: FreeTierNote;
   bpFindings?: BPFinding[];
+  memoryHints?: string[];
 }
 
 // ── Spinner (AC2) ────────────────────────────────────────────────────────────
@@ -100,12 +102,16 @@ export function renderPlanBox(state: RenderableState): void {
   // Story 7.8: Free tier note line (optional, non-blocking)
   const freeTierLine = formatFreeTierNote(state.freeTierNote);
 
+  // Story 19.3: Memory hints from provision history (optional)
+  const memoryHintLines = formatMemoryHints(state.memoryHints);
+
   const content = [
     `Resource Type:   ${state.resourceType}`,
     `Region:          ${regionLabel()}`,
     `Config:          ${JSON.stringify(state.desiredState, null, 2)}`,
     `Estimated Cost:  ${state.estimatedMonthlyCost ?? "N/A"}`,
     ...(freeTierLine ? [freeTierLine] : []),
+    ...(memoryHintLines ? [memoryHintLines] : []),
     guardrailLine,
     bpLine,
     `Run ID:          ${state.runId}`,
@@ -177,6 +183,19 @@ function formatFreeTierNote(note: FreeTierNote | undefined): string | null {
   if (!note) return null;
   const icon = note.type === "always_free" ? "\u2713" : "\u2139";
   return `Free Tier:       ${icon} ${note.message}`;
+}
+
+/**
+ * Formats memory hints for display in the plan box (Story 19.3).
+ * Returns null if no hints are present.
+ */
+function formatMemoryHints(hints: string[] | undefined): string | null {
+  if (!hints || hints.length === 0) return null;
+  const isTTY = process.stdout.isTTY;
+  const lines = hints.map((h) =>
+    isTTY ? chalk.dim(`Cost History:    ${h}`) : `Cost History:    ${h}`,
+  );
+  return lines.join("\n");
 }
 
 /** Severity-to-icon mapping for best practice findings (Story 12.3). */
@@ -437,6 +456,33 @@ export function renderCompoundSuccess(
   }
 }
 
+// ── Security warnings (Story 19.2) ────────────────────────────────────────────
+
+/**
+ * Renders post-provision security warnings to stdout.
+ * Called after successful provisioning when CRITICAL or HIGH findings are detected.
+ * Non-blocking — purely informational output.
+ *
+ * @see Story 19.2, AC #2
+ */
+export function renderSecurityWarnings(
+  resourceArn: string,
+  findings: SecurityFinding[],
+): void {
+  if (findings.length === 0) return;
+
+  console.log(`\n\u26A0 Security findings for ${resourceArn}:`);
+  for (const finding of findings) {
+    const icon =
+      finding.severity === "CRITICAL" ? "\uD83D\uDD34" : "\uD83D\uDFE1";
+    console.log(`  ${icon} [${finding.severity}] ${finding.title}`);
+    if (finding.recommendation) {
+      console.log(`     \u2192 ${finding.recommendation}`);
+    }
+  }
+  console.log(""); // trailing newline
+}
+
 // ── Documentation help (Story 7.5) ───────────────────────────────────────────
 
 const DOC_TIMEOUT_MS = 15000;
@@ -570,6 +616,70 @@ Rules:
   const [err, hint] = await llmClient.generateText(prompt);
   if (err || !hint) return rawDocText;
   return hint.trim();
+}
+
+// ── Resource list display (Story 18.4) ────────────────────────────────────────
+
+import type { ManagedResource } from "../services/list-resources.js";
+
+/**
+ * Renders a table of managed resources.
+ * TTY mode: chalk-colored headers with padded columns in a boxen frame.
+ * Non-TTY mode: tab-separated values with a header row (no ANSI).
+ *
+ * @see Story 18.4, AC #2
+ */
+export function renderResourceTable(resources: ManagedResource[]): void {
+  if (process.stdout.isTTY) {
+    const header = chalk.bold(
+      "Type".padEnd(30) +
+        "ARN".padEnd(60) +
+        "Region".padEnd(15) +
+        "Created".padEnd(20) +
+        "Est. Cost",
+    );
+    const rows = resources.map(
+      (r) =>
+        r.resourceType.padEnd(30) +
+        r.arn.padEnd(60) +
+        r.region.padEnd(15) +
+        r.createdDate.padEnd(20) +
+        r.estimatedMonthlyCost,
+    );
+
+    const content = [header, chalk.dim("-".repeat(130)), ...rows].join("\n");
+
+    process.stdout.write(
+      boxen(content, {
+        title: "Managed Resources",
+        titleAlignment: "center",
+        borderColor: "cyan",
+        padding: 1,
+      }) + "\n",
+    );
+  } else {
+    const header = "Type\tARN\tRegion\tCreated\tEst. Cost";
+    const rows = resources.map(
+      (r) =>
+        `${r.resourceType}\t${r.arn}\t${r.region}\t${r.createdDate}\t${r.estimatedMonthlyCost}`,
+    );
+    process.stdout.write([header, ...rows].join("\n") + "\n");
+  }
+}
+
+/**
+ * Renders the empty-list message with a hint to run `assignee apply`.
+ *
+ * @see Story 18.4, AC #5
+ */
+export function renderEmptyList(): void {
+  const message =
+    "No resources managed by assignee.ai found. Run `assignee apply` to provision your first resource.";
+  if (process.stdout.isTTY) {
+    process.stdout.write(chalk.yellow(message) + "\n");
+  } else {
+    process.stdout.write(message + "\n");
+  }
 }
 
 // ── Option elicitation prompts (Story 7.3) ───────────────────────────────────

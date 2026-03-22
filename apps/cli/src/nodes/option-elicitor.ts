@@ -19,6 +19,7 @@ import {
   defaultPluginRegistry,
   MissingRequiredFieldsError,
 } from "@assignee/core";
+import { defaultMemoryService } from "../services/memory.js";
 import type {
   ResourceField,
   ResourcePlugin,
@@ -367,13 +368,65 @@ export async function optionElicitorNode(
   // Enrich advanced fields with contextual metadata too
   const advancedFields = enrichFieldLabels(bpHintedAdvanced);
 
+  // Story 19.5: Read pattern memory for previous option defaults
+  let previousOptions: Record<string, unknown> = {};
+  if (state.resourcePattern) {
+    try {
+      const patterns = await defaultMemoryService.readPatterns();
+      const match = patterns.find(
+        (p) => p.pattern === state.resourcePattern!.patternId,
+      );
+      if (match) {
+        previousOptions = match.optionsSelected;
+      }
+    } catch {
+      // Graceful degradation — pattern memory read failure is non-blocking
+    }
+  }
+
   const resolvedCommon = resolveFieldConfigs(commonFields);
   const resolvedAdvanced = resolveFieldConfigs(advancedFields);
 
+  // Story 19.5: Apply pattern memory defaults — higher priority than plugin defaults,
+  // lower priority than org policy locks. User can still override during prompt.
+  const patternHintedFields = new Set<string>();
+  for (const [fieldName, resolved] of Object.entries(resolvedCommon)) {
+    if (
+      fieldName in previousOptions &&
+      resolved.source === FieldSource.PLUGIN_DEFAULT
+    ) {
+      resolved.value = previousOptions[fieldName];
+      patternHintedFields.add(fieldName);
+    }
+  }
+  for (const [fieldName, resolved] of Object.entries(resolvedAdvanced)) {
+    if (
+      fieldName in previousOptions &&
+      resolved.source === FieldSource.PLUGIN_DEFAULT
+    ) {
+      resolved.value = previousOptions[fieldName];
+      patternHintedFields.add(fieldName);
+    }
+  }
+
   const elicitedOptions: Record<string, unknown> = {};
 
+  // Story 19.5: Append "(from previous use)" hint to pattern-memory-defaulted fields
+  const applyPatternHint = (field: ResourceField): ResourceField => {
+    if (!patternHintedFields.has(field.name)) return field;
+    const patternHint = "(from previous use)";
+    const existingHint = field.question.hint;
+    return {
+      ...field,
+      question: {
+        ...field.question,
+        hint: existingHint ? `${existingHint}\n${patternHint}` : patternHint,
+      },
+    };
+  };
+
   // ── Common tier ──────────────────────────────────────────────────────────────
-  for (const field of commonFields) {
+  for (const field of commonFields.map(applyPatternHint)) {
     const resolved = resolvedCommon[field.name];
     if (!resolved) continue;
 
@@ -409,7 +462,7 @@ export async function optionElicitorNode(
   if (advancedFields.length > 0) {
     const showAdvanced = await renderAdvancedConfirm();
     if (showAdvanced) {
-      for (const field of advancedFields) {
+      for (const field of advancedFields.map(applyPatternHint)) {
         const resolved = resolvedAdvanced[field.name];
         if (!resolved) continue;
 

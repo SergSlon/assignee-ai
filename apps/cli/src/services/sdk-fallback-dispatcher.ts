@@ -11,8 +11,13 @@
 import {
   LambdaClient,
   CreateEventSourceMappingCommand,
+  DeleteEventSourceMappingCommand,
 } from "@aws-sdk/client-lambda";
-import { SNSClient, SubscribeCommand } from "@aws-sdk/client-sns";
+import {
+  SNSClient,
+  SubscribeCommand,
+  UnsubscribeCommand,
+} from "@aws-sdk/client-sns";
 import {
   CCAPI_FALLBACK_TYPES,
   CCAPI_SDK_ROUTABLE_TYPES,
@@ -115,6 +120,55 @@ export class SDKFallbackDispatcher {
       redirect: true,
       message: `${resourceType} is not supported by CCAPI. Use ${alternative} instead.`,
     };
+  }
+
+  /**
+   * Returns true if the given resource type can be deleted by direct SDK calls.
+   * Mirrors canHandle() for delete operations.
+   * @param resourceType - CloudFormation resource type string
+   */
+  canDelete(resourceType: string): boolean {
+    return (CCAPI_SDK_ROUTABLE_TYPES as readonly string[]).includes(
+      resourceType,
+    );
+  }
+
+  /**
+   * Deletes a Lambda EventSourceMapping via the Lambda SDK.
+   *
+   * @param identifier - The event source mapping UUID
+   * @returns Error-first tuple with void result on success
+   */
+  async deleteEventSourceMapping(
+    identifier: string,
+  ): Promise<FallbackResult<{ success: true }>> {
+    try {
+      await this.lambdaClient.send(
+        new DeleteEventSourceMappingCommand({ UUID: identifier }),
+      );
+      return [null, { success: true }];
+    } catch (err) {
+      return [classifySdkError(err), null];
+    }
+  }
+
+  /**
+   * Unsubscribes an SNS Subscription via the SNS SDK.
+   *
+   * @param subscriptionArn - The subscription ARN to remove
+   * @returns Error-first tuple with void result on success
+   */
+  async unsubscribe(
+    subscriptionArn: string,
+  ): Promise<FallbackResult<{ success: true }>> {
+    try {
+      await this.snsClient.send(
+        new UnsubscribeCommand({ SubscriptionArn: subscriptionArn }),
+      );
+      return [null, { success: true }];
+    } catch (err) {
+      return [classifySdkError(err), null];
+    }
   }
 
   /**

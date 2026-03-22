@@ -6,6 +6,7 @@
 import {
   type CloudControlClient,
   CreateResourceCommand,
+  DeleteResourceCommand,
   GetResourceCommand,
   GetResourceRequestStatusCommand,
   ResourceNotFoundException,
@@ -18,6 +19,7 @@ import {
   type ProvisioningPort,
   type ProvisioningPortError,
   type CreateResourceResult,
+  type DeleteResourceResult,
   type GetRequestStatusResult,
 } from "./provisioning-port.js";
 
@@ -74,6 +76,33 @@ export class CloudControlAdapter implements ProvisioningPort {
           {
             kind: ProvisioningErrorKind.UNKNOWN,
             message: "CreateResource returned no RequestToken",
+          },
+          null,
+        ];
+      }
+      return [null, { requestToken }];
+    } catch (err) {
+      return [classifyError(err), null];
+    }
+  }
+
+  async deleteResource(
+    typeName: string,
+    identifier: string,
+  ): Promise<[ProvisioningPortError, null] | [null, DeleteResourceResult]> {
+    try {
+      const result = await this.client.send(
+        new DeleteResourceCommand({
+          TypeName: typeName,
+          Identifier: identifier,
+        }),
+      );
+      const requestToken = result.ProgressEvent?.RequestToken;
+      if (!requestToken) {
+        return [
+          {
+            kind: ProvisioningErrorKind.UNKNOWN,
+            message: "DeleteResource returned no RequestToken",
           },
           null,
         ];

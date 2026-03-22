@@ -1,7 +1,17 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ExecutionStatus, MockLlmAdapter } from "@assignee/core";
 import { createPlanGeneratorNode } from "./plan-generator.js";
 import type { AgentState } from "../services/graph.js";
+
+// Mock memory service (Story 19.3, 19.4)
+vi.mock("../services/memory.js", () => ({
+  defaultMemoryService: {
+    readProvisions: vi.fn().mockResolvedValue([]),
+    readFailures: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+import { defaultMemoryService } from "../services/memory.js";
 
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
@@ -224,6 +234,275 @@ describe("planGeneratorNode", () => {
       }),
     );
 
+    expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
+  });
+});
+
+// ── Story 19.3: Memory hints from provision history ─────────────────────────
+
+describe("planGeneratorNode — Story 19.3 memory hints", () => {
+  it("includes memory hint when previous provision exists for same resource type", async () => {
+    vi.mocked(defaultMemoryService.readProvisions).mockResolvedValueOnce([
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440000",
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "arn:aws:s3:::old-bucket",
+        region: "us-east-1",
+        desiredStateHash: "abc123",
+        estimatedMonthlyCost: "$0.50",
+        timestamp: "2026-03-20T10:00:00.000Z",
+      },
+    ]);
+
+    let capturedPrompt = "";
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const originalGenerateText = mock.generateText.bind(mock);
+    mock.generateText = async (prompt: string) => {
+      capturedPrompt = prompt;
+      return originalGenerateText(prompt);
+    };
+
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(makeState());
+
+    expect(capturedPrompt).toContain("COST CONTEXT");
+    expect(capturedPrompt).toContain("$0.50/month");
+    expect(result.memoryHints).toBeDefined();
+    expect(result.memoryHints).toHaveLength(1);
+    expect(result.memoryHints![0]).toContain("$0.50/month");
+  });
+
+  it("does not include memory hint when no previous provision exists", async () => {
+    vi.mocked(defaultMemoryService.readProvisions).mockResolvedValueOnce([]);
+
+    let capturedPrompt = "";
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const originalGenerateText = mock.generateText.bind(mock);
+    mock.generateText = async (prompt: string) => {
+      capturedPrompt = prompt;
+      return originalGenerateText(prompt);
+    };
+
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(makeState());
+
+    expect(capturedPrompt).not.toContain("COST CONTEXT");
+    expect(result.memoryHints).toBeUndefined();
+  });
+
+  it("uses most recent provision when multiple exist for same type", async () => {
+    vi.mocked(defaultMemoryService.readProvisions).mockResolvedValueOnce([
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440001",
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "arn:aws:s3:::old-bucket",
+        region: "us-east-1",
+        desiredStateHash: "abc123",
+        estimatedMonthlyCost: "$0.50",
+        timestamp: "2026-03-18T10:00:00.000Z",
+      },
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440002",
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "arn:aws:s3:::newer-bucket",
+        region: "us-east-1",
+        desiredStateHash: "def456",
+        estimatedMonthlyCost: "$1.00",
+        timestamp: "2026-03-20T10:00:00.000Z",
+      },
+    ]);
+
+    let capturedPrompt = "";
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const originalGenerateText = mock.generateText.bind(mock);
+    mock.generateText = async (prompt: string) => {
+      capturedPrompt = prompt;
+      return originalGenerateText(prompt);
+    };
+
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(makeState());
+
+    // Should use the most recent ($1.00), not the older ($0.50)
+    expect(capturedPrompt).toContain("$1.00/month");
+    expect(result.memoryHints![0]).toContain("$1.00/month");
+  });
+
+  it("gracefully handles memory read failure without affecting plan generation", async () => {
+    vi.mocked(defaultMemoryService.readProvisions).mockRejectedValueOnce(
+      new Error("Disk error"),
+    );
+
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+
+    const result = await node(makeState());
+
+    // Plan should still generate successfully
+    expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
+    expect(result.memoryHints).toBeUndefined();
+  });
+});
+
+// ── Story 19.4: Failure history warnings ─────────────────────────────────────
+
+describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
+  it("includes warning hint when previous failure exists for same resource type", async () => {
+    vi.mocked(defaultMemoryService.readFailures).mockResolvedValueOnce([
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440000",
+        resourceType: "AWS::S3::Bucket",
+        errorCode: "AlreadyExists",
+        errorMessage: "Bucket already exists",
+        suggestedFix: "Try a different name.",
+        timestamp: "2026-03-20T10:00:00.000Z",
+      },
+    ]);
+
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(makeState());
+
+    expect(result.memoryHints).toBeDefined();
+    const failureHint = result.memoryHints!.find((h: string) =>
+      h.includes("Previous error"),
+    );
+    expect(failureHint).toBeDefined();
+    expect(failureHint).toContain("AWS::S3::Bucket");
+    expect(failureHint).toContain("Bucket already exists");
+    expect(failureHint).toContain("Fix: Try a different name.");
+  });
+
+  it("does not include warning when no previous failure exists", async () => {
+    vi.mocked(defaultMemoryService.readFailures).mockResolvedValueOnce([]);
+
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(makeState());
+
+    // memoryHints may be undefined (no provision hints either)
+    const failureHints = (result.memoryHints ?? []).filter((h: string) =>
+      h.includes("Previous error"),
+    );
+    expect(failureHints).toHaveLength(0);
+  });
+
+  it("surfaces only the latest failure when multiple exist for same type", async () => {
+    vi.mocked(defaultMemoryService.readFailures).mockResolvedValueOnce([
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440001",
+        resourceType: "AWS::S3::Bucket",
+        errorCode: "AlreadyExists",
+        errorMessage: "Old error",
+        suggestedFix: "Old fix.",
+        timestamp: "2026-03-18T10:00:00.000Z",
+      },
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440002",
+        resourceType: "AWS::S3::Bucket",
+        errorCode: "Throttled",
+        errorMessage: "Recent throttle error",
+        suggestedFix: "Wait and retry.",
+        timestamp: "2026-03-20T10:00:00.000Z",
+      },
+    ]);
+
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(makeState());
+
+    const failureHint = result.memoryHints!.find((h: string) =>
+      h.includes("Previous error"),
+    );
+    expect(failureHint).toContain("Recent throttle error");
+    expect(failureHint).not.toContain("Old error");
+  });
+
+  it("omits Fix suffix when suggestedFix is empty", async () => {
+    vi.mocked(defaultMemoryService.readFailures).mockResolvedValueOnce([
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440000",
+        resourceType: "AWS::S3::Bucket",
+        errorCode: "Unknown",
+        errorMessage: "Unknown error occurred",
+        suggestedFix: "",
+        timestamp: "2026-03-20T10:00:00.000Z",
+      },
+    ]);
+
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(makeState());
+
+    const failureHint = result.memoryHints!.find((h: string) =>
+      h.includes("Previous error"),
+    );
+    expect(failureHint).not.toContain("Fix:");
+  });
+
+  it("does not include failure warning for different resource type", async () => {
+    vi.mocked(defaultMemoryService.readFailures).mockResolvedValueOnce([
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440000",
+        resourceType: "AWS::Lambda::Function",
+        errorCode: "AlreadyExists",
+        errorMessage: "Function already exists",
+        suggestedFix: "Try a different name.",
+        timestamp: "2026-03-20T10:00:00.000Z",
+      },
+    ]);
+
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    // State has resourceType "AWS::S3::Bucket" (default)
+    const result = await node(makeState());
+
+    const failureHints = (result.memoryHints ?? []).filter((h: string) =>
+      h.includes("Previous error"),
+    );
+    expect(failureHints).toHaveLength(0);
+  });
+
+  it("gracefully handles failure read error without affecting plan generation", async () => {
+    vi.mocked(defaultMemoryService.readFailures).mockRejectedValueOnce(
+      new Error("Disk error"),
+    );
+
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(makeState());
+
+    // Plan should still generate successfully
     expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
   });
 });

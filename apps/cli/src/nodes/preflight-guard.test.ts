@@ -6,6 +6,7 @@ import {
   LambdaPricing,
   PricingUnit,
 } from "../constants/pricing.js";
+import { ToolName } from "../constants/tools.js";
 import type { StructuredTool } from "@langchain/core/tools";
 
 function makeState(overrides: Record<string, unknown> = {}) {
@@ -253,5 +254,139 @@ describe("preflightGuardNode", () => {
     expect(pricingTool.invoke).toHaveBeenCalledWith(
       expect.objectContaining({ service_code: "AmazonS3" }),
     );
+  });
+});
+
+// ── Story 19.1: IAM permission pre-check ──────────────────────────────────────
+
+function makeMockIamTool(
+  evaluationResults: Array<{
+    EvalActionName: string;
+    EvalDecision: string;
+  }>,
+): StructuredTool {
+  return {
+    name: ToolName.SIMULATE_PRINCIPAL_POLICY,
+    invoke: vi.fn().mockResolvedValue({
+      type: "text",
+      text: JSON.stringify({ EvaluationResults: evaluationResults }),
+    }),
+  } as unknown as StructuredTool;
+}
+
+describe("preflightGuardNode — IAM permission check (Story 19.1)", () => {
+  it("passes when all actions are allowed — provisioning continues", async () => {
+    const iamTool = makeMockIamTool([
+      {
+        EvalActionName: "cloudcontrol:CreateResource",
+        EvalDecision: "allowed",
+      },
+      { EvalActionName: "cloudcontrol:GetResource", EvalDecision: "allowed" },
+      {
+        EvalActionName: "cloudcontrol:UpdateResource",
+        EvalDecision: "allowed",
+      },
+      {
+        EvalActionName: "cloudcontrol:DeleteResource",
+        EvalDecision: "allowed",
+      },
+      { EvalActionName: "s3:CreateBucket", EvalDecision: "allowed" },
+      { EvalActionName: "s3:PutBucketTagging", EvalDecision: "allowed" },
+    ]);
+
+    const result = await preflightGuardNode(makeState(), [iamTool]);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.errorMessage).toBeUndefined();
+    expect(result.preflightPassed).toBe(true);
+  });
+
+  it("fails with specific missing actions — returns FAILED with descriptive message", async () => {
+    const iamTool = makeMockIamTool([
+      {
+        EvalActionName: "cloudcontrol:CreateResource",
+        EvalDecision: "allowed",
+      },
+      { EvalActionName: "cloudcontrol:GetResource", EvalDecision: "allowed" },
+      {
+        EvalActionName: "cloudcontrol:UpdateResource",
+        EvalDecision: "allowed",
+      },
+      {
+        EvalActionName: "cloudcontrol:DeleteResource",
+        EvalDecision: "allowed",
+      },
+      { EvalActionName: "s3:CreateBucket", EvalDecision: "implicitDeny" },
+      { EvalActionName: "s3:PutBucketTagging", EvalDecision: "implicitDeny" },
+    ]);
+
+    const result = await preflightGuardNode(makeState(), [iamTool]);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toContain("Insufficient IAM permissions");
+    expect(result.errorMessage).toContain("s3:CreateBucket");
+    expect(result.errorMessage).toContain("s3:PutBucketTagging");
+    expect(result.errorMessage).toContain(
+      "Ask your admin to grant these permissions or use a different profile",
+    );
+  });
+
+  it("skips check when IAM tool is not found — provisioning continues", async () => {
+    const otherTool = {
+      name: "some_other_tool",
+      invoke: vi.fn(),
+    } as unknown as StructuredTool;
+
+    const result = await preflightGuardNode(makeState(), [otherTool]);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.errorMessage).toBeUndefined();
+    expect(result.preflightPassed).toBe(true);
+  });
+
+  it("skips check gracefully when IAM tool invocation throws — provisioning continues", async () => {
+    const iamTool = {
+      name: ToolName.SIMULATE_PRINCIPAL_POLICY,
+      invoke: vi.fn().mockRejectedValue(new Error("MCP server crashed")),
+    } as unknown as StructuredTool;
+
+    const result = await preflightGuardNode(makeState(), [iamTool]);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.errorMessage).toBeUndefined();
+    expect(result.preflightPassed).toBe(true);
+  });
+
+  it("skips check gracefully when IAM tool invocation times out", async () => {
+    const iamTool = {
+      name: ToolName.SIMULATE_PRINCIPAL_POLICY,
+      invoke: vi.fn().mockReturnValue(new Promise(() => {})), // never resolves
+    } as unknown as StructuredTool;
+
+    // withTimeout returns null on timeout, so IAM check is silently skipped
+    const result = await preflightGuardNode(makeState(), [iamTool]);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.preflightPassed).toBe(true);
+  });
+
+  it("skips check when no tools are provided", async () => {
+    const result = await preflightGuardNode(makeState());
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.preflightPassed).toBe(true);
+  });
+
+  it("skips check when resourceType is empty", async () => {
+    const iamTool = makeMockIamTool([]);
+
+    const result = await preflightGuardNode(makeState({ resourceType: "" }), [
+      iamTool,
+    ]);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.preflightPassed).toBe(true);
+    // IAM tool should not have been called
+    expect(iamTool.invoke).not.toHaveBeenCalled();
   });
 });

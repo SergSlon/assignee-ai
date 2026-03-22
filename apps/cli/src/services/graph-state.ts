@@ -22,6 +22,14 @@ import {
 import type { BPFinding } from "@assignee/best-practices";
 import type { FreeTierNote } from "../utils/free-tier.js";
 
+/** Post-provision security finding from Well-Architected Security MCP server (Story 19.2). */
+export interface SecurityFinding {
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFORMATIONAL";
+  title: string;
+  recommendation: string;
+  service: string;
+}
+
 export const graphAnnotation = Annotation.Root({
   userIntent: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),
   runId: Annotation<string>({
@@ -121,6 +129,16 @@ export const graphAnnotation = Annotation.Root({
   autoApprove: Annotation<boolean>({
     reducer: (_, b) => b,
     default: () => false,
+  }),
+  // Story 19.2: post-provision security findings (display-only, non-blocking)
+  securityFindings: Annotation<SecurityFinding[] | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
+  // Story 19.3: memory hints from provision history (display-only, non-blocking)
+  memoryHints: Annotation<string[] | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
   }),
 });
 

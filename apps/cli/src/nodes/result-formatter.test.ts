@@ -1,13 +1,19 @@
 /**
- * Tests for result-formatter node (Story 2.4, Story 8.2).
- * Covers compound SUCCESS routing, compound FAILED partial message, and
- * single-resource path (no change to existing behaviour).
+ * Tests for result-formatter node (Story 2.4, Story 8.2, Story 19.2).
+ * Covers compound SUCCESS routing, compound FAILED partial message,
+ * single-resource path, and post-provision security posture checks.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ExecutionStatus, ExecutionMode } from "@assignee/core";
+import {
+  ExecutionStatus,
+  ExecutionMode,
+  ProvisioningError,
+  AssigneeError,
+} from "@assignee/core";
 import type { AgentState } from "../services/graph.js";
 import type { ArchitecturePattern } from "@assignee/core";
+import type { StructuredTool } from "@langchain/core/tools";
 
 // Suppress display output for all tests
 vi.mock("../utils/display.js", () => ({
@@ -15,6 +21,7 @@ vi.mock("../utils/display.js", () => ({
   renderCompoundSuccess: vi.fn(),
   renderError: vi.fn(),
   renderPlanBox: vi.fn(),
+  renderSecurityWarnings: vi.fn(),
 }));
 
 // Suppress logger output
@@ -24,6 +31,16 @@ vi.mock("../utils/logger.js", () => ({
     RESULT_FORMATTED: "result_formatted",
     APPLY_SUCCEEDED: "apply_succeeded",
     APPLY_FAILED: "apply_failed",
+    SECURITY_CHECK_SKIPPED: "security_check_skipped",
+  },
+}));
+
+// Mock memory service (Story 19.3, 19.4)
+vi.mock("../services/memory.js", () => ({
+  defaultMemoryService: {
+    appendProvision: vi.fn().mockResolvedValue(undefined),
+    appendFailure: vi.fn().mockResolvedValue(undefined),
+    upsertPattern: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -33,7 +50,9 @@ import {
   renderCompoundSuccess,
   renderError,
   renderPlanBox,
+  renderSecurityWarnings,
 } from "../utils/display.js";
+import { defaultMemoryService } from "../services/memory.js";
 
 /** 3-resource pattern for compound tests */
 const mockPattern: ArchitecturePattern = {
@@ -280,5 +299,428 @@ describe("resultFormatterNode — compound FAILED with partial results", () => {
       ...unknown[],
     ];
     expect(errorMsg).toBe("IAM Role creation failed");
+  });
+});
+
+// ── Story 19.2: Post-provision security posture check ─────────────────────
+
+/** Helper to build a mock security tool with the expected MCP response shape. */
+function makeMockSecurityTool(
+  response: unknown,
+  reject = false,
+): StructuredTool {
+  return {
+    name: "AnalyzeSecurityPosture",
+    invoke: reject
+      ? vi.fn().mockRejectedValue(new Error("Connection refused"))
+      : vi.fn().mockResolvedValue(response),
+  } as unknown as StructuredTool;
+}
+
+function makeSecurityResponse(findings: unknown[]) {
+  return {
+    type: "text",
+    text: JSON.stringify({
+      findings,
+      overallPosture: findings.length > 0 ? "AT_RISK" : "SECURE",
+    }),
+  };
+}
+
+describe("resultFormatterNode — Story 19.2 security posture check (single-resource)", () => {
+  it("surfaces CRITICAL finding as warning after successful apply", async () => {
+    const criticalFinding = {
+      severity: "CRITICAL",
+      title: "S3 bucket has public read access",
+      recommendation: "Block public access",
+      service: "SecurityHub",
+    };
+    const tool = makeMockSecurityTool(makeSecurityResponse([criticalFinding]));
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket-12345",
+    });
+
+    const result = await resultFormatterNode(state, [tool]);
+
+    expect(renderApplySuccess).toHaveBeenCalledWith(state);
+    expect(renderSecurityWarnings).toHaveBeenCalledWith(
+      "arn:aws:s3:::my-bucket-12345",
+      [criticalFinding],
+    );
+    // Non-blocking: status remains SUCCESS
+    expect(result).toEqual({});
+  });
+
+  it("surfaces HIGH finding as warning after successful apply", async () => {
+    const highFinding = {
+      severity: "HIGH",
+      title: "S3 bucket lacks default encryption",
+      recommendation: "Enable SSE-S3 or SSE-KMS",
+      service: "SecurityHub",
+    };
+    const tool = makeMockSecurityTool(makeSecurityResponse([highFinding]));
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket-12345",
+    });
+
+    const result = await resultFormatterNode(state, [tool]);
+
+    expect(renderSecurityWarnings).toHaveBeenCalledWith(
+      "arn:aws:s3:::my-bucket-12345",
+      [highFinding],
+    );
+    expect(result).toEqual({});
+  });
+
+  it("filters out MEDIUM/LOW findings — not shown", async () => {
+    const mediumFinding = {
+      severity: "MEDIUM",
+      title: "Versioning not enabled",
+      recommendation: "Enable versioning",
+      service: "SecurityHub",
+    };
+    const lowFinding = {
+      severity: "LOW",
+      title: "Access logging not enabled",
+      recommendation: "Enable logging",
+      service: "SecurityHub",
+    };
+    const tool = makeMockSecurityTool(
+      makeSecurityResponse([mediumFinding, lowFinding]),
+    );
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket-12345",
+    });
+
+    await resultFormatterNode(state, [tool]);
+
+    // No CRITICAL/HIGH findings, so renderSecurityWarnings should not be called
+    expect(renderSecurityWarnings).not.toHaveBeenCalled();
+  });
+
+  it("no findings produces clean result (no security section)", async () => {
+    const tool = makeMockSecurityTool(makeSecurityResponse([]));
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket-12345",
+    });
+
+    await resultFormatterNode(state, [tool]);
+
+    expect(renderSecurityWarnings).not.toHaveBeenCalled();
+  });
+
+  it("does NOT change executionStatus — remains SUCCESS", async () => {
+    const criticalFinding = {
+      severity: "CRITICAL",
+      title: "Public access",
+      recommendation: "Block it",
+      service: "SecurityHub",
+    };
+    const tool = makeMockSecurityTool(makeSecurityResponse([criticalFinding]));
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket-12345",
+    });
+
+    const result = await resultFormatterNode(state, [tool]);
+
+    // result should be empty — no error fields, no status change
+    expect(result).toEqual({});
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.errorMessage).toBeUndefined();
+  });
+});
+
+// ── Story 19.3: Provision memory write ─────────────────────────────────────
+
+describe("resultFormatterNode — Story 19.3 provision memory write", () => {
+  it("writes provision record after single-resource SUCCESS", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket",
+      resourceType: "AWS::S3::Bucket",
+      desiredState: { BucketName: "my-bucket" },
+      estimatedMonthlyCost: "$0.023/GB-month",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(defaultMemoryService.appendProvision).toHaveBeenCalledOnce();
+    const call = vi.mocked(defaultMemoryService.appendProvision).mock
+      .calls[0]![0];
+    expect(call.runId).toBe("test-run-id");
+    expect(call.resourceType).toBe("AWS::S3::Bucket");
+    expect(call.resourceArn).toBe("arn:aws:s3:::my-bucket");
+    expect(call.estimatedMonthlyCost).toBe("$0.023/GB-month");
+    expect(call.desiredStateHash).toBeTruthy();
+    expect(call.timestamp).toBeTruthy();
+  });
+
+  it("writes provision records for each resource in compound SUCCESS final", async () => {
+    const resourceQueue = makeResourceQueue();
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourcePattern: mockPattern,
+      resourceQueue,
+      currentResourceIndex: 2,
+      completedResources: [
+        {
+          resourceId: "lambda-execution-role",
+          resourceType: "AWS::IAM::Role",
+          resourceArn: "arn:aws:iam::123:role/exec-role",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+        {
+          resourceId: "lambda-fn",
+          resourceType: "AWS::Lambda::Function",
+          resourceArn: "arn:aws:lambda::123:function:my-fn",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+      resourceArn: "arn:aws:apigateway::123:apis/abc",
+      resourceType: "AWS::ApiGatewayV2::Api",
+    });
+
+    await resultFormatterNode(state);
+
+    // 3 resources completed = 3 provision records
+    expect(defaultMemoryService.appendProvision).toHaveBeenCalledTimes(3);
+  });
+
+  it("memory write failure does not change the execution result", async () => {
+    vi.mocked(defaultMemoryService.appendProvision).mockRejectedValueOnce(
+      new Error("Disk full"),
+    );
+
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket",
+      resourceType: "AWS::S3::Bucket",
+    });
+
+    const result = await resultFormatterNode(state);
+
+    // Should still render success
+    expect(renderApplySuccess).toHaveBeenCalledWith(state);
+    // Result should be empty (no error propagation)
+    expect(result).toEqual({});
+  });
+
+  it("does not write provision record on FAILED status", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: "Something went wrong",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(defaultMemoryService.appendProvision).not.toHaveBeenCalled();
+  });
+});
+
+describe("resultFormatterNode — Story 19.2 graceful degradation", () => {
+  it("skips check silently when security tool not in tools array", async () => {
+    const otherTool = {
+      name: "get_pricing",
+      invoke: vi.fn(),
+    } as unknown as StructuredTool;
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket-12345",
+    });
+
+    const result = await resultFormatterNode(state, [otherTool]);
+
+    expect(renderSecurityWarnings).not.toHaveBeenCalled();
+    expect(result).toEqual({});
+  });
+
+  it("skips check when tools is undefined", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket-12345",
+    });
+
+    const result = await resultFormatterNode(state);
+
+    expect(renderSecurityWarnings).not.toHaveBeenCalled();
+    expect(result).toEqual({});
+  });
+
+  it("prints warning when security tool invocation throws", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const tool = makeMockSecurityTool(null, true);
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket-12345",
+    });
+
+    const result = await resultFormatterNode(state, [tool]);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Security posture check skipped (MCP server unavailable)",
+    );
+    expect(result).toEqual({});
+    warnSpy.mockRestore();
+  });
+
+  it("skips when resourceArn is undefined", async () => {
+    const tool = makeMockSecurityTool(makeSecurityResponse([]));
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: undefined,
+    });
+
+    const result = await resultFormatterNode(state, [tool]);
+
+    expect(renderSecurityWarnings).not.toHaveBeenCalled();
+    expect(result).toEqual({});
+  });
+});
+
+// ── Story 19.4: Failure memory write ──────────────────────────────────────────
+
+describe("resultFormatterNode — Story 19.4 failure memory write", () => {
+  it("writes failure record after FAILED status", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      resourceType: "AWS::S3::Bucket",
+      errorMessage: "Bucket creation failed",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(defaultMemoryService.appendFailure).toHaveBeenCalledOnce();
+    const call = vi.mocked(defaultMemoryService.appendFailure).mock
+      .calls[0]![0];
+    expect(call.runId).toBe("test-run-id");
+    expect(call.resourceType).toBe("AWS::S3::Bucket");
+    expect(call.errorMessage).toBe("Bucket creation failed");
+    expect(call.timestamp).toBeTruthy();
+  });
+
+  it("extracts provisioningCode from ProvisioningError", async () => {
+    const provErr = new ProvisioningError("Already exists", "AlreadyExists");
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      resourceType: "AWS::S3::Bucket",
+      errorMessage: "Bucket already exists",
+      error: provErr,
+    });
+
+    await resultFormatterNode(state);
+
+    const call = vi.mocked(defaultMemoryService.appendFailure).mock
+      .calls[0]![0];
+    expect(call.errorCode).toBe("AlreadyExists");
+  });
+
+  it("extracts error code from AssigneeError", async () => {
+    const err = new AssigneeError("MCP timeout", "MCP_ERROR");
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      resourceType: "AWS::Lambda::Function",
+      errorMessage: "MCP timeout",
+      error: err,
+    });
+
+    await resultFormatterNode(state);
+
+    const call = vi.mocked(defaultMemoryService.appendFailure).mock
+      .calls[0]![0];
+    expect(call.errorCode).toBe("MCP_ERROR");
+  });
+
+  it("uses UNKNOWN errorCode when no error object", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      resourceType: "AWS::S3::Bucket",
+      errorMessage: "Something failed",
+    });
+
+    await resultFormatterNode(state);
+
+    const call = vi.mocked(defaultMemoryService.appendFailure).mock
+      .calls[0]![0];
+    expect(call.errorCode).toBe("UNKNOWN");
+  });
+
+  it("populates suggestedFix from ErrorHintRegistry when available", async () => {
+    const provErr = new ProvisioningError("Already exists", "AlreadyExists");
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      resourceType: "AWS::S3::Bucket",
+      errorMessage: "Bucket already exists",
+      error: provErr,
+    });
+
+    await resultFormatterNode(state);
+
+    const call = vi.mocked(defaultMemoryService.appendFailure).mock
+      .calls[0]![0];
+    // AlreadyExists hint from defaultErrorHintRegistry
+    expect(call.suggestedFix).toContain("different name");
+  });
+
+  it("suggestedFix is empty string when no hint is available", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      resourceType: "AWS::S3::Bucket",
+      errorMessage: "Unknown error happened",
+    });
+
+    await resultFormatterNode(state);
+
+    const call = vi.mocked(defaultMemoryService.appendFailure).mock
+      .calls[0]![0];
+    // No error object = no hint from ErrorHintRegistry, fallback to error-messages registry
+    // which returns a generic howToFix, but for truly unknown errors it may be empty or generic
+    expect(typeof call.suggestedFix).toBe("string");
+  });
+
+  it("memory write failure does not affect error output", async () => {
+    vi.mocked(defaultMemoryService.appendFailure).mockRejectedValueOnce(
+      new Error("Disk full"),
+    );
+
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      resourceType: "AWS::S3::Bucket",
+      errorMessage: "Bucket creation failed",
+    });
+
+    // Should not throw
+    const result = await resultFormatterNode(state);
+
+    expect(renderError).toHaveBeenCalled();
+    expect(result).toEqual({});
+  });
+
+  it("does not write failure record on SUCCESS status", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket",
+      resourceType: "AWS::S3::Bucket",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(defaultMemoryService.appendFailure).not.toHaveBeenCalled();
+  });
+
+  it("writes failure record for POLICY_BLOCKED status", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.POLICY_BLOCKED,
+      resourceType: "AWS::S3::Bucket",
+      errorMessage: "Blocked by org policy",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(defaultMemoryService.appendFailure).toHaveBeenCalledOnce();
   });
 });

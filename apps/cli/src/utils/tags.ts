@@ -16,12 +16,12 @@ export interface CfnTag {
 }
 
 /** Tag keys injected on every provisioned resource (NFR-14). */
-const TAG_KEY_MANAGED_BY = "managed-by";
+export const TAG_KEY_MANAGED_BY = "managed-by";
 const TAG_KEY_RUN_ID = "assignee-run-id";
 const TAG_KEY_ENVIRONMENT = "environment";
 
 /** Tag values for the static mandatory tags. */
-const TAG_VALUE_MANAGED_BY = "assignee-ai";
+export const TAG_VALUE_MANAGED_BY = "assignee-ai";
 const TAG_VALUE_ENVIRONMENT = "poc";
 
 /**

@@ -83,3 +83,29 @@ export function getMcpServerConfigs(): Record<string, McpServerConfig> {
     },
   };
 }
+
+/**
+ * Factory that returns MCP server configs for optional intelligence servers.
+ * These servers are non-critical — if they fail to start, provisioning continues without them.
+ * Spawned as a separate MultiServerMCPClient instance so failures don't crash core servers.
+ *
+ * @see Story 19.1 — IAM MCP server (read-only)
+ * @see Story 19.2 — Well-Architected Security MCP server
+ */
+export function getOptionalMcpServerConfigs(): Record<string, McpServerConfig> {
+  return {
+    [McpServerName.IAM]: {
+      command: McpCommand.UVX,
+      args: ["awslabs.iam-mcp-server@latest", "--readonly"],
+      env: mcpEnv(),
+    },
+    // Well-Architected Security server: post-provision security posture analysis.
+    // Aggregates findings from SecurityHub, GuardDuty, Inspector, IAM Access Analyzer.
+    // Needs AWS creds for security service API access.
+    [McpServerName.WELL_ARCHITECTED_SECURITY]: {
+      command: McpCommand.UVX,
+      args: ["awslabs.well-architected-security-mcp-server@latest"],
+      env: mcpEnv(),
+    },
+  };
+}

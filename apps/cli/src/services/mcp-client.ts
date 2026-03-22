@@ -2,11 +2,15 @@ import {
   MultiServerMCPClient,
   type ClientConfig,
 } from "@langchain/mcp-adapters";
-import { getMcpServerConfigs } from "../config/mcp-servers.js";
+import {
+  getMcpServerConfigs,
+  getOptionalMcpServerConfigs,
+} from "../config/mcp-servers.js";
 import { ProcessExitCode } from "../constants/errors.js";
 import type { StructuredTool } from "@langchain/core/tools";
 
 let client: MultiServerMCPClient | null = null;
+let optionalClient: MultiServerMCPClient | null = null;
 
 /**
  * Creates and initializes a MultiServerMCPClient connecting to all configured MCP servers.
@@ -76,28 +80,80 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
     process.exit(ProcessExitCode.MCP_STARTUP_FAILED);
   }
 
+  // Story 19.1: Initialize optional intelligence servers (IAM, etc.)
+  // These are spawned as a separate client so failures don't crash the core servers.
+  const optionalConfigs = getOptionalMcpServerConfigs();
+  if (Object.keys(optionalConfigs).length > 0) {
+    const optionalClientConfig: ClientConfig = {
+      mcpServers: Object.fromEntries(
+        Object.entries(optionalConfigs).map(([name, config]) => [
+          name,
+          {
+            transport: "stdio" as const,
+            command: config.command,
+            args: config.args,
+            env: config.env,
+            stderr: "pipe" as const,
+          },
+        ]),
+      ),
+    };
+
+    try {
+      optionalClient = new MultiServerMCPClient(optionalClientConfig);
+      await optionalClient.initializeConnections();
+    } catch {
+      // Graceful degradation: optional servers failed, continue without them.
+      // The tools simply won't appear in the tools[] array.
+      if (optionalClient) {
+        try {
+          await optionalClient.close();
+        } catch {
+          // Ignore close errors
+        }
+      }
+      optionalClient = null;
+    }
+  }
+
   return client;
 }
 
 /**
  * Retrieves all registered tools from the connected MCP servers,
  * formatted as LangChain-compatible StructuredTools.
+ * Includes tools from both core and optional (gracefully degraded) servers.
  *
- * @param {MultiServerMCPClient} mcpClient - The initialized MCP client.
+ * @param {MultiServerMCPClient} mcpClient - The initialized core MCP client.
  * @returns {Promise<StructuredTool[]>} Array of tools ready for use by a LangGraph node.
  */
 export async function getMcpTools(
   mcpClient: MultiServerMCPClient,
 ): Promise<StructuredTool[]> {
-  return mcpClient.getTools();
+  const coreTools = await mcpClient.getTools();
+  if (optionalClient) {
+    try {
+      const optTools = await optionalClient.getTools();
+      return [...coreTools, ...optTools];
+    } catch {
+      // Optional tools unavailable — continue with core tools only
+    }
+  }
+  return coreTools;
 }
 
 /**
  * Closes the MCP client connections gracefully.
  */
 export async function closeMcpClient(): Promise<void> {
+  const closePromises: Promise<void>[] = [];
   if (client) {
-    await client.close();
+    closePromises.push(client.close());
     client = null;
   }
+  if (optionalClient) {
+    closePromises.push(optionalClient.close());
+    optionalClient = null;
+  }
+  await Promise.allSettled(closePromises);
 }

@@ -8,26 +8,39 @@ try {
   // .env not present — rely on shell environment
 }
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { Command } from "commander";
 import { planCommand } from "./commands/plan.js";
 import { applyCommand } from "./commands/apply.js";
 import { completionsCommand } from "./commands/completions.js";
 import { initCommand } from "./commands/init.js";
+import { destroyCommand } from "./commands/destroy.js";
+import { listCommand } from "./commands/list.js";
 import { ProcessExitCode } from "./constants/errors.js";
 import { SUPPORTED_TYPES_HINT } from "./config/constants.js";
 
 import { closeMcpClient } from "./services/mcp-client.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, "..", "package.json"), "utf-8"),
+);
 
 const program = new Command();
 
 program
   .name("assignee")
   .description("Assignee.ai — AI-Native Cloud Operator")
-  .version("0.1.0")
+  .version(pkg.version as string)
   .addHelpText("after", `\n${SUPPORTED_TYPES_HINT}`);
 
 program.addCommand(completionsCommand);
+program.addCommand(destroyCommand);
 program.addCommand(initCommand);
+program.addCommand(listCommand);
 program.addCommand(planCommand);
 program.addCommand(applyCommand);
 
