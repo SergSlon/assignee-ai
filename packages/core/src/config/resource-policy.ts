@@ -46,4 +46,10 @@ export interface ResolvedFieldConfig {
     | "org_default"
     | "org_locked"
     | "plugin_default";
+  /**
+   * When set, tells the categorySelect renderer which category to pre-select,
+   * skipping the category step. Derived from intent-based overrides.
+   * @see Story 18.12
+   */
+  categoryHint?: string;
 }

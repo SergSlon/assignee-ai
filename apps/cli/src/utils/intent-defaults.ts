@@ -19,6 +19,12 @@ export interface IntentDefaultOverride {
   value: unknown;
   /** Explanation shown as clack hint, e.g. "Selected for web serving — burstable with 2 GiB RAM" */
   reason: string;
+  /**
+   * Tells the categorySelect renderer which category to pre-select,
+   * skipping the category step. E.g., "burstable", "compute", "memory".
+   * @see Story 18.12
+   */
+  categoryHint?: string;
 }
 
 /** Internal rule definition for keyword-to-override mapping. */
@@ -38,6 +44,7 @@ const INTENT_RULES: IntentRule[] = [
         fieldName: "InstanceType",
         value: "t3.small",
         reason: "Selected for web serving — burstable with 2 GiB RAM",
+        categoryHint: "burstable",
       },
     ],
   },
@@ -50,6 +57,7 @@ const INTENT_RULES: IntentRule[] = [
         fieldName: "InstanceType",
         value: "c5.xlarge",
         reason: "Selected for ML/compute — 4 vCPU, 8 GiB, compute-optimized",
+        categoryHint: "compute",
       },
     ],
   },
@@ -62,6 +70,7 @@ const INTENT_RULES: IntentRule[] = [
         fieldName: "InstanceType",
         value: "r5.large",
         reason: "Selected for data workloads — 16 GiB memory-optimized",
+        categoryHint: "memory",
       },
     ],
   },
@@ -109,6 +118,76 @@ const INTENT_RULES: IntentRule[] = [
         fieldName: "PublicAccessBlockConfiguration",
         value: false,
         reason: "Pre-configured for static web hosting — public access allowed",
+      },
+    ],
+  },
+  // Lambda — API handler
+  {
+    resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+    keywords: ["api handler", "api endpoint"],
+    overrides: [
+      {
+        fieldName: "MemorySize",
+        value: "512",
+        reason:
+          "Selected for API handling — 512 MB provides proportional CPU for fast response times",
+      },
+      {
+        fieldName: "Timeout",
+        value: "30",
+        reason:
+          "Selected for API handling — 30s timeout suits synchronous HTTP requests",
+      },
+    ],
+  },
+  // Lambda — Background job / worker
+  {
+    resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+    keywords: ["background job", "worker"],
+    overrides: [
+      {
+        fieldName: "Timeout",
+        value: "300",
+        reason:
+          "Selected for background processing — 300s timeout for long-running tasks",
+      },
+    ],
+  },
+  // RDS — Production database
+  {
+    resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
+    keywords: ["production database", "prod db"],
+    overrides: [
+      {
+        fieldName: "MultiAZ",
+        value: true,
+        reason:
+          "Selected for production — Multi-AZ provides high availability with automatic failover",
+      },
+      {
+        fieldName: "BackupRetentionPeriod",
+        value: "7",
+        reason:
+          "Selected for production — 7-day backup retention for point-in-time recovery",
+      },
+      {
+        fieldName: "DeletionProtection",
+        value: true,
+        reason:
+          "Selected for production — deletion protection prevents accidental data loss",
+      },
+    ],
+  },
+  // RDS — Dev database
+  {
+    resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
+    keywords: ["dev database", "dev db"],
+    overrides: [
+      {
+        fieldName: "MultiAZ",
+        value: false,
+        reason:
+          "Selected for development — single-AZ reduces cost for non-critical environments",
       },
     ],
   },

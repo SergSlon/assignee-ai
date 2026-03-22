@@ -35,6 +35,21 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
             label: "db.m5.large  (2 vCPU,  8 GiB) — ~$0.171/hr",
             fitHint: "High-performance production",
           },
+          {
+            value: "db.r5.large",
+            label: "db.r5.large  (2 vCPU, 16 GiB) — ~$0.240/hr",
+            fitHint: "Memory-optimized",
+          },
+          {
+            value: "db.r6g.large",
+            label: "db.r6g.large (2 vCPU, 16 GiB) — ~$0.208/hr",
+            fitHint: "Memory-optimized, Graviton",
+          },
+          {
+            value: "db.r6g.xlarge",
+            label: "db.r6g.xlarge (4 vCPU, 32 GiB) — ~$0.416/hr",
+            fitHint: "Memory-optimized, Graviton",
+          },
         ],
         initialValue: "db.t3.micro",
       },
@@ -69,16 +84,66 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
+      name: "EngineVersion",
+      question: {
+        type: "enum",
+        label: "Engine version",
+        hint: "Database engine version. Newer versions offer better performance and security. Version cannot be easily downgraded after creation.",
+        options: [
+          {
+            value: "16",
+            label: "PostgreSQL 16",
+            fitHint: "Latest, best performance",
+            recommended: true,
+          },
+          { value: "15", label: "PostgreSQL 15", fitHint: "Stable" },
+          {
+            value: "8.4",
+            label: "MySQL 8.4",
+            fitHint: "Latest, best performance",
+            recommended: true,
+          },
+          { value: "8.0", label: "MySQL 8.0", fitHint: "Stable, widely used" },
+          {
+            value: "11.4",
+            label: "MariaDB 11.4",
+            fitHint: "Latest",
+            recommended: true,
+          },
+          { value: "10.11", label: "MariaDB 10.11", fitHint: "LTS" },
+        ],
+        showIf: { field: "Engine", value: "postgres" },
+      },
+    },
+    {
+      name: "DBName",
+      question: {
+        type: "string",
+        label: "Initial database name",
+        placeholder: "myapp",
+        hint: "Name of the initial database created on launch. If omitted, no database is created and you must create one manually after provisioning. Use lowercase letters and underscores.",
+      },
+    },
+    {
       name: "MasterUsername",
       question: {
         type: "string",
         label: "Master username",
-        placeholder: "admin",
+        placeholder: "appuser",
         hint: "Admin username for the database. Avoid 'admin' or 'root' in production for security. Must start with a letter. Cannot be changed after creation.",
         validate: (value: unknown) =>
           typeof value === "string" && value.length > 0
             ? undefined
             : "Master username is required",
+      },
+    },
+    {
+      name: "MasterUserPassword",
+      question: {
+        type: "string",
+        label: "Master password",
+        placeholder: "Auto-generated if blank",
+        hint: 'Leave blank to auto-generate a secure password stored in AWS Secrets Manager. If you provide one: min 8 chars, must include uppercase, lowercase, and numbers. Avoid /, @, " and spaces.',
       },
     },
     {
@@ -88,6 +153,15 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         label: "Enable Multi-AZ deployment?",
         initialValue: false,
         hint: "Doubles cost. Provides high availability with automatic failover. Best for production.",
+      },
+    },
+    {
+      name: "DeletionProtection",
+      question: {
+        type: "boolean",
+        label: "Enable deletion protection?",
+        initialValue: false,
+        hint: "When enabled, the database cannot be deleted via API or console until protection is removed. Strongly recommended for production to prevent accidental data loss. No cost impact.",
       },
     },
     {
@@ -119,12 +193,54 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
+      name: "AllocatedStorage",
+      question: {
+        type: "enum",
+        label: "Storage size (GB)",
+        hint: "Minimum 20 GB for gp3/gp2. Storage cannot be decreased after creation. gp3 costs ~$0.115/GB-month. 20 GB = ~$2.30/mo, 100 GB = ~$11.50/mo.",
+        options: [
+          {
+            value: "20",
+            label: "20 GB (~$2.30/mo)",
+            fitHint: "Dev/test minimum",
+            recommended: true,
+          },
+          {
+            value: "50",
+            label: "50 GB (~$5.75/mo)",
+            fitHint: "Small production",
+          },
+          {
+            value: "100",
+            label: "100 GB (~$11.50/mo)",
+            fitHint: "Medium production",
+          },
+          {
+            value: "200",
+            label: "200 GB (~$23.00/mo)",
+            fitHint: "Large production",
+          },
+        ],
+        initialValue: "20",
+      },
+    },
+    {
       name: "Tags",
       question: {
-        type: "multi",
+        type: "string",
         label: "Tags",
-        hint: "Key-value pairs for cost tracking and organization. Common tags: Environment (dev/staging/prod), Team, Project. Tags are free and highly recommended.",
-        options: [],
+        placeholder: "env:production, team:backend",
+        hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+      },
+      toCfn: (answer: unknown) => {
+        if (typeof answer !== "string" || !answer.trim()) return undefined;
+        return answer
+          .split(",")
+          .filter((p) => p.includes(":"))
+          .map((pair) => {
+            const [Key, ...rest] = pair.trim().split(":");
+            return { Key: Key!.trim(), Value: rest.join(":").trim() };
+          });
       },
     },
   ],
@@ -136,15 +252,13 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         label: "Backup retention period (days)",
         placeholder: "7",
         hint: "Number of days to keep automated backups (1-35). Default is 7. Longer retention increases storage cost. Set to 0 to disable backups (not recommended for production).",
-      },
-    },
-    {
-      name: "DeletionProtection",
-      question: {
-        type: "boolean",
-        label: "Enable deletion protection?",
-        initialValue: false,
-        hint: "When enabled, the database cannot be deleted via API or console until protection is removed. Strongly recommended for production to prevent accidental data loss. No cost impact.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const n = Number(value);
+          if (!Number.isInteger(n) || n < 0 || n > 35)
+            return "Backup retention must be an integer between 0 and 35";
+          return undefined;
+        },
       },
     },
   ],

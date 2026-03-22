@@ -73,12 +73,12 @@ describe("display.ts — non-TTY (CI) mode", () => {
     expect(output).toContain("AWS::S3::Bucket");
     expect(output).toContain("my-test-bucket");
     expect(output).toContain("~$0.02/month");
-    expect(output).toContain("run-display-test-123");
+    // Run ID is hidden unless verbose is set (Story 18.11)
     // No ANSI escape codes
     expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
   });
 
-  it("renderPlanBox includes Resource Type, Region, Config, Estimated Cost, Run ID fields", async () => {
+  it("renderPlanBox includes Resource Type, Region, Config, Estimated Cost fields", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
 
@@ -90,6 +90,27 @@ describe("display.ts — non-TTY (CI) mode", () => {
     expect(output).toContain("Region");
     expect(output).toContain("Config");
     expect(output).toContain("Estimated Cost");
+  });
+
+  it("renderPlanBox hides Run ID unless verbose is set", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox(mockState);
+    restore();
+
+    const output = chunks.join("");
+    expect(output).not.toContain("Run ID");
+  });
+
+  it("renderPlanBox shows Run ID when verbose is true", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({ ...mockState, verbose: true });
+    restore();
+
+    const output = chunks.join("");
     expect(output).toContain("Run ID");
   });
 
@@ -1998,5 +2019,207 @@ describe("renderOptionPrompt — edge cases", () => {
       value: undefined,
       configurable: true,
     });
+  });
+});
+
+// ── Story 18.11: formatDesiredState tests ─────────────────────────────────
+
+describe("formatDesiredState", () => {
+  let formatDesiredState: typeof import("./display.js").formatDesiredState;
+
+  beforeEach(async () => {
+    const display = await import("./display.js");
+    formatDesiredState = display.formatDesiredState;
+  });
+
+  it("maps known keys to friendly names", () => {
+    const result = formatDesiredState({ InstanceType: "t3.micro" });
+    expect(result).toContain("Instance Type");
+    expect(result).toContain("t3.micro");
+  });
+
+  it("falls back to spaced PascalCase for unknown keys", () => {
+    const result = formatDesiredState({ IamInstanceProfile: "my-profile" });
+    expect(result).toContain("Iam Instance Profile");
+    expect(result).toContain("my-profile");
+  });
+
+  it("renders booleans as Yes/No", () => {
+    const result = formatDesiredState({ MultiAZ: true });
+    expect(result).toContain("Yes");
+  });
+
+  it("renders false booleans as No", () => {
+    const result = formatDesiredState({ MultiAZ: false });
+    expect(result).toContain("No");
+  });
+
+  it("joins arrays with commas", () => {
+    const result = formatDesiredState({
+      SecurityGroupIds: ["sg-123", "sg-456"],
+    });
+    expect(result).toContain("sg-123, sg-456");
+  });
+
+  it("renders Tag arrays as Key:Value pairs", () => {
+    const result = formatDesiredState({
+      Tags: [
+        { Key: "env", Value: "prod" },
+        { Key: "team", Value: "backend" },
+      ],
+    });
+    expect(result).toContain("env:prod, team:backend");
+  });
+
+  it("returns (none) for empty state", () => {
+    const result = formatDesiredState({});
+    expect(result).toBe("(none)");
+  });
+
+  it("handles nested objects", () => {
+    const result = formatDesiredState({
+      BucketEncryption: {
+        ServerSideEncryptionConfiguration: "AES256",
+      },
+    });
+    expect(result).toContain("ServerSideEncryptionConfiguration: AES256");
+  });
+});
+
+// ── renderOptionPrompt — categorySelect tests (Story 18.12) ─────────────────
+
+describe("renderOptionPrompt — categorySelect", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  const categoryField: ResourceField = {
+    name: "InstanceType",
+    question: {
+      type: "categorySelect",
+      label: "Instance type",
+      initialValue: "t3.micro",
+      categories: [
+        {
+          key: "burstable",
+          label: "Burstable (t3/t4g) — $0.008-0.17/hr",
+          description: "Variable CPU with burst credits.",
+          options: [
+            { value: "t3.micro", label: "t3.micro (2 vCPU, 1 GiB)" },
+            {
+              value: "t3.small",
+              label: "t3.small (2 vCPU, 2 GiB)",
+              recommended: true,
+            },
+          ],
+        },
+        {
+          key: "compute",
+          label: "Compute Optimized (c5/c6i) — $0.085-0.34/hr",
+          description: "High-performance CPUs.",
+          options: [
+            { value: "c5.large", label: "c5.large (2 vCPU, 4 GiB)" },
+            { value: "c5.xlarge", label: "c5.xlarge (4 vCPU, 8 GiB)" },
+          ],
+        },
+      ],
+    },
+  };
+
+  it("two-step flow: category select then size select returns instance type value", async () => {
+    vi.mocked(select)
+      .mockResolvedValueOnce("burstable")
+      .mockResolvedValueOnce("t3.small");
+
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(categoryField, resolved);
+
+    expect(select).toHaveBeenCalledTimes(2);
+    expect(result).toBe("t3.small");
+  });
+
+  it("skips category step when categoryHint is set (intent-based skip)", async () => {
+    vi.mocked(select).mockResolvedValueOnce("t3.small");
+
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(categoryField, {
+      ...resolved,
+      value: "t3.small",
+      categoryHint: "burstable",
+    });
+
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(result).toBe("t3.small");
+    expect(vi.mocked(log).info).toHaveBeenCalledWith(
+      expect.stringContaining("Category auto-selected"),
+    );
+  });
+
+  it("? at category level shows help note and re-prompts", async () => {
+    vi.mocked(select)
+      .mockResolvedValueOnce("?")
+      .mockResolvedValueOnce("compute")
+      .mockResolvedValueOnce("c5.large");
+
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(categoryField, resolved);
+
+    expect(vi.mocked(note)).toHaveBeenCalled();
+    expect(result).toBe("c5.large");
+  });
+
+  it("non-TTY returns default value without prompting", async () => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(categoryField, resolved);
+
+    expect(select).not.toHaveBeenCalled();
+    expect(result).toBe("t3.micro");
+  });
+
+  it("returns default when categories is empty", async () => {
+    const emptyField: ResourceField = {
+      name: "InstanceType",
+      question: {
+        type: "categorySelect",
+        label: "Instance type",
+        initialValue: "t3.micro",
+        categories: [],
+      },
+    };
+
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(emptyField, resolved);
+
+    expect(result).toBe("t3.micro");
+  });
+
+  it("all category labels include price range strings", () => {
+    for (const cat of categoryField.question.categories!) {
+      expect(cat.label).toMatch(/\$/);
+    }
   });
 });

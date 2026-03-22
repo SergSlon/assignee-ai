@@ -48,6 +48,98 @@ export interface RenderableState {
   freeTierNote?: FreeTierNote;
   bpFindings?: BPFinding[];
   memoryHints?: string[];
+  verbose?: boolean;
+}
+
+// ── Friendly key names for plan box rendering (Story 18.11) ─────────────────
+
+const FRIENDLY_NAMES: Record<string, string> = {
+  InstanceType: "Instance Type",
+  ImageId: "AMI",
+  KeyName: "Key Pair",
+  SubnetId: "Subnet",
+  SecurityGroupIds: "Security Groups",
+  BucketName: "Bucket Name",
+  BucketEncryption: "Encryption",
+  PublicAccessBlockConfiguration: "Block Public Access",
+  VersioningConfiguration: "Versioning",
+  DBInstanceClass: "DB Instance Class",
+  Engine: "Engine",
+  MasterUsername: "Master Username",
+  MasterUserPassword: "Master Password",
+  AllocatedStorage: "Storage (GB)",
+  MultiAZ: "Multi-AZ",
+  StorageType: "Storage Type",
+  FunctionName: "Function Name",
+  Runtime: "Runtime",
+  Handler: "Handler",
+  MemorySize: "Memory (MB)",
+  Timeout: "Timeout (s)",
+  Role: "Execution Role",
+  Tags: "Tags",
+};
+
+/**
+ * Converts a PascalCase key to a spaced name (fallback for unknown keys).
+ * E.g., "IamInstanceProfile" -> "Iam Instance Profile"
+ */
+function spacePascalCase(key: string): string {
+  return key.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+/**
+ * Formats a desiredState record as a human-readable key-value table.
+ * Arrays are joined with commas. Objects render as nested key-value pairs.
+ * Booleans render as "Yes"/"No". Strings and numbers render as-is.
+ */
+export function formatDesiredState(state: Record<string, unknown>): string {
+  const entries = Object.entries(state);
+  if (entries.length === 0) return "(none)";
+
+  const lines: string[] = [];
+  const maxKeyLen = Math.max(
+    ...entries.map(([k]) => (FRIENDLY_NAMES[k] ?? spacePascalCase(k)).length),
+  );
+
+  for (const [key, value] of entries) {
+    const friendlyKey = FRIENDLY_NAMES[key] ?? spacePascalCase(key);
+    const padded = friendlyKey.padEnd(maxKeyLen);
+    const formatted = formatValue(value);
+    lines.push(`  ${padded}   ${formatted}`);
+  }
+
+  return lines.join("\n");
+}
+
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined) return "-";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (Array.isArray(value)) {
+    // Arrays of objects (e.g., Tags [{Key, Value}]) — show as Key:Value pairs
+    if (
+      value.length > 0 &&
+      typeof value[0] === "object" &&
+      value[0] !== null &&
+      "Key" in value[0]
+    ) {
+      return value
+        .map(
+          (item: Record<string, unknown>) => `${item["Key"]}:${item["Value"]}`,
+        )
+        .join(", ");
+    }
+    return value.map(String).join(", ");
+  }
+  if (typeof value === "object") {
+    // Nested objects — show key: value pairs inline
+    const obj = value as Record<string, unknown>;
+    return Object.entries(obj)
+      .map(([k, v]) => `${k}: ${formatValue(v)}`)
+      .join(", ");
+  }
+  return String(value);
 }
 
 // ── Spinner (AC2) ────────────────────────────────────────────────────────────
@@ -100,15 +192,22 @@ export function renderPlanBox(state: RenderableState): void {
   // Story 19.3: Memory hints from provision history (optional)
   const memoryHintLines = formatMemoryHints(state.memoryHints);
 
+  const configBlock = state.desiredState
+    ? formatDesiredState(state.desiredState)
+    : "(none)";
+
   const content = [
     `Resource Type:   ${state.resourceType}`,
     `Region:          ${regionLabel()}`,
-    `Config:          ${JSON.stringify(state.desiredState, null, 2)}`,
+    `Config:`,
+    configBlock,
     `Estimated Cost:  ${state.estimatedMonthlyCost ?? "N/A"}`,
     ...(freeTierLine ? [freeTierLine] : []),
     ...(memoryHintLines ? [memoryHintLines] : []),
     findingsLine,
-    `Run ID:          ${state.runId}`,
+    ...(state.verbose || process.argv.includes("--verbose")
+      ? [`Run ID:          ${state.runId}`]
+      : []),
   ].join("\n");
 
   if (process.stdout.isTTY) {
@@ -876,6 +975,101 @@ export async function renderOptionPrompt(
           })),
         ],
         required: false,
+      });
+      break;
+    }
+    case "categorySelect": {
+      // Story 18.12: Two-step category → size selection for grouped options.
+      const categories = question.categories;
+      if (!categories || categories.length === 0) {
+        // Fallback: treat as flat enum if no categories defined
+        return defaultValue;
+      }
+
+      // Determine if we can skip the category step via intent-based categoryHint
+      // or by finding which category the default value belongs to.
+      let selectedCategoryKey: string | undefined = resolved.categoryHint;
+      let skipCategory = !!selectedCategoryKey;
+
+      // If no explicit categoryHint but we have a default value, find its category
+      if (!selectedCategoryKey && typeof defaultValue === "string") {
+        for (const cat of categories) {
+          if (cat.options.some((o) => o.value === defaultValue)) {
+            // Don't auto-skip when only initialValue is set (no intent match)
+            // Only pre-select if there's a categoryHint
+            break;
+          }
+        }
+      }
+
+      // Step 1: Category selection (unless skipped by intent)
+      if (!skipCategory) {
+        let categoryResult: string | symbol;
+
+        // Category select loop (supports ? help)
+        while (true) {
+          categoryResult = (await clack.select({
+            message: `${question.label} — Choose a category`,
+            options: [
+              ...categories.map((cat) => ({
+                value: cat.key,
+                label: cat.label,
+                hint: cat.description,
+              })),
+              { value: "?", label: "\u2753 ? \u2014 explain this field" },
+            ],
+          })) as string | symbol;
+
+          if (clack.isCancel(categoryResult)) {
+            clack.cancel("Wizard cancelled.");
+            process.exit(0);
+          }
+
+          if (categoryResult === "?") {
+            // Show category help note
+            const helpLines = categories
+              .map((cat) => `${cat.label}\n  ${cat.description}`)
+              .join("\n\n");
+            clack.note(helpLines, "Instance Type Categories");
+            continue;
+          }
+
+          selectedCategoryKey = categoryResult as string;
+          break;
+        }
+      } else {
+        // Show info that category was auto-selected
+        const matchedCat = categories.find(
+          (c) => c.key === selectedCategoryKey,
+        );
+        if (matchedCat) {
+          clack.log.info(
+            `Category auto-selected: ${matchedCat.label} — based on your intent`,
+          );
+        }
+      }
+
+      // Step 2: Size selection within the selected category
+      const selectedCategory = categories.find(
+        (c) => c.key === selectedCategoryKey,
+      );
+      if (!selectedCategory) {
+        return defaultValue;
+      }
+
+      const sizeOptions = [
+        ...selectedCategory.options.map((o) => ({
+          value: o.value,
+          label: o.label,
+        })),
+        { value: "?", label: "\u2753 ? \u2014 explain this field" },
+      ];
+
+      result = await clack.select({
+        message: `${question.label} — ${selectedCategory.label.split(" — ")[0]}`,
+        options: sizeOptions,
+        initialValue:
+          typeof defaultValue === "string" ? defaultValue : undefined,
       });
       break;
     }

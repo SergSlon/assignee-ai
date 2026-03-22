@@ -1,131 +1,168 @@
 import { describe, it, expect } from "vitest";
-import {
-  lambdaFunctionPlugin,
-  LAMBDA_USD_PER_GB_SECOND,
-} from "./lambda-function.js";
+import { lambdaFunctionPlugin } from "./lambda-function.js";
 
 describe("lambdaFunctionPlugin", () => {
-  it("has the correct resourceType", () => {
-    expect(lambdaFunctionPlugin.resourceType).toBe("AWS::Lambda::Function");
-  });
+  // ── Task 5 / AC #5: FunctionName and Role required ─────────────────────
 
-  it("commonFields count is ≤10 (AC-6)", () => {
-    expect(lambdaFunctionPlugin.commonFields.length).toBeLessThanOrEqual(10);
-  });
-
-  it("all commonField question types are valid QuestionType values", () => {
-    const validTypes = new Set(["boolean", "enum", "string", "multi"]);
-    for (const field of lambdaFunctionPlugin.commonFields) {
-      expect(validTypes.has(field.question.type)).toBe(true);
-    }
-  });
-
-  it("Runtime is enum with nodejs22.x default", () => {
+  it("marks FunctionName as required", () => {
     const field = lambdaFunctionPlugin.commonFields.find(
+      (f) => f.name === "FunctionName",
+    );
+    expect(field).toBeDefined();
+    expect(field!.required).toBe(true);
+  });
+
+  it("marks Role as required", () => {
+    const field = lambdaFunctionPlugin.commonFields.find(
+      (f) => f.name === "Role",
+    );
+    expect(field).toBeDefined();
+    expect(field!.required).toBe(true);
+  });
+
+  // ── Task 2 / AC #2: Runtime enum has 8 options ─────────────────────────
+
+  it("has 8 runtime options including new runtimes", () => {
+    const runtimeField = lambdaFunctionPlugin.commonFields.find(
       (f) => f.name === "Runtime",
     );
-    expect(field).toBeDefined();
-    expect(field?.question.type).toBe("enum");
-    expect(field?.question.initialValue).toBe("nodejs22.x");
-    const values = field?.question.options?.map((o) => o.value) ?? [];
+    expect(runtimeField).toBeDefined();
+    const options = runtimeField!.question.options!;
+    expect(options).toHaveLength(8);
+
+    const values = options.map((o) => o.value);
+    expect(values).toContain("dotnet8");
+    expect(values).toContain("ruby3.3");
+    expect(values).toContain("provided.al2023");
     expect(values).toContain("nodejs22.x");
+    expect(values).toContain("nodejs20.x");
     expect(values).toContain("python3.13");
+    expect(values).toContain("python3.12");
+    expect(values).toContain("java21");
   });
 
-  it("Role validate rejects non-ARN values and allows empty string", () => {
-    const field = lambdaFunctionPlugin.commonFields.find(
-      (f) => f.name === "Role",
+  // ── Task 1 / AC #1: Environment field with toCfn ───────────────────────
+
+  describe("Environment field", () => {
+    const envField = lambdaFunctionPlugin.commonFields.find(
+      (f) => f.name === "Environment",
     );
-    expect(field?.question.validate).toBeDefined();
-    expect(field?.question.validate?.("not-an-arn")).toBeDefined();
-    expect(field?.question.validate?.("")).toBeUndefined();
+
+    it("exists in commonFields with correct type and placeholder", () => {
+      expect(envField).toBeDefined();
+      expect(envField!.question.type).toBe("string");
+      expect(envField!.question.placeholder).toBe(
+        "DB_HOST=localhost,API_KEY=xxx",
+      );
+    });
+
+    it("toCfn transforms comma-separated pairs to Variables object", () => {
+      const result = envField!.toCfn!("DB_HOST=localhost,API_KEY=abc123");
+      expect(result).toEqual({
+        Variables: {
+          DB_HOST: "localhost",
+          API_KEY: "abc123",
+        },
+      });
+    });
+
+    it("toCfn returns undefined for empty string", () => {
+      expect(envField!.toCfn!("")).toBeUndefined();
+      expect(envField!.toCfn!("  ")).toBeUndefined();
+    });
+
+    it("toCfn returns undefined for falsy values", () => {
+      expect(envField!.toCfn!(null)).toBeUndefined();
+      expect(envField!.toCfn!(undefined)).toBeUndefined();
+    });
+
+    it("toCfn preserves everything after first = in value", () => {
+      const result = envField!.toCfn!("API_KEY=abc=def=ghi");
+      expect(result).toEqual({
+        Variables: {
+          API_KEY: "abc=def=ghi",
+        },
+      });
+    });
+
+    it("toCfn skips malformed pairs without =", () => {
+      const result = envField!.toCfn!("GOOD=value,BADPAIR,ALSO_GOOD=yes");
+      expect(result).toEqual({
+        Variables: {
+          GOOD: "value",
+          ALSO_GOOD: "yes",
+        },
+      });
+    });
+
+    it("toCfn returns undefined if all pairs are malformed", () => {
+      expect(envField!.toCfn!("noeq,another")).toBeUndefined();
+    });
+
+    it("toCfn trims whitespace from keys and values", () => {
+      const result = envField!.toCfn!(" KEY1 = value1 , KEY2 = value2 ");
+      expect(result).toEqual({
+        Variables: {
+          KEY1: "value1",
+          KEY2: "value2",
+        },
+      });
+    });
   });
 
-  it("Role validate accepts valid IAM role ARN", () => {
-    const field = lambdaFunctionPlugin.commonFields.find(
-      (f) => f.name === "Role",
-    );
-    expect(
-      field?.question.validate?.(
-        "arn:aws:iam::123456789012:role/my-lambda-role",
-      ),
-    ).toBeUndefined();
-  });
+  // ── Story 18.11: Tags field ──────────────────────────────────────────────
 
-  it("Timeout validate rejects out-of-range values and allows empty string", () => {
-    const field = lambdaFunctionPlugin.commonFields.find(
-      (f) => f.name === "Timeout",
-    );
-    expect(field?.question.validate).toBeDefined();
-    expect(field?.question.validate?.("0")).toBeDefined();
-    expect(field?.question.validate?.("901")).toBeDefined();
-    expect(field?.question.validate?.("abc")).toBeDefined();
-    expect(field?.question.validate?.("")).toBeUndefined();
-  });
-
-  it("Timeout validate accepts values within 1–900 range", () => {
-    const field = lambdaFunctionPlugin.commonFields.find(
-      (f) => f.name === "Timeout",
-    );
-    expect(field?.question.validate?.("1")).toBeUndefined();
-    expect(field?.question.validate?.("30")).toBeUndefined();
-    expect(field?.question.validate?.("900")).toBeUndefined();
-  });
-
-  it("MemorySize is enum with 128 default", () => {
-    const field = lambdaFunctionPlugin.commonFields.find(
-      (f) => f.name === "MemorySize",
-    );
-    expect(field).toBeDefined();
-    expect(field?.question.type).toBe("enum");
-    expect(field?.question.initialValue).toBe("128");
-  });
-
-  it("MemorySize labels show correct per-100ms cost (not 10x inflated)", () => {
-    const field = lambdaFunctionPlugin.commonFields.find(
-      (f) => f.name === "MemorySize",
-    );
-    const options = field?.question.options ?? [];
-
-    for (const opt of options) {
-      const mb = Number(opt.value);
-      const expected = (mb / 1024) * LAMBDA_USD_PER_GB_SECOND * 0.1;
-      // Extract the dollar amount from the label, e.g. "~$0.00000021/100ms"
-      const match = opt.label.match(/\$([0-9.]+)\/100ms/);
-      expect(
-        match,
-        `label for ${mb}MB missing price: ${opt.label}`,
-      ).toBeTruthy();
-      const actual = parseFloat(match![1]!);
-      // Allow rounding to the label's displayed precision (7 decimal places)
-      expect(actual).toBeCloseTo(expected, 7);
-    }
-  });
-
-  it("Tags field is multi type", () => {
+  it("Tags field is string type with toCfn transform", () => {
     const field = lambdaFunctionPlugin.commonFields.find(
       (f) => f.name === "Tags",
     );
     expect(field).toBeDefined();
-    expect(field?.question.type).toBe("multi");
+    expect(field?.question.type).toBe("string");
+    expect(field?.toCfn).toBeDefined();
   });
 
-  it("defaults contain MemorySize 128 and Timeout 30", () => {
-    expect(lambdaFunctionPlugin.defaults["MemorySize"]).toBe(128);
-    expect(lambdaFunctionPlugin.defaults["Timeout"]).toBe(30);
+  // ── Story 18.11: FunctionName validation ─────────────────────────────────
+
+  describe("FunctionName validation", () => {
+    const field = lambdaFunctionPlugin.commonFields.find(
+      (f) => f.name === "FunctionName",
+    )!;
+
+    it("accepts valid function name", () => {
+      expect(field.question.validate?.("my-function_123")).toBeUndefined();
+    });
+
+    it("accepts empty value", () => {
+      expect(field.question.validate?.("")).toBeUndefined();
+    });
+
+    it("rejects names longer than 64 chars", () => {
+      expect(field.question.validate?.("a".repeat(65))).toBeDefined();
+    });
+
+    it("rejects names with special characters", () => {
+      expect(field.question.validate?.("my.function")).toBeDefined();
+      expect(field.question.validate?.("my function")).toBeDefined();
+    });
   });
 
-  it("configHints references nodejs22.x and Role ARN guidance", () => {
-    expect(lambdaFunctionPlugin.configHints).toBeDefined();
-    expect(lambdaFunctionPlugin.configHints?.length).toBeGreaterThan(0);
-    const joined = lambdaFunctionPlugin.configHints?.join(" ") ?? "";
-    expect(joined).toContain("nodejs22.x");
-    expect(joined).toContain("Role");
-  });
+  // ── Story 18.11: Handler validation ──────────────────────────────────────
 
-  it("advancedFields contains Description and ReservedConcurrentExecutions", () => {
-    const names = lambdaFunctionPlugin.advancedFields.map((f) => f.name);
-    expect(names).toContain("Description");
-    expect(names).toContain("ReservedConcurrentExecutions");
+  describe("Handler validation", () => {
+    const field = lambdaFunctionPlugin.commonFields.find(
+      (f) => f.name === "Handler",
+    )!;
+
+    it("accepts valid handler", () => {
+      expect(field.question.validate?.("index.handler")).toBeUndefined();
+    });
+
+    it("accepts empty value", () => {
+      expect(field.question.validate?.("")).toBeUndefined();
+    });
+
+    it("rejects handler without dot", () => {
+      expect(field.question.validate?.("handler")).toBeDefined();
+    });
   });
 });

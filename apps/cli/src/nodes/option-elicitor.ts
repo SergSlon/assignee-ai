@@ -34,6 +34,7 @@ import {
   renderAdvancedConfirm,
   renderDocHelp,
   renderTradeoffHelp,
+  startSpinner,
   stopSpinner,
 } from "../utils/display.js";
 import { enrichOptionLabel } from "../utils/option-enrichment.js";
@@ -99,14 +100,29 @@ async function fetchPricesForResource(
     const field = plugin.commonFields.find(
       (f) =>
         f.name === ResourceFieldName.INSTANCE_TYPE &&
-        f.question.type === "enum",
+        (f.question.type === "enum" || f.question.type === "categorySelect"),
     );
-    if (field?.question.type === "enum" && field.question.options) {
-      const priceMap = await fetchEc2InstancePrices(
-        tools,
-        field.question.options.map((o) => o.value),
-      );
-      return { fieldName: ResourceFieldName.INSTANCE_TYPE, priceMap };
+    if (field) {
+      // Collect all instance type values from either flat options or category groups
+      const allValues: string[] = [];
+      if (
+        field.question.type === "categorySelect" &&
+        field.question.categories
+      ) {
+        for (const cat of field.question.categories) {
+          for (const opt of cat.options) {
+            allValues.push(opt.value);
+          }
+        }
+      } else if (field.question.type === "enum" && field.question.options) {
+        for (const opt of field.question.options) {
+          allValues.push(opt.value);
+        }
+      }
+      if (allValues.length > 0) {
+        const priceMap = await fetchEc2InstancePrices(tools, allValues);
+        return { fieldName: ResourceFieldName.INSTANCE_TYPE, priceMap };
+      }
     }
   }
 
@@ -140,29 +156,48 @@ async function fetchPricesForResource(
   return null;
 }
 
-/** Injects live price labels into enum option fields. */
+/** Injects live price labels into enum/categorySelect option fields. */
 function injectPriceLabels(
   fields: ResourceField[],
   fieldName: string,
   priceMap: Record<string, string>,
 ): ResourceField[] {
+  const enrichLabel = (opt: { value: string; label: string }) => {
+    const livePrice = priceMap[opt.value];
+    if (!livePrice) return opt;
+    const label = opt.label.includes(" — ")
+      ? `${opt.label.split(" — ")[0]} — ${livePrice}`
+      : `${opt.label} — ${livePrice}`;
+    return { ...opt, label };
+  };
+
   return fields.map((field) => {
-    if (field.name !== fieldName || field.question.type !== "enum")
-      return field;
-    return {
-      ...field,
-      question: {
-        ...field.question,
-        options: field.question.options?.map((opt) => {
-          const livePrice = priceMap[opt.value];
-          if (!livePrice) return opt;
-          const label = opt.label.includes(" — ")
-            ? `${opt.label.split(" — ")[0]} — ${livePrice}`
-            : `${opt.label} — ${livePrice}`;
-          return { ...opt, label };
-        }),
-      },
-    };
+    if (field.name !== fieldName) return field;
+
+    if (field.question.type === "categorySelect" && field.question.categories) {
+      return {
+        ...field,
+        question: {
+          ...field.question,
+          categories: field.question.categories.map((cat) => ({
+            ...cat,
+            options: cat.options.map(enrichLabel),
+          })),
+        },
+      };
+    }
+
+    if (field.question.type === "enum") {
+      return {
+        ...field,
+        question: {
+          ...field.question,
+          options: field.question.options?.map(enrichLabel),
+        },
+      };
+    }
+
+    return field;
   });
 }
 
@@ -194,6 +229,21 @@ async function enrichWithLivePricing(
 function enrichFieldLabels(fields: ResourceField[]): ResourceField[] {
   if (!process.stdout.isTTY) return fields;
   return fields.map((field) => {
+    if (field.question.type === "categorySelect" && field.question.categories) {
+      return {
+        ...field,
+        question: {
+          ...field.question,
+          categories: field.question.categories.map((cat) => ({
+            ...cat,
+            options: cat.options.map((opt) => ({
+              ...opt,
+              label: enrichOptionLabel(opt),
+            })),
+          })),
+        },
+      };
+    }
     if (field.question.type !== "enum" || !field.question.options) return field;
     return {
       ...field,
@@ -244,6 +294,9 @@ async function resolveDynamicFields(
         const options = await fetch();
         fetchResults.set(field.name, options);
       } catch {
+        clack.log.warn(
+          `Could not discover ${field.question.label ?? field.name} from your account. Enter manually.`,
+        );
         fetchResults.set(field.name, []);
       }
     }),
@@ -255,6 +308,9 @@ async function resolveDynamicFields(
 
     if (options.length === 0) {
       // Fallback to manual string entry
+      clack.log.warn(
+        `Could not discover ${field.question.label ?? field.name} from your account. Enter manually.`,
+      );
       return {
         ...field,
         question: {
@@ -401,12 +457,26 @@ async function promptWithHelp(
     if (isHelpRequest) {
       const isEnumOrMulti =
         field.question.type === "enum" || field.question.type === "multi";
+      const isCategorySelect = field.question.type === "categorySelect";
 
       if (isEnumOrMulti && field.question.options && llmClient) {
         cachedHint = await renderTradeoffHelp(
           field.name,
           resourceType,
           [...field.question.options],
+          userIntent ?? "",
+          tools,
+          llmClient,
+        );
+      } else if (isCategorySelect && field.question.categories && llmClient) {
+        // Collect all options from all categories for the trade-off analysis
+        const allOpts = field.question.categories.flatMap((c) =>
+          c.options.map((o) => ({ value: o.value, label: o.label })),
+        );
+        cachedHint = await renderTradeoffHelp(
+          field.name,
+          resourceType,
+          allOpts,
           userIntent ?? "",
           tools,
           llmClient,
@@ -581,6 +651,16 @@ export async function optionElicitorNode(
   const resolvedCommon = resolveFieldConfigs(commonFields);
   const resolvedAdvanced = resolveFieldConfigs(advancedFields);
 
+  // Story 18.12: Propagate categoryHint from intent overrides into resolved configs
+  for (const override of intentOverrides) {
+    if (override.categoryHint) {
+      const resolved = resolvedCommon[override.fieldName];
+      if (resolved) {
+        resolved.categoryHint = override.categoryHint;
+      }
+    }
+  }
+
   // Story 19.5: Apply pattern memory defaults — higher priority than plugin defaults,
   // lower priority than org policy locks. User can still override during prompt.
   const patternHintedFields = new Set<string>();
@@ -719,6 +799,8 @@ export async function optionElicitorNode(
       ),
     },
   });
+
+  startSpinner("Generating your plan...");
 
   return { elicitedOptions };
 }

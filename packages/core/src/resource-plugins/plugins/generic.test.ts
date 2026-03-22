@@ -24,9 +24,10 @@ describe("genericPlugin", () => {
     expect(field?.question.type).toBe("string");
   });
 
-  it("Tags is a multi type", () => {
+  it("Tags is a string type with toCfn", () => {
     const field = genericPlugin.commonFields.find((f) => f.name === "Tags");
-    expect(field?.question.type).toBe("multi");
+    expect(field?.question.type).toBe("string");
+    expect(field?.toCfn).toBeDefined();
   });
 
   it("advancedFields is empty (AC-5)", () => {
