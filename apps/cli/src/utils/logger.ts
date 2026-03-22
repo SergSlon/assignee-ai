@@ -28,6 +28,9 @@ export const LOG_ACTIONS = {
   RESULT_FORMATTED: "result_formatted",
   APPLY_SUCCEEDED: "apply_succeeded",
   APPLY_FAILED: "apply_failed",
+  CHECKPOINT_SAVED: "checkpoint_saved",
+  CHECKPOINT_LOADED: "checkpoint_loaded",
+  CHECKPOINT_EXPIRED: "checkpoint_expired",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

@@ -13,3 +13,9 @@ export const SUPPORTED_TYPES_HINT = `Supported types: ${SUPPORTED_TYPES_ARRAY.jo
 
 /** Maximum characters of the CFN schema excerpt passed to the plan generator prompt. */
 export const SCHEMA_EXCERPT_MAX_CHARS = 3000;
+
+/** Default TTL for plan checkpoints in hours. */
+export const CHECKPOINT_DEFAULT_TTL_HOURS = 72;
+
+/** Directory for checkpoint files, relative to project root. */
+export const CHECKPOINT_DIR = ".assignee";

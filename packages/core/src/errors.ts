@@ -69,6 +69,14 @@ export class ConfigurationError extends AssigneeError {
   }
 }
 
+/** Error related to checkpoint save/load/validation. */
+export class CheckpointError extends AssigneeError {
+  constructor(message: string) {
+    super(message, "CHECKPOINT_ERROR");
+    this.name = "CheckpointError";
+  }
+}
+
 export type ProvisioningErrorCode =
   | "AlreadyExists"
   | "NotFound"

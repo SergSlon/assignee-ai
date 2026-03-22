@@ -8,6 +8,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import { GraphNode } from "../constants/graph.js";
 import { graphAnnotation } from "./graph-state.js";
 import {
+  routeCheckpointEntry,
   routePreflightGuard,
   routeResourceProvisioner,
   routeStatusPoller,
@@ -74,7 +75,10 @@ export function createGraph(tools: StructuredTool[] = []) {
       statusPollerNode(state, provisioner),
     )
     .addNode(GraphNode.RESULT_FORMATTER, (state) => resultFormatterNode(state))
-    .addEdge(START, GraphNode.INTENT_PARSER)
+    .addConditionalEdges(START, routeCheckpointEntry, {
+      [GraphNode.INTENT_PARSER]: GraphNode.INTENT_PARSER,
+      [GraphNode.HUMAN_APPROVAL]: GraphNode.HUMAN_APPROVAL,
+    })
     .addEdge(GraphNode.INTENT_PARSER, GraphNode.SCHEMA_FETCHER)
     .addEdge(GraphNode.SCHEMA_FETCHER, GraphNode.OPTION_ELICITOR)
     .addEdge(GraphNode.OPTION_ELICITOR, GraphNode.COMPOUND_DISPATCHER)

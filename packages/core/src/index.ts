@@ -10,6 +10,11 @@ export {
   type PreflightModeType,
 } from "./schema/graph-state.js";
 export { AuditEventSchema, type AuditEvent } from "./schema/audit.js";
+export {
+  PlanCheckpointSchema,
+  type PlanCheckpoint,
+  CHECKPOINT_VERSION,
+} from "./schema/checkpoint.js";
 
 // Config — resource type constants and identifier mappings
 export {
@@ -89,6 +94,7 @@ export {
   StateGuardError,
   UnsupportedResourceError,
   ConfigurationError,
+  CheckpointError,
   ProvisioningError,
   type ProvisioningErrorCode,
 } from "./errors.js";
