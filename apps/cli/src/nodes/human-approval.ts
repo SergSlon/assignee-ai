@@ -57,7 +57,6 @@ export async function humanApprovalNode(
       state.resourcePattern,
       state.resourceQueue,
       state.perResourceCosts,
-      state.guardrailFindings,
       state.bpFindings,
     );
     confirmed = await renderHitlCompoundConfirm(

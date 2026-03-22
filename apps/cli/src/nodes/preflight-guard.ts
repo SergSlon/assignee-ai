@@ -11,9 +11,7 @@ import {
   ExecutionStatus,
   defaultPricingRegistry,
   extractFirstTierPrice,
-  defaultGuardrailEngine,
   type AwsPricingResponse,
-  type GuardrailFinding,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
@@ -96,33 +94,6 @@ export async function preflightGuardNode(
     }
   }
 
-  // Story 10.4: Fast guardrail evaluation (pure, synchronous, <100ms)
-  const guardrailFindings: GuardrailFinding[] = defaultGuardrailEngine.evaluate(
-    state.resourceType,
-    desiredState,
-  );
-
-  if (guardrailFindings.length > 0) {
-    const criticals = guardrailFindings.filter(
-      (f) => f.severity === "critical",
-    ).length;
-    const warnings = guardrailFindings.filter(
-      (f) => f.severity === "warning",
-    ).length;
-    log({
-      ts: new Date().toISOString(),
-      runId: state.runId,
-      level: "info",
-      action: LOG_ACTIONS.GUARDRAIL_EVALUATED,
-      extras: {
-        resourceType: state.resourceType,
-        findingsCount: guardrailFindings.length,
-        criticals,
-        warnings,
-      },
-    });
-  }
-
   log({
     ts: new Date().toISOString(),
     runId: state.runId,
@@ -168,13 +139,13 @@ export async function preflightGuardNode(
     freeTierNote = undefined;
   }
 
-  // Story 12.3: CRITICAL BP findings block provisioning (complementing fast guardrails)
+  // Story 18.10: Blocking BP findings (replaces old guardrail engine + CRITICAL BP check)
   const bpFindings = state.bpFindings ?? [];
-  const criticalBPFindings = bpFindings.filter(
-    (f) => f.severity === "CRITICAL",
+  const blockingFindings = bpFindings.filter(
+    (f) => f.blocking || f.severity === "CRITICAL",
   );
   let bpBlocked = false;
-  if (criticalBPFindings.length > 0) {
+  if (blockingFindings.length > 0) {
     bpBlocked = true;
     log({
       ts: new Date().toISOString(),
@@ -183,8 +154,8 @@ export async function preflightGuardNode(
       action: LOG_ACTIONS.BP_EVALUATED,
       extras: {
         blocked: true,
-        criticalCount: criticalBPFindings.length,
-        practiceIds: criticalBPFindings.map((f) => f.practiceId),
+        blockingCount: blockingFindings.length,
+        practiceIds: blockingFindings.map((f) => f.practiceId),
       },
     });
   }
@@ -240,7 +211,6 @@ export async function preflightGuardNode(
   return {
     estimatedMonthlyCost: costEstimate,
     preflightPassed: !bpBlocked,
-    guardrailFindings,
     freeTierNote: freeTierNote ?? undefined,
     ...(perResourceCosts !== undefined ? { perResourceCosts } : {}),
   };

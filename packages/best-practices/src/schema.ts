@@ -35,5 +35,6 @@ export const bestPracticeSchema = z
     triggers: z.array(triggerSchema).optional(),
     autoFixable: z.boolean().optional(),
     desiredStatePatch: z.record(z.unknown()).optional(),
+    blocking: z.boolean().optional().default(false),
   })
   .strict();

@@ -161,8 +161,6 @@ export function registerPlanResource(
                   desiredState: finalState["desiredState"],
                   estimatedMonthlyCost: finalState["estimatedMonthlyCost"],
                   bpFindings: (finalState["bpFindings"] as unknown[]) ?? [],
-                  guardrailFindings:
-                    (finalState["guardrailFindings"] as unknown[]) ?? [],
                   freeTierNote: finalState["freeTierNote"],
                   checkpointPath,
                   runId,

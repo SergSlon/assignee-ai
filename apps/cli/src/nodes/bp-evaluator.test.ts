@@ -57,6 +57,7 @@ const S3_ENCRYPTION_BP: BestPractice = {
   remediation: "Configure ServerSideEncryptionConfiguration",
   category: "security",
   lastVerified: "2026-03-18",
+  blocking: true,
 };
 
 function makeState(overrides: Partial<AgentState> = {}): AgentState {
@@ -150,6 +151,22 @@ describe("bpEvaluatorNode", () => {
 
     expect(result.bpFindings).toBeDefined();
     expect(result.bpFindings).toHaveLength(0);
+  });
+
+  it("returns findings with blocking: true for blocking practices", async () => {
+    vi.mocked(loadBestPractices).mockReturnValue([S3_ENCRYPTION_BP]);
+
+    const state = makeState({
+      desiredState: {
+        BucketName: "my-bucket",
+        // No encryption configured — should trigger blocking finding
+      },
+    });
+
+    const result = await bpEvaluatorNode(state);
+
+    expect(result.bpFindings).toHaveLength(1);
+    expect(result.bpFindings![0]!.blocking).toBe(true);
   });
 
   it("caches loaded practices across invocations", async () => {

@@ -1,7 +1,14 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Seed BP Library — Sprint A+B (45 rules) > snapshot: loadBestPractices output matches expected structure 1`] = `
+exports[`Seed BP Library — Sprint A+B + guardrail migration (47 rules) > snapshot: loadBestPractices output matches expected structure 1`] = `
 [
+  {
+    "category": "reliability",
+    "check_type": "exists",
+    "id": "BP-ASG-001",
+    "resource_type": "AWS::AutoScaling::AutoScalingGroup",
+    "severity": "HIGH",
+  },
   {
     "category": "reliability",
     "check_type": "equals",
@@ -134,6 +141,13 @@ exports[`Seed BP Library — Sprint A+B (45 rules) > snapshot: loadBestPractices
     "id": "BP-IAM-004",
     "resource_type": "AWS::IAM::User",
     "severity": "HIGH",
+  },
+  {
+    "category": "security",
+    "check_type": "not_equals",
+    "id": "BP-IAM-005",
+    "resource_type": "AWS::IAM::Role",
+    "severity": "CRITICAL",
   },
   {
     "category": "reliability",

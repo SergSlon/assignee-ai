@@ -46,6 +46,7 @@ export interface BestPractice {
   triggers?: Trigger[];
   autoFixable?: boolean;
   desiredStatePatch?: Record<string, unknown>;
+  blocking?: boolean;
 }
 
 export interface BPFinding {
@@ -55,4 +56,5 @@ export interface BPFinding {
   category: BPCategory;
   message: string;
   remediation?: string;
+  blocking: boolean;
 }

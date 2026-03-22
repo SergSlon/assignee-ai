@@ -113,14 +113,6 @@ export type {
   AwsPriceDimension,
 } from "./pricing/index.js";
 
-// Guardrails (Story 10.4)
-export { defaultGuardrailEngine, GuardrailEngine } from "./guardrails/index.js";
-export type {
-  GuardrailSeverity,
-  GuardrailFinding,
-  GuardrailRule,
-} from "./guardrails/index.js";
-
 // Errors
 export {
   AssigneeError,

@@ -86,7 +86,6 @@ describe("plan_resource tool", () => {
             message: "Versioning is recommended for data protection.",
           },
         ],
-        guardrailFindings: [],
         freeTierNote: {
           type: "legacy_eligible",
           message: "S3 includes 5GB free storage for 12 months.",
@@ -127,7 +126,6 @@ describe("plan_resource tool", () => {
         bpFindings: [
           { id: "s3-encryption", severity: "HIGH", title: "Enable encryption" },
         ],
-        guardrailFindings: [],
       };
 
       const ctx = createMockGraphContext(mockState);
@@ -167,15 +165,22 @@ describe("plan_resource tool", () => {
       expect(data["bpFindings"]).toEqual([]);
     });
 
-    it("should include guardrailFindings and freeTierNote in the response", async () => {
+    it("should include freeTierNote in the response", async () => {
       const mockState = {
         executionStatus: ExecutionStatus.SUCCESS,
         resourceType: "AWS::IAM::Role",
         desiredState: { RoleName: "my-role" },
         estimatedMonthlyCost: "$0.00",
         preflightPassed: true,
-        guardrailFindings: [
-          { severity: "HIGH", title: "Admin access detected" },
+        bpFindings: [
+          {
+            practiceId: "BP-IAM-005",
+            severity: "CRITICAL",
+            title: "Admin access detected",
+            category: "security",
+            message: "IAM policy contains wildcard permissions",
+            blocking: true,
+          },
         ],
         freeTierNote: { type: "always_free", message: "IAM is always free." },
       };
@@ -189,7 +194,7 @@ describe("plan_resource tool", () => {
       });
 
       const data = parseToolResult(result);
-      expect(data["guardrailFindings"]).toHaveLength(1);
+      expect(data["bpFindings"]).toHaveLength(1);
       expect(data["freeTierNote"]).toBeDefined();
       expect((data["freeTierNote"] as Record<string, unknown>)["type"]).toBe(
         "always_free",

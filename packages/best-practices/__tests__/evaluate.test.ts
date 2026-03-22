@@ -517,6 +517,29 @@ describe("evaluateTriggers — edge cases", () => {
     expect(f.category).toBe("security");
     expect(f.message).toBe("Public ACLs are bad");
     expect(f.remediation).toBe("Set BlockPublicAcls to true");
+    expect(f.blocking).toBe(false);
+  });
+
+  it("propagates blocking: true from practice to finding", () => {
+    const bp = makeBP({
+      id: "BP-S3-001",
+      title: "Blocking rule",
+      blocking: true,
+    });
+    const ctx = makeCtx({ desiredState: {} });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.blocking).toBe(true);
+  });
+
+  it("defaults blocking to false when not set on practice", () => {
+    const bp = makeBP(); // no blocking field
+    const ctx = makeCtx({ desiredState: {} });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.blocking).toBe(false);
   });
 
   it("uses fallback message when description is undefined", () => {

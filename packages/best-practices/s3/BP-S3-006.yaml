@@ -11,3 +11,4 @@ description: "S3 buckets must have server-side encryption configured. Encryption
 remediation: "Configure BucketEncryption with at least SSE-S3 (AES256). For compliance workloads, use SSE-KMS with a customer-managed key."
 category: security
 lastVerified: "2026-03-22"
+blocking: true

@@ -16,7 +16,6 @@ import {
   type ResourceResult,
   type OrgResourceConfig,
   type UserResourceConfig,
-  type GuardrailFinding,
   AssigneeError,
 } from "@assignee/core";
 import type { BPFinding } from "@assignee/best-practices";
@@ -104,11 +103,6 @@ export const graphAnnotation = Annotation.Root({
   checkpointResumed: Annotation<boolean>({
     reducer: (_, b) => b,
     default: () => false,
-  }),
-  // Story 10.4: fast guardrail findings (display-only, non-blocking)
-  guardrailFindings: Annotation<GuardrailFinding[] | undefined>({
-    reducer: (_, b) => b,
-    default: () => undefined,
   }),
   // Story 7.8: free tier eligibility note (display-only, non-blocking)
   freeTierNote: Annotation<FreeTierNote | undefined>({

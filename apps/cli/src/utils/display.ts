@@ -17,7 +17,6 @@ import type {
   ArchitecturePattern,
   ResourceSpec,
   LlmPort,
-  GuardrailFinding,
 } from "@assignee/core";
 import type { BPFinding } from "@assignee/best-practices";
 import type { SecurityFinding } from "../services/graph-state.js";
@@ -46,7 +45,6 @@ export interface RenderableState {
   runId: string;
   resourceArn?: string;
   executionMode?: string;
-  guardrailFindings?: GuardrailFinding[];
   freeTierNote?: FreeTierNote;
   bpFindings?: BPFinding[];
   memoryHints?: string[];
@@ -93,11 +91,8 @@ export function renderIntro(): void {
 export function renderPlanBox(state: RenderableState): void {
   stopSpinner();
 
-  // Story 10.4: Build guardrail findings section
-  const guardrailLine = formatGuardrailFindings(state.guardrailFindings);
-
-  // Story 12.3: Build best practices findings section
-  const bpLine = formatBPFindings(state.bpFindings);
+  // Story 18.10: Unified findings section (merged guardrails + best practices)
+  const findingsLine = formatFindings(state.bpFindings);
 
   // Story 7.8: Free tier note line (optional, non-blocking)
   const freeTierLine = formatFreeTierNote(state.freeTierNote);
@@ -112,8 +107,7 @@ export function renderPlanBox(state: RenderableState): void {
     `Estimated Cost:  ${state.estimatedMonthlyCost ?? "N/A"}`,
     ...(freeTierLine ? [freeTierLine] : []),
     ...(memoryHintLines ? [memoryHintLines] : []),
-    guardrailLine,
-    bpLine,
+    findingsLine,
     `Run ID:          ${state.runId}`,
   ].join("\n");
 
@@ -132,45 +126,69 @@ export function renderPlanBox(state: RenderableState): void {
 }
 
 /**
- * Formats guardrail findings for display in the plan box.
- * TTY mode uses chalk coloring and emoji indicators.
- * Non-TTY mode uses plain text markers.
+ * Formats all findings (blocking + non-blocking) for display in the plan box.
+ * Replaces the former separate formatGuardrailFindings and formatBPFindings.
+ * TTY mode uses chalk coloring. Non-TTY mode uses plain text markers.
+ *
+ * @see Story 18.10
  */
-function formatGuardrailFindings(
-  findings: GuardrailFinding[] | undefined,
-): string {
+export function formatFindings(findings: BPFinding[] | undefined): string {
   const items = findings ?? [];
   const isTTY = process.stdout.isTTY;
 
   if (items.length === 0) {
     return isTTY
-      ? `Guardrails:      ${chalk.green("\u2705 All checks passed")}`
-      : "Guardrails:      PASS All checks passed";
+      ? `Findings:        ${chalk.green("All checks passed")}`
+      : "Findings:        PASS All checks passed";
   }
 
-  const criticals = items.filter((f) => f.severity === "critical");
-  const warnings = items.filter((f) => f.severity === "warning");
+  const blocking = items.filter((f) => f.blocking);
+  const critical = items.filter(
+    (f) => !f.blocking && f.severity === "CRITICAL",
+  );
+  const high = items.filter((f) => f.severity === "HIGH" && !f.blocking);
+  const medium = items.filter((f) => f.severity === "MEDIUM");
+  const info = items.filter((f) => f.severity === "INFO");
+
+  const summary = [
+    blocking.length > 0 ? `${blocking.length} blocking` : null,
+    critical.length > 0 ? `${critical.length} critical` : null,
+    high.length > 0 ? `${high.length} high` : null,
+    medium.length > 0 ? `${medium.length} medium` : null,
+    info.length > 0 ? `${info.length} info` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   if (isTTY) {
     const lines = [
-      `Guardrails:      ${criticals.length} critical, ${warnings.length} warnings`,
-      ...items.map((f) =>
-        f.severity === "critical"
-          ? chalk.red(`  \uD83D\uDD34 ${f.message}`)
-          : chalk.yellow(`  \u26A0\uFE0F ${f.message}`),
-      ),
+      `Findings:        ${summary}`,
+      ...items.map((f) => {
+        const hint = f.remediation ? ` (${f.remediation})` : "";
+        if (f.blocking) return chalk.red(`  BLOCK  ${f.message}${hint}`);
+        if (f.severity === "CRITICAL")
+          return chalk.red(`  CRIT   ${f.message}${hint}`);
+        if (f.severity === "HIGH")
+          return chalk.red(`  HIGH   ${f.message}${hint}`);
+        if (f.severity === "MEDIUM")
+          return chalk.yellow(`  WARN   ${f.message}${hint}`);
+        return chalk.blue(`  INFO   ${f.message}${hint}`);
+      }),
     ];
     return lines.join("\n");
   }
 
-  // Non-TTY: plain text without emoji/chalk
+  // Non-TTY: plain text without chalk
   const lines = [
-    `Guardrails:      ${criticals.length} critical, ${warnings.length} warnings`,
-    ...items.map((f) =>
-      f.severity === "critical"
-        ? `  [CRITICAL] ${f.message}`
-        : `  [WARNING] ${f.message}`,
-    ),
+    `Findings:        ${summary}`,
+    ...items.map((f) => {
+      const hint = f.remediation ? ` (${f.remediation})` : "";
+      if (f.blocking) return `  [BLOCK] ${f.message}${hint}`;
+      if (f.severity === "CRITICAL") return `  [CRITICAL] ${f.message}${hint}`;
+      if (f.severity === "HIGH") return `  [HIGH] ${f.message}${hint}`;
+      if (f.severity === "MEDIUM") return `  [MEDIUM] ${f.message}${hint}`;
+      return `  [INFO] ${f.message}${hint}`;
+    }),
   ];
   return lines.join("\n");
 }
@@ -198,64 +216,6 @@ function formatMemoryHints(hints: string[] | undefined): string | null {
   return lines.join("\n");
 }
 
-/** Severity-to-icon mapping for best practice findings (Story 12.3). */
-const BP_SEVERITY_ICON: Record<string, { tty: string; plain: string }> = {
-  CRITICAL: { tty: "\uD83D\uDED1", plain: "[CRITICAL]" }, // octagonal stop sign
-  HIGH: { tty: "\uD83D\uDD34", plain: "[HIGH]" }, // red circle
-  MEDIUM: { tty: "\u26A0\uFE0F", plain: "[MEDIUM]" }, // warning
-  INFO: { tty: "\u2139\uFE0F", plain: "[INFO]" }, // info
-};
-
-/**
- * Formats best practice findings for display in the plan box.
- * TTY mode uses chalk coloring and emoji indicators.
- * Non-TTY mode uses plain text markers.
- *
- * @see Story 12.3
- */
-export function formatBPFindings(findings: BPFinding[] | undefined): string {
-  const items = findings ?? [];
-  const isTTY = process.stdout.isTTY;
-
-  if (items.length === 0) {
-    return isTTY
-      ? `Best Practices:  ${chalk.green("\u2705 No best practice findings")}`
-      : "Best Practices:  PASS No best practice findings";
-  }
-
-  const criticals = items.filter(
-    (f) => f.severity === "CRITICAL" || f.severity === "HIGH",
-  );
-  const warnings = items.filter(
-    (f) => f.severity === "MEDIUM" || f.severity === "INFO",
-  );
-
-  if (isTTY) {
-    const lines = [
-      `Best Practices:  ${criticals.length} violation${criticals.length !== 1 ? "s" : ""}, ${warnings.length} warning${warnings.length !== 1 ? "s" : ""}`,
-      ...items.map((f) => {
-        const icon = BP_SEVERITY_ICON[f.severity]?.tty ?? "\u2753";
-        const hint = f.remediation ? ` (${f.remediation})` : "";
-        if (f.severity === "CRITICAL" || f.severity === "HIGH") {
-          return chalk.red(`  ${icon} ${f.title}${hint}`);
-        }
-        return chalk.yellow(`  ${icon} ${f.title}${hint}`);
-      }),
-    ];
-    return lines.join("\n");
-  }
-
-  const lines = [
-    `Best Practices:  ${criticals.length} violation${criticals.length !== 1 ? "s" : ""}, ${warnings.length} warning${warnings.length !== 1 ? "s" : ""}`,
-    ...items.map((f) => {
-      const tag = BP_SEVERITY_ICON[f.severity]?.plain ?? "[UNKNOWN]";
-      const hint = f.remediation ? ` (${f.remediation})` : "";
-      return `  ${tag} ${f.title}${hint}`;
-    }),
-  ];
-  return lines.join("\n");
-}
-
 /**
  * Renders a compound provisioning plan as a dependency-ordered resource list.
  * Called by human_approval node when resourcePattern is set (compound intent).
@@ -269,7 +229,6 @@ export function renderDependencyPlan(
   pattern: ArchitecturePattern,
   resourceQueue: ResourceSpec[],
   perResourceCosts?: Record<string, string>,
-  guardrailFindings?: GuardrailFinding[],
   bpFindings?: BPFinding[],
 ): void {
   stopSpinner();
@@ -303,13 +262,9 @@ export function renderDependencyPlan(
     }
   }
 
-  // Story 10.4: Guardrail findings summary for compound plans
+  // Story 18.10: Unified findings summary for compound plans
   lines.push(``);
-  lines.push(formatGuardrailFindings(guardrailFindings));
-
-  // Story 12.3: Best practice findings summary for compound plans
-  lines.push(``);
-  lines.push(formatBPFindings(bpFindings));
+  lines.push(formatFindings(bpFindings));
 
   lines.push(``);
   lines.push(`Region:   ${regionLabel()}`);

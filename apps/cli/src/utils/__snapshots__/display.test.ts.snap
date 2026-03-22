@@ -21,9 +21,7 @@ Will provision 5 resources in order:
   [5] AWS::CloudWatch::Alarm
        CloudWatch Alarm
 
-Guardrails:      PASS All checks passed
-
-Best Practices:  PASS No best practice findings
+Findings:        PASS All checks passed
 
 Region:   us-east-1 (cross-regional inference: us.*)
 ==================================

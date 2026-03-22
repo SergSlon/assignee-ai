@@ -1,0 +1,15 @@
+id: BP-ASG-001
+title: "Auto Scaling group missing MaxSize"
+severity: HIGH
+resource_type: "AWS::AutoScaling::AutoScalingGroup"
+property_path: "MaxSize"
+check_type: "exists"
+expected_value: true
+source: "Assignee Guardrails (migrated)"
+source_id: "autoscaling-no-maxsize"
+description: "Auto Scaling group has no MaxSize defined — may scale without bound"
+remediation: "Set MaxSize to a reasonable upper limit for your workload"
+category: reliability
+lastVerified: "2026-03-22"
+triggers:
+  - resourceType: "AWS::AutoScaling::AutoScalingGroup"
