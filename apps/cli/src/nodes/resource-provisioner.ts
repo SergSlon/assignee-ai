@@ -162,11 +162,24 @@ export async function resourceProvisionerNode(
     }
 
     if (stateGuardErr.kind !== ProvisioningErrorKind.NOT_FOUND) {
-      return {
-        executionStatus: ExecutionStatus.FAILED,
-        errorMessage: `State Guard failed: ${stateGuardErr.message}`,
-        error: new ProvisioningError(stateGuardErr.message, "Unknown"),
-      };
+      // Permission errors should not block CREATE — the resource likely doesn't exist,
+      // we just can't verify. Log a warning and proceed.
+      if (stateGuardErr.kind === ProvisioningErrorKind.ACCESS_DENIED) {
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "warn",
+          action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
+          extras: { reason: "access_denied", message: stateGuardErr.message },
+        });
+        // Fall through to proceed with creation
+      } else {
+        return {
+          executionStatus: ExecutionStatus.FAILED,
+          errorMessage: `State Guard: unable to verify resource state. ${stateGuardErr.message}`,
+          error: new ProvisioningError(stateGuardErr.message, "Unknown"),
+        };
+      }
     }
 
     // NOT_FOUND = safe to proceed

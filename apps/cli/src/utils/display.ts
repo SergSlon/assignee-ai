@@ -438,6 +438,76 @@ export function renderSecurityWarnings(
   console.log(""); // trailing newline
 }
 
+// ── Trade-off analysis help (Story 10.6) ──────────────────────────────────────
+
+const TRADEOFF_TIMEOUT_MS = 10_000;
+
+/**
+ * Generates and displays an LLM-powered trade-off analysis for enum/multi options.
+ * Called when the user types `?` at an enum or multi prompt.
+ * Falls back to `renderDocHelp` on timeout, LLM failure, or missing llmClient.
+ *
+ * @param fieldName    - The field being configured (e.g. "InstanceType")
+ * @param resourceType - The AWS resource type (e.g. "AWS::EC2::Instance")
+ * @param options      - Available enum/multi options with value and label
+ * @param userIntent   - The user's original natural-language intent
+ * @param tools        - LangChain tools array (passed through for fallback)
+ * @param llmClient    - Optional LLM client for generating the trade-off analysis
+ *
+ * @see Story 10.6
+ */
+export async function renderTradeoffHelp(
+  fieldName: string,
+  resourceType: string,
+  options: Array<{ value: string; label: string }>,
+  userIntent: string,
+  tools: StructuredTool[],
+  llmClient?: LlmPort,
+): Promise<void> {
+  if (!llmClient) {
+    return renderDocHelp(fieldName, resourceType, tools);
+  }
+
+  const optionList = options.map((o) => `- ${o.value}: ${o.label}`).join("\n");
+
+  const prompt = `You are an AWS infrastructure cost/performance advisor.
+A developer is configuring a "${resourceType}" resource and needs to choose a value for "${fieldName}".
+
+Their stated intent: "${userIntent}"
+
+Available options:
+${optionList}
+
+Compare the top 3-5 most relevant options for this developer's use case. For each option provide:
+1. Option name
+2. Estimated monthly cost at typical usage (e.g., "~$8/mo for light workloads")
+3. Best use case (1 sentence)
+
+End with a one-sentence recommendation based on their intent.
+
+Rules:
+- Be concise — no more than 15 lines total.
+- Use plain text, no markdown headers or code blocks.
+- If you don't know exact pricing, give reasonable estimates with "~".`;
+
+  const result = await withTimeout(
+    llmClient.generateText(prompt),
+    TRADEOFF_TIMEOUT_MS,
+  );
+
+  if (!result) {
+    // Timeout — fall back to doc help
+    return renderDocHelp(fieldName, resourceType, tools, llmClient);
+  }
+
+  const [err, text] = result;
+  if (err || !text) {
+    return renderDocHelp(fieldName, resourceType, tools, llmClient);
+  }
+
+  clack.note(text.trim(), `⚖️ ${fieldName} — Trade-off Analysis`);
+}
+
 // ── Documentation help (Story 7.5) ───────────────────────────────────────────
 
 const DOC_TIMEOUT_MS = 15000;
@@ -751,11 +821,11 @@ export async function renderOptionPrompt(
     }
     case "enum": {
       const enumOptions = [
-        { value: "?", label: "\u2753 ? \u2014 explain this field" },
         ...(question.options ?? []).map((o) => ({
           value: o.value,
           label: o.label,
         })),
+        { value: "?", label: "\u2753 ? \u2014 explain this field" },
       ];
       result = await clack.select({
         message: question.label,
@@ -788,10 +858,13 @@ export async function renderOptionPrompt(
       }
       result = await clack.multiselect({
         message: question.label,
-        options: question.options.map((o) => ({
-          value: o.value,
-          label: o.label,
-        })),
+        options: [
+          { value: "?", label: "\u2753 ? \u2014 explain these options" },
+          ...question.options.map((o) => ({
+            value: o.value,
+            label: o.label,
+          })),
+        ],
         required: false,
       });
       break;

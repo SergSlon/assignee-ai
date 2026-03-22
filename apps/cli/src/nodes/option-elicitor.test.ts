@@ -8,6 +8,7 @@ vi.mock("@clack/prompts", () => ({
   text: vi.fn(),
   multiselect: vi.fn(),
   isCancel: vi.fn(() => false),
+  spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
 }));
 
 vi.mock("@assignee/best-practices", () => {
@@ -21,8 +22,16 @@ vi.mock("../utils/display.js", async (importOriginal) => {
   return {
     ...actual,
     renderDocHelp: vi.fn().mockResolvedValue(undefined),
+    renderTradeoffHelp: vi.fn().mockResolvedValue(undefined),
   };
 });
+
+vi.mock("../utils/aws-resource-discovery.js", () => ({
+  discoverAmis: vi.fn().mockResolvedValue([]),
+  discoverSubnets: vi.fn().mockResolvedValue([]),
+  discoverSecurityGroups: vi.fn().mockResolvedValue([]),
+  discoverKeyPairs: vi.fn().mockResolvedValue([]),
+}));
 
 const testPlugin: ResourcePlugin = {
   resourceType: "AWS::Test::Resource",
@@ -73,6 +82,85 @@ const testPlugin: ResourcePlugin = {
   defaults: {},
 };
 
+/** Simplified EC2 plugin for intent-defaults integration tests (no fetchers). */
+const testEc2Plugin: ResourcePlugin = {
+  resourceType: "AWS::EC2::Instance",
+  commonFields: [
+    {
+      name: "InstanceType",
+      question: {
+        type: "enum",
+        label: "Instance type",
+        options: [
+          { value: "t3.micro", label: "t3.micro" },
+          { value: "t3.small", label: "t3.small" },
+          { value: "t3.large", label: "t3.large" },
+          { value: "c5.xlarge", label: "c5.xlarge" },
+          { value: "r5.large", label: "r5.large" },
+        ],
+        initialValue: "t3.micro",
+      },
+    },
+  ],
+  advancedFields: [],
+  defaults: {},
+};
+
+/** Simplified S3 plugin for intent-defaults integration tests. */
+const testS3Plugin: ResourcePlugin = {
+  resourceType: "AWS::S3::Bucket",
+  commonFields: [
+    {
+      name: "BucketName",
+      question: {
+        type: "string",
+        label: "Bucket name",
+        placeholder: "my-bucket",
+      },
+    },
+    {
+      name: "BucketEncryption",
+      question: {
+        type: "boolean",
+        label: "Enable encryption?",
+        initialValue: true,
+      },
+    },
+    {
+      name: "PublicAccessBlockConfiguration",
+      question: {
+        type: "boolean",
+        label: "Block public access?",
+        initialValue: true,
+      },
+    },
+  ],
+  advancedFields: [
+    {
+      name: "EnableLifecycle",
+      question: {
+        type: "boolean",
+        label: "Add lifecycle rules?",
+        initialValue: false,
+      },
+    },
+    {
+      name: "LifecycleTransitionDays",
+      question: {
+        type: "enum",
+        label: "Transition days",
+        options: [
+          { value: "30", label: "30 days" },
+          { value: "90", label: "90 days" },
+        ],
+        initialValue: "30",
+        showIf: { field: "EnableLifecycle", value: true },
+      },
+    },
+  ],
+  defaults: {},
+};
+
 vi.mock("@assignee/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@assignee/core")>();
   return {
@@ -81,6 +169,8 @@ vi.mock("@assignee/core", async (importOriginal) => {
     defaultPluginRegistry: {
       get: vi.fn((type: string) => {
         if (type === "AWS::Test::Resource") return testPlugin;
+        if (type === "AWS::EC2::Instance") return testEc2Plugin;
+        if (type === "AWS::S3::Bucket") return testS3Plugin;
         // Fall through to real registry for generic fallback
         return actual.defaultPluginRegistry.get(type);
       }),
@@ -92,7 +182,8 @@ const { confirm, select, text, multiselect, isCancel } =
   await import("@clack/prompts");
 const { optionElicitorNode, populateDefaultOptions } =
   await import("./option-elicitor.js");
-const { renderDocHelp } = await import("../utils/display.js");
+const { renderDocHelp, renderTradeoffHelp } =
+  await import("../utils/display.js");
 
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
@@ -467,5 +558,174 @@ describe("populateDefaultOptions — missing required fields (Story 11.1 AC#5)",
     ).not.toThrow();
     const result = populateDefaultOptions(pluginOptionalNoDefaults);
     expect(result["OptionalField"]).toBeUndefined();
+  });
+});
+
+// ── Story 10.5: Intent-Aware Smart Defaults integration tests ────────────────
+
+describe("optionElicitorNode — intent-aware smart defaults (Story 10.5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setTTY(true);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  // Task 4.1: EC2 "web server" → InstanceType initialValue overridden to t3.small
+  it("EC2 web server intent: InstanceType defaults to t3.small", async () => {
+    // testEc2Plugin has 1 common field: InstanceType (enum, no fetchers)
+    vi.mocked(select).mockResolvedValueOnce("t3.small"); // InstanceType — intent default
+
+    const result = await optionElicitorNode(
+      makeState({
+        userIntent: "Create an EC2 for a web server",
+        resourceType: "AWS::EC2::Instance",
+      }),
+    );
+
+    expect(result.elicitedOptions).toBeDefined();
+    expect(result.elicitedOptions?.["InstanceType"]).toBe("t3.small");
+  });
+
+  // Task 4.2: S3 no keywords → plugin defaults unchanged
+  it("S3 with no intent keywords: plugin defaults unchanged", async () => {
+    // testS3Plugin common fields: BucketName(string), BucketEncryption(bool), PublicAccessBlockConfiguration(bool)
+    vi.mocked(text).mockResolvedValueOnce("my-bucket"); // BucketName
+    vi.mocked(select)
+      .mockResolvedValueOnce(true) // BucketEncryption
+      .mockResolvedValueOnce(true); // PublicAccessBlockConfiguration
+    vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
+
+    const result = await optionElicitorNode(
+      makeState({
+        userIntent: "Create an S3 bucket",
+        resourceType: "AWS::S3::Bucket",
+      }),
+    );
+
+    expect(result.elicitedOptions).toBeDefined();
+    expect(result.elicitedOptions?.["BucketName"]).toBe("my-bucket");
+  });
+
+  // Task 3.10: Intent defaults do not override user-provided values
+  it("intent defaults do not override when user provides a different value", async () => {
+    // testEc2Plugin has 1 common field: InstanceType (enum)
+    // User explicitly chooses t3.large instead of the intent default t3.small
+    vi.mocked(select).mockResolvedValueOnce("t3.large"); // InstanceType — user overrides
+
+    const result = await optionElicitorNode(
+      makeState({
+        userIntent: "Create an EC2 for a web server",
+        resourceType: "AWS::EC2::Instance",
+      }),
+    );
+
+    // User's choice takes precedence over intent default
+    expect(result.elicitedOptions?.["InstanceType"]).toBe("t3.large");
+  });
+});
+
+// ── Story 10.6: ? dispatch — enum vs string ──────────────────────────────────
+
+describe("optionElicitorNode — ? dispatch by field type (Story 10.6)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setTTY(true);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("enum field ? → calls renderTradeoffHelp (not renderDocHelp)", async () => {
+    // Name → normal answer
+    vi.mocked(text).mockResolvedValueOnce("my-resource");
+    // Encrypt → normal answer
+    vi.mocked(select).mockResolvedValueOnce("false");
+    // Size (enum) → first '?', then 'sm'
+    vi.mocked(select)
+      .mockResolvedValueOnce("?") // Size → triggers help
+      .mockResolvedValueOnce("sm"); // Size → valid answer
+    vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
+
+    const mockLlmClient = {
+      generateText: vi.fn().mockResolvedValue([null, "test"] as const),
+      generateStructured: vi.fn(),
+    };
+
+    await optionElicitorNode(
+      makeState({ userIntent: "low-traffic blog" }),
+      [],
+      mockLlmClient,
+    );
+
+    expect(vi.mocked(renderTradeoffHelp)).toHaveBeenCalledOnce();
+    expect(vi.mocked(renderTradeoffHelp)).toHaveBeenCalledWith(
+      "Size",
+      "AWS::Test::Resource",
+      expect.arrayContaining([expect.objectContaining({ value: "sm" })]),
+      "low-traffic blog",
+      [],
+      mockLlmClient,
+    );
+    // renderDocHelp should NOT have been called for the enum field
+    expect(vi.mocked(renderDocHelp)).not.toHaveBeenCalled();
+  });
+
+  it("string field ? → calls renderDocHelp (not renderTradeoffHelp)", async () => {
+    // Name (string) → first '?', then valid answer
+    vi.mocked(text)
+      .mockResolvedValueOnce("?") // Name → triggers help
+      .mockResolvedValueOnce("my-resource"); // Name → valid answer
+    vi.mocked(select).mockResolvedValueOnce("false"); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("sm"); // Size
+    vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
+
+    const mockLlmClient = {
+      generateText: vi.fn().mockResolvedValue([null, "test"] as const),
+      generateStructured: vi.fn(),
+    };
+
+    await optionElicitorNode(
+      makeState({ userIntent: "low-traffic blog" }),
+      [],
+      mockLlmClient,
+    );
+
+    expect(vi.mocked(renderDocHelp)).toHaveBeenCalledOnce();
+    expect(vi.mocked(renderDocHelp)).toHaveBeenCalledWith(
+      "Name",
+      "AWS::Test::Resource",
+      [],
+      mockLlmClient,
+    );
+    // renderTradeoffHelp should NOT have been called for the string field
+    expect(vi.mocked(renderTradeoffHelp)).not.toHaveBeenCalled();
+  });
+
+  it("enum field ? without llmClient → falls back to renderDocHelp", async () => {
+    vi.mocked(text).mockResolvedValueOnce("my-resource"); // Name
+    vi.mocked(select).mockResolvedValueOnce("false"); // Encrypt
+    // Size (enum) → first '?', then 'sm'
+    vi.mocked(select).mockResolvedValueOnce("?").mockResolvedValueOnce("sm");
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    await optionElicitorNode(
+      makeState({ userIntent: "low-traffic blog" }),
+      [],
+      undefined, // no llmClient
+    );
+
+    // Without llmClient, enum ? should fall back to renderDocHelp
+    expect(vi.mocked(renderDocHelp)).toHaveBeenCalledOnce();
+    expect(vi.mocked(renderTradeoffHelp)).not.toHaveBeenCalled();
   });
 });

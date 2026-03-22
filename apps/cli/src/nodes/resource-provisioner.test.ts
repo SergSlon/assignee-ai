@@ -152,8 +152,29 @@ describe("resourceProvisionerNode", () => {
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(/State Guard failed/);
+      expect(result.errorMessage).toMatch(
+        /State Guard: unable to verify resource state/,
+      );
       expect(mockProvisioner.createResource).not.toHaveBeenCalled();
+    });
+
+    it("proceeds with creation when getResource returns ACCESS_DENIED", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.ACCESS_DENIED, message: "Access denied" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "token-access-denied" },
+      ]);
+
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
+
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      expect(mockProvisioner.createResource).toHaveBeenCalled();
     });
 
     it("skips state guard when identifier cannot be derived (no BucketName)", async () => {

@@ -33,14 +33,30 @@ import {
   renderOptionPrompt,
   renderAdvancedConfirm,
   renderDocHelp,
+  renderTradeoffHelp,
+  stopSpinner,
 } from "../utils/display.js";
 import { enrichOptionLabel } from "../utils/option-enrichment.js";
 import {
   fetchEc2InstancePrices,
   fetchRdsInstancePrices,
 } from "../utils/pricing-lookup.js";
+import {
+  discoverAmis,
+  discoverSubnets,
+  discoverSecurityGroups,
+  discoverKeyPairs,
+} from "../utils/aws-resource-discovery.js";
 import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
 import { ResourceFieldName } from "../constants/resource-fields.js";
+import {
+  evaluateWizardRecommendations,
+  displayRecommendations,
+} from "../utils/wizard-recommendations.js";
+import {
+  getIntentDefaults,
+  applyIntentOverrides,
+} from "../utils/intent-defaults.js";
 import type { AgentState } from "../services/graph.js";
 
 /**
@@ -203,6 +219,79 @@ function enrichFieldLabels(fields: ResourceField[]): ResourceField[] {
   });
 }
 
+/** Maps fetcher identifiers to discovery functions. */
+const fetcherMap: Record<
+  string,
+  () => Promise<Array<{ value: string; label: string }>>
+> = {
+  "discover-amis": discoverAmis,
+  "discover-subnets": discoverSubnets,
+  "discover-security-groups": discoverSecurityGroups,
+  "discover-key-pairs": discoverKeyPairs,
+};
+
+/**
+ * Resolves dynamic fields by fetching live options from AWS.
+ * Fields with a `fetcher` identifier get their options populated at runtime.
+ * If a fetch returns empty results, the field reverts to string type for manual entry.
+ * @see Story 7.11
+ */
+async function resolveDynamicFields(
+  fields: ResourceField[],
+): Promise<ResourceField[]> {
+  const dynamicFields = fields.filter((f) => f.question.fetcher);
+  if (dynamicFields.length === 0) return fields;
+
+  const s = clack.spinner();
+  s.start("Discovering AWS resources…");
+
+  const fetchResults = new Map<
+    string,
+    Array<{ value: string; label: string }>
+  >();
+  await Promise.all(
+    dynamicFields.map(async (field) => {
+      const fetch = fetcherMap[field.question.fetcher!];
+      if (!fetch) return;
+      try {
+        const options = await fetch();
+        fetchResults.set(field.name, options);
+      } catch {
+        fetchResults.set(field.name, []);
+      }
+    }),
+  );
+
+  const anyFound = [...fetchResults.values()].some((opts) => opts.length > 0);
+  s.stop(anyFound ? "Resources discovered" : "Using manual entry");
+
+  return fields.map((field) => {
+    if (!field.question.fetcher) return field;
+    const options = fetchResults.get(field.name) ?? [];
+
+    if (options.length === 0) {
+      // Fallback to manual string entry
+      return {
+        ...field,
+        question: {
+          ...field.question,
+          type: "string" as const,
+          options: undefined,
+          fetcher: undefined,
+        },
+      };
+    }
+
+    return {
+      ...field,
+      question: {
+        ...field.question,
+        options,
+      },
+    };
+  });
+}
+
 /**
  * Injects "Recommended by Best Practices" hints into field questions when
  * a BP rule references the field's property path for the given resource type.
@@ -255,15 +344,18 @@ export function injectBPHints(
 
 /**
  * Wraps renderOptionPrompt with a `?` help loop.
- * If the user types `?` at a string-type prompt, fetches and displays AWS
+ * If the user types `?` at a string/boolean prompt, fetches and displays AWS
  * documentation for the field, then re-presents the same prompt.
+ * If the user types `?` at an enum/multi prompt, renders an LLM-powered
+ * trade-off analysis instead (Story 10.6).
  * File-private — not exported.
  *
  * @param field        - The resource field being prompted
  * @param resolved     - Resolved policy/value config for the field
  * @param resourceType - The AWS resource type (e.g. "AWS::S3::Bucket")
  * @param tools        - LangChain tools array (passed through from node)
- * @param llmClient    - Optional LLM client forwarded to renderDocHelp for synthesis
+ * @param llmClient    - Optional LLM client forwarded to renderDocHelp/renderTradeoffHelp
+ * @param userIntent   - Optional user intent string for context-aware trade-off analysis
  */
 async function promptWithHelp(
   field: ResourceField,
@@ -271,11 +363,32 @@ async function promptWithHelp(
   resourceType: string,
   tools: StructuredTool[],
   llmClient?: LlmPort,
+  userIntent?: string,
 ): Promise<unknown> {
   while (true) {
     const answer = await renderOptionPrompt(field, resolved);
-    if (answer === "?") {
-      await renderDocHelp(field.name, resourceType, tools, llmClient);
+
+    // Multi fields: when user selects only '?', trigger help
+    const isHelpRequest =
+      answer === "?" ||
+      (Array.isArray(answer) && answer.length === 1 && answer[0] === "?");
+
+    if (isHelpRequest) {
+      const isEnumOrMulti =
+        field.question.type === "enum" || field.question.type === "multi";
+
+      if (isEnumOrMulti && field.question.options && llmClient) {
+        await renderTradeoffHelp(
+          field.name,
+          resourceType,
+          [...field.question.options],
+          userIntent ?? "",
+          tools,
+          llmClient,
+        );
+      } else {
+        await renderDocHelp(field.name, resourceType, tools, llmClient);
+      }
       continue;
     }
     return answer;
@@ -346,6 +459,9 @@ export async function optionElicitorNode(
   // Non-TTY (CI/pipes): skip all prompts
   if (!process.stdin.isTTY) return { elicitedOptions: {} };
 
+  // Stop the outer "Generating plan..." spinner before interactive prompts
+  stopSpinner();
+
   const plugin =
     defaultPluginRegistry.get(state.resourceType) ??
     defaultPluginRegistry.get("generic")!;
@@ -356,18 +472,33 @@ export async function optionElicitorNode(
       ? await enrichWithLivePricing(plugin, tools)
       : plugin.commonFields;
 
+  // Story 7.11: Resolve dynamic fields (fetch AMIs, subnets, SGs, key pairs from AWS)
+  const dynamicFields = await resolveDynamicFields(pricedFields);
+
   // Story 12.3: Inject BP-sourced hints into field prompts
-  const bpHintedCommon = injectBPHints(pricedFields, state.resourceType);
+  const bpHintedCommon = injectBPHints(dynamicFields, state.resourceType);
   const bpHintedAdvanced = injectBPHints(
     plugin.advancedFields,
     state.resourceType,
   );
 
   // Enrich with contextual metadata (cost/fit/recommended) from plugin definitions
-  const commonFields = enrichFieldLabels(bpHintedCommon);
+  const enrichedCommon = enrichFieldLabels(bpHintedCommon);
 
   // Enrich advanced fields with contextual metadata too
-  const advancedFields = enrichFieldLabels(bpHintedAdvanced);
+  const enrichedAdvanced = enrichFieldLabels(bpHintedAdvanced);
+
+  // Story 10.5: Apply intent-aware smart defaults — higher priority than plugin
+  // initialValue, lower priority than pattern memory and user input.
+  const intentOverrides = getIntentDefaults(
+    state.userIntent,
+    state.resourceType,
+  );
+  const commonFields = applyIntentOverrides(enrichedCommon, intentOverrides);
+  const advancedFields = applyIntentOverrides(
+    enrichedAdvanced,
+    intentOverrides,
+  );
 
   // Story 19.5: Read pattern memory for previous option defaults
   let previousOptions: Record<string, unknown> = {};
@@ -412,6 +543,14 @@ export async function optionElicitorNode(
 
   const elicitedOptions: Record<string, unknown> = {};
 
+  // Story 10.5: Pre-inject boolean toggles from intent overrides so showIf gates
+  // open for child fields (e.g., EnableLifecycle=true reveals LifecycleTransitionDays)
+  for (const override of intentOverrides) {
+    if (override.value === true || override.value === false) {
+      elicitedOptions[override.fieldName] = override.value;
+    }
+  }
+
   // Story 19.5: Append "(from previous use)" hint to pattern-memory-defaulted fields
   const applyPatternHint = (field: ResourceField): ResourceField => {
     if (!patternHintedFields.has(field.name)) return field;
@@ -453,6 +592,7 @@ export async function optionElicitorNode(
       state.resourceType,
       tools ?? [],
       llmClient,
+      state.userIntent,
     );
     if (answer !== undefined && answer !== "") {
       elicitedOptions[field.name] = answer;
@@ -484,6 +624,7 @@ export async function optionElicitorNode(
           state.resourceType,
           tools ?? [],
           llmClient,
+          state.userIntent,
         );
         if (answer !== undefined && answer !== "") {
           elicitedOptions[field.name] = answer;
@@ -491,6 +632,14 @@ export async function optionElicitorNode(
       }
     }
   }
+
+  // ── Post-wizard recommendations (Story 10.7) ─────────────────────────────
+  const recommendations = evaluateWizardRecommendations(
+    elicitedOptions,
+    state.userIntent ?? "",
+    state.resourceType,
+  );
+  displayRecommendations(recommendations);
 
   log({
     ts: new Date().toISOString(),

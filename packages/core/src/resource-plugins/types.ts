@@ -51,6 +51,8 @@ export interface FieldQuestion {
   validate?: (value: unknown) => string | undefined;
   /** If set, only show this field when the condition is met */
   showIf?: ShowIfCondition;
+  /** Optional identifier for runtime option discovery (e.g., "discover-amis"). When set, the option-elicitor fetches options dynamically before prompting. */
+  fetcher?: string;
 }
 
 /**
