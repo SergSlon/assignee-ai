@@ -1,0 +1,16 @@
+id: BP-IAM-005
+title: "IAM role policy with wildcard actions"
+severity: CRITICAL
+resource_type: "AWS::IAM::Role"
+property_path: "AssumeRolePolicyDocument"
+check_type: "not_equals"
+expected_value: "*"
+source: "Assignee Guardrails (migrated)"
+source_id: "iam-wildcard-actions"
+description: "IAM policy contains Action: '*' or Resource: '*' — overly permissive. Note: this is a simplified check; deep policy document inspection is a known limitation."
+remediation: "Scope IAM actions and resources to least-privilege — avoid wildcards"
+category: security
+lastVerified: "2026-03-22"
+blocking: true
+triggers:
+  - resourceType: "AWS::IAM::Role"

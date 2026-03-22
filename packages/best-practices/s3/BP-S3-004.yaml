@@ -11,3 +11,4 @@ description: "S3 buckets must have RestrictPublicBuckets enabled to restrict acc
 remediation: "Set PublicAccessBlockConfiguration.RestrictPublicBuckets to true. This limits access on buckets with public policies to authorized users only."
 category: security
 lastVerified: "2026-03-22"
+blocking: true

@@ -11,3 +11,4 @@ description: "S3 buckets must have BlockPublicPolicy enabled to reject bucket po
 remediation: "Set PublicAccessBlockConfiguration.BlockPublicPolicy to true. This prevents any bucket policy from granting public access."
 category: security
 lastVerified: "2026-03-22"
+blocking: true

@@ -35,7 +35,6 @@ export const LOG_ACTIONS = {
   PLAN_TO_APPLY_DECLINED: "plan_to_apply_declined",
   CONFIG_LOADED: "config_loaded",
   ORG_POLICY_FETCHED: "org_policy_fetched",
-  GUARDRAIL_EVALUATED: "guardrail_evaluated",
   SDK_FALLBACK_DISPATCHED: "sdk_fallback_dispatched",
   FREE_TIER_DETECTED: "free_tier_detected",
   BP_EVALUATED: "bp_evaluated",

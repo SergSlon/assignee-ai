@@ -802,9 +802,9 @@ describe("renderDocHelp", () => {
   });
 });
 
-// ── Guardrail findings rendering (Story 10.4) ────────────────────────────────
+// ── Unified findings rendering (Story 18.10) ────────────────────────────────
 
-describe("renderPlanBox with guardrail findings — non-TTY", () => {
+describe("renderPlanBox with unified findings — non-TTY", () => {
   beforeEach(() => {
     Object.defineProperty(process.stdout, "isTTY", {
       value: false,
@@ -832,82 +832,99 @@ describe("renderPlanBox with guardrail findings — non-TTY", () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
 
-    renderPlanBox({ ...mockState, guardrailFindings: [] });
+    renderPlanBox({ ...mockState, bpFindings: [] });
     restore();
 
     const output = chunks.join("");
     expect(output).toContain("All checks passed");
-    expect(output).toContain("Guardrails:");
+    expect(output).toContain("Findings:");
   });
 
   it("shows 'All checks passed' when findings is undefined", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
 
-    renderPlanBox({ ...mockState, guardrailFindings: undefined });
+    renderPlanBox({ ...mockState, bpFindings: undefined });
     restore();
 
     const output = chunks.join("");
     expect(output).toContain("All checks passed");
   });
 
-  it("shows critical and warning findings with plain text markers", async () => {
+  it("shows blocking and non-blocking findings with plain text markers", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
 
     renderPlanBox({
       ...mockState,
-      guardrailFindings: [
+      bpFindings: [
         {
-          ruleId: "s3-public-access",
-          severity: "critical",
+          practiceId: "BP-S3-001",
+          title: "S3 public access",
+          severity: "CRITICAL",
+          category: "security",
           message: "S3 bucket has public access enabled",
+          blocking: true,
         },
         {
-          ruleId: "s3-missing-lifecycle",
-          severity: "warning",
+          practiceId: "BP-S3-007",
+          title: "S3 lifecycle",
+          severity: "MEDIUM",
+          category: "cost",
           message: "S3 bucket is missing lifecycle rules",
+          blocking: false,
         },
       ],
     });
     restore();
 
     const output = chunks.join("");
-    expect(output).toContain("1 critical, 1 warnings");
-    expect(output).toContain("[CRITICAL] S3 bucket has public access enabled");
-    expect(output).toContain("[WARNING] S3 bucket is missing lifecycle rules");
+    expect(output).toContain("1 blocking");
+    expect(output).toContain("1 medium");
+    expect(output).toContain("[BLOCK] S3 bucket has public access enabled");
+    expect(output).toContain("[MEDIUM] S3 bucket is missing lifecycle rules");
     // No ANSI escape codes in non-TTY mode
     expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
   });
 
-  it("shows correct counts for multiple criticals", async () => {
+  it("shows correct counts for multiple blocking findings", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
 
     renderPlanBox({
       ...mockState,
-      guardrailFindings: [
+      bpFindings: [
         {
-          ruleId: "s3-public-access",
-          severity: "critical",
+          practiceId: "BP-S3-001",
+          title: "Public access",
+          severity: "CRITICAL",
+          category: "security",
           message: "Public access issue",
+          blocking: true,
         },
         {
-          ruleId: "missing-encryption",
-          severity: "critical",
+          practiceId: "BP-S3-006",
+          title: "Encryption",
+          severity: "CRITICAL",
+          category: "security",
           message: "Encryption issue",
+          blocking: true,
         },
         {
-          ruleId: "s3-missing-lifecycle",
-          severity: "warning",
+          practiceId: "BP-S3-007",
+          title: "Lifecycle",
+          severity: "MEDIUM",
+          category: "cost",
           message: "Lifecycle issue",
+          blocking: false,
         },
       ],
     });
     restore();
 
     const output = chunks.join("");
-    expect(output).toContain("2 critical, 1 warnings");
+    expect(output).toContain("2 blocking");
+    expect(output).toContain("1 medium");
   });
 });
 
@@ -1049,7 +1066,7 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
     });
   });
 
-  it("shows 'No best practice findings' when bpFindings is empty", async () => {
+  it("shows 'All checks passed' when bpFindings is empty", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
 
@@ -1057,11 +1074,11 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
     restore();
 
     const output = chunks.join("");
-    expect(output).toContain("No best practice findings");
-    expect(output).toContain("Best Practices:");
+    expect(output).toContain("All checks passed");
+    expect(output).toContain("Findings:");
   });
 
-  it("shows 'No best practice findings' when bpFindings is undefined", async () => {
+  it("shows 'All checks passed' when bpFindings is undefined", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
 
@@ -1069,10 +1086,10 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
     restore();
 
     const output = chunks.join("");
-    expect(output).toContain("No best practice findings");
+    expect(output).toContain("All checks passed");
   });
 
-  it("shows violations and warnings with plain text markers", async () => {
+  it("shows findings with plain text markers", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
 
@@ -1086,6 +1103,7 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
           category: "reliability",
           message: "S3 bucket versioning should be enabled",
           remediation: "Set VersioningConfiguration.Status to Enabled",
+          blocking: false,
         },
         {
           practiceId: "BP-S3-002",
@@ -1094,23 +1112,26 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
           category: "security",
           message: "S3 bucket should have default encryption",
           remediation: "Configure ServerSideEncryptionConfiguration",
+          blocking: false,
         },
       ],
     });
     restore();
 
     const output = chunks.join("");
-    expect(output).toContain("1 violation");
-    expect(output).toContain("1 warning");
-    expect(output).toContain("[CRITICAL] Enable S3 Default Encryption");
-    expect(output).toContain("[MEDIUM] Enable S3 Bucket Versioning");
+    expect(output).toContain("1 critical");
+    expect(output).toContain("1 medium");
+    expect(output).toContain(
+      "[CRITICAL] S3 bucket should have default encryption",
+    );
+    expect(output).toContain("[MEDIUM] S3 bucket versioning should be enabled");
     // Remediation hints shown
     expect(output).toContain("Configure ServerSideEncryptionConfiguration");
     // No ANSI escape codes in non-TTY mode
     expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
   });
 
-  it("maps severity icons correctly", async () => {
+  it("maps severity levels correctly", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
 
@@ -1123,6 +1144,7 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
           severity: "HIGH",
           category: "security",
           message: "High severity finding",
+          blocking: false,
         },
         {
           practiceId: "BP-S3-011",
@@ -1130,14 +1152,15 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
           severity: "INFO",
           category: "cost",
           message: "Informational finding",
+          blocking: false,
         },
       ],
     });
     restore();
 
     const output = chunks.join("");
-    expect(output).toContain("[HIGH] HIGH Finding");
-    expect(output).toContain("[INFO] INFO Finding");
+    expect(output).toContain("[HIGH] High severity finding");
+    expect(output).toContain("[INFO] Informational finding");
   });
 });
 

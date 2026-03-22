@@ -124,4 +124,20 @@ describe("bestPracticeSchema", () => {
     const badDate = { ...validBP, lastVerified: "03-22-2026" };
     expect(() => bestPracticeSchema.parse(badDate)).toThrow(ZodError);
   });
+
+  it("validates blocking: true", () => {
+    const withBlocking = { ...validBP, blocking: true };
+    const result = bestPracticeSchema.parse(withBlocking);
+    expect(result.blocking).toBe(true);
+  });
+
+  it("defaults blocking to false when not specified", () => {
+    const result = bestPracticeSchema.parse(validBP);
+    expect(result.blocking).toBe(false);
+  });
+
+  it("rejects non-boolean blocking value", () => {
+    const badBlocking = { ...validBP, blocking: "yes" };
+    expect(() => bestPracticeSchema.parse(badBlocking)).toThrow(ZodError);
+  });
 });

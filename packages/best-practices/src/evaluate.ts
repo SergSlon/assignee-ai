@@ -169,6 +169,7 @@ function buildFinding(bp: BestPractice): BPFinding {
       bp.description ??
       `${bp.title} — expected ${bp.property_path} ${bp.check_type} ${bp.expected_value}`,
     remediation: bp.remediation,
+    blocking: bp.blocking ?? false,
   };
 }
 

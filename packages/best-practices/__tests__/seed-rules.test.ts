@@ -14,12 +14,13 @@ const DYNAMODB_DIR = join(BP_ROOT, "dynamodb");
 const ECS_DIR = join(BP_ROOT, "ecs");
 const SQS_DIR = join(BP_ROOT, "sqs");
 const SNS_DIR = join(BP_ROOT, "sns");
+const ASG_DIR = join(BP_ROOT, "autoscaling");
 
-describe("Seed BP Library — Sprint A+B (45 rules)", () => {
+describe("Seed BP Library — Sprint A+B + guardrail migration (47 rules)", () => {
   const practices = loadBestPractices(BP_ROOT);
 
-  it("loads exactly 45 best practice entries", () => {
-    expect(practices).toHaveLength(45);
+  it("loads exactly 47 best practice entries", () => {
+    expect(practices).toHaveLength(47);
   });
 
   it("every entry validates against bestPracticeSchema without errors", () => {
@@ -80,9 +81,9 @@ describe("Seed BP Library — Sprint A+B (45 rules)", () => {
     expect(files).toHaveLength(5);
   });
 
-  it("IAM directory contains 4 YAML files", () => {
+  it("IAM directory contains 5 YAML files", () => {
     const files = readdirSync(IAM_DIR).filter((f) => f.endsWith(".yaml"));
-    expect(files).toHaveLength(4);
+    expect(files).toHaveLength(5);
   });
 
   it("DynamoDB directory contains 3 YAML files", () => {
@@ -103,6 +104,11 @@ describe("Seed BP Library — Sprint A+B (45 rules)", () => {
   it("SNS directory contains 2 YAML files", () => {
     const files = readdirSync(SNS_DIR).filter((f) => f.endsWith(".yaml"));
     expect(files).toHaveLength(2);
+  });
+
+  it("AutoScaling directory contains 1 YAML file", () => {
+    const files = readdirSync(ASG_DIR).filter((f) => f.endsWith(".yaml"));
+    expect(files).toHaveLength(1);
   });
 
   it("all FSBP-sourced entries have a source_id field", () => {
@@ -129,6 +135,8 @@ describe("Seed BP Library — Sprint A+B (45 rules)", () => {
     expect(resourceTypes.has("AWS::ECS::Service")).toBe(true);
     expect(resourceTypes.has("AWS::SQS::Queue")).toBe(true);
     expect(resourceTypes.has("AWS::SNS::Topic")).toBe(true);
+    expect(resourceTypes.has("AWS::IAM::Role")).toBe(true);
+    expect(resourceTypes.has("AWS::AutoScaling::AutoScalingGroup")).toBe(true);
   });
 
   it("every entry has a non-empty description", () => {

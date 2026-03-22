@@ -163,6 +163,7 @@ describe("preflightGuardNode", () => {
             severity: "CRITICAL",
             category: "security",
             message: "S3 bucket should have default encryption",
+            blocking: false,
           },
         ],
       }),
@@ -170,16 +171,35 @@ describe("preflightGuardNode", () => {
     expect(result.preflightPassed).toBe(false);
   });
 
-  it("keeps preflightPassed = true when only MEDIUM BP findings exist", async () => {
+  it("sets preflightPassed = false when blocking: true finding is present", async () => {
     const result = await preflightGuardNode(
       makeState({
         bpFindings: [
           {
             practiceId: "BP-S3-001",
+            title: "S3 public access block",
+            severity: "HIGH",
+            category: "security",
+            message: "S3 bucket has public access enabled",
+            blocking: true,
+          },
+        ],
+      }),
+    );
+    expect(result.preflightPassed).toBe(false);
+  });
+
+  it("keeps preflightPassed = true when only MEDIUM non-blocking BP findings exist", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        bpFindings: [
+          {
+            practiceId: "BP-S3-005",
             title: "Enable S3 Bucket Versioning",
             severity: "MEDIUM",
             category: "reliability",
             message: "S3 bucket versioning should be enabled",
+            blocking: false,
           },
         ],
       }),
