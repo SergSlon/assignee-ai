@@ -20,8 +20,8 @@ import {
 let savedEnv: Record<string, string | undefined>;
 
 const ENV_KEYS = [
-  "AWS_ACCESS_KEY_ID",
-  "AWS_SECRET_ACCESS_KEY",
+  "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
+  "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
   "AWS_PROFILE",
   "AWS_REGION",
   "AWS_DEFAULT_REGION",
@@ -114,8 +114,8 @@ describe("detectCredentials", () => {
   });
 
   it("detects env var credentials and returns source 'env'", async () => {
-    process.env["AWS_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
-    process.env["AWS_SECRET_ACCESS_KEY"] =
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
       "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
 
     const result = await detectCredentials(tmpDir);
@@ -126,8 +126,8 @@ describe("detectCredentials", () => {
   });
 
   it("detects env var credentials with custom AWS_PROFILE", async () => {
-    process.env["AWS_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
-    process.env["AWS_SECRET_ACCESS_KEY"] = "secret";
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] = "secret";
     process.env["AWS_PROFILE"] = "staging";
 
     const result = await detectCredentials(tmpDir);
@@ -180,7 +180,7 @@ aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     expect(result.detected).toBe(false);
     expect(result.reason).toBeDefined();
     expect(result.reason).toContain("No AWS credentials found");
-    expect(result.reason).toContain("AWS_ACCESS_KEY_ID");
+    expect(result.reason).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
     expect(result.reason).toContain("~/.aws/credentials");
     expect(result.reason).toContain("AWS SSO");
   });

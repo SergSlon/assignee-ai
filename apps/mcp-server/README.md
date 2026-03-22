@@ -26,8 +26,8 @@ Or add to `.claude/mcp_config.json`:
       "args": ["@assignee/mcp-server"],
       "env": {
         "AWS_REGION": "us-east-1",
-        "AWS_ACCESS_KEY_ID": "your-key",
-        "AWS_SECRET_ACCESS_KEY": "your-secret"
+        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
+        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "your-secret"
       }
     }
   }
@@ -46,8 +46,8 @@ Add to `.cursor/mcp.json` in your project root:
       "args": ["@assignee/mcp-server"],
       "env": {
         "AWS_REGION": "us-east-1",
-        "AWS_ACCESS_KEY_ID": "your-key",
-        "AWS_SECRET_ACCESS_KEY": "your-secret"
+        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
+        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "your-secret"
       }
     }
   }
@@ -66,8 +66,8 @@ Add to your Windsurf MCP configuration:
       "args": ["@assignee/mcp-server"],
       "env": {
         "AWS_REGION": "us-east-1",
-        "AWS_ACCESS_KEY_ID": "your-key",
-        "AWS_SECRET_ACCESS_KEY": "your-secret"
+        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
+        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "your-secret"
       }
     }
   }
@@ -95,12 +95,12 @@ Then use `assignee-mcp-server` as the command in your agent config instead of `n
 
 ## Environment Variables
 
-| Variable                | Required | Description                                |
-| :---------------------- | :------- | :----------------------------------------- |
-| `AWS_REGION`            | Yes      | Default AWS region for provisioning        |
-| `AWS_ACCESS_KEY_ID`     | Yes      | AWS access key for the operator            |
-| `AWS_SECRET_ACCESS_KEY` | Yes      | AWS secret key for the operator            |
-| `ASSIGNEE_MODEL`        | No       | LLM model string (default: Bedrock Claude) |
+| Variable                              | Required | Description                                |
+| :------------------------------------ | :------- | :----------------------------------------- |
+| `AWS_REGION`                          | Yes      | Default AWS region for provisioning        |
+| `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | Yes      | AWS access key for the operator            |
+| `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | Yes      | AWS secret key for the operator            |
+| `ASSIGNEE_MODEL`                      | No       | LLM model string (default: Bedrock Claude) |
 
 > **Security Note:** Never commit AWS credentials to version control. Use environment variables or AWS credential profiles. For shared team setups, consider using `aws-vault` or similar credential management tools.
 

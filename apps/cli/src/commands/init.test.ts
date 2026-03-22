@@ -240,7 +240,7 @@ describe("assignee init command", () => {
       detected: false,
       reason:
         "No AWS credentials found. Configure credentials via:\n" +
-        "  1) AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY environment variables\n" +
+        "  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n" +
         "  2) ~/.aws/credentials file\n" +
         "  3) AWS SSO login (aws sso login)",
     });
