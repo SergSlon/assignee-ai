@@ -6,7 +6,7 @@
  * Saves raw wire-format JSON responses to captured-responses/ directory.
  *
  * Usage: node apps/cli/scripts/capture-mcp-responses.mjs
- * Requires: .env with MCP_AWS_ACCESS_KEY_ID and MCP_AWS_SECRET_ACCESS_KEY
+ * Requires: .env with ASSIGNEE_READER_ACCESS_KEY_ID and ASSIGNEE_READER_SECRET_ACCESS_KEY
  */
 
 import { spawn } from "node:child_process";
@@ -31,8 +31,8 @@ for (const line of envLines) {
 }
 
 const MCP_ENV = {
-  AWS_ACCESS_KEY_ID: process.env.MCP_AWS_ACCESS_KEY_ID ?? "",
-  AWS_SECRET_ACCESS_KEY: process.env.MCP_AWS_SECRET_ACCESS_KEY ?? "",
+  AWS_ACCESS_KEY_ID: process.env.ASSIGNEE_READER_ACCESS_KEY_ID ?? "",
+  AWS_SECRET_ACCESS_KEY: process.env.ASSIGNEE_READER_SECRET_ACCESS_KEY ?? "",
   AWS_DEFAULT_REGION: "us-east-1",
   FASTMCP_LOG_LEVEL: "ERROR",
 };
@@ -541,7 +541,7 @@ async function captureWellArchitectedSecurity() {
 async function main() {
   console.log("MCP Response Capture Script");
   console.log(`Output: ${OUT_DIR}\n`);
-  console.log("Credentials loaded:", process.env.MCP_AWS_ACCESS_KEY_ID ? "✓" : "✗");
+  console.log("Credentials loaded:", process.env.ASSIGNEE_READER_ACCESS_KEY_ID ? "✓" : "✗");
 
   try {
     await captureCfnSchemas();

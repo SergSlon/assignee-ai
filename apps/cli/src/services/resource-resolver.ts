@@ -112,12 +112,10 @@ export function createTaggingClient(
   config: AwsConfig,
 ): ResourceGroupsTaggingAPIClient {
   if (!config.accessKeyId) {
-    throw new ConfigurationError("MCP_AWS_ACCESS_KEY_ID is missing or empty");
+    throw new ConfigurationError("AWS_ACCESS_KEY_ID is missing or empty");
   }
   if (!config.secretAccessKey) {
-    throw new ConfigurationError(
-      "MCP_AWS_SECRET_ACCESS_KEY is missing or empty",
-    );
+    throw new ConfigurationError("AWS_SECRET_ACCESS_KEY is missing or empty");
   }
 
   return new ResourceGroupsTaggingAPIClient({

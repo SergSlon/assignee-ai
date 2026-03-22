@@ -26,7 +26,7 @@ describe("createCloudControlClient", () => {
 
     expect(() =>
       createCloudControlClient({ ...VALID_CONFIG, accessKeyId: "" }),
-    ).toThrow("MCP_AWS_ACCESS_KEY_ID is missing or empty");
+    ).toThrow("AWS_ACCESS_KEY_ID is missing or empty");
   });
 
   it("throws ConfigurationError when secretAccessKey is empty", () => {
@@ -36,7 +36,7 @@ describe("createCloudControlClient", () => {
 
     expect(() =>
       createCloudControlClient({ ...VALID_CONFIG, secretAccessKey: "" }),
-    ).toThrow("MCP_AWS_SECRET_ACCESS_KEY is missing or empty");
+    ).toThrow("AWS_SECRET_ACCESS_KEY is missing or empty");
   });
 
   it("throws ConfigurationError when region is empty", () => {

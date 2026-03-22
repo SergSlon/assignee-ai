@@ -23,7 +23,7 @@ import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { unwrapMcpText } from "../utils/mcp.js";
 import { withTimeout } from "../utils/timeout.js";
 import { getFreeTierNote, loadAccountCreatedDate } from "../utils/free-tier.js";
-import { getRequiredIamActions } from "../utils/iam-actions.js";
+import { getRequiredIamActions } from "@assignee/core";
 import type { AgentState } from "../services/graph.js";
 
 const PRICING_TIMEOUT_MS = 3000;

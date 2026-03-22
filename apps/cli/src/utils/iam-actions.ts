@@ -1,43 +1,7 @@
 /**
- * Maps CloudFormation resource types to the IAM actions required
- * for CloudControl API provisioning + service-specific bootstrapping.
+ * Re-export from @assignee/core for backward compatibility.
+ * The canonical source is packages/core/src/config/iam-actions.ts.
  *
- * For unknown resource types, only the base CloudControl API actions are returned.
- * The mapping can be expanded incrementally as new resource types are added.
- *
- * @see Story 19.1 — IAM MCP Server Integration (FR-43)
+ * @deprecated Import from "@assignee/core" directly.
  */
-
-/**
- * Returns the IAM actions required to provision a given CloudFormation resource type.
- * Includes both CloudControl API base actions and service-specific actions.
- */
-export function getRequiredIamActions(resourceType: string): string[] {
-  const ccapiActions = [
-    "cloudcontrol:CreateResource",
-    "cloudcontrol:GetResource",
-    "cloudcontrol:UpdateResource",
-    "cloudcontrol:DeleteResource",
-  ];
-
-  const serviceActionMap: Record<string, string[]> = {
-    "AWS::S3::Bucket": ["s3:CreateBucket", "s3:PutBucketTagging"],
-    "AWS::Lambda::Function": [
-      "lambda:CreateFunction",
-      "lambda:TagResource",
-      "iam:PassRole",
-    ],
-    "AWS::DynamoDB::Table": ["dynamodb:CreateTable", "dynamodb:TagResource"],
-    "AWS::SQS::Queue": ["sqs:CreateQueue", "sqs:TagQueue"],
-    "AWS::SNS::Topic": ["sns:CreateTopic", "sns:TagResource"],
-    "AWS::EC2::Instance": [
-      "ec2:RunInstances",
-      "ec2:CreateTags",
-      "iam:PassRole",
-    ],
-    "AWS::RDS::DBInstance": ["rds:CreateDBInstance", "rds:AddTagsToResource"],
-  };
-
-  const serviceActions = serviceActionMap[resourceType] ?? [];
-  return [...ccapiActions, ...serviceActions];
-}
+export { getRequiredIamActions } from "@assignee/core";

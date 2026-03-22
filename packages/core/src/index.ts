@@ -43,6 +43,18 @@ export {
   getPrimaryIdentifier,
 } from "./config/resource-identifiers.js";
 
+// IAM — action map and policy generators
+export { getRequiredIamActions } from "./config/iam-actions.js";
+export {
+  operatorPolicy,
+  readerPolicy,
+  auditorPolicy,
+  IAM_USER_NAMES,
+  IAM_POLICY_NAMES,
+  type PolicyDocument,
+  type PolicyStatement,
+} from "./config/iam-policies.js";
+
 // Types
 export { type Result, safeTry } from "./types/result.js";
 export { PlanSchema, type Plan } from "./types/plan.js";

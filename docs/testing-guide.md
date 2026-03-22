@@ -120,7 +120,8 @@ pnpm build
 # 2. Verify .env is populated
 cat .env
 # Must contain: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
-#               MCP_AWS_ACCESS_KEY_ID, MCP_AWS_SECRET_ACCESS_KEY
+#               ASSIGNEE_READER_ACCESS_KEY_ID, ASSIGNEE_READER_SECRET_ACCESS_KEY,
+#               ASSIGNEE_AUDITOR_ACCESS_KEY_ID, ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY
 
 # 3. Verify unit tests pass
 pnpm test

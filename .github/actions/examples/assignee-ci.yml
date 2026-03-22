@@ -9,9 +9,9 @@
 #   3. Set the following GitHub Actions secrets:
 #      - AWS_ACCESS_KEY_ID
 #      - AWS_SECRET_ACCESS_KEY
-#   4. (Optional) Set MCP-specific read-only credentials:
-#      - MCP_AWS_ACCESS_KEY_ID
-#      - MCP_AWS_SECRET_ACCESS_KEY
+#   4. (Optional) Set separate reader/auditor credentials:
+#      - ASSIGNEE_READER_ACCESS_KEY_ID / ASSIGNEE_READER_SECRET_ACCESS_KEY
+#      - ASSIGNEE_AUDITOR_ACCESS_KEY_ID / ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY
 
 name: Assignee Infrastructure
 
@@ -42,9 +42,11 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
-          # Optional: separate read-only creds for MCP servers
-          # mcp-aws-access-key-id: ${{ secrets.MCP_AWS_ACCESS_KEY_ID }}
-          # mcp-aws-secret-access-key: ${{ secrets.MCP_AWS_SECRET_ACCESS_KEY }}
+          # Optional: separate reader/auditor creds for MCP servers
+          # assignee-reader-access-key-id: ${{ secrets.ASSIGNEE_READER_ACCESS_KEY_ID }}
+          # assignee-reader-secret-access-key: ${{ secrets.ASSIGNEE_READER_SECRET_ACCESS_KEY }}
+          # assignee-auditor-access-key-id: ${{ secrets.ASSIGNEE_AUDITOR_ACCESS_KEY_ID }}
+          # assignee-auditor-secret-access-key: ${{ secrets.ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY }}
 
   # ── Apply: runs on merge to main ───────────────────────────────────────
   apply:
