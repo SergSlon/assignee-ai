@@ -121,6 +121,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         label: "Enable cross-region replication?",
         initialValue: false,
       },
+      toCfn: (answer: unknown) => (answer ? {} : undefined),
     },
   ],
   defaults: {
