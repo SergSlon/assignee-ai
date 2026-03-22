@@ -1,13 +1,13 @@
-# Testing Guide — Assignee.ai POC
+# Testing Guide — Assignee.ai CLI-First MVP
 
-> Unit tests (Vitest) and end-to-end smoke tests for the `assignee plan` and `assignee apply` commands.
+> Unit tests (Vitest) and end-to-end smoke tests for the `assignee plan`, `assignee apply`, `assignee list`, `assignee destroy`, `assignee status`, and `assignee init` commands.
 
 ---
 
 ## Unit tests
 
 ```bash
-pnpm test          # 188 tests across 20 files (~15s)
+pnpm test          # 808 tests across 52 files (724 CLI + 84 MCP)
 pnpm check-types   # TypeScript type check
 ```
 
@@ -17,15 +17,18 @@ All MCP mock responses in `apps/cli/src/test-fixtures/mcp-mock-responses.ts` are
 
 **What's included:**
 
-| Category          | Count | Source server                          |
-| ----------------- | ----- | -------------------------------------- |
-| CFN schemas       | 8     | `awslabs.cfn-mcp-server`               |
-| Pricing           | 11    | `awslabs.aws-pricing-mcp-server`       |
-| Doc search        | 4     | `awslabs.aws-documentation-mcp-server` |
-| Doc read sections | 5     | `awslabs.aws-documentation-mcp-server` |
-| Doc read full     | 2     | `awslabs.aws-documentation-mcp-server` |
+| Category                  | Count | Source server                                                                             |
+| ------------------------- | ----- | ----------------------------------------------------------------------------------------- |
+| CFN schemas               | 8     | `awslabs.cfn-mcp-server`                                                                  |
+| Pricing                   | 11    | `awslabs.aws-pricing-mcp-server`                                                          |
+| Doc search                | 4     | `awslabs.aws-documentation-mcp-server`                                                    |
+| Doc read sections         | 5     | `awslabs.aws-documentation-mcp-server`                                                    |
+| Doc read full             | 2     | `awslabs.aws-documentation-mcp-server`                                                    |
+| IAM                       | 3     | `awslabs.iam-mcp-server` (s3BucketAllowed, ec2InstancePartialDeny, lambdaFunctionAllowed) |
+| Well-Architected Security | 2     | `awslabs.well-architected-mcp-server` (s3BucketPosture, noFindings)                       |
+| Billing                   | 4     | `awslabs.billing-mcp-server` (s3BucketCost, multiResourceCost, noCostData, costForecast)  |
 
-Plus synthetic edge cases (empty responses, malformed JSON, null, errors) for boundary testing.
+Total: ~39 captured responses, plus synthetic edge cases (empty responses, malformed JSON, null, errors) for boundary testing.
 
 **Usage in tests:**
 
@@ -34,6 +37,9 @@ import {
   McpMocks,
   createMockTool,
   createCoreMockTools,
+  createIamMockTool,
+  createSecurityMockTool,
+  createBillingMockTool,
 } from "../test-fixtures/mcp-mock-responses.js";
 
 // Single mock tool
@@ -47,31 +53,55 @@ const tools = createCoreMockTools(
   McpMocks.schema.ec2Instance.success,
   McpMocks.pricing.ec2T3Micro.success,
 );
+
+// Domain-specific mock tools
+const iamTool = createIamMockTool(McpMocks.iam.s3BucketAllowed);
+const secTool = createSecurityMockTool(McpMocks.security.s3BucketPosture);
+const billTool = createBillingMockTool(McpMocks.billing.s3BucketCost);
 ```
 
 **Refreshing fixtures from live servers:**
 
 ```bash
 cd apps/cli/scripts
-node capture-mcp-responses.mjs      # spawns MCP servers, captures 32 responses (requires .env)
+node capture-mcp-responses.mjs      # spawns MCP servers, captures ~39 responses (requires .env)
 node process-captured-responses.mjs  # trims schemas/pricing/docs to fixture size
 node build-fixture-ts.mjs           # generates final mcp-mock-responses.ts
 ```
 
-> `captured-responses/` and `processed-responses/` directories are gitignored — only the final TypeScript fixture is committed.
+> `captured-responses/` is now tracked in git (committed alongside the TypeScript fixture). `processed-responses/` is still gitignored — only the final TypeScript fixture and the raw captures are committed.
 
 ### Key test files
 
-| File                        | Tests | What it covers                                                                       |
-| --------------------------- | ----- | ------------------------------------------------------------------------------------ |
-| `graph-integration.test.ts` | 18    | Full graph pipeline: S3, EC2, Lambda, IAM, DynamoDB, error paths, pricing edge cases |
-| `preflight-guard.test.ts`   | 10    | Required field validation, cost estimation, pricing timeout                          |
-| `intent-parser.test.ts`     | 11    | Resource type classification, compound pattern detection                             |
-| `schema-fetcher.test.ts`    | 7     | MCP schema retrieval, error handling                                                 |
-| `option-elicitor.test.ts`   | 24    | Interactive prompts, showIf conditionals, CI mode                                    |
-| `plan-generator.test.ts`    | 8     | LLM plan generation, JSON parsing                                                    |
-| `pricing-lookup.test.ts`    | 17    | EC2/RDS live price enrichment                                                        |
-| Plugin tests (core)         | 50+   | S3, EC2, RDS, Lambda, generic plugin config hints                                    |
+| File                             | Tests | What it covers                                                                       |
+| -------------------------------- | ----- | ------------------------------------------------------------------------------------ |
+| `graph-integration.test.ts`      | 18    | Full graph pipeline: S3, EC2, Lambda, IAM, DynamoDB, error paths, pricing edge cases |
+| `preflight-guard.test.ts`        | 10    | Required field validation, cost estimation, pricing timeout                          |
+| `intent-parser.test.ts`          | 11    | Resource type classification, compound pattern detection                             |
+| `schema-fetcher.test.ts`         | 7     | MCP schema retrieval, error handling                                                 |
+| `option-elicitor.test.ts`        | 24    | Interactive prompts, showIf conditionals, CI mode                                    |
+| `plan-generator.test.ts`         | 8     | LLM plan generation, JSON parsing                                                    |
+| `pricing-lookup.test.ts`         | 17    | EC2/RDS live price enrichment                                                        |
+| `result-formatter.test.ts`       | ~30   | Memory writes, security checks, output formatting                                    |
+| `status-poller.test.ts`          | —     | CloudControl status polling, timeout handling                                        |
+| `destroy.test.ts`                | 14    | Safe teardown, confirmation prompts, error paths                                     |
+| `list.test.ts`                   | 7     | Managed resource listing, filtering                                                  |
+| `status.test.ts`                 | 4     | Summary with cost totals                                                             |
+| `resource-resolver.test.ts`      | 7     | Resource type resolution, ARN parsing                                                |
+| `list-resources.test.ts`         | 14    | Resource enumeration, tag-based filtering                                            |
+| `billing.test.ts`                | 11    | Cost data retrieval, forecast, multi-resource aggregation                            |
+| `status-aggregator.test.ts`      | 19    | Status rollup across multiple resources                                              |
+| `memory.test.ts` (service)       | —     | Memory service read/write, hint retrieval                                            |
+| `memory.test.ts` (core schema)   | —     | Memory schema validation                                                             |
+| `iam-actions.test.ts`            | 6     | IAM action resolution, permission checks                                             |
+| `distribution.test.ts`           | —     | CLI + MCP server distribution packaging                                              |
+| `mcp-servers.test.ts`            | 6     | MCP server config loading, lifecycle                                                 |
+| `server.test.ts` (MCP)           | —     | MCP server startup, tool registration                                                |
+| `plan-resource.test.ts` (MCP)    | —     | MCP plan-resource tool handler                                                       |
+| `apply-plan.test.ts` (MCP)       | —     | MCP apply-plan tool handler                                                          |
+| `list-managed-resources.test.ts` | —     | MCP list-managed-resources tool handler                                              |
+| `estimate-cost.test.ts` (MCP)    | —     | MCP estimate-cost tool handler                                                       |
+| Plugin tests (core)              | 50+   | S3, EC2, RDS, Lambda, generic plugin config hints                                    |
 
 ---
 
@@ -924,6 +954,162 @@ jq 'select(.action == "intent_parsed")' /tmp/pattern-logs.txt
 
 ---
 
+## Test 22 — List managed resources
+
+**Purpose:** Verify `assignee list` displays all resources tagged with `managed-by: assignee-ai`.
+
+```bash
+assignee list
+```
+
+**Expected:** Table of managed resources with ARN, type, status, and run ID columns.
+
+**Check:**
+
+- [ ] Table renders with resource entries (or "No managed resources found" if none exist)
+- [ ] Exits 0
+
+---
+
+## Test 23 — Destroy with confirmation
+
+**Purpose:** Verify `assignee destroy` performs safe teardown with explicit "yes" confirmation.
+
+> This test requires at least one managed resource. Create one with `assignee apply` first if needed.
+
+```bash
+assignee destroy
+```
+
+At the confirmation prompt, type **`yes`** to confirm teardown.
+
+**Check:**
+
+- [ ] Confirmation prompt requires typing "yes" (not just `y`)
+- [ ] Resource is deleted from AWS after confirmation
+- [ ] Exits 0
+
+---
+
+## Test 24 — Status with cost totals
+
+**Purpose:** Verify `assignee status` shows a summary including cost totals for managed resources.
+
+```bash
+assignee status
+```
+
+**Expected:** Summary output with resource count and aggregated monthly cost.
+
+**Check:**
+
+- [ ] Status summary renders with resource counts
+- [ ] Cost totals displayed (or "$0.00/month" if no resources)
+- [ ] Exits 0
+
+---
+
+## Test 25 — Project initialization
+
+**Purpose:** Verify `assignee init` sets up a new project configuration.
+
+```bash
+mkdir /tmp/assignee-init-test && cd /tmp/assignee-init-test
+assignee init
+```
+
+**Check:**
+
+- [ ] Project config file created
+- [ ] Exits 0
+
+**Cleanup:**
+
+```bash
+rm -rf /tmp/assignee-init-test
+```
+
+---
+
+## Test 26 — Non-interactive plan
+
+**Purpose:** Verify `assignee plan --no-wizard` skips all interactive prompts (useful for scripting and CI).
+
+```bash
+assignee plan --no-wizard "Create an S3 bucket named poc-no-wizard-test"
+```
+
+**Check:**
+
+- [ ] No interactive prompts appear
+- [ ] Plan box generated with defaults
+- [ ] Exits 0
+
+---
+
+## Test 27 — CI mode apply with checkpoint
+
+**Purpose:** Verify `assignee apply --yes --checkpoint` auto-confirms and enables checkpoint logging for CI pipelines.
+
+```bash
+BUCKET="poc-ci-apply-$(date +%s)"
+assignee apply --yes --checkpoint "Create an S3 bucket named $BUCKET"
+```
+
+**Check:**
+
+- [ ] No confirmation prompt (auto-approved via `--yes`)
+- [ ] Checkpoint data written (visible in structured logs)
+- [ ] Resource created successfully
+- [ ] Exits 0
+
+**Cleanup:**
+
+```bash
+aws s3 rb s3://$BUCKET --region us-east-1
+```
+
+---
+
+## Test 28 — Best practices findings in plan output
+
+**Purpose:** Verify that plan output includes best practices findings (security, cost, reliability).
+
+```bash
+assignee plan "Create an S3 bucket named poc-best-practices-test"
+```
+
+**Expected:** Plan output includes a findings section with best practices recommendations (e.g., encryption, public access block, versioning).
+
+**Check:**
+
+- [ ] Best practices findings appear in plan output
+- [ ] Findings reference specific configuration recommendations
+- [ ] Exits 0
+
+---
+
+## Test 29 — Memory hints in plan output
+
+**Purpose:** Verify that plan output includes memory hints from previous provisions (e.g., "Previous provision: $X/month").
+
+> This test requires at least one previous `assignee apply` for the same resource type to populate memory.
+
+```bash
+# First, ensure a previous S3 provision exists in memory
+assignee plan "Create an S3 bucket named poc-memory-hint-test"
+```
+
+**Expected:** Plan output includes a memory hint like `Previous provision: $X/month` if a prior S3 provision exists.
+
+**Check:**
+
+- [ ] Memory hint appears if prior provision exists for this resource type
+- [ ] Hint includes previous cost data
+- [ ] Exits 0
+
+---
+
 ## Smoke test checklist
 
 Run all tests and mark pass/fail:
@@ -951,9 +1137,20 @@ Run all tests and mark pass/fail:
 | 19  | Lambda Function single-resource plan with elicitation                   | ⬜     |
 | 20  | DynamoDB Table single-resource plan                                     | ⬜     |
 | 21  | Pattern detection logged — no Bedrock call for compound intents         | ⬜     |
+| 22  | `assignee list` — shows managed resources                               | ⬜     |
+| 23  | `assignee destroy` — safe teardown with "yes" confirmation              | ⬜     |
+| 24  | `assignee status` — summary with cost totals                            | ⬜     |
+| 25  | `assignee init` — project setup                                         | ⬜     |
+| 26  | `assignee plan --no-wizard` — non-interactive plan                      | ⬜     |
+| 27  | `assignee apply --yes --checkpoint` — CI mode auto-confirm              | ⬜     |
+| 28  | Best practices findings in plan output                                  | ⬜     |
+| 29  | Memory hints ("Previous provision: $X/month") in plan output            | ⬜     |
 
-Tests 1–8 passing = POC demo-ready. ✅
-Tests 9–12 passing = Option elicitation (Story 7.3) verified. ✅
-Tests 13–16 passing = Compound provisioning (Story 8.2) verified. ✅
-Tests 17–18 passing = Architecture hardening (Epic 9) verified. ✅
-Tests 19–21 passing = Expanded resource types + pattern logging verified. ✅
+Tests 1–8 passing = Core demo-ready.
+Tests 9–12 passing = Option elicitation (Story 7.3) verified.
+Tests 13–16 passing = Compound provisioning (Story 8.2) verified.
+Tests 17–18 passing = Architecture hardening (Epic 9) verified.
+Tests 19–21 passing = Expanded resource types + pattern logging verified.
+Tests 22–25 passing = Utility commands (list, destroy, status, init) verified.
+Tests 26–27 passing = CI/non-interactive mode verified.
+Tests 28–29 passing = Best practices + memory integration verified.
