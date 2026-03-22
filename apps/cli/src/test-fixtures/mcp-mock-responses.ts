@@ -1,0 +1,2306 @@
+/**
+ * Comprehensive MCP mock responses for all 4 servers and 5 tools.
+ * ALL response data captured from live MCP servers on 2026-03-22.
+ *
+ * Usage in tests:
+ *   import { McpMocks, createMockTool } from "../test-fixtures/mcp-mock-responses.js";
+ *   const tool = createMockTool("get_resource_schema_information", McpMocks.schema.s3Bucket.success);
+ *
+ * All responses mirror the real MCP wire format: { type: "text", text: "<json>" }
+ * See: apps/cli/src/utils/mcp.ts — unwrapMcpText()
+ *
+ * aws-knowledge-mcp-server: configured but no app code calls its tools — no mocks needed.
+ */
+
+import { vi } from "vitest";
+import type { StructuredTool } from "@langchain/core/tools";
+import { ToolName } from "../constants/tools.js";
+
+// ── Helper: wrap JSON in MCP content block ──────────────────────────────────
+
+function mcpText(payload: unknown): { type: "text"; text: string } {
+  return { type: "text", text: JSON.stringify(payload) };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 1. cfn-mcp-server — get_resource_schema_information
+//    Captured 2026-03-22 via: uvx awslabs.cfn-mcp-server@latest
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const schemaResponses = {
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::S3::Bucket" }. 30 props in full schema, trimmed to 10. */
+  s3Bucket: {
+    success: mcpText({
+      typeName: "AWS::S3::Bucket",
+      description:
+        "The ``AWS::S3::Bucket`` resource creates an Amazon S3 bucket in the same AWS Region where you create the AWS CloudFormation stack.\n To control how AWS CloudFormation handles the bucket when the stack is deleted, you can set a deletion policy for your bucket. You can choose to *retain* the bucket or to *delete* the bucket. For more information, see [DeletionPolicy Attribute](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-deletionpolicy.html).\n  You can only delete empty buckets. Deletion fails for buckets that have contents.",
+      properties: {
+        Tags: {
+          type: "array",
+          description:
+            "An arbitrary set of tags (key-value pairs) for this S3 bucket.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+        Arn: {
+          description: "",
+          $ref: "#/definitions/Arn",
+        },
+        BucketName: {
+          type: "string",
+          description:
+            "A name for the bucket. If you don't specify a name, AWS CloudFormation generates a unique ID and uses that ID for the bucket name. The bucket name must contain only lowercase letters, numbers, periods (.), and dashes (-) and must follow [Amazon S3 bucket restrictions and limitations](https://docs.aws.amazon.com/AmazonS3/latest/dev/BucketRestrictions.html). For more information, see [Rules for naming Amazon S3 buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html) in the *Amazon S3 User Guide*. \n  If you specify a name, you can't perform updates that require replacement of this resource. You can perform updates that require no or some interruption. If you need to replace the resource, specify a new name.",
+        },
+        VersioningConfiguration: {
+          description:
+            "Enables multiple versions of all objects in this bucket. You might enable versioning to prevent objects from being deleted or overwritten by mistake or to archive objects so that you can retrieve previous versions of them.\n  When you enable versioning on a bucket for the first time, it might take a short amount of time for the change to be fully propagated. We recommend that you wait for 15 minutes after enabling versioning before issuing write operations (``PUT`` or ``DELETE``) on objects in the bucket.",
+          $ref: "#/definitions/VersioningConfiguration",
+        },
+        BucketEncryption: {
+          description:
+            "Specifies default encryption for a bucket using server-side encryption with Amazon S3-managed keys (SSE-S3), AWS KMS-managed keys (SSE-KMS), or dual-layer server-side encryption with KMS-managed keys (DSSE-KMS). For information about the Amazon S3 default encryption feature, see [Amazon S3 Default Encryption for S3 Buckets](https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html) in the *Amazon S3 User Guide*.",
+          $ref: "#/definitions/BucketEncryption",
+        },
+        AccessControl: {
+          type: "string",
+          description:
+            "This is a legacy property, and it is not recommended for most use cases. A majority of modern use cases in Amazon S3 no longer require the use of ACLs, and we recommend that you keep ACLs disabled. For more information, see [Controlling object ownership](https://docs.aws.amazon.com//AmazonS3/latest/userguide/about-object-ownership.html) in the *Amazon S3 User Guide*.\n  A canned access control list (ACL) that grants predefined permissions to the bucket. For more information about canned ACLs, see [Canned ACL](https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#canned-acl) in the *Amazon S3 User Guide*.\n  S3 buckets are created with ACLs disabled by default. Therefore, unless you explicitly set the [AWS::S3::OwnershipControls](https://docs.aws.amazon.com//AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket-ownershipcontrols.html) property to enable ACLs, your resource will fail to deploy with any value other than Private. Use cases requiring ACLs are uncommon.\n  The majority of access control configurations can be successfully and more easily achieved with bucket policies. For more information, see [AWS::S3::BucketPolicy](https://docs.aws.amazon.com//AWSCloudFormation/latest/UserGuide/aws-properties-s3-policy.html). For examples of common policy configurations, including S3 Server Access Logs buckets and more, see [Bucket policy examples](https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html) in the *Amazon S3 User Guide*.",
+          enum: [
+            "AuthenticatedRead",
+            "AwsExecRead",
+            "BucketOwnerFullControl",
+            "BucketOwnerRead",
+            "LogDeliveryWrite",
+            "Private",
+            "PublicRead",
+            "PublicReadWrite",
+          ],
+        },
+        PublicAccessBlockConfiguration: {
+          description:
+            "Configuration that defines how Amazon S3 handles public access.",
+          $ref: "#/definitions/PublicAccessBlockConfiguration",
+        },
+        LifecycleConfiguration: {
+          description:
+            "Specifies the lifecycle configuration for objects in an Amazon S3 bucket. For more information, see [Object Lifecycle Management](https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html) in the *Amazon S3 User Guide*.",
+          $ref: "#/definitions/LifecycleConfiguration",
+        },
+      },
+      required: [],
+      readOnlyProperties: [
+        "/properties/Arn",
+        "/properties/DomainName",
+        "/properties/DualStackDomainName",
+        "/properties/RegionalDomainName",
+        "/properties/MetadataTableConfiguration/S3TablesDestination/TableNamespace",
+        "/properties/MetadataTableConfiguration/S3TablesDestination/TableArn",
+        "/properties/MetadataConfiguration/Destination",
+        "/properties/MetadataConfiguration/JournalTableConfiguration/TableName",
+        "/properties/MetadataConfiguration/JournalTableConfiguration/TableArn",
+        "/properties/MetadataConfiguration/InventoryTableConfiguration/TableName",
+        "/properties/MetadataConfiguration/InventoryTableConfiguration/TableArn",
+        "/properties/WebsiteURL",
+      ],
+      primaryIdentifier: ["/properties/BucketName"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::EC2::Instance" }. 48 props in full schema, trimmed to 10. */
+  ec2Instance: {
+    success: mcpText({
+      typeName: "AWS::EC2::Instance",
+      description: "Resource Type definition for AWS::EC2::Instance",
+      properties: {
+        Tags: {
+          type: "array",
+          description: "The tags to add to the instance.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+        InstanceType: {
+          type: "string",
+          description: "The instance type.",
+        },
+        ImageId: {
+          type: "string",
+          description:
+            "The ID of the AMI. An AMI ID is required to launch an instance and must be specified here or in a launch template.",
+        },
+        KeyName: {
+          type: "string",
+          description: "The name of the key pair.",
+        },
+        SecurityGroupIds: {
+          type: "array",
+          description: "The IDs of the security groups.",
+          insertionOrder: false,
+          items: {
+            type: "string",
+          },
+        },
+        SubnetId: {
+          type: "string",
+          description:
+            "[EC2-VPC] The ID of the subnet to launch the instance into.\n\n",
+        },
+        InstanceId: {
+          type: "string",
+          description: "The EC2 Instance ID.",
+        },
+        BlockDeviceMappings: {
+          type: "array",
+          description:
+            "The block device mapping entries that defines the block devices to attach to the instance at launch.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/BlockDeviceMapping",
+          },
+        },
+      },
+      required: [],
+      readOnlyProperties: [
+        "/properties/InstanceId",
+        "/properties/PrivateIp",
+        "/properties/PublicDnsName",
+        "/properties/PublicIp",
+        "/properties/PrivateDnsName",
+        "/properties/VpcId",
+        "/properties/State",
+      ],
+      primaryIdentifier: ["/properties/InstanceId"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::Lambda::Function" }. 33 props in full schema, trimmed to 10. */
+  lambdaFunction: {
+    success: mcpText({
+      typeName: "AWS::Lambda::Function",
+      description:
+        "The ``AWS::Lambda::Function`` resource creates a Lambda function. To create a function, you need a [deployment package](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-package.html) and an [execution role](https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html). The deployment package is a .zip file archive or container image that contains your function code. The execution role grants the function permission to use AWS services, such as Amazon CloudWatch Logs for log streaming and AWS X-Ray for request tracing.\n You set the package type to ``Image`` if the deployment package is a [container image](https://docs.aws.amazon.com/lambda/latest/dg/lambda-images.html). For these functions, include the URI of the container image in the ECR registry in the [ImageUri property of the Code property](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-lambda-function-code.html#cfn-lambda-function-code-imageuri). You do not need to specify the handler and runtime properties. \n You set the package type to ``Zip`` if the deployment package is a [.zip file archive](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-package.html#gettingstarted-package-zip). For these functions, specify the S3 location of your .zip file in the ``Code`` property. Alternatively, for Node.js and Python functions, you can define your function inline in the [ZipFile property of the Code property](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-lambda-function-code.html#cfn-lambda-function-code-zipfile). In both cases, you must also specify the handler and runtime properties.\n You can use [code signing](https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html) if your deployment package is a .zip file archive. To enable code signing for this function, specify the ARN of a code-signing configuration. When a user attempts to deploy a code package with ``UpdateFunctionCode``, Lambda checks that the code package has a valid signature from a trusted publisher. The code-signing configuration includes a set of signing profiles, which define the trusted publishers for this function.\n When you update a ``AWS::Lambda::Function`` resource, CFNshort calls the [UpdateFunctionConfiguration](https://docs.aws.amazon.com/lambda/latest/api/API_UpdateFunctionConfiguration.html) and [UpdateFunctionCode](https://docs.aws.amazon.com/lambda/latest/api/API_UpdateFunctionCode.html)LAM APIs under the hood. Because these calls happen sequentially, and invocations can happen between these calls, your function may encounter errors in the time between the calls. For example, if you remove an environment variable, and the code that references that environment variable in the same CFNshort update, you may see invocation errors related to a missing environment variable. To work around this, you can invoke your function against a version or alias by default, rather than the ``$LATEST`` version.\n Note that you configure [provisioned concurrency](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html) on a ``AWS::Lambda::Version`` or a ``AWS::Lambda::Alias``.\n For a complete introduction to Lambda functions, see [What is Lambda?](https://docs.aws.amazon.com/lambda/latest/dg/lambda-welcome.html) in the *Lambda developer guide.*",
+      properties: {
+        Tags: {
+          type: "array",
+          description:
+            "A list of [tags](https://docs.aws.amazon.com/lambda/latest/dg/tagging.html) to apply to the function.\n  You must have the ``lambda:TagResource``, ``lambda:UntagResource``, and ``lambda:ListTags`` permissions for your [principal](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_terms-and-concepts.html) to manage the CFN stack. If you don't have these permissions, there might be unexpected behavior with stack-level tags propagating to the resource during resource creation and update.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+        Arn: {
+          type: "string",
+          description: "",
+        },
+        FunctionName: {
+          type: "string",
+          description:
+            "The name of the Lambda function, up to 64 characters in length. If you don't specify a name, CFN generates one.\n If you specify a name, you cannot perform updates that require replacement of this resource. You can perform updates that require no or some interruption. If you must replace the resource, specify a new name.",
+          minLength: 1,
+        },
+        Runtime: {
+          type: "string",
+          description:
+            "The identifier of the function's [runtime](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html). Runtime is required if the deployment package is a .zip file archive. Specifying a runtime results in an error if you're deploying a function using a container image.\n The following list includes deprecated runtimes. Lambda blocks creating new functions and updating existing functions shortly after each runtime is deprecated. For more information, see [Runtime use after deprecation](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html#runtime-deprecation-levels).\n For a list of all currently supported runtimes, see [Supported runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html#runtimes-supported).",
+        },
+        Role: {
+          type: "string",
+          description:
+            "The Amazon Resource Name (ARN) of the function's execution role.",
+          pattern:
+            "^arn:(aws[a-zA-Z-]*)?:iam::\\d{12}:role/?[a-zA-Z_0-9+=,.@\\-_/]+$",
+        },
+        Handler: {
+          type: "string",
+          description:
+            "The name of the method within your code that Lambda calls to run your function. Handler is required if the deployment package is a .zip file archive. The format includes the file name. It can also include namespaces and other qualifiers, depending on the runtime. For more information, see [Lambda programming model](https://docs.aws.amazon.com/lambda/latest/dg/foundation-progmodel.html).",
+          pattern: "^[^\\s]+$",
+          maxLength: 128,
+        },
+        Code: {
+          description:
+            "The code for the function. You can define your function code in multiple ways:\n  +  For .zip deployment packages, you can specify the S3 location of the .zip file in the ``S3Bucket``, ``S3Key``, and ``S3ObjectVersion`` properties.\n  +  For .zip deployment packages, you can alternatively define the function code inline in the ``ZipFile`` property. This method works only for Node.js and Python functions.\n  +  For container images, specify the URI of your container image in the ECR registry in the ``ImageUri`` property.",
+          $ref: "#/definitions/Code",
+        },
+        MemorySize: {
+          type: "integer",
+          description:
+            "The amount of [memory available to the function](https://docs.aws.amazon.com/lambda/latest/dg/configuration-function-common.html#configuration-memory-console) at runtime. Increasing the function memory also increases its CPU allocation. The default value is 128 MB. The value can be any multiple of 1 MB. Note that new AWS accounts have reduced concurrency and memory quotas. AWS raises these quotas automatically based on your usage. You can also request a quota increase.",
+        },
+        Timeout: {
+          type: "integer",
+          description:
+            "The amount of time (in seconds) that Lambda allows a function to run before stopping it. The default is 3 seconds. The maximum allowed value is 900 seconds. For more information, see [Lambda execution environment](https://docs.aws.amazon.com/lambda/latest/dg/runtimes-context.html).",
+          minimum: 1,
+        },
+        Environment: {
+          description:
+            "Environment variables that are accessible from function code during execution.",
+          $ref: "#/definitions/Environment",
+        },
+      },
+      required: ["Code", "Role"],
+      readOnlyProperties: [
+        "/properties/SnapStartResponse",
+        "/properties/SnapStartResponse/ApplyOn",
+        "/properties/SnapStartResponse/OptimizationStatus",
+        "/properties/Arn",
+      ],
+      primaryIdentifier: ["/properties/FunctionName"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::RDS::DBInstance" }. 99 props in full schema, trimmed to 12. */
+  rdsDbInstance: {
+    success: mcpText({
+      typeName: "AWS::RDS::DBInstance",
+      description:
+        "The ``AWS::RDS::DBInstance`` resource creates an Amazon DB instance. The new DB instance can be an RDS DB instance, or it can be a DB instance in an Aurora DB cluster.\n For more information about creating an RDS DB instance, see [Creating an Amazon RDS DB instance](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_CreateDBInstance.html) in the *Amazon RDS User Guide*.\n For more information about creating a DB instance in an Aurora DB cluster, see [Creating an Amazon Aurora DB cluster](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/Aurora.CreateInstance.html) in the *Amazon Aurora User Guide*.\n If you import an existing DB instance, and the template configuration doesn't match the actual configuration of the DB instance, AWS CloudFormation applies the changes in the template during the import operation.\n  If a DB instance is deleted or replaced during an update, AWS CloudFormation deletes all automated snapshots. However, it retains manual DB snapshots. During an update that requires replacement, you can apply a stack policy to prevent DB instances from being replaced. For more information, see [Prevent Updates to Stack Resources](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/protect-stack-resources.html).\n   *Updating DB instances* \n When properties labeled \"*Update requires:*[Replacement](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-update-behaviors.html#update-replacement)\" are updated, AWS CloudFormation first creates a replacement DB instance, then changes references from other dependent resources to point to the replacement DB instance, and finally deletes the old DB instance.\n  We highly recommend that you take a snapshot of the database before updating the stack. If you don't, you lose the data when AWS CloudFormation replaces your DB instance. To preserve your data, perform the following procedure:\n  1.  Deactivate any applications that are using the DB instance so that there's no activity on the DB instance.\n  1.  Create a snapshot of the DB instance. For more information, see [Creating a DB Snapshot](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_CreateSnapshot.html).\n  1.  If you want to restore your instance using a DB snapshot, modify the updated template with your DB instance changes and add the ``DBSnapshotIdentifier`` property with the ID of the DB snapshot that you want to use.\n After you restore a DB instance with a ``DBSnapshotIdentifier`` property, you can delete the ``DBSnapshotIdentifier`` property. When you specify this property for an update, the DB instance is not restored from the DB snapshot again, and the data in the database is not changed. However, if you don't specify the ``DBSnapshotIdentifier`` property, an empty DB instance is created, and the original DB instance is deleted. If you specify a property that is different from the previous snapshot restore property, a new DB instance is restored from the specified ``DBSnapshotIdentifier`` property, and the original DB instance is deleted.\n  1.  Update the stack.\n  \n  For more information about updating other properties of this resource, see ``ModifyDBInstance``. For more information about updating stacks, see [CloudFormation Stacks Updates](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks.html).\n  *Deleting DB instances* \n For DB instances that are part of an Aurora DB cluster, you can set a deletion policy for your DB instance to control how AWS CloudFormation handles the DB instance when the stack is deleted. For Amazon RDS DB instances, you can choose to *retain* the DB instance, to *delete* the DB instance, or to *create a snapshot* of the DB instance. The default AWS CloudFormation behavior depends on the ``DBClusterIdentifier`` property:\n  1.  For ``AWS::RDS::DBInstance`` resources that don't specify the ``DBClusterIdentifier`` property, AWS CloudFormation saves a snapshot of the DB instance.\n  1.   For ``AWS::RDS::DBInstance`` resources that do specify the ``DBClusterIdentifier`` property, AWS CloudFormation deletes the DB instance.\n  \n  For more information, see [DeletionPolicy Attribute](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-deletionpolicy.html).",
+      properties: {
+        Tags: {
+          type: "array",
+          description: "Tags to assign to the DB instance.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+        DBInstanceIdentifier: {
+          type: "string",
+          description:
+            "A name for the DB instance. If you specify a name, AWS CloudFormation converts it to lowercase. If you don't specify a name, AWS CloudFormation generates a unique physical ID and uses that ID for the DB instance. For more information, see [Name Type](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-name.html).\n For information about constraints that apply to DB instance identifiers, see [Naming constraints in Amazon RDS](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Limits.html#RDS_Limits.Constraints) in the *Amazon RDS User Guide*.\n  If you specify a name, you can't perform updates that require replacement of this resource. You can perform updates that require no or some interruption. If you must replace the resource, specify a new name.",
+          pattern: "^$|^[a-zA-Z]{1}(?:-?[a-zA-Z0-9]){0,62}$",
+          minLength: 1,
+          maxLength: 63,
+        },
+        DBInstanceClass: {
+          type: "string",
+          description:
+            "The compute and memory capacity of the DB instance, for example ``db.m5.large``. Not all DB instance classes are available in all AWS-Regions, or for all database engines. For the full list of DB instance classes, and availability for your engine, see [DB instance classes](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.DBInstanceClass.html) in the *Amazon RDS User Guide* or [Aurora DB instance classes](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/Concepts.DBInstanceClass.html) in the *Amazon Aurora User Guide*.",
+        },
+        Engine: {
+          type: "string",
+          description:
+            "The name of the database engine to use for this DB instance. Not every database engine is available in every AWS Region.\n This property is required when creating a DB instance.\n  You can convert an Oracle database from the non-CDB architecture to the container database (CDB) architecture by updating the ``Engine`` value in your templates from ``oracle-ee`` to ``oracle-ee-cdb`` or from ``oracle-se2`` to ``oracle-se2-cdb``. Converting to the CDB architecture requires an interruption.\n  Valid Values:\n  +  ``aurora-mysql`` (for Aurora MySQL DB instances)\n  +  ``aurora-postgresql`` (for Aurora PostgreSQL DB instances)\n  +  ``custom-oracle-ee`` (for RDS Custom for Oracle DB instances)\n  +  ``custom-oracle-ee-cdb`` (for RDS Custom for Oracle DB instances)\n  +  ``custom-sqlserver-ee`` (for RDS Custom for SQL Server DB instances)\n  +  ``custom-sqlserver-se`` (for RDS Custom for SQL Server DB instances)\n  +  ``custom-sqlserver-web`` (for RDS Custom for SQL Server DB instances)\n  +   ``db2-ae`` \n  +   ``db2-se`` \n  +   ``mariadb`` \n  +   ``mysql`` \n  +   ``oracle-ee`` \n  +   ``oracle-ee-cdb`` \n  +   ``oracle-se2`` \n  +   ``oracle-se2-cdb`` \n  +   ``postgres`` \n  +   ``sqlserver-ee`` \n  +   ``sqlserver-se`` \n  +   ``sqlserver-ex`` \n  +   ``sqlserver-web``",
+        },
+        MasterUsername: {
+          type: "string",
+          description:
+            "The master user name for the DB instance.\n  If you specify the ``SourceDBInstanceIdentifier`` or ``DBSnapshotIdentifier`` property, don't specify this property. The value is inherited from the source DB instance or snapshot.\n When migrating a self-managed Db2 database, we recommend that you use the same master username as your self-managed Db2 instance name.\n   *Amazon Aurora* \n Not applicable. The name for the master user is managed by the DB cluster. \n  *RDS for Db2* \n Constraints:\n  +  Must be 1 to 16 letters or numbers.\n  +  First character must be a letter.\n  +  Can't be a reserved word for the chosen database engine.\n  \n  *RDS for MariaDB* \n Constraints:\n  +  Must be 1 to 16 letters or numbers.\n  +  Can't be a reserved word for the chosen database engine.\n  \n  *RDS for Microsoft SQL Server* \n Constraints:\n  +  Must be 1 to 128 letters or numbers.\n  +  First character must be a letter.\n  +  Can't be a reserved word for the chosen database engine.\n  \n  *RDS for MySQL* \n Constraints:\n  +  Must be 1 to 16 letters or numbers.\n  +  First character must be a letter.\n  +  Can't be a reserved word for the chosen database engine.\n  \n  *RDS for Oracle* \n Constraints:\n  +  Must be 1 to 30 letters or numbers.\n  +  First character must be a letter.\n  +  Can't be a reserved word for the chosen database engine.\n  \n  *RDS for PostgreSQL* \n Constraints:\n  +  Must be 1 to 63 letters or numbers.\n  +  First character must be a letter.\n  +  Can't be a reserved word for the chosen database engine.",
+          pattern: "^[a-zA-Z][a-zA-Z0-9_]{0,127}$",
+          minLength: 1,
+          maxLength: 128,
+        },
+        MasterUserPassword: {
+          type: "string",
+          description:
+            'The password for the master user. The password can include any printable ASCII character except "/", """, or "@".\n  *Amazon Aurora* \n Not applicable. The password for the master user is managed by the DB cluster.\n  *RDS for Db2* \n Must contain from 8 to 255 characters.\n  *RDS for MariaDB* \n Constraints: Must contain from 8 to 41 characters.\n  *RDS for Microsoft SQL Server* \n Constraints: Must contain from 8 to 128 characters.\n  *RDS for MySQL* \n Constraints: Must contain from 8 to 41 characters.\n  *RDS for Oracle* \n Constraints: Must contain from 8 to 30 characters.\n  *RDS for PostgreSQL* \n Constraints: Must contain from 8 to 128 characters.',
+        },
+        AllocatedStorage: {
+          type: "string",
+          description:
+            "The amount of storage in gibibytes (GiB) to be initially allocated for the database instance.\n  If any value is set in the ``Iops`` parameter, ``AllocatedStorage`` must be at least 100 GiB, which corresponds to the minimum Iops value of 1,000. If you increase the ``Iops`` value (in 1,000 IOPS increments), then you must also increase the ``AllocatedStorage`` value (in 100-GiB increments). \n   *Amazon Aurora* \n Not applicable. Aurora cluster volumes automatically grow as the amount of data in your database increases, though you are only charged for the space that you use in an Aurora cluster volume.\n  *Db2* \n Constraints to the amount of storage for each storage type are the following:\n  +  General Purpose (SSD) storage (gp3): Must be an integer from 20 to 64000.\n  +  Provisioned IOPS storage (io1): Must be an integer from 100 to 64000.\n  \n  *MySQL* \n Constraints to the amount of storage for each storage type are the following: \n  +  General Purpose (SSD) storage (gp2): Must be an integer from 20 to 65536.\n  +  Provisioned IOPS storage (io1): Must be an integer from 100 to 65536.\n  +  Magnetic storage (standard): Must be an integer from 5 to 3072.\n  \n  *MariaDB* \n Constraints to the amount of storage for each storage type are the following: \n  +  General Purpose (SSD) storage (gp2): Must be an integer from 20 to 65536.\n  +  Provisioned IOPS storage (io1): Must be an integer from 100 to 65536.\n  +  Magnetic storage (standard): Must be an integer from 5 to 3072.\n  \n  *PostgreSQL* \n Constraints to the amount of storage for each storage type are the following: \n  +  General Purpose (SSD) storage (gp2): Must be an integer from 20 to 65536.\n  +  Provisioned IOPS storage (io1): Must be an integer from 100 to 65536.\n  +  Magnetic storage (standard): Must be an integer from 5 to 3072.\n  \n  *Oracle* \n Constraints to the amount of storage for each storage type are the following: \n  +  General Purpose (SSD) storage (gp2): Must be an integer from 20 to 65536.\n  +  Provisioned IOPS storage (io1): Must be an integer from 100 to 65536.\n  +  Magnetic storage (standard): Must be an integer from 10 to 3072.\n  \n  *SQL Server* \n Constraints to the amount of storage for each storage type are the following: \n  +  General Purpose (SSD) storage (gp2):\n  +  Enterprise and Standard editions: Must be an integer from 20 to 16384.\n  +  Web and Express editions: Must be an integer from 20 to 16384.\n  \n  +  Provisioned IOPS storage (io1):\n  +  Enterprise and Standard editions: Must be an integer from 20 to 16384.\n  +  Web and Express editions: Must be an integer from 20 to 16384.\n  \n  +  Magnetic storage (standard):\n  +  Enterprise and Standard editions: Must be an integer from 20 to 1024.\n  +  Web and Express editions: Must be an integer from 20 to 1024.",
+          pattern: "^[0-9]*$",
+        },
+        StorageType: {
+          type: "string",
+          description:
+            "The storage type to associate with the DB instance.\n If you specify ``io1``, ``io2``, or ``gp3``, you must also include a value for the ``Iops`` parameter.\n This setting doesn't apply to Amazon Aurora DB instances. Storage is managed by the DB cluster.\n Valid Values: ``gp2 | gp3 | io1 | io2 | standard``\n Default: ``io1``, if the ``Iops`` parameter is specified. Otherwise, ``gp3``.",
+        },
+        MultiAZ: {
+          type: "boolean",
+          description:
+            "Specifies whether the DB instance is a Multi-AZ deployment. You can't set the ``AvailabilityZone`` parameter if the DB instance is a Multi-AZ deployment.\n This setting doesn't apply to Amazon Aurora because the DB instance Availability Zones (AZs) are managed by the DB cluster.",
+        },
+        EngineVersion: {
+          type: "string",
+          description:
+            "The version number of the database engine to use.\n For a list of valid engine versions, use the ``DescribeDBEngineVersions`` action.\n The following are the database engines and links to information about the major and minor versions that are available with Amazon RDS. Not every database engine is available for every AWS Region.\n  *Amazon Aurora* \n Not applicable. The version number of the database engine to be used by the DB instance is managed by the DB cluster.\n  *Db2* \n See [Amazon RDS for Db2](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Db2.html#Db2.Concepts.VersionMgmt) in the *Amazon RDS User Guide.*\n  *MariaDB* \n See [MariaDB on Amazon RDS Versions](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_MariaDB.html#MariaDB.Concepts.VersionMgmt) in the *Amazon RDS User Guide.*\n  *Microsoft SQL Server* \n See [Microsoft SQL Server Versions on Amazon RDS](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_SQLServer.html#SQLServer.Concepts.General.VersionSupport) in the *Amazon RDS User Guide.*\n  *MySQL* \n See [MySQL on Amazon RDS Versions](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_MySQL.html#MySQL.Concepts.VersionMgmt) in the *Amazon RDS User Guide.*\n  *Oracle* \n See [Oracle Database Engine Release Notes](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Appendix.Oracle.PatchComposition.html) in the *Amazon RDS User Guide.*\n  *PostgreSQL* \n See [Supported PostgreSQL Database Versions](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_PostgreSQL.html#PostgreSQL.Concepts.General.DBVersions) in the *Amazon RDS User Guide.*",
+        },
+        DBName: {
+          type: "string",
+          description:
+            "The meaning of this parameter differs according to the database engine you use.\n  If you specify the ``DBSnapshotIdentifier`` property, this property only applies to RDS for Oracle.\n   *Amazon Aurora* \n Not applicable. The database name is managed by the DB cluster.\n  *Db2* \n The name of the database to create when the DB instance is created. If this parameter isn't specified, no database is created in the DB instance.\n Constraints:\n  +  Must contain 1 to 64 letters or numbers.\n  +  Must begin with a letter. Subsequent characters can be letters, underscores, or digits (0-9).\n  +  Can't be a word reserved by the specified database engine.\n  \n  *MySQL* \n The name of the database to create when the DB instance is created. If this parameter is not specified, no database is created in the DB instance.\n Constraints:\n  +  Must contain 1 to 64 letters or numbers.\n  +  Can't be a word reserved by the specified database engine\n  \n  *MariaDB* \n The name of the database to create when the DB instance is created. If this parameter is not specified, no database is created in the DB instance.\n Constraints:\n  +  Must contain 1 to 64 letters or numbers.\n  +  Can't be a word reserved by the specified database engine\n  \n  *PostgreSQL* \n The name of the database to create when the DB instance is created. If this parameter is not specified, the default ``postgres`` database is created in the DB instance.\n Constraints:\n  +  Must begin with a letter. Subsequent characters can be letters, underscores, or digits (0-9).\n  +  Must contain 1 to 63 characters.\n  +  Can't be a word reserved by the specified database engine\n  \n  *Oracle* \n The Oracle System ID (SID) of the created DB instance. If you specify ``null``, the default value ``ORCL`` is used. You can't specify the string NULL, or any other reserved word, for ``DBName``. \n Default: ``ORCL``\n Constraints:\n  +  Can't be longer than 8 characters\n  \n  *SQL Server* \n Not applicable. Must be null.",
+        },
+        Port: {
+          type: "string",
+          description:
+            "The port number on which the database accepts connections.\n This setting doesn't apply to Aurora DB instances. The port number is managed by the cluster.\n Valid Values: ``1150-65535``\n Default:\n  +  RDS for Db2 - ``50000``\n  +  RDS for MariaDB - ``3306``\n  +  RDS for Microsoft SQL Server - ``1433``\n  +  RDS for MySQL - ``3306``\n  +  RDS for Oracle - ``1521``\n  +  RDS for PostgreSQL - ``5432``\n  \n Constraints:\n  +  For RDS for Microsoft SQL Server, the value can't be ``1234``, ``1434``, ``3260``, ``3343``, ``3389``, ``47001``, or ``49152-49156``.",
+          pattern: "^\\d*$",
+        },
+      },
+      required: [],
+      readOnlyProperties: [
+        "/properties/AutomaticRestartTime",
+        "/properties/CertificateDetails",
+        "/properties/CertificateDetails/CAIdentifier",
+        "/properties/CertificateDetails/ValidTill",
+        "/properties/Endpoint",
+        "/properties/Endpoint/Address",
+        "/properties/Endpoint/Port",
+        "/properties/Endpoint/HostedZoneId",
+        "/properties/DbiResourceId",
+        "/properties/DBInstanceArn",
+        "/properties/DBInstanceStatus",
+        "/properties/InstanceCreateTime",
+        "/properties/IsStorageConfigUpgradeAvailable",
+        "/properties/LatestRestorableTime",
+        "/properties/ListenerEndpoint",
+        "/properties/ListenerEndpoint/Address",
+        "/properties/ListenerEndpoint/Port",
+        "/properties/ListenerEndpoint/HostedZoneId",
+        "/properties/MasterUserSecret/SecretArn",
+        "/properties/PercentProgress",
+        "/properties/ReadReplicaDBClusterIdentifiers",
+        "/properties/ReadReplicaDBInstanceIdentifiers",
+        "/properties/ResumeFullAutomationModeTime",
+        "/properties/SecondaryAvailabilityZone",
+        "/properties/StatusInfos",
+      ],
+      primaryIdentifier: ["/properties/DBInstanceIdentifier"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::IAM::Role" }. 11 props (all kept). */
+  iamRole: {
+    success: mcpText({
+      typeName: "AWS::IAM::Role",
+      description:
+        "Creates a new role for your AWS-account.\n  For more information about roles, see [IAM roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html) in the *IAM User Guide*. For information about quotas for role names and the number of roles you can create, see [IAM and quotas](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html) in the *IAM User Guide*.",
+      properties: {
+        Arn: {
+          type: "string",
+          description: "",
+        },
+        AssumeRolePolicyDocument: {
+          type: ["object", "string"],
+          description:
+            "The trust policy that is associated with this role. Trust policies define which entities can assume the role. You can associate only one trust policy with a role. For an example of a policy that can be used to assume a role, see [Template Examples](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html#aws-resource-iam-role--examples). For more information about the elements that you can use in an IAM policy, see [Policy Elements Reference](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements.html) in the *User Guide*.",
+        },
+        Description: {
+          type: "string",
+          description: "A description of the role that you provide.",
+        },
+        ManagedPolicyArns: {
+          type: "array",
+          description:
+            "A list of Amazon Resource Names (ARNs) of the IAM managed policies that you want to attach to the role.\n For more information about ARNs, see [Amazon Resource Names (ARNs) and Service Namespaces](https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) in the *General Reference*.",
+          insertionOrder: false,
+          items: {
+            type: "string",
+          },
+        },
+        MaxSessionDuration: {
+          type: "integer",
+          description:
+            "The maximum session duration (in seconds) that you want to set for the specified role. If you do not specify a value for this setting, the default value of one hour is applied. This setting can have a value from 1 hour to 12 hours.\n Anyone who assumes the role from the CLI or API can use the ``DurationSeconds`` API parameter or the ``duration-seconds``CLI parameter to request a longer session. The ``MaxSessionDuration`` setting determines the maximum duration that can be requested using the ``DurationSeconds`` parameter. If users don't specify a value for the ``DurationSeconds`` parameter, their security credentials are valid for one hour by default. This applies when you use the ``AssumeRole*`` API operations or the ``assume-role*``CLI operations but does not apply when you use those operations to create a console URL. For more information, see [Using IAM roles](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use.html) in the *IAM User Guide*.",
+        },
+        Path: {
+          type: "string",
+          description:
+            "The path to the role. For more information about paths, see [IAM Identifiers](https://docs.aws.amazon.com/IAM/latest/UserGuide/Using_Identifiers.html) in the *IAM User Guide*.\n This parameter is optional. If it is not included, it defaults to a slash (/).\n This parameter allows (through its [regex pattern](https://docs.aws.amazon.com/http://wikipedia.org/wiki/regex)) a string of characters consisting of either a forward slash (/) by itself or a string that must begin and end with forward slashes. In addition, it can contain any ASCII character from the ! (``\\u0021``) through the DEL character (``\\u007F``), including most punctuation characters, digits, and upper and lowercased letters.",
+          default: "/",
+        },
+        PermissionsBoundary: {
+          type: "string",
+          description:
+            "The ARN of the policy used to set the permissions boundary for the role.\n For more information about permissions boundaries, see [Permissions boundaries for IAM identities](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html) in the *IAM User Guide*.",
+        },
+        Policies: {
+          type: "array",
+          description:
+            "Adds or updates an inline policy document that is embedded in the specified IAM role.\n When you embed an inline policy in a role, the inline policy is used as part of the role's access (permissions) policy. The role's trust policy is created at the same time as the role. You can update a role's trust policy later. For more information about IAM roles, go to [Using Roles to Delegate Permissions and Federate Identities](https://docs.aws.amazon.com/IAM/latest/UserGuide/roles-toplevel.html).\n A role can also have an attached managed policy. For information about policies, see [Managed Policies and Inline Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/policies-managed-vs-inline.html) in the *User Guide*.\n For information about limits on the number of inline policies that you can embed with a role, see [Limitations on Entities](https://docs.aws.amazon.com/IAM/latest/UserGuide/LimitationsOnEntities.html) in the *User Guide*.\n  If an external policy (such as ``AWS::IAM::Policy`` or ``AWS::IAM::ManagedPolicy``) has a ``Ref`` to a role and if a resource (such as ``AWS::ECS::Service``) also has a ``Ref`` to the same role, add a ``DependsOn`` attribute to the resource to make the resource depend on the external policy. This dependency ensures that the role's policy is available throughout the resource's lifecycle. For example, when you delete a stack with an ``AWS::ECS::Service`` resource, the ``DependsOn`` attribute ensures that CFN deletes the ``AWS::ECS::Service`` resource before deleting its role's policy.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Policy",
+          },
+        },
+        RoleId: {
+          type: "string",
+          description: "",
+        },
+        RoleName: {
+          type: "string",
+          description:
+            'A name for the IAM role, up to 64 characters in length. For valid values, see the ``RoleName`` parameter for the [CreateRole](https://docs.aws.amazon.com/IAM/latest/APIReference/API_CreateRole.html) action in the *User Guide*.\n This parameter allows (per its [regex pattern](https://docs.aws.amazon.com/http://wikipedia.org/wiki/regex)) a string of characters consisting of upper and lowercase alphanumeric characters with no spaces. You can also include any of the following characters: _+=,.@-. The role name must be unique within the account. Role names are not distinguished by case. For example, you cannot create roles named both "Role1" and "role1".\n If you don\'t specify a name, CFN generates a unique physical ID and uses that ID for the role name.\n If you specify a name, you must specify the ``CAPABILITY_NAMED_IAM`` value to acknowledge your template\'s capabilities. For more information, see [Acknowledging Resources in Templates](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-iam-template.html#using-iam-capabilities).\n  Naming an IAM resource can cause an unrecoverable error if you reuse the same template in multiple Regions. To prevent this, we recommend using ``Fn::Join`` and ``AWS::Region`` to create a Region-specific name, as in the following example: ``{"Fn::Join": ["", [{"Ref": "AWS::Region"}, {"Ref": "MyResourceName"}]]}``.',
+        },
+        Tags: {
+          type: "array",
+          description:
+            "A list of tags that are attached to the role. For more information about tagging, see [Tagging IAM resources](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_tags.html) in the *IAM User Guide*.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+      },
+      required: ["AssumeRolePolicyDocument"],
+      readOnlyProperties: ["/properties/Arn", "/properties/RoleId"],
+      primaryIdentifier: ["/properties/RoleName"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::DynamoDB::Table" }. 22 props in full schema, trimmed to 10. */
+  dynamoDbTable: {
+    success: mcpText({
+      typeName: "AWS::DynamoDB::Table",
+      description:
+        "The ``AWS::DynamoDB::Table`` resource creates a DDB table. For more information, see [CreateTable](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html) in the *API Reference*.\n You should be aware of the following behaviors when working with DDB tables:\n  +  CFNlong typically creates DDB tables in parallel. However, if your template includes multiple DDB tables with indexes, you must declare dependencies so that the tables are created sequentially. DDBlong limits the number of tables with secondary indexes that are in the creating state. If you create multiple tables with indexes at the same time, DDB returns an error and the stack operation fails. For an example, see [DynamoDB Table with a DependsOn Attribute](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-dynamodb-table.html#aws-resource-dynamodb-table--examples--DynamoDB_Table_with_a_DependsOn_Attribute).\n  \n   Our guidance is to use the latest schema documented for your CFNlong templates. This schema supports the provisioning of all table settings below. When using this schema in your CFNlong templates, please ensure that your Identity and Access Management (IAM) policies are updated with appropriate permissions to allow for the authorization of these setting changes.",
+      properties: {
+        Tags: {
+          type: "array",
+          description:
+            "An array of key-value pairs to apply to this resource.\n For more information, see [Tag](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-resource-tags.html).",
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+        Arn: {
+          type: "string",
+          description: "",
+        },
+        TableName: {
+          type: "string",
+          description:
+            "A name for the table. If you don't specify a name, CFNlong generates a unique physical ID and uses that ID for the table name. For more information, see [Name Type](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-name.html).\n  If you specify a name, you cannot perform updates that require replacement of this resource. You can perform updates that require no or some interruption. If you must replace the resource, specify a new name.",
+        },
+        KeySchema: {
+          description:
+            "Specifies the attributes that make up the primary key for the table. The attributes in the ``KeySchema`` property must also be defined in the ``AttributeDefinitions`` property.",
+        },
+        AttributeDefinitions: {
+          type: "array",
+          description:
+            "A list of attributes that describe the key schema for the table and indexes.\n This property is required to create a DDB table.\n Update requires: [Some interruptions](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-update-behaviors.html#update-some-interrupt). Replacement if you edit an existing AttributeDefinition.",
+          items: {
+            $ref: "#/definitions/AttributeDefinition",
+          },
+        },
+        BillingMode: {
+          type: "string",
+          description:
+            "Specify how you are charged for read and write throughput and how you manage capacity.\n Valid values include:\n  +  ``PAY_PER_REQUEST`` - We recommend using ``PAY_PER_REQUEST`` for most DynamoDB workloads. ``PAY_PER_REQUEST`` sets the billing mode to [On-demand capacity mode](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/on-demand-capacity-mode.html). \n  +  ``PROVISIONED`` - We recommend using ``PROVISIONED`` for steady workloads with predictable growth where capacity requirements can be reliably forecasted. ``PROVISIONED`` sets the billing mode to [Provisioned capacity mode](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/provisioned-capacity-mode.html).\n  \n If not specified, the default is ``PROVISIONED``.",
+        },
+        ProvisionedThroughput: {
+          description:
+            "Throughput for the specified table, which consists of values for ``ReadCapacityUnits`` and ``WriteCapacityUnits``. For more information about the contents of a provisioned throughput structure, see [Amazon DynamoDB Table ProvisionedThroughput](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ProvisionedThroughput.html). \n If you set ``BillingMode`` as ``PROVISIONED``, you must specify this property. If you set ``BillingMode`` as ``PAY_PER_REQUEST``, you cannot specify this property.",
+          $ref: "#/definitions/ProvisionedThroughput",
+        },
+        GlobalSecondaryIndexes: {
+          type: "array",
+          description:
+            "Global secondary indexes to be created on the table. You can create up to 20 global secondary indexes.\n  If you update a table to include a new global secondary index, CFNlong initiates the index creation and then proceeds with the stack update. CFNlong doesn't wait for the index to complete creation because the backfilling phase can take a long time, depending on the size of the table. You can't use the index or update the table until the index's status is ``ACTIVE``. You can track its status by using the DynamoDB [DescribeTable](https://docs.aws.amazon.com/cli/latest/reference/dynamodb/describe-table.html) command.\n If you add or delete an index during an update, we recommend that you don't update any other resources. If your stack fails to update and is rolled back while adding a new index, you must manually delete the index. \n Updates are not supported. The following are exceptions:\n  +  If you update either the contributor insights specification or the provisioned throughput values of global secondary indexes, you can update the table without interruption.\n  +  You can delete or add one global secondary index without interruption. If you do both in the same update (for example, by changing the index's logical ID), the update fails.",
+          items: {
+            $ref: "#/definitions/GlobalSecondaryIndex",
+          },
+        },
+      },
+      required: ["KeySchema"],
+      readOnlyProperties: ["/properties/Arn", "/properties/StreamArn"],
+      primaryIdentifier: ["/properties/TableName"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::SSM::Parameter" }. 9 props (all kept). */
+  ssmParameter: {
+    success: mcpText({
+      typeName: "AWS::SSM::Parameter",
+      description:
+        "The ``AWS::SSM::Parameter`` resource creates an SSM parameter in SYSlong Parameter Store.\n  To create an SSM parameter, you must have the IAMlong (IAM) permissions ``ssm:PutParameter`` and ``ssm:AddTagsToResource``. On stack creation, CFNlong adds the following three tags to the parameter: ``aws:cloudformation:stack-name``, ``aws:cloudformation:logical-id``, and ``aws:cloudformation:stack-id``, in addition to any custom tags you specify.\n To add, update, or remove tags during stack update, you must have IAM permissions for both ``ssm:AddTagsToResource`` and ``ssm:RemoveTagsFromResource``. For more information, see [Managing access using policies](https://docs.aws.amazon.com/systems-manager/latest/userguide/security-iam.html#security_iam_access-manage) in the *User Guide*.\n  For information about valid values for parameters, see [About requirements and constraints for parameter names](https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-paramstore-su-create.html#sysman-parameter-name-constraints) in the *User Guide* and [PutParameter](https://docs.aws.amazon.com/systems-manager/latest/APIReference/API_PutParameter.html) in the *API Reference*.",
+      properties: {
+        Type: {
+          type: "string",
+          description:
+            "The type of parameter.\n  Parameters of type ``SecureString`` are not supported by CFNlong.",
+          enum: ["String", "StringList"],
+        },
+        Value: {
+          type: "string",
+          description:
+            "The parameter value.\n  If type is ``StringList``, the system returns a comma-separated string with no spaces between commas in the ``Value`` field.",
+        },
+        Description: {
+          type: "string",
+          description: "Information about the parameter.",
+        },
+        Policies: {
+          type: "string",
+          description:
+            "Information about the policies assigned to a parameter.\n [Assigning parameter policies](https://docs.aws.amazon.com/systems-manager/latest/userguide/parameter-store-policies.html) in the *User Guide*.",
+        },
+        AllowedPattern: {
+          type: "string",
+          description:
+            "A regular expression used to validate the parameter value. For example, for ``String`` types with values restricted to numbers, you can specify the following: ``AllowedPattern=^\\d+$``",
+        },
+        Tier: {
+          type: "string",
+          description: "The parameter tier.",
+          enum: ["Standard", "Advanced", "Intelligent-Tiering"],
+        },
+        Tags: {
+          type: "object",
+          description:
+            "Optional metadata that you assign to a resource in the form of an arbitrary set of tags (key-value pairs). Tags enable you to categorize a resource in different ways, such as by purpose, owner, or environment. For example, you might want to tag a SYS parameter to identify the type of resource to which it applies, the environment, or the type of configuration data referenced by the parameter.",
+        },
+        DataType: {
+          type: "string",
+          description:
+            "The data type of the parameter, such as ``text`` or ``aws:ec2:image``. The default is ``text``.",
+          enum: ["text", "aws:ec2:image"],
+        },
+        Name: {
+          type: "string",
+          description:
+            "The name of the parameter.\n  The reported maximum length of 2048 characters for a parameter name includes 1037 characters that are reserved for internal use by SYS. The maximum length for a parameter name that you specify is 1011 characters.\n This count of 1011 characters includes the characters in the ARN that precede the name you specify. This ARN length will vary depending on your partition and Region. For example, the following 45 characters count toward the 1011 character maximum for a parameter created in the US East (Ohio) Region: ``arn:aws:ssm:us-east-2:111122223333:parameter/``.",
+        },
+      },
+      required: ["Value", "Type"],
+      primaryIdentifier: ["/properties/Name"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::Custom::FakeResource" }. Returns error (TypeNotFoundException). */
+  generic: {
+    success: {
+      type: "text" as const,
+      text: `Error executing tool get_resource_schema_information: Error downloading the schema for AWS::Custom::FakeResource: An error occurred (TypeNotFoundException) when calling the DescribeType operation: The type 'AWS::Custom::FakeResource' cannot be found.`,
+    },
+  },
+
+  /** Synthetic: empty schema edge case — cfn-mcp-server never returns empty schemas for known types. */
+  empty: {
+    success: mcpText({
+      typeName: "AWS::Unknown::Type",
+      properties: {},
+    }),
+  },
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2. aws-pricing-mcp-server — get_pricing
+//    Captured 2026-03-22 via: uvx --with "botocore[crt]" awslabs.aws-pricing-mcp-server@latest
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const pricingResponses = {
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AmazonS3", filters: [productFamily=Storage, usagetype=TimedStorage-ByteHrs] } */
+  s3Storage: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonS3",
+      data: [
+        {
+          product: {
+            productFamily: "Storage",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "TimedStorage-ByteHrs",
+              servicecode: "AmazonS3",
+              servicename: "Amazon Simple Storage Service",
+            },
+            sku: "WP9ANXZGBYYSGJEA",
+          },
+          terms: {
+            OnDemand: {
+              "WP9ANXZGBYYSGJEA.JRTCKXETXF": {
+                priceDimensions: {
+                  "WP9ANXZGBYYSGJEA.JRTCKXETXF.D42MF2PVJS": {
+                    unit: "GB-Mo",
+                    endRange: "512000",
+                    description:
+                      "$0.022 per GB - next 450 TB / month of storage used",
+                    appliesTo: [],
+                    rateCode: "WP9ANXZGBYYSGJEA.JRTCKXETXF.D42MF2PVJS",
+                    beginRange: "51200",
+                    pricePerUnit: {
+                      USD: "0.0220000000",
+                    },
+                  },
+                  "WP9ANXZGBYYSGJEA.JRTCKXETXF.PXJDJ3YRG3": {
+                    unit: "GB-Mo",
+                    endRange: "Inf",
+                    description:
+                      "$0.021 per GB - storage used / month over 500 TB",
+                    appliesTo: [],
+                    rateCode: "WP9ANXZGBYYSGJEA.JRTCKXETXF.PXJDJ3YRG3",
+                    beginRange: "512000",
+                    pricePerUnit: {
+                      USD: "0.0210000000",
+                    },
+                  },
+                  "WP9ANXZGBYYSGJEA.JRTCKXETXF.PGHJ3S3EYE": {
+                    unit: "GB-Mo",
+                    endRange: "51200",
+                    description:
+                      "$0.023 per GB - first 50 TB / month of storage used",
+                    appliesTo: [],
+                    rateCode: "WP9ANXZGBYYSGJEA.JRTCKXETXF.PGHJ3S3EYE",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0230000000",
+                    },
+                  },
+                },
+                sku: "WP9ANXZGBYYSGJEA",
+                effectiveDate: "2026-02-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260223232215",
+          publicationDate: "2026-02-23T23:22:15Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonS3 in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AmazonEC2", filters: [instanceType=t3.micro, os=Linux, tenancy=Shared] } */
+  ec2T3Micro: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonEC2",
+      data: [
+        {
+          product: {
+            productFamily: "Compute Instance",
+            attributes: {
+              instanceType: "t3.micro",
+              operatingSystem: "Linux",
+              tenancy: "Shared",
+              regionCode: "us-east-1",
+              usagetype: "BoxUsage:t3.micro",
+              capacitystatus: "Used",
+              preInstalledSw: "NA",
+              servicecode: "AmazonEC2",
+              servicename: "Amazon Elastic Compute Cloud",
+              memory: "1 GiB",
+              vcpu: "2",
+              storage: "EBS only",
+              currentGeneration: "Yes",
+              instanceFamily: "General purpose",
+            },
+            sku: "CRAJUW7BTXFMT2UJ",
+          },
+          terms: {
+            OnDemand: {
+              "CRAJUW7BTXFMT2UJ.JRTCKXETXF": {
+                priceDimensions: {
+                  "CRAJUW7BTXFMT2UJ.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "$0.0104 per On Demand Linux t3.micro Instance Hour",
+                    appliesTo: [],
+                    rateCode: "CRAJUW7BTXFMT2UJ.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0104000000",
+                    },
+                  },
+                },
+                sku: "CRAJUW7BTXFMT2UJ",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+            Reserved: "<filtered by output_options.pricing_terms>",
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonEC2 in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AmazonEC2", filters: [instanceType=t3.small, os=Linux, tenancy=Shared] } */
+  ec2T3Small: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonEC2",
+      data: [
+        {
+          product: {
+            productFamily: "Compute Instance",
+            attributes: {
+              instanceType: "t3.small",
+              operatingSystem: "Linux",
+              tenancy: "Shared",
+              regionCode: "us-east-1",
+              usagetype: "BoxUsage:t3.small",
+              capacitystatus: "Used",
+              preInstalledSw: "NA",
+              servicecode: "AmazonEC2",
+              servicename: "Amazon Elastic Compute Cloud",
+              memory: "2 GiB",
+              vcpu: "2",
+              storage: "EBS only",
+              currentGeneration: "Yes",
+              instanceFamily: "General purpose",
+            },
+            sku: "QA3NBPZEQKZ2K9AR",
+          },
+          terms: {
+            OnDemand: {
+              "QA3NBPZEQKZ2K9AR.JRTCKXETXF": {
+                priceDimensions: {
+                  "QA3NBPZEQKZ2K9AR.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "$0.0208 per On Demand Linux t3.small Instance Hour",
+                    appliesTo: [],
+                    rateCode: "QA3NBPZEQKZ2K9AR.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0208000000",
+                    },
+                  },
+                },
+                sku: "QA3NBPZEQKZ2K9AR",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+            Reserved: "<filtered by output_options.pricing_terms>",
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonEC2 in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AmazonEC2", filters: [instanceType=m5.large, os=Linux, tenancy=Shared] } */
+  ec2M5Large: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonEC2",
+      data: [
+        {
+          product: {
+            productFamily: "Compute Instance",
+            attributes: {
+              instanceType: "m5.large",
+              operatingSystem: "Linux",
+              tenancy: "Shared",
+              regionCode: "us-east-1",
+              usagetype: "BoxUsage:m5.large",
+              capacitystatus: "Used",
+              preInstalledSw: "NA",
+              servicecode: "AmazonEC2",
+              servicename: "Amazon Elastic Compute Cloud",
+              memory: "8 GiB",
+              vcpu: "2",
+              storage: "EBS only",
+              currentGeneration: "Yes",
+              instanceFamily: "General purpose",
+            },
+            sku: "6C86BEPQVG73ZGGR",
+          },
+          terms: {
+            OnDemand: {
+              "6C86BEPQVG73ZGGR.JRTCKXETXF": {
+                priceDimensions: {
+                  "6C86BEPQVG73ZGGR.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "$0.096 per On Demand Linux m5.large Instance Hour",
+                    appliesTo: [],
+                    rateCode: "6C86BEPQVG73ZGGR.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0960000000",
+                    },
+                  },
+                },
+                sku: "6C86BEPQVG73ZGGR",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+            Reserved: "<filtered by output_options.pricing_terms>",
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonEC2 in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AmazonRDS", filters: [instanceType=db.t3.micro, engine=PostgreSQL, deployment=Single-AZ] } */
+  rdsT3MicroPostgres: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonRDS",
+      data: [
+        {
+          product: {
+            productFamily: "Database Instance",
+            attributes: {
+              instanceType: "db.t3.micro",
+              regionCode: "us-east-1",
+              usagetype: "InstanceUsage:db.t3.micro",
+              databaseEngine: "PostgreSQL",
+              deploymentOption: "Single-AZ",
+              servicecode: "AmazonRDS",
+              servicename: "Amazon Relational Database Service",
+              memory: "1 GiB",
+              vcpu: "2",
+              storage: "EBS Only",
+              currentGeneration: "Yes",
+              instanceFamily: "General purpose",
+            },
+            sku: "TGN7QDJF2AGFU9XA",
+          },
+          terms: {
+            OnDemand: {
+              "TGN7QDJF2AGFU9XA.JRTCKXETXF": {
+                priceDimensions: {
+                  "TGN7QDJF2AGFU9XA.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "USD 0.018 per db.t3.micro Single-AZ instance hour (or partial hour) running PostgreSQL",
+                    appliesTo: [],
+                    rateCode: "TGN7QDJF2AGFU9XA.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0180000000",
+                    },
+                  },
+                },
+                sku: "TGN7QDJF2AGFU9XA",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+            Reserved: "<filtered by output_options.pricing_terms>",
+          },
+          version: "20260318225923",
+          publicationDate: "2026-03-18T22:59:23Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AmazonRDS", filters: [instanceType=db.t3.micro, engine=MySQL, deployment=Single-AZ] } */
+  rdsT3MicroMysql: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonRDS",
+      data: [
+        {
+          product: {
+            productFamily: "Database Instance",
+            attributes: {
+              instanceType: "db.t3.micro",
+              regionCode: "us-east-1",
+              usagetype: "InstanceUsage:db.t3.micro",
+              databaseEngine: "MySQL",
+              deploymentOption: "Single-AZ",
+              servicecode: "AmazonRDS",
+              servicename: "Amazon Relational Database Service",
+              memory: "1 GiB",
+              vcpu: "2",
+              storage: "EBS Only",
+              currentGeneration: "Yes",
+              instanceFamily: "General purpose",
+            },
+            sku: "AXC2TYPWXFK88MVY",
+          },
+          terms: {
+            OnDemand: {
+              "AXC2TYPWXFK88MVY.JRTCKXETXF": {
+                priceDimensions: {
+                  "AXC2TYPWXFK88MVY.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "USD 0.017 per db.t3.micro Single-AZ instance hour (or partial hour) running MySQL",
+                    appliesTo: [],
+                    rateCode: "AXC2TYPWXFK88MVY.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0170000000",
+                    },
+                  },
+                },
+                sku: "AXC2TYPWXFK88MVY",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+            Reserved: "<filtered by output_options.pricing_terms>",
+          },
+          version: "20260318225923",
+          publicationDate: "2026-03-18T22:59:23Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AmazonRDS", filters: [instanceType=db.r6g.large, engine=Aurora PostgreSQL] }. 2 items captured, 1 kept. */
+  rdsR6gLargeAuroraPostgres: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonRDS",
+      data: [
+        {
+          product: {
+            productFamily: "Database Instance",
+            attributes: {
+              instanceType: "db.r6g.large",
+              regionCode: "us-east-1",
+              usagetype: "InstanceUsage:db.r6g.large",
+              databaseEngine: "Aurora PostgreSQL",
+              deploymentOption: "Single-AZ",
+              servicecode: "AmazonRDS",
+              servicename: "Amazon Relational Database Service",
+              memory: "16 GiB",
+              vcpu: "2",
+              storage: "EBS Only",
+              currentGeneration: "Yes",
+              instanceFamily: "Memory optimized",
+            },
+            sku: "4U9P9G87PY8QVQH5",
+          },
+          terms: {
+            OnDemand: {
+              "4U9P9G87PY8QVQH5.JRTCKXETXF": {
+                priceDimensions: {
+                  "4U9P9G87PY8QVQH5.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "$ 0.26 per RDS db.r6g.large Single-AZ instance hour (or partial hour) running Aurora PostgreSQL",
+                    appliesTo: [],
+                    rateCode: "4U9P9G87PY8QVQH5.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.2600000000",
+                    },
+                  },
+                },
+                sku: "4U9P9G87PY8QVQH5",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+            Reserved: "<filtered by output_options.pricing_terms>",
+          },
+          version: "20260318225923",
+          publicationDate: "2026-03-18T22:59:23Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AmazonRDS", filters: [instanceType=db.r6g.large, engine=Aurora MySQL] }. 2 items captured, 1 kept. */
+  rdsR6gLargeAuroraMysql: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonRDS",
+      data: [
+        {
+          product: {
+            productFamily: "Database Instance",
+            attributes: {
+              instanceType: "db.r6g.large",
+              regionCode: "us-east-1",
+              usagetype: "InstanceUsage:db.r6g.large",
+              databaseEngine: "Aurora MySQL",
+              deploymentOption: "Single-AZ",
+              servicecode: "AmazonRDS",
+              servicename: "Amazon Relational Database Service",
+              memory: "16 GiB",
+              vcpu: "2",
+              storage: "EBS Only",
+              currentGeneration: "Yes",
+              instanceFamily: "Memory optimized",
+            },
+            sku: "SVB4AAU3H83DPGMK",
+          },
+          terms: {
+            OnDemand: {
+              "SVB4AAU3H83DPGMK.JRTCKXETXF": {
+                priceDimensions: {
+                  "SVB4AAU3H83DPGMK.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "$ 0.26 per RDS db.r6g.large Single-AZ instance hour (or partial hour) running Aurora MySQL",
+                    appliesTo: [],
+                    rateCode: "SVB4AAU3H83DPGMK.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.2600000000",
+                    },
+                  },
+                },
+                sku: "SVB4AAU3H83DPGMK",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+            Reserved: "<filtered by output_options.pricing_terms>",
+          },
+          version: "20260318225923",
+          publicationDate: "2026-03-18T22:59:23Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AmazonRDS", filters: [instanceType=db.t3.micro, engine=MariaDB, deployment=Single-AZ] } */
+  rdsT3MicroMariadb: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonRDS",
+      data: [
+        {
+          product: {
+            productFamily: "Database Instance",
+            attributes: {
+              instanceType: "db.t3.micro",
+              regionCode: "us-east-1",
+              usagetype: "InstanceUsage:db.t3.micro",
+              databaseEngine: "MariaDB",
+              deploymentOption: "Single-AZ",
+              servicecode: "AmazonRDS",
+              servicename: "Amazon Relational Database Service",
+              memory: "1 GiB",
+              vcpu: "2",
+              storage: "EBS Only",
+              currentGeneration: "Yes",
+              instanceFamily: "General purpose",
+            },
+            sku: "5J8PBWJNX88YGMQK",
+          },
+          terms: {
+            OnDemand: {
+              "5J8PBWJNX88YGMQK.JRTCKXETXF": {
+                priceDimensions: {
+                  "5J8PBWJNX88YGMQK.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "USD 0.017 per db.t3.micro Single-AZ instance hour (or partial hour) running MariaDB",
+                    appliesTo: [],
+                    rateCode: "5J8PBWJNX88YGMQK.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0170000000",
+                    },
+                  },
+                },
+                sku: "5J8PBWJNX88YGMQK",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+            Reserved: "<filtered by output_options.pricing_terms>",
+          },
+          version: "20260318225923",
+          publicationDate: "2026-03-18T22:59:23Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AWSSystemsManager", filters: [productFamily=AWS Systems Manager] }. 34 items captured, 1 kept. */
+  ssmParameter: {
+    success: mcpText({
+      status: "success",
+      service_name: "AWSSystemsManager",
+      data: [
+        {
+          product: {
+            productFamily: "AWS Systems Manager",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "USE1-Change-API-Requests-Free",
+              servicecode: "AWSSystemsManager",
+              servicename: "AWS Systems Manager",
+            },
+            sku: "2SC234H95RE9KUWA",
+          },
+          terms: {
+            OnDemand: {
+              "2SC234H95RE9KUWA.JRTCKXETXF": {
+                priceDimensions: {
+                  "2SC234H95RE9KUWA.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "API Requests",
+                    endRange: "Inf",
+                    description:
+                      "Free trial Change Manager API Requests in US East (N. Virginia)",
+                    appliesTo: [],
+                    rateCode: "2SC234H95RE9KUWA.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0000000000",
+                    },
+                  },
+                },
+                sku: "2SC234H95RE9KUWA",
+                effectiveDate: "2025-08-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20250828153807",
+          publicationDate: "2025-08-28T15:38:07Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AWSSystemsManager in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Captured 2026-03-22 from aws-pricing-mcp-server. Input: { service_code: "AmazonEC2", filters: [instanceType=z99.nonexistent] }. Server returns error with suggestion. */
+  emptyData: {
+    success: mcpText({
+      status: "error",
+      error_type: "empty_results",
+      message:
+        "No results found for given filters [[PricingFilter(field='productFamily', type='TERM_MATCH', value='Compute Instance'), PricingFilter(field='instanceType', type='TERM_MATCH', value='z99.nonexistent'), PricingFilter(field='operatingSystem', type='TERM_MATCH', value='Linux')]], service: \"AmazonEC2\", region \"us-east-1\"",
+      service_code: "AmazonEC2",
+      region: "us-east-1",
+      suggestion:
+        "Try these approaches: (1) Verify that the service code is valid. Use get_service_codes() to get valid service codes. (2) Validate region and filter values using get_pricing_attribute_values(). (3) Test with fewer filters to isolate the issue.",
+      examples: {
+        "Example service codes": [
+          "AmazonEC2",
+          "AmazonS3",
+          "AmazonES",
+          "AWSLambda",
+          "AmazonDynamoDB",
+        ],
+        "Example regions": ["us-east-1", "eu-west-1", "ap-south-1"],
+      },
+    }),
+  },
+
+  /** Synthetic: zero-price response — constructed for free-tier edge case testing. */
+  zeroPrice: {
+    success: mcpText({
+      data: [
+        {
+          terms: {
+            OnDemand: {
+              "TERM-FREE": {
+                priceDimensions: {
+                  "DIM-FREE": {
+                    beginRange: "0",
+                    pricePerUnit: { USD: "0.0000000000" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    }),
+  },
+
+  /** Synthetic: empty response object — MCP server returned valid JSON but no data key. */
+  emptyResponse: {
+    success: mcpText({}),
+  },
+
+  /** Synthetic: malformed response — text field is not valid JSON. */
+  malformedJson: {
+    success: { type: "text" as const, text: "not valid json {{{" },
+  },
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 3. aws-documentation-mcp-server — search_documentation
+//    Captured 2026-03-22 via: uvx awslabs.aws-documentation-mcp-server@latest
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const docSearchResponses = {
+  /** Captured 2026-03-22 from aws-documentation-mcp-server. Input: { search_phrase: "BucketName AWS::S3::Bucket" }. 10 results, 3 kept. */
+  s3BucketName: {
+    success: {
+      search_results: [
+        {
+          rank_order: 1,
+          url: "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-s3-bucket.html",
+          title: "AWS::S3::Bucket - AWS CloudFormation",
+          context: "Use the CloudFormation AWS::S3::Bucket resource for S3.",
+        },
+        {
+          rank_order: 2,
+          url: "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket.html",
+          title: "AWS::S3::Bucket - AWS CloudFormation",
+          context:
+            "Use the AWS CloudFormation AWS::S3::Bucket resource for S3.",
+        },
+        {
+          rank_order: 3,
+          url: "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket-cors-corsrule.html",
+          title: "AWS::S3::Bucket CorsRule - AWS CloudFormation",
+          context:
+            "Specifies a cross-origin access rule for an Amazon S3 bucket.",
+        },
+      ],
+    },
+  },
+
+  /** Captured 2026-03-22 from aws-documentation-mcp-server. Input: { search_phrase: "InstanceType AWS::EC2::Instance" } */
+  ec2InstanceType: {
+    success: {
+      search_results: [
+        {
+          rank_order: 1,
+          url: "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-ec2-instance.html",
+          title: "AWS::EC2::Instance - AWS CloudFormation",
+          context: "Specifies an EC2 instance.",
+        },
+        {
+          rank_order: 2,
+          url: "https://docs.aws.amazon.com/cdk/api/v1/docs/@aws-cdk_aws-ec2.InstanceType.html",
+          title: "class InstanceType · AWS CDK",
+          context: "# class InstanceType",
+        },
+        {
+          rank_order: 3,
+          url: "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-discovery.html",
+          title:
+            "Find an Amazon EC2 instance type - Amazon Elastic Compute Cloud",
+          context:
+            "Discover suitable EC2 instance types based on compute, memory, storage needs. Filter by Availability Zone, memory size, instance storage, hibernation support.",
+        },
+      ],
+    },
+  },
+
+  /** Captured 2026-03-22 from aws-documentation-mcp-server. Input: { search_phrase: "Runtime AWS::Lambda::Function" } */
+  lambdaRuntime: {
+    success: {
+      search_results: [
+        {
+          rank_order: 1,
+          url: "https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html",
+          title: "Working with Lambda environment variables - AWS Lambda",
+          context:
+            "Configure Lambda environment variables customize function behavior, encrypt secrets, manage keys console.",
+        },
+        {
+          rank_order: 2,
+          url: "https://docs.aws.amazon.com/lambda/latest/dg/runtime-management-configure-settings.html",
+          title: "Configuring Lambda runtime management settings - AWS Lambda",
+          context:
+            "Lambda runtime management settings allow configuring automatic updates, updates on function changes, or manual updates with runtime version ARNs via console or CLI.",
+        },
+        {
+          rank_order: 3,
+          url: "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-lambda-version-runtimepolicy.html",
+          title: "AWS::Lambda::Version RuntimePolicy - AWS CloudFormation",
+          context:
+            "Use the CloudFormation AWS::Lambda::Version.RuntimePolicy resource for Lambda.",
+        },
+      ],
+    },
+  },
+
+  /** Captured 2026-03-22 from aws-documentation-mcp-server. Input: { search_phrase: "Engine AWS::RDS::DBInstance" } */
+  rdsEngine: {
+    success: {
+      search_results: [
+        {
+          rank_order: 1,
+          url: "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html",
+          title: "AWS::RDS::DBInstance - AWS CloudFormation",
+          context:
+            "Use the CloudFormation AWS::RDS::DBInstance resource for RDS.",
+        },
+        {
+          rank_order: 2,
+          url: "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-rds-dbinstance-dbinstancerole.html",
+          title: "AWS::RDS::DBInstance DBInstanceRole - AWS CloudFormation",
+          context:
+            "Use the CloudFormation AWS::RDS::DBInstance.DBInstanceRole resource for RDS.",
+        },
+        {
+          rank_order: 3,
+          url: "https://docs.aws.amazon.com/sdk-for-cpp/latest/api/aws-cpp-sdk-rds/html/class_aws_1_1_r_d_s_1_1_model_1_1_d_b_instance.html",
+          title: "AWS SDK for C++: Aws::RDS::Model::DBInstance Class Reference",
+          context:
+            "Aws::RDS::Model::DBInstance Class Reference - AWS SDK for C++ v1",
+        },
+      ],
+    },
+  },
+
+  /** Synthetic: unstructured response — URL embedded in plain text (regex fallback path). */
+  unstructuredWithUrl: {
+    success:
+      "See https://docs.aws.amazon.com/AmazonS3/latest/userguide/BucketName.html for details",
+  },
+
+  /** Synthetic: empty search results — no URLs in structured response. */
+  emptyResults: {
+    success: {
+      structuredContent: {
+        search_results: [],
+      },
+    },
+  },
+
+  /** Synthetic: no results — plain text response with no URL. */
+  noResultsText: {
+    success: "No results found for the given search phrase.",
+  },
+
+  /** Synthetic: null response — server returned nothing. */
+  nullResponse: {
+    success: null,
+  },
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 4. aws-documentation-mcp-server — read_sections
+//    Captured 2026-03-22 via: uvx awslabs.aws-documentation-mcp-server@latest
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const docReadSectionsResponses = {
+  /** Captured 2026-03-22 from aws-documentation-mcp-server read_sections. Input: { url: CFN S3 Bucket page, section_titles: [Overview,Description,Properties,Syntax] }. Truncated from 24K chars. */
+  s3BucketName: {
+    success: {
+      type: "text" as const,
+      text: `## Syntax
+
+To declare this entity in your CloudFormation template, use the following syntax:
+
+### JSON
+
+\`\`\`
+{
+  "Type" : "AWS::S3::Bucket",
+  "Properties" : {
+      "AbacStatus" : String,
+      "AccelerateConfiguration" : AccelerateConfiguration,
+      "AccessControl" : String,
+      "AnalyticsConfigurations" : [ AnalyticsConfiguration, ... ],
+      "BucketEncryption" : BucketEncryption,
+      "BucketName" : String,
+      "BucketNamePrefix" : String,
+      "BucketNamespace" : String,
+      "CorsConfiguration" : CorsConfiguration,
+      "IntelligentTieringConfigurations" : [ IntelligentTieringConfiguration, ... ],
+      "InventoryConfigurations" : [ InventoryConfiguration, ... ],
+      "LifecycleConfiguration" : LifecycleConfiguration,
+      "LoggingConfiguration" : LoggingConfiguration,
+      "MetadataConfiguration" : MetadataConfiguration,
+      "MetadataTableConfiguration" : MetadataTableConfiguration,
+      "MetricsConfigurations" : [ MetricsConfiguration, ... ],
+      "NotificationConfiguration" : NotificationConfiguration,
+      "ObjectLockConfiguration" : ObjectLockConfiguration,
+      "ObjectLockEnabled" : Boolean,
+      "OwnershipControls" : OwnershipControls,
+      "PublicAccessBlockConfiguration" : PublicAccessBlockConfiguration,
+      "ReplicationConfiguration" : ReplicationConfiguration,
+      "Tags" : [ Tag, ... ],
+      "VersioningConfiguration" : VersioningConfiguration,
+      "WebsiteConfiguration" : WebsiteConfiguration
+    }
+}
+\`\`\`
+
+### YAML
+
+\`\`\`
+Type: AWS::S3::Bucket
+Properties:
+  AbacStatus: String
+  AccelerateConfiguration: 
+    AccelerateConfiguration
+  AccessControl: String
+  AnalyticsConfigurations: 
+    - AnalyticsConfiguration
+  BucketEncryption: 
+    BucketEncryption
+  BucketName: String
+  BucketNamePrefix: String
+  BucketNamespace: String
+  CorsConfiguration: 
+    CorsConfiguration
+  IntelligentTieringConfigurations: 
+    - IntelligentTieringConfiguration
+  InventoryConfigurations: 
+    - InventoryConfiguration
+  LifecycleConfiguration: 
+ 
+
+[Content truncated for test fixture]`,
+    },
+  },
+
+  /** Captured 2026-03-22. read_sections on CFN EC2 Instance page. Truncated from 50K chars. */
+  ec2InstanceType: {
+    success: {
+      type: "text" as const,
+      text: `## Syntax
+
+To declare this entity in your CloudFormation template, use the following syntax:
+
+### JSON
+
+\`\`\`
+{
+  "Type" : "AWS::EC2::Instance",
+  "Properties" : {
+      "AdditionalInfo" : String,
+      "Affinity" : String,
+      "AvailabilityZone" : String,
+      "BlockDeviceMappings" : [ BlockDeviceMapping, ... ],
+      "CpuOptions" : CpuOptions,
+      "CreditSpecification" : CreditSpecification,
+      "DisableApiTermination" : Boolean,
+      "EbsOptimized" : Boolean,
+      "ElasticGpuSpecifications" : [ ElasticGpuSpecification, ... ],
+      "ElasticInferenceAccelerators" : [ ElasticInferenceAccelerator, ... ],
+      "EnclaveOptions" : EnclaveOptions,
+      "HibernationOptions" : HibernationOptions,
+      "HostId" : String,
+      "HostResourceGroupArn" : String,
+      "IamInstanceProfile" : String,
+      "ImageId" : String,
+      "InstanceInitiatedShutdownBehavior" : String,
+      "InstanceType" : String,
+      "Ipv6AddressCount" : Integer,
+      "Ipv6Addresses" : [ InstanceIpv6Address, ... ],
+      "KernelId" : String,
+      "KeyName" : String,
+      "LaunchTemplate" : LaunchTemplateSpecification,
+      "LicenseSpecifications" : [ LicenseSpecification, ... ],
+      "MetadataOptions" : MetadataOptions,
+      "Monitoring" : Boolean,
+      "NetworkInterfaces" : [ NetworkInterface, ... ],
+      "PlacementGroupName" : String,
+      "PrivateDnsNameOptions" : PrivateDnsNameOptions,
+      "PrivateIpAddress" : String,
+      "PropagateTagsToVolumeOnCreation" : Boolean,
+      "RamdiskId" : String,
+      "SecurityGroupIds" : [ String, ... ],
+      "SecurityGroups" : [ String, ... ],
+      "SourceDestCheck" : Boolean,
+      "SsmAssociations" : [ SsmAssociation, ... ],
+      "SubnetId" : String,
+      "Tags" : [ Tag, ... ],
+      "Tenancy" : String,
+      "UserData" : String,
+      "Volumes" : [ Volume, ... ]
+    }
+}
+\`\`\`
+
+### YAML
+
+\`\`\`
+Type: AWS::EC2::Instance
+Properties:
+  AdditionalInfo: String
+  Affinity: String
+  AvailabilityZone: String
+  BlockDeviceMappings: 
+    - BlockDe
+
+[Content truncated for test fixture]`,
+    },
+  },
+
+  /** Captured 2026-03-22. read_sections on CFN Lambda Function page. Truncated from 28K chars. */
+  lambdaRuntime: {
+    success: {
+      type: "text" as const,
+      text: `## Syntax
+
+To declare this entity in your CloudFormation template, use the following syntax:
+
+### JSON
+
+\`\`\`
+{
+  "Type" : "AWS::Lambda::Function",
+  "Properties" : {
+      "Architectures" : [ String, ... ],
+      "CapacityProviderConfig" : CapacityProviderConfig,
+      "Code" : Code,
+      "CodeSigningConfigArn" : String,
+      "DeadLetterConfig" : DeadLetterConfig,
+      "Description" : String,
+      "DurableConfig" : DurableConfig,
+      "Environment" : Environment,
+      "EphemeralStorage" : EphemeralStorage,
+      "FileSystemConfigs" : [ FileSystemConfig, ... ],
+      "FunctionName" : String,
+      "FunctionScalingConfig" : FunctionScalingConfig,
+      "Handler" : String,
+      "ImageConfig" : ImageConfig,
+      "KmsKeyArn" : String,
+      "Layers" : [ String, ... ],
+      "LoggingConfig" : LoggingConfig,
+      "MemorySize" : Integer,
+      "PackageType" : String,
+      "PublishToLatestPublished" : Boolean,
+      "RecursiveLoop" : String,
+      "ReservedConcurrentExecutions" : Integer,
+      "Role" : String,
+      "Runtime" : String,
+      "RuntimeManagementConfig" : RuntimeManagementConfig,
+      "SnapStart" : SnapStart,
+      "Tags" : [ Tag, ... ],
+      "TenancyConfig" : TenancyConfig,
+      "Timeout" : Integer,
+      "TracingConfig" : TracingConfig,
+      "VpcConfig" : VpcConfig
+    }
+}
+\`\`\`
+
+### YAML
+
+\`\`\`
+Type: AWS::Lambda::Function
+Properties:
+  Architectures: 
+    - String
+  CapacityProviderConfig: 
+    CapacityProviderConfig
+  Code: 
+    Code
+  CodeSigningConfigArn: String
+  DeadLetterConfig: 
+    DeadLetterConfig
+  Description: String
+  DurableConfig: 
+    DurableConfig
+  Environment: 
+    Environment
+  EphemeralStorage: 
+    EphemeralStorage
+  FileSystemConfigs: 
+    - FileSystemConfig
+  FunctionName: String
+  FunctionScalingConfig: 
+    FunctionScalingConfig
+  Handler: String
+  ImageConfig: 
+    ImageConfig
+  KmsKeyArn: String
+  Layers: 
+    - String
+  LoggingConfig: 
+    LoggingConfig
+  MemorySize: Integer
+  PackageType: String
+  PublishToLatestPublish
+
+[Content truncated for test fixture]`,
+    },
+  },
+
+  /** Captured 2026-03-22. read_sections on CFN RDS DBInstance page. Truncated from 97K chars. */
+  rdsEngine: {
+    success: {
+      type: "text" as const,
+      text: `## Syntax
+
+To declare this entity in your CloudFormation template, use the following syntax:
+
+### JSON
+
+\`\`\`
+{
+  "Type" : "AWS::RDS::DBInstance",
+  "Properties" : {
+      "AdditionalStorageVolumes" : [ AdditionalStorageVolume, ... ],
+      "AllocatedStorage" : String,
+      "AllowMajorVersionUpgrade" : Boolean,
+      "ApplyImmediately" : Boolean,
+      "AssociatedRoles" : [ DBInstanceRole, ... ],
+      "AutomaticBackupReplicationKmsKeyId" : String,
+      "AutomaticBackupReplicationRegion" : String,
+      "AutomaticBackupReplicationRetentionPeriod" : Integer,
+      "AutoMinorVersionUpgrade" : Boolean,
+      "AvailabilityZone" : String,
+      "BackupRetentionPeriod" : Integer,
+      "BackupTarget" : String,
+      "CACertificateIdentifier" : String,
+      "CertificateRotationRestart" : Boolean,
+      "CharacterSetName" : String,
+      "CopyTagsToSnapshot" : Boolean,
+      "CustomIAMInstanceProfile" : String,
+      "DatabaseInsightsMode" : String,
+      "DBClusterIdentifier" : String,
+      "DBClusterSnapshotIdentifier" : String,
+      "DBInstanceClass" : String,
+      "DBInstanceIdentifier" : String,
+      "DBName" : String,
+      "DBParameterGroupName" : String,
+      "DBSecurityGroups" : [ String, ... ],
+      "DBSnapshotIdentifier" : String,
+      "DBSubnetGroupName" : String,
+      "DBSystemId" : String,
+      "DedicatedLogVolume" : Boolean,
+      "DeleteAutomatedBackups" : Boolean,
+      "DeletionProtection" : Boolean,
+      "Domain" : String,
+      "DomainAuthSecretArn" : String,
+      "DomainDnsIps" : [ String, ... ],
+      "DomainFqdn" : String,
+      "DomainIAMRoleName" : String,
+      "DomainOu" : String,
+      "EnableCloudwatchLogsExports" : [ String, ... ],
+      "EnableIAMDatabaseAuthentication" : Boolean,
+      "EnablePerformanceInsights" : Boolean,
+      "Engine" : String,
+      "EngineLifecycleSupport" : String,
+      "EngineVersion" : String,
+      "Iops" : Integer,
+      "KmsKeyId" : String,
+      "LicenseModel" : String,
+      "ManageMasterUserPasswor
+
+[Content truncated for test fixture]`,
+    },
+  },
+
+  /** Captured 2026-03-22. read_sections on CFN DynamoDB Table page. Truncated from 20K chars. */
+  dynamoDbBillingMode: {
+    success: {
+      type: "text" as const,
+      text: `## Syntax
+
+To declare this entity in your CloudFormation template, use the following syntax:
+
+### JSON
+
+\`\`\`
+{
+  "Type" : "AWS::DynamoDB::Table",
+  "Properties" : {
+      "AttributeDefinitions" : [ AttributeDefinition, ... ],
+      "BillingMode" : String,
+      "ContributorInsightsSpecification" : ContributorInsightsSpecification,
+      "DeletionProtectionEnabled" : Boolean,
+      "GlobalSecondaryIndexes" : [ GlobalSecondaryIndex, ... ],
+      "ImportSourceSpecification" : ImportSourceSpecification,
+      "KeySchema" : [ KeySchema, ... ],
+      "KinesisStreamSpecification" : KinesisStreamSpecification,
+      "LocalSecondaryIndexes" : [ LocalSecondaryIndex, ... ],
+      "OnDemandThroughput" : OnDemandThroughput,
+      "PointInTimeRecoverySpecification" : PointInTimeRecoverySpecification,
+      "ProvisionedThroughput" : ProvisionedThroughput,
+      "ResourcePolicy" : ResourcePolicy,
+      "SSESpecification" : SSESpecification,
+      "StreamSpecification" : StreamSpecification,
+      "TableClass" : String,
+      "TableName" : String,
+      "Tags" : [ Tag, ... ],
+      "TimeToLiveSpecification" : TimeToLiveSpecification,
+      "WarmThroughput" : WarmThroughput
+    }
+}
+\`\`\`
+
+### YAML
+
+\`\`\`
+Type: AWS::DynamoDB::Table
+Properties:
+  AttributeDefinitions: 
+    - AttributeDefinition
+  BillingMode: String
+  ContributorInsightsSpecification: 
+    ContributorInsightsSpecification
+  DeletionProtectionEnabled: Boolean
+  GlobalSecondaryIndexes: 
+    - GlobalSecondaryIndex
+  ImportSourceSpecification: 
+    ImportSourceSpecification
+  KeySchema: 
+    - KeySchema
+  KinesisStreamSpecification: 
+    KinesisStreamSpecification
+  LocalSecondaryIndexes: 
+    - LocalSecondaryIndex
+  OnDemandThroughput: 
+    OnDemandThroughput
+  PointInTimeRecoverySpecification: 
+    PointInTimeRecoverySpecification
+  ProvisionedThroughput: 
+    ProvisionedThroughput
+  ResourcePolicy: 
+    ResourcePolicy
+  SSESpecification: 
+    SSESpecification
+  StreamSpecification: 
+    StreamSpecification
+  TableClass: Stri
+
+[Content truncated for test fixture]`,
+    },
+  },
+
+  /** Synthetic: very long content — stress test for truncation/synthesis. */
+  longContent: {
+    success: mcpText(
+      "## Overview\n\n" +
+        "This is a very long documentation page that covers many aspects of the resource configuration. ".repeat(
+          50,
+        ) +
+        "\n\n## Properties\n\n" +
+        "PropertyA: Description of property A.\n" +
+        "PropertyB: Description of property B.\n" +
+        "PropertyC: Description of property C.\n",
+    ),
+  },
+
+  /** Synthetic: response with "Note: not found" pattern — stripped by display.ts regex. */
+  withNotFoundNote: {
+    success: mcpText(
+      "> **Note**: Section 'Syntax' not found in the document.\n\n" +
+        "## Properties\n\n" +
+        "**BucketName**\n" +
+        "A name for the bucket.",
+    ),
+  },
+
+  /** Synthetic: no matching sections error — triggers fallback to read_documentation. */
+  noMatchingSections: {
+    error: new Error("No matching sections were found"),
+  },
+
+  /** Synthetic: generic server error. */
+  serverError: {
+    error: new Error(
+      "Internal server error: documentation service unavailable",
+    ),
+  },
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 5. aws-documentation-mcp-server — read_documentation (full page fallback)
+//    Captured 2026-03-22 via: uvx awslabs.aws-documentation-mcp-server@latest
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const docReadFullResponses = {
+  /** Captured 2026-03-22 from aws-documentation-mcp-server read_documentation. Full S3 Bucket page, truncated from 5K chars. */
+  s3BucketFull: {
+    success: {
+      type: "text" as const,
+      text: `AWS Documentation from https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket.html:
+
+This is the new *CloudFormation Template Reference Guide*.
+Please update your bookmarks and links. For help getting started with CloudFormation, see the
+[AWS CloudFormation User Guide](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html").
+
+# AWS::S3::Bucket
+
+The \`AWS::S3::Bucket\` resource creates an Amazon S3 bucket in the same AWS Region where you create the AWS CloudFormation stack.
+
+To control how AWS CloudFormation handles the bucket when the stack is
+deleted, you can set a deletion policy for your bucket. You can choose to
+*retain* the bucket or to *delete* the bucket. For
+more information, see [DeletionPolicy
+Attribute](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-deletionpolicy.html "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-deletionpolicy.html").
+
+###### Important
+
+You can only delete empty buckets. Deletion fails for buckets that have contents.
+
+## Syntax
+
+To declare this entity in your CloudFormation template, use the following syntax:
+
+### JSON
+
+\`\`\`
+{
+  "Type" : "AWS::S3::Bucket",
+  "Properties" : {
+      "AbacStatus" : String,
+      "AccelerateConfiguration" : AccelerateConfiguration,
+      "AccessControl" : String,
+      "AnalyticsConfigurations" : [ AnalyticsConfiguration, ... ],
+      "BucketEncryption" : BucketEncryption,
+      "BucketName" : String,
+      "BucketNamePrefix" : String,
+      "BucketNamespace" : String,
+      "CorsConfiguration" : CorsConfiguration,
+      "IntelligentTieringConfigurations" : [ IntelligentTieringConfiguration, ... ],
+      "InventoryConfigurations" : [ InventoryConfiguration, ... ],
+      "LifecycleConfiguration" : LifecycleConfiguration,
+      "LoggingConfiguration" : LoggingConfiguration,
+      "MetadataConfiguration" : MetadataConfiguration,
+      "MetadataTableConfiguration" : MetadataTableConfiguration,
+      "MetricsConfigurations" : [ MetricsConfiguration, ... ],
+      "NotificationConfiguration" : NotificationConfiguration,
+      "ObjectLockConfiguration" : ObjectLockConfiguration,
+      "ObjectLockEnabled" : Boolean,
+      "OwnershipControls" : OwnershipControls,
+      "PublicAccessBlockConfiguration" : PublicAccessBlockConfiguration,
+      "ReplicationConfiguration" : ReplicationConfiguration,
+      "Tags" : [ Tag, ... ],
+      "VersioningConfiguration" : VersioningConfiguration,
+      "WebsiteConfiguration" : WebsiteConfiguration
+    }
+}
+\`\`\`
+
+### YAML
+
+\`\`\`
+Type: AWS::S3::Bucket
+Properties:
+  AbacStatus: String
+  AccelerateConfiguration: 
+    AccelerateConfiguration
+  AccessControl: String
+  AnalyticsConfigurations: 
+    - AnalyticsConfiguration
+  BucketEncryption: 
+    BucketEncryption
+  BucketName: String
+  BucketNamePrefix: String
+  BucketNamespace: String
+  CorsConfiguration: 
+    CorsConfiguration
+  Inte
+
+[Content truncated for test fixture]`,
+    },
+  },
+
+  /** Captured 2026-03-22. Full Lambda Function page, truncated from 5K chars. */
+  lambdaFunctionFull: {
+    success: {
+      type: "text" as const,
+      text: `AWS Documentation from https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-function.html:
+
+This is the new *CloudFormation Template Reference Guide*.
+Please update your bookmarks and links. For help getting started with CloudFormation, see the
+[AWS CloudFormation User Guide](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/Welcome.html").
+
+# AWS::Lambda::Function
+
+The \`AWS::Lambda::Function\` resource creates a Lambda function. To create a function, you need a
+[deployment package](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-package.html "https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-package.html") and an
+[execution role](https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html "https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html").
+The deployment package is a .zip file archive or container image that contains your function code.
+The execution role grants the function permission to use AWS services, such as Amazon CloudWatch Logs
+for log streaming and AWS X-Ray for request tracing.
+
+You set the package type to \`Image\` if the deployment package is a
+[container image](https://docs.aws.amazon.com/lambda/latest/dg/lambda-images.html "https://docs.aws.amazon.com/lambda/latest/dg/lambda-images.html"). For these functions,
+include the URI of the container image in the Amazon ECR registry in the [\`ImageUri\` property of the \`Code\` property](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-lambda-function-code.html#cfn-lambda-function-code-imageuri "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-lambda-function-code.html#cfn-lambda-function-code-imageuri"). You do not need to specify the handler and
+runtime properties.
+
+You set the package type to \`Zip\` if the deployment package is a [.zip file archive](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-package.html#gettingstarted-package-zip "https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-package.html#gettingstarted-package-zip").
+For these functions, specify the Amazon S3 location of your .zip file in the \`Code\` property.
+Alternatively, for Node.js and Python functions, you can define your function inline in the [\`ZipFile\` property of the \`Code\` property](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-lambda-function-code.html#cfn-lambda-function-code-zipfile "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-lambda-function-code.html#cfn-lambda-function-code-zipfile"). In both cases, you must also specify the
+handler and runtime properties.
+
+You can use [code signing](https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html "https://docs.aws.amazon.com/lambda/latest/dg/configuration-codesigning.html")
+if your deployment package is a .zip file archive. T
+
+[Content truncated for test fixture]`,
+    },
+  },
+
+  /** Synthetic: empty page — edge case. */
+  emptyPage: {
+    success: mcpText(""),
+  },
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Exported namespace
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const McpMocks = {
+  schema: schemaResponses,
+  pricing: pricingResponses,
+  docSearch: docSearchResponses,
+  docReadSections: docReadSectionsResponses,
+  docReadFull: docReadFullResponses,
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Mock tool factory functions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Creates a mock StructuredTool that returns the given response on invoke().
+ * Matches the pattern used across all existing tests in the project.
+ *
+ * @param name  - Tool name from ToolName constants
+ * @param response - The value to resolve (or Error to reject) on invoke
+ *
+ * @example
+ *   const tool = createMockTool(ToolName.GET_RESOURCE_SCHEMA, McpMocks.schema.s3Bucket.success);
+ *   const result = await tool.invoke({ resource_type: "AWS::S3::Bucket" });
+ */
+export function createMockTool(
+  name: string,
+  response: unknown,
+): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi.fn().mockResolvedValue(response),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates a mock tool that rejects with the given error.
+ *
+ * @example
+ *   const tool = createFailingMockTool(ToolName.GET_RESOURCE_SCHEMA, new Error("Server down"));
+ */
+export function createFailingMockTool(
+  name: string,
+  error: Error = new Error("Tool execution failed"),
+): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi.fn().mockRejectedValue(error),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates a mock tool that never resolves (hangs forever) — for timeout tests.
+ *
+ * @example
+ *   const tool = createHangingMockTool(ToolName.GET_PRICING);
+ */
+export function createHangingMockTool(name: string): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi.fn().mockImplementation(() => new Promise(() => {})),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates a mock tool that resolves after a specified delay.
+ *
+ * @example
+ *   const tool = createDelayedMockTool(ToolName.GET_PRICING, McpMocks.pricing.ec2T3Micro.success, 5000);
+ */
+export function createDelayedMockTool(
+  name: string,
+  response: unknown,
+  delayMs: number,
+): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => resolve(response), delayMs),
+          ),
+      ),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates a mock tool that returns null — simulates timeout via withTimeout().
+ *
+ * @example
+ *   const tool = createNullMockTool(ToolName.SEARCH_DOCUMENTATION);
+ */
+export function createNullMockTool(name: string): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi.fn().mockResolvedValue(null),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates a mock tool that returns different responses on successive calls.
+ *
+ * @example
+ *   const tool = createSequenceMockTool(ToolName.GET_PRICING, [
+ *     McpMocks.pricing.ec2T3Micro.success,
+ *     McpMocks.pricing.ec2T3Small.success,
+ *   ]);
+ */
+export function createSequenceMockTool(
+  name: string,
+  responses: unknown[],
+): StructuredTool {
+  const mockFn = vi.fn();
+  responses.forEach((response) => {
+    if (response instanceof Error) {
+      mockFn.mockRejectedValueOnce(response);
+    } else {
+      mockFn.mockResolvedValueOnce(response);
+    }
+  });
+  return {
+    name,
+    description: "",
+    invoke: mockFn,
+  } as unknown as StructuredTool;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Pre-built tool sets — common combinations used across multiple test files
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Creates a complete set of all 5 MCP tools with default success responses.
+ * Useful for integration-style tests that need all tools available.
+ */
+export function createAllMockTools(): StructuredTool[] {
+  return [
+    createMockTool(
+      ToolName.GET_RESOURCE_SCHEMA,
+      McpMocks.schema.s3Bucket.success,
+    ),
+    createMockTool(ToolName.GET_PRICING, McpMocks.pricing.s3Storage.success),
+    createMockTool(
+      ToolName.SEARCH_DOCUMENTATION,
+      McpMocks.docSearch.s3BucketName.success,
+    ),
+    createMockTool(
+      ToolName.READ_SECTIONS,
+      McpMocks.docReadSections.s3BucketName.success,
+    ),
+    createMockTool(
+      ToolName.READ_DOCUMENTATION,
+      McpMocks.docReadFull.s3BucketFull.success,
+    ),
+  ];
+}
+
+/**
+ * Creates schema + pricing tools only (no documentation).
+ * Used by schema-fetcher and preflight-guard tests.
+ */
+export function createCoreMockTools(
+  schemaResponse = McpMocks.schema.s3Bucket.success,
+  pricingResponse = McpMocks.pricing.s3Storage.success,
+): StructuredTool[] {
+  return [
+    createMockTool(ToolName.GET_RESOURCE_SCHEMA, schemaResponse),
+    createMockTool(ToolName.GET_PRICING, pricingResponse),
+  ];
+}
+
+/**
+ * Creates documentation tools only (search + read_sections + read_documentation).
+ * Used by display.ts renderDocHelp tests.
+ */
+export function createDocMockTools(
+  searchResponse: unknown = McpMocks.docSearch.s3BucketName.success,
+  readSectionsResponse: unknown = McpMocks.docReadSections.s3BucketName.success,
+  readFullResponse: unknown = McpMocks.docReadFull.s3BucketFull.success,
+): StructuredTool[] {
+  return [
+    createMockTool(ToolName.SEARCH_DOCUMENTATION, searchResponse),
+    createMockTool(ToolName.READ_SECTIONS, readSectionsResponse),
+    createMockTool(ToolName.READ_DOCUMENTATION, readFullResponse),
+  ];
+}
+
+/**
+ * Creates a pricing tool that returns different prices for different instance types.
+ * Maps instance type → mock pricing response.
+ *
+ * @example
+ *   const tool = createPricingLookupTool({
+ *     "t3.micro": McpMocks.pricing.ec2T3Micro.success,
+ *     "t3.small": McpMocks.pricing.ec2T3Small.success,
+ *   });
+ */
+export function createPricingLookupTool(
+  priceMap: Record<string, unknown>,
+): StructuredTool {
+  return {
+    name: ToolName.GET_PRICING,
+    description: "",
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        async (args: { filters?: Array<{ Field: string; Value: string }> }) => {
+          const instanceFilter = args.filters?.find(
+            (f) => f.Field === "instanceType",
+          );
+          if (instanceFilter && instanceFilter.Value in priceMap) {
+            return priceMap[instanceFilter.Value];
+          }
+          return McpMocks.pricing.emptyData.success;
+        },
+      ),
+  } as unknown as StructuredTool;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Pricing response builder — for generating custom pricing responses
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Builds a minimal pricing response with a single on-demand price.
+ * Matches the helper `makePricingResponse` used in pricing-lookup.test.ts.
+ *
+ * @param priceUsd - The USD price per unit (0 for free-tier)
+ * @returns MCP-wrapped pricing response
+ *
+ * @example
+ *   const response = buildPricingResponse(0.0104);
+ *   // → { type: "text", text: '{"data":[{"terms":{"OnDemand":...}}]}' }
+ */
+export function buildPricingResponse(priceUsd: number) {
+  return mcpText({
+    data: [
+      {
+        terms: {
+          OnDemand: {
+            "TERM-1": {
+              priceDimensions: {
+                "DIM-1": {
+                  beginRange: "0",
+                  pricePerUnit: { USD: String(priceUsd) },
+                },
+              },
+            },
+          },
+        },
+      },
+    ],
+  });
+}
+
+/**
+ * Builds a multi-tier pricing response (e.g., S3 storage tiers).
+ *
+ * @param tiers - Array of [beginRange, endRange, priceUsd] tuples
+ *
+ * @example
+ *   const response = buildMultiTierPricingResponse([
+ *     ["0", "51200", 0.023],
+ *     ["51200", "512000", 0.022],
+ *     ["512000", "Inf", 0.021],
+ *   ]);
+ */
+export function buildMultiTierPricingResponse(
+  tiers: Array<[string, string, number]>,
+) {
+  const priceDimensions: Record<string, unknown> = {};
+  tiers.forEach(([beginRange, endRange, priceUsd], i) => {
+    priceDimensions[`DIM-${i}`] = {
+      beginRange,
+      endRange,
+      pricePerUnit: { USD: String(priceUsd) },
+    };
+  });
+
+  return mcpText({
+    data: [
+      {
+        terms: {
+          OnDemand: {
+            "TERM-MULTI": { priceDimensions },
+          },
+        },
+      },
+    ],
+  });
+}
+
+/**
+ * Builds a schema response for any resource type with custom properties.
+ *
+ * @example
+ *   const response = buildSchemaResponse("AWS::SQS::Queue", {
+ *     QueueName: { Type: "string" },
+ *     FifoQueue: { Type: "boolean" },
+ *   }, ["QueueName"]);
+ */
+export function buildSchemaResponse(
+  typeName: string,
+  properties: Record<string, unknown>,
+  required: string[] = [],
+) {
+  return mcpText({
+    typeName,
+    properties,
+    required,
+  });
+}
+
+/**
+ * Builds a documentation search response with custom URLs.
+ *
+ * @example
+ *   const response = buildDocSearchResponse([
+ *     "https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-naming.html",
+ *   ]);
+ */
+export function buildDocSearchResponse(urls: string[]) {
+  return {
+    structuredContent: {
+      search_results: urls.map((url) => ({ url })),
+    },
+  };
+}
+
+/**
+ * Builds a documentation read response with custom text content.
+ *
+ * @example
+ *   const response = buildDocReadResponse("## Properties\n\nBucketName: ...");
+ */
+export function buildDocReadResponse(content: string) {
+  return mcpText(content);
+}
