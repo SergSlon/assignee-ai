@@ -16,8 +16,15 @@ export function getRequiredIamActions(resourceType: string): string[] {
   const ccapiActions = [
     "cloudcontrol:CreateResource",
     "cloudcontrol:GetResource",
+    "cloudcontrol:GetResourceRequestStatus",
     "cloudcontrol:UpdateResource",
     "cloudcontrol:DeleteResource",
+    // CloudControl API maps internally to CloudFormation — some accounts
+    // require these actions under the cloudformation namespace
+    "cloudformation:GetResource",
+    "cloudformation:CreateResource",
+    "cloudformation:DeleteResource",
+    "cloudformation:UpdateResource",
   ];
 
   const serviceActionMap: Record<string, string[]> = {
