@@ -20,11 +20,22 @@ export const s3PublicAccessRule: GuardrailRule = {
   ruleId: "s3-public-access",
   resourceTypes: ["AWS::S3::Bucket"],
   evaluate: (_resourceType: string, desiredState: Record<string, unknown>) => {
-    const config = desiredState["PublicAccessBlockConfiguration"] as
-      | Record<string, unknown>
-      | undefined;
+    const raw = desiredState["PublicAccessBlockConfiguration"];
 
-    if (!config) {
+    // Handle boolean form (pre-toCfn or legacy) — true means "block all"
+    if (typeof raw === "boolean") {
+      return raw
+        ? null // true = all blocked
+        : {
+            ruleId: "s3-public-access",
+            severity: "critical",
+            message:
+              "S3 bucket has PublicAccessBlockConfiguration set to false — public access is allowed",
+            field: "PublicAccessBlockConfiguration",
+          };
+    }
+
+    if (raw == null) {
       return {
         ruleId: "s3-public-access",
         severity: "critical",
@@ -33,6 +44,8 @@ export const s3PublicAccessRule: GuardrailRule = {
         field: "PublicAccessBlockConfiguration",
       };
     }
+
+    const config = raw as Record<string, unknown>;
 
     const openFields = PUBLIC_ACCESS_FIELDS.filter(
       (field) => config[field] !== true,

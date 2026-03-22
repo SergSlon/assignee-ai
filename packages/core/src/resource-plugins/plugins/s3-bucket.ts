@@ -25,6 +25,14 @@ export const s3BucketPlugin: ResourcePlugin = {
         initialValue: true,
         hint: "SSE-S3 is free. KMS adds ~$1/mo per 10K requests. Recommended for production.",
       },
+      toCfn: (answer: unknown) =>
+        answer
+          ? {
+              ServerSideEncryptionConfiguration: [
+                { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
+              ],
+            }
+          : undefined,
     },
     {
       name: "KMSMasterKeyID",
@@ -43,6 +51,15 @@ export const s3BucketPlugin: ResourcePlugin = {
         initialValue: true,
         hint: "Blocks all public ACLs and policies. Recommended for security.",
       },
+      toCfn: (answer: unknown) =>
+        answer
+          ? {
+              BlockPublicAcls: true,
+              BlockPublicPolicy: true,
+              IgnorePublicAcls: true,
+              RestrictPublicBuckets: true,
+            }
+          : undefined,
     },
     {
       name: "VersioningConfiguration",
@@ -52,6 +69,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         initialValue: false,
         hint: "Keeps all object versions. Increases storage cost. Best for data protection.",
       },
+      toCfn: (answer: unknown) => (answer ? { Status: "Enabled" } : undefined),
     },
     {
       name: "Tags",
@@ -70,6 +88,19 @@ export const s3BucketPlugin: ResourcePlugin = {
         label: "Add lifecycle rules?",
         initialValue: false,
       },
+      toCfn: (answer: unknown) =>
+        answer
+          ? {
+              Rules: [
+                {
+                  Status: "Enabled",
+                  Transitions: [
+                    { StorageClass: "STANDARD_IA", TransitionInDays: 30 },
+                  ],
+                },
+              ],
+            }
+          : undefined,
     },
     {
       name: "CorsConfiguration",
@@ -78,6 +109,10 @@ export const s3BucketPlugin: ResourcePlugin = {
         label: "Enable CORS?",
         initialValue: false,
       },
+      toCfn: (answer: unknown) =>
+        answer
+          ? { CorsRules: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"] }] }
+          : undefined,
     },
     {
       name: "ReplicationConfiguration",

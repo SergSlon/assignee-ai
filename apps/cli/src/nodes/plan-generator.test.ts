@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { ExecutionStatus, MockLlmAdapter } from "@assignee/core";
-import { createPlanGeneratorNode } from "./plan-generator.js";
+import {
+  createPlanGeneratorNode,
+  applyToCfnTransforms,
+} from "./plan-generator.js";
 import type { AgentState } from "../services/graph.js";
 
 // Mock memory service (Story 19.3, 19.4)
@@ -504,5 +507,184 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
 
     // Plan should still generate successfully
     expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
+  });
+});
+
+// ── Story 18.9: toCfn transform tests ────────────────────────────────────────
+
+describe("applyToCfnTransforms", () => {
+  it("transforms S3 boolean options into CFN structures", () => {
+    const result = applyToCfnTransforms(
+      {
+        BucketEncryption: true,
+        PublicAccessBlockConfiguration: true,
+        VersioningConfiguration: true,
+      },
+      "AWS::S3::Bucket",
+    );
+
+    expect(result["BucketEncryption"]).toEqual({
+      ServerSideEncryptionConfiguration: [
+        { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
+      ],
+    });
+    expect(result["PublicAccessBlockConfiguration"]).toEqual({
+      BlockPublicAcls: true,
+      BlockPublicPolicy: true,
+      IgnorePublicAcls: true,
+      RestrictPublicBuckets: true,
+    });
+    expect(result["VersioningConfiguration"]).toEqual({ Status: "Enabled" });
+  });
+
+  it("omits fields where toCfn returns undefined (user said no)", () => {
+    const result = applyToCfnTransforms(
+      {
+        BucketEncryption: false,
+        PublicAccessBlockConfiguration: false,
+        VersioningConfiguration: false,
+      },
+      "AWS::S3::Bucket",
+    );
+
+    expect(result["BucketEncryption"]).toBeUndefined();
+    expect(result["PublicAccessBlockConfiguration"]).toBeUndefined();
+    expect(result["VersioningConfiguration"]).toBeUndefined();
+    expect(Object.keys(result)).toHaveLength(0);
+  });
+
+  it("passes through fields without toCfn unchanged", () => {
+    const result = applyToCfnTransforms(
+      { BucketName: "my-bucket", BucketEncryption: true },
+      "AWS::S3::Bucket",
+    );
+
+    expect(result["BucketName"]).toBe("my-bucket");
+    expect(result["BucketEncryption"]).toEqual({
+      ServerSideEncryptionConfiguration: [
+        { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
+      ],
+    });
+  });
+
+  it("returns options unchanged when plugin is not found", () => {
+    const options = { SomeField: "some-value" };
+    const result = applyToCfnTransforms(options, "AWS::Unknown::Resource");
+
+    expect(result).toEqual(options);
+  });
+
+  it("transforms advanced fields (LifecycleConfiguration, CorsConfiguration)", () => {
+    const result = applyToCfnTransforms(
+      { LifecycleConfiguration: true, CorsConfiguration: true },
+      "AWS::S3::Bucket",
+    );
+
+    expect(result["LifecycleConfiguration"]).toEqual({
+      Rules: [
+        {
+          Status: "Enabled",
+          Transitions: [{ StorageClass: "STANDARD_IA", TransitionInDays: 30 }],
+        },
+      ],
+    });
+    expect(result["CorsConfiguration"]).toEqual({
+      CorsRules: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"] }],
+    });
+  });
+});
+
+describe("planGeneratorNode — Story 18.9 toCfn integration", () => {
+  it("applies toCfn transforms to elicited options in standard mode", async () => {
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+
+    const result = await node(
+      makeState({
+        elicitedOptions: {
+          BucketEncryption: true,
+          PublicAccessBlockConfiguration: true,
+        },
+      }),
+    );
+
+    const ds = result.desiredState as Record<string, unknown>;
+    expect(ds["BucketEncryption"]).toEqual({
+      ServerSideEncryptionConfiguration: [
+        { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
+      ],
+    });
+    expect(ds["PublicAccessBlockConfiguration"]).toEqual({
+      BlockPublicAcls: true,
+      BlockPublicPolicy: true,
+      IgnorePublicAcls: true,
+      RestrictPublicBuckets: true,
+    });
+  });
+
+  it("omits false-valued toCfn fields from desiredState", async () => {
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "my-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+
+    const result = await node(
+      makeState({
+        elicitedOptions: {
+          BucketEncryption: false,
+          VersioningConfiguration: false,
+        },
+      }),
+    );
+
+    const ds = result.desiredState as Record<string, unknown>;
+    expect(ds["BucketEncryption"]).toBeUndefined();
+    expect(ds["VersioningConfiguration"]).toBeUndefined();
+    expect(ds["BucketName"]).toBe("my-bucket");
+  });
+
+  it("applies toCfn transforms in compound mode", async () => {
+    const mock = new MockLlmAdapter(undefined, "unused");
+    const node = createPlanGeneratorNode({ llmClient: mock });
+
+    const result = await node(
+      makeState({
+        executionStatus: ExecutionStatus.PENDING,
+        resourcePattern: {
+          patternId: "static-website",
+          description: "Static website",
+          resourceIds: ["bucket"],
+          defaultOptions: {
+            bucket: { BucketName: "site-bucket" },
+          },
+        },
+        resourceQueue: [
+          { resourceId: "bucket", resourceType: "AWS::S3::Bucket" },
+        ],
+        currentResourceIndex: 0,
+        elicitedOptions: {
+          BucketEncryption: true,
+          PublicAccessBlockConfiguration: true,
+        },
+      }),
+    );
+
+    const ds = result.desiredState as Record<string, unknown>;
+    expect(ds["BucketEncryption"]).toEqual({
+      ServerSideEncryptionConfiguration: [
+        { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
+      ],
+    });
+    expect(ds["PublicAccessBlockConfiguration"]).toEqual({
+      BlockPublicAcls: true,
+      BlockPublicPolicy: true,
+      IgnorePublicAcls: true,
+      RestrictPublicBuckets: true,
+    });
+    expect(ds["BucketName"]).toBe("site-bucket");
   });
 });

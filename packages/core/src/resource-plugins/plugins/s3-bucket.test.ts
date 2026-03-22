@@ -62,4 +62,107 @@ describe("s3BucketPlugin", () => {
     expect(names).toContain("LifecycleConfiguration");
     expect(names).toContain("CorsConfiguration");
   });
+
+  // Story 18.9 — toCfn transform tests
+  describe("toCfn transforms", () => {
+    const allFields = [
+      ...s3BucketPlugin.commonFields,
+      ...s3BucketPlugin.advancedFields,
+    ];
+    const findField = (name: string) => allFields.find((f) => f.name === name)!;
+
+    describe("BucketEncryption", () => {
+      const field = findField("BucketEncryption");
+
+      it("transforms true to SSE-S3 structure", () => {
+        expect(field.toCfn!(true)).toEqual({
+          ServerSideEncryptionConfiguration: [
+            { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
+          ],
+        });
+      });
+
+      it("transforms false to undefined", () => {
+        expect(field.toCfn!(false)).toBeUndefined();
+      });
+    });
+
+    describe("PublicAccessBlockConfiguration", () => {
+      const field = findField("PublicAccessBlockConfiguration");
+
+      it("transforms true to 4-field block", () => {
+        expect(field.toCfn!(true)).toEqual({
+          BlockPublicAcls: true,
+          BlockPublicPolicy: true,
+          IgnorePublicAcls: true,
+          RestrictPublicBuckets: true,
+        });
+      });
+
+      it("transforms false to undefined", () => {
+        expect(field.toCfn!(false)).toBeUndefined();
+      });
+    });
+
+    describe("VersioningConfiguration", () => {
+      const field = findField("VersioningConfiguration");
+
+      it("transforms true to Status: Enabled", () => {
+        expect(field.toCfn!(true)).toEqual({ Status: "Enabled" });
+      });
+
+      it("transforms false to undefined", () => {
+        expect(field.toCfn!(false)).toBeUndefined();
+      });
+    });
+
+    describe("LifecycleConfiguration", () => {
+      const field = findField("LifecycleConfiguration");
+
+      it("transforms true to default rule with STANDARD_IA transition", () => {
+        expect(field.toCfn!(true)).toEqual({
+          Rules: [
+            {
+              Status: "Enabled",
+              Transitions: [
+                { StorageClass: "STANDARD_IA", TransitionInDays: 30 },
+              ],
+            },
+          ],
+        });
+      });
+
+      it("transforms false to undefined", () => {
+        expect(field.toCfn!(false)).toBeUndefined();
+      });
+    });
+
+    describe("CorsConfiguration", () => {
+      const field = findField("CorsConfiguration");
+
+      it("transforms true to permissive GET/* default", () => {
+        expect(field.toCfn!(true)).toEqual({
+          CorsRules: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"] }],
+        });
+      });
+
+      it("transforms false to undefined", () => {
+        expect(field.toCfn!(false)).toBeUndefined();
+      });
+    });
+
+    describe("fields without toCfn", () => {
+      it("BucketName has no toCfn", () => {
+        expect(findField("BucketName").toCfn).toBeUndefined();
+      });
+
+      it("KMSMasterKeyID has no toCfn", () => {
+        expect(findField("KMSMasterKeyID").toCfn).toBeUndefined();
+      });
+
+      it("Tags has no toCfn", () => {
+        expect(findField("Tags").toCfn).toBeUndefined();
+      });
+    });
+  });
 });

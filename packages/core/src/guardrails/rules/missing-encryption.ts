@@ -13,6 +13,8 @@ export const missingEncryptionRule: GuardrailRule = {
   resourceTypes: ["AWS::S3::Bucket", "AWS::RDS::DBInstance"],
   evaluate: (resourceType: string, desiredState: Record<string, unknown>) => {
     if (resourceType === "AWS::S3::Bucket") {
+      // Handles both boolean true (pre-toCfn) and object form (post-toCfn).
+      // Boolean true is truthy, object is truthy — both pass. False/absent fail.
       const encryption = desiredState["BucketEncryption"];
       if (!encryption || encryption === false) {
         return {
