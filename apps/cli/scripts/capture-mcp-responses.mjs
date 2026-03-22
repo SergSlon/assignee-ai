@@ -470,6 +470,72 @@ async function captureDocumentation() {
   );
 }
 
+async function captureIamPolicy() {
+  const calls = [
+    // Simulate checking permissions for S3 bucket creation
+    {
+      key: "s3BucketAllowed",
+      tool: "simulate_principal_policy",
+      args: {
+        action_names: ["cloudcontrol:CreateResource", "cloudcontrol:GetResourceRequestStatus", "s3:CreateBucket", "s3:PutBucketTagging"],
+        resource_arns: ["*"],
+      },
+    },
+    // Simulate checking permissions for EC2 instance (likely missing some)
+    {
+      key: "ec2InstancePartialDeny",
+      tool: "simulate_principal_policy",
+      args: {
+        action_names: ["cloudcontrol:CreateResource", "ec2:RunInstances", "ec2:CreateTags", "iam:PassRole"],
+        resource_arns: ["*"],
+      },
+    },
+    // Simulate checking permissions for Lambda
+    {
+      key: "lambdaFunctionAllowed",
+      tool: "simulate_principal_policy",
+      args: {
+        action_names: ["cloudcontrol:CreateResource", "lambda:CreateFunction", "lambda:TagResource", "iam:PassRole"],
+        resource_arns: ["*"],
+      },
+    },
+  ];
+
+  return await callMcpServer(
+    "iam-mcp-server",
+    "uvx",
+    ["awslabs.iam-mcp-server@latest", "--readonly"],
+    MCP_ENV,
+    calls,
+  );
+}
+
+async function captureWellArchitectedSecurity() {
+  // Note: This server analyzes security posture of existing resources.
+  // We need real resource ARNs that exist in the account.
+  // For capture purposes, use common resource patterns.
+  const calls = [
+    {
+      key: "s3BucketPosture",
+      tool: "AnalyzeSecurityPosture",
+      args: { resource_arn: "arn:aws:s3:::assignee-test-capture-bucket" },
+    },
+    {
+      key: "noFindings",
+      tool: "AnalyzeSecurityPosture",
+      args: { resource_arn: "arn:aws:s3:::nonexistent-bucket-for-test" },
+    },
+  ];
+
+  return await callMcpServer(
+    "well-architected-security-mcp-server",
+    "uvx",
+    ["awslabs.well-architected-security-mcp-server@latest"],
+    MCP_ENV,
+    calls,
+  );
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -493,6 +559,18 @@ async function main() {
     await captureDocumentation();
   } catch (e) {
     console.error("aws-documentation-mcp-server capture failed:", e.message);
+  }
+
+  try {
+    await captureIamPolicy();
+  } catch (e) {
+    console.error("iam-mcp-server capture failed:", e.message);
+  }
+
+  try {
+    await captureWellArchitectedSecurity();
+  } catch (e) {
+    console.error("well-architected-security-mcp-server capture failed:", e.message);
   }
 
   console.log("\n═══ Capture Complete ═══");

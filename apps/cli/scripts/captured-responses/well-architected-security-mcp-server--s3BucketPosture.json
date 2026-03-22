@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"findings\":[{\"severity\":\"CRITICAL\",\"title\":\"S3 bucket has public read access\",\"recommendation\":\"Block public access by enabling S3 Block Public Access settings at the bucket level. Set BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, and RestrictPublicBuckets to true.\",\"service\":\"SecurityHub\",\"controlId\":\"S3.2\",\"complianceStatus\":\"FAILED\",\"resourceArn\":\"arn:aws:s3:::assignee-test-capture-bucket\"},{\"severity\":\"HIGH\",\"title\":\"S3 bucket does not have default encryption enabled\",\"recommendation\":\"Enable default encryption on the S3 bucket using SSE-S3 (AES-256) or SSE-KMS. Use aws s3api put-bucket-encryption to configure server-side encryption.\",\"service\":\"SecurityHub\",\"controlId\":\"S3.4\",\"complianceStatus\":\"FAILED\",\"resourceArn\":\"arn:aws:s3:::assignee-test-capture-bucket\"},{\"severity\":\"MEDIUM\",\"title\":\"S3 bucket versioning is not enabled\",\"recommendation\":\"Enable versioning on the S3 bucket to preserve, retrieve, and restore every version of every object. Use aws s3api put-bucket-versioning --bucket BUCKET --versioning-configuration Status=Enabled.\",\"service\":\"SecurityHub\",\"controlId\":\"S3.14\",\"complianceStatus\":\"FAILED\",\"resourceArn\":\"arn:aws:s3:::assignee-test-capture-bucket\"}],\"overallPosture\":\"AT_RISK\",\"resourceArn\":\"arn:aws:s3:::assignee-test-capture-bucket\",\"analyzedAt\":\"2026-03-22T10:15:30.000Z\"}"
+    }
+  ]
+}

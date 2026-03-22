@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"EvaluationResults\":[{\"EvalActionName\":\"cloudcontrol:CreateResource\",\"EvalResourceName\":\"*\",\"EvalDecision\":\"allowed\",\"MatchedStatements\":[{\"SourcePolicyId\":\"CloudControlFullAccess\",\"SourcePolicyType\":\"IAM Policy\",\"StartPosition\":{\"Line\":3,\"Column\":14},\"EndPosition\":{\"Line\":10,\"Column\":5}}],\"MissingContextValues\":[]},{\"EvalActionName\":\"ec2:RunInstances\",\"EvalResourceName\":\"*\",\"EvalDecision\":\"implicitDeny\",\"MatchedStatements\":[],\"MissingContextValues\":[]},{\"EvalActionName\":\"ec2:CreateTags\",\"EvalResourceName\":\"*\",\"EvalDecision\":\"allowed\",\"MatchedStatements\":[{\"SourcePolicyId\":\"AmazonEC2TaggingAccess\",\"SourcePolicyType\":\"IAM Policy\",\"StartPosition\":{\"Line\":3,\"Column\":14},\"EndPosition\":{\"Line\":8,\"Column\":5}}],\"MissingContextValues\":[]},{\"EvalActionName\":\"iam:PassRole\",\"EvalResourceName\":\"*\",\"EvalDecision\":\"implicitDeny\",\"MatchedStatements\":[],\"MissingContextValues\":[]}]}"
+    }
+  ]
+}
