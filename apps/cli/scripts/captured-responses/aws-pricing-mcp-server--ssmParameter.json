@@ -1,0 +1,1508 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"status\": \"success\",\n  \"service_name\": \"AWSSystemsManager\",\n  \"data\": [\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"api-requests-paid\": \"Not Applicable\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-Change-API-Requests-Free\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"change-requests-free\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"api-requests-free\": \"True\",\n          \"change-requests-paid\": \"Not Applicable\"\n        },\n        \"sku\": \"2SC234H95RE9KUWA\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"2SC234H95RE9KUWA.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"2SC234H95RE9KUWA.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"API Requests\",\n                \"endRange\": \"Inf\",\n                \"description\": \"Free trial Change Manager API Requests in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"2SC234H95RE9KUWA.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0000000000\"\n                }\n              }\n            },\n            \"sku\": \"2SC234H95RE9KUWA\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"parameterType\": \"True\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-PS-Advanced-Param-Tier1\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"throughput\": \"40\",\n          \"operation\": \"\"\n        },\n        \"sku\": \"3XW4UVEQHA78KWS2\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"3XW4UVEQHA78KWS2.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"3XW4UVEQHA78KWS2.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Hour\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.05 per Advanced Parameter per Month in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"3XW4UVEQHA78KWS2.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0000700000\"\n                }\n              }\n            },\n            \"sku\": \"3XW4UVEQHA78KWS2\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"SAE1-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-SAE1-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"4GHA68HCKCXD8NGK\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"4GHA68HCKCXD8NGK.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"4GHA68HCKCXD8NGK.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"4GHA68HCKCXD8NGK.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"4GHA68HCKCXD8NGK\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"response\": \"response-plan-months\",\n          \"usagetype\": \"USE1-IM-ResponsePlan-Months-Tier1\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"operation\": \"\"\n        },\n        \"sku\": \"69CBTNUPM5AC83AH\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"69CBTNUPM5AC83AH.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"69CBTNUPM5AC83AH.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Months\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$7.00 per Response Plan Month\",\n                \"appliesTo\": [],\n                \"rateCode\": \"69CBTNUPM5AC83AH.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"7.0000000000\"\n                }\n              }\n            },\n            \"sku\": \"69CBTNUPM5AC83AH\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"APS1-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-APS1-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"7MPX7776F7Q4Y8KK\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"7MPX7776F7Q4Y8KK.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"7MPX7776F7Q4Y8KK.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"7MPX7776F7Q4Y8KK.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"7MPX7776F7Q4Y8KK\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-AppConfig-Requests\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"updates\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"True\"\n        },\n        \"sku\": \"83YNJDGH6F8RN675\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"83YNJDGH6F8RN675.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"83YNJDGH6F8RN675.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Configuration Requests\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.0000002 per Request for AppConfig-Requests in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"83YNJDGH6F8RN675.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0000002000\"\n                }\n              }\n            },\n            \"sku\": \"83YNJDGH6F8RN675\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"instances\": \"advanced\",\n          \"usagetype\": \"USE1-MI-AdvInstances-Hrs\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"operation\": \"\"\n        },\n        \"sku\": \"9HRYHYTY87QPU6B9\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"9HRYHYTY87QPU6B9.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"9HRYHYTY87QPU6B9.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Hrs\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.00695 per Advanced Instance Hr in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"9HRYHYTY87QPU6B9.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0069500000\"\n                }\n              }\n            },\n            \"sku\": \"9HRYHYTY87QPU6B9\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"USW1-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-USW1-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"9PK9YPMQFXR82PR9\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"9PK9YPMQFXR82PR9.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"9PK9YPMQFXR82PR9.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"9PK9YPMQFXR82PR9.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"9PK9YPMQFXR82PR9\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"api-requests-paid\": \"True\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-Change-API-Requests-Tier1\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"change-requests-free\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"api-requests-free\": \"Not Applicable\",\n          \"change-requests-paid\": \"Not Applicable\"\n        },\n        \"sku\": \"AG3WMR8HRVCSECCQ\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"AG3WMR8HRVCSECCQ.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"AG3WMR8HRVCSECCQ.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"API Requests\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.000039 per Change Manager API Request in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"AG3WMR8HRVCSECCQ.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0000390000\"\n                }\n              }\n            },\n            \"sku\": \"AG3WMR8HRVCSECCQ\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"APN1-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-APN1-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"BBEM6PJWSFZ3BF3D\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"BBEM6PJWSFZ3BF3D.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"BBEM6PJWSFZ3BF3D.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"BBEM6PJWSFZ3BF3D.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"BBEM6PJWSFZ3BF3D\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"USE2-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-USE2-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"CGM92Q8VB8YJWQXE\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"CGM92Q8VB8YJWQXE.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"CGM92Q8VB8YJWQXE.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"CGM92Q8VB8YJWQXE.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"CGM92Q8VB8YJWQXE\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"EUC1-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-EUC1-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"CJER6TJ4ZN4FSAF2\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"CJER6TJ4ZN4FSAF2.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"CJER6TJ4ZN4FSAF2.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"CJER6TJ4ZN4FSAF2.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"CJER6TJ4ZN4FSAF2\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"CAN1-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-CAN1-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"CRGRBSKXVRVAKSFW\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"CRGRBSKXVRVAKSFW.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"CRGRBSKXVRVAKSFW.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"CRGRBSKXVRVAKSFW.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"CRGRBSKXVRVAKSFW\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"APS3\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-APS3-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"D9PJGEG5Y3CJ7MMP\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"D9PJGEG5Y3CJ7MMP.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"D9PJGEG5Y3CJ7MMP.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"D9PJGEG5Y3CJ7MMP.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"D9PJGEG5Y3CJ7MMP\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"UGW1-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-UGW1-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"DBE23PVEV666XAAZ\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"DBE23PVEV666XAAZ.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"DBE23PVEV666XAAZ.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"DBE23PVEV666XAAZ.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"DBE23PVEV666XAAZ\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"DataTransfer-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"DataTransfer-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"E45PS9ZVE8VEFT2X\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"E45PS9ZVE8VEFT2X.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"E45PS9ZVE8VEFT2X.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"E45PS9ZVE8VEFT2X.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"E45PS9ZVE8VEFT2X\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"APN2-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-APN2-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"GBCH6SDBJ88VJY6X\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"GBCH6SDBJ88VJY6X.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"GBCH6SDBJ88VJY6X.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"GBCH6SDBJ88VJY6X.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"GBCH6SDBJ88VJY6X\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"api-requests-paid\": \"Not Applicable\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-Change-ChangeRequest-Free\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"change-requests-free\": \"True\",\n          \"operation\": \"\",\n          \"api-requests-free\": \"Not Applicable\",\n          \"change-requests-paid\": \"Not Applicable\"\n        },\n        \"sku\": \"HC63D5E39KDGQFBC\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"HC63D5E39KDGQFBC.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"HC63D5E39KDGQFBC.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Requests\",\n                \"endRange\": \"Inf\",\n                \"description\": \"Free trial Change Requests in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"HC63D5E39KDGQFBC.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0000000000\"\n                }\n              }\n            },\n            \"sku\": \"HC63D5E39KDGQFBC\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"Not Applicable\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-TimedStorage-ByteHrs\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"True\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"J6TGD65Y5WUGW3BU\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"J6TGD65Y5WUGW3BU.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"J6TGD65Y5WUGW3BU.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB-Mo\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.046 per GB per month of storage used in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"J6TGD65Y5WUGW3BU.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0460000000\"\n                }\n              }\n            },\n            \"sku\": \"J6TGD65Y5WUGW3BU\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"api-requests-paid\": \"Not Applicable\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-Change-ChangeRequest-Tier1\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"change-requests-free\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"api-requests-free\": \"Not Applicable\",\n          \"change-requests-paid\": \"True\"\n        },\n        \"sku\": \"JQMTRM5QAT5Q5S9G\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"JQMTRM5QAT5Q5S9G.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"JQMTRM5QAT5Q5S9G.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Requests\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.296 per Change Request in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"JQMTRM5QAT5Q5S9G.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.2960000000\"\n                }\n              }\n            },\n            \"sku\": \"JQMTRM5QAT5Q5S9G\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"EUW2-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-EUW2-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"JTF8BR2XPR8HFR82\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"JTF8BR2XPR8HFR82.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"JTF8BR2XPR8HFR82.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"JTF8BR2XPR8HFR82.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"JTF8BR2XPR8HFR82\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"APS2-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-APS2-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"M8JPDP4UYTS2PJN8\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"M8JPDP4UYTS2PJN8.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"M8JPDP4UYTS2PJN8.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"M8JPDP4UYTS2PJN8.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"M8JPDP4UYTS2PJN8\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"EU-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-EU-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"PNM2JSTPY6ZQ8K7E\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"PNM2JSTPY6ZQ8K7E.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"PNM2JSTPY6ZQ8K7E.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"PNM2JSTPY6ZQ8K7E.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"PNM2JSTPY6ZQ8K7E\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"Not Applicable\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-Doc-API-Requests-Tier1\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"True\"\n        },\n        \"sku\": \"R4HG5NC3FGHMZB56\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"R4HG5NC3FGHMZB56.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"R4HG5NC3FGHMZB56.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"API Requests\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.025 per 1000 Get/Describe requests for Package Documents\",\n                \"appliesTo\": [],\n                \"rateCode\": \"R4HG5NC3FGHMZB56.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0000250000\"\n                }\n              }\n            },\n            \"sku\": \"R4HG5NC3FGHMZB56\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-JustInTimeAccessHour\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"operation\": \"JustInTimeAccessHour\",\n          \"trial\": \"FALSE\"\n        },\n        \"sku\": \"SNQ94B38KKCNXSW5\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"SNQ94B38KKCNXSW5.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"SNQ94B38KKCNXSW5.JRTCKXETXF.7UZZKUX94N\": {\n                \"unit\": \"hours\",\n                \"endRange\": \"72000\",\n                \"description\": \"$0.0137 per hours from 0 to 72,000 for USE1-JustInTimeAccessHour in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"SNQ94B38KKCNXSW5.JRTCKXETXF.7UZZKUX94N\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0137000000\"\n                }\n              },\n              \"SNQ94B38KKCNXSW5.JRTCKXETXF.M9YCZK9D2S\": {\n                \"unit\": \"hours\",\n                \"endRange\": \"7200000\",\n                \"description\": \"$0.0034 per hours from 720,000 to 7,200,000 for USE1-JustInTimeAccessHour in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"SNQ94B38KKCNXSW5.JRTCKXETXF.M9YCZK9D2S\",\n                \"beginRange\": \"720000\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0034000000\"\n                }\n              },\n              \"SNQ94B38KKCNXSW5.JRTCKXETXF.4AXZNUSGXN\": {\n                \"unit\": \"hours\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.0014 per hours from 7,200,000 for USE1-JustInTimeAccessHour in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"SNQ94B38KKCNXSW5.JRTCKXETXF.4AXZNUSGXN\",\n                \"beginRange\": \"7200000\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0014000000\"\n                }\n              },\n              \"SNQ94B38KKCNXSW5.JRTCKXETXF.MR2VG8R56J\": {\n                \"unit\": \"hours\",\n                \"endRange\": \"720000\",\n                \"description\": \"$0.0103 per hours from 72,000 to 720,000 for USE1-JustInTimeAccessHour in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"SNQ94B38KKCNXSW5.JRTCKXETXF.MR2VG8R56J\",\n                \"beginRange\": \"72000\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0103000000\"\n                }\n              }\n            },\n            \"sku\": \"SNQ94B38KKCNXSW5\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"USW2-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-USW2-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"T8EZ8T42X4ZTP973\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"T8EZ8T42X4ZTP973.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"T8EZ8T42X4ZTP973.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"T8EZ8T42X4ZTP973.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"T8EZ8T42X4ZTP973\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-OC-OpsItems-Tier1\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"opsItems\": \"True\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"updates\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\",\n          \"describes\": \"Not Applicable\"\n        },\n        \"sku\": \"TE8TQ3NV4UMVS7TS\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"TE8TQ3NV4UMVS7TS.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"TE8TQ3NV4UMVS7TS.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"OpsItems\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.00297 per OpsItem in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"TE8TQ3NV4UMVS7TS.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0029700000\"\n                }\n              }\n            },\n            \"sku\": \"TE8TQ3NV4UMVS7TS\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-OC-API-Requests-Tier1\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"opsItems\": \"Not Applicable\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"updates\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"True\",\n          \"describes\": \"Not Applicable\"\n        },\n        \"sku\": \"THYQHDPMFRQAUS5S\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"THYQHDPMFRQAUS5S.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"THYQHDPMFRQAUS5S.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"API Requests\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.000039 per OpsItem API Request in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"THYQHDPMFRQAUS5S.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0000390000\"\n                }\n              }\n            },\n            \"sku\": \"THYQHDPMFRQAUS5S\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-JustInTimeAccessHour-Trial\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"operation\": \"JustInTimeAccessHour\",\n          \"trial\": \"TRUE\"\n        },\n        \"sku\": \"TPMRZ2E89RZMFTNP\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"TPMRZ2E89RZMFTNP.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"TPMRZ2E89RZMFTNP.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"hours\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.00 per hours for USE1-JustInTimeAccessHour-Trial in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"TPMRZ2E89RZMFTNP.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0000000000\"\n                }\n              }\n            },\n            \"sku\": \"TPMRZ2E89RZMFTNP\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"UGE1-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-UGE1-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"UNPGD9DYFMDSVXRD\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"UNPGD9DYFMDSVXRD.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"UNPGD9DYFMDSVXRD.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"UNPGD9DYFMDSVXRD.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"UNPGD9DYFMDSVXRD\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"APN3-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-APN3-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"UXWWMVZSE7AHTM46\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"UXWWMVZSE7AHTM46.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"UXWWMVZSE7AHTM46.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"UXWWMVZSE7AHTM46.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"UXWWMVZSE7AHTM46\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"EUW3-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-EUW3-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"XMNNGXT9W8GP758W\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"XMNNGXT9W8GP758W.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"XMNNGXT9W8GP758W.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"XMNNGXT9W8GP758W.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"XMNNGXT9W8GP758W\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"dataTransfer\": \"EUN1-\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-EUN1-AWS-Out-Bytes\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"storage\": \"Not Applicable\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"YNS7WP2C8Z59X3C6\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"YNS7WP2C8Z59X3C6.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"YNS7WP2C8Z59X3C6.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"GB\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.9 per GB - Data Retrieval\",\n                \"appliesTo\": [],\n                \"rateCode\": \"YNS7WP2C8Z59X3C6.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.9000000000\"\n                }\n              }\n            },\n            \"sku\": \"YNS7WP2C8Z59X3C6\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"AWS Systems Manager\",\n        \"attributes\": {\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AWSSystemsManager\",\n          \"usagetype\": \"USE1-AppConfig-Deployments\",\n          \"locationType\": \"AWS Region\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"AWS Systems Manager\",\n          \"updates\": \"True\",\n          \"operation\": \"\",\n          \"gets\": \"Not Applicable\"\n        },\n        \"sku\": \"ZHBBQT53NUZ69GUP\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"ZHBBQT53NUZ69GUP.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"ZHBBQT53NUZ69GUP.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Configuration Received\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.0008 per Configuration Received for AppConfig-Deployments in US East (N. Virginia)\",\n                \"appliesTo\": [],\n                \"rateCode\": \"ZHBBQT53NUZ69GUP.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0008000000\"\n                }\n              }\n            },\n            \"sku\": \"ZHBBQT53NUZ69GUP\",\n            \"effectiveDate\": \"2025-08-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20250828153807\",\n      \"publicationDate\": \"2025-08-28T15:38:07Z\"\n    }\n  ],\n  \"message\": \"Retrieved pricing for AWSSystemsManager in us-east-1 from AWS Pricing API\"\n}"
+    }
+  ],
+  "structuredContent": {
+    "result": {
+      "status": "success",
+      "service_name": "AWSSystemsManager",
+      "data": [
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "api-requests-paid": "Not Applicable",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-Change-API-Requests-Free",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "change-requests-free": "Not Applicable",
+              "operation": "",
+              "api-requests-free": "True",
+              "change-requests-paid": "Not Applicable"
+            },
+            "sku": "2SC234H95RE9KUWA"
+          },
+          "terms": {
+            "OnDemand": {
+              "2SC234H95RE9KUWA.JRTCKXETXF": {
+                "priceDimensions": {
+                  "2SC234H95RE9KUWA.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "API Requests",
+                    "endRange": "Inf",
+                    "description": "Free trial Change Manager API Requests in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "2SC234H95RE9KUWA.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0000000000"
+                    }
+                  }
+                },
+                "sku": "2SC234H95RE9KUWA",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "parameterType": "True",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-PS-Advanced-Param-Tier1",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "throughput": "40",
+              "operation": ""
+            },
+            "sku": "3XW4UVEQHA78KWS2"
+          },
+          "terms": {
+            "OnDemand": {
+              "3XW4UVEQHA78KWS2.JRTCKXETXF": {
+                "priceDimensions": {
+                  "3XW4UVEQHA78KWS2.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Hour",
+                    "endRange": "Inf",
+                    "description": "$0.05 per Advanced Parameter per Month in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "3XW4UVEQHA78KWS2.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0000700000"
+                    }
+                  }
+                },
+                "sku": "3XW4UVEQHA78KWS2",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "SAE1-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-SAE1-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "4GHA68HCKCXD8NGK"
+          },
+          "terms": {
+            "OnDemand": {
+              "4GHA68HCKCXD8NGK.JRTCKXETXF": {
+                "priceDimensions": {
+                  "4GHA68HCKCXD8NGK.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "4GHA68HCKCXD8NGK.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "4GHA68HCKCXD8NGK",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "response": "response-plan-months",
+              "usagetype": "USE1-IM-ResponsePlan-Months-Tier1",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "operation": ""
+            },
+            "sku": "69CBTNUPM5AC83AH"
+          },
+          "terms": {
+            "OnDemand": {
+              "69CBTNUPM5AC83AH.JRTCKXETXF": {
+                "priceDimensions": {
+                  "69CBTNUPM5AC83AH.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Months",
+                    "endRange": "Inf",
+                    "description": "$7.00 per Response Plan Month",
+                    "appliesTo": [],
+                    "rateCode": "69CBTNUPM5AC83AH.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "7.0000000000"
+                    }
+                  }
+                },
+                "sku": "69CBTNUPM5AC83AH",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "APS1-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-APS1-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "7MPX7776F7Q4Y8KK"
+          },
+          "terms": {
+            "OnDemand": {
+              "7MPX7776F7Q4Y8KK.JRTCKXETXF": {
+                "priceDimensions": {
+                  "7MPX7776F7Q4Y8KK.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "7MPX7776F7Q4Y8KK.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "7MPX7776F7Q4Y8KK",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-AppConfig-Requests",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "updates": "Not Applicable",
+              "operation": "",
+              "gets": "True"
+            },
+            "sku": "83YNJDGH6F8RN675"
+          },
+          "terms": {
+            "OnDemand": {
+              "83YNJDGH6F8RN675.JRTCKXETXF": {
+                "priceDimensions": {
+                  "83YNJDGH6F8RN675.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Configuration Requests",
+                    "endRange": "Inf",
+                    "description": "$0.0000002 per Request for AppConfig-Requests in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "83YNJDGH6F8RN675.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0000002000"
+                    }
+                  }
+                },
+                "sku": "83YNJDGH6F8RN675",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "instances": "advanced",
+              "usagetype": "USE1-MI-AdvInstances-Hrs",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "operation": ""
+            },
+            "sku": "9HRYHYTY87QPU6B9"
+          },
+          "terms": {
+            "OnDemand": {
+              "9HRYHYTY87QPU6B9.JRTCKXETXF": {
+                "priceDimensions": {
+                  "9HRYHYTY87QPU6B9.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Hrs",
+                    "endRange": "Inf",
+                    "description": "$0.00695 per Advanced Instance Hr in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "9HRYHYTY87QPU6B9.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0069500000"
+                    }
+                  }
+                },
+                "sku": "9HRYHYTY87QPU6B9",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "USW1-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-USW1-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "9PK9YPMQFXR82PR9"
+          },
+          "terms": {
+            "OnDemand": {
+              "9PK9YPMQFXR82PR9.JRTCKXETXF": {
+                "priceDimensions": {
+                  "9PK9YPMQFXR82PR9.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "9PK9YPMQFXR82PR9.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "9PK9YPMQFXR82PR9",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "api-requests-paid": "True",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-Change-API-Requests-Tier1",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "change-requests-free": "Not Applicable",
+              "operation": "",
+              "api-requests-free": "Not Applicable",
+              "change-requests-paid": "Not Applicable"
+            },
+            "sku": "AG3WMR8HRVCSECCQ"
+          },
+          "terms": {
+            "OnDemand": {
+              "AG3WMR8HRVCSECCQ.JRTCKXETXF": {
+                "priceDimensions": {
+                  "AG3WMR8HRVCSECCQ.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "API Requests",
+                    "endRange": "Inf",
+                    "description": "$0.000039 per Change Manager API Request in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "AG3WMR8HRVCSECCQ.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0000390000"
+                    }
+                  }
+                },
+                "sku": "AG3WMR8HRVCSECCQ",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "APN1-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-APN1-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "BBEM6PJWSFZ3BF3D"
+          },
+          "terms": {
+            "OnDemand": {
+              "BBEM6PJWSFZ3BF3D.JRTCKXETXF": {
+                "priceDimensions": {
+                  "BBEM6PJWSFZ3BF3D.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "BBEM6PJWSFZ3BF3D.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "BBEM6PJWSFZ3BF3D",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "USE2-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-USE2-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "CGM92Q8VB8YJWQXE"
+          },
+          "terms": {
+            "OnDemand": {
+              "CGM92Q8VB8YJWQXE.JRTCKXETXF": {
+                "priceDimensions": {
+                  "CGM92Q8VB8YJWQXE.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "CGM92Q8VB8YJWQXE.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "CGM92Q8VB8YJWQXE",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "EUC1-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-EUC1-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "CJER6TJ4ZN4FSAF2"
+          },
+          "terms": {
+            "OnDemand": {
+              "CJER6TJ4ZN4FSAF2.JRTCKXETXF": {
+                "priceDimensions": {
+                  "CJER6TJ4ZN4FSAF2.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "CJER6TJ4ZN4FSAF2.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "CJER6TJ4ZN4FSAF2",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "CAN1-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-CAN1-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "CRGRBSKXVRVAKSFW"
+          },
+          "terms": {
+            "OnDemand": {
+              "CRGRBSKXVRVAKSFW.JRTCKXETXF": {
+                "priceDimensions": {
+                  "CRGRBSKXVRVAKSFW.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "CRGRBSKXVRVAKSFW.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "CRGRBSKXVRVAKSFW",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "APS3",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-APS3-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "D9PJGEG5Y3CJ7MMP"
+          },
+          "terms": {
+            "OnDemand": {
+              "D9PJGEG5Y3CJ7MMP.JRTCKXETXF": {
+                "priceDimensions": {
+                  "D9PJGEG5Y3CJ7MMP.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "D9PJGEG5Y3CJ7MMP.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "D9PJGEG5Y3CJ7MMP",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "UGW1-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-UGW1-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "DBE23PVEV666XAAZ"
+          },
+          "terms": {
+            "OnDemand": {
+              "DBE23PVEV666XAAZ.JRTCKXETXF": {
+                "priceDimensions": {
+                  "DBE23PVEV666XAAZ.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "DBE23PVEV666XAAZ.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "DBE23PVEV666XAAZ",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "DataTransfer-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "DataTransfer-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "E45PS9ZVE8VEFT2X"
+          },
+          "terms": {
+            "OnDemand": {
+              "E45PS9ZVE8VEFT2X.JRTCKXETXF": {
+                "priceDimensions": {
+                  "E45PS9ZVE8VEFT2X.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "E45PS9ZVE8VEFT2X.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "E45PS9ZVE8VEFT2X",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "APN2-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-APN2-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "GBCH6SDBJ88VJY6X"
+          },
+          "terms": {
+            "OnDemand": {
+              "GBCH6SDBJ88VJY6X.JRTCKXETXF": {
+                "priceDimensions": {
+                  "GBCH6SDBJ88VJY6X.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "GBCH6SDBJ88VJY6X.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "GBCH6SDBJ88VJY6X",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "api-requests-paid": "Not Applicable",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-Change-ChangeRequest-Free",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "change-requests-free": "True",
+              "operation": "",
+              "api-requests-free": "Not Applicable",
+              "change-requests-paid": "Not Applicable"
+            },
+            "sku": "HC63D5E39KDGQFBC"
+          },
+          "terms": {
+            "OnDemand": {
+              "HC63D5E39KDGQFBC.JRTCKXETXF": {
+                "priceDimensions": {
+                  "HC63D5E39KDGQFBC.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Requests",
+                    "endRange": "Inf",
+                    "description": "Free trial Change Requests in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "HC63D5E39KDGQFBC.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0000000000"
+                    }
+                  }
+                },
+                "sku": "HC63D5E39KDGQFBC",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "Not Applicable",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-TimedStorage-ByteHrs",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "True",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "J6TGD65Y5WUGW3BU"
+          },
+          "terms": {
+            "OnDemand": {
+              "J6TGD65Y5WUGW3BU.JRTCKXETXF": {
+                "priceDimensions": {
+                  "J6TGD65Y5WUGW3BU.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB-Mo",
+                    "endRange": "Inf",
+                    "description": "$0.046 per GB per month of storage used in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "J6TGD65Y5WUGW3BU.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0460000000"
+                    }
+                  }
+                },
+                "sku": "J6TGD65Y5WUGW3BU",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "api-requests-paid": "Not Applicable",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-Change-ChangeRequest-Tier1",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "change-requests-free": "Not Applicable",
+              "operation": "",
+              "api-requests-free": "Not Applicable",
+              "change-requests-paid": "True"
+            },
+            "sku": "JQMTRM5QAT5Q5S9G"
+          },
+          "terms": {
+            "OnDemand": {
+              "JQMTRM5QAT5Q5S9G.JRTCKXETXF": {
+                "priceDimensions": {
+                  "JQMTRM5QAT5Q5S9G.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Requests",
+                    "endRange": "Inf",
+                    "description": "$0.296 per Change Request in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "JQMTRM5QAT5Q5S9G.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.2960000000"
+                    }
+                  }
+                },
+                "sku": "JQMTRM5QAT5Q5S9G",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "EUW2-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-EUW2-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "JTF8BR2XPR8HFR82"
+          },
+          "terms": {
+            "OnDemand": {
+              "JTF8BR2XPR8HFR82.JRTCKXETXF": {
+                "priceDimensions": {
+                  "JTF8BR2XPR8HFR82.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "JTF8BR2XPR8HFR82.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "JTF8BR2XPR8HFR82",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "APS2-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-APS2-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "M8JPDP4UYTS2PJN8"
+          },
+          "terms": {
+            "OnDemand": {
+              "M8JPDP4UYTS2PJN8.JRTCKXETXF": {
+                "priceDimensions": {
+                  "M8JPDP4UYTS2PJN8.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "M8JPDP4UYTS2PJN8.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "M8JPDP4UYTS2PJN8",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "EU-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-EU-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "PNM2JSTPY6ZQ8K7E"
+          },
+          "terms": {
+            "OnDemand": {
+              "PNM2JSTPY6ZQ8K7E.JRTCKXETXF": {
+                "priceDimensions": {
+                  "PNM2JSTPY6ZQ8K7E.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "PNM2JSTPY6ZQ8K7E.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "PNM2JSTPY6ZQ8K7E",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "Not Applicable",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-Doc-API-Requests-Tier1",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "True"
+            },
+            "sku": "R4HG5NC3FGHMZB56"
+          },
+          "terms": {
+            "OnDemand": {
+              "R4HG5NC3FGHMZB56.JRTCKXETXF": {
+                "priceDimensions": {
+                  "R4HG5NC3FGHMZB56.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "API Requests",
+                    "endRange": "Inf",
+                    "description": "$0.025 per 1000 Get/Describe requests for Package Documents",
+                    "appliesTo": [],
+                    "rateCode": "R4HG5NC3FGHMZB56.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0000250000"
+                    }
+                  }
+                },
+                "sku": "R4HG5NC3FGHMZB56",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-JustInTimeAccessHour",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "operation": "JustInTimeAccessHour",
+              "trial": "FALSE"
+            },
+            "sku": "SNQ94B38KKCNXSW5"
+          },
+          "terms": {
+            "OnDemand": {
+              "SNQ94B38KKCNXSW5.JRTCKXETXF": {
+                "priceDimensions": {
+                  "SNQ94B38KKCNXSW5.JRTCKXETXF.7UZZKUX94N": {
+                    "unit": "hours",
+                    "endRange": "72000",
+                    "description": "$0.0137 per hours from 0 to 72,000 for USE1-JustInTimeAccessHour in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "SNQ94B38KKCNXSW5.JRTCKXETXF.7UZZKUX94N",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0137000000"
+                    }
+                  },
+                  "SNQ94B38KKCNXSW5.JRTCKXETXF.M9YCZK9D2S": {
+                    "unit": "hours",
+                    "endRange": "7200000",
+                    "description": "$0.0034 per hours from 720,000 to 7,200,000 for USE1-JustInTimeAccessHour in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "SNQ94B38KKCNXSW5.JRTCKXETXF.M9YCZK9D2S",
+                    "beginRange": "720000",
+                    "pricePerUnit": {
+                      "USD": "0.0034000000"
+                    }
+                  },
+                  "SNQ94B38KKCNXSW5.JRTCKXETXF.4AXZNUSGXN": {
+                    "unit": "hours",
+                    "endRange": "Inf",
+                    "description": "$0.0014 per hours from 7,200,000 for USE1-JustInTimeAccessHour in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "SNQ94B38KKCNXSW5.JRTCKXETXF.4AXZNUSGXN",
+                    "beginRange": "7200000",
+                    "pricePerUnit": {
+                      "USD": "0.0014000000"
+                    }
+                  },
+                  "SNQ94B38KKCNXSW5.JRTCKXETXF.MR2VG8R56J": {
+                    "unit": "hours",
+                    "endRange": "720000",
+                    "description": "$0.0103 per hours from 72,000 to 720,000 for USE1-JustInTimeAccessHour in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "SNQ94B38KKCNXSW5.JRTCKXETXF.MR2VG8R56J",
+                    "beginRange": "72000",
+                    "pricePerUnit": {
+                      "USD": "0.0103000000"
+                    }
+                  }
+                },
+                "sku": "SNQ94B38KKCNXSW5",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "USW2-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-USW2-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "T8EZ8T42X4ZTP973"
+          },
+          "terms": {
+            "OnDemand": {
+              "T8EZ8T42X4ZTP973.JRTCKXETXF": {
+                "priceDimensions": {
+                  "T8EZ8T42X4ZTP973.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "T8EZ8T42X4ZTP973.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "T8EZ8T42X4ZTP973",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-OC-OpsItems-Tier1",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "opsItems": "True",
+              "servicename": "AWS Systems Manager",
+              "updates": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable",
+              "describes": "Not Applicable"
+            },
+            "sku": "TE8TQ3NV4UMVS7TS"
+          },
+          "terms": {
+            "OnDemand": {
+              "TE8TQ3NV4UMVS7TS.JRTCKXETXF": {
+                "priceDimensions": {
+                  "TE8TQ3NV4UMVS7TS.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "OpsItems",
+                    "endRange": "Inf",
+                    "description": "$0.00297 per OpsItem in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "TE8TQ3NV4UMVS7TS.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0029700000"
+                    }
+                  }
+                },
+                "sku": "TE8TQ3NV4UMVS7TS",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-OC-API-Requests-Tier1",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "opsItems": "Not Applicable",
+              "servicename": "AWS Systems Manager",
+              "updates": "Not Applicable",
+              "operation": "",
+              "gets": "True",
+              "describes": "Not Applicable"
+            },
+            "sku": "THYQHDPMFRQAUS5S"
+          },
+          "terms": {
+            "OnDemand": {
+              "THYQHDPMFRQAUS5S.JRTCKXETXF": {
+                "priceDimensions": {
+                  "THYQHDPMFRQAUS5S.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "API Requests",
+                    "endRange": "Inf",
+                    "description": "$0.000039 per OpsItem API Request in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "THYQHDPMFRQAUS5S.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0000390000"
+                    }
+                  }
+                },
+                "sku": "THYQHDPMFRQAUS5S",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-JustInTimeAccessHour-Trial",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "operation": "JustInTimeAccessHour",
+              "trial": "TRUE"
+            },
+            "sku": "TPMRZ2E89RZMFTNP"
+          },
+          "terms": {
+            "OnDemand": {
+              "TPMRZ2E89RZMFTNP.JRTCKXETXF": {
+                "priceDimensions": {
+                  "TPMRZ2E89RZMFTNP.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "hours",
+                    "endRange": "Inf",
+                    "description": "$0.00 per hours for USE1-JustInTimeAccessHour-Trial in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "TPMRZ2E89RZMFTNP.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0000000000"
+                    }
+                  }
+                },
+                "sku": "TPMRZ2E89RZMFTNP",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "UGE1-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-UGE1-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "UNPGD9DYFMDSVXRD"
+          },
+          "terms": {
+            "OnDemand": {
+              "UNPGD9DYFMDSVXRD.JRTCKXETXF": {
+                "priceDimensions": {
+                  "UNPGD9DYFMDSVXRD.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "UNPGD9DYFMDSVXRD.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "UNPGD9DYFMDSVXRD",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "APN3-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-APN3-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "UXWWMVZSE7AHTM46"
+          },
+          "terms": {
+            "OnDemand": {
+              "UXWWMVZSE7AHTM46.JRTCKXETXF": {
+                "priceDimensions": {
+                  "UXWWMVZSE7AHTM46.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "UXWWMVZSE7AHTM46.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "UXWWMVZSE7AHTM46",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "EUW3-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-EUW3-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "XMNNGXT9W8GP758W"
+          },
+          "terms": {
+            "OnDemand": {
+              "XMNNGXT9W8GP758W.JRTCKXETXF": {
+                "priceDimensions": {
+                  "XMNNGXT9W8GP758W.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "XMNNGXT9W8GP758W.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "XMNNGXT9W8GP758W",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "dataTransfer": "EUN1-",
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-EUN1-AWS-Out-Bytes",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "storage": "Not Applicable",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "YNS7WP2C8Z59X3C6"
+          },
+          "terms": {
+            "OnDemand": {
+              "YNS7WP2C8Z59X3C6.JRTCKXETXF": {
+                "priceDimensions": {
+                  "YNS7WP2C8Z59X3C6.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "GB",
+                    "endRange": "Inf",
+                    "description": "$0.9 per GB - Data Retrieval",
+                    "appliesTo": [],
+                    "rateCode": "YNS7WP2C8Z59X3C6.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.9000000000"
+                    }
+                  }
+                },
+                "sku": "YNS7WP2C8Z59X3C6",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        },
+        {
+          "product": {
+            "productFamily": "AWS Systems Manager",
+            "attributes": {
+              "regionCode": "us-east-1",
+              "servicecode": "AWSSystemsManager",
+              "usagetype": "USE1-AppConfig-Deployments",
+              "locationType": "AWS Region",
+              "location": "US East (N. Virginia)",
+              "servicename": "AWS Systems Manager",
+              "updates": "True",
+              "operation": "",
+              "gets": "Not Applicable"
+            },
+            "sku": "ZHBBQT53NUZ69GUP"
+          },
+          "terms": {
+            "OnDemand": {
+              "ZHBBQT53NUZ69GUP.JRTCKXETXF": {
+                "priceDimensions": {
+                  "ZHBBQT53NUZ69GUP.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Configuration Received",
+                    "endRange": "Inf",
+                    "description": "$0.0008 per Configuration Received for AppConfig-Deployments in US East (N. Virginia)",
+                    "appliesTo": [],
+                    "rateCode": "ZHBBQT53NUZ69GUP.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0008000000"
+                    }
+                  }
+                },
+                "sku": "ZHBBQT53NUZ69GUP",
+                "effectiveDate": "2025-08-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20250828153807",
+          "publicationDate": "2025-08-28T15:38:07Z"
+        }
+      ],
+      "message": "Retrieved pricing for AWSSystemsManager in us-east-1 from AWS Pricing API"
+    }
+  },
+  "isError": false
+}

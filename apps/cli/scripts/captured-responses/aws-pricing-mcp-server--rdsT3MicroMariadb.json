@@ -1,0 +1,75 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"status\": \"success\",\n  \"service_name\": \"AmazonRDS\",\n  \"data\": [\n    {\n      \"product\": {\n        \"productFamily\": \"Database Instance\",\n        \"attributes\": {\n          \"engineCode\": \"18\",\n          \"instanceTypeFamily\": \"T3\",\n          \"memory\": \"1 GiB\",\n          \"vcpu\": \"2\",\n          \"instanceType\": \"db.t3.micro\",\n          \"unbundledLicensing\": \"FALSE\",\n          \"usagetype\": \"InstanceUsage:db.t3.micro\",\n          \"locationType\": \"AWS Region\",\n          \"storage\": \"EBS Only\",\n          \"normalizationSizeFactor\": \"0.5\",\n          \"instanceFamily\": \"General purpose\",\n          \"databaseEngine\": \"MariaDB\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AmazonRDS\",\n          \"physicalProcessor\": \"Intel Skylake E5 2686 v5 (2.5 GHz)\",\n          \"licenseModel\": \"No license required\",\n          \"currentGeneration\": \"Yes\",\n          \"networkPerformance\": \"Low to Moderate\",\n          \"deploymentOption\": \"Single-AZ\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"Amazon Relational Database Service\",\n          \"processorArchitecture\": \"64-bit\",\n          \"operation\": \"CreateDBInstance:0018\"\n        },\n        \"sku\": \"5J8PBWJNX88YGMQK\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"5J8PBWJNX88YGMQK.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"5J8PBWJNX88YGMQK.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Hrs\",\n                \"endRange\": \"Inf\",\n                \"description\": \"USD 0.017 per db.t3.micro Single-AZ instance hour (or partial hour) running MariaDB\",\n                \"appliesTo\": [],\n                \"rateCode\": \"5J8PBWJNX88YGMQK.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0170000000\"\n                }\n              }\n            },\n            \"sku\": \"5J8PBWJNX88YGMQK\",\n            \"effectiveDate\": \"2026-03-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        },\n        \"Reserved\": \"<filtered by output_options.pricing_terms>\"\n      },\n      \"version\": \"20260318225923\",\n      \"publicationDate\": \"2026-03-18T22:59:23Z\"\n    }\n  ],\n  \"message\": \"Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API\"\n}"
+    }
+  ],
+  "structuredContent": {
+    "result": {
+      "status": "success",
+      "service_name": "AmazonRDS",
+      "data": [
+        {
+          "product": {
+            "productFamily": "Database Instance",
+            "attributes": {
+              "engineCode": "18",
+              "instanceTypeFamily": "T3",
+              "memory": "1 GiB",
+              "vcpu": "2",
+              "instanceType": "db.t3.micro",
+              "unbundledLicensing": "FALSE",
+              "usagetype": "InstanceUsage:db.t3.micro",
+              "locationType": "AWS Region",
+              "storage": "EBS Only",
+              "normalizationSizeFactor": "0.5",
+              "instanceFamily": "General purpose",
+              "databaseEngine": "MariaDB",
+              "regionCode": "us-east-1",
+              "servicecode": "AmazonRDS",
+              "physicalProcessor": "Intel Skylake E5 2686 v5 (2.5 GHz)",
+              "licenseModel": "No license required",
+              "currentGeneration": "Yes",
+              "networkPerformance": "Low to Moderate",
+              "deploymentOption": "Single-AZ",
+              "location": "US East (N. Virginia)",
+              "servicename": "Amazon Relational Database Service",
+              "processorArchitecture": "64-bit",
+              "operation": "CreateDBInstance:0018"
+            },
+            "sku": "5J8PBWJNX88YGMQK"
+          },
+          "terms": {
+            "OnDemand": {
+              "5J8PBWJNX88YGMQK.JRTCKXETXF": {
+                "priceDimensions": {
+                  "5J8PBWJNX88YGMQK.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Hrs",
+                    "endRange": "Inf",
+                    "description": "USD 0.017 per db.t3.micro Single-AZ instance hour (or partial hour) running MariaDB",
+                    "appliesTo": [],
+                    "rateCode": "5J8PBWJNX88YGMQK.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0170000000"
+                    }
+                  }
+                },
+                "sku": "5J8PBWJNX88YGMQK",
+                "effectiveDate": "2026-03-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            },
+            "Reserved": "<filtered by output_options.pricing_terms>"
+          },
+          "version": "20260318225923",
+          "publicationDate": "2026-03-18T22:59:23Z"
+        }
+      ],
+      "message": "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API"
+    }
+  },
+  "isError": false
+}

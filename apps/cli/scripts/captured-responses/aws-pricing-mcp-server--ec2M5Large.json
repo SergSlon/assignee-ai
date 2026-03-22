@@ -1,0 +1,88 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"status\": \"success\",\n  \"service_name\": \"AmazonEC2\",\n  \"data\": [\n    {\n      \"product\": {\n        \"productFamily\": \"Compute Instance\",\n        \"attributes\": {\n          \"enhancedNetworkingSupported\": \"Yes\",\n          \"intelTurboAvailable\": \"Yes\",\n          \"memory\": \"8 GiB\",\n          \"dedicatedEbsThroughput\": \"Up to 2120 Mbps\",\n          \"vcpu\": \"2\",\n          \"classicnetworkingsupport\": \"false\",\n          \"capacitystatus\": \"Used\",\n          \"locationType\": \"AWS Region\",\n          \"storage\": \"EBS only\",\n          \"instanceFamily\": \"General purpose\",\n          \"operatingSystem\": \"Linux\",\n          \"intelAvx2Available\": \"Yes\",\n          \"regionCode\": \"us-east-1\",\n          \"physicalProcessor\": \"Intel Xeon Platinum 8175\",\n          \"clockSpeed\": \"3.1 GHz\",\n          \"ecu\": \"10\",\n          \"networkPerformance\": \"Up to 10 Gigabit\",\n          \"servicename\": \"Amazon Elastic Compute Cloud\",\n          \"gpuMemory\": \"NA\",\n          \"dedicatedEbsThroughputDescription\": \"480 Mbps\",\n          \"vpcnetworkingsupport\": \"true\",\n          \"instanceType\": \"m5.large\",\n          \"tenancy\": \"Shared\",\n          \"usagetype\": \"BoxUsage:m5.large\",\n          \"normalizationSizeFactor\": \"4\",\n          \"intelAvxAvailable\": \"Yes\",\n          \"processorFeatures\": \"Intel AVX; Intel AVX2; Intel AVX512; Intel Turbo\",\n          \"servicecode\": \"AmazonEC2\",\n          \"licenseModel\": \"No License required\",\n          \"currentGeneration\": \"Yes\",\n          \"preInstalledSw\": \"NA\",\n          \"location\": \"US East (N. Virginia)\",\n          \"processorArchitecture\": \"64-bit\",\n          \"marketoption\": \"OnDemand\",\n          \"operation\": \"RunInstances\",\n          \"availabilityzone\": \"NA\"\n        },\n        \"sku\": \"6C86BEPQVG73ZGGR\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"6C86BEPQVG73ZGGR.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"6C86BEPQVG73ZGGR.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Hrs\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$0.096 per On Demand Linux m5.large Instance Hour\",\n                \"appliesTo\": [],\n                \"rateCode\": \"6C86BEPQVG73ZGGR.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0960000000\"\n                }\n              }\n            },\n            \"sku\": \"6C86BEPQVG73ZGGR\",\n            \"effectiveDate\": \"2026-03-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        },\n        \"Reserved\": \"<filtered by output_options.pricing_terms>\"\n      },\n      \"version\": \"20260320042925\",\n      \"publicationDate\": \"2026-03-20T04:29:25Z\"\n    }\n  ],\n  \"message\": \"Retrieved pricing for AmazonEC2 in us-east-1 from AWS Pricing API\"\n}"
+    }
+  ],
+  "structuredContent": {
+    "result": {
+      "status": "success",
+      "service_name": "AmazonEC2",
+      "data": [
+        {
+          "product": {
+            "productFamily": "Compute Instance",
+            "attributes": {
+              "enhancedNetworkingSupported": "Yes",
+              "intelTurboAvailable": "Yes",
+              "memory": "8 GiB",
+              "dedicatedEbsThroughput": "Up to 2120 Mbps",
+              "vcpu": "2",
+              "classicnetworkingsupport": "false",
+              "capacitystatus": "Used",
+              "locationType": "AWS Region",
+              "storage": "EBS only",
+              "instanceFamily": "General purpose",
+              "operatingSystem": "Linux",
+              "intelAvx2Available": "Yes",
+              "regionCode": "us-east-1",
+              "physicalProcessor": "Intel Xeon Platinum 8175",
+              "clockSpeed": "3.1 GHz",
+              "ecu": "10",
+              "networkPerformance": "Up to 10 Gigabit",
+              "servicename": "Amazon Elastic Compute Cloud",
+              "gpuMemory": "NA",
+              "dedicatedEbsThroughputDescription": "480 Mbps",
+              "vpcnetworkingsupport": "true",
+              "instanceType": "m5.large",
+              "tenancy": "Shared",
+              "usagetype": "BoxUsage:m5.large",
+              "normalizationSizeFactor": "4",
+              "intelAvxAvailable": "Yes",
+              "processorFeatures": "Intel AVX; Intel AVX2; Intel AVX512; Intel Turbo",
+              "servicecode": "AmazonEC2",
+              "licenseModel": "No License required",
+              "currentGeneration": "Yes",
+              "preInstalledSw": "NA",
+              "location": "US East (N. Virginia)",
+              "processorArchitecture": "64-bit",
+              "marketoption": "OnDemand",
+              "operation": "RunInstances",
+              "availabilityzone": "NA"
+            },
+            "sku": "6C86BEPQVG73ZGGR"
+          },
+          "terms": {
+            "OnDemand": {
+              "6C86BEPQVG73ZGGR.JRTCKXETXF": {
+                "priceDimensions": {
+                  "6C86BEPQVG73ZGGR.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Hrs",
+                    "endRange": "Inf",
+                    "description": "$0.096 per On Demand Linux m5.large Instance Hour",
+                    "appliesTo": [],
+                    "rateCode": "6C86BEPQVG73ZGGR.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0960000000"
+                    }
+                  }
+                },
+                "sku": "6C86BEPQVG73ZGGR",
+                "effectiveDate": "2026-03-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            },
+            "Reserved": "<filtered by output_options.pricing_terms>"
+          },
+          "version": "20260320042925",
+          "publicationDate": "2026-03-20T04:29:25Z"
+        }
+      ],
+      "message": "Retrieved pricing for AmazonEC2 in us-east-1 from AWS Pricing API"
+    }
+  },
+  "isError": false
+}

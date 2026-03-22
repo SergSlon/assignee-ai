@@ -1,0 +1,130 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"status\": \"success\",\n  \"service_name\": \"AmazonRDS\",\n  \"data\": [\n    {\n      \"product\": {\n        \"productFamily\": \"Database Instance\",\n        \"attributes\": {\n          \"engineCode\": \"16\",\n          \"instanceTypeFamily\": \"R6G\",\n          \"memory\": \"16 GiB\",\n          \"vcpu\": \"2\",\n          \"instanceType\": \"db.r6g.large\",\n          \"unbundledLicensing\": \"FALSE\",\n          \"usagetype\": \"InstanceUsage:db.r6g.large\",\n          \"locationType\": \"AWS Region\",\n          \"storage\": \"EBS Only\",\n          \"normalizationSizeFactor\": \"4\",\n          \"instanceFamily\": \"Memory optimized\",\n          \"databaseEngine\": \"Aurora MySQL\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AmazonRDS\",\n          \"physicalProcessor\": \"AWS Graviton2\",\n          \"licenseModel\": \"No license required\",\n          \"currentGeneration\": \"Yes\",\n          \"networkPerformance\": \"Up to 10 Gigabit\",\n          \"deploymentOption\": \"Single-AZ\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"Amazon Relational Database Service\",\n          \"processorArchitecture\": \"64-bit\",\n          \"operation\": \"CreateDBInstance:0016\"\n        },\n        \"sku\": \"SVB4AAU3H83DPGMK\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"SVB4AAU3H83DPGMK.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"SVB4AAU3H83DPGMK.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Hrs\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$ 0.26 per RDS db.r6g.large Single-AZ instance hour (or partial hour) running Aurora MySQL\",\n                \"appliesTo\": [],\n                \"rateCode\": \"SVB4AAU3H83DPGMK.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.2600000000\"\n                }\n              }\n            },\n            \"sku\": \"SVB4AAU3H83DPGMK\",\n            \"effectiveDate\": \"2026-03-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        },\n        \"Reserved\": \"<filtered by output_options.pricing_terms>\"\n      },\n      \"version\": \"20260318225923\",\n      \"publicationDate\": \"2026-03-18T22:59:23Z\"\n    },\n    {\n      \"product\": {\n        \"productFamily\": \"Database Instance\",\n        \"attributes\": {\n          \"engineCode\": \"16\",\n          \"instanceTypeFamily\": \"R6G\",\n          \"memory\": \"16 GiB\",\n          \"vcpu\": \"2\",\n          \"instanceType\": \"db.r6g.large\",\n          \"usagetype\": \"InstanceUsageIOOptimized:db.r6g.large\",\n          \"locationType\": \"AWS Region\",\n          \"storage\": \"Aurora IO Optimization Mode\",\n          \"normalizationSizeFactor\": \"5.2\",\n          \"instanceFamily\": \"Memory optimized\",\n          \"databaseEngine\": \"Aurora MySQL\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AmazonRDS\",\n          \"physicalProcessor\": \"AWS Graviton2\",\n          \"licenseModel\": \"No license required\",\n          \"currentGeneration\": \"Yes\",\n          \"networkPerformance\": \"Up to 10 Gigabit\",\n          \"deploymentOption\": \"Single-AZ\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"Amazon Relational Database Service\",\n          \"processorArchitecture\": \"64-bit\",\n          \"operation\": \"CreateDBInstance:0016\"\n        },\n        \"sku\": \"WJD7AAF57MBUC6E6\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"WJD7AAF57MBUC6E6.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"WJD7AAF57MBUC6E6.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Hrs\",\n                \"endRange\": \"Inf\",\n                \"description\": \"$ 0.338 per RDS db.r6g.large IO-optimized Single-AZ instance hour (or partial hour) running Aurora MySQL\",\n                \"appliesTo\": [],\n                \"rateCode\": \"WJD7AAF57MBUC6E6.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.3380000000\"\n                }\n              }\n            },\n            \"sku\": \"WJD7AAF57MBUC6E6\",\n            \"effectiveDate\": \"2026-03-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        }\n      },\n      \"version\": \"20260318225923\",\n      \"publicationDate\": \"2026-03-18T22:59:23Z\"\n    }\n  ],\n  \"message\": \"Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API\"\n}"
+    }
+  ],
+  "structuredContent": {
+    "result": {
+      "status": "success",
+      "service_name": "AmazonRDS",
+      "data": [
+        {
+          "product": {
+            "productFamily": "Database Instance",
+            "attributes": {
+              "engineCode": "16",
+              "instanceTypeFamily": "R6G",
+              "memory": "16 GiB",
+              "vcpu": "2",
+              "instanceType": "db.r6g.large",
+              "unbundledLicensing": "FALSE",
+              "usagetype": "InstanceUsage:db.r6g.large",
+              "locationType": "AWS Region",
+              "storage": "EBS Only",
+              "normalizationSizeFactor": "4",
+              "instanceFamily": "Memory optimized",
+              "databaseEngine": "Aurora MySQL",
+              "regionCode": "us-east-1",
+              "servicecode": "AmazonRDS",
+              "physicalProcessor": "AWS Graviton2",
+              "licenseModel": "No license required",
+              "currentGeneration": "Yes",
+              "networkPerformance": "Up to 10 Gigabit",
+              "deploymentOption": "Single-AZ",
+              "location": "US East (N. Virginia)",
+              "servicename": "Amazon Relational Database Service",
+              "processorArchitecture": "64-bit",
+              "operation": "CreateDBInstance:0016"
+            },
+            "sku": "SVB4AAU3H83DPGMK"
+          },
+          "terms": {
+            "OnDemand": {
+              "SVB4AAU3H83DPGMK.JRTCKXETXF": {
+                "priceDimensions": {
+                  "SVB4AAU3H83DPGMK.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Hrs",
+                    "endRange": "Inf",
+                    "description": "$ 0.26 per RDS db.r6g.large Single-AZ instance hour (or partial hour) running Aurora MySQL",
+                    "appliesTo": [],
+                    "rateCode": "SVB4AAU3H83DPGMK.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.2600000000"
+                    }
+                  }
+                },
+                "sku": "SVB4AAU3H83DPGMK",
+                "effectiveDate": "2026-03-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            },
+            "Reserved": "<filtered by output_options.pricing_terms>"
+          },
+          "version": "20260318225923",
+          "publicationDate": "2026-03-18T22:59:23Z"
+        },
+        {
+          "product": {
+            "productFamily": "Database Instance",
+            "attributes": {
+              "engineCode": "16",
+              "instanceTypeFamily": "R6G",
+              "memory": "16 GiB",
+              "vcpu": "2",
+              "instanceType": "db.r6g.large",
+              "usagetype": "InstanceUsageIOOptimized:db.r6g.large",
+              "locationType": "AWS Region",
+              "storage": "Aurora IO Optimization Mode",
+              "normalizationSizeFactor": "5.2",
+              "instanceFamily": "Memory optimized",
+              "databaseEngine": "Aurora MySQL",
+              "regionCode": "us-east-1",
+              "servicecode": "AmazonRDS",
+              "physicalProcessor": "AWS Graviton2",
+              "licenseModel": "No license required",
+              "currentGeneration": "Yes",
+              "networkPerformance": "Up to 10 Gigabit",
+              "deploymentOption": "Single-AZ",
+              "location": "US East (N. Virginia)",
+              "servicename": "Amazon Relational Database Service",
+              "processorArchitecture": "64-bit",
+              "operation": "CreateDBInstance:0016"
+            },
+            "sku": "WJD7AAF57MBUC6E6"
+          },
+          "terms": {
+            "OnDemand": {
+              "WJD7AAF57MBUC6E6.JRTCKXETXF": {
+                "priceDimensions": {
+                  "WJD7AAF57MBUC6E6.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Hrs",
+                    "endRange": "Inf",
+                    "description": "$ 0.338 per RDS db.r6g.large IO-optimized Single-AZ instance hour (or partial hour) running Aurora MySQL",
+                    "appliesTo": [],
+                    "rateCode": "WJD7AAF57MBUC6E6.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.3380000000"
+                    }
+                  }
+                },
+                "sku": "WJD7AAF57MBUC6E6",
+                "effectiveDate": "2026-03-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            }
+          },
+          "version": "20260318225923",
+          "publicationDate": "2026-03-18T22:59:23Z"
+        }
+      ],
+      "message": "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API"
+    }
+  },
+  "isError": false
+}
