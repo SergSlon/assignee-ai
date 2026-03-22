@@ -80,6 +80,11 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
   }),
   error: Annotation<AssigneeError | undefined>({ reducer: (_, b) => b }),
+  // Story 10.1: checkpoint reuse — set to true when apply resumes from a saved checkpoint
+  checkpointResumed: Annotation<boolean>({
+    reducer: (_, b) => b,
+    default: () => false,
+  }),
 });
 
 export type AgentState = typeof graphAnnotation.State;

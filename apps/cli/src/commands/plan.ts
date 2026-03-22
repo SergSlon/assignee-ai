@@ -5,8 +5,10 @@
  * @see Story 1-6, Story 1-8, Story 9-6
  */
 
+import * as path from "node:path";
 import { Command } from "commander";
-import { ExecutionMode, ExecutionStatus } from "@assignee/core";
+import { ExecutionMode, ExecutionStatus, safeTry } from "@assignee/core";
+import type { AgentState } from "../services/graph-state.js";
 import {
   CommandName,
   CommandDescription,
@@ -16,7 +18,8 @@ import { ProcessExitCode } from "../constants/errors.js";
 import { renderError, startSpinner, stopSpinner } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand } from "../utils/command-runner.js";
-import { SUPPORTED_TYPES_HINT } from "../config/constants.js";
+import { SUPPORTED_TYPES_HINT, CHECKPOINT_DIR } from "../config/constants.js";
+import { serializeCheckpoint, saveCheckpoint } from "../services/checkpoint.js";
 
 export const planCommand = new Command(CommandName.PLAN)
   .description(CommandDescription.PLAN)
@@ -76,6 +79,38 @@ export const planCommand = new Command(CommandName.PLAN)
               ? SUPPORTED_TYPES_HINT
               : undefined,
           );
+        }
+
+        // Save checkpoint on successful plan (AC: #1, #2, #5)
+        if (!failed) {
+          const checkpoint = serializeCheckpoint(finalState as AgentState);
+          const checkpointDir = path.resolve(process.cwd(), CHECKPOINT_DIR);
+          const [saveErr, filePath] = await safeTry(
+            saveCheckpoint(checkpoint, checkpointDir),
+          );
+          if (saveErr) {
+            log({
+              ts: new Date().toISOString(),
+              runId: ctx.runId,
+              level: "warn",
+              action: LOG_ACTIONS.CHECKPOINT_SAVED,
+              result: "failed",
+              extras: { error: saveErr.message },
+            });
+          } else {
+            log({
+              ts: new Date().toISOString(),
+              runId: ctx.runId,
+              level: "info",
+              action: LOG_ACTIONS.CHECKPOINT_SAVED,
+              extras: { path: filePath },
+            });
+            if (process.stdout.isTTY) {
+              process.stdout.write(
+                `\nPlan saved to ${CHECKPOINT_DIR}/checkpoint-${ctx.runId}.json (valid for ${checkpoint.ttl_hours}h)\n`,
+              );
+            }
+          }
         }
 
         return { success: !failed };

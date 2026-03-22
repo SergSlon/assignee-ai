@@ -8,6 +8,16 @@ import { ExecutionMode, ExecutionStatus } from "@assignee/core";
 import { GraphNode } from "../constants/graph.js";
 import type { AgentState } from "./graph-state.js";
 
+/** Routes after START: checkpoint resumed → human_approval (skip Phase 1), else → intent_parser. */
+export function routeCheckpointEntry(
+  state: AgentState,
+): typeof GraphNode.INTENT_PARSER | typeof GraphNode.HUMAN_APPROVAL {
+  if (state.checkpointResumed && state.desiredState) {
+    return GraphNode.HUMAN_APPROVAL;
+  }
+  return GraphNode.INTENT_PARSER;
+}
+
 /** Routes after preflight_guard: plan → result, apply → approval or provisioner. */
 export function routePreflightGuard(
   state: AgentState,
