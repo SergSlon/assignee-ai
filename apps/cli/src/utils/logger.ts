@@ -31,6 +31,8 @@ export const LOG_ACTIONS = {
   CHECKPOINT_SAVED: "checkpoint_saved",
   CHECKPOINT_LOADED: "checkpoint_loaded",
   CHECKPOINT_EXPIRED: "checkpoint_expired",
+  PLAN_TO_APPLY_STARTED: "plan_to_apply_started",
+  PLAN_TO_APPLY_DECLINED: "plan_to_apply_declined",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
