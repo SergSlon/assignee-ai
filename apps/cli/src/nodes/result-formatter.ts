@@ -2,7 +2,7 @@
  * result_formatter node — final rendering gate.
  * Handles all terminal outcomes: SUCCESS, FAILED, CANCELLED, and plan-mode preview.
  *
- * @see Story 2-4, Story 9-6
+ * @see Story 2-4, Story 9-6, Story 18-3
  */
 
 import {
@@ -17,6 +17,7 @@ import {
   renderError,
   renderPlanBox,
 } from "../utils/display.js";
+import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
@@ -109,7 +110,17 @@ export async function resultFormatterNode(
 
     case ExecutionStatus.FAILED:
     case ExecutionStatus.POLICY_BLOCKED:
-    case ExecutionStatus.UNSUPPORTED_RESOURCE:
+    case ExecutionStatus.UNSUPPORTED_RESOURCE: {
+      // Resolve structured error message via the error message registry (Story 18.3)
+      const resolved = state.error
+        ? defaultErrorMessageRegistry.resolve(state.error)
+        : defaultErrorMessageRegistry.resolveMessage(
+            state.errorMessage ?? "An unknown error occurred",
+          );
+
+      // Legacy hint from ErrorHintRegistry as fallback for howToFix
+      const legacyHint = defaultErrorHintRegistry.getHint(state.error);
+
       // Compound mode: show partial results with cleanup message
       if (
         state.resourcePattern &&
@@ -123,13 +134,13 @@ export async function resultFormatterNode(
         const haltedAt = state.resourceType ?? "unknown resource";
         renderError(
           `Provision halted at ${haltedAt}. Previously provisioned: ${provisioned}. Manual cleanup may be required.`,
-          defaultErrorHintRegistry.getHint(state.error),
+          legacyHint ?? resolved.howToFix,
+          { why: resolved.why },
         );
       } else {
-        renderError(
-          state.errorMessage ?? "An unknown error occurred",
-          defaultErrorHintRegistry.getHint(state.error),
-        );
+        renderError(resolved.what, legacyHint ?? resolved.howToFix, {
+          why: resolved.why,
+        });
       }
       log({
         ts: new Date().toISOString(),
@@ -139,6 +150,7 @@ export async function resultFormatterNode(
         extras: { errorMessage: state.errorMessage },
       });
       break;
+    }
 
     default:
       // PENDING = plan mode — render plan preview box

@@ -1,0 +1,13 @@
+id: BP-S3-010
+title: "S3 bucket should have lifecycle configuration"
+severity: HIGH
+resource_type: "AWS::S3::Bucket"
+property_path: "LifecycleConfiguration"
+check_type: "exists"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "S3.13"
+description: "S3 buckets should have lifecycle policies configured to manage object transitions and expirations. Without lifecycle rules, storage costs grow unbounded and stale data remains accessible unnecessarily."
+remediation: "Configure LifecycleConfiguration with rules to transition objects to cheaper storage classes (e.g., Glacier) and expire objects that are no longer needed."
+category: cost
+lastVerified: "2026-03-22"

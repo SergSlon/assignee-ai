@@ -1,0 +1,13 @@
+id: BP-ECS-002
+title: "ECS service should not assign public IP addresses"
+severity: HIGH
+resource_type: "AWS::ECS::Service"
+property_path: "NetworkConfiguration.AwsvpcConfiguration.AssignPublicIp"
+check_type: "not_equals"
+expected_value: "ENABLED"
+source: "AWS Security Hub FSBP"
+source_id: "ECS.2"
+description: "ECS services using awsvpc networking should not automatically assign public IP addresses to tasks. Public IPs expose containers directly to the internet, bypassing load balancers and security controls."
+remediation: "Set AssignPublicIp to 'DISABLED'. Place tasks in private subnets and use a NAT gateway for outbound internet access, or an Application Load Balancer for inbound traffic."
+category: security
+lastVerified: "2026-03-22"

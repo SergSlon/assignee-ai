@@ -1,0 +1,13 @@
+id: BP-EC2-008
+title: "EC2 instance should have EBS volumes encrypted"
+severity: HIGH
+resource_type: "AWS::EC2::Instance"
+property_path: "BlockDeviceMappings[0].Ebs.Encrypted"
+check_type: "equals"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "EC2.3"
+description: "EC2 instance EBS volumes should be encrypted at rest. Unencrypted volumes expose data if the underlying storage media is decommissioned or accessed by unauthorized parties."
+remediation: "Set Ebs.Encrypted to true in BlockDeviceMappings. Enable EBS encryption by default at the account level to ensure all new volumes are automatically encrypted."
+category: security
+lastVerified: "2026-03-22"

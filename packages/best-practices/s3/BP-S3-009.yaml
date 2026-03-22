@@ -1,0 +1,13 @@
+id: BP-S3-009
+title: "S3 bucket should have event notifications or S3 Event Bridge enabled"
+severity: HIGH
+resource_type: "AWS::S3::Bucket"
+property_path: "NotificationConfiguration"
+check_type: "exists"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "S3.11"
+description: "S3 buckets should have event notifications configured for security monitoring. Event notifications enable detection of unauthorized access patterns, unexpected deletions, and compliance-relevant operations."
+remediation: "Configure NotificationConfiguration with EventBridge, SNS, SQS, or Lambda destinations to capture S3 events. Enable EventBridge integration for richer event filtering."
+category: security
+lastVerified: "2026-03-22"

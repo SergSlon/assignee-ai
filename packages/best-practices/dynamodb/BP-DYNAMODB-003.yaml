@@ -1,0 +1,13 @@
+id: BP-DYNAMODB-003
+title: "DynamoDB table should have encryption at rest with CMK"
+severity: HIGH
+resource_type: "AWS::DynamoDB::Table"
+property_path: "SSESpecification.SSEEnabled"
+check_type: "equals"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "DynamoDB.1"
+description: "DynamoDB tables should use customer managed KMS keys (CMK) for encryption at rest. While DynamoDB encrypts all data by default with AWS-owned keys, using CMKs provides additional control over key rotation, access policies, and audit trails."
+remediation: "Set SSESpecification.SSEEnabled to true and SSESpecification.SSEType to 'KMS'. Specify a customer managed KMS key for maximum control."
+category: security
+lastVerified: "2026-03-22"

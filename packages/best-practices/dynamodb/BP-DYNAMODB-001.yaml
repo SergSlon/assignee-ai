@@ -1,0 +1,13 @@
+id: BP-DYNAMODB-001
+title: "DynamoDB table should have point-in-time recovery enabled"
+severity: HIGH
+resource_type: "AWS::DynamoDB::Table"
+property_path: "PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled"
+check_type: "equals"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "DynamoDB.2"
+description: "DynamoDB tables should have point-in-time recovery (PITR) enabled for continuous backups. PITR provides automatic backups with per-second granularity, enabling recovery from accidental writes or deletes."
+remediation: "Set PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled to true. PITR allows restoring the table to any point in the last 35 days."
+category: reliability
+lastVerified: "2026-03-22"

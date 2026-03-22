@@ -1,0 +1,13 @@
+id: BP-SNS-001
+title: "SNS topic should have encryption at rest enabled"
+severity: HIGH
+resource_type: "AWS::SNS::Topic"
+property_path: "KmsMasterKeyId"
+check_type: "exists"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "SNS.1"
+description: "SNS topics should have server-side encryption enabled using AWS KMS. Unencrypted topics expose notification payloads at rest, potentially leaking sensitive data in event-driven architectures."
+remediation: "Set KmsMasterKeyId to a KMS key ARN or alias. Use 'alias/aws/sns' for AWS managed encryption or specify a customer managed key for granular access control."
+category: security
+lastVerified: "2026-03-22"

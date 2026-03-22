@@ -8,12 +8,18 @@ const BP_ROOT = join(import.meta.dirname, "..");
 const S3_DIR = join(BP_ROOT, "s3");
 const EC2_DIR = join(BP_ROOT, "ec2");
 const LAMBDA_DIR = join(BP_ROOT, "lambda");
+const RDS_DIR = join(BP_ROOT, "rds");
+const IAM_DIR = join(BP_ROOT, "iam");
+const DYNAMODB_DIR = join(BP_ROOT, "dynamodb");
+const ECS_DIR = join(BP_ROOT, "ecs");
+const SQS_DIR = join(BP_ROOT, "sqs");
+const SNS_DIR = join(BP_ROOT, "sns");
 
-describe("Seed BP Library — Sprint A (20 rules)", () => {
+describe("Seed BP Library — Sprint A+B (45 rules)", () => {
   const practices = loadBestPractices(BP_ROOT);
 
-  it("loads exactly 20 best practice entries", () => {
-    expect(practices).toHaveLength(20);
+  it("loads exactly 45 best practice entries", () => {
+    expect(practices).toHaveLength(45);
   });
 
   it("every entry validates against bestPracticeSchema without errors", () => {
@@ -54,19 +60,49 @@ describe("Seed BP Library — Sprint A (20 rules)", () => {
     }
   });
 
-  it("S3 directory contains 8 YAML files", () => {
+  it("S3 directory contains 10 YAML files", () => {
     const files = readdirSync(S3_DIR).filter((f) => f.endsWith(".yaml"));
-    expect(files).toHaveLength(8);
+    expect(files).toHaveLength(10);
   });
 
-  it("EC2 directory contains 7 YAML files", () => {
+  it("EC2 directory contains 9 YAML files", () => {
     const files = readdirSync(EC2_DIR).filter((f) => f.endsWith(".yaml"));
+    expect(files).toHaveLength(9);
+  });
+
+  it("Lambda directory contains 7 YAML files", () => {
+    const files = readdirSync(LAMBDA_DIR).filter((f) => f.endsWith(".yaml"));
     expect(files).toHaveLength(7);
   });
 
-  it("Lambda directory contains 5 YAML files", () => {
-    const files = readdirSync(LAMBDA_DIR).filter((f) => f.endsWith(".yaml"));
+  it("RDS directory contains 5 YAML files", () => {
+    const files = readdirSync(RDS_DIR).filter((f) => f.endsWith(".yaml"));
     expect(files).toHaveLength(5);
+  });
+
+  it("IAM directory contains 4 YAML files", () => {
+    const files = readdirSync(IAM_DIR).filter((f) => f.endsWith(".yaml"));
+    expect(files).toHaveLength(4);
+  });
+
+  it("DynamoDB directory contains 3 YAML files", () => {
+    const files = readdirSync(DYNAMODB_DIR).filter((f) => f.endsWith(".yaml"));
+    expect(files).toHaveLength(3);
+  });
+
+  it("ECS directory contains 3 YAML files", () => {
+    const files = readdirSync(ECS_DIR).filter((f) => f.endsWith(".yaml"));
+    expect(files).toHaveLength(3);
+  });
+
+  it("SQS directory contains 2 YAML files", () => {
+    const files = readdirSync(SQS_DIR).filter((f) => f.endsWith(".yaml"));
+    expect(files).toHaveLength(2);
+  });
+
+  it("SNS directory contains 2 YAML files", () => {
+    const files = readdirSync(SNS_DIR).filter((f) => f.endsWith(".yaml"));
+    expect(files).toHaveLength(2);
   });
 
   it("all FSBP-sourced entries have a source_id field", () => {
@@ -80,11 +116,19 @@ describe("Seed BP Library — Sprint A (20 rules)", () => {
     }
   });
 
-  it("covers all three resource types: S3, EC2, Lambda", () => {
+  it("covers all Tier 1 resource types", () => {
     const resourceTypes = new Set(practices.map((bp) => bp.resource_type));
     expect(resourceTypes.has("AWS::S3::Bucket")).toBe(true);
     expect(resourceTypes.has("AWS::EC2::Instance")).toBe(true);
     expect(resourceTypes.has("AWS::Lambda::Function")).toBe(true);
+    expect(resourceTypes.has("AWS::RDS::DBInstance")).toBe(true);
+    expect(resourceTypes.has("AWS::IAM::Policy")).toBe(true);
+    expect(resourceTypes.has("AWS::IAM::User")).toBe(true);
+    expect(resourceTypes.has("AWS::DynamoDB::Table")).toBe(true);
+    expect(resourceTypes.has("AWS::ECS::TaskDefinition")).toBe(true);
+    expect(resourceTypes.has("AWS::ECS::Service")).toBe(true);
+    expect(resourceTypes.has("AWS::SQS::Queue")).toBe(true);
+    expect(resourceTypes.has("AWS::SNS::Topic")).toBe(true);
   });
 
   it("every entry has a non-empty description", () => {

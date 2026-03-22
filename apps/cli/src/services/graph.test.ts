@@ -27,6 +27,19 @@ vi.mock("@ai-sdk/amazon-bedrock", () => ({
   createAmazonBedrock: vi.fn(() => vi.fn()),
 }));
 
+// Mock LiteLLMAdapter so graph.ts doesn't resolve real providers.
+// Return Result tuples matching LlmPort interface.
+vi.mock("./litellm-adapter.js", () => ({
+  LiteLLMAdapter: vi.fn().mockImplementation(() => ({
+    generateStructured: vi
+      .fn()
+      .mockResolvedValue([null, { resourceType: "AWS::S3::Bucket" }]),
+    generateText: vi
+      .fn()
+      .mockResolvedValue([null, '{"BucketName":"test-bucket"}']),
+  })),
+}));
+
 // Mock the nodes that have external dependencies or side-effects
 vi.mock("../nodes/schema-fetcher.js", () => ({
   schemaFetcherNode: vi.fn().mockResolvedValue({

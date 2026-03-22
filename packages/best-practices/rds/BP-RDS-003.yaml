@@ -1,0 +1,13 @@
+id: BP-RDS-003
+title: "RDS instance should have Multi-AZ deployment enabled"
+severity: HIGH
+resource_type: "AWS::RDS::DBInstance"
+property_path: "MultiAZ"
+check_type: "equals"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "RDS.5"
+description: "RDS DB instances should be configured for Multi-AZ deployments to ensure high availability. Multi-AZ provides automatic failover to a standby replica in a different Availability Zone during planned maintenance or unplanned outages."
+remediation: "Set MultiAZ to true. This creates a synchronous standby replica in a different AZ. For Aurora, use multiple instances across AZs instead."
+category: reliability
+lastVerified: "2026-03-22"

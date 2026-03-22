@@ -1,0 +1,13 @@
+id: BP-LAMBDA-007
+title: "Lambda function should use a supported runtime"
+severity: HIGH
+resource_type: "AWS::Lambda::Function"
+property_path: "Runtime"
+check_type: "not_equals"
+expected_value: "python3.8"
+source: "AWS Security Hub FSBP"
+source_id: "Lambda.2"
+description: "Lambda functions should use supported runtimes that receive security patches. Deprecated runtimes no longer receive security updates, leaving functions vulnerable to known exploits."
+remediation: "Update the Runtime to a currently supported version (e.g., python3.12, nodejs20.x, java21). Test the function with the new runtime before deploying to production."
+category: security
+lastVerified: "2026-03-22"
