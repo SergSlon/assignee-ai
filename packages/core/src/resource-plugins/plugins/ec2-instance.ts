@@ -9,6 +9,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Instance type",
+        hint: "t3/t4g: burstable (dev/small prod). m5/m6i: general-purpose. c5/c6i: compute. r5/r6i: memory. t4g (ARM) is ~20% cheaper than t3.",
         options: [
           // ── Burstable (t3) ──
           {
@@ -168,6 +169,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "AMI",
+        hint: "The Amazon Machine Image determines the OS and software. Common choices: Amazon Linux 2023 (free tier), Ubuntu 22.04/24.04, Windows Server 2022.",
         placeholder: "ami-0abcdef1234567890",
         options: [],
         fetcher: "discover-amis",
@@ -178,6 +180,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "EC2 Key Pair",
+        hint: "Required for SSH access. Leave blank to use SSM Session Manager instead (no key needed, more secure).",
         options: [],
         fetcher: "discover-key-pairs",
       },
@@ -187,6 +190,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Subnet",
+        hint: "Determines which VPC and availability zone the instance launches in. Public subnets get internet access; private subnets are isolated.",
         placeholder: "subnet-0abc1234",
         options: [],
         fetcher: "discover-subnets",
@@ -197,6 +201,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       question: {
         type: "multi",
         label: "Security Groups",
+        hint: "Firewall rules controlling inbound/outbound traffic. Select existing groups or leave blank to use the VPC default.",
         options: [],
         fetcher: "discover-security-groups",
       },
@@ -216,6 +221,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "IAM Instance Profile name",
+        hint: "Grants the instance permissions to call AWS services (S3, DynamoDB, etc.). Create a role in IAM first, then attach it here.",
         placeholder: "my-instance-profile",
       },
     },
@@ -224,6 +230,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "User data script (base64)",
+        hint: "Shell script that runs on first boot. Use for installing packages, configuring services, or pulling code. Max 16 KB.",
         placeholder: "#!/bin/bash\\necho hello",
       },
     },
