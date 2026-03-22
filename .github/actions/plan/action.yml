@@ -5,11 +5,11 @@ branding:
   color: 'blue'
 
 inputs:
-  aws-access-key-id:
-    description: 'AWS access key ID for provisioning'
+  assignee-operator-access-key-id:
+    description: 'Operator AWS access key ID for provisioning'
     required: true
-  aws-secret-access-key:
-    description: 'AWS secret access key for provisioning'
+  assignee-operator-secret-access-key:
+    description: 'Operator AWS secret access key for provisioning'
     required: true
   aws-region:
     description: 'AWS region'
@@ -95,13 +95,13 @@ runs:
       if: steps.read-intent.outputs.intent != ''
       shell: bash
       env:
-        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
-        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        ASSIGNEE_OPERATOR_ACCESS_KEY_ID: ${{ inputs.assignee-operator-access-key-id }}
+        ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY: ${{ inputs.assignee-operator-secret-access-key }}
         AWS_REGION: ${{ inputs.aws-region }}
-        ASSIGNEE_READER_ACCESS_KEY_ID: ${{ inputs.assignee-reader-access-key-id || inputs.aws-access-key-id }}
-        ASSIGNEE_READER_SECRET_ACCESS_KEY: ${{ inputs.assignee-reader-secret-access-key || inputs.aws-secret-access-key }}
-        ASSIGNEE_AUDITOR_ACCESS_KEY_ID: ${{ inputs.assignee-auditor-access-key-id || inputs.aws-access-key-id }}
-        ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY: ${{ inputs.assignee-auditor-secret-access-key || inputs.aws-secret-access-key }}
+        ASSIGNEE_READER_ACCESS_KEY_ID: ${{ inputs.assignee-reader-access-key-id || inputs.assignee-operator-access-key-id }}
+        ASSIGNEE_READER_SECRET_ACCESS_KEY: ${{ inputs.assignee-reader-secret-access-key || inputs.assignee-operator-secret-access-key }}
+        ASSIGNEE_AUDITOR_ACCESS_KEY_ID: ${{ inputs.assignee-auditor-access-key-id || inputs.assignee-operator-access-key-id }}
+        ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY: ${{ inputs.assignee-auditor-secret-access-key || inputs.assignee-operator-secret-access-key }}
       run: |
         PLAN_OUTPUT=$(assignee plan "${{ steps.read-intent.outputs.intent }}" -o json --no-apply 2>&1) || true
 

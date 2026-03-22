@@ -2,7 +2,7 @@
  * AWS credential and region auto-detection for `assignee init`.
  *
  * Detects credentials from (in priority order):
- * 1. `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` env vars
+ * 1. `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` env vars
  * 2. `~/.aws/credentials` default profile (or `AWS_PROFILE`)
  * 3. AWS SSO active session via `~/.aws/sso/cache/` token files
  *
@@ -95,8 +95,8 @@ export async function detectCredentials(
   const home = homeDir ?? os.homedir();
 
   // Priority 1: Environment variables
-  const accessKeyId = process.env["AWS_ACCESS_KEY_ID"];
-  const secretAccessKey = process.env["AWS_SECRET_ACCESS_KEY"];
+  const accessKeyId = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+  const secretAccessKey = process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
 
   if (accessKeyId && secretAccessKey) {
     return {
@@ -176,7 +176,7 @@ export async function detectCredentials(
     detected: false,
     reason:
       "No AWS credentials found. Configure credentials via:\n" +
-      "  1) AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY environment variables\n" +
+      "  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n" +
       "  2) ~/.aws/credentials file\n" +
       "  3) AWS SSO login (aws sso login)",
   };

@@ -496,14 +496,12 @@ export class ErrorMessageRegistry {
   private matchConfigError(message: string): ErrorMessageEntry | undefined {
     if (
       message.includes("ASSIGNEE_OPERATOR_ACCESS_KEY_ID") ||
-      message.includes("AWS_ACCESS_KEY_ID") ||
       message.includes("access key")
     ) {
       return this.entries.get("MISSING_ACCESS_KEY");
     }
     if (
       message.includes("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY") ||
-      message.includes("AWS_SECRET_ACCESS_KEY") ||
       message.includes("secret key")
     ) {
       return this.entries.get("MISSING_SECRET_KEY");

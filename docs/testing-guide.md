@@ -119,7 +119,7 @@ pnpm build
 
 # 2. Verify .env is populated
 cat .env
-# Must contain: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
+# Must contain: ASSIGNEE_OPERATOR_ACCESS_KEY_ID, ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY, AWS_REGION,
 #               ASSIGNEE_READER_ACCESS_KEY_ID, ASSIGNEE_READER_SECRET_ACCESS_KEY,
 #               ASSIGNEE_AUDITOR_ACCESS_KEY_ID, ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY
 
@@ -856,7 +856,7 @@ assignee plan "$LONG"
 
 ```bash
 # Override credentials with invalid values
-AWS_ACCESS_KEY_ID=AKIAINVALID AWS_SECRET_ACCESS_KEY=invalidsecret \
+ASSIGNEE_OPERATOR_ACCESS_KEY_ID=AKIAINVALID ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY=invalidsecret \
   assignee plan "Create an S3 bucket named poc-cred-test"
 ```
 
@@ -865,7 +865,7 @@ AWS_ACCESS_KEY_ID=AKIAINVALID AWS_SECRET_ACCESS_KEY=invalidsecret \
 ```
 ✖ Error: AWS credential validation failed.
   How to Fix: Run 'aws sts get-caller-identity' to verify your credentials,
-              or check AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY in your .env file.
+              or check ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY in your .env file.
 ```
 
 **Check:**
