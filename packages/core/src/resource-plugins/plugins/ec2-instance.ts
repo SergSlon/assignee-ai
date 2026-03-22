@@ -16,22 +16,28 @@ export const ec2InstancePlugin: ResourcePlugin = {
           {
             value: "t3.micro",
             label: "t3.micro  (2 vCPU,  1 GiB) — ~$0.0104/hr",
+            fitHint: "Dev/test, free tier eligible",
           },
           {
             value: "t3.small",
             label: "t3.small  (2 vCPU,  2 GiB) — ~$0.0208/hr",
+            fitHint: "Light production workloads",
+            recommended: true,
           },
           {
             value: "t3.medium",
             label: "t3.medium (2 vCPU,  4 GiB) — ~$0.0416/hr",
+            fitHint: "Small production",
           },
           {
             value: "m5.large",
             label: "m5.large  (2 vCPU,  8 GiB) — ~$0.0960/hr",
+            fitHint: "General-purpose production",
           },
           {
             value: "m5.xlarge",
             label: "m5.xlarge (4 vCPU, 16 GiB) — ~$0.1920/hr",
+            fitHint: "Compute-intensive workloads",
           },
         ],
         initialValue: "t3.micro",

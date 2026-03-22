@@ -30,6 +30,7 @@ import {
   renderAdvancedConfirm,
   renderDocHelp,
 } from "../utils/display.js";
+import { enrichOptionLabel } from "../utils/option-enrichment.js";
 import {
   fetchEc2InstancePrices,
   fetchRdsInstancePrices,
@@ -177,6 +178,28 @@ async function enrichWithLivePricing(
 }
 
 /**
+ * Enriches enum option labels with contextual metadata (cost/fit/recommended).
+ * Pure in-memory transformation — no I/O, no mutations.
+ * Only enriches in TTY mode (display-only).
+ */
+function enrichFieldLabels(fields: ResourceField[]): ResourceField[] {
+  if (!process.stdout.isTTY) return fields;
+  return fields.map((field) => {
+    if (field.question.type !== "enum" || !field.question.options) return field;
+    return {
+      ...field,
+      question: {
+        ...field.question,
+        options: field.question.options.map((opt) => ({
+          ...opt,
+          label: enrichOptionLabel(opt),
+        })),
+      },
+    };
+  });
+}
+
+/**
  * Wraps renderOptionPrompt with a `?` help loop.
  * If the user types `?` at a string-type prompt, fetches and displays AWS
  * documentation for the field, then re-presents the same prompt.
@@ -225,13 +248,19 @@ export async function optionElicitorNode(
     defaultPluginRegistry.get("generic")!;
 
   // Enrich enum option labels with live prices when tools are available
-  const commonFields =
+  const pricedFields =
     tools && tools.length > 0
       ? await enrichWithLivePricing(plugin, tools)
       : plugin.commonFields;
 
+  // Enrich with contextual metadata (cost/fit/recommended) from plugin definitions
+  const commonFields = enrichFieldLabels(pricedFields);
+
+  // Enrich advanced fields with contextual metadata too
+  const advancedFields = enrichFieldLabels(plugin.advancedFields);
+
   const resolvedCommon = resolveFieldConfigs(commonFields);
-  const resolvedAdvanced = resolveFieldConfigs(plugin.advancedFields);
+  const resolvedAdvanced = resolveFieldConfigs(advancedFields);
 
   const elicitedOptions: Record<string, unknown> = {};
 
@@ -269,10 +298,10 @@ export async function optionElicitorNode(
   }
 
   // ── Advanced tier gate ───────────────────────────────────────────────────────
-  if (plugin.advancedFields.length > 0) {
+  if (advancedFields.length > 0) {
     const showAdvanced = await renderAdvancedConfirm();
     if (showAdvanced) {
-      for (const field of plugin.advancedFields) {
+      for (const field of advancedFields) {
         const resolved = resolvedAdvanced[field.name];
         if (!resolved) continue;
 
