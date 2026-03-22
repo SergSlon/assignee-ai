@@ -1,0 +1,60 @@
+# Example workflow: Assignee Infrastructure CI/CD
+#
+# This workflow runs `assignee plan` on pull requests that modify infrastructure
+# intent files and `assignee apply` when those PRs are merged to main.
+#
+# Prerequisites:
+#   1. Install assignee.ai: npm install -g assignee
+#   2. Run `assignee init` in your repository
+#   3. Set the following GitHub Actions secrets:
+#      - AWS_ACCESS_KEY_ID
+#      - AWS_SECRET_ACCESS_KEY
+#   4. (Optional) Set MCP-specific read-only credentials:
+#      - MCP_AWS_ACCESS_KEY_ID
+#      - MCP_AWS_SECRET_ACCESS_KEY
+
+name: Assignee Infrastructure
+
+on:
+  pull_request:
+    paths: ['**.intent', '.assignee/**']
+  push:
+    branches: [main]
+    paths: ['**.intent', '.assignee/**']
+
+permissions:
+  contents: read
+  pull-requests: write   # Required for PR comments
+  issues: write           # Required for issue comments
+
+jobs:
+  # ── Plan: runs on PR open/update ────────────────────────────────────────
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for diff detection of changed .intent files
+
+      - uses: assignee-ai/plan-action@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          # Optional: separate read-only creds for MCP servers
+          # mcp-aws-access-key-id: ${{ secrets.MCP_AWS_ACCESS_KEY_ID }}
+          # mcp-aws-secret-access-key: ${{ secrets.MCP_AWS_SECRET_ACCESS_KEY }}
+
+  # ── Apply: runs on merge to main ───────────────────────────────────────
+  apply:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: assignee-ai/apply-action@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1

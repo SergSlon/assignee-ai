@@ -18,6 +18,7 @@ import { completionsCommand } from "./commands/completions.js";
 import { initCommand } from "./commands/init.js";
 import { destroyCommand } from "./commands/destroy.js";
 import { listCommand } from "./commands/list.js";
+import { statusCommand } from "./commands/status.js";
 import { ProcessExitCode } from "./constants/errors.js";
 import { SUPPORTED_TYPES_HINT } from "./config/constants.js";
 
@@ -42,6 +43,7 @@ program.addCommand(destroyCommand);
 program.addCommand(initCommand);
 program.addCommand(listCommand);
 program.addCommand(planCommand);
+program.addCommand(statusCommand);
 program.addCommand(applyCommand);
 
 // EPIPE: stdout pipe closed (e.g. piped to grep/head that exits early).

@@ -7,6 +7,7 @@ import {
   getOptionalMcpServerConfigs,
 } from "../config/mcp-servers.js";
 import { ProcessExitCode } from "../constants/errors.js";
+import { ToolName } from "../constants/tools.js";
 import type { StructuredTool } from "@langchain/core/tools";
 
 let client: MultiServerMCPClient | null = null;
@@ -140,6 +141,30 @@ export async function getMcpTools(
     }
   }
   return coreTools;
+}
+
+/**
+ * Retrieves billing MCP tools from the optional client.
+ * Returns undefined if the optional client is not initialized or server failed.
+ *
+ * @see Story 19.7
+ */
+export async function getBillingMcpToolsAsync(): Promise<
+  StructuredTool[] | undefined
+> {
+  if (!optionalClient) return undefined;
+
+  try {
+    const allTools = await optionalClient.getTools();
+    const billingToolNames = new Set<string>([
+      ToolName.GET_COST_AND_USAGE,
+      ToolName.GET_COST_FORECAST,
+    ]);
+    const billingTools = allTools.filter((t) => billingToolNames.has(t.name));
+    return billingTools.length > 0 ? billingTools : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

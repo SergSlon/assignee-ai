@@ -1,11 +1,14 @@
 /**
  * Service for listing AWS resources managed by assignee.ai.
  *
+ * Ported from apps/cli/src/services/list-resources.ts for use
+ * inside the MCP server (no CLI dependencies).
+ *
  * Queries the Resource Groups Tagging API for resources tagged with
  * `managed-by=assignee-ai` and enriches results with cost data from
- * the provision log when available.
+ * the provision log.
  *
- * @see Story 18.4, FR-40
+ * @see Story 20.4, Story 18.4
  */
 
 import {
@@ -13,13 +16,16 @@ import {
   GetResourcesCommand,
   type GetResourcesOutput,
 } from "@aws-sdk/client-resource-groups-tagging-api";
-import type { StructuredTool } from "@langchain/core/tools";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { AWS_REGION } from "../config/constants.js";
-import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
-import { fetchBillingData } from "./billing.js";
+
+/** Tag key/value used to identify assignee-managed resources. */
+const TAG_KEY_MANAGED_BY = "managed-by";
+const TAG_VALUE_MANAGED_BY = "assignee-ai";
+
+/** Default AWS region when none is specified. */
+const DEFAULT_REGION = process.env["AWS_REGION"] ?? "us-east-1";
 
 /** Shape of a managed resource returned by the list service. */
 export interface ManagedResource {
@@ -30,7 +36,7 @@ export interface ManagedResource {
   estimatedMonthlyCost: string;
 }
 
-/** Shape of a provision log entry from ~/.assignee/memory/provisions.json (Story 19.3). */
+/** Shape of a provision log entry from ~/.assignee/memory/provisions.json. */
 interface ProvisionLogEntry {
   runId?: string;
   resourceType?: string;
@@ -42,7 +48,6 @@ interface ProvisionLogEntry {
 
 /**
  * Maps common AWS service names to CloudFormation resource types.
- * Falls back to `AWS::<Service>::Resource` for unmapped services.
  */
 const SERVICE_TYPE_MAP: Record<string, string> = {
   s3: "AWS::S3::Bucket",
@@ -72,14 +77,13 @@ const SERVICE_TYPE_MAP: Record<string, string> = {
  * Converts an AWS service name and resource component from an ARN
  * into a CloudFormation-style type string.
  */
-export function arnToCloudFormationType(
+function arnToCloudFormationType(
   service: string,
   resourcePart: string,
 ): string {
   const mapped = SERVICE_TYPE_MAP[service];
   if (mapped) return mapped;
 
-  // Capitalize service name for a best-effort CloudFormation type
   const capitalizedService = service.charAt(0).toUpperCase() + service.slice(1);
   const resourceType = resourcePart.split(/[:/]/)[0] ?? "Resource";
   const capitalizedResource =
@@ -90,10 +94,8 @@ export function arnToCloudFormationType(
 
 /**
  * Parses an ARN into its components.
- *
- * ARN format: arn:partition:service:region:account-id:resource-type/resource-id
  */
-export function parseArn(arn: string): {
+function parseArn(arn: string): {
   service: string;
   region: string;
   resourceType: string;
@@ -108,7 +110,6 @@ export function parseArn(arn: string): {
 
 /**
  * Reads the provision log file and returns a map of ARN -> estimated monthly cost.
- * Returns an empty map if the file does not exist or cannot be parsed.
  */
 function loadProvisionCosts(): Map<string, string> {
   const costMap = new Map<string, string>();
@@ -141,15 +142,15 @@ function loadProvisionCosts(): Map<string, string> {
  * Fetches all resources tagged with `managed-by=assignee-ai` from AWS.
  * Paginates through all results and enriches with cost data from the provision log.
  *
- * @param region - AWS region to query (defaults to AWS_REGION constant)
- * @param mcpTools - Optional MCP tools for live billing data (Story 19.7)
+ * @param region - AWS region to query (defaults to AWS_REGION env var or us-east-1)
+ * @param resourceType - Optional filter by CloudFormation resource type
  * @returns Array of managed resources
  */
 export async function fetchManagedResources(
   region?: string,
-  mcpTools?: StructuredTool[],
+  resourceType?: string,
 ): Promise<ManagedResource[]> {
-  const resolvedRegion = region ?? AWS_REGION;
+  const resolvedRegion = region ?? DEFAULT_REGION;
   const client = new ResourceGroupsTaggingAPIClient({
     region: resolvedRegion,
   });
@@ -190,20 +191,9 @@ export async function fetchManagedResources(
     paginationToken = response.PaginationToken;
   } while (paginationToken);
 
-  // Story 19.7: Enrich with live billing data from the Billing MCP server.
-  // Overrides provision log costs when billing MCP data is available.
-  if (mcpTools && mcpTools.length > 0 && resources.length > 0) {
-    try {
-      const billingMap = await fetchBillingData(resources, mcpTools);
-      for (const resource of resources) {
-        const billingData = billingMap.get(resource.arn);
-        if (billingData) {
-          resource.estimatedMonthlyCost = billingData.actualMonthlyCost;
-        }
-      }
-    } catch {
-      // Billing MCP unavailable — keep provision log costs
-    }
+  // Filter by resource type if specified
+  if (resourceType) {
+    return resources.filter((r) => r.resourceType === resourceType);
   }
 
   return resources;

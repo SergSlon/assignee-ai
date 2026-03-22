@@ -21,6 +21,8 @@ import {
   CommandDescription,
   CommandArgs,
 } from "../constants/commands.js";
+import { getCostSavingsEstimate } from "../services/billing.js";
+import { getBillingMcpToolsAsync } from "../services/mcp-client.js";
 import { ProcessExitCode } from "../constants/errors.js";
 import { renderError, startSpinner, stopSpinner } from "../utils/display.js";
 import { createCloudControlClient } from "../services/cloudcontrol-client.js";
@@ -178,9 +180,14 @@ export async function destroyAction(
     process.exit(ProcessExitCode.GENERIC_ERROR);
   }
 
-  // ── Estimate cost savings ───────────────────────────────────────────
-  // Story 19.3 provision log is not yet implemented — graceful degradation
-  const estimatedMonthlyCost = "(cost data unavailable)";
+  // ── Estimate cost savings (Story 19.7) ──────────────────────────────
+  const billingTools = await getBillingMcpToolsAsync();
+  const savingsEstimate = await getCostSavingsEstimate(
+    resolved.arn,
+    billingTools,
+  );
+  const estimatedMonthlyCost =
+    savingsEstimate !== "N/A" ? savingsEstimate : "(cost data unavailable)";
 
   // ── Display resource details ────────────────────────────────────────
   renderDestroyBox({

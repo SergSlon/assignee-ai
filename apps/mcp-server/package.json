@@ -1,0 +1,65 @@
+{
+  "name": "@assignee/mcp-server",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Assignee.ai MCP Server — AI agents can plan, estimate, and provision AWS infrastructure via MCP protocol",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "assignee-mcp-server": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/assignee-ai/assignee.git",
+    "directory": "apps/mcp-server"
+  },
+  "homepage": "https://assignee.ai",
+  "bugs": {
+    "url": "https://github.com/assignee-ai/assignee/issues"
+  },
+  "keywords": [
+    "assignee",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "aws",
+    "infrastructure",
+    "ai-agent",
+    "cursor",
+    "claude-code",
+    "windsurf",
+    "devops",
+    "cloud"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "start": "node ./dist/index.js",
+    "check-types": "tsc --noEmit",
+    "prepublishOnly": "cd ../.. && npx turbo build --filter=@assignee/mcp-server"
+  },
+  "dependencies": {
+    "@assignee/core": "workspace:*",
+    "@assignee/best-practices": "workspace:*",
+    "@aws-sdk/client-resource-groups-tagging-api": "^3.1014.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "assignee": "workspace:*",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@assignee/tsconfig": "workspace:*",
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.1.0"
+  }
+}

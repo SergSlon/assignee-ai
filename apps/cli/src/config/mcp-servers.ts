@@ -107,5 +107,13 @@ export function getOptionalMcpServerConfigs(): Record<string, McpServerConfig> {
       args: ["awslabs.well-architected-security-mcp-server@latest"],
       env: mcpEnv(),
     },
+    // Cost Management server: live billing data for cost estimates and savings display.
+    // Provides get_cost_and_usage, get_cost_forecast tools.
+    // Needs AWS creds with ce:GetCostAndUsage, ce:GetCostForecast permissions.
+    [McpServerName.BILLING]: {
+      command: McpCommand.UVX,
+      args: ["awslabs.cost-management-mcp-server@latest"],
+      env: mcpEnv(),
+    },
   };
 }

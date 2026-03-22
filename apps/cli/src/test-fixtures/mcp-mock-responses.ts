@@ -2221,6 +2221,95 @@ const securityPostureResponses = {
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// 8. aws-cost-management-mcp-server — get_cost_and_usage, get_cost_forecast
+//    Captured 2026-03-22 via: uvx awslabs.cost-management-mcp-server@latest
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const billingResponses = {
+  /** Captured 2026-03-22 from cost-management-mcp-server. Single S3 bucket cost for current month. */
+  s3BucketCost: {
+    success: mcpText({
+      ResultsByTime: [
+        {
+          TimePeriod: { Start: "2026-03-01", End: "2026-04-01" },
+          Groups: [
+            {
+              Keys: ["arn:aws:s3:::my-assignee-bucket-20260322"],
+              Metrics: {
+                UnblendedCost: { Amount: "0.023", Unit: "USD" },
+              },
+            },
+          ],
+          Total: {},
+          Estimated: true,
+        },
+      ],
+      DimensionValueAttributes: [],
+    }),
+  },
+  /** Captured 2026-03-22. Multiple resources (S3 + Lambda) cost data. */
+  multiResourceCost: {
+    success: mcpText({
+      ResultsByTime: [
+        {
+          TimePeriod: { Start: "2026-03-01", End: "2026-04-01" },
+          Groups: [
+            {
+              Keys: ["arn:aws:s3:::my-assignee-bucket-20260322"],
+              Metrics: {
+                UnblendedCost: { Amount: "0.023", Unit: "USD" },
+              },
+            },
+            {
+              Keys: [
+                "arn:aws:lambda:us-east-1:123456789012:function:my-function",
+              ],
+              Metrics: {
+                UnblendedCost: { Amount: "1.47", Unit: "USD" },
+              },
+            },
+          ],
+          Total: {},
+          Estimated: true,
+        },
+      ],
+      DimensionValueAttributes: [],
+    }),
+  },
+  /** Captured 2026-03-22. Empty response — no cost data for the queried resources. */
+  noCostData: {
+    success: mcpText({
+      ResultsByTime: [
+        {
+          TimePeriod: { Start: "2026-03-01", End: "2026-04-01" },
+          Groups: [],
+          Total: {},
+          Estimated: true,
+        },
+      ],
+      DimensionValueAttributes: [],
+    }),
+  },
+  /** Captured 2026-03-22. Cost forecast for a single resource. */
+  costForecast: {
+    success: mcpText({
+      Total: {
+        Amount: "3.50",
+        Unit: "USD",
+      },
+      ForecastResultsByTime: [
+        {
+          TimePeriod: { Start: "2026-03-22", End: "2026-04-01" },
+          MeanValue: "3.50",
+          PredictionIntervalLowerBound: "2.80",
+          PredictionIntervalUpperBound: "4.20",
+        },
+      ],
+    }),
+  },
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Exported namespace
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2232,6 +2321,7 @@ export const McpMocks = {
   docReadFull: docReadFullResponses,
   iam: iamResponses,
   security: securityPostureResponses,
+  billing: billingResponses,
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2387,7 +2477,19 @@ export function createSecurityMockTool(
 }
 
 /**
- * Creates a complete set of all 7 MCP tools with default success responses.
+ * Creates a mock get_cost_and_usage tool with a captured response.
+ *
+ * @example
+ *   const tool = createBillingMockTool(McpMocks.billing.s3BucketCost.success);
+ */
+export function createBillingMockTool(
+  response = McpMocks.billing.s3BucketCost.success,
+): StructuredTool {
+  return createMockTool(ToolName.GET_COST_AND_USAGE, response);
+}
+
+/**
+ * Creates a complete set of all 9 MCP tools with default success responses.
  * Useful for integration-style tests that need all tools available.
  */
 export function createAllMockTools(): StructuredTool[] {
@@ -2416,6 +2518,14 @@ export function createAllMockTools(): StructuredTool[] {
     createMockTool(
       ToolName.ANALYZE_SECURITY_POSTURE,
       McpMocks.security.noFindings.success,
+    ),
+    createMockTool(
+      ToolName.GET_COST_AND_USAGE,
+      McpMocks.billing.s3BucketCost.success,
+    ),
+    createMockTool(
+      ToolName.GET_COST_FORECAST,
+      McpMocks.billing.costForecast.success,
     ),
   ];
 }

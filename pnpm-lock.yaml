@@ -103,6 +103,40 @@ importers:
         specifier: ^3.1.0
         version: 3.2.4(@types/node@25.5.0)(yaml@2.8.3)
 
+  apps/mcp-server:
+    dependencies:
+      '@assignee/best-practices':
+        specifier: workspace:*
+        version: link:../../packages/best-practices
+      '@assignee/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@aws-sdk/client-resource-groups-tagging-api':
+        specifier: ^3.1014.0
+        version: 3.1014.0
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.12.1
+        version: 1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76)
+      assignee:
+        specifier: workspace:*
+        version: link:../cli
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@assignee/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.0
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      vitest:
+        specifier: ^3.1.0
+        version: 3.2.4(@types/node@25.5.0)(yaml@2.8.3)
+
   packages/best-practices:
     dependencies:
       yaml:
