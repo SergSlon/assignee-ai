@@ -1362,3 +1362,620 @@ describe("renderTradeoffHelp", () => {
     expect(noteCallsWithTradeoff).toHaveLength(0);
   });
 });
+
+// ── Story 9.9: Additional display tests for coverage gaps ─────────────────
+
+describe("formatFindings — non-TTY", () => {
+  beforeEach(() => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("empty findings → 'All checks passed'", async () => {
+    const { formatFindings } = await import("./display.js");
+    const result = formatFindings([]);
+    expect(result).toContain("PASS All checks passed");
+  });
+
+  it("undefined findings → 'All checks passed'", async () => {
+    const { formatFindings } = await import("./display.js");
+    const result = formatFindings(undefined);
+    expect(result).toContain("PASS All checks passed");
+  });
+
+  it("blocking finding → [BLOCK] marker in output", async () => {
+    const { formatFindings } = await import("./display.js");
+    const result = formatFindings([
+      {
+        ruleId: "r1",
+        severity: "CRITICAL",
+        message: "Encryption missing",
+        blocking: true,
+      },
+    ] as any);
+    expect(result).toContain("[BLOCK]");
+    expect(result).toContain("Encryption missing");
+    expect(result).toContain("1 blocking");
+  });
+
+  it("mixed severities → correct counts in summary", async () => {
+    const { formatFindings } = await import("./display.js");
+    const result = formatFindings([
+      {
+        ruleId: "r1",
+        severity: "CRITICAL",
+        message: "Critical issue",
+        blocking: false,
+      },
+      {
+        ruleId: "r2",
+        severity: "HIGH",
+        message: "High issue",
+        blocking: false,
+      },
+      {
+        ruleId: "r3",
+        severity: "MEDIUM",
+        message: "Medium issue",
+        blocking: false,
+      },
+      {
+        ruleId: "r4",
+        severity: "INFO",
+        message: "Info note",
+        blocking: false,
+      },
+    ] as any);
+    expect(result).toContain("1 critical");
+    expect(result).toContain("1 high");
+    expect(result).toContain("1 medium");
+    expect(result).toContain("1 info");
+    expect(result).toContain("[CRITICAL]");
+    expect(result).toContain("[HIGH]");
+    expect(result).toContain("[MEDIUM]");
+    expect(result).toContain("[INFO]");
+  });
+
+  it("finding with remediation hint included in output", async () => {
+    const { formatFindings } = await import("./display.js");
+    const result = formatFindings([
+      {
+        ruleId: "r1",
+        severity: "HIGH",
+        message: "Public access enabled",
+        remediation: "Set BlockPublicAccess to true",
+        blocking: false,
+      },
+    ] as any);
+    expect(result).toContain("Set BlockPublicAccess to true");
+  });
+});
+
+describe("renderPlanBox — with BP findings", () => {
+  beforeEach(() => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("includes findings in plan box output", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      bpFindings: [
+        {
+          ruleId: "r1",
+          severity: "CRITICAL",
+          message: "Encryption not enabled",
+          blocking: false,
+        },
+      ] as any,
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("Encryption not enabled");
+    expect(output).toContain("1 critical");
+  });
+
+  it("includes free tier note in plan box", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      freeTierNote: {
+        type: "always_free",
+        message: "IAM is always free",
+      },
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("IAM is always free");
+    expect(output).toContain("Free Tier");
+  });
+
+  it("includes memory hints in plan box", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      memoryHints: ["Last deployed: $0.50/mo avg"],
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("Last deployed: $0.50/mo avg");
+    expect(output).toContain("Cost History");
+  });
+});
+
+describe("renderHitlConfirm — TTY mode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("user approves — returns true", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+    const { renderHitlConfirm } = await import("./display.js");
+    const result = await renderHitlConfirm(mockState);
+    expect(result).toBe(true);
+  });
+
+  it("user rejects — returns false", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+    const { renderHitlConfirm } = await import("./display.js");
+    const result = await renderHitlConfirm(mockState);
+    expect(result).toBe(false);
+  });
+
+  it("user cancels — returns false", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(
+      Symbol("cancel") as unknown as boolean,
+    );
+    vi.mocked(isCancel).mockReturnValueOnce(true);
+    const { renderHitlConfirm } = await import("./display.js");
+    const result = await renderHitlConfirm(mockState);
+    expect(result).toBe(false);
+  });
+});
+
+describe("renderHitlConfirm — non-TTY mode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("returns false without prompting", async () => {
+    const { renderHitlConfirm } = await import("./display.js");
+    const result = await renderHitlConfirm(mockState);
+    expect(result).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+});
+
+describe("renderApplyNowConfirm — TTY mode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("user approves — returns true", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+    const { renderApplyNowConfirm } = await import("./display.js");
+    const result = await renderApplyNowConfirm(mockState);
+    expect(result).toBe(true);
+  });
+
+  it("user rejects — returns false", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+    const { renderApplyNowConfirm } = await import("./display.js");
+    const result = await renderApplyNowConfirm(mockState);
+    expect(result).toBe(false);
+  });
+
+  it("user cancels — returns false", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(
+      Symbol("cancel") as unknown as boolean,
+    );
+    vi.mocked(isCancel).mockReturnValueOnce(true);
+    const { renderApplyNowConfirm } = await import("./display.js");
+    const result = await renderApplyNowConfirm(mockState);
+    expect(result).toBe(false);
+  });
+});
+
+describe("renderApplyNowConfirm — non-TTY mode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("returns false without prompting", async () => {
+    const { renderApplyNowConfirm } = await import("./display.js");
+    const result = await renderApplyNowConfirm(mockState);
+    expect(result).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+});
+
+describe("renderSecurityWarnings", () => {
+  it("no findings — no output", async () => {
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { renderSecurityWarnings } = await import("./display.js");
+    renderSecurityWarnings("arn:aws:s3:::test", []);
+    expect(consoleSpy).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it("CRITICAL + HIGH findings — shows both with icons", async () => {
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { renderSecurityWarnings } = await import("./display.js");
+    renderSecurityWarnings("arn:aws:s3:::test", [
+      {
+        severity: "CRITICAL",
+        title: "Public bucket",
+        recommendation: "Block public access",
+        service: "s3",
+      },
+      {
+        severity: "HIGH",
+        title: "No encryption",
+        recommendation: "Enable SSE",
+        service: "s3",
+      },
+    ]);
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("Public bucket");
+    expect(output).toContain("No encryption");
+    expect(output).toContain("Block public access");
+    consoleSpy.mockRestore();
+  });
+});
+
+describe("spinner functions", () => {
+  it("startSpinner non-TTY — writes label to stdout", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    const { startSpinner } = await import("./display.js");
+    startSpinner("Loading...");
+    expect(writeSpy).toHaveBeenCalledWith("Loading......\n");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("updateSpinner non-TTY — writes label to stdout", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    const { updateSpinner } = await import("./display.js");
+    updateSpinner("Still loading...");
+    expect(writeSpy).toHaveBeenCalledWith("Still loading......\n");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+});
+
+describe("renderAdvancedConfirm", () => {
+  it("non-TTY — returns false", async () => {
+    vi.clearAllMocks();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const { renderAdvancedConfirm } = await import("./display.js");
+    const result = await renderAdvancedConfirm();
+    expect(result).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("TTY approve — returns true", async () => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+    const { renderAdvancedConfirm } = await import("./display.js");
+    const result = await renderAdvancedConfirm();
+    expect(result).toBe(true);
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("TTY cancel — returns false", async () => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+    vi.mocked(confirm).mockResolvedValueOnce(
+      Symbol("cancel") as unknown as boolean,
+    );
+    vi.mocked(isCancel).mockReturnValueOnce(true);
+    const { renderAdvancedConfirm } = await import("./display.js");
+    const result = await renderAdvancedConfirm();
+    expect(result).toBe(false);
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+});
+
+describe("renderError — structured format", () => {
+  it("includes why context when provided", async () => {
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const { renderError } = await import("./display.js");
+    renderError("Something failed", "Check logs", { why: "Network timeout" });
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain("[CONTEXT] Network timeout");
+    expect(output).toContain("[FIX] Check logs");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+});
+
+describe("renderResourceTable — non-TTY", () => {
+  beforeEach(() => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("renders tab-separated rows", async () => {
+    const { renderResourceTable } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+    renderResourceTable([
+      {
+        resourceType: "AWS::S3::Bucket",
+        arn: "arn:aws:s3:::test",
+        region: "us-east-1",
+        createdDate: "2024-01-01",
+        estimatedMonthlyCost: "$0.02",
+      },
+    ]);
+    restore();
+    const output = chunks.join("");
+    expect(output).toContain("AWS::S3::Bucket\t");
+    expect(output).toContain("arn:aws:s3:::test");
+    expect(output).toContain("us-east-1");
+  });
+});
+
+describe("renderEmptyList — non-TTY", () => {
+  it("renders hint message", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    const { renderEmptyList } = await import("./display.js");
+    renderEmptyList();
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain("No resources managed");
+    expect(output).toContain("assignee apply");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+});
+
+describe("renderStatusSummary — non-TTY", () => {
+  it("renders plain text summary", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    const { renderStatusSummary } = await import("./display.js");
+    renderStatusSummary({
+      totalResources: 3,
+      totalEstimatedMonthlyCost: "$5.00",
+      byType: [
+        { type: "AWS::S3::Bucket", count: 2, estimatedMonthlyCost: "$1.00" },
+      ],
+      byRegion: [
+        { region: "us-east-1", count: 3, estimatedMonthlyCost: "$5.00" },
+      ],
+      lastUpdated: new Date().toISOString(),
+    });
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain("Total Resources: 3");
+    expect(output).toContain("AWS::S3::Bucket");
+    expect(output).toContain("us-east-1");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+});
+
+describe("renderEmptyStatus — non-TTY", () => {
+  it("renders hint message", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    const { renderEmptyStatus } = await import("./display.js");
+    renderEmptyStatus();
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain("No resources managed");
+    expect(output).toContain("assignee plan");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+});
+
+describe("renderOptionPrompt — edge cases", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+  });
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("boolean field — '?' returns '?' (for help dispatch)", async () => {
+    vi.mocked(select).mockResolvedValueOnce("?");
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(
+      makeField({ type: "boolean", label: "Enable?" }),
+      resolved,
+    );
+    expect(result).toBe("?");
+  });
+
+  it("boolean field — false", async () => {
+    vi.mocked(select).mockResolvedValueOnce("false");
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(
+      makeField({ type: "boolean", label: "Enable?" }),
+      resolved,
+    );
+    expect(result).toBe(false);
+  });
+
+  it("string field — empty string returns undefined (skipped)", async () => {
+    vi.mocked(text).mockResolvedValueOnce("  ");
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(
+      makeField({ type: "string" }),
+      resolved,
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it("field with hint — clack.note called before prompt", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+    vi.mocked(text).mockResolvedValueOnce("value");
+    const { renderOptionPrompt } = await import("./display.js");
+    await renderOptionPrompt(
+      makeField({ type: "string", hint: "Contextual hint" }),
+      resolved,
+    );
+    expect(vi.mocked(note)).toHaveBeenCalledWith(
+      "Contextual hint",
+      "TestField",
+    );
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+});

@@ -22,6 +22,12 @@ import {
   stopSpinner,
 } from "./display.js";
 import { log, type LogAction } from "./logger.js";
+import {
+  isRecordingEnabled,
+  RecordingInterceptor,
+  wrapToolWithRecorder,
+  RecordingLlmAdapter,
+} from "./recorder.js";
 
 export interface CommandContext {
   intent: string;
@@ -58,10 +64,39 @@ export async function runCommand(opts: RunCommandOptions): Promise<never> {
     extras: { intent: opts.intent },
   });
 
+  // Story 9.7: Initialize recording session when ASSIGNEE_RECORD=1
+  const recorder = isRecordingEnabled()
+    ? new RecordingInterceptor(runId, opts.intent)
+    : null;
+
   try {
     const mcpClient = await createMcpClient();
-    const tools = await getMcpTools(mcpClient);
-    const graph = createGraph(tools);
+    let tools = await getMcpTools(mcpClient);
+
+    // Story 9.7: Wrap MCP tools with recorder when recording enabled
+    if (recorder) {
+      tools = tools.map((t) => wrapToolWithRecorder(t, recorder));
+    }
+
+    // Story 9.7: Wrap LLM adapter with recorder when recording enabled
+    const { LiteLLMAdapter } = await import("../services/litellm-adapter.js");
+    const baseLlm = new LiteLLMAdapter({
+      modelString: process.env["ASSIGNEE_MODEL"],
+      guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
+      guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],
+    });
+    const llmClient = recorder
+      ? new RecordingLlmAdapter(
+          baseLlm,
+          recorder,
+          process.env["ASSIGNEE_MODEL"] ?? "bedrock/amazon.nova-lite-v1:0",
+        )
+      : undefined;
+
+    const graph = createGraph(tools, {
+      llmClient,
+      recorder: recorder ?? undefined,
+    });
 
     const result = await opts.run({
       intent: opts.intent,
@@ -70,6 +105,11 @@ export async function runCommand(opts: RunCommandOptions): Promise<never> {
       tools,
       graph,
     });
+
+    // Story 9.7: Finalize recording session
+    if (recorder) {
+      recorder.finalizeSession();
+    }
 
     renderOutro(result.success);
     await closeMcpClient().catch(() => {});
@@ -87,6 +127,12 @@ export async function runCommand(opts: RunCommandOptions): Promise<never> {
       durationMs: Date.now() - startTs,
       result: "error",
     });
+
+    // Story 9.7: Finalize recording even on error
+    if (recorder) {
+      recorder.finalizeSession();
+    }
+
     renderError(`${opts.errorPrefix}: ${errMsg}`, opts.errorHint);
     renderOutro(false);
     await closeMcpClient().catch(() => {});

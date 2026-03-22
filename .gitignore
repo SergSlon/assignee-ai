@@ -42,3 +42,6 @@ yarn-error.log*
 
 # MCP capture pipeline intermediate files (regenerable via scripts)
 apps/cli/scripts/processed-responses/
+
+# Recording session output (transient, not committed)
+apps/cli/src/test-fixtures/recordings/

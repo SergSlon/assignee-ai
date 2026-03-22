@@ -85,7 +85,10 @@ function resolveFieldConfigs(
   return result;
 }
 
-/** Fetches live prices for a specific resource type and returns the field name + price map. */
+/**
+ * Fetches live prices for a specific resource type and returns the field name + price map.
+ * Spinner-free — callers are responsible for spinner lifecycle.
+ */
 async function fetchPricesForResource(
   plugin: ResourcePlugin,
   tools: StructuredTool[],
@@ -99,16 +102,9 @@ async function fetchPricesForResource(
         f.question.type === "enum",
     );
     if (field?.question.type === "enum" && field.question.options) {
-      const s = clack.spinner();
-      s.start("Fetching live EC2 instance prices…");
       const priceMap = await fetchEc2InstancePrices(
         tools,
         field.question.options.map((o) => o.value),
-      );
-      s.stop(
-        Object.keys(priceMap).length > 0
-          ? "Live prices loaded"
-          : "Using estimated prices",
       );
       return { fieldName: ResourceFieldName.INSTANCE_TYPE, priceMap };
     }
@@ -132,17 +128,10 @@ async function fetchPricesForResource(
       instanceClassField?.question.type === "enum" &&
       instanceClassField.question.options
     ) {
-      const s = clack.spinner();
-      s.start("Fetching live RDS instance prices…");
       const priceMap = await fetchRdsInstancePrices(
         tools,
         instanceClassField.question.options.map((o) => o.value),
         engine,
-      );
-      s.stop(
-        Object.keys(priceMap).length > 0
-          ? "Live prices loaded"
-          : "Using estimated prices",
       );
       return { fieldName: ResourceFieldName.DB_INSTANCE_CLASS, priceMap };
     }
@@ -234,6 +223,7 @@ const fetcherMap: Record<
  * Resolves dynamic fields by fetching live options from AWS.
  * Fields with a `fetcher` identifier get their options populated at runtime.
  * If a fetch returns empty results, the field reverts to string type for manual entry.
+ * Spinner-free — callers are responsible for spinner lifecycle.
  * @see Story 7.11
  */
 async function resolveDynamicFields(
@@ -241,9 +231,6 @@ async function resolveDynamicFields(
 ): Promise<ResourceField[]> {
   const dynamicFields = fields.filter((f) => f.question.fetcher);
   if (dynamicFields.length === 0) return fields;
-
-  const s = clack.spinner();
-  s.start("Discovering AWS resources…");
 
   const fetchResults = new Map<
     string,
@@ -261,9 +248,6 @@ async function resolveDynamicFields(
       }
     }),
   );
-
-  const anyFound = [...fetchResults.values()].some((opts) => opts.length > 0);
-  s.stop(anyFound ? "Resources discovered" : "Using manual entry");
 
   return fields.map((field) => {
     if (!field.question.fetcher) return field;
@@ -290,6 +274,33 @@ async function resolveDynamicFields(
       },
     };
   });
+}
+
+/**
+ * Merges two independently-enriched field arrays (pricing + discovery).
+ * For each field: if discovery provided options (fetcher field with resolved options),
+ * use the discovery result. Otherwise, use the pricing-enriched version.
+ * Pricing enriches InstanceType/DBInstanceClass labels; discovery populates
+ * ImageId/SubnetId/SecurityGroupIds/KeyName options. They target different fields,
+ * so the merge is a field-level union.
+ *
+ * @see Story 9.10
+ */
+function mergeEnrichedFields(
+  pricedFields: ResourceField[],
+  discoveryFields: ResourceField[],
+): ResourceField[] {
+  const discoveryMap = new Map(
+    discoveryFields
+      .filter(
+        (f) =>
+          f.question.fetcher ||
+          (f.question.options && f.question.options.length > 0),
+      )
+      .map((f) => [f.name, f]),
+  );
+
+  return pricedFields.map((field) => discoveryMap.get(field.name) ?? field);
 }
 
 /**
@@ -481,14 +492,46 @@ export async function optionElicitorNode(
     defaultPluginRegistry.get(state.resourceType) ??
     defaultPluginRegistry.get("generic")!;
 
-  // Enrich enum option labels with live prices when tools are available
-  const pricedFields =
+  // Story 9.10: Parallel fan-out — pricing enrichment and dynamic field discovery
+  // run concurrently. They operate on different fields (pricing → InstanceType labels,
+  // discovery → AMI/Subnet/SG/KeyPair options) so results merge without conflict.
+  const parallelSpinner = clack.spinner();
+  parallelSpinner.start("Preparing your wizard…");
+
+  const startMs = Date.now();
+  const [pricingSettled, discoverySettled] = await Promise.allSettled([
     tools && tools.length > 0
-      ? await enrichWithLivePricing(plugin, tools)
+      ? enrichWithLivePricing(plugin, tools)
+      : Promise.resolve(plugin.commonFields),
+    resolveDynamicFields(plugin.commonFields),
+  ]);
+
+  const pricedFields =
+    pricingSettled.status === "fulfilled"
+      ? pricingSettled.value
       : plugin.commonFields;
 
-  // Story 7.11: Resolve dynamic fields (fetch AMIs, subnets, SGs, key pairs from AWS)
-  const dynamicFields = await resolveDynamicFields(pricedFields);
+  const discoveredFields =
+    discoverySettled.status === "fulfilled"
+      ? discoverySettled.value
+      : plugin.commonFields;
+
+  // Merge: pricing-enriched labels + discovery-resolved options
+  const dynamicFields = mergeEnrichedFields(pricedFields, discoveredFields);
+
+  log({
+    ts: new Date().toISOString(),
+    runId: state.runId,
+    level: "info",
+    action: LOG_ACTIONS.OPTION_ELICITED,
+    extras: {
+      parallelFanOutMs: Date.now() - startMs,
+      pricingStatus: pricingSettled.status,
+      discoveryStatus: discoverySettled.status,
+    },
+  });
+
+  parallelSpinner.stop("Ready");
 
   // Story 12.3: Inject BP-sourced hints into field prompts
   const bpHintedCommon = injectBPHints(dynamicFields, state.resourceType);

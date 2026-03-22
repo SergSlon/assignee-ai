@@ -35,10 +35,32 @@ import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
 import { LiteLLMAdapter } from "./litellm-adapter.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
+import type { LlmPort } from "@assignee/core";
+import {
+  isRecordingEnabled,
+  addRecordingMiddleware,
+  type RecordingInterceptor,
+} from "../utils/recorder.js";
 
-export function createGraph(tools: StructuredTool[] = []) {
+export interface CreateGraphOptions {
+  /** Optional pre-built LLM adapter (used for recording wrapper). */
+  llmClient?: LlmPort;
+  /** Optional recording interceptor for SDK middleware. */
+  recorder?: RecordingInterceptor;
+}
+
+export function createGraph(
+  tools: StructuredTool[] = [],
+  options: CreateGraphOptions = {},
+) {
   const opCreds = operatorCredentials();
   const cloudClient = createCloudControlClient(opCreds);
+
+  // Story 9.7: Attach recording middleware to CloudControl client when recording enabled
+  if (options.recorder && isRecordingEnabled()) {
+    addRecordingMiddleware(cloudClient, options.recorder, "CloudControl");
+  }
+
   const provisioner = new CloudControlAdapter(cloudClient);
 
   let fallbackDispatcher: SDKFallbackDispatcher | undefined;
@@ -48,11 +70,13 @@ export function createGraph(tools: StructuredTool[] = []) {
     // SDK fallback unavailable (missing credentials) — graph works without it
   }
 
-  const llmAdapter = new LiteLLMAdapter({
-    modelString: process.env["ASSIGNEE_MODEL"],
-    guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
-    guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],
-  });
+  const llmAdapter: LlmPort =
+    options.llmClient ??
+    new LiteLLMAdapter({
+      modelString: process.env["ASSIGNEE_MODEL"],
+      guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
+      guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],
+    });
 
   const intentParserNode = createIntentParserNode({ llmClient: llmAdapter });
   const planGeneratorNode = createPlanGeneratorNode({ llmClient: llmAdapter });
