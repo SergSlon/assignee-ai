@@ -601,17 +601,18 @@ describe("renderDocHelp", () => {
     vi.clearAllMocks();
   });
 
-  it("shows fallback when search tool not in tools array", async () => {
+  it("shows fallback when search tool not in tools array and returns null", async () => {
     const { renderDocHelp } = await import("./display.js");
 
-    await renderDocHelp("BucketName", "AWS::S3::Bucket", []);
+    const result = await renderDocHelp("BucketName", "AWS::S3::Bucket", []);
 
     expect(vi.mocked(log.info)).toHaveBeenCalledWith(
       expect.stringContaining("BucketName"),
     );
+    expect(result).toBeNull();
   });
 
-  it("shows fallback when search tool times out (returns null via race)", async () => {
+  it("shows fallback when search tool times out (returns null via race) and returns null", async () => {
     // Search tool never resolves — timeout wins
     const searchTool = makeTool(
       "search_documentation",
@@ -627,12 +628,13 @@ describe("renderDocHelp", () => {
       readTool,
     ]);
     await vi.advanceTimersByTimeAsync(16000);
-    await promise;
+    const result = await promise;
     vi.useRealTimers();
 
     expect(vi.mocked(log.info)).toHaveBeenCalledWith(
       expect.stringContaining("timeout"),
     );
+    expect(result).toBeNull();
   }, 12_000);
 
   it("shows fallback when search returns no URL", async () => {
@@ -652,7 +654,7 @@ describe("renderDocHelp", () => {
     );
   });
 
-  it("calls clack.note with description when search + read succeed", async () => {
+  it("calls clack.note with description when search + read succeed and returns hint text", async () => {
     const searchTool = makeTool("search_documentation", () =>
       Promise.resolve(
         "See https://docs.aws.amazon.com/AmazonS3/latest/userguide/BucketName.html for details",
@@ -665,7 +667,7 @@ describe("renderDocHelp", () => {
     );
 
     const { renderDocHelp } = await import("./display.js");
-    await renderDocHelp("BucketName", "AWS::S3::Bucket", [
+    const result = await renderDocHelp("BucketName", "AWS::S3::Bucket", [
       searchTool,
       readTool,
     ]);
@@ -673,6 +675,9 @@ describe("renderDocHelp", () => {
     expect(vi.mocked(note)).toHaveBeenCalledWith(
       expect.stringContaining("BucketName"),
       expect.stringContaining("📖 BucketName"),
+    );
+    expect(result).toEqual(
+      expect.stringContaining("BucketName property specifies"),
     );
   });
 
@@ -745,7 +750,7 @@ describe("renderDocHelp", () => {
       ),
     });
 
-    it("calls generateText and displays synthesized hint when LLM succeeds", async () => {
+    it("calls generateText and displays synthesized hint when LLM succeeds, returns hint text", async () => {
       const { searchTool, readTool } = makeDocTools();
       const llmClient = {
         generateText: vi
@@ -758,7 +763,7 @@ describe("renderDocHelp", () => {
       };
 
       const { renderDocHelp } = await import("./display.js");
-      await renderDocHelp(
+      const result = await renderDocHelp(
         "BucketName",
         "AWS::S3::Bucket",
         [searchTool, readTool],
@@ -773,6 +778,7 @@ describe("renderDocHelp", () => {
         expect.stringContaining("globally unique"),
         expect.stringContaining("📖 BucketName"),
       );
+      expect(result).toEqual(expect.stringContaining("globally unique"));
     });
 
     it("falls back to raw doc text when generateText returns an error", async () => {
@@ -1243,7 +1249,7 @@ describe("renderTradeoffHelp", () => {
     vi.clearAllMocks();
   });
 
-  it("calls generateText and displays trade-off in clack.note on success", async () => {
+  it("calls generateText and displays trade-off in clack.note on success, returns trimmed text", async () => {
     const llmClient = {
       generateText: vi
         .fn()
@@ -1255,7 +1261,7 @@ describe("renderTradeoffHelp", () => {
     };
 
     const { renderTradeoffHelp } = await import("./display.js");
-    await renderTradeoffHelp(
+    const result = await renderTradeoffHelp(
       "InstanceType",
       "AWS::EC2::Instance",
       testOptions,
@@ -1275,6 +1281,7 @@ describe("renderTradeoffHelp", () => {
       expect.stringContaining("t3.micro"),
       expect.stringContaining("⚖️ InstanceType — Trade-off Analysis"),
     );
+    expect(result).toEqual(expect.stringContaining("t3.micro"));
   });
 
   it("falls back to renderDocHelp when LLM times out (returns null)", async () => {

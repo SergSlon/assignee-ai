@@ -12,6 +12,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "DB instance class",
+        hint: "Determines CPU, memory, and network capacity. db.t3 = burstable (dev/test). db.m5 = general-purpose (production). Larger classes cost significantly more per hour.",
         options: [
           {
             value: "db.t3.micro",
@@ -43,6 +44,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Database engine",
+        hint: "Database engine and version. PostgreSQL is the most feature-rich open-source option. Aurora variants offer auto-scaling but cost more. Engine cannot be changed after creation.",
         options: [
           { value: "mysql", label: "MySQL", fitHint: "Widely supported" },
           {
@@ -72,6 +74,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         type: "string",
         label: "Master username",
         placeholder: "admin",
+        hint: "Admin username for the database. Avoid 'admin' or 'root' in production for security. Must start with a letter. Cannot be changed after creation.",
         validate: (value: unknown) =>
           typeof value === "string" && value.length > 0
             ? undefined
@@ -92,6 +95,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Storage type",
+        hint: "gp3 is the best price-performance for most workloads. io1 is for high-IOPS needs (thousands of transactions/sec). gp2 is legacy -- prefer gp3 for new databases.",
         options: [
           {
             value: "gp3",
@@ -119,6 +123,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "multi",
         label: "Tags",
+        hint: "Key-value pairs for cost tracking and organization. Common tags: Environment (dev/staging/prod), Team, Project. Tags are free and highly recommended.",
         options: [],
       },
     },
@@ -130,6 +135,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         type: "string",
         label: "Backup retention period (days)",
         placeholder: "7",
+        hint: "Number of days to keep automated backups (1-35). Default is 7. Longer retention increases storage cost. Set to 0 to disable backups (not recommended for production).",
       },
     },
     {
@@ -138,6 +144,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         type: "boolean",
         label: "Enable deletion protection?",
         initialValue: false,
+        hint: "When enabled, the database cannot be deleted via API or console until protection is removed. Strongly recommended for production to prevent accidental data loss. No cost impact.",
       },
     },
   ],

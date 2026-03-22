@@ -365,8 +365,18 @@ async function promptWithHelp(
   llmClient?: LlmPort,
   userIntent?: string,
 ): Promise<unknown> {
+  let cachedHint: string | null = null;
+
   while (true) {
-    const answer = await renderOptionPrompt(field, resolved);
+    // If we have a cached hint from a previous ? press, inject it into the field
+    const promptField = cachedHint
+      ? {
+          ...field,
+          question: { ...field.question, hint: cachedHint },
+        }
+      : field;
+
+    const answer = await renderOptionPrompt(promptField, resolved);
 
     // Multi fields: when user selects only '?', trigger help
     const isHelpRequest =
@@ -378,7 +388,7 @@ async function promptWithHelp(
         field.question.type === "enum" || field.question.type === "multi";
 
       if (isEnumOrMulti && field.question.options && llmClient) {
-        await renderTradeoffHelp(
+        cachedHint = await renderTradeoffHelp(
           field.name,
           resourceType,
           [...field.question.options],
@@ -387,7 +397,12 @@ async function promptWithHelp(
           llmClient,
         );
       } else {
-        await renderDocHelp(field.name, resourceType, tools, llmClient);
+        cachedHint = await renderDocHelp(
+          field.name,
+          resourceType,
+          tools,
+          llmClient,
+        );
       }
       continue;
     }

@@ -27,6 +27,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         type: "string",
         label: "Function name",
         placeholder: "my-function",
+        hint: "Unique name for this function within the region. Use lowercase, hyphens, and numbers. Max 64 chars. Cannot be changed after creation.",
       },
     },
     {
@@ -34,6 +35,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Runtime",
+        hint: "Language and version your code runs on. Node.js has the fastest cold starts. Python is popular for ML/data. Java has slower cold starts but strong enterprise support.",
         options: [
           {
             value: "nodejs22.x",
@@ -71,6 +73,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         type: "string",
         label: "Handler (file.method)",
         placeholder: "index.handler",
+        hint: "Entry point for your function: file name + exported method. Node.js: 'index.handler'. Python: 'lambda_function.lambda_handler'. Must match your code exactly.",
       },
     },
     {
@@ -79,6 +82,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         type: "string",
         label: "Execution role ARN",
         placeholder: "arn:aws:iam::123456789012:role/my-role",
+        hint: "IAM role that grants the function permissions to access AWS services (S3, DynamoDB, etc.). If omitted, assignee will create a minimal-privilege role for you.",
         validate: (value: unknown) => {
           if (!value) return undefined; // Optional field
           return typeof value === "string" && value.startsWith("arn:aws:iam::")
@@ -92,6 +96,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Memory (MB)",
+        hint: "RAM allocated to the function. CPU scales proportionally. More memory = faster execution but higher cost. 128 MB is minimum; 256 MB is a good starting point for APIs.",
         options: [
           {
             value: "128",
@@ -129,6 +134,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         type: "string",
         label: "Timeout (seconds, 1-900)",
         placeholder: "30",
+        hint: "Max execution time before the function is killed. API handlers: 10-30s. Background jobs: 60-300s. Max 900s (15 min). Lower values prevent runaway costs.",
         validate: (value: unknown) => {
           if (!value) return undefined; // Optional field
           const n = Number(value);
@@ -143,6 +149,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       question: {
         type: "multi",
         label: "Tags",
+        hint: "Key-value pairs for cost tracking and organization. Common tags: Environment (dev/staging/prod), Team, Project. Tags are free and highly recommended.",
         options: [],
       },
     },
@@ -154,6 +161,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         type: "string",
         label: "Function description",
         placeholder: "Brief description of what this function does",
+        hint: "Free-text description shown in the AWS console. Helps teammates understand the function's purpose. Max 256 chars. No cost or security impact.",
       },
     },
     {
@@ -162,6 +170,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         type: "string",
         label: "Reserved concurrent executions (-1 = unreserved)",
         placeholder: "-1",
+        hint: "Limits how many instances run simultaneously. -1 = unreserved (uses shared account pool). Set a limit to prevent one function from starving others. Reduces risk of runaway costs.",
       },
     },
   ],

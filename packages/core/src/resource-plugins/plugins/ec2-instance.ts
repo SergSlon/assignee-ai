@@ -211,6 +211,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       question: {
         type: "multi",
         label: "Tags",
+        hint: "Key-value pairs for cost tracking and organization. The 'Name' tag is displayed in the EC2 console. Common tags: Environment (dev/staging/prod), Team, Project. Tags are free and highly recommended.",
         options: [],
       },
     },

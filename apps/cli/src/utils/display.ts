@@ -463,7 +463,7 @@ export async function renderTradeoffHelp(
   userIntent: string,
   tools: StructuredTool[],
   llmClient?: LlmPort,
-): Promise<void> {
+): Promise<string | null> {
   if (!llmClient) {
     return renderDocHelp(fieldName, resourceType, tools);
   }
@@ -505,7 +505,9 @@ Rules:
     return renderDocHelp(fieldName, resourceType, tools, llmClient);
   }
 
-  clack.note(text.trim(), `⚖️ ${fieldName} — Trade-off Analysis`);
+  const trimmed = text.trim();
+  clack.note(trimmed, `⚖️ ${fieldName} — Trade-off Analysis`);
+  return trimmed;
 }
 
 // ── Documentation help (Story 7.5) ───────────────────────────────────────────
@@ -594,19 +596,21 @@ export async function renderDocHelp(
   resourceType: string,
   tools: StructuredTool[],
   llmClient?: LlmPort,
-): Promise<void> {
+): Promise<string | null> {
   try {
     const rawText = await fetchDocText(fieldName, resourceType, tools);
-    if (!rawText) return;
+    if (!rawText) return null;
 
     const hint = llmClient
       ? await synthesizeDocHint(fieldName, resourceType, rawText, llmClient)
       : rawText;
 
     clack.note(hint, `📖 ${fieldName}`);
+    return hint;
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     clack.log.info(`${fieldName}: Documentation unavailable. (${msg})`);
+    return null;
   }
 }
 
