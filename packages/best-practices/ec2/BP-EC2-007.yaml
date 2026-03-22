@@ -1,0 +1,12 @@
+id: BP-EC2-007
+title: "EC2 instance should have detailed monitoring enabled"
+severity: MEDIUM
+resource_type: "AWS::EC2::Instance"
+property_path: "Monitoring.Enabled"
+check_type: "equals"
+expected_value: true
+source: "AWS Well-Architected Framework — Operational Excellence Pillar"
+description: "EC2 instances should have detailed monitoring enabled for 1-minute CloudWatch metrics. Basic monitoring only provides 5-minute intervals, which can miss short-lived performance issues."
+remediation: "Set Monitoring.Enabled to true. Detailed monitoring provides 1-minute metric granularity, enabling faster alerting and more accurate auto-scaling decisions."
+category: performance
+lastVerified: "2026-03-22"

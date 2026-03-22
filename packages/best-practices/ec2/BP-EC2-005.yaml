@@ -1,0 +1,12 @@
+id: BP-EC2-005
+title: "EC2 instance should be placed in a private subnet"
+severity: HIGH
+resource_type: "AWS::EC2::Instance"
+property_path: "SubnetId"
+check_type: "exists"
+expected_value: true
+source: "AWS Well-Architected Framework — Security Pillar"
+description: "EC2 instances should be placed in private subnets by default. Instances with public IPs are directly exposed to internet traffic, increasing the attack surface."
+remediation: "Place EC2 instances in private subnets. Use a load balancer or NAT gateway for public access and outbound internet connectivity respectively."
+category: security
+lastVerified: "2026-03-22"

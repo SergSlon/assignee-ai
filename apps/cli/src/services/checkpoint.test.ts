@@ -6,6 +6,7 @@ import {
   serializeCheckpoint,
   saveCheckpoint,
   loadCheckpoint,
+  loadCheckpointFromPath,
   findNewestValidCheckpoint,
 } from "./checkpoint.js";
 import { routeCheckpointEntry } from "./graph-routing.js";
@@ -317,6 +318,95 @@ describe("routeCheckpointEntry", () => {
       desiredState: undefined,
     } as AgentState;
     expect(routeCheckpointEntry(state)).toBe("intent_parser");
+  });
+});
+
+describe("loadCheckpointFromPath (Story 11.3)", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await makeTempDir();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns parsed checkpoint from valid file", async () => {
+    const checkpoint = serializeCheckpoint(baseGraphState as AgentState);
+    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+
+    const loaded = await loadCheckpointFromPath(filePath);
+    expect(loaded.runId).toBe(checkpoint.runId);
+    expect(loaded.userIntent).toBe(checkpoint.userIntent);
+    expect(loaded.desiredState).toEqual(checkpoint.desiredState);
+    expect(loaded.preflightPassed).toBe(true);
+  });
+
+  it("throws CheckpointError with actionable message for missing file", async () => {
+    const missingPath = path.join(tmpDir, "checkpoint-nonexistent.json");
+
+    await expect(loadCheckpointFromPath(missingPath)).rejects.toThrow(
+      /Checkpoint file not found.*Run `assignee plan`/,
+    );
+  });
+
+  it("throws CheckpointError when TTL is expired", async () => {
+    const checkpoint = serializeCheckpoint(baseGraphState as AgentState);
+    checkpoint.ttl_hours = 1;
+    checkpoint.created_at = new Date(
+      Date.now() - 2 * 60 * 60 * 1000,
+    ).toISOString(); // 2h ago, past 1h TTL
+    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+
+    await expect(loadCheckpointFromPath(filePath)).rejects.toThrow(
+      /Checkpoint expired.*TTL 1h.*Run `assignee plan`/,
+    );
+  });
+
+  it("throws CheckpointError on invalid schema", async () => {
+    const invalidPath = path.join(tmpDir, "checkpoint-invalid.json");
+    await fs.writeFile(
+      invalidPath,
+      JSON.stringify({ runId: "bad", something: "wrong" }),
+    );
+
+    await expect(loadCheckpointFromPath(invalidPath)).rejects.toThrow(
+      "Invalid checkpoint file",
+    );
+  });
+
+  it("throws CheckpointError on corrupt JSON", async () => {
+    const corruptPath = path.join(tmpDir, "checkpoint-corrupt.json");
+    await fs.writeFile(corruptPath, "{not valid json");
+
+    await expect(loadCheckpointFromPath(corruptPath)).rejects.toThrow(
+      "Corrupt checkpoint file",
+    );
+  });
+
+  it("throws CheckpointError when preflightPassed is false", async () => {
+    const checkpoint = serializeCheckpoint({
+      ...baseGraphState,
+      preflightPassed: false,
+    } as AgentState);
+    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+
+    await expect(loadCheckpointFromPath(filePath)).rejects.toThrow(
+      /did not pass preflight/,
+    );
+  });
+
+  it("throws CheckpointError when desiredState is empty", async () => {
+    const checkpoint = serializeCheckpoint({
+      ...baseGraphState,
+      desiredState: {},
+    } as AgentState);
+    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+
+    await expect(loadCheckpointFromPath(filePath)).rejects.toThrow(
+      /no desiredState/,
+    );
   });
 });
 

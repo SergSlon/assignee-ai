@@ -25,6 +25,8 @@ import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand, runProvisioningLoop } from "../utils/command-runner.js";
 import { SUPPORTED_TYPES_HINT, CHECKPOINT_DIR } from "../config/constants.js";
 import { serializeCheckpoint, saveCheckpoint } from "../services/checkpoint.js";
+import { loadUserConfig } from "../config/user-config-loader.js";
+import { fetchOrgPolicy, readAuthToken } from "../config/org-policy-cache.js";
 
 export const planCommand = new Command(CommandName.PLAN)
   .description(CommandDescription.PLAN)
@@ -52,6 +54,13 @@ export const planCommand = new Command(CommandName.PLAN)
       errorHint:
         "Check that AWS credentials are configured and Bedrock is accessible in your region.",
       run: async (ctx) => {
+        // Story 7.2: load user config + org policy before graph invocation
+        const [userConfig, authToken] = await Promise.all([
+          loadUserConfig(),
+          readAuthToken(),
+        ]);
+        const orgConfig = await fetchOrgPolicy(authToken);
+
         startSpinner("Generating plan...");
 
         const finalState = await ctx.graph.invoke(
@@ -60,6 +69,8 @@ export const planCommand = new Command(CommandName.PLAN)
             runId: ctx.runId,
             executionMode: ExecutionMode.PLAN,
             startedAt: Date.now(),
+            ...(userConfig ? { userConfig } : {}),
+            ...(orgConfig ? { orgConfig } : {}),
           },
           { configurable: { thread_id: ctx.runId } },
         );

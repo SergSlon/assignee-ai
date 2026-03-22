@@ -5,6 +5,7 @@ import {
   ProvisioningErrorKind,
   type ProvisioningPort,
 } from "../services/provisioning-port.js";
+import type { SDKFallbackDispatcher } from "../services/sdk-fallback-dispatcher.js";
 
 // ── Mock provisioning port ──────────────────────────────────────────────────
 
@@ -407,6 +408,195 @@ describe("resourceProvisionerNode", () => {
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/CloudControl provisioning failed/);
       expect(result.errorMessage).toMatch(/Unable to locate credentials/);
+    });
+  });
+
+  // ── SDK Fallback Dispatcher Tests (Story 7.7) ─────────────────────────────
+
+  describe("SDK fallback dispatch (Story 7.7)", () => {
+    function createMockFallbackDispatcher(): {
+      canHandle: ReturnType<typeof vi.fn>;
+      isRedirect: ReturnType<typeof vi.fn>;
+      createEventSourceMapping: ReturnType<typeof vi.fn>;
+      subscribe: ReturnType<typeof vi.fn>;
+    } {
+      return {
+        canHandle: vi.fn().mockReturnValue(false),
+        isRedirect: vi.fn().mockReturnValue(null),
+        createEventSourceMapping: vi.fn(),
+        subscribe: vi.fn(),
+      };
+    }
+
+    let mockFallback: ReturnType<typeof createMockFallbackDispatcher>;
+
+    beforeEach(() => {
+      mockFallback = createMockFallbackDispatcher();
+    });
+
+    it("dispatches EventSourceMapping via SDK fallback and returns SUCCESS with UUID", async () => {
+      mockFallback.canHandle.mockReturnValue(true);
+      mockFallback.createEventSourceMapping.mockResolvedValueOnce([
+        null,
+        { identifier: "esm-uuid-1234" },
+      ]);
+
+      const result = await resourceProvisionerNode(
+        makeState({
+          resourceType: "AWS::Lambda::EventSourceMapping",
+          desiredState: {
+            EventSourceArn: "arn:aws:sqs:us-east-1:123456789012:queue",
+            FunctionName: "my-function",
+          },
+        }),
+        mockProvisioner,
+        mockFallback as unknown as SDKFallbackDispatcher,
+      );
+
+      expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
+      expect(result.resourceArn).toBe("esm-uuid-1234");
+      expect(mockFallback.canHandle).toHaveBeenCalledWith(
+        "AWS::Lambda::EventSourceMapping",
+      );
+      expect(mockFallback.createEventSourceMapping).toHaveBeenCalled();
+      // Should NOT have gone through CloudControl path
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
+      expect(mockProvisioner.createResource).not.toHaveBeenCalled();
+    });
+
+    it("dispatches SNS Subscription via SDK fallback and returns SUCCESS with ARN", async () => {
+      mockFallback.canHandle.mockReturnValue(true);
+      mockFallback.subscribe.mockResolvedValueOnce([
+        null,
+        {
+          identifier: "arn:aws:sns:us-east-1:123456789012:my-topic:sub-id",
+        },
+      ]);
+
+      const result = await resourceProvisionerNode(
+        makeState({
+          resourceType: "AWS::SNS::Subscription",
+          desiredState: {
+            TopicArn: "arn:aws:sns:us-east-1:123456789012:my-topic",
+            Protocol: "sqs",
+            Endpoint: "arn:aws:sqs:us-east-1:123456789012:queue",
+          },
+        }),
+        mockProvisioner,
+        mockFallback as unknown as SDKFallbackDispatcher,
+      );
+
+      expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
+      expect(result.resourceArn).toBe(
+        "arn:aws:sns:us-east-1:123456789012:my-topic:sub-id",
+      );
+      expect(mockFallback.subscribe).toHaveBeenCalled();
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
+    });
+
+    it("returns FAILED with redirect message for Lambda::Permission", async () => {
+      mockFallback.isRedirect.mockReturnValue({
+        redirect: true,
+        message:
+          "AWS::Lambda::Permission is not supported by CCAPI. Use AWS::Lambda::PermissionPolicy instead.",
+      });
+
+      const result = await resourceProvisionerNode(
+        makeState({
+          resourceType: "AWS::Lambda::Permission",
+          desiredState: {
+            Action: "lambda:InvokeFunction",
+            FunctionName: "my-function",
+            Principal: "sns.amazonaws.com",
+          },
+        }),
+        mockProvisioner,
+        mockFallback as unknown as SDKFallbackDispatcher,
+      );
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(
+        /AWS::Lambda::Permission is not supported by CCAPI/,
+      );
+      expect(result.errorMessage).toMatch(/PermissionPolicy/);
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
+    });
+
+    it("returns FAILED with redirect message for ElastiCache::ReplicationGroup", async () => {
+      mockFallback.isRedirect.mockReturnValue({
+        redirect: true,
+        message:
+          "ElastiCache ReplicationGroup is not supported. Use AWS::ElastiCache::ServerlessCache for Redis/Memcached.",
+      });
+
+      const result = await resourceProvisionerNode(
+        makeState({
+          resourceType: "AWS::ElastiCache::ReplicationGroup",
+          desiredState: {
+            ReplicationGroupDescription: "test",
+          },
+        }),
+        mockProvisioner,
+        mockFallback as unknown as SDKFallbackDispatcher,
+      );
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(
+        /ElastiCache ReplicationGroup is not supported/,
+      );
+      expect(result.errorMessage).toMatch(/ServerlessCache/);
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
+    });
+
+    it("falls through to CloudControl path for standard types when fallback dispatcher present", async () => {
+      mockFallback.canHandle.mockReturnValue(false);
+      mockFallback.isRedirect.mockReturnValue(null);
+
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "standard-token" },
+      ]);
+
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+        mockFallback as unknown as SDKFallbackDispatcher,
+      );
+
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      expect(result.requestToken).toBe("standard-token");
+      expect(mockProvisioner.getResource).toHaveBeenCalled();
+    });
+
+    it("returns FAILED when SDK fallback createEventSourceMapping fails", async () => {
+      mockFallback.canHandle.mockReturnValue(true);
+      mockFallback.createEventSourceMapping.mockResolvedValueOnce([
+        {
+          kind: ProvisioningErrorKind.NOT_FOUND,
+          message: "Function not found",
+        },
+        null,
+      ]);
+
+      const result = await resourceProvisionerNode(
+        makeState({
+          resourceType: "AWS::Lambda::EventSourceMapping",
+          desiredState: {
+            EventSourceArn: "arn:aws:sqs:us-east-1:123456789012:queue",
+            FunctionName: "nonexistent",
+          },
+        }),
+        mockProvisioner,
+        mockFallback as unknown as SDKFallbackDispatcher,
+      );
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(/SDK fallback provisioning failed/);
+      expect(result.errorMessage).toMatch(/Function not found/);
     });
   });
 });

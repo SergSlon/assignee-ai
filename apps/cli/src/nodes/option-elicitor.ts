@@ -17,6 +17,7 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   defaultPluginRegistry,
+  MissingRequiredFieldsError,
 } from "@assignee/core";
 import type {
   ResourceField,
@@ -25,6 +26,7 @@ import type {
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import type { LlmPort } from "@assignee/core";
+import { loadBestPractices, type BestPractice } from "@assignee/best-practices";
 import {
   renderOptionPrompt,
   renderAdvancedConfirm,
@@ -200,6 +202,56 @@ function enrichFieldLabels(fields: ResourceField[]): ResourceField[] {
 }
 
 /**
+ * Injects "Recommended by Best Practices" hints into field questions when
+ * a BP rule references the field's property path for the given resource type.
+ * Pure in-memory transformation — no I/O.
+ *
+ * @param fields - Resource plugin fields to annotate
+ * @param resourceType - The AWS resource type being configured
+ * @returns Fields with BP-sourced hints appended to question hints
+ *
+ * @see Story 12.3, AC #3
+ */
+export function injectBPHints(
+  fields: ResourceField[],
+  resourceType: string,
+): ResourceField[] {
+  let practices: BestPractice[];
+  try {
+    practices = loadBestPractices();
+  } catch {
+    return fields;
+  }
+
+  const relevantBPs = practices.filter(
+    (bp) => bp.resource_type === resourceType,
+  );
+  if (relevantBPs.length === 0) return fields;
+
+  return fields.map((field) => {
+    // Check if any BP references this field's name as a property_path segment
+    const matchingBP = relevantBPs.find((bp) => {
+      const segments = bp.property_path.split(".");
+      return segments.includes(field.name) || bp.property_path === field.name;
+    });
+
+    if (!matchingBP) return field;
+
+    const bpHint = `Recommended by Best Practices: ${matchingBP.title}`;
+    const existingHint = field.question.hint;
+    const combinedHint = existingHint ? `${existingHint}\n${bpHint}` : bpHint;
+
+    return {
+      ...field,
+      question: {
+        ...field.question,
+        hint: combinedHint,
+      },
+    };
+  });
+}
+
+/**
  * Wraps renderOptionPrompt with a `?` help loop.
  * If the user types `?` at a string-type prompt, fetches and displays AWS
  * documentation for the field, then re-presents the same prompt.
@@ -228,6 +280,46 @@ async function promptWithHelp(
   }
 }
 
+/**
+ * Populates elicitedOptions from plugin defaults when --no-wizard is set.
+ * Skips all interactive prompts. Throws MissingRequiredFieldsError if any
+ * required field (marked `required: true`) has no initialValue and no plugin default.
+ *
+ * @param plugin - Resource plugin with field definitions and defaults
+ * @returns Populated elicitedOptions record
+ * @throws MissingRequiredFieldsError when required fields lack defaults
+ */
+export function populateDefaultOptions(
+  plugin: ResourcePlugin,
+): Record<string, unknown> {
+  const elicitedOptions: Record<string, unknown> = {};
+  const missingFields: string[] = [];
+
+  const allFields = [...plugin.commonFields, ...plugin.advancedFields];
+
+  for (const field of allFields) {
+    // Skip conditionally shown fields — they depend on interactive choices
+    if (field.question.showIf) continue;
+
+    const initialValue = field.question.initialValue;
+    const pluginDefault = plugin.defaults[field.name];
+
+    if (initialValue !== undefined) {
+      elicitedOptions[field.name] = initialValue;
+    } else if (pluginDefault !== undefined) {
+      elicitedOptions[field.name] = pluginDefault;
+    } else if (field.required) {
+      missingFields.push(field.name);
+    }
+  }
+
+  if (missingFields.length > 0) {
+    throw new MissingRequiredFieldsError(missingFields);
+  }
+
+  return elicitedOptions;
+}
+
 export async function optionElicitorNode(
   state: AgentState,
   tools?: StructuredTool[],
@@ -239,6 +331,15 @@ export async function optionElicitorNode(
   }
 
   if (state.executionStatus !== ExecutionStatus.PENDING) return {};
+
+  // Story 11.1: --no-wizard bypasses all interactive prompts, uses plugin defaults
+  if (state.noWizard) {
+    const plugin =
+      defaultPluginRegistry.get(state.resourceType) ??
+      defaultPluginRegistry.get("generic")!;
+    const elicitedOptions = populateDefaultOptions(plugin);
+    return { elicitedOptions };
+  }
 
   // Non-TTY (CI/pipes): skip all prompts
   if (!process.stdin.isTTY) return { elicitedOptions: {} };
@@ -253,11 +354,18 @@ export async function optionElicitorNode(
       ? await enrichWithLivePricing(plugin, tools)
       : plugin.commonFields;
 
+  // Story 12.3: Inject BP-sourced hints into field prompts
+  const bpHintedCommon = injectBPHints(pricedFields, state.resourceType);
+  const bpHintedAdvanced = injectBPHints(
+    plugin.advancedFields,
+    state.resourceType,
+  );
+
   // Enrich with contextual metadata (cost/fit/recommended) from plugin definitions
-  const commonFields = enrichFieldLabels(pricedFields);
+  const commonFields = enrichFieldLabels(bpHintedCommon);
 
   // Enrich advanced fields with contextual metadata too
-  const advancedFields = enrichFieldLabels(plugin.advancedFields);
+  const advancedFields = enrichFieldLabels(bpHintedAdvanced);
 
   const resolvedCommon = resolveFieldConfigs(commonFields);
   const resolvedAdvanced = resolveFieldConfigs(advancedFields);

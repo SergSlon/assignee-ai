@@ -77,11 +77,28 @@ export class CheckpointError extends AssigneeError {
   }
 }
 
+/**
+ * Error when --no-wizard is set and required fields have no defaults.
+ * Lists the missing field names so the user can provide them via intent or remove --no-wizard.
+ */
+export class MissingRequiredFieldsError extends AssigneeError {
+  constructor(public readonly missingFields: string[]) {
+    const fieldList = missingFields.join(", ");
+    super(
+      `Missing required fields with no defaults: ${fieldList}. ` +
+        `Provide these values in your intent or remove --no-wizard to use interactive prompts.`,
+      "MISSING_REQUIRED_FIELDS",
+    );
+    this.name = "MissingRequiredFieldsError";
+  }
+}
+
 export type ProvisioningErrorCode =
   | "AlreadyExists"
   | "NotFound"
   | "Throttled"
   | "StateMismatch"
+  | "UnsupportedType"
   | "Unknown";
 
 /** Error from AWS CloudControl resource provisioning. */

@@ -1,0 +1,177 @@
+/**
+ * Org policy fetcher with local file cache.
+ * Fetches resource option policies from the SaaS API (when auth token is available)
+ * and caches to `~/.cache/assignee/org-policy.json` with configurable TTL.
+ *
+ * All I/O is wrapped in try/catch — this function never throws.
+ *
+ * @see Story 7.2 — AC: 2, 6
+ */
+
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as os from "node:os";
+import type { OrgResourceConfig } from "@assignee/core";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { SAAS_API_URL, ORG_POLICY_TTL_MS } from "./constants.js";
+
+/** Shape of the cache envelope persisted to disk. */
+interface OrgPolicyCacheEnvelope {
+  fetchedAt: number;
+  data: OrgResourceConfig;
+}
+
+/** Resolve the cache file path. */
+function resolveCachePath(): string {
+  return path.join(os.homedir(), ".cache", "assignee", "org-policy.json");
+}
+
+/**
+ * Read the auth token from `~/.config/assignee/auth.json`.
+ * Returns undefined if the file does not exist or is malformed.
+ */
+export async function readAuthToken(): Promise<string | undefined> {
+  try {
+    const authPath = path.join(
+      os.homedir(),
+      ".config",
+      "assignee",
+      "auth.json",
+    );
+    const content = await fs.readFile(authPath, "utf-8");
+    const parsed: unknown = JSON.parse(content);
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      "token" in parsed &&
+      typeof (parsed as { token: unknown }).token === "string"
+    ) {
+      return (parsed as { token: string }).token;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Read cached org policy from disk.
+ * Returns the data if the cache is within TTL, undefined otherwise.
+ */
+async function readCache(): Promise<OrgResourceConfig | undefined> {
+  try {
+    const content = await fs.readFile(resolveCachePath(), "utf-8");
+    const envelope: unknown = JSON.parse(content);
+    if (
+      envelope !== null &&
+      typeof envelope === "object" &&
+      "fetchedAt" in envelope &&
+      "data" in envelope
+    ) {
+      const typed = envelope as OrgPolicyCacheEnvelope;
+      if (Date.now() - typed.fetchedAt < ORG_POLICY_TTL_MS) {
+        return typed.data;
+      }
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Write org policy to the cache file.
+ */
+async function writeCache(data: OrgResourceConfig): Promise<void> {
+  const cachePath = resolveCachePath();
+  const cacheDir = path.dirname(cachePath);
+  await fs.mkdir(cacheDir, { recursive: true });
+  const envelope: OrgPolicyCacheEnvelope = {
+    fetchedAt: Date.now(),
+    data,
+  };
+  await fs.writeFile(cachePath, JSON.stringify(envelope, null, 2), "utf-8");
+}
+
+/**
+ * Fetch org policy from SaaS API with cache fallback.
+ *
+ * - No authToken → returns undefined immediately (no SaaS call in POC)
+ * - Fetch succeeds → writes cache, returns data
+ * - Fetch fails → falls back to cache if within TTL, else undefined with warn log
+ *
+ * @param authToken - Bearer token from `~/.config/assignee/auth.json`
+ * @returns Org policy config or undefined (never throws)
+ */
+export async function fetchOrgPolicy(
+  authToken: string | undefined,
+): Promise<OrgResourceConfig | undefined> {
+  if (!authToken) {
+    return undefined;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+
+    const response = await fetch(`${SAAS_API_URL}/api/org/resource-policy`, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as OrgResourceConfig;
+
+    try {
+      await writeCache(data);
+    } catch {
+      // Cache write failure is non-fatal
+    }
+
+    log({
+      ts: new Date().toISOString(),
+      runId: "system",
+      level: "info",
+      action: LOG_ACTIONS.ORG_POLICY_FETCHED,
+      extras: { source: "api" },
+    });
+
+    return data;
+  } catch (fetchErr: unknown) {
+    // API unreachable — try cache fallback
+    const cached = await readCache();
+    if (cached) {
+      log({
+        ts: new Date().toISOString(),
+        runId: "system",
+        level: "warn",
+        action: LOG_ACTIONS.ORG_POLICY_FETCHED,
+        extras: {
+          source: "cache",
+          reason: fetchErr instanceof Error ? fetchErr.message : "fetch failed",
+        },
+      });
+      return cached;
+    }
+
+    log({
+      ts: new Date().toISOString(),
+      runId: "system",
+      level: "warn",
+      action: LOG_ACTIONS.ORG_POLICY_FETCHED,
+      extras: {
+        source: "none",
+        reason: fetchErr instanceof Error ? fetchErr.message : "fetch failed",
+      },
+    });
+    return undefined;
+  }
+}

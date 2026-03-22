@@ -1,0 +1,12 @@
+id: BP-LAMBDA-004
+title: "Lambda function timeout should not be set to maximum (900s)"
+severity: MEDIUM
+resource_type: "AWS::Lambda::Function"
+property_path: "Timeout"
+check_type: "less_than"
+expected_value: 900
+source: "AWS Lambda Best Practices"
+description: "Lambda functions should not use the maximum 900-second (15-minute) timeout. An excessively long timeout hides bugs, increases costs during failures, and prevents timely error detection."
+remediation: "Set Timeout to an appropriate value for the function's purpose — typically 30 seconds for API handlers and 300 seconds for async processing. Avoid 900s unless the function genuinely needs 15 minutes."
+category: reliability
+lastVerified: "2026-03-22"

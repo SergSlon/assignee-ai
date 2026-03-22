@@ -1,0 +1,13 @@
+id: BP-EC2-001
+title: "EC2 instance should require IMDSv2"
+severity: CRITICAL
+resource_type: "AWS::EC2::Instance"
+property_path: "MetadataOptions.HttpTokens"
+check_type: "equals"
+expected_value: "required"
+source: "AWS Security Hub FSBP"
+source_id: "EC2.8"
+description: "EC2 instances must enforce IMDSv2 by requiring tokens. IMDSv1 is vulnerable to SSRF attacks that can leak IAM credentials from the instance metadata service."
+remediation: "Set MetadataOptions.HttpTokens to 'required' to enforce IMDSv2. This blocks IMDSv1 requests that do not include a session token."
+category: security
+lastVerified: "2026-03-22"

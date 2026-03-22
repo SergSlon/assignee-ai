@@ -29,8 +29,10 @@ import { humanApprovalNode } from "../nodes/human-approval.js";
 import { resourceProvisionerNode } from "../nodes/resource-provisioner.js";
 import { statusPollerNode } from "../nodes/status-poller.js";
 import { resultFormatterNode } from "../nodes/result-formatter.js";
+import { bpEvaluatorNode } from "../nodes/bp-evaluator.js";
 import { createCloudControlClient } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
+import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
 import { BedrockLlmAdapter } from "./bedrock-llm-adapter.js";
 import { BEDROCK_MODEL_ID, AWS_REGION } from "../config/constants.js";
 
@@ -41,6 +43,17 @@ export function createGraph(tools: StructuredTool[] = []) {
     region: process.env["AWS_REGION"] ?? "",
   });
   const provisioner = new CloudControlAdapter(cloudClient);
+
+  let fallbackDispatcher: SDKFallbackDispatcher | undefined;
+  try {
+    fallbackDispatcher = new SDKFallbackDispatcher({
+      accessKeyId: process.env["MCP_AWS_ACCESS_KEY_ID"] ?? "",
+      secretAccessKey: process.env["MCP_AWS_SECRET_ACCESS_KEY"] ?? "",
+      region: process.env["AWS_REGION"] ?? "",
+    });
+  } catch {
+    // SDK fallback unavailable (missing credentials) — graph works without it
+  }
 
   const llmAdapter = new BedrockLlmAdapter({
     modelId: BEDROCK_MODEL_ID,
@@ -69,11 +82,12 @@ export function createGraph(tools: StructuredTool[] = []) {
     )
     .addNode(GraphNode.HUMAN_APPROVAL, (state) => humanApprovalNode(state))
     .addNode(GraphNode.RESOURCE_PROVISIONER, (state) =>
-      resourceProvisionerNode(state, provisioner),
+      resourceProvisionerNode(state, provisioner, fallbackDispatcher),
     )
     .addNode(GraphNode.STATUS_POLLER, (state) =>
       statusPollerNode(state, provisioner),
     )
+    .addNode(GraphNode.BP_EVALUATOR, (state) => bpEvaluatorNode(state))
     .addNode(GraphNode.RESULT_FORMATTER, (state) => resultFormatterNode(state))
     .addConditionalEdges(START, routeCheckpointEntry, {
       [GraphNode.INTENT_PARSER]: GraphNode.INTENT_PARSER,
@@ -83,7 +97,8 @@ export function createGraph(tools: StructuredTool[] = []) {
     .addEdge(GraphNode.SCHEMA_FETCHER, GraphNode.OPTION_ELICITOR)
     .addEdge(GraphNode.OPTION_ELICITOR, GraphNode.COMPOUND_DISPATCHER)
     .addEdge(GraphNode.COMPOUND_DISPATCHER, GraphNode.PLAN_GENERATOR)
-    .addEdge(GraphNode.PLAN_GENERATOR, GraphNode.PREFLIGHT_GUARD)
+    .addEdge(GraphNode.PLAN_GENERATOR, GraphNode.BP_EVALUATOR)
+    .addEdge(GraphNode.BP_EVALUATOR, GraphNode.PREFLIGHT_GUARD)
     .addConditionalEdges(GraphNode.PREFLIGHT_GUARD, routePreflightGuard, {
       [GraphNode.HUMAN_APPROVAL]: GraphNode.HUMAN_APPROVAL,
       [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,

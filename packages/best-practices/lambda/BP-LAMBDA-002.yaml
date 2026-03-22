@@ -1,0 +1,12 @@
+id: BP-LAMBDA-002
+title: "Lambda function should use arm64 (Graviton2) architecture"
+severity: MEDIUM
+resource_type: "AWS::Lambda::Function"
+property_path: "Architectures[0]"
+check_type: "equals"
+expected_value: "arm64"
+source: "AWS Well-Architected Framework — Cost Optimization Pillar"
+description: "Lambda functions should use arm64 architecture (AWS Graviton2). Graviton2 functions are 20% cheaper per GB-second and offer equivalent or better performance for most workloads."
+remediation: "Set Architectures to ['arm64']. Ensure your runtime and dependencies support arm64 — most modern runtimes (Node.js, Python, Java 11+) work without changes."
+category: cost
+lastVerified: "2026-03-22"
