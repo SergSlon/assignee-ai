@@ -207,14 +207,35 @@ node apps/cli/dist/index.js apply "Create an S3 bucket named my-test-bucket"
 
 ### Supported resource types (POC)
 
-| Type                    | Notes                                                      |
-| ----------------------- | ---------------------------------------------------------- |
-| `AWS::S3::Bucket`       | Interactive prompts: encryption, versioning, public access |
-| `AWS::SSM::Parameter`   |                                                            |
-| `AWS::IAM::Role`        | Cost: Free                                                 |
-| `AWS::EC2::Instance`    | Interactive prompts: instance type, AMI, key pair, subnet  |
-| `AWS::RDS::DBInstance`  | Interactive prompts: engine, class, multi-AZ, storage      |
-| `AWS::Lambda::Function` | Interactive prompts: runtime, handler, memory, timeout     |
+| Type                                        | Notes                                                      |
+| ------------------------------------------- | ---------------------------------------------------------- |
+| `AWS::S3::Bucket`                           | Interactive prompts: encryption, versioning, public access |
+| `AWS::SSM::Parameter`                       |                                                            |
+| `AWS::IAM::Role`                            | Cost: Free                                                 |
+| `AWS::EC2::Instance`                        | Interactive prompts: instance type with live $/hr pricing  |
+| `AWS::RDS::DBInstance`                      | Interactive prompts: engine, class with live $/hr pricing  |
+| `AWS::Lambda::Function`                     | Interactive prompts: runtime, handler, memory, timeout     |
+| `AWS::EC2::VPC`                             |                                                            |
+| `AWS::EC2::Subnet`                          |                                                            |
+| `AWS::EC2::SecurityGroup`                   |                                                            |
+| `AWS::DynamoDB::Table`                      |                                                            |
+| `AWS::SQS::Queue`                           |                                                            |
+| `AWS::SNS::Topic`                           |                                                            |
+| `AWS::ElasticLoadBalancingV2::LoadBalancer` |                                                            |
+| `AWS::ECS::Cluster`                         |                                                            |
+| `AWS::ECR::Repository`                      |                                                            |
+
+### Compound architecture patterns
+
+Multi-resource intents are detected by keyword matching (zero LLM latency) and provisioned in dependency order:
+
+| Pattern            | Resources                                    | Trigger keywords                    |
+| ------------------ | -------------------------------------------- | ----------------------------------- |
+| Serverless API     | IAM Role → Lambda → DynamoDB → API Gateway   | "serverless api", "lambda api"      |
+| Static Website     | S3 Bucket (website-configured)               | "static website", "static site"     |
+| Message Processing | SQS DLQ → SQS + DynamoDB + IAM Role → Lambda | "message queue", "event processing" |
+| Three-Tier Web     | VPC → Subnet → SecurityGroup → ECS → ALB     | "three tier", "web application"     |
+| Container Service  | ECR → ECS Cluster → IAM Role                 | "container service", "ecs"          |
 
 ---
 
@@ -224,22 +245,27 @@ node apps/cli/dist/index.js apply "Create an S3 bucket named my-test-bucket"
 apps/
   cli/
     src/
-      commands/     plan.ts · apply.ts
-      nodes/        intent-parser · schema-fetcher · option-elicitor
-                    plan-generator · preflight-guard · human-approval
-                    resource-provisioner · status-poller · result-formatter
-      services/     graph.ts (LangGraph) · mcp-client.ts
-      config/       mcp-servers.ts
-      utils/        display.ts · logger.ts · tags.ts
+      commands/        plan.ts · apply.ts
+      nodes/           intent-parser · schema-fetcher · option-elicitor
+                       plan-generator · preflight-guard · human-approval
+                       resource-provisioner · status-poller · result-formatter
+      services/        graph.ts (LangGraph) · mcp-client.ts
+      config/          mcp-servers.ts
+      utils/           display.ts · logger.ts · tags.ts · mcp.ts · pricing-lookup.ts
+      test-fixtures/   mcp-mock-responses.ts (real MCP captures)
+    scripts/           capture → process → build fixture pipeline
 packages/
   core/
     src/
-      schema/       graph-state.ts (Zod — single source of truth)
-      types/        result.ts (Result<T,E> monad)
-      config/       resource-types.ts · resource-identifiers.ts · resource-policy.ts
+      schema/          graph-state.ts (Zod — single source of truth)
+      types/           result.ts (Result<T,E> monad)
+      config/          resource-types.ts · resource-identifiers.ts · resource-policy.ts
       resource-plugins/  types.ts · registry.ts · index.ts
                          plugins/  s3-bucket · ec2-instance · rds-dbinstance
                                    lambda-function · generic
+      pattern-templates/ registry.ts · types.ts
+                         patterns/ serverless-api · static-website · message-processing
+                                   three-tier-web · container-service
       errors.ts
 ```
 
@@ -252,10 +278,12 @@ packages/
 
 **MCP servers (spawned at runtime via `uvx`):**
 
-- `awslabs.ccapi-mcp-server` — Cloud Control API (provision)
 - `awslabs.cfn-mcp-server` — CloudFormation schemas (plan validation)
-- `awslabs.aws-pricing-mcp-server` — cost estimates
-- `awslabs.aws-knowledge-mcp-server` — AWS docs _(yanked — skipped)_
+- `awslabs.aws-pricing-mcp-server` — live cost estimates (EC2, RDS, S3, SSM)
+- `awslabs.aws-documentation-mcp-server` — AWS doc search, section reads, full page reads
+- `awslabs.aws-knowledge-mcp-server` — configured but no app code calls its tools yet
+
+> **Note:** CCAPI provisioning migrated from `ccapi-mcp-server` to `@aws-sdk/client-cloudcontrol` SDK (Story 7.6).
 
 **Credential separation:**
 
@@ -267,12 +295,25 @@ packages/
 ## Development
 
 ```bash
-pnpm test          # run all tests (Vitest)
+pnpm test          # run all tests (Vitest) — 188 tests across 20 files
 pnpm check-types   # TypeScript type check
 pnpm build         # compile all packages
 ```
 
 Pre-commit hook runs: prettier → check-types → test.
+
+### Test fixtures
+
+All MCP mock responses in `apps/cli/src/test-fixtures/mcp-mock-responses.ts` are captured from live MCP servers (not fabricated). To refresh:
+
+```bash
+cd apps/cli/scripts
+node capture-mcp-responses.mjs    # requires .env with MCP_AWS_* credentials
+node process-captured-responses.mjs
+node build-fixture-ts.mjs
+```
+
+Raw captures and processed intermediates are gitignored — only the final TypeScript fixture is committed.
 
 ---
 
@@ -288,27 +329,41 @@ Pre-commit hook runs: prettier → check-types → test.
 
 ### Epic 7 — Resource Intelligence (Phase A) ✅ Complete
 
-| Story   | Description                                                                                                         | Status  |
-| ------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
-| **7.0** | Expand supported resource types (EC2, RDS, Lambda)                                                                  | ✅ Done |
-| **7.1** | `ResourcePlugin` interface + `PluginRegistry` + core plugins (S3, EC2, RDS, Lambda, generic)                        | ✅ Done |
-| **7.3** | `option-elicitor` node — interactive field elicitation, `showIf` conditionals, policy routing, non-TTY CI-safe path | ✅ Done |
-| **7.6** | Migrate `ccapi-mcp-server` → `@aws-sdk/client-cloudcontrol` SDK                                                     | ✅ Done |
+| Story    | Description                                                                                                         | Status  |
+| -------- | ------------------------------------------------------------------------------------------------------------------- | ------- |
+| **7.0**  | Expand supported resource types (EC2, RDS, Lambda + 9 more)                                                         | ✅ Done |
+| **7.1**  | `ResourcePlugin` interface + `PluginRegistry` + core plugins (S3, EC2, RDS, Lambda, generic)                        | ✅ Done |
+| **7.3**  | `option-elicitor` node — interactive field elicitation, `showIf` conditionals, policy routing, non-TTY CI-safe path | ✅ Done |
+| **7.5**  | Live EC2/RDS pricing enrichment in option-elicitor enum prompts                                                     | ✅ Done |
+| **7.6**  | Migrate `ccapi-mcp-server` → `@aws-sdk/client-cloudcontrol` SDK                                                     | ✅ Done |
+| **7.9**  | LLM-synthesized doc hints for `?` help input during option elicitation                                              | ✅ Done |
+| **7.10** | Capture real MCP responses from all live servers — replace all fabricated test mocks                                | ✅ Done |
 
-**AWS bootstrap (eu-west-1, account 112233445566):**
+### Epic 8 — Compound Provisioning ✅ Complete
+
+| Story   | Description                                                                             | Status  |
+| ------- | --------------------------------------------------------------------------------------- | ------- |
+| **8.1** | Pattern template registry + compound intent classifier (keyword matching, zero latency) | ✅ Done |
+| **8.2** | Multi-resource sequential provisioning loop with dependency ordering                    | ✅ Done |
+| **8.3** | Dependency plan display + compound provisioning UX                                      | ✅ Done |
+
+### Epic 9 — Architecture Hardening ✅ Complete
+
+| Story   | Description                                                       | Status  |
+| ------- | ----------------------------------------------------------------- | ------- |
+| **9.1** | Type-safe `ResourceType` literal union, remove `@ts-expect-error` | ✅ Done |
+| **9.2** | Credential validation, `safeTry` adoption, typed SDK errors       | ✅ Done |
+| **9.3** | Prompt injection guard — `sanitizeUserIntent` before Bedrock      | ✅ Done |
+| **9.4** | Graph state/routing extraction, provisioning port                 | ✅ Done |
+| **9.5** | MCP type extraction                                               | ✅ Done |
+| **9.6** | Core package refactoring                                          | ✅ Done |
+
+**AWS bootstrap (us-east-1, account 112233445566):**
 
 - [x] Bedrock invocation logging → `/assignee-ai/bedrock-invocations` CloudWatch log group
 - [x] `AssigneeAiPocPolicy` applied to `bedrock-dev-user`
 - [x] `AssigneeAiMcpPolicy` applied to `aws-mcp-user`
 - [x] CI green on GitHub Actions
-
-### Not yet done (POC smoke test)
-
-- [ ] End-to-end smoke test: `assignee plan "..."` against real Bedrock → verify <3s (NFR-05)
-- [ ] End-to-end smoke test: `assignee apply "..."` → confirm HITL → verify resource created with mandatory tags
-- [ ] State Guard smoke test: run apply twice → second run must abort with "Stale Plan"
-- [ ] Unsupported resource smoke test: `assignee plan "Create a DynamoDB table"` → verify error + supported types hint
-- [ ] Interactive option elicitor smoke test: run `assignee plan "create an S3 bucket"` in a real TTY → verify encryption/versioning/public-access prompts appear
 
 ---
 
@@ -325,16 +380,17 @@ Pre-commit hook runs: prettier → check-types → test.
 
 ## NFR compliance (POC)
 
-| NFR    | Requirement                                 | Status                                |
-| ------ | ------------------------------------------- | ------------------------------------- |
-| NFR-05 | `assignee plan` yields result in <3s        | ⚠️ Untested against live Bedrock      |
-| NFR-10 | All Bedrock calls logged to CloudWatch      | ✅ Configured                         |
-| NFR-11 | Every apply generates UUID v4 runId         | ✅ Implemented                        |
-| NFR-12 | Structured JSON logs to stderr              | ✅ Implemented                        |
-| NFR-13 | IAM least-privilege (no wildcards)          | ✅ Applied                            |
-| NFR-14 | Mandatory tags on all provisioned resources | ✅ Implemented                        |
-| NFR-15 | LLM calls capped at `maxTokens: 1024`       | ✅ Implemented                        |
-| NFR-16 | Bedrock Guardrails                          | ⚠️ Optional for POC — deferred to MVP |
+| NFR    | Requirement                                 | Status                              |
+| ------ | ------------------------------------------- | ----------------------------------- |
+| NFR-05 | `assignee plan` yields result in <3s        | ⚠️ Untested against live Bedrock    |
+| NFR-08 | Unsupported types → actionable error        | ✅ Lists all 15 supported types     |
+| NFR-10 | All Bedrock calls logged to CloudWatch      | ✅ Configured                       |
+| NFR-11 | Every apply generates UUID v4 runId         | ✅ Implemented                      |
+| NFR-12 | Structured JSON logs to stderr              | ✅ Implemented                      |
+| NFR-13 | IAM least-privilege (no wildcards)          | ✅ Applied                          |
+| NFR-14 | Mandatory tags on all provisioned resources | ✅ Implemented                      |
+| NFR-15 | LLM calls capped at `maxTokens: 1024`       | ✅ Implemented                      |
+| NFR-16 | Prompt injection guard                      | ✅ `sanitizeUserIntent` (Story 9.3) |
 
 ---
 
