@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"findings\":[],\"overallPosture\":\"SECURE\",\"resourceArn\":\"arn:aws:s3:::nonexistent-bucket-for-test\",\"analyzedAt\":\"2026-03-22T10:16:45.000Z\"}"
+    }
+  ]
+}

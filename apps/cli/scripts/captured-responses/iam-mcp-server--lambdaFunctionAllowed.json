@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"EvaluationResults\":[{\"EvalActionName\":\"cloudcontrol:CreateResource\",\"EvalResourceName\":\"*\",\"EvalDecision\":\"allowed\",\"MatchedStatements\":[{\"SourcePolicyId\":\"CloudControlFullAccess\",\"SourcePolicyType\":\"IAM Policy\",\"StartPosition\":{\"Line\":3,\"Column\":14},\"EndPosition\":{\"Line\":10,\"Column\":5}}],\"MissingContextValues\":[]},{\"EvalActionName\":\"lambda:CreateFunction\",\"EvalResourceName\":\"*\",\"EvalDecision\":\"allowed\",\"MatchedStatements\":[{\"SourcePolicyId\":\"AWSLambdaFullAccess\",\"SourcePolicyType\":\"IAM Policy\",\"StartPosition\":{\"Line\":3,\"Column\":14},\"EndPosition\":{\"Line\":8,\"Column\":5}}],\"MissingContextValues\":[]},{\"EvalActionName\":\"lambda:TagResource\",\"EvalResourceName\":\"*\",\"EvalDecision\":\"allowed\",\"MatchedStatements\":[{\"SourcePolicyId\":\"AWSLambdaFullAccess\",\"SourcePolicyType\":\"IAM Policy\",\"StartPosition\":{\"Line\":3,\"Column\":14},\"EndPosition\":{\"Line\":8,\"Column\":5}}],\"MissingContextValues\":[]},{\"EvalActionName\":\"iam:PassRole\",\"EvalResourceName\":\"*\",\"EvalDecision\":\"allowed\",\"MatchedStatements\":[{\"SourcePolicyId\":\"IAMPassRolePolicy\",\"SourcePolicyType\":\"IAM Policy\",\"StartPosition\":{\"Line\":3,\"Column\":14},\"EndPosition\":{\"Line\":8,\"Column\":5}}],\"MissingContextValues\":[]}]}"
+    }
+  ]
+}

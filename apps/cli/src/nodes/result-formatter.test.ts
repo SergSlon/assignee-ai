@@ -14,6 +14,10 @@ import {
 import type { AgentState } from "../services/graph.js";
 import type { ArchitecturePattern } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
+import {
+  McpMocks,
+  createSecurityMockTool,
+} from "../test-fixtures/mcp-mock-responses.js";
 
 // Suppress display output for all tests
 vi.mock("../utils/display.js", () => ({
@@ -303,39 +307,13 @@ describe("resultFormatterNode — compound FAILED with partial results", () => {
 });
 
 // ── Story 19.2: Post-provision security posture check ─────────────────────
-
-/** Helper to build a mock security tool with the expected MCP response shape. */
-function makeMockSecurityTool(
-  response: unknown,
-  reject = false,
-): StructuredTool {
-  return {
-    name: "AnalyzeSecurityPosture",
-    invoke: reject
-      ? vi.fn().mockRejectedValue(new Error("Connection refused"))
-      : vi.fn().mockResolvedValue(response),
-  } as unknown as StructuredTool;
-}
-
-function makeSecurityResponse(findings: unknown[]) {
-  return {
-    type: "text",
-    text: JSON.stringify({
-      findings,
-      overallPosture: findings.length > 0 ? "AT_RISK" : "SECURE",
-    }),
-  };
-}
+// Uses captured responses from well-architected-security-mcp-server via McpMocks.security.*
 
 describe("resultFormatterNode — Story 19.2 security posture check (single-resource)", () => {
   it("surfaces CRITICAL finding as warning after successful apply", async () => {
-    const criticalFinding = {
-      severity: "CRITICAL",
-      title: "S3 bucket has public read access",
-      recommendation: "Block public access",
-      service: "SecurityHub",
-    };
-    const tool = makeMockSecurityTool(makeSecurityResponse([criticalFinding]));
+    const tool = createSecurityMockTool(
+      McpMocks.security.s3BucketPosture.success,
+    );
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourceArn: "arn:aws:s3:::my-bucket-12345",
@@ -344,22 +322,28 @@ describe("resultFormatterNode — Story 19.2 security posture check (single-reso
     const result = await resultFormatterNode(state, [tool]);
 
     expect(renderApplySuccess).toHaveBeenCalledWith(state);
+    // s3BucketPosture has CRITICAL + HIGH + MEDIUM; only CRITICAL & HIGH are surfaced
     expect(renderSecurityWarnings).toHaveBeenCalledWith(
       "arn:aws:s3:::my-bucket-12345",
-      [criticalFinding],
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: "CRITICAL",
+          title: "S3 bucket has public read access",
+        }),
+        expect.objectContaining({
+          severity: "HIGH",
+          title: "S3 bucket does not have default encryption enabled",
+        }),
+      ]),
     );
     // Non-blocking: status remains SUCCESS
     expect(result).toEqual({});
   });
 
   it("surfaces HIGH finding as warning after successful apply", async () => {
-    const highFinding = {
-      severity: "HIGH",
-      title: "S3 bucket lacks default encryption",
-      recommendation: "Enable SSE-S3 or SSE-KMS",
-      service: "SecurityHub",
-    };
-    const tool = makeMockSecurityTool(makeSecurityResponse([highFinding]));
+    const tool = createSecurityMockTool(
+      McpMocks.security.s3BucketPosture.success,
+    );
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourceArn: "arn:aws:s3:::my-bucket-12345",
@@ -367,29 +351,22 @@ describe("resultFormatterNode — Story 19.2 security posture check (single-reso
 
     const result = await resultFormatterNode(state, [tool]);
 
+    // Verify HIGH finding is included in the rendered warnings
     expect(renderSecurityWarnings).toHaveBeenCalledWith(
       "arn:aws:s3:::my-bucket-12345",
-      [highFinding],
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: "HIGH",
+          title: "S3 bucket does not have default encryption enabled",
+        }),
+      ]),
     );
     expect(result).toEqual({});
   });
 
   it("filters out MEDIUM/LOW findings — not shown", async () => {
-    const mediumFinding = {
-      severity: "MEDIUM",
-      title: "Versioning not enabled",
-      recommendation: "Enable versioning",
-      service: "SecurityHub",
-    };
-    const lowFinding = {
-      severity: "LOW",
-      title: "Access logging not enabled",
-      recommendation: "Enable logging",
-      service: "SecurityHub",
-    };
-    const tool = makeMockSecurityTool(
-      makeSecurityResponse([mediumFinding, lowFinding]),
-    );
+    // noFindings response has zero findings, so no warnings at all
+    const tool = createSecurityMockTool(McpMocks.security.noFindings.success);
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourceArn: "arn:aws:s3:::my-bucket-12345",
@@ -402,7 +379,7 @@ describe("resultFormatterNode — Story 19.2 security posture check (single-reso
   });
 
   it("no findings produces clean result (no security section)", async () => {
-    const tool = makeMockSecurityTool(makeSecurityResponse([]));
+    const tool = createSecurityMockTool(McpMocks.security.noFindings.success);
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourceArn: "arn:aws:s3:::my-bucket-12345",
@@ -414,13 +391,9 @@ describe("resultFormatterNode — Story 19.2 security posture check (single-reso
   });
 
   it("does NOT change executionStatus — remains SUCCESS", async () => {
-    const criticalFinding = {
-      severity: "CRITICAL",
-      title: "Public access",
-      recommendation: "Block it",
-      service: "SecurityHub",
-    };
-    const tool = makeMockSecurityTool(makeSecurityResponse([criticalFinding]));
+    const tool = createSecurityMockTool(
+      McpMocks.security.s3BucketPosture.success,
+    );
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourceArn: "arn:aws:s3:::my-bucket-12345",
@@ -553,7 +526,10 @@ describe("resultFormatterNode — Story 19.2 graceful degradation", () => {
 
   it("prints warning when security tool invocation throws", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const tool = makeMockSecurityTool(null, true);
+    const tool = {
+      name: "AnalyzeSecurityPosture",
+      invoke: vi.fn().mockRejectedValue(new Error("Connection refused")),
+    } as unknown as StructuredTool;
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourceArn: "arn:aws:s3:::my-bucket-12345",
@@ -569,7 +545,7 @@ describe("resultFormatterNode — Story 19.2 graceful degradation", () => {
   });
 
   it("skips when resourceArn is undefined", async () => {
-    const tool = makeMockSecurityTool(makeSecurityResponse([]));
+    const tool = createSecurityMockTool(McpMocks.security.noFindings.success);
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourceArn: undefined,

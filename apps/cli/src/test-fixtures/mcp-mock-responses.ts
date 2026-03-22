@@ -1,5 +1,5 @@
 /**
- * Comprehensive MCP mock responses for all 4 servers and 5 tools.
+ * Comprehensive MCP mock responses for all 6 servers and 7 tools.
  * ALL response data captured from live MCP servers on 2026-03-22.
  *
  * Usage in tests:
@@ -1978,6 +1978,249 @@ if your deployment package is a .zip file archive. T
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// 5. iam-mcp-server — simulate_principal_policy
+//    Captured 2026-03-22 via: uvx awslabs.iam-mcp-server@latest --readonly
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const iamResponses = {
+  /** Captured 2026-03-22. All S3 bucket creation actions allowed. */
+  s3BucketAllowed: {
+    success: mcpText({
+      EvaluationResults: [
+        {
+          EvalActionName: "cloudcontrol:CreateResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "s3:CreateBucket",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonS3FullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "s3:PutBucketTagging",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonS3FullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+      ],
+    }),
+  },
+
+  /** Captured 2026-03-22. EC2 instance — ec2:RunInstances and iam:PassRole denied. */
+  ec2InstancePartialDeny: {
+    success: mcpText({
+      EvaluationResults: [
+        {
+          EvalActionName: "cloudcontrol:CreateResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "ec2:RunInstances",
+          EvalResourceName: "*",
+          EvalDecision: "implicitDeny",
+          MatchedStatements: [],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "ec2:CreateTags",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonEC2TaggingAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "iam:PassRole",
+          EvalResourceName: "*",
+          EvalDecision: "implicitDeny",
+          MatchedStatements: [],
+          MissingContextValues: [],
+        },
+      ],
+    }),
+  },
+
+  /** Captured 2026-03-22. All Lambda function creation actions allowed. */
+  lambdaFunctionAllowed: {
+    success: mcpText({
+      EvaluationResults: [
+        {
+          EvalActionName: "cloudcontrol:CreateResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "lambda:CreateFunction",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AWSLambdaFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "lambda:TagResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AWSLambdaFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "iam:PassRole",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "IAMPassRolePolicy",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+      ],
+    }),
+  },
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. well-architected-security-mcp-server — AnalyzeSecurityPosture
+//    Captured 2026-03-22 via: uvx awslabs.well-architected-security-mcp-server@latest
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const securityPostureResponses = {
+  /** Captured 2026-03-22. S3 bucket with CRITICAL + HIGH + MEDIUM findings. */
+  s3BucketPosture: {
+    success: mcpText({
+      findings: [
+        {
+          severity: "CRITICAL",
+          title: "S3 bucket has public read access",
+          recommendation:
+            "Block public access by enabling S3 Block Public Access settings at the bucket level. Set BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, and RestrictPublicBuckets to true.",
+          service: "SecurityHub",
+          controlId: "S3.2",
+          complianceStatus: "FAILED",
+          resourceArn: "arn:aws:s3:::assignee-test-capture-bucket",
+        },
+        {
+          severity: "HIGH",
+          title: "S3 bucket does not have default encryption enabled",
+          recommendation:
+            "Enable default encryption on the S3 bucket using SSE-S3 (AES-256) or SSE-KMS. Use aws s3api put-bucket-encryption to configure server-side encryption.",
+          service: "SecurityHub",
+          controlId: "S3.4",
+          complianceStatus: "FAILED",
+          resourceArn: "arn:aws:s3:::assignee-test-capture-bucket",
+        },
+        {
+          severity: "MEDIUM",
+          title: "S3 bucket versioning is not enabled",
+          recommendation:
+            "Enable versioning on the S3 bucket to preserve, retrieve, and restore every version of every object. Use aws s3api put-bucket-versioning --bucket BUCKET --versioning-configuration Status=Enabled.",
+          service: "SecurityHub",
+          controlId: "S3.14",
+          complianceStatus: "FAILED",
+          resourceArn: "arn:aws:s3:::assignee-test-capture-bucket",
+        },
+      ],
+      overallPosture: "AT_RISK",
+      resourceArn: "arn:aws:s3:::assignee-test-capture-bucket",
+      analyzedAt: "2026-03-22T10:15:30.000Z",
+    }),
+  },
+
+  /** Captured 2026-03-22. No findings — clean security posture. */
+  noFindings: {
+    success: mcpText({
+      findings: [],
+      overallPosture: "SECURE",
+      resourceArn: "arn:aws:s3:::nonexistent-bucket-for-test",
+      analyzedAt: "2026-03-22T10:16:45.000Z",
+    }),
+  },
+} as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Exported namespace
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1987,6 +2230,8 @@ export const McpMocks = {
   docSearch: docSearchResponses,
   docReadSections: docReadSectionsResponses,
   docReadFull: docReadFullResponses,
+  iam: iamResponses,
+  security: securityPostureResponses,
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2118,7 +2363,31 @@ export function createSequenceMockTool(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Creates a complete set of all 5 MCP tools with default success responses.
+ * Creates a mock IAM simulate_principal_policy tool with a captured response.
+ *
+ * @example
+ *   const tool = createIamMockTool(McpMocks.iam.ec2InstancePartialDeny.success);
+ */
+export function createIamMockTool(
+  response = McpMocks.iam.s3BucketAllowed.success,
+): StructuredTool {
+  return createMockTool(ToolName.SIMULATE_PRINCIPAL_POLICY, response);
+}
+
+/**
+ * Creates a mock AnalyzeSecurityPosture tool with a captured response.
+ *
+ * @example
+ *   const tool = createSecurityMockTool(McpMocks.security.s3BucketPosture.success);
+ */
+export function createSecurityMockTool(
+  response = McpMocks.security.noFindings.success,
+): StructuredTool {
+  return createMockTool(ToolName.ANALYZE_SECURITY_POSTURE, response);
+}
+
+/**
+ * Creates a complete set of all 7 MCP tools with default success responses.
  * Useful for integration-style tests that need all tools available.
  */
 export function createAllMockTools(): StructuredTool[] {
@@ -2139,6 +2408,14 @@ export function createAllMockTools(): StructuredTool[] {
     createMockTool(
       ToolName.READ_DOCUMENTATION,
       McpMocks.docReadFull.s3BucketFull.success,
+    ),
+    createMockTool(
+      ToolName.SIMULATE_PRINCIPAL_POLICY,
+      McpMocks.iam.s3BucketAllowed.success,
+    ),
+    createMockTool(
+      ToolName.ANALYZE_SECURITY_POSTURE,
+      McpMocks.security.noFindings.success,
     ),
   ];
 }

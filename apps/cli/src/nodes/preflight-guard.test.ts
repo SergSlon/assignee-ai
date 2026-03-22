@@ -8,6 +8,11 @@ import {
 } from "../constants/pricing.js";
 import { ToolName } from "../constants/tools.js";
 import type { StructuredTool } from "@langchain/core/tools";
+import {
+  McpMocks,
+  createIamMockTool,
+  createMockTool,
+} from "../test-fixtures/mcp-mock-responses.js";
 
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
@@ -258,41 +263,11 @@ describe("preflightGuardNode", () => {
 });
 
 // ── Story 19.1: IAM permission pre-check ──────────────────────────────────────
-
-function makeMockIamTool(
-  evaluationResults: Array<{
-    EvalActionName: string;
-    EvalDecision: string;
-  }>,
-): StructuredTool {
-  return {
-    name: ToolName.SIMULATE_PRINCIPAL_POLICY,
-    invoke: vi.fn().mockResolvedValue({
-      type: "text",
-      text: JSON.stringify({ EvaluationResults: evaluationResults }),
-    }),
-  } as unknown as StructuredTool;
-}
+// Uses captured responses from iam-mcp-server via McpMocks.iam.*
 
 describe("preflightGuardNode — IAM permission check (Story 19.1)", () => {
   it("passes when all actions are allowed — provisioning continues", async () => {
-    const iamTool = makeMockIamTool([
-      {
-        EvalActionName: "cloudcontrol:CreateResource",
-        EvalDecision: "allowed",
-      },
-      { EvalActionName: "cloudcontrol:GetResource", EvalDecision: "allowed" },
-      {
-        EvalActionName: "cloudcontrol:UpdateResource",
-        EvalDecision: "allowed",
-      },
-      {
-        EvalActionName: "cloudcontrol:DeleteResource",
-        EvalDecision: "allowed",
-      },
-      { EvalActionName: "s3:CreateBucket", EvalDecision: "allowed" },
-      { EvalActionName: "s3:PutBucketTagging", EvalDecision: "allowed" },
-    ]);
+    const iamTool = createIamMockTool(McpMocks.iam.s3BucketAllowed.success);
 
     const result = await preflightGuardNode(makeState(), [iamTool]);
 
@@ -302,40 +277,23 @@ describe("preflightGuardNode — IAM permission check (Story 19.1)", () => {
   });
 
   it("fails with specific missing actions — returns FAILED with descriptive message", async () => {
-    const iamTool = makeMockIamTool([
-      {
-        EvalActionName: "cloudcontrol:CreateResource",
-        EvalDecision: "allowed",
-      },
-      { EvalActionName: "cloudcontrol:GetResource", EvalDecision: "allowed" },
-      {
-        EvalActionName: "cloudcontrol:UpdateResource",
-        EvalDecision: "allowed",
-      },
-      {
-        EvalActionName: "cloudcontrol:DeleteResource",
-        EvalDecision: "allowed",
-      },
-      { EvalActionName: "s3:CreateBucket", EvalDecision: "implicitDeny" },
-      { EvalActionName: "s3:PutBucketTagging", EvalDecision: "implicitDeny" },
-    ]);
+    const iamTool = createIamMockTool(
+      McpMocks.iam.ec2InstancePartialDeny.success,
+    );
 
     const result = await preflightGuardNode(makeState(), [iamTool]);
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toContain("Insufficient IAM permissions");
-    expect(result.errorMessage).toContain("s3:CreateBucket");
-    expect(result.errorMessage).toContain("s3:PutBucketTagging");
+    expect(result.errorMessage).toContain("ec2:RunInstances");
+    expect(result.errorMessage).toContain("iam:PassRole");
     expect(result.errorMessage).toContain(
       "Ask your admin to grant these permissions or use a different profile",
     );
   });
 
   it("skips check when IAM tool is not found — provisioning continues", async () => {
-    const otherTool = {
-      name: "some_other_tool",
-      invoke: vi.fn(),
-    } as unknown as StructuredTool;
+    const otherTool = createMockTool("some_other_tool", null);
 
     const result = await preflightGuardNode(makeState(), [otherTool]);
 
@@ -378,7 +336,7 @@ describe("preflightGuardNode — IAM permission check (Story 19.1)", () => {
   });
 
   it("skips check when resourceType is empty", async () => {
-    const iamTool = makeMockIamTool([]);
+    const iamTool = createIamMockTool();
 
     const result = await preflightGuardNode(makeState({ resourceType: "" }), [
       iamTool,
