@@ -20,6 +20,7 @@ import {
   MissingRequiredFieldsError,
 } from "@assignee/core";
 import { defaultMemoryService } from "../services/memory.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type {
   ResourceField,
   ResourcePlugin,
@@ -490,6 +491,23 @@ export async function optionElicitorNode(
       }
     }
   }
+
+  log({
+    ts: new Date().toISOString(),
+    runId: state.runId,
+    level: "info",
+    action: LOG_ACTIONS.OPTION_ELICITED,
+    extras: {
+      resourceType: state.resourceType,
+      elicitedKeys: Object.keys(elicitedOptions),
+      elicitedValues: Object.fromEntries(
+        Object.entries(elicitedOptions).map(([k, v]) => [
+          k,
+          typeof v === "object" ? "[object]" : String(v),
+        ]),
+      ),
+    },
+  });
 
   return { elicitedOptions };
 }
