@@ -1,9 +1,83 @@
 # Testing Guide — Assignee.ai POC
 
-> End-to-end smoke tests for the `assignee plan` and `assignee apply` commands.
-> All tests run against real AWS (us-east-1, account 054125018476).
+> Unit tests (Vitest) and end-to-end smoke tests for the `assignee plan` and `assignee apply` commands.
 
 ---
+
+## Unit tests
+
+```bash
+pnpm test          # 188 tests across 20 files (~15s)
+pnpm check-types   # TypeScript type check
+```
+
+### Test fixtures — real MCP mock responses
+
+All MCP mock responses in `apps/cli/src/test-fixtures/mcp-mock-responses.ts` are captured from **live MCP servers** (cfn-mcp-server, aws-pricing-mcp-server, aws-documentation-mcp-server). No fabricated data.
+
+**What's included:**
+
+| Category          | Count | Source server                          |
+| ----------------- | ----- | -------------------------------------- |
+| CFN schemas       | 8     | `awslabs.cfn-mcp-server`               |
+| Pricing           | 11    | `awslabs.aws-pricing-mcp-server`       |
+| Doc search        | 4     | `awslabs.aws-documentation-mcp-server` |
+| Doc read sections | 5     | `awslabs.aws-documentation-mcp-server` |
+| Doc read full     | 2     | `awslabs.aws-documentation-mcp-server` |
+
+Plus synthetic edge cases (empty responses, malformed JSON, null, errors) for boundary testing.
+
+**Usage in tests:**
+
+```typescript
+import {
+  McpMocks,
+  createMockTool,
+  createCoreMockTools,
+} from "../test-fixtures/mcp-mock-responses.js";
+
+// Single mock tool
+const tool = createMockTool(
+  ToolName.GET_RESOURCE_SCHEMA,
+  McpMocks.schema.s3Bucket.success,
+);
+
+// Pre-built tool sets
+const tools = createCoreMockTools(
+  McpMocks.schema.ec2Instance.success,
+  McpMocks.pricing.ec2T3Micro.success,
+);
+```
+
+**Refreshing fixtures from live servers:**
+
+```bash
+cd apps/cli/scripts
+node capture-mcp-responses.mjs      # spawns MCP servers, captures 32 responses (requires .env)
+node process-captured-responses.mjs  # trims schemas/pricing/docs to fixture size
+node build-fixture-ts.mjs           # generates final mcp-mock-responses.ts
+```
+
+> `captured-responses/` and `processed-responses/` directories are gitignored — only the final TypeScript fixture is committed.
+
+### Key test files
+
+| File                        | Tests | What it covers                                                                       |
+| --------------------------- | ----- | ------------------------------------------------------------------------------------ |
+| `graph-integration.test.ts` | 18    | Full graph pipeline: S3, EC2, Lambda, IAM, DynamoDB, error paths, pricing edge cases |
+| `preflight-guard.test.ts`   | 10    | Required field validation, cost estimation, pricing timeout                          |
+| `intent-parser.test.ts`     | 11    | Resource type classification, compound pattern detection                             |
+| `schema-fetcher.test.ts`    | 7     | MCP schema retrieval, error handling                                                 |
+| `option-elicitor.test.ts`   | 24    | Interactive prompts, showIf conditionals, CI mode                                    |
+| `plan-generator.test.ts`    | 8     | LLM plan generation, JSON parsing                                                    |
+| `pricing-lookup.test.ts`    | 17    | EC2/RDS live price enrichment                                                        |
+| Plugin tests (core)         | 50+   | S3, EC2, RDS, Lambda, generic plugin config hints                                    |
+
+---
+
+## End-to-end smoke tests
+
+> All smoke tests run against real AWS (us-east-1, account 054125018476).
 
 ## Prerequisites
 
