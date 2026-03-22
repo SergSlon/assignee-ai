@@ -15,6 +15,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         type: "string",
         label: "Bucket name",
         placeholder: "my-bucket (leave blank for auto-generated)",
+        hint: "Globally unique name across all AWS accounts. Use lowercase letters, numbers, and hyphens. Must be 3-63 chars. Cannot be changed after creation. Leave blank for an auto-generated name.",
       },
     },
     {
@@ -40,6 +41,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         type: "string",
         label: "KMS Key ID (leave blank for SSE-S3)",
         placeholder: "arn:aws:kms:...",
+        hint: "ARN of a KMS key for server-side encryption. Leave blank to use the free SSE-S3 (AES-256). KMS adds ~$1/month per key plus $0.03 per 10K requests. Use KMS when you need key rotation or audit trails.",
         showIf: { field: "BucketEncryption", value: true },
       },
     },
@@ -76,6 +78,7 @@ export const s3BucketPlugin: ResourcePlugin = {
       question: {
         type: "multi",
         label: "Tags",
+        hint: "Key-value pairs for cost tracking and organization. Common tags: Environment (dev/staging/prod), Team, Project. Tags are free and highly recommended.",
         options: [],
       },
     },

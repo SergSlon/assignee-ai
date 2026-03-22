@@ -15,6 +15,7 @@ export const genericPlugin: ResourcePlugin = {
         type: "string",
         label: "Resource name",
         placeholder: "my-resource",
+        hint: "A descriptive name for this resource. Used for identification in the generated CloudFormation template. Use lowercase with hyphens.",
       },
     },
     {
@@ -22,6 +23,7 @@ export const genericPlugin: ResourcePlugin = {
       question: {
         type: "multi",
         label: "Tags",
+        hint: "Key-value pairs for cost tracking and organization. Common tags: Environment (dev/staging/prod), Team, Project. Tags are free and highly recommended.",
         options: [],
       },
     },
