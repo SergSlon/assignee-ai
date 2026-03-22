@@ -21,10 +21,20 @@ export const genericPlugin: ResourcePlugin = {
     {
       name: "Tags",
       question: {
-        type: "multi",
+        type: "string",
         label: "Tags",
-        hint: "Key-value pairs for cost tracking and organization. Common tags: Environment (dev/staging/prod), Team, Project. Tags are free and highly recommended.",
-        options: [],
+        placeholder: "env:production, team:backend",
+        hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+      },
+      toCfn: (answer: unknown) => {
+        if (typeof answer !== "string" || !answer.trim()) return undefined;
+        return answer
+          .split(",")
+          .filter((p) => p.includes(":"))
+          .map((pair) => {
+            const [Key, ...rest] = pair.trim().split(":");
+            return { Key: Key!.trim(), Value: rest.join(":").trim() };
+          });
       },
     },
   ],

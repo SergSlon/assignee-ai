@@ -70,8 +70,10 @@ export async function runCommand(opts: RunCommandOptions): Promise<never> {
     : null;
 
   try {
+    startSpinner("Connecting to AWS...");
     const mcpClient = await createMcpClient();
     let tools = await getMcpTools(mcpClient);
+    stopSpinner("Connected");
 
     // Story 9.7: Wrap MCP tools with recorder when recording enabled
     if (recorder) {

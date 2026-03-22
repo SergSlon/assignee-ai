@@ -287,7 +287,7 @@ describe("optionElicitorNode", () => {
   it("uses generic fallback plugin for unknown resource type", async () => {
     // generic plugin has 2 commonFields, no advancedFields
     vi.mocked(text).mockResolvedValueOnce("my-resource"); // ResourceName
-    vi.mocked(multiselect).mockResolvedValueOnce([]); // Tags (multi, no advanced confirm since no advancedFields)
+    vi.mocked(text).mockResolvedValueOnce("env:prod"); // Tags (now string type)
 
     const result = await optionElicitorNode(
       makeState({ resourceType: "AWS::Unknown::Type" }),

@@ -6,7 +6,12 @@
  */
 
 /** Supported question input types for field elicitation. */
-export type QuestionType = "boolean" | "enum" | "string" | "multi";
+export type QuestionType =
+  | "boolean"
+  | "enum"
+  | "string"
+  | "multi"
+  | "categorySelect";
 
 /**
  * Optional metadata for enriched option display (Story 10.2).
@@ -53,6 +58,17 @@ export interface FieldQuestion {
   showIf?: ShowIfCondition;
   /** Optional identifier for runtime option discovery (e.g., "discover-amis"). When set, the option-elicitor fetches options dynamically before prompting. */
   fetcher?: string;
+  /**
+   * Category groupings for `categorySelect` type. Each category groups related
+   * options with a label, description, and list of options belonging to it.
+   * @see Story 18.12
+   */
+  categories?: ReadonlyArray<{
+    key: string;
+    label: string;
+    description: string;
+    options: ReadonlyArray<{ value: string; label: string } & OptionMetadata>;
+  }>;
 }
 
 /**

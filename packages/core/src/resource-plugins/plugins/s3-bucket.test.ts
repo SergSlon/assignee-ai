@@ -40,10 +40,41 @@ describe("s3BucketPlugin", () => {
     expect(field?.question.type).toBe("string");
   });
 
-  it("Tags field uses multi type", () => {
+  describe("BucketName validation", () => {
+    const field = s3BucketPlugin.commonFields.find(
+      (f) => f.name === "BucketName",
+    )!;
+
+    it("accepts empty value (auto-generated)", () => {
+      expect(field.question.validate?.("")).toBeUndefined();
+    });
+
+    it("accepts valid bucket name", () => {
+      expect(field.question.validate?.("my-bucket-123")).toBeUndefined();
+    });
+
+    it("rejects too short name", () => {
+      expect(field.question.validate?.("ab")).toBeDefined();
+    });
+
+    it("rejects too long name (>63 chars)", () => {
+      expect(field.question.validate?.("a".repeat(64))).toBeDefined();
+    });
+
+    it("rejects uppercase letters", () => {
+      expect(field.question.validate?.("MyBucket")).toBeDefined();
+    });
+
+    it("rejects consecutive periods", () => {
+      expect(field.question.validate?.("my..bucket")).toBeDefined();
+    });
+  });
+
+  it("Tags field is string type with toCfn transform", () => {
     const field = s3BucketPlugin.commonFields.find((f) => f.name === "Tags");
     expect(field).toBeDefined();
-    expect(field?.question.type).toBe("multi");
+    expect(field?.question.type).toBe("string");
+    expect(field?.toCfn).toBeDefined();
   });
 
   it("defaults contain PublicAccessBlockConfiguration", () => {
@@ -191,8 +222,8 @@ describe("s3BucketPlugin", () => {
         expect(findField("KMSMasterKeyID").toCfn).toBeUndefined();
       });
 
-      it("Tags has no toCfn", () => {
-        expect(findField("Tags").toCfn).toBeUndefined();
+      it("Tags has toCfn", () => {
+        expect(findField("Tags").toCfn).toBeDefined();
       });
     });
   });

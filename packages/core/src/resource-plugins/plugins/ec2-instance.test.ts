@@ -15,22 +15,38 @@ describe("ec2InstancePlugin", () => {
   });
 
   it("all commonField question types are valid QuestionType values", () => {
-    const validTypes = new Set(["boolean", "enum", "string", "multi"]);
+    const validTypes = new Set([
+      "boolean",
+      "enum",
+      "string",
+      "multi",
+      "categorySelect",
+    ]);
     for (const field of ec2InstancePlugin.commonFields) {
       expect(validTypes.has(field.question.type)).toBe(true);
     }
   });
 
-  it("InstanceType is enum with t3.micro default and multiple options", () => {
+  it("InstanceType is categorySelect with t3.micro default and categories", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "InstanceType",
     );
     expect(field).toBeDefined();
-    expect(field?.question.type).toBe("enum");
+    expect(field?.question.type).toBe("categorySelect");
     expect(field?.question.initialValue).toBe("t3.micro");
-    expect(field?.question.options?.length).toBeGreaterThan(0);
-    const values = field?.question.options?.map((o) => o.value) ?? [];
-    expect(values).toContain("t3.micro");
+    expect(field?.question.categories?.length).toBe(4);
+    // Verify all 28 instance types are present across categories
+    const allValues =
+      field?.question.categories?.flatMap((c) =>
+        c.options.map((o) => o.value),
+      ) ?? [];
+    expect(allValues.length).toBe(28);
+    expect(allValues).toContain("t3.micro");
+    expect(allValues).toContain("m5.large");
+    expect(allValues).toContain("c5.large");
+    expect(allValues).toContain("r5.large");
+    // No duplicate values
+    expect(new Set(allValues).size).toBe(28);
   });
 
   it("ImageId is a dynamic enum field with fetcher", () => {
@@ -59,10 +75,53 @@ describe("ec2InstancePlugin", () => {
     expect(field?.question.type).toBe("multi");
   });
 
-  it("Tags field is multi type", () => {
+  it("Tags field is string type with toCfn transform", () => {
     const field = ec2InstancePlugin.commonFields.find((f) => f.name === "Tags");
     expect(field).toBeDefined();
-    expect(field?.question.type).toBe("multi");
+    expect(field?.question.type).toBe("string");
+    expect(field?.toCfn).toBeDefined();
+  });
+
+  describe("Tags toCfn transform", () => {
+    const field = ec2InstancePlugin.commonFields.find(
+      (f) => f.name === "Tags",
+    )!;
+
+    it("converts comma-separated Key:Value pairs to CFN array", () => {
+      expect(field.toCfn!("env:production, team:backend")).toEqual([
+        { Key: "env", Value: "production" },
+        { Key: "team", Value: "backend" },
+      ]);
+    });
+
+    it("returns undefined for empty string", () => {
+      expect(field.toCfn!("")).toBeUndefined();
+    });
+
+    it("returns undefined for whitespace-only string", () => {
+      expect(field.toCfn!("   ")).toBeUndefined();
+    });
+
+    it("handles single tag", () => {
+      expect(field.toCfn!("env:prod")).toEqual([{ Key: "env", Value: "prod" }]);
+    });
+
+    it("handles values containing colons (e.g., ARN)", () => {
+      expect(field.toCfn!("role:arn:aws:iam::123:role/my-role")).toEqual([
+        { Key: "role", Value: "arn:aws:iam::123:role/my-role" },
+      ]);
+    });
+
+    it("trims whitespace from keys and values", () => {
+      expect(field.toCfn!("  env : production , team : backend  ")).toEqual([
+        { Key: "env", Value: "production" },
+        { Key: "team", Value: "backend" },
+      ]);
+    });
+
+    it("returns undefined for non-string input", () => {
+      expect(field.toCfn!(42)).toBeUndefined();
+    });
   });
 
   it("advancedFields contains IamInstanceProfile and UserData", () => {

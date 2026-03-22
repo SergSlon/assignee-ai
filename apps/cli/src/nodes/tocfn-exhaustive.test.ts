@@ -82,13 +82,25 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
         }
 
         if (field.question.type === "string") {
-          it(`${field.name} (string value) → passthrough`, () => {
-            const result = applyToCfnTransforms(
-              { [field.name]: "test-value-123" },
-              resourceType,
-            );
-            expect(result[field.name]).toBe("test-value-123");
-          });
+          if (field.toCfn) {
+            it(`${field.name} (string value) → toCfn transform`, () => {
+              const result = applyToCfnTransforms(
+                { [field.name]: "test-value-123" },
+                resourceType,
+              );
+              // Fields with toCfn may transform or omit the value (e.g., Tags → [{Key, Value}], Environment → {Variables: {...}} or undefined)
+              // Simply verify it does NOT pass through unchanged as a raw string
+              expect(result[field.name]).not.toBe("test-value-123");
+            });
+          } else {
+            it(`${field.name} (string value) → passthrough`, () => {
+              const result = applyToCfnTransforms(
+                { [field.name]: "test-value-123" },
+                resourceType,
+              );
+              expect(result[field.name]).toBe("test-value-123");
+            });
+          }
         }
 
         if (field.question.type === "enum" && field.question.options?.length) {

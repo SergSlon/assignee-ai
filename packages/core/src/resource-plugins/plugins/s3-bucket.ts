@@ -16,6 +16,17 @@ export const s3BucketPlugin: ResourcePlugin = {
         label: "Bucket name",
         placeholder: "my-bucket (leave blank for auto-generated)",
         hint: "Globally unique name across all AWS accounts. Use lowercase letters, numbers, and hyphens. Must be 3-63 chars. Cannot be changed after creation. Leave blank for an auto-generated name.",
+        validate: (value: unknown) => {
+          if (!value) return undefined; // Optional (auto-generated)
+          const s = String(value);
+          if (s.length < 3 || s.length > 63)
+            return "Bucket name must be 3-63 characters";
+          if (!/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(s))
+            return "Bucket name must be lowercase letters, numbers, hyphens, and periods";
+          if (/\.\./.test(s))
+            return "Bucket name cannot contain consecutive periods";
+          return undefined;
+        },
       },
     },
     {
@@ -76,10 +87,20 @@ export const s3BucketPlugin: ResourcePlugin = {
     {
       name: "Tags",
       question: {
-        type: "multi",
+        type: "string",
         label: "Tags",
-        hint: "Key-value pairs for cost tracking and organization. Common tags: Environment (dev/staging/prod), Team, Project. Tags are free and highly recommended.",
-        options: [],
+        placeholder: "env:production, team:backend",
+        hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+      },
+      toCfn: (answer: unknown) => {
+        if (typeof answer !== "string" || !answer.trim()) return undefined;
+        return answer
+          .split(",")
+          .filter((p) => p.includes(":"))
+          .map((pair) => {
+            const [Key, ...rest] = pair.trim().split(":");
+            return { Key: Key!.trim(), Value: rest.join(":").trim() };
+          });
       },
     },
   ],

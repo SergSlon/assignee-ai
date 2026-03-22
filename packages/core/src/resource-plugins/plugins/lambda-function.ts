@@ -23,11 +23,20 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
   commonFields: [
     {
       name: "FunctionName",
+      required: true,
       question: {
         type: "string",
         label: "Function name",
         placeholder: "my-function",
         hint: "Unique name for this function within the region. Use lowercase, hyphens, and numbers. Max 64 chars. Cannot be changed after creation.",
+        validate: (value: unknown) => {
+          if (!value) return undefined; // Optional
+          const s = String(value);
+          if (s.length > 64) return "Function name cannot exceed 64 characters";
+          if (!/^[a-zA-Z0-9_-]+$/.test(s))
+            return "Function name can only contain letters, numbers, hyphens, and underscores";
+          return undefined;
+        },
       },
     },
     {
@@ -63,6 +72,21 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
             label: "Java 21",
             fitHint: "Enterprise, slower cold start",
           },
+          {
+            value: "dotnet8",
+            label: ".NET 8",
+            fitHint: "Cross-platform, enterprise",
+          },
+          {
+            value: "ruby3.3",
+            label: "Ruby 3.3",
+            fitHint: "Scripting, web apps",
+          },
+          {
+            value: "provided.al2023",
+            label: "Custom runtime (Go/Rust/C++)",
+            fitHint: "Bring your own runtime",
+          },
         ],
         initialValue: "nodejs22.x",
       },
@@ -74,10 +98,18 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         label: "Handler (file.method)",
         placeholder: "index.handler",
         hint: "Entry point for your function: file name + exported method. Node.js: 'index.handler'. Python: 'lambda_function.lambda_handler'. Must match your code exactly.",
+        validate: (value: unknown) => {
+          if (!value) return undefined; // Optional
+          const s = String(value);
+          if (!s.includes("."))
+            return "Handler must be in file.method format (e.g., index.handler)";
+          return undefined;
+        },
       },
     },
     {
       name: "Role",
+      required: true,
       question: {
         type: "string",
         label: "Execution role ARN",
@@ -145,12 +177,44 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       },
     },
     {
+      name: "Environment",
+      question: {
+        type: "string",
+        label: "Environment variables",
+        placeholder: "DB_HOST=localhost,API_KEY=xxx",
+        hint: "Comma-separated KEY=VALUE pairs. These are injected into the function's runtime environment. Sensitive values should use SSM Parameter Store references instead.",
+      },
+      toCfn: (value: unknown) => {
+        if (!value || typeof value !== "string" || !value.trim()) {
+          return undefined;
+        }
+        const vars: Record<string, string> = {};
+        for (const pair of value.split(",")) {
+          const eqIdx = pair.indexOf("=");
+          if (eqIdx > 0) {
+            vars[pair.slice(0, eqIdx).trim()] = pair.slice(eqIdx + 1).trim();
+          }
+        }
+        return Object.keys(vars).length > 0 ? { Variables: vars } : undefined;
+      },
+    },
+    {
       name: "Tags",
       question: {
-        type: "multi",
+        type: "string",
         label: "Tags",
-        hint: "Key-value pairs for cost tracking and organization. Common tags: Environment (dev/staging/prod), Team, Project. Tags are free and highly recommended.",
-        options: [],
+        placeholder: "env:production, team:backend",
+        hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+      },
+      toCfn: (answer: unknown) => {
+        if (typeof answer !== "string" || !answer.trim()) return undefined;
+        return answer
+          .split(",")
+          .filter((p) => p.includes(":"))
+          .map((pair) => {
+            const [Key, ...rest] = pair.trim().split(":");
+            return { Key: Key!.trim(), Value: rest.join(":").trim() };
+          });
       },
     },
   ],

@@ -98,6 +98,31 @@ export const RECOMMENDATION_RULES: RecommendationRule[] = [
       return !options["MultiAZ"] && isProductionIntent(intent);
     },
   },
+  {
+    id: "lambda-low-memory-api",
+    resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+    severity: "info",
+    message:
+      "Consider 256+ MB for API handlers — CPU scales with memory, " +
+      "improving response latency.",
+    condition: (options, intent) => {
+      const mem = options["MemorySize"];
+      const isLowMem = mem === 128 || mem === "128" || mem === undefined;
+      return isLowMem && intent.toLowerCase().includes("api");
+    },
+  },
+  {
+    id: "lambda-no-reserved-concurrency",
+    resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+    severity: "info",
+    message:
+      "Set reserved concurrency to prevent a single function from " +
+      "consuming the account-wide Lambda concurrency pool.",
+    condition: (options) => {
+      const val = options["ReservedConcurrentExecutions"];
+      return val === undefined || val === "" || val === null;
+    },
+  },
 ];
 
 // ── Engine ───────────────────────────────────────────────────────────────────
