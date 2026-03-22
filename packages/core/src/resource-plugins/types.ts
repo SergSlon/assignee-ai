@@ -9,6 +9,19 @@
 export type QuestionType = "boolean" | "enum" | "string" | "multi";
 
 /**
+ * Optional metadata for enriched option display (Story 10.2).
+ * Extensible — BP library (Epic 12) will add compliance/security flags later.
+ */
+export interface OptionMetadata {
+  /** Estimated cost hint, e.g. "$0.023/GB-mo" or "~2x cost" */
+  costHint?: string;
+  /** Suitability hint, e.g. "Best for frequently accessed data" */
+  fitHint?: string;
+  /** Whether this option is the recommended choice */
+  recommended?: boolean;
+}
+
+/**
  * Conditional display rule: show this field only when another field equals a specific value.
  * Mirrors JSON Schema if/then pattern.
  */
@@ -29,9 +42,11 @@ export interface FieldQuestion {
   /** Placeholder text for string/enum inputs */
   placeholder?: string;
   /** Required for 'enum' and 'multi' types */
-  options?: ReadonlyArray<{ value: string; label: string }>;
+  options?: ReadonlyArray<{ value: string; label: string } & OptionMetadata>;
   /** Pre-filled default value shown to user */
   initialValue?: unknown;
+  /** Contextual hint displayed before the prompt (e.g., cost/tradeoff note for boolean fields) */
+  hint?: string;
   /** Optional inline validation — return error string or undefined */
   validate?: (value: unknown) => string | undefined;
   /** If set, only show this field when the condition is met */

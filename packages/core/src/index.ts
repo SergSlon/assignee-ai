@@ -54,6 +54,7 @@ export type {
   FieldQuestion,
   QuestionType,
   ShowIfCondition,
+  OptionMetadata,
 } from "./resource-plugins/types.js";
 
 // Resource Policy (config types for option elicitation — full loader in Story 7.2)

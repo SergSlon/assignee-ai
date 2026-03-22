@@ -428,6 +428,11 @@ export async function renderOptionPrompt(
 
   if (!process.stdin.isTTY) return defaultValue;
 
+  // Display contextual hint before the prompt if present (Story 10.2)
+  if (field.question.hint && process.stdout.isTTY) {
+    clack.note(field.question.hint, field.name);
+  }
+
   const { question } = field;
   let result: unknown;
 

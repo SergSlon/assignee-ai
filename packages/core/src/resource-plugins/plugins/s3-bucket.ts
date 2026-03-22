@@ -23,6 +23,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         type: "boolean",
         label: "Enable server-side encryption?",
         initialValue: true,
+        hint: "SSE-S3 is free. KMS adds ~$1/mo per 10K requests. Recommended for production.",
       },
     },
     {
@@ -40,6 +41,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         type: "boolean",
         label: "Block all public access?",
         initialValue: true,
+        hint: "Blocks all public ACLs and policies. Recommended for security.",
       },
     },
     {
@@ -48,6 +50,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         type: "boolean",
         label: "Enable versioning?",
         initialValue: false,
+        hint: "Keeps all object versions. Increases storage cost. Best for data protection.",
       },
     },
     {

@@ -16,18 +16,23 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           {
             value: "db.t3.micro",
             label: "db.t3.micro  (2 vCPU,  1 GiB) — ~$0.017/hr",
+            fitHint: "Dev/test",
           },
           {
             value: "db.t3.small",
             label: "db.t3.small  (2 vCPU,  2 GiB) — ~$0.034/hr",
+            fitHint: "Small production",
+            recommended: true,
           },
           {
             value: "db.t3.medium",
             label: "db.t3.medium (2 vCPU,  4 GiB) — ~$0.068/hr",
+            fitHint: "Medium production",
           },
           {
             value: "db.m5.large",
             label: "db.m5.large  (2 vCPU,  8 GiB) — ~$0.171/hr",
+            fitHint: "High-performance production",
           },
         ],
         initialValue: "db.t3.micro",
@@ -39,11 +44,24 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         type: "enum",
         label: "Database engine",
         options: [
-          { value: "mysql", label: "MySQL" },
-          { value: "postgres", label: "PostgreSQL" },
-          { value: "mariadb", label: "MariaDB" },
-          { value: "aurora-mysql", label: "Aurora MySQL" },
-          { value: "aurora-postgresql", label: "Aurora PostgreSQL" },
+          { value: "mysql", label: "MySQL", fitHint: "Widely supported" },
+          {
+            value: "postgres",
+            label: "PostgreSQL",
+            fitHint: "Most popular, advanced features",
+            recommended: true,
+          },
+          { value: "mariadb", label: "MariaDB", fitHint: "MySQL-compatible" },
+          {
+            value: "aurora-mysql",
+            label: "Aurora MySQL",
+            fitHint: "AWS-native, auto-scaling",
+          },
+          {
+            value: "aurora-postgresql",
+            label: "Aurora PostgreSQL",
+            fitHint: "AWS-native, auto-scaling",
+          },
         ],
         initialValue: "postgres",
       },
@@ -66,6 +84,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         type: "boolean",
         label: "Enable Multi-AZ deployment?",
         initialValue: false,
+        hint: "Doubles cost. Provides high availability with automatic failover. Best for production.",
       },
     },
     {
@@ -77,15 +96,19 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           {
             value: "gp3",
             label: "gp3 (General Purpose SSD v3) — ~$0.115/GB-month",
+            fitHint: "Best price-performance",
+            recommended: true,
           },
           {
             value: "gp2",
             label: "gp2 (General Purpose SSD v2) — ~$0.115/GB-month",
+            fitHint: "Legacy, prefer gp3",
           },
           {
             value: "io1",
             label:
               "io1 (Provisioned IOPS SSD)   — ~$0.125/GB-month + $0.10/IOPS",
+            fitHint: "High-IOPS workloads",
           },
         ],
         initialValue: "gp3",
