@@ -3,7 +3,7 @@
  * These configs are used by @langchain/mcp-adapters to spawn MCP server processes.
  *
  * Credential separation (3-user model — Story 18.8):
- *   - Operator (AWS_*): used directly by CLI for Bedrock + CloudControl
+ *   - Operator (ASSIGNEE_OPERATOR_*): used directly by CLI for Bedrock + CloudControl
  *   - Reader (ASSIGNEE_READER_*): passed to MCP servers needing schema/pricing/billing
  *   - Auditor (ASSIGNEE_AUDITOR_*): passed to MCP servers needing IAM/SecurityHub access
  *   All sets live in .env — see .env.example.

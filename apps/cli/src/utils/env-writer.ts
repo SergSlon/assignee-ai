@@ -8,8 +8,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-/** Keys that should be removed during migration from the old 2-user model. */
-const DEPRECATED_KEYS = ["MCP_AWS_ACCESS_KEY_ID", "MCP_AWS_SECRET_ACCESS_KEY"];
+/** Keys that should be removed during migration from older credential models. */
+const DEPRECATED_KEYS = [
+  "MCP_AWS_ACCESS_KEY_ID",
+  "MCP_AWS_SECRET_ACCESS_KEY",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+];
 
 /**
  * Reads an existing .env file, upserts the given key-value pairs,

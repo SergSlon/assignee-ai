@@ -183,8 +183,8 @@ describe("setup command", () => {
 
     expect(mockMergeEnvFile).toHaveBeenCalledTimes(1);
     const envUpdates = mockMergeEnvFile.mock.calls[0]![1];
-    expect(envUpdates).toHaveProperty("AWS_ACCESS_KEY_ID");
-    expect(envUpdates).toHaveProperty("AWS_SECRET_ACCESS_KEY");
+    expect(envUpdates).toHaveProperty("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
+    expect(envUpdates).toHaveProperty("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
     expect(envUpdates).toHaveProperty("ASSIGNEE_READER_ACCESS_KEY_ID");
     expect(envUpdates).toHaveProperty("ASSIGNEE_READER_SECRET_ACCESS_KEY");
     expect(envUpdates).toHaveProperty("ASSIGNEE_AUDITOR_ACCESS_KEY_ID");

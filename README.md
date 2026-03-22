@@ -207,7 +207,7 @@ Optional servers (IAM, Well-Architected Security, Billing) are spawned only when
 
 **Credential separation:**
 
-- `AWS_*` env vars → operator IAM user → Bedrock AI calls + CloudFormation provisioning
+- `ASSIGNEE_OPERATOR_*` env vars → operator IAM user → Bedrock AI calls + CloudFormation provisioning
 - `ASSIGNEE_READER_*` env vars → reader IAM user → MCP servers with read-only access (CCAPI, pricing)
 - `ASSIGNEE_AUDITOR_*` env vars → auditor IAM user → MCP servers with audit access (CloudFormation describe/list)
 
