@@ -1,0 +1,335 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// Mock tool factory functions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Creates a mock StructuredTool that returns the given response on invoke().
+ * Matches the pattern used across all existing tests in the project.
+ *
+ * @param name  - Tool name from ToolName constants
+ * @param response - The value to resolve (or Error to reject) on invoke
+ *
+ * @example
+ *   const tool = createMockTool(ToolName.GET_RESOURCE_SCHEMA, McpMocks.schema.s3Bucket.success);
+ *   const result = await tool.invoke({ resource_type: "AWS::S3::Bucket" });
+ */
+export function createMockTool(
+  name: string,
+  response: unknown,
+): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi.fn().mockResolvedValue(response),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates a mock tool that rejects with the given error.
+ *
+ * @example
+ *   const tool = createFailingMockTool(ToolName.GET_RESOURCE_SCHEMA, new Error("Server down"));
+ */
+export function createFailingMockTool(
+  name: string,
+  error: Error = new Error("Tool execution failed"),
+): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi.fn().mockRejectedValue(error),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates a mock tool that never resolves (hangs forever) — for timeout tests.
+ *
+ * @example
+ *   const tool = createHangingMockTool(ToolName.GET_PRICING);
+ */
+export function createHangingMockTool(name: string): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi.fn().mockImplementation(() => new Promise(() => {})),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates a mock tool that resolves after a specified delay.
+ *
+ * @example
+ *   const tool = createDelayedMockTool(ToolName.GET_PRICING, McpMocks.pricing.ec2T3Micro.success, 5000);
+ */
+export function createDelayedMockTool(
+  name: string,
+  response: unknown,
+  delayMs: number,
+): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => resolve(response), delayMs),
+          ),
+      ),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates a mock tool that returns null — simulates timeout via withTimeout().
+ *
+ * @example
+ *   const tool = createNullMockTool(ToolName.SEARCH_DOCUMENTATION);
+ */
+export function createNullMockTool(name: string): StructuredTool {
+  return {
+    name,
+    description: "",
+    invoke: vi.fn().mockResolvedValue(null),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates a mock tool that returns different responses on successive calls.
+ *
+ * @example
+ *   const tool = createSequenceMockTool(ToolName.GET_PRICING, [
+ *     McpMocks.pricing.ec2T3Micro.success,
+ *     McpMocks.pricing.ec2T3Small.success,
+ *   ]);
+ */
+export function createSequenceMockTool(
+  name: string,
+  responses: unknown[],
+): StructuredTool {
+  const mockFn = vi.fn();
+  responses.forEach((response) => {
+    if (response instanceof Error) {
+      mockFn.mockRejectedValueOnce(response);
+    } else {
+      mockFn.mockResolvedValueOnce(response);
+    }
+  });
+  return {
+    name,
+    description: "",
+    invoke: mockFn,
+  } as unknown as StructuredTool;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Pre-built tool sets — common combinations used across multiple test files
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Creates a complete set of all 5 MCP tools with default success responses.
+ * Useful for integration-style tests that need all tools available.
+ */
+export function createAllMockTools(): StructuredTool[] {
+  return [
+    createMockTool(
+      ToolName.GET_RESOURCE_SCHEMA,
+      McpMocks.schema.s3Bucket.success,
+    ),
+    createMockTool(ToolName.GET_PRICING, McpMocks.pricing.s3Storage.success),
+    createMockTool(
+      ToolName.SEARCH_DOCUMENTATION,
+      McpMocks.docSearch.s3BucketName.success,
+    ),
+    createMockTool(
+      ToolName.READ_SECTIONS,
+      McpMocks.docReadSections.s3BucketName.success,
+    ),
+    createMockTool(
+      ToolName.READ_DOCUMENTATION,
+      McpMocks.docReadFull.s3BucketFull.success,
+    ),
+  ];
+}
+
+/**
+ * Creates schema + pricing tools only (no documentation).
+ * Used by schema-fetcher and preflight-guard tests.
+ */
+export function createCoreMockTools(
+  schemaResponse = McpMocks.schema.s3Bucket.success,
+  pricingResponse = McpMocks.pricing.s3Storage.success,
+): StructuredTool[] {
+  return [
+    createMockTool(ToolName.GET_RESOURCE_SCHEMA, schemaResponse),
+    createMockTool(ToolName.GET_PRICING, pricingResponse),
+  ];
+}
+
+/**
+ * Creates documentation tools only (search + read_sections + read_documentation).
+ * Used by display.ts renderDocHelp tests.
+ */
+export function createDocMockTools(
+  searchResponse: unknown = McpMocks.docSearch.s3BucketName.success,
+  readSectionsResponse: unknown = McpMocks.docReadSections.s3BucketName.success,
+  readFullResponse: unknown = McpMocks.docReadFull.s3BucketFull.success,
+): StructuredTool[] {
+  return [
+    createMockTool(ToolName.SEARCH_DOCUMENTATION, searchResponse),
+    createMockTool(ToolName.READ_SECTIONS, readSectionsResponse),
+    createMockTool(ToolName.READ_DOCUMENTATION, readFullResponse),
+  ];
+}
+
+/**
+ * Creates a pricing tool that returns different prices for different instance types.
+ * Maps instance type → mock pricing response.
+ *
+ * @example
+ *   const tool = createPricingLookupTool({
+ *     "t3.micro": McpMocks.pricing.ec2T3Micro.success,
+ *     "t3.small": McpMocks.pricing.ec2T3Small.success,
+ *   });
+ */
+export function createPricingLookupTool(
+  priceMap: Record<string, unknown>,
+): StructuredTool {
+  return {
+    name: ToolName.GET_PRICING,
+    description: "",
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        async (args: { filters?: Array<{ Field: string; Value: string }> }) => {
+          const instanceFilter = args.filters?.find(
+            (f) => f.Field === "instanceType",
+          );
+          if (instanceFilter && instanceFilter.Value in priceMap) {
+            return priceMap[instanceFilter.Value];
+          }
+          return McpMocks.pricing.emptyData.success;
+        },
+      ),
+  } as unknown as StructuredTool;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Pricing response builder — for generating custom pricing responses
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Builds a minimal pricing response with a single on-demand price.
+ * Matches the helper `makePricingResponse` used in pricing-lookup.test.ts.
+ *
+ * @param priceUsd - The USD price per unit (0 for free-tier)
+ * @returns MCP-wrapped pricing response
+ *
+ * @example
+ *   const response = buildPricingResponse(0.0104);
+ *   // → { type: "text", text: '{"data":[{"terms":{"OnDemand":...}}]}' }
+ */
+export function buildPricingResponse(priceUsd: number) {
+  return mcpText({
+    data: [
+      {
+        terms: {
+          OnDemand: {
+            "TERM-1": {
+              priceDimensions: {
+                "DIM-1": {
+                  beginRange: "0",
+                  pricePerUnit: { USD: String(priceUsd) },
+                },
+              },
+            },
+          },
+        },
+      },
+    ],
+  });
+}
+
+/**
+ * Builds a multi-tier pricing response (e.g., S3 storage tiers).
+ *
+ * @param tiers - Array of [beginRange, endRange, priceUsd] tuples
+ *
+ * @example
+ *   const response = buildMultiTierPricingResponse([
+ *     ["0", "51200", 0.023],
+ *     ["51200", "512000", 0.022],
+ *     ["512000", "Inf", 0.021],
+ *   ]);
+ */
+export function buildMultiTierPricingResponse(
+  tiers: Array<[string, string, number]>,
+) {
+  const priceDimensions: Record<string, unknown> = {};
+  tiers.forEach(([beginRange, endRange, priceUsd], i) => {
+    priceDimensions[`DIM-${i}`] = {
+      beginRange,
+      endRange,
+      pricePerUnit: { USD: String(priceUsd) },
+    };
+  });
+
+  return mcpText({
+    data: [
+      {
+        terms: {
+          OnDemand: {
+            "TERM-MULTI": { priceDimensions },
+          },
+        },
+      },
+    ],
+  });
+}
+
+/**
+ * Builds a schema response for any resource type with custom properties.
+ *
+ * @example
+ *   const response = buildSchemaResponse("AWS::SQS::Queue", {
+ *     QueueName: { Type: "string" },
+ *     FifoQueue: { Type: "boolean" },
+ *   }, ["QueueName"]);
+ */
+export function buildSchemaResponse(
+  typeName: string,
+  properties: Record<string, unknown>,
+  required: string[] = [],
+) {
+  return mcpText({
+    typeName,
+    properties,
+    required,
+  });
+}
+
+/**
+ * Builds a documentation search response with custom URLs.
+ *
+ * @example
+ *   const response = buildDocSearchResponse([
+ *     "https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-naming.html",
+ *   ]);
+ */
+export function buildDocSearchResponse(urls: string[]) {
+  return {
+    structuredContent: {
+      search_results: urls.map((url) => ({ url })),
+    },
+  };
+}
+
+/**
+ * Builds a documentation read response with custom text content.
+ *
+ * @example
+ *   const response = buildDocReadResponse("## Properties\n\nBucketName: ...");
+ */
+export function buildDocReadResponse(content: string) {
+  return mcpText(content);
+}
