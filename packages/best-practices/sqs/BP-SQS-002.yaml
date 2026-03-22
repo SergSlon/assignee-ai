@@ -1,0 +1,13 @@
+id: BP-SQS-002
+title: "SQS queue should have a dead-letter queue configured"
+severity: HIGH
+resource_type: "AWS::SQS::Queue"
+property_path: "RedrivePolicy"
+check_type: "exists"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "SQS.2"
+description: "SQS queues should have a dead-letter queue (DLQ) configured via a RedrivePolicy. Without a DLQ, messages that fail processing are retried indefinitely or silently dropped, causing data loss and hiding errors."
+remediation: "Configure RedrivePolicy with a deadLetterTargetArn and maxReceiveCount. Set maxReceiveCount to a reasonable value (e.g., 3-5) based on expected retry behavior."
+category: reliability
+lastVerified: "2026-03-22"

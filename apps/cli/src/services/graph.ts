@@ -33,8 +33,7 @@ import { bpEvaluatorNode } from "../nodes/bp-evaluator.js";
 import { createCloudControlClient } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
-import { BedrockLlmAdapter } from "./bedrock-llm-adapter.js";
-import { BEDROCK_MODEL_ID, AWS_REGION } from "../config/constants.js";
+import { LiteLLMAdapter } from "./litellm-adapter.js";
 
 export function createGraph(tools: StructuredTool[] = []) {
   const cloudClient = createCloudControlClient({
@@ -55,9 +54,8 @@ export function createGraph(tools: StructuredTool[] = []) {
     // SDK fallback unavailable (missing credentials) — graph works without it
   }
 
-  const llmAdapter = new BedrockLlmAdapter({
-    modelId: BEDROCK_MODEL_ID,
-    region: AWS_REGION,
+  const llmAdapter = new LiteLLMAdapter({
+    modelString: process.env["ASSIGNEE_MODEL"],
     guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
     guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],
   });

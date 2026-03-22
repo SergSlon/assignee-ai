@@ -1,0 +1,13 @@
+id: BP-RDS-001
+title: "RDS instance should not be publicly accessible"
+severity: CRITICAL
+resource_type: "AWS::RDS::DBInstance"
+property_path: "PubliclyAccessible"
+check_type: "equals"
+expected_value: false
+source: "AWS Security Hub FSBP"
+source_id: "RDS.2"
+description: "RDS DB instances should not be publicly accessible. Publicly accessible instances are reachable from the internet, significantly increasing the attack surface for database compromise."
+remediation: "Set PubliclyAccessible to false. Place the RDS instance in a private subnet and access it through a VPN, bastion host, or AWS PrivateLink."
+category: security
+lastVerified: "2026-03-22"

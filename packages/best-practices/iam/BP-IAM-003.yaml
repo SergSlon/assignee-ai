@@ -1,0 +1,13 @@
+id: BP-IAM-003
+title: "IAM user access keys should be rotated within 90 days"
+severity: HIGH
+resource_type: "AWS::IAM::User"
+property_path: "AccessKeyMaxAge"
+check_type: "less_than"
+expected_value: 90
+source: "AWS Security Hub FSBP"
+source_id: "IAM.3"
+description: "IAM user access keys should be rotated at least every 90 days. Long-lived credentials increase the window of exposure if they are leaked or compromised."
+remediation: "Rotate access keys regularly. Prefer IAM roles with temporary credentials via AWS STS instead of long-lived access keys. If keys are required, automate rotation and disable unused keys."
+category: security
+lastVerified: "2026-03-22"

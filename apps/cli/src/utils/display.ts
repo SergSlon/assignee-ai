@@ -313,17 +313,36 @@ export function renderDependencyPlan(
   }
 }
 
-export function renderError(message: string, hint?: string): void {
+/**
+ * Renders an error message to stderr with structured WHAT / WHY / HOW-TO-FIX format.
+ *
+ * Overloads:
+ * 1. renderError(message, hint?) — legacy format (backward-compatible)
+ * 2. renderError(message, hint?, context?) — 3-part structured format
+ *
+ * @see Story 18.3 — Error Message Quality Audit
+ */
+export function renderError(
+  message: string,
+  hint?: string,
+  context?: { why?: string },
+): void {
   stopSpinner();
   if (process.stderr.isTTY) {
-    process.stderr.write(chalk.red(`✖ Error: ${message}\n`));
+    process.stderr.write(chalk.red(`\u2716 Error: ${message}\n`));
+    if (context?.why) {
+      process.stderr.write(chalk.yellow(`  Why: ${context.why}\n`));
+    }
     if (hint) {
-      process.stderr.write(chalk.dim(`  How to Fix: ${hint}\n`));
+      process.stderr.write(chalk.green(`  How to Fix: ${hint}\n`));
     }
   } else {
-    process.stderr.write(`Error: ${message}\n`);
+    process.stderr.write(`[ERROR] ${message}\n`);
+    if (context?.why) {
+      process.stderr.write(`[CONTEXT] ${context.why}\n`);
+    }
     if (hint) {
-      process.stderr.write(`How to Fix: ${hint}\n`);
+      process.stderr.write(`[FIX] ${hint}\n`);
     }
   }
 }

@@ -1,0 +1,13 @@
+id: BP-SNS-002
+title: "SNS topic should have message delivery logging enabled"
+severity: HIGH
+resource_type: "AWS::SNS::Topic"
+property_path: "DeliveryStatusLogging"
+check_type: "exists"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "SNS.4"
+description: "SNS topics should have delivery status logging enabled for at least one protocol. Without delivery logging, failed notifications go undetected, causing silent data loss in event pipelines."
+remediation: "Configure delivery status logging for the topic's subscribed protocols (HTTP, SQS, Lambda, etc.). Set up a CloudWatch Logs IAM role and configure success/failure sample rates."
+category: reliability
+lastVerified: "2026-03-22"
