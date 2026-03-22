@@ -37,8 +37,8 @@ import { LiteLLMAdapter } from "./litellm-adapter.js";
 
 export function createGraph(tools: StructuredTool[] = []) {
   const cloudClient = createCloudControlClient({
-    accessKeyId: process.env["MCP_AWS_ACCESS_KEY_ID"] ?? "",
-    secretAccessKey: process.env["MCP_AWS_SECRET_ACCESS_KEY"] ?? "",
+    accessKeyId: process.env["AWS_ACCESS_KEY_ID"] ?? "",
+    secretAccessKey: process.env["AWS_SECRET_ACCESS_KEY"] ?? "",
     region: process.env["AWS_REGION"] ?? "",
   });
   const provisioner = new CloudControlAdapter(cloudClient);
@@ -46,8 +46,8 @@ export function createGraph(tools: StructuredTool[] = []) {
   let fallbackDispatcher: SDKFallbackDispatcher | undefined;
   try {
     fallbackDispatcher = new SDKFallbackDispatcher({
-      accessKeyId: process.env["MCP_AWS_ACCESS_KEY_ID"] ?? "",
-      secretAccessKey: process.env["MCP_AWS_SECRET_ACCESS_KEY"] ?? "",
+      accessKeyId: process.env["AWS_ACCESS_KEY_ID"] ?? "",
+      secretAccessKey: process.env["AWS_SECRET_ACCESS_KEY"] ?? "",
       region: process.env["AWS_REGION"] ?? "",
     });
   } catch {

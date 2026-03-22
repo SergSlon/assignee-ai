@@ -40,12 +40,12 @@ const MAX_POLL_ATTEMPTS = 60;
 const POLL_INTERVAL_MS = 2000;
 
 /**
- * Reads AWS credentials from environment variables (MCP_AWS_* for aws-mcp-user).
+ * Reads AWS credentials from environment variables (AWS_* for assignee-operator).
  */
 function getAwsConfig(): AwsConfig {
   return {
-    accessKeyId: process.env["MCP_AWS_ACCESS_KEY_ID"] ?? "",
-    secretAccessKey: process.env["MCP_AWS_SECRET_ACCESS_KEY"] ?? "",
+    accessKeyId: process.env["AWS_ACCESS_KEY_ID"] ?? "",
+    secretAccessKey: process.env["AWS_SECRET_ACCESS_KEY"] ?? "",
     region: process.env["AWS_REGION"] ?? "us-east-1",
   };
 }
@@ -156,7 +156,7 @@ export async function destroyAction(
   } catch {
     renderError(
       "AWS credentials are not configured.",
-      "Set MCP_AWS_ACCESS_KEY_ID and MCP_AWS_SECRET_ACCESS_KEY environment variables.",
+      "Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables, or run `assignee setup`.",
     );
     process.exit(ProcessExitCode.GENERIC_ERROR);
   }

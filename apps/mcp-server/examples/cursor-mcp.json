@@ -5,8 +5,8 @@
       "args": ["@assignee/mcp-server"],
       "env": {
         "AWS_REGION": "us-east-1",
-        "MCP_AWS_ACCESS_KEY_ID": "your-key",
-        "MCP_AWS_SECRET_ACCESS_KEY": "your-secret"
+        "AWS_ACCESS_KEY_ID": "your-key",
+        "AWS_SECRET_ACCESS_KEY": "your-secret"
       }
     }
   }

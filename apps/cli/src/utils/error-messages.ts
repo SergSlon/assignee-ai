@@ -88,7 +88,7 @@ const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "AWS denied access to perform this operation.",
     why: "The IAM credentials used by assignee.ai lack the required permissions for this resource type or action.",
     howToFix:
-      "Verify that the MCP_AWS_ACCESS_KEY_ID / MCP_AWS_SECRET_ACCESS_KEY credentials have the necessary IAM permissions. Check the assignee.ai IAM policy documentation.",
+      "Verify that the AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY credentials have the necessary IAM permissions. Run `assignee setup` to create properly scoped IAM users.",
   },
   InvalidParameterValue: {
     code: "InvalidParameterValue",
@@ -126,16 +126,16 @@ const CONFIG_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
   MISSING_ACCESS_KEY: {
     code: "MISSING_ACCESS_KEY",
     what: "AWS access key ID is not configured.",
-    why: "The MCP_AWS_ACCESS_KEY_ID environment variable is missing or empty. Assignee.ai requires AWS credentials to interact with your account.",
+    why: "The AWS_ACCESS_KEY_ID environment variable is missing or empty. Assignee.ai requires AWS credentials to interact with your account.",
     howToFix:
-      "Set the MCP_AWS_ACCESS_KEY_ID environment variable:\n  export MCP_AWS_ACCESS_KEY_ID=AKIA...\nOr run `assignee init` to configure credentials.",
+      "Set the AWS_ACCESS_KEY_ID environment variable:\n  export AWS_ACCESS_KEY_ID=AKIA...\nOr run `assignee setup` to create IAM users and credentials.",
   },
   MISSING_SECRET_KEY: {
     code: "MISSING_SECRET_KEY",
     what: "AWS secret access key is not configured.",
-    why: "The MCP_AWS_SECRET_ACCESS_KEY environment variable is missing or empty.",
+    why: "The AWS_SECRET_ACCESS_KEY environment variable is missing or empty.",
     howToFix:
-      "Set the MCP_AWS_SECRET_ACCESS_KEY environment variable:\n  export MCP_AWS_SECRET_ACCESS_KEY=...\nOr run `assignee init` to configure credentials.",
+      "Set the AWS_SECRET_ACCESS_KEY environment variable:\n  export AWS_SECRET_ACCESS_KEY=...\nOr run `assignee setup` to create IAM users and credentials.",
   },
   MISSING_REGION: {
     code: "MISSING_REGION",
@@ -495,13 +495,13 @@ export class ErrorMessageRegistry {
 
   private matchConfigError(message: string): ErrorMessageEntry | undefined {
     if (
-      message.includes("MCP_AWS_ACCESS_KEY_ID") ||
+      message.includes("AWS_ACCESS_KEY_ID") ||
       message.includes("access key")
     ) {
       return this.entries.get("MISSING_ACCESS_KEY");
     }
     if (
-      message.includes("MCP_AWS_SECRET_ACCESS_KEY") ||
+      message.includes("AWS_SECRET_ACCESS_KEY") ||
       message.includes("secret key")
     ) {
       return this.entries.get("MISSING_SECRET_KEY");

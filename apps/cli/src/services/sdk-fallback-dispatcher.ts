@@ -3,7 +3,7 @@
  * Routes to native AWS SDK calls for types that Cloud Control API cannot provision.
  *
  * Follows the same Result tuple pattern as ProvisioningPort for consistency.
- * Uses MCP_AWS_* credentials (aws-mcp-user), NOT AWS_* (bedrock-dev-user).
+ * Uses AWS_* credentials (assignee-operator) for provisioning.
  *
  * @see Story 7.7 — SDK Fallback Dispatcher for CCAPI Gaps
  */
@@ -57,12 +57,10 @@ export class SDKFallbackDispatcher {
 
   constructor(config: AwsConfig) {
     if (!config.accessKeyId) {
-      throw new ConfigurationError("MCP_AWS_ACCESS_KEY_ID is missing or empty");
+      throw new ConfigurationError("AWS_ACCESS_KEY_ID is missing or empty");
     }
     if (!config.secretAccessKey) {
-      throw new ConfigurationError(
-        "MCP_AWS_SECRET_ACCESS_KEY is missing or empty",
-      );
+      throw new ConfigurationError("AWS_SECRET_ACCESS_KEY is missing or empty");
     }
 
     const credentials = {

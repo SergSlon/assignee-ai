@@ -81,8 +81,9 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
     process.exit(ProcessExitCode.MCP_STARTUP_FAILED);
   }
 
-  // Story 19.1: Initialize optional intelligence servers (IAM, etc.)
-  // These are spawned as a separate client so failures don't crash the core servers.
+  // Story 19.1: Initialize optional intelligence servers (IAM, WA Security, Billing).
+  // These use ASSIGNEE_AUDITOR_* or ASSIGNEE_READER_* credentials (mapped to AWS_* in subprocess env).
+  // Spawned as a separate client so failures don't crash the core servers.
   const optionalConfigs = getOptionalMcpServerConfigs();
   if (Object.keys(optionalConfigs).length > 0) {
     const optionalClientConfig: ClientConfig = {

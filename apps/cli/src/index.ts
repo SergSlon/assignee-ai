@@ -18,6 +18,7 @@ import { completionsCommand } from "./commands/completions.js";
 import { initCommand } from "./commands/init.js";
 import { destroyCommand } from "./commands/destroy.js";
 import { listCommand } from "./commands/list.js";
+import { setupCommand } from "./commands/setup.js";
 import { statusCommand } from "./commands/status.js";
 import { ProcessExitCode } from "./constants/errors.js";
 import { SUPPORTED_TYPES_HINT } from "./config/constants.js";
@@ -43,6 +44,7 @@ program.addCommand(destroyCommand);
 program.addCommand(initCommand);
 program.addCommand(listCommand);
 program.addCommand(planCommand);
+program.addCommand(setupCommand);
 program.addCommand(statusCommand);
 program.addCommand(applyCommand);
 

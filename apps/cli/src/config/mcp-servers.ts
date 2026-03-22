@@ -2,10 +2,11 @@
  * MCP Server configurations for the Assignee.ai CLI.
  * These configs are used by @langchain/mcp-adapters to spawn MCP server processes.
  *
- * Credential separation:
- *   - Bedrock calls use the standard AWS_* env vars (bedrock-dev-user)
- *   - MCP server processes use MCP_AWS_* env vars (aws-mcp-user)
- *   Both sets live in .env — see .env.example.
+ * Credential separation (3-user model — Story 18.8):
+ *   - Operator (AWS_*): used directly by CLI for Bedrock + CloudControl
+ *   - Reader (ASSIGNEE_READER_*): passed to MCP servers needing schema/pricing/billing
+ *   - Auditor (ASSIGNEE_AUDITOR_*): passed to MCP servers needing IAM/SecurityHub access
+ *   All sets live in .env — see .env.example.
  *
  * IMPORTANT: getMcpServerConfigs() is a factory function (not a const) so that
  * process.env is read at call time, after process.loadEnvFile() has run in index.ts.
@@ -25,13 +26,33 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
-/** AWS credential env block forwarded to AWS MCP server subprocesses. */
-function mcpEnv(
+/**
+ * Reader credential env block — maps ASSIGNEE_READER_* to standard AWS_* for MCP subprocess.
+ * Used by: cfn-mcp-server (IAC), aws-pricing-mcp-server, aws-cost-management-mcp-server.
+ */
+function readerEnv(
   region = process.env["AWS_REGION"] ?? "us-east-1",
 ): Record<string, string> {
   return {
-    AWS_ACCESS_KEY_ID: process.env["MCP_AWS_ACCESS_KEY_ID"] ?? "",
-    AWS_SECRET_ACCESS_KEY: process.env["MCP_AWS_SECRET_ACCESS_KEY"] ?? "",
+    AWS_ACCESS_KEY_ID: process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] ?? "",
+    AWS_SECRET_ACCESS_KEY:
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] ?? "",
+    AWS_DEFAULT_REGION: region,
+    FASTMCP_LOG_LEVEL: "ERROR",
+  };
+}
+
+/**
+ * Auditor credential env block — maps ASSIGNEE_AUDITOR_* to standard AWS_* for MCP subprocess.
+ * Used by: iam-mcp-server, well-architected-security-mcp-server.
+ */
+function auditorEnv(
+  region = process.env["AWS_REGION"] ?? "us-east-1",
+): Record<string, string> {
+  return {
+    AWS_ACCESS_KEY_ID: process.env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"] ?? "",
+    AWS_SECRET_ACCESS_KEY:
+      process.env["ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY"] ?? "",
     AWS_DEFAULT_REGION: region,
     FASTMCP_LOG_LEVEL: "ERROR",
   };
@@ -39,7 +60,7 @@ function mcpEnv(
 
 /**
  * Factory that returns MCP server process configurations.
- * Called at runtime (not module load) so MCP_AWS_* env vars are available.
+ * Called at runtime (not module load) so credential env vars are available.
  *
  * Region notes:
  *   - IAC (cfn-mcp-server): us-east-1 — provides get_resource_schema_information for schema fetching.
@@ -55,7 +76,7 @@ export function getMcpServerConfigs(): Record<string, McpServerConfig> {
     [McpServerName.IAC]: {
       command: McpCommand.UVX,
       args: ["awslabs.cfn-mcp-server@latest"],
-      env: mcpEnv("us-east-1"),
+      env: readerEnv("us-east-1"),
     },
     // Knowledge server: yanked uvx package — use remote API via fastmcp instead
     // Matches .gemini/antigravity/mcp_config.json "aws-knowledge-mcp-server"
@@ -72,7 +93,7 @@ export function getMcpServerConfigs(): Record<string, McpServerConfig> {
         "botocore[crt]",
         "awslabs.aws-pricing-mcp-server@latest",
       ],
-      env: mcpEnv("us-east-1"),
+      env: readerEnv("us-east-1"),
     },
     // Documentation server: targeted section-level access to AWS official docs via read_sections.
     // Complements the Knowledge server (which adds blogs/What's New/Builder Center/regional data).
@@ -97,23 +118,23 @@ export function getOptionalMcpServerConfigs(): Record<string, McpServerConfig> {
     [McpServerName.IAM]: {
       command: McpCommand.UVX,
       args: ["awslabs.iam-mcp-server@latest", "--readonly"],
-      env: mcpEnv(),
+      env: auditorEnv(),
     },
     // Well-Architected Security server: post-provision security posture analysis.
     // Aggregates findings from SecurityHub, GuardDuty, Inspector, IAM Access Analyzer.
-    // Needs AWS creds for security service API access.
+    // Needs auditor-level AWS creds for security service API access.
     [McpServerName.WELL_ARCHITECTED_SECURITY]: {
       command: McpCommand.UVX,
       args: ["awslabs.well-architected-security-mcp-server@latest"],
-      env: mcpEnv(),
+      env: auditorEnv(),
     },
     // Cost Management server: live billing data for cost estimates and savings display.
     // Provides get_cost_and_usage, get_cost_forecast tools.
-    // Needs AWS creds with ce:GetCostAndUsage, ce:GetCostForecast permissions.
+    // Needs reader-level AWS creds with ce:GetCostAndUsage, ce:GetCostForecast permissions.
     [McpServerName.BILLING]: {
       command: McpCommand.UVX,
       args: ["awslabs.cost-management-mcp-server@latest"],
-      env: mcpEnv(),
+      env: readerEnv(),
     },
   };
 }

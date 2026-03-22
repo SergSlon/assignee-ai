@@ -15,11 +15,17 @@ inputs:
     description: 'AWS region'
     required: false
     default: 'us-east-1'
-  mcp-aws-access-key-id:
-    description: 'AWS access key for MCP servers (read-only)'
+  assignee-reader-access-key-id:
+    description: 'AWS access key for reader MCP servers (read-only)'
     required: false
-  mcp-aws-secret-access-key:
-    description: 'AWS secret access key for MCP servers'
+  assignee-reader-secret-access-key:
+    description: 'AWS secret access key for reader MCP servers'
+    required: false
+  assignee-auditor-access-key-id:
+    description: 'AWS access key for auditor MCP servers (audit access)'
+    required: false
+  assignee-auditor-secret-access-key:
+    description: 'AWS secret access key for auditor MCP servers'
     required: false
   checkpoint:
     description: 'Path to plan checkpoint from PR phase'
@@ -95,8 +101,10 @@ runs:
         AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
         AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
         AWS_REGION: ${{ inputs.aws-region }}
-        MCP_AWS_ACCESS_KEY_ID: ${{ inputs.mcp-aws-access-key-id || inputs.aws-access-key-id }}
-        MCP_AWS_SECRET_ACCESS_KEY: ${{ inputs.mcp-aws-secret-access-key || inputs.aws-secret-access-key }}
+        ASSIGNEE_READER_ACCESS_KEY_ID: ${{ inputs.assignee-reader-access-key-id || inputs.aws-access-key-id }}
+        ASSIGNEE_READER_SECRET_ACCESS_KEY: ${{ inputs.assignee-reader-secret-access-key || inputs.aws-secret-access-key }}
+        ASSIGNEE_AUDITOR_ACCESS_KEY_ID: ${{ inputs.assignee-auditor-access-key-id || inputs.aws-access-key-id }}
+        ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY: ${{ inputs.assignee-auditor-secret-access-key || inputs.aws-secret-access-key }}
       run: |
         APPLY_OUTPUT=$(assignee apply --yes --checkpoint "${{ steps.resolve-checkpoint.outputs.checkpoint-path }}" 2>&1) || true
         echo "apply-output<<APPLY_EOF" >> "$GITHUB_OUTPUT"
@@ -112,8 +120,10 @@ runs:
         AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
         AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
         AWS_REGION: ${{ inputs.aws-region }}
-        MCP_AWS_ACCESS_KEY_ID: ${{ inputs.mcp-aws-access-key-id || inputs.aws-access-key-id }}
-        MCP_AWS_SECRET_ACCESS_KEY: ${{ inputs.mcp-aws-secret-access-key || inputs.aws-secret-access-key }}
+        ASSIGNEE_READER_ACCESS_KEY_ID: ${{ inputs.assignee-reader-access-key-id || inputs.aws-access-key-id }}
+        ASSIGNEE_READER_SECRET_ACCESS_KEY: ${{ inputs.assignee-reader-secret-access-key || inputs.aws-secret-access-key }}
+        ASSIGNEE_AUDITOR_ACCESS_KEY_ID: ${{ inputs.assignee-auditor-access-key-id || inputs.aws-access-key-id }}
+        ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY: ${{ inputs.assignee-auditor-secret-access-key || inputs.aws-secret-access-key }}
       run: |
         INTENT=""
         if [ -f "${{ inputs.intent-file }}" ]; then

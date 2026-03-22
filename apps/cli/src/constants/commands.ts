@@ -5,6 +5,7 @@ export const CommandName = {
   INIT: "init",
   LIST: "list",
   PLAN: "plan",
+  SETUP: "setup",
   STATUS: "status",
 } as const;
 
@@ -17,6 +18,8 @@ export const CommandDescription = {
   INIT: "Initialize assignee.ai project configuration",
   LIST: "List all resources managed by assignee.ai",
   PLAN: "Generate an infrastructure plan from natural language intent",
+  SETUP:
+    "Create IAM users and policies for least-privilege credential separation",
   STATUS: "Show summary of managed infrastructure",
 } as const;
 
