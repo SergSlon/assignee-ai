@@ -368,3 +368,186 @@ describe("preflightGuardNode — IAM permission check (Story 19.1)", () => {
     expect(iamTool.invoke).not.toHaveBeenCalled();
   });
 });
+
+// ── Story 9.10: Parallel pricing + IAM fan-out ──────────────────────────────
+
+describe("preflightGuardNode — parallel pricing + IAM fan-out (Story 9.10)", () => {
+  it("pricing and IAM run concurrently (overlapping execution)", async () => {
+    const executionLog: Array<{
+      task: string;
+      event: "start" | "end";
+      time: number;
+    }> = [];
+
+    const pricingTool = {
+      name: "get_pricing",
+      invoke: vi.fn(async () => {
+        executionLog.push({
+          task: "pricing",
+          event: "start",
+          time: Date.now(),
+        });
+        await new Promise((r) => setTimeout(r, 50));
+        executionLog.push({ task: "pricing", event: "end", time: Date.now() });
+        return {
+          type: "text",
+          text: JSON.stringify({
+            status: "success",
+            data: [
+              {
+                terms: {
+                  OnDemand: {
+                    "X.Y": {
+                      priceDimensions: {
+                        "X.Y.Z": {
+                          beginRange: "0",
+                          endRange: "Inf",
+                          pricePerUnit: { USD: "0.0230000000" },
+                          unit: "GB-Mo",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          }),
+        };
+      }),
+    } as unknown as StructuredTool;
+
+    const iamTool = {
+      name: ToolName.SIMULATE_PRINCIPAL_POLICY,
+      invoke: vi.fn(async () => {
+        executionLog.push({ task: "iam", event: "start", time: Date.now() });
+        await new Promise((r) => setTimeout(r, 50));
+        executionLog.push({ task: "iam", event: "end", time: Date.now() });
+        return {
+          type: "text",
+          text: JSON.stringify({
+            EvaluationResults: [
+              { EvalActionName: "s3:CreateBucket", EvalDecision: "allowed" },
+            ],
+          }),
+        };
+      }),
+    } as unknown as StructuredTool;
+
+    const result = await preflightGuardNode(makeState(), [
+      pricingTool,
+      iamTool,
+    ]);
+
+    // Both should have been called
+    expect(pricingTool.invoke).toHaveBeenCalled();
+    expect(iamTool.invoke).toHaveBeenCalled();
+    expect(result.preflightPassed).toBe(true);
+
+    // Verify overlapping execution: IAM should start before pricing ends
+    const pricingStart = executionLog.find(
+      (e) => e.task === "pricing" && e.event === "start",
+    );
+    const iamStart = executionLog.find(
+      (e) => e.task === "iam" && e.event === "start",
+    );
+    const pricingEnd = executionLog.find(
+      (e) => e.task === "pricing" && e.event === "end",
+    );
+    expect(pricingStart).toBeDefined();
+    expect(iamStart).toBeDefined();
+    expect(pricingEnd).toBeDefined();
+    // IAM should start before pricing ends (proving concurrency)
+    expect(iamStart!.time).toBeLessThanOrEqual(pricingEnd!.time);
+  });
+
+  it("graceful degradation: pricing failure does not block IAM check", async () => {
+    const pricingTool = {
+      name: "get_pricing",
+      invoke: vi
+        .fn()
+        .mockRejectedValue(new Error("MCP pricing server crashed")),
+    } as unknown as StructuredTool;
+
+    const iamTool = createIamMockTool(McpMocks.iam.s3BucketAllowed.success);
+
+    const result = await preflightGuardNode(makeState(), [
+      pricingTool,
+      iamTool,
+    ]);
+
+    // IAM should still pass despite pricing failure
+    expect(result.preflightPassed).toBe(true);
+    expect(result.executionStatus).toBeUndefined();
+    // Cost should fall back to local estimate
+    expect(result.estimatedMonthlyCost).toBeDefined();
+  });
+
+  it("graceful degradation: IAM failure does not block pricing", async () => {
+    const realMcpResponse = {
+      type: "text",
+      text: JSON.stringify({
+        status: "success",
+        data: [
+          {
+            terms: {
+              OnDemand: {
+                "X.Y": {
+                  priceDimensions: {
+                    "X.Y.Z": {
+                      beginRange: "0",
+                      endRange: "Inf",
+                      pricePerUnit: { USD: "0.0230000000" },
+                      unit: "GB-Mo",
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      }),
+    };
+
+    const pricingTool = {
+      name: "get_pricing",
+      invoke: vi.fn().mockResolvedValue(realMcpResponse),
+    } as unknown as StructuredTool;
+
+    const iamTool = {
+      name: ToolName.SIMULATE_PRINCIPAL_POLICY,
+      invoke: vi.fn().mockRejectedValue(new Error("IAM MCP crashed")),
+    } as unknown as StructuredTool;
+
+    const result = await preflightGuardNode(makeState(), [
+      pricingTool,
+      iamTool,
+    ]);
+
+    // Pricing should succeed, IAM should degrade gracefully
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(result.preflightPassed).toBe(true);
+    expect(result.executionStatus).toBeUndefined();
+  });
+
+  it("both pricing and IAM fail: graceful degradation for both", async () => {
+    const pricingTool = {
+      name: "get_pricing",
+      invoke: vi.fn().mockRejectedValue(new Error("pricing down")),
+    } as unknown as StructuredTool;
+
+    const iamTool = {
+      name: ToolName.SIMULATE_PRINCIPAL_POLICY,
+      invoke: vi.fn().mockRejectedValue(new Error("iam down")),
+    } as unknown as StructuredTool;
+
+    const result = await preflightGuardNode(makeState(), [
+      pricingTool,
+      iamTool,
+    ]);
+
+    // Both degrade gracefully — preflight still passes
+    expect(result.preflightPassed).toBe(true);
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(result.executionStatus).toBeUndefined();
+  });
+});

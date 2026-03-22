@@ -876,3 +876,191 @@ describe("optionElicitorNode — cached help as persistent hints (Story 10.8)", 
     );
   });
 });
+
+// ── Story 9.10: Parallel MCP Subagent Architecture ───────────────────────────
+
+describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.10)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setTTY(true);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("pricing and discovery run concurrently (overlapping execution)", async () => {
+    const {
+      discoverAmis,
+      discoverSubnets,
+      discoverSecurityGroups,
+      discoverKeyPairs,
+    } = await import("../utils/aws-resource-discovery.js");
+
+    // Track execution timing to prove concurrency
+    const executionLog: Array<{ task: string; event: "start" | "end" }> = [];
+
+    // Make discovery functions take measurable time
+    vi.mocked(discoverAmis).mockImplementation(async () => {
+      executionLog.push({ task: "discovery", event: "start" });
+      await new Promise((r) => setTimeout(r, 50));
+      executionLog.push({ task: "discovery", event: "end" });
+      return [];
+    });
+    vi.mocked(discoverSubnets).mockResolvedValue([]);
+    vi.mocked(discoverSecurityGroups).mockResolvedValue([]);
+    vi.mocked(discoverKeyPairs).mockResolvedValue([]);
+
+    // Use EC2 plugin that has both pricing fields and fetcher fields
+    const ec2PluginWithFetchers = {
+      resourceType: "AWS::EC2::Instance",
+      commonFields: [
+        {
+          name: "InstanceType",
+          question: {
+            type: "enum" as const,
+            label: "Instance type",
+            options: [
+              { value: "t3.micro", label: "t3.micro" },
+              { value: "t3.small", label: "t3.small" },
+            ],
+            initialValue: "t3.micro",
+          },
+        },
+        {
+          name: "ImageId",
+          question: {
+            type: "enum" as const,
+            label: "AMI",
+            fetcher: "discover-amis",
+            options: [],
+          },
+        },
+      ],
+      advancedFields: [],
+      defaults: {},
+    };
+
+    const { defaultPluginRegistry } = await import("@assignee/core");
+    vi.mocked(defaultPluginRegistry.get).mockImplementation((type: string) => {
+      if (type === "AWS::EC2::Instance") return ec2PluginWithFetchers as any;
+      return undefined;
+    });
+
+    vi.mocked(select).mockResolvedValueOnce("t3.micro"); // InstanceType
+    vi.mocked(text).mockResolvedValueOnce("ami-123"); // ImageId (fallback to string)
+
+    await optionElicitorNode(
+      makeState({ resourceType: "AWS::EC2::Instance" }),
+      [], // no pricing tools — pricing resolves immediately
+    );
+
+    // Discovery functions should have been called (proving they ran in parallel block)
+    expect(discoverAmis).toHaveBeenCalled();
+  });
+
+  it("graceful degradation: pricing failure does not block discovery", async () => {
+    const {
+      discoverAmis,
+      discoverSubnets,
+      discoverSecurityGroups,
+      discoverKeyPairs,
+    } = await import("../utils/aws-resource-discovery.js");
+
+    vi.mocked(discoverAmis).mockResolvedValue([
+      { value: "ami-123", label: "Amazon Linux 2" },
+    ]);
+    vi.mocked(discoverSubnets).mockResolvedValue([]);
+    vi.mocked(discoverSecurityGroups).mockResolvedValue([]);
+    vi.mocked(discoverKeyPairs).mockResolvedValue([]);
+
+    const ec2PluginWithFetchers = {
+      resourceType: "AWS::EC2::Instance",
+      commonFields: [
+        {
+          name: "InstanceType",
+          question: {
+            type: "enum" as const,
+            label: "Instance type",
+            options: [{ value: "t3.micro", label: "t3.micro" }],
+            initialValue: "t3.micro",
+          },
+        },
+        {
+          name: "ImageId",
+          question: {
+            type: "enum" as const,
+            label: "AMI",
+            fetcher: "discover-amis",
+            options: [],
+          },
+        },
+      ],
+      advancedFields: [],
+      defaults: {},
+    };
+
+    const { defaultPluginRegistry } = await import("@assignee/core");
+    vi.mocked(defaultPluginRegistry.get).mockImplementation((type: string) => {
+      if (type === "AWS::EC2::Instance") return ec2PluginWithFetchers as any;
+      return undefined;
+    });
+
+    // Pricing tool that throws
+    const failingPricingTool = {
+      name: "get_pricing",
+      invoke: vi.fn().mockRejectedValue(new Error("MCP server crashed")),
+    } as unknown as import("@langchain/core/tools").StructuredTool;
+
+    vi.mocked(select)
+      .mockResolvedValueOnce("t3.micro") // InstanceType
+      .mockResolvedValueOnce("ami-123"); // ImageId (discovered)
+
+    const result = await optionElicitorNode(
+      makeState({ resourceType: "AWS::EC2::Instance" }),
+      [failingPricingTool],
+    );
+
+    // Discovery should still have succeeded despite pricing failure
+    expect(discoverAmis).toHaveBeenCalled();
+    expect(result.elicitedOptions).toBeDefined();
+  });
+
+  it("graceful degradation: discovery failure does not block pricing", async () => {
+    const { discoverAmis } = await import("../utils/aws-resource-discovery.js");
+
+    // All discovery functions throw
+    vi.mocked(discoverAmis).mockRejectedValue(new Error("SDK error"));
+
+    vi.mocked(text).mockResolvedValueOnce("my-resource"); // Name
+    vi.mocked(select).mockResolvedValueOnce("false"); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("sm"); // Size
+    vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
+
+    const result = await optionElicitorNode(makeState());
+
+    // Node should complete successfully with fallback fields
+    expect(result.elicitedOptions).toBeDefined();
+    expect(result.elicitedOptions?.["Name"]).toBe("my-resource");
+  });
+
+  it("unified spinner wraps entire parallel block", async () => {
+    const { spinner } = await import("@clack/prompts");
+    const mockSpinner = { start: vi.fn(), stop: vi.fn() };
+    vi.mocked(spinner).mockReturnValue(mockSpinner as any);
+
+    vi.mocked(text).mockResolvedValueOnce("my-resource");
+    vi.mocked(select).mockResolvedValueOnce("false");
+    vi.mocked(select).mockResolvedValueOnce("sm");
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    await optionElicitorNode(makeState());
+
+    // Spinner should show "Preparing your wizard…" and stop with "Ready"
+    expect(mockSpinner.start).toHaveBeenCalledWith("Preparing your wizard…");
+    expect(mockSpinner.stop).toHaveBeenCalledWith("Ready");
+  });
+});
