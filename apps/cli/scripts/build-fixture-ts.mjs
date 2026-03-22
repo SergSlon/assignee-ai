@@ -379,7 +379,7 @@ export const McpMocks = {
 
 // ── Factory functions (unchanged from original) ─────────────────────────────
 
-ts += readFileSync(resolve(__dirname, "_factory-functions.ts"), "utf-8");
+ts += readFileSync(resolve(__dirname, "_factory-functions.ts.template"), "utf-8");
 
 writeFileSync(OUT_FILE, ts);
 console.log(`Generated: ${OUT_FILE}`);
