@@ -81,47 +81,90 @@ export const s3BucketPlugin: ResourcePlugin = {
     },
   ],
   advancedFields: [
+    // ── Lifecycle ──
     {
-      name: "LifecycleConfiguration",
+      name: "EnableLifecycle",
       question: {
         type: "boolean",
         label: "Add lifecycle rules?",
         initialValue: false,
       },
-      toCfn: (answer: unknown) =>
-        answer
-          ? {
-              Rules: [
-                {
-                  Status: "Enabled",
-                  Transitions: [
-                    { StorageClass: "STANDARD_IA", TransitionInDays: 30 },
-                  ],
-                },
-              ],
-            }
-          : undefined,
     },
     {
-      name: "CorsConfiguration",
+      name: "LifecycleTransitionDays",
+      question: {
+        type: "enum",
+        label: "Transition to Infrequent Access after (days)",
+        options: [
+          { value: "30", label: "30 days (recommended)" },
+          { value: "60", label: "60 days" },
+          { value: "90", label: "90 days" },
+          { value: "180", label: "180 days" },
+        ],
+        initialValue: "30",
+        showIf: { field: "EnableLifecycle", value: true },
+      },
+    },
+    {
+      name: "LifecycleExpirationDays",
+      question: {
+        type: "string",
+        label: "Expire objects after (days, leave blank for never)",
+        placeholder: "365",
+        showIf: { field: "EnableLifecycle", value: true },
+      },
+    },
+    // ── CORS ──
+    {
+      name: "EnableCors",
       question: {
         type: "boolean",
         label: "Enable CORS?",
         initialValue: false,
       },
-      toCfn: (answer: unknown) =>
-        answer
-          ? { CorsRules: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"] }] }
-          : undefined,
     },
     {
-      name: "ReplicationConfiguration",
+      name: "CorsAllowedOrigins",
+      question: {
+        type: "string",
+        label: "Allowed origins (comma-separated, * for all)",
+        placeholder: "https://example.com, https://app.example.com",
+        initialValue: "*",
+        showIf: { field: "EnableCors", value: true },
+      },
+    },
+    {
+      name: "CorsAllowedMethods",
+      question: {
+        type: "enum",
+        label: "Allowed HTTP methods",
+        options: [
+          { value: "GET", label: "GET only (read)" },
+          { value: "GET,PUT", label: "GET + PUT (read/write)" },
+          { value: "GET,PUT,POST,DELETE", label: "All methods" },
+        ],
+        initialValue: "GET",
+        showIf: { field: "EnableCors", value: true },
+      },
+    },
+    // ── Replication ──
+    {
+      name: "EnableReplication",
       question: {
         type: "boolean",
         label: "Enable cross-region replication?",
         initialValue: false,
+        hint: "Requires a destination bucket in another region and an IAM role.",
       },
-      toCfn: (answer: unknown) => (answer ? {} : undefined),
+    },
+    {
+      name: "ReplicationDestinationBucket",
+      question: {
+        type: "string",
+        label: "Destination bucket ARN",
+        placeholder: "arn:aws:s3:::my-replica-bucket",
+        showIf: { field: "EnableReplication", value: true },
+      },
     },
   ],
   defaults: {

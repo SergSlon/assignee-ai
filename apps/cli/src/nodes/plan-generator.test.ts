@@ -574,9 +574,15 @@ describe("applyToCfnTransforms", () => {
     expect(result).toEqual(options);
   });
 
-  it("transforms advanced fields (LifecycleConfiguration, CorsConfiguration)", () => {
+  it("transforms advanced fields (Lifecycle, CORS sub-fields → CFN structures)", () => {
     const result = applyToCfnTransforms(
-      { LifecycleConfiguration: true, CorsConfiguration: true },
+      {
+        EnableLifecycle: true,
+        LifecycleTransitionDays: "30",
+        EnableCors: true,
+        CorsAllowedOrigins: "*",
+        CorsAllowedMethods: "GET",
+      },
       "AWS::S3::Bucket",
     );
 
@@ -591,6 +597,12 @@ describe("applyToCfnTransforms", () => {
     expect(result["CorsConfiguration"]).toEqual({
       CorsRules: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"] }],
     });
+    // Intermediate keys must be removed
+    expect(result["EnableLifecycle"]).toBeUndefined();
+    expect(result["EnableCors"]).toBeUndefined();
+    expect(result["LifecycleTransitionDays"]).toBeUndefined();
+    expect(result["CorsAllowedOrigins"]).toBeUndefined();
+    expect(result["CorsAllowedMethods"]).toBeUndefined();
   });
 });
 
