@@ -66,6 +66,12 @@ export interface ResourceField {
    * cause a MissingRequiredFieldsError. Defaults to false.
    */
   required?: boolean;
+  /**
+   * Transforms the user's answer into the correct CloudFormation property value.
+   * If absent, the raw answer is used as-is (suitable for string/number fields).
+   * Return undefined to omit the field from desiredState (e.g., user answered "no").
+   */
+  toCfn?: (answer: unknown) => unknown;
 }
 
 /**

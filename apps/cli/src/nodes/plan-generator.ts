@@ -19,6 +19,37 @@ import { CloudFormationKey } from "../constants/cfn-keys.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 
+/**
+ * Transforms elicited options using plugin toCfn mappers.
+ * Fields with toCfn that return undefined are omitted (user said "no").
+ * Fields without toCfn pass through unchanged.
+ */
+export function applyToCfnTransforms(
+  elicitedOptions: Record<string, unknown>,
+  resourceType: string,
+): Record<string, unknown> {
+  const plugin = defaultPluginRegistry.get(resourceType);
+  if (!plugin) return elicitedOptions;
+
+  const allFields = [...plugin.commonFields, ...plugin.advancedFields];
+  const transformed: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(elicitedOptions)) {
+    const field = allFields.find((f) => f.name === key);
+    if (field?.toCfn) {
+      const cfnValue = field.toCfn(value);
+      if (cfnValue !== undefined) {
+        transformed[key] = cfnValue;
+      }
+      // If toCfn returns undefined, omit the field (user said "no")
+    } else {
+      transformed[key] = value; // No transform needed
+    }
+  }
+
+  return transformed;
+}
+
 /** Recursively removes empty-placeholder values the LLM may insert despite prompt rules. */
 function stripEmpty(obj: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -58,9 +89,14 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         (state.resourcePattern.defaultOptions[currentResource.resourceId] as
           | Record<string, unknown>
           | undefined) ?? {};
+      const rawOptions = state.elicitedOptions ?? {};
+      const transformedOptions = applyToCfnTransforms(
+        rawOptions,
+        currentResource.resourceType,
+      );
       const desiredState: Record<string, unknown> = {
         ...patternDefaults,
-        ...(state.elicitedOptions ?? {}),
+        ...transformedOptions,
       };
       // Story 19.5: Read pattern memory for compound mode hints
       const compoundMemoryHints: string[] = [];
@@ -271,12 +307,16 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     desiredState = stripEmpty(desiredState);
 
     // Merge elicited options — user-confirmed values override LLM-generated values.
-    // elicitedOptions fields come from the schema so no hallucination risk.
+    // Apply toCfn transforms to convert boolean answers to valid CFN structures.
     if (
       state.elicitedOptions &&
       Object.keys(state.elicitedOptions).length > 0
     ) {
-      desiredState = { ...desiredState, ...state.elicitedOptions };
+      const transformed = applyToCfnTransforms(
+        state.elicitedOptions,
+        state.resourceType ?? "",
+      );
+      desiredState = { ...desiredState, ...transformed };
     }
 
     const durationMs = Date.now() - startedAt;
