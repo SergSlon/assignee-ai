@@ -12,6 +12,7 @@ import { LOG_ACTIONS } from "../utils/logger.js";
 vi.mock("@clack/prompts", () => ({
   confirm: vi.fn(),
   isCancel: vi.fn(),
+  cancel: vi.fn(),
   intro: vi.fn(),
   outro: vi.fn(),
   spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), message: vi.fn() })),
@@ -83,7 +84,10 @@ describe("renderApplyNowConfirm", () => {
     });
   });
 
-  it("returns false on Ctrl-C (clack.isCancel)", async () => {
+  it("exits process on Ctrl-C (clack.isCancel)", async () => {
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
     const origTTY = process.stdin.isTTY;
     Object.defineProperty(process.stdin, "isTTY", {
       value: true,
@@ -96,9 +100,10 @@ describe("renderApplyNowConfirm", () => {
     );
     vi.mocked(clack.isCancel).mockReturnValue(true);
 
-    const result = await renderApplyNowConfirm(mockState);
-    expect(result).toBe(false);
+    await renderApplyNowConfirm(mockState);
+    expect(exitSpy).toHaveBeenCalledWith(0);
 
+    exitSpy.mockRestore();
     Object.defineProperty(process.stdin, "isTTY", {
       value: origTTY,
       writable: true,

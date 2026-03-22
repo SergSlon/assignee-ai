@@ -334,7 +334,10 @@ export async function renderHitlConfirm(
     initialValue: false,
   });
 
-  if (clack.isCancel(result)) return false;
+  if (clack.isCancel(result)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
+  }
   return result === true;
 }
 
@@ -359,7 +362,10 @@ export async function renderHitlCompoundConfirm(
     initialValue: false,
   });
 
-  if (clack.isCancel(result)) return false;
+  if (clack.isCancel(result)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
+  }
   return result === true;
 }
 
@@ -882,7 +888,10 @@ export async function renderOptionPrompt(
     }
   }
 
-  if (clack.isCancel(result)) return defaultValue;
+  if (clack.isCancel(result)) {
+    clack.cancel("Wizard cancelled.");
+    process.exit(0);
+  }
 
   // Normalise boolean-select results back to actual booleans.
   // The boolean case uses clack.select which returns "true"/"false" strings,
@@ -910,7 +919,10 @@ export async function renderAdvancedConfirm(): Promise<boolean> {
     message: "Configure advanced options?",
     initialValue: false,
   });
-  if (clack.isCancel(result)) return false;
+  if (clack.isCancel(result)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
+  }
   return result === true;
 }
 
@@ -930,7 +942,10 @@ export async function renderApplyNowConfirm(
     initialValue: false,
   });
 
-  if (clack.isCancel(result)) return false;
+  if (clack.isCancel(result)) {
+    clack.cancel("Cancelled.");
+    process.exit(0);
+  }
   return result === true;
 }
 

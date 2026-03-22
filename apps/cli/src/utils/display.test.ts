@@ -409,14 +409,18 @@ describe("renderHitlCompoundConfirm — TTY mode", () => {
     expect(result).toBe(true);
   });
 
-  it("returns false when user cancels", async () => {
+  it("exits process when user cancels", async () => {
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
     vi.mocked(confirm).mockResolvedValueOnce(
       Symbol("cancel") as unknown as boolean,
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderHitlCompoundConfirm } = await import("./display.js");
-    const result = await renderHitlCompoundConfirm(mockPattern, 3);
-    expect(result).toBe(false);
+    await renderHitlCompoundConfirm(mockPattern, 3);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    exitSpy.mockRestore();
   });
 });
 
@@ -428,6 +432,7 @@ vi.mock("@clack/prompts", () => ({
   text: vi.fn(),
   multiselect: vi.fn(),
   isCancel: vi.fn(() => false),
+  cancel: vi.fn(),
   note: vi.fn(),
   log: { info: vi.fn() },
 }));
@@ -530,17 +535,21 @@ describe("renderOptionPrompt — TTY mode", () => {
     expect(result).toBeUndefined();
   });
 
-  it("returns resolved.value when clack.isCancel returns true", async () => {
+  it("exits process when clack.isCancel returns true", async () => {
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
     vi.mocked(text).mockResolvedValueOnce(
       Symbol("cancel") as unknown as string,
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderOptionPrompt } = await import("./display.js");
-    const result = await renderOptionPrompt(makeField({ type: "string" }), {
+    await renderOptionPrompt(makeField({ type: "string" }), {
       ...resolved,
       value: "fallback",
     });
-    expect(result).toBe("fallback");
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    exitSpy.mockRestore();
   });
 });
 
@@ -1559,14 +1568,18 @@ describe("renderHitlConfirm — TTY mode", () => {
     expect(result).toBe(false);
   });
 
-  it("user cancels — returns false", async () => {
+  it("user cancels — exits process", async () => {
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
     vi.mocked(confirm).mockResolvedValueOnce(
       Symbol("cancel") as unknown as boolean,
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderHitlConfirm } = await import("./display.js");
-    const result = await renderHitlConfirm(mockState);
-    expect(result).toBe(false);
+    await renderHitlConfirm(mockState);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    exitSpy.mockRestore();
   });
 });
 
@@ -1622,14 +1635,18 @@ describe("renderApplyNowConfirm — TTY mode", () => {
     expect(result).toBe(false);
   });
 
-  it("user cancels — returns false", async () => {
+  it("user cancels — exits process", async () => {
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
     vi.mocked(confirm).mockResolvedValueOnce(
       Symbol("cancel") as unknown as boolean,
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderApplyNowConfirm } = await import("./display.js");
-    const result = await renderApplyNowConfirm(mockState);
-    expect(result).toBe(false);
+    await renderApplyNowConfirm(mockState);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    exitSpy.mockRestore();
   });
 });
 
@@ -1760,7 +1777,10 @@ describe("renderAdvancedConfirm", () => {
     });
   });
 
-  it("TTY cancel — returns false", async () => {
+  it("TTY cancel — exits process", async () => {
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
     Object.defineProperty(process.stdin, "isTTY", {
       value: true,
       configurable: true,
@@ -1770,8 +1790,9 @@ describe("renderAdvancedConfirm", () => {
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderAdvancedConfirm } = await import("./display.js");
-    const result = await renderAdvancedConfirm();
-    expect(result).toBe(false);
+    await renderAdvancedConfirm();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    exitSpy.mockRestore();
     Object.defineProperty(process.stdin, "isTTY", {
       value: undefined,
       configurable: true,
