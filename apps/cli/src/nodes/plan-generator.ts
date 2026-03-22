@@ -47,7 +47,89 @@ export function applyToCfnTransforms(
     }
   }
 
+  // Post-transform: assemble composite CFN structures from sub-fields
+  if (resourceType === "AWS::S3::Bucket") {
+    assembleS3Composites(transformed, elicitedOptions);
+  }
+
   return transformed;
+}
+
+/**
+ * Assembles S3 composite CFN properties from individual sub-fields.
+ * E.g., EnableLifecycle + LifecycleTransitionDays + LifecycleExpirationDays
+ * → LifecycleConfiguration: { Rules: [...] }
+ *
+ * Mutates `transformed` in place — removes intermediate keys, adds CFN keys.
+ */
+function assembleS3Composites(
+  transformed: Record<string, unknown>,
+  options: Record<string, unknown>,
+): void {
+  // ── Lifecycle ──
+  if (options["EnableLifecycle"] === true) {
+    const transitionDays = parseInt(
+      String(options["LifecycleTransitionDays"] ?? "30"),
+      10,
+    );
+    const expirationDaysRaw = options["LifecycleExpirationDays"];
+    const expirationDays =
+      expirationDaysRaw && String(expirationDaysRaw).trim()
+        ? parseInt(String(expirationDaysRaw), 10)
+        : undefined;
+
+    const rule: Record<string, unknown> = {
+      Status: "Enabled",
+      Transitions: [
+        { StorageClass: "STANDARD_IA", TransitionInDays: transitionDays },
+      ],
+    };
+    if (expirationDays && expirationDays > 0) {
+      rule["ExpirationInDays"] = expirationDays;
+    }
+    transformed["LifecycleConfiguration"] = { Rules: [rule] };
+  }
+  delete transformed["EnableLifecycle"];
+  delete transformed["LifecycleTransitionDays"];
+  delete transformed["LifecycleExpirationDays"];
+
+  // ── CORS ──
+  if (options["EnableCors"] === true) {
+    const origins = String(options["CorsAllowedOrigins"] ?? "*")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const methods = String(options["CorsAllowedMethods"] ?? "GET")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    transformed["CorsConfiguration"] = {
+      CorsRules: [{ AllowedMethods: methods, AllowedOrigins: origins }],
+    };
+  }
+  delete transformed["EnableCors"];
+  delete transformed["CorsAllowedOrigins"];
+  delete transformed["CorsAllowedMethods"];
+
+  // ── Replication ──
+  if (
+    options["EnableReplication"] === true &&
+    options["ReplicationDestinationBucket"]
+  ) {
+    transformed["ReplicationConfiguration"] = {
+      Role: "", // Must be filled by the LLM or user
+      Rules: [
+        {
+          Status: "Enabled",
+          Destination: {
+            Bucket: String(options["ReplicationDestinationBucket"]),
+          },
+        },
+      ],
+    };
+  }
+  delete transformed["EnableReplication"];
+  delete transformed["ReplicationDestinationBucket"];
 }
 
 /** Recursively removes empty-placeholder values the LLM may insert despite prompt rules. */

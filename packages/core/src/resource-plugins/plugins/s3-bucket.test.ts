@@ -57,13 +57,65 @@ describe("s3BucketPlugin", () => {
     });
   });
 
-  it("advancedFields contains LifecycleConfiguration and CorsConfiguration", () => {
+  it("advancedFields contains lifecycle and CORS sub-fields", () => {
     const names = s3BucketPlugin.advancedFields.map((f) => f.name);
-    expect(names).toContain("LifecycleConfiguration");
-    expect(names).toContain("CorsConfiguration");
+    expect(names).toContain("EnableLifecycle");
+    expect(names).toContain("LifecycleTransitionDays");
+    expect(names).toContain("LifecycleExpirationDays");
+    expect(names).toContain("EnableCors");
+    expect(names).toContain("CorsAllowedOrigins");
+    expect(names).toContain("CorsAllowedMethods");
+    expect(names).toContain("EnableReplication");
+    expect(names).toContain("ReplicationDestinationBucket");
   });
 
-  // Story 18.9 — toCfn transform tests
+  it("lifecycle sub-fields have showIf on EnableLifecycle", () => {
+    const transField = s3BucketPlugin.advancedFields.find(
+      (f) => f.name === "LifecycleTransitionDays",
+    );
+    expect(transField?.question.showIf).toEqual({
+      field: "EnableLifecycle",
+      value: true,
+    });
+
+    const expField = s3BucketPlugin.advancedFields.find(
+      (f) => f.name === "LifecycleExpirationDays",
+    );
+    expect(expField?.question.showIf).toEqual({
+      field: "EnableLifecycle",
+      value: true,
+    });
+  });
+
+  it("CORS sub-fields have showIf on EnableCors", () => {
+    const originsField = s3BucketPlugin.advancedFields.find(
+      (f) => f.name === "CorsAllowedOrigins",
+    );
+    expect(originsField?.question.showIf).toEqual({
+      field: "EnableCors",
+      value: true,
+    });
+
+    const methodsField = s3BucketPlugin.advancedFields.find(
+      (f) => f.name === "CorsAllowedMethods",
+    );
+    expect(methodsField?.question.showIf).toEqual({
+      field: "EnableCors",
+      value: true,
+    });
+  });
+
+  it("replication destination has showIf on EnableReplication", () => {
+    const destField = s3BucketPlugin.advancedFields.find(
+      (f) => f.name === "ReplicationDestinationBucket",
+    );
+    expect(destField?.question.showIf).toEqual({
+      field: "EnableReplication",
+      value: true,
+    });
+  });
+
+  // Story 18.9 — toCfn transform tests (commonFields only now)
   describe("toCfn transforms", () => {
     const allFields = [
       ...s3BucketPlugin.commonFields,
@@ -116,38 +168,17 @@ describe("s3BucketPlugin", () => {
       });
     });
 
-    describe("LifecycleConfiguration", () => {
-      const field = findField("LifecycleConfiguration");
-
-      it("transforms true to default rule with STANDARD_IA transition", () => {
-        expect(field.toCfn!(true)).toEqual({
-          Rules: [
-            {
-              Status: "Enabled",
-              Transitions: [
-                { StorageClass: "STANDARD_IA", TransitionInDays: 30 },
-              ],
-            },
-          ],
-        });
+    describe("advanced fields have no toCfn (assembled by plan-generator)", () => {
+      it("EnableLifecycle has no toCfn", () => {
+        expect(findField("EnableLifecycle").toCfn).toBeUndefined();
       });
 
-      it("transforms false to undefined", () => {
-        expect(field.toCfn!(false)).toBeUndefined();
-      });
-    });
-
-    describe("CorsConfiguration", () => {
-      const field = findField("CorsConfiguration");
-
-      it("transforms true to permissive GET/* default", () => {
-        expect(field.toCfn!(true)).toEqual({
-          CorsRules: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"] }],
-        });
+      it("EnableCors has no toCfn", () => {
+        expect(findField("EnableCors").toCfn).toBeUndefined();
       });
 
-      it("transforms false to undefined", () => {
-        expect(field.toCfn!(false)).toBeUndefined();
+      it("EnableReplication has no toCfn", () => {
+        expect(findField("EnableReplication").toCfn).toBeUndefined();
       });
     });
 

@@ -13,6 +13,22 @@ const PLUGIN_TYPES = [
   "AWS::Lambda::Function",
 ];
 
+/**
+ * S3 composite sub-fields that are consumed by assembleS3Composites()
+ * and deleted from the result. These must be tested separately as composites,
+ * not as individual passthrough fields.
+ */
+const S3_COMPOSITE_SUB_FIELDS = new Set([
+  "EnableLifecycle",
+  "LifecycleTransitionDays",
+  "LifecycleExpirationDays",
+  "EnableCors",
+  "CorsAllowedOrigins",
+  "CorsAllowedMethods",
+  "EnableReplication",
+  "ReplicationDestinationBucket",
+]);
+
 describe("applyToCfnTransforms — exhaustive field coverage", () => {
   for (const resourceType of PLUGIN_TYPES) {
     const plugin = defaultPluginRegistry.get(resourceType);
@@ -22,6 +38,15 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
 
     describe(resourceType, () => {
       for (const field of allFields) {
+        // Skip S3 composite sub-fields — they are deleted by assembleS3Composites
+        // and tested separately in the "S3 composite assembly" describe block below.
+        if (
+          resourceType === "AWS::S3::Bucket" &&
+          S3_COMPOSITE_SUB_FIELDS.has(field.name)
+        ) {
+          continue;
+        }
+
         const hasToCfn = !!field.toCfn;
 
         if (field.question.type === "boolean") {
@@ -117,33 +142,15 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
       expect(result["VersioningConfiguration"]).toEqual({ Status: "Enabled" });
     });
 
-    it("LifecycleConfiguration (true) → transition rule", () => {
-      const result = applyToCfnTransforms(
-        { LifecycleConfiguration: true },
-        "AWS::S3::Bucket",
-      );
-      const lc = result["LifecycleConfiguration"] as Record<string, unknown>;
-      expect(lc).toHaveProperty("Rules");
-      expect(Array.isArray((lc as { Rules: unknown[] }).Rules)).toBe(true);
-    });
-
-    it("CorsConfiguration (true) → CorsRules array", () => {
-      const result = applyToCfnTransforms(
-        { CorsConfiguration: true },
-        "AWS::S3::Bucket",
-      );
-      const cors = result["CorsConfiguration"] as Record<string, unknown>;
-      expect(cors).toHaveProperty("CorsRules");
-    });
-
-    it("All S3 booleans false → all omitted from result", () => {
+    it("All S3 toCfn booleans false → all omitted from result", () => {
       const result = applyToCfnTransforms(
         {
           BucketEncryption: false,
           PublicAccessBlockConfiguration: false,
           VersioningConfiguration: false,
-          LifecycleConfiguration: false,
-          CorsConfiguration: false,
+          EnableLifecycle: false,
+          EnableCors: false,
+          EnableReplication: false,
         },
         "AWS::S3::Bucket",
       );
@@ -152,16 +159,27 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
       expect(result["VersioningConfiguration"]).toBeUndefined();
       expect(result["LifecycleConfiguration"]).toBeUndefined();
       expect(result["CorsConfiguration"]).toBeUndefined();
+      expect(result["ReplicationConfiguration"]).toBeUndefined();
+      // Intermediate keys must be removed
+      expect(result["EnableLifecycle"]).toBeUndefined();
+      expect(result["EnableCors"]).toBeUndefined();
+      expect(result["EnableReplication"]).toBeUndefined();
     });
 
-    it("All S3 booleans true → all produce objects", () => {
+    it("All S3 features enabled → all produce objects", () => {
       const result = applyToCfnTransforms(
         {
           BucketEncryption: true,
           PublicAccessBlockConfiguration: true,
           VersioningConfiguration: true,
-          LifecycleConfiguration: true,
-          CorsConfiguration: true,
+          EnableLifecycle: true,
+          LifecycleTransitionDays: "60",
+          LifecycleExpirationDays: "365",
+          EnableCors: true,
+          CorsAllowedOrigins: "https://example.com",
+          CorsAllowedMethods: "GET,PUT",
+          EnableReplication: true,
+          ReplicationDestinationBucket: "arn:aws:s3:::replica",
         },
         "AWS::S3::Bucket",
       );
@@ -170,6 +188,7 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
       expect(typeof result["VersioningConfiguration"]).toBe("object");
       expect(typeof result["LifecycleConfiguration"]).toBe("object");
       expect(typeof result["CorsConfiguration"]).toBe("object");
+      expect(typeof result["ReplicationConfiguration"]).toBe("object");
     });
 
     it("String fields pass through unchanged alongside boolean transforms", () => {
@@ -177,14 +196,137 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
         {
           BucketName: "my-test-bucket",
           BucketEncryption: true,
-          ReplicationConfiguration: false,
+          EnableReplication: false,
         },
         "AWS::S3::Bucket",
       );
       expect(result["BucketName"]).toBe("my-test-bucket");
       expect(typeof result["BucketEncryption"]).toBe("object");
-      // ReplicationConfiguration has toCfn that returns undefined for false → omitted
       expect(result["ReplicationConfiguration"]).toBeUndefined();
+      expect(result["EnableReplication"]).toBeUndefined();
+    });
+  });
+
+  // === S3 composite assembly (sub-field → CFN structure) ===
+
+  describe("S3 composite assembly", () => {
+    it("Lifecycle: assembles LifecycleConfiguration from sub-fields", () => {
+      const result = applyToCfnTransforms(
+        {
+          EnableLifecycle: true,
+          LifecycleTransitionDays: "60",
+          LifecycleExpirationDays: "365",
+        },
+        "AWS::S3::Bucket",
+      );
+      expect(result["LifecycleConfiguration"]).toEqual({
+        Rules: [
+          {
+            Status: "Enabled",
+            Transitions: [
+              { StorageClass: "STANDARD_IA", TransitionInDays: 60 },
+            ],
+            ExpirationInDays: 365,
+          },
+        ],
+      });
+      // Intermediate keys must be deleted
+      expect(result["EnableLifecycle"]).toBeUndefined();
+      expect(result["LifecycleTransitionDays"]).toBeUndefined();
+      expect(result["LifecycleExpirationDays"]).toBeUndefined();
+    });
+
+    it("Lifecycle: uses defaults when sub-fields are omitted", () => {
+      const result = applyToCfnTransforms(
+        { EnableLifecycle: true },
+        "AWS::S3::Bucket",
+      );
+      expect(result["LifecycleConfiguration"]).toEqual({
+        Rules: [
+          {
+            Status: "Enabled",
+            Transitions: [
+              { StorageClass: "STANDARD_IA", TransitionInDays: 30 },
+            ],
+          },
+        ],
+      });
+    });
+
+    it("Lifecycle: no CFN structure when EnableLifecycle is false", () => {
+      const result = applyToCfnTransforms(
+        { EnableLifecycle: false, LifecycleTransitionDays: "60" },
+        "AWS::S3::Bucket",
+      );
+      expect(result["LifecycleConfiguration"]).toBeUndefined();
+      expect(result["EnableLifecycle"]).toBeUndefined();
+      expect(result["LifecycleTransitionDays"]).toBeUndefined();
+    });
+
+    it("CORS: assembles CorsConfiguration from sub-fields", () => {
+      const result = applyToCfnTransforms(
+        {
+          EnableCors: true,
+          CorsAllowedOrigins: "https://example.com",
+          CorsAllowedMethods: "GET,PUT",
+        },
+        "AWS::S3::Bucket",
+      );
+      expect(result["CorsConfiguration"]).toEqual({
+        CorsRules: [
+          {
+            AllowedMethods: ["GET", "PUT"],
+            AllowedOrigins: ["https://example.com"],
+          },
+        ],
+      });
+      expect(result["EnableCors"]).toBeUndefined();
+      expect(result["CorsAllowedOrigins"]).toBeUndefined();
+      expect(result["CorsAllowedMethods"]).toBeUndefined();
+    });
+
+    it("CORS: no CFN structure when EnableCors is false", () => {
+      const result = applyToCfnTransforms(
+        { EnableCors: false, CorsAllowedOrigins: "https://example.com" },
+        "AWS::S3::Bucket",
+      );
+      expect(result["CorsConfiguration"]).toBeUndefined();
+      expect(result["EnableCors"]).toBeUndefined();
+      expect(result["CorsAllowedOrigins"]).toBeUndefined();
+    });
+
+    it("Replication: assembles ReplicationConfiguration from sub-fields", () => {
+      const result = applyToCfnTransforms(
+        {
+          EnableReplication: true,
+          ReplicationDestinationBucket: "arn:aws:s3:::replica",
+        },
+        "AWS::S3::Bucket",
+      );
+      expect(result["ReplicationConfiguration"]).toEqual({
+        Role: "",
+        Rules: [
+          {
+            Status: "Enabled",
+            Destination: { Bucket: "arn:aws:s3:::replica" },
+          },
+        ],
+      });
+      expect(result["EnableReplication"]).toBeUndefined();
+      expect(result["ReplicationDestinationBucket"]).toBeUndefined();
+    });
+
+    it("Replication: no CFN structure when EnableReplication is false", () => {
+      const result = applyToCfnTransforms(
+        {
+          EnableReplication: false,
+          ReplicationDestinationBucket: "arn:aws:s3:::replica",
+        },
+        "AWS::S3::Bucket",
+      );
+      expect(result["ReplicationConfiguration"]).toBeUndefined();
+      expect(result["EnableReplication"]).toBeUndefined();
+      expect(result["ReplicationDestinationBucket"]).toBeUndefined();
     });
   });
 
