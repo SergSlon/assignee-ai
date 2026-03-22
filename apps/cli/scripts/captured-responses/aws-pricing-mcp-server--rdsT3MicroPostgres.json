@@ -1,0 +1,75 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"status\": \"success\",\n  \"service_name\": \"AmazonRDS\",\n  \"data\": [\n    {\n      \"product\": {\n        \"productFamily\": \"Database Instance\",\n        \"attributes\": {\n          \"engineCode\": \"14\",\n          \"instanceTypeFamily\": \"T3\",\n          \"memory\": \"1 GiB\",\n          \"vcpu\": \"2\",\n          \"instanceType\": \"db.t3.micro\",\n          \"unbundledLicensing\": \"FALSE\",\n          \"usagetype\": \"InstanceUsage:db.t3.micro\",\n          \"locationType\": \"AWS Region\",\n          \"storage\": \"EBS Only\",\n          \"normalizationSizeFactor\": \"0.5\",\n          \"instanceFamily\": \"General purpose\",\n          \"databaseEngine\": \"PostgreSQL\",\n          \"regionCode\": \"us-east-1\",\n          \"servicecode\": \"AmazonRDS\",\n          \"physicalProcessor\": \"Intel Skylake E5 2686 v5 (2.5 GHz)\",\n          \"licenseModel\": \"No license required\",\n          \"currentGeneration\": \"Yes\",\n          \"networkPerformance\": \"Low to Moderate\",\n          \"deploymentOption\": \"Single-AZ\",\n          \"location\": \"US East (N. Virginia)\",\n          \"servicename\": \"Amazon Relational Database Service\",\n          \"processorArchitecture\": \"64-bit\",\n          \"operation\": \"CreateDBInstance:0014\"\n        },\n        \"sku\": \"TGN7QDJF2AGFU9XA\"\n      },\n      \"terms\": {\n        \"OnDemand\": {\n          \"TGN7QDJF2AGFU9XA.JRTCKXETXF\": {\n            \"priceDimensions\": {\n              \"TGN7QDJF2AGFU9XA.JRTCKXETXF.6YS6EN2CT7\": {\n                \"unit\": \"Hrs\",\n                \"endRange\": \"Inf\",\n                \"description\": \"USD 0.018 per db.t3.micro Single-AZ instance hour (or partial hour) running PostgreSQL\",\n                \"appliesTo\": [],\n                \"rateCode\": \"TGN7QDJF2AGFU9XA.JRTCKXETXF.6YS6EN2CT7\",\n                \"beginRange\": \"0\",\n                \"pricePerUnit\": {\n                  \"USD\": \"0.0180000000\"\n                }\n              }\n            },\n            \"sku\": \"TGN7QDJF2AGFU9XA\",\n            \"effectiveDate\": \"2026-03-01T00:00:00Z\",\n            \"offerTermCode\": \"JRTCKXETXF\",\n            \"termAttributes\": {}\n          }\n        },\n        \"Reserved\": \"<filtered by output_options.pricing_terms>\"\n      },\n      \"version\": \"20260318225923\",\n      \"publicationDate\": \"2026-03-18T22:59:23Z\"\n    }\n  ],\n  \"message\": \"Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API\"\n}"
+    }
+  ],
+  "structuredContent": {
+    "result": {
+      "status": "success",
+      "service_name": "AmazonRDS",
+      "data": [
+        {
+          "product": {
+            "productFamily": "Database Instance",
+            "attributes": {
+              "engineCode": "14",
+              "instanceTypeFamily": "T3",
+              "memory": "1 GiB",
+              "vcpu": "2",
+              "instanceType": "db.t3.micro",
+              "unbundledLicensing": "FALSE",
+              "usagetype": "InstanceUsage:db.t3.micro",
+              "locationType": "AWS Region",
+              "storage": "EBS Only",
+              "normalizationSizeFactor": "0.5",
+              "instanceFamily": "General purpose",
+              "databaseEngine": "PostgreSQL",
+              "regionCode": "us-east-1",
+              "servicecode": "AmazonRDS",
+              "physicalProcessor": "Intel Skylake E5 2686 v5 (2.5 GHz)",
+              "licenseModel": "No license required",
+              "currentGeneration": "Yes",
+              "networkPerformance": "Low to Moderate",
+              "deploymentOption": "Single-AZ",
+              "location": "US East (N. Virginia)",
+              "servicename": "Amazon Relational Database Service",
+              "processorArchitecture": "64-bit",
+              "operation": "CreateDBInstance:0014"
+            },
+            "sku": "TGN7QDJF2AGFU9XA"
+          },
+          "terms": {
+            "OnDemand": {
+              "TGN7QDJF2AGFU9XA.JRTCKXETXF": {
+                "priceDimensions": {
+                  "TGN7QDJF2AGFU9XA.JRTCKXETXF.6YS6EN2CT7": {
+                    "unit": "Hrs",
+                    "endRange": "Inf",
+                    "description": "USD 0.018 per db.t3.micro Single-AZ instance hour (or partial hour) running PostgreSQL",
+                    "appliesTo": [],
+                    "rateCode": "TGN7QDJF2AGFU9XA.JRTCKXETXF.6YS6EN2CT7",
+                    "beginRange": "0",
+                    "pricePerUnit": {
+                      "USD": "0.0180000000"
+                    }
+                  }
+                },
+                "sku": "TGN7QDJF2AGFU9XA",
+                "effectiveDate": "2026-03-01T00:00:00Z",
+                "offerTermCode": "JRTCKXETXF",
+                "termAttributes": {}
+              }
+            },
+            "Reserved": "<filtered by output_options.pricing_terms>"
+          },
+          "version": "20260318225923",
+          "publicationDate": "2026-03-18T22:59:23Z"
+        }
+      ],
+      "message": "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API"
+    }
+  },
+  "isError": false
+}

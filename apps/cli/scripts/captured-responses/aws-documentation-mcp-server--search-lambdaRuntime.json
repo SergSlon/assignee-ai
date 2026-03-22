@@ -1,0 +1,157 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"search_results\": [\n    {\n      \"rank_order\": 1,\n      \"url\": \"https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html\",\n      \"title\": \"Working with Lambda environment variables - AWS Lambda\",\n      \"context\": \"Configure Lambda environment variables customize function behavior, encrypt secrets, manage keys console.\",\n      \"sections\": [\n        \"Creating Lambda environment variables\",\n        \"Example scenario for environment variables\",\n        \"Retrieving Lambda environment variables\",\n        \"Defined runtime environment variables\"\n      ]\n    },\n    {\n      \"rank_order\": 2,\n      \"url\": \"https://docs.aws.amazon.com/lambda/latest/dg/runtime-management-configure-settings.html\",\n      \"title\": \"Configuring Lambda runtime management settings - AWS Lambda\",\n      \"context\": \"Lambda runtime management settings allow configuring automatic updates, updates on function changes, or manual updates with runtime version ARNs via console or CLI.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 3,\n      \"url\": \"https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-lambda-version-runtimepolicy.html\",\n      \"title\": \"AWS::Lambda::Version RuntimePolicy - AWS CloudFormation\",\n      \"context\": \"Use the CloudFormation AWS::Lambda::Version.RuntimePolicy resource for Lambda.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 4,\n      \"url\": \"https://docs.aws.amazon.com/lambda/latest/dg/runtime-management-identify.html\",\n      \"title\": \"Identifying Lambda runtime version changes - AWS Lambda\",\n      \"context\": \"Lambda execution environment initialization tracked via CloudWatch Logs INIT_START line, enabling runtime version transition monitoring with CloudWatch Contributor Insights\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 5,\n      \"url\": \"https://docs.aws.amazon.com/lambda/latest/dg/python-handler.html\",\n      \"title\": \"Define Lambda function handler in Python - AWS Lambda\",\n      \"context\": \"Lambda function handler in Python produces text file receipt, puts file in Amazon S3 bucket, accesses context object\",\n      \"sections\": [\n        \"Example Python Lambda function code\",\n        \"Handler naming conventions\",\n        \"Using the Lambda event object\",\n        \"Accessing and using the Lambda context object\",\n        \"Valid handler signatures for Python handlers\",\n        \"Returning a value\",\n        \"Using the AWS SDK for Python (Boto3) in your handler\",\n        \"Accessing environment variables\",\n        \"Code best practices for Python Lambda functions\"\n      ]\n    },\n    {\n      \"rank_order\": 6,\n      \"url\": \"https://docs.aws.amazon.com/lambda/latest/dg/runtimes-modify.html\",\n      \"title\": \"Modifying the runtime environment - AWS Lambda\",\n      \"context\": \"Lambda allows customizing runtime startup behavior via wrapper scripts, injecting arguments, setting environment variables, capturing diagnostics. Enables modifying runtime environment, adding options and tools.\",\n      \"sections\": [\n        \"Language-specific environment variables\",\n        \"Wrapper scripts\"\n      ]\n    },\n    {\n      \"rank_order\": 7,\n      \"url\": \"https://docs.aws.amazon.com/lambda/latest/dg/runtimes-walkthrough.html\",\n      \"title\": \"Tutorial: Building a custom runtime - AWS Lambda\",\n      \"context\": \"Lambda function created with custom runtime layer, shared across accounts, updated layer version.\",\n      \"sections\": [\n        \"Prerequisites\",\n        \"Create a function\",\n        \"Create a layer\",\n        \"Update the function\",\n        \"Update the runtime\",\n        \"Share the layer\",\n        \"Clean up\"\n      ]\n    },\n    {\n      \"rank_order\": 8,\n      \"url\": \"https://docs.aws.amazon.com/lambda/latest/dg/lambda-managed-instances-nodejs-runtime.html\",\n      \"title\": \"Node.js runtime for Lambda Managed Instances - AWS Lambda\",\n      \"context\": \"Lambda Managed Instances handles concurrent requests using worker threads, requiring safe handling of shared global state, database connections, and /tmp directory. It uses structured JSON log format, provides request context access, and has specific function initialization and shutdown behavior. Minimum dependency versions are required.\",\n      \"sections\": [\n        \"Maximum concurrency\",\n        \"Building functions for multi-concurrency\",\n        \"Node.js 22 callback-based handlers\",\n        \"Shared /tmp directory\",\n        \"Logging\",\n        \"Request context\",\n        \"Initialization and shutdown\",\n        \"Dependency versions\",\n        \"Powertools for AWS Lambda (TypeScript)\",\n        \"Next steps\"\n      ]\n    },\n    {\n      \"rank_order\": 9,\n      \"url\": \"https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-lambda-function-runtimemanagementconfig.html\",\n      \"title\": \"AWS::Lambda::Function RuntimeManagementConfig - AWS CloudFormation\",\n      \"context\": \"Use the CloudFormation AWS::Lambda::Function.RuntimeManagementConfig resource for Lambda.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 10,\n      \"url\": \"https://docs.aws.amazon.com/lambda/latest/dg/lambda-managed-instances-java-runtime.html\",\n      \"title\": \"Java runtime for Lambda Managed Instances - AWS Lambda\",\n      \"context\": \"Lambda Managed Instances use OS threads, requiring thread-safe handling of state, shared resources. Concurrency configuration controls maximum concurrent requests. Apply thread safety practices, use thread-safe collections, database connection pools, unique file names. Structured JSON logging includes requestId. Access request context thread-safely. Handle SIGTERM signal. Minimum dependency versions required.\",\n      \"sections\": [\n        \"Concurrency configuration\",\n        \"Building functions for multi-concurrency\",\n        \"Shared /tmp directory\",\n        \"Logging\",\n        \"Request context\",\n        \"Initialization and shutdown\",\n        \"Dependency versions\",\n        \"Powertools for AWS Lambda (Java)\",\n        \"Next steps\"\n      ]\n    }\n  ],\n  \"facets\": {\n    \"product_types\": [\n      \"AWS Lambda\",\n      \"AWS Cloud Development Kit (AWS CDK)\",\n      \"AWS SDK for Kotlin\",\n      \"AWS CloudFormation\",\n      \"Cdk\",\n      \"Sdk For Swift\",\n      \"AWS SDK For Ruby V3\",\n      \"AWS IoT Greengrass\",\n      \"AWS SDK For Ruby V2\",\n      \"AWS SDK for .NET Version 3\"\n    ],\n    \"guide_types\": [\n      \"Developer Guide\",\n      \"API Reference\",\n      \"SDK Reference\",\n      \"Guide\",\n      \"Template Reference\",\n      \"User Guide\",\n      \"AWS CloudFormation Command Line Interface (CLI) User Guide\",\n      \"AWS Solutions\",\n      \"AWS Whitepaper\",\n      \"Developer Guide, Version 1\"\n    ]\n  },\n  \"query_id\": \"8109ebae-0bfa-44af-9572-a1d0083cc25a\"\n}"
+    }
+  ],
+  "structuredContent": {
+    "search_results": [
+      {
+        "rank_order": 1,
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html",
+        "title": "Working with Lambda environment variables - AWS Lambda",
+        "context": "Configure Lambda environment variables customize function behavior, encrypt secrets, manage keys console.",
+        "sections": [
+          "Creating Lambda environment variables",
+          "Example scenario for environment variables",
+          "Retrieving Lambda environment variables",
+          "Defined runtime environment variables"
+        ]
+      },
+      {
+        "rank_order": 2,
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/runtime-management-configure-settings.html",
+        "title": "Configuring Lambda runtime management settings - AWS Lambda",
+        "context": "Lambda runtime management settings allow configuring automatic updates, updates on function changes, or manual updates with runtime version ARNs via console or CLI.",
+        "sections": null
+      },
+      {
+        "rank_order": 3,
+        "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-lambda-version-runtimepolicy.html",
+        "title": "AWS::Lambda::Version RuntimePolicy - AWS CloudFormation",
+        "context": "Use the CloudFormation AWS::Lambda::Version.RuntimePolicy resource for Lambda.",
+        "sections": null
+      },
+      {
+        "rank_order": 4,
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/runtime-management-identify.html",
+        "title": "Identifying Lambda runtime version changes - AWS Lambda",
+        "context": "Lambda execution environment initialization tracked via CloudWatch Logs INIT_START line, enabling runtime version transition monitoring with CloudWatch Contributor Insights",
+        "sections": null
+      },
+      {
+        "rank_order": 5,
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/python-handler.html",
+        "title": "Define Lambda function handler in Python - AWS Lambda",
+        "context": "Lambda function handler in Python produces text file receipt, puts file in Amazon S3 bucket, accesses context object",
+        "sections": [
+          "Example Python Lambda function code",
+          "Handler naming conventions",
+          "Using the Lambda event object",
+          "Accessing and using the Lambda context object",
+          "Valid handler signatures for Python handlers",
+          "Returning a value",
+          "Using the AWS SDK for Python (Boto3) in your handler",
+          "Accessing environment variables",
+          "Code best practices for Python Lambda functions"
+        ]
+      },
+      {
+        "rank_order": 6,
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/runtimes-modify.html",
+        "title": "Modifying the runtime environment - AWS Lambda",
+        "context": "Lambda allows customizing runtime startup behavior via wrapper scripts, injecting arguments, setting environment variables, capturing diagnostics. Enables modifying runtime environment, adding options and tools.",
+        "sections": [
+          "Language-specific environment variables",
+          "Wrapper scripts"
+        ]
+      },
+      {
+        "rank_order": 7,
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/runtimes-walkthrough.html",
+        "title": "Tutorial: Building a custom runtime - AWS Lambda",
+        "context": "Lambda function created with custom runtime layer, shared across accounts, updated layer version.",
+        "sections": [
+          "Prerequisites",
+          "Create a function",
+          "Create a layer",
+          "Update the function",
+          "Update the runtime",
+          "Share the layer",
+          "Clean up"
+        ]
+      },
+      {
+        "rank_order": 8,
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-managed-instances-nodejs-runtime.html",
+        "title": "Node.js runtime for Lambda Managed Instances - AWS Lambda",
+        "context": "Lambda Managed Instances handles concurrent requests using worker threads, requiring safe handling of shared global state, database connections, and /tmp directory. It uses structured JSON log format, provides request context access, and has specific function initialization and shutdown behavior. Minimum dependency versions are required.",
+        "sections": [
+          "Maximum concurrency",
+          "Building functions for multi-concurrency",
+          "Node.js 22 callback-based handlers",
+          "Shared /tmp directory",
+          "Logging",
+          "Request context",
+          "Initialization and shutdown",
+          "Dependency versions",
+          "Powertools for AWS Lambda (TypeScript)",
+          "Next steps"
+        ]
+      },
+      {
+        "rank_order": 9,
+        "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-lambda-function-runtimemanagementconfig.html",
+        "title": "AWS::Lambda::Function RuntimeManagementConfig - AWS CloudFormation",
+        "context": "Use the CloudFormation AWS::Lambda::Function.RuntimeManagementConfig resource for Lambda.",
+        "sections": null
+      },
+      {
+        "rank_order": 10,
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-managed-instances-java-runtime.html",
+        "title": "Java runtime for Lambda Managed Instances - AWS Lambda",
+        "context": "Lambda Managed Instances use OS threads, requiring thread-safe handling of state, shared resources. Concurrency configuration controls maximum concurrent requests. Apply thread safety practices, use thread-safe collections, database connection pools, unique file names. Structured JSON logging includes requestId. Access request context thread-safely. Handle SIGTERM signal. Minimum dependency versions required.",
+        "sections": [
+          "Concurrency configuration",
+          "Building functions for multi-concurrency",
+          "Shared /tmp directory",
+          "Logging",
+          "Request context",
+          "Initialization and shutdown",
+          "Dependency versions",
+          "Powertools for AWS Lambda (Java)",
+          "Next steps"
+        ]
+      }
+    ],
+    "facets": {
+      "product_types": [
+        "AWS Lambda",
+        "AWS Cloud Development Kit (AWS CDK)",
+        "AWS SDK for Kotlin",
+        "AWS CloudFormation",
+        "Cdk",
+        "Sdk For Swift",
+        "AWS SDK For Ruby V3",
+        "AWS IoT Greengrass",
+        "AWS SDK For Ruby V2",
+        "AWS SDK for .NET Version 3"
+      ],
+      "guide_types": [
+        "Developer Guide",
+        "API Reference",
+        "SDK Reference",
+        "Guide",
+        "Template Reference",
+        "User Guide",
+        "AWS CloudFormation Command Line Interface (CLI) User Guide",
+        "AWS Solutions",
+        "AWS Whitepaper",
+        "Developer Guide, Version 1"
+      ]
+    },
+    "query_id": "8109ebae-0bfa-44af-9572-a1d0083cc25a"
+  },
+  "isError": false
+}

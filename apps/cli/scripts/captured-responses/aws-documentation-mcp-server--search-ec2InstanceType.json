@@ -1,0 +1,112 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"search_results\": [\n    {\n      \"rank_order\": 1,\n      \"url\": \"https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-ec2-instance.html\",\n      \"title\": \"AWS::EC2::Instance - AWS CloudFormation\",\n      \"context\": \"Specifies an EC2 instance.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 2,\n      \"url\": \"https://docs.aws.amazon.com/cdk/api/v1/docs/@aws-cdk_aws-ec2.InstanceType.html\",\n      \"title\": \"class InstanceType · AWS CDK\",\n      \"context\": \"# class InstanceType\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 3,\n      \"url\": \"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-discovery.html\",\n      \"title\": \"Find an Amazon EC2 instance type - Amazon Elastic Compute Cloud\",\n      \"context\": \"Discover suitable EC2 instance types based on compute, memory, storage needs. Filter by Availability Zone, memory size, instance storage, hibernation support.\",\n      \"sections\": [\n        \"Find an instance type using the console\",\n        \"Describe an instance type using the AWS CLI\",\n        \"Find an instance type using the AWS CLI\",\n        \"Find an instance type using the Tools for PowerShell\"\n      ]\n    },\n    {\n      \"rank_order\": 4,\n      \"url\": \"https://docs.aws.amazon.com/sdk-for-kotlin/api/latest/autoscaling/aws.sdk.kotlin.services.autoscaling.model/-create-launch-configuration-request/instance-type.html\",\n      \"title\": \"instanceType - AWS SDK for Kotlin\",\n      \"context\": \"Learn how to use instanceType in the AWS SDK for Kotlin\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 5,\n      \"url\": \"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Instances.html\",\n      \"title\": \"Amazon EC2 instances - Amazon Elastic Compute Cloud\",\n      \"context\": \"Amazon EC2 instances provide virtual servers with customizable operating systems, applications, and compute resources. Manage instances' lifecycle, optimize performance, and pay for usage.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 6,\n      \"url\": \"https://docs.aws.amazon.com/sdk-for-kotlin/api/latest/ec2/aws.sdk.kotlin.services.ec2.model/-request-launch-template-data/-builder/instance-type.html\",\n      \"title\": \"instanceType - AWS SDK for Kotlin\",\n      \"context\": \"Learn how to use instanceType in the AWS SDK for Kotlin\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 7,\n      \"url\": \"https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Instance.html\",\n      \"title\": \"Instance - Amazon Elastic Compute Cloud\",\n      \"context\": \"Describes an instance.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 8,\n      \"url\": \"https://docs.aws.amazon.com/sdk-for-kotlin/api/latest/ec2/aws.sdk.kotlin.services.ec2.model/-create-capacity-reservation-request/-builder/instance-type.html\",\n      \"title\": \"instanceType - AWS SDK for Kotlin\",\n      \"context\": \"Learn how to use instanceType in the AWS SDK for Kotlin\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 9,\n      \"url\": \"https://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/ec2/model/InstanceType.html\",\n      \"title\": \"InstanceType (AWS SDK for Java - 1.12.797)\",\n      \"context\": \"Search Submit feedback...\\nAWS SDK for Java 1.x API Reference - 1.12.797\\nWe announced the upcoming end-of-support for AWS SDK for Java (v1). We recommend that you migrate to AWS SDK for Java v2. For dates, additional details, and information on how to migrate, please refer to the linked announcement.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 10,\n      \"url\": \"https://docs.aws.amazon.com/sdk-for-kotlin/api/latest/ec2/aws.sdk.kotlin.services.ec2.model/-request-launch-template-data/instance-type.html\",\n      \"title\": \"instanceType - AWS SDK for Kotlin\",\n      \"context\": \"Learn how to use instanceType in the AWS SDK for Kotlin\",\n      \"sections\": null\n    }\n  ],\n  \"facets\": {\n    \"product_types\": [\n      \"AWS SDK for Kotlin\",\n      \"AWS Cloud Development Kit (AWS CDK)\",\n      \"Sdk For Swift\",\n      \"AWS SDK for .NET Version 3\",\n      \"AWS SDK for Java\",\n      \"AWS SDK for .NET Version 4\",\n      \"Amazon Elastic Compute Cloud\",\n      \"AWS CloudFormation\",\n      \"Amazon EMR\",\n      \"Cdk\"\n    ],\n    \"guide_types\": [\n      \"SDK Reference\",\n      \"API Reference\",\n      \"Guide\",\n      \"Template Reference\",\n      \"Instance Types\",\n      \"User Guide\",\n      \"Developer Guide\"\n    ]\n  },\n  \"query_id\": \"daf9e7dd-df14-4f9e-bf70-d1079cc56e08\"\n}"
+    }
+  ],
+  "structuredContent": {
+    "search_results": [
+      {
+        "rank_order": 1,
+        "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-ec2-instance.html",
+        "title": "AWS::EC2::Instance - AWS CloudFormation",
+        "context": "Specifies an EC2 instance.",
+        "sections": null
+      },
+      {
+        "rank_order": 2,
+        "url": "https://docs.aws.amazon.com/cdk/api/v1/docs/@aws-cdk_aws-ec2.InstanceType.html",
+        "title": "class InstanceType · AWS CDK",
+        "context": "# class InstanceType",
+        "sections": null
+      },
+      {
+        "rank_order": 3,
+        "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-discovery.html",
+        "title": "Find an Amazon EC2 instance type - Amazon Elastic Compute Cloud",
+        "context": "Discover suitable EC2 instance types based on compute, memory, storage needs. Filter by Availability Zone, memory size, instance storage, hibernation support.",
+        "sections": [
+          "Find an instance type using the console",
+          "Describe an instance type using the AWS CLI",
+          "Find an instance type using the AWS CLI",
+          "Find an instance type using the Tools for PowerShell"
+        ]
+      },
+      {
+        "rank_order": 4,
+        "url": "https://docs.aws.amazon.com/sdk-for-kotlin/api/latest/autoscaling/aws.sdk.kotlin.services.autoscaling.model/-create-launch-configuration-request/instance-type.html",
+        "title": "instanceType - AWS SDK for Kotlin",
+        "context": "Learn how to use instanceType in the AWS SDK for Kotlin",
+        "sections": null
+      },
+      {
+        "rank_order": 5,
+        "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Instances.html",
+        "title": "Amazon EC2 instances - Amazon Elastic Compute Cloud",
+        "context": "Amazon EC2 instances provide virtual servers with customizable operating systems, applications, and compute resources. Manage instances' lifecycle, optimize performance, and pay for usage.",
+        "sections": null
+      },
+      {
+        "rank_order": 6,
+        "url": "https://docs.aws.amazon.com/sdk-for-kotlin/api/latest/ec2/aws.sdk.kotlin.services.ec2.model/-request-launch-template-data/-builder/instance-type.html",
+        "title": "instanceType - AWS SDK for Kotlin",
+        "context": "Learn how to use instanceType in the AWS SDK for Kotlin",
+        "sections": null
+      },
+      {
+        "rank_order": 7,
+        "url": "https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Instance.html",
+        "title": "Instance - Amazon Elastic Compute Cloud",
+        "context": "Describes an instance.",
+        "sections": null
+      },
+      {
+        "rank_order": 8,
+        "url": "https://docs.aws.amazon.com/sdk-for-kotlin/api/latest/ec2/aws.sdk.kotlin.services.ec2.model/-create-capacity-reservation-request/-builder/instance-type.html",
+        "title": "instanceType - AWS SDK for Kotlin",
+        "context": "Learn how to use instanceType in the AWS SDK for Kotlin",
+        "sections": null
+      },
+      {
+        "rank_order": 9,
+        "url": "https://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/ec2/model/InstanceType.html",
+        "title": "InstanceType (AWS SDK for Java - 1.12.797)",
+        "context": "Search Submit feedback...\nAWS SDK for Java 1.x API Reference - 1.12.797\nWe announced the upcoming end-of-support for AWS SDK for Java (v1). We recommend that you migrate to AWS SDK for Java v2. For dates, additional details, and information on how to migrate, please refer to the linked announcement.",
+        "sections": null
+      },
+      {
+        "rank_order": 10,
+        "url": "https://docs.aws.amazon.com/sdk-for-kotlin/api/latest/ec2/aws.sdk.kotlin.services.ec2.model/-request-launch-template-data/instance-type.html",
+        "title": "instanceType - AWS SDK for Kotlin",
+        "context": "Learn how to use instanceType in the AWS SDK for Kotlin",
+        "sections": null
+      }
+    ],
+    "facets": {
+      "product_types": [
+        "AWS SDK for Kotlin",
+        "AWS Cloud Development Kit (AWS CDK)",
+        "Sdk For Swift",
+        "AWS SDK for .NET Version 3",
+        "AWS SDK for Java",
+        "AWS SDK for .NET Version 4",
+        "Amazon Elastic Compute Cloud",
+        "AWS CloudFormation",
+        "Amazon EMR",
+        "Cdk"
+      ],
+      "guide_types": [
+        "SDK Reference",
+        "API Reference",
+        "Guide",
+        "Template Reference",
+        "Instance Types",
+        "User Guide",
+        "Developer Guide"
+      ]
+    },
+    "query_id": "daf9e7dd-df14-4f9e-bf70-d1079cc56e08"
+  },
+  "isError": false
+}

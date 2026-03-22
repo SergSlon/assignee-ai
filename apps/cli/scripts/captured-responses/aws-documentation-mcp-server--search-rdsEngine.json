@@ -1,0 +1,117 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"search_results\": [\n    {\n      \"rank_order\": 1,\n      \"url\": \"https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html\",\n      \"title\": \"AWS::RDS::DBInstance - AWS CloudFormation\",\n      \"context\": \"Use the CloudFormation AWS::RDS::DBInstance resource for RDS.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 2,\n      \"url\": \"https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-rds-dbinstance-dbinstancerole.html\",\n      \"title\": \"AWS::RDS::DBInstance DBInstanceRole - AWS CloudFormation\",\n      \"context\": \"Use the CloudFormation AWS::RDS::DBInstance.DBInstanceRole resource for RDS.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 3,\n      \"url\": \"https://docs.aws.amazon.com/sdk-for-cpp/latest/api/aws-cpp-sdk-rds/html/class_aws_1_1_r_d_s_1_1_model_1_1_d_b_instance.html\",\n      \"title\": \"AWS SDK for C++: Aws::RDS::Model::DBInstance Class Reference\",\n      \"context\": \"Aws::RDS::Model::DBInstance Class Reference - AWS SDK for C++ v1\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 4,\n      \"url\": \"https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/AWS_RDS.html\",\n      \"title\": \"Amazon Relational Database Service - AWS CloudFormation\",\n      \"context\": \"AWS::RDS resource types reference for CloudFormation.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 5,\n      \"url\": \"https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-rds-dbinstance-endpoint.html\",\n      \"title\": \"AWS::RDS::DBInstance Endpoint - AWS CloudFormation\",\n      \"context\": \"This data type represents the information you need to connect to an Amazon RDS DB instance. This data type is used as a response element in the following actions:\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 6,\n      \"url\": \"https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-rds-security-group.html\",\n      \"title\": \"AWS::RDS::DBSecurityGroup - AWS CloudFormation\",\n      \"context\": \"Use the AWS CloudFormation AWS::RDS::DBSecurityGroup resource for RDS.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 7,\n      \"url\": \"https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-rds.html\",\n      \"title\": \"Amazon RDS template snippets - AWS CloudFormation\",\n      \"context\": \"Amazon RDS DB instance resource with managed master user password, DBSecurityGroup for CIDR range, EC2 security group, multiple VPC security groups, and database instance in VPC security group.\",\n      \"sections\": [\n        \"Amazon RDS DB instance resource\",\n        \"Amazon RDS oracle database DB instance resource\",\n        \"Amazon RDS DBSecurityGroup resource for CIDR range\",\n        \"Amazon RDS DBSecurityGroup with an Amazon EC2 security group\",\n        \"Multiple VPC security groups\",\n        \"Amazon RDS database instance in a VPC security group\"\n      ]\n    },\n    {\n      \"rank_order\": 8,\n      \"url\": \"https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-customdbengineversion.html\",\n      \"title\": \"AWS::RDS::CustomDBEngineVersion - AWS CloudFormation\",\n      \"context\": \"Creates a custom DB engine version (CEV).\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 9,\n      \"url\": \"https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_DBInstance.html\",\n      \"title\": \"DBInstance - Amazon Relational Database Service\",\n      \"context\": \"Contains the details of an Amazon RDS DB instance.\",\n      \"sections\": null\n    },\n    {\n      \"rank_order\": 10,\n      \"url\": \"https://docs.aws.amazon.com/sdk-for-ruby/v1/api/AWS/RDS/DBInstance.html\",\n      \"title\": \"Class: AWS::RDS::DBInstance\\n  \\n    — AWS SDK for Ruby\",\n      \"context\": \"A new instance of DBInstance.\",\n      \"sections\": null\n    }\n  ],\n  \"facets\": {\n    \"product_types\": [\n      \"AWS CloudFormation\",\n      \"Sdk For Swift\",\n      \"AWS SDK for Kotlin\",\n      \"AWS Cloud Development Kit (AWS CDK)\",\n      \"AWS SDK for C++ v1\",\n      \"Cdk\",\n      \"AWS SDK For Ruby V3\",\n      \"Amazon Relational Database Service\",\n      \"AWS Config\",\n      \"AWS SDK For Ruby V2\"\n    ],\n    \"guide_types\": [\n      \"API Reference\",\n      \"SDK Reference\",\n      \"Template Reference\",\n      \"AWS SDK for C++ v1 API Reference\",\n      \"Guide\",\n      \"Developer Guide\",\n      \"User Guide\",\n      \"AMS Advanced Change Type Details\",\n      \"Code Library\",\n      \"Controls Reference Guide\"\n    ]\n  },\n  \"query_id\": \"518feb0a-aa47-4b84-b2f3-8637935db20c\"\n}"
+    }
+  ],
+  "structuredContent": {
+    "search_results": [
+      {
+        "rank_order": 1,
+        "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html",
+        "title": "AWS::RDS::DBInstance - AWS CloudFormation",
+        "context": "Use the CloudFormation AWS::RDS::DBInstance resource for RDS.",
+        "sections": null
+      },
+      {
+        "rank_order": 2,
+        "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-rds-dbinstance-dbinstancerole.html",
+        "title": "AWS::RDS::DBInstance DBInstanceRole - AWS CloudFormation",
+        "context": "Use the CloudFormation AWS::RDS::DBInstance.DBInstanceRole resource for RDS.",
+        "sections": null
+      },
+      {
+        "rank_order": 3,
+        "url": "https://docs.aws.amazon.com/sdk-for-cpp/latest/api/aws-cpp-sdk-rds/html/class_aws_1_1_r_d_s_1_1_model_1_1_d_b_instance.html",
+        "title": "AWS SDK for C++: Aws::RDS::Model::DBInstance Class Reference",
+        "context": "Aws::RDS::Model::DBInstance Class Reference - AWS SDK for C++ v1",
+        "sections": null
+      },
+      {
+        "rank_order": 4,
+        "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/AWS_RDS.html",
+        "title": "Amazon Relational Database Service - AWS CloudFormation",
+        "context": "AWS::RDS resource types reference for CloudFormation.",
+        "sections": null
+      },
+      {
+        "rank_order": 5,
+        "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-rds-dbinstance-endpoint.html",
+        "title": "AWS::RDS::DBInstance Endpoint - AWS CloudFormation",
+        "context": "This data type represents the information you need to connect to an Amazon RDS DB instance. This data type is used as a response element in the following actions:",
+        "sections": null
+      },
+      {
+        "rank_order": 6,
+        "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-rds-security-group.html",
+        "title": "AWS::RDS::DBSecurityGroup - AWS CloudFormation",
+        "context": "Use the AWS CloudFormation AWS::RDS::DBSecurityGroup resource for RDS.",
+        "sections": null
+      },
+      {
+        "rank_order": 7,
+        "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-rds.html",
+        "title": "Amazon RDS template snippets - AWS CloudFormation",
+        "context": "Amazon RDS DB instance resource with managed master user password, DBSecurityGroup for CIDR range, EC2 security group, multiple VPC security groups, and database instance in VPC security group.",
+        "sections": [
+          "Amazon RDS DB instance resource",
+          "Amazon RDS oracle database DB instance resource",
+          "Amazon RDS DBSecurityGroup resource for CIDR range",
+          "Amazon RDS DBSecurityGroup with an Amazon EC2 security group",
+          "Multiple VPC security groups",
+          "Amazon RDS database instance in a VPC security group"
+        ]
+      },
+      {
+        "rank_order": 8,
+        "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-customdbengineversion.html",
+        "title": "AWS::RDS::CustomDBEngineVersion - AWS CloudFormation",
+        "context": "Creates a custom DB engine version (CEV).",
+        "sections": null
+      },
+      {
+        "rank_order": 9,
+        "url": "https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_DBInstance.html",
+        "title": "DBInstance - Amazon Relational Database Service",
+        "context": "Contains the details of an Amazon RDS DB instance.",
+        "sections": null
+      },
+      {
+        "rank_order": 10,
+        "url": "https://docs.aws.amazon.com/sdk-for-ruby/v1/api/AWS/RDS/DBInstance.html",
+        "title": "Class: AWS::RDS::DBInstance\n  \n    — AWS SDK for Ruby",
+        "context": "A new instance of DBInstance.",
+        "sections": null
+      }
+    ],
+    "facets": {
+      "product_types": [
+        "AWS CloudFormation",
+        "Sdk For Swift",
+        "AWS SDK for Kotlin",
+        "AWS Cloud Development Kit (AWS CDK)",
+        "AWS SDK for C++ v1",
+        "Cdk",
+        "AWS SDK For Ruby V3",
+        "Amazon Relational Database Service",
+        "AWS Config",
+        "AWS SDK For Ruby V2"
+      ],
+      "guide_types": [
+        "API Reference",
+        "SDK Reference",
+        "Template Reference",
+        "AWS SDK for C++ v1 API Reference",
+        "Guide",
+        "Developer Guide",
+        "User Guide",
+        "AMS Advanced Change Type Details",
+        "Code Library",
+        "Controls Reference Guide"
+      ]
+    },
+    "query_id": "518feb0a-aa47-4b84-b2f3-8637935db20c"
+  },
+  "isError": false
+}

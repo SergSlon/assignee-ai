@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Error executing tool get_resource_schema_information: Error downloading the schema for AWS::Custom::FakeResource: An error occurred (TypeNotFoundException) when calling the DescribeType operation: The type 'AWS::Custom::FakeResource' cannot be found."
+    }
+  ],
+  "isError": true
+}

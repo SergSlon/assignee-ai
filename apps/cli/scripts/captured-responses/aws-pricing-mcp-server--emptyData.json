@@ -1,0 +1,33 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"status\": \"error\",\n  \"error_type\": \"empty_results\",\n  \"message\": \"No results found for given filters [[PricingFilter(field='productFamily', type='TERM_MATCH', value='Compute Instance'), PricingFilter(field='instanceType', type='TERM_MATCH', value='z99.nonexistent'), PricingFilter(field='operatingSystem', type='TERM_MATCH', value='Linux')]], service: \\\"AmazonEC2\\\", region \\\"us-east-1\\\"\",\n  \"service_code\": \"AmazonEC2\",\n  \"region\": \"us-east-1\",\n  \"suggestion\": \"Try these approaches: (1) Verify that the service code is valid. Use get_service_codes() to get valid service codes. (2) Validate region and filter values using get_pricing_attribute_values(). (3) Test with fewer filters to isolate the issue.\",\n  \"examples\": {\n    \"Example service codes\": [\n      \"AmazonEC2\",\n      \"AmazonS3\",\n      \"AmazonES\",\n      \"AWSLambda\",\n      \"AmazonDynamoDB\"\n    ],\n    \"Example regions\": [\n      \"us-east-1\",\n      \"eu-west-1\",\n      \"ap-south-1\"\n    ]\n  }\n}"
+    }
+  ],
+  "structuredContent": {
+    "result": {
+      "status": "error",
+      "error_type": "empty_results",
+      "message": "No results found for given filters [[PricingFilter(field='productFamily', type='TERM_MATCH', value='Compute Instance'), PricingFilter(field='instanceType', type='TERM_MATCH', value='z99.nonexistent'), PricingFilter(field='operatingSystem', type='TERM_MATCH', value='Linux')]], service: \"AmazonEC2\", region \"us-east-1\"",
+      "service_code": "AmazonEC2",
+      "region": "us-east-1",
+      "suggestion": "Try these approaches: (1) Verify that the service code is valid. Use get_service_codes() to get valid service codes. (2) Validate region and filter values using get_pricing_attribute_values(). (3) Test with fewer filters to isolate the issue.",
+      "examples": {
+        "Example service codes": [
+          "AmazonEC2",
+          "AmazonS3",
+          "AmazonES",
+          "AWSLambda",
+          "AmazonDynamoDB"
+        ],
+        "Example regions": [
+          "us-east-1",
+          "eu-west-1",
+          "ap-south-1"
+        ]
+      }
+    }
+  },
+  "isError": false
+}
