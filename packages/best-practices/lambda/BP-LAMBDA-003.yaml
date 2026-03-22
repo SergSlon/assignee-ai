@@ -1,0 +1,12 @@
+id: BP-LAMBDA-003
+title: "Lambda function memory should be above 128 MB minimum"
+severity: MEDIUM
+resource_type: "AWS::Lambda::Function"
+property_path: "MemorySize"
+check_type: "greater_than"
+expected_value: 128
+source: "AWS Lambda Best Practices"
+description: "Lambda functions should not use the 128 MB default memory. CPU is allocated proportionally to memory, so 128 MB severely throttles CPU-bound workloads and often increases total cost due to longer execution times."
+remediation: "Set MemorySize to at least 256 MB. Use AWS Lambda Power Tuning to find the optimal memory-to-cost ratio for your function."
+category: performance
+lastVerified: "2026-03-22"

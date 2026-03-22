@@ -3,7 +3,10 @@
  * Runs in Phase 1 of apply, before the LangGraph interrupt at resource_provisioner.
  * If user declines or cancels, sets executionStatus: CANCELLED.
  *
- * @see Story 2-1, Story 8-3
+ * Story 11.2: --yes flag auto-confirms without interactive prompt (for CI/CD).
+ * Preflight is never bypassed — it runs before this node in the graph.
+ *
+ * @see Story 2-1, Story 8-3, Story 11-2
  */
 
 import { ExecutionStatus } from "@assignee/core";
@@ -19,6 +22,33 @@ import type { AgentState } from "../services/graph.js";
 export async function humanApprovalNode(
   state: AgentState,
 ): Promise<Partial<AgentState>> {
+  // Story 11.2: --yes flag auto-approves without interactive prompt
+  if (state.autoApprove) {
+    // Warn if used in an interactive TTY session
+    if (process.stdout.isTTY) {
+      process.stderr.write(
+        "Warning: --yes flag used in interactive session. Auto-approving without confirmation.\n",
+      );
+    }
+
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.APPLY_AUTO_APPROVED,
+      extras: { autoApproved: true, flag: "--yes" },
+    });
+
+    return {};
+  }
+
+  // Story 11.2: non-TTY without --yes is an error
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      "Error: Apply requires confirmation. Use --yes for non-interactive mode.",
+    );
+  }
+
   let confirmed: boolean;
 
   if (state.resourcePattern && state.resourceQueue) {
@@ -27,6 +57,8 @@ export async function humanApprovalNode(
       state.resourcePattern,
       state.resourceQueue,
       state.perResourceCosts,
+      state.guardrailFindings,
+      state.bpFindings,
     );
     confirmed = await renderHitlCompoundConfirm(
       state.resourcePattern,

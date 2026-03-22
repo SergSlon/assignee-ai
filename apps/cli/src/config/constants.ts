@@ -19,3 +19,13 @@ export const CHECKPOINT_DEFAULT_TTL_HOURS = 72;
 
 /** Directory for checkpoint files, relative to project root. */
 export const CHECKPOINT_DIR = ".assignee";
+
+/** SaaS API base URL for org policy fetch (Story 7.2). */
+export const SAAS_API_URL =
+  process.env["ASSIGNEE_SAAS_URL"] ?? "https://app.assignee.ai";
+
+/** TTL in milliseconds for cached org policy (default 5 minutes). */
+export const ORG_POLICY_TTL_MS = parseInt(
+  process.env["ASSIGNEE_ORG_POLICY_TTL_MS"] ?? "300000",
+  10,
+);

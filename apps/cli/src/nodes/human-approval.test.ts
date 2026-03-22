@@ -1,0 +1,227 @@
+/**
+ * Tests for human_approval node (Story 11.2: --yes CI flag).
+ * Verifies auto-approval, TTY warning, non-TTY error, audit logging,
+ * and that preflight is not bypassed by --yes.
+ *
+ * @see Story 11-2
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { ExecutionStatus } from "@assignee/core";
+import type { AgentState } from "../services/graph.js";
+
+// Mock display functions to avoid real TTY interactions
+vi.mock("../utils/display.js", () => ({
+  renderPlanBox: vi.fn(),
+  renderHitlConfirm: vi.fn(),
+  renderDependencyPlan: vi.fn(),
+  renderHitlCompoundConfirm: vi.fn(),
+}));
+
+// Mock logger — capture calls for audit assertions
+vi.mock("../utils/logger.js", () => ({
+  log: vi.fn(),
+  LOG_ACTIONS: {
+    PLAN_APPROVED: "plan_approved",
+    PLAN_REJECTED: "plan_rejected_by_user",
+    APPLY_AUTO_APPROVED: "apply_auto_approved",
+  },
+}));
+
+import { humanApprovalNode } from "./human-approval.js";
+import { renderPlanBox, renderHitlConfirm } from "../utils/display.js";
+import { log } from "../utils/logger.js";
+
+function makeState(overrides: Partial<AgentState> = {}): AgentState {
+  return {
+    userIntent: "Create an S3 bucket",
+    runId: "run-test-approval",
+    executionStatus: "pending",
+    executionMode: "apply",
+    resourceType: "AWS::S3::Bucket",
+    preflightPassed: true,
+    preflightErrors: [],
+    preflightMode: "local",
+    messages: [],
+    autoApprove: false,
+    noWizard: false,
+    checkpointResumed: false,
+    ...overrides,
+  } as AgentState;
+}
+
+describe("humanApprovalNode", () => {
+  let originalStdinIsTTY: boolean | undefined;
+  let originalStdoutIsTTY: boolean | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stderrWriteSpy: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    originalStdinIsTTY = process.stdin.isTTY;
+    originalStdoutIsTTY = process.stdout.isTTY;
+    stderrWriteSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: originalStdinIsTTY,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: originalStdoutIsTTY,
+      writable: true,
+      configurable: true,
+    });
+    stderrWriteSpy.mockRestore();
+  });
+
+  // ── AC #1: autoApprove: true skips interactive prompt ──────────────
+  it("autoApprove: true returns approval without interactive prompt", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    const state = makeState({ autoApprove: true });
+    const result = await humanApprovalNode(state);
+
+    // Should return empty (approved) — no executionStatus: CANCELLED
+    expect(result.executionStatus).toBeUndefined();
+    // Should NOT call interactive confirm
+    expect(renderHitlConfirm).not.toHaveBeenCalled();
+    expect(renderPlanBox).not.toHaveBeenCalled();
+  });
+
+  // ── AC #3: autoApprove + TTY emits warning ─────────────────────────
+  it("autoApprove: true + TTY emits warning to stderr", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      writable: true,
+      configurable: true,
+    });
+
+    const state = makeState({ autoApprove: true });
+    await humanApprovalNode(state);
+
+    expect(stderrWriteSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Warning: --yes flag used in interactive session",
+      ),
+    );
+  });
+
+  // ── AC #5: no --yes + non-TTY throws error ────────────────────────
+  it("autoApprove: false + non-TTY throws clear error", async () => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    const state = makeState({ autoApprove: false });
+
+    await expect(humanApprovalNode(state)).rejects.toThrow(
+      "Error: Apply requires confirmation. Use --yes for non-interactive mode.",
+    );
+  });
+
+  // ── AC #1 (interactive): autoApprove: false + TTY runs prompt ──────
+  it("autoApprove: false + TTY runs interactive prompt (existing behaviour)", async () => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      writable: true,
+      configurable: true,
+    });
+
+    vi.mocked(renderHitlConfirm).mockResolvedValue(true);
+
+    const state = makeState({ autoApprove: false });
+    const result = await humanApprovalNode(state);
+
+    expect(renderPlanBox).toHaveBeenCalled();
+    expect(renderHitlConfirm).toHaveBeenCalled();
+    expect(result.executionStatus).toBeUndefined();
+  });
+
+  // ── Interactive prompt — user declines ─────────────────────────────
+  it("autoApprove: false + TTY + user declines sets CANCELLED", async () => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      writable: true,
+      configurable: true,
+    });
+
+    vi.mocked(renderHitlConfirm).mockResolvedValue(false);
+
+    const state = makeState({ autoApprove: false });
+    const result = await humanApprovalNode(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.CANCELLED);
+  });
+
+  // ── AC #2: audit log contains autoApproved: true and flag ──────────
+  it("autoApprove: true writes audit log with autoApproved and flag", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    const state = makeState({ autoApprove: true, runId: "run-audit-test" });
+    await humanApprovalNode(state);
+
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "apply_auto_approved",
+        runId: "run-audit-test",
+        extras: expect.objectContaining({
+          autoApproved: true,
+          flag: "--yes",
+        }),
+      }),
+    );
+  });
+
+  // ── AC #4: preflight failure with --yes still aborts ───────────────
+  // This is an architectural test: preflight_guard runs BEFORE human_approval
+  // in the graph. When preflight fails, the graph routes to result_formatter
+  // (not human_approval). The human_approval node is never reached.
+  // We verify this by checking that a state with preflightPassed: false
+  // reaching human_approval would still auto-approve — because the graph
+  // routing is what enforces preflight, not this node.
+  it("preflight failure prevents reaching human_approval (graph routing test)", async () => {
+    // This test documents that preflight enforcement is in graph-routing.ts,
+    // not in human_approval. The routePreflightGuard function routes to
+    // RESULT_FORMATTER when preflight fails, bypassing human_approval entirely.
+    // We import and verify the routing function.
+    const { routePreflightGuard } =
+      await import("../services/graph-routing.js");
+    const { GraphNode } = await import("../constants/graph.js");
+
+    const failedState = makeState({
+      autoApprove: true,
+      preflightPassed: false,
+      executionStatus: ExecutionStatus.FAILED,
+    });
+
+    const route = routePreflightGuard(failedState);
+
+    // When preflight fails, graph routes to RESULT_FORMATTER, never reaching human_approval
+    expect(route).toBe(GraphNode.RESULT_FORMATTER);
+  });
+});

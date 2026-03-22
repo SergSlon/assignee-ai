@@ -7,17 +7,26 @@
     "assignee": "./dist/index.js"
   },
   "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "completions"
+  ],
   "scripts": {
     "build": "tsc",
+    "postbuild": "npx tsx scripts/generate-completions.ts",
     "dev": "tsc --watch",
+    "generate-completions": "npx tsx scripts/generate-completions.ts",
     "test": "vitest run",
     "start": "node ./dist/index.js",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^4.0.77",
+    "@assignee/best-practices": "workspace:*",
     "@assignee/core": "workspace:*",
     "@aws-sdk/client-cloudcontrol": "^3.1009.0",
+    "@aws-sdk/client-lambda": "^3.1014.0",
+    "@aws-sdk/client-sns": "^3.1014.0",
     "@clack/prompts": "^1.1.0",
     "@langchain/core": "^1.1.32",
     "@langchain/langgraph": "^1.2.2",
@@ -26,6 +35,7 @@
     "boxen": "^8.0.1",
     "chalk": "^5.6.2",
     "commander": "^12.0.0",
+    "yaml": "^2.8.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {

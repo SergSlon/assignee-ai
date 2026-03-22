@@ -11,11 +11,13 @@ import {
   ExecutionStatus,
   getPrimaryIdentifier,
   SUPPORTED_TYPES_ARRAY,
+  CCAPI_FALLBACK_TYPES,
   type ResourceType,
   ProvisioningError,
 } from "@assignee/core";
 import type { ProvisioningPort } from "../services/provisioning-port.js";
 import { ProvisioningErrorKind } from "../services/provisioning-port.js";
+import type { SDKFallbackDispatcher } from "../services/sdk-fallback-dispatcher.js";
 import { injectMandatoryTags } from "../utils/tags.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph-state.js";
@@ -27,6 +29,7 @@ function isResourceType(s: string): s is ResourceType {
 export async function resourceProvisionerNode(
   state: AgentState,
   provisioner: ProvisioningPort,
+  fallbackDispatcher?: SDKFallbackDispatcher,
 ): Promise<Partial<AgentState>> {
   if (state.executionStatus === ExecutionStatus.CANCELLED) return {};
 
@@ -35,6 +38,91 @@ export async function resourceProvisionerNode(
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: "Cannot provision: desiredState is missing.",
     };
+  }
+
+  // ── SDK Fallback Dispatch (Story 7.7) ────────────────────────────────────
+  // Check for CCAPI gap types BEFORE the CloudControl path.
+  if (state.resourceType && fallbackDispatcher) {
+    // Check redirect types first (unsupported with known alternative)
+    const redirect = fallbackDispatcher.isRedirect(state.resourceType);
+    if (redirect) {
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "warn",
+        action: LOG_ACTIONS.SDK_FALLBACK_DISPATCHED,
+        extras: {
+          resourceType: state.resourceType,
+          dispatchPath: "redirect",
+          message: redirect.message,
+        },
+      });
+      return {
+        executionStatus: ExecutionStatus.FAILED,
+        errorMessage: redirect.message,
+        error: new ProvisioningError(redirect.message, "UnsupportedType"),
+      };
+    }
+
+    // Check SDK-routable types (can be provisioned via native SDK)
+    if (fallbackDispatcher.canHandle(state.resourceType)) {
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.SDK_FALLBACK_DISPATCHED,
+        extras: {
+          resourceType: state.resourceType,
+          dispatchPath: "sdk_fallback",
+        },
+      });
+
+      // Inject tags for EventSourceMapping (supports Tags parameter)
+      // SNS Subscriptions do NOT support tags at creation time
+      const desiredStateForSdk =
+        state.resourceType === CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING
+          ? injectMandatoryTags(
+              state.desiredState,
+              state.runId,
+              state.resourceType,
+            )
+          : state.desiredState;
+
+      if (
+        state.resourceType === CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING
+      ) {
+        const [err, result] =
+          await fallbackDispatcher.createEventSourceMapping(desiredStateForSdk);
+        if (err) {
+          return {
+            executionStatus: ExecutionStatus.FAILED,
+            errorMessage: `SDK fallback provisioning failed: ${err.message}`,
+            error: new ProvisioningError(err.message, "Unknown"),
+          };
+        }
+        return {
+          executionStatus: ExecutionStatus.SUCCESS,
+          resourceArn: result.identifier,
+        };
+      }
+
+      if (state.resourceType === CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION) {
+        const [err, result] = await fallbackDispatcher.subscribe(
+          state.desiredState,
+        );
+        if (err) {
+          return {
+            executionStatus: ExecutionStatus.FAILED,
+            errorMessage: `SDK fallback provisioning failed: ${err.message}`,
+            error: new ProvisioningError(err.message, "Unknown"),
+          };
+        }
+        return {
+          executionStatus: ExecutionStatus.SUCCESS,
+          resourceArn: result.identifier,
+        };
+      }
+    }
   }
 
   // ── State Guard (FR-15 Read-Before-Write) ────────────────────────────────

@@ -1,0 +1,9 @@
+id: BP-S3-003
+title: "Missing lastVerified example"
+severity: CRITICAL
+resource_type: "AWS::S3::Bucket"
+property_path: "PublicAccessBlockConfiguration.BlockPublicAcls"
+check_type: equals
+expected_value: true
+source: "AWS Security Hub FSBP"
+category: security

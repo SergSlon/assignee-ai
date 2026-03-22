@@ -1,0 +1,13 @@
+id: BP-EC2-004
+title: "EC2 instance should have IAM instance profile attached"
+severity: HIGH
+resource_type: "AWS::EC2::Instance"
+property_path: "IamInstanceProfile"
+check_type: "exists"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "EC2.19"
+description: "EC2 instances should use IAM instance profiles for AWS API access instead of hardcoded credentials. Instance profiles provide temporary, automatically rotated credentials via the instance metadata service."
+remediation: "Attach an IAM Instance Profile with a role that follows least privilege. Never use long-lived access keys on EC2 instances."
+category: security
+lastVerified: "2026-03-22"

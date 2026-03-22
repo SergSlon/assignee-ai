@@ -1,0 +1,9 @@
+{
+  "extends": "@assignee/tsconfig/strict",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

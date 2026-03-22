@@ -1,0 +1,12 @@
+id: BP-EC2-003
+title: "EC2 EBS volumes should use gp3 (not gp2)"
+severity: MEDIUM
+resource_type: "AWS::EC2::Instance"
+property_path: "BlockDeviceMappings[0].Ebs.VolumeType"
+check_type: "equals"
+expected_value: "gp3"
+source: "AWS Well-Architected Framework — Cost Optimization Pillar"
+description: "EC2 instances should use gp3 EBS volumes instead of gp2. gp3 provides 20% lower cost per GB, 3000 baseline IOPS (vs 100-3000 variable for gp2), and 125 MiB/s baseline throughput."
+remediation: "Use gp3 volumes — 20% cheaper than gp2 with better baseline performance (3000 IOPS, 125 MiB/s). Migrate existing gp2 volumes to gp3 with zero downtime using EBS Modify Volume."
+category: cost
+lastVerified: "2026-03-22"

@@ -1,0 +1,12 @@
+id: BP-EC2-006
+title: "EC2 instance should have termination protection enabled"
+severity: MEDIUM
+resource_type: "AWS::EC2::Instance"
+property_path: "DisableApiTermination"
+check_type: "equals"
+expected_value: true
+source: "AWS Well-Architected Framework — Reliability Pillar"
+description: "Production EC2 instances should have API termination protection enabled to prevent accidental termination via the console, CLI, or API."
+remediation: "Set DisableApiTermination to true for production instances. This prevents accidental termination — the setting must be explicitly disabled before the instance can be terminated."
+category: reliability
+lastVerified: "2026-03-22"

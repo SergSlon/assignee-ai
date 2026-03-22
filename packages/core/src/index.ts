@@ -22,6 +22,10 @@ export {
   type ResourceType,
   SUPPORTED_TYPES_ARRAY,
   SUPPORTED_POC_TYPES,
+  CCAPI_FALLBACK_TYPES,
+  type CcapiFallbackType,
+  CCAPI_SDK_ROUTABLE_TYPES,
+  CCAPI_REDIRECT_TYPES,
 } from "./config/resource-types.js";
 export {
   RESOURCE_IDENTIFIER_KEYS,
@@ -86,6 +90,14 @@ export type {
   AwsPriceDimension,
 } from "./pricing/index.js";
 
+// Guardrails (Story 10.4)
+export { defaultGuardrailEngine, GuardrailEngine } from "./guardrails/index.js";
+export type {
+  GuardrailSeverity,
+  GuardrailFinding,
+  GuardrailRule,
+} from "./guardrails/index.js";
+
 // Errors
 export {
   AssigneeError,
@@ -97,6 +109,7 @@ export {
   ConfigurationError,
   CheckpointError,
   ProvisioningError,
+  MissingRequiredFieldsError,
   type ProvisioningErrorCode,
 } from "./errors.js";
 export {

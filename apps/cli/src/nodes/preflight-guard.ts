@@ -11,7 +11,9 @@ import {
   ExecutionStatus,
   defaultPricingRegistry,
   extractFirstTierPrice,
+  defaultGuardrailEngine,
   type AwsPricingResponse,
+  type GuardrailFinding,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
@@ -20,6 +22,7 @@ import { CostEstimate, PricingTerm } from "../constants/pricing.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { unwrapMcpText } from "../utils/mcp.js";
 import { withTimeout } from "../utils/timeout.js";
+import { getFreeTierNote, loadAccountCreatedDate } from "../utils/free-tier.js";
 import type { AgentState } from "../services/graph.js";
 
 const PRICING_TIMEOUT_MS = 3000;
@@ -92,6 +95,33 @@ export async function preflightGuardNode(
     }
   }
 
+  // Story 10.4: Fast guardrail evaluation (pure, synchronous, <100ms)
+  const guardrailFindings: GuardrailFinding[] = defaultGuardrailEngine.evaluate(
+    state.resourceType,
+    desiredState,
+  );
+
+  if (guardrailFindings.length > 0) {
+    const criticals = guardrailFindings.filter(
+      (f) => f.severity === "critical",
+    ).length;
+    const warnings = guardrailFindings.filter(
+      (f) => f.severity === "warning",
+    ).length;
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.GUARDRAIL_EVALUATED,
+      extras: {
+        resourceType: state.resourceType,
+        findingsCount: guardrailFindings.length,
+        criticals,
+        warnings,
+      },
+    });
+  }
+
   log({
     ts: new Date().toISOString(),
     runId: state.runId,
@@ -115,9 +145,54 @@ export async function preflightGuardNode(
     };
   }
 
+  // Story 7.8: Free tier awareness — non-blocking (AC #6)
+  let freeTierNote: ReturnType<typeof getFreeTierNote> | undefined;
+  try {
+    const accountCreated = loadAccountCreatedDate();
+    freeTierNote = getFreeTierNote(state.resourceType, accountCreated);
+    if (freeTierNote) {
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.FREE_TIER_DETECTED,
+        extras: {
+          resourceType: state.resourceType,
+          freeTierType: freeTierNote.type,
+        },
+      });
+    }
+  } catch {
+    // Non-blocking: free tier detection failure must never prevent plan/apply
+    freeTierNote = undefined;
+  }
+
+  // Story 12.3: CRITICAL BP findings block provisioning (complementing fast guardrails)
+  const bpFindings = state.bpFindings ?? [];
+  const criticalBPFindings = bpFindings.filter(
+    (f) => f.severity === "CRITICAL",
+  );
+  let bpBlocked = false;
+  if (criticalBPFindings.length > 0) {
+    bpBlocked = true;
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "warn",
+      action: LOG_ACTIONS.BP_EVALUATED,
+      extras: {
+        blocked: true,
+        criticalCount: criticalBPFindings.length,
+        practiceIds: criticalBPFindings.map((f) => f.practiceId),
+      },
+    });
+  }
+
   return {
     estimatedMonthlyCost: costEstimate,
-    preflightPassed: true,
+    preflightPassed: !bpBlocked,
+    guardrailFindings,
+    freeTierNote: freeTierNote ?? undefined,
     ...(perResourceCosts !== undefined ? { perResourceCosts } : {}),
   };
 }

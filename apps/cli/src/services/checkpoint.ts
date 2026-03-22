@@ -89,6 +89,70 @@ export async function loadCheckpoint(
 }
 
 /**
+ * Loads and validates a checkpoint from an explicit file path.
+ * Validates schema, TTL, preflight status, and desiredState presence.
+ *
+ * @throws CheckpointError on missing file, invalid schema, expired TTL, or incomplete checkpoint.
+ * @see Story 11.3
+ */
+export async function loadCheckpointFromPath(
+  filePath: string,
+): Promise<PlanCheckpoint> {
+  let raw: string;
+  try {
+    raw = await fs.readFile(filePath, "utf-8");
+  } catch {
+    throw new CheckpointError(
+      `Checkpoint file not found: ${filePath}. Run \`assignee plan\` to create a new plan.`,
+    );
+  }
+
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new CheckpointError(
+      `Corrupt checkpoint file (invalid JSON): ${filePath}`,
+    );
+  }
+
+  const parsed = PlanCheckpointSchema.strict().safeParse(json);
+  if (!parsed.success) {
+    throw new CheckpointError(
+      `Invalid checkpoint file: ${parsed.error.message}`,
+    );
+  }
+
+  const cp = parsed.data;
+
+  // TTL validation
+  const createdMs = new Date(cp.created_at).getTime();
+  const expiresMs = createdMs + cp.ttl_hours * 60 * 60 * 1000;
+  const now = Date.now();
+  if (now > expiresMs) {
+    const createdDate = new Date(cp.created_at).toLocaleString();
+    throw new CheckpointError(
+      `Checkpoint expired: created ${createdDate}, TTL ${cp.ttl_hours}h. Run \`assignee plan\` to create a new plan.`,
+    );
+  }
+
+  // Validate checkpoint completeness for Phase 2
+  if (!cp.preflightPassed) {
+    throw new CheckpointError(
+      `Checkpoint did not pass preflight validation. Run \`assignee plan\` to create a new plan.`,
+    );
+  }
+
+  if (!cp.desiredState || Object.keys(cp.desiredState).length === 0) {
+    throw new CheckpointError(
+      `Checkpoint has no desiredState. Run \`assignee plan\` to create a new plan.`,
+    );
+  }
+
+  return cp;
+}
+
+/**
  * Scans a directory for checkpoint files, filters by TTL, returns the newest valid one.
  * Returns null if none are valid or the directory doesn't exist.
  */

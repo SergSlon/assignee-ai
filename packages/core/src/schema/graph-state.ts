@@ -79,6 +79,19 @@ export const GraphStateSchema = z.object({
   // Story 8.3: per-resource cost map keyed by resourceId (populated by preflight_guard in compound mode)
   perResourceCosts: z.record(z.string()).optional(),
 
+  // Config — org policy + user preferences (Story 7.2)
+  orgConfig: z
+    .record(
+      z.record(
+        z.object({
+          policy: z.enum(["locked", "default", "always_ask"]),
+          value: z.unknown().optional(),
+        }),
+      ),
+    )
+    .optional(),
+  userConfig: z.record(z.record(z.unknown())).optional(),
+
   // LangGraph message history
   messages: z.array(z.unknown()).default([]),
 });

@@ -145,6 +145,47 @@ describe("preflightGuardNode", () => {
     expect(result.estimatedMonthlyCost).toContain("512MB");
   });
 
+  // ── Story 12.3: BP findings integration ─────────────────────────────────────
+
+  it("sets preflightPassed = false when CRITICAL BP finding is present", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        bpFindings: [
+          {
+            practiceId: "BP-S3-002",
+            title: "Enable S3 Default Encryption",
+            severity: "CRITICAL",
+            category: "security",
+            message: "S3 bucket should have default encryption",
+          },
+        ],
+      }),
+    );
+    expect(result.preflightPassed).toBe(false);
+  });
+
+  it("keeps preflightPassed = true when only MEDIUM BP findings exist", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        bpFindings: [
+          {
+            practiceId: "BP-S3-001",
+            title: "Enable S3 Bucket Versioning",
+            severity: "MEDIUM",
+            category: "reliability",
+            message: "S3 bucket versioning should be enabled",
+          },
+        ],
+      }),
+    );
+    expect(result.preflightPassed).toBe(true);
+  });
+
+  it("keeps preflightPassed = true when bpFindings is empty", async () => {
+    const result = await preflightGuardNode(makeState({ bpFindings: [] }));
+    expect(result.preflightPassed).toBe(true);
+  });
+
   it("parses real get_pricing MCP response and returns first-tier price", async () => {
     // Real response shape returned by awslabs.aws-pricing-mcp-server get_pricing tool.
     // Captured from a live call: AmazonS3, region us-east-1, filtered to TimedStorage-ByteHrs.

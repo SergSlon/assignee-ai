@@ -33,6 +33,13 @@ export const LOG_ACTIONS = {
   CHECKPOINT_EXPIRED: "checkpoint_expired",
   PLAN_TO_APPLY_STARTED: "plan_to_apply_started",
   PLAN_TO_APPLY_DECLINED: "plan_to_apply_declined",
+  CONFIG_LOADED: "config_loaded",
+  ORG_POLICY_FETCHED: "org_policy_fetched",
+  GUARDRAIL_EVALUATED: "guardrail_evaluated",
+  SDK_FALLBACK_DISPATCHED: "sdk_fallback_dispatched",
+  FREE_TIER_DETECTED: "free_tier_detected",
+  BP_EVALUATED: "bp_evaluated",
+  APPLY_AUTO_APPROVED: "apply_auto_approved",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

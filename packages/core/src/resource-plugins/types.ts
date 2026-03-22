@@ -60,6 +60,12 @@ export interface ResourceField {
   /** CloudFormation property name, e.g. "BucketName" */
   name: string;
   question: FieldQuestion;
+  /**
+   * Whether this field is required for resource creation.
+   * When --no-wizard is set, required fields without initialValue or plugin defaults
+   * cause a MissingRequiredFieldsError. Defaults to false.
+   */
+  required?: boolean;
 }
 
 /**

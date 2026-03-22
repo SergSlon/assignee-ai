@@ -801,3 +801,342 @@ describe("renderDocHelp", () => {
     });
   });
 });
+
+// ── Guardrail findings rendering (Story 10.4) ────────────────────────────────
+
+describe("renderPlanBox with guardrail findings — non-TTY", () => {
+  beforeEach(() => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("shows 'All checks passed' when no findings", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({ ...mockState, guardrailFindings: [] });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("All checks passed");
+    expect(output).toContain("Guardrails:");
+  });
+
+  it("shows 'All checks passed' when findings is undefined", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({ ...mockState, guardrailFindings: undefined });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("All checks passed");
+  });
+
+  it("shows critical and warning findings with plain text markers", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      guardrailFindings: [
+        {
+          ruleId: "s3-public-access",
+          severity: "critical",
+          message: "S3 bucket has public access enabled",
+        },
+        {
+          ruleId: "s3-missing-lifecycle",
+          severity: "warning",
+          message: "S3 bucket is missing lifecycle rules",
+        },
+      ],
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("1 critical, 1 warnings");
+    expect(output).toContain("[CRITICAL] S3 bucket has public access enabled");
+    expect(output).toContain("[WARNING] S3 bucket is missing lifecycle rules");
+    // No ANSI escape codes in non-TTY mode
+    expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
+  });
+
+  it("shows correct counts for multiple criticals", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      guardrailFindings: [
+        {
+          ruleId: "s3-public-access",
+          severity: "critical",
+          message: "Public access issue",
+        },
+        {
+          ruleId: "missing-encryption",
+          severity: "critical",
+          message: "Encryption issue",
+        },
+        {
+          ruleId: "s3-missing-lifecycle",
+          severity: "warning",
+          message: "Lifecycle issue",
+        },
+      ],
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("2 critical, 1 warnings");
+  });
+});
+
+// ── Free tier note rendering (Story 7.8) ──────────────────────────────────────
+
+describe("renderPlanBox with freeTierNote — non-TTY", () => {
+  beforeEach(() => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("shows free tier note with checkmark icon for always_free", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      freeTierNote: {
+        type: "always_free",
+        message: "Always free tier",
+      },
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("Free Tier:");
+    expect(output).toContain("\u2713 Always free tier");
+  });
+
+  it("shows free tier note with info icon for legacy_eligible", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      resourceType: "AWS::EC2::Instance",
+      freeTierNote: {
+        type: "legacy_eligible",
+        message: "Free tier: 750 hrs/month t2.micro/t3.micro remaining",
+      },
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("Free Tier:");
+    expect(output).toContain("\u2139 Free tier: 750 hrs/month");
+  });
+
+  it("shows free tier note with info icon for credits_apply", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      resourceType: "AWS::EC2::Instance",
+      freeTierNote: {
+        type: "credits_apply",
+        message: "AWS credits may apply -- check your billing dashboard",
+      },
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("Free Tier:");
+    expect(output).toContain("AWS credits may apply");
+  });
+
+  it("does not show free tier line when freeTierNote is undefined", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({ ...mockState, freeTierNote: undefined });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).not.toContain("Free Tier:");
+  });
+
+  it("includes free tier note as plain text in non-TTY mode (no ANSI)", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      freeTierNote: {
+        type: "always_free",
+        message: "Always free tier",
+      },
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("Free Tier:");
+    expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
+  });
+});
+
+// ── Best Practice findings rendering (Story 12.3) ────────────────────────────
+
+describe("renderPlanBox with BP findings — non-TTY", () => {
+  beforeEach(() => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("shows 'No best practice findings' when bpFindings is empty", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({ ...mockState, bpFindings: [] });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("No best practice findings");
+    expect(output).toContain("Best Practices:");
+  });
+
+  it("shows 'No best practice findings' when bpFindings is undefined", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({ ...mockState, bpFindings: undefined });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("No best practice findings");
+  });
+
+  it("shows violations and warnings with plain text markers", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      bpFindings: [
+        {
+          practiceId: "BP-S3-001",
+          title: "Enable S3 Bucket Versioning",
+          severity: "MEDIUM",
+          category: "reliability",
+          message: "S3 bucket versioning should be enabled",
+          remediation: "Set VersioningConfiguration.Status to Enabled",
+        },
+        {
+          practiceId: "BP-S3-002",
+          title: "Enable S3 Default Encryption",
+          severity: "CRITICAL",
+          category: "security",
+          message: "S3 bucket should have default encryption",
+          remediation: "Configure ServerSideEncryptionConfiguration",
+        },
+      ],
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("1 violation");
+    expect(output).toContain("1 warning");
+    expect(output).toContain("[CRITICAL] Enable S3 Default Encryption");
+    expect(output).toContain("[MEDIUM] Enable S3 Bucket Versioning");
+    // Remediation hints shown
+    expect(output).toContain("Configure ServerSideEncryptionConfiguration");
+    // No ANSI escape codes in non-TTY mode
+    expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
+  });
+
+  it("maps severity icons correctly", async () => {
+    const { renderPlanBox } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderPlanBox({
+      ...mockState,
+      bpFindings: [
+        {
+          practiceId: "BP-S3-010",
+          title: "HIGH Finding",
+          severity: "HIGH",
+          category: "security",
+          message: "High severity finding",
+        },
+        {
+          practiceId: "BP-S3-011",
+          title: "INFO Finding",
+          severity: "INFO",
+          category: "cost",
+          message: "Informational finding",
+        },
+      ],
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("[HIGH] HIGH Finding");
+    expect(output).toContain("[INFO] INFO Finding");
+  });
+});

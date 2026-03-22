@@ -14,8 +14,13 @@ import {
   type ArchitecturePattern,
   type ResourceSpec,
   type ResourceResult,
+  type OrgResourceConfig,
+  type UserResourceConfig,
+  type GuardrailFinding,
   AssigneeError,
 } from "@assignee/core";
+import type { BPFinding } from "@assignee/best-practices";
+import type { FreeTierNote } from "../utils/free-tier.js";
 
 export const graphAnnotation = Annotation.Root({
   userIntent: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),
@@ -80,8 +85,40 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
   }),
   error: Annotation<AssigneeError | undefined>({ reducer: (_, b) => b }),
+  // Story 7.2: org policy + user config for option elicitation
+  orgConfig: Annotation<OrgResourceConfig | undefined>({
+    reducer: (_, b) => b,
+  }),
+  userConfig: Annotation<UserResourceConfig | undefined>({
+    reducer: (_, b) => b,
+  }),
   // Story 10.1: checkpoint reuse — set to true when apply resumes from a saved checkpoint
   checkpointResumed: Annotation<boolean>({
+    reducer: (_, b) => b,
+    default: () => false,
+  }),
+  // Story 10.4: fast guardrail findings (display-only, non-blocking)
+  guardrailFindings: Annotation<GuardrailFinding[] | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
+  // Story 7.8: free tier eligibility note (display-only, non-blocking)
+  freeTierNote: Annotation<FreeTierNote | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
+  // Story 11.1: skip interactive option elicitor prompts, use plugin defaults
+  noWizard: Annotation<boolean>({
+    reducer: (_, b) => b,
+    default: () => false,
+  }),
+  // Story 12.3: best practice findings from bp_evaluator node
+  bpFindings: Annotation<BPFinding[] | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
+  // Story 11.2: auto-approve HITL for CI/CD (--yes flag)
+  autoApprove: Annotation<boolean>({
     reducer: (_, b) => b,
     default: () => false,
   }),

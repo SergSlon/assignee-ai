@@ -11,6 +11,8 @@ try {
 import { Command } from "commander";
 import { planCommand } from "./commands/plan.js";
 import { applyCommand } from "./commands/apply.js";
+import { completionsCommand } from "./commands/completions.js";
+import { initCommand } from "./commands/init.js";
 import { ProcessExitCode } from "./constants/errors.js";
 import { SUPPORTED_TYPES_HINT } from "./config/constants.js";
 
@@ -24,6 +26,8 @@ program
   .version("0.1.0")
   .addHelpText("after", `\n${SUPPORTED_TYPES_HINT}`);
 
+program.addCommand(completionsCommand);
+program.addCommand(initCommand);
 program.addCommand(planCommand);
 program.addCommand(applyCommand);
 

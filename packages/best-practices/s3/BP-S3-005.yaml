@@ -1,0 +1,13 @@
+id: BP-S3-005
+title: "S3 bucket should have versioning enabled"
+severity: HIGH
+resource_type: "AWS::S3::Bucket"
+property_path: "VersioningConfiguration.Status"
+check_type: "equals"
+expected_value: "Enabled"
+source: "AWS Security Hub FSBP"
+source_id: "S3.14"
+description: "S3 buckets should have versioning enabled to preserve, retrieve, and restore every version of every object. Versioning protects against accidental deletions and enables MFA Delete."
+remediation: "Set VersioningConfiguration.Status to 'Enabled'. This preserves all object versions and enables recovery from accidental deletions or overwrites."
+category: reliability
+lastVerified: "2026-03-22"

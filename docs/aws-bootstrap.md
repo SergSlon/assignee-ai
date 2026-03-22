@@ -233,6 +233,32 @@ aws iam put-user-policy \
       "Resource": "*"
     },
     {
+      "Sid": "LambdaEventSourceMappingProvisioning",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateEventSourceMapping"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "SNSSubscriptionProvisioning",
+      "Effect": "Allow",
+      "Action": [
+        "sns:Subscribe"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
       "Sid": "CloudFormationSchemaRead",
       "Effect": "Allow",
       "Action": [

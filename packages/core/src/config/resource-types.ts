@@ -51,3 +51,35 @@ export const RESOURCE_TYPES = {
 
 /** Ordered array of all resource types supported in the POC phase. */
 export const SUPPORTED_POC_TYPES: ResourceType[] = [...SUPPORTED_TYPES_ARRAY];
+
+// ── CCAPI Fallback Types (Story 7.7) ────────────────────────────────────────
+// Resource types that cannot be provisioned via Cloud Control API.
+// These are routed to SDK-specific fallback handlers or rejected with a redirect message.
+
+/** All resource types known to have CCAPI gaps. */
+export const CCAPI_FALLBACK_TYPES = {
+  LAMBDA_EVENT_SOURCE_MAPPING: "AWS::Lambda::EventSourceMapping",
+  SNS_SUBSCRIPTION: "AWS::SNS::Subscription",
+  LAMBDA_PERMISSION: "AWS::Lambda::Permission",
+  ELASTICACHE_REPLICATION_GROUP: "AWS::ElastiCache::ReplicationGroup",
+} as const;
+
+/** Union of all CCAPI fallback resource type strings. */
+export type CcapiFallbackType =
+  (typeof CCAPI_FALLBACK_TYPES)[keyof typeof CCAPI_FALLBACK_TYPES];
+
+/** Resource types that can be handled via direct AWS SDK calls (not CCAPI). */
+export const CCAPI_SDK_ROUTABLE_TYPES: readonly string[] = [
+  CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING,
+  CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION,
+] as const;
+
+/**
+ * Resource types that are not supported and should redirect to an alternative.
+ * Key: unsupported resource type, Value: recommended alternative type.
+ */
+export const CCAPI_REDIRECT_TYPES: Readonly<Record<string, string>> = {
+  [CCAPI_FALLBACK_TYPES.LAMBDA_PERMISSION]: "AWS::Lambda::PermissionPolicy",
+  [CCAPI_FALLBACK_TYPES.ELASTICACHE_REPLICATION_GROUP]:
+    "AWS::ElastiCache::ServerlessCache",
+} as const;
