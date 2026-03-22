@@ -36,6 +36,14 @@ function classifyError(err: unknown): ProvisioningPortError {
   if (err instanceof GeneralServiceException) {
     return { kind: ProvisioningErrorKind.SERVICE_ERROR, message: err.message };
   }
+  // AccessDeniedException is not exported as a class by the CloudControl SDK;
+  // detect it via the error name property.
+  if (
+    err instanceof Error &&
+    (err.name === "AccessDeniedException" || err.name === "AccessDenied")
+  ) {
+    return { kind: ProvisioningErrorKind.ACCESS_DENIED, message: err.message };
+  }
   const message = err instanceof Error ? err.message : String(err);
   return { kind: ProvisioningErrorKind.UNKNOWN, message };
 }

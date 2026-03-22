@@ -1229,3 +1229,129 @@ describe("renderSecurityWarnings", () => {
     expect(logSpy).not.toHaveBeenCalled();
   });
 });
+
+// ── renderTradeoffHelp tests (Story 10.6) ─────────────────────────────────────
+
+describe("renderTradeoffHelp", () => {
+  const testOptions = [
+    { value: "t3.micro", label: "t3.micro — 2 vCPU, 1 GiB" },
+    { value: "t3.small", label: "t3.small — 2 vCPU, 2 GiB" },
+    { value: "m5.large", label: "m5.large — 2 vCPU, 8 GiB" },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("calls generateText and displays trade-off in clack.note on success", async () => {
+    const llmClient = {
+      generateText: vi
+        .fn()
+        .mockResolvedValue([
+          null,
+          "t3.micro: ~$8/mo, best for light workloads.\nt3.small: ~$15/mo, best for moderate traffic.\nRecommendation: t3.micro for a low-traffic blog.",
+        ] as const),
+      generateStructured: vi.fn(),
+    };
+
+    const { renderTradeoffHelp } = await import("./display.js");
+    await renderTradeoffHelp(
+      "InstanceType",
+      "AWS::EC2::Instance",
+      testOptions,
+      "low-traffic blog",
+      [],
+      llmClient,
+    );
+
+    expect(llmClient.generateText).toHaveBeenCalledOnce();
+    expect(llmClient.generateText).toHaveBeenCalledWith(
+      expect.stringContaining("low-traffic blog"),
+    );
+    expect(llmClient.generateText).toHaveBeenCalledWith(
+      expect.stringContaining("InstanceType"),
+    );
+    expect(vi.mocked(note)).toHaveBeenCalledWith(
+      expect.stringContaining("t3.micro"),
+      expect.stringContaining("⚖️ InstanceType — Trade-off Analysis"),
+    );
+  });
+
+  it("falls back to renderDocHelp when LLM times out (returns null)", async () => {
+    // Simulate timeout: generateText never resolves within the timeout
+    const llmClient = {
+      generateText: vi.fn().mockImplementation(() => new Promise(() => {})),
+      generateStructured: vi.fn(),
+    };
+
+    vi.useFakeTimers();
+    const { renderTradeoffHelp } = await import("./display.js");
+    const promise = renderTradeoffHelp(
+      "InstanceType",
+      "AWS::EC2::Instance",
+      testOptions,
+      "low-traffic blog",
+      [],
+      llmClient,
+    );
+    await vi.advanceTimersByTimeAsync(11_000);
+    await promise;
+    vi.useRealTimers();
+
+    // Should NOT have called clack.note with trade-off title
+    const noteCallsWithTradeoff = vi
+      .mocked(note)
+      .mock.calls.filter(
+        (c) => typeof c[1] === "string" && c[1].includes("Trade-off Analysis"),
+      );
+    expect(noteCallsWithTradeoff).toHaveLength(0);
+  }, 15_000);
+
+  it("falls back to renderDocHelp when llmClient is undefined", async () => {
+    const { renderTradeoffHelp } = await import("./display.js");
+    await renderTradeoffHelp(
+      "InstanceType",
+      "AWS::EC2::Instance",
+      testOptions,
+      "low-traffic blog",
+      [],
+      undefined,
+    );
+
+    // Should not render trade-off note (no llmClient → fallback path)
+    const noteCallsWithTradeoff = vi
+      .mocked(note)
+      .mock.calls.filter(
+        (c) => typeof c[1] === "string" && c[1].includes("Trade-off Analysis"),
+      );
+    expect(noteCallsWithTradeoff).toHaveLength(0);
+  });
+
+  it("falls back to renderDocHelp when generateText returns an error", async () => {
+    const llmClient = {
+      generateText: vi
+        .fn()
+        .mockResolvedValue([new Error("Bedrock throttled"), null] as const),
+      generateStructured: vi.fn(),
+    };
+
+    const { renderTradeoffHelp } = await import("./display.js");
+    await renderTradeoffHelp(
+      "InstanceType",
+      "AWS::EC2::Instance",
+      testOptions,
+      "low-traffic blog",
+      [],
+      llmClient,
+    );
+
+    expect(llmClient.generateText).toHaveBeenCalledOnce();
+    // Should not render trade-off note (error → fallback path)
+    const noteCallsWithTradeoff = vi
+      .mocked(note)
+      .mock.calls.filter(
+        (c) => typeof c[1] === "string" && c[1].includes("Trade-off Analysis"),
+      );
+    expect(noteCallsWithTradeoff).toHaveLength(0);
+  });
+});

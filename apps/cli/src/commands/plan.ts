@@ -6,6 +6,7 @@
  */
 
 import * as path from "node:path";
+import * as clack from "@clack/prompts";
 import { Command } from "commander";
 import { ExecutionMode, ExecutionStatus, safeTry } from "@assignee/core";
 import type { AgentState } from "../services/graph-state.js";
@@ -138,6 +139,13 @@ export const planCommand = new Command(CommandName.PLAN)
           return { success: true };
         }
 
+        if (!(finalState as AgentState).preflightPassed) {
+          clack.log.warn(
+            "Cannot apply: blocking best-practice findings detected. Fix the issues above and re-run `assignee plan`.",
+          );
+          return { success: true };
+        }
+
         const applyNow = await renderApplyNowConfirm({
           resourceType: (finalState as AgentState).resourceType ?? "unknown",
           desiredState: (finalState as AgentState).desiredState,
@@ -188,6 +196,7 @@ export const planCommand = new Command(CommandName.PLAN)
             currentResourceIndex: planState.currentResourceIndex,
             completedResources: planState.completedResources,
             perResourceCosts: planState.perResourceCosts,
+            bpFindings: planState.bpFindings,
             checkpointResumed: true,
           },
           applyConfig,

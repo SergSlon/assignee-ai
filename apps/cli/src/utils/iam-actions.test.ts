@@ -5,8 +5,13 @@ describe("getRequiredIamActions", () => {
   const BASE_CCAPI_ACTIONS = [
     "cloudcontrol:CreateResource",
     "cloudcontrol:GetResource",
+    "cloudcontrol:GetResourceRequestStatus",
     "cloudcontrol:UpdateResource",
     "cloudcontrol:DeleteResource",
+    "cloudformation:GetResource",
+    "cloudformation:CreateResource",
+    "cloudformation:DeleteResource",
+    "cloudformation:UpdateResource",
   ];
 
   it("returns CloudControl base actions + S3-specific actions for AWS::S3::Bucket", () => {

@@ -33,20 +33,22 @@ describe("ec2InstancePlugin", () => {
     expect(values).toContain("t3.micro");
   });
 
-  it("ImageId is a string field", () => {
+  it("ImageId is a dynamic enum field with fetcher", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "ImageId",
     );
     expect(field).toBeDefined();
-    expect(field?.question.type).toBe("string");
+    expect(field?.question.type).toBe("enum");
+    expect(field?.question.fetcher).toBe("discover-amis");
   });
 
-  it("KeyName is a string field", () => {
+  it("KeyName is a dynamic enum field with fetcher", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "KeyName",
     );
     expect(field).toBeDefined();
-    expect(field?.question.type).toBe("string");
+    expect(field?.question.type).toBe("enum");
+    expect(field?.question.fetcher).toBe("discover-key-pairs");
   });
 
   it("SecurityGroupIds is a multi field", () => {
