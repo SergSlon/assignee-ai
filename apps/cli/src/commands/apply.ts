@@ -25,14 +25,9 @@ import {
 } from "../constants/commands.js";
 import { ProcessExitCode } from "../constants/errors.js";
 import type { AgentState } from "../services/graph.js";
-import {
-  renderError,
-  startSpinner,
-  updateSpinner,
-  stopSpinner,
-} from "../utils/display.js";
+import { renderError, startSpinner, stopSpinner } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
-import { runCommand } from "../utils/command-runner.js";
+import { runCommand, runProvisioningLoop } from "../utils/command-runner.js";
 import { SUPPORTED_TYPES_HINT, CHECKPOINT_DIR } from "../config/constants.js";
 import { findNewestValidCheckpoint } from "../services/checkpoint.js";
 
@@ -171,35 +166,11 @@ export const applyCommand = new Command(CommandName.APPLY)
         }
 
         // ── Phase 2: provision all resources (single or compound loop) ────────
-        const isCompound = !!phase1State.resourcePattern;
-        const totalResources = phase1State.resourceQueue?.length ?? 1;
-        let resourcesProvisioned = 0;
-
-        while (true) {
-          const resourceLabel = isCompound
-            ? `Provisioning resource ${resourcesProvisioned + 1} of ${totalResources} (${phase1State.resourceQueue?.[resourcesProvisioned]?.displayName ?? "..."})...`
-            : "Provisioning resource...";
-          startSpinner(resourceLabel);
-          updateSpinner("Waiting for AWS Cloud Control API...");
-
-          await ctx.graph.invoke(null, config);
-          stopSpinner();
-
-          const graphState = await ctx.graph.getState(config);
-          const isPendingInterrupt = graphState.next.length > 0;
-
-          if (!isPendingInterrupt) break;
-
-          resourcesProvisioned++;
-        }
-
-        const finalState = (await ctx.graph.getState(config))
-          .values as AgentState;
-
-        const success =
-          finalState.executionStatus === ExecutionStatus.SUCCESS ||
-          (isCompound &&
-            (finalState.completedResources?.length ?? 0) === totalResources);
+        const { finalState, success } = await runProvisioningLoop(
+          ctx.graph,
+          config,
+          phase1State,
+        );
 
         log({
           ts: new Date().toISOString(),

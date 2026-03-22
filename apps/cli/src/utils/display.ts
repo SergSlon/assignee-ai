@@ -545,6 +545,26 @@ export async function renderAdvancedConfirm(): Promise<boolean> {
   return result === true;
 }
 
+/**
+ * Prompts user to apply the plan immediately after display.
+ * Non-TTY: returns false (CI-safe — auto-decline).
+ *
+ * @see Story 10.3, FR-20
+ */
+export async function renderApplyNowConfirm(
+  state: RenderableState,
+): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+
+  const result = await clack.confirm({
+    message: `Apply now? (${state.resourceType}, est. ${state.estimatedMonthlyCost ?? "N/A"}/mo) [y/N]`,
+    initialValue: false,
+  });
+
+  if (clack.isCancel(result)) return false;
+  return result === true;
+}
+
 export function renderOutro(success: boolean): void {
   if (process.stdout.isTTY) {
     clack.outro(
