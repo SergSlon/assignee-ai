@@ -1,0 +1,191 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Build and test
+  # --------------------------------------------------------------------------
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: npx turbo build
+
+      - name: Run all tests
+        run: npx turbo test
+
+      - name: Upload CLI build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-dist
+          path: |
+            apps/cli/dist/
+            apps/cli/completions/
+            apps/cli/package.json
+            apps/cli/README.md
+            apps/cli/LICENSE
+
+  # --------------------------------------------------------------------------
+  # Publish to npm
+  # --------------------------------------------------------------------------
+  publish-npm:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: npx turbo build
+
+      - name: Publish to npm
+        working-directory: apps/cli
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # --------------------------------------------------------------------------
+  # Create platform tarballs for GitHub release
+  # --------------------------------------------------------------------------
+  package-binaries:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - platform: darwin-arm64
+          - platform: darwin-x64
+          - platform: linux-x64
+          - platform: linux-arm64
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cli-dist
+          path: staging/
+
+      - name: Create platform tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          TARBALL="assignee-${VERSION}-${{ matrix.platform }}.tar.gz"
+          cd staging
+          tar -czf "../${TARBALL}" .
+          echo "TARBALL=${TARBALL}" >> "$GITHUB_ENV"
+
+      - name: Upload platform tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarball-${{ matrix.platform }}
+          path: ${{ env.TARBALL }}
+
+  # --------------------------------------------------------------------------
+  # GitHub Release
+  # --------------------------------------------------------------------------
+  github-release:
+    needs: [publish-npm, package-binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all tarballs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tarball-*
+          merge-multiple: true
+          path: release-assets/
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1)
+          if [ -z "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --oneline --no-decorate)
+          else
+            CHANGELOG=$(git log --oneline --no-decorate "${PREV_TAG}..HEAD")
+          fi
+          # Write to file to handle multiline
+          echo "$CHANGELOG" > changelog.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: changelog.txt
+          files: release-assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --------------------------------------------------------------------------
+  # Update Homebrew formula
+  # --------------------------------------------------------------------------
+  update-homebrew:
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download darwin-arm64 tarball for sha256
+        uses: actions/download-artifact@v4
+        with:
+          name: tarball-darwin-arm64
+          path: release-assets/
+
+      - name: Compute sha256
+        id: sha
+        run: |
+          TARBALL=$(ls release-assets/*.tar.gz | head -1)
+          SHA=$(shasum -a 256 "$TARBALL" | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Update Homebrew formula
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          SHA="${{ steps.sha.outputs.sha256 }}"
+
+          # Clone the tap repo
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/assignee-ai/homebrew-assignee.git" tap
+
+          # Update formula
+          sed -i "s|url \".*\"|url \"https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}.tar.gz\"|" tap/Formula/assignee.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" tap/Formula/assignee.rb
+
+          # Commit and push
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/assignee.rb
+          git commit -m "Update assignee to ${VERSION}" || echo "No changes to commit"
+          git push

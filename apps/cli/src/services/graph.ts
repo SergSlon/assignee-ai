@@ -86,7 +86,9 @@ export function createGraph(tools: StructuredTool[] = []) {
       statusPollerNode(state, provisioner),
     )
     .addNode(GraphNode.BP_EVALUATOR, (state) => bpEvaluatorNode(state))
-    .addNode(GraphNode.RESULT_FORMATTER, (state) => resultFormatterNode(state))
+    .addNode(GraphNode.RESULT_FORMATTER, (state) =>
+      resultFormatterNode(state, tools),
+    )
     .addConditionalEdges(START, routeCheckpointEntry, {
       [GraphNode.INTENT_PARSER]: GraphNode.INTENT_PARSER,
       [GraphNode.HUMAN_APPROVAL]: GraphNode.HUMAN_APPROVAL,

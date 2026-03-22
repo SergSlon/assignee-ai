@@ -18,6 +18,12 @@ export const ToolName = {
   SEARCH_DOCUMENTATION: "search_documentation",
   READ_SECTIONS: "read_sections",
   READ_DOCUMENTATION: "read_documentation",
+
+  // ── iam-mcp-server ────────────────────────────────────────────────────────
+  SIMULATE_PRINCIPAL_POLICY: "simulate_principal_policy",
+
+  // ── well-architected-security-mcp-server ──────────────────────────────────
+  ANALYZE_SECURITY_POSTURE: "AnalyzeSecurityPosture",
 } as const;
 
 export type ToolNameType = (typeof ToolName)[keyof typeof ToolName];

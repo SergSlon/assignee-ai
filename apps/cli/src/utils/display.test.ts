@@ -1140,3 +1140,69 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
     expect(output).toContain("[INFO] INFO Finding");
   });
 });
+
+// ── Story 19.2: renderSecurityWarnings ─────────────────────────────────────
+
+describe("renderSecurityWarnings", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders CRITICAL finding with red indicator", async () => {
+    const { renderSecurityWarnings } = await import("./display.js");
+    const logSpy = vi.mocked(console.log);
+
+    renderSecurityWarnings("arn:aws:s3:::my-bucket", [
+      {
+        severity: "CRITICAL",
+        title: "S3 bucket has public read access",
+        recommendation: "Block public access",
+        service: "SecurityHub",
+      },
+    ]);
+
+    const allOutput = logSpy.mock.calls.map((c) => c[0]).join("\n");
+    expect(allOutput).toContain("Security findings for arn:aws:s3:::my-bucket");
+    expect(allOutput).toContain("[CRITICAL] S3 bucket has public read access");
+    expect(allOutput).toContain("Block public access");
+  });
+
+  it("renders multiple findings with recommendations", async () => {
+    const { renderSecurityWarnings } = await import("./display.js");
+    const logSpy = vi.mocked(console.log);
+
+    renderSecurityWarnings("arn:aws:s3:::test-bucket", [
+      {
+        severity: "CRITICAL",
+        title: "Public access enabled",
+        recommendation: "Disable public access",
+        service: "SecurityHub",
+      },
+      {
+        severity: "HIGH",
+        title: "No encryption",
+        recommendation: "Enable SSE-S3",
+        service: "SecurityHub",
+      },
+    ]);
+
+    const allOutput = logSpy.mock.calls.map((c) => c[0]).join("\n");
+    expect(allOutput).toContain("[CRITICAL] Public access enabled");
+    expect(allOutput).toContain("[HIGH] No encryption");
+    expect(allOutput).toContain("Disable public access");
+    expect(allOutput).toContain("Enable SSE-S3");
+  });
+
+  it("does nothing when findings array is empty", async () => {
+    const { renderSecurityWarnings } = await import("./display.js");
+    const logSpy = vi.mocked(console.log);
+
+    renderSecurityWarnings("arn:aws:s3:::my-bucket", []);
+
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+});

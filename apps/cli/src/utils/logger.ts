@@ -40,6 +40,9 @@ export const LOG_ACTIONS = {
   FREE_TIER_DETECTED: "free_tier_detected",
   BP_EVALUATED: "bp_evaluated",
   APPLY_AUTO_APPROVED: "apply_auto_approved",
+  IAM_CHECK_SKIPPED: "iam_check_skipped",
+  SECURITY_CHECK_SKIPPED: "security_check_skipped",
+  MEMORY_WRITE_FAILED: "memory_write_failed",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

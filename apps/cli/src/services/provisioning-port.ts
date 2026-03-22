@@ -25,6 +25,10 @@ export interface CreateResourceResult {
   requestToken: string;
 }
 
+export interface DeleteResourceResult {
+  requestToken: string;
+}
+
 export interface GetRequestStatusResult {
   operationStatus: string | undefined;
   identifier: string | undefined;
@@ -44,6 +48,12 @@ export interface ProvisioningPort {
     desiredState: string,
     clientToken: string,
   ): Promise<[ProvisioningPortError, null] | [null, CreateResourceResult]>;
+
+  /** Delete a resource. Returns a request token on success. */
+  deleteResource(
+    typeName: string,
+    identifier: string,
+  ): Promise<[ProvisioningPortError, null] | [null, DeleteResourceResult]>;
 
   /** Poll async operation status. */
   getRequestStatus(

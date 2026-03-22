@@ -15,6 +15,17 @@ export {
   type PlanCheckpoint,
   CHECKPOINT_VERSION,
 } from "./schema/checkpoint.js";
+export {
+  ProvisionRecordSchema,
+  ProvisionLogSchema,
+  FailureRecordSchema,
+  FailureLogSchema,
+  PatternRecordSchema,
+  PatternLogSchema,
+  type ProvisionRecord,
+  type FailureRecord,
+  type PatternRecord,
+} from "./schema/memory.js";
 
 // Config — resource type constants and identifier mappings
 export {

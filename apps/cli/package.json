@@ -1,21 +1,49 @@
 {
-  "name": "@assignee/cli",
+  "name": "assignee",
   "version": "0.1.0",
-  "private": true,
+  "description": "Assignee.ai — AI-Native Cloud Operator. Plan and apply cloud infrastructure using natural language.",
   "type": "module",
+  "license": "MIT",
   "bin": {
     "assignee": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "files": [
     "dist",
-    "completions"
+    "completions",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/assignee-ai/assignee.git",
+    "directory": "apps/cli"
+  },
+  "homepage": "https://assignee.ai",
+  "bugs": {
+    "url": "https://github.com/assignee-ai/assignee/issues"
+  },
+  "keywords": [
+    "assignee",
+    "cloud",
+    "infrastructure",
+    "aws",
+    "iac",
+    "ai",
+    "cli",
+    "devops",
+    "cloud-operator",
+    "natural-language"
   ],
   "scripts": {
     "build": "tsc",
     "postbuild": "npx tsx scripts/generate-completions.ts",
     "dev": "tsc --watch",
     "generate-completions": "npx tsx scripts/generate-completions.ts",
+    "prepublishOnly": "cd ../.. && npx turbo build --filter=assignee",
     "test": "vitest run",
     "start": "node ./dist/index.js",
     "check-types": "tsc --noEmit"
@@ -29,6 +57,7 @@
     "@assignee/core": "workspace:*",
     "@aws-sdk/client-cloudcontrol": "^3.1009.0",
     "@aws-sdk/client-lambda": "^3.1014.0",
+    "@aws-sdk/client-resource-groups-tagging-api": "^3.1014.0",
     "@aws-sdk/client-sns": "^3.1014.0",
     "@clack/prompts": "^1.1.0",
     "@langchain/core": "^1.1.32",
