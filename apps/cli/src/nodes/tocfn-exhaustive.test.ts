@@ -183,8 +183,8 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
       );
       expect(result["BucketName"]).toBe("my-test-bucket");
       expect(typeof result["BucketEncryption"]).toBe("object");
-      // ReplicationConfiguration has no toCfn → passes through as false
-      expect(result["ReplicationConfiguration"]).toBe(false);
+      // ReplicationConfiguration has toCfn that returns undefined for false → omitted
+      expect(result["ReplicationConfiguration"]).toBeUndefined();
     });
   });
 
