@@ -5,6 +5,7 @@ export const McpServerName = {
   DOCS: "aws-documentation-mcp-server",
   IAM: "iam-mcp-server",
   WELL_ARCHITECTED_SECURITY: "well-architected-security-mcp-server",
+  BILLING: "aws-cost-management-mcp-server",
 } as const;
 
 export type McpServerNameType =

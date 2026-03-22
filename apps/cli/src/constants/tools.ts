@@ -24,6 +24,10 @@ export const ToolName = {
 
   // ── well-architected-security-mcp-server ──────────────────────────────────
   ANALYZE_SECURITY_POSTURE: "AnalyzeSecurityPosture",
+
+  // ── aws-cost-management-mcp-server ──────────────────────────────────────
+  GET_COST_AND_USAGE: "get_cost_and_usage",
+  GET_COST_FORECAST: "get_cost_forecast",
 } as const;
 
 export type ToolNameType = (typeof ToolName)[keyof typeof ToolName];

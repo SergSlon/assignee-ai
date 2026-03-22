@@ -1,0 +1,169 @@
+name: 'Assignee Apply'
+description: 'Apply an approved assignee plan after PR merge'
+branding:
+  icon: 'cloud-lightning'
+  color: 'green'
+
+inputs:
+  aws-access-key-id:
+    description: 'AWS access key ID for provisioning'
+    required: true
+  aws-secret-access-key:
+    description: 'AWS secret access key for provisioning'
+    required: true
+  aws-region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-1'
+  mcp-aws-access-key-id:
+    description: 'AWS access key for MCP servers (read-only)'
+    required: false
+  mcp-aws-secret-access-key:
+    description: 'AWS secret access key for MCP servers'
+    required: false
+  checkpoint:
+    description: 'Path to plan checkpoint from PR phase'
+    required: false
+  intent-file:
+    description: 'Path to file containing infrastructure intent'
+    required: false
+    default: 'assignee.intent'
+
+outputs:
+  apply-result:
+    description: 'The apply result (success/failed)'
+    value: ${{ steps.run-apply.outputs.apply-result }}
+  resource-arn:
+    description: 'ARN of the provisioned resource'
+    value: ${{ steps.run-apply.outputs.resource-arn }}
+
+runs:
+  using: 'composite'
+  steps:
+    # ── Setup Python for MCP servers (uvx) ──────────────────────────────────
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uvx
+      shell: bash
+      run: pip install uvx
+
+    # ── Install assignee CLI ────────────────────────────────────────────────
+    - name: Install assignee CLI
+      shell: bash
+      run: npm install -g assignee
+
+    # ── Download checkpoint artifact ────────────────────────────────────────
+    - name: Download checkpoint artifact
+      if: inputs.checkpoint == ''
+      id: download-checkpoint
+      uses: actions/download-artifact@v4
+      with:
+        name: assignee-plan-checkpoint
+        path: .assignee/
+      continue-on-error: true
+
+    # ── Resolve checkpoint path ─────────────────────────────────────────────
+    - name: Resolve checkpoint path
+      id: resolve-checkpoint
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.checkpoint }}" ]; then
+          echo "checkpoint-path=${{ inputs.checkpoint }}" >> "$GITHUB_OUTPUT"
+          echo "has-checkpoint=true" >> "$GITHUB_OUTPUT"
+        elif [ "${{ steps.download-checkpoint.outcome }}" = "success" ]; then
+          # Find the most recent checkpoint file
+          CHECKPOINT=$(ls -t .assignee/checkpoint-*.json 2>/dev/null | head -1)
+          if [ -n "$CHECKPOINT" ]; then
+            echo "checkpoint-path=$CHECKPOINT" >> "$GITHUB_OUTPUT"
+            echo "has-checkpoint=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-checkpoint=false" >> "$GITHUB_OUTPUT"
+          fi
+        else
+          echo "has-checkpoint=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    # ── Run assignee apply with checkpoint ──────────────────────────────────
+    - name: Run assignee apply (with checkpoint)
+      id: run-apply-checkpoint
+      if: steps.resolve-checkpoint.outputs.has-checkpoint == 'true'
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        AWS_REGION: ${{ inputs.aws-region }}
+        MCP_AWS_ACCESS_KEY_ID: ${{ inputs.mcp-aws-access-key-id || inputs.aws-access-key-id }}
+        MCP_AWS_SECRET_ACCESS_KEY: ${{ inputs.mcp-aws-secret-access-key || inputs.aws-secret-access-key }}
+      run: |
+        APPLY_OUTPUT=$(assignee apply --yes --checkpoint "${{ steps.resolve-checkpoint.outputs.checkpoint-path }}" 2>&1) || true
+        echo "apply-output<<APPLY_EOF" >> "$GITHUB_OUTPUT"
+        echo "$APPLY_OUTPUT" >> "$GITHUB_OUTPUT"
+        echo "APPLY_EOF" >> "$GITHUB_OUTPUT"
+
+    # ── Run assignee apply without checkpoint (fallback) ────────────────────
+    - name: Run assignee apply (from intent, no checkpoint)
+      id: run-apply-intent
+      if: steps.resolve-checkpoint.outputs.has-checkpoint == 'false'
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        AWS_REGION: ${{ inputs.aws-region }}
+        MCP_AWS_ACCESS_KEY_ID: ${{ inputs.mcp-aws-access-key-id || inputs.aws-access-key-id }}
+        MCP_AWS_SECRET_ACCESS_KEY: ${{ inputs.mcp-aws-secret-access-key || inputs.aws-secret-access-key }}
+      run: |
+        INTENT=""
+        if [ -f "${{ inputs.intent-file }}" ]; then
+          INTENT=$(cat "${{ inputs.intent-file }}")
+        fi
+
+        if [ -z "$INTENT" ]; then
+          echo "::error::No checkpoint and no intent file found. Cannot apply."
+          echo "apply-output=No checkpoint or intent file found" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        APPLY_OUTPUT=$(assignee apply --yes "$INTENT" 2>&1) || true
+        echo "apply-output<<APPLY_EOF" >> "$GITHUB_OUTPUT"
+        echo "$APPLY_OUTPUT" >> "$GITHUB_OUTPUT"
+        echo "APPLY_EOF" >> "$GITHUB_OUTPUT"
+
+    # ── Parse apply result ──────────────────────────────────────────────────
+    - name: Parse apply result
+      id: run-apply
+      shell: bash
+      run: |
+        RAW_OUTPUT="${{ steps.run-apply-checkpoint.outputs.apply-output }}${{ steps.run-apply-intent.outputs.apply-output }}"
+
+        # Try to extract structured result
+        RESULT="success"
+        if echo "$RAW_OUTPUT" | grep -qi "error\|failed\|failure"; then
+          RESULT="failed"
+        fi
+        echo "apply-result=$RESULT" >> "$GITHUB_OUTPUT"
+
+        # Try to extract ARN from output
+        ARN=$(echo "$RAW_OUTPUT" | grep -oE 'arn:aws:[a-zA-Z0-9\-]+:[a-zA-Z0-9\-]*:[0-9]*:[a-zA-Z0-9\-_/:.]+' | head -1 || true)
+        echo "resource-arn=$ARN" >> "$GITHUB_OUTPUT"
+
+        # Pass raw output for comment
+        echo "raw-output<<RAW_EOF" >> "$GITHUB_OUTPUT"
+        echo "$RAW_OUTPUT" >> "$GITHUB_OUTPUT"
+        echo "RAW_EOF" >> "$GITHUB_OUTPUT"
+
+    # ── Post merge commit comment ───────────────────────────────────────────
+    - name: Post merge commit comment
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const applyResult = `${{ steps.run-apply.outputs.apply-result }}`;
+          const resourceArn = `${{ steps.run-apply.outputs.resource-arn }}`;
+          const rawOutput = `${{ steps.run-apply.outputs.raw-output }}`;
+          const script = require('./post-comment.js');
+          await script({ github, context, applyResult, resourceArn, rawOutput });
+      env:
+        GITHUB_TOKEN: ${{ github.token }}

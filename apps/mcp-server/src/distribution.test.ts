@@ -5,15 +5,15 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const cliRoot = resolve(__dirname, "..");
+const mcpRoot = resolve(__dirname, "..");
 
 describe("Distribution package configuration", () => {
   const pkg = JSON.parse(
-    readFileSync(resolve(cliRoot, "package.json"), "utf-8"),
+    readFileSync(resolve(mcpRoot, "package.json"), "utf-8"),
   );
 
-  it("has npm package name 'assignee'", () => {
-    expect(pkg.name).toBe("assignee");
+  it("has npm package name '@assignee/mcp-server'", () => {
+    expect(pkg.name).toBe("@assignee/mcp-server");
   });
 
   it("is marked as private until approved for publishing", () => {
@@ -21,12 +21,11 @@ describe("Distribution package configuration", () => {
   });
 
   it("has bin field pointing to dist/index.js", () => {
-    expect(pkg.bin).toEqual({ assignee: "./dist/index.js" });
+    expect(pkg.bin).toEqual({ "assignee-mcp-server": "./dist/index.js" });
   });
 
-  it("has files array with dist, completions, README.md, LICENSE", () => {
+  it("has files array with dist, README.md, LICENSE", () => {
     expect(pkg.files).toContain("dist");
-    expect(pkg.files).toContain("completions");
     expect(pkg.files).toContain("README.md");
     expect(pkg.files).toContain("LICENSE");
   });
@@ -47,13 +46,16 @@ describe("Distribution package configuration", () => {
   it("has repository field", () => {
     expect(pkg.repository).toBeDefined();
     expect(pkg.repository.type).toBe("git");
+    expect(pkg.repository.directory).toBe("apps/mcp-server");
   });
 
-  it("has keywords array", () => {
+  it("has keywords array with mcp-related terms", () => {
     expect(pkg.keywords).toBeInstanceOf(Array);
     expect(pkg.keywords.length).toBeGreaterThan(0);
     expect(pkg.keywords).toContain("assignee");
-    expect(pkg.keywords).toContain("cli");
+    expect(pkg.keywords).toContain("mcp");
+    expect(pkg.keywords).toContain("mcp-server");
+    expect(pkg.keywords).toContain("model-context-protocol");
   });
 
   it("has prepublishOnly script that runs turbo build", () => {
@@ -70,19 +72,31 @@ describe("Distribution package configuration", () => {
     expect(pkg.license).toBe("MIT");
   });
 
+  it("has homepage field", () => {
+    expect(pkg.homepage).toBe("https://assignee.ai");
+  });
+
   it("dist/index.js has shebang line", () => {
-    const indexPath = resolve(cliRoot, "dist", "index.js");
+    const indexPath = resolve(mcpRoot, "dist", "index.js");
     if (existsSync(indexPath)) {
       const content = readFileSync(indexPath, "utf-8");
       expect(content.startsWith("#!/usr/bin/env node")).toBe(true);
     }
   });
 
-  it("completions directory exists with shell scripts", () => {
-    const completionsDir = resolve(cliRoot, "completions");
-    expect(existsSync(completionsDir)).toBe(true);
-    expect(existsSync(resolve(completionsDir, "assignee.bash"))).toBe(true);
-    expect(existsSync(resolve(completionsDir, "assignee.zsh"))).toBe(true);
-    expect(existsSync(resolve(completionsDir, "assignee.fish"))).toBe(true);
+  it("README.md exists", () => {
+    const readmePath = resolve(mcpRoot, "README.md");
+    expect(existsSync(readmePath)).toBe(true);
+  });
+
+  it("README.md contains agent configuration examples", () => {
+    const readmePath = resolve(mcpRoot, "README.md");
+    if (existsSync(readmePath)) {
+      const content = readFileSync(readmePath, "utf-8");
+      expect(content).toContain("Claude Code");
+      expect(content).toContain("Cursor");
+      expect(content).toContain("Windsurf");
+      expect(content).toContain("npx @assignee/mcp-server");
+    }
   });
 });

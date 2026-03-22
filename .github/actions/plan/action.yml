@@ -1,0 +1,125 @@
+name: 'Assignee Plan'
+description: 'Run assignee plan on PRs and post results as a comment'
+branding:
+  icon: 'cloud'
+  color: 'blue'
+
+inputs:
+  aws-access-key-id:
+    description: 'AWS access key ID for provisioning'
+    required: true
+  aws-secret-access-key:
+    description: 'AWS secret access key for provisioning'
+    required: true
+  aws-region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-1'
+  mcp-aws-access-key-id:
+    description: 'AWS access key for MCP servers (read-only)'
+    required: false
+  mcp-aws-secret-access-key:
+    description: 'AWS secret access key for MCP servers'
+    required: false
+  intent-file:
+    description: 'Path to file containing infrastructure intent'
+    required: false
+    default: 'assignee.intent'
+  config-path:
+    description: 'Path to assignee config directory'
+    required: false
+    default: '.assignee'
+
+outputs:
+  plan-json:
+    description: 'The plan output in JSON format'
+    value: ${{ steps.run-plan.outputs.plan-json }}
+
+runs:
+  using: 'composite'
+  steps:
+    # ── Setup Python for MCP servers (uvx) ──────────────────────────────────
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uvx
+      shell: bash
+      run: pip install uvx
+
+    # ── Install assignee CLI ────────────────────────────────────────────────
+    - name: Install assignee CLI
+      shell: bash
+      run: npm install -g assignee
+
+    # ── Read intent ─────────────────────────────────────────────────────────
+    - name: Read intent
+      id: read-intent
+      shell: bash
+      run: |
+        INTENT=""
+        if [ -f "${{ inputs.intent-file }}" ]; then
+          INTENT=$(cat "${{ inputs.intent-file }}")
+        else
+          # Look for changed .intent files in the PR diff
+          CHANGED_INTENTS=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.intent' '${{ inputs.config-path }}/*.intent' 2>/dev/null || true)
+          if [ -n "$CHANGED_INTENTS" ]; then
+            for f in $CHANGED_INTENTS; do
+              if [ -f "$f" ]; then
+                INTENT="${INTENT}$(cat "$f")\n"
+              fi
+            done
+          fi
+        fi
+
+        if [ -z "$INTENT" ]; then
+          echo "::warning::No intent file found at '${{ inputs.intent-file }}' and no changed .intent files in PR"
+          echo "intent=" >> "$GITHUB_OUTPUT"
+        else
+          # Use delimiter for multiline output
+          echo "intent<<INTENT_EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$INTENT" >> "$GITHUB_OUTPUT"
+          echo "INTENT_EOF" >> "$GITHUB_OUTPUT"
+        fi
+
+    # ── Run assignee plan ───────────────────────────────────────────────────
+    - name: Run assignee plan
+      id: run-plan
+      if: steps.read-intent.outputs.intent != ''
+      shell: bash
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        AWS_REGION: ${{ inputs.aws-region }}
+        MCP_AWS_ACCESS_KEY_ID: ${{ inputs.mcp-aws-access-key-id || inputs.aws-access-key-id }}
+        MCP_AWS_SECRET_ACCESS_KEY: ${{ inputs.mcp-aws-secret-access-key || inputs.aws-secret-access-key }}
+      run: |
+        PLAN_OUTPUT=$(assignee plan "${{ steps.read-intent.outputs.intent }}" -o json --no-apply 2>&1) || true
+
+        # Write plan JSON to output using delimiter
+        echo "plan-json<<PLAN_EOF" >> "$GITHUB_OUTPUT"
+        echo "$PLAN_OUTPUT" >> "$GITHUB_OUTPUT"
+        echo "PLAN_EOF" >> "$GITHUB_OUTPUT"
+
+    # ── Upload checkpoint artifact ──────────────────────────────────────────
+    - name: Upload checkpoint artifact
+      if: steps.run-plan.outputs.plan-json != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: assignee-plan-checkpoint
+        path: ${{ inputs.config-path }}/checkpoint-*.json
+        if-no-files-found: warn
+        retention-days: 90
+
+    # ── Post PR comment ─────────────────────────────────────────────────────
+    - name: Post PR comment
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const planJson = `${{ steps.run-plan.outputs.plan-json }}`;
+          const script = require('./post-comment.js');
+          await script({ github, context, planJson });
+      env:
+        GITHUB_TOKEN: ${{ github.token }}

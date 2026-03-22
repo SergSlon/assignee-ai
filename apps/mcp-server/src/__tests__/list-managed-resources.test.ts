@@ -1,0 +1,188 @@
+/**
+ * Unit tests for list_managed_resources MCP tool.
+ *
+ * @see Story 20.4
+ */
+
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// Mock the AWS SDK before importing the module under test
+vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
+  const mockSend = vi.fn();
+  return {
+    ResourceGroupsTaggingAPIClient: vi.fn().mockImplementation(() => ({
+      send: mockSend,
+    })),
+    GetResourcesCommand: vi.fn(),
+    __mockSend: mockSend,
+  };
+});
+
+// Mock fs for provision log reading
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn().mockImplementation(() => {
+    throw new Error("File not found");
+  }),
+}));
+
+import {
+  ResourceGroupsTaggingAPIClient,
+  GetResourcesCommand,
+} from "@aws-sdk/client-resource-groups-tagging-api";
+import { fetchManagedResources } from "../services/list-resources.js";
+
+// Access the mock send function
+const getMockSend = () => {
+  const mockModule = vi.mocked(ResourceGroupsTaggingAPIClient);
+  const instance = new mockModule({});
+  return instance.send as ReturnType<typeof vi.fn>;
+};
+
+describe("list_managed_resources", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should return an array of managed resources with correct shape", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:s3:::my-bucket-12345",
+          Tags: [
+            { Key: "managed-by", Value: "assignee-ai" },
+            { Key: "assignee-run-id", Value: "2026-03-15T10:30:00Z" },
+          ],
+        },
+        {
+          ResourceARN:
+            "arn:aws:lambda:us-east-1:123456789012:function:my-function",
+          Tags: [
+            { Key: "managed-by", Value: "assignee-ai" },
+            { Key: "assignee-run-id", Value: "2026-03-16T11:00:00Z" },
+          ],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+
+    expect(resources).toHaveLength(2);
+    expect(resources[0]).toEqual({
+      resourceType: "AWS::S3::Bucket",
+      arn: "arn:aws:s3:::my-bucket-12345",
+      region: "us-east-1",
+      createdDate: "2026-03-15T10:30:00Z",
+      estimatedMonthlyCost: "N/A",
+    });
+    expect(resources[1]).toEqual({
+      resourceType: "AWS::Lambda::Function",
+      arn: "arn:aws:lambda:us-east-1:123456789012:function:my-function",
+      region: "us-east-1",
+      createdDate: "2026-03-16T11:00:00Z",
+      estimatedMonthlyCost: "N/A",
+    });
+  });
+
+  it("should return empty array when no tagged resources exist", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+
+    expect(resources).toEqual([]);
+  });
+
+  it("should return structured error on AWS credentials failure", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockRejectedValueOnce(new Error("Missing credentials in config"));
+
+    await expect(fetchManagedResources("us-east-1")).rejects.toThrow(
+      "Missing credentials in config",
+    );
+  });
+
+  it("should forward region parameter to AWS client", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [],
+      PaginationToken: undefined,
+    });
+
+    await fetchManagedResources("eu-west-1");
+
+    expect(ResourceGroupsTaggingAPIClient).toHaveBeenCalledWith({
+      region: "eu-west-1",
+    });
+  });
+
+  it("should filter resources by resourceType when specified", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:s3:::bucket-1",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+        {
+          ResourceARN: "arn:aws:lambda:us-east-1:123456789012:function:fn-1",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources(
+      "us-east-1",
+      "AWS::S3::Bucket",
+    );
+
+    expect(resources).toHaveLength(1);
+    expect(resources[0]!.resourceType).toBe("AWS::S3::Bucket");
+  });
+
+  it("should handle paginated responses", async () => {
+    const mockSend = getMockSend();
+    mockSend
+      .mockResolvedValueOnce({
+        ResourceTagMappingList: [
+          {
+            ResourceARN: "arn:aws:s3:::bucket-1",
+            Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+          },
+        ],
+        PaginationToken: "next-page-token",
+      })
+      .mockResolvedValueOnce({
+        ResourceTagMappingList: [
+          {
+            ResourceARN: "arn:aws:s3:::bucket-2",
+            Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+          },
+        ],
+        PaginationToken: undefined,
+      });
+
+    const resources = await fetchManagedResources("us-east-1");
+
+    expect(resources).toHaveLength(2);
+    expect(mockSend).toHaveBeenCalledTimes(2);
+  });
+
+  it("should use default region when none specified", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [],
+      PaginationToken: undefined,
+    });
+
+    await fetchManagedResources();
+
+    // Should have been called with some region (the default)
+    expect(ResourceGroupsTaggingAPIClient).toHaveBeenCalled();
+  });
+});

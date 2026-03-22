@@ -1,5 +1,6 @@
 {
   "name": "assignee",
+  "private": true,
   "version": "0.1.0",
   "description": "Assignee.ai — AI-Native Cloud Operator. Plan and apply cloud infrastructure using natural language.",
   "type": "module",

@@ -1,0 +1,72 @@
+# Test workflow for validating the assignee GitHub Actions.
+# Disabled (.disabled suffix) because the project is not yet published.
+# Rename to test-actions.yml to enable.
+
+name: Test Actions
+
+on:
+  pull_request:
+    paths:
+      - '.github/actions/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ── Validate action YAML syntax ────────────────────────────────────────
+  validate-actions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-bash.sh)
+
+      - name: Lint plan action
+        run: |
+          # Validate composite action YAML structure
+          python3 -c "
+          import yaml, sys
+          with open('.github/actions/plan/action.yml') as f:
+              action = yaml.safe_load(f)
+          assert action.get('name'), 'Missing action name'
+          assert action.get('runs', {}).get('using') == 'composite', 'Must be composite action'
+          assert 'aws-access-key-id' in action.get('inputs', {}), 'Missing aws-access-key-id input'
+          print('plan/action.yml: OK')
+          "
+
+      - name: Lint apply action
+        run: |
+          python3 -c "
+          import yaml, sys
+          with open('.github/actions/apply/action.yml') as f:
+              action = yaml.safe_load(f)
+          assert action.get('name'), 'Missing action name'
+          assert action.get('runs', {}).get('using') == 'composite', 'Must be composite action'
+          assert 'aws-access-key-id' in action.get('inputs', {}), 'Missing aws-access-key-id input'
+          print('apply/action.yml: OK')
+          "
+
+      - name: Lint example workflow
+        run: ./actionlint .github/actions/examples/assignee-ci.yml || true
+
+  # ── Unit tests for comment formatting ──────────────────────────────────
+  test-comment-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run action tests
+        run: npx vitest run --config .github/actions/vitest.config.ts
