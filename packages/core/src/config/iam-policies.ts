@@ -145,6 +145,22 @@ export function readerPolicy(): PolicyDocument {
         Resource: "*",
       },
       {
+        Sid: "ResourceDiscoveryRead",
+        Effect: "Allow",
+        Action: [
+          "ssm:GetParameter",
+          "ec2:DescribeInstances",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeKeyPairs",
+          "ec2:DescribeInstanceTypes",
+          "ec2:DescribeImages",
+          "rds:DescribeDBEngineVersions",
+          "rds:DescribeOrderableDBInstanceOptions",
+        ],
+        Resource: "*",
+      },
+      {
         Sid: "PricingRead",
         Effect: "Allow",
         Action: [
