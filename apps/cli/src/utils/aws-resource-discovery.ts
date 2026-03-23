@@ -15,6 +15,7 @@ import {
   DescribeSecurityGroupsCommand,
   DescribeKeyPairsCommand,
   DescribeInstanceTypesCommand,
+  DescribeImagesCommand,
   type InstanceTypeInfo,
 } from "@aws-sdk/client-ec2";
 import {
@@ -617,5 +618,54 @@ export async function discoverRdsInstanceClasses(
       value: cls,
       label: cls,
     }));
+  });
+}
+
+/**
+ * Searches for AMIs matching a user description (e.g., "deep learning", "ML training").
+ * Uses ec2:DescribeImages filtered to Amazon-owned, available, public images.
+ * Returns top 5 results as DiscoveryOption[]. Cached per query string.
+ */
+export async function searchAmis(query: string): Promise<DiscoveryOption[]> {
+  const normalizedQuery = query.toLowerCase().trim();
+  if (!normalizedQuery) return [];
+
+  const cacheKey = `search-amis-${normalizedQuery}`;
+  return cachedDiscover(cacheKey, async () => {
+    const ec2 = createEc2Client();
+
+    // Build wildcard pattern from query words: "ML training" → "*ml*training*"
+    const words = normalizedQuery.split(/\s+/).filter(Boolean);
+    const namePattern = `*${words.join("*")}*`;
+
+    const result = await withTimeout(
+      ec2.send(
+        new DescribeImagesCommand({
+          Filters: [
+            { Name: "name", Values: [namePattern] },
+            { Name: "state", Values: ["available"] },
+            { Name: "is-public", Values: ["true"] },
+          ],
+          Owners: ["amazon"],
+        }),
+      ),
+      DISCOVERY_TIMEOUT_MS,
+    );
+
+    if (!result?.Images || result.Images.length === 0) return [];
+
+    // Sort by creation date (newest first) and take top 5
+    const sorted = result.Images.sort((a, b) => {
+      const dateA = a.CreationDate ?? "";
+      const dateB = b.CreationDate ?? "";
+      return dateB.localeCompare(dateA);
+    }).slice(0, 5);
+
+    return sorted
+      .filter((img) => img.ImageId)
+      .map((img) => ({
+        value: img.ImageId!,
+        label: `${img.Name ?? "Unnamed AMI"} \u2014 ${img.ImageId}`,
+      }));
   });
 }

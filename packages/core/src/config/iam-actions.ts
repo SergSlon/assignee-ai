@@ -40,6 +40,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
     "AWS::SNS::Topic": ["sns:CreateTopic", "sns:TagResource"],
     "AWS::EC2::Instance": [
       "ec2:RunInstances",
+      "ec2:TerminateInstances",
       "ec2:CreateTags",
       "ec2:DescribeInstances",
       "ec2:DescribeSubnets",

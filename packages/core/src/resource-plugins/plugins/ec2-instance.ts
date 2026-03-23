@@ -278,6 +278,49 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
+      name: "EbsVolumeType",
+      question: {
+        type: "enum",
+        label: "EBS volume type",
+        hint: "gp3 is recommended — 20% cheaper than gp2 with better baseline performance (3000 IOPS, 125 MiB/s).",
+        options: [
+          {
+            value: "gp3",
+            label: "gp3 (General Purpose SSD v3) — recommended",
+            recommended: true,
+          },
+          { value: "gp2", label: "gp2 (General Purpose SSD v2) — legacy" },
+          { value: "io1", label: "io1 (Provisioned IOPS) — high-performance" },
+        ],
+        initialValue: "gp3",
+      },
+    },
+    {
+      name: "EbsVolumeSize",
+      question: {
+        type: "string",
+        label: "Root volume size (GB)",
+        placeholder: "8",
+        initialValue: "8",
+        hint: "Root EBS volume size in GB. Default 8 GB for Amazon Linux. Increase for data-heavy workloads.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const n = parseInt(String(value), 10);
+          if (isNaN(n) || n < 1 || n > 16384) return "Must be 1-16384 GB";
+          return undefined;
+        },
+      },
+    },
+    {
+      name: "EbsEncrypted",
+      question: {
+        type: "boolean",
+        label: "Encrypt root volume?",
+        initialValue: true,
+        hint: "Encrypts the root EBS volume at rest. Strongly recommended for security. No performance impact. Uses default AWS KMS key.",
+      },
+    },
+    {
       name: "UserData",
       question: {
         type: "string",
@@ -287,12 +330,22 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
   ],
-  defaults: {},
+  defaults: {
+    MetadataOptions: { HttpTokens: "required" },
+    BlockDeviceMappings: [
+      {
+        DeviceName: "/dev/xvda",
+        Ebs: { Encrypted: true, VolumeType: "gp3" },
+      },
+    ],
+  },
   configHints: [
     "EC2 ImageId (AMI): ImageId is REQUIRED. The user may provide an OS name like 'amazon-linux-2023' instead of a real AMI ID — keep it as-is, the system resolves it automatically. NEVER use placeholder IDs like ami-0abcdef1234567890.",
     "EC2 KeyName: if the user did not provide a key pair, OMIT KeyName — SSM Session Manager will be used instead",
     "EC2 SubnetId: if the user did not provide a subnet, OMIT SubnetId — the default VPC subnet will be used",
     "EC2 SecurityGroupIds: if the user did not provide security groups, OMIT SecurityGroupIds — the default VPC security group will be used",
     "EC2 IamInstanceProfile: if the user did not provide an instance profile, OMIT IamInstanceProfile",
+    'EC2 IMDSv2: ALWAYS include MetadataOptions: { HttpTokens: "required" } to enforce IMDSv2. This is an AWS security best practice — never omit it.',
+    'EC2 EBS Encryption: ALWAYS include BlockDeviceMappings with Ebs.Encrypted: true and VolumeType: "gp3". Example: BlockDeviceMappings: [{ DeviceName: "/dev/xvda", Ebs: { Encrypted: true, VolumeType: "gp3" } }]',
   ],
 };

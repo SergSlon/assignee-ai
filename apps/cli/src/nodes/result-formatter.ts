@@ -159,6 +159,30 @@ async function writeFailureRecord(
   }
 }
 
+/**
+ * Clears stale failure records for a resource type after a successful provision (Story 20.13).
+ * Fire-and-forget: failures are logged but never block the apply result.
+ */
+async function clearFailureHistory(
+  runId: string,
+  resourceType: string,
+): Promise<void> {
+  try {
+    await defaultMemoryService.clearFailuresForType(resourceType);
+  } catch (err) {
+    log({
+      ts: new Date().toISOString(),
+      runId,
+      level: "warn",
+      action: "memory_write_failed" as any,
+      extras: {
+        memoryWriteError: "Failed to clear failure history",
+        error: err instanceof Error ? err.message : String(err),
+      },
+    });
+  }
+}
+
 export async function resultFormatterNode(
   state: AgentState,
   tools?: StructuredTool[],
@@ -240,6 +264,16 @@ export async function resultFormatterNode(
           );
         }
 
+        // Story 20.13: clear stale failure history for all successfully provisioned resource types
+        const succeededTypes = new Set(
+          updatedCompleted
+            .filter((r) => r.executionStatus === ExecutionStatus.SUCCESS)
+            .map((r) => r.resourceType),
+        );
+        for (const resourceType of succeededTypes) {
+          await clearFailureHistory(state.runId, resourceType);
+        }
+
         // Story 19.5: Write pattern memory record for compound patterns
         if (state.resourcePattern) {
           try {
@@ -294,6 +328,9 @@ export async function resultFormatterNode(
         state.desiredState,
         state.estimatedMonthlyCost,
       );
+
+      // Story 20.13: clear stale failure history after successful provision
+      await clearFailureHistory(state.runId, state.resourceType);
 
       // Story 19.2: Post-provision security posture check (non-blocking)
       if (state.resourceArn && tools) {
