@@ -32,6 +32,7 @@ vi.mock("../utils/aws-resource-discovery.js", () => ({
   discoverSubnets: vi.fn().mockResolvedValue([]),
   discoverSecurityGroups: vi.fn().mockResolvedValue([]),
   discoverKeyPairs: vi.fn().mockResolvedValue([]),
+  discoverInstanceTypes: vi.fn().mockResolvedValue(null),
 }));
 
 const testPlugin: ResourcePlugin = {
