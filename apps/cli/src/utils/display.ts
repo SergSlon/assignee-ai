@@ -1079,25 +1079,9 @@ export async function renderOptionPrompt(
             continue;
           }
 
-          // "Other" — manual entry for types not in any category
+          // "Other" — return sentinel so promptWithHelp handles LLM-assisted input
           if (categoryResult === "__other__") {
-            const customType = await clack.text({
-              message: `${question.label} — Enter instance type`,
-              placeholder: "p3.2xlarge",
-              validate: (value) => {
-                if (!value || !value.trim()) return "Instance type is required";
-                if (!/^[a-z][a-z0-9]*\.[a-z0-9]+$/.test(value.trim()))
-                  return "Format: family.size (e.g., p3.2xlarge, g5.xlarge)";
-                return undefined;
-              },
-            });
-            if (clack.isCancel(customType)) {
-              clack.cancel("Wizard cancelled.");
-              process.exit(130);
-            }
-            return typeof customType === "string"
-              ? customType.trim()
-              : defaultValue;
+            return "__other__";
           }
 
           selectedCategoryKey = categoryResult as string;
@@ -1147,19 +1131,7 @@ export async function renderOptionPrompt(
         options: sizeOptions,
         initialValue: sizeInitial,
       });
-      if (result === "__other__") {
-        const customSize = await clack.text({
-          message: `${question.label} — Enter size for ${selectedCategoryKey} family`,
-          placeholder: `${selectedCategoryKey}.2xlarge`,
-        });
-        if (clack.isCancel(customSize)) {
-          clack.cancel("Wizard cancelled.");
-          process.exit(130);
-        }
-        return typeof customSize === "string"
-          ? customSize.trim()
-          : defaultValue;
-      }
+      // "__other__" returned as-is — promptWithHelp handles LLM-assisted input
       break;
     }
     default: {
