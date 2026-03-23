@@ -281,8 +281,8 @@ export const ec2InstancePlugin: ResourcePlugin = {
       name: "EbsVolumeType",
       question: {
         type: "enum",
-        label: "EBS volume type",
-        hint: "gp3 is recommended — 20% cheaper than gp2 with better baseline performance (3000 IOPS, 125 MiB/s).",
+        label: "EBS volume type (gp3/gp2/io1)",
+        hint: "This is the STORAGE TYPE, not size. Size is configured in the next field. gp3 is recommended — 20% cheaper than gp2 with better baseline performance (3000 IOPS, 125 MiB/s).",
         options: [
           {
             value: "gp3",
