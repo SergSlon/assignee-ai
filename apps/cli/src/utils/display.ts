@@ -952,6 +952,7 @@ export async function renderOptionPrompt(
           value: o.value,
           label: o.label,
         })),
+        { value: "__other__", label: "Other \u2014 enter manually" },
         { value: "?", label: "\u2753 ? \u2014 explain this field" },
       ];
       result = await clack.select({
@@ -960,6 +961,19 @@ export async function renderOptionPrompt(
         initialValue:
           typeof defaultValue === "string" ? defaultValue : undefined,
       });
+      if (result === "__other__") {
+        const customValue = await clack.text({
+          message: `${question.label} \u2014 Enter value`,
+          placeholder: question.placeholder ?? "",
+        });
+        if (clack.isCancel(customValue)) {
+          clack.cancel("Wizard cancelled.");
+          process.exit(130);
+        }
+        return typeof customValue === "string"
+          ? customValue.trim()
+          : defaultValue;
+      }
       break;
     }
     case "string": {
@@ -991,9 +1005,30 @@ export async function renderOptionPrompt(
             value: o.value,
             label: o.label,
           })),
+          { value: "__other__", label: "Other \u2014 enter manually" },
         ],
         required: false,
       });
+      // If user selected "__other__", prompt for comma-separated custom values
+      if (Array.isArray(result) && result.includes("__other__")) {
+        const otherValues = result.filter((v: string) => v !== "__other__");
+        const customInput = await clack.text({
+          message: `${question.label} \u2014 Enter additional values (comma-separated)`,
+          placeholder: "value1, value2",
+        });
+        if (clack.isCancel(customInput)) {
+          clack.cancel("Wizard cancelled.");
+          process.exit(130);
+        }
+        if (typeof customInput === "string" && customInput.trim()) {
+          const customValues = customInput
+            .split(",")
+            .map((v: string) => v.trim())
+            .filter(Boolean);
+          return [...otherValues, ...customValues];
+        }
+        return otherValues;
+      }
       break;
     }
     case "categorySelect": {
@@ -1105,6 +1140,10 @@ export async function renderOptionPrompt(
           value: o.value,
           label: o.label,
         })),
+        {
+          value: "__other__",
+          label: "Other \u2014 enter size manually",
+        },
         { value: "?", label: "\u2753 ? \u2014 explain this field" },
       ];
 
@@ -1120,6 +1159,19 @@ export async function renderOptionPrompt(
         options: sizeOptions,
         initialValue: sizeInitial,
       });
+      if (result === "__other__") {
+        const customSize = await clack.text({
+          message: `${question.label} — Enter size for ${selectedCategoryKey} family`,
+          placeholder: `${selectedCategoryKey}.2xlarge`,
+        });
+        if (clack.isCancel(customSize)) {
+          clack.cancel("Wizard cancelled.");
+          process.exit(130);
+        }
+        return typeof customSize === "string"
+          ? customSize.trim()
+          : defaultValue;
+      }
       break;
     }
     default: {
