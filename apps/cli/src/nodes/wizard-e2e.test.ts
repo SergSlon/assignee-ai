@@ -234,14 +234,14 @@ describe("EC2 full flow — user skips optional fields", () => {
 
 describe("EC2 full flow — user provides values", () => {
   it("stores user-provided values correctly in elicitedOptions", async () => {
-    // InstanceType categorySelect
+    // InstanceType categorySelect + ImageId enum (static fallback)
     vi.mocked(select)
       .mockResolvedValueOnce("burstable") // category
-      .mockResolvedValueOnce("t3.medium"); // instance type
+      .mockResolvedValueOnce("t3.medium") // instance type
+      .mockResolvedValueOnce("amazon-linux-2023"); // ImageId (static fallback option)
 
-    // Text fields: ImageId, KeyName, SubnetId, SecurityGroupIds (multi→string fallback), Tags
+    // Text fields: KeyName, SubnetId, SecurityGroupIds (multi→string fallback), Tags
     vi.mocked(text)
-      .mockResolvedValueOnce("ami-0123456789abcdef0") // ImageId
       .mockResolvedValueOnce("my-ssh-key") // KeyName
       .mockResolvedValueOnce("subnet-abc123def") // SubnetId
       .mockResolvedValueOnce("sg-abc123") // SecurityGroupIds (falls back to string)
@@ -253,7 +253,7 @@ describe("EC2 full flow — user provides values", () => {
     const result = await optionElicitorNode(makeElicitorState());
 
     expect(result.elicitedOptions?.["InstanceType"]).toBe("t3.medium");
-    expect(result.elicitedOptions?.["ImageId"]).toBe("ami-0123456789abcdef0");
+    expect(result.elicitedOptions?.["ImageId"]).toBe("amazon-linux-2023");
     expect(result.elicitedOptions?.["KeyName"]).toBe("my-ssh-key");
     expect(result.elicitedOptions?.["SubnetId"]).toBe("subnet-abc123def");
     expect(result.elicitedOptions?.["Tags"]).toBe(
@@ -264,14 +264,14 @@ describe("EC2 full flow — user provides values", () => {
 
 describe("EC2 full flow — user provides values and configures advanced", () => {
   it("captures advanced fields when user opts in", async () => {
-    // InstanceType categorySelect
+    // InstanceType categorySelect + ImageId enum (static fallback)
     vi.mocked(select)
       .mockResolvedValueOnce("general") // category
-      .mockResolvedValueOnce("m5.large"); // instance type
+      .mockResolvedValueOnce("m5.large") // instance type
+      .mockResolvedValueOnce("ubuntu-24.04"); // ImageId (static fallback option)
 
-    // Text fields: ImageId, KeyName, SubnetId, SecurityGroupIds (multi→string), Tags
+    // Text fields: KeyName, SubnetId, SecurityGroupIds (multi→string), Tags
     vi.mocked(text)
-      .mockResolvedValueOnce("ami-real123") // ImageId
       .mockResolvedValueOnce("") // KeyName (skipped)
       .mockResolvedValueOnce("") // SubnetId (skipped)
       .mockResolvedValueOnce("") // SecurityGroupIds (multi→string fallback, skipped)
@@ -285,7 +285,7 @@ describe("EC2 full flow — user provides values and configures advanced", () =>
     const result = await optionElicitorNode(makeElicitorState());
 
     expect(result.elicitedOptions?.["InstanceType"]).toBe("m5.large");
-    expect(result.elicitedOptions?.["ImageId"]).toBe("ami-real123");
+    expect(result.elicitedOptions?.["ImageId"]).toBe("ubuntu-24.04");
     expect(result.elicitedOptions?.["IamInstanceProfile"]).toBe("my-profile");
   });
 });
