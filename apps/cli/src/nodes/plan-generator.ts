@@ -42,8 +42,9 @@ export function applyToCfnTransforms(
         transformed[key] = cfnValue;
       }
       // If toCfn returns undefined, omit the field (user said "no")
-    } else {
-      transformed[key] = value; // No transform needed
+    } else if (value !== false) {
+      // false without toCfn means "user declined" — omit from CFN output
+      transformed[key] = value;
     }
   }
 
