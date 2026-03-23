@@ -278,4 +278,11 @@ export const ec2InstancePlugin: ResourcePlugin = {
     },
   ],
   defaults: {},
+  configHints: [
+    "EC2 ImageId (AMI): if the user did not select or provide a specific AMI ID, OMIT the ImageId property entirely — do NOT invent or guess AMI IDs",
+    "EC2 KeyName: if the user did not select or provide a specific key pair, OMIT the KeyName property entirely — do NOT invent key pair names",
+    "EC2 SubnetId: if the user did not select or provide a specific subnet, OMIT the SubnetId property entirely — do NOT invent subnet IDs",
+    "EC2 SecurityGroupIds: if the user did not select or provide specific security groups, OMIT the SecurityGroupIds property entirely — do NOT invent security group IDs",
+    "EC2 IamInstanceProfile: if the user did not provide a specific instance profile name, OMIT the IamInstanceProfile property entirely",
+  ],
 };
