@@ -64,6 +64,8 @@ vi.mock("../config/org-policy-cache.js", () => ({
 
 vi.mock("@clack/prompts", () => ({
   log: { warn: vi.fn(), info: vi.fn() },
+  autocomplete: vi.fn(),
+  autocompleteMultiselect: vi.fn(),
 }));
 
 const { runProvisioningLoop } = await import("../utils/command-runner.js");

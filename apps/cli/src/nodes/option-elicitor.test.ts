@@ -7,6 +7,8 @@ vi.mock("@clack/prompts", () => ({
   select: vi.fn(),
   text: vi.fn(),
   multiselect: vi.fn(),
+  autocomplete: vi.fn(),
+  autocompleteMultiselect: vi.fn(),
   isCancel: vi.fn(() => false),
   spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
 }));

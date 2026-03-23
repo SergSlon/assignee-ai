@@ -951,12 +951,22 @@ export async function renderOptionPrompt(
         { value: "__other__", label: "Other \u2014 enter manually" },
         { value: "?", label: "\u2753 ? \u2014 explain this field" },
       ];
-      result = await clack.select({
-        message: question.label,
-        options: enumOptions,
-        initialValue:
-          typeof defaultValue === "string" ? defaultValue : undefined,
-      });
+      // Use searchable autocomplete for large option lists (>10 items)
+      if (enumOptions.length > 12) {
+        result = await clack.autocomplete({
+          message: `${question.label} (type to search)`,
+          options: enumOptions,
+          initialValue:
+            typeof defaultValue === "string" ? defaultValue : undefined,
+        });
+      } else {
+        result = await clack.select({
+          message: question.label,
+          options: enumOptions,
+          initialValue:
+            typeof defaultValue === "string" ? defaultValue : undefined,
+        });
+      }
       // "__other__" is returned as-is — promptWithHelp handles LLM-assisted input
       break;
     }
@@ -981,18 +991,28 @@ export async function renderOptionPrompt(
       if (!question.options || question.options.length === 0) {
         return undefined;
       }
-      result = await clack.multiselect({
-        message: question.label,
-        options: [
-          { value: "?", label: "\u2753 ? \u2014 explain these options" },
-          ...question.options.map((o) => ({
-            value: o.value,
-            label: o.label,
-          })),
-          { value: "__other__", label: "Other \u2014 enter manually" },
-        ],
-        required: false,
-      });
+      const multiOptions = [
+        { value: "?", label: "\u2753 ? \u2014 explain these options" },
+        ...question.options.map((o) => ({
+          value: o.value,
+          label: o.label,
+        })),
+        { value: "__other__", label: "Other \u2014 enter manually" },
+      ];
+      // Use searchable autocomplete multiselect for large lists
+      if (multiOptions.length > 12) {
+        result = await clack.autocompleteMultiselect({
+          message: `${question.label} (type to search)`,
+          options: multiOptions,
+          required: false,
+        });
+      } else {
+        result = await clack.multiselect({
+          message: question.label,
+          options: multiOptions,
+          required: false,
+        });
+      }
       // If user selected "__other__", prompt for comma-separated custom values
       if (Array.isArray(result) && result.includes("__other__")) {
         const otherValues = result.filter((v: string) => v !== "__other__");

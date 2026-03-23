@@ -24,6 +24,8 @@ vi.mock("@clack/prompts", () => ({
   select: vi.fn(),
   confirm: vi.fn(),
   isCancel: vi.fn().mockReturnValue(false),
+  autocomplete: vi.fn(),
+  autocompleteMultiselect: vi.fn(),
 }));
 
 // Mock credential-detector

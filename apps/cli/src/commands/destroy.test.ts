@@ -39,6 +39,8 @@ vi.mock("@clack/prompts", () => ({
     stop: vi.fn(),
     message: vi.fn(),
   }),
+  autocomplete: vi.fn(),
+  autocompleteMultiselect: vi.fn(),
 }));
 
 // ── Mock boxen ──────────────────────────────────────────────────────────────

@@ -66,6 +66,8 @@ vi.mock("@clack/prompts", () => ({
   })),
   confirm: vi.fn(() => true),
   isCancel: vi.fn(() => false),
+  autocomplete: vi.fn(),
+  autocompleteMultiselect: vi.fn(),
 }));
 
 // Mock env-writer

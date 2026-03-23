@@ -60,6 +60,8 @@ vi.mock("@clack/prompts", () => ({
   confirm: vi.fn(),
   isCancel: vi.fn(() => false),
   log: { warn: vi.fn(), info: vi.fn() },
+  autocomplete: vi.fn(),
+  autocompleteMultiselect: vi.fn(),
 }));
 
 const { runProvisioningLoop } = await import("../utils/command-runner.js");
