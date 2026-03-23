@@ -42,6 +42,7 @@ import {
   fetchEc2InstancePrices,
   fetchRdsInstancePrices,
 } from "../utils/pricing-lookup.js";
+import { withTimeout } from "../utils/timeout.js";
 import {
   discoverAmis,
   discoverSubnets,
@@ -661,6 +662,47 @@ export function injectBPHints(
  * @param llmClient    - Optional LLM client forwarded to renderDocHelp/renderTradeoffHelp
  * @param userIntent   - Optional user intent string for context-aware trade-off analysis
  */
+
+/**
+ * Fetches a price hint for an LLM-suggested value, if the field is a known
+ * priced resource type (EC2 InstanceType, RDS DBInstanceClass).
+ * Returns a formatted price string (e.g. "$0.0416/hr") or null.
+ * Never throws — returns null on any failure or timeout.
+ */
+async function fetchSuggestionPrice(
+  suggested: string,
+  fieldName: string,
+  resourceType: string,
+  tools: StructuredTool[],
+): Promise<string | null> {
+  try {
+    let priceMap: Record<string, string> | null = null;
+
+    if (resourceType === "AWS::EC2::Instance" && fieldName === "InstanceType") {
+      priceMap = await withTimeout(
+        fetchEc2InstancePrices(tools, [suggested]),
+        3000,
+      );
+    } else if (
+      resourceType === "AWS::RDS::DBInstance" &&
+      fieldName === "DBInstanceClass"
+    ) {
+      // Default to postgres since we may not know the selected engine here
+      priceMap = await withTimeout(
+        fetchRdsInstancePrices(tools, [suggested], "postgres"),
+        3000,
+      );
+    } else {
+      return null;
+    }
+
+    if (!priceMap) return null;
+    return priceMap[suggested] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function promptWithHelp(
   field: ResourceField,
   resolved: ResolvedFieldConfig,
@@ -768,8 +810,24 @@ async function promptWithHelp(
               clack.log.warn("Could not determine a suggestion");
               continue; // re-prompt
             }
+
+            // Fetch price for suggested value (non-blocking)
+            let priceHint = "";
+            if (suggested) {
+              const ps = clack.spinner();
+              ps.start("Checking price...");
+              const price = await fetchSuggestionPrice(
+                suggested,
+                field.name,
+                resourceType,
+                tools,
+              );
+              ps.stop();
+              if (price) priceHint = ` (~${price})`;
+            }
+
             const confirm = await clack.confirm({
-              message: `Suggested: ${suggested} — use this?`,
+              message: `Suggested: ${suggested}${priceHint} — use this?`,
               initialValue: true,
             });
             if (clack.isCancel(confirm)) {
