@@ -930,11 +930,7 @@ export async function renderOptionPrompt(
       // Use select instead of confirm so the user can pick '?' to get field help.
       // The '?' sentinel is caught by promptWithHelp, which shows docs and re-prompts.
       const boolDefault =
-        typeof defaultValue === "boolean"
-          ? defaultValue
-            ? "true"
-            : "false"
-          : "false";
+        defaultValue === true || defaultValue === "true" ? "true" : "false";
       result = await clack.select({
         message: question.label,
         options: [

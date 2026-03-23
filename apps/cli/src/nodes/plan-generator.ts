@@ -66,6 +66,25 @@ function assembleS3Composites(
   transformed: Record<string, unknown>,
   options: Record<string, unknown>,
 ): void {
+  // ── Encryption ──
+  if (options["BucketEncryption"] === true) {
+    const kmsKey = options["KMSMasterKeyID"];
+    const algorithm = kmsKey && String(kmsKey).trim() ? "aws:kms" : "AES256";
+    transformed["BucketEncryption"] = {
+      ServerSideEncryptionConfiguration: [
+        {
+          ServerSideEncryptionByDefault: {
+            SSEAlgorithm: algorithm,
+            ...(algorithm === "aws:kms"
+              ? { KMSMasterKeyID: String(kmsKey) }
+              : {}),
+          },
+        },
+      ],
+    };
+  }
+  delete transformed["KMSMasterKeyID"];
+
   // ── Lifecycle ──
   if (options["EnableLifecycle"] === true) {
     const transitionDays =
@@ -396,6 +415,21 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         state.resourceType ?? "",
       );
       desiredState = { ...desiredState, ...transformed };
+
+      // Delete LLM-generated values that the user explicitly declined
+      const plugin = defaultPluginRegistry.get(state.resourceType ?? "");
+      if (plugin) {
+        const allFields = [...plugin.commonFields, ...plugin.advancedFields];
+        for (const [key, value] of Object.entries(state.elicitedOptions)) {
+          const field = allFields.find((f) => f.name === key);
+          if (field?.toCfn) {
+            const cfnValue = field.toCfn(value);
+            if (cfnValue === undefined) {
+              delete desiredState[key];
+            }
+          }
+        }
+      }
     }
 
     const durationMs = Date.now() - startedAt;

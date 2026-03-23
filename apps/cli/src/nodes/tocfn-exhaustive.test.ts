@@ -19,6 +19,8 @@ const PLUGIN_TYPES = [
  * not as individual passthrough fields.
  */
 const S3_COMPOSITE_SUB_FIELDS = new Set([
+  "BucketEncryption",
+  "KMSMasterKeyID",
   "EnableLifecycle",
   "LifecycleTransitionDays",
   "LifecycleExpirationDays",

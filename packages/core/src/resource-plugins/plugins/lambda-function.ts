@@ -30,7 +30,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         placeholder: "my-function",
         hint: "Unique name for this function within the region. Use lowercase, hyphens, and numbers. Max 64 chars. Cannot be changed after creation.",
         validate: (value: unknown) => {
-          if (!value) return undefined; // Optional
+          if (!value) return "Function name is required";
           const s = String(value);
           if (s.length > 64) return "Function name cannot exceed 64 characters";
           if (!/^[a-zA-Z0-9_-]+$/.test(s))

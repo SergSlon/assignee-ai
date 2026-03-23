@@ -458,8 +458,7 @@ async function promptWithHelp(
 
     // Multi fields: when user selects only '?', trigger help
     const isHelpRequest =
-      answer === "?" ||
-      (Array.isArray(answer) && answer.length === 1 && answer[0] === "?");
+      answer === "?" || (Array.isArray(answer) && answer.includes("?"));
 
     if (isHelpRequest) {
       const isEnumOrMulti =
@@ -538,7 +537,11 @@ async function promptWithHelp(
           s.stop();
 
           if (!err && text) {
-            const suggested = text.trim().split("\n")[0]!.trim();
+            const suggested = text.trim().split("\n")[0]?.trim();
+            if (!suggested) {
+              clack.log.warn("Could not determine a suggestion");
+              continue; // re-prompt
+            }
             const confirm = await clack.confirm({
               message: `Suggested: ${suggested} — use this?`,
               initialValue: true,
@@ -770,9 +773,14 @@ export async function optionElicitorNode(
   const elicitedOptions: Record<string, unknown> = {};
 
   // Story 10.5: Pre-inject boolean toggles from intent overrides so showIf gates
-  // open for child fields (e.g., EnableLifecycle=true reveals LifecycleTransitionDays)
+  // open for child fields (e.g., EnableLifecycle=true reveals LifecycleTransitionDays).
+  // Only pre-inject for commonFields — advanced field toggles require user confirmation.
+  const commonFieldNames = new Set(commonFields.map((f) => f.name));
   for (const override of intentOverrides) {
-    if (override.value === true || override.value === false) {
+    if (
+      (override.value === true || override.value === false) &&
+      commonFieldNames.has(override.fieldName)
+    ) {
       elicitedOptions[override.fieldName] = override.value;
     }
   }
