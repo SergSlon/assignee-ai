@@ -68,18 +68,14 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
             }
           });
 
-          it(`${field.name} (false) → ${hasToCfn ? "omitted" : "passthrough false"}`, () => {
+          it(`${field.name} (false) → omitted`, () => {
             const result = applyToCfnTransforms(
               { [field.name]: false },
               resourceType,
             );
-            if (hasToCfn) {
-              // toCfn(false) should return undefined → field omitted
-              expect(result[field.name]).toBeUndefined();
-            } else {
-              // No transform — boolean passes through
-              expect(result[field.name]).toBe(false);
-            }
+            // false always means "user declined" — must be omitted from CFN output
+            // regardless of whether the field has a toCfn transform
+            expect(result[field.name]).toBeUndefined();
           });
         }
 
