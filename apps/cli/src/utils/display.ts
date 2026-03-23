@@ -1036,6 +1036,7 @@ export async function renderOptionPrompt(
               })),
               { value: "?", label: "\u2753 ? \u2014 explain this field" },
             ],
+            initialValue: categories[0]?.key,
           })) as string | symbol;
 
           if (clack.isCancel(categoryResult)) {
@@ -1083,11 +1084,17 @@ export async function renderOptionPrompt(
         { value: "?", label: "\u2753 ? \u2014 explain this field" },
       ];
 
+      // Pre-select the default if it exists in this category, otherwise first option
+      const sizeInitial =
+        typeof defaultValue === "string" &&
+        selectedCategory.options.some((o) => o.value === defaultValue)
+          ? defaultValue
+          : selectedCategory.options[0]?.value;
+
       result = await clack.select({
         message: `${question.label} — ${selectedCategory.label.split(" — ")[0]}`,
         options: sizeOptions,
-        initialValue:
-          typeof defaultValue === "string" ? defaultValue : undefined,
+        initialValue: sizeInitial,
       });
       break;
     }
