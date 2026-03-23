@@ -90,6 +90,25 @@ export class MemoryService {
     );
   }
 
+  /**
+   * Remove all failure records for a given resource type.
+   * Called after a successful provision so stale errors are not surfaced.
+   *
+   * @see Story 20.13
+   */
+  async clearFailuresForType(resourceType: string): Promise<void> {
+    await this.ensureDir();
+    const existing = await this.readFailures();
+    const filtered = existing.filter((f) => f.resourceType !== resourceType);
+    // Skip write if nothing changed
+    if (filtered.length === existing.length) return;
+    await fs.writeFile(
+      this.filePath("failures.json"),
+      JSON.stringify(filtered, null, 2),
+      "utf-8",
+    );
+  }
+
   // --- Patterns (upsert) — stub for Story 19.5 ---
 
   async readPatterns(): Promise<PatternRecord[]> {

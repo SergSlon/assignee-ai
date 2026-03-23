@@ -514,6 +514,87 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
     // Plan should still generate successfully
     expect(result.desiredState).toEqual({ BucketName: "test-data-bucket" });
   });
+
+  it("suppresses failure hint when latest success is newer than latest failure (Story 20.13)", async () => {
+    const provisionData = [
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440001",
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "arn:aws:s3:::my-bucket",
+        region: "us-east-1",
+        desiredStateHash: "abc123",
+        estimatedMonthlyCost: "$0.50/mo",
+        timestamp: "2026-03-20T12:00:00.000Z",
+      },
+    ];
+    vi.mocked(defaultMemoryService.readFailures).mockResolvedValueOnce([
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440000",
+        resourceType: "AWS::S3::Bucket",
+        errorCode: "AlreadyExists",
+        errorMessage: "Bucket already exists",
+        suggestedFix: "Try a different name.",
+        timestamp: "2026-03-18T10:00:00.000Z",
+      },
+    ]);
+    // First call: cost-hint section; second call: failure-check section
+    vi.mocked(defaultMemoryService.readProvisions)
+      .mockResolvedValueOnce(provisionData)
+      .mockResolvedValueOnce(provisionData);
+
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "test-data-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(makeState());
+
+    const failureHints = (result.memoryHints ?? []).filter((h: string) =>
+      h.includes("Previous error"),
+    );
+    expect(failureHints).toHaveLength(0);
+  });
+
+  it("shows failure hint when failure is newer than latest success (Story 20.13)", async () => {
+    const provisionData = [
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440001",
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "arn:aws:s3:::my-bucket",
+        region: "us-east-1",
+        desiredStateHash: "abc123",
+        estimatedMonthlyCost: "$0.50/mo",
+        timestamp: "2026-03-20T12:00:00.000Z",
+      },
+    ];
+    vi.mocked(defaultMemoryService.readFailures).mockResolvedValueOnce([
+      {
+        runId: "550e8400-e29b-41d4-a716-446655440000",
+        resourceType: "AWS::S3::Bucket",
+        errorCode: "AlreadyExists",
+        errorMessage: "Bucket already exists",
+        suggestedFix: "Try a different name.",
+        timestamp: "2026-03-22T10:00:00.000Z",
+      },
+    ]);
+    // First call: cost-hint section; second call: failure-check section
+    vi.mocked(defaultMemoryService.readProvisions)
+      .mockResolvedValueOnce(provisionData)
+      .mockResolvedValueOnce(provisionData);
+
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ BucketName: "test-data-bucket" }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(makeState());
+
+    const failureHint = result.memoryHints!.find((h: string) =>
+      h.includes("Previous error"),
+    );
+    expect(failureHint).toBeDefined();
+    expect(failureHint).toContain("Bucket already exists");
+  });
 });
 
 // ── Story 18.9: toCfn transform tests ────────────────────────────────────────

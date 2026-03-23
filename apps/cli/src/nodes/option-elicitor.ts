@@ -51,6 +51,7 @@ import {
   discoverInstanceTypes,
   discoverRdsEngineVersions,
   discoverRdsInstanceClasses,
+  searchAmis,
   type InstanceTypeCategory,
 } from "../utils/aws-resource-discovery.js";
 import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
@@ -801,6 +802,35 @@ async function promptWithHelp(
           /\d+\.\d+/.test(userDesc)); // version: 16.4, 8.0
       if (looksLikeAwsValue) {
         return userDesc;
+      }
+
+      // Story 20.9: AMI search by description via ec2:DescribeImages
+      if (field.name === "ImageId") {
+        const amiSpinner = clack.spinner();
+        amiSpinner.start("Searching for matching AMIs...");
+        const amiResults = await searchAmis(userDesc);
+        amiSpinner.stop();
+
+        if (amiResults.length > 0) {
+          const amiChoice = await clack.select({
+            message: `Found ${amiResults.length} matching AMI${amiResults.length === 1 ? "" : "s"}:`,
+            options: [
+              ...amiResults.map((ami) => ({
+                value: ami.value,
+                label: ami.label,
+              })),
+              { value: "__none__", label: "None of these — let me try again" },
+            ],
+          });
+          if (clack.isCancel(amiChoice)) {
+            clack.cancel("Wizard cancelled.");
+            process.exit(130);
+          }
+          if (amiChoice !== "__none__") {
+            return amiChoice as string;
+          }
+          // User rejected all results — fall through to LLM suggestion
+        }
       }
 
       // Use LLM to suggest the right value

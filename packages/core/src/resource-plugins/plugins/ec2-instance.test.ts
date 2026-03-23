@@ -130,7 +130,15 @@ describe("ec2InstancePlugin", () => {
     expect(names).toContain("UserData");
   });
 
-  it("defaults is empty object", () => {
-    expect(ec2InstancePlugin.defaults).toEqual({});
+  it("defaults includes IMDSv2 and encrypted EBS", () => {
+    expect(ec2InstancePlugin.defaults).toEqual({
+      MetadataOptions: { HttpTokens: "required" },
+      BlockDeviceMappings: [
+        {
+          DeviceName: "/dev/xvda",
+          Ebs: { Encrypted: true, VolumeType: "gp3" },
+        },
+      ],
+    });
   });
 });

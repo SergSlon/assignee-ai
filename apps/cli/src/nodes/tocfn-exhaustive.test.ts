@@ -31,6 +31,16 @@ const S3_COMPOSITE_SUB_FIELDS = new Set([
   "ReplicationDestinationBucket",
 ]);
 
+/**
+ * EC2 composite sub-fields that are consumed by assembleEc2Storage()
+ * and deleted from the result. These must be tested separately as composites.
+ */
+const EC2_COMPOSITE_SUB_FIELDS = new Set([
+  "EbsVolumeType",
+  "EbsVolumeSize",
+  "EbsEncrypted",
+]);
+
 describe("applyToCfnTransforms — exhaustive field coverage", () => {
   for (const resourceType of PLUGIN_TYPES) {
     const plugin = defaultPluginRegistry.get(resourceType);
@@ -45,6 +55,15 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
         if (
           resourceType === "AWS::S3::Bucket" &&
           S3_COMPOSITE_SUB_FIELDS.has(field.name)
+        ) {
+          continue;
+        }
+
+        // Skip EC2 EBS composite sub-fields — they are deleted by assembleEc2Storage
+        // and tested separately in the "EC2 storage assembly" describe block below.
+        if (
+          resourceType === "AWS::EC2::Instance" &&
+          EC2_COMPOSITE_SUB_FIELDS.has(field.name)
         ) {
           continue;
         }
@@ -366,6 +385,141 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
         "AWS::RDS::DBInstance",
       );
       expect(result["DeletionProtection"]).toBe(true);
+    });
+  });
+
+  // === EC2 storage assembly (sub-field → CFN structure) ===
+
+  describe("EC2 storage assembly", () => {
+    it("assembles BlockDeviceMappings from all EBS sub-fields", () => {
+      const result = applyToCfnTransforms(
+        {
+          EbsVolumeType: "gp3",
+          EbsVolumeSize: "8",
+          EbsEncrypted: true,
+        },
+        "AWS::EC2::Instance",
+      );
+      expect(result["BlockDeviceMappings"]).toEqual([
+        {
+          DeviceName: "/dev/xvda",
+          Ebs: {
+            VolumeType: "gp3",
+            VolumeSize: 8,
+            Encrypted: true,
+          },
+        },
+      ]);
+      // Intermediate keys must be deleted
+      expect(result["EbsVolumeType"]).toBeUndefined();
+      expect(result["EbsVolumeSize"]).toBeUndefined();
+      expect(result["EbsEncrypted"]).toBeUndefined();
+    });
+
+    it("uses gp2 volume type when specified", () => {
+      const result = applyToCfnTransforms(
+        {
+          EbsVolumeType: "gp2",
+          EbsVolumeSize: "50",
+          EbsEncrypted: true,
+        },
+        "AWS::EC2::Instance",
+      );
+      expect(result["BlockDeviceMappings"]).toEqual([
+        {
+          DeviceName: "/dev/xvda",
+          Ebs: {
+            VolumeType: "gp2",
+            VolumeSize: 50,
+            Encrypted: true,
+          },
+        },
+      ]);
+    });
+
+    it("defaults VolumeType to gp3 when not specified", () => {
+      const result = applyToCfnTransforms(
+        {
+          EbsVolumeSize: "20",
+          EbsEncrypted: true,
+        },
+        "AWS::EC2::Instance",
+      );
+      expect(result["BlockDeviceMappings"]).toEqual([
+        {
+          DeviceName: "/dev/xvda",
+          Ebs: {
+            VolumeType: "gp3",
+            VolumeSize: 20,
+            Encrypted: true,
+          },
+        },
+      ]);
+    });
+
+    it("defaults Encrypted to true when not specified", () => {
+      const result = applyToCfnTransforms(
+        {
+          EbsVolumeType: "gp3",
+        },
+        "AWS::EC2::Instance",
+      );
+      expect(result["BlockDeviceMappings"]).toEqual([
+        {
+          DeviceName: "/dev/xvda",
+          Ebs: {
+            VolumeType: "gp3",
+            Encrypted: true,
+          },
+        },
+      ]);
+    });
+
+    it("sets Encrypted to false when explicitly declined", () => {
+      const result = applyToCfnTransforms(
+        {
+          EbsVolumeType: "gp3",
+          EbsEncrypted: false,
+        },
+        "AWS::EC2::Instance",
+      );
+      expect(result["BlockDeviceMappings"]).toEqual([
+        {
+          DeviceName: "/dev/xvda",
+          Ebs: {
+            VolumeType: "gp3",
+            Encrypted: false,
+          },
+        },
+      ]);
+    });
+
+    it("no BlockDeviceMappings when no EBS fields provided", () => {
+      const result = applyToCfnTransforms(
+        { InstanceType: "t3.micro" },
+        "AWS::EC2::Instance",
+      );
+      expect(result["BlockDeviceMappings"]).toBeUndefined();
+      expect(result["EbsVolumeType"]).toBeUndefined();
+      expect(result["EbsVolumeSize"]).toBeUndefined();
+      expect(result["EbsEncrypted"]).toBeUndefined();
+    });
+
+    it("intermediate EBS keys are always deleted", () => {
+      const result = applyToCfnTransforms(
+        {
+          EbsVolumeType: "io1",
+          EbsVolumeSize: "100",
+          EbsEncrypted: true,
+          InstanceType: "t3.micro",
+        },
+        "AWS::EC2::Instance",
+      );
+      expect(result["EbsVolumeType"]).toBeUndefined();
+      expect(result["EbsVolumeSize"]).toBeUndefined();
+      expect(result["EbsEncrypted"]).toBeUndefined();
+      expect(result["InstanceType"]).toBe("t3.micro");
+      expect(result["BlockDeviceMappings"]).toBeDefined();
     });
   });
 

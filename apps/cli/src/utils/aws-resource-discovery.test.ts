@@ -15,6 +15,7 @@ vi.mock("@aws-sdk/client-ec2", () => ({
   DescribeSubnetsCommand: vi.fn(),
   DescribeSecurityGroupsCommand: vi.fn(),
   DescribeKeyPairsCommand: vi.fn(),
+  DescribeImagesCommand: vi.fn(),
 }));
 
 vi.mock("@aws-sdk/client-ssm", () => ({
@@ -40,6 +41,7 @@ import {
   discoverAmis,
   discoverRdsEngineVersions,
   discoverRdsInstanceClasses,
+  searchAmis,
   clearDiscoveryCache,
 } from "./aws-resource-discovery.js";
 
@@ -624,6 +626,112 @@ describe("aws-resource-discovery", () => {
       });
       const result = await discoverAmis();
       assertShapeInvariants(result);
+    });
+  });
+
+  // ── searchAmis ──────────────────────────────────────────────────────────
+
+  describe("searchAmis", () => {
+    it("returns matching AMIs sorted by creation date (newest first)", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        Images: [
+          {
+            ImageId: "ami-older",
+            Name: "Deep Learning AMI (Ubuntu 22.04)",
+            CreationDate: "2025-01-01T00:00:00Z",
+          },
+          {
+            ImageId: "ami-newer",
+            Name: "Deep Learning Base AMI (Ubuntu 24.04)",
+            CreationDate: "2026-02-15T00:00:00Z",
+          },
+        ],
+      });
+      const result = await searchAmis("deep learning");
+      expect(result).toHaveLength(2);
+      expect(result[0]!.value).toBe("ami-newer");
+      expect(result[0]!.label).toContain("Deep Learning Base AMI");
+      expect(result[0]!.label).toContain("ami-newer");
+      expect(result[1]!.value).toBe("ami-older");
+    });
+
+    it("returns at most 5 results", async () => {
+      const images = Array.from({ length: 8 }, (_, i) => ({
+        ImageId: `ami-${i}`,
+        Name: `ML AMI ${i}`,
+        CreationDate: `2026-01-0${i + 1}T00:00:00Z`,
+      }));
+      mockEc2Send.mockResolvedValueOnce({ Images: images });
+      const result = await searchAmis("ML");
+      expect(result).toHaveLength(5);
+    });
+
+    it("returns [] when no images match", async () => {
+      mockEc2Send.mockResolvedValueOnce({ Images: [] });
+      const result = await searchAmis("nonexistent");
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when API returns null", async () => {
+      mockEc2Send.mockResolvedValueOnce(null);
+      const result = await searchAmis("deep learning");
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when API throws", async () => {
+      mockEc2Send.mockRejectedValueOnce(new Error("access denied"));
+      const result = await searchAmis("ml training");
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] for empty query", async () => {
+      const result = await searchAmis("   ");
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+    });
+
+    it("caches results per query string", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        Images: [
+          {
+            ImageId: "ami-cached",
+            Name: "ML AMI",
+            CreationDate: "2026-01-01T00:00:00Z",
+          },
+        ],
+      });
+      const first = await searchAmis("ml training");
+      const second = await searchAmis("ml training");
+      expect(first).toEqual(second);
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses 'Unnamed AMI' label when Name is missing", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        Images: [
+          {
+            ImageId: "ami-noname",
+            CreationDate: "2026-01-01T00:00:00Z",
+          },
+        ],
+      });
+      const result = await searchAmis("something");
+      expect(result[0]!.label).toContain("Unnamed AMI");
+      expect(result[0]!.label).toContain("ami-noname");
+    });
+
+    it("passes correct filters to DescribeImagesCommand", async () => {
+      const { DescribeImagesCommand } = await import("@aws-sdk/client-ec2");
+      mockEc2Send.mockResolvedValueOnce({ Images: [] });
+      await searchAmis("deep learning");
+      expect(DescribeImagesCommand).toHaveBeenCalledWith({
+        Filters: [
+          { Name: "name", Values: ["*deep*learning*"] },
+          { Name: "state", Values: ["available"] },
+          { Name: "is-public", Values: ["true"] },
+        ],
+        Owners: ["amazon"],
+      });
     });
   });
 });

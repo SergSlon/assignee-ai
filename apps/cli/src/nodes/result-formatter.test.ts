@@ -39,12 +39,13 @@ vi.mock("../utils/logger.js", () => ({
   },
 }));
 
-// Mock memory service (Story 19.3, 19.4)
+// Mock memory service (Story 19.3, 19.4, 20.13)
 vi.mock("../services/memory.js", () => ({
   defaultMemoryService: {
     appendProvision: vi.fn().mockResolvedValue(undefined),
     appendFailure: vi.fn().mockResolvedValue(undefined),
     upsertPattern: vi.fn().mockResolvedValue(undefined),
+    clearFailuresForType: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -698,5 +699,91 @@ describe("resultFormatterNode — Story 19.4 failure memory write", () => {
     await resultFormatterNode(state);
 
     expect(defaultMemoryService.appendFailure).toHaveBeenCalledOnce();
+  });
+});
+
+// ── Story 20.13: Clear failure history after successful provision ──────────
+
+describe("resultFormatterNode — Story 20.13 clear failure history on success", () => {
+  it("clears failure history for resource type after single-resource SUCCESS", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket",
+      resourceType: "AWS::S3::Bucket",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(defaultMemoryService.clearFailuresForType).toHaveBeenCalledWith(
+      "AWS::S3::Bucket",
+    );
+  });
+
+  it("clears failure history for each resource type after compound SUCCESS final", async () => {
+    const resourceQueue = makeResourceQueue();
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourcePattern: mockPattern,
+      resourceQueue,
+      currentResourceIndex: 2,
+      completedResources: [
+        {
+          resourceId: "lambda-execution-role",
+          resourceType: "AWS::IAM::Role",
+          resourceArn: "arn:aws:iam::123:role/exec-role",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+        {
+          resourceId: "lambda-fn",
+          resourceType: "AWS::Lambda::Function",
+          resourceArn: "arn:aws:lambda::123:function:my-fn",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+      resourceArn: "arn:aws:apigateway::123:apis/abc",
+      resourceType: "AWS::ApiGatewayV2::Api",
+    });
+
+    await resultFormatterNode(state);
+
+    // Should clear for all 3 unique resource types
+    expect(defaultMemoryService.clearFailuresForType).toHaveBeenCalledWith(
+      "AWS::IAM::Role",
+    );
+    expect(defaultMemoryService.clearFailuresForType).toHaveBeenCalledWith(
+      "AWS::Lambda::Function",
+    );
+    expect(defaultMemoryService.clearFailuresForType).toHaveBeenCalledWith(
+      "AWS::ApiGatewayV2::Api",
+    );
+  });
+
+  it("does not clear failure history on FAILED status", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      resourceType: "AWS::S3::Bucket",
+      errorMessage: "Bucket creation failed",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(defaultMemoryService.clearFailuresForType).not.toHaveBeenCalled();
+  });
+
+  it("clearFailuresForType failure does not affect success result", async () => {
+    vi.mocked(defaultMemoryService.clearFailuresForType).mockRejectedValueOnce(
+      new Error("Disk full"),
+    );
+
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: "arn:aws:s3:::my-bucket",
+      resourceType: "AWS::S3::Bucket",
+    });
+
+    const result = await resultFormatterNode(state);
+
+    expect(renderApplySuccess).toHaveBeenCalledWith(state);
+    expect(result).toEqual({});
   });
 });

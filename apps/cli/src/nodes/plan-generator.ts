@@ -53,6 +53,9 @@ export function applyToCfnTransforms(
   if (resourceType === "AWS::S3::Bucket") {
     assembleS3Composites(transformed, elicitedOptions);
   }
+  if (resourceType === "AWS::EC2::Instance") {
+    assembleEc2Storage(transformed, elicitedOptions);
+  }
 
   return transformed;
 }
@@ -152,6 +155,58 @@ function assembleS3Composites(
   }
   delete transformed["EnableReplication"];
   delete transformed["ReplicationDestinationBucket"];
+}
+
+/**
+ * Assembles EC2 BlockDeviceMappings from individual EBS sub-fields.
+ * EbsVolumeType + EbsVolumeSize + EbsEncrypted → BlockDeviceMappings: [...]
+ *
+ * Mutates `transformed` in place — removes intermediate keys, adds CFN keys.
+ */
+export function assembleEc2Storage(
+  transformed: Record<string, unknown>,
+  options: Record<string, unknown>,
+): void {
+  const volumeType = options["EbsVolumeType"];
+  const volumeSize = options["EbsVolumeSize"];
+  const encrypted = options["EbsEncrypted"];
+
+  // Only assemble if at least one EBS field was provided
+  const hasAnyEbsField =
+    volumeType !== undefined ||
+    volumeSize !== undefined ||
+    encrypted !== undefined;
+
+  if (hasAnyEbsField) {
+    const ebs: Record<string, unknown> = {};
+
+    if (volumeType && typeof volumeType === "string") {
+      ebs["VolumeType"] = volumeType;
+    } else {
+      ebs["VolumeType"] = "gp3"; // default
+    }
+
+    if (volumeSize) {
+      const size = parseInt(String(volumeSize), 10);
+      if (!isNaN(size) && size >= 1) {
+        ebs["VolumeSize"] = size;
+      }
+    }
+
+    // Default to true (encrypted) unless explicitly set to false
+    ebs["Encrypted"] = encrypted !== false;
+
+    transformed["BlockDeviceMappings"] = [
+      {
+        DeviceName: "/dev/xvda",
+        Ebs: ebs,
+      },
+    ];
+  }
+
+  delete transformed["EbsVolumeType"];
+  delete transformed["EbsVolumeSize"];
+  delete transformed["EbsEncrypted"];
 }
 
 /**
@@ -327,6 +382,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     }
 
     // Story 19.4: Read failure history for warning hints
+    // Story 20.13: Skip failures older than the latest success for same type
     try {
       const failures = await defaultMemoryService.readFailures();
       const previousFailuresForType = failures
@@ -336,12 +392,24 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         );
       const latestFailure = previousFailuresForType[0];
       if (latestFailure) {
-        const fixSuffix = latestFailure.suggestedFix
-          ? ` Fix: ${latestFailure.suggestedFix}`
-          : "";
-        memoryHints.push(
-          `\u26A0 Previous error with ${latestFailure.resourceType}: ${latestFailure.errorMessage}.${fixSuffix}`,
-        );
+        // Only show if failure is newer than latest success for this type
+        const provisions = await defaultMemoryService.readProvisions();
+        const latestSuccess = provisions
+          .filter((p: ProvisionRecord) => p.resourceType === state.resourceType)
+          .sort((a: ProvisionRecord, b: ProvisionRecord) =>
+            b.timestamp.localeCompare(a.timestamp),
+          )[0];
+        const failureIsStale =
+          latestSuccess &&
+          latestFailure.timestamp.localeCompare(latestSuccess.timestamp) <= 0;
+        if (!failureIsStale) {
+          const fixSuffix = latestFailure.suggestedFix
+            ? ` Fix: ${latestFailure.suggestedFix}`
+            : "";
+          memoryHints.push(
+            `\u26A0 Previous error with ${latestFailure.resourceType}: ${latestFailure.errorMessage}.${fixSuffix}`,
+          );
+        }
       }
     } catch {
       // Graceful degradation — memory read failure is non-blocking
