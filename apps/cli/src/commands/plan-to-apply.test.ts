@@ -21,6 +21,8 @@ vi.mock("@clack/prompts", () => ({
   select: vi.fn(),
   text: vi.fn(),
   multiselect: vi.fn(),
+  autocomplete: vi.fn(),
+  autocompleteMultiselect: vi.fn(),
 }));
 
 const mockState: RenderableState = {
