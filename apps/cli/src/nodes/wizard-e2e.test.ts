@@ -654,6 +654,298 @@ describe("EC2 Tags toCfn transform", () => {
 // Lambda Environment toCfn transform
 // ═════════════════════════════════════════════════════════════════════════════
 
+// ═════════════════════════════════════════════════════════════════════════════
+// EC2 "Other" FLOW — LLM-ASSISTED VALUE INPUT
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('EC2 "Other" flow — user types a description (not exact value)', () => {
+  it("uses LLM to suggest an instance type from a description", async () => {
+    const mockLlm = new MockLlmAdapter(
+      // structuredResponse — for classifyWorkload
+      { profile: "general-purpose", confidence: 0.9 },
+      // textResponse — for "Other" LLM suggestion
+      "p3.2xlarge",
+    );
+
+    // InstanceType categorySelect: category → __other__
+    vi.mocked(select).mockResolvedValueOnce("__other__");
+
+    // ImageId: static fallback (discovery fails, static options present) → select
+    vi.mocked(select).mockResolvedValueOnce("amazon-linux-2023");
+
+    // "Other" flow: text input for description
+    vi.mocked(text).mockResolvedValueOnce("gpu for ml training");
+
+    // "Other" flow: confirm LLM suggestion
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+
+    // Remaining text fields: KeyName, SubnetId, SecurityGroupIds (multi→string), Tags
+    vi.mocked(text)
+      .mockResolvedValueOnce("") // KeyName
+      .mockResolvedValueOnce("") // SubnetId
+      .mockResolvedValueOnce("") // SecurityGroupIds
+      .mockResolvedValueOnce(""); // Tags
+
+    // Advanced = no
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    const result = await optionElicitorNode(makeElicitorState(), [], mockLlm);
+
+    expect(result.elicitedOptions?.["InstanceType"]).toBe("p3.2xlarge");
+    expect(result.elicitedOptions?.["ImageId"]).toBe("amazon-linux-2023");
+  });
+});
+
+describe('EC2 "Other" flow — user types exact value like "t3.nano"', () => {
+  it("accepts exact AWS value without LLM call", async () => {
+    // InstanceType categorySelect: category → __other__
+    vi.mocked(select).mockResolvedValueOnce("__other__");
+
+    // "Other" flow: text input — exact value with dot (no LLM needed)
+    vi.mocked(text).mockResolvedValueOnce("t3.nano");
+
+    // ImageId: static fallback → select
+    vi.mocked(select).mockResolvedValueOnce("amazon-linux-2023");
+
+    // Remaining text fields: KeyName, SubnetId, SecurityGroupIds, Tags
+    vi.mocked(text)
+      .mockResolvedValueOnce("") // KeyName
+      .mockResolvedValueOnce("") // SubnetId
+      .mockResolvedValueOnce("") // SecurityGroupIds
+      .mockResolvedValueOnce(""); // Tags
+
+    // Advanced = no
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    const result = await optionElicitorNode(makeElicitorState());
+
+    expect(result.elicitedOptions?.["InstanceType"]).toBe("t3.nano");
+  });
+});
+
+describe('EC2 "Other" flow — user types plain word "linux" (goes to LLM)', () => {
+  it("sends plain description to LLM for suggestion", async () => {
+    const mockLlm = new MockLlmAdapter(
+      { profile: "burstable", confidence: 0.8 },
+      "t3.small",
+    );
+
+    // InstanceType categorySelect: category → __other__
+    vi.mocked(select).mockResolvedValueOnce("__other__");
+
+    // "Other" flow: text input — plain word (no dot, no prefix → LLM)
+    vi.mocked(text).mockResolvedValueOnce("linux");
+
+    // "Other" flow: confirm LLM suggestion
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+
+    // ImageId: static fallback → select
+    vi.mocked(select).mockResolvedValueOnce("amazon-linux-2023");
+
+    // Remaining text fields: KeyName, SubnetId, SecurityGroupIds, Tags
+    vi.mocked(text)
+      .mockResolvedValueOnce("") // KeyName
+      .mockResolvedValueOnce("") // SubnetId
+      .mockResolvedValueOnce("") // SecurityGroupIds
+      .mockResolvedValueOnce(""); // Tags
+
+    // Advanced = no
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    const result = await optionElicitorNode(makeElicitorState(), [], mockLlm);
+
+    expect(result.elicitedOptions?.["InstanceType"]).toBe("t3.small");
+  });
+});
+
+describe("EC2 ImageId with static fallback — user picks OS from menu", () => {
+  it("stays as enum when discovery fails but static options exist", async () => {
+    // InstanceType categorySelect
+    vi.mocked(select)
+      .mockResolvedValueOnce("burstable") // category
+      .mockResolvedValueOnce("t3.micro"); // instance type
+
+    // ImageId: discovery returns [] → static fallback options stay as enum → select
+    vi.mocked(select).mockResolvedValueOnce("amazon-linux-2023");
+
+    // Text fields: KeyName, SubnetId, SecurityGroupIds, Tags
+    vi.mocked(text)
+      .mockResolvedValueOnce("") // KeyName
+      .mockResolvedValueOnce("") // SubnetId
+      .mockResolvedValueOnce("") // SecurityGroupIds
+      .mockResolvedValueOnce(""); // Tags
+
+    // Advanced = no
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    const result = await optionElicitorNode(makeElicitorState());
+
+    // ImageId should be the OS shorthand, NOT an ami- ID
+    expect(result.elicitedOptions?.["ImageId"]).toBe("amazon-linux-2023");
+    expect(result.elicitedOptions?.["InstanceType"]).toBe("t3.micro");
+  });
+});
+
+describe("EC2 all fields skipped except InstanceType and ImageId", () => {
+  it("elicitedOptions only contains fields with non-empty values", async () => {
+    // InstanceType categorySelect
+    vi.mocked(select)
+      .mockResolvedValueOnce("burstable") // category
+      .mockResolvedValueOnce("t3.micro"); // instance type
+
+    // ImageId static fallback → select
+    vi.mocked(select).mockResolvedValueOnce("amazon-linux-2023");
+
+    // All text fields blank: KeyName, SubnetId, SecurityGroupIds, Tags
+    vi.mocked(text)
+      .mockResolvedValueOnce("") // KeyName
+      .mockResolvedValueOnce("") // SubnetId
+      .mockResolvedValueOnce("") // SecurityGroupIds
+      .mockResolvedValueOnce(""); // Tags
+
+    // Advanced = no
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    const result = await optionElicitorNode(makeElicitorState());
+
+    const elicited = result.elicitedOptions ?? {};
+    // Only InstanceType and ImageId should be present
+    expect(elicited["InstanceType"]).toBe("t3.micro");
+    expect(elicited["ImageId"]).toBe("amazon-linux-2023");
+
+    // Blanks should be excluded
+    expect(elicited["KeyName"]).toBeUndefined();
+    expect(elicited["SubnetId"]).toBeUndefined();
+    expect(elicited["SecurityGroupIds"]).toBeUndefined();
+    expect(elicited["Tags"]).toBeUndefined();
+
+    // No extra keys
+    const keys = Object.keys(elicited);
+    expect(keys).toEqual(expect.arrayContaining(["InstanceType", "ImageId"]));
+    expect(keys.length).toBe(2);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RDS ENGINE VERSION — showIf CONDITIONAL PROMPTING
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("RDS Engine version is prompted when engine is postgres", () => {
+  it("shows EngineVersion prompt matching showIf Engine=postgres", async () => {
+    vi.mocked(select)
+      .mockResolvedValueOnce("db.t3.small") // DBInstanceClass
+      .mockResolvedValueOnce("postgres") // Engine
+      .mockResolvedValueOnce("16") // EngineVersion (showIf Engine=postgres)
+      .mockResolvedValueOnce("false") // MultiAZ
+      .mockResolvedValueOnce("false") // DeletionProtection
+      .mockResolvedValueOnce("gp3") // StorageType
+      .mockResolvedValueOnce("20"); // AllocatedStorage
+
+    vi.mocked(text)
+      .mockResolvedValueOnce("testdb") // DBName
+      .mockResolvedValueOnce("admin") // MasterUsername
+      .mockResolvedValueOnce("Pass123!") // MasterUserPassword
+      .mockResolvedValueOnce(""); // Tags (skipped)
+
+    // Advanced = no
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    const result = await optionElicitorNode(
+      makeElicitorState({
+        resourceType: "AWS::RDS::DBInstance",
+        userIntent: "Create a PostgreSQL RDS instance",
+      }),
+    );
+
+    const elicited = result.elicitedOptions ?? {};
+    expect(elicited["Engine"]).toBe("postgres");
+    expect(elicited["EngineVersion"]).toBe("16");
+    expect(elicited["DBInstanceClass"]).toBe("db.t3.small");
+  });
+});
+
+describe("RDS Engine version skipped for wrong showIf (mysql engine, no mysql EngineVersion prompt for postgres)", () => {
+  it("does not prompt EngineVersion for postgres when engine is mysql", async () => {
+    vi.mocked(select)
+      .mockResolvedValueOnce("db.t3.small") // DBInstanceClass
+      .mockResolvedValueOnce("mysql") // Engine
+      .mockResolvedValueOnce("8.4") // EngineVersion (showIf Engine=mysql)
+      .mockResolvedValueOnce("false") // MultiAZ
+      .mockResolvedValueOnce("false") // DeletionProtection
+      .mockResolvedValueOnce("gp3") // StorageType
+      .mockResolvedValueOnce("20"); // AllocatedStorage
+
+    vi.mocked(text)
+      .mockResolvedValueOnce("testdb") // DBName
+      .mockResolvedValueOnce("admin") // MasterUsername
+      .mockResolvedValueOnce("Pass123!") // MasterUserPassword
+      .mockResolvedValueOnce(""); // Tags (skipped)
+
+    // Advanced = no
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    const result = await optionElicitorNode(
+      makeElicitorState({
+        resourceType: "AWS::RDS::DBInstance",
+        userIntent: "Create a MySQL database",
+      }),
+    );
+
+    const elicited = result.elicitedOptions ?? {};
+    expect(elicited["Engine"]).toBe("mysql");
+    // EngineVersion should be the mysql variant, not postgres
+    expect(elicited["EngineVersion"]).toBe("8.4");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// EC2 "Other" FLOW — USER REJECTS SUGGESTION, RE-PROMPTED
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('EC2 "Other" flow — user rejects suggestion, gets re-prompted', () => {
+  it("re-prompts after rejection and accepts exact value on second attempt", async () => {
+    const mockLlm = new MockLlmAdapter(
+      { profile: "compute-heavy", confidence: 0.9 },
+      "c5.xlarge",
+    );
+
+    // InstanceType categorySelect: category → __other__
+    vi.mocked(select).mockResolvedValueOnce("__other__");
+
+    // First "Other" attempt: description → LLM suggests → user rejects
+    vi.mocked(text).mockResolvedValueOnce("something fast");
+    vi.mocked(confirm).mockResolvedValueOnce(false); // reject suggestion
+
+    // Second attempt: the while loop in promptWithHelp re-prompts renderOptionPrompt
+    // which renders the categorySelect again. User picks __other__ again.
+    vi.mocked(select).mockResolvedValueOnce("__other__");
+
+    // Second "Other" attempt: user types exact value
+    vi.mocked(text).mockResolvedValueOnce("c6i.large");
+
+    // ImageId: static fallback → select
+    vi.mocked(select).mockResolvedValueOnce("amazon-linux-2023");
+
+    // Remaining text fields: KeyName, SubnetId, SecurityGroupIds, Tags
+    vi.mocked(text)
+      .mockResolvedValueOnce("") // KeyName
+      .mockResolvedValueOnce("") // SubnetId
+      .mockResolvedValueOnce("") // SecurityGroupIds
+      .mockResolvedValueOnce(""); // Tags
+
+    // Advanced = no
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    const result = await optionElicitorNode(makeElicitorState(), [], mockLlm);
+
+    expect(result.elicitedOptions?.["InstanceType"]).toBe("c6i.large");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Lambda Environment toCfn transform
+// ═════════════════════════════════════════════════════════════════════════════
+
 describe("Lambda Environment toCfn transform", () => {
   it("transforms comma-separated env vars to CFN Variables structure", () => {
     const result = applyToCfnTransforms(
