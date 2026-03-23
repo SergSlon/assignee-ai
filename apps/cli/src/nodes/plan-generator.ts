@@ -82,6 +82,8 @@ function assembleS3Composites(
         },
       ],
     };
+  } else {
+    delete transformed["BucketEncryption"];
   }
   delete transformed["KMSMasterKeyID"];
 
