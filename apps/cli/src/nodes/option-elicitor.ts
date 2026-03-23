@@ -582,8 +582,12 @@ function mergeEnrichedFields(
 ): ResourceField[] {
   // Discovery processes all fetcher fields — successful ones get options,
   // failed ones get converted to type:"string" (manual entry fallback).
-  // Index by name so we can look up the discovery result for each field.
-  const discoveryMap = new Map(discoveryFields.map((f) => [f.name, f]));
+  // Index by composite key (name + showIf) so fields sharing a name but
+  // distinguished by showIf conditions (e.g., EngineVersion per engine)
+  // are each preserved during the merge.
+  const discoveryMap = new Map(
+    discoveryFields.map((f) => [fieldFetchKey(f), f]),
+  );
 
   return pricedFields.map((field) => {
     // For fields with a fetcher, ALWAYS use the discovery version —
@@ -591,7 +595,7 @@ function mergeEnrichedFields(
     // For non-fetcher fields (e.g., InstanceType), use the priced version
     // which has live pricing labels enriched.
     if (field.question.fetcher) {
-      return discoveryMap.get(field.name) ?? field;
+      return discoveryMap.get(fieldFetchKey(field)) ?? field;
     }
     return field;
   });
