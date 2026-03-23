@@ -25,7 +25,7 @@ flowchart TD
         subgraph PHASE1["Phase 1 — Planning"]
             IP["1. INTENT_PARSER<br/>—————<br/>Pattern match OR<br/>Bedrock LLM classify"]
             SF["2. SCHEMA_FETCHER<br/>—————<br/>MCP: cfn-mcp-server<br/>get_resource_schema"]
-            OE["3. OPTION_ELICITOR<br/>—————<br/>Interactive wizard<br/>+ live pricing<br/>+ AWS discovery"]
+            OE["3. OPTION_ELICITOR<br/>—————<br/>Interactive wizard<br/>+ live pricing<br/>+ AWS discovery<br/>+ workload classification<br/>+ option ranking"]
             CD["4. COMPOUND_DISPATCHER<br/>—————<br/>Single vs multi-resource<br/>routing"]
             PG["5. PLAN_GENERATOR<br/>—————<br/>LLM generates CFN JSON<br/>+ toCfn transforms<br/>+ assembleComposites"]
             BP["6. BP_EVALUATOR<br/>—————<br/>YAML best practices<br/>evaluate findings"]
@@ -115,17 +115,21 @@ flowchart LR
 
     subgraph SDK["Direct AWS SDK Calls"]
         direction TB
-        EC2["EC2 API<br/>DescribeInstanceTypes<br/>DescribeSubnets<br/>DescribeSecurityGroups<br/>DescribeKeyPairs"]
-        SSM["SSM API<br/>GetParameter<br/>(AMI discovery)"]
-        CC["CloudControl API<br/>CreateResource<br/>DeleteResource<br/>GetRequestStatus"]
-        TAGS["Resource Groups<br/>Tagging API<br/>GetResources"]
-        STS["STS API<br/>GetCallerIdentity"]
+        EC2["EC2 API<br/>DescribeInstanceTypes<br/>DescribeSubnets<br/>DescribeSecurityGroups<br/>DescribeKeyPairs<br/>DescribeImages<br/>(Creds: READER)"]
+        SSM["SSM API<br/>GetParameter<br/>(AMI discovery +<br/>OS name resolution)<br/>(Creds: READER)"]
+        RDS["RDS API<br/>DescribeDBEngineVersions<br/>DescribeOrderableDB-<br/>InstanceOptions<br/>(Creds: READER)"]
+        CC["CloudControl API<br/>CreateResource<br/>DeleteResource<br/>GetRequestStatus<br/>(Creds: OPERATOR)"]
+        TAGS["Resource Groups<br/>Tagging API<br/>GetResources<br/>(Creds: OPERATOR)"]
+        STS["STS API<br/>GetCallerIdentity<br/>(Creds: OPERATOR)"]
+        BEDROCK["Bedrock API<br/>InvokeModel<br/>(LLM: intent parsing,<br/>workload classification)<br/>(Creds: OPERATOR)"]
     end
 
-    EC2 -->|"dynamic options"| OE2
-    SSM -->|"AMI lookup"| OE2
+    EC2 -->|"dynamic options<br/>+ AMI search"| OE2
+    SSM -->|"AMI lookup<br/>+ OS name resolve"| OE2
+    RDS -->|"engine versions<br/>+ instance classes"| OE2
     CC -->|"provisioning"| RP2["resource_provisioner"]
     TAGS -->|"list/resolve"| LIST2["list / destroy"]
+    BEDROCK -->|"workload classify"| OE2
 
     subgraph LOCAL["Hardcoded / Embedded"]
         direction TB
@@ -133,12 +137,14 @@ flowchart LR
         BPYAML["Best Practices<br/>YAML rules<br/>Severity + remediation"]
         PATTERNS["Intent Patterns<br/>Regex matchers<br/>Zero-latency shortcut"]
         LOCALP["Local Pricing Registry<br/>Fallback estimates"]
+        RANKER["Option Ranker<br/>Keyword-based scoring<br/>Profile → ranked options<br/>(LOCAL, pure utility)"]
     end
 
     PLUGINS -->|"field definitions"| OE2
     BPYAML -->|"evaluate rules"| BP2["bp_evaluator"]
     PATTERNS -->|"pattern match"| IP2["intent_parser"]
     LOCALP -->|"fallback pricing"| PF2
+    RANKER -->|"rank + filter"| OE2
 
     style CORE fill:#e8f5e9,stroke:#4CAF50
     style OPT fill:#fff3e0,stroke:#FF9800
@@ -158,7 +164,7 @@ flowchart TD
         Q1["🔤 BucketName<br/>type: string<br/>placeholder: my-bucket<br/>validation: 3-63 chars, lowercase<br/>─────<br/>📦 HARDCODED"]
         Q2["✅ BucketEncryption<br/>type: boolean<br/>initial: true<br/>hint: SSE-S3 free, KMS ~$1/mo<br/>─────<br/>📦 HARDCODED"]
         Q3["🔤 KMSMasterKeyID<br/>type: string<br/>showIf: BucketEncryption=true<br/>validation: arn:aws:kms:...<br/>─────<br/>📦 HARDCODED"]
-        Q4["✅ PublicAccessBlockConfiguration<br/>type: boolean<br/>initial: true<br/>toCfn: BlockPublicAcls etc.<br/>─────<br/>📦 HARDCODED"]
+        Q4["✅ PublicAccessBlockConfiguration<br/>type: boolean<br/>initial: true<br/>toCfn: BlockPublicAcls etc.<br/>─────<br/>📦 HARDCODED<br/>Default: BlockPublicAcls=true,<br/>BlockPublicPolicy=true,<br/>IgnorePublicAcls=true,<br/>RestrictPublicBuckets=true"]
         Q5["✅ VersioningConfiguration<br/>type: boolean<br/>initial: false<br/>toCfn: Status=Enabled<br/>─────<br/>📦 HARDCODED"]
         Q6["🔤 Tags<br/>type: string<br/>placeholder: env:production<br/>toCfn: parse Key:Value pairs<br/>─────<br/>📦 HARDCODED"]
     end
@@ -211,11 +217,19 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    START([Option Elicitor]) --> Q1
+    START([Option Elicitor]) --> CLASSIFY
+
+    CLASSIFY["🧠 classifyWorkload<br/>—————<br/>LLM (Bedrock) classifies<br/>user intent into<br/>WorkloadProfile:<br/>burstable / general-purpose /<br/>compute-heavy / memory-intensive /<br/>gpu-accelerated / storage-heavy /<br/>unknown"]
+
+    CLASSIFY --> FILTER
+
+    FILTER["applyCategorySmartFilter<br/>—————<br/>Reorders EC2 categories<br/>so matching profile<br/>appears first<br/>+ applyOptionRanking<br/>for enum fields >10 options"]
+
+    FILTER --> Q1
 
     subgraph COMMON["Common Fields (6)"]
-        Q1["📋 InstanceType<br/>type: categorySelect<br/>4 categories, 28 types<br/>initial: t3.micro<br/>─────<br/>📦 HARDCODED categories<br/>🔄 DYNAMIC: DescribeInstanceTypes<br/>fetches current-gen types<br/>💰 DYNAMIC: Pricing MCP<br/>fetches live $/hr per type"]
-        Q2["📋 ImageId / AMI<br/>type: enum<br/>options: EMPTY at build<br/>─────<br/>🔄 DYNAMIC: fetcher=discover-amis<br/>SSM GetParameter<br/>/aws/service/ami-amazon-linux-latest<br/>+ EC2 DescribeImages<br/>6s timeout, fallback: manual"]
+        Q1["📋 InstanceType<br/>type: categorySelect<br/>4 categories, 28 types<br/>initial: t3.micro<br/>─────<br/>📦 HARDCODED categories<br/>🔄 DYNAMIC: DescribeInstanceTypes<br/>fetches current-gen types<br/>💰 DYNAMIC: Pricing MCP<br/>fetches live $/hr per type<br/>🧠 Smart-filtered by<br/>workload profile"]
+        Q2["📋 ImageId / AMI<br/>type: enum<br/>Static OS fallback options:<br/>amazon-linux-2023 / ubuntu-24.04 /<br/>ubuntu-22.04 / windows-2022<br/>initial: amazon-linux-2023<br/>─────<br/>🔄 DYNAMIC: fetcher=discover-amis<br/>SSM GetParameter + DescribeImages<br/>6s timeout, fallback: static OS list<br/>🔍 searchAmis() for 'Other' flow<br/>resolveAmiFromOsName() at plan time"]
         Q3["📋 KeyName<br/>type: enum<br/>options: EMPTY at build<br/>─────<br/>🔄 DYNAMIC: fetcher=discover-key-pairs<br/>EC2 DescribeKeyPairs<br/>6s timeout, fallback: manual"]
         Q4["📋 SubnetId<br/>type: enum<br/>options: EMPTY at build<br/>─────<br/>🔄 DYNAMIC: fetcher=discover-subnets<br/>EC2 DescribeSubnets<br/>6s timeout, fallback: manual"]
         Q5["📋 SecurityGroupIds<br/>type: multi-select<br/>options: EMPTY at build<br/>─────<br/>🔄 DYNAMIC: fetcher=discover-security-groups<br/>EC2 DescribeSecurityGroups<br/>6s timeout, fallback: manual"]
@@ -226,13 +240,20 @@ flowchart TD
 
     Q6 --> ADV{Advanced?}
 
-    subgraph ADVANCED["Advanced Fields (2)"]
-        A1["🔤 IamInstanceProfile<br/>type: string<br/>─────<br/>📦 HARDCODED"]
-        A2["🔤 UserData<br/>type: string<br/>base64 script<br/>─────<br/>📦 HARDCODED"]
+    subgraph ADVANCED["Advanced Fields (5)"]
+        A1["🔤 IamInstanceProfile<br/>type: string<br/>placeholder: my-instance-profile<br/>─────<br/>📦 HARDCODED"]
+        A2["📋 EbsVolumeType<br/>type: enum<br/>options: gp3 / gp2 / io1<br/>initial: gp3<br/>─────<br/>📦 HARDCODED"]
+        A3["🔤 EbsVolumeSize<br/>type: string<br/>placeholder: 8<br/>initial: 8 GB<br/>validation: 1-16384 GB<br/>─────<br/>📦 HARDCODED"]
+        A4["✅ EbsEncrypted<br/>type: boolean<br/>initial: true<br/>─────<br/>📦 HARDCODED"]
+        A5["🔤 UserData<br/>type: string<br/>base64 script<br/>─────<br/>📦 HARDCODED"]
     end
 
-    ADV -->|yes| A1 --> A2 --> PG
-    ADV -->|no| PG
+    ADV -->|yes| A1 --> A2 --> A3 --> A4 --> A5 --> TOCFN
+    ADV -->|no| TOCFN
+
+    TOCFN["applyToCfnTransforms<br/>+ assembleEc2Storage()<br/>─────<br/>Composite assembly:<br/>EbsVolumeType + EbsVolumeSize +<br/>EbsEncrypted → BlockDeviceMappings<br/>Removes intermediate keys<br/>─────<br/>Defaults applied:<br/>MetadataOptions.HttpTokens=required<br/>BlockDeviceMappings: encrypted gp3"]
+
+    TOCFN --> PG
 
     subgraph CATS["categorySelect: 4 Instance Categories"]
         C1["⚡ Burstable t3/t4g<br/>10 types<br/>$0.008-0.17/hr"]
@@ -251,12 +272,31 @@ flowchart TD
         F5["EC2 DescribeSecurityGroups"]
     end
 
+    subgraph AMI_FLOWS["ImageId Resolution Flows"]
+        AMI1["discover-amis fetcher<br/>→ SSM + DescribeImages<br/>→ real AMI IDs"]
+        AMI2["Static OS fallback<br/>→ amazon-linux-2023 etc.<br/>→ resolveAmiFromOsName()<br/>via SSM GetParameter<br/>at plan generation time"]
+        AMI3["'Other' selection<br/>→ searchAmis()<br/>via EC2 DescribeImages<br/>name filter, top 5 results"]
+    end
+
+    subgraph HINTS["configHints (7)"]
+        H1["1. ImageId REQUIRED,<br/>OS names kept as-is"]
+        H2["2. KeyName: omit if empty"]
+        H3["3. SubnetId: omit if empty"]
+        H4["4. SecurityGroupIds: omit if empty"]
+        H5["5. IamInstanceProfile: omit if empty"]
+        H6["6. IMDSv2: ALWAYS include<br/>HttpTokens=required"]
+        H7["7. EBS: ALWAYS include<br/>Encrypted=true, VolumeType=gp3"]
+    end
+
     PG([Plan Generator])
 
     style COMMON fill:#e3f2fd,stroke:#2196F3
     style ADVANCED fill:#fff3e0,stroke:#FF9800
     style CATS fill:#fce4ec,stroke:#E91E63
     style FETCH fill:#e8f5e9,stroke:#4CAF50
+    style AMI_FLOWS fill:#f3e5f5,stroke:#9C27B0
+    style HINTS fill:#fffde7,stroke:#FDD835
+    style TOCFN fill:#f3e5f5,stroke:#9C27B0
 ```
 
 ---
@@ -268,20 +308,20 @@ flowchart TD
     START([Option Elicitor]) --> Q1
 
     subgraph COMMON["Common Fields (13+)"]
-        Q1["📋 DBInstanceClass<br/>type: enum, 7 options<br/>db.t3.micro → db.r6g.xlarge<br/>initial: db.t3.micro<br/>─────<br/>📦 HARDCODED options<br/>💰 DYNAMIC: Pricing MCP<br/>fetches live $/hr per class"]
+        Q1["📋 DBInstanceClass<br/>type: enum, 7 options<br/>db.t3.micro → db.r6g.xlarge<br/>initial: db.t3.micro<br/>─────<br/>📦 HARDCODED fallback options<br/>🔄 DYNAMIC: fetcher=<br/>discover-rds-instance-classes<br/>RDS DescribeOrderableDB-<br/>InstanceOptions<br/>6s timeout, fallback: hardcoded<br/>💰 DYNAMIC: Pricing MCP<br/>fetches live $/hr per class"]
         Q2["📋 Engine<br/>type: enum, 5 options<br/>mysql / postgres / mariadb<br/>aurora-mysql / aurora-postgresql<br/>initial: postgres<br/>─────<br/>📦 HARDCODED"]
-        Q3P["📋 EngineVersion (Postgres)<br/>enum: 16, 15<br/>showIf: Engine=postgres<br/>📦 HARDCODED"]
-        Q3M["📋 EngineVersion (MySQL)<br/>enum: 8.4, 8.0<br/>showIf: Engine=mysql<br/>📦 HARDCODED"]
-        Q3D["📋 EngineVersion (MariaDB)<br/>enum: 11.4, 10.11<br/>showIf: Engine=mariadb<br/>📦 HARDCODED"]
-        Q3AM["📋 EngineVersion (Aurora MySQL)<br/>enum: 3.07.1, 3.05.2<br/>showIf: Engine=aurora-mysql<br/>📦 HARDCODED"]
-        Q3AP["📋 EngineVersion (Aurora PG)<br/>enum: 16.4, 15.8<br/>showIf: Engine=aurora-postgresql<br/>📦 HARDCODED"]
+        Q3P["📋 EngineVersion (Postgres)<br/>enum: 16, 15<br/>showIf: Engine=postgres<br/>─────<br/>📦 HARDCODED fallback<br/>🔄 DYNAMIC: fetcher=<br/>discover-rds-engine-versions<br/>RDS DescribeDBEngineVersions<br/>6s timeout, fallback: hardcoded"]
+        Q3M["📋 EngineVersion (MySQL)<br/>enum: 8.4, 8.0<br/>showIf: Engine=mysql<br/>─────<br/>📦 HARDCODED fallback<br/>🔄 DYNAMIC: fetcher=<br/>discover-rds-engine-versions"]
+        Q3D["📋 EngineVersion (MariaDB)<br/>enum: 11.4, 10.11<br/>showIf: Engine=mariadb<br/>─────<br/>📦 HARDCODED fallback<br/>🔄 DYNAMIC: fetcher=<br/>discover-rds-engine-versions"]
+        Q3AM["📋 EngineVersion (Aurora MySQL)<br/>enum: 3.07.1, 3.05.2<br/>showIf: Engine=aurora-mysql<br/>─────<br/>📦 HARDCODED fallback<br/>🔄 DYNAMIC: fetcher=<br/>discover-rds-engine-versions"]
+        Q3AP["📋 EngineVersion (Aurora PG)<br/>enum: 16.4, 15.8<br/>showIf: Engine=aurora-postgresql<br/>─────<br/>📦 HARDCODED fallback<br/>🔄 DYNAMIC: fetcher=<br/>discover-rds-engine-versions"]
         Q4["🔤 DBName<br/>type: string<br/>placeholder: myapp<br/>📦 HARDCODED"]
         Q5["🔤 MasterUsername<br/>type: string, REQUIRED<br/>validation: non-empty<br/>📦 HARDCODED"]
         Q6["🔤 MasterUserPassword<br/>type: string<br/>blank = auto-generate<br/>📦 HARDCODED"]
         Q7["✅ MultiAZ<br/>type: boolean<br/>initial: false<br/>hint: doubles cost<br/>📦 HARDCODED"]
         Q8["✅ DeletionProtection<br/>type: boolean<br/>initial: false<br/>📦 HARDCODED"]
         Q9["📋 StorageType<br/>enum: gp3 / gp2 / io1<br/>initial: gp3<br/>📦 HARDCODED"]
-        Q10["📋 AllocatedStorage<br/>enum: 20/50/100/200 GB<br/>initial: 20<br/>📦 HARDCODED"]
+        Q10["📋 AllocatedStorage<br/>enum: 20/50/100/200 GB<br/>initial: 20<br/>toCfn: parseInt<br/>(string → number)<br/>📦 HARDCODED"]
         Q11["🔤 Tags<br/>toCfn: parse Key:Value<br/>📦 HARDCODED"]
     end
 
@@ -308,13 +348,22 @@ flowchart TD
         A1["🔤 BackupRetentionPeriod<br/>type: string<br/>placeholder: 7<br/>validation: 0-35 days<br/>📦 HARDCODED"]
     end
 
-    ADV -->|yes| A1 --> PG
-    ADV -->|no| PG
+    ADV -->|yes| A1 --> HINTS
+    ADV -->|no| HINTS
 
-    PG([Plan Generator])
+    subgraph HINTS_BOX["configHints (3)"]
+        CH1["1. MasterUserPassword: omit if blank<br/>→ AWS auto-generates via<br/>Secrets Manager"]
+        CH2["2. DBName: omit if blank<br/>→ no initial database created"]
+        CH3["3. EngineVersion MUST be valid<br/>for selected Engine<br/>NEVER use deprecated versions"]
+    end
+
+    HINTS["Defaults applied:<br/>StorageType=gp3<br/>MultiAZ=false"]
+
+    HINTS --> PG([Plan Generator])
 
     style COMMON fill:#fff9c4,stroke:#FFC107
     style ADVANCED fill:#fff3e0,stroke:#FF9800
+    style HINTS_BOX fill:#f3e5f5,stroke:#9C27B0
 ```
 
 ---
@@ -326,12 +375,12 @@ flowchart TD
     START([Option Elicitor]) --> Q1
 
     subgraph COMMON["Common Fields (8)"]
-        Q1["🔤 FunctionName<br/>type: string, REQUIRED<br/>validation: max 64 chars<br/>letters/numbers/hyphens<br/>─────<br/>📦 HARDCODED"]
-        Q2["📋 Runtime<br/>type: enum, 8 options<br/>nodejs22.x / nodejs20.x<br/>python3.13 / python3.12<br/>java21 / dotnet8 / ruby3.3<br/>provided.al2023<br/>initial: nodejs22.x<br/>─────<br/>📦 HARDCODED"]
+        Q1["🔤 FunctionName<br/>type: string, REQUIRED<br/>validation: max 64 chars<br/>letters/numbers/hyphens/underscores<br/>─────<br/>📦 HARDCODED"]
+        Q2["📋 Runtime<br/>type: enum, 8 options<br/>nodejs22.x / nodejs20.x<br/>python3.13 / python3.12<br/>java21 / dotnet8 / ruby3.3<br/>provided.al2023<br/>initial: nodejs22.x<br/>─────<br/>📦 HARDCODED<br/>Deprecation infrastructure:<br/>deprecated → sorted last,<br/>[DEPRECATED] label suffix"]
         Q3["🔤 Handler<br/>type: string<br/>placeholder: index.handler<br/>validation: must contain dot<br/>─────<br/>📦 HARDCODED"]
         Q4["🔤 Role<br/>type: string, REQUIRED<br/>validation: arn:aws:iam::<br/>hint: omit for auto-create<br/>─────<br/>📦 HARDCODED"]
-        Q5["📋 MemorySize<br/>type: enum, 5 options<br/>128/256/512/1024/2048 MB<br/>initial: 128<br/>cost: calculated per 100ms<br/>─────<br/>📦 HARDCODED<br/>🧮 COMPUTED: cost/100ms<br/>from LAMBDA_USD_PER_GB_SECOND"]
-        Q6["🔤 Timeout<br/>type: string<br/>initial: 30<br/>validation: 1-900<br/>─────<br/>📦 HARDCODED"]
+        Q5["📋 MemorySize<br/>type: enum, 5 options<br/>128/256/512/1024/2048 MB<br/>initial: 128<br/>toCfn: parseInt<br/>(string → number)<br/>cost: calculated per 100ms<br/>─────<br/>📦 HARDCODED<br/>🧮 COMPUTED: cost/100ms<br/>from LAMBDA_USD_PER_GB_SECOND"]
+        Q6["🔤 Timeout<br/>type: string<br/>initial: 30<br/>validation: 1-900<br/>toCfn: parseInt<br/>(string → number)<br/>─────<br/>📦 HARDCODED"]
         Q7["🔤 Environment<br/>type: string<br/>placeholder: DB_HOST=localhost<br/>toCfn: parse KEY=VALUE<br/>→ Variables object<br/>─────<br/>📦 HARDCODED"]
         Q8["🔤 Tags<br/>type: string<br/>toCfn: parse Key:Value<br/>─────<br/>📦 HARDCODED"]
     end
@@ -348,13 +397,22 @@ flowchart TD
     ADV -->|yes| A1 --> A2 --> HINTS
     ADV -->|no| HINTS
 
-    HINTS["configHints for LLM<br/>─────<br/>1. Runtime MUST be valid enum<br/>   NEVER use deprecated runtimes<br/>2. If no Role ARN provided<br/>   OMIT Role property<br/>─────<br/>📦 HARDCODED"]
+    HINTS["configHints (2)<br/>─────<br/>1. Runtime hint: dynamically<br/>   generated via buildRuntimeHint()<br/>   from runtimeOptions array<br/>   Lists valid runtimes,<br/>   warns against deprecated<br/>2. If no Role ARN provided<br/>   OMIT Role property<br/>─────<br/>Defaults:<br/>MemorySize=128<br/>Timeout=30"]
 
     HINTS --> PG([Plan Generator])
+
+    subgraph DEPRECATION["Runtime Deprecation Infrastructure"]
+        DEP1["runtimeOptions array<br/>Each option has optional<br/>deprecated: true flag"]
+        DEP2["sortedRuntimeOptions()<br/>Active first, deprecated last<br/>[DEPRECATED] label suffix"]
+        DEP3["buildRuntimeHint()<br/>Generates configHint from<br/>options array dynamically<br/>Lists active, warns deprecated"]
+    end
+
+    DEP1 --> DEP2 --> DEP3
 
     style COMMON fill:#e8eaf6,stroke:#3F51B5
     style ADVANCED fill:#fff3e0,stroke:#FF9800
     style HINTS fill:#f3e5f5,stroke:#9C27B0
+    style DEPRECATION fill:#e8f5e9,stroke:#4CAF50
 ```
 
 ---
@@ -396,8 +454,8 @@ flowchart TD
 flowchart TB
     subgraph CREDS["3 IAM User Classes (Least Privilege)"]
         direction LR
-        OP["🔧 OPERATOR<br/>ASSIGNEE_OPERATOR_*<br/>─────<br/>Bedrock InvokeModel<br/>CloudControl CRUD<br/>Resource provisioning"]
-        RD["📖 READER<br/>ASSIGNEE_READER_*<br/>─────<br/>CFN Schema registry<br/>Pricing API<br/>Cost Explorer"]
+        OP["🔧 OPERATOR<br/>ASSIGNEE_OPERATOR_*<br/>─────<br/>Bedrock InvokeModel<br/>CloudControl CRUD<br/>Resource provisioning<br/>ec2:TerminateInstances"]
+        RD["📖 READER<br/>ASSIGNEE_READER_*<br/>─────<br/>CFN Schema registry<br/>Pricing API<br/>Cost Explorer<br/>ec2:Describe*<br/>ssm:GetParameter<br/>rds:Describe*"]
         AU["🔐 AUDITOR<br/>ASSIGNEE_AUDITOR_*<br/>─────<br/>IAM SimulatePolicy<br/>SecurityHub<br/>GuardDuty<br/>Inspector<br/>Access Analyzer"]
     end
 
@@ -415,10 +473,11 @@ flowchart TB
     end
 
     subgraph DIRECT["Direct AWS SDK Calls"]
-        BED["Bedrock<br/>InvokeModel<br/>(LLM calls)"]
+        BED["Bedrock<br/>InvokeModel<br/>(LLM calls +<br/>workload classify)"]
         CC["CloudControl<br/>Create/Delete/Get"]
-        EC2D["EC2<br/>Describe*<br/>(discovery)"]
-        SSMD["SSM<br/>GetParameter<br/>(AMI lookup)"]
+        EC2D["EC2<br/>Describe*<br/>(discovery +<br/>AMI search)"]
+        SSMD["SSM<br/>GetParameter<br/>(AMI lookup +<br/>OS resolution)"]
+        RDSD["RDS<br/>DescribeDBEngineVersions<br/>DescribeOrderableDB-<br/>InstanceOptions"]
         STSD["STS<br/>GetCallerIdentity"]
         TAGD["ResourceGroups<br/>Tagging API"]
         IAMD["IAM<br/>Create/Attach<br/>(setup only)"]
@@ -427,13 +486,14 @@ flowchart TB
     RD -->|"AWS_* env mapped"| CFN
     RD -->|"AWS_* env mapped"| PRICE
     RD -->|"AWS_* env mapped"| BILL_S
+    RD --> EC2D
+    RD --> SSMD
+    RD --> RDSD
     AU -->|"AWS_* env mapped"| IAM_S
     AU -->|"AWS_* env mapped"| SEC_S
 
     OP --> BED
     OP --> CC
-    OP --> EC2D
-    OP --> SSMD
     OP --> STSD
     OP --> TAGD
     OP --> IAMD
@@ -455,6 +515,7 @@ flowchart TB
     PRICE --> N_PF
     EC2D --> N_OE
     SSMD --> N_OE
+    RDSD --> N_OE
     IAM_S --> N_PF
     CC --> N_RP
     SEC_S --> N_RF
@@ -520,26 +581,69 @@ flowchart TD
 
 ---
 
+## 10. Intent-Aware Filtering Pipeline
+
+```mermaid
+flowchart TD
+    INTENT["userIntent<br/>─────<br/>Natural-language<br/>infrastructure request"]
+
+    INTENT --> CLASSIFY["🧠 classifyWorkload()<br/>─────<br/>LLM (Bedrock) structured generation<br/>Zod schema validation<br/>Confidence threshold: 0.5<br/>Session-scoped cache<br/>─────<br/>Returns: WorkloadProfile<br/>burstable / general-purpose /<br/>compute-heavy / memory-intensive /<br/>gpu-accelerated / storage-heavy /<br/>unknown"]
+
+    CLASSIFY --> PROFILE["WorkloadProfile<br/>─────<br/>e.g. 'compute-heavy'<br/>confidence: 0.85"]
+
+    PROFILE --> CATFILTER["applyCategorySmartFilter()<br/>─────<br/>For categorySelect fields<br/>(EC2 InstanceType)<br/>─────<br/>burstable → burstable first<br/>general-purpose → general first<br/>compute-heavy → compute first<br/>memory-intensive → memory first<br/>gpu-accelerated → adds GPU note<br/>unknown → no change"]
+
+    PROFILE --> OPTRANK["applyOptionRanking()<br/>─────<br/>For enum fields with >10 options<br/>─────<br/>Keyword-based scoring:<br/>PROFILE_KEYWORDS per profile<br/>+5 pts per keyword match<br/>+10 pts for recommended flag<br/>─────<br/>Top 8 visible, rest overflow<br/>'Show all...' escape hatch"]
+
+    CATFILTER --> WIZARD["Option Elicitor Wizard<br/>─────<br/>Categories reordered<br/>Options ranked<br/>Most relevant shown first"]
+
+    OPTRANK --> WIZARD
+
+    subgraph SCORING["Option Ranker (LOCAL, pure utility)"]
+        S1["scoreOption()<br/>Match value + label<br/>against profile keywords"]
+        S2["rankOptions()<br/>Sort by score desc<br/>Split: visible / overflow"]
+        S3["PROFILE_KEYWORDS<br/>burstable: t3, t4g, burst...<br/>general-purpose: m5, m6i...<br/>compute-heavy: c5, c6i...<br/>memory-intensive: r5, r6g..."]
+    end
+
+    S1 --> S2
+    S3 --> S1
+
+    style CLASSIFY fill:#e3f2fd,stroke:#2196F3
+    style CATFILTER fill:#e8f5e9,stroke:#4CAF50
+    style OPTRANK fill:#fff3e0,stroke:#FF9800
+    style SCORING fill:#f3e5f5,stroke:#9C27B0
+    style WIZARD fill:#fce4ec,stroke:#E91E63
+```
+
+---
+
 ## Data Source Legend
 
-| Symbol                  | Meaning                                       |
-| ----------------------- | --------------------------------------------- |
-| 📦 HARDCODED            | Defined statically in plugin source code      |
-| 🔄 DYNAMIC              | Fetched at runtime from AWS API or MCP server |
-| 💰 DYNAMIC: Pricing MCP | Live price from aws-pricing-mcp-server        |
-| 🧮 COMPUTED             | Calculated from constants at build time       |
-| 📋 enum                 | Fixed dropdown options                        |
-| ✅ boolean              | Yes/No toggle                                 |
-| 🔤 string               | Free text input                               |
+| Symbol                  | Meaning                                              |
+| ----------------------- | ---------------------------------------------------- |
+| 📦 HARDCODED            | Defined statically in plugin source code             |
+| 🔄 DYNAMIC              | Fetched at runtime from AWS API or MCP server        |
+| 🔄 DYNAMIC: fetcher     | Fetched via named fetcher function at wizard time    |
+| 🔍 DYNAMIC: searchAmis  | Searched via ec2:DescribeImages (name filter, top 5) |
+| 🔄 DYNAMIC: resolveAmi  | Resolved via SSM GetParameter (OS name → AMI ID)     |
+| 💰 DYNAMIC: Pricing MCP | Live price from aws-pricing-mcp-server               |
+| 🧮 COMPUTED             | Calculated from constants at build time              |
+| 📋 enum                 | Fixed dropdown options                               |
+| ✅ boolean              | Yes/No toggle                                        |
+| 🔤 string               | Free text input                                      |
 
 ## Timeout & Fallback Summary
 
-| Source                        | Timeout | Fallback                      |
-| ----------------------------- | ------- | ----------------------------- |
-| EC2 Describe\* (discovery)    | 6s      | Manual string entry           |
-| SSM AMI lookup                | 6s      | Manual string entry           |
-| Pricing MCP (option_elicitor) | 6s      | Static cost hints in labels   |
-| Pricing MCP (preflight_guard) | 3s      | Local pricing registry        |
-| IAM simulation                | 3s      | Assume allowed                |
-| Security posture              | 5s      | Skip findings                 |
-| Billing MCP (destroy)         | 3s      | Provision log memory or "N/A" |
+| Source                            | Timeout | Fallback                      |
+| --------------------------------- | ------- | ----------------------------- |
+| EC2 Describe\* (discovery)        | 6s      | Manual string entry           |
+| SSM AMI lookup (discover-amis)    | 6s      | Static OS name fallback list  |
+| AMI search (DescribeImages)       | 6s      | LLM suggestion                |
+| AMI resolution (SSM GetParameter) | 6s      | Plan fails with clear error   |
+| RDS engine versions               | 6s      | Hardcoded version list        |
+| RDS instance classes              | 6s      | Hardcoded class list          |
+| Pricing MCP (option_elicitor)     | 6s      | Static cost hints in labels   |
+| Pricing MCP (preflight_guard)     | 3s      | Local pricing registry        |
+| IAM simulation                    | 3s      | Assume allowed                |
+| Security posture                  | 5s      | Skip findings                 |
+| Billing MCP (destroy)             | 3s      | Provision log memory or "N/A" |
