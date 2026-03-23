@@ -1,8 +1,14 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 // Mock AWS SDK clients before importing the module under test.
-const mockEc2Send = vi.fn();
-const mockSsmSend = vi.fn();
+const { mockEc2Send, mockSsmSend, mockRdsSend, mockWithTimeout } = vi.hoisted(
+  () => ({
+    mockEc2Send: vi.fn(),
+    mockSsmSend: vi.fn(),
+    mockRdsSend: vi.fn(),
+    mockWithTimeout: vi.fn(async (promise: Promise<unknown>) => promise),
+  }),
+);
 
 vi.mock("@aws-sdk/client-ec2", () => ({
   EC2Client: vi.fn().mockImplementation(() => ({ send: mockEc2Send })),
@@ -16,9 +22,15 @@ vi.mock("@aws-sdk/client-ssm", () => ({
   GetParameterCommand: vi.fn(),
 }));
 
+vi.mock("@aws-sdk/client-rds", () => ({
+  RDSClient: vi.fn().mockImplementation(() => ({ send: mockRdsSend })),
+  DescribeDBEngineVersionsCommand: vi.fn(),
+  DescribeOrderableDBInstanceOptionsCommand: vi.fn(),
+}));
+
 // Let withTimeout pass through (no real timer needed in tests).
 vi.mock("./timeout.js", () => ({
-  withTimeout: vi.fn(async (promise: Promise<unknown>) => promise),
+  withTimeout: mockWithTimeout,
 }));
 
 import {
@@ -26,6 +38,8 @@ import {
   discoverSecurityGroups,
   discoverKeyPairs,
   discoverAmis,
+  discoverRdsEngineVersions,
+  discoverRdsInstanceClasses,
   clearDiscoveryCache,
 } from "./aws-resource-discovery.js";
 
@@ -33,6 +47,10 @@ describe("aws-resource-discovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearDiscoveryCache();
+    // Reset withTimeout to default pass-through after timeout tests
+    mockWithTimeout.mockImplementation(
+      async (promise: Promise<unknown>) => promise,
+    );
   });
 
   // ── discoverSubnets ──────────────────────────────────────────────────────
@@ -246,6 +264,366 @@ describe("aws-resource-discovery", () => {
       const second = await discoverSecurityGroups();
       expect(second).toHaveLength(1);
       expect(mockEc2Send).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ── discoverRdsEngineVersions ───────────────────────────────────────────
+
+  describe("discoverRdsEngineVersions", () => {
+    it("returns versions sorted newest-first with recommended on latest", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        DBEngineVersions: [
+          {
+            EngineVersion: "14.9",
+            DBEngineVersionDescription: "PostgreSQL 14.9",
+          },
+          {
+            EngineVersion: "16.1",
+            DBEngineVersionDescription: "PostgreSQL 16.1",
+          },
+          {
+            EngineVersion: "15.4",
+            DBEngineVersionDescription: "PostgreSQL 15.4",
+          },
+          {
+            EngineVersion: "13.12",
+            DBEngineVersionDescription: "PostgreSQL 13.12",
+          },
+        ],
+      });
+      const result = await discoverRdsEngineVersions();
+      expect(result).toHaveLength(4);
+      // Newest first
+      expect(result[0]!.value).toBe("16.1");
+      expect(result[1]!.value).toBe("15.4");
+      expect(result[2]!.value).toBe("14.9");
+      expect(result[3]!.value).toBe("13.12");
+      // First (newest) has recommended
+      expect(result[0]).toHaveProperty("recommended", true);
+      // Others do not
+      expect(result[1]).not.toHaveProperty("recommended");
+      expect(result[2]).not.toHaveProperty("recommended");
+      expect(result[3]).not.toHaveProperty("recommended");
+    });
+
+    it("deduplicates versions", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        DBEngineVersions: [
+          {
+            EngineVersion: "16.1",
+            DBEngineVersionDescription: "PostgreSQL 16.1",
+          },
+          {
+            EngineVersion: "16.1",
+            DBEngineVersionDescription: "PostgreSQL 16.1 (dup)",
+          },
+          {
+            EngineVersion: "15.4",
+            DBEngineVersionDescription: "PostgreSQL 15.4",
+          },
+        ],
+      });
+      const result = await discoverRdsEngineVersions();
+      expect(result).toHaveLength(2);
+      expect(result[0]!.value).toBe("16.1");
+      expect(result[1]!.value).toBe("15.4");
+    });
+
+    it("uses description from API as label", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        DBEngineVersions: [
+          {
+            EngineVersion: "16.1",
+            DBEngineVersionDescription: "PostgreSQL 16.1",
+          },
+        ],
+      });
+      const result = await discoverRdsEngineVersions();
+      expect(result[0]!.label).toBe("PostgreSQL 16.1");
+    });
+
+    it("falls back to EngineVersion as label when description is missing", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        DBEngineVersions: [{ EngineVersion: "15.4" }],
+      });
+      const result = await discoverRdsEngineVersions();
+      expect(result[0]!.label).toBe("15.4");
+    });
+
+    it("returns [] when API returns empty DBEngineVersions", async () => {
+      mockRdsSend.mockResolvedValueOnce({ DBEngineVersions: [] });
+      const result = await discoverRdsEngineVersions();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when API returns null", async () => {
+      mockRdsSend.mockResolvedValueOnce(null);
+      const result = await discoverRdsEngineVersions();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] on timeout", async () => {
+      mockWithTimeout.mockRejectedValueOnce(new Error("timeout"));
+      const result = await discoverRdsEngineVersions();
+      expect(result).toEqual([]);
+    });
+
+    it("passes Engine filter from context (default postgres)", async () => {
+      const { DescribeDBEngineVersionsCommand } =
+        await import("@aws-sdk/client-rds");
+      mockRdsSend.mockResolvedValueOnce({ DBEngineVersions: [] });
+      await discoverRdsEngineVersions();
+      expect(DescribeDBEngineVersionsCommand).toHaveBeenCalledWith({
+        Engine: "postgres",
+        DefaultOnly: false,
+      });
+    });
+
+    it("passes custom Engine filter from context", async () => {
+      const { DescribeDBEngineVersionsCommand } =
+        await import("@aws-sdk/client-rds");
+      mockRdsSend.mockResolvedValueOnce({ DBEngineVersions: [] });
+      await discoverRdsEngineVersions({ Engine: "mysql" });
+      expect(DescribeDBEngineVersionsCommand).toHaveBeenCalledWith({
+        Engine: "mysql",
+        DefaultOnly: false,
+      });
+    });
+
+    it("caches results — second call does not re-fetch", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        DBEngineVersions: [
+          {
+            EngineVersion: "16.1",
+            DBEngineVersionDescription: "PostgreSQL 16.1",
+          },
+        ],
+      });
+      const first = await discoverRdsEngineVersions();
+      const second = await discoverRdsEngineVersions();
+      expect(first).toEqual(second);
+      expect(mockRdsSend).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── discoverRdsInstanceClasses ──────────────────────────────────────────
+
+  describe("discoverRdsInstanceClasses", () => {
+    it("returns deduplicated classes grouped burstable → general → memory → other", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        OrderableDBInstanceOptions: [
+          { DBInstanceClass: "db.r6g.large" },
+          { DBInstanceClass: "db.t3.micro" },
+          { DBInstanceClass: "db.m5.large" },
+          { DBInstanceClass: "db.t3.micro" }, // duplicate
+          { DBInstanceClass: "db.r6g.xlarge" },
+          { DBInstanceClass: "db.m5.xlarge" },
+          { DBInstanceClass: "db.x2g.large" }, // memory family (x)
+        ],
+        Marker: undefined,
+      });
+      const result = await discoverRdsInstanceClasses();
+      // Deduplicated: 6 unique classes
+      expect(result).toHaveLength(6);
+
+      // Burstable first
+      expect(result[0]!.value).toBe("db.t3.micro");
+      // General next
+      expect(result[1]!.value).toBe("db.m5.large");
+      expect(result[2]!.value).toBe("db.m5.xlarge");
+      // Memory after general
+      const memoryValues = result.filter(
+        (o) => o.value.startsWith("db.r") || o.value.startsWith("db.x"),
+      );
+      expect(memoryValues).toHaveLength(3);
+    });
+
+    it("handles paginated responses", async () => {
+      mockRdsSend
+        .mockResolvedValueOnce({
+          OrderableDBInstanceOptions: [{ DBInstanceClass: "db.t3.micro" }],
+          Marker: "page2",
+        })
+        .mockResolvedValueOnce({
+          OrderableDBInstanceOptions: [{ DBInstanceClass: "db.m5.large" }],
+          Marker: undefined,
+        });
+      const result = await discoverRdsInstanceClasses();
+      expect(result).toHaveLength(2);
+      expect(result[0]!.value).toBe("db.t3.micro"); // burstable first
+      expect(result[1]!.value).toBe("db.m5.large"); // general second
+      expect(mockRdsSend).toHaveBeenCalledTimes(2);
+    });
+
+    it("returns [] when API returns empty OrderableDBInstanceOptions", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        OrderableDBInstanceOptions: [],
+        Marker: undefined,
+      });
+      const result = await discoverRdsInstanceClasses();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] when API returns null", async () => {
+      mockRdsSend.mockResolvedValueOnce(null);
+      const result = await discoverRdsInstanceClasses();
+      expect(result).toEqual([]);
+    });
+
+    it("returns [] on timeout", async () => {
+      mockWithTimeout.mockRejectedValueOnce(new Error("timeout"));
+      const result = await discoverRdsInstanceClasses();
+      expect(result).toEqual([]);
+    });
+
+    it("passes Engine filter from context (default postgres)", async () => {
+      const { DescribeOrderableDBInstanceOptionsCommand } =
+        await import("@aws-sdk/client-rds");
+      mockRdsSend.mockResolvedValueOnce({
+        OrderableDBInstanceOptions: [],
+        Marker: undefined,
+      });
+      await discoverRdsInstanceClasses();
+      expect(DescribeOrderableDBInstanceOptionsCommand).toHaveBeenCalledWith({
+        Engine: "postgres",
+      });
+    });
+
+    it("passes custom Engine filter from context", async () => {
+      const { DescribeOrderableDBInstanceOptionsCommand } =
+        await import("@aws-sdk/client-rds");
+      mockRdsSend.mockResolvedValueOnce({
+        OrderableDBInstanceOptions: [],
+        Marker: undefined,
+      });
+      await discoverRdsInstanceClasses({ Engine: "mysql" });
+      expect(DescribeOrderableDBInstanceOptionsCommand).toHaveBeenCalledWith({
+        Engine: "mysql",
+      });
+    });
+
+    it("caches results — second call does not re-fetch", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        OrderableDBInstanceOptions: [{ DBInstanceClass: "db.t3.micro" }],
+        Marker: undefined,
+      });
+      const first = await discoverRdsInstanceClasses();
+      const second = await discoverRdsInstanceClasses();
+      expect(first).toEqual(second);
+      expect(mockRdsSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses class name as both value and label", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        OrderableDBInstanceOptions: [{ DBInstanceClass: "db.t3.micro" }],
+        Marker: undefined,
+      });
+      const result = await discoverRdsInstanceClasses();
+      expect(result[0]).toEqual({ value: "db.t3.micro", label: "db.t3.micro" });
+    });
+  });
+
+  // ── Shape invariant tests ──────────────────────────────────────────────
+
+  describe("shape invariants", () => {
+    /**
+     * Every discovery option must have:
+     * - `value` as a non-empty string (except key pairs "None" option which uses "")
+     * - `label` as a non-empty string
+     * - `value` never equals "false" or "undefined"
+     */
+    function assertShapeInvariants(
+      options: Array<{ value: string; label: string }>,
+      allowEmptyValue = false,
+    ) {
+      for (const opt of options) {
+        expect(typeof opt.value).toBe("string");
+        expect(typeof opt.label).toBe("string");
+        expect(opt.label.length).toBeGreaterThan(0);
+        if (!allowEmptyValue) {
+          expect(opt.value.length).toBeGreaterThan(0);
+        }
+        expect(opt.value).not.toBe("false");
+        expect(opt.value).not.toBe("undefined");
+      }
+    }
+
+    it("discoverRdsEngineVersions returns well-shaped options", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        DBEngineVersions: [
+          {
+            EngineVersion: "16.1",
+            DBEngineVersionDescription: "PostgreSQL 16.1",
+          },
+          {
+            EngineVersion: "15.4",
+            DBEngineVersionDescription: "PostgreSQL 15.4",
+          },
+        ],
+      });
+      const result = await discoverRdsEngineVersions();
+      assertShapeInvariants(result);
+    });
+
+    it("discoverRdsInstanceClasses returns well-shaped options", async () => {
+      mockRdsSend.mockResolvedValueOnce({
+        OrderableDBInstanceOptions: [
+          { DBInstanceClass: "db.t3.micro" },
+          { DBInstanceClass: "db.m5.large" },
+          { DBInstanceClass: "db.r6g.large" },
+        ],
+        Marker: undefined,
+      });
+      const result = await discoverRdsInstanceClasses();
+      assertShapeInvariants(result);
+    });
+
+    it("discoverSubnets returns well-shaped options", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        Subnets: [
+          {
+            SubnetId: "subnet-111",
+            CidrBlock: "10.0.1.0/24",
+            AvailabilityZone: "us-east-1a",
+            Tags: [{ Key: "Name", Value: "public-a" }],
+          },
+        ],
+      });
+      const result = await discoverSubnets();
+      assertShapeInvariants(result);
+    });
+
+    it("discoverSecurityGroups returns well-shaped options", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        SecurityGroups: [
+          {
+            GroupId: "sg-bbb",
+            GroupName: "web-servers",
+            Description: "HTTP/HTTPS",
+          },
+        ],
+      });
+      const result = await discoverSecurityGroups();
+      assertShapeInvariants(result);
+    });
+
+    it("discoverKeyPairs returns well-shaped options (allows empty value for None)", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        KeyPairs: [{ KeyName: "my-key", KeyType: "rsa" }],
+      });
+      const result = await discoverKeyPairs();
+      assertShapeInvariants(
+        result,
+        true /* allowEmptyValue for "None" option */,
+      );
+    });
+
+    it("discoverAmis returns well-shaped options", async () => {
+      mockSsmSend.mockResolvedValue({
+        Parameter: { Value: "ami-12345678" },
+      });
+      const result = await discoverAmis();
+      assertShapeInvariants(result);
     });
   });
 });

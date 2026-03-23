@@ -33,6 +33,8 @@ vi.mock("../utils/aws-resource-discovery.js", () => ({
   discoverSecurityGroups: vi.fn().mockResolvedValue([]),
   discoverKeyPairs: vi.fn().mockResolvedValue([]),
   discoverInstanceTypes: vi.fn().mockResolvedValue(null),
+  discoverRdsEngineVersions: vi.fn().mockResolvedValue([]),
+  discoverRdsInstanceClasses: vi.fn().mockResolvedValue([]),
 }));
 
 const testPlugin: ResourcePlugin = {
@@ -182,8 +184,12 @@ vi.mock("@assignee/core", async (importOriginal) => {
 
 const { confirm, select, text, multiselect, isCancel } =
   await import("@clack/prompts");
-const { optionElicitorNode, populateDefaultOptions } =
-  await import("./option-elicitor.js");
+const {
+  optionElicitorNode,
+  populateDefaultOptions,
+  applyOptionRanking,
+  applyCategorySmartFilter,
+} = await import("./option-elicitor.js");
 const { renderDocHelp, renderTradeoffHelp, renderOptionPrompt } =
   await import("../utils/display.js");
 
@@ -1063,5 +1069,308 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
     // Spinner should show "Preparing your wizard…" and stop with "Ready"
     expect(mockSpinner.start).toHaveBeenCalledWith("Preparing your wizard…");
     expect(mockSpinner.stop).toHaveBeenCalledWith("Ready");
+  });
+});
+
+// ── Story 21.4: RDS DBInstanceClass smart filtering ──────────────────────────
+
+describe("applyOptionRanking (Story 21.4)", () => {
+  /** Helper: builds an RDS-like DBInstanceClass field with many options (>10). */
+  function rdsInstanceClassField() {
+    return {
+      name: "DBInstanceClass",
+      question: {
+        type: "enum" as const,
+        label: "DB instance class",
+        options: [
+          { value: "db.t3.micro", label: "db.t3.micro (2 vCPU, 1 GiB)" },
+          { value: "db.t3.small", label: "db.t3.small (2 vCPU, 2 GiB)" },
+          { value: "db.t3.medium", label: "db.t3.medium (2 vCPU, 4 GiB)" },
+          { value: "db.t4g.micro", label: "db.t4g.micro (2 vCPU, 1 GiB)" },
+          { value: "db.t4g.small", label: "db.t4g.small (2 vCPU, 2 GiB)" },
+          { value: "db.m5.large", label: "db.m5.large (2 vCPU, 8 GiB)" },
+          { value: "db.m5.xlarge", label: "db.m5.xlarge (4 vCPU, 16 GiB)" },
+          { value: "db.r5.large", label: "db.r5.large (2 vCPU, 16 GiB)" },
+          { value: "db.r6g.large", label: "db.r6g.large (2 vCPU, 16 GiB)" },
+          { value: "db.r6g.xlarge", label: "db.r6g.xlarge (4 vCPU, 32 GiB)" },
+          { value: "db.r7g.large", label: "db.r7g.large (2 vCPU, 16 GiB)" },
+          { value: "db.c5.large", label: "db.c5.large (2 vCPU, 4 GiB)" },
+        ],
+      },
+    };
+  }
+
+  it("memory-intensive profile ranks r6g/r5 classes first", () => {
+    const fields = [rdsInstanceClassField()] as any;
+    const result = applyOptionRanking(fields, "memory-intensive");
+
+    const options = result[0]!.question.options!;
+    const values = options.map((o: any) => o.value);
+
+    // r5, r6g, r7g should be ranked first (they match memory-intensive keywords)
+    const topValues = values.slice(0, 5);
+    expect(topValues).toContain("db.r5.large");
+    expect(topValues).toContain("db.r6g.large");
+    expect(topValues).toContain("db.r6g.xlarge");
+    expect(topValues).toContain("db.r7g.large");
+  });
+
+  it("burstable profile ranks t3/t4g classes first", () => {
+    const fields = [rdsInstanceClassField()] as any;
+    const result = applyOptionRanking(fields, "burstable");
+
+    const options = result[0]!.question.options!;
+    const values = options.map((o: any) => o.value);
+
+    // t3 and t4g should be ranked first
+    const topValues = values.slice(0, 5);
+    expect(topValues).toContain("db.t3.micro");
+    expect(topValues).toContain("db.t3.small");
+    expect(topValues).toContain("db.t3.medium");
+    expect(topValues).toContain("db.t4g.micro");
+    expect(topValues).toContain("db.t4g.small");
+  });
+
+  it("options.length <= 10 — no filtering applied", () => {
+    const smallField = {
+      name: "StorageType",
+      question: {
+        type: "enum" as const,
+        label: "Storage type",
+        options: [
+          { value: "gp3", label: "gp3" },
+          { value: "gp2", label: "gp2" },
+          { value: "io1", label: "io1" },
+        ],
+      },
+    };
+    const fields = [smallField] as any;
+    const result = applyOptionRanking(fields, "memory-intensive");
+
+    // Options should remain in original order
+    const values = result[0]!.question.options!.map((o: any) => o.value);
+    expect(values).toEqual(["gp3", "gp2", "io1"]);
+  });
+
+  it("unknown profile returns options in original order (no ranking)", () => {
+    const fields = [rdsInstanceClassField()] as any;
+    const original = fields[0]!.question.options!.map((o: any) => o.value);
+
+    const result = applyOptionRanking(fields, "unknown");
+
+    const values = result[0]!.question.options!.map((o: any) => o.value);
+    expect(values).toEqual(original);
+  });
+
+  it("preserves all options (ranked order, no truncation)", () => {
+    const fields = [rdsInstanceClassField()] as any;
+    const originalCount = fields[0]!.question.options!.length;
+
+    const result = applyOptionRanking(fields, "burstable");
+
+    const options = result[0]!.question.options!;
+    expect(options).toHaveLength(originalCount);
+  });
+
+  it("does not modify non-enum fields", () => {
+    const stringField = {
+      name: "DBName",
+      question: {
+        type: "string" as const,
+        label: "Database name",
+      },
+    };
+    const fields = [stringField] as any;
+    const result = applyOptionRanking(fields, "burstable");
+
+    expect(result[0]).toBe(stringField);
+  });
+});
+
+// ── Story 21.3: EC2 Instance Type Smart Filtering ────────────────────────────
+
+function categorySelectField() {
+  return {
+    name: "InstanceType",
+    question: {
+      type: "categorySelect" as const,
+      label: "Instance type",
+      hint: "Pick an instance type",
+      categories: [
+        {
+          key: "burstable",
+          label: "Burstable (t3/t4g)",
+          description: "Variable CPU with burst credits",
+          options: [
+            { value: "t3.micro", label: "t3.micro (2 vCPU, 1 GiB)" },
+            { value: "t3.small", label: "t3.small (2 vCPU, 2 GiB)" },
+            { value: "t4g.micro", label: "t4g.micro (2 vCPU, 1 GiB)" },
+          ],
+        },
+        {
+          key: "general",
+          label: "General Purpose (m5/m6i)",
+          description: "Balanced CPU/memory ratio",
+          options: [
+            { value: "m5.large", label: "m5.large (2 vCPU, 8 GiB)" },
+            { value: "m6i.xlarge", label: "m6i.xlarge (4 vCPU, 16 GiB)" },
+          ],
+        },
+        {
+          key: "compute",
+          label: "Compute Optimized (c5/c6i)",
+          description: "High-performance CPUs",
+          options: [
+            { value: "c5.large", label: "c5.large (2 vCPU, 4 GiB)" },
+            { value: "c6i.xlarge", label: "c6i.xlarge (4 vCPU, 8 GiB)" },
+          ],
+        },
+        {
+          key: "memory",
+          label: "Memory Optimized (r5/r6i)",
+          description: "High memory-to-CPU ratio",
+          options: [
+            { value: "r5.large", label: "r5.large (2 vCPU, 16 GiB)" },
+            { value: "r6i.xlarge", label: "r6i.xlarge (4 vCPU, 32 GiB)" },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+describe("applyCategorySmartFilter (Story 21.3)", () => {
+  it("burstable profile reorders categories to put burstable first", () => {
+    const fields = [categorySelectField()] as any;
+    const result = applyCategorySmartFilter(fields, "burstable");
+
+    const cats = result[0]!.question.categories!;
+    expect(cats[0]!.key).toBe("burstable");
+    expect(cats[0]!.label).toContain("(recommended for your workload)");
+    // Other categories follow in original order
+    expect(cats[1]!.key).toBe("general");
+    expect(cats[2]!.key).toBe("compute");
+    expect(cats[3]!.key).toBe("memory");
+  });
+
+  it("compute-heavy profile reorders categories to put compute first", () => {
+    const fields = [categorySelectField()] as any;
+    const result = applyCategorySmartFilter(fields, "compute-heavy");
+
+    const cats = result[0]!.question.categories!;
+    expect(cats[0]!.key).toBe("compute");
+    expect(cats[0]!.label).toContain("(recommended for your workload)");
+    expect(cats[1]!.key).toBe("burstable");
+  });
+
+  it("memory-intensive profile reorders categories to put memory first", () => {
+    const fields = [categorySelectField()] as any;
+    const result = applyCategorySmartFilter(fields, "memory-intensive");
+
+    const cats = result[0]!.question.categories!;
+    expect(cats[0]!.key).toBe("memory");
+    expect(cats[0]!.label).toContain("(recommended for your workload)");
+  });
+
+  it("general-purpose profile reorders categories to put general first", () => {
+    const fields = [categorySelectField()] as any;
+    const result = applyCategorySmartFilter(fields, "general-purpose");
+
+    const cats = result[0]!.question.categories!;
+    expect(cats[0]!.key).toBe("general");
+    expect(cats[0]!.label).toContain("(recommended for your workload)");
+  });
+
+  it("unknown profile leaves order unchanged", () => {
+    const fields = [categorySelectField()] as any;
+    const result = applyCategorySmartFilter(fields, "unknown");
+
+    // Should return the exact same reference (no transformation)
+    expect(result).toBe(fields);
+  });
+
+  it("undefined profile leaves order unchanged", () => {
+    const fields = [categorySelectField()] as any;
+    const result = applyCategorySmartFilter(fields, undefined);
+
+    expect(result).toBe(fields);
+  });
+
+  it("gpu-accelerated profile adds GPU note to hint", () => {
+    const fields = [categorySelectField()] as any;
+    const result = applyCategorySmartFilter(fields, "gpu-accelerated");
+
+    const hint = result[0]!.question.hint;
+    expect(hint).toContain("GPU instances not in categories");
+    expect(hint).toContain("p5/g6");
+    // Categories should remain in original order (no matching category)
+    expect(result[0]!.question.categories![0]!.key).toBe("burstable");
+  });
+
+  it("ranks options within the matched category by workload relevance", () => {
+    // Build a field where burstable options are in non-optimal order
+    const field = {
+      name: "InstanceType",
+      question: {
+        type: "categorySelect" as const,
+        label: "Instance type",
+        categories: [
+          {
+            key: "burstable",
+            label: "Burstable",
+            description: "Burstable instances",
+            options: [
+              { value: "t3.xlarge", label: "t3.xlarge (4 vCPU, 16 GiB)" },
+              {
+                value: "t3.micro",
+                label: "t3.micro (2 vCPU, 1 GiB) — dev/test, burst",
+              },
+              {
+                value: "t4g.small",
+                label: "t4g.small (2 vCPU, 2 GiB) — burst, small",
+              },
+            ],
+          },
+          {
+            key: "general",
+            label: "General Purpose",
+            description: "General purpose instances",
+            options: [{ value: "m5.large", label: "m5.large (2 vCPU, 8 GiB)" }],
+          },
+        ],
+      },
+    };
+    const fields = [field] as any;
+    const result = applyCategorySmartFilter(fields, "burstable");
+
+    // The burstable category should be first
+    const burstCat = result[0]!.question.categories![0]!;
+    expect(burstCat.key).toBe("burstable");
+    // Options should be ranked — t3.micro matches "t3" + "micro", t4g.small matches "small"
+    // t3.micro scores higher (matches t3 + micro = 10), t4g.small scores (small = 5), t3.xlarge (t3 = 5)
+    const values = burstCat.options.map((o: any) => o.value);
+    expect(values[0]).toBe("t3.micro");
+  });
+
+  it("preserves total category count after reordering", () => {
+    const fields = [categorySelectField()] as any;
+    const result = applyCategorySmartFilter(fields, "compute-heavy");
+
+    expect(result[0]!.question.categories).toHaveLength(4);
+  });
+
+  it("does not modify non-categorySelect fields", () => {
+    const enumField = {
+      name: "Size",
+      question: {
+        type: "enum" as const,
+        label: "Size",
+        options: [{ value: "sm", label: "Small" }],
+      },
+    };
+    const fields = [enumField] as any;
+    const result = applyCategorySmartFilter(fields, "burstable");
+
+    expect(result[0]).toBe(enumField);
   });
 });

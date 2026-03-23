@@ -79,6 +79,7 @@ export type {
   ResourcePlugin,
   ResourceField,
   FieldQuestion,
+  FetcherContext,
   QuestionType,
   ShowIfCondition,
   OptionMetadata,

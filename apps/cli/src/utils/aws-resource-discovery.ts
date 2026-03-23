@@ -17,6 +17,11 @@ import {
   DescribeInstanceTypesCommand,
   type InstanceTypeInfo,
 } from "@aws-sdk/client-ec2";
+import {
+  RDSClient,
+  DescribeDBEngineVersionsCommand,
+  DescribeOrderableDBInstanceOptionsCommand,
+} from "@aws-sdk/client-rds";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { withTimeout } from "./timeout.js";
 
@@ -29,7 +34,29 @@ export interface DiscoveryOption {
 }
 
 // ── Session cache ────────────────────────────────────────────────────────────
-const discoveryCache = new Map<string, DiscoveryOption[]>();
+
+/** Cache entry with TTL support. */
+interface CacheEntry {
+  data: DiscoveryOption[];
+  fetchedAt: number;
+  ttl: number;
+}
+
+/** Default TTL: 5 minutes. */
+const DEFAULT_TTL_MS = 300_000;
+
+/** Per-fetcher TTL overrides (milliseconds). */
+const FETCHER_TTL: Record<string, number> = {
+  "discover-amis": 120_000, // 2 min
+  "discover-subnets": 120_000, // 2 min
+  "discover-key-pairs": 120_000, // 2 min
+  "discover-security-groups": 120_000, // 2 min
+  "discover-rds-engine-versions": 300_000, // 5 min
+  "discover-rds-instance-classes": 300_000, // 5 min
+  "discover-lambda-runtimes": 900_000, // 15 min
+};
+
+const discoveryCache = new Map<string, CacheEntry>();
 
 /** Reset cache — used by tests and when region changes. */
 export function clearDiscoveryCache(): void {
@@ -40,13 +67,21 @@ async function cachedDiscover(
   key: string,
   fetcher: () => Promise<DiscoveryOption[]>,
 ): Promise<DiscoveryOption[]> {
-  const cached = discoveryCache.get(key);
-  if (cached) return cached;
+  const entry = discoveryCache.get(key);
+  if (entry) {
+    const age = Date.now() - entry.fetchedAt;
+    if (age < entry.ttl) {
+      return entry.data;
+    }
+    // Expired — remove stale entry
+    discoveryCache.delete(key);
+  }
 
   try {
     const results = await fetcher();
     if (results.length > 0) {
-      discoveryCache.set(key, results);
+      const ttl = FETCHER_TTL[key] ?? DEFAULT_TTL_MS;
+      discoveryCache.set(key, { data: results, fetchedAt: Date.now(), ttl });
     }
     return results;
   } catch {
@@ -83,6 +118,17 @@ function createEc2Client(): EC2Client {
 function createSsmClient(): SSMClient {
   const creds = readerCredentials();
   return new SSMClient({
+    region: creds.region,
+    credentials: {
+      accessKeyId: creds.accessKeyId,
+      secretAccessKey: creds.secretAccessKey,
+    },
+  });
+}
+
+function createRdsClient(): RDSClient {
+  const creds = readerCredentials();
+  return new RDSClient({
     region: creds.region,
     credentials: {
       accessKeyId: creds.accessKeyId,
@@ -281,7 +327,7 @@ export async function discoverInstanceTypes(): Promise<InstanceTypeCategory[]> {
  * Fetches Amazon Linux 2023, Ubuntu 22.04, Ubuntu 24.04, Windows Server 2022.
  */
 export async function discoverAmis(): Promise<DiscoveryOption[]> {
-  return cachedDiscover("amis", async () => {
+  return cachedDiscover("discover-amis", async () => {
     const ssm = createSsmClient();
     const params: Array<{ path: string; label: string }> = [
       {
@@ -329,7 +375,7 @@ export async function discoverAmis(): Promise<DiscoveryOption[]> {
  * Shows Name tag, CIDR block, and availability zone.
  */
 export async function discoverSubnets(): Promise<DiscoveryOption[]> {
-  return cachedDiscover("subnets", async () => {
+  return cachedDiscover("discover-subnets", async () => {
     const ec2 = createEc2Client();
     const result = await withTimeout(
       ec2.send(new DescribeSubnetsCommand({})),
@@ -352,7 +398,7 @@ export async function discoverSubnets(): Promise<DiscoveryOption[]> {
  * Shows group name and description.
  */
 export async function discoverSecurityGroups(): Promise<DiscoveryOption[]> {
-  return cachedDiscover("security-groups", async () => {
+  return cachedDiscover("discover-security-groups", async () => {
     const ec2 = createEc2Client();
     const result = await withTimeout(
       ec2.send(new DescribeSecurityGroupsCommand({})),
@@ -380,7 +426,7 @@ export async function discoverSecurityGroups(): Promise<DiscoveryOption[]> {
  * Prepends a "None (SSM access only)" option.
  */
 export async function discoverKeyPairs(): Promise<DiscoveryOption[]> {
-  return cachedDiscover("key-pairs", async () => {
+  return cachedDiscover("discover-key-pairs", async () => {
     const ec2 = createEc2Client();
     const result = await withTimeout(
       ec2.send(new DescribeKeyPairsCommand({})),
@@ -401,5 +447,137 @@ export async function discoverKeyPairs(): Promise<DiscoveryOption[]> {
       }
     }
     return options;
+  });
+}
+
+/**
+ * Discovers available RDS engine versions for a given engine using
+ * the DescribeDBEngineVersions API. Returns versions sorted newest-first.
+ * The latest version is marked with `recommended: true`.
+ *
+ * @param context - Optional context object; expects `Engine` key (defaults to "postgres")
+ */
+export async function discoverRdsEngineVersions(
+  context?: Record<string, unknown>,
+): Promise<DiscoveryOption[]> {
+  const engine = (context?.["Engine"] as string) ?? "postgres";
+  const cacheKey = `discover-rds-engine-versions-${engine}`;
+
+  return cachedDiscover(cacheKey, async () => {
+    const rds = createRdsClient();
+    const result = await withTimeout(
+      rds.send(
+        new DescribeDBEngineVersionsCommand({
+          Engine: engine,
+          DefaultOnly: false,
+        }),
+      ),
+      DISCOVERY_TIMEOUT_MS,
+    );
+    if (!result?.DBEngineVersions) return [];
+
+    // Collect unique versions, sorted newest-first
+    const versions = result.DBEngineVersions.filter((v) => v.EngineVersion).map(
+      (v) => ({
+        version: v.EngineVersion!,
+        description: v.DBEngineVersionDescription ?? v.EngineVersion!,
+      }),
+    );
+
+    // Sort newest version first (descending)
+    versions.sort((a, b) =>
+      b.version.localeCompare(a.version, undefined, { numeric: true }),
+    );
+
+    // Deduplicate by version string
+    const seen = new Set<string>();
+    const unique = versions.filter((v) => {
+      if (seen.has(v.version)) return false;
+      seen.add(v.version);
+      return true;
+    });
+
+    return unique.map((v, i) => ({
+      value: v.version,
+      label: v.description,
+      ...(i === 0 ? { recommended: true } : {}),
+    }));
+  });
+}
+
+/**
+ * Discovers available RDS instance classes for a given engine using
+ * the DescribeOrderableDBInstanceOptions API. Returns deduplicated classes
+ * grouped by family: burstable (db.t*), general (db.m*), memory (db.r*), other.
+ * Sorted burstable-first (cheapest), then general, then memory, then other.
+ *
+ * @param context - Optional context object; expects `Engine` key (defaults to "postgres")
+ */
+export async function discoverRdsInstanceClasses(
+  context?: Record<string, unknown>,
+): Promise<DiscoveryOption[]> {
+  const engine = (context?.["Engine"] as string) ?? "postgres";
+  const cacheKey = `discover-rds-instance-classes-${engine}`;
+
+  return cachedDiscover(cacheKey, async () => {
+    const rds = createRdsClient();
+
+    // The API paginates — collect all pages
+    const allClasses = new Set<string>();
+    let marker: string | undefined;
+
+    do {
+      const result = await withTimeout(
+        rds.send(
+          new DescribeOrderableDBInstanceOptionsCommand({
+            Engine: engine,
+            ...(marker ? { Marker: marker } : {}),
+          }),
+        ),
+        DISCOVERY_TIMEOUT_MS,
+      );
+      if (!result?.OrderableDBInstanceOptions) break;
+
+      for (const opt of result.OrderableDBInstanceOptions) {
+        if (opt.DBInstanceClass) {
+          allClasses.add(opt.DBInstanceClass);
+        }
+      }
+
+      marker = result.Marker;
+    } while (marker);
+
+    if (allClasses.size === 0) return [];
+
+    // Group by family
+    const familyOrder: Record<string, number> = {
+      burstable: 0,
+      general: 1,
+      memory: 2,
+      other: 3,
+    };
+
+    function classifyRdsFamily(cls: string): string {
+      // cls is like "db.t3.micro", "db.m5.large", "db.r6g.large"
+      const parts = cls.split(".");
+      const familyPrefix = parts[1]?.[0]?.toLowerCase() ?? "";
+      if (familyPrefix === "t") return "burstable";
+      if (familyPrefix === "m") return "general";
+      if (familyPrefix === "r" || familyPrefix === "x") return "memory";
+      return "other";
+    }
+
+    const sorted = [...allClasses].sort((a, b) => {
+      const famA = familyOrder[classifyRdsFamily(a)] ?? 3;
+      const famB = familyOrder[classifyRdsFamily(b)] ?? 3;
+      if (famA !== famB) return famA - famB;
+      // Within same family, sort alphabetically (which approximates size order)
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+
+    return sorted.map((cls) => ({
+      value: cls,
+      label: cls,
+    }));
   });
 }
