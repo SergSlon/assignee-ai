@@ -477,13 +477,18 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       typeof desiredState["ImageId"] === "string" &&
       !String(desiredState["ImageId"]).startsWith("ami-")
     ) {
-      const resolvedAmi = await resolveAmiFromOsName(
-        String(desiredState["ImageId"]),
-      );
+      const osName = String(desiredState["ImageId"]);
+      const resolvedAmi = await resolveAmiFromOsName(osName);
       if (resolvedAmi) {
         desiredState["ImageId"] = resolvedAmi;
+      } else {
+        // Cannot resolve OS name without AWS access — fail the plan clearly
+        return {
+          desiredState: {},
+          executionStatus: ExecutionStatus.FAILED,
+          errorMessage: `Cannot resolve AMI for "${osName}" — AWS credentials are expired or unavailable. Run "aws sso login" or provide a valid AMI ID (e.g., ami-0c55b159cbfafe1f0) instead of an OS name.`,
+        };
       }
-      // If resolution fails, keep the OS name — CloudControl will give a clear error
     }
 
     const durationMs = Date.now() - startedAt;
