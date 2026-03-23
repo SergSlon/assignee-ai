@@ -22,6 +22,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
     // CloudControl API maps internally to CloudFormation — some accounts
     // require these actions under the cloudformation namespace
     "cloudformation:GetResource",
+    "cloudformation:GetResourceRequestStatus",
     "cloudformation:CreateResource",
     "cloudformation:DeleteResource",
     "cloudformation:UpdateResource",
