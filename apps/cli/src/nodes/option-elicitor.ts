@@ -808,15 +808,21 @@ async function promptWithHelp(
         const s = clack.spinner();
         s.start("Finding the best option for you...");
         try {
+          // Build field-aware prompt with available options context
+          const staticOptions = field.question.options ?? [];
+          const optionsContext =
+            staticOptions.length > 0
+              ? `\nAvailable options: ${staticOptions.map((o) => `${o.value} (${o.label})`).join(", ")}\nPick the best matching option value from the list above.`
+              : "";
           const prompt = [
             `The user is configuring a ${resourceType} resource.`,
             `They need to set the "${field.name}" field.`,
             `They described what they need as: "${userDesc}"`,
             userIntent ? `Their overall intent: "${userIntent}"` : "",
+            optionsContext,
             "",
-            "Respond with ONLY the exact valid AWS value (nothing else).",
-            "For example, if they want a GPU instance for ML, respond: p3.2xlarge",
-            "If they want a PostgreSQL version, respond: 16",
+            "Respond with ONLY the exact value (a single short string, nothing else — no explanation, no sentences).",
+            "Examples: p3.2xlarge, amazon-linux-2023, postgres, 16, db.r6g.large",
           ].join("\n");
 
           const [err, text] = await llmClient.generateText(prompt);
@@ -824,8 +830,11 @@ async function promptWithHelp(
 
           if (!err && text) {
             const suggested = text.trim().split("\n")[0]?.trim();
-            if (!suggested) {
-              clack.log.warn("Could not determine a suggestion");
+            if (!suggested || suggested.length > 100) {
+              // LLM returned empty or a paragraph instead of a short value
+              clack.log.warn(
+                "Could not determine a suggestion. Please enter an exact value.",
+              );
               continue; // re-prompt
             }
 
