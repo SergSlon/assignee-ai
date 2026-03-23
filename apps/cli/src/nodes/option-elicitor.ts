@@ -785,8 +785,21 @@ async function promptWithHelp(
         typeof description === "string" ? description.trim() : "";
       if (!userDesc) continue; // re-prompt
 
-      // If it looks like an exact value (e.g., "p3.2xlarge"), return it directly
-      if (/^[a-z0-9][a-z0-9.-]*$/i.test(userDesc) && !userDesc.includes(" ")) {
+      // If it looks like an exact AWS value (e.g., "p3.2xlarge", "ami-0c55b", "db.t3.micro"),
+      // return it directly. Must contain a dot, dash-with-digits, or AWS prefix to qualify.
+      // Plain words like "linux" or "gpu" are descriptions, not exact values.
+      const looksLikeAwsValue =
+        !userDesc.includes(" ") &&
+        /^[a-z0-9][a-z0-9._-]*$/i.test(userDesc) &&
+        (/\./.test(userDesc) || // has dot: t3.small, db.t3.micro
+          /^ami-/.test(userDesc) || // AMI ID
+          /^subnet-/.test(userDesc) || // subnet ID
+          /^sg-/.test(userDesc) || // security group ID
+          /^i-/.test(userDesc) || // instance ID
+          /^arn:/.test(userDesc) || // ARN
+          /^db\./.test(userDesc) || // RDS class
+          /\d+\.\d+/.test(userDesc)); // version: 16.4, 8.0
+      if (looksLikeAwsValue) {
         return userDesc;
       }
 
