@@ -156,7 +156,7 @@ const INTENT_RULES: IntentRule[] = [
   // RDS — Production database
   {
     resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
-    keywords: ["production database", "prod db"],
+    keywords: ["production", "prod db", "production database"],
     overrides: [
       {
         fieldName: "MultiAZ",
