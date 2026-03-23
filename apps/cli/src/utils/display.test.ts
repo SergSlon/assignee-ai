@@ -440,7 +440,7 @@ describe("renderHitlCompoundConfirm — TTY mode", () => {
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderHitlCompoundConfirm } = await import("./display.js");
     await renderHitlCompoundConfirm(mockPattern, 3);
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(130);
     exitSpy.mockRestore();
   });
 });
@@ -569,7 +569,7 @@ describe("renderOptionPrompt — TTY mode", () => {
       ...resolved,
       value: "fallback",
     });
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(130);
     exitSpy.mockRestore();
   });
 });
@@ -1599,7 +1599,7 @@ describe("renderHitlConfirm — TTY mode", () => {
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderHitlConfirm } = await import("./display.js");
     await renderHitlConfirm(mockState);
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(130);
     exitSpy.mockRestore();
   });
 });
@@ -1666,7 +1666,7 @@ describe("renderApplyNowConfirm — TTY mode", () => {
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderApplyNowConfirm } = await import("./display.js");
     await renderApplyNowConfirm(mockState);
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(130);
     exitSpy.mockRestore();
   });
 });
@@ -1812,7 +1812,7 @@ describe("renderAdvancedConfirm", () => {
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderAdvancedConfirm } = await import("./display.js");
     await renderAdvancedConfirm();
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(130);
     exitSpy.mockRestore();
     Object.defineProperty(process.stdin, "isTTY", {
       value: undefined,
@@ -2039,9 +2039,9 @@ describe("formatDesiredState", () => {
   });
 
   it("falls back to spaced PascalCase for unknown keys", () => {
-    const result = formatDesiredState({ IamInstanceProfile: "my-profile" });
-    expect(result).toContain("Iam Instance Profile");
-    expect(result).toContain("my-profile");
+    const result = formatDesiredState({ SomeCustomProperty: "my-value" });
+    expect(result).toContain("Some Custom Property");
+    expect(result).toContain("my-value");
   });
 
   it("renders booleans as Yes/No", () => {

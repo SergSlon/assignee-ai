@@ -286,6 +286,7 @@ async function resolveDynamicFields(
     string,
     Array<{ value: string; label: string }>
   >();
+  const warnedFields = new Set<string>();
   await Promise.all(
     dynamicFields.map(async (field) => {
       const fetch = fetcherMap[field.question.fetcher!];
@@ -297,6 +298,7 @@ async function resolveDynamicFields(
         clack.log.warn(
           `Could not discover ${field.question.label ?? field.name} from your account. Enter manually.`,
         );
+        warnedFields.add(field.name);
         fetchResults.set(field.name, []);
       }
     }),
@@ -307,10 +309,13 @@ async function resolveDynamicFields(
     const options = fetchResults.get(field.name) ?? [];
 
     if (options.length === 0) {
-      // Fallback to manual string entry
-      clack.log.warn(
-        `Could not discover ${field.question.label ?? field.name} from your account. Enter manually.`,
-      );
+      // Fallback to manual string entry.
+      // Only warn if the catch block didn't already warn for this field.
+      if (!warnedFields.has(field.name)) {
+        clack.log.warn(
+          `Could not discover ${field.question.label ?? field.name} from your account. Enter manually.`,
+        );
+      }
       return {
         ...field,
         question: {
@@ -632,21 +637,9 @@ export async function optionElicitorNode(
     intentOverrides,
   );
 
-  // Story 19.5: Read pattern memory for previous option defaults
-  let previousOptions: Record<string, unknown> = {};
-  if (state.resourcePattern) {
-    try {
-      const patterns = await defaultMemoryService.readPatterns();
-      const match = patterns.find(
-        (p) => p.pattern === state.resourcePattern!.patternId,
-      );
-      if (match) {
-        previousOptions = match.optionsSelected;
-      }
-    } catch {
-      // Graceful degradation — pattern memory read failure is non-blocking
-    }
-  }
+  // Story 19.5: Pattern memory block removed — compound intents (resourcePattern set)
+  // return early at line 543, so this code was unreachable dead code.
+  const previousOptions: Record<string, unknown> = {};
 
   const resolvedCommon = resolveFieldConfigs(commonFields);
   const resolvedAdvanced = resolveFieldConfigs(advancedFields);

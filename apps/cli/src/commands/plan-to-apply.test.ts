@@ -101,7 +101,7 @@ describe("renderApplyNowConfirm", () => {
     vi.mocked(clack.isCancel).mockReturnValue(true);
 
     await renderApplyNowConfirm(mockState);
-    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(exitSpy).toHaveBeenCalledWith(130);
 
     exitSpy.mockRestore();
     Object.defineProperty(process.stdin, "isTTY", {
