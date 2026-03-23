@@ -166,6 +166,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         type: "string",
         label: "Timeout (seconds, 1-900)",
         placeholder: "30",
+        initialValue: "30",
         hint: "Max execution time before the function is killed. API handlers: 10-30s. Background jobs: 60-300s. Max 900s (15 min). Lower values prevent runaway costs.",
         validate: (value: unknown) => {
           if (!value) return undefined; // Optional field
@@ -226,6 +227,12 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         label: "Function description",
         placeholder: "Brief description of what this function does",
         hint: "Free-text description shown in the AWS console. Helps teammates understand the function's purpose. Max 256 chars. No cost or security impact.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value);
+          if (s.length > 256) return "Max 256 characters";
+          return undefined;
+        },
       },
     },
     {
@@ -235,6 +242,13 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         label: "Reserved concurrent executions (-1 = unreserved)",
         placeholder: "-1",
         hint: "Limits how many instances run simultaneously. -1 = unreserved (uses shared account pool). Set a limit to prevent one function from starving others. Reduces risk of runaway costs.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const n = Number(value);
+          if (!Number.isInteger(n) || n < -1)
+            return "Must be -1 (unreserved) or 0+";
+          return undefined;
+        },
       },
     },
   ],

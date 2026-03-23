@@ -138,6 +138,36 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
+      name: "EngineVersion",
+      question: {
+        type: "enum",
+        label: "Aurora MySQL version",
+        hint: "Aurora MySQL is API-compatible with MySQL.",
+        options: [
+          {
+            value: "3.07.1",
+            label: "Aurora MySQL 3.07.1 (MySQL 8.0 compatible)",
+            recommended: true,
+          },
+          { value: "3.05.2", label: "Aurora MySQL 3.05.2 (stable)" },
+        ],
+        showIf: { field: "Engine", value: "aurora-mysql" },
+      },
+    },
+    {
+      name: "EngineVersion",
+      question: {
+        type: "enum",
+        label: "Aurora PostgreSQL version",
+        hint: "Aurora PostgreSQL is wire-compatible with PostgreSQL.",
+        options: [
+          { value: "16.4", label: "Aurora PostgreSQL 16.4", recommended: true },
+          { value: "15.8", label: "Aurora PostgreSQL 15.8 (stable)" },
+        ],
+        showIf: { field: "Engine", value: "aurora-postgresql" },
+      },
+    },
+    {
       name: "DBName",
       question: {
         type: "string",
