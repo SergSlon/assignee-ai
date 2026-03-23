@@ -90,6 +90,8 @@ const FRIENDLY_NAMES: Record<string, string> = {
   EnableLifecycle: "Lifecycle Rules",
   EnableCors: "CORS",
   EnableReplication: "Cross-Region Replication",
+  MetadataOptions: "Instance Metadata",
+  BlockDeviceMappings: "Storage",
 };
 
 /**
@@ -117,11 +119,43 @@ export function formatDesiredState(state: Record<string, unknown>): string {
   for (const [key, value] of entries) {
     const friendlyKey = FRIENDLY_NAMES[key] ?? spacePascalCase(key);
     const padded = friendlyKey.padEnd(maxKeyLen);
-    const formatted = formatValue(value);
+    const formatted = formatSpecialValue(key, value) ?? formatValue(value);
     lines.push(`  ${padded}   ${formatted}`);
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Human-friendly formatting for complex CFN structures.
+ * Returns null if no special formatting applies.
+ */
+function formatSpecialValue(key: string, value: unknown): string | null {
+  if (
+    key === "BlockDeviceMappings" &&
+    Array.isArray(value) &&
+    value.length > 0
+  ) {
+    const vol = value[0] as Record<string, unknown>;
+    const ebs = vol?.["Ebs"] as Record<string, unknown> | undefined;
+    if (!ebs) return null;
+    const parts: string[] = [];
+    if (ebs["VolumeType"]) parts.push(String(ebs["VolumeType"]));
+    if (ebs["VolumeSize"]) parts.push(`${ebs["VolumeSize"]} GB`);
+    parts.push(ebs["Encrypted"] ? "encrypted" : "unencrypted");
+    return parts.join(", ");
+  }
+  if (
+    key === "MetadataOptions" &&
+    typeof value === "object" &&
+    value !== null
+  ) {
+    const opts = value as Record<string, unknown>;
+    return opts["HttpTokens"] === "required"
+      ? "IMDSv2 required"
+      : "IMDSv1 allowed";
+  }
+  return null;
 }
 
 function formatValue(value: unknown): string {
