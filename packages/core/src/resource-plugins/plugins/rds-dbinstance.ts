@@ -281,6 +281,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         ],
         initialValue: "20",
       },
+      toCfn: (v: unknown) => (v ? parseInt(String(v), 10) : undefined),
     },
     {
       name: "Tags",
@@ -324,4 +325,9 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
     StorageType: "gp3",
     MultiAZ: false,
   },
+  configHints: [
+    "If the user did not provide a MasterUserPassword, OMIT it — AWS will auto-generate one via Secrets Manager",
+    "If the user did not provide a DBName, OMIT it — no initial database will be created",
+    "EngineVersion MUST be a valid version number for the selected Engine (e.g., '16' for postgres, '8.4' for mysql). NEVER use deprecated versions.",
+  ],
 };

@@ -61,13 +61,16 @@ describe("planGeneratorNode", () => {
   it("strips hallucinated fields not in schema", async () => {
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket", HallucinatedField: "bad" }),
+      JSON.stringify({
+        BucketName: "test-data-bucket",
+        HallucinatedField: "bad",
+      }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
 
     const result = await node(makeState());
 
-    expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
+    expect(result.desiredState).toEqual({ BucketName: "test-data-bucket" });
     expect(
       (result.desiredState as Record<string, unknown>)?.["HallucinatedField"],
     ).toBeUndefined();
@@ -203,7 +206,7 @@ describe("planGeneratorNode", () => {
     let capturedPrompt = "";
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
 
     const originalGenerateText = mock.generateText.bind(mock);
@@ -221,7 +224,10 @@ describe("planGeneratorNode", () => {
   it("reads schema from uppercase Properties key as fallback", async () => {
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket", HallucinatedField: "bad" }),
+      JSON.stringify({
+        BucketName: "test-data-bucket",
+        HallucinatedField: "bad",
+      }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
 
@@ -237,7 +243,7 @@ describe("planGeneratorNode", () => {
       }),
     );
 
-    expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
+    expect(result.desiredState).toEqual({ BucketName: "test-data-bucket" });
   });
 });
 
@@ -260,7 +266,7 @@ describe("planGeneratorNode — Story 19.3 memory hints", () => {
     let capturedPrompt = "";
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const originalGenerateText = mock.generateText.bind(mock);
     mock.generateText = async (prompt: string) => {
@@ -284,7 +290,7 @@ describe("planGeneratorNode — Story 19.3 memory hints", () => {
     let capturedPrompt = "";
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const originalGenerateText = mock.generateText.bind(mock);
     mock.generateText = async (prompt: string) => {
@@ -324,7 +330,7 @@ describe("planGeneratorNode — Story 19.3 memory hints", () => {
     let capturedPrompt = "";
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const originalGenerateText = mock.generateText.bind(mock);
     mock.generateText = async (prompt: string) => {
@@ -347,14 +353,14 @@ describe("planGeneratorNode — Story 19.3 memory hints", () => {
 
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
 
     const result = await node(makeState());
 
     // Plan should still generate successfully
-    expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
+    expect(result.desiredState).toEqual({ BucketName: "test-data-bucket" });
     expect(result.memoryHints).toBeUndefined();
   });
 });
@@ -376,7 +382,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
 
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
     const result = await node(makeState());
@@ -396,7 +402,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
 
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
     const result = await node(makeState());
@@ -430,7 +436,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
 
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
     const result = await node(makeState());
@@ -456,7 +462,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
 
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
     const result = await node(makeState());
@@ -481,7 +487,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
 
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
     // State has resourceType "AWS::S3::Bucket" (default)
@@ -500,13 +506,13 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
 
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
     const result = await node(makeState());
 
     // Plan should still generate successfully
-    expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
+    expect(result.desiredState).toEqual({ BucketName: "test-data-bucket" });
   });
 });
 
@@ -555,11 +561,11 @@ describe("applyToCfnTransforms", () => {
 
   it("passes through fields without toCfn unchanged", () => {
     const result = applyToCfnTransforms(
-      { BucketName: "my-bucket", BucketEncryption: true },
+      { BucketName: "test-data-bucket", BucketEncryption: true },
       "AWS::S3::Bucket",
     );
 
-    expect(result["BucketName"]).toBe("my-bucket");
+    expect(result["BucketName"]).toBe("test-data-bucket");
     expect(result["BucketEncryption"]).toEqual({
       ServerSideEncryptionConfiguration: [
         { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
@@ -610,7 +616,7 @@ describe("planGeneratorNode — Story 18.9 toCfn integration", () => {
   it("applies toCfn transforms to elicited options in standard mode", async () => {
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
 
@@ -640,7 +646,7 @@ describe("planGeneratorNode — Story 18.9 toCfn integration", () => {
   it("omits false-valued toCfn fields from desiredState", async () => {
     const mock = new MockLlmAdapter(
       undefined,
-      JSON.stringify({ BucketName: "my-bucket" }),
+      JSON.stringify({ BucketName: "test-data-bucket" }),
     );
     const node = createPlanGeneratorNode({ llmClient: mock });
 
@@ -656,7 +662,7 @@ describe("planGeneratorNode — Story 18.9 toCfn integration", () => {
     const ds = result.desiredState as Record<string, unknown>;
     expect(ds["BucketEncryption"]).toBeUndefined();
     expect(ds["VersioningConfiguration"]).toBeUndefined();
-    expect(ds["BucketName"]).toBe("my-bucket");
+    expect(ds["BucketName"]).toBe("test-data-bucket");
   });
 
   it("applies toCfn transforms in compound mode", async () => {

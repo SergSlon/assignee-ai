@@ -81,7 +81,8 @@ function resolveFieldConfigs(
   const result: Record<string, ResolvedFieldConfig> = {};
   for (const field of fields) {
     const pluginDefault = field.question.initialValue;
-    result[field.name] =
+    const key = fieldFetchKey(field);
+    result[key] =
       pluginDefault !== undefined
         ? {
             policy: FieldPolicy.ASK_IF_NOT_SET,
@@ -1136,7 +1137,7 @@ export async function optionElicitorNode(
 
   // ── Common tier ──────────────────────────────────────────────────────────────
   for (const field of commonFields.map(applyPatternHint)) {
-    const resolved = resolvedCommon[field.name];
+    const resolved = resolvedCommon[fieldFetchKey(field)];
     if (!resolved) continue;
 
     // showIf conditional — skip if condition not met
@@ -1173,7 +1174,7 @@ export async function optionElicitorNode(
     const showAdvanced = await renderAdvancedConfirm();
     if (showAdvanced) {
       for (const field of advancedFields.map(applyPatternHint)) {
-        const resolved = resolvedAdvanced[field.name];
+        const resolved = resolvedAdvanced[fieldFetchKey(field)];
         if (!resolved) continue;
 
         if (field.question.showIf) {

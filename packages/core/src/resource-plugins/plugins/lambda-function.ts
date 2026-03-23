@@ -205,6 +205,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         ],
         initialValue: "128",
       },
+      toCfn: (v: unknown) => (v ? parseInt(String(v), 10) : undefined),
     },
     {
       name: "Timeout",
@@ -222,6 +223,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
             : "Timeout must be between 1 and 900 seconds";
         },
       },
+      toCfn: (v: unknown) => (v ? parseInt(String(v), 10) : undefined),
     },
     {
       name: "Environment",
