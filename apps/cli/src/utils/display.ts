@@ -1034,6 +1034,10 @@ export async function renderOptionPrompt(
                 label: cat.label,
                 hint: cat.description,
               })),
+              {
+                value: "__other__",
+                label: "Other \u2014 enter any instance type manually",
+              },
               { value: "?", label: "\u2753 ? \u2014 explain this field" },
             ],
             initialValue: categories[0]?.key,
@@ -1045,12 +1049,32 @@ export async function renderOptionPrompt(
           }
 
           if (categoryResult === "?") {
-            // Show category help note
             const helpLines = categories
               .map((cat) => `${cat.label}\n  ${cat.description}`)
               .join("\n\n");
             clack.note(helpLines, "Instance Type Categories");
             continue;
+          }
+
+          // "Other" — free-text input for any instance type (GPU, storage, etc.)
+          if (categoryResult === "__other__") {
+            const customType = await clack.text({
+              message: `${question.label} — Enter instance type`,
+              placeholder: "p3.2xlarge",
+              validate: (value) => {
+                if (!value || !value.trim()) return "Instance type is required";
+                if (!/^[a-z][a-z0-9]*\.[a-z0-9]+$/.test(value.trim()))
+                  return "Format: family.size (e.g., p3.2xlarge, g5.xlarge, i3.large)";
+                return undefined;
+              },
+            });
+            if (clack.isCancel(customType)) {
+              clack.cancel("Wizard cancelled.");
+              process.exit(130);
+            }
+            return typeof customType === "string"
+              ? customType.trim()
+              : defaultValue;
           }
 
           selectedCategoryKey = categoryResult as string;
