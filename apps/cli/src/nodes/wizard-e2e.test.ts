@@ -28,6 +28,18 @@ vi.mock("@assignee/best-practices", () => ({
   loadBestPractices: () => [],
 }));
 
+vi.mock("../utils/aws-resource-discovery.js", () => ({
+  discoverAmis: vi.fn().mockResolvedValue([]),
+  discoverSubnets: vi.fn().mockResolvedValue([]),
+  discoverSecurityGroups: vi.fn().mockResolvedValue([]),
+  discoverKeyPairs: vi.fn().mockResolvedValue([]),
+  discoverInstanceTypes: vi.fn().mockResolvedValue(null),
+  discoverRdsEngineVersions: vi.fn().mockResolvedValue([]),
+  discoverRdsInstanceClasses: vi.fn().mockResolvedValue([]),
+  clearDiscoveryCache: vi.fn(),
+  resolveAmiFromOsName: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("../utils/display.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../utils/display.js")>();
   return {

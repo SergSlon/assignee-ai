@@ -482,11 +482,11 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       if (resolvedAmi) {
         desiredState["ImageId"] = resolvedAmi;
       } else {
-        // Cannot resolve OS name without AWS access — fail the plan clearly
+        // Cannot resolve OS name — fail the plan clearly
         return {
           desiredState: {},
           executionStatus: ExecutionStatus.FAILED,
-          errorMessage: `Cannot resolve AMI for "${osName}" — AWS credentials are expired or unavailable. Run "aws sso login" or provide a valid AMI ID (e.g., ami-0c55b159cbfafe1f0) instead of an OS name.`,
+          errorMessage: `Cannot resolve "${osName}" to a real AMI ID. Please either:\n  1. Run "aws sso login" to refresh credentials, then retry\n  2. Use "Other" in the AMI field and enter a real AMI ID (e.g., ami-0c55b159cbfafe1f0)`,
         };
       }
     }
