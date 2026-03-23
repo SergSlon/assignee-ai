@@ -9,6 +9,7 @@ describe("getRequiredIamActions", () => {
     "cloudcontrol:UpdateResource",
     "cloudcontrol:DeleteResource",
     "cloudformation:GetResource",
+    "cloudformation:GetResourceRequestStatus",
     "cloudformation:CreateResource",
     "cloudformation:DeleteResource",
     "cloudformation:UpdateResource",

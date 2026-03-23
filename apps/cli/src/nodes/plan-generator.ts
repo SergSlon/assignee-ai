@@ -152,15 +152,38 @@ function assembleS3Composites(
   delete transformed["ReplicationDestinationBucket"];
 }
 
+/**
+ * Collects all placeholder strings from the plugin field definitions for a resource type.
+ * These are the example values that appear in text inputs and should never leak into the plan.
+ */
+export function collectPluginPlaceholders(resourceType: string): Set<string> {
+  const placeholders = new Set<string>();
+  const plugin = defaultPluginRegistry.get(resourceType);
+  if (!plugin) return placeholders;
+
+  const allFields = [...plugin.commonFields, ...plugin.advancedFields];
+  for (const field of allFields) {
+    if (field.question.placeholder) {
+      placeholders.add(field.question.placeholder);
+    }
+  }
+  return placeholders;
+}
+
 /** Recursively removes empty-placeholder values the LLM may insert despite prompt rules. */
-function stripEmpty(obj: Record<string, unknown>): Record<string, unknown> {
+function stripEmpty(
+  obj: Record<string, unknown>,
+  placeholders?: Set<string>,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
     if (v === null || v === undefined) continue;
     if (typeof v === "string" && v === "") continue;
     if (Array.isArray(v) && v.length === 0) continue;
+    // Strip values that exactly match a plugin placeholder string
+    if (typeof v === "string" && placeholders && placeholders.has(v)) continue;
     if (typeof v === "object" && !Array.isArray(v)) {
-      const nested = stripEmpty(v as Record<string, unknown>);
+      const nested = stripEmpty(v as Record<string, unknown>, placeholders);
       if (Object.keys(nested).length === 0) continue;
       out[k] = nested;
     } else {
@@ -329,7 +352,8 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       "4. Include ALL Required properties with real values",
       "5. Include properties clearly implied by the user's intent (e.g. InstanceType, Engine, FunctionName, Runtime)",
       "6. OMIT any property you don't have a specific value for — do NOT use empty strings, 0, false, or [] as placeholders",
-      "7. For S3 BucketName: use only lowercase letters, digits, hyphens (3–63 chars)",
+      "7. NEVER use placeholder or example values from schema descriptions (e.g., ami-0abcdef1234567890, my-key-pair, subnet-0abc1234, sg-0123456789abcdef0, arn:aws:iam::123456789012:role/my-role, my-instance-profile, my-bucket, my-resource). If the user did not provide a real value, OMIT the property entirely.",
+      "8. For S3 BucketName: use only lowercase letters, digits, hyphens (3–63 chars)",
       ...(resourceHints.length > 0
         ? [
             "",
@@ -404,8 +428,11 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       desiredState = validated;
     }
 
-    // Remove empty placeholders the LLM may have inserted despite the prompt rules
-    desiredState = stripEmpty(desiredState);
+    // Remove empty placeholders and plugin placeholder values the LLM may have inserted
+    const pluginPlaceholders = collectPluginPlaceholders(
+      state.resourceType ?? "",
+    );
+    desiredState = stripEmpty(desiredState, pluginPlaceholders);
 
     // Merge elicited options — user-confirmed values override LLM-generated values.
     // Apply toCfn transforms to convert boolean answers to valid CFN structures.
