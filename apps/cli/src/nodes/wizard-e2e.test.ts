@@ -942,6 +942,52 @@ describe('EC2 "Other" flow — user rejects suggestion, gets re-prompted', () =>
   });
 });
 
+describe('EC2 "Other" flow — LLM returns paragraph instead of value', () => {
+  it("rejects paragraph response and re-prompts for exact value", async () => {
+    const paragraphResponse =
+      "To configure an EC2 instance for ML tasks, a popular choice is the Deep Learning AMI which includes TensorFlow and PyTorch.";
+    const mockLlm = new MockLlmAdapter(
+      { profile: "compute-heavy", confidence: 0.9 },
+      paragraphResponse,
+    );
+
+    // First: category → __other__
+    vi.mocked(select).mockResolvedValueOnce("__other__");
+    // Description
+    vi.mocked(text).mockResolvedValueOnce("ML");
+    // LLM returns paragraph (>100 chars) → rejected automatically, re-prompts
+
+    // Re-prompt: category → __other__
+    vi.mocked(select).mockResolvedValueOnce("__other__");
+    // User types exact value this time
+    vi.mocked(text).mockResolvedValueOnce("p3.2xlarge");
+
+    // ImageId: static fallback
+    vi.mocked(select).mockResolvedValueOnce("amazon-linux-2023");
+
+    // Remaining text fields
+    vi.mocked(text)
+      .mockResolvedValueOnce("") // KeyName
+      .mockResolvedValueOnce("") // SubnetId
+      .mockResolvedValueOnce("") // SecurityGroupIds
+      .mockResolvedValueOnce(""); // Tags
+
+    vi.mocked(confirm).mockResolvedValueOnce(false); // Advanced = no
+
+    const result = await optionElicitorNode(makeElicitorState(), [], mockLlm);
+
+    // Paragraph was rejected, exact value used
+    expect(result.elicitedOptions?.["InstanceType"]).toBe("p3.2xlarge");
+    // No paragraph leaked into any field
+    const values = Object.values(result.elicitedOptions ?? {});
+    for (const v of values) {
+      if (typeof v === "string") {
+        expect(v.length).toBeLessThan(100);
+      }
+    }
+  });
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Lambda Environment toCfn transform
 // ═════════════════════════════════════════════════════════════════════════════
