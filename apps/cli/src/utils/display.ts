@@ -961,19 +961,7 @@ export async function renderOptionPrompt(
         initialValue:
           typeof defaultValue === "string" ? defaultValue : undefined,
       });
-      if (result === "__other__") {
-        const customValue = await clack.text({
-          message: `${question.label} \u2014 Enter value`,
-          placeholder: question.placeholder ?? "",
-        });
-        if (clack.isCancel(customValue)) {
-          clack.cancel("Wizard cancelled.");
-          process.exit(130);
-        }
-        return typeof customValue === "string"
-          ? customValue.trim()
-          : defaultValue;
-      }
+      // "__other__" is returned as-is — promptWithHelp handles LLM-assisted input
       break;
     }
     case "string": {
