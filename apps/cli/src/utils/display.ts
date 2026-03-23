@@ -77,6 +77,19 @@ const FRIENDLY_NAMES: Record<string, string> = {
   Timeout: "Timeout (s)",
   Role: "Execution Role",
   Tags: "Tags",
+  DBName: "Database Name",
+  EngineVersion: "Engine Version",
+  DeletionProtection: "Deletion Protection",
+  BackupRetentionPeriod: "Backup Retention (days)",
+  Description: "Description",
+  ReservedConcurrentExecutions: "Reserved Concurrency",
+  Environment: "Environment Variables",
+  IamInstanceProfile: "IAM Instance Profile",
+  UserData: "User Data",
+  KMSMasterKeyID: "KMS Key ID",
+  EnableLifecycle: "Lifecycle Rules",
+  EnableCors: "CORS",
+  EnableReplication: "Cross-Region Replication",
 };
 
 /**
@@ -435,7 +448,7 @@ export async function renderHitlConfirm(
 
   if (clack.isCancel(result)) {
     clack.cancel("Cancelled.");
-    process.exit(0);
+    process.exit(130);
   }
   return result === true;
 }
@@ -463,7 +476,7 @@ export async function renderHitlCompoundConfirm(
 
   if (clack.isCancel(result)) {
     clack.cancel("Cancelled.");
-    process.exit(0);
+    process.exit(130);
   }
   return result === true;
 }
@@ -595,24 +608,29 @@ Rules:
 - Use plain text, no markdown headers or code blocks.
 - If you don't know exact pricing, give reasonable estimates with "~".`;
 
-  const result = await withTimeout(
-    llmClient.generateText(prompt),
-    TRADEOFF_TIMEOUT_MS,
-  );
+  try {
+    const result = await withTimeout(
+      llmClient.generateText(prompt),
+      TRADEOFF_TIMEOUT_MS,
+    );
 
-  if (!result) {
-    // Timeout — fall back to doc help
+    if (!result) {
+      // Timeout — fall back to doc help
+      return renderDocHelp(fieldName, resourceType, tools, llmClient);
+    }
+
+    const [err, text] = result;
+    if (err || !text) {
+      return renderDocHelp(fieldName, resourceType, tools, llmClient);
+    }
+
+    const trimmed = text.trim();
+    clack.note(trimmed, `⚖️ ${fieldName} — Trade-off Analysis`);
+    return trimmed;
+  } catch {
+    // LLM call threw — fall back to doc help
     return renderDocHelp(fieldName, resourceType, tools, llmClient);
   }
-
-  const [err, text] = result;
-  if (err || !text) {
-    return renderDocHelp(fieldName, resourceType, tools, llmClient);
-  }
-
-  const trimmed = text.trim();
-  clack.note(trimmed, `⚖️ ${fieldName} — Trade-off Analysis`);
-  return trimmed;
 }
 
 // ── Documentation help (Story 7.5) ───────────────────────────────────────────
@@ -1022,7 +1040,7 @@ export async function renderOptionPrompt(
 
           if (clack.isCancel(categoryResult)) {
             clack.cancel("Wizard cancelled.");
-            process.exit(0);
+            process.exit(130);
           }
 
           if (categoryResult === "?") {
@@ -1084,7 +1102,7 @@ export async function renderOptionPrompt(
 
   if (clack.isCancel(result)) {
     clack.cancel("Wizard cancelled.");
-    process.exit(0);
+    process.exit(130);
   }
 
   // Normalise boolean-select results back to actual booleans.
@@ -1115,7 +1133,7 @@ export async function renderAdvancedConfirm(): Promise<boolean> {
   });
   if (clack.isCancel(result)) {
     clack.cancel("Cancelled.");
-    process.exit(0);
+    process.exit(130);
   }
   return result === true;
 }
@@ -1138,7 +1156,7 @@ export async function renderApplyNowConfirm(
 
   if (clack.isCancel(result)) {
     clack.cancel("Cancelled.");
-    process.exit(0);
+    process.exit(130);
   }
   return result === true;
 }

@@ -22,8 +22,9 @@ describe("rdsDbInstancePlugin", () => {
     );
     expect(field).toBeDefined();
     expect(field!.question.type).toBe("enum");
-    expect(field!.question.showIf).toBeDefined();
-    expect(field!.question.showIf!.field).toBe("Engine");
+    // EngineVersion is always shown (no showIf) because it contains
+    // options for all engines (PostgreSQL, MySQL, MariaDB).
+    expect(field!.question.showIf).toBeUndefined();
   });
 
   it("EngineVersion includes PostgreSQL 15 and 16", () => {

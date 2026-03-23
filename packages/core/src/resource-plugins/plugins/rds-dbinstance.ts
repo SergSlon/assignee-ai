@@ -112,7 +112,6 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           },
           { value: "10.11", label: "MariaDB 10.11", fitHint: "LTS" },
         ],
-        showIf: { field: "Engine", value: "postgres" },
       },
     },
     {

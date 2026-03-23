@@ -57,9 +57,7 @@ export async function preflightGuardNode(
   // Story 18.10: Blocking BP findings (replaces old guardrail engine + CRITICAL BP check)
   // BP evaluation is synchronous (<1ms) — run before the parallel block.
   const bpFindings = state.bpFindings ?? [];
-  const blockingFindings = bpFindings.filter(
-    (f) => f.blocking || f.severity === "CRITICAL",
-  );
+  const blockingFindings = bpFindings.filter((f) => f.blocking);
   let bpBlocked = false;
   if (blockingFindings.length > 0) {
     bpBlocked = true;

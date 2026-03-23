@@ -153,7 +153,7 @@ describe("preflightGuardNode", () => {
 
   // ── Story 12.3: BP findings integration ─────────────────────────────────────
 
-  it("sets preflightPassed = false when CRITICAL BP finding is present", async () => {
+  it("sets preflightPassed = true when CRITICAL severity but blocking: false", async () => {
     const result = await preflightGuardNode(
       makeState({
         bpFindings: [
@@ -168,7 +168,7 @@ describe("preflightGuardNode", () => {
         ],
       }),
     );
-    expect(result.preflightPassed).toBe(false);
+    expect(result.preflightPassed).toBe(true);
   });
 
   it("sets preflightPassed = false when blocking: true finding is present", async () => {

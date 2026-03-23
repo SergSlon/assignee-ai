@@ -68,10 +68,8 @@ function assembleS3Composites(
 ): void {
   // ── Lifecycle ──
   if (options["EnableLifecycle"] === true) {
-    const transitionDays = parseInt(
-      String(options["LifecycleTransitionDays"] ?? "30"),
-      10,
-    );
+    const transitionDays =
+      parseInt(String(options["LifecycleTransitionDays"] ?? "30"), 10) || 30;
     const expirationDaysRaw = options["LifecycleExpirationDays"];
     const expirationDays =
       expirationDaysRaw && String(expirationDaysRaw).trim()
@@ -138,7 +136,6 @@ function stripEmpty(obj: Record<string, unknown>): Record<string, unknown> {
   for (const [k, v] of Object.entries(obj)) {
     if (v === null || v === undefined) continue;
     if (typeof v === "string" && v === "") continue;
-    if (typeof v === "number" && v === 0) continue;
     if (Array.isArray(v) && v.length === 0) continue;
     if (typeof v === "object" && !Array.isArray(v)) {
       const nested = stripEmpty(v as Record<string, unknown>);
