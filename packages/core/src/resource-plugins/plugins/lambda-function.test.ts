@@ -132,8 +132,8 @@ describe("lambdaFunctionPlugin", () => {
       expect(field.question.validate?.("my-function_123")).toBeUndefined();
     });
 
-    it("accepts empty value", () => {
-      expect(field.question.validate?.("")).toBeUndefined();
+    it("rejects empty value (required field)", () => {
+      expect(field.question.validate?.("")).toBe("Function name is required");
     });
 
     it("rejects names longer than 64 chars", () => {

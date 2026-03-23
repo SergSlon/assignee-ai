@@ -37,14 +37,6 @@ export const s3BucketPlugin: ResourcePlugin = {
         initialValue: true,
         hint: "SSE-S3 is free. KMS adds ~$1/mo per 10K requests. Recommended for production.",
       },
-      toCfn: (answer: unknown) =>
-        answer
-          ? {
-              ServerSideEncryptionConfiguration: [
-                { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
-              ],
-            }
-          : undefined,
     },
     {
       name: "KMSMasterKeyID",

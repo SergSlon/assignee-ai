@@ -157,16 +157,8 @@ describe("s3BucketPlugin", () => {
     describe("BucketEncryption", () => {
       const field = findField("BucketEncryption");
 
-      it("transforms true to SSE-S3 structure", () => {
-        expect(field.toCfn!(true)).toEqual({
-          ServerSideEncryptionConfiguration: [
-            { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
-          ],
-        });
-      });
-
-      it("transforms false to undefined", () => {
-        expect(field.toCfn!(false)).toBeUndefined();
+      it("has no toCfn (encryption is assembled by assembleS3Composites)", () => {
+        expect(field.toCfn).toBeUndefined();
       });
     });
 
