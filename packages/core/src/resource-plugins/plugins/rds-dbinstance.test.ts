@@ -16,29 +16,31 @@ describe("rdsDbInstancePlugin", () => {
 
   // ── Task 4.2 / AC #7: EngineVersion field ─────────────────────────────
 
-  it("has EngineVersion field in commonFields with enum type", () => {
-    const field = rdsDbInstancePlugin.commonFields.find(
+  it("has per-engine EngineVersion fields with showIf conditions", () => {
+    const versionFields = rdsDbInstancePlugin.commonFields.filter(
       (f) => f.name === "EngineVersion",
     );
-    expect(field).toBeDefined();
-    expect(field!.question.type).toBe("enum");
-    // EngineVersion is always shown (no showIf) because it contains
-    // options for all engines (PostgreSQL, MySQL, MariaDB).
-    expect(field!.question.showIf).toBeUndefined();
+    expect(versionFields.length).toBe(3);
+    // Each is filtered by engine
+    const engines = versionFields.map((f) => f.question.showIf?.value);
+    expect(engines).toContain("postgres");
+    expect(engines).toContain("mysql");
+    expect(engines).toContain("mariadb");
   });
 
-  it("EngineVersion includes PostgreSQL 15 and 16", () => {
+  it("PostgreSQL EngineVersion includes versions 15 and 16", () => {
     const field = rdsDbInstancePlugin.commonFields.find(
-      (f) => f.name === "EngineVersion",
+      (f) =>
+        f.name === "EngineVersion" && f.question.showIf?.value === "postgres",
     );
     const values = field!.question.options!.map((o) => o.value);
     expect(values).toContain("15");
     expect(values).toContain("16");
   });
 
-  it("EngineVersion includes MySQL 8.0 and 8.4", () => {
+  it("MySQL EngineVersion includes versions 8.0 and 8.4", () => {
     const field = rdsDbInstancePlugin.commonFields.find(
-      (f) => f.name === "EngineVersion",
+      (f) => f.name === "EngineVersion" && f.question.showIf?.value === "mysql",
     );
     const values = field!.question.options!.map((o) => o.value);
     expect(values).toContain("8.0");

@@ -87,8 +87,8 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       name: "EngineVersion",
       question: {
         type: "enum",
-        label: "Engine version",
-        hint: "Database engine version. Newer versions offer better performance and security. Version cannot be easily downgraded after creation.",
+        label: "PostgreSQL version",
+        hint: "Newer versions offer better performance and security. Cannot be easily downgraded.",
         options: [
           {
             value: "16",
@@ -97,13 +97,35 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
             recommended: true,
           },
           { value: "15", label: "PostgreSQL 15", fitHint: "Stable" },
+        ],
+        showIf: { field: "Engine", value: "postgres" },
+      },
+    },
+    {
+      name: "EngineVersion",
+      question: {
+        type: "enum",
+        label: "MySQL version",
+        hint: "Newer versions offer better performance and security. Cannot be easily downgraded.",
+        options: [
           {
             value: "8.4",
             label: "MySQL 8.4",
-            fitHint: "Latest, best performance",
+            fitHint: "Latest",
             recommended: true,
           },
           { value: "8.0", label: "MySQL 8.0", fitHint: "Stable, widely used" },
+        ],
+        showIf: { field: "Engine", value: "mysql" },
+      },
+    },
+    {
+      name: "EngineVersion",
+      question: {
+        type: "enum",
+        label: "MariaDB version",
+        hint: "Newer versions offer better performance and security. Cannot be easily downgraded.",
+        options: [
           {
             value: "11.4",
             label: "MariaDB 11.4",
@@ -112,6 +134,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           },
           { value: "10.11", label: "MariaDB 10.11", fitHint: "LTS" },
         ],
+        showIf: { field: "Engine", value: "mariadb" },
       },
     },
     {
