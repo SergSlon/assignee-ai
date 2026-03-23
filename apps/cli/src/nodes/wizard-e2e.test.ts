@@ -378,10 +378,6 @@ describe("RDS full flow — all required fields", () => {
     //   1. DBInstanceClass (enum, fetcher → static fallback options) → select
     //   2. Engine (enum) → select
     //   3. EngineVersion × 5 (enum, showIf per engine, fetcher → static fallback)
-    //      NOTE: mergeEnrichedFields uses a name-keyed Map, so duplicate "EngineVersion"
-    //      fields collapse to the last variant (aurora-postgresql). When Engine="postgres",
-    //      the showIf aurora-postgresql doesn't match, so EngineVersion is skipped.
-    //      This is a known limitation of the current field merge approach.
     //   4. DBName (string) → text
     //   5. MasterUsername (string) → text
     //   6. MasterUserPassword (string) → text
@@ -394,7 +390,7 @@ describe("RDS full flow — all required fields", () => {
     vi.mocked(select)
       .mockResolvedValueOnce("db.t3.small") // DBInstanceClass
       .mockResolvedValueOnce("postgres") // Engine
-      // EngineVersion is skipped (see NOTE above)
+      .mockResolvedValueOnce("16") // EngineVersion (postgres variant, matched by showIf)
       .mockResolvedValueOnce("false") // MultiAZ
       .mockResolvedValueOnce("false") // DeletionProtection
       .mockResolvedValueOnce("gp3") // StorageType
@@ -425,9 +421,7 @@ describe("RDS full flow — all required fields", () => {
     expect(elicited["StorageType"]).toBe("gp3");
     expect(elicited["AllocatedStorage"]).toBe("20");
 
-    // EngineVersion is NOT captured due to the duplicate-name merge issue
-    // (all 5 EngineVersion fields collapse to aurora-postgresql showIf)
-    expect(elicited["EngineVersion"]).toBeUndefined();
+    expect(elicited["EngineVersion"]).toBe("16");
 
     // No placeholders
     const placeholder = containsPlaceholder(elicited);
