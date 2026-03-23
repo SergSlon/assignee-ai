@@ -52,6 +52,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           },
         ],
         initialValue: "db.t3.micro",
+        fetcher: "discover-rds-instance-classes",
       },
     },
     {
@@ -99,6 +100,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           { value: "15", label: "PostgreSQL 15", fitHint: "Stable" },
         ],
         showIf: { field: "Engine", value: "postgres" },
+        fetcher: "discover-rds-engine-versions",
       },
     },
     {
@@ -117,6 +119,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           { value: "8.0", label: "MySQL 8.0", fitHint: "Stable, widely used" },
         ],
         showIf: { field: "Engine", value: "mysql" },
+        fetcher: "discover-rds-engine-versions",
       },
     },
     {
@@ -135,6 +138,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           { value: "10.11", label: "MariaDB 10.11", fitHint: "LTS" },
         ],
         showIf: { field: "Engine", value: "mariadb" },
+        fetcher: "discover-rds-engine-versions",
       },
     },
     {
@@ -152,6 +156,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           { value: "3.05.2", label: "Aurora MySQL 3.05.2 (stable)" },
         ],
         showIf: { field: "Engine", value: "aurora-mysql" },
+        fetcher: "discover-rds-engine-versions",
       },
     },
     {
@@ -165,6 +170,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           { value: "15.8", label: "Aurora PostgreSQL 15.8 (stable)" },
         ],
         showIf: { field: "Engine", value: "aurora-postgresql" },
+        fetcher: "discover-rds-engine-versions",
       },
     },
     {

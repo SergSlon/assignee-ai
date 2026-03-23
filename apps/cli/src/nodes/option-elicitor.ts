@@ -48,6 +48,8 @@ import {
   discoverSecurityGroups,
   discoverKeyPairs,
   discoverInstanceTypes,
+  discoverRdsEngineVersions,
+  discoverRdsInstanceClasses,
   type InstanceTypeCategory,
 } from "../utils/aws-resource-discovery.js";
 import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
@@ -60,6 +62,11 @@ import {
   getIntentDefaults,
   applyIntentOverrides,
 } from "../utils/intent-defaults.js";
+import {
+  classifyWorkload,
+  type WorkloadProfile,
+} from "../utils/workload-classifier.js";
+import { rankOptions } from "../utils/option-ranker.js";
 import type { AgentState } from "../services/graph.js";
 
 /**
@@ -260,16 +267,194 @@ function enrichFieldLabels(fields: ResourceField[]): ResourceField[] {
   });
 }
 
+/**
+ * Maps a workload profile to the corresponding category key used in the
+ * EC2 InstanceType categorySelect field.
+ * Returns undefined for profiles that don't map to a known category (gpu-accelerated, storage-heavy, unknown).
+ *
+ * @see Story 21.3
+ */
+const PROFILE_TO_CATEGORY: Partial<Record<WorkloadProfile, string>> = {
+  burstable: "burstable",
+  "general-purpose": "general",
+  "compute-heavy": "compute",
+  "memory-intensive": "memory",
+};
+
+/** GPU note shown when gpu-accelerated profile is detected. */
+const GPU_CATEGORY_NOTE =
+  "GPU instances not in categories \u2014 use 'Other' for p5/g6 types";
+
+/**
+ * Applies workload-based smart filtering to categorySelect fields (e.g., EC2 InstanceType).
+ *
+ * - Reorders categories so the workload-matching category appears first
+ * - Appends "(recommended for your workload)" hint to the matching category label
+ * - Ranks options within the matching category using `rankOptions()`
+ * - For gpu-accelerated profile: adds a note via the field hint
+ * - For unknown/undefined profile: no changes
+ *
+ * Pure transformation — no I/O, no mutations to inputs.
+ *
+ * @see Story 21.3
+ */
+export function applyCategorySmartFilter(
+  fields: ResourceField[],
+  profile: WorkloadProfile | undefined,
+): ResourceField[] {
+  if (!profile || profile === "unknown") return fields;
+
+  const targetCategory = PROFILE_TO_CATEGORY[profile];
+
+  return fields.map((field) => {
+    if (
+      field.question.type !== "categorySelect" ||
+      !field.question.categories
+    ) {
+      return field;
+    }
+
+    // GPU profile: no matching category, just add a hint
+    if (profile === "gpu-accelerated" || profile === "storage-heavy") {
+      const gpuHint =
+        profile === "gpu-accelerated" ? GPU_CATEGORY_NOTE : undefined;
+      if (!gpuHint) return field;
+      const existingHint = field.question.hint;
+      return {
+        ...field,
+        question: {
+          ...field.question,
+          hint: existingHint ? `${existingHint}\n${gpuHint}` : gpuHint,
+        },
+      };
+    }
+
+    if (!targetCategory) return field;
+
+    // Mutable copy of categories array for reordering
+    const categories = [...field.question.categories];
+    const matchIdx = categories.findIndex((c) => c.key === targetCategory);
+    if (matchIdx < 0) return field;
+
+    // Rank options within the matching category
+    const matchedCat = categories[matchIdx]!;
+    const ranked = rankOptions(
+      [...matchedCat.options] as Array<
+        { value: string; label: string } & Record<string, unknown>
+      >,
+      profile,
+      matchedCat.options.length,
+    );
+    const rankedOptions = [...ranked.visible, ...ranked.overflow];
+
+    // Build the enhanced matching category with "(recommended for your workload)" label
+    const enhancedCat = {
+      ...matchedCat,
+      label: `${matchedCat.label} (recommended for your workload)`,
+      options: rankedOptions,
+    };
+
+    // Reorder: put matching category first, keep others in original order
+    const reordered = [
+      enhancedCat,
+      ...categories.filter((_, i) => i !== matchIdx),
+    ];
+
+    return {
+      ...field,
+      question: {
+        ...field.question,
+        categories: reordered,
+      },
+    };
+  });
+}
+
+/**
+ * Applies workload-based ranking to enum fields with many options (>10).
+ * Reorders options so the most relevant ones appear first.
+ * Only applies when a known workload profile is detected; "unknown" skips ranking.
+ *
+ * @see Story 21.4
+ */
+export function applyOptionRanking(
+  fields: ResourceField[],
+  profile: WorkloadProfile,
+): ResourceField[] {
+  if (profile === "unknown") return fields;
+
+  return fields.map((field) => {
+    if (field.question.type !== "enum" || !field.question.options) return field;
+    if (field.question.options.length <= 10) return field;
+
+    const ranked = rankOptions(
+      [...field.question.options] as Array<
+        { value: string; label: string } & Record<string, unknown>
+      >,
+      profile,
+      field.question.options.length,
+    );
+
+    // If ranking was not applied (e.g. unknown profile fallback), keep original order
+    if (!ranked.filtered) return field;
+
+    return {
+      ...field,
+      question: {
+        ...field.question,
+        options: [...ranked.visible, ...ranked.overflow],
+      },
+    };
+  });
+}
+
 /** Maps fetcher identifiers to discovery functions. */
 const fetcherMap: Record<
   string,
-  () => Promise<Array<{ value: string; label: string }>>
+  (
+    context?: Record<string, unknown>,
+  ) => Promise<Array<{ value: string; label: string }>>
 > = {
   "discover-amis": discoverAmis,
   "discover-subnets": discoverSubnets,
   "discover-security-groups": discoverSecurityGroups,
   "discover-key-pairs": discoverKeyPairs,
+  "discover-rds-engine-versions": discoverRdsEngineVersions,
+  "discover-rds-instance-classes": discoverRdsInstanceClasses,
 };
+
+/** Human-readable spinner messages per fetcher ID. */
+const fetcherSpinnerMessages: Record<string, string> = {
+  "discover-amis": "Discovering available AMIs...",
+  "discover-subnets": "Discovering available subnets...",
+  "discover-security-groups": "Discovering security groups...",
+  "discover-key-pairs": "Discovering key pairs...",
+  "discover-rds-engine-versions":
+    "Fetching available database engine versions from AWS...",
+  "discover-rds-instance-classes":
+    "Fetching available database instance classes from AWS...",
+};
+
+/**
+ * Returns a spinner message appropriate for the set of fetcher IDs that will run.
+ * Single fetcher -> resource-specific message; multiple -> generic message.
+ * Returns null if no dynamic fields need fetching.
+ */
+function getDiscoverySpinnerMessage(fields: ResourceField[]): string | null {
+  const fetcherIds = new Set(
+    fields
+      .filter((f) => f.question.fetcher && fetcherMap[f.question.fetcher])
+      .map((f) => f.question.fetcher!),
+  );
+  if (fetcherIds.size === 0) return null;
+  if (fetcherIds.size === 1) {
+    const id = [...fetcherIds][0]!;
+    return (
+      fetcherSpinnerMessages[id] ?? "Discovering available options from AWS..."
+    );
+  }
+  return "Discovering available options from AWS...";
+}
 
 /**
  * Resolves dynamic fields by fetching live options from AWS.
@@ -278,8 +463,17 @@ const fetcherMap: Record<
  * Spinner-free — callers are responsible for spinner lifecycle.
  * @see Story 7.11
  */
+/** Unique key for a field in fetchResults — disambiguates fields sharing the same name (e.g., EngineVersion per engine). */
+function fieldFetchKey(field: ResourceField): string {
+  if (field.question.showIf) {
+    return `${field.name}::${field.question.showIf.field}=${String(field.question.showIf.value)}`;
+  }
+  return field.name;
+}
+
 async function resolveDynamicFields(
   fields: ResourceField[],
+  context?: Record<string, unknown>,
 ): Promise<ResourceField[]> {
   const dynamicFields = fields.filter((f) => f.question.fetcher);
   if (dynamicFields.length === 0) return fields;
@@ -288,32 +482,64 @@ async function resolveDynamicFields(
     string,
     Array<{ value: string; label: string }>
   >();
-  const warnedFields = new Set<string>();
+  const warnedKeys = new Set<string>();
   await Promise.all(
     dynamicFields.map(async (field) => {
       const fetch = fetcherMap[field.question.fetcher!];
       if (!fetch) return;
+      const key = fieldFetchKey(field);
       try {
-        const options = await fetch();
-        fetchResults.set(field.name, options);
+        // Build per-field context: merge global context with showIf condition data
+        // so fetchers like discover-rds-engine-versions know which engine to query.
+        const fieldContext = field.question.showIf
+          ? {
+              ...context,
+              [field.question.showIf.field]: field.question.showIf.value,
+            }
+          : context;
+        const options = await fetch(fieldContext);
+        fetchResults.set(key, options);
       } catch {
         clack.log.warn(
           `Could not discover ${field.question.label ?? field.name} from your account. Enter manually.`,
         );
-        warnedFields.add(field.name);
-        fetchResults.set(field.name, []);
+        warnedKeys.add(key);
+        fetchResults.set(key, []);
       }
     }),
   );
 
   return fields.map((field) => {
     if (!field.question.fetcher) return field;
-    const options = fetchResults.get(field.name) ?? [];
+    const key = fieldFetchKey(field);
+    const options = fetchResults.get(key) ?? [];
 
     if (options.length === 0) {
-      // Fallback to manual string entry.
+      // Check if the field has static fallback options defined in the plugin
+      const staticOptions = field.question.options;
+      const hasStaticFallback =
+        Array.isArray(staticOptions) && staticOptions.length > 0;
+
+      if (hasStaticFallback) {
+        // Static defaults exist — show them with an outdated-data warning
+        if (!warnedKeys.has(key)) {
+          clack.log.warn(
+            "Could not reach AWS. Showing default options \u2014 versions may be outdated.",
+          );
+        }
+        return {
+          ...field,
+          question: {
+            ...field.question,
+            // Keep the existing static options; clear fetcher so we don't retry
+            fetcher: undefined,
+          },
+        };
+      }
+
+      // No static fallback — revert to manual string entry.
       // Only warn if the catch block didn't already warn for this field.
-      if (!warnedFields.has(field.name)) {
+      if (!warnedKeys.has(key)) {
         clack.log.warn(
           `Could not discover ${field.question.label ?? field.name} from your account. Enter manually.`,
         );
@@ -640,20 +866,40 @@ export async function optionElicitorNode(
   // run concurrently. They operate on different fields (pricing → InstanceType labels,
   // discovery → AMI/Subnet/SG/KeyPair options) so results merge without conflict.
   const parallelSpinner = clack.spinner();
-  parallelSpinner.start("Preparing your wizard…");
+  // Story 20.6: Use resource-specific spinner message when fetching dynamic options
+  const discoveryMessage = getDiscoverySpinnerMessage(plugin.commonFields);
+  const spinnerMessage = discoveryMessage ?? "Preparing your wizard\u2026";
+  parallelSpinner.start(spinnerMessage);
+
+  // Story 21.1: Classify workload profile in parallel with pricing/discovery.
+  // Result stored for Story 21.2 (smart option filtering).
+  let workloadProfile: WorkloadProfile = "unknown";
 
   const startMs = Date.now();
-  const [pricingSettled, discoverySettled, instanceTypesSettled] =
-    await Promise.allSettled([
-      tools && tools.length > 0
-        ? enrichWithLivePricing(plugin, tools)
-        : Promise.resolve(plugin.commonFields),
-      resolveDynamicFields(plugin.commonFields),
-      // Fetch real instance types from AWS for EC2 categorySelect
-      state.resourceType === RESOURCE_TYPES.EC2_INSTANCE
-        ? discoverInstanceTypes()
-        : Promise.resolve(null),
-    ]);
+  const [
+    pricingSettled,
+    discoverySettled,
+    instanceTypesSettled,
+    classificationSettled,
+  ] = await Promise.allSettled([
+    tools && tools.length > 0
+      ? enrichWithLivePricing(plugin, tools)
+      : Promise.resolve(plugin.commonFields),
+    resolveDynamicFields(plugin.commonFields, {}),
+    // Fetch real instance types from AWS for EC2 categorySelect
+    state.resourceType === RESOURCE_TYPES.EC2_INSTANCE
+      ? discoverInstanceTypes()
+      : Promise.resolve(null),
+    // Story 21.1: LLM-based workload classification
+    llmClient && state.userIntent
+      ? classifyWorkload(state.userIntent, llmClient)
+      : Promise.resolve("unknown" as WorkloadProfile),
+  ]);
+
+  // Story 21.1: Extract classification result
+  if (classificationSettled.status === "fulfilled") {
+    workloadProfile = classificationSettled.value;
+  }
 
   const pricedFields =
     pricingSettled.status === "fulfilled"
@@ -701,6 +947,7 @@ export async function optionElicitorNode(
       parallelFanOutMs: Date.now() - startMs,
       pricingStatus: pricingSettled.status,
       discoveryStatus: discoverySettled.status,
+      workloadProfile,
     },
   });
 
@@ -719,13 +966,27 @@ export async function optionElicitorNode(
   // Enrich advanced fields with contextual metadata too
   const enrichedAdvanced = enrichFieldLabels(bpHintedAdvanced);
 
+  // Story 21.3: Smart-filter categorySelect fields (EC2 InstanceType) by workload profile.
+  // Reorders categories so the matching one appears first, ranks within-category options.
+  const categoryFilteredCommon = applyCategorySmartFilter(
+    enrichedCommon,
+    workloadProfile,
+  );
+
+  // Story 21.4: Rank enum fields with many options (>10) by workload relevance.
+  // Applied after enrichment so labels are already finalized.
+  const rankedCommon = applyOptionRanking(
+    categoryFilteredCommon,
+    workloadProfile,
+  );
+
   // Story 10.5: Apply intent-aware smart defaults — higher priority than plugin
   // initialValue, lower priority than pattern memory and user input.
   const intentOverrides = getIntentDefaults(
     state.userIntent,
     state.resourceType,
   );
-  const commonFields = applyIntentOverrides(enrichedCommon, intentOverrides);
+  const commonFields = applyIntentOverrides(rankedCommon, intentOverrides);
   const advancedFields = applyIntentOverrides(
     enrichedAdvanced,
     intentOverrides,

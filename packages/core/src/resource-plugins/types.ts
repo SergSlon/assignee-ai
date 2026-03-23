@@ -5,6 +5,9 @@
  * @see project-context.md — Open/Closed Principle section
  */
 
+/** Context passed to fetcher functions — contains previously answered wizard field values. */
+export type FetcherContext = Record<string, unknown>;
+
 /** Supported question input types for field elicitation. */
 export type QuestionType =
   | "boolean"
@@ -24,6 +27,8 @@ export interface OptionMetadata {
   fitHint?: string;
   /** Whether this option is the recommended choice */
   recommended?: boolean;
+  /** Whether this option is deprecated / past EOL */
+  deprecated?: boolean;
 }
 
 /**
