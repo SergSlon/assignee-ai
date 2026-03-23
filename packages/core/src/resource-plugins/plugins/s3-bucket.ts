@@ -54,6 +54,13 @@ export const s3BucketPlugin: ResourcePlugin = {
         placeholder: "arn:aws:kms:...",
         hint: "ARN of a KMS key for server-side encryption. Leave blank to use the free SSE-S3 (AES-256). KMS adds ~$1/month per key plus $0.03 per 10K requests. Use KMS when you need key rotation or audit trails.",
         showIf: { field: "BucketEncryption", value: true },
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value);
+          if (!s.startsWith("arn:aws:kms:"))
+            return "Must be a KMS key ARN (arn:aws:kms:...)";
+          return undefined;
+        },
       },
     },
     {
@@ -139,6 +146,13 @@ export const s3BucketPlugin: ResourcePlugin = {
         placeholder: "365",
         hint: "Permanently deletes objects after this many days. Leave blank to keep objects forever. Common: 365 for logs, 90 for temp files.",
         showIf: { field: "EnableLifecycle", value: true },
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const n = Number(value);
+          if (!Number.isInteger(n) || n < 1)
+            return "Must be a positive integer (days)";
+          return undefined;
+        },
       },
     },
     // ── CORS ──
@@ -195,6 +209,13 @@ export const s3BucketPlugin: ResourcePlugin = {
         placeholder: "arn:aws:s3:::my-replica-bucket",
         hint: "The S3 bucket ARN in another region where replicas will be stored. The bucket must already exist and have versioning enabled.",
         showIf: { field: "EnableReplication", value: true },
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value);
+          if (!s.startsWith("arn:aws:s3:::"))
+            return "Must be an S3 bucket ARN (arn:aws:s3:::bucket-name)";
+          return undefined;
+        },
       },
     },
   ],

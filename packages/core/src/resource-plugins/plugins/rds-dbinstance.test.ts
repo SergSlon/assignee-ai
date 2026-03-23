@@ -20,12 +20,14 @@ describe("rdsDbInstancePlugin", () => {
     const versionFields = rdsDbInstancePlugin.commonFields.filter(
       (f) => f.name === "EngineVersion",
     );
-    expect(versionFields.length).toBe(3);
+    expect(versionFields.length).toBe(5);
     // Each is filtered by engine
     const engines = versionFields.map((f) => f.question.showIf?.value);
     expect(engines).toContain("postgres");
     expect(engines).toContain("mysql");
     expect(engines).toContain("mariadb");
+    expect(engines).toContain("aurora-mysql");
+    expect(engines).toContain("aurora-postgresql");
   });
 
   it("PostgreSQL EngineVersion includes versions 15 and 16", () => {

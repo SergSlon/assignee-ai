@@ -514,7 +514,7 @@ async function promptWithHelp(
       if (!userDesc) continue; // re-prompt
 
       // If it looks like an exact value (e.g., "p3.2xlarge"), return it directly
-      if (/^[a-z][a-z0-9.-]*$/.test(userDesc) && !userDesc.includes(" ")) {
+      if (/^[a-z0-9][a-z0-9.-]*$/i.test(userDesc) && !userDesc.includes(" ")) {
         return userDesc;
       }
 
