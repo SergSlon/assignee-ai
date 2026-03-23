@@ -777,14 +777,26 @@ async function promptWithHelp(
               process.exit(130);
             }
             if (confirm) return suggested;
+            // User rejected suggestion — re-prompt the field
+            continue;
           }
         } catch {
           s.stop("Could not get suggestion");
         }
       }
 
-      // Fallback: just use what they typed
-      return userDesc;
+      // Fallback: let user type an exact value
+      const manualValue = await clack.text({
+        message: `${field.question.label} — Enter the exact value`,
+        placeholder: "e.g., t3.medium, p3.2xlarge",
+      });
+      if (clack.isCancel(manualValue)) {
+        clack.cancel("Wizard cancelled.");
+        process.exit(130);
+      }
+      const val = typeof manualValue === "string" ? manualValue.trim() : "";
+      if (val) return val;
+      continue; // re-prompt if empty
     }
 
     return answer;
