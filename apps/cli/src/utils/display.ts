@@ -227,6 +227,43 @@ export function renderIntro(): void {
   }
 }
 
+/** EBS volume pricing per GB-month by volume type (us-east-1 On-Demand). */
+const EBS_PRICE_PER_GB_MONTH: Record<string, number> = {
+  gp3: 0.08,
+  gp2: 0.1,
+  io1: 0.125,
+};
+
+/**
+ * Builds a cost string with EBS storage breakdown when BlockDeviceMappings
+ * are present in the desiredState. Returns the original cost string when
+ * no EBS info is available.
+ */
+function formatEbsCostBreakdown(
+  desiredState: Record<string, unknown> | undefined,
+  estimatedMonthlyCost: string | undefined,
+): string {
+  const baseCost = estimatedMonthlyCost ?? "N/A";
+  if (!desiredState) return baseCost;
+
+  const bdm = desiredState["BlockDeviceMappings"];
+  if (!Array.isArray(bdm) || bdm.length === 0) return baseCost;
+
+  const vol = bdm[0] as Record<string, unknown> | undefined;
+  const ebs = vol?.["Ebs"] as Record<string, unknown> | undefined;
+  if (!ebs) return baseCost;
+
+  const volumeType = String(ebs["VolumeType"] ?? "gp3");
+  const volumeSize = Number(ebs["VolumeSize"] ?? 8);
+  const pricePerGb = EBS_PRICE_PER_GB_MONTH[volumeType];
+  if (!pricePerGb || isNaN(volumeSize) || volumeSize <= 0) return baseCost;
+
+  const storageMonthlyCost = volumeSize * pricePerGb;
+  const storageCostStr = `$${storageMonthlyCost.toFixed(2)}/mo`;
+
+  return `Compute: ${baseCost} + Storage: ${volumeSize} GB ${volumeType} ~${storageCostStr}`;
+}
+
 export function renderPlanBox(state: RenderableState): void {
   stopSpinner();
 
@@ -243,12 +280,18 @@ export function renderPlanBox(state: RenderableState): void {
     ? formatDesiredState(state.desiredState)
     : "(none)";
 
+  // Calculate EBS storage cost from desiredState BlockDeviceMappings if available
+  const ebsCostLine = formatEbsCostBreakdown(
+    state.desiredState,
+    state.estimatedMonthlyCost,
+  );
+
   const content = [
     `Resource Type:   ${state.resourceType}`,
     `Region:          ${regionLabel()}`,
     `Config:`,
     configBlock,
-    `Estimated Cost:  ${state.estimatedMonthlyCost ?? "N/A"}`,
+    `Estimated Cost:  ${ebsCostLine}`,
     ...(freeTierLine ? [freeTierLine] : []),
     ...(memoryHintLines ? [memoryHintLines] : []),
     findingsLine,

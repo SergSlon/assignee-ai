@@ -469,6 +469,7 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
           DeviceName: "/dev/xvda",
           Ebs: {
             VolumeType: "gp3",
+            VolumeSize: 8,
             Encrypted: true,
           },
         },
@@ -488,6 +489,7 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
           DeviceName: "/dev/xvda",
           Ebs: {
             VolumeType: "gp3",
+            VolumeSize: 8,
             Encrypted: false,
           },
         },

@@ -186,11 +186,15 @@ export function assembleEc2Storage(
       ebs["VolumeType"] = "gp3"; // default
     }
 
-    if (volumeSize) {
+    if (volumeSize && String(volumeSize).trim() !== "") {
       const size = parseInt(String(volumeSize), 10);
       if (!isNaN(size) && size >= 1) {
         ebs["VolumeSize"] = size;
+      } else {
+        ebs["VolumeSize"] = 8; // default from plugin initialValue
       }
+    } else {
+      ebs["VolumeSize"] = 8; // default when left blank
     }
 
     // Default to true (encrypted) unless explicitly set to false
