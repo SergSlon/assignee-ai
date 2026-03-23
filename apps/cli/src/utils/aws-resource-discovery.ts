@@ -371,6 +371,44 @@ export async function discoverAmis(): Promise<DiscoveryOption[]> {
 }
 
 /**
+ * OS name → SSM parameter path mapping for AMI resolution.
+ * Used when the user picks an OS from the static fallback menu
+ * instead of a real AMI ID (discovery failed).
+ */
+const OS_TO_SSM_PATH: Record<string, string> = {
+  "amazon-linux-2023":
+    "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64",
+  "ubuntu-24.04":
+    "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id",
+  "ubuntu-22.04":
+    "/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id",
+  "windows-2022":
+    "/aws/service/ami-windows-latest/Windows_Server-2022-English-Full-Base",
+};
+
+/**
+ * Resolves an OS name (e.g., "amazon-linux-2023") to a real AMI ID
+ * via a targeted SSM parameter lookup. Returns null on failure.
+ */
+export async function resolveAmiFromOsName(
+  osName: string,
+): Promise<string | null> {
+  const ssmPath = OS_TO_SSM_PATH[osName];
+  if (!ssmPath) return null;
+
+  try {
+    const ssm = createSsmClient();
+    const result = await withTimeout(
+      ssm.send(new GetParameterCommand({ Name: ssmPath })),
+      DISCOVERY_TIMEOUT_MS,
+    );
+    return result?.Parameter?.Value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Discovers VPC subnets from the account.
  * Shows Name tag, CIDR block, and availability zone.
  */

@@ -201,18 +201,19 @@ export const ec2InstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "AMI",
-        hint: "The Amazon Machine Image determines the OS and software. Common choices: Amazon Linux 2023 (free tier), Ubuntu 22.04/24.04, Windows Server 2022.",
+        hint: "The Amazon Machine Image determines the OS and software. When connected to AWS, real AMI IDs are fetched automatically. Otherwise, pick an OS and the system will resolve the AMI for your region.",
         placeholder: "ami-0abcdef1234567890",
-        options: [],
+        options: [
+          {
+            value: "amazon-linux-2023",
+            label: "Amazon Linux 2023 (recommended, free tier eligible)",
+          },
+          { value: "ubuntu-24.04", label: "Ubuntu 24.04 LTS" },
+          { value: "ubuntu-22.04", label: "Ubuntu 22.04 LTS" },
+          { value: "windows-2022", label: "Windows Server 2022" },
+        ],
+        initialValue: "amazon-linux-2023",
         fetcher: "discover-amis",
-        validate: (value: unknown) => {
-          if (!value || String(value).trim() === "")
-            return "AMI ID is required to launch an EC2 instance. Use 'ami-' followed by the ID (e.g., ami-0c55b159cbfafe1f0).";
-          const s = String(value).trim();
-          if (!s.startsWith("ami-"))
-            return "Must be a valid AMI ID starting with 'ami-'";
-          return undefined;
-        },
       },
     },
     {
@@ -288,7 +289,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
   ],
   defaults: {},
   configHints: [
-    "EC2 ImageId (AMI): ImageId is REQUIRED. If the user did not provide a specific AMI ID, use a recent Amazon Linux 2023 AMI for the target region (e.g., resolve via SSM parameter /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64). NEVER use placeholder IDs like ami-0abcdef1234567890.",
+    "EC2 ImageId (AMI): ImageId is REQUIRED. The user may provide an OS name like 'amazon-linux-2023' instead of a real AMI ID — keep it as-is, the system resolves it automatically. NEVER use placeholder IDs like ami-0abcdef1234567890.",
     "EC2 KeyName: if the user did not provide a key pair, OMIT KeyName — SSM Session Manager will be used instead",
     "EC2 SubnetId: if the user did not provide a subnet, OMIT SubnetId — the default VPC subnet will be used",
     "EC2 SecurityGroupIds: if the user did not provide security groups, OMIT SecurityGroupIds — the default VPC security group will be used",

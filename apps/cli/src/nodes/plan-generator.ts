@@ -13,6 +13,7 @@ import {
   type FailureRecord,
 } from "@assignee/core";
 import { defaultMemoryService } from "../services/memory.js";
+import { resolveAmiFromOsName } from "../utils/aws-resource-discovery.js";
 import type { LlmPort } from "@assignee/core";
 import { SCHEMA_EXCERPT_MAX_CHARS } from "../config/constants.js";
 import { CloudFormationKey } from "../constants/cfn-keys.js";
@@ -468,6 +469,21 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
           }
         }
       }
+    }
+
+    // Resolve OS name to real AMI ID for EC2 instances
+    if (
+      state.resourceType === "AWS::EC2::Instance" &&
+      typeof desiredState["ImageId"] === "string" &&
+      !String(desiredState["ImageId"]).startsWith("ami-")
+    ) {
+      const resolvedAmi = await resolveAmiFromOsName(
+        String(desiredState["ImageId"]),
+      );
+      if (resolvedAmi) {
+        desiredState["ImageId"] = resolvedAmi;
+      }
+      // If resolution fails, keep the OS name — CloudControl will give a clear error
     }
 
     const durationMs = Date.now() - startedAt;
