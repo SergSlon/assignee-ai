@@ -53,6 +53,16 @@ export interface RunCommandOptions {
 export async function runCommand(opts: RunCommandOptions): Promise<never> {
   renderIntro();
 
+  // Early credential check — fail fast before the wizard, not after
+  const hasOperatorKey = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+  if (!hasOperatorKey) {
+    renderError(
+      "No AWS credentials detected. Assignee.ai requires ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY.",
+      'Configure credentials via:\n  1) Add them to your .env file\n  2) Run "assignee setup" to create IAM users\n  3) Export them as environment variables\nThen run "assignee init" to verify.',
+    );
+    process.exit(ProcessExitCode.GENERIC_ERROR);
+  }
+
   const runId = crypto.randomUUID();
   const startTs = Date.now();
 

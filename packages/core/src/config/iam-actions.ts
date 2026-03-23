@@ -41,6 +41,12 @@ export function getRequiredIamActions(resourceType: string): string[] {
     "AWS::EC2::Instance": [
       "ec2:RunInstances",
       "ec2:CreateTags",
+      "ec2:DescribeInstances",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeSecurityGroups",
+      "ec2:DescribeKeyPairs",
+      "ec2:DescribeInstanceTypes",
+      "ssm:GetParameter",
       "iam:PassRole",
     ],
     "AWS::RDS::DBInstance": ["rds:CreateDBInstance", "rds:AddTagsToResource"],
