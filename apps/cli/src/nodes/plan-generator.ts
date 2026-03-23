@@ -136,8 +136,9 @@ function assembleS3Composites(
     options["EnableReplication"] === true &&
     options["ReplicationDestinationBucket"]
   ) {
+    // Role must come from the user or a future IAM role creation feature.
+    // Omitted here so stripEmpty does not produce invalid CFN.
     transformed["ReplicationConfiguration"] = {
-      Role: "", // Must be filled by the LLM or user
       Rules: [
         {
           Status: "Enabled",
@@ -165,6 +166,13 @@ export function collectPluginPlaceholders(resourceType: string): Set<string> {
   for (const field of allFields) {
     if (field.question.placeholder) {
       placeholders.add(field.question.placeholder);
+      // Also extract the prefix before any parenthetical suffix so that
+      // partial matches like "my-bucket" (from "my-bucket (leave blank...)")
+      // are caught by stripEmpty.
+      const prefixMatch = field.question.placeholder.match(/^(.+?)\s+\(/);
+      if (prefixMatch) {
+        placeholders.add(prefixMatch[1]!.trim());
+      }
     }
   }
   return placeholders;
@@ -363,8 +371,8 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         : []),
       ...(provisionHintLine ? ["", `COST CONTEXT: ${provisionHintLine}`] : []),
       "",
-      'CORRECT format example: { "BucketName": "my-bucket" }',
-      'WRONG format example: { "MyBucket": { "Type": "AWS::S3::Bucket", "Properties": { "BucketName": "my-bucket" } } }',
+      'CORRECT format example: { "BucketName": "payments-data-prod" }',
+      'WRONG format example: { "MyBucket": { "Type": "AWS::S3::Bucket", "Properties": { "BucketName": "payments-data-prod" } } }',
       "",
       `Schema excerpt:\n${JSON.stringify(state.resourceSchema, null, 2).slice(0, SCHEMA_EXCERPT_MAX_CHARS)}`,
       "",

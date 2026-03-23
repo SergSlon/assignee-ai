@@ -547,7 +547,7 @@ describe("Graph integration — plan generator resilience", () => {
   it("strips hallucinated fields not in schema", async () => {
     mockLlmForPlanFlow(
       "AWS::S3::Bucket",
-      '{"BucketName":"my-bucket","NonExistentField":"hallucinated","Tags":[]}',
+      '{"BucketName":"test-data-bucket","NonExistentField":"hallucinated","Tags":[]}',
     );
 
     const tools = createCoreMockTools(
@@ -565,7 +565,10 @@ describe("Graph integration — plan generator resilience", () => {
     );
 
     // plan_generator validates against schema keys and strips unknown fields
-    expect(result.desiredState).toHaveProperty("BucketName", "my-bucket");
+    expect(result.desiredState).toHaveProperty(
+      "BucketName",
+      "test-data-bucket",
+    );
     expect(result.desiredState).not.toHaveProperty("NonExistentField");
     // Empty arrays are also stripped by stripEmpty()
     expect(result.desiredState).not.toHaveProperty("Tags");

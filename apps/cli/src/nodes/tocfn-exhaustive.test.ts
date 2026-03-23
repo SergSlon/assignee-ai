@@ -103,13 +103,24 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
 
         if (field.question.type === "enum" && field.question.options?.length) {
           for (const opt of field.question.options) {
-            it(`${field.name} (enum "${opt.value}") → passthrough`, () => {
-              const result = applyToCfnTransforms(
-                { [field.name]: opt.value },
-                resourceType,
-              );
-              expect(result[field.name]).toBe(opt.value);
-            });
+            if (field.toCfn) {
+              it(`${field.name} (enum "${opt.value}") → toCfn transform`, () => {
+                const result = applyToCfnTransforms(
+                  { [field.name]: opt.value },
+                  resourceType,
+                );
+                const expected = field.toCfn!(opt.value);
+                expect(result[field.name]).toEqual(expected);
+              });
+            } else {
+              it(`${field.name} (enum "${opt.value}") → passthrough`, () => {
+                const result = applyToCfnTransforms(
+                  { [field.name]: opt.value },
+                  resourceType,
+                );
+                expect(result[field.name]).toBe(opt.value);
+              });
+            }
           }
         }
       }
@@ -314,7 +325,6 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
         "AWS::S3::Bucket",
       );
       expect(result["ReplicationConfiguration"]).toEqual({
-        Role: "",
         Rules: [
           {
             Status: "Enabled",
