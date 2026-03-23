@@ -498,6 +498,66 @@ async function promptWithHelp(
       }
       continue;
     }
+
+    // "Other" — LLM-assisted value input for any enum/categorySelect field
+    if (answer === "__other__") {
+      const description = await clack.text({
+        message: `${field.question.label} — Describe what you need`,
+        placeholder: "e.g., 'GPU for ML training' or enter exact value",
+      });
+      if (clack.isCancel(description)) {
+        clack.cancel("Wizard cancelled.");
+        process.exit(130);
+      }
+      const userDesc =
+        typeof description === "string" ? description.trim() : "";
+      if (!userDesc) continue; // re-prompt
+
+      // If it looks like an exact value (e.g., "p3.2xlarge"), return it directly
+      if (/^[a-z][a-z0-9.-]*$/.test(userDesc) && !userDesc.includes(" ")) {
+        return userDesc;
+      }
+
+      // Use LLM to suggest the right value
+      if (llmClient) {
+        const s = clack.spinner();
+        s.start("Finding the best option for you...");
+        try {
+          const prompt = [
+            `The user is configuring a ${resourceType} resource.`,
+            `They need to set the "${field.name}" field.`,
+            `They described what they need as: "${userDesc}"`,
+            userIntent ? `Their overall intent: "${userIntent}"` : "",
+            "",
+            "Respond with ONLY the exact valid AWS value (nothing else).",
+            "For example, if they want a GPU instance for ML, respond: p3.2xlarge",
+            "If they want a PostgreSQL version, respond: 16",
+          ].join("\n");
+
+          const [err, text] = await llmClient.generateText(prompt);
+          s.stop();
+
+          if (!err && text) {
+            const suggested = text.trim().split("\n")[0]!.trim();
+            const confirm = await clack.confirm({
+              message: `Suggested: ${suggested} — use this?`,
+              initialValue: true,
+            });
+            if (clack.isCancel(confirm)) {
+              clack.cancel("Wizard cancelled.");
+              process.exit(130);
+            }
+            if (confirm) return suggested;
+          }
+        } catch {
+          s.stop("Could not get suggestion");
+        }
+      }
+
+      // Fallback: just use what they typed
+      return userDesc;
+    }
+
     return answer;
   }
 }
