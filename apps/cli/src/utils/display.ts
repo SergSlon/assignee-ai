@@ -1091,110 +1091,25 @@ export async function renderOptionPrompt(
             continue;
           }
 
-          // "Other" — show extended families + manual entry
+          // "Other" — manual entry for types not in any category
           if (categoryResult === "__other__") {
-            const extendedFamilies = [
-              {
-                value: "p5.xlarge",
-                label: "GPU — p5 (NVIDIA H100)",
-                hint: "ML training, deep learning",
+            const customType = await clack.text({
+              message: `${question.label} — Enter instance type`,
+              placeholder: "p3.2xlarge",
+              validate: (value) => {
+                if (!value || !value.trim()) return "Instance type is required";
+                if (!/^[a-z][a-z0-9]*\.[a-z0-9]+$/.test(value.trim()))
+                  return "Format: family.size (e.g., p3.2xlarge, g5.xlarge)";
+                return undefined;
               },
-              {
-                value: "p4d.24xlarge",
-                label: "GPU — p4d (NVIDIA A100)",
-                hint: "Large-scale ML",
-              },
-              {
-                value: "g5.xlarge",
-                label: "GPU — g5 (NVIDIA A10G)",
-                hint: "Graphics, inference, video",
-              },
-              {
-                value: "g6.xlarge",
-                label: "GPU — g6 (NVIDIA L4)",
-                hint: "Cost-effective inference",
-              },
-              {
-                value: "i3.large",
-                label: "Storage — i3 (NVMe SSD)",
-                hint: "High I/O databases",
-              },
-              {
-                value: "i4i.large",
-                label: "Storage — i4i (AWS Nitro SSD)",
-                hint: "Transactional databases",
-              },
-              {
-                value: "d3.xlarge",
-                label: "Storage — d3 (HDD)",
-                hint: "Data warehousing, Hadoop",
-              },
-              {
-                value: "hpc7g.4xlarge",
-                label: "HPC — hpc7g (Graviton)",
-                hint: "High-performance computing",
-              },
-              {
-                value: "inf2.xlarge",
-                label: "Inference — inf2 (AWS Inferentia)",
-                hint: "ML inference at scale",
-              },
-              {
-                value: "trn1.2xlarge",
-                label: "Training — trn1 (AWS Trainium)",
-                hint: "ML training, cost-optimized",
-              },
-              {
-                value: "a1.medium",
-                label: "ARM — a1 (Graviton 1st gen)",
-                hint: "ARM workloads, lowest cost",
-              },
-              {
-                value: "m7g.medium",
-                label: "General — m7g (Graviton 3)",
-                hint: "Latest gen ARM general-purpose",
-              },
-            ];
-            const otherResult = (await clack.select({
-              message: `${question.label} — More instance types`,
-              options: [
-                ...extendedFamilies,
-                {
-                  value: "__manual__",
-                  label: "Enter exact type manually",
-                  hint: "Type any instance type (e.g., c7g.2xlarge)",
-                },
-              ],
-              initialValue: extendedFamilies[0]?.value,
-            })) as string | symbol;
-
-            if (clack.isCancel(otherResult)) {
+            });
+            if (clack.isCancel(customType)) {
               clack.cancel("Wizard cancelled.");
               process.exit(130);
             }
-
-            if (otherResult === "__manual__") {
-              const customType = await clack.text({
-                message: `${question.label} — Enter instance type`,
-                placeholder: "c7g.2xlarge",
-                validate: (value) => {
-                  if (!value || !value.trim())
-                    return "Instance type is required";
-                  if (!/^[a-z][a-z0-9]*\.[a-z0-9]+$/.test(value.trim()))
-                    return "Format: family.size (e.g., p3.2xlarge, g5.xlarge)";
-                  return undefined;
-                },
-              });
-              if (clack.isCancel(customType)) {
-                clack.cancel("Wizard cancelled.");
-                process.exit(130);
-              }
-              return typeof customType === "string"
-                ? customType.trim()
-                : defaultValue;
-            }
-
-            return otherResult as string;
+            return typeof customType === "string"
+              ? customType.trim()
+              : defaultValue;
           }
 
           selectedCategoryKey = categoryResult as string;

@@ -47,6 +47,8 @@ import {
   discoverSubnets,
   discoverSecurityGroups,
   discoverKeyPairs,
+  discoverInstanceTypes,
+  type InstanceTypeCategory,
 } from "../utils/aws-resource-discovery.js";
 import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
 import { ResourceFieldName } from "../constants/resource-fields.js";
@@ -578,12 +580,17 @@ export async function optionElicitorNode(
   parallelSpinner.start("Preparing your wizard…");
 
   const startMs = Date.now();
-  const [pricingSettled, discoverySettled] = await Promise.allSettled([
-    tools && tools.length > 0
-      ? enrichWithLivePricing(plugin, tools)
-      : Promise.resolve(plugin.commonFields),
-    resolveDynamicFields(plugin.commonFields),
-  ]);
+  const [pricingSettled, discoverySettled, instanceTypesSettled] =
+    await Promise.allSettled([
+      tools && tools.length > 0
+        ? enrichWithLivePricing(plugin, tools)
+        : Promise.resolve(plugin.commonFields),
+      resolveDynamicFields(plugin.commonFields),
+      // Fetch real instance types from AWS for EC2 categorySelect
+      state.resourceType === RESOURCE_TYPES.EC2_INSTANCE
+        ? discoverInstanceTypes()
+        : Promise.resolve(null),
+    ]);
 
   const pricedFields =
     pricingSettled.status === "fulfilled"
@@ -595,8 +602,32 @@ export async function optionElicitorNode(
       ? discoverySettled.value
       : plugin.commonFields;
 
+  // If real instance types were fetched, replace hardcoded categories on the InstanceType field
+  const liveCategories: InstanceTypeCategory[] | null =
+    instanceTypesSettled.status === "fulfilled"
+      ? (instanceTypesSettled.value as InstanceTypeCategory[] | null)
+      : null;
+
   // Merge: pricing-enriched labels + discovery-resolved options
-  const dynamicFields = mergeEnrichedFields(pricedFields, discoveredFields);
+  let dynamicFields = mergeEnrichedFields(pricedFields, discoveredFields);
+
+  // Replace hardcoded categorySelect categories with live data if available
+  if (liveCategories && liveCategories.length > 0) {
+    dynamicFields = dynamicFields.map((field) => {
+      if (
+        field.name !== "InstanceType" ||
+        field.question.type !== "categorySelect"
+      )
+        return field;
+      return {
+        ...field,
+        question: {
+          ...field.question,
+          categories: liveCategories,
+        },
+      };
+    });
+  }
 
   log({
     ts: new Date().toISOString(),
