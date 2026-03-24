@@ -1,6 +1,7 @@
 /**
  * Unit tests for mcp-client.ts
  * Story 9.9 — T7.12-T7.15: mcp-client.ts unit tests with mocked MCP servers
+ * Story 31.4 — Removed cfn-mcp-server (IAC); core servers now 3 (Pricing, Knowledge, Docs)
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -23,9 +24,9 @@ vi.mock("@langchain/mcp-adapters", () => ({
 
 vi.mock("../config/mcp-servers.js", () => ({
   getMcpServerConfigs: vi.fn(() => ({
-    "cfn-mcp-server": {
+    "aws-pricing-mcp-server": {
       command: "uvx",
-      args: ["cfn-mcp-server"],
+      args: ["awslabs.aws-pricing-mcp-server@latest"],
       env: {},
     },
   })),
@@ -59,9 +60,9 @@ async function freshImport() {
   }));
   vi.doMock("../config/mcp-servers.js", () => ({
     getMcpServerConfigs: vi.fn(() => ({
-      "cfn-mcp-server": {
+      "aws-pricing-mcp-server": {
         command: "uvx",
-        args: ["cfn-mcp-server"],
+        args: ["awslabs.aws-pricing-mcp-server@latest"],
         env: {},
       },
     })),
@@ -95,28 +96,28 @@ describe("createMcpClient", () => {
 
   it("connection failure — logs error and throws McpError", async () => {
     mockInitializeConnections.mockRejectedValue(
-      new Error("cfn-mcp-server failed to start"),
+      new Error("aws-pricing-mcp-server failed to start"),
     );
     const { createMcpClient } = await freshImport();
 
     await expect(createMcpClient()).rejects.toThrow(
-      "MCP server 'cfn-mcp-server' failed to start.",
+      "MCP server 'aws-pricing-mcp-server' failed to start.",
     );
     expect(stderrWriteSpy).toHaveBeenCalled();
   });
 
   it("connection failure with known server name — shows install hint", async () => {
     mockInitializeConnections.mockRejectedValue(
-      new Error("cfn-mcp-server connection refused"),
+      new Error("aws-pricing-mcp-server connection refused"),
     );
     const { createMcpClient } = await freshImport();
 
     await expect(createMcpClient()).rejects.toThrow(
-      "MCP server 'cfn-mcp-server' failed to start.",
+      "MCP server 'aws-pricing-mcp-server' failed to start.",
     );
 
     const errorCall = stderrWriteSpy.mock.calls[0]?.[0] as string;
-    expect(errorCall).toContain("cfn-mcp-server");
+    expect(errorCall).toContain("aws-pricing-mcp-server");
     expect(errorCall).toContain("failed to start");
   });
 
@@ -139,8 +140,8 @@ describe("getMcpTools", () => {
   it("T7.13: returns tools from core client", async () => {
     mockInitializeConnections.mockResolvedValue(undefined);
     const mockTools = [
-      { name: "get_resource_schema" },
       { name: "get_pricing" },
+      { name: "search_documentation" },
     ];
     mockGetTools.mockResolvedValue(mockTools);
 
@@ -216,9 +217,9 @@ describe("optional server failure isolation", () => {
 
     vi.doMock("../config/mcp-servers.js", () => ({
       getMcpServerConfigs: vi.fn(() => ({
-        "cfn-mcp-server": {
+        "aws-pricing-mcp-server": {
           command: "uvx",
-          args: ["cfn-mcp-server"],
+          args: ["awslabs.aws-pricing-mcp-server@latest"],
           env: {},
         },
       })),
@@ -234,7 +235,7 @@ describe("optional server failure isolation", () => {
     vi.resetModules();
     const { createMcpClient, getMcpTools } = await import("./mcp-client.js");
 
-    const coreTools = [{ name: "schema" }];
+    const coreTools = [{ name: "get_pricing" }];
     mockGetTools.mockResolvedValue(coreTools);
 
     const client = await createMcpClient();

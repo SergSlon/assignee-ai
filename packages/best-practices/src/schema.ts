@@ -41,13 +41,20 @@ export const bestPracticeSchema = z
     autoFixable: z.boolean().optional(),
     desiredStatePatch: z.record(z.unknown()).optional(),
     blocking: z.boolean().optional().default(false),
+    condition: z.record(z.unknown()).optional(),
     fixType: z.enum(BP_FIX_TYPE).optional(),
     interactiveOptions: z
       .array(
         z.object({
           label: z.string(),
-          action: z.enum(["prompt_value", "skip"]),
+          action: z.enum([
+            "prompt_value",
+            "set_value",
+            "remove_property",
+            "skip",
+          ]),
           targetField: z.string().optional(),
+          targetValue: z.unknown().optional(),
         }),
       )
       .optional(),

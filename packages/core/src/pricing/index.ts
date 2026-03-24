@@ -15,6 +15,15 @@ import { snsPricingStrategy } from "./strategies/sns.js";
 import { ecsClusterPricingStrategy } from "./strategies/ecs-cluster.js";
 import { ecrPricingStrategy } from "./strategies/ecr.js";
 import { elbv2PricingStrategy } from "./strategies/elbv2.js";
+// Sprint F: Tier 1 pricing strategies (Epic 25)
+import { logsPricingStrategy } from "./strategies/logs.js";
+import { internetGatewayPricingStrategy } from "./strategies/internet-gateway.js";
+import { routeTablePricingStrategy } from "./strategies/route-table.js";
+import { natGatewayPricingStrategy } from "./strategies/nat-gateway.js";
+// Sprint G: Tier 2 pricing strategies (Epic 26)
+import { apiGatewayV2PricingStrategy } from "./strategies/apigatewayv2.js";
+import { cloudWatchAlarmPricingStrategy } from "./strategies/cloudwatch-alarm.js";
+import { secretsManagerPricingStrategy } from "./strategies/secretsmanager.js";
 import { ec2PricingDecomposer } from "./decomposers/ec2.js";
 import { rdsPricingDecomposer } from "./decomposers/rds.js";
 import { s3PricingDecomposer } from "./decomposers/s3.js";
@@ -54,6 +63,33 @@ defaultPricingRegistry.register("AWS::ECR::Repository", ecrPricingStrategy);
 defaultPricingRegistry.register(
   "AWS::ElasticLoadBalancingV2::LoadBalancer",
   elbv2PricingStrategy,
+);
+// Sprint F: Tier 1 resources (Epic 25)
+defaultPricingRegistry.register("AWS::Logs::LogGroup", logsPricingStrategy);
+defaultPricingRegistry.register(
+  "AWS::EC2::InternetGateway",
+  internetGatewayPricingStrategy,
+);
+defaultPricingRegistry.register(
+  "AWS::EC2::RouteTable",
+  routeTablePricingStrategy,
+);
+defaultPricingRegistry.register(
+  "AWS::EC2::NatGateway",
+  natGatewayPricingStrategy,
+);
+// Sprint G: Tier 2 resources (Epic 26)
+defaultPricingRegistry.register(
+  "AWS::ApiGatewayV2::Api",
+  apiGatewayV2PricingStrategy,
+);
+defaultPricingRegistry.register(
+  "AWS::CloudWatch::Alarm",
+  cloudWatchAlarmPricingStrategy,
+);
+defaultPricingRegistry.register(
+  "AWS::SecretsManager::Secret",
+  secretsManagerPricingStrategy,
 );
 
 /**

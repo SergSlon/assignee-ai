@@ -1,0 +1,13 @@
+id: BP-SNS-004
+title: "SNS topic should not allow public access"
+severity: CRITICAL
+resource_type: "AWS::SNS::Topic"
+property_path: "TopicPolicy"
+check_type: "awareness"
+expected_value: true
+source: "FSBP"
+source_id: "SNS.2"
+description: "SNS topic access policies should not allow public access (Principal: '*' without conditions). Public topics can be subscribed to by any AWS account, causing data leakage."
+remediation: "Review the SNS topic policy and restrict Principal to specific AWS accounts or IAM entities. Add conditions to limit access by source account or VPC endpoint."
+category: security
+lastVerified: "2026-03-24"

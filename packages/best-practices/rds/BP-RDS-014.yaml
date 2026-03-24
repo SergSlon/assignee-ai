@@ -1,0 +1,13 @@
+id: BP-RDS-014
+title: "RDS single-AZ instance should be evaluated for Multi-AZ"
+severity: HIGH
+resource_type: "AWS::RDS::DBInstance"
+property_path: "MultiAZ"
+check_type: "awareness"
+expected_value: true
+source: "TrustedAdvisor"
+source_id: "TA-rds-single-az"
+description: "Trusted Advisor identifies Single-AZ RDS instances in production accounts. Single-AZ deployments have no automatic failover, resulting in extended downtime during infrastructure failures."
+remediation: "Enable Multi-AZ for production databases. Multi-AZ provides automatic failover with minimal downtime. For non-production, document the acceptance of Single-AZ risk."
+category: reliability
+lastVerified: "2026-03-24"

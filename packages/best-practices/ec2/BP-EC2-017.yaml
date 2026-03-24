@@ -1,0 +1,17 @@
+id: BP-EC2-017
+title: "EC2 instance should have IMDSv2 hop limit set to 1"
+severity: HIGH
+resource_type: "AWS::EC2::Instance"
+property_path: "MetadataOptions.HttpPutResponseHopLimit"
+check_type: "equals"
+expected_value: 1
+source: "FSBP"
+source_id: "EC2.8"
+description: "EC2 instances should set the IMDS hop limit to 1 to prevent containers on the instance from accessing instance metadata. A hop limit >1 allows Docker containers to reach IMDS through the extra network hop."
+remediation: "Set MetadataOptions.HttpPutResponseHopLimit to 1 unless running containers that legitimately need IMDS access."
+category: security
+lastVerified: "2026-03-24"
+autoFixable: true
+desiredStatePatch:
+  MetadataOptions:
+    HttpPutResponseHopLimit: 1

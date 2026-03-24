@@ -1,5 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import type { ResourcePlugin, OptionMetadata } from "../types.js";
+import type { ResourcePlugin, OptionMetadata, CfnOutput } from "../types.js";
 
 /** Lambda duration pricing rate ($/GB-second) — stable since 2014. Exported for test use. */
 export const LAMBDA_USD_PER_GB_SECOND = 0.0000166667;
@@ -402,4 +402,25 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
     "VpcConfig: if VpcSubnetIds are provided, emit a single VpcConfig object combining SubnetIds and SecurityGroupIds arrays. Do NOT set VpcConfig without subnets.",
     "Layers: must be an array of full Lambda Layer ARNs including version number. Max 5 layers.",
   ],
+  companionResources(desiredState: Record<string, unknown>): CfnOutput[] {
+    const functionName = desiredState["FunctionName"];
+    if (typeof functionName !== "string" || !functionName) return [];
+
+    const retention =
+      typeof desiredState["LogRetentionInDays"] === "number"
+        ? desiredState["LogRetentionInDays"]
+        : 14;
+
+    const sanitized = functionName.replace(/[^a-zA-Z0-9]/g, "");
+    return [
+      {
+        logicalId: `${sanitized}LogGroup`,
+        type: "AWS::Logs::LogGroup",
+        properties: {
+          LogGroupName: `/aws/lambda/${functionName}`,
+          RetentionInDays: retention,
+        },
+      },
+    ];
+  },
 };

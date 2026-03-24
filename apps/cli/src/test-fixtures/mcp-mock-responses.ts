@@ -1,12 +1,16 @@
 /**
- * Comprehensive MCP mock responses for all 6 servers and 7 tools.
- * ALL response data captured from live MCP servers on 2026-03-22.
+ * Comprehensive MCP mock responses for MCP servers and tools, plus raw schema data.
+ * ALL response data captured from live servers on 2026-03-22.
  *
  * Usage in tests:
  *   import { McpMocks, createMockTool } from "../test-fixtures/mcp-mock-responses.js";
- *   const tool = createMockTool("get_resource_schema_information", McpMocks.schema.s3Bucket.success);
+ *   const tool = createMockTool(ToolName.GET_PRICING, McpMocks.pricing.s3Storage.success);
  *
- * All responses mirror the real MCP wire format: { type: "text", text: "<json>" }
+ * Schema data:
+ *   Schema responses are available in MCP-wrapped format (McpMocks.schema.*.success)
+ *   and as raw objects (RawSchemas.*) for mocking CloudFormationSchemaService.getSchema().
+ *
+ * MCP responses mirror the wire format: { type: "text", text: "<json>" }
  * See: apps/cli/src/utils/mcp.ts — unwrapMcpText()
  *
  * aws-knowledge-mcp-server: configured but no app code calls its tools — no mocks needed.
@@ -23,12 +27,13 @@ function mcpText(payload: unknown): { type: "text"; text: string } {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 1. cfn-mcp-server — get_resource_schema_information
-//    Captured 2026-03-22 via: uvx awslabs.cfn-mcp-server@latest
+// 1. CloudFormation Resource Schemas
+//    Originally captured 2026-03-22; now fetched via CloudFormationSchemaService
+//    (DescribeType SDK) — see Story 31.x.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const schemaResponses = {
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::S3::Bucket" }. 30 props in full schema, trimmed to 10. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::S3::Bucket" }. 30 props in full schema, trimmed to 10. */
   s3Bucket: {
     success: mcpText({
       typeName: "AWS::S3::Bucket",
@@ -109,7 +114,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::EC2::Instance" }. 48 props in full schema, trimmed to 10. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::EC2::Instance" }. 48 props in full schema, trimmed to 10. */
   ec2Instance: {
     success: mcpText({
       typeName: "AWS::EC2::Instance",
@@ -178,7 +183,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::Lambda::Function" }. 33 props in full schema, trimmed to 10. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::Lambda::Function" }. 33 props in full schema, trimmed to 10. */
   lambdaFunction: {
     success: mcpText({
       typeName: "AWS::Lambda::Function",
@@ -257,7 +262,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::RDS::DBInstance" }. 99 props in full schema, trimmed to 12. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::RDS::DBInstance" }. 99 props in full schema, trimmed to 12. */
   rdsDbInstance: {
     success: mcpText({
       typeName: "AWS::RDS::DBInstance",
@@ -389,7 +394,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::IAM::Role" }. 11 props (all kept). */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::IAM::Role" }. 11 props (all kept). */
   iamRole: {
     success: mcpText({
       typeName: "AWS::IAM::Role",
@@ -469,7 +474,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::DynamoDB::Table" }. 22 props in full schema, trimmed to 10. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::DynamoDB::Table" }. 22 props in full schema, trimmed to 10. */
   dynamoDbTable: {
     success: mcpText({
       typeName: "AWS::DynamoDB::Table",
@@ -531,7 +536,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::SSM::Parameter" }. 9 props (all kept). */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::SSM::Parameter" }. 9 props (all kept). */
   ssmParameter: {
     success: mcpText({
       typeName: "AWS::SSM::Parameter",
@@ -591,7 +596,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::EC2::SecurityGroup" }. 13 props in full schema, trimmed to 6. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::EC2::SecurityGroup" }. 13 props in full schema, trimmed to 6. */
   securityGroup: {
     success: mcpText({
       typeName: "AWS::EC2::SecurityGroup",
@@ -647,7 +652,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::EC2::VPC" }. 8 props in full schema, trimmed to 5. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::EC2::VPC" }. 8 props in full schema, trimmed to 5. */
   vpc: {
     success: mcpText({
       typeName: "AWS::EC2::VPC",
@@ -696,7 +701,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::EC2::Subnet" }. 18 props in full schema, trimmed to 5. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::EC2::Subnet" }. 18 props in full schema, trimmed to 5. */
   subnet: {
     success: mcpText({
       typeName: "AWS::EC2::Subnet",
@@ -742,7 +747,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::SQS::Queue" }. 19 props in full schema, trimmed to 8. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::SQS::Queue" }. 19 props in full schema, trimmed to 8. */
   sqsQueue: {
     success: mcpText({
       typeName: "AWS::SQS::Queue",
@@ -800,7 +805,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::SNS::Topic" }. 15 props in full schema, trimmed to 5. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::SNS::Topic" }. 15 props in full schema, trimmed to 5. */
   snsTopic: {
     success: mcpText({
       typeName: "AWS::SNS::Topic",
@@ -842,7 +847,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::ECS::Cluster" }. 9 props in full schema, trimmed to 5. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::ECS::Cluster" }. 9 props in full schema, trimmed to 5. */
   ecsCluster: {
     success: mcpText({
       typeName: "AWS::ECS::Cluster",
@@ -895,7 +900,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::ECR::Repository" }. 10 props in full schema, trimmed to 5. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::ECR::Repository" }. 10 props in full schema, trimmed to 5. */
   ecrRepository: {
     success: mcpText({
       typeName: "AWS::ECR::Repository",
@@ -943,7 +948,7 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::ElasticLoadBalancingV2::LoadBalancer" }. 12 props in full schema, trimmed to 7. */
+  /** Captured 2026-03-22 via DescribeType. Input: { resource_type: "AWS::ElasticLoadBalancingV2::LoadBalancer" }. 12 props in full schema, trimmed to 7. */
   elbv2LoadBalancer: {
     success: mcpText({
       typeName: "AWS::ElasticLoadBalancingV2::LoadBalancer",
@@ -1012,15 +1017,15 @@ const schemaResponses = {
     }),
   },
 
-  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::Custom::FakeResource" }. Returns error (TypeNotFoundException). */
+  /** Captured 2026-03-22 via DescribeType. Input: { TypeName: "AWS::Custom::FakeResource" }. Returns error (TypeNotFoundException). */
   generic: {
     success: {
       type: "text" as const,
-      text: `Error executing tool get_resource_schema_information: Error downloading the schema for AWS::Custom::FakeResource: An error occurred (TypeNotFoundException) when calling the DescribeType operation: The type 'AWS::Custom::FakeResource' cannot be found.`,
+      text: `An error occurred (TypeNotFoundException) when calling the DescribeType operation: The type 'AWS::Custom::FakeResource' cannot be found.`,
     },
   },
 
-  /** Synthetic: empty schema edge case — cfn-mcp-server never returns empty schemas for known types. */
+  /** Synthetic: empty schema edge case — DescribeType never returns empty schemas for known types. */
   empty: {
     success: mcpText({
       typeName: "AWS::Unknown::Type",
@@ -3946,6 +3951,57 @@ export const McpMocks = {
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Raw schema objects — for mocking CloudFormationSchemaService.getSchema()
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function unwrapSchemaPayload(response: {
+  type: "text";
+  text: string;
+}): Record<string, unknown> {
+  return JSON.parse(response.text) as Record<string, unknown>;
+}
+
+/** Raw schema objects keyed by resource nickname (pre-adapter format). */
+export const RawSchemas = {
+  s3Bucket: unwrapSchemaPayload(schemaResponses.s3Bucket.success),
+  ec2Instance: unwrapSchemaPayload(schemaResponses.ec2Instance.success),
+  lambdaFunction: unwrapSchemaPayload(schemaResponses.lambdaFunction.success),
+  rdsDbInstance: unwrapSchemaPayload(schemaResponses.rdsDbInstance.success),
+  iamRole: unwrapSchemaPayload(schemaResponses.iamRole.success),
+  dynamoDbTable: unwrapSchemaPayload(schemaResponses.dynamoDbTable.success),
+  ssmParameter: unwrapSchemaPayload(schemaResponses.ssmParameter.success),
+  securityGroup: unwrapSchemaPayload(schemaResponses.securityGroup.success),
+  vpc: unwrapSchemaPayload(schemaResponses.vpc.success),
+  subnet: unwrapSchemaPayload(schemaResponses.subnet.success),
+  sqsQueue: unwrapSchemaPayload(schemaResponses.sqsQueue.success),
+  snsTopic: unwrapSchemaPayload(schemaResponses.snsTopic.success),
+  ecsCluster: unwrapSchemaPayload(schemaResponses.ecsCluster.success),
+  ecrRepository: unwrapSchemaPayload(schemaResponses.ecrRepository.success),
+  elbv2LoadBalancer: unwrapSchemaPayload(
+    schemaResponses.elbv2LoadBalancer.success,
+  ),
+} as const;
+
+/** Maps AWS resource type names to raw schema objects for mockGetSchema. */
+export const RawSchemasByType: Record<string, Record<string, unknown>> = {
+  "AWS::S3::Bucket": RawSchemas.s3Bucket,
+  "AWS::EC2::Instance": RawSchemas.ec2Instance,
+  "AWS::Lambda::Function": RawSchemas.lambdaFunction,
+  "AWS::RDS::DBInstance": RawSchemas.rdsDbInstance,
+  "AWS::IAM::Role": RawSchemas.iamRole,
+  "AWS::DynamoDB::Table": RawSchemas.dynamoDbTable,
+  "AWS::SSM::Parameter": RawSchemas.ssmParameter,
+  "AWS::EC2::SecurityGroup": RawSchemas.securityGroup,
+  "AWS::EC2::VPC": RawSchemas.vpc,
+  "AWS::EC2::Subnet": RawSchemas.subnet,
+  "AWS::SQS::Queue": RawSchemas.sqsQueue,
+  "AWS::SNS::Topic": RawSchemas.snsTopic,
+  "AWS::ECS::Cluster": RawSchemas.ecsCluster,
+  "AWS::ECR::Repository": RawSchemas.ecrRepository,
+  "AWS::ElasticLoadBalancingV2::LoadBalancer": RawSchemas.elbv2LoadBalancer,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Mock tool factory functions
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -3957,8 +4013,8 @@ export const McpMocks = {
  * @param response - The value to resolve (or Error to reject) on invoke
  *
  * @example
- *   const tool = createMockTool(ToolName.GET_RESOURCE_SCHEMA, McpMocks.schema.s3Bucket.success);
- *   const result = await tool.invoke({ resource_type: "AWS::S3::Bucket" });
+ *   const tool = createMockTool(ToolName.GET_PRICING, McpMocks.pricing.s3Storage.success);
+ *   const result = await tool.invoke({ service_code: "AmazonS3" });
  */
 export function createMockTool(
   name: string,
@@ -3975,7 +4031,7 @@ export function createMockTool(
  * Creates a mock tool that rejects with the given error.
  *
  * @example
- *   const tool = createFailingMockTool(ToolName.GET_RESOURCE_SCHEMA, new Error("Server down"));
+ *   const tool = createFailingMockTool(ToolName.GET_PRICING, new Error("Server down"));
  */
 export function createFailingMockTool(
   name: string,
@@ -4110,15 +4166,11 @@ export function createBillingMockTool(
 }
 
 /**
- * Creates a complete set of all 9 MCP tools with default success responses.
- * Useful for integration-style tests that need all tools available.
+ * Creates a complete set of all MCP tools with default success responses.
+ * Note: Schema fetching is no longer an MCP tool — mock CloudFormationSchemaService separately.
  */
 export function createAllMockTools(): StructuredTool[] {
   return [
-    createMockTool(
-      ToolName.GET_RESOURCE_SCHEMA,
-      McpMocks.schema.s3Bucket.success,
-    ),
     createMockTool(ToolName.GET_PRICING, McpMocks.pricing.s3Storage.success),
     createMockTool(
       ToolName.SEARCH_DOCUMENTATION,
@@ -4152,17 +4204,24 @@ export function createAllMockTools(): StructuredTool[] {
 }
 
 /**
- * Creates schema + pricing tools only (no documentation).
- * Used by schema-fetcher and preflight-guard tests.
+ * Creates a pricing-only tool set.
+ * Schema fetching is now handled by CloudFormationSchemaService (not MCP).
  */
-export function createCoreMockTools(
-  schemaResponse = McpMocks.schema.s3Bucket.success,
+export function createPricingMockTools(
   pricingResponse = McpMocks.pricing.s3Storage.success,
 ): StructuredTool[] {
-  return [
-    createMockTool(ToolName.GET_RESOURCE_SCHEMA, schemaResponse),
-    createMockTool(ToolName.GET_PRICING, pricingResponse),
-  ];
+  return [createMockTool(ToolName.GET_PRICING, pricingResponse)];
+}
+
+/**
+ * @deprecated Use createPricingMockTools() instead.
+ * Schema fetching is no longer MCP-based. Schema arg is ignored.
+ */
+export function createCoreMockTools(
+  _schemaResponse?: unknown,
+  pricingResponse = McpMocks.pricing.s3Storage.success,
+): StructuredTool[] {
+  return [createMockTool(ToolName.GET_PRICING, pricingResponse)];
 }
 
 /**

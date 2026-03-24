@@ -1,5 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import type { ResourcePlugin } from "../types.js";
+import type { ResourcePlugin, CfnOutput } from "../types.js";
 
 /**
  * ResourcePlugin for AWS::ECS::Cluster.
@@ -113,5 +113,26 @@ export const ecsClusterPlugin: ResourcePlugin = {
   ],
   defaults: {
     ClusterSettings: [{ Name: "containerInsights", Value: "enabled" }],
+  },
+  companionResources(desiredState: Record<string, unknown>): CfnOutput[] {
+    const clusterName = desiredState["ClusterName"];
+    if (typeof clusterName !== "string" || !clusterName) return [];
+
+    const retention =
+      typeof desiredState["LogRetentionInDays"] === "number"
+        ? desiredState["LogRetentionInDays"]
+        : 14;
+
+    const sanitized = clusterName.replace(/[^a-zA-Z0-9]/g, "");
+    return [
+      {
+        logicalId: `${sanitized}LogGroup`,
+        type: "AWS::Logs::LogGroup",
+        properties: {
+          LogGroupName: `/ecs/${clusterName}`,
+          RetentionInDays: retention,
+        },
+      },
+    ];
   },
 };

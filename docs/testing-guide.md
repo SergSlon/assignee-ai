@@ -36,23 +36,21 @@ Total: ~39 captured responses, plus synthetic edge cases (empty responses, malfo
 import {
   McpMocks,
   createMockTool,
-  createCoreMockTools,
+  createPricingMockTools,
   createIamMockTool,
   createSecurityMockTool,
   createBillingMockTool,
+  RawSchemasByType,
 } from "../test-fixtures/mcp-mock-responses.js";
 
 // Single mock tool
 const tool = createMockTool(
-  ToolName.GET_RESOURCE_SCHEMA,
-  McpMocks.schema.s3Bucket.success,
+  ToolName.GET_PRICING,
+  McpMocks.pricing.s3Storage.success,
 );
 
-// Pre-built tool sets
-const tools = createCoreMockTools(
-  McpMocks.schema.ec2Instance.success,
-  McpMocks.pricing.ec2T3Micro.success,
-);
+// Pre-built tool sets (pricing only — schema uses CloudFormationSchemaService mock)
+const tools = createPricingMockTools(McpMocks.pricing.ec2T3Micro.success);
 
 // Domain-specific mock tools
 const iamTool = createIamMockTool(McpMocks.iam.s3BucketAllowed);

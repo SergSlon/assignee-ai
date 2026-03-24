@@ -35,6 +35,8 @@ _assignee() {
             '--checkpoint[Use a saved plan checkpoint instead of running Phase 1]:path:'
           ;;
         init)
+          _arguments \
+            '--global[Create global user config (~/.config/assignee/config.yaml) instead of project config]'
           ;;
         completions)
           ;;

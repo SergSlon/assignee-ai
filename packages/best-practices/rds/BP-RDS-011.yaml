@@ -1,0 +1,16 @@
+id: BP-RDS-011
+title: "RDS instance should have Performance Insights enabled"
+severity: MEDIUM
+resource_type: "AWS::RDS::DBInstance"
+property_path: "EnablePerformanceInsights"
+check_type: "equals"
+expected_value: true
+source: "FSBP"
+source_id: "RDS.17"
+description: "RDS instances should have Performance Insights enabled for database performance monitoring. Performance Insights provides detailed wait analysis, top SQL queries, and resource utilization metrics."
+remediation: "Set EnablePerformanceInsights to true. Performance Insights is free for 7 days of data retention and available for most RDS engine types."
+category: performance
+lastVerified: "2026-03-24"
+autoFixable: true
+desiredStatePatch:
+  EnablePerformanceInsights: true

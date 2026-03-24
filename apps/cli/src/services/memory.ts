@@ -147,6 +147,61 @@ export class MemoryService {
       "utf-8",
     );
   }
+  // --- Rotation (trim oldest records to stay within caps) ---
+
+  /**
+   * Rotate provisions: keep only the most recent `maxRecords` entries.
+   * @returns Number of records removed.
+   */
+  async rotateProvisions(maxRecords = 200): Promise<number> {
+    const existing = await this.readProvisions();
+    if (existing.length <= maxRecords) return 0;
+    const removed = existing.length - maxRecords;
+    const trimmed = existing.slice(-maxRecords);
+    await this.ensureDir();
+    await fs.writeFile(
+      this.filePath("provisions.json"),
+      JSON.stringify(trimmed, null, 2),
+      "utf-8",
+    );
+    return removed;
+  }
+
+  /**
+   * Rotate failures: keep only the most recent `maxRecords` entries.
+   * @returns Number of records removed.
+   */
+  async rotateFailures(maxRecords = 100): Promise<number> {
+    const existing = await this.readFailures();
+    if (existing.length <= maxRecords) return 0;
+    const removed = existing.length - maxRecords;
+    const trimmed = existing.slice(-maxRecords);
+    await this.ensureDir();
+    await fs.writeFile(
+      this.filePath("failures.json"),
+      JSON.stringify(trimmed, null, 2),
+      "utf-8",
+    );
+    return removed;
+  }
+
+  /**
+   * Rotate patterns: keep only the most recent `maxRecords` entries.
+   * @returns Number of records removed.
+   */
+  async rotatePatterns(maxRecords = 100): Promise<number> {
+    const existing = await this.readPatterns();
+    if (existing.length <= maxRecords) return 0;
+    const removed = existing.length - maxRecords;
+    const trimmed = existing.slice(-maxRecords);
+    await this.ensureDir();
+    await fs.writeFile(
+      this.filePath("patterns.json"),
+      JSON.stringify(trimmed, null, 2),
+      "utf-8",
+    );
+    return removed;
+  }
 }
 
 /** Default singleton instance for production use. Tests can instantiate with a temp dir. */

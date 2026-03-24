@@ -5,11 +5,12 @@
  * Live pricing: fetches real-time on-demand prices from the AWS Pricing API MCP server
  * before the prompt loop and injects them into enum option labels.
  *
- * Policy resolution: Story 7.2 (mergeConfigs) is not yet implemented.
- * Until then, all fields use plugin initialValue with ask_if_not_set policy.
- * When Story 7.2 lands, replace `resolveFieldConfigs()` with `mergeConfigs()`.
+ * Config integration: loads user config, project config, and org policy in parallel,
+ * then uses mergeConfigs() to resolve field values/policies via 6-level precedence.
+ * Fields resolved as never_ask are injected silently; ask_if_not_set pre-fills
+ * initialValue; always_ask forces a prompt regardless of config.
  *
- * @see Story 7.3
+ * @see Story 7.3, Story 27.4
  */
 
 import * as clack from "@clack/prompts";
@@ -56,6 +57,13 @@ import {
   type InstanceTypeCategory,
 } from "../utils/aws-resource-discovery.js";
 import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
+import { loadUserConfig } from "../config/user-config-loader.js";
+import { loadProjectConfig } from "../config/project-config-loader.js";
+import { fetchOrgPolicy, readAuthToken } from "../config/org-policy-cache.js";
+import {
+  mergeConfigs,
+  type MergeConfigsInput,
+} from "../utils/merge-configs.js";
 import { ResourceFieldName } from "../constants/resource-fields.js";
 import {
   evaluateWizardRecommendations,
@@ -1019,6 +1027,15 @@ export async function optionElicitorNode(
     defaultPluginRegistry.get(state.resourceType) ??
     defaultPluginRegistry.get("generic")!;
 
+  // Story 27.4: Load user config, project config, and org policy in parallel.
+  // These are loaded once per `assignee plan` invocation, not per field.
+  const [userConfig, projectConfig, authToken] = await Promise.all([
+    loadUserConfig(),
+    loadProjectConfig(),
+    readAuthToken(),
+  ]);
+  const orgPolicy = await fetchOrgPolicy(authToken);
+
   // Story 9.10: Parallel fan-out — pricing enrichment and dynamic field discovery
   // run concurrently. They operate on different fields (pricing → InstanceType labels,
   // discovery → AMI/Subnet/SG/KeyPair options) so results merge without conflict.
@@ -1153,8 +1170,94 @@ export async function optionElicitorNode(
   // return early at line 543, so this code was unreachable dead code.
   const previousOptions: Record<string, unknown> = {};
 
-  const resolvedCommon = resolveFieldConfigs(commonFields);
-  const resolvedAdvanced = resolveFieldConfigs(advancedFields);
+  // Story 27.4: Build config-aware merge input for 6-level precedence resolution.
+  // Extract global defaults (region, tags, naming prefix) from resolved config
+  // and inject them into a synthetic layer so they apply across all plugin fields.
+  const configDefaults: Record<string, unknown> = {};
+  const resolvedConfig = projectConfig ?? userConfig;
+  if (resolvedConfig?.defaults?.region) {
+    configDefaults["region"] = resolvedConfig.defaults.region;
+  }
+  if (resolvedConfig?.defaults?.tags) {
+    configDefaults["Tags"] = resolvedConfig.defaults.tags;
+  }
+
+  // Convert UserResourceConfig-shaped configs to the format mergeConfigs expects.
+  // mergeConfigs looks up fields by resourceType key in the config objects.
+  const userConfigAsResource = userConfig
+    ? {
+        [state.resourceType]: {
+          ...configDefaults,
+          ...(
+            userConfig as unknown as Record<string, Record<string, unknown>>
+          )?.[state.resourceType],
+        },
+      }
+    : undefined;
+
+  const projectConfigAsResource = projectConfig
+    ? {
+        [state.resourceType]: {
+          ...(projectConfig.defaults?.region
+            ? { region: projectConfig.defaults.region }
+            : {}),
+          ...(projectConfig.defaults?.tags
+            ? { Tags: projectConfig.defaults.tags }
+            : {}),
+          ...(
+            projectConfig as unknown as Record<string, Record<string, unknown>>
+          )?.[state.resourceType],
+        },
+      }
+    : undefined;
+
+  // Resolve field configs using mergeConfigs, re-keyed by fieldFetchKey
+  // so showIf-variant fields (e.g., multiple EngineVersion per engine) are preserved.
+  const resolveFieldsWithConfig = (
+    fields: ResourceField[],
+  ): Record<string, ResolvedFieldConfig> => {
+    const mergeInput: MergeConfigsInput = {
+      pluginFields: fields,
+      resourceType: state.resourceType,
+      orgPolicy: orgPolicy,
+      userConfig: userConfigAsResource,
+      projectConfig: projectConfigAsResource,
+    };
+    const raw = mergeConfigs(mergeInput);
+    // Re-key from field.name to fieldFetchKey for disambiguation
+    const result: Record<string, ResolvedFieldConfig> = {};
+    for (const field of fields) {
+      const key = fieldFetchKey(field);
+      const resolved = raw[field.name];
+      if (resolved) {
+        result[key] = { ...resolved };
+      }
+    }
+    return result;
+  };
+
+  const resolvedCommon = resolveFieldsWithConfig(commonFields);
+  const resolvedAdvanced = resolveFieldsWithConfig(advancedFields);
+
+  // Story 27.4: Log resolved field sources for diagnostics
+  if (state.runId) {
+    for (const [fieldName, resolved] of Object.entries(resolvedCommon)) {
+      if (resolved.source !== FieldSource.PLUGIN_DEFAULT) {
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.CONFIG_LOADED,
+          extras: {
+            field: fieldName,
+            value: resolved.value,
+            source: resolved.source,
+            policy: resolved.policy,
+          },
+        });
+      }
+    }
+  }
 
   // Story 18.12: Propagate categoryHint from intent overrides into resolved configs
   for (const override of intentOverrides) {

@@ -28,7 +28,7 @@ export interface McpServerConfig {
 
 /**
  * Reader credential env block — maps ASSIGNEE_READER_* to standard AWS_* for MCP subprocess.
- * Used by: cfn-mcp-server (IAC), aws-pricing-mcp-server, aws-cost-management-mcp-server.
+ * Used by: aws-pricing-mcp-server, aws-cost-management-mcp-server.
  */
 function readerEnv(
   region = process.env["AWS_REGION"] ?? "us-east-1",
@@ -59,25 +59,19 @@ function auditorEnv(
 }
 
 /**
- * Factory that returns MCP server process configurations.
+ * Factory that returns the 3 core MCP server process configurations.
  * Called at runtime (not module load) so credential env vars are available.
  *
  * Region notes:
- *   - IAC (cfn-mcp-server): us-east-1 — provides get_resource_schema_information for schema fetching.
- *     NOTE: cfn-mcp-server is deprecated by AWS in favour of aws-iac-mcp-server, but aws-iac-mcp-server
- *     v3+ dropped get_resource_schema_information (replaced by text-search tool search_cloudformation_documentation).
- *     Retained until schema-fetcher is migrated to CloudFormation Registry direct HTTP/SDK fetch (follow-up story).
  *   - Pricing: us-east-1 — AWS Pricing API only available in us-east-1
  *   - Knowledge: no AWS creds — public remote API via fastmcp
  *   - Docs:    no AWS creds — public documentation API via uvx subprocess
+ *
+ * Note: Schema fetching (previously via cfn-mcp-server / IAC) is now handled
+ * by CloudFormationSchemaService (direct SDK) — see Story 31.3.
  */
 export function getMcpServerConfigs(): Record<string, McpServerConfig> {
   return {
-    [McpServerName.IAC]: {
-      command: McpCommand.UVX,
-      args: ["awslabs.cfn-mcp-server@latest"],
-      env: readerEnv("us-east-1"),
-    },
     // Knowledge server: yanked uvx package — use remote API via fastmcp instead
     // Matches .gemini/antigravity/mcp_config.json "aws-knowledge-mcp-server"
     [McpServerName.KNOWLEDGE]: {

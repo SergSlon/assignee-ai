@@ -24,6 +24,16 @@ export const SUPPORTED_TYPES_ARRAY = [
   "AWS::ElasticLoadBalancingV2::LoadBalancer",
   "AWS::ECS::Cluster",
   "AWS::ECR::Repository",
+  // Sprint F: Tier 1 resources (Epic 25)
+  "AWS::Logs::LogGroup",
+  "AWS::EC2::InternetGateway",
+  "AWS::EC2::RouteTable",
+  "AWS::EC2::Route",
+  "AWS::EC2::NatGateway",
+  // Sprint G: Tier 2 resources (Epic 26)
+  "AWS::ApiGatewayV2::Api",
+  "AWS::CloudWatch::Alarm",
+  "AWS::SecretsManager::Secret",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -47,6 +57,16 @@ export const RESOURCE_TYPES = {
   ELBV2_LOAD_BALANCER: "AWS::ElasticLoadBalancingV2::LoadBalancer",
   ECS_CLUSTER: "AWS::ECS::Cluster",
   ECR_REPOSITORY: "AWS::ECR::Repository",
+  // Sprint F: Tier 1 resources (Epic 25)
+  LOGS_LOG_GROUP: "AWS::Logs::LogGroup",
+  EC2_INTERNET_GATEWAY: "AWS::EC2::InternetGateway",
+  EC2_ROUTE_TABLE: "AWS::EC2::RouteTable",
+  EC2_ROUTE: "AWS::EC2::Route",
+  EC2_NAT_GATEWAY: "AWS::EC2::NatGateway",
+  // Sprint G: Tier 2 resources (Epic 26)
+  APIGATEWAYV2_API: "AWS::ApiGatewayV2::Api",
+  CLOUDWATCH_ALARM: "AWS::CloudWatch::Alarm",
+  SECRETSMANAGER_SECRET: "AWS::SecretsManager::Secret",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */

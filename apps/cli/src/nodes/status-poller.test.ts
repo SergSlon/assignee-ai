@@ -13,12 +13,14 @@ function createMockProvisioner(): ProvisioningPort & {
   createResource: ReturnType<typeof vi.fn>;
   getRequestStatus: ReturnType<typeof vi.fn>;
   deleteResource: ReturnType<typeof vi.fn>;
+  updateResource: ReturnType<typeof vi.fn>;
 } {
   return {
     getResource: vi.fn(),
     createResource: vi.fn(),
     getRequestStatus: vi.fn(),
     deleteResource: vi.fn(),
+    updateResource: vi.fn(),
   };
 }
 

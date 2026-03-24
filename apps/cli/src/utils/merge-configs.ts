@@ -1,20 +1,20 @@
 /**
- * 5-level precedence resolver for resource field configuration.
- * Merges plugin defaults, org policy, and user config into a single resolved config
- * consumed by the option-elicitor (Story 7.3).
+ * 6-level precedence resolver for resource field configuration.
+ * Merges plugin defaults, org policy, user config, project config,
+ * env overrides, and CLI flags into a single resolved config
+ * consumed by the option-elicitor (Story 7.3, upgraded in Story 27.2).
  *
  * Precedence (highest → lowest):
- *   1. CLI flag (stub — wired in 7.3)
- *   2. Env var (stub — wired in 7.3)
- *   3. User config (~/.config/assignee/config.yaml)
- *   4. Org policy (SaaS or cached)
- *   5. Plugin default (ResourceField.question.initialValue)
+ *   0. Org locked (overrides EVERYTHING, including CLI flags)
+ *   0. Org always_ask (forces prompt regardless of all config)
+ *   1. CLI flags
+ *   2. Env var overrides (ASSIGNEE_*)
+ *   3. Project config (.assignee/config.yaml)
+ *   4. User config (~/.config/assignee/config.yaml)
+ *   5. Org default
+ *   6. Plugin default (ResourceField.question.initialValue)
  *
- * Special cases:
- *   - `locked` org field → overrides everything, source = "org_locked"
- *   - `always_ask` org field → forces prompt regardless of user config
- *
- * @see Story 7.2 — AC: 3, 4, 5
+ * @see Story 27.2 — 6-Level Precedence Resolver
  */
 
 import type { ResourceField } from "@assignee/core";
@@ -25,29 +25,60 @@ import type {
 } from "@assignee/core";
 
 /**
- * Resolve field config for all plugin fields by merging org policy and user preferences.
+ * Input options for the 6-level mergeConfigs resolver.
+ * All parameters except pluginFields and resourceType are optional
+ * for backward compatibility.
+ */
+export interface MergeConfigsInput {
+  pluginFields: ResourceField[];
+  resourceType: string;
+  cliFlags?: Record<string, unknown>;
+  envOverrides?: Record<string, unknown>;
+  projectConfig?: UserResourceConfig;
+  userConfig?: UserResourceConfig;
+  orgPolicy?: OrgResourceConfig;
+}
+
+/**
+ * Resolve field config for all plugin fields by merging 6 precedence levels.
  *
- * @param pluginFields - Fields declared by the resource plugin
- * @param orgPolicy - Org-level policy from SaaS API or cache (may be undefined)
- * @param userConfig - User-level preferences from config.yaml (may be undefined)
- * @param resourceType - CloudFormation resource type, e.g. "AWS::S3::Bucket"
- * @returns Map of field name → resolved config
+ * Overloaded for backward compatibility:
+ * - New callers: pass a single MergeConfigsInput object.
+ * - Legacy callers: pass (pluginFields, orgPolicy, userConfig, resourceType).
  */
 export function mergeConfigs(
-  pluginFields: ResourceField[],
-  orgPolicy: OrgResourceConfig | undefined,
-  userConfig: UserResourceConfig | undefined,
-  resourceType: string,
+  pluginFieldsOrInput: ResourceField[] | MergeConfigsInput,
+  orgPolicy?: OrgResourceConfig | undefined,
+  userConfig?: UserResourceConfig | undefined,
+  resourceType?: string,
 ): Record<string, ResolvedFieldConfig> {
-  const result: Record<string, ResolvedFieldConfig> = {};
-  const orgFields = orgPolicy?.[resourceType] ?? {};
-  const userFields = userConfig?.[resourceType] ?? {};
+  // Normalize: support both old 4-arg signature and new options object.
+  let input: MergeConfigsInput;
 
-  for (const field of pluginFields) {
+  if (Array.isArray(pluginFieldsOrInput)) {
+    // Legacy call signature
+    input = {
+      pluginFields: pluginFieldsOrInput,
+      orgPolicy,
+      userConfig,
+      resourceType: resourceType!,
+    };
+  } else {
+    input = pluginFieldsOrInput;
+  }
+
+  const result: Record<string, ResolvedFieldConfig> = {};
+  const orgFields = input.orgPolicy?.[input.resourceType] ?? {};
+  const userFields = input.userConfig?.[input.resourceType] ?? {};
+  const projectFields = input.projectConfig?.[input.resourceType] ?? {};
+  const envFields = input.envOverrides ?? {};
+  const cliFields = input.cliFlags ?? {};
+
+  for (const field of input.pluginFields) {
     const { name } = field;
     const orgField = orgFields[name];
 
-    // Level 1: org locked → never_ask, lock the value
+    // Priority 0a: org locked → never_ask, overrides EVERYTHING including CLI flags
     if (orgField?.policy === "locked") {
       result[name] = {
         policy: "never_ask",
@@ -57,14 +88,44 @@ export function mergeConfigs(
       continue;
     }
 
-    // Level 2: org always_ask → force prompt regardless of user config
+    // Priority 0b: org always_ask → force prompt regardless of all config
     if (orgField?.policy === "always_ask") {
       result[name] = { policy: "always_ask", source: "org_default" };
       continue;
     }
 
-    // Level 3: user config has value → ask_if_not_set (respect it but still elicit if absent)
-    if (name in userFields) {
+    // Level 1: CLI flag
+    if (name in cliFields && cliFields[name] !== undefined) {
+      result[name] = {
+        policy: "ask_if_not_set",
+        value: cliFields[name],
+        source: "cli_flag",
+      };
+      continue;
+    }
+
+    // Level 2: Env var override
+    if (name in envFields && envFields[name] !== undefined) {
+      result[name] = {
+        policy: "ask_if_not_set",
+        value: envFields[name],
+        source: "env_var",
+      };
+      continue;
+    }
+
+    // Level 3: Project config (.assignee/config.yaml)
+    if (name in projectFields && projectFields[name] !== undefined) {
+      result[name] = {
+        policy: "ask_if_not_set",
+        value: projectFields[name],
+        source: "project_config",
+      };
+      continue;
+    }
+
+    // Level 4: User config (~/.config/assignee/config.yaml)
+    if (name in userFields && userFields[name] !== undefined) {
       result[name] = {
         policy: "ask_if_not_set",
         value: userFields[name],
@@ -73,7 +134,7 @@ export function mergeConfigs(
       continue;
     }
 
-    // Level 4: org default → suggest value, ask_if_not_set
+    // Level 5: Org default
     if (orgField?.policy === "default" && orgField.value !== undefined) {
       result[name] = {
         policy: "ask_if_not_set",
@@ -83,7 +144,7 @@ export function mergeConfigs(
       continue;
     }
 
-    // Level 5: plugin default
+    // Level 6: Plugin default
     const pluginDefault = field.question.initialValue;
     if (pluginDefault !== undefined) {
       result[name] = {

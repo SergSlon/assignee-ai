@@ -14,6 +14,16 @@ import { iamRolePlugin } from "./plugins/iam-role.js";
 import { ecsClusterPlugin } from "./plugins/ecs-cluster.js";
 import { ecrRepositoryPlugin } from "./plugins/ecr-repository.js";
 import { elbv2LoadBalancerPlugin } from "./plugins/elbv2-loadbalancer.js";
+// Sprint F: Tier 1 resource plugins (Epic 25)
+import { logGroupPlugin } from "./plugins/logs-loggroup.js";
+import { internetGatewayPlugin } from "./plugins/ec2-internet-gateway.js";
+import { routeTablePlugin } from "./plugins/ec2-route-table.js";
+import { routePlugin } from "./plugins/ec2-route.js";
+import { natGatewayPlugin } from "./plugins/ec2-nat-gateway.js";
+// Sprint G: Tier 2 resource plugins (Epic 26)
+import { apiGatewayV2Plugin } from "./plugins/apigatewayv2-api.js";
+import { cloudWatchAlarmPlugin } from "./plugins/cloudwatch-alarm.js";
+import { secretsManagerSecretPlugin } from "./plugins/secretsmanager-secret.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -41,6 +51,16 @@ defaultPluginRegistry.register(iamRolePlugin);
 defaultPluginRegistry.register(ecsClusterPlugin);
 defaultPluginRegistry.register(ecrRepositoryPlugin);
 defaultPluginRegistry.register(elbv2LoadBalancerPlugin);
+// Sprint F: Tier 1 resources (Epic 25)
+defaultPluginRegistry.register(logGroupPlugin);
+defaultPluginRegistry.register(internetGatewayPlugin);
+defaultPluginRegistry.register(routeTablePlugin);
+defaultPluginRegistry.register(routePlugin);
+defaultPluginRegistry.register(natGatewayPlugin);
+// Sprint G: Tier 2 resources (Epic 26)
+defaultPluginRegistry.register(apiGatewayV2Plugin);
+defaultPluginRegistry.register(cloudWatchAlarmPlugin);
+defaultPluginRegistry.register(secretsManagerSecretPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 export { PluginRegistry };
@@ -59,6 +79,16 @@ export { iamRolePlugin } from "./plugins/iam-role.js";
 export { ecsClusterPlugin } from "./plugins/ecs-cluster.js";
 export { ecrRepositoryPlugin } from "./plugins/ecr-repository.js";
 export { elbv2LoadBalancerPlugin } from "./plugins/elbv2-loadbalancer.js";
+// Sprint F: Tier 1 resources (Epic 25)
+export { logGroupPlugin } from "./plugins/logs-loggroup.js";
+export { internetGatewayPlugin } from "./plugins/ec2-internet-gateway.js";
+export { routeTablePlugin } from "./plugins/ec2-route-table.js";
+export { routePlugin } from "./plugins/ec2-route.js";
+export { natGatewayPlugin } from "./plugins/ec2-nat-gateway.js";
+// Sprint G: Tier 2 resources (Epic 26)
+export { apiGatewayV2Plugin } from "./plugins/apigatewayv2-api.js";
+export { cloudWatchAlarmPlugin } from "./plugins/cloudwatch-alarm.js";
+export { secretsManagerSecretPlugin } from "./plugins/secretsmanager-secret.js";
 export { genericPlugin } from "./plugins/generic.js";
 export type {
   ResourcePlugin,

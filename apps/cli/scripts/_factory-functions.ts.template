@@ -10,8 +10,8 @@
  * @param response - The value to resolve (or Error to reject) on invoke
  *
  * @example
- *   const tool = createMockTool(ToolName.GET_RESOURCE_SCHEMA, McpMocks.schema.s3Bucket.success);
- *   const result = await tool.invoke({ resource_type: "AWS::S3::Bucket" });
+ *   const tool = createMockTool(ToolName.GET_PRICING, McpMocks.pricing.s3Storage.success);
+ *   const result = await tool.invoke({ service_code: "AmazonS3" });
  */
 export function createMockTool(
   name: string,
@@ -28,7 +28,7 @@ export function createMockTool(
  * Creates a mock tool that rejects with the given error.
  *
  * @example
- *   const tool = createFailingMockTool(ToolName.GET_RESOURCE_SCHEMA, new Error("Server down"));
+ *   const tool = createFailingMockTool(ToolName.GET_PRICING, new Error("Server down"));
  */
 export function createFailingMockTool(
   name: string,
@@ -127,15 +127,14 @@ export function createSequenceMockTool(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Creates a complete set of all 5 MCP tools with default success responses.
+ * Creates a complete set of all MCP tools with default success responses.
  * Useful for integration-style tests that need all tools available.
+ *
+ * Note: Schema fetching is no longer an MCP tool — it uses CloudFormationSchemaService
+ * (direct SDK). Mock that service separately via vi.mock("@assignee/core").
  */
 export function createAllMockTools(): StructuredTool[] {
   return [
-    createMockTool(
-      ToolName.GET_RESOURCE_SCHEMA,
-      McpMocks.schema.s3Bucket.success,
-    ),
     createMockTool(ToolName.GET_PRICING, McpMocks.pricing.s3Storage.success),
     createMockTool(
       ToolName.SEARCH_DOCUMENTATION,
@@ -153,17 +152,13 @@ export function createAllMockTools(): StructuredTool[] {
 }
 
 /**
- * Creates schema + pricing tools only (no documentation).
- * Used by schema-fetcher and preflight-guard tests.
+ * Creates a pricing-only tool set.
+ * Schema fetching is now handled by CloudFormationSchemaService (not MCP).
  */
-export function createCoreMockTools(
-  schemaResponse = McpMocks.schema.s3Bucket.success,
+export function createPricingMockTools(
   pricingResponse = McpMocks.pricing.s3Storage.success,
 ): StructuredTool[] {
-  return [
-    createMockTool(ToolName.GET_RESOURCE_SCHEMA, schemaResponse),
-    createMockTool(ToolName.GET_PRICING, pricingResponse),
-  ];
+  return [createMockTool(ToolName.GET_PRICING, pricingResponse)];
 }
 
 /**

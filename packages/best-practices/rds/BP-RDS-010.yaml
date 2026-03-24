@@ -1,0 +1,16 @@
+id: BP-RDS-010
+title: "RDS instance should have minor version auto-upgrade enabled"
+severity: HIGH
+resource_type: "AWS::RDS::DBInstance"
+property_path: "AutoMinorVersionUpgrade"
+check_type: "equals"
+expected_value: true
+source: "FSBP"
+source_id: "RDS.13"
+description: "RDS instances should have automatic minor version upgrades enabled to receive security patches and bug fixes. Instances running outdated versions may have known vulnerabilities."
+remediation: "Set AutoMinorVersionUpgrade to true. Minor upgrades are applied during the maintenance window."
+category: security
+lastVerified: "2026-03-24"
+autoFixable: true
+desiredStatePatch:
+  AutoMinorVersionUpgrade: true

@@ -9,6 +9,7 @@ import {
   DeleteResourceCommand,
   GetResourceCommand,
   GetResourceRequestStatusCommand,
+  UpdateResourceCommand,
   ResourceNotFoundException,
   AlreadyExistsException,
   ThrottlingException,
@@ -20,6 +21,7 @@ import {
   type ProvisioningPortError,
   type CreateResourceResult,
   type DeleteResourceResult,
+  type UpdateResourceResult,
   type GetRequestStatusResult,
 } from "./provisioning-port.js";
 
@@ -118,6 +120,41 @@ export class CloudControlAdapter implements ProvisioningPort {
       return [null, { requestToken }];
     } catch (err) {
       return [classifyError(err), null];
+    }
+  }
+
+  async updateResource(
+    typeName: string,
+    identifier: string,
+    patchDocument: string,
+  ): Promise<[ProvisioningPortError, null] | [null, UpdateResourceResult]> {
+    try {
+      const result = await this.client.send(
+        new UpdateResourceCommand({
+          TypeName: typeName,
+          Identifier: identifier,
+          PatchDocument: patchDocument,
+        }),
+      );
+      const requestToken = result.ProgressEvent?.RequestToken;
+      if (!requestToken) {
+        return [
+          {
+            kind: ProvisioningErrorKind.UNKNOWN,
+            message: "UpdateResource returned no RequestToken",
+          },
+          null,
+        ];
+      }
+      return [null, { requestToken }];
+    } catch (err) {
+      const classified = classifyError(err);
+      if (classified.kind === ProvisioningErrorKind.ACCESS_DENIED) {
+        classified.message =
+          "Reconcile requires OPERATOR-level AWS credentials with write access to CloudControl. " +
+          classified.message;
+      }
+      return [classified, null];
     }
   }
 

@@ -1,0 +1,13 @@
+id: BP-EC2-020
+title: "EBS volume should not be underutilized"
+severity: MEDIUM
+resource_type: "AWS::EC2::Instance"
+property_path: "BlockDeviceMappings"
+check_type: "awareness"
+expected_value: true
+source: "TrustedAdvisor"
+source_id: "DAvU99Dc4C"
+description: "Trusted Advisor identifies EBS volumes with very low read/write IOPS over 14 days. Underutilized volumes represent wasted storage costs, especially GP3 and IO2 volumes."
+remediation: "Review volume utilization metrics and downsize or change volume type. Consider GP3 for variable workloads or deleting unattached volumes."
+category: cost_optimization
+lastVerified: "2026-03-24"

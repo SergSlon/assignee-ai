@@ -70,6 +70,6 @@ describe("intentParserNode", () => {
     expect(SUPPORTED_TYPES).toContain("AWS::SQS::Queue");
     expect(SUPPORTED_TYPES).toContain("AWS::ECS::Cluster");
     expect(SUPPORTED_TYPES).toContain("AWS::ECR::Repository");
-    expect(SUPPORTED_TYPES).toHaveLength(15);
+    expect(SUPPORTED_TYPES).toHaveLength(23);
   });
 });

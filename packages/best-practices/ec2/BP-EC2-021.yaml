@@ -1,0 +1,13 @@
+id: BP-EC2-021
+title: "EBS volume should have a snapshot backup"
+severity: HIGH
+resource_type: "AWS::EC2::Instance"
+property_path: "BlockDeviceMappings[0].Ebs.VolumeId"
+check_type: "awareness"
+expected_value: true
+source: "TrustedAdvisor"
+source_id: "H7IgTzjTYb"
+description: "Trusted Advisor identifies EBS volumes without recent snapshots. Without snapshots, data on the volume cannot be recovered if the volume is corrupted or accidentally deleted."
+remediation: "Create EBS snapshots regularly using AWS Backup or Amazon Data Lifecycle Manager (DLM). Configure automated snapshot policies with appropriate retention."
+category: reliability
+lastVerified: "2026-03-24"

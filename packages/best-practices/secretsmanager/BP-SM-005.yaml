@@ -1,0 +1,13 @@
+id: BP-SM-005
+title: "Secret should have automatic rotation configured"
+severity: HIGH
+resource_type: "AWS::SecretsManager::Secret"
+property_path: "RotationRules"
+check_type: "exists"
+expected_value: true
+source: "TrustedAdvisor"
+source_id: "TA-sm-rotation"
+description: "Secrets Manager secrets should have automatic rotation configured to minimize the window of exposure for compromised credentials. Long-lived secrets are a common attack vector."
+remediation: "Configure RotationRules with a rotation Lambda function. Set AutomaticallyAfterDays to 30-90 days depending on the sensitivity of the secret."
+category: security
+lastVerified: "2026-03-24"

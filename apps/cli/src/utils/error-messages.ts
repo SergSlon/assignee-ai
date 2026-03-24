@@ -219,10 +219,10 @@ const MCP_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
   },
   CFN_MCP_UNAVAILABLE: {
     code: "CFN_MCP_UNAVAILABLE",
-    what: "The CloudFormation MCP server is not available.",
-    why: "The cfn-mcp-server process is not running or failed to connect. This server provides resource schemas for plan generation.",
+    what: "The CloudFormation schema service is not available.",
+    why: "The CloudFormation DescribeType SDK call failed. Schema fetching uses the AWS SDK directly to fetch resource type schemas for plan generation.",
     howToFix:
-      "Verify cfn-mcp-server is installed and accessible. Check your MCP server configuration and restart assignee.ai.",
+      "Verify your ASSIGNEE_OPERATOR credentials have cloudformation:DescribeType permission and check network connectivity.",
   },
 };
 
@@ -570,7 +570,11 @@ export class ErrorMessageRegistry {
     ) {
       return this.entries.get("MCP_STARTUP_FAILED");
     }
-    if (message.includes("cfn-mcp-server") || message.includes("cfn")) {
+    if (
+      message.includes("SchemaFetchError") ||
+      message.includes("DescribeType") ||
+      message.includes("Schema fetch failed")
+    ) {
       return this.entries.get("CFN_MCP_UNAVAILABLE");
     }
     if (

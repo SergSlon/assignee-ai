@@ -1,0 +1,13 @@
+id: BP-VPC-003
+title: "VPC should have flow logs enabled"
+severity: HIGH
+resource_type: "AWS::EC2::VPC"
+property_path: "VpcId"
+check_type: "awareness"
+expected_value: true
+source: "TrustedAdvisor"
+source_id: "TA-vpc-flowlogs"
+description: "VPCs should have flow logs enabled for network traffic monitoring and security analysis. Without flow logs, suspicious network activity such as port scanning and data exfiltration cannot be detected."
+remediation: "Enable VPC Flow Logs to capture ACCEPT and REJECT traffic. Send logs to CloudWatch Logs or S3 for analysis with Athena or CloudWatch Insights."
+category: security
+lastVerified: "2026-03-24"

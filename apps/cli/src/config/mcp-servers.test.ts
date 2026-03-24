@@ -1,7 +1,13 @@
 /**
- * Tests for MCP server configuration (Story 19.7 — billing server registration).
+ * Tests for MCP server configuration.
+ *
+ * Story 19.7 — billing server registration.
+ * Story 31.4 — removed cfn-mcp-server (IAC); core servers are now 3.
  *
  * Verifies:
+ * - getMcpServerConfigs() returns exactly 3 core servers (Knowledge, Pricing, Docs)
+ * - No entry contains cfn-mcp-server
+ * - IAC constant no longer exists on McpServerName
  * - BILLING constant is defined in McpServerName
  * - Billing server appears in getOptionalMcpServerConfigs() output
  * - Billing server uses mcpEnv() for credentials
@@ -9,11 +15,40 @@
 
 import { describe, it, expect } from "vitest";
 import { McpServerName, McpCommand } from "../constants/mcp.js";
-import { getOptionalMcpServerConfigs } from "./mcp-servers.js";
+import {
+  getMcpServerConfigs,
+  getOptionalMcpServerConfigs,
+} from "./mcp-servers.js";
 
 describe("McpServerName", () => {
   it("defines the BILLING constant", () => {
     expect(McpServerName.BILLING).toBe("aws-cost-management-mcp-server");
+  });
+
+  it("does not define IAC constant (removed in Story 31.4)", () => {
+    expect("IAC" in McpServerName).toBe(false);
+  });
+});
+
+describe("getMcpServerConfigs", () => {
+  it("returns exactly 3 core servers", () => {
+    const configs = getMcpServerConfigs();
+    expect(Object.keys(configs)).toHaveLength(3);
+  });
+
+  it("includes Knowledge, Pricing, and Docs servers", () => {
+    const configs = getMcpServerConfigs();
+    expect(configs[McpServerName.KNOWLEDGE]).toBeDefined();
+    expect(configs[McpServerName.PRICING]).toBeDefined();
+    expect(configs[McpServerName.DOCS]).toBeDefined();
+  });
+
+  it("does not include cfn-mcp-server in any entry", () => {
+    const configs = getMcpServerConfigs();
+    for (const [name, config] of Object.entries(configs)) {
+      expect(name).not.toContain("cfn-mcp-server");
+      expect(config.args.join(" ")).not.toContain("cfn-mcp-server");
+    }
   });
 });
 

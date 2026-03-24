@@ -45,7 +45,7 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
   try {
     // PERFORMANCE NOTE (NFR-05):
     // MCP stdio process cold-start time is EXCLUDED from the <3s goal.
-    // The <3s budget begins AFTER all 4 MCP servers have responded to tools/list.
+    // The <3s budget begins AFTER all 3 core MCP servers have responded to tools/list.
     // Rationale: MCP servers are infrastructure (like a database connection), not part
     // of the user-facing plan generation pipeline.
     // Typical cold-start: 200–800ms. Optimize with process pooling post-POC if needed.

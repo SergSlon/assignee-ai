@@ -2,15 +2,14 @@
  * MCP tool name constants — single source of truth for all tool identifiers.
  *
  * Groups by MCP server:
- *   aws-iac-mcp-server            → schema fetching
  *   aws-pricing-mcp-server        → cost estimation
  *   aws-documentation-mcp-server  → contextual field help
+ *
+ * Note: Schema fetching (previously via cfn-mcp-server / get_resource_schema_information)
+ * is now handled by CloudFormationSchemaService (direct SDK) — see Story 31.3.
  */
 
 export const ToolName = {
-  // ── aws-iac-mcp-server ──────────────────────────────────────────────────────
-  GET_RESOURCE_SCHEMA: "get_resource_schema_information",
-
   // ── aws-pricing-mcp-server ─────────────────────────────────────────────────
   GET_PRICING: "get_pricing",
 

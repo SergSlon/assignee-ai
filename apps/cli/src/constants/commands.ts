@@ -2,9 +2,11 @@ export const CommandName = {
   APPLY: "apply",
   COMPLETIONS: "completions",
   DESTROY: "destroy",
+  DRIFT: "drift",
   INIT: "init",
   LIST: "list",
   PLAN: "plan",
+  RECONCILE: "reconcile",
   SETUP: "setup",
   STATUS: "status",
 } as const;
@@ -15,9 +17,11 @@ export const CommandDescription = {
   APPLY: "Execute an approved infrastructure plan",
   COMPLETIONS: "Output shell completion script",
   DESTROY: "Safely destroy a managed AWS resource",
+  DRIFT: "Check managed resources for configuration drift",
   INIT: "Initialize assignee.ai project configuration",
   LIST: "List all resources managed by assignee.ai",
   PLAN: "Generate an infrastructure plan from natural language intent",
+  RECONCILE: "Reconcile drifted resources back to desired state",
   SETUP:
     "Create IAM users and policies for least-privilege credential separation",
   STATUS: "Show summary of managed infrastructure",

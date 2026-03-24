@@ -1,11 +1,14 @@
 /**
- * `assignee init` command — optional project-level configuration setup.
+ * `assignee init` command — optional project-level or global configuration setup.
+ *
+ * Without flags: creates `.assignee/config.yaml` in the current project.
+ * With `--global`: creates `~/.config/assignee/config.yaml` for user-wide defaults.
  *
  * Auto-detects AWS credentials and region, prompts for confirmation,
- * and creates `.assignee/config.yaml`. The command is entirely optional;
+ * and writes the config file. The command is entirely optional;
  * all CLI commands work without it by using the standard AWS credential chain.
  *
- * @see Story 18.1, ADR-010
+ * @see Story 18.1, ADR-010, Story 27.5
  */
 
 import * as fs from "node:fs/promises";
@@ -14,11 +17,13 @@ import { Command } from "commander";
 import * as clack from "@clack/prompts";
 import { stringify as yamlStringify } from "yaml";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { ConfigurationError } from "@assignee/core";
+import { ConfigurationError, validateConfig } from "@assignee/core";
+import type { AssigneeConfig } from "@assignee/core";
 import {
   detectCredentials,
   detectRegion,
 } from "../services/credential-detector.js";
+import { resolveConfigPath } from "../config/user-config-loader.js";
 
 /** Directory name for assignee project config. */
 const CONFIG_DIR = ".assignee";
@@ -48,10 +53,193 @@ export interface ProjectConfig {
   priceCacheTtlMinutes?: number;
 }
 
+/**
+ * Prompts the user for global config values and returns an AssigneeConfig object.
+ * Uses @clack/prompts for interactive input.
+ *
+ * @see Story 27.5 — AC #2, #6, #7
+ */
+export async function promptGlobalConfig(): Promise<
+  AssigneeConfig | undefined
+> {
+  // ── Region ─────────────────────────────────────────────────────────
+  const region = await clack.text({
+    message: "Default AWS region",
+    placeholder: "us-east-1",
+  });
+
+  if (clack.isCancel(region)) {
+    clack.outro("Initialization cancelled.");
+    return undefined;
+  }
+
+  // ── Tags (multi-entry loop) ────────────────────────────────────────
+  const tags: Record<string, string> = {};
+  while (true) {
+    const entry = await clack.text({
+      message: "Add a tag (key=value), or press Enter to finish",
+      placeholder: "environment=dev",
+    });
+
+    if (clack.isCancel(entry)) {
+      clack.outro("Initialization cancelled.");
+      return undefined;
+    }
+
+    if (!entry) break;
+
+    const entryStr = String(entry);
+    const eqIndex = entryStr.indexOf("=");
+    if (eqIndex > 0) {
+      const key = entryStr.slice(0, eqIndex).trim();
+      const val = entryStr.slice(eqIndex + 1).trim();
+      if (key && val) tags[key] = val;
+    }
+  }
+
+  // ── Naming prefix ──────────────────────────────────────────────────
+  const prefix = await clack.text({
+    message: "Resource naming prefix (optional, press Enter to skip)",
+    placeholder: "mycompany-",
+  });
+
+  if (clack.isCancel(prefix)) {
+    clack.outro("Initialization cancelled.");
+    return undefined;
+  }
+
+  // ── Auto-fix mode ──────────────────────────────────────────────────
+  const autoFix = await clack.select({
+    message: "Auto-fix best practice violations",
+    options: [
+      { value: "ask", label: "ask — prompt before each fix (default)" },
+      { value: "apply", label: "apply — fix automatically" },
+      { value: "skip", label: "skip — never auto-fix" },
+    ],
+    initialValue: "ask",
+  });
+
+  if (clack.isCancel(autoFix)) {
+    clack.outro("Initialization cancelled.");
+    return undefined;
+  }
+
+  // ── Output format ──────────────────────────────────────────────────
+  const outputFormat = await clack.select({
+    message: "Output format",
+    options: [
+      { value: "table", label: "table — human-readable tables (default)" },
+      { value: "json", label: "json — machine-readable JSON" },
+    ],
+    initialValue: "table",
+  });
+
+  if (clack.isCancel(outputFormat)) {
+    clack.outro("Initialization cancelled.");
+    return undefined;
+  }
+
+  // ── Verbosity ──────────────────────────────────────────────────────
+  const verbosity = await clack.select({
+    message: "Verbosity level",
+    options: [
+      { value: "quiet", label: "quiet — minimal output" },
+      { value: "normal", label: "normal — standard output (default)" },
+      { value: "verbose", label: "verbose — detailed output" },
+    ],
+    initialValue: "normal",
+  });
+
+  if (clack.isCancel(verbosity)) {
+    clack.outro("Initialization cancelled.");
+    return undefined;
+  }
+
+  // ── Assemble config ────────────────────────────────────────────────
+  const config: AssigneeConfig = {
+    defaults: {
+      region: (region as string) || undefined,
+      tags: Object.keys(tags).length > 0 ? tags : undefined,
+      naming: (prefix as string) ? { prefix: prefix as string } : undefined,
+    },
+    preferences: {
+      auto_fix: autoFix as AssigneeConfig["preferences"] extends {
+        auto_fix?: infer T;
+      }
+        ? T
+        : never,
+      output_format: outputFormat as AssigneeConfig["preferences"] extends {
+        output_format?: infer T;
+      }
+        ? T
+        : never,
+      verbosity: verbosity as AssigneeConfig["preferences"] extends {
+        verbosity?: infer T;
+      }
+        ? T
+        : never,
+    },
+  };
+
+  // Validate before writing (sanity check)
+  validateConfig(config);
+
+  return config;
+}
+
 export const initCommand = new Command(CommandName.INIT)
   .description(CommandDescription.INIT)
-  .action(async () => {
-    clack.intro("Assignee.ai — Project Initialization");
+  .option(
+    "--global",
+    "Create global user config (~/.config/assignee/config.yaml) instead of project config",
+  )
+  .action(async (options: { global?: boolean }) => {
+    const isGlobal = options.global === true;
+
+    clack.intro(
+      isGlobal
+        ? "Assignee.ai — Global User Config Setup"
+        : "Assignee.ai — Project Initialization",
+    );
+
+    if (isGlobal) {
+      // ── Global config path ───────────────────────────────────────────
+      const configPath = resolveConfigPath();
+      const configDir = path.dirname(configPath);
+
+      // Check for existing global config
+      try {
+        await fs.access(configPath);
+        const overwrite = await clack.confirm({
+          message: "Global config already exists. Overwrite?",
+          initialValue: false,
+        });
+
+        if (clack.isCancel(overwrite) || overwrite === false) {
+          clack.outro("Keeping existing configuration.");
+          return;
+        }
+      } catch {
+        // Config does not exist — proceed
+      }
+
+      // Run global config wizard
+      const config = await promptGlobalConfig();
+      if (!config) return;
+
+      // Write config file
+      await fs.mkdir(configDir, { recursive: true });
+      const yamlContent =
+        "# Generated by assignee init --global\n" + yamlStringify(config);
+      await fs.writeFile(configPath, yamlContent, "utf-8");
+
+      clack.outro(
+        `Global config written to ${configPath}. Your defaults will apply to all projects.`,
+      );
+      return;
+    }
+
+    // ── Project-level init (original behavior, unchanged) ───────────
 
     // ── Credential detection ──────────────────────────────────────────
     const credentialResult = await detectCredentials();

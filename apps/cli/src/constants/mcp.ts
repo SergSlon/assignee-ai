@@ -1,5 +1,4 @@
 export const McpServerName = {
-  IAC: "cfn-mcp-server",
   KNOWLEDGE: "aws-knowledge-mcp-server",
   PRICING: "aws-pricing-mcp-server",
   DOCS: "aws-documentation-mcp-server",

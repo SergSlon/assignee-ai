@@ -1,0 +1,17 @@
+id: BP-EC2-011
+title: "EC2 instance should have EBS optimization enabled"
+severity: MEDIUM
+resource_type: "AWS::EC2::Instance"
+property_path: "EbsOptimized"
+check_type: "equals"
+expected_value: true
+source: "FSBP"
+source_id: "EC2.10"
+description: "EC2 instances should be EBS-optimized for consistent, dedicated bandwidth to EBS volumes. Non-optimized instances share network bandwidth between EBS I/O and regular network traffic, causing unpredictable performance."
+remediation: "Set EbsOptimized to true. Most current-generation instance types support EBS optimization at no additional cost."
+category: performance
+lastVerified: "2026-03-24"
+fixType: "auto"
+autoFixable: true
+desiredStatePatch:
+  EbsOptimized: true

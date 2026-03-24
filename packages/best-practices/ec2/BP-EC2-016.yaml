@@ -1,0 +1,13 @@
+id: BP-EC2-016
+title: "EC2 instance should have credit specification set for burstable types"
+severity: MEDIUM
+resource_type: "AWS::EC2::Instance"
+property_path: "CreditSpecification.CPUCredits"
+check_type: "awareness"
+expected_value: true
+source: "FSBP"
+source_id: "EC2.21"
+description: "Burstable EC2 instances (T-series) should have their credit specification explicitly set to either 'standard' or 'unlimited'. Without explicit configuration, the account default applies, which may cause unexpected charges or performance throttling."
+remediation: "Set CreditSpecification.CPUCredits to 'standard' for cost predictability or 'unlimited' for sustained performance at variable cost."
+category: cost_optimization
+lastVerified: "2026-03-24"

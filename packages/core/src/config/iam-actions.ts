@@ -105,6 +105,29 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ec2:DescribeSubnets",
       "ec2:DescribeSecurityGroups",
     ],
+    // Sprint G: Tier 2 resources (Epic 26)
+    "AWS::ApiGatewayV2::Api": [
+      "apigateway:CreateApi",
+      "apigateway:CreateRoute",
+      "apigateway:CreateIntegration",
+      "apigateway:CreateStage",
+      "apigateway:CreateDeployment",
+      "apigateway:UpdateApi",
+      "apigateway:TagResource",
+    ],
+    "AWS::CloudWatch::Alarm": [
+      "cloudwatch:PutMetricAlarm",
+      "cloudwatch:DescribeAlarms",
+      "cloudwatch:TagResource",
+      "cloudwatch:EnableAlarmActions",
+    ],
+    "AWS::SecretsManager::Secret": [
+      "secretsmanager:CreateSecret",
+      "secretsmanager:TagResource",
+      "secretsmanager:PutSecretValue",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret",
+    ],
   };
 
   const serviceActions = serviceActionMap[resourceType] ?? [];

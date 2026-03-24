@@ -1,0 +1,12 @@
+id: BP-SM-004
+title: "RDS MasterUserPassword should use SecretsManager dynamic reference"
+severity: HIGH
+resource_type: "AWS::RDS::DBInstance"
+property_path: "MasterUserPassword"
+check_type: "contains"
+expected_value: "{{resolve:secretsmanager:"
+source: "AWS Well-Architected Framework — Security Pillar"
+description: "RDS database passwords should be managed by AWS Secrets Manager using dynamic references instead of plaintext values. Plaintext passwords appear in CloudFormation templates, stack events, and drift detection output — a significant security risk. Use {{resolve:secretsmanager:...}} dynamic references to keep credentials out of templates."
+remediation: "Create an AWS::SecretsManager::Secret with GenerateSecretString configured for RDS-safe characters (ExcludeCharacters: /@\"\\'), then reference it in MasterUserPassword using the dynamic reference format: {{resolve:secretsmanager:SECRET_NAME:SecretString:password}}. Add an AWS::SecretsManager::SecretTargetAttachment to enable automatic rotation."
+category: security
+lastVerified: "2026-03-24"

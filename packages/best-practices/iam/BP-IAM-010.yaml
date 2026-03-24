@@ -1,0 +1,13 @@
+id: BP-IAM-010
+title: "IAM role should have a trust policy with external ID for cross-account"
+severity: HIGH
+resource_type: "AWS::IAM::Role"
+property_path: "AssumeRolePolicyDocument"
+check_type: "awareness"
+expected_value: true
+source: "TrustedAdvisor"
+source_id: "TA-iam-external-id"
+description: "IAM roles that allow cross-account access should require an External ID in the trust policy to prevent confused deputy attacks. Without an External ID, any entity in the trusted account can assume the role."
+remediation: "Add a Condition with sts:ExternalId to the role's trust policy when granting cross-account access. Generate a unique External ID and share it securely with the trusted party."
+category: security
+lastVerified: "2026-03-24"

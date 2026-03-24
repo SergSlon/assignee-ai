@@ -41,6 +41,20 @@ vi.mock("../utils/aws-resource-discovery.js", () => ({
   clearDiscoveryCache: vi.fn(),
 }));
 
+// Story 27.4: Mock config loaders — return undefined by default (no config)
+vi.mock("../config/user-config-loader.js", () => ({
+  loadUserConfig: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../config/project-config-loader.js", () => ({
+  loadProjectConfig: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../config/org-policy-cache.js", () => ({
+  readAuthToken: vi.fn().mockResolvedValue(undefined),
+  fetchOrgPolicy: vi.fn().mockResolvedValue(undefined),
+}));
+
 const testPlugin: ResourcePlugin = {
   resourceType: "AWS::Test::Resource",
   commonFields: [
@@ -1376,5 +1390,21 @@ describe("applyCategorySmartFilter (Story 21.3)", () => {
     const result = applyCategorySmartFilter(fields, "burstable");
 
     expect(result[0]).toBe(enumField);
+  });
+});
+
+// ── Story 27.4: Config integration tests ──────────────────────────────────
+describe("config integration (Story 27.4)", () => {
+  it("no configs loaded — wizard behaves as before (backward-compatible)", async () => {
+    // Default mocks: all config loaders return undefined
+    vi.mocked(text).mockResolvedValueOnce("my-resource"); // Name
+    vi.mocked(select).mockResolvedValueOnce("false"); // Encrypt
+    vi.mocked(select).mockResolvedValueOnce("sm"); // Size
+    vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
+
+    const result = await optionElicitorNode(makeState());
+
+    expect(result.elicitedOptions?.["Name"]).toBe("my-resource");
+    expect(result.elicitedOptions?.["Size"]).toBe("sm");
   });
 });

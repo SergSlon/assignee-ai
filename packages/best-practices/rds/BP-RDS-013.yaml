@@ -1,0 +1,13 @@
+id: BP-RDS-013
+title: "RDS instance should not be idle"
+severity: MEDIUM
+resource_type: "AWS::RDS::DBInstance"
+property_path: "DBInstanceIdentifier"
+check_type: "awareness"
+expected_value: true
+source: "TrustedAdvisor"
+source_id: "Ti39halfu8"
+description: "Trusted Advisor identifies RDS instances with very low connection count and CPU utilization over 14 days. Idle database instances are costly and should be stopped or terminated."
+remediation: "Stop or terminate idle RDS instances. For dev/test databases, use RDS stop/start scheduling. For rarely-used databases, consider Aurora Serverless."
+category: cost_optimization
+lastVerified: "2026-03-24"

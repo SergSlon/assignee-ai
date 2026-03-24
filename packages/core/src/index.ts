@@ -27,6 +27,29 @@ export {
   type PatternRecord,
 } from "./schema/memory.js";
 
+// Drift detection types (Story 28.1)
+export {
+  DriftStatus,
+  type DriftStatusType,
+  ChangeType,
+  type ChangeTypeValue,
+  type DriftedField,
+  type DriftResult,
+  DriftedFieldSchema,
+  DriftResultSchema,
+  AUTO_POPULATED_FIELDS,
+  isAutoPopulatedField,
+} from "./schema/drift.js";
+
+// Config — AssigneeConfig schema and validation (Story 27.1)
+export type {
+  AssigneeConfig,
+  ConfigDefaults,
+  ConfigPreferences,
+  ConfigNaming,
+} from "./config/index.js";
+export { validateConfig, CONFIG_DEFAULTS } from "./config/index.js";
+
 // Config — resource type constants and identifier mappings
 export {
   RESOURCE_TYPES,
@@ -144,3 +167,19 @@ export {
 // Ports (hexagonal architecture — Story 9.5)
 export type { LlmPort } from "./ports/llm-port.js";
 export { MockLlmAdapter } from "./ports/mock-llm-adapter.js";
+
+// Services — CloudFormation schema fetching (Story 31.1, 31.2)
+export {
+  CloudFormationSchemaService,
+  SchemaFetchError,
+  type CloudFormationSchemaServiceConfig,
+} from "./services/cloudformation-schema-service.js";
+export {
+  adaptDescribeTypeToMcpFormat,
+  type AdaptedSchema,
+} from "./services/schema-adapter.js";
+export {
+  SchemaCacheWarmer,
+  type WarmResult,
+  type WarmOptions,
+} from "./services/schema-cache-warmer.js";
