@@ -179,6 +179,8 @@ async function captureCfnSchemas() {
     { key: "generic", type: "AWS::Custom::FakeResource" },
   ];
 
+  // NOTE: Schema fetching in the app now uses CloudFormationSchemaService (DescribeType SDK).
+  // This capture path is retained for regenerating legacy test fixture data.
   return await callMcpServer(
     "cfn-mcp-server",
     "uvx",

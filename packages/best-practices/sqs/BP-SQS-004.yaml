@@ -1,0 +1,18 @@
+id: BP-SQS-004
+title: "SQS queue should have a visibility timeout configured"
+severity: MEDIUM
+resource_type: "AWS::SQS::Queue"
+property_path: "VisibilityTimeout"
+check_type: "greater_than"
+expected_value: 0
+source: "FSBP"
+source_id: "SQS.3"
+description: "SQS queues should have a non-zero visibility timeout to prevent duplicate processing. The visibility timeout should be at least as long as the consumer's processing time."
+remediation: "Set VisibilityTimeout to a value that exceeds the expected message processing time. The default is 30 seconds."
+category: reliability
+lastVerified: "2026-03-24"
+fixType: "interactive"
+interactiveOptions:
+  - label: "Set visibility timeout (seconds)"
+    action: "prompt_value"
+    targetField: "VisibilityTimeout"

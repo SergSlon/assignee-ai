@@ -20,7 +20,9 @@ function field(name: string, initialValue?: unknown): ResourceField {
   };
 }
 
-describe("mergeConfigs", () => {
+// ── Legacy 4-arg call tests (backward compatibility) ─────────────────────
+
+describe("mergeConfigs (legacy 4-arg signature)", () => {
   describe("locked org field", () => {
     it("beats user config + plugin default", () => {
       const orgPolicy: OrgResourceConfig = {
@@ -229,6 +231,187 @@ describe("mergeConfigs", () => {
       expect(result["Region"]?.source).toBe("user_config");
       expect(result["Timeout"]?.source).toBe("user_config");
       expect(result["NoDefault"]?.policy).toBe("always_ask");
+    });
+  });
+});
+
+// ── New 6-level precedence tests (Story 27.2) ───────────────────────────
+
+describe("mergeConfigs (6-level options object)", () => {
+  describe("CLI flag overrides all non-locked levels", () => {
+    it("CLI flag wins over env var, project, user, org default, plugin default", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("Region", "plugin-default")],
+        resourceType: RESOURCE_TYPE,
+        cliFlags: { Region: "from-cli" },
+        envOverrides: { Region: "from-env" },
+        projectConfig: { [RESOURCE_TYPE]: { Region: "from-project" } },
+        userConfig: { [RESOURCE_TYPE]: { Region: "from-user" } },
+        orgPolicy: {
+          [RESOURCE_TYPE]: {
+            Region: { policy: "default", value: "from-org" },
+          },
+        },
+      });
+
+      expect(result["Region"]).toEqual({
+        policy: "ask_if_not_set",
+        value: "from-cli",
+        source: "cli_flag",
+      });
+    });
+  });
+
+  describe("env var overrides project, user, org default, plugin default", () => {
+    it("env var wins over lower levels", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("Region", "plugin-default")],
+        resourceType: RESOURCE_TYPE,
+        envOverrides: { Region: "from-env" },
+        projectConfig: { [RESOURCE_TYPE]: { Region: "from-project" } },
+        userConfig: { [RESOURCE_TYPE]: { Region: "from-user" } },
+      });
+
+      expect(result["Region"]).toEqual({
+        policy: "ask_if_not_set",
+        value: "from-env",
+        source: "env_var",
+      });
+    });
+  });
+
+  describe("project config overrides user, org default, plugin default", () => {
+    it("project config wins over user config", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("Region", "plugin-default")],
+        resourceType: RESOURCE_TYPE,
+        projectConfig: { [RESOURCE_TYPE]: { Region: "from-project" } },
+        userConfig: { [RESOURCE_TYPE]: { Region: "from-user" } },
+      });
+
+      expect(result["Region"]).toEqual({
+        policy: "ask_if_not_set",
+        value: "from-project",
+        source: "project_config",
+      });
+    });
+
+    it("project config wins over org default", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("Region", "plugin-default")],
+        resourceType: RESOURCE_TYPE,
+        projectConfig: { [RESOURCE_TYPE]: { Region: "from-project" } },
+        orgPolicy: {
+          [RESOURCE_TYPE]: {
+            Region: { policy: "default", value: "from-org" },
+          },
+        },
+      });
+
+      expect(result["Region"]).toEqual({
+        policy: "ask_if_not_set",
+        value: "from-project",
+        source: "project_config",
+      });
+    });
+  });
+
+  describe("org locked overrides CLI flags", () => {
+    it("locked beats CLI flag", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("Encryption", "none")],
+        resourceType: RESOURCE_TYPE,
+        cliFlags: { Encryption: "from-cli" },
+        orgPolicy: {
+          [RESOURCE_TYPE]: {
+            Encryption: { policy: "locked", value: "AES256" },
+          },
+        },
+      });
+
+      expect(result["Encryption"]).toEqual({
+        policy: "never_ask",
+        value: "AES256",
+        source: "org_locked",
+      });
+    });
+  });
+
+  describe("org always_ask forces prompt even with CLI flag", () => {
+    it("always_ask overrides CLI flag", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("Region", "default")],
+        resourceType: RESOURCE_TYPE,
+        cliFlags: { Region: "from-cli" },
+        orgPolicy: {
+          [RESOURCE_TYPE]: { Region: { policy: "always_ask" } },
+        },
+      });
+
+      expect(result["Region"]).toEqual({
+        policy: "always_ask",
+        source: "org_default",
+      });
+    });
+  });
+
+  describe("empty/undefined at each level falls through correctly", () => {
+    it("undefined CLI flags falls through to env var", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("Region")],
+        resourceType: RESOURCE_TYPE,
+        cliFlags: {},
+        envOverrides: { Region: "from-env" },
+      });
+
+      expect(result["Region"]?.source).toBe("env_var");
+    });
+
+    it("undefined env var falls through to project config", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("Region")],
+        resourceType: RESOURCE_TYPE,
+        envOverrides: {},
+        projectConfig: { [RESOURCE_TYPE]: { Region: "from-project" } },
+      });
+
+      expect(result["Region"]?.source).toBe("project_config");
+    });
+
+    it("undefined project config falls through to user config", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("Region")],
+        resourceType: RESOURCE_TYPE,
+        projectConfig: {},
+        userConfig: { [RESOURCE_TYPE]: { Region: "from-user" } },
+      });
+
+      expect(result["Region"]?.source).toBe("user_config");
+    });
+
+    it("all undefined falls through to plugin default", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("Region", "us-east-1")],
+        resourceType: RESOURCE_TYPE,
+      });
+
+      expect(result["Region"]).toEqual({
+        policy: "ask_if_not_set",
+        value: "us-east-1",
+        source: "plugin_default",
+      });
+    });
+
+    it("no defaults anywhere → always_ask", () => {
+      const result = mergeConfigs({
+        pluginFields: [field("CustomField")],
+        resourceType: RESOURCE_TYPE,
+      });
+
+      expect(result["CustomField"]).toEqual({
+        policy: "always_ask",
+        source: "plugin_default",
+      });
     });
   });
 });

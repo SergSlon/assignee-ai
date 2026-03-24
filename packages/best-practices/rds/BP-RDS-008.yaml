@@ -1,0 +1,16 @@
+id: BP-RDS-008
+title: "RDS instance should have IAM database authentication enabled"
+severity: HIGH
+resource_type: "AWS::RDS::DBInstance"
+property_path: "EnableIAMDatabaseAuthentication"
+check_type: "equals"
+expected_value: true
+source: "FSBP"
+source_id: "RDS.10"
+description: "RDS instances should use IAM database authentication instead of password-only auth. IAM auth provides token-based access with automatic rotation, eliminating the need to manage database passwords."
+remediation: "Set EnableIAMDatabaseAuthentication to true. Update application connection strings to use IAM authentication tokens."
+category: security
+lastVerified: "2026-03-24"
+autoFixable: true
+desiredStatePatch:
+  EnableIAMDatabaseAuthentication: true

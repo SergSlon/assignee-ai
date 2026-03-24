@@ -1,0 +1,22 @@
+id: BP-IGW-001
+title: "InternetGateway must be attached to a VPC"
+severity: HIGH
+resource_type: "AWS::EC2::InternetGateway"
+property_path: "VPCGatewayAttachment"
+check_type: "exists"
+expected_value: "VpcId must reference a valid VPC"
+source: "AWS Well-Architected Framework"
+source_id: "REL-02"
+description: "An InternetGateway must be attached to exactly one VPC via a VPCGatewayAttachment resource. Orphaned InternetGateways (not attached to any VPC) serve no purpose and waste resources. Each AWS account has a limit on the number of IGWs per region."
+remediation: "Ensure a VPCGatewayAttachment resource exists that references both the InternetGateway and the target VPC. Remove any orphaned InternetGateways that are not attached to a VPC."
+category: reliability
+lastVerified: "2026-03-24"
+blocking: true
+autoFixable: false
+fixType: interactive
+interactiveOptions:
+  - label: "Attach to existing VPC in plan"
+    action: prompt_value
+    targetField: "VPCGatewayAttachment"
+  - label: "Skip — I will fix manually"
+    action: skip

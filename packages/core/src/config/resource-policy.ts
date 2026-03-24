@@ -42,6 +42,7 @@ export interface ResolvedFieldConfig {
   source:
     | "cli_flag"
     | "env_var"
+    | "project_config"
     | "user_config"
     | "org_default"
     | "org_locked"

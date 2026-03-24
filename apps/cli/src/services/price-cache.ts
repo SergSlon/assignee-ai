@@ -144,6 +144,61 @@ export function setCachedPrice(
 }
 
 /**
+ * Sweep expired price cache entries.
+ * Deletes .json files older than maxAgeMs or with corrupt/missing cachedAt.
+ *
+ * @param maxAgeMs - Maximum age in milliseconds (default 24h)
+ * @param cacheDir - Directory to sweep (defaults to standard cache dir)
+ * @returns Count of removed and remaining files
+ * @see Story 33.1
+ */
+export function sweepExpiredPrices(
+  maxAgeMs: number = 24 * 60 * 60 * 1000,
+  cacheDir: string = CACHE_DIR,
+): { removed: number; remaining: number } {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(cacheDir);
+  } catch {
+    return { removed: 0, remaining: 0 };
+  }
+
+  const jsonFiles = entries.filter((f) => f.endsWith(".json"));
+  let removed = 0;
+  let remaining = 0;
+  const now = Date.now();
+
+  for (const file of jsonFiles) {
+    const filePath = path.join(cacheDir, file);
+    let shouldRemove = false;
+    try {
+      const content = fs.readFileSync(filePath, "utf-8");
+      const entry = JSON.parse(content) as { cachedAt?: unknown };
+      if (typeof entry.cachedAt !== "number" || isNaN(entry.cachedAt)) {
+        shouldRemove = true;
+      } else if (now - entry.cachedAt > maxAgeMs) {
+        shouldRemove = true;
+      }
+    } catch {
+      shouldRemove = true;
+    }
+
+    if (shouldRemove) {
+      try {
+        fs.unlinkSync(filePath);
+        removed++;
+      } catch {
+        remaining++;
+      }
+    } else {
+      remaining++;
+    }
+  }
+
+  return { removed, remaining };
+}
+
+/**
  * Clear all cached pricing data.
  */
 export function clearPriceCache(): void {

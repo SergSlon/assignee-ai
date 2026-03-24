@@ -1,0 +1,13 @@
+id: BP-ECS-006
+title: "ECS task definition should use Fargate platform version 1.4.0 or later"
+severity: MEDIUM
+resource_type: "AWS::ECS::TaskDefinition"
+property_path: "RequiresCompatibilities"
+check_type: "awareness"
+expected_value: true
+source: "FSBP"
+source_id: "ECS.10"
+description: "ECS Fargate tasks should use platform version 1.4.0 or LATEST. Earlier platform versions lack features like EFS support, ephemeral storage configuration, and have known security patches missing."
+remediation: "Set the platform version to LATEST or 1.4.0+ when running the ECS service or task. Older tasks need to be recreated with the updated platform version."
+category: security
+lastVerified: "2026-03-24"

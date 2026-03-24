@@ -1,0 +1,28 @@
+id: BP-RT-001
+title: "No public route (0.0.0.0/0 via IGW) in private route tables"
+severity: CRITICAL
+resource_type: "AWS::EC2::Route"
+property_path: "GatewayId"
+check_type: "conditional_forbidden"
+condition:
+  field: "RouteTableType"
+  value: "private"
+expected_value: "Private subnets must route 0.0.0.0/0 through NatGateway, not InternetGateway"
+source: "AWS Well-Architected Framework"
+source_id: "SEC-05"
+description: "A route table associated with private subnets must NOT have a 0.0.0.0/0 route pointing to an InternetGateway. Private subnets should route outbound internet traffic through a NatGateway to prevent direct inbound access from the internet. Routing private subnets through an IGW effectively makes them public, violating network segmentation."
+remediation: "Replace the InternetGateway target (GatewayId) with a NatGateway target (NatGatewayId) for any 0.0.0.0/0 route in route tables associated with private subnets. Ensure only public route tables reference an InternetGateway."
+category: security
+lastVerified: "2026-03-24"
+blocking: true
+autoFixable: false
+fixType: interactive
+interactiveOptions:
+  - label: "Switch target to NatGateway"
+    action: prompt_value
+    targetField: "NatGatewayId"
+  - label: "Remove the 0.0.0.0/0 route"
+    action: remove_property
+    targetField: "GatewayId"
+  - label: "Skip — I will fix manually"
+    action: skip

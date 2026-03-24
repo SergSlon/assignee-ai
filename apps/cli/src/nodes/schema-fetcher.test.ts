@@ -1,87 +1,130 @@
-import { describe, it, expect, vi } from "vitest";
-import { schemaFetcherNode } from "./schema-fetcher.js";
-import { ExecutionStatus } from "@assignee/core";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ExecutionStatus, SchemaFetchError } from "@assignee/core";
+
+// Mock CloudFormationSchemaService
+const mockGetSchema = vi.fn();
+vi.mock("@assignee/core", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    CloudFormationSchemaService: vi.fn().mockImplementation(() => ({
+      getSchema: mockGetSchema,
+    })),
+  };
+});
+
+import { schemaFetcherNode, _resetSchemaService } from "./schema-fetcher.js";
 import type { AgentState } from "../services/graph.js";
-import type { StructuredTool } from "@langchain/core/tools";
+
+function makeState(overrides: Partial<AgentState> = {}): AgentState {
+  return {
+    userIntent: "Create an S3 bucket",
+    resourceType: "AWS::S3::Bucket",
+    executionStatus: ExecutionStatus.PENDING,
+    resourcePattern: "",
+    ...overrides,
+  } as AgentState;
+}
 
 describe("schemaFetcherNode", () => {
-  const mockSchema = {
-    TypeName: "AWS::S3::Bucket",
-    Properties: {
-      BucketName: { Type: "string" },
-    },
-  };
-
-  // Real response shape returned by aws-iac-mcp-server get_resource_schema_information.
-  const createMockSchemaTool = (shouldFail = false): StructuredTool => {
-    return {
-      name: "get_resource_schema_information",
-      invoke: vi.fn().mockImplementation(async () => {
-        if (shouldFail) throw new Error("Tool execution failed");
-        // aws-iac-mcp-server wraps all responses in { type: "text", text: "<json>" }
-        return { type: "text", text: JSON.stringify(mockSchema) };
-      }),
-    } as unknown as StructuredTool;
-  };
-
-  it("bypasses logic if status is already FAILED", async () => {
-    const state = {
-      executionStatus: ExecutionStatus.FAILED,
-      resourceType: "AWS::S3::Bucket",
-    } as AgentState;
-    const result = await schemaFetcherNode(state);
-
-    // Empty partial returned if executionStatus isn't PENDING
-    expect(result).toEqual({});
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _resetSchemaService();
   });
 
-  it("bypasses logic if resourcePattern is set (compound pattern path)", async () => {
-    const state = {
-      executionStatus: ExecutionStatus.PENDING,
-      resourceType: "",
-      resourcePattern: { patternId: "serverless-api" },
-    } as unknown as AgentState;
-    const result = await schemaFetcherNode(state);
+  it("fetches schema via CloudFormationSchemaService and adapts it", async () => {
+    const rawSchema = {
+      typeName: "AWS::S3::Bucket",
+      description: "The AWS::S3::Bucket resource creates an S3 bucket.",
+      properties: {
+        BucketName: { type: "string" },
+        Arn: { type: "string" },
+      },
+      required: [],
+      readOnlyProperties: ["/properties/Arn"],
+      primaryIdentifier: ["/properties/BucketName"],
+      additionalProperties: false,
+      handlers: { create: {}, read: {}, delete: {} },
+    };
 
-    // compound-dispatcher (Story 8.2) handles compound patterns; schema_fetcher must not run
-    expect(result).toEqual({});
-  });
+    mockGetSchema.mockResolvedValue(rawSchema);
 
-  it("fails if get_resource_schema tool is not found", async () => {
-    const state = {
-      executionStatus: ExecutionStatus.PENDING,
-      resourceType: "AWS::S3::Bucket",
-    } as AgentState;
-    // Empty array means tool is missing
-    const result = await schemaFetcherNode(state, []);
+    const result = await schemaFetcherNode(makeState());
 
-    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(result.errorMessage).toBe("cfn-mcp-server not available");
-  });
-
-  it("fetches and sets the schema on success", async () => {
-    const tool = createMockSchemaTool();
-    const state = {
-      executionStatus: ExecutionStatus.PENDING,
-      resourceType: "AWS::S3::Bucket",
-    } as AgentState;
-    const result = await schemaFetcherNode(state, [tool]);
-
+    expect(mockGetSchema).toHaveBeenCalledWith("AWS::S3::Bucket");
+    expect(result.resourceSchema).toBeDefined();
+    const schema = result.resourceSchema as Record<string, unknown>;
+    // Adapter should strip `handlers`
+    expect(schema["handlers"]).toBeUndefined();
+    // Core fields should be present
+    expect(schema["typeName"]).toBe("AWS::S3::Bucket");
+    expect(schema["properties"]).toEqual({
+      BucketName: { type: "string" },
+      Arn: { type: "string" },
+    });
+    expect(schema["readOnlyProperties"]).toEqual(["/properties/Arn"]);
+    // Should not set FAILED status
     expect(result.executionStatus).toBeUndefined();
-    expect(result.resourceSchema).toEqual(mockSchema);
   });
 
-  it("sets execution status to FAILED on tool error", async () => {
-    const failingTool = createMockSchemaTool(true);
-    const state = {
-      executionStatus: ExecutionStatus.PENDING,
-      resourceType: "AWS::S3::Bucket",
-    } as AgentState;
-    const result = await schemaFetcherNode(state, [failingTool]);
+  it("returns FAILED status when CloudFormationSchemaService throws SchemaFetchError", async () => {
+    const rootCause = new Error("Access denied");
+    mockGetSchema.mockRejectedValue(
+      new SchemaFetchError("AWS::S3::Bucket", rootCause),
+    );
+
+    const result = await schemaFetcherNode(makeState());
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(result.errorMessage).toBe(
-      "Failed to fetch schema for AWS::S3::Bucket. Check cfn-mcp-server is running. Error: Tool execution failed",
+    expect(result.errorMessage).toContain("AWS::S3::Bucket");
+    expect(result.errorMessage).toContain("Access denied");
+  });
+
+  it("returns FAILED status for unexpected errors", async () => {
+    mockGetSchema.mockRejectedValue(new Error("Network timeout"));
+
+    const result = await schemaFetcherNode(makeState());
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toContain("Network timeout");
+    expect(result.errorMessage).toContain("AWS::S3::Bucket");
+  });
+
+  it("skips schema fetch when resourcePattern is set (compound path)", async () => {
+    const result = await schemaFetcherNode(
+      makeState({
+        resourcePattern: { patternId: "serverless-api" },
+      } as unknown as Partial<AgentState>),
     );
+
+    expect(result).toEqual({});
+    expect(mockGetSchema).not.toHaveBeenCalled();
+  });
+
+  it("skips schema fetch when executionStatus is not PENDING", async () => {
+    const result = await schemaFetcherNode(
+      makeState({ executionStatus: ExecutionStatus.FAILED }),
+    );
+
+    expect(result).toEqual({});
+    expect(mockGetSchema).not.toHaveBeenCalled();
+  });
+
+  it("reuses singleton service across invocations", async () => {
+    mockGetSchema.mockResolvedValue({
+      typeName: "AWS::S3::Bucket",
+      properties: {},
+    });
+
+    await schemaFetcherNode(makeState());
+    await schemaFetcherNode(
+      makeState({ resourceType: "AWS::DynamoDB::Table" }),
+    );
+
+    // getSchema called twice but CloudFormationSchemaService constructor only once
+    expect(mockGetSchema).toHaveBeenCalledTimes(2);
+    const { CloudFormationSchemaService: MockCtor } =
+      await import("@assignee/core");
+    expect(MockCtor).toHaveBeenCalledTimes(1);
   });
 });

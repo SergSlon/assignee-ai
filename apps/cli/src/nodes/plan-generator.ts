@@ -332,12 +332,12 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage:
-          "Cannot generate plan: resource schema is missing. Hint: check cfn-mcp-server connectivity.",
+          "Cannot generate plan: resource schema is missing. Hint: check CloudFormation Registry SDK connectivity and ASSIGNEE_OPERATOR credentials.",
       };
     }
 
     const startedAt = Date.now();
-    // cfn-mcp-server returns lowercase "properties"; older servers used "Properties"
+    // CloudFormation Registry SDK returns lowercase "properties"; older MCP servers used "Properties"
     const schemaProperties =
       (state.resourceSchema["properties"] as
         | Record<string, unknown>

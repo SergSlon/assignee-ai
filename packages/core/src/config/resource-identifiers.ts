@@ -27,6 +27,16 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   [RESOURCE_TYPES.ELBV2_LOAD_BALANCER]: "LoadBalancerArn",
   [RESOURCE_TYPES.ECS_CLUSTER]: "Arn",
   [RESOURCE_TYPES.ECR_REPOSITORY]: "RepositoryName",
+  // Sprint F: Tier 1 resources (Epic 25)
+  [RESOURCE_TYPES.LOGS_LOG_GROUP]: "LogGroupName",
+  [RESOURCE_TYPES.EC2_INTERNET_GATEWAY]: "InternetGatewayId",
+  [RESOURCE_TYPES.EC2_ROUTE_TABLE]: "RouteTableId",
+  [RESOURCE_TYPES.EC2_ROUTE]: "RouteTableId",
+  [RESOURCE_TYPES.EC2_NAT_GATEWAY]: "NatGatewayId",
+  // Sprint G: Tier 2 resources (Epic 26)
+  [RESOURCE_TYPES.APIGATEWAYV2_API]: "ApiId",
+  [RESOURCE_TYPES.CLOUDWATCH_ALARM]: "AlarmName",
+  [RESOURCE_TYPES.SECRETSMANAGER_SECRET]: "Name",
 } as const;
 
 /**

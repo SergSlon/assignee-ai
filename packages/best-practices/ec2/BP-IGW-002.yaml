@@ -1,0 +1,22 @@
+id: BP-IGW-002
+title: "Route to InternetGateway must exist for public subnets"
+severity: MEDIUM
+resource_type: "AWS::EC2::InternetGateway"
+property_path: "RouteTable.Routes"
+check_type: "exists"
+expected_value: "Route with destination 0.0.0.0/0 targeting the InternetGateway"
+source: "AWS Well-Architected Framework"
+source_id: "REL-02"
+description: "When an InternetGateway is provisioned, at least one route table should contain a route with destination 0.0.0.0/0 pointing to the IGW. Without this route, the IGW serves no purpose — public subnets will not have internet access even though the gateway is attached."
+remediation: "Add a route entry in the public subnet route table with DestinationCidrBlock 0.0.0.0/0 and GatewayId referencing the InternetGateway. Ensure the route table is associated with the intended public subnets."
+category: reliability
+lastVerified: "2026-03-24"
+blocking: false
+autoFixable: false
+fixType: interactive
+interactiveOptions:
+  - label: "Add default route to IGW in route table"
+    action: prompt_value
+    targetField: "RouteTable.Routes"
+  - label: "Skip — I will fix manually"
+    action: skip

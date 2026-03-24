@@ -87,14 +87,14 @@ function fmtStructured(data) {
 // ── Load and process all data ───────────────────────────────────────────────
 
 const schemaConfigs = [
-  { key: "s3Bucket", file: "schema-s3Bucket.json", maxProps: 10, comment: "Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: \"AWS::S3::Bucket\" }. 30 props in full schema, trimmed to 10." },
-  { key: "ec2Instance", file: "schema-ec2Instance.json", maxProps: 10, comment: "Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: \"AWS::EC2::Instance\" }. 48 props in full schema, trimmed to 10." },
-  { key: "lambdaFunction", file: "schema-lambdaFunction.json", maxProps: 10, comment: "Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: \"AWS::Lambda::Function\" }. 33 props in full schema, trimmed to 10." },
-  { key: "rdsDbInstance", file: "schema-rdsDbInstance.json", maxProps: 12, comment: "Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: \"AWS::RDS::DBInstance\" }. 99 props in full schema, trimmed to 12." },
-  { key: "iamRole", file: "schema-iamRole.json", maxProps: 11, comment: "Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: \"AWS::IAM::Role\" }. 11 props (all kept)." },
-  { key: "dynamoDbTable", file: "schema-dynamoDbTable.json", maxProps: 10, comment: "Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: \"AWS::DynamoDB::Table\" }. 22 props in full schema, trimmed to 10." },
-  { key: "ssmParameter", file: "schema-ssmParameter.json", maxProps: 9, comment: "Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: \"AWS::SSM::Parameter\" }. 9 props (all kept)." },
-  { key: "generic", file: "schema-generic.json", maxProps: 0, comment: "Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: \"AWS::Custom::FakeResource\" }. Returns error (TypeNotFoundException)." },
+  { key: "s3Bucket", file: "schema-s3Bucket.json", maxProps: 10, comment: "Captured 2026-03-22 via DescribeType. Input: { resource_type: \"AWS::S3::Bucket\" }. 30 props in full schema, trimmed to 10." },
+  { key: "ec2Instance", file: "schema-ec2Instance.json", maxProps: 10, comment: "Captured 2026-03-22 via DescribeType. Input: { resource_type: \"AWS::EC2::Instance\" }. 48 props in full schema, trimmed to 10." },
+  { key: "lambdaFunction", file: "schema-lambdaFunction.json", maxProps: 10, comment: "Captured 2026-03-22 via DescribeType. Input: { resource_type: \"AWS::Lambda::Function\" }. 33 props in full schema, trimmed to 10." },
+  { key: "rdsDbInstance", file: "schema-rdsDbInstance.json", maxProps: 12, comment: "Captured 2026-03-22 via DescribeType. Input: { resource_type: \"AWS::RDS::DBInstance\" }. 99 props in full schema, trimmed to 12." },
+  { key: "iamRole", file: "schema-iamRole.json", maxProps: 11, comment: "Captured 2026-03-22 via DescribeType. Input: { resource_type: \"AWS::IAM::Role\" }. 11 props (all kept)." },
+  { key: "dynamoDbTable", file: "schema-dynamoDbTable.json", maxProps: 10, comment: "Captured 2026-03-22 via DescribeType. Input: { resource_type: \"AWS::DynamoDB::Table\" }. 22 props in full schema, trimmed to 10." },
+  { key: "ssmParameter", file: "schema-ssmParameter.json", maxProps: 9, comment: "Captured 2026-03-22 via DescribeType. Input: { resource_type: \"AWS::SSM::Parameter\" }. 9 props (all kept)." },
+  { key: "generic", file: "schema-generic.json", maxProps: 0, comment: "Captured 2026-03-22 via DescribeType. Input: { resource_type: \"AWS::Custom::FakeResource\" }. Returns error (TypeNotFoundException)." },
 ];
 
 const pricingConfigs = [
@@ -139,7 +139,7 @@ let ts = `/**
  *
  * Usage in tests:
  *   import { McpMocks, createMockTool } from "../test-fixtures/mcp-mock-responses.js";
- *   const tool = createMockTool("get_resource_schema_information", McpMocks.schema.s3Bucket.success);
+ *   const tool = createMockTool(ToolName.GET_PRICING, McpMocks.pricing.s3Storage.success);
  *
  * All responses mirror the real MCP wire format: { type: "text", text: "<json>" }
  * See: apps/cli/src/utils/mcp.ts — unwrapMcpText()
@@ -162,8 +162,8 @@ function mcpText(payload: unknown): { type: "text"; text: string } {
 // ── Schemas ─────────────────────────────────────────────────────────────────
 
 ts += `// ═══════════════════════════════════════════════════════════════════════════════
-// 1. cfn-mcp-server — get_resource_schema_information
-//    Captured 2026-03-22 via: uvx awslabs.cfn-mcp-server@latest
+// 1. CloudFormation Resource Schemas
+//    Originally captured 2026-03-22 via DescribeType SDK
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const schemaResponses = {\n`;
@@ -180,7 +180,7 @@ for (const cfg of schemaConfigs) {
 }
 
 // Add empty schema (synthetic)
-ts += `  /** Synthetic: empty schema edge case — cfn-mcp-server never returns empty schemas for known types. */\n`;
+ts += `  /** Synthetic: empty schema edge case — DescribeType never returns empty schemas for known types. */\n`;
 ts += `  empty: {\n`;
 ts += `    success: mcpText({\n`;
 ts += `      typeName: "AWS::Unknown::Type",\n`;

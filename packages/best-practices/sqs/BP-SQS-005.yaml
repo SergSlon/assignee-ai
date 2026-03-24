@@ -1,0 +1,18 @@
+id: BP-SQS-005
+title: "SQS queue should have message retention period configured"
+severity: MEDIUM
+resource_type: "AWS::SQS::Queue"
+property_path: "MessageRetentionPeriod"
+check_type: "greater_than"
+expected_value: 60
+source: "TrustedAdvisor"
+source_id: "TA-sqs-retention"
+description: "SQS queues should have message retention configured to an appropriate value. The default 4 days may be too short for queues with irregular consumers, causing message loss."
+remediation: "Set MessageRetentionPeriod to match the expected maximum processing delay. Maximum is 1209600 seconds (14 days)."
+category: reliability
+lastVerified: "2026-03-24"
+fixType: "interactive"
+interactiveOptions:
+  - label: "Set message retention period (seconds)"
+    action: "prompt_value"
+    targetField: "MessageRetentionPeriod"

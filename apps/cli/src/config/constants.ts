@@ -29,3 +29,15 @@ export const ORG_POLICY_TTL_MS = parseInt(
   process.env["ASSIGNEE_ORG_POLICY_TTL_MS"] ?? "300000",
   10,
 );
+
+/** Auto-cleanup throttle interval in milliseconds (1 hour). */
+export const AUTO_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+/** Maximum number of provision records to keep in memory rotation. */
+export const MEMORY_MAX_PROVISIONS = 200;
+
+/** Maximum number of failure records to keep in memory rotation. */
+export const MEMORY_MAX_FAILURES = 100;
+
+/** Maximum number of pattern records to keep in memory rotation. */
+export const MEMORY_MAX_PATTERNS = 100;

@@ -1,0 +1,22 @@
+id: BP-NAT-003
+title: "NatGateway must be placed in a public subnet"
+severity: HIGH
+resource_type: "AWS::EC2::NatGateway"
+property_path: "SubnetId"
+check_type: "cross_resource_reference"
+expected_value: "SubnetId must reference a public subnet (one with a route to an InternetGateway)"
+source: "AWS VPC Documentation"
+source_id: "VPC-NAT-01"
+description: "A NatGateway with ConnectivityType 'public' must be placed in a public subnet — a subnet whose route table has a route to an InternetGateway (0.0.0.0/0 -> igw-xxx). Placing a public NatGateway in a private subnet means it cannot reach the internet, and all private subnet traffic routed through it will fail."
+remediation: "Move the NatGateway to a public subnet. Ensure the public subnet's route table has a 0.0.0.0/0 route targeting an InternetGateway. Private subnets should route 0.0.0.0/0 to the NatGateway, not the other way around."
+category: reliability
+lastVerified: "2026-03-24"
+blocking: true
+autoFixable: false
+fixType: interactive
+interactiveOptions:
+  - label: "Select a different (public) subnet"
+    action: prompt_value
+    targetField: "SubnetId"
+  - label: "Skip — I will verify subnet configuration manually"
+    action: skip

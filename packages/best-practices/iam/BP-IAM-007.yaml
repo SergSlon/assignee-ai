@@ -1,0 +1,13 @@
+id: BP-IAM-007
+title: "IAM role should have a maximum session duration under 4 hours"
+severity: MEDIUM
+resource_type: "AWS::IAM::Role"
+property_path: "MaxSessionDuration"
+check_type: "less_than"
+expected_value: 14401
+source: "FSBP"
+source_id: "IAM.7"
+description: "IAM roles should limit the maximum session duration to reduce the window of exposure if temporary credentials are compromised. The default is 1 hour; extending beyond 4 hours increases risk."
+remediation: "Set MaxSessionDuration to 3600 (1 hour) or 14400 (4 hours) for roles that need extended sessions. Avoid setting the maximum of 43200 (12 hours)."
+category: security
+lastVerified: "2026-03-24"

@@ -2,12 +2,37 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 
 /**
- * AWS::ApiGatewayV2::Api — display-only in this pattern.
- * Not in RESOURCE_TYPES (CCAPI provisioning deferred; requires route/integration config from user).
- * provisionable: false prevents Story 8.2 compound-dispatcher from attempting CloudControl creation.
+ * API Gateway V2 sub-resource types used in the serverless API pattern.
+ * These auxiliary resources are generated as part of the compound topology but
+ * are not independently provisioned via Cloud Control API.
  */
-const APIGATEWAYV2_API = "AWS::ApiGatewayV2::Api" as const;
+const APIGATEWAYV2_INTEGRATION = "AWS::ApiGatewayV2::Integration" as const;
+const APIGATEWAYV2_ROUTE = "AWS::ApiGatewayV2::Route" as const;
+const APIGATEWAYV2_STAGE = "AWS::ApiGatewayV2::Stage" as const;
+const LAMBDA_PERMISSION = "AWS::Lambda::Permission" as const;
 
+/**
+ * Full Serverless API compound pattern.
+ * Produces a complete serverless API with 8 resources:
+ *
+ * 1. IAM Role — Lambda execution role with trust policy for lambda.amazonaws.com
+ * 2. Lambda Function — the API handler function, linked to IAM Role
+ * 3. CloudWatch LogGroup — for API Gateway access logs
+ * 4. API Gateway V2 Api — HTTP API with CORS configuration
+ * 5. API Gateway V2 Integration — Lambda proxy integration
+ * 6. API Gateway V2 Route — default route ($default) with integration
+ * 7. API Gateway V2 Stage — $default stage with access logging to LogGroup
+ * 8. Lambda Permission — grants API Gateway invoke permission on Lambda
+ *
+ * Cross-references:
+ * - Lambda -> IAM Role ARN (via Fn::GetAtt)
+ * - Integration -> Lambda ARN (via Fn::GetAtt) + API ID (via Ref)
+ * - Route -> Integration ID (via Fn::GetAtt) + API ID (via Ref)
+ * - Stage -> LogGroup ARN (via Fn::GetAtt) + API ID (via Ref)
+ * - Permission -> API ID (via Ref) + Lambda ARN (via Fn::GetAtt)
+ *
+ * @see Story 26.4 — Serverless API Compound Pattern
+ */
 export const serverlessApiPattern: ArchitecturePattern = {
   patternId: "serverless-api",
   displayName: "Serverless API",
@@ -18,34 +43,75 @@ export const serverlessApiPattern: ArchitecturePattern = {
     "api gateway",
     "serverless backend",
     "http api lambda",
+    "create a serverless api",
+    "create an api",
+    "build an http api",
+    "serverless rest api",
   ],
   resourceList: [
+    // 1. IAM Role (no dependencies)
     {
       resourceType: RESOURCE_TYPES.IAM_ROLE,
       resourceId: "iam-execution-role",
       displayName: "Lambda Execution Role",
     },
+    // 2. Lambda Function (depends on Role)
     {
       resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
       resourceId: "lambda-fn",
       displayName: "Lambda Function",
     },
+    // 3. CloudWatch LogGroup (no dependencies, logically grouped after Lambda)
     {
-      resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
-      resourceId: "dynamodb-table",
-      displayName: "DynamoDB Table",
+      resourceType: RESOURCE_TYPES.LOGS_LOG_GROUP,
+      resourceId: "access-log-group",
+      displayName: "API Gateway Access LogGroup",
     },
+    // 4. API Gateway V2 Api (no dependencies)
     {
-      resourceType: APIGATEWAYV2_API,
-      resourceId: "api-gateway",
+      resourceType: RESOURCE_TYPES.APIGATEWAYV2_API,
+      resourceId: "http-api",
       displayName: "HTTP API Gateway",
+      provisionable: false,
+    },
+    // 5. Integration (depends on API + Lambda)
+    {
+      resourceType: APIGATEWAYV2_INTEGRATION,
+      resourceId: "lambda-integration",
+      displayName: "Lambda Proxy Integration",
+      provisionable: false,
+    },
+    // 6. Route (depends on API + Integration)
+    {
+      resourceType: APIGATEWAYV2_ROUTE,
+      resourceId: "default-route",
+      displayName: "Default Route ($default)",
+      provisionable: false,
+    },
+    // 7. Stage (depends on API + LogGroup)
+    {
+      resourceType: APIGATEWAYV2_STAGE,
+      resourceId: "default-stage",
+      displayName: "$default Stage",
+      provisionable: false,
+    },
+    // 8. Lambda Permission (depends on API + Lambda)
+    {
+      resourceType: LAMBDA_PERMISSION,
+      resourceId: "api-invoke-permission",
+      displayName: "API Gateway → Lambda Permission",
       provisionable: false,
     },
   ],
   dependencyOrder: [
+    // Group 0: IAM Role first — Lambda depends on it
     ["iam-execution-role"],
-    ["lambda-fn", "dynamodb-table"],
-    ["api-gateway"],
+    // Group 1: Lambda + LogGroup + API — can be created in parallel
+    ["lambda-fn", "access-log-group", "http-api"],
+    // Group 2: Integration — needs API + Lambda
+    ["lambda-integration"],
+    // Group 3: Route + Stage + Permission — need API + Integration/LogGroup/Lambda
+    ["default-route", "default-stage", "api-invoke-permission"],
   ],
   defaultOptions: {
     "iam-execution-role": {
@@ -60,23 +126,55 @@ export const serverlessApiPattern: ArchitecturePattern = {
           },
         ],
       },
+      PermissionsBoundary: "arn:aws:iam::aws:policy/PowerUserAccess",
     },
     "lambda-fn": {
       Runtime: "nodejs22.x",
       MemorySize: 512,
       Timeout: 30,
       Architectures: ["arm64"],
+      Role: { "Fn::GetAtt": ["iam-execution-role", "Arn"] },
     },
-    "dynamodb-table": {
-      BillingMode: "PAY_PER_REQUEST",
-      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
+    "access-log-group": {
+      LogGroupName: "/aws/apigateway/serverless-api",
+      RetentionInDays: 14,
     },
-    "api-gateway": {
+    "http-api": {
       ProtocolType: "HTTP",
       CorsConfiguration: {
         AllowOrigins: ["*"],
-        AllowMethods: ["GET", "POST", "PUT", "DELETE"],
+        AllowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         AllowHeaders: ["Content-Type", "Authorization"],
+      },
+    },
+    "lambda-integration": {
+      ApiId: { Ref: "http-api" },
+      IntegrationType: "AWS_PROXY",
+      IntegrationUri: { "Fn::GetAtt": ["lambda-fn", "Arn"] },
+      PayloadFormatVersion: "2.0",
+    },
+    "default-route": {
+      ApiId: { Ref: "http-api" },
+      RouteKey: "$default",
+      Target: {
+        "Fn::Join": ["/", ["integrations", { Ref: "lambda-integration" }]],
+      },
+    },
+    "default-stage": {
+      ApiId: { Ref: "http-api" },
+      StageName: "$default",
+      AutoDeploy: true,
+      AccessLogSettings: {
+        DestinationArn: { "Fn::GetAtt": ["access-log-group", "Arn"] },
+      },
+    },
+    "api-invoke-permission": {
+      Action: "lambda:InvokeFunction",
+      FunctionName: { "Fn::GetAtt": ["lambda-fn", "Arn"] },
+      Principal: "apigateway.amazonaws.com",
+      SourceArn: {
+        "Fn::Sub":
+          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${http-api}/*",
       },
     },
   },

@@ -36,6 +36,10 @@ export interface GetRequestStatusResult {
   statusMessage: string | undefined;
 }
 
+export interface UpdateResourceResult {
+  requestToken: string;
+}
+
 export interface ProvisioningPort {
   /** Check if a resource exists. Returns the error kind on failure. */
   getResource(
@@ -55,6 +59,13 @@ export interface ProvisioningPort {
     typeName: string,
     identifier: string,
   ): Promise<[ProvisioningPortError, null] | [null, DeleteResourceResult]>;
+
+  /** Update a resource via JSON Patch (RFC 6902). */
+  updateResource(
+    typeName: string,
+    identifier: string,
+    patchDocument: string,
+  ): Promise<[ProvisioningPortError, null] | [null, UpdateResourceResult]>;
 
   /** Poll async operation status. */
   getRequestStatus(

@@ -14,6 +14,7 @@ import * as os from "node:os";
 import type { OrgResourceConfig } from "@assignee/core";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { SAAS_API_URL, ORG_POLICY_TTL_MS } from "./constants.js";
+import { loadLocalOrgPolicy, mergeOrgPolicies } from "./org-policy-loader.js";
 
 /** Shape of the cache envelope persisted to disk. */
 interface OrgPolicyCacheEnvelope {
@@ -107,7 +108,8 @@ export async function fetchOrgPolicy(
   authToken: string | undefined,
 ): Promise<OrgResourceConfig | undefined> {
   if (!authToken) {
-    return undefined;
+    // No SaaS auth — return local org policy if available
+    return loadLocalOrgPolicy();
   }
 
   try {
@@ -136,6 +138,20 @@ export async function fetchOrgPolicy(
       // Cache write failure is non-fatal
     }
 
+    // Merge with local policy if it exists (SaaS wins on collision)
+    const localPolicy = await loadLocalOrgPolicy();
+    if (localPolicy) {
+      const merged = mergeOrgPolicies(localPolicy, data);
+      log({
+        ts: new Date().toISOString(),
+        runId: "system",
+        level: "info",
+        action: LOG_ACTIONS.ORG_POLICY_FETCHED,
+        extras: { source: "api+local" },
+      });
+      return merged;
+    }
+
     log({
       ts: new Date().toISOString(),
       runId: "system",
@@ -160,6 +176,22 @@ export async function fetchOrgPolicy(
         },
       });
       return cached;
+    }
+
+    // SaaS and cache both failed — try local org policy as last resort
+    const localPolicy = await loadLocalOrgPolicy();
+    if (localPolicy) {
+      log({
+        ts: new Date().toISOString(),
+        runId: "system",
+        level: "info",
+        action: LOG_ACTIONS.ORG_POLICY_FETCHED,
+        extras: {
+          source: "local",
+          reason: fetchErr instanceof Error ? fetchErr.message : "fetch failed",
+        },
+      });
+      return localPolicy;
     }
 
     log({

@@ -4,6 +4,7 @@ export type BPSeverity = (typeof BP_SEVERITY)[number];
 export const BP_CATEGORY = [
   "security",
   "cost",
+  "cost_optimization",
   "reliability",
   "performance",
   "compliance",
@@ -17,6 +18,12 @@ export const BP_CHECK_TYPE = [
   "not_exists",
   "greater_than",
   "less_than",
+  "contains",
+  "not_contains",
+  "conditional_forbidden",
+  "cross_resource_count",
+  "cross_resource_reference",
+  "awareness",
 ] as const;
 export type BPCheckType = (typeof BP_CHECK_TYPE)[number];
 

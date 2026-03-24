@@ -1,0 +1,13 @@
+id: BP-RDS-012
+title: "RDS instance should have CloudWatch Logs exports enabled"
+severity: MEDIUM
+resource_type: "AWS::RDS::DBInstance"
+property_path: "EnableCloudwatchLogsExports"
+check_type: "exists"
+expected_value: true
+source: "FSBP"
+source_id: "RDS.9"
+description: "RDS instances should export database logs to CloudWatch Logs for centralized monitoring and alerting. Without log exports, database errors and security events cannot be easily analyzed."
+remediation: "Set EnableCloudwatchLogsExports to include relevant log types (e.g., 'audit', 'error', 'general', 'slowquery' for MySQL; 'postgresql', 'upgrade' for PostgreSQL)."
+category: security
+lastVerified: "2026-03-24"

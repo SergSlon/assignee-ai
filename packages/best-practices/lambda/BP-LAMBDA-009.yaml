@@ -1,0 +1,13 @@
+id: BP-LAMBDA-009
+title: "Lambda function should have dead-letter queue configured"
+severity: HIGH
+resource_type: "AWS::Lambda::Function"
+property_path: "DeadLetterConfig"
+check_type: "exists"
+expected_value: true
+source: "FSBP"
+source_id: "Lambda.6"
+description: "Lambda functions that process asynchronous events should have a dead-letter queue configured. Without a DLQ, failed invocations are silently dropped after retries, causing data loss."
+remediation: "Configure DeadLetterConfig.TargetArn to point to an SQS queue or SNS topic. Failed events are sent there after the configured number of retries."
+category: reliability
+lastVerified: "2026-03-24"

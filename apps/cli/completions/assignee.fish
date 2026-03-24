@@ -18,3 +18,6 @@ complete -c assignee -n "__fish_seen_subcommand_from plan" -l no-apply -d 'Skip 
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l no-wizard -d 'Skip interactive option prompts, use defaults'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l yes -s y -d 'Auto-confirm apply without interactive prompt (for CI/CD)'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l checkpoint -s c -r -d 'Use a saved plan checkpoint instead of running Phase 1'
+
+# Options for 'init'
+complete -c assignee -n "__fish_seen_subcommand_from init" -l global -d 'Create global user config (~/.config/assignee/config.yaml) instead of project config'

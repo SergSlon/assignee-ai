@@ -17,17 +17,33 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ExecutionMode, ExecutionStatus } from "@assignee/core";
+import {
+  ExecutionMode,
+  ExecutionStatus,
+  SchemaFetchError,
+} from "@assignee/core";
 import {
   McpMocks,
+  RawSchemasByType,
   createMockTool,
-  createCoreMockTools,
-  createFailingMockTool,
+  createPricingMockTools,
   createAllMockTools,
 } from "../test-fixtures/mcp-mock-responses.js";
 import { ToolName } from "../constants/tools.js";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
+
+// Mock CloudFormationSchemaService — schema fetching now uses direct SDK, not MCP
+const mockGetSchema = vi.fn();
+vi.mock("@assignee/core", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    CloudFormationSchemaService: vi.fn().mockImplementation(() => ({
+      getSchema: mockGetSchema,
+    })),
+  };
+});
 
 // Mock CloudControl client — prevents real AWS API calls
 vi.mock("../services/cloudcontrol-client.js", () => ({
@@ -130,7 +146,25 @@ vi.mock("@clack/prompts", () => ({
   spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), message: vi.fn() })),
 }));
 
+// Story 27.4: Mock config loaders — return undefined by default (no config)
+vi.mock("../config/user-config-loader.js", () => ({
+  loadUserConfig: vi.fn().mockResolvedValue(undefined),
+  resolveConfigPath: vi
+    .fn()
+    .mockReturnValue("/tmp/.config/assignee/config.yaml"),
+}));
+
+vi.mock("../config/project-config-loader.js", () => ({
+  loadProjectConfig: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../config/org-policy-cache.js", () => ({
+  readAuthToken: vi.fn().mockResolvedValue(undefined),
+  fetchOrgPolicy: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { createGraph } from "./graph.js";
+import { _resetSchemaService } from "../nodes/schema-fetcher.js";
 const { renderPlanBox, renderError } = await import("../utils/display.js");
 
 // ── Test helpers ────────────────────────────────────────────────────────────
@@ -154,6 +188,16 @@ beforeEach(() => {
   // mockReset is required to clear mockResolvedValueOnce queues
   // (vi.clearAllMocks only calls mockClear which may not flush them)
   mockGenerateText.mockReset();
+  // Reset schema service singleton so the mock constructor fires each test
+  _resetSchemaService();
+  // Default schema mock: look up raw schema by resource type name
+  mockGetSchema.mockImplementation((typeName: string) => {
+    const schema = RawSchemasByType[typeName];
+    if (schema) return Promise.resolve(schema);
+    return Promise.reject(
+      new SchemaFetchError(typeName, new Error(`Type '${typeName}' not found`)),
+    );
+  });
   // Force non-TTY to skip option-elicitor interactive prompts
   Object.defineProperty(process.stdin, "isTTY", {
     value: false,
@@ -204,10 +248,7 @@ describe("Graph integration — plan mode", () => {
     });
     mockLlmForPlanFlow("AWS::S3::Bucket", bpCompliantS3);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.s3Bucket.success,
-      McpMocks.pricing.s3Storage.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.s3Storage.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -228,14 +269,11 @@ describe("Graph integration — plan mode", () => {
     expect(result.estimatedMonthlyCost).toMatch(/\$0\.0230/); // S3 first-tier price
     expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
 
-    // Schema fetcher called the MCP tool
-    const schemaTool = tools[0]!;
-    expect(schemaTool.invoke).toHaveBeenCalledWith(
-      expect.objectContaining({ resource_type: "AWS::S3::Bucket" }),
-    );
+    // Schema fetcher called CloudFormationSchemaService (not MCP tool)
+    expect(mockGetSchema).toHaveBeenCalledWith("AWS::S3::Bucket");
 
     // Pricing tool called for cost estimation
-    const pricingTool = tools[1]!;
+    const pricingTool = tools[0]!;
     expect(pricingTool.invoke).toHaveBeenCalledWith(
       expect.objectContaining({ service_code: "AmazonS3" }),
     );
@@ -251,10 +289,7 @@ describe("Graph integration — plan mode", () => {
       '{"FunctionName":"my-fn","Runtime":"nodejs22.x","Role":"arn:aws:iam::123456789012:role/lambda-exec"}',
     );
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.lambdaFunction.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -280,10 +315,7 @@ describe("Graph integration — plan mode", () => {
     });
     mockLlmForPlanFlow("AWS::EC2::Instance", bpCompliantEc2);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.ec2Instance.success,
-      McpMocks.pricing.ec2T3Micro.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.ec2T3Micro.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -307,10 +339,7 @@ describe("Graph integration — plan mode", () => {
       '{"FunctionName":"my-fn","Runtime":"nodejs22.x","Role":"arn:aws:iam::123456789012:role/lambda-exec","Code":{"ZipFile":"exports.handler=async()=>({statusCode:200})"}}',
     );
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.lambdaFunction.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -344,13 +373,7 @@ describe("Graph integration — plan mode", () => {
       ToolName.GET_PRICING,
       McpMocks.pricing.zeroPrice.success,
     );
-    const tools = [
-      createMockTool(
-        ToolName.GET_RESOURCE_SCHEMA,
-        McpMocks.schema.iamRole.success,
-      ),
-      pricingTool,
-    ];
+    const tools = [pricingTool];
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -378,8 +401,7 @@ describe("Graph integration — plan mode", () => {
     });
     mockLlmForPlanFlow("AWS::RDS::DBInstance", bpCompliantRds);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.rdsDbInstance.success,
+    const tools = createPricingMockTools(
       McpMocks.pricing.rdsT3MicroPostgres.success,
     );
 
@@ -444,51 +466,9 @@ describe("Graph integration — failure paths", () => {
     expect(result.errorMessage).toContain("Bedrock");
   });
 
-  it("schema fetch failure: cfn-mcp-server unavailable", async () => {
-    mockLlmForPlanFlow("AWS::S3::Bucket", "{}");
-
-    // Pass only pricing tool — no schema tool means cfn-mcp-server is "down"
-    const tools = [
-      createMockTool(ToolName.GET_PRICING, McpMocks.pricing.s3Storage.success),
-    ];
-
-    const graph = createGraph(tools);
-    const result = await graph.invoke(
-      {
-        userIntent: "Create an S3 bucket",
-        executionMode: ExecutionMode.PLAN,
-      },
-      { configurable: { thread_id: "integration-schema-fail" } },
-    );
-
-    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(result.errorMessage).toBe("cfn-mcp-server not available");
-  });
-
-  it("schema tool throws error: wraps error message", async () => {
-    mockLlmForPlanFlow("AWS::S3::Bucket", "{}");
-
-    const tools = [
-      createFailingMockTool(
-        ToolName.GET_RESOURCE_SCHEMA,
-        new Error("Connection refused"),
-      ),
-      createMockTool(ToolName.GET_PRICING, McpMocks.pricing.s3Storage.success),
-    ];
-
-    const graph = createGraph(tools);
-    const result = await graph.invoke(
-      {
-        userIntent: "Create an S3 bucket",
-        executionMode: ExecutionMode.PLAN,
-      },
-      { configurable: { thread_id: "integration-schema-error" } },
-    );
-
-    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(result.errorMessage).toContain("Connection refused");
-    expect(result.errorMessage).toContain("cfn-mcp-server");
-  });
+  // Note: Schema fetch failure tests removed in Story 31.4.
+  // Schema fetching now uses CloudFormationSchemaService (direct SDK), not MCP tools.
+  // SDK-level failure tests live in apps/cli/src/nodes/schema-fetcher.test.ts.
 
   it("LLM returns invalid JSON at plan-generator: fails gracefully", async () => {
     mockGenerateText
@@ -501,10 +481,7 @@ describe("Graph integration — failure paths", () => {
         output: undefined,
       });
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.s3Bucket.success,
-      McpMocks.pricing.s3Storage.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.s3Storage.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -526,10 +503,7 @@ describe("Graph integration — failure paths", () => {
       '{"FunctionName":"my-fn","Runtime":"nodejs22.x"}',
     );
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.lambdaFunction.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -552,10 +526,7 @@ describe("Graph integration — plan generator resilience", () => {
       '{"BucketName":"test-data-bucket","NonExistentField":"hallucinated","Tags":[]}',
     );
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.s3Bucket.success,
-      McpMocks.pricing.s3Storage.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.s3Storage.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -591,10 +562,7 @@ describe("Graph integration — plan generator resilience", () => {
       '{"MyBucket":{"Type":"AWS::S3::Bucket","Properties":{"BucketName":"unwrapped-bucket"}}}',
     );
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.s3Bucket.success,
-      McpMocks.pricing.s3Storage.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.s3Storage.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -617,10 +585,7 @@ describe("Graph integration — plan generator resilience", () => {
       '```json\n{"BucketName":"fenced-bucket"}\n```',
     );
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.s3Bucket.success,
-      McpMocks.pricing.s3Storage.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.s3Storage.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -642,10 +607,6 @@ describe("Graph integration — pricing edge cases", () => {
     mockLlmForPlanFlow("AWS::S3::Bucket", '{"BucketName":"timeout-bucket"}');
 
     const tools = [
-      createMockTool(
-        ToolName.GET_RESOURCE_SCHEMA,
-        McpMocks.schema.s3Bucket.success,
-      ),
       // Pricing tool returns null (simulates withTimeout resolving to null)
       createMockTool(ToolName.GET_PRICING, null),
     ];
@@ -668,13 +629,8 @@ describe("Graph integration — pricing edge cases", () => {
   it("no pricing tool available: falls back to N/A", async () => {
     mockLlmForPlanFlow("AWS::S3::Bucket", '{"BucketName":"no-pricing-bucket"}');
 
-    // Only schema tool, no pricing tool at all
-    const tools = [
-      createMockTool(
-        ToolName.GET_RESOURCE_SCHEMA,
-        McpMocks.schema.s3Bucket.success,
-      ),
-    ];
+    // No pricing tool at all — should fall back to N/A
+    const tools: ReturnType<typeof createMockTool>[] = [];
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -696,10 +652,6 @@ describe("Graph integration — pricing edge cases", () => {
     );
 
     const tools = [
-      createMockTool(
-        ToolName.GET_RESOURCE_SCHEMA,
-        McpMocks.schema.s3Bucket.success,
-      ),
       createMockTool(
         ToolName.GET_PRICING,
         McpMocks.pricing.malformedJson.success,
@@ -745,10 +697,7 @@ describe("Graph integration — fix_applicator + pricing breakdown", () => {
     });
     mockLlmForPlanFlow("AWS::S3::Bucket", bpCompliantS3);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.s3Bucket.success,
-      McpMocks.pricing.s3Storage.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.s3Storage.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -774,10 +723,7 @@ describe("Graph integration — fix_applicator + pricing breakdown", () => {
     });
     mockLlmForPlanFlow("AWS::EC2::Instance", ec2State);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.ec2Instance.success,
-      McpMocks.pricing.ec2T3Micro.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.ec2T3Micro.success);
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -809,10 +755,7 @@ describe("Graph integration — new resource types", () => {
     });
     mockLlmForPlanFlow("AWS::DynamoDB::Table", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.dynamoDbTable.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
     const result = await graph.invoke(
       {
@@ -834,10 +777,7 @@ describe("Graph integration — new resource types", () => {
     });
     mockLlmForPlanFlow("AWS::EC2::SecurityGroup", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.securityGroup.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
     const result = await graph.invoke(
       {
@@ -856,10 +796,7 @@ describe("Graph integration — new resource types", () => {
     const state = JSON.stringify({ CidrBlock: "10.0.0.0/16" });
     mockLlmForPlanFlow("AWS::EC2::VPC", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.vpc.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
     const result = await graph.invoke(
       {
@@ -883,10 +820,7 @@ describe("Graph integration — new resource types", () => {
     });
     mockLlmForPlanFlow("AWS::EC2::Subnet", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.subnet.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
     const result = await graph.invoke(
       {
@@ -905,10 +839,7 @@ describe("Graph integration — new resource types", () => {
     const state = JSON.stringify({ QueueName: "test-queue" });
     mockLlmForPlanFlow("AWS::SQS::Queue", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.sqsQueue.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
     const result = await graph.invoke(
       {
@@ -928,10 +859,7 @@ describe("Graph integration — new resource types", () => {
     const state = JSON.stringify({ TopicName: "test-topic" });
     mockLlmForPlanFlow("AWS::SNS::Topic", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.snsTopic.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
     const result = await graph.invoke(
       {
@@ -955,10 +883,7 @@ describe("Graph integration — new resource types", () => {
     });
     mockLlmForPlanFlow("AWS::SSM::Parameter", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.ssmParameter.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
     const result = await graph.invoke(
       {
@@ -977,10 +902,7 @@ describe("Graph integration — new resource types", () => {
     const state = JSON.stringify({ ClusterName: "test-cluster" });
     mockLlmForPlanFlow("AWS::ECS::Cluster", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.ecsCluster.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
     const result = await graph.invoke(
       {
@@ -1000,10 +922,7 @@ describe("Graph integration — new resource types", () => {
     const state = JSON.stringify({ RepositoryName: "test-repo" });
     mockLlmForPlanFlow("AWS::ECR::Repository", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.ecrRepository.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
     const result = await graph.invoke(
       {
@@ -1026,10 +945,7 @@ describe("Graph integration — new resource types", () => {
     });
     mockLlmForPlanFlow("AWS::ElasticLoadBalancingV2::LoadBalancer", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.elbv2LoadBalancer.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
     const result = await graph.invoke(
       {
@@ -1059,10 +975,7 @@ describe("Graph integration — apply flow", () => {
     });
     mockLlmForPlanFlow("AWS::SSM::Parameter", state);
 
-    const tools = createCoreMockTools(
-      McpMocks.schema.ssmParameter.success,
-      McpMocks.pricing.emptyData.success,
-    );
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
 
     // Configure CloudControl mock to handle Phase 2 commands:
     //   GetResource → NOT_FOUND (state guard passes)

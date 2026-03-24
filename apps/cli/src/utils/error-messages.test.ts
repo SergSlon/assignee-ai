@@ -248,11 +248,11 @@ describe("ErrorMessageRegistry — MCP errors", () => {
     expect(entry.howToFix).toContain("MCP server");
   });
 
-  it("resolves cfn-mcp-server unavailable", () => {
-    const err = new McpError("cfn-mcp-server is not responding");
+  it("resolves schema fetch failure (DescribeType)", () => {
+    const err = new McpError("SchemaFetchError: DescribeType call failed");
     const entry = defaultErrorMessageRegistry.resolve(err);
     expect(entry.code).toBe("CFN_MCP_UNAVAILABLE");
-    expect(entry.howToFix).toContain("cfn-mcp-server");
+    expect(entry.howToFix).toContain("DescribeType");
   });
 
   it("resolves MCP tool not found", () => {

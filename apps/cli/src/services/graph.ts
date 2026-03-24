@@ -84,9 +84,7 @@ export function createGraph(
 
   const workflow = new StateGraph(graphAnnotation)
     .addNode(GraphNode.INTENT_PARSER, (state) => intentParserNode(state))
-    .addNode(GraphNode.SCHEMA_FETCHER, (state) =>
-      schemaFetcherNode(state, tools),
-    )
+    .addNode(GraphNode.SCHEMA_FETCHER, (state) => schemaFetcherNode(state))
     .addNode(GraphNode.OPTION_ELICITOR, (state) =>
       optionElicitorNode(state, tools, llmAdapter),
     )

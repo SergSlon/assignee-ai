@@ -1,36 +1,47 @@
-import { ExecutionStatus } from "@assignee/core";
-import type { StructuredTool } from "@langchain/core/tools";
-import { ToolName } from "../constants/tools.js";
-import { unwrapMcpText } from "../utils/mcp.js";
+import {
+  ExecutionStatus,
+  CloudFormationSchemaService,
+  SchemaFetchError,
+  adaptDescribeTypeToMcpFormat,
+} from "@assignee/core";
 import type { AgentState } from "../services/graph.js";
+
+/** Module-level singleton — lazily initialised on first use. */
+let schemaService: CloudFormationSchemaService | null = null;
+
+function getSchemaService(): CloudFormationSchemaService {
+  if (!schemaService) {
+    schemaService = new CloudFormationSchemaService();
+  }
+  return schemaService;
+}
 
 export async function schemaFetcherNode(
   state: AgentState,
-  tools?: StructuredTool[],
 ): Promise<Partial<AgentState>> {
   if (state.resourcePattern) return {}; // compound pattern path — schema_fetcher is single-resource only; compound-dispatcher handles this
   if (state.executionStatus !== ExecutionStatus.PENDING) return {}; // skip if already failed
 
-  const getResourceSchema = tools?.find(
-    (t) => t.name === ToolName.GET_RESOURCE_SCHEMA,
-  );
-  if (!getResourceSchema) {
-    return {
-      executionStatus: ExecutionStatus.FAILED,
-      errorMessage: "cfn-mcp-server not available",
-    };
-  }
-
   try {
-    const raw = await getResourceSchema.invoke({
-      resource_type: state.resourceType,
-    });
-    const schema = JSON.parse(unwrapMcpText(raw)) as Record<string, unknown>;
+    const service = getSchemaService();
+    const rawSchema = await service.getSchema(state.resourceType);
+    const schema = adaptDescribeTypeToMcpFormat(
+      rawSchema as Record<string, unknown>,
+    );
     return { resourceSchema: schema };
   } catch (err: unknown) {
+    const message =
+      err instanceof SchemaFetchError
+        ? `Schema fetch failed for ${err.typeName}: ${err.rootCause.message}`
+        : `Failed to fetch schema for ${state.resourceType}: ${err instanceof Error ? err.message : String(err)}`;
     return {
       executionStatus: ExecutionStatus.FAILED,
-      errorMessage: `Failed to fetch schema for ${state.resourceType}. Check cfn-mcp-server is running. Error: ${err instanceof Error ? err.message : String(err)}`,
+      errorMessage: message,
     };
   }
+}
+
+/** Reset the singleton — exposed for testing only. */
+export function _resetSchemaService(): void {
+  schemaService = null;
 }

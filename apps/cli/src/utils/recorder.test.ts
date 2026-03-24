@@ -315,7 +315,7 @@ describe("wrapToolWithRecorder", () => {
 
   it("preserves tool name on wrapped tool", () => {
     const mockTool = {
-      name: "get_resource_schema_information",
+      name: "get_pricing",
       invoke: vi.fn(),
     } as unknown as import("@langchain/core/tools").StructuredTool;
 
@@ -323,7 +323,7 @@ describe("wrapToolWithRecorder", () => {
     tmpDir = t.tmpDir;
     const wrapped = wrapToolWithRecorder(mockTool, t.recorder);
 
-    expect(wrapped.name).toBe("get_resource_schema_information");
+    expect(wrapped.name).toBe("get_pricing");
   });
 });
 

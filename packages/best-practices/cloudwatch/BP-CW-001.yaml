@@ -1,0 +1,15 @@
+id: BP-CW-001
+title: "CloudWatch alarm must have AlarmActions configured"
+severity: CRITICAL
+resource_type: "AWS::CloudWatch::Alarm"
+property_path: "AlarmActions"
+check_type: "exists"
+expected_value: true
+source: "AWS Well-Architected (Reliability Pillar)"
+source_id: "REL-06"
+description: "A CloudWatch alarm without AlarmActions is useless — it changes state but sends no notifications. Every alarm must have at least one SNS topic ARN in AlarmActions to notify operators or trigger auto-remediation."
+remediation: "Add at least one SNS topic ARN to AlarmActions. Example: arn:aws:sns:us-east-1:123456789012:ops-alerts. Consider adding OKActions as well for 'all clear' notifications."
+category: reliability
+lastVerified: "2026-03-24"
+blocking: true
+autoFixable: false

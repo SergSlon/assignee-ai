@@ -1,0 +1,15 @@
+id: BP-APIGW-003
+title: "API routes should have authorization configured"
+severity: MEDIUM
+resource_type: "AWS::ApiGatewayV2::Route"
+property_path: "AuthorizationType"
+check_type: "not_equals"
+expected_value: "NONE"
+source: "AWS Well-Architected Framework"
+source_id: "SEC-03"
+description: "All API Gateway V2 routes should have an authorization type configured (e.g., JWT, IAM, or a custom Lambda authorizer). Routes with AuthorizationType set to NONE are publicly accessible without any authentication, increasing the attack surface."
+remediation: "Set AuthorizationType to JWT (recommended for HTTP APIs with Cognito/OIDC), AWS_IAM (for service-to-service calls), or CUSTOM (for Lambda authorizers). Only use NONE for truly public endpoints like health checks."
+category: security
+lastVerified: "2026-03-24"
+blocking: false
+autoFixable: false

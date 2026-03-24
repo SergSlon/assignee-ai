@@ -63,6 +63,20 @@ vi.mock("../utils/aws-resource-discovery.js", () => ({
   discoverRdsInstanceClasses: vi.fn().mockResolvedValue([]),
 }));
 
+// Story 27.4: Mock config loaders — return undefined by default (no config)
+vi.mock("../config/user-config-loader.js", () => ({
+  loadUserConfig: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../config/project-config-loader.js", () => ({
+  loadProjectConfig: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../config/org-policy-cache.js", () => ({
+  readAuthToken: vi.fn().mockResolvedValue(undefined),
+  fetchOrgPolicy: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../services/memory.js", () => ({
   defaultMemoryService: {
     readProvisions: vi.fn().mockResolvedValue([]),

@@ -1,0 +1,13 @@
+id: BP-IAM-008
+title: "IAM role should not have inline policies"
+severity: HIGH
+resource_type: "AWS::IAM::Role"
+property_path: "Policies"
+check_type: "not_exists"
+expected_value: true
+source: "FSBP"
+source_id: "IAM.21"
+description: "IAM roles should use managed policies instead of inline policies. Inline policies are harder to audit, version, and reuse across roles, and they cannot be centrally managed."
+remediation: "Convert inline policies to customer managed policies and attach them to the role. This enables policy reuse, version tracking, and centralized management."
+category: security
+lastVerified: "2026-03-24"

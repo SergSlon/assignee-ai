@@ -1,0 +1,13 @@
+id: BP-SG-006
+title: "Security group should have a description"
+severity: MEDIUM
+resource_type: "AWS::EC2::SecurityGroup"
+property_path: "GroupDescription"
+check_type: "not_equals"
+expected_value: ""
+source: "FSBP"
+source_id: "EC2.23"
+description: "Security groups should have meaningful descriptions to document their purpose and intended usage. Empty or default descriptions make security auditing and troubleshooting difficult."
+remediation: "Set GroupDescription to a meaningful description of the security group's purpose, such as 'Web server public traffic on ports 80/443'."
+category: compliance
+lastVerified: "2026-03-24"

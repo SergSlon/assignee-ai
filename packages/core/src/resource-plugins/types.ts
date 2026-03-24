@@ -104,6 +104,18 @@ export interface ResourceField {
 }
 
 /**
+ * Structured CloudFormation resource output produced by toCfn() or companionResources().
+ */
+export interface CfnOutput {
+  /** Logical ID for the CloudFormation resource, e.g. "NatGateway" */
+  logicalId: string;
+  /** CloudFormation resource type, e.g. "AWS::EC2::NatGateway" */
+  type: string;
+  /** CloudFormation resource properties */
+  properties: Record<string, unknown>;
+}
+
+/**
  * Describes how to elicit configuration for a specific CloudFormation resource type.
  * Consumed by the option-elicitor node to determine which questions to ask.
  */
@@ -131,4 +143,14 @@ export interface ResourcePlugin {
    * Example: ["Runtime MUST be one of: nodejs22.x ...", "OMIT Role if user didn't provide ARN"]
    */
   configHints?: string[];
+  /**
+   * Optional method to transform desiredState into one or more CfnOutput resources.
+   * Used by plugins that need to produce multiple CloudFormation resources (e.g., NatGateway + EIP).
+   */
+  toCfn?: (desiredState: Record<string, unknown>) => CfnOutput[];
+  /**
+   * Optional method to generate companion resources for this plugin (e.g., auto-provisioned LogGroups).
+   * @see Story 25.6 — LogGroup co-provisioning
+   */
+  companionResources?: (desiredState: Record<string, unknown>) => CfnOutput[];
 }

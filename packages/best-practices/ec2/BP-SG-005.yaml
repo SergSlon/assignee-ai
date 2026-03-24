@@ -1,0 +1,18 @@
+id: BP-SG-005
+title: "Security group should not allow ingress from 0.0.0.0/0 to RDP"
+severity: CRITICAL
+resource_type: "AWS::EC2::SecurityGroup"
+property_path: "SecurityGroupIngress"
+check_type: "awareness"
+expected_value: true
+source: "FSBP"
+source_id: "EC2.14"
+description: "Security groups should not allow unrestricted RDP access (port 3389) from 0.0.0.0/0. Open RDP ports are frequently targeted by brute-force attacks against Windows instances."
+remediation: "Restrict RDP ingress to specific IP ranges or use AWS Systems Manager Fleet Manager for remote desktop access without opening RDP ports."
+category: security
+lastVerified: "2026-03-24"
+fixType: "interactive"
+interactiveOptions:
+  - label: "Set allowed RDP CIDR range"
+    action: "prompt_value"
+    targetField: "SecurityGroupIngress"

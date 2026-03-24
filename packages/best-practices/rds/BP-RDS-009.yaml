@@ -1,0 +1,16 @@
+id: BP-RDS-009
+title: "RDS instance should have copy tags to snapshots enabled"
+severity: MEDIUM
+resource_type: "AWS::RDS::DBInstance"
+property_path: "CopyTagsToSnapshot"
+check_type: "equals"
+expected_value: true
+source: "FSBP"
+source_id: "RDS.16"
+description: "RDS instances should copy tags to snapshots for consistent tagging. Without tag propagation, snapshots lose cost allocation, ownership, and compliance tags."
+remediation: "Set CopyTagsToSnapshot to true so all instance tags are automatically copied to manual and automated snapshots."
+category: compliance
+lastVerified: "2026-03-24"
+autoFixable: true
+desiredStatePatch:
+  CopyTagsToSnapshot: true

@@ -1,0 +1,13 @@
+id: BP-LAMBDA-010
+title: "Lambda function should not have deprecated runtime python3.7"
+severity: HIGH
+resource_type: "AWS::Lambda::Function"
+property_path: "Runtime"
+check_type: "not_equals"
+expected_value: "python3.7"
+source: "FSBP"
+source_id: "Lambda.2-python37"
+description: "Lambda functions should not use the deprecated python3.7 runtime. Deprecated runtimes no longer receive security patches, leaving functions vulnerable to known exploits."
+remediation: "Upgrade to python3.12 or later. Test the function thoroughly before deploying the new runtime to production."
+category: security
+lastVerified: "2026-03-24"

@@ -1,0 +1,13 @@
+id: BP-S3-017
+title: "S3 bucket should have access logging enabled"
+severity: HIGH
+resource_type: "AWS::S3::Bucket"
+property_path: "LoggingConfiguration"
+check_type: "exists"
+expected_value: true
+source: "FSBP"
+source_id: "S3.9"
+description: "S3 buckets should have server access logging enabled to track requests for security auditing and troubleshooting. Without logging, unauthorized access attempts cannot be investigated."
+remediation: "Configure LoggingConfiguration.DestinationBucketName to point to a dedicated logging bucket. Ensure the logging bucket has appropriate lifecycle rules."
+category: security
+lastVerified: "2026-03-24"

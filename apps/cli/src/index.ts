@@ -17,6 +17,7 @@ import { applyCommand } from "./commands/apply.js";
 import { completionsCommand } from "./commands/completions.js";
 import { initCommand } from "./commands/init.js";
 import { destroyCommand } from "./commands/destroy.js";
+import { driftCommand } from "./commands/drift.js";
 import { listCommand } from "./commands/list.js";
 import { setupCommand } from "./commands/setup.js";
 import { statusCommand } from "./commands/status.js";
@@ -24,12 +25,16 @@ import { ProcessExitCode } from "./constants/errors.js";
 import { SUPPORTED_TYPES_HINT } from "./config/constants.js";
 
 import { closeMcpClient } from "./services/mcp-client.js";
+import { bootstrapFirstRun } from "./utils/first-run.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, "..", "package.json"), "utf-8"),
 );
+
+// First-run detection: auto-create ~/.assignee/ and show welcome (Story 29.6)
+bootstrapFirstRun(pkg.version as string);
 
 const program = new Command();
 
@@ -41,6 +46,7 @@ program
 
 program.addCommand(completionsCommand);
 program.addCommand(destroyCommand);
+program.addCommand(driftCommand);
 program.addCommand(initCommand);
 program.addCommand(listCommand);
 program.addCommand(planCommand);

@@ -1,0 +1,13 @@
+id: BP-LAMBDA-013
+title: "Lambda function should have appropriate memory configured"
+severity: MEDIUM
+resource_type: "AWS::Lambda::Function"
+property_path: "MemorySize"
+check_type: "greater_than"
+expected_value: 128
+source: "TrustedAdvisor"
+source_id: "TA-lambda-memory"
+description: "Lambda functions using the minimum 128MB memory are often under-provisioned, leading to slower execution and higher costs per invocation. CPU allocation scales linearly with memory."
+remediation: "Right-size Lambda memory using AWS Lambda Power Tuning. Higher memory often reduces duration enough to lower total cost."
+category: performance
+lastVerified: "2026-03-24"

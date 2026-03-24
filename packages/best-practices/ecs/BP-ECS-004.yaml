@@ -1,0 +1,13 @@
+id: BP-ECS-004
+title: "ECS task definition should not pass secrets as environment variables"
+severity: CRITICAL
+resource_type: "AWS::ECS::TaskDefinition"
+property_path: "ContainerDefinitions[0].Secrets"
+check_type: "awareness"
+expected_value: true
+source: "FSBP"
+source_id: "ECS.8"
+description: "ECS task definitions should use the Secrets property to inject sensitive values from Secrets Manager or SSM Parameter Store, not plain-text Environment variables. Environment variables are visible in the console and API."
+remediation: "Move sensitive values from Environment to Secrets. Reference Secrets Manager secrets or SSM SecureString parameters using the Secrets array."
+category: security
+lastVerified: "2026-03-24"

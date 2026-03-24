@@ -1,0 +1,13 @@
+id: BP-CWA-002
+title: "CloudWatch alarm should have InsufficientDataActions configured"
+severity: MEDIUM
+resource_type: "AWS::CloudWatch::Alarm"
+property_path: "InsufficientDataActions"
+check_type: "exists"
+expected_value: true
+source: "FSBP"
+source_id: "CloudWatch.2"
+description: "CloudWatch alarms should have InsufficientDataActions configured to notify when data is missing. Without this, a broken metric pipeline goes unnoticed, effectively disabling the alarm."
+remediation: "Add at least one SNS topic ARN to InsufficientDataActions to be alerted when the alarm cannot evaluate due to missing data."
+category: reliability
+lastVerified: "2026-03-24"

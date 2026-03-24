@@ -1,0 +1,17 @@
+id: BP-LOGS-001
+title: "CloudWatch LogGroup must have a retention period set"
+severity: HIGH
+resource_type: "AWS::Logs::LogGroup"
+property_path: "RetentionInDays"
+check_type: "exists"
+expected_value: true
+source: "AWS Well-Architected Framework"
+source_id: "COST-04"
+description: "CloudWatch LogGroups must have RetentionInDays explicitly set. Without a retention policy, log data is retained indefinitely, leading to unbounded storage costs. Production workloads should never use 'never expire'."
+remediation: "Set RetentionInDays to an appropriate value (e.g., 14 for development, 90-365 for production). This controls how long log events are kept before automatic deletion."
+category: cost
+lastVerified: "2026-03-24"
+blocking: true
+autoFixable: true
+desiredStatePatch:
+  RetentionInDays: 14
