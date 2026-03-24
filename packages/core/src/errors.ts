@@ -93,6 +93,14 @@ export class MissingRequiredFieldsError extends AssigneeError {
   }
 }
 
+/** Error when the user cancels an interactive prompt (Ctrl+C / ESC). */
+export class UserCancelledError extends AssigneeError {
+  constructor(message = "Operation cancelled by user.") {
+    super(message, "USER_CANCELLED");
+    this.name = "UserCancelledError";
+  }
+}
+
 export type ProvisioningErrorCode =
   | "AlreadyExists"
   | "NotFound"

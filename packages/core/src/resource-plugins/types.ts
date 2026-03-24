@@ -38,8 +38,14 @@ export interface OptionMetadata {
 export interface ShowIfCondition {
   /** Field name in the same plugin's commonFields or advancedFields */
   field: string;
-  /** The value the referenced field must equal for this field to be shown */
-  value: unknown;
+  /** The value the referenced field must equal for this field to be shown (exact match). */
+  value?: unknown;
+  /**
+   * Regex pattern tested against the string value of the referenced field.
+   * When set, `value` is ignored — the field is shown if the pattern matches.
+   * Example: "^t[34]" matches burstable instance types t3.* and t4g.*.
+   */
+  pattern?: string;
 }
 
 /**

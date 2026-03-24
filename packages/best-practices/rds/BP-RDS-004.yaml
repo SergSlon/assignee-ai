@@ -11,3 +11,6 @@ description: "RDS DB instances should have deletion protection enabled to preven
 remediation: "Set DeletionProtection to true. This prevents the instance from being deleted via the API or console until deletion protection is explicitly disabled."
 category: reliability
 lastVerified: "2026-03-22"
+autoFixable: true
+desiredStatePatch:
+  DeletionProtection: true

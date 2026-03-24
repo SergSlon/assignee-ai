@@ -10,8 +10,12 @@
 import {
   ExecutionStatus,
   defaultPricingRegistry,
+  defaultDecomposerRegistry,
   extractFirstTierPrice,
   type AwsPricingResponse,
+  type PricingLineItem,
+  type PricingLineItemResult,
+  type PricingBreakdown,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
@@ -22,6 +26,7 @@ import { unwrapMcpText } from "../utils/mcp.js";
 import { withTimeout } from "../utils/timeout.js";
 import { getFreeTierNote, loadAccountCreatedDate } from "../utils/free-tier.js";
 import { getRequiredIamActions } from "@assignee/core";
+import { getCachedPrice, setCachedPrice } from "../services/price-cache.js";
 import type { AgentState } from "../services/graph.js";
 
 const PRICING_TIMEOUT_MS = 3000;
@@ -209,6 +214,23 @@ export async function preflightGuardNode(
     extras: { costEstimate, resourceType: state.resourceType },
   });
 
+  // Story 23.6: Pricing breakdown from decomposers
+  let pricingBreakdown: PricingBreakdown | undefined;
+  if (defaultDecomposerRegistry.has(state.resourceType) && tools) {
+    const lineItems = defaultDecomposerRegistry.decompose(
+      state.resourceType,
+      desiredState,
+    );
+    if (lineItems.length > 0) {
+      pricingBreakdown = await queryLineItemPrices(
+        lineItems,
+        tools,
+        state.runId,
+        state.projectDir,
+      );
+    }
+  }
+
   // Accumulate per-resource costs for compound provisioning display (Story 8.3)
   let perResourceCosts: Record<string, string> | undefined;
   if (
@@ -234,10 +256,169 @@ export async function preflightGuardNode(
     };
   }
 
+  // If the single-line pricing query returned "N/A" but the decomposer
+  // produced a valid fixedSubtotal, use the decomposer's total as the headline.
+  let headlineCost = costEstimate;
+  if (
+    headlineCost === CostEstimate.NA &&
+    pricingBreakdown &&
+    pricingBreakdown.fixedSubtotal > 0
+  ) {
+    headlineCost = `$${pricingBreakdown.fixedSubtotal.toFixed(2)}/mo`;
+  }
+
   return {
-    estimatedMonthlyCost: costEstimate,
+    estimatedMonthlyCost: headlineCost,
     preflightPassed: !bpBlocked,
     freeTierNote: freeTierNote ?? undefined,
     ...(perResourceCosts !== undefined ? { perResourceCosts } : {}),
+    ...(pricingBreakdown !== undefined ? { pricingBreakdown } : {}),
+  };
+}
+
+/**
+ * Query MCP for each pricing line item in parallel (Story 23.6).
+ * Uses price cache (Story 23.4) to avoid redundant queries.
+ */
+async function queryLineItemPrices(
+  lineItems: PricingLineItem[],
+  tools: StructuredTool[],
+  runId: string,
+  projectDir?: string,
+): Promise<PricingBreakdown> {
+  const pricingTool = tools.find((t) => t.name === ToolName.GET_PRICING);
+  const fetchedAt = new Date().toISOString().split("T")[0]!;
+  let hasPartialFailure = false;
+
+  const results: PricingLineItemResult[] = await Promise.all(
+    lineItems.map(async (item): Promise<PricingLineItemResult> => {
+      if (!pricingTool) {
+        hasPartialFailure = true;
+        return {
+          lineItem: item,
+          unitPrice: null,
+          monthlyCost: null,
+          displayPrice: "unavailable",
+        };
+      }
+
+      // Check cache first (Story 23.4)
+      const category =
+        item.kind === "fixed" && item.priceUnit === "/hr"
+          ? "compute"
+          : "storage";
+      const cached = getCachedPrice(
+        item.serviceCode,
+        item.filters,
+        category,
+        projectDir,
+      );
+
+      try {
+        let data: AwsPricingResponse;
+
+        if (cached) {
+          data = cached as AwsPricingResponse;
+        } else {
+          const timeoutMs = item.timeoutMs ?? PRICING_TIMEOUT_MS;
+          const result = await withTimeout(
+            pricingTool.invoke({
+              service_code: item.serviceCode,
+              region: AWS_REGION,
+              filters: item.filters,
+              output_options: { pricing_terms: [PricingTerm.ON_DEMAND] },
+            }),
+            timeoutMs,
+          );
+
+          if (result === null) {
+            hasPartialFailure = true;
+            return {
+              lineItem: item,
+              unitPrice: null,
+              monthlyCost: null,
+              displayPrice: "unavailable",
+            };
+          }
+
+          data = JSON.parse(unwrapMcpText(result)) as AwsPricingResponse;
+          setCachedPrice(item.serviceCode, item.filters, data);
+        }
+
+        const priceStr = extractFirstTierPrice(
+          data,
+          item.priceUnit,
+          item.scale,
+        );
+
+        if (!priceStr) {
+          hasPartialFailure = true;
+          return {
+            lineItem: item,
+            unitPrice: null,
+            monthlyCost: null,
+            displayPrice: "unavailable",
+          };
+        }
+
+        // Calculate monthly cost for fixed items
+        let monthlyCost: number | null = null;
+        const rawPrice = parseFloat(priceStr.replace(/^\$/, ""));
+
+        if (item.kind === "fixed" && !isNaN(rawPrice)) {
+          if (item.priceUnit === "/hr") {
+            monthlyCost = rawPrice * 730 * item.quantity; // 730 hrs/month
+          } else if (item.priceUnit.includes("/GB-mo")) {
+            monthlyCost = rawPrice * item.quantity;
+          } else {
+            monthlyCost = rawPrice * item.quantity;
+          }
+        }
+
+        const displayPrice =
+          monthlyCost !== null
+            ? `$${monthlyCost.toFixed(2)}/mo`
+            : `${priceStr}`;
+
+        return {
+          lineItem: item,
+          unitPrice: priceStr,
+          monthlyCost,
+          displayPrice,
+        };
+      } catch {
+        hasPartialFailure = true;
+        log({
+          ts: new Date().toISOString(),
+          runId,
+          level: "warn",
+          action: LOG_ACTIONS.PRICING_UNAVAILABLE,
+          extras: { lineItem: item.label, serviceCode: item.serviceCode },
+        });
+        return {
+          lineItem: item,
+          unitPrice: null,
+          monthlyCost: null,
+          displayPrice: "unavailable",
+        };
+      }
+    }),
+  );
+
+  const fixedItems = results.filter((r) => r.lineItem.kind === "fixed");
+  const usageBasedItems = results.filter(
+    (r) => r.lineItem.kind === "usage_based",
+  );
+  const fixedSubtotal = fixedItems.reduce(
+    (sum, r) => sum + (r.monthlyCost ?? 0),
+    0,
+  );
+
+  return {
+    fixedItems,
+    usageBasedItems,
+    fixedSubtotal,
+    fetchedAt,
+    hasPartialFailure,
   };
 }

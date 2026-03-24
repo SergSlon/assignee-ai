@@ -14,6 +14,9 @@ import {
   IAMClient,
   CreateUserCommand,
   GetUserCommand,
+  CreateRoleCommand,
+  GetRoleCommand,
+  PutRolePolicyCommand,
   CreatePolicyCommand,
   CreatePolicyVersionCommand,
   AttachUserPolicyCommand,
@@ -22,6 +25,9 @@ import {
   ListPolicyVersionsCommand,
   DeletePolicyVersionCommand,
   DeleteAccessKeyCommand,
+  TagUserCommand,
+  TagRoleCommand,
+  TagPolicyCommand,
 } from "@aws-sdk/client-iam";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import {
@@ -33,7 +39,7 @@ import {
   type PolicyDocument,
 } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { ProcessExitCode } from "../constants/errors.js";
+import { ConfigurationError } from "@assignee/core";
 import { mergeEnvFile } from "../utils/env-writer.js";
 
 /** Maps role keys to their policy generators, user names, and env var prefixes. */
@@ -66,6 +72,13 @@ const ROLES = [
     description: "MCP auditor — IAM simulate, SecurityHub (read-only)",
   },
 ] as const;
+
+/** Standard tag applied to all IAM resources managed by assignee.ai. */
+const MANAGED_TAG = { Key: "managed-by", Value: "assignee-ai" };
+
+/** Bedrock invocation logging constants. */
+const BEDROCK_LOGGING_ROLE_NAME = "AssigneeAiBedrockLoggingRole";
+const BEDROCK_LOG_GROUP_NAME = "/assignee-ai/bedrock-invocations";
 
 /**
  * Creates or updates an IAM managed policy.
@@ -219,12 +232,11 @@ export const setupCommand = new Command(CommandName.SETUP)
       s.stop(`Authenticated as ${identity.Arn} (account: ${accountId})`);
     } catch (err) {
       s.stop("Failed to verify AWS credentials.");
-      clack.log.error(
+      throw new ConfigurationError(
         "Cannot reach AWS STS. Ensure you have admin/root credentials configured.\n" +
           "Tip: Use --profile <name> to specify an AWS CLI profile with admin access.\n" +
           `Error: ${err instanceof Error ? err.message : String(err)}`,
       );
-      process.exit(ProcessExitCode.GENERIC_ERROR);
     }
 
     // ── Display plan and confirm ─────────────────────────────────────
@@ -252,87 +264,269 @@ export const setupCommand = new Command(CommandName.SETUP)
     const iam = new IAMClient(clientConfig);
     const envUpdates: Record<string, string> = {};
 
-    // ── Create/update users, policies, and access keys ───────────────
-    for (const role of ROLES) {
-      const sp = clack.spinner();
-
-      // 1. Create or verify user
-      sp.start(`Creating user ${role.userName}...`);
-      const isNew = await ensureUser(iam, role.userName);
-      sp.stop(
-        isNew
-          ? `Created user ${role.userName}`
-          : `User ${role.userName} already exists`,
-      );
-
-      // 2. Create or update policy
-      sp.start(`Creating policy ${role.policyName}...`);
-      const policyDoc = role.policyFn();
-      const policyArn = await ensurePolicy(
-        iam,
-        accountId,
-        role.policyName,
-        policyDoc,
-      );
-      sp.stop(`Policy ${role.policyName} ready (${policyArn})`);
-
-      // 3. Attach policy to user
-      sp.start(`Attaching policy to ${role.userName}...`);
-      await iam.send(
-        new AttachUserPolicyCommand({
-          UserName: role.userName,
-          PolicyArn: policyArn,
-        }),
-      );
-      sp.stop(`Policy attached to ${role.userName}`);
-
-      // 4. Handle access keys
-      let shouldCreateKey = isNew;
-      if (!isNew) {
-        // Check for existing keys
-        const existingKeys = await iam.send(
-          new ListAccessKeysCommand({ UserName: role.userName }),
-        );
-        const hasKeys = (existingKeys.AccessKeyMetadata ?? []).length > 0;
-
-        if (hasKeys) {
-          let rotate: boolean | symbol = false;
-          if (options.yes) {
-            // With --yes, skip rotation (keep existing keys)
-            rotate = false;
-          } else {
-            rotate = await clack.confirm({
+    // ── Pre-check existing users for key rotation prompts (sequential) ─
+    // Interactive prompts cannot run in parallel, so we gather rotation
+    // decisions before the parallel IAM work begins.
+    const rotationDecisions = new Map<string, boolean>();
+    if (!options.yes) {
+      for (const role of ROLES) {
+        try {
+          await iam.send(new GetUserCommand({ UserName: role.userName }));
+          // User exists — check for access keys
+          const existingKeys = await iam.send(
+            new ListAccessKeysCommand({ UserName: role.userName }),
+          );
+          const hasKeys = (existingKeys.AccessKeyMetadata ?? []).length > 0;
+          if (hasKeys) {
+            const rotate = await clack.confirm({
               message: `User ${role.userName} already has access keys. Rotate them?`,
               initialValue: false,
             });
-
             if (clack.isCancel(rotate)) {
               clack.outro("Setup cancelled.");
               return;
             }
+            rotationDecisions.set(role.userName, !!rotate);
           }
-
-          shouldCreateKey = !!rotate;
-          if (rotate) {
-            sp.start(`Rotating access keys for ${role.userName}...`);
-            const keys = await ensureAccessKey(iam, role.userName, true);
-            envUpdates[role.envKeyId] = keys.accessKeyId;
-            envUpdates[role.envSecretKey] = keys.secretAccessKey;
-            sp.stop(`Access keys rotated for ${role.userName}`);
-          }
-        } else {
-          shouldCreateKey = true;
+        } catch {
+          // User doesn't exist yet — will be created; no prompt needed
         }
       }
+    }
 
-      if (shouldCreateKey && !envUpdates[role.envKeyId]) {
-        sp.start(`Creating access keys for ${role.userName}...`);
-        const keys = await ensureAccessKey(iam, role.userName, false);
-        envUpdates[role.envKeyId] = keys.accessKeyId;
-        envUpdates[role.envSecretKey] = keys.secretAccessKey;
-        sp.stop(`Access keys created for ${role.userName}`);
+    // ── Create/update users, policies, and access keys (parallel) ────
+    const sp = clack.spinner();
+    const roleNames = ROLES.map((r) => r.userName).join(", ");
+    sp.start(
+      `Creating ${ROLES.length} IAM users in parallel (${roleNames})...`,
+    );
+
+    const settled = await Promise.allSettled(
+      ROLES.map(async (role) => {
+        const roleEnv: Record<string, string> = {};
+
+        // 1. Create or verify user
+        const isNew = await ensureUser(iam, role.userName);
+
+        // Tag user idempotently (covers pre-existing users missing the tag)
+        await iam.send(
+          new TagUserCommand({
+            UserName: role.userName,
+            Tags: [MANAGED_TAG],
+          }),
+        );
+
+        // 2. Create or update policy
+        const policyDoc = role.policyFn();
+        const policyArn = await ensurePolicy(
+          iam,
+          accountId,
+          role.policyName,
+          policyDoc,
+        );
+
+        // Tag policy idempotently
+        await iam.send(
+          new TagPolicyCommand({
+            PolicyArn: policyArn,
+            Tags: [MANAGED_TAG],
+          }),
+        );
+
+        // 3. Attach policy to user
+        await iam.send(
+          new AttachUserPolicyCommand({
+            UserName: role.userName,
+            PolicyArn: policyArn,
+          }),
+        );
+
+        // 4. Handle access keys
+        let shouldCreateKey = isNew;
+        if (!isNew) {
+          const existingKeys = await iam.send(
+            new ListAccessKeysCommand({ UserName: role.userName }),
+          );
+          const hasKeys = (existingKeys.AccessKeyMetadata ?? []).length > 0;
+
+          if (hasKeys) {
+            // Use pre-collected rotation decision; --yes skips rotation
+            const rotate = rotationDecisions.get(role.userName) ?? false;
+            shouldCreateKey = rotate;
+            if (rotate) {
+              const keys = await ensureAccessKey(iam, role.userName, true);
+              roleEnv[role.envKeyId] = keys.accessKeyId;
+              roleEnv[role.envSecretKey] = keys.secretAccessKey;
+            }
+          } else {
+            shouldCreateKey = true;
+          }
+        }
+
+        if (shouldCreateKey && !roleEnv[role.envKeyId]) {
+          const keys = await ensureAccessKey(iam, role.userName, false);
+          roleEnv[role.envKeyId] = keys.accessKeyId;
+          roleEnv[role.envSecretKey] = keys.secretAccessKey;
+        }
+
+        return { role, isNew, roleEnv };
+      }),
+    );
+
+    // Handle partial failures gracefully — save keys from successful roles
+    const succeeded = settled.filter(
+      (
+        r,
+      ): r is PromiseFulfilledResult<{
+        role: (typeof ROLES)[number];
+        isNew: boolean;
+        roleEnv: Record<string, string>;
+      }> => r.status === "fulfilled",
+    );
+    const failed = settled.filter(
+      (r): r is PromiseRejectedResult => r.status === "rejected",
+    );
+
+    sp.stop(
+      failed.length === 0
+        ? `All ${ROLES.length} IAM users ready (${roleNames})`
+        : `${succeeded.length}/${ROLES.length} IAM users ready (${failed.length} failed)`,
+    );
+
+    if (failed.length > 0) {
+      for (const f of failed) {
+        clack.log.error(
+          `IAM setup failed for one role: ${f.reason instanceof Error ? f.reason.message : String(f.reason)}`,
+        );
       }
     }
+
+    // Merge per-role env updates from successful roles
+    for (const {
+      value: { role, isNew, roleEnv },
+    } of succeeded) {
+      Object.assign(envUpdates, roleEnv);
+      clack.log.step(
+        isNew
+          ? `Created user ${role.userName} with policy ${role.policyName}`
+          : `User ${role.userName} verified, policy ${role.policyName} updated`,
+      );
+    }
+
+    // ── Bedrock invocation logging (Tasks 1–3 from aws-bootstrap.md) ──
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const logSp = clack.spinner();
+    logSp.start("Setting up Bedrock invocation logging...");
+
+    // Task 1: Create IAM role for Bedrock logging
+    try {
+      await iam.send(
+        new GetRoleCommand({ RoleName: BEDROCK_LOGGING_ROLE_NAME }),
+      );
+      clack.log.step(
+        `Role ${BEDROCK_LOGGING_ROLE_NAME} — verified (already exists)`,
+      );
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "NoSuchEntityException") {
+        await iam.send(
+          new CreateRoleCommand({
+            RoleName: BEDROCK_LOGGING_ROLE_NAME,
+            AssumeRolePolicyDocument: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "bedrock.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            }),
+            Description:
+              "Allows Bedrock to write invocation logs to CloudWatch",
+          }),
+        );
+        clack.log.step(`Role ${BEDROCK_LOGGING_ROLE_NAME} — created`);
+      } else {
+        throw err;
+      }
+    }
+
+    // Tag Bedrock logging role idempotently
+    await iam.send(
+      new TagRoleCommand({
+        RoleName: BEDROCK_LOGGING_ROLE_NAME,
+        Tags: [MANAGED_TAG],
+      }),
+    );
+
+    // Task 2: Attach inline logging policy to the role (put-role-policy is idempotent)
+    await iam.send(
+      new PutRolePolicyCommand({
+        RoleName: BEDROCK_LOGGING_ROLE_NAME,
+        PolicyName: "BedrockLoggingPolicy",
+        PolicyDocument: JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Allow",
+              Action: [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "logs:DescribeLogGroups",
+              ],
+              Resource: `arn:aws:logs:${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
+            },
+          ],
+        }),
+      }),
+    );
+    clack.log.step("Inline policy BedrockLoggingPolicy — applied");
+
+    // Task 3: Create CloudWatch log group
+    {
+      const { CloudWatchLogsClient, CreateLogGroupCommand } =
+        await import("@aws-sdk/client-cloudwatch-logs");
+      const cwl = new CloudWatchLogsClient({ ...clientConfig, region });
+      try {
+        await cwl.send(
+          new CreateLogGroupCommand({ logGroupName: BEDROCK_LOG_GROUP_NAME }),
+        );
+        clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — created`);
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          err.name === "ResourceAlreadyExistsException"
+        ) {
+          clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — verified`);
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    // Task 4: Enable Bedrock invocation logging
+    {
+      const { BedrockClient, PutModelInvocationLoggingConfigurationCommand } =
+        await import("@aws-sdk/client-bedrock");
+      const bedrock = new BedrockClient({ ...clientConfig, region });
+      await bedrock.send(
+        new PutModelInvocationLoggingConfigurationCommand({
+          loggingConfig: {
+            cloudWatchConfig: {
+              logGroupName: BEDROCK_LOG_GROUP_NAME,
+              roleArn: `arn:aws:iam::${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
+            },
+            textDataDeliveryEnabled: true,
+            imageDataDeliveryEnabled: false,
+            embeddingDataDeliveryEnabled: false,
+          },
+        }),
+      );
+      clack.log.step("Bedrock invocation logging — enabled");
+    }
+
+    logSp.stop("Bedrock logging IAM role and policy ready");
 
     // ── Write .env file ──────────────────────────────────────────────
     if (Object.keys(envUpdates).length > 0) {

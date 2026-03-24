@@ -6,12 +6,12 @@ describe("enrichOptionLabel", () => {
   it("appends all metadata when costHint, fitHint, and recommended are present", () => {
     const result = enrichOptionLabel({
       value: "gp3",
-      label: "gp3 (General Purpose SSD v3) — ~$0.115/GB-month",
-      costHint: "$0.115/GB-mo",
+      label: "gp3 (General Purpose SSD v3) — ~$0.023/GB-month",
+      costHint: "$0.023/GB-mo",
       fitHint: "Best price-performance",
       recommended: true,
     });
-    expect(result).toContain("$0.115/GB-mo");
+    expect(result).toContain("$0.023/GB-mo");
     expect(result).toContain("Best price-performance");
     expect(result).toContain("Recommended");
   });

@@ -42,6 +42,8 @@ Access keys are written to `.env` automatically. The command is idempotent — s
 
 ## Task 1 — IAM Role for Bedrock Logging
 
+> **Automated:** Tasks 1–3 are now handled by `assignee setup`. The manual steps below are kept for reference only.
+
 Creates the IAM role that Bedrock assumes to write invocation logs to CloudWatch.
 
 ```bash
@@ -81,6 +83,8 @@ aws --region us-east-1 iam put-role-policy \
 
 ## Task 2 — CloudWatch Log Group
 
+> **Automated:** See Task 1 note above.
+
 ```bash
 aws --region us-east-1 logs create-log-group \
   --log-group-name /assignee-ai/bedrock-invocations
@@ -89,6 +93,8 @@ aws --region us-east-1 logs create-log-group \
 ---
 
 ## Task 3 — Enable Bedrock Invocation Logging (Story 0.5 AC1, AC3)
+
+> **Automated:** See Task 1 note above.
 
 ```bash
 aws --region us-east-1 bedrock put-model-invocation-logging-configuration \

@@ -18,6 +18,7 @@ import {
 } from "../constants/pricing.js";
 import { unwrapMcpText } from "./mcp.js";
 import { withTimeout } from "./timeout.js";
+import { getCachedPrice, setCachedPrice } from "../services/price-cache.js";
 
 const LOOKUP_TIMEOUT_MS = 6000;
 
@@ -50,6 +51,13 @@ async function queryPrice(
   serviceCode: string,
   filters: TermMatchFilter[],
 ): Promise<string | null> {
+  // Check cache first (Story 23.4 — avoid redundant MCP calls)
+  const cached = getCachedPrice(serviceCode, filters, "compute");
+  if (cached) {
+    const data = cached as AwsPricingResponse;
+    return extractPrice(data);
+  }
+
   try {
     const result = await withTimeout(
       pricingTool.invoke({
@@ -62,6 +70,7 @@ async function queryPrice(
     );
     if (!result) return null;
     const data = JSON.parse(unwrapMcpText(result)) as AwsPricingResponse;
+    setCachedPrice(serviceCode, filters, data);
     return extractPrice(data);
   } catch {
     return null;

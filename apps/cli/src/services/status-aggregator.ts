@@ -64,8 +64,9 @@ export async function enrichWithBillingData(
   resources: ManagedResource[],
   memoryService: MemoryService = defaultMemoryService,
 ): Promise<ManagedResource[]> {
-  // TODO: Story 19.7 — Try Billing MCP server first for live cost data.
-  // For now, fall back to provision log memory.
+  // Story 19.7: Billing MCP integration exists in billing.ts (fetchBillingData)
+  // but requires MCP tools parameter. This function uses provision log fallback
+  // only; callers needing live billing data should use fetchBillingData directly.
 
   let provisions: Awaited<ReturnType<MemoryService["readProvisions"]>>;
   try {

@@ -15,12 +15,13 @@ const ECS_DIR = join(BP_ROOT, "ecs");
 const SQS_DIR = join(BP_ROOT, "sqs");
 const SNS_DIR = join(BP_ROOT, "sns");
 const ASG_DIR = join(BP_ROOT, "autoscaling");
+const SSM_DIR = join(BP_ROOT, "ssm");
 
 describe("Seed BP Library — Sprint A+B + guardrail migration (47 rules)", () => {
   const practices = loadBestPractices(BP_ROOT);
 
-  it("loads exactly 47 best practice entries", () => {
-    expect(practices).toHaveLength(47);
+  it("loads exactly 59 best practice entries", () => {
+    expect(practices).toHaveLength(59);
   });
 
   it("every entry validates against bestPracticeSchema without errors", () => {
@@ -66,9 +67,9 @@ describe("Seed BP Library — Sprint A+B + guardrail migration (47 rules)", () =
     expect(files).toHaveLength(10);
   });
 
-  it("EC2 directory contains 9 YAML files", () => {
+  it("EC2 directory contains 11 YAML files", () => {
     const files = readdirSync(EC2_DIR).filter((f) => f.endsWith(".yaml"));
-    expect(files).toHaveLength(9);
+    expect(files).toHaveLength(11);
   });
 
   it("Lambda directory contains 7 YAML files", () => {
@@ -111,6 +112,11 @@ describe("Seed BP Library — Sprint A+B + guardrail migration (47 rules)", () =
     expect(files).toHaveLength(1);
   });
 
+  it("SSM directory contains 2 YAML files", () => {
+    const files = readdirSync(SSM_DIR).filter((f) => f.endsWith(".yaml"));
+    expect(files).toHaveLength(2);
+  });
+
   it("all FSBP-sourced entries have a source_id field", () => {
     const fsbpEntries = practices.filter((bp) => bp.source.includes("FSBP"));
     expect(fsbpEntries.length).toBeGreaterThan(0);
@@ -137,6 +143,8 @@ describe("Seed BP Library — Sprint A+B + guardrail migration (47 rules)", () =
     expect(resourceTypes.has("AWS::SNS::Topic")).toBe(true);
     expect(resourceTypes.has("AWS::IAM::Role")).toBe(true);
     expect(resourceTypes.has("AWS::AutoScaling::AutoScalingGroup")).toBe(true);
+    expect(resourceTypes.has("AWS::EC2::SecurityGroup")).toBe(true);
+    expect(resourceTypes.has("AWS::SSM::Parameter")).toBe(true);
   });
 
   it("every entry has a non-empty description", () => {

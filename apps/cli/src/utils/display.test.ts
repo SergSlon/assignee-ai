@@ -430,18 +430,15 @@ describe("renderHitlCompoundConfirm — TTY mode", () => {
     expect(result).toBe(true);
   });
 
-  it("exits process when user cancels", async () => {
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation(() => undefined as never);
+  it("throws UserCancelledError when user cancels", async () => {
     vi.mocked(confirm).mockResolvedValueOnce(
       Symbol("cancel") as unknown as boolean,
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderHitlCompoundConfirm } = await import("./display.js");
-    await renderHitlCompoundConfirm(mockPattern, 3);
-    expect(exitSpy).toHaveBeenCalledWith(130);
-    exitSpy.mockRestore();
+    await expect(renderHitlCompoundConfirm(mockPattern, 3)).rejects.toThrow(
+      "Operation cancelled by user.",
+    );
   });
 });
 
@@ -558,21 +555,18 @@ describe("renderOptionPrompt — TTY mode", () => {
     expect(result).toBeUndefined();
   });
 
-  it("exits process when clack.isCancel returns true", async () => {
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation(() => undefined as never);
+  it("throws UserCancelledError when clack.isCancel returns true", async () => {
     vi.mocked(text).mockResolvedValueOnce(
       Symbol("cancel") as unknown as string,
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderOptionPrompt } = await import("./display.js");
-    await renderOptionPrompt(makeField({ type: "string" }), {
-      ...resolved,
-      value: "fallback",
-    });
-    expect(exitSpy).toHaveBeenCalledWith(130);
-    exitSpy.mockRestore();
+    await expect(
+      renderOptionPrompt(makeField({ type: "string" }), {
+        ...resolved,
+        value: "fallback",
+      }),
+    ).rejects.toThrow("Operation cancelled by user.");
   });
 });
 
@@ -1205,8 +1199,12 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
 // ── Story 19.2: renderSecurityWarnings ─────────────────────────────────────
 
 describe("renderSecurityWarnings", () => {
+  let writeSpy: any;
+
   beforeEach(() => {
-    vi.spyOn(console, "log").mockImplementation(() => {});
+    writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((() => true) as any);
   });
 
   afterEach(() => {
@@ -1215,7 +1213,6 @@ describe("renderSecurityWarnings", () => {
 
   it("renders CRITICAL finding with red indicator", async () => {
     const { renderSecurityWarnings } = await import("./display.js");
-    const logSpy = vi.mocked(console.log);
 
     renderSecurityWarnings("arn:aws:s3:::my-bucket", [
       {
@@ -1226,7 +1223,7 @@ describe("renderSecurityWarnings", () => {
       },
     ]);
 
-    const allOutput = logSpy.mock.calls.map((c) => c[0]).join("\n");
+    const allOutput = writeSpy.mock.calls.map((c: any[]) => c[0]).join("");
     expect(allOutput).toContain("Security findings for arn:aws:s3:::my-bucket");
     expect(allOutput).toContain("[CRITICAL] S3 bucket has public read access");
     expect(allOutput).toContain("Block public access");
@@ -1234,7 +1231,6 @@ describe("renderSecurityWarnings", () => {
 
   it("renders multiple findings with recommendations", async () => {
     const { renderSecurityWarnings } = await import("./display.js");
-    const logSpy = vi.mocked(console.log);
 
     renderSecurityWarnings("arn:aws:s3:::test-bucket", [
       {
@@ -1251,7 +1247,7 @@ describe("renderSecurityWarnings", () => {
       },
     ]);
 
-    const allOutput = logSpy.mock.calls.map((c) => c[0]).join("\n");
+    const allOutput = writeSpy.mock.calls.map((c: any[]) => c[0]).join("");
     expect(allOutput).toContain("[CRITICAL] Public access enabled");
     expect(allOutput).toContain("[HIGH] No encryption");
     expect(allOutput).toContain("Disable public access");
@@ -1260,11 +1256,10 @@ describe("renderSecurityWarnings", () => {
 
   it("does nothing when findings array is empty", async () => {
     const { renderSecurityWarnings } = await import("./display.js");
-    const logSpy = vi.mocked(console.log);
 
     renderSecurityWarnings("arn:aws:s3:::my-bucket", []);
 
-    expect(logSpy).not.toHaveBeenCalled();
+    expect(writeSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -1591,18 +1586,15 @@ describe("renderHitlConfirm — TTY mode", () => {
     expect(result).toBe(false);
   });
 
-  it("user cancels — exits process", async () => {
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation(() => undefined as never);
+  it("throws UserCancelledError when user cancels", async () => {
     vi.mocked(confirm).mockResolvedValueOnce(
       Symbol("cancel") as unknown as boolean,
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderHitlConfirm } = await import("./display.js");
-    await renderHitlConfirm(mockState);
-    expect(exitSpy).toHaveBeenCalledWith(130);
-    exitSpy.mockRestore();
+    await expect(renderHitlConfirm(mockState)).rejects.toThrow(
+      "Operation cancelled by user.",
+    );
   });
 });
 
@@ -1658,18 +1650,15 @@ describe("renderApplyNowConfirm — TTY mode", () => {
     expect(result).toBe(false);
   });
 
-  it("user cancels — exits process", async () => {
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation(() => undefined as never);
+  it("throws UserCancelledError when user cancels", async () => {
     vi.mocked(confirm).mockResolvedValueOnce(
       Symbol("cancel") as unknown as boolean,
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderApplyNowConfirm } = await import("./display.js");
-    await renderApplyNowConfirm(mockState);
-    expect(exitSpy).toHaveBeenCalledWith(130);
-    exitSpy.mockRestore();
+    await expect(renderApplyNowConfirm(mockState)).rejects.toThrow(
+      "Operation cancelled by user.",
+    );
   });
 });
 
@@ -1698,15 +1687,19 @@ describe("renderApplyNowConfirm — non-TTY mode", () => {
 
 describe("renderSecurityWarnings", () => {
   it("no findings — no output", async () => {
-    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const stdoutSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((() => true) as any);
     const { renderSecurityWarnings } = await import("./display.js");
     renderSecurityWarnings("arn:aws:s3:::test", []);
-    expect(consoleSpy).not.toHaveBeenCalled();
-    consoleSpy.mockRestore();
+    expect(stdoutSpy).not.toHaveBeenCalled();
+    stdoutSpy.mockRestore();
   });
 
   it("CRITICAL + HIGH findings — shows both with icons", async () => {
-    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const stdoutSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((() => true) as any);
     const { renderSecurityWarnings } = await import("./display.js");
     renderSecurityWarnings("arn:aws:s3:::test", [
       {
@@ -1722,11 +1715,13 @@ describe("renderSecurityWarnings", () => {
         service: "s3",
       },
     ]);
-    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    const output = stdoutSpy.mock.calls
+      .map((c: any[]) => String(c[0]))
+      .join("");
     expect(output).toContain("Public bucket");
     expect(output).toContain("No encryption");
     expect(output).toContain("Block public access");
-    consoleSpy.mockRestore();
+    stdoutSpy.mockRestore();
   });
 });
 
@@ -1800,10 +1795,7 @@ describe("renderAdvancedConfirm", () => {
     });
   });
 
-  it("TTY cancel — exits process", async () => {
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation(() => undefined as never);
+  it("TTY cancel — throws UserCancelledError", async () => {
     Object.defineProperty(process.stdin, "isTTY", {
       value: true,
       configurable: true,
@@ -1813,9 +1805,9 @@ describe("renderAdvancedConfirm", () => {
     );
     vi.mocked(isCancel).mockReturnValueOnce(true);
     const { renderAdvancedConfirm } = await import("./display.js");
-    await renderAdvancedConfirm();
-    expect(exitSpy).toHaveBeenCalledWith(130);
-    exitSpy.mockRestore();
+    await expect(renderAdvancedConfirm()).rejects.toThrow(
+      "Operation cancelled by user.",
+    );
     Object.defineProperty(process.stdin, "isTTY", {
       value: undefined,
       configurable: true,

@@ -1,0 +1,15 @@
+id: BP-ELB-002
+title: "ELBv2 load balancer should have access logging enabled"
+severity: MEDIUM
+resource_type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+property_path: "LoadBalancerAttributes[access_logs.s3.enabled]"
+check_type: "equals"
+expected_value: "true"
+source: "AWS Security Hub FSBP"
+source_id: "ELB.5"
+description: "ELBv2 load balancers should have access logging enabled to capture detailed request information (client IP, latencies, request paths). Logs are essential for security auditing, troubleshooting, and compliance."
+remediation: "Enable access logging by setting the access_logs.s3.enabled attribute to true and specifying an S3 bucket via access_logs.s3.bucket."
+category: security
+lastVerified: "2026-03-24"
+blocking: false
+autoFixable: false

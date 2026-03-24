@@ -51,9 +51,7 @@ describe("lambdaFunctionPlugin", () => {
     it("exists in commonFields with correct type and placeholder", () => {
       expect(envField).toBeDefined();
       expect(envField!.question.type).toBe("string");
-      expect(envField!.question.placeholder).toBe(
-        "DB_HOST=localhost,API_KEY=xxx",
-      );
+      expect(envField!.question.placeholder).toBe("KEY1=value1,KEY2=value2");
     });
 
     it("toCfn transforms comma-separated pairs to Variables object", () => {

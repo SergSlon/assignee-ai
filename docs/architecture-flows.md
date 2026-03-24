@@ -1,5 +1,7 @@
 # Assignee.ai — Architecture & Flow Diagrams
 
+> **Developer-facing diagrams.** For the authoritative CLI implementation spec, see [`cli-architecture.md`](../../_bmad-output/planning-artifacts/cli-architecture.md). For the full SaaS vision (deferred), see [`architecture.md`](../../_bmad-output/planning-artifacts/architecture.md).
+
 Complete reference of all execution flows, resource types, MCP integrations, and data sources.
 
 ---
@@ -19,7 +21,7 @@ flowchart TD
     CMD -->|"assignee init"| INIT
     CMD -->|"assignee status &lt;token&gt;"| STATUS
 
-    subgraph GRAPH["LangGraph Agent (11 Nodes)"]
+    subgraph GRAPH["LangGraph Agent (12 Nodes)"]
         direction TB
 
         subgraph PHASE1["Phase 1 — Planning"]
@@ -29,18 +31,19 @@ flowchart TD
             CD["4. COMPOUND_DISPATCHER<br/>—————<br/>Single vs multi-resource<br/>routing"]
             PG["5. PLAN_GENERATOR<br/>—————<br/>LLM generates CFN JSON<br/>+ toCfn transforms<br/>+ assembleComposites"]
             BP["6. BP_EVALUATOR<br/>—————<br/>YAML best practices<br/>evaluate findings"]
-            PF["7. PREFLIGHT_GUARD<br/>—————<br/>Cost estimate<br/>+ IAM pre-check<br/>+ blocking BP check"]
+            FA["7. FIX_APPLICATOR<br/>—————<br/>Auto-fix autoFixable<br/>BP patches (user consent)"]
+            PF["8. PREFLIGHT_GUARD<br/>—————<br/>Cost estimate<br/>+ IAM pre-check<br/>+ blocking BP check"]
         end
 
-        HA["8. HUMAN_APPROVAL<br/>—————<br/>Display plan + cost<br/>User confirms / cancels<br/>⚡ LangGraph INTERRUPT"]
+        HA["9. HUMAN_APPROVAL<br/>—————<br/>Display plan + cost<br/>User confirms / cancels<br/>⚡ LangGraph INTERRUPT"]
 
         subgraph PHASE2["Phase 2 — Provisioning"]
-            RP["9. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>OR SDK fallback"]
-            SP["10. STATUS_POLLER<br/>—————<br/>Poll every 2s<br/>max 60 attempts (5 min)"]
-            RF["11. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
+            RP["10. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>OR SDK fallback"]
+            SP["11. STATUS_POLLER<br/>—————<br/>Poll every 2s<br/>max 60 attempts (5 min)"]
+            RF["12. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
         end
 
-        IP --> SF --> OE --> CD --> PG --> BP --> PF
+        IP --> SF --> OE --> CD --> PG --> BP --> FA --> PF
 
         PF -->|"PLAN mode"| RF
         PF -->|"APPLY mode"| HA
@@ -162,7 +165,7 @@ flowchart TD
 
     subgraph COMMON["Common Fields (6)"]
         Q1["🔤 BucketName<br/>type: string<br/>placeholder: my-bucket<br/>validation: 3-63 chars, lowercase<br/>─────<br/>📦 HARDCODED"]
-        Q2["✅ BucketEncryption<br/>type: boolean<br/>initial: true<br/>hint: SSE-S3 free, KMS ~$1/mo<br/>─────<br/>📦 HARDCODED"]
+        Q2["✅ BucketEncryption<br/>type: boolean<br/>initial: true<br/>hint: SSE-S3 free, KMS (live pricing)<br/>─────<br/>📦 HARDCODED"]
         Q3["🔤 KMSMasterKeyID<br/>type: string<br/>showIf: BucketEncryption=true<br/>validation: arn:aws:kms:...<br/>─────<br/>📦 HARDCODED"]
         Q4["✅ PublicAccessBlockConfiguration<br/>type: boolean<br/>initial: true<br/>toCfn: BlockPublicAcls etc.<br/>─────<br/>📦 HARDCODED<br/>Default: BlockPublicAcls=true,<br/>BlockPublicPolicy=true,<br/>IgnorePublicAcls=true,<br/>RestrictPublicBuckets=true"]
         Q5["✅ VersioningConfiguration<br/>type: boolean<br/>initial: false<br/>toCfn: Status=Enabled<br/>─────<br/>📦 HARDCODED"]
@@ -256,10 +259,10 @@ flowchart TD
     TOCFN --> PG
 
     subgraph CATS["categorySelect: 4 Instance Categories"]
-        C1["⚡ Burstable t3/t4g<br/>10 types<br/>$0.008-0.17/hr"]
-        C2["⚖️ General Purpose m5/m6i<br/>6 types<br/>$0.096-0.38/hr"]
-        C3["🖥️ Compute Optimized c5/c6i<br/>6 types<br/>$0.085-0.34/hr"]
-        C4["🧠 Memory Optimized r5/r6i<br/>6 types<br/>$0.126-0.50/hr"]
+        C1["⚡ Burstable t3/t4g<br/>10 types<br/>(live pricing)"]
+        C2["⚖️ General Purpose m5/m6i<br/>6 types<br/>(live pricing)"]
+        C3["🖥️ Compute Optimized c5/c6i<br/>6 types<br/>(live pricing)"]
+        C4["🧠 Memory Optimized r5/r6i<br/>6 types<br/>(live pricing)"]
     end
 
     Q1 -.->|"user picks category"| CATS
@@ -551,7 +554,7 @@ flowchart TD
     WIND --> MCP_SERVER
 
     subgraph INTERNAL["Internal: Reuses CLI Graph"]
-        GRAPH["LangGraph Agent<br/>(same 11 nodes)"]
+        GRAPH["LangGraph Agent<br/>(same 12 nodes)"]
         MCPS["Core MCP Servers<br/>(cfn, pricing, docs, knowledge)"]
         AWS["AWS CloudControl<br/>+ SDK fallbacks"]
     end

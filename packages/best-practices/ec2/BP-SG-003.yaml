@@ -1,0 +1,21 @@
+id: BP-SG-003
+title: "Security group should have a meaningful description"
+severity: MEDIUM
+resource_type: "AWS::EC2::SecurityGroup"
+property_path: "GroupDescription"
+check_type: "exists"
+expected_value: true
+source: "Assignee.ai best practice"
+description: "Every security group should have a descriptive GroupDescription. AWS requires this field and it cannot be changed after creation. A meaningful description aids troubleshooting and auditing."
+remediation: "Provide a descriptive GroupDescription that explains the purpose of the security group (e.g., 'Web server SG — allows HTTPS from internet and SSH from bastion')."
+category: security
+lastVerified: "2026-03-23"
+blocking: false
+autoFixable: false
+fixType: interactive
+interactiveOptions:
+  - label: "Enter a description now"
+    action: prompt_value
+    targetField: "GroupDescription"
+  - label: "Skip — I will add one later"
+    action: skip

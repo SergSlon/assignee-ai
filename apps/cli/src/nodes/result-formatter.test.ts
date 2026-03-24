@@ -526,7 +526,9 @@ describe("resultFormatterNode — Story 19.2 graceful degradation", () => {
   });
 
   it("prints warning when security tool invocation throws", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((() => true) as any);
     const tool = {
       name: "AnalyzeSecurityPosture",
       invoke: vi.fn().mockRejectedValue(new Error("Connection refused")),
@@ -538,11 +540,11 @@ describe("resultFormatterNode — Story 19.2 graceful degradation", () => {
 
     const result = await resultFormatterNode(state, [tool]);
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      "Security posture check skipped (MCP server unavailable)",
+    expect(stderrSpy).toHaveBeenCalledWith(
+      "Security posture check skipped (MCP server unavailable)\n",
     );
     expect(result).toEqual({});
-    warnSpy.mockRestore();
+    stderrSpy.mockRestore();
   });
 
   it("skips when resourceArn is undefined", async () => {

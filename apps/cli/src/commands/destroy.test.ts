@@ -146,12 +146,7 @@ vi.mock("../services/cloudcontrol-client.js", () => ({
 // ── Import after mocks ─────────────────────────────────────────────────────
 import { destroyAction } from "./destroy.js";
 
-// Mock process.exit to throw instead of exiting
-const mockExit = vi.spyOn(process, "exit").mockImplementation(((
-  code?: number,
-) => {
-  throw new Error(`process.exit(${code})`);
-}) as (code?: string | number | null | undefined) => never);
+// No longer need to mock process.exit — source throws errors directly
 
 // Store original isTTY values
 const origStdinIsTTY = process.stdin.isTTY;
@@ -167,11 +162,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   stderrOutput = "";
   stdoutOutput = "";
-
-  // Re-mock process.exit after clearAllMocks
-  mockExit.mockImplementation(((code?: number) => {
-    throw new Error(`process.exit(${code})`);
-  }) as (code?: string | number | null | undefined) => never);
 
   process.stderr.write = vi.fn((chunk: string | Uint8Array) => {
     stderrOutput += String(chunk);
@@ -228,10 +218,8 @@ describe("assignee destroy", () => {
   describe("--all rejection", () => {
     it("rejects --all with error message", async () => {
       await expect(destroyAction("--all", {})).rejects.toThrow(
-        "process.exit(1)",
+        "--all is not supported",
       );
-      expect(stderrOutput).toContain("--all is not supported");
-      expect(stderrOutput).toContain("Destroy resources individually");
     });
   });
 
@@ -240,12 +228,8 @@ describe("assignee destroy", () => {
       mockResolveResource.mockResolvedValue(null);
 
       await expect(destroyAction("nonexistent-bucket", {})).rejects.toThrow(
-        "process.exit(1)",
-      );
-      expect(stderrOutput).toContain(
         'No managed resource found matching "nonexistent-bucket"',
       );
-      expect(stderrOutput).toContain("assignee list");
     });
   });
 
@@ -271,7 +255,7 @@ describe("assignee destroy", () => {
       mockText.mockResolvedValue("y");
 
       await expect(destroyAction("test-bucket", {})).rejects.toThrow(
-        "process.exit(0)",
+        "Destroy cancelled.",
       );
       expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
     });
@@ -281,7 +265,7 @@ describe("assignee destroy", () => {
       mockText.mockResolvedValue("Y");
 
       await expect(destroyAction("test-bucket", {})).rejects.toThrow(
-        "process.exit(0)",
+        "Destroy cancelled.",
       );
       expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
     });
@@ -291,7 +275,7 @@ describe("assignee destroy", () => {
       mockText.mockResolvedValue("YES");
 
       await expect(destroyAction("test-bucket", {})).rejects.toThrow(
-        "process.exit(0)",
+        "Destroy cancelled.",
       );
       expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
     });
@@ -301,7 +285,7 @@ describe("assignee destroy", () => {
       mockText.mockResolvedValue("no");
 
       await expect(destroyAction("test-bucket", {})).rejects.toThrow(
-        "process.exit(0)",
+        "Destroy cancelled.",
       );
       expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
     });
@@ -311,7 +295,7 @@ describe("assignee destroy", () => {
       mockText.mockResolvedValue("");
 
       await expect(destroyAction("test-bucket", {})).rejects.toThrow(
-        "process.exit(0)",
+        "Destroy cancelled.",
       );
       expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
     });
@@ -323,7 +307,7 @@ describe("assignee destroy", () => {
       mockIsCancel.mockReturnValue(true);
 
       await expect(destroyAction("test-bucket", {})).rejects.toThrow(
-        "process.exit(0)",
+        "Destroy cancelled.",
       );
       expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
     });
@@ -369,10 +353,8 @@ describe("assignee destroy", () => {
       mockResolveResource.mockResolvedValue(mockResource);
 
       await expect(destroyAction("test-bucket", {})).rejects.toThrow(
-        "process.exit(1)",
+        "Destroy requires confirmation",
       );
-      expect(stderrOutput).toContain("Destroy requires confirmation");
-      expect(stderrOutput).toContain("--yes");
     });
   });
 
@@ -405,10 +387,8 @@ describe("assignee destroy", () => {
       });
 
       await expect(destroyAction("test-bucket", { yes: true })).rejects.toThrow(
-        "process.exit(1)",
+        "Destroy failed: BucketNotEmpty",
       );
-      expect(stderrOutput).toContain("Destroy failed");
-      expect(stderrOutput).toContain("BucketNotEmpty");
     });
   });
 });

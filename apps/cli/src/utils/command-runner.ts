@@ -4,6 +4,7 @@
  */
 
 import type { StructuredTool } from "@langchain/core/tools";
+import { ConfigurationError, AssigneeError } from "@assignee/core";
 import { ProcessExitCode } from "../constants/errors.js";
 import {
   createMcpClient,
@@ -50,17 +51,16 @@ export interface RunCommandOptions {
  * Bootstraps MCP + graph then delegates to `run`. Handles intro/outro/error boilerplate.
  * The `run` callback should handle command-specific spinners, mid-flow logging, and error rendering.
  */
-export async function runCommand(opts: RunCommandOptions): Promise<never> {
+export async function runCommand(opts: RunCommandOptions): Promise<void> {
   renderIntro();
 
   // Early credential check — fail fast before the wizard, not after
   const hasOperatorKey = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
   if (!hasOperatorKey) {
-    renderError(
-      "No AWS credentials detected. Assignee.ai requires ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY.",
-      'Configure credentials via:\n  1) Add them to your .env file\n  2) Run "assignee setup" to create IAM users\n  3) Export them as environment variables\nThen run "assignee init" to verify.',
+    throw new ConfigurationError(
+      "No AWS credentials detected. Assignee.ai requires ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY.\n" +
+        'Configure credentials via:\n  1) Add them to your .env file\n  2) Run "assignee setup" to create IAM users\n  3) Export them as environment variables\nThen run "assignee init" to verify.',
     );
-    process.exit(ProcessExitCode.GENERIC_ERROR);
   }
 
   const runId = crypto.randomUUID();
@@ -125,9 +125,11 @@ export async function runCommand(opts: RunCommandOptions): Promise<never> {
 
     renderOutro(result.success);
     await closeMcpClient().catch(() => {});
-    process.exit(
-      result.success ? ProcessExitCode.SUCCESS : ProcessExitCode.GENERIC_ERROR,
-    );
+    if (!result.success) {
+      // Error was already rendered by the graph run — don't throw (which would
+      // double-render via the catch block). Just return so the process exits cleanly.
+      return;
+    }
   } catch (err: unknown) {
     stopSpinner();
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -148,7 +150,8 @@ export async function runCommand(opts: RunCommandOptions): Promise<never> {
     renderError(`${opts.errorPrefix}: ${errMsg}`, opts.errorHint);
     renderOutro(false);
     await closeMcpClient().catch(() => {});
-    process.exit(ProcessExitCode.GENERIC_ERROR);
+    if (err instanceof AssigneeError) throw err;
+    throw new AssigneeError(`${opts.errorPrefix}: ${errMsg}`, "COMMAND_FAILED");
   }
 }
 

@@ -169,13 +169,11 @@ describe("planCommand — flag parsing", () => {
 // ── Plan command action tests (via captured run callback) ───────────────────
 
 describe("planCommand — action", () => {
-  it("T2.0: no intent — prints usage and exits", async () => {
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("T2.0: no intent — throws with usage message", async () => {
     const { planCommand } = await import("./plan.js");
-    await planCommand.parseAsync(["node", "plan"]);
-
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Usage"));
-    expect(process.exit).toHaveBeenCalledWith(1);
+    await expect(planCommand.parseAsync(["node", "plan"])).rejects.toThrow(
+      "Missing intent",
+    );
   });
 });
 

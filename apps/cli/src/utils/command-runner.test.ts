@@ -62,15 +62,24 @@ const { runCommand, runProvisioningLoop } = await import("./command-runner.js");
 
 let exitSpy: ReturnType<typeof vi.spyOn>;
 
+let origOperatorKey: string | undefined;
+
 beforeEach(() => {
   vi.clearAllMocks();
   exitSpy = vi
     .spyOn(process, "exit")
     .mockImplementation((() => {}) as never) as any;
+  origOperatorKey = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+  process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "test-key";
 });
 
 afterEach(() => {
   exitSpy.mockRestore();
+  if (origOperatorKey === undefined) {
+    delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+  } else {
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = origOperatorKey;
+  }
 });
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -124,29 +133,30 @@ describe("runCommand", () => {
     expect(createGraph).toHaveBeenCalledWith(mockTools, expect.anything());
   });
 
-  it("T3.3: MCP client fails to connect — renders error and exits with code 1", async () => {
+  it("T3.3: MCP client fails to connect — renders error and throws", async () => {
     vi.mocked(createMcpClient).mockRejectedValue(
       new Error("Connection refused"),
     );
 
-    await runCommand({
-      intent: "Create an S3 bucket",
-      startAction: "plan_started",
-      endAction: "plan_complete",
-      errorPrefix: "Plan failed",
-      errorHint: "Check MCP servers",
-      run: async () => ({ success: true }),
-    });
+    await expect(
+      runCommand({
+        intent: "Create an S3 bucket",
+        startAction: "plan_started",
+        endAction: "plan_complete",
+        errorPrefix: "Plan failed",
+        errorHint: "Check MCP servers",
+        run: async () => ({ success: true }),
+      }),
+    ).rejects.toThrow();
 
     expect(renderError).toHaveBeenCalledWith(
       expect.stringContaining("Connection refused"),
       "Check MCP servers",
     );
     expect(renderOutro).toHaveBeenCalledWith(false);
-    expect(process.exit).toHaveBeenCalledWith(1);
   });
 
-  it("T3.4a: Success exit code — successful run exits 0", async () => {
+  it("T3.4a: Success exit code — successful run completes without throwing", async () => {
     const mockClient = {};
     const mockTools: never[] = [];
     const mockGraph = { invoke: vi.fn(), getState: vi.fn() };
@@ -165,10 +175,9 @@ describe("runCommand", () => {
     });
 
     expect(renderOutro).toHaveBeenCalledWith(true);
-    expect(process.exit).toHaveBeenCalledWith(0);
   });
 
-  it("T3.4b: Failure exit code — failed run exits 1", async () => {
+  it("T3.4b: Failure exit code — renders outro(false) without throwing", async () => {
     const mockClient = {};
     const mockTools: never[] = [];
     const mockGraph = { invoke: vi.fn(), getState: vi.fn() };
@@ -187,7 +196,6 @@ describe("runCommand", () => {
     });
 
     expect(renderOutro).toHaveBeenCalledWith(false);
-    expect(process.exit).toHaveBeenCalledWith(1);
   });
 
   it("renders intro on start", async () => {
@@ -208,29 +216,30 @@ describe("runCommand", () => {
     expect(renderIntro).toHaveBeenCalledOnce();
   });
 
-  it("run callback throws — stops spinner, renders error, exits 1", async () => {
+  it("run callback throws — stops spinner, renders error, throws", async () => {
     const mockClient = {};
     vi.mocked(createMcpClient).mockResolvedValue(mockClient as never);
     vi.mocked(getMcpTools).mockResolvedValue([] as never);
     vi.mocked(createGraph).mockReturnValue({ invoke: vi.fn() } as never);
 
-    await runCommand({
-      intent: "test",
-      startAction: "plan_started",
-      endAction: "plan_complete",
-      errorPrefix: "Plan failed",
-      errorHint: "Try again",
-      run: async () => {
-        throw new Error("Graph exploded");
-      },
-    });
+    await expect(
+      runCommand({
+        intent: "test",
+        startAction: "plan_started",
+        endAction: "plan_complete",
+        errorPrefix: "Plan failed",
+        errorHint: "Try again",
+        run: async () => {
+          throw new Error("Graph exploded");
+        },
+      }),
+    ).rejects.toThrow();
 
     expect(stopSpinner).toHaveBeenCalled();
     expect(renderError).toHaveBeenCalledWith(
       "Plan failed: Graph exploded",
       "Try again",
     );
-    expect(process.exit).toHaveBeenCalledWith(1);
   });
 
   it("non-Error throw is stringified in error message", async () => {
@@ -239,16 +248,18 @@ describe("runCommand", () => {
     vi.mocked(getMcpTools).mockResolvedValue([] as never);
     vi.mocked(createGraph).mockReturnValue({ invoke: vi.fn() } as never);
 
-    await runCommand({
-      intent: "test",
-      startAction: "plan_started",
-      endAction: "plan_complete",
-      errorPrefix: "Plan failed",
-      errorHint: "hint",
-      run: async () => {
-        throw "string error";
-      },
-    });
+    await expect(
+      runCommand({
+        intent: "test",
+        startAction: "plan_started",
+        endAction: "plan_complete",
+        errorPrefix: "Plan failed",
+        errorHint: "hint",
+        run: async () => {
+          throw "string error";
+        },
+      }),
+    ).rejects.toThrow();
 
     expect(renderError).toHaveBeenCalledWith(
       "Plan failed: string error",
@@ -263,7 +274,7 @@ describe("runCommand", () => {
     vi.mocked(createGraph).mockReturnValue({ invoke: vi.fn() } as never);
     vi.mocked(closeMcpClient).mockRejectedValue(new Error("close failed"));
 
-    // Should not throw
+    // Should not throw — closeMcpClient error is swallowed
     await runCommand({
       intent: "test",
       startAction: "plan_started",
@@ -272,8 +283,6 @@ describe("runCommand", () => {
       errorHint: "hint",
       run: async () => ({ success: true }),
     });
-
-    expect(process.exit).toHaveBeenCalledWith(0);
   });
 
   it("recorder enabled — wraps tools and finalizes on success", async () => {
@@ -325,16 +334,18 @@ describe("runCommand", () => {
     vi.mocked(getMcpTools).mockResolvedValue([] as never);
     vi.mocked(createGraph).mockReturnValue({ invoke: vi.fn() } as never);
 
-    await runCommand({
-      intent: "test",
-      startAction: "plan_started",
-      endAction: "plan_complete",
-      errorPrefix: "Err",
-      errorHint: "hint",
-      run: async () => {
-        throw new Error("boom");
-      },
-    });
+    await expect(
+      runCommand({
+        intent: "test",
+        startAction: "plan_started",
+        endAction: "plan_complete",
+        errorPrefix: "Err",
+        errorHint: "hint",
+        run: async () => {
+          throw new Error("boom");
+        },
+      }),
+    ).rejects.toThrow();
 
     expect(mockRecorder.finalizeSession).toHaveBeenCalled();
 

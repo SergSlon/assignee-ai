@@ -1,0 +1,17 @@
+id: BP-ECR-002
+title: "ECR repository should use immutable image tags"
+severity: HIGH
+resource_type: "AWS::ECR::Repository"
+property_path: "ImageTagMutability"
+check_type: "equals"
+expected_value: "IMMUTABLE"
+source: "AWS Security Hub FSBP"
+source_id: "ECR.2"
+description: "ECR repositories should use immutable image tags to prevent tag overwrites. Mutable tags allow replacing an image behind a tag, breaking deployment reproducibility and enabling supply chain attacks."
+remediation: "Set ImageTagMutability to IMMUTABLE. Use unique tags (e.g., git SHA, build number) instead of overwriting 'latest'."
+category: security
+lastVerified: "2026-03-24"
+blocking: false
+autoFixable: true
+desiredStatePatch:
+  ImageTagMutability: "IMMUTABLE"

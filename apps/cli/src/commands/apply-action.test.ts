@@ -133,49 +133,47 @@ afterEach(() => {
 // ── No intent, no checkpoint tests ──────────────────────────────────────────
 
 describe("applyCommand — no intent scenarios", () => {
-  it("no intent + no checkpoint — prints usage and exits", async () => {
+  it("no intent + no checkpoint — throws AssigneeError with usage hint", async () => {
     vi.mocked(findNewestValidCheckpoint).mockResolvedValue(null);
     const { applyCommand } = await import("./apply.js");
-    await applyCommand.parseAsync(["node", "apply"]);
 
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Usage"),
+    await expect(applyCommand.parseAsync(["node", "apply"])).rejects.toThrow(
+      "Usage:",
     );
-    expect(process.exit).toHaveBeenCalledWith(1);
   });
 
-  it("--checkpoint with bad file — prints error and exits", async () => {
+  it("--checkpoint with bad file — throws AssigneeError", async () => {
     vi.mocked(loadCheckpointFromPath).mockRejectedValue(
       new Error("ENOENT: file not found"),
     );
 
     const { applyCommand } = await import("./apply.js");
-    await applyCommand.parseAsync([
-      "node",
-      "apply",
-      "--checkpoint",
-      "nonexistent.json",
-    ]);
 
-    expect(console.error).toHaveBeenCalled();
-    expect(process.exit).toHaveBeenCalledWith(1);
+    await expect(
+      applyCommand.parseAsync([
+        "node",
+        "apply",
+        "--checkpoint",
+        "nonexistent.json",
+      ]),
+    ).rejects.toThrow("Checkpoint file not found");
   });
 
-  it("--checkpoint with CheckpointError — prints CheckpointError message", async () => {
+  it("--checkpoint with CheckpointError — throws CheckpointError", async () => {
     vi.mocked(loadCheckpointFromPath).mockRejectedValue(
       new CheckpointError("Checkpoint expired"),
     );
 
     const { applyCommand } = await import("./apply.js");
-    await applyCommand.parseAsync([
-      "node",
-      "apply",
-      "--checkpoint",
-      "expired.json",
-    ]);
 
-    expect(console.error).toHaveBeenCalledWith("Checkpoint expired");
-    expect(process.exit).toHaveBeenCalledWith(1);
+    await expect(
+      applyCommand.parseAsync([
+        "node",
+        "apply",
+        "--checkpoint",
+        "expired.json",
+      ]),
+    ).rejects.toThrow("Checkpoint expired");
   });
 });
 

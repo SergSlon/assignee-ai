@@ -12,3 +12,6 @@ remediation: "Set StorageEncrypted to true and specify a KmsKeyId. Note: encrypt
 category: security
 lastVerified: "2026-03-22"
 blocking: true
+autoFixable: true
+desiredStatePatch:
+  StorageEncrypted: true

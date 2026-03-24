@@ -100,7 +100,9 @@ export { sanitizeUserIntent, MAX_INTENT_LENGTH } from "./utils/sanitize.js";
 // Pricing Strategy Registry
 export {
   defaultPricingRegistry,
+  defaultDecomposerRegistry,
   PricingStrategyRegistry,
+  PricingDecomposerRegistry,
   extractFirstTierPrice,
 } from "./pricing/index.js";
 export type {
@@ -112,6 +114,11 @@ export type {
   AwsPricingItem,
   AwsPricingTerm,
   AwsPriceDimension,
+  PricingDecomposer,
+  PricingLineItem,
+  PricingLineItemKind,
+  PricingLineItemResult,
+  PricingBreakdown,
 } from "./pricing/index.js";
 
 // Errors
@@ -126,6 +133,7 @@ export {
   CheckpointError,
   ProvisioningError,
   MissingRequiredFieldsError,
+  UserCancelledError,
   type ProvisioningErrorCode,
 } from "./errors.js";
 export {

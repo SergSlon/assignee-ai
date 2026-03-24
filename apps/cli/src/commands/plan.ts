@@ -8,14 +8,18 @@
 import * as path from "node:path";
 import * as clack from "@clack/prompts";
 import { Command } from "commander";
-import { ExecutionMode, ExecutionStatus, safeTry } from "@assignee/core";
+import {
+  ExecutionMode,
+  ExecutionStatus,
+  safeTry,
+  AssigneeError,
+} from "@assignee/core";
 import type { AgentState } from "../services/graph-state.js";
 import {
   CommandName,
   CommandDescription,
   CommandArgs,
 } from "../constants/commands.js";
-import { ProcessExitCode } from "../constants/errors.js";
 import {
   renderError,
   renderApplyNowConfirm,
@@ -41,10 +45,10 @@ export const planCommand = new Command(CommandName.PLAN)
   .action(async (intent: string | undefined, opts: { apply?: boolean }) => {
     const noApply = opts.apply === false;
     if (!intent) {
-      console.error(
-        'Usage: assignee plan "Create an S3 bucket named my-bucket"',
+      throw new AssigneeError(
+        'Missing intent. Usage: assignee plan "Create an S3 bucket named my-bucket"',
+        "MISSING_INTENT",
       );
-      process.exit(ProcessExitCode.GENERIC_ERROR);
     }
 
     await runCommand({
@@ -70,6 +74,7 @@ export const planCommand = new Command(CommandName.PLAN)
             runId: ctx.runId,
             executionMode: ExecutionMode.PLAN,
             startedAt: Date.now(),
+            projectDir: process.cwd(),
             ...(userConfig ? { userConfig } : {}),
             ...(orgConfig ? { orgConfig } : {}),
           },
@@ -186,6 +191,7 @@ export const planCommand = new Command(CommandName.PLAN)
             runId: ctx.runId,
             executionMode: ExecutionMode.APPLY,
             startedAt: Date.now(),
+            projectDir: process.cwd(),
             resourceType: planState.resourceType,
             desiredState: planState.desiredState,
             estimatedMonthlyCost: planState.estimatedMonthlyCost,

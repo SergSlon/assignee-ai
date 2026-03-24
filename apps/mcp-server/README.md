@@ -2,18 +2,28 @@
 
 AI-native AWS infrastructure provisioning via MCP (Model Context Protocol). Plan, estimate, and deploy AWS resources using natural language from any AI coding agent.
 
+> **Status:** This package is currently `private` and not published to npm. All instructions below use local paths. Once the package is published, `npx @assignee/mcp-server` will also work — see the [After Publish](#after-publish-coming-soon) section.
+
 ## Prerequisites
 
 - **Node.js** >= 20.0.0
+- **Python 3.10+** (required by MCP sub-servers)
+- **uvx** (Python package runner, used to launch CloudFormation, pricing, knowledge base, and AWS docs sub-servers)
 - **AWS credentials** configured (environment variables or `~/.aws/credentials`)
-- **Python 3.10+** and **uvx** (for MCP sub-servers: CloudFormation, pricing, knowledge base, AWS docs)
 
-## Quick Start
+## Quick Start (Local Development)
+
+First, build the MCP server from the repo root:
+
+```bash
+pnpm install
+pnpm --filter @assignee/mcp-server build
+```
 
 ### Claude Code
 
 ```bash
-claude mcp add assignee-ai -- npx @assignee/mcp-server
+claude mcp add assignee-ai -- node /absolute/path/to/assignee.ai/apps/mcp-server/dist/index.js
 ```
 
 Or add to `.claude/mcp_config.json`:
@@ -22,8 +32,8 @@ Or add to `.claude/mcp_config.json`:
 {
   "mcpServers": {
     "assignee-ai": {
-      "command": "npx",
-      "args": ["@assignee/mcp-server"],
+      "command": "node",
+      "args": ["/absolute/path/to/assignee.ai/apps/mcp-server/dist/index.js"],
       "env": {
         "AWS_REGION": "us-east-1",
         "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
@@ -42,8 +52,8 @@ Add to `.cursor/mcp.json` in your project root:
 {
   "mcpServers": {
     "assignee-ai": {
-      "command": "npx",
-      "args": ["@assignee/mcp-server"],
+      "command": "node",
+      "args": ["/absolute/path/to/assignee.ai/apps/mcp-server/dist/index.js"],
       "env": {
         "AWS_REGION": "us-east-1",
         "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
@@ -62,8 +72,8 @@ Add to your Windsurf MCP configuration:
 {
   "mcpServers": {
     "assignee-ai": {
-      "command": "npx",
-      "args": ["@assignee/mcp-server"],
+      "command": "node",
+      "args": ["/absolute/path/to/assignee.ai/apps/mcp-server/dist/index.js"],
       "env": {
         "AWS_REGION": "us-east-1",
         "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
@@ -74,15 +84,7 @@ Add to your Windsurf MCP configuration:
 }
 ```
 
-### Global Install (Alternative)
-
-For faster startup, install globally instead of using `npx`:
-
-```bash
-npm install -g @assignee/mcp-server
-```
-
-Then use `assignee-mcp-server` as the command in your agent config instead of `npx @assignee/mcp-server`.
+> Replace `/absolute/path/to/assignee.ai` with the actual path to your local clone of the repository.
 
 ## Available Tools
 
@@ -92,6 +94,8 @@ Then use `assignee-mcp-server` as the command in your agent config instead of `n
 | `apply_plan`             | Apply a previously generated plan     | `{ checkpointPath: string, confirmed: boolean }`         |
 | `list_managed_resources` | List resources managed by assignee.ai | `{ region?: string }`                                    |
 | `estimate_cost`          | Estimate monthly cost of a resource   | `{ description: string, region?: string }`               |
+
+> **Note:** A `destroy` tool for tearing down managed resources is not yet implemented. To remove resources, use the AWS Console or AWS CLI directly for now.
 
 ## Environment Variables
 
@@ -110,15 +114,12 @@ Then use `assignee-mcp-server` as the command in your agent config instead of `n
 
 1. Verify Node.js version: `node --version` (must be >= 20.0.0)
 2. Check AWS credentials are configured: `aws sts get-caller-identity`
-3. Ensure Python and uvx are installed: `uvx --version`
+3. Ensure Python 3.10+ is installed: `python3 --version`
+4. Ensure uvx is installed: `uvx --version`
 
 ### Tools return NOT_READY
 
-The MCP sub-servers (CloudFormation, pricing, knowledge base) may not have initialized. Check stderr output for initialization warnings. Ensure Python dependencies are available.
-
-### npx is slow on first run
-
-The first `npx @assignee/mcp-server` invocation downloads the package (30-60s). Subsequent runs use the npx cache. For instant startup, use a global install instead.
+The MCP sub-servers (CloudFormation, pricing, knowledge base) may not have initialized. Check stderr output for initialization warnings. Ensure Python 3.10+ and uvx are available on your PATH.
 
 ### Connection issues with AI agent
 
@@ -126,8 +127,29 @@ The first `npx @assignee/mcp-server` invocation downloads the package (30-60s). 
 - Restart your AI agent after modifying MCP configuration
 - Check agent logs for MCP connection errors
 
+## After Publish (Coming Soon)
+
+Once the package is published to npm, you will be able to use `npx` instead of a local path:
+
+```bash
+# Claude Code
+claude mcp add assignee-ai -- npx @assignee/mcp-server
+
+# Or in any agent's MCP config:
+{
+  "command": "npx",
+  "args": ["@assignee/mcp-server"]
+}
+```
+
+A global install option will also be available:
+
+```bash
+npm install -g @assignee/mcp-server
+```
+
 ## Links
 
-- [assignee.ai](https://assignee.ai) -- Project homepage
-- [GitHub](https://github.com/assignee-ai/assignee) -- Source code
-- [CLI package](https://www.npmjs.com/package/assignee) -- `@assignee/cli` on npm
+- [assignee.ai](https://assignee.ai) -- Project homepage (coming soon)
+- [GitHub](https://github.com/assignee-ai/assignee) -- Source code (coming soon)
+- [npm package](https://www.npmjs.com/package/@assignee/mcp-server) -- npm registry (coming soon, package is currently private)

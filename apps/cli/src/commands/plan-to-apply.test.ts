@@ -86,10 +86,7 @@ describe("renderApplyNowConfirm", () => {
     });
   });
 
-  it("exits process on Ctrl-C (clack.isCancel)", async () => {
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation(() => undefined as never);
+  it("throws UserCancelledError on Ctrl-C (clack.isCancel)", async () => {
     const origTTY = process.stdin.isTTY;
     Object.defineProperty(process.stdin, "isTTY", {
       value: true,
@@ -102,10 +99,10 @@ describe("renderApplyNowConfirm", () => {
     );
     vi.mocked(clack.isCancel).mockReturnValue(true);
 
-    await renderApplyNowConfirm(mockState);
-    expect(exitSpy).toHaveBeenCalledWith(130);
+    await expect(renderApplyNowConfirm(mockState)).rejects.toThrow(
+      "Operation cancelled by user.",
+    );
 
-    exitSpy.mockRestore();
     Object.defineProperty(process.stdin, "isTTY", {
       value: origTTY,
       writable: true,

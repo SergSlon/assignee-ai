@@ -11,3 +11,6 @@ description: "RDS DB instances should not be publicly accessible. Publicly acces
 remediation: "Set PubliclyAccessible to false. Place the RDS instance in a private subnet and access it through a VPN, bastion host, or AWS PrivateLink."
 category: security
 lastVerified: "2026-03-22"
+autoFixable: true
+desiredStatePatch:
+  PubliclyAccessible: false

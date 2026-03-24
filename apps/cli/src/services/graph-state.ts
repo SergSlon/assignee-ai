@@ -16,6 +16,7 @@ import {
   type ResourceResult,
   type OrgResourceConfig,
   type UserResourceConfig,
+  type PricingBreakdown,
   AssigneeError,
 } from "@assignee/core";
 import type { BPFinding } from "@assignee/best-practices";
@@ -27,6 +28,15 @@ export interface SecurityFinding {
   title: string;
   recommendation: string;
   service: string;
+}
+
+/** Record of a best practice finding that was automatically fixed (Story 22.2). */
+export interface AppliedFix {
+  practiceId: string;
+  title: string;
+  fieldPath: string;
+  oldValue: unknown;
+  newValue: unknown;
 }
 
 export const graphAnnotation = Annotation.Root({
@@ -131,6 +141,21 @@ export const graphAnnotation = Annotation.Root({
   }),
   // Story 19.3: memory hints from provision history (display-only, non-blocking)
   memoryHints: Annotation<string[] | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
+  // Story 22.2: auto-fix applied patches (display-only, non-blocking)
+  appliedFixes: Annotation<AppliedFix[] | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
+  // Story 23.6: pricing breakdown from decomposers (display-only, non-blocking)
+  pricingBreakdown: Annotation<PricingBreakdown | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
+  // Project directory for config resolution (MCP servers may have different cwd)
+  projectDir: Annotation<string | undefined>({
     reducer: (_, b) => b,
     default: () => undefined,
   }),

@@ -1,0 +1,21 @@
+id: BP-SG-002
+title: "Security group should not allow unrestricted SSH access"
+severity: CRITICAL
+resource_type: "AWS::EC2::SecurityGroup"
+property_path: "SecurityGroupIngress"
+check_type: "not_equals"
+expected_value: "0.0.0.0/0:22"
+source: "AWS Security Hub FSBP"
+source_id: "EC2.13"
+description: "SSH (port 22) must not be open to 0.0.0.0/0. Unrestricted SSH access is a top attack vector — automated bots continuously scan for open SSH ports and attempt brute-force logins."
+remediation: "Restrict SSH ingress to specific IP ranges (e.g., your corporate VPN CIDR or bastion host security group). Consider using AWS SSM Session Manager instead — it requires no open inbound ports."
+category: security
+lastVerified: "2026-03-23"
+blocking: true
+autoFixable: true
+desiredStatePatch:
+  SecurityGroupIngress:
+    - IpProtocol: "tcp"
+      FromPort: 22
+      ToPort: 22
+      CidrIp: "10.0.0.0/8"

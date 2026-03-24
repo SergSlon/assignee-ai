@@ -231,13 +231,13 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         options: [
           {
             value: "gp3",
-            label: "gp3 (General Purpose SSD v3) — ~$0.115/GB-month",
+            label: "gp3 (General Purpose SSD v3) — ~$0.023/GB-month",
             fitHint: "Best price-performance",
             recommended: true,
           },
           {
             value: "gp2",
-            label: "gp2 (General Purpose SSD v2) — ~$0.115/GB-month",
+            label: "gp2 (General Purpose SSD v2) — ~$0.023/GB-month",
             fitHint: "Legacy, prefer gp3",
           },
           {
@@ -255,33 +255,42 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Storage size (GB)",
-        hint: "Minimum 20 GB for gp3/gp2. Storage cannot be decreased after creation. gp3 costs ~$0.115/GB-month. 20 GB = ~$2.30/mo, 100 GB = ~$11.50/mo.",
+        hint: "Minimum 20 GB for gp3/gp2. Storage cannot be decreased after creation. gp3 costs ~$0.023/GB-month. 20 GB = ~$0.46/mo, 100 GB = ~$2.30/mo.",
         options: [
           {
             value: "20",
-            label: "20 GB (~$2.30/mo)",
+            label: "20 GB (~$0.46/mo)",
             fitHint: "Dev/test minimum",
             recommended: true,
           },
           {
             value: "50",
-            label: "50 GB (~$5.75/mo)",
+            label: "50 GB (~$1.15/mo)",
             fitHint: "Small production",
           },
           {
             value: "100",
-            label: "100 GB (~$11.50/mo)",
+            label: "100 GB (~$2.30/mo)",
             fitHint: "Medium production",
           },
           {
             value: "200",
-            label: "200 GB (~$23.00/mo)",
+            label: "200 GB (~$4.60/mo)",
             fitHint: "Large production",
           },
         ],
         initialValue: "20",
       },
       toCfn: (v: unknown) => (v ? parseInt(String(v), 10) : undefined),
+    },
+    {
+      name: "PubliclyAccessible",
+      question: {
+        type: "boolean",
+        label: "Publicly Accessible",
+        initialValue: false,
+        hint: "Set to false for production databases. Place in private subnet with VPN/bastion access.",
+      },
     },
     {
       name: "Tags",
@@ -304,6 +313,68 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
     },
   ],
   advancedFields: [
+    {
+      name: "DBSubnetGroupName",
+      question: {
+        type: "enum",
+        label: "DB Subnet Group",
+        fetcher: "discover-db-subnet-groups",
+        hint: "Choose a DB subnet group to place the database in specific VPC subnets. Required for production databases to control network isolation.",
+      },
+    },
+    {
+      name: "VpcSecurityGroupIds",
+      question: {
+        type: "multi",
+        label: "VPC Security Groups",
+        fetcher: "discover-security-groups",
+        hint: "Security groups control inbound/outbound network access to the database. At minimum, allow your application's security group on the database port.",
+      },
+    },
+    {
+      name: "Port",
+      question: {
+        type: "string",
+        label: "Database Port",
+        placeholder: "5432 (postgres) / 3306 (mysql)",
+        hint: "Default ports: PostgreSQL 5432, MySQL/MariaDB 3306, Oracle 1521, SQL Server 1433. Non-standard ports add security-by-obscurity but require firewall rule updates.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const n = Number(value);
+          if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 65535)
+            return "Port must be a number between 1 and 65535";
+          return undefined;
+        },
+      },
+      toCfn: (v: unknown) => (v ? parseInt(String(v), 10) : undefined),
+    },
+    {
+      name: "EnableCloudwatchLogsExports",
+      question: {
+        type: "multi",
+        label: "CloudWatch Logs Exports",
+        hint: "Export database logs to CloudWatch for monitoring, alerting, and troubleshooting. Error + slow query logs are recommended for production.",
+        options: [
+          { value: "error", label: "Error log" },
+          { value: "general", label: "General log" },
+          { value: "slowquery", label: "Slow query log" },
+          { value: "audit", label: "Audit log" },
+        ],
+      },
+      toCfn: (v: unknown) => {
+        if (!Array.isArray(v) || v.length === 0) return undefined;
+        return v.map(String);
+      },
+    },
+    {
+      name: "PerformanceInsightsEnabled",
+      question: {
+        type: "boolean",
+        label: "Performance Insights",
+        initialValue: false,
+        hint: "Provides advanced database performance monitoring with wait event analysis. Free tier includes 7 days retention for db.t3+ instances. Highly recommended for production.",
+      },
+    },
     {
       name: "BackupRetentionPeriod",
       question: {
@@ -329,5 +400,8 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
     "If the user did not provide a MasterUserPassword, OMIT it — AWS will auto-generate one via Secrets Manager",
     "If the user did not provide a DBName, OMIT it — no initial database will be created",
     "EngineVersion MUST be a valid version number for the selected Engine (e.g., '16' for postgres, '8.4' for mysql). NEVER use deprecated versions.",
+    "PubliclyAccessible SHOULD be false for production. If a DBSubnetGroupName is provided, the instance is placed in that VPC subnet group.",
+    "VpcSecurityGroupIds control network access — at least one security group allowing ingress on the database Port is required for connectivity.",
+    "EnableCloudwatchLogsExports and PerformanceInsightsEnabled are strongly recommended for production observability. Available log types vary by engine.",
   ],
 };

@@ -28,11 +28,11 @@ Also available as an [MCP server](#mcp-server) for AI coding agents (Claude Code
 
 ```
 intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
-  → plan_generator → bp_evaluator → preflight_guard
+  → plan_generator → bp_evaluator → fix_applicator → preflight_guard
     → human_approval ─[HITL]─ → resource_provisioner → status_poller → result_formatter
 ```
 
-11 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order.
+12 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order.
 
 All AI calls stay local — no AWS credentials ever leave your machine.
 
@@ -48,6 +48,7 @@ All AI calls stay local — no AWS credentials ever leave your machine.
 | `assignee list`               | Show managed resources with cost               | `--region`, `--json`                                      |
 | `assignee destroy <resource>` | Safe teardown with confirmation                | `--yes`                                                   |
 | `assignee status`             | Intelligence summary (memory, findings, costs) | `--json`                                                  |
+| `assignee setup`              | Automate IAM role/policy creation              | —                                                         |
 | `assignee completions`        | Generate shell completions (bash/zsh)          | —                                                         |
 
 ---
@@ -59,7 +60,7 @@ All AI calls stay local — no AWS credentials ever leave your machine.
 - Node.js 22+
 - pnpm 10+
 - Python 3.10+ with `uvx` (`pip install uv`)
-- Two IAM users with the policies below (full setup: [docs/aws-bootstrap.md](docs/aws-bootstrap.md))
+- Three IAM users with the policies below (full setup: [docs/aws-bootstrap.md](docs/aws-bootstrap.md))
 
 ### Install
 
@@ -149,7 +150,7 @@ apps/
                        status.ts · completions.ts
       nodes/           intent-parser · schema-fetcher · option-elicitor
                        compound-dispatcher · plan-generator · bp-evaluator
-                       preflight-guard · human-approval
+                       fix-applicator · preflight-guard · human-approval
                        resource-provisioner · status-poller · result-formatter
       services/        graph.ts (LangGraph) · mcp-client.ts · memory.ts
                        list-resources.ts · resource-resolver.ts · billing.ts
@@ -216,7 +217,7 @@ Optional servers (IAM, Well-Architected Security, Billing) are spawned only when
 ## Development
 
 ```bash
-pnpm test          # 724 CLI + 84 MCP server = 808 tests across 52 files
+pnpm test          # 1171 tests across 65 files
 pnpm check-types   # TypeScript type check
 pnpm build         # compile all packages
 ```
@@ -255,6 +256,8 @@ node build-fixture-ts.mjs
 | **18** | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action) | Done                                        |
 | **19** | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)     | Done                                        |
 | **20** | MCP Server (plan, apply, list, estimate tools for AI agents)                      | Done                                        |
+| **22** | Auto-Fix Round (apply auto-fixable BP patches with user consent)                  | Done                                        |
+| **23** | Real-Time Pricing Breakdown (live pricing via AWS Pricing MCP, zero hardcoded $)  | Done                                        |
 
 ### Deferred epics (post-traction / SaaS phase)
 
@@ -275,4 +278,18 @@ node build-fixture-ts.mjs
 
 See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the full IAM policy setup, Bedrock logging, and CloudWatch log group configuration.
 
-**Quick start:** `assignee setup` (planned) will automate IAM role/policy creation. Until then, follow the manual guide.
+**Quick start:** `assignee setup` automates IAM role/policy creation. For manual setup, follow the guide.
+
+---
+
+## Documentation
+
+| Document                 | Scope               | Location                                                                             |
+| ------------------------ | ------------------- | ------------------------------------------------------------------------------------ |
+| Architecture Flows       | CLI (current)       | [docs/architecture-flows.md](docs/architecture-flows.md)                             |
+| AWS Setup Guide          | CLI (current)       | [docs/aws-bootstrap.md](docs/aws-bootstrap.md)                                       |
+| Testing Guide            | CLI (current)       | [docs/testing-guide.md](docs/testing-guide.md)                                       |
+| CLI Architecture         | CLI (authoritative) | [planning: cli-architecture.md](_bmad-output/planning-artifacts/cli-architecture.md) |
+| Full Vision Architecture | SaaS (deferred)     | [planning: architecture.md](_bmad-output/planning-artifacts/architecture.md)         |
+| Product Requirements     | Both                | [planning: prd.md](_bmad-output/planning-artifacts/prd.md)                           |
+| Epics & Stories          | Both                | [planning: epics.md](_bmad-output/planning-artifacts/epics.md)                       |

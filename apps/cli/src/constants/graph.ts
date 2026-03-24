@@ -9,6 +9,7 @@ export const GraphNode = {
   RESOURCE_PROVISIONER: "resource_provisioner",
   STATUS_POLLER: "status_poller",
   BP_EVALUATOR: "bp_evaluator",
+  FIX_APPLICATOR: "fix_applicator",
   RESULT_FORMATTER: "result_formatter",
 } as const;
 

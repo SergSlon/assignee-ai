@@ -13,7 +13,7 @@
 
 import { Command } from "commander";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { ProcessExitCode } from "../constants/errors.js";
+import { AssigneeError } from "@assignee/core";
 import { fetchManagedResources } from "../services/list-resources.js";
 import {
   renderResourceTable,
@@ -31,18 +31,15 @@ export const listCommand = new Command(CommandName.LIST)
 
       if (resources.length === 0) {
         renderEmptyList();
-        process.exit(ProcessExitCode.SUCCESS);
         return;
       }
 
       if (opts.json) {
         process.stdout.write(JSON.stringify(resources, null, 2) + "\n");
-        process.exit(ProcessExitCode.SUCCESS);
         return;
       }
 
       renderResourceTable(resources);
-      process.exit(ProcessExitCode.SUCCESS);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       const errName = (error as { name?: string }).name ?? "";
@@ -73,6 +70,9 @@ export const listCommand = new Command(CommandName.LIST)
         );
       }
 
-      process.exit(ProcessExitCode.GENERIC_ERROR);
+      throw new AssigneeError(
+        err.message || "Failed to list managed resources.",
+        "LIST_ERROR",
+      );
     }
   });

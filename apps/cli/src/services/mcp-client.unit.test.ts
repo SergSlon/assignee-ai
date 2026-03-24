@@ -33,19 +33,21 @@ vi.mock("../config/mcp-servers.js", () => ({
 }));
 
 let exitSpy: ReturnType<typeof vi.spyOn>;
-let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+let stderrWriteSpy: any;
 
 beforeEach(() => {
   vi.clearAllMocks();
   exitSpy = vi
     .spyOn(process, "exit")
     .mockImplementation((() => {}) as never) as any;
-  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  stderrWriteSpy = vi
+    .spyOn(process.stderr, "write")
+    .mockImplementation((() => true) as any);
 });
 
 afterEach(() => {
   exitSpy.mockRestore();
-  consoleErrorSpy.mockRestore();
+  stderrWriteSpy.mockRestore();
 });
 
 // Each test needs a fresh module to reset the singleton `client` variable
@@ -91,18 +93,16 @@ describe("createMcpClient", () => {
     expect(mockInitializeConnections).toHaveBeenCalledOnce();
   });
 
-  it("connection failure — logs error and calls process.exit", async () => {
+  it("connection failure — logs error and throws McpError", async () => {
     mockInitializeConnections.mockRejectedValue(
       new Error("cfn-mcp-server failed to start"),
     );
     const { createMcpClient } = await freshImport();
 
-    await createMcpClient();
-
-    expect(process.exit).toHaveBeenCalledWith(
-      ProcessExitCode.MCP_STARTUP_FAILED,
+    await expect(createMcpClient()).rejects.toThrow(
+      "MCP server 'cfn-mcp-server' failed to start.",
     );
-    expect(console.error).toHaveBeenCalled();
+    expect(stderrWriteSpy).toHaveBeenCalled();
   });
 
   it("connection failure with known server name — shows install hint", async () => {
@@ -111,9 +111,11 @@ describe("createMcpClient", () => {
     );
     const { createMcpClient } = await freshImport();
 
-    await createMcpClient();
+    await expect(createMcpClient()).rejects.toThrow(
+      "MCP server 'cfn-mcp-server' failed to start.",
+    );
 
-    const errorCall = consoleErrorSpy.mock.calls[0]?.[0] as string;
+    const errorCall = stderrWriteSpy.mock.calls[0]?.[0] as string;
     expect(errorCall).toContain("cfn-mcp-server");
     expect(errorCall).toContain("failed to start");
   });
@@ -124,9 +126,11 @@ describe("createMcpClient", () => {
     );
     const { createMcpClient } = await freshImport();
 
-    await createMcpClient();
+    await expect(createMcpClient()).rejects.toThrow(
+      "An unknown MCP server failed to start: Something went wrong",
+    );
 
-    const errorCall = consoleErrorSpy.mock.calls[0]?.[0] as string;
+    const errorCall = stderrWriteSpy.mock.calls[0]?.[0] as string;
     expect(errorCall).toContain("unknown MCP server");
   });
 });

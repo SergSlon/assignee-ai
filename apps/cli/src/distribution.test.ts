@@ -24,17 +24,20 @@ describe("Distribution package configuration", () => {
     expect(pkg.bin).toEqual({ assignee: "./dist/index.js" });
   });
 
-  it("has files array with dist, completions, README.md, LICENSE", () => {
-    expect(pkg.files).toContain("dist");
+  it("has files array with dist globs, completions, README.md, LICENSE", () => {
+    expect(pkg.files).toContain("dist/**/*.js");
+    expect(pkg.files).toContain("dist/**/*.d.ts");
+    expect(pkg.files).toContain("dist/**/*.d.ts.map");
     expect(pkg.files).toContain("completions");
     expect(pkg.files).toContain("README.md");
     expect(pkg.files).toContain("LICENSE");
   });
 
-  it("does not include source files or test files in files array", () => {
+  it("excludes test files and test-fixtures from files array", () => {
+    expect(pkg.files).toContain("!dist/**/*.test.*");
+    expect(pkg.files).toContain("!dist/**/test-fixtures/**");
     for (const entry of pkg.files) {
       expect(entry).not.toMatch(/src/);
-      expect(entry).not.toMatch(/test/);
       expect(entry).not.toMatch(/vitest/);
     }
   });
