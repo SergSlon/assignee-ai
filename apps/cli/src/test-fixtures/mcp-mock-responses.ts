@@ -591,6 +591,427 @@ const schemaResponses = {
     }),
   },
 
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::EC2::SecurityGroup" }. 13 props in full schema, trimmed to 6. */
+  securityGroup: {
+    success: mcpText({
+      typeName: "AWS::EC2::SecurityGroup",
+      description:
+        "Specifies a security group. To create a security group, use the [VpcId](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-security-group.html#cfn-ec2-securitygroup-vpcid) property to specify the VPC for which to create the security group.",
+      properties: {
+        GroupDescription: {
+          type: "string",
+          description:
+            "A description for the security group. This is informational only.\n Constraints: Up to 255 characters in length\n Constraints for EC2-Classic: ASCII characters\n Constraints for EC2-VPC: a-z, A-Z, 0-9, spaces, and ._-:/()#,@[]+=&;{}!$*",
+        },
+        GroupName: {
+          type: "string",
+          description:
+            "The name of the security group.\n Constraints: Up to 255 characters in length. Cannot start with ``sg-``.\n Valid characters: a-z, A-Z, 0-9, spaces, and ._-:/()#,@[]+=&;{}!$*",
+        },
+        VpcId: {
+          type: "string",
+          description:
+            "The ID of the VPC for the security group. If you do not specify a VPC, the default VPC is used.",
+        },
+        SecurityGroupIngress: {
+          type: "array",
+          description:
+            "The inbound rules associated with the security group. There is a short interruption during which you cannot connect to the security group.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Ingress",
+          },
+        },
+        SecurityGroupEgress: {
+          type: "array",
+          description:
+            "The outbound rules associated with the security group. There is a short interruption during which you cannot connect to the security group.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Egress",
+          },
+        },
+        Tags: {
+          type: "array",
+          description: "Any tags assigned to the security group.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+      },
+      required: ["GroupDescription"],
+      readOnlyProperties: ["/properties/Id", "/properties/GroupId"],
+      primaryIdentifier: ["/properties/Id"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::EC2::VPC" }. 8 props in full schema, trimmed to 5. */
+  vpc: {
+    success: mcpText({
+      typeName: "AWS::EC2::VPC",
+      description:
+        "Specifies a virtual private cloud (VPC).\n To add an IPv6 CIDR block to the VPC, see [AWS::EC2::VPCCidrBlock](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-vpccidrblock.html).",
+      properties: {
+        CidrBlock: {
+          type: "string",
+          description:
+            "The IPv4 network range for the VPC, in CIDR notation. For example, ``10.0.0.0/16``. We modify the specified CIDR block to its canonical form; for example, if you specify ``100.68.0.18/18``, we modify it to ``100.68.0.0/18``.",
+        },
+        EnableDnsHostnames: {
+          type: "boolean",
+          description:
+            "Indicates whether the instances launched in the VPC get DNS hostnames. If enabled, instances in the VPC get DNS hostnames; otherwise, they do not.",
+        },
+        EnableDnsSupport: {
+          type: "boolean",
+          description:
+            'Indicates whether the DNS resolution is supported for the VPC. If enabled, queries to the Amazon provided DNS server at the 169.254.169.253 IP address, or the reserved IP address at the base of the VPC network range "plus two" succeed. If disabled, the Amazon provided DNS service in the VPC that resolves public DNS hostnames to IP addresses is not enabled.',
+        },
+        InstanceTenancy: {
+          type: "string",
+          description:
+            "The allowed tenancy of instances launched into the VPC.\n ``default``: An instance launched into the VPC runs on shared hardware by default, unless you explicitly specify a different tenancy during instance launch.\n ``dedicated``: An instance launched into the VPC runs on dedicated hardware by default, unless you explicitly specify a tenancy of ``host`` during instance launch. You cannot specify a tenancy of ``default`` during instance launch.",
+          enum: ["default", "dedicated"],
+        },
+        Tags: {
+          type: "array",
+          description: "The tags for the VPC.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+      },
+      required: [],
+      readOnlyProperties: [
+        "/properties/VpcId",
+        "/properties/CidrBlockAssociations",
+        "/properties/DefaultNetworkAcl",
+        "/properties/DefaultSecurityGroup",
+      ],
+      primaryIdentifier: ["/properties/VpcId"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::EC2::Subnet" }. 18 props in full schema, trimmed to 5. */
+  subnet: {
+    success: mcpText({
+      typeName: "AWS::EC2::Subnet",
+      description:
+        "Specifies a subnet for the specified VPC.\n For an IPv4 only subnet, specify an IPv4 CIDR block. If the VPC has an IPv6 CIDR block, you can create an IPv6 only subnet or a dual stack subnet instead. For an IPv6 only subnet, specify an IPv6 CIDR block. For a dual stack subnet, specify both an IPv4 CIDR block and an IPv6 CIDR block.",
+      properties: {
+        VpcId: {
+          type: "string",
+          description: "The ID of the VPC the subnet is in.",
+        },
+        CidrBlock: {
+          type: "string",
+          description:
+            "The IPv4 CIDR block assigned to the subnet.\n If you update this property, we create a new subnet, and then delete the existing one.",
+        },
+        AvailabilityZone: {
+          type: "string",
+          description:
+            "The Availability Zone of the subnet.\n If you update this property, we create a new subnet, and then delete the existing one.",
+        },
+        MapPublicIpOnLaunch: {
+          type: "boolean",
+          description:
+            "Indicates whether instances launched in this subnet receive a public IPv4 address. The default value is ``false``.\n  AWS charges for all public IPv4 addresses, including public IPv4 addresses associated with running instances and Elastic IP addresses.",
+        },
+        Tags: {
+          type: "array",
+          description: "Any tags assigned to the subnet.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+      },
+      required: ["VpcId"],
+      readOnlyProperties: [
+        "/properties/SubnetId",
+        "/properties/AvailabilityZoneId",
+        "/properties/NetworkAclAssociationId",
+      ],
+      primaryIdentifier: ["/properties/SubnetId"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::SQS::Queue" }. 19 props in full schema, trimmed to 8. */
+  sqsQueue: {
+    success: mcpText({
+      typeName: "AWS::SQS::Queue",
+      description:
+        "The ``AWS::SQS::Queue`` resource creates an Amazon SQS standard or FIFO queue.\n Keep the following caveats in mind:\n  +  If you don't specify the ``FifoQueue`` property, Amazon SQS creates a standard queue.\n  +  If you change the value of the ``FifoQueue`` property, SQS creates a new queue and deletes the existing one.\n  +  You can't change the queue type after you create it.",
+      properties: {
+        QueueName: {
+          type: "string",
+          description:
+            "A name for the queue. To create a FIFO queue, the name of your FIFO queue must end with the ``.fifo`` suffix. For more information, see [FIFO queues](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/FIFO-queues.html) in the *Developer Guide*.\n If you don't specify a name, CFN generates a unique physical ID and uses that ID for the queue name. For more information, see [Name type](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-name.html).",
+        },
+        FifoQueue: {
+          type: "boolean",
+          description:
+            "If set to true, creates a FIFO queue. If you don't specify this property, Amazon SQS creates a standard queue.",
+        },
+        VisibilityTimeout: {
+          type: "integer",
+          description:
+            "The length of time during which a message will be unavailable after a message is delivered from the queue. This blocks other components from receiving the same message and gives the initial component time to process and delete the message from the queue.\n Values must be from 0 to 43,200 seconds (12 hours). If you don't specify a value, AWS CloudFormation uses the default value of 30 seconds.",
+        },
+        MessageRetentionPeriod: {
+          type: "integer",
+          description:
+            "The number of seconds that Amazon SQS retains a message. You can specify an integer value from ``60`` seconds (1 minute) to ``1,209,600`` seconds (14 days). The default value is ``345,600`` seconds (4 days).",
+        },
+        DelaySeconds: {
+          type: "integer",
+          description:
+            "The time in seconds for which the delivery of all messages in the queue is delayed. You can specify an integer value of ``0`` to ``900`` (15 minutes). The default value is ``0``.",
+        },
+        MaximumMessageSize: {
+          type: "integer",
+          description:
+            "The limit of how many bytes that a message can contain before Amazon SQS rejects it. You can specify an integer value from ``1,024`` bytes (1 KiB) to ``262,144`` bytes (256 KiB). The default value is ``262,144`` (256 KiB).",
+        },
+        RedrivePolicy: {
+          type: ["object", "string"],
+          description:
+            "The string that includes the parameters for the dead-letter queue functionality of the source queue as a JSON object.",
+        },
+        Tags: {
+          type: "array",
+          description: "The tags that you attach to this queue.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+      },
+      required: [],
+      readOnlyProperties: ["/properties/QueueUrl", "/properties/Arn"],
+      primaryIdentifier: ["/properties/QueueUrl"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::SNS::Topic" }. 15 props in full schema, trimmed to 5. */
+  snsTopic: {
+    success: mcpText({
+      typeName: "AWS::SNS::Topic",
+      description:
+        "The ``AWS::SNS::Topic`` resource creates a topic to which notifications can be published.\n  One account can create a maximum of 100,000 standard topics and 1,000 FIFO topics. For more information, see [endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/sns.html) in the *General Reference*.",
+      properties: {
+        TopicName: {
+          type: "string",
+          description:
+            "The name of the topic you want to create. Topic names must include only uppercase and lowercase ASCII letters, numbers, underscores, and hyphens, and must be between 1 and 256 characters long. FIFO topic names must end with ``.fifo``.\n If you don't specify a name, CFN generates a unique physical ID and uses that ID for the topic name.",
+        },
+        FifoTopic: {
+          type: "boolean",
+          description: "Set to true to create a FIFO topic.",
+        },
+        DisplayName: {
+          type: "string",
+          description:
+            "The display name to use for an SNS topic with SMS subscriptions. The display name must be maximum 100 characters long, including hyphens (-), underscores (_), spaces, and tabs.",
+        },
+        KmsMasterKeyId: {
+          type: "string",
+          description:
+            "The ID of an AWS managed customer master key (CMK) for Amazon SNS or a custom CMK. For more information, see [Key terms](https://docs.aws.amazon.com/sns/latest/dg/sns-server-side-encryption.html#sse-key-terms).",
+        },
+        Tags: {
+          type: "array",
+          description: "The list of tags to add to a new topic.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+      },
+      required: [],
+      readOnlyProperties: ["/properties/TopicArn"],
+      primaryIdentifier: ["/properties/TopicArn"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::ECS::Cluster" }. 9 props in full schema, trimmed to 5. */
+  ecsCluster: {
+    success: mcpText({
+      typeName: "AWS::ECS::Cluster",
+      description:
+        "The ``AWS::ECS::Cluster`` resource creates an Amazon Elastic Container Service (Amazon ECS) cluster.",
+      properties: {
+        ClusterName: {
+          type: "string",
+          description:
+            "A user-generated string that you use to identify your cluster. If you don't specify a name, CFNlong generates a unique physical ID for the name.",
+        },
+        ClusterSettings: {
+          type: "array",
+          description:
+            "The settings to use when creating a cluster. This parameter is used to turn on CloudWatch Container Insights for a cluster.",
+          items: {
+            $ref: "#/definitions/ClusterSettings",
+          },
+        },
+        CapacityProviders: {
+          type: "array",
+          description:
+            "The short name of one or more capacity providers to associate with the cluster. A capacity provider must be associated with a cluster before it can be included as part of the default capacity provider strategy of the cluster or used in a capacity provider strategy when calling the [CreateService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateService.html) or [RunTask](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html) actions.",
+          items: {
+            type: "string",
+          },
+        },
+        DefaultCapacityProviderStrategy: {
+          type: "array",
+          description:
+            "The default capacity provider strategy for the cluster. When services or tasks are run in the cluster with no launch type or capacity provider strategy specified, the default capacity provider strategy is used.",
+          items: {
+            $ref: "#/definitions/CapacityProviderStrategyItem",
+          },
+        },
+        Tags: {
+          type: "array",
+          description:
+            "The metadata that you apply to the cluster to help you categorize and organize them. Each tag consists of a key and an optional value. You define both.\n The following basic restrictions apply to tags:\n +  Maximum number of tags per resource - 50.\n +  For each resource, each tag key must be unique, and each tag key can have only one value.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+      },
+      required: [],
+      readOnlyProperties: ["/properties/Arn"],
+      primaryIdentifier: ["/properties/ClusterName"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::ECR::Repository" }. 10 props in full schema, trimmed to 5. */
+  ecrRepository: {
+    success: mcpText({
+      typeName: "AWS::ECR::Repository",
+      description:
+        "The ``AWS::ECR::Repository`` resource specifies an Amazon Elastic Container Registry (Amazon ECR) repository, where users can push and pull Docker images, Open Container Initiative (OCI) images, and OCI compatible artifacts.",
+      properties: {
+        RepositoryName: {
+          type: "string",
+          description:
+            "The name to use for the repository. The repository name may be specified on its own (such as ``nginx-web-app``) or it can be prepended with a namespace to group the repository into a category (such as ``project-a/nginx-web-app``). If you don't specify a name, CFNlong generates a unique physical ID and uses that ID for the repository name.",
+          minLength: 2,
+          maxLength: 256,
+          pattern:
+            "^(?=.{2,256}$)((?:[a-z0-9]+(?:[._-][a-z0-9]+)*/)*[a-z0-9]+(?:[._-][a-z0-9]+)*)$",
+        },
+        ImageScanningConfiguration: {
+          description:
+            "The image scanning configuration for the repository. This determines whether images are scanned for known vulnerabilities after being pushed to the repository.",
+          $ref: "#/definitions/ImageScanningConfiguration",
+        },
+        ImageTagMutability: {
+          type: "string",
+          description:
+            "The tag mutability setting for the repository. If this parameter is omitted, the default setting of ``MUTABLE`` will be used which will allow image tags to be overwritten.",
+          enum: ["MUTABLE", "IMMUTABLE"],
+        },
+        EncryptionConfiguration: {
+          description:
+            "The encryption configuration for the repository. This determines how the contents of your repository are encrypted at rest.",
+          $ref: "#/definitions/EncryptionConfiguration",
+        },
+        Tags: {
+          type: "array",
+          description: "An array of key-value pairs to apply to this resource.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+      },
+      required: [],
+      readOnlyProperties: ["/properties/Arn", "/properties/RepositoryUri"],
+      primaryIdentifier: ["/properties/RepositoryName"],
+      additionalProperties: false,
+    }),
+  },
+
+  /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::ElasticLoadBalancingV2::LoadBalancer" }. 12 props in full schema, trimmed to 7. */
+  elbv2LoadBalancer: {
+    success: mcpText({
+      typeName: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      description:
+        "Specifies an Application Load Balancer, a Network Load Balancer, or a Gateway Load Balancer.",
+      properties: {
+        Name: {
+          type: "string",
+          description:
+            'The name of the load balancer. This name must be unique per region per account, can have a maximum of 32 characters, must contain only alphanumeric characters or hyphens, must not begin or end with a hyphen, and must not begin with "internal-".\n If you don\'t specify a name, AWS CloudFormation generates a unique physical ID for the load balancer.',
+        },
+        Type: {
+          type: "string",
+          description:
+            "The type of load balancer. The default is ``application``.",
+          enum: ["application", "network", "gateway"],
+        },
+        Scheme: {
+          type: "string",
+          description:
+            "The nodes of an Internet-facing load balancer have public IP addresses. The DNS name of an Internet-facing load balancer is publicly resolvable to the public IP addresses of the nodes. Therefore, Internet-facing load balancers can route requests from clients over the internet.\n The nodes of an internal load balancer have only private IP addresses. The DNS name of an internal load balancer is publicly resolvable to the private IP addresses of the nodes. Therefore, internal load balancers can only route requests from clients with access to the VPC for the load balancer.\n The default is an Internet-facing load balancer.\n You cannot specify a scheme for a Gateway Load Balancer.",
+          enum: ["internet-facing", "internal"],
+        },
+        Subnets: {
+          type: "array",
+          description:
+            "The IDs of the subnets. You can specify only one subnet per Availability Zone. You must specify either subnets or subnet mappings, but not both.",
+          insertionOrder: false,
+          items: {
+            type: "string",
+          },
+        },
+        SecurityGroups: {
+          type: "array",
+          description: "The IDs of the security groups for the load balancer.",
+          insertionOrder: false,
+          items: {
+            type: "string",
+          },
+        },
+        IpAddressType: {
+          type: "string",
+          description:
+            "The IP address type. The possible values are ``ipv4`` (for IPv4 addresses) and ``dualstack`` (for IPv4 and IPv6 addresses). You can't specify ``dualstack`` for a load balancer with a UDP or TCP_UDP listener.",
+          enum: ["ipv4", "dualstack"],
+        },
+        Tags: {
+          type: "array",
+          description: "The tags to assign to the load balancer.",
+          insertionOrder: false,
+          items: {
+            $ref: "#/definitions/Tag",
+          },
+        },
+      },
+      required: [],
+      readOnlyProperties: [
+        "/properties/LoadBalancerArn",
+        "/properties/LoadBalancerFullName",
+        "/properties/LoadBalancerName",
+        "/properties/DNSName",
+        "/properties/CanonicalHostedZoneID",
+      ],
+      primaryIdentifier: ["/properties/LoadBalancerArn"],
+      additionalProperties: false,
+    }),
+  },
+
   /** Captured 2026-03-22 from cfn-mcp-server. Input: { resource_type: "AWS::Custom::FakeResource" }. Returns error (TypeNotFoundException). */
   generic: {
     success: {
@@ -1177,7 +1598,7 @@ const pricingResponses = {
             productFamily: "AWS Systems Manager",
             attributes: {
               regionCode: "us-east-1",
-              usagetype: "USE1-Change-API-Requests-Free",
+              usagetype: "USE1-SmAdvParamStorageHrs",
               servicecode: "AWSSystemsManager",
               servicename: "AWS Systems Manager",
             },
@@ -1191,12 +1612,12 @@ const pricingResponses = {
                     unit: "API Requests",
                     endRange: "Inf",
                     description:
-                      "Free trial Change Manager API Requests in US East (N. Virginia)",
+                      "SSM Parameter Storage in US East (N. Virginia)",
                     appliesTo: [],
                     rateCode: "2SC234H95RE9KUWA.JRTCKXETXF.6YS6EN2CT7",
                     beginRange: "0",
                     pricePerUnit: {
-                      USD: "0.0000000000",
+                      USD: "0.0000700000",
                     },
                   },
                 },
@@ -1213,6 +1634,872 @@ const pricingResponses = {
       ],
       message:
         "Retrieved pricing for AWSSystemsManager in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** EC2 decomposer: EBS gp3 storage. Input: { service_code: "AmazonEC2", filters: [productFamily=Storage, volumeApiName=gp3] } */
+  ebsGp3Storage: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonEC2",
+      data: [
+        {
+          product: {
+            productFamily: "Storage",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "EBS:VolumeUsage.gp3",
+              volumeApiName: "gp3",
+              servicecode: "AmazonEC2",
+              servicename: "Amazon Elastic Compute Cloud",
+            },
+            sku: "GP3VOLSKU00001",
+          },
+          terms: {
+            OnDemand: {
+              "GP3VOLSKU00001.JRTCKXETXF": {
+                priceDimensions: {
+                  "GP3VOLSKU00001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "GB-Mo",
+                    endRange: "Inf",
+                    description:
+                      "$0.08 per GB-month of General Purpose (gp3) provisioned storage",
+                    appliesTo: [],
+                    rateCode: "GP3VOLSKU00001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0800000000",
+                    },
+                  },
+                },
+                sku: "GP3VOLSKU00001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonEC2 in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** EC2 decomposer: Public IPv4 address. Input: { service_code: "AmazonVPC", filters: [productFamily=IP Address, group=ElasticIP:Address] } */
+  publicIpv4: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonVPC",
+      data: [
+        {
+          product: {
+            productFamily: "IP Address",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "ElasticIP:IdleAddress",
+              group: "ElasticIP:Address",
+              servicecode: "AmazonVPC",
+              servicename: "Amazon Virtual Private Cloud",
+            },
+            sku: "IPV4ADDRSKU0001",
+          },
+          terms: {
+            OnDemand: {
+              "IPV4ADDRSKU0001.JRTCKXETXF": {
+                priceDimensions: {
+                  "IPV4ADDRSKU0001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "$0.005 per Elastic IP address not attached to a running instance per hour",
+                    appliesTo: [],
+                    rateCode: "IPV4ADDRSKU0001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0050000000",
+                    },
+                  },
+                },
+                sku: "IPV4ADDRSKU0001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonVPC in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** EC2 decomposer: Data transfer out. Input: { service_code: "AWSDataTransfer", filters: [productFamily=Data Transfer, transferType=AWS Outbound] } */
+  dataTransferOut: {
+    success: mcpText({
+      status: "success",
+      service_name: "AWSDataTransfer",
+      data: [
+        {
+          product: {
+            productFamily: "Data Transfer",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "DataTransfer-Out-Bytes",
+              fromLocationType: "AWS Region",
+              toLocationType: "External",
+              transferType: "AWS Outbound",
+              servicecode: "AWSDataTransfer",
+              servicename: "AWS Data Transfer",
+            },
+            sku: "DTOUTSKU000001",
+          },
+          terms: {
+            OnDemand: {
+              "DTOUTSKU000001.JRTCKXETXF": {
+                priceDimensions: {
+                  "DTOUTSKU000001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "GB",
+                    endRange: "Inf",
+                    description: "$0.09 per GB - data transfer out to Internet",
+                    appliesTo: [],
+                    rateCode: "DTOUTSKU000001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0900000000",
+                    },
+                  },
+                },
+                sku: "DTOUTSKU000001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AWSDataTransfer in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** RDS decomposer: Multi-AZ compute. Input: { service_code: "AmazonRDS", filters: [instanceType=db.t3.micro, engine=PostgreSQL, deployment=Multi-AZ] } */
+  rdsT3MicroPostgresMultiAZ: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonRDS",
+      data: [
+        {
+          product: {
+            productFamily: "Database Instance",
+            attributes: {
+              instanceType: "db.t3.micro",
+              regionCode: "us-east-1",
+              usagetype: "Multi-AZUsage:db.t3.micro",
+              databaseEngine: "PostgreSQL",
+              deploymentOption: "Multi-AZ",
+              servicecode: "AmazonRDS",
+              servicename: "Amazon Relational Database Service",
+              memory: "1 GiB",
+              vcpu: "2",
+              storage: "EBS Only",
+              currentGeneration: "Yes",
+              instanceFamily: "General purpose",
+            },
+            sku: "RDSMAZ7QDJF2AG01",
+          },
+          terms: {
+            OnDemand: {
+              "RDSMAZ7QDJF2AG01.JRTCKXETXF": {
+                priceDimensions: {
+                  "RDSMAZ7QDJF2AG01.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "USD 0.036 per db.t3.micro Multi-AZ instance hour (or partial hour) running PostgreSQL",
+                    appliesTo: [],
+                    rateCode: "RDSMAZ7QDJF2AG01.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0360000000",
+                    },
+                  },
+                },
+                sku: "RDSMAZ7QDJF2AG01",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+            Reserved: "<filtered by output_options.pricing_terms>",
+          },
+          version: "20260318225923",
+          publicationDate: "2026-03-18T22:59:23Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** RDS decomposer: Database storage gp3. Input: { service_code: "AmazonRDS", filters: [productFamily=Database Storage, volumeType=General Purpose (SSD)] } */
+  rdsStorageGp3: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonRDS",
+      data: [
+        {
+          product: {
+            productFamily: "Database Storage",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "RDS:GP3-Storage",
+              volumeType: "General Purpose (SSD)",
+              deploymentOption: "Single-AZ",
+              servicecode: "AmazonRDS",
+              servicename: "Amazon Relational Database Service",
+            },
+            sku: "RDSSTRGP3SK0001",
+          },
+          terms: {
+            OnDemand: {
+              "RDSSTRGP3SK0001.JRTCKXETXF": {
+                priceDimensions: {
+                  "RDSSTRGP3SK0001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "GB-Mo",
+                    endRange: "Inf",
+                    description:
+                      "$0.023 per GB-month of General Purpose (SSD) gp3 provisioned storage",
+                    appliesTo: [],
+                    rateCode: "RDSSTRGP3SK0001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0230000000",
+                    },
+                  },
+                },
+                sku: "RDSSTRGP3SK0001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260318225923",
+          publicationDate: "2026-03-18T22:59:23Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** RDS decomposer: Backup (storage snapshot). Input: { service_code: "AmazonRDS", filters: [productFamily=Storage Snapshot] } */
+  rdsBackupStorage: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonRDS",
+      data: [
+        {
+          product: {
+            productFamily: "Storage Snapshot",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "RDS:ChargedBackupUsage",
+              servicecode: "AmazonRDS",
+              servicename: "Amazon Relational Database Service",
+            },
+            sku: "RDSBKUPSK000001",
+          },
+          terms: {
+            OnDemand: {
+              "RDSBKUPSK000001.JRTCKXETXF": {
+                priceDimensions: {
+                  "RDSBKUPSK000001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "GB-Mo",
+                    endRange: "Inf",
+                    description: "$0.018 per GB-month of backup storage used",
+                    appliesTo: [],
+                    rateCode: "RDSBKUPSK000001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0180000000",
+                    },
+                  },
+                },
+                sku: "RDSBKUPSK000001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260318225923",
+          publicationDate: "2026-03-18T22:59:23Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonRDS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** S3 decomposer: PUT requests. Input: { service_code: "AmazonS3", filters: [productFamily=API Request, usagetype=Requests-Tier1] } */
+  s3PutRequests: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonS3",
+      data: [
+        {
+          product: {
+            productFamily: "API Request",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "Requests-Tier1",
+              group: "S3-API-Tier1",
+              servicecode: "AmazonS3",
+              servicename: "Amazon Simple Storage Service",
+            },
+            sku: "S3PUTREQSKU0001",
+          },
+          terms: {
+            OnDemand: {
+              "S3PUTREQSKU0001.JRTCKXETXF": {
+                priceDimensions: {
+                  "S3PUTREQSKU0001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Requests",
+                    endRange: "Inf",
+                    description:
+                      "$0.005 per 1,000 PUT, COPY, POST, or LIST requests",
+                    appliesTo: [],
+                    rateCode: "S3PUTREQSKU0001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0050000000",
+                    },
+                  },
+                },
+                sku: "S3PUTREQSKU0001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260223232215",
+          publicationDate: "2026-02-23T23:22:15Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonS3 in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** S3 decomposer: GET requests. Input: { service_code: "AmazonS3", filters: [productFamily=API Request, usagetype=Requests-Tier2] } */
+  s3GetRequests: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonS3",
+      data: [
+        {
+          product: {
+            productFamily: "API Request",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "Requests-Tier2",
+              group: "S3-API-Tier2",
+              servicecode: "AmazonS3",
+              servicename: "Amazon Simple Storage Service",
+            },
+            sku: "S3GETREQSKU0001",
+          },
+          terms: {
+            OnDemand: {
+              "S3GETREQSKU0001.JRTCKXETXF": {
+                priceDimensions: {
+                  "S3GETREQSKU0001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Requests",
+                    endRange: "Inf",
+                    description: "$0.0004 per 1,000 GET and all other requests",
+                    appliesTo: [],
+                    rateCode: "S3GETREQSKU0001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0004000000",
+                    },
+                  },
+                },
+                sku: "S3GETREQSKU0001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260223232215",
+          publicationDate: "2026-02-23T23:22:15Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonS3 in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Lambda decomposer: Requests. Input: { service_code: "AWSLambda", filters: [productFamily=Serverless, group=AWS-Lambda-Requests, usagetype=Request] } */
+  lambdaRequests: {
+    success: mcpText({
+      status: "success",
+      service_name: "AWSLambda",
+      data: [
+        {
+          product: {
+            productFamily: "Serverless",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "Request",
+              group: "AWS-Lambda-Requests",
+              servicecode: "AWSLambda",
+              servicename: "AWS Lambda",
+            },
+            sku: "LMBREQSKU000001",
+          },
+          terms: {
+            OnDemand: {
+              "LMBREQSKU000001.JRTCKXETXF": {
+                priceDimensions: {
+                  "LMBREQSKU000001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Requests",
+                    endRange: "Inf",
+                    description: "$0.20 per 1M requests",
+                    appliesTo: [],
+                    rateCode: "LMBREQSKU000001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.2000000000",
+                    },
+                  },
+                },
+                sku: "LMBREQSKU000001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AWSLambda in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Lambda decomposer: Duration (GB-second). Input: { service_code: "AWSLambda", filters: [productFamily=Serverless, group=AWS-Lambda-Duration, usagetype=Lambda-GB-Second] } */
+  lambdaDuration: {
+    success: mcpText({
+      status: "success",
+      service_name: "AWSLambda",
+      data: [
+        {
+          product: {
+            productFamily: "Serverless",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "Lambda-GB-Second",
+              group: "AWS-Lambda-Duration",
+              servicecode: "AWSLambda",
+              servicename: "AWS Lambda",
+            },
+            sku: "LMBDURSKU000001",
+          },
+          terms: {
+            OnDemand: {
+              "LMBDURSKU000001.JRTCKXETXF": {
+                priceDimensions: {
+                  "LMBDURSKU000001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Second",
+                    endRange: "Inf",
+                    description: "$0.0000166667 per GB-second",
+                    appliesTo: [],
+                    rateCode: "LMBDURSKU000001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0000166667",
+                    },
+                  },
+                },
+                sku: "LMBDURSKU000001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AWSLambda in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** Lambda decomposer: CloudWatch Logs. Input: { service_code: "AmazonCloudWatch", filters: [productFamily=Data Payload, group=CW:Logs, usagetype=DataProcessing-Bytes] } */
+  cloudWatchLogs: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonCloudWatch",
+      data: [
+        {
+          product: {
+            productFamily: "Data Payload",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "DataProcessing-Bytes",
+              group: "CW:Logs",
+              servicecode: "AmazonCloudWatch",
+              servicename: "Amazon CloudWatch",
+            },
+            sku: "CWLOGSKU00000001",
+          },
+          terms: {
+            OnDemand: {
+              "CWLOGSKU00000001.JRTCKXETXF": {
+                priceDimensions: {
+                  "CWLOGSKU00000001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "GB",
+                    endRange: "Inf",
+                    description: "$0.50 per GB of log data ingested",
+                    appliesTo: [],
+                    rateCode: "CWLOGSKU00000001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.5000000000",
+                    },
+                  },
+                },
+                sku: "CWLOGSKU00000001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonCloudWatch in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** SQS Standard queue requests. Input: { service_code: "AmazonSQS", filters: [productFamily=API Request, queueType=Standard] } */
+  sqsStandardRequests: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonSQS",
+      data: [
+        {
+          product: {
+            productFamily: "API Request",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "USE1-Requests-Tier1",
+              queueType: "Standard",
+              servicecode: "AmazonSQS",
+              servicename: "Amazon Simple Queue Service",
+            },
+            sku: "SQSSTDREQ0000001",
+          },
+          terms: {
+            OnDemand: {
+              "SQSSTDREQ0000001.JRTCKXETXF": {
+                priceDimensions: {
+                  "SQSSTDREQ0000001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Requests",
+                    endRange: "Inf",
+                    description:
+                      "$0.40 per million Amazon SQS Requests per month for Standard queue",
+                    appliesTo: [],
+                    rateCode: "SQSSTDREQ0000001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0000004000",
+                    },
+                  },
+                },
+                sku: "SQSSTDREQ0000001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonSQS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** SQS FIFO queue requests. Input: { service_code: "AmazonSQS", filters: [productFamily=API Request, queueType=FIFO] } */
+  sqsFifoRequests: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonSQS",
+      data: [
+        {
+          product: {
+            productFamily: "API Request",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "USE1-Requests-FIFO-Tier1",
+              queueType: "FIFO",
+              servicecode: "AmazonSQS",
+              servicename: "Amazon Simple Queue Service",
+            },
+            sku: "SQSFIFOREQ000001",
+          },
+          terms: {
+            OnDemand: {
+              "SQSFIFOREQ000001.JRTCKXETXF": {
+                priceDimensions: {
+                  "SQSFIFOREQ000001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Requests",
+                    endRange: "Inf",
+                    description:
+                      "$0.50 per million Amazon SQS Requests per month for FIFO queue",
+                    appliesTo: [],
+                    rateCode: "SQSFIFOREQ000001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0000005000",
+                    },
+                  },
+                },
+                sku: "SQSFIFOREQ000001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonSQS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** SNS publishes. Input: { service_code: "AmazonSNS", filters: [productFamily=API Request, group=SNS-Requests-Tier1] } */
+  snsPublishes: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonSNS",
+      data: [
+        {
+          product: {
+            productFamily: "API Request",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "USE1-Requests-Tier1",
+              group: "SNS-Requests-Tier1",
+              servicecode: "AmazonSNS",
+              servicename: "Amazon Simple Notification Service",
+            },
+            sku: "SNSPUBREQSK00001",
+          },
+          terms: {
+            OnDemand: {
+              "SNSPUBREQSK00001.JRTCKXETXF": {
+                priceDimensions: {
+                  "SNSPUBREQSK00001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Requests",
+                    endRange: "Inf",
+                    description: "$0.50 per million Amazon SNS requests",
+                    appliesTo: [],
+                    rateCode: "SNSPUBREQSK00001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0000005000",
+                    },
+                  },
+                },
+                sku: "SNSPUBREQSK00001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonSNS in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** ECR storage. Input: { service_code: "AmazonECR", filters: [productFamily=EC2 Container Registry, usagetype=USE1-TimedStorage-ByteHrs] } */
+  ecrStorage: {
+    success: mcpText({
+      status: "success",
+      service_name: "AmazonECR",
+      data: [
+        {
+          product: {
+            productFamily: "EC2 Container Registry",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "USE1-TimedStorage-ByteHrs",
+              servicecode: "AmazonECR",
+              servicename: "Amazon EC2 Container Registry",
+            },
+            sku: "ECRSTORSKU000001",
+          },
+          terms: {
+            OnDemand: {
+              "ECRSTORSKU000001.JRTCKXETXF": {
+                priceDimensions: {
+                  "ECRSTORSKU000001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "GB-Mo",
+                    endRange: "Inf",
+                    description:
+                      "$0.10 per GB per month for data stored in private or public repositories",
+                    appliesTo: [],
+                    rateCode: "ECRSTORSKU000001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.1000000000",
+                    },
+                  },
+                },
+                sku: "ECRSTORSKU000001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AmazonECR in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** ELBv2 ALB hourly charge. Input: { service_code: "AWSELB", filters: [productFamily=Load Balancer-Application, usagetype=LoadBalancerUsage] } */
+  elbv2AlbHourly: {
+    success: mcpText({
+      status: "success",
+      service_name: "AWSELB",
+      data: [
+        {
+          product: {
+            productFamily: "Load Balancer-Application",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "LoadBalancerUsage",
+              group: "ELB:Balancer",
+              servicecode: "AWSELB",
+              servicename: "Elastic Load Balancing",
+            },
+            sku: "ELBALBHRSKU00001",
+          },
+          terms: {
+            OnDemand: {
+              "ELBALBHRSKU00001.JRTCKXETXF": {
+                priceDimensions: {
+                  "ELBALBHRSKU00001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description:
+                      "$0.0225 per Application Load Balancer-hour (or partial hour)",
+                    appliesTo: [],
+                    rateCode: "ELBALBHRSKU00001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0225000000",
+                    },
+                  },
+                },
+                sku: "ELBALBHRSKU00001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message: "Retrieved pricing for AWSELB in us-east-1 from AWS Pricing API",
+    }),
+  },
+
+  /** ELBv2 ALB LCU-hour. Input: { service_code: "AWSELB", filters: [productFamily=Load Balancer-Application, usagetype=LCUUsage] } */
+  elbv2AlbLcu: {
+    success: mcpText({
+      status: "success",
+      service_name: "AWSELB",
+      data: [
+        {
+          product: {
+            productFamily: "Load Balancer-Application",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "LCUUsage",
+              group: "ELB:Balancer",
+              servicecode: "AWSELB",
+              servicename: "Elastic Load Balancing",
+            },
+            sku: "ELBALBLCUSKU0001",
+          },
+          terms: {
+            OnDemand: {
+              "ELBALBLCUSKU0001.JRTCKXETXF": {
+                priceDimensions: {
+                  "ELBALBLCUSKU0001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "Hrs",
+                    endRange: "Inf",
+                    description: "$0.008 per LCU-hour (or partial hour)",
+                    appliesTo: [],
+                    rateCode: "ELBALBLCUSKU0001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "0",
+                    pricePerUnit: {
+                      USD: "0.0080000000",
+                    },
+                  },
+                },
+                sku: "ELBALBLCUSKU0001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260320042925",
+          publicationDate: "2026-03-20T04:29:25Z",
+        },
+      ],
+      message: "Retrieved pricing for AWSELB in us-east-1 from AWS Pricing API",
     }),
   },
 
@@ -2150,6 +3437,340 @@ const iamResponses = {
           MatchedStatements: [
             {
               SourcePolicyId: "IAMPassRolePolicy",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+      ],
+    }),
+  },
+
+  /** SSM Parameter — all actions allowed. Input: { actions: [cloudcontrol:CreateResource, ssm:PutParameter, ssm:AddTagsToResource] } */
+  ssmParameterAllowed: {
+    success: mcpText({
+      EvaluationResults: [
+        {
+          EvalActionName: "cloudcontrol:CreateResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "ssm:PutParameter",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonSSMFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "ssm:AddTagsToResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonSSMFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+      ],
+    }),
+  },
+
+  /** SecurityGroup — all creation actions allowed. Input: { actions: [cloudcontrol:CreateResource, ec2:CreateSecurityGroup, ec2:AuthorizeSecurityGroupIngress, ec2:AuthorizeSecurityGroupEgress] } */
+  securityGroupAllowed: {
+    success: mcpText({
+      EvaluationResults: [
+        {
+          EvalActionName: "cloudcontrol:CreateResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "ec2:CreateSecurityGroup",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonEC2FullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "ec2:AuthorizeSecurityGroupIngress",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonEC2FullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "ec2:AuthorizeSecurityGroupEgress",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonEC2FullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+      ],
+    }),
+  },
+
+  /** VPC — all creation actions allowed. Input: { actions: [cloudcontrol:CreateResource, ec2:CreateVpc, ec2:ModifyVpcAttribute] } */
+  vpcAllowed: {
+    success: mcpText({
+      EvaluationResults: [
+        {
+          EvalActionName: "cloudcontrol:CreateResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "ec2:CreateVpc",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonEC2FullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "ec2:ModifyVpcAttribute",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonEC2FullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+      ],
+    }),
+  },
+
+  /** DynamoDB — all creation actions allowed. Input: { actions: [cloudcontrol:CreateResource, dynamodb:CreateTable, dynamodb:TagResource] } */
+  dynamoDbTableAllowed: {
+    success: mcpText({
+      EvaluationResults: [
+        {
+          EvalActionName: "cloudcontrol:CreateResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "dynamodb:CreateTable",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonDynamoDBFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "dynamodb:TagResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "AmazonDynamoDBFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+      ],
+    }),
+  },
+
+  /** ELBv2 — all creation actions allowed. Input: { actions: [cloudcontrol:CreateResource, elasticloadbalancing:CreateLoadBalancer] } */
+  elbv2LoadBalancerAllowed: {
+    success: mcpText({
+      EvaluationResults: [
+        {
+          EvalActionName: "cloudcontrol:CreateResource",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "CloudControlFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 10, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "elasticloadbalancing:CreateLoadBalancer",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "ElasticLoadBalancingFullAccess",
+              SourcePolicyType: "IAM Policy",
+              StartPosition: { Line: 3, Column: 14 },
+              EndPosition: { Line: 8, Column: 5 },
+            },
+          ],
+          MissingContextValues: [],
+        },
+        {
+          EvalActionName: "elasticloadbalancing:AddTags",
+          EvalResourceName: "*",
+          EvalDecision: "allowed",
+          MatchedStatements: [
+            {
+              SourcePolicyId: "ElasticLoadBalancingFullAccess",
               SourcePolicyType: "IAM Policy",
               StartPosition: { Line: 3, Column: 14 },
               EndPosition: { Line: 8, Column: 5 },

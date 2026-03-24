@@ -1,5 +1,12 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import type { StructuredTool } from "@langchain/core/tools";
+
+// Mock price cache so tests don't hit filesystem
+vi.mock("../services/price-cache.js", () => ({
+  getCachedPrice: vi.fn(() => null),
+  setCachedPrice: vi.fn(),
+}));
+
 import {
   fetchEc2InstancePrices,
   fetchRdsInstancePrices,

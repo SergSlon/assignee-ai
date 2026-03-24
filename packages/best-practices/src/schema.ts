@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { BP_SEVERITY, BP_CATEGORY, BP_CHECK_TYPE } from "./types.js";
+import {
+  BP_SEVERITY,
+  BP_CATEGORY,
+  BP_CHECK_TYPE,
+  BP_FIX_TYPE,
+} from "./types.js";
 
 const triggerSchema = z
   .object({
@@ -36,5 +41,38 @@ export const bestPracticeSchema = z
     autoFixable: z.boolean().optional(),
     desiredStatePatch: z.record(z.unknown()).optional(),
     blocking: z.boolean().optional().default(false),
+    fixType: z.enum(BP_FIX_TYPE).optional(),
+    interactiveOptions: z
+      .array(
+        z.object({
+          label: z.string(),
+          action: z.enum(["prompt_value", "skip"]),
+          targetField: z.string().optional(),
+        }),
+      )
+      .optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (bp) => {
+      if (bp.fixType === "auto") {
+        return bp.autoFixable === true && bp.desiredStatePatch != null;
+      }
+      return true;
+    },
+    {
+      message:
+        "fixType 'auto' requires autoFixable=true and a desiredStatePatch",
+    },
+  )
+  .refine(
+    (bp) => {
+      if (bp.fixType === "interactive") {
+        return (
+          bp.interactiveOptions != null && bp.interactiveOptions.length > 0
+        );
+      }
+      return true;
+    },
+    { message: "fixType 'interactive' requires non-empty interactiveOptions" },
+  );

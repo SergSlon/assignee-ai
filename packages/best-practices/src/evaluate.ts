@@ -160,7 +160,7 @@ export function matchesTrigger(
  * @returns A finding object for display in the plan box
  */
 function buildFinding(bp: BestPractice): BPFinding {
-  return {
+  const finding: BPFinding = {
     practiceId: bp.id,
     title: bp.title,
     severity: bp.severity,
@@ -171,6 +171,19 @@ function buildFinding(bp: BestPractice): BPFinding {
     remediation: bp.remediation,
     blocking: bp.blocking ?? false,
   };
+
+  if (bp.autoFixable) {
+    finding.autoFixable = true;
+    finding.desiredStatePatch = bp.desiredStatePatch;
+  }
+
+  if (bp.fixType) {
+    finding.fixType = bp.fixType;
+    finding.interactiveOptions = bp.interactiveOptions;
+    finding.propertyPath = bp.property_path;
+  }
+
+  return finding;
 }
 
 /**

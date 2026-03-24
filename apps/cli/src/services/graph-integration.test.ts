@@ -719,3 +719,402 @@ describe("Graph integration — pricing edge cases", () => {
     expect(result.preflightPassed).toBe(false);
   });
 });
+
+describe("Graph integration — fix_applicator + pricing breakdown", () => {
+  it("FIX_APPLICATOR node: appliedFixes field exists in final state", async () => {
+    // S3 bucket with minimal config will trigger BP findings + auto-fixes (if config enabled)
+    const bpCompliantS3 = JSON.stringify({
+      BucketName: "fix-applicator-test-bucket",
+      BucketEncryption: {
+        ServerSideEncryptionConfiguration: [
+          { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
+        ],
+      },
+      VersioningConfiguration: { Status: "Enabled" },
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: true,
+        BlockPublicPolicy: true,
+        IgnorePublicAcls: true,
+        RestrictPublicBuckets: true,
+      },
+      OwnershipControls: {
+        Rules: [{ ObjectOwnership: "BucketOwnerEnforced" }],
+      },
+      LifecycleConfiguration: { Rules: [{ Status: "Enabled" }] },
+      LoggingConfiguration: { DestinationBucketName: "logs-bucket" },
+    });
+    mockLlmForPlanFlow("AWS::S3::Bucket", bpCompliantS3);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.s3Bucket.success,
+      McpMocks.pricing.s3Storage.success,
+    );
+
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create an S3 bucket named fix-applicator-test-bucket",
+        executionMode: ExecutionMode.PLAN,
+      },
+      { configurable: { thread_id: "integration-fix-applicator" } },
+    );
+
+    // appliedFixes should exist in state (may be undefined/empty when auto-fix is not enabled)
+    expect("appliedFixes" in result).toBe(true);
+    // The graph should have completed (fix_applicator does not block on missing config)
+    expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+  });
+
+  it("pricingBreakdown field structure is present for priced resources", async () => {
+    const ec2State = JSON.stringify({
+      InstanceType: "t3.micro",
+      ImageId: "ami-0123456789abcdef0",
+      MetadataOptions: { HttpTokens: "required" },
+      BlockDeviceMappings: [{ Ebs: { Encrypted: true, VolumeType: "gp3" } }],
+    });
+    mockLlmForPlanFlow("AWS::EC2::Instance", ec2State);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.ec2Instance.success,
+      McpMocks.pricing.ec2T3Micro.success,
+    );
+
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create a t3.micro EC2 instance",
+        executionMode: ExecutionMode.PLAN,
+      },
+      { configurable: { thread_id: "integration-pricing-breakdown" } },
+    );
+
+    // pricingBreakdown should be present in state annotation
+    expect("pricingBreakdown" in result).toBe(true);
+    // EC2 should have a cost estimate
+    expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// New resource type coverage
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("Graph integration — new resource types", () => {
+  it("DynamoDB: plan for a table", async () => {
+    const state = JSON.stringify({
+      TableName: "test-table",
+      BillingMode: "PAY_PER_REQUEST",
+      KeySchema: [{ AttributeName: "id", KeyType: "HASH" }],
+      AttributeDefinitions: [{ AttributeName: "id", AttributeType: "S" }],
+    });
+    mockLlmForPlanFlow("AWS::DynamoDB::Table", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.dynamoDbTable.success,
+      McpMocks.pricing.emptyData.success,
+    );
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create a DynamoDB table named test-table",
+        executionMode: ExecutionMode.PLAN,
+      },
+      { configurable: { thread_id: "integration-dynamodb-plan" } },
+    );
+
+    expect(result.resourceType).toBe("AWS::DynamoDB::Table");
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toBeDefined();
+  });
+
+  it("SecurityGroup: plan for web traffic SG", async () => {
+    const state = JSON.stringify({
+      GroupDescription: "Web traffic security group",
+      VpcId: "vpc-123",
+    });
+    mockLlmForPlanFlow("AWS::EC2::SecurityGroup", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.securityGroup.success,
+      McpMocks.pricing.emptyData.success,
+    );
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create a security group for web traffic",
+        executionMode: ExecutionMode.PLAN,
+      },
+      { configurable: { thread_id: "integration-sg-plan" } },
+    );
+
+    expect(result.resourceType).toBe("AWS::EC2::SecurityGroup");
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toBeDefined();
+  });
+
+  it("VPC: plan with CIDR block", async () => {
+    const state = JSON.stringify({ CidrBlock: "10.0.0.0/16" });
+    mockLlmForPlanFlow("AWS::EC2::VPC", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.vpc.success,
+      McpMocks.pricing.emptyData.success,
+    );
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create a VPC with CIDR 10.0.0.0/16",
+        executionMode: ExecutionMode.PLAN,
+        noWizard: true,
+      },
+      { configurable: { thread_id: "integration-vpc-plan" } },
+    );
+
+    expect(result.resourceType).toBe("AWS::EC2::VPC");
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toBeDefined();
+  });
+
+  it("Subnet: plan in a VPC", async () => {
+    const state = JSON.stringify({
+      VpcId: "vpc-123",
+      CidrBlock: "10.0.1.0/24",
+      AvailabilityZone: "us-east-1a",
+    });
+    mockLlmForPlanFlow("AWS::EC2::Subnet", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.subnet.success,
+      McpMocks.pricing.emptyData.success,
+    );
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create a subnet in my VPC",
+        executionMode: ExecutionMode.PLAN,
+      },
+      { configurable: { thread_id: "integration-subnet-plan" } },
+    );
+
+    expect(result.resourceType).toBe("AWS::EC2::Subnet");
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toBeDefined();
+  });
+
+  it("SQS: plan for a queue", async () => {
+    const state = JSON.stringify({ QueueName: "test-queue" });
+    mockLlmForPlanFlow("AWS::SQS::Queue", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.sqsQueue.success,
+      McpMocks.pricing.emptyData.success,
+    );
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create an SQS queue named test-queue",
+        executionMode: ExecutionMode.PLAN,
+        noWizard: true,
+      },
+      { configurable: { thread_id: "integration-sqs-plan" } },
+    );
+
+    expect(result.resourceType).toBe("AWS::SQS::Queue");
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toBeDefined();
+  });
+
+  it("SNS: plan for a topic", async () => {
+    const state = JSON.stringify({ TopicName: "test-topic" });
+    mockLlmForPlanFlow("AWS::SNS::Topic", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.snsTopic.success,
+      McpMocks.pricing.emptyData.success,
+    );
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create an SNS topic named test-topic",
+        executionMode: ExecutionMode.PLAN,
+        noWizard: true,
+      },
+      { configurable: { thread_id: "integration-sns-plan" } },
+    );
+
+    expect(result.resourceType).toBe("AWS::SNS::Topic");
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toBeDefined();
+  });
+
+  it("SSM Parameter: plan for a parameter", async () => {
+    const state = JSON.stringify({
+      Name: "/test/param",
+      Type: "String",
+      Value: "test-value",
+    });
+    mockLlmForPlanFlow("AWS::SSM::Parameter", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.ssmParameter.success,
+      McpMocks.pricing.emptyData.success,
+    );
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create an SSM parameter /test/param",
+        executionMode: ExecutionMode.PLAN,
+      },
+      { configurable: { thread_id: "integration-ssm-plan" } },
+    );
+
+    expect(result.resourceType).toBe("AWS::SSM::Parameter");
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toBeDefined();
+  });
+
+  it("ECS Cluster: plan for a cluster", async () => {
+    const state = JSON.stringify({ ClusterName: "test-cluster" });
+    mockLlmForPlanFlow("AWS::ECS::Cluster", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.ecsCluster.success,
+      McpMocks.pricing.emptyData.success,
+    );
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create an ECS cluster named test-cluster",
+        executionMode: ExecutionMode.PLAN,
+        noWizard: true,
+      },
+      { configurable: { thread_id: "integration-ecs-plan" } },
+    );
+
+    expect(result.resourceType).toBe("AWS::ECS::Cluster");
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toBeDefined();
+  });
+
+  it("ECR: plan for a repository", async () => {
+    const state = JSON.stringify({ RepositoryName: "test-repo" });
+    mockLlmForPlanFlow("AWS::ECR::Repository", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.ecrRepository.success,
+      McpMocks.pricing.emptyData.success,
+    );
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create an ECR repository named test-repo",
+        executionMode: ExecutionMode.PLAN,
+      },
+      { configurable: { thread_id: "integration-ecr-plan" } },
+    );
+
+    expect(result.resourceType).toBe("AWS::ECR::Repository");
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toBeDefined();
+  });
+
+  it("ELBv2: plan for an application load balancer", async () => {
+    const state = JSON.stringify({
+      Name: "test-alb",
+      Type: "application",
+      Scheme: "internet-facing",
+    });
+    mockLlmForPlanFlow("AWS::ElasticLoadBalancingV2::LoadBalancer", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.elbv2LoadBalancer.success,
+      McpMocks.pricing.emptyData.success,
+    );
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create an application load balancer named test-alb",
+        executionMode: ExecutionMode.PLAN,
+      },
+      { configurable: { thread_id: "integration-elbv2-plan" } },
+    );
+
+    expect(result.resourceType).toBe(
+      "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    );
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toBeDefined();
+  });
+});
+
+describe("Graph integration — apply flow", () => {
+  // TODO: Apply flow requires full HITL interrupt/resume cycle with CloudControl mock.
+  // Current LangGraph interruptBefore pattern needs graph.invoke(null, config) resume
+  // which requires proper checkpoint state. Tracked as a follow-up story.
+  it.skip("SSM Parameter: apply with autoApprove completes successfully", async () => {
+    const state = JSON.stringify({
+      Name: "/test/param",
+      Type: "String",
+      Value: "test-value",
+    });
+    mockLlmForPlanFlow("AWS::SSM::Parameter", state);
+
+    const tools = createCoreMockTools(
+      McpMocks.schema.ssmParameter.success,
+      McpMocks.pricing.emptyData.success,
+    );
+
+    // Configure CloudControl mock to handle Phase 2 commands:
+    //   GetResource → NOT_FOUND (state guard passes)
+    //   CreateResource → returns request token
+    //   GetResourceRequestStatus → SUCCESS
+    const { createCloudControlClient } =
+      await import("../services/cloudcontrol-client.js");
+    const { ResourceNotFoundException } =
+      await import("@aws-sdk/client-cloudcontrol");
+
+    const mockSend = vi
+      .fn()
+      // GetResource (state guard) → NOT_FOUND
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Resource not found"), {
+          name: "ResourceNotFoundException",
+          __proto__: ResourceNotFoundException.prototype,
+        }),
+      )
+      // CreateResource → returns request token
+      .mockResolvedValueOnce({
+        ProgressEvent: { RequestToken: "tok-ssm-apply-test" },
+      })
+      // GetResourceRequestStatus → SUCCESS
+      .mockResolvedValueOnce({
+        ProgressEvent: {
+          OperationStatus: "SUCCESS",
+          Identifier: "/test/param",
+        },
+      });
+
+    vi.mocked(createCloudControlClient).mockReturnValueOnce({
+      send: mockSend,
+    } as never);
+
+    const config = { configurable: { thread_id: "integration-ssm-apply" } };
+    const graph = createGraph(tools);
+
+    // Phase 1: plan + human_approval (auto-approved) → stops at interrupt before resource_provisioner
+    await graph.invoke(
+      {
+        userIntent: "Create an SSM parameter /test/param",
+        executionMode: ExecutionMode.APPLY,
+        autoApprove: true,
+      },
+      config,
+    );
+
+    // Phase 2: resume past interrupt → resource_provisioner + status_poller + result_formatter
+    await graph.invoke(null, config);
+
+    const finalState = await graph.getState(config);
+    expect(finalState.values.executionStatus).toBe(ExecutionStatus.SUCCESS);
+  });
+});

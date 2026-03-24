@@ -28,6 +28,15 @@ export interface Trigger {
   always?: boolean;
 }
 
+export const BP_FIX_TYPE = ["auto", "interactive", "info"] as const;
+export type BPFixType = (typeof BP_FIX_TYPE)[number];
+
+export interface InteractiveFixOption {
+  label: string;
+  action: "prompt_value" | "skip";
+  targetField?: string;
+}
+
 export interface BestPractice {
   id: string;
   title: string;
@@ -47,6 +56,8 @@ export interface BestPractice {
   autoFixable?: boolean;
   desiredStatePatch?: Record<string, unknown>;
   blocking?: boolean;
+  fixType?: BPFixType;
+  interactiveOptions?: InteractiveFixOption[];
 }
 
 export interface BPFinding {
@@ -57,4 +68,11 @@ export interface BPFinding {
   message: string;
   remediation?: string;
   blocking: boolean;
+  autoFixable?: boolean;
+  desiredStatePatch?: Record<string, unknown>;
+  fixType?: BPFixType;
+  interactiveOptions?: InteractiveFixOption[];
+  propertyPath?: string;
+  userSkipped?: boolean;
+  userExplicitChoice?: boolean;
 }

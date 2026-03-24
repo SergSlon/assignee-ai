@@ -30,6 +30,7 @@ import { resourceProvisionerNode } from "../nodes/resource-provisioner.js";
 import { statusPollerNode } from "../nodes/status-poller.js";
 import { resultFormatterNode } from "../nodes/result-formatter.js";
 import { bpEvaluatorNode } from "../nodes/bp-evaluator.js";
+import { fixApplicatorNode } from "../nodes/fix-applicator.js";
 import { createCloudControlClient } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
@@ -104,6 +105,7 @@ export function createGraph(
       statusPollerNode(state, provisioner),
     )
     .addNode(GraphNode.BP_EVALUATOR, (state) => bpEvaluatorNode(state))
+    .addNode(GraphNode.FIX_APPLICATOR, (state) => fixApplicatorNode(state))
     .addNode(GraphNode.RESULT_FORMATTER, (state) =>
       resultFormatterNode(state, tools),
     )
@@ -116,7 +118,8 @@ export function createGraph(
     .addEdge(GraphNode.OPTION_ELICITOR, GraphNode.COMPOUND_DISPATCHER)
     .addEdge(GraphNode.COMPOUND_DISPATCHER, GraphNode.PLAN_GENERATOR)
     .addEdge(GraphNode.PLAN_GENERATOR, GraphNode.BP_EVALUATOR)
-    .addEdge(GraphNode.BP_EVALUATOR, GraphNode.PREFLIGHT_GUARD)
+    .addEdge(GraphNode.BP_EVALUATOR, GraphNode.FIX_APPLICATOR)
+    .addEdge(GraphNode.FIX_APPLICATOR, GraphNode.PREFLIGHT_GUARD)
     .addConditionalEdges(GraphNode.PREFLIGHT_GUARD, routePreflightGuard, {
       [GraphNode.HUMAN_APPROVAL]: GraphNode.HUMAN_APPROVAL,
       [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,

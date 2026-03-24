@@ -1,0 +1,12 @@
+id: BP-SSM-002
+title: "SSM parameter name should follow hierarchical naming convention"
+severity: MEDIUM
+resource_type: "AWS::SSM::Parameter"
+property_path: "Name"
+check_type: "exists"
+expected_value: true
+source: "AWS Systems Manager Best Practices"
+description: "SSM parameters should use hierarchical paths (e.g., /app/env/key) for organization, access control, and bulk operations. Flat names make parameter management difficult at scale."
+remediation: "Use forward-slash separated paths for parameter names (e.g., /myapp/production/db-host). This enables path-based IAM policies and GetParametersByPath API calls."
+category: reliability
+lastVerified: "2026-03-24"

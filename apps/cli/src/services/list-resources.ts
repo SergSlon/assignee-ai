@@ -107,12 +107,19 @@ export function parseArn(arn: string): {
   };
 }
 
+/** Provision log data keyed by ARN. */
+interface ProvisionLookup {
+  costMap: Map<string, string>;
+  timestampMap: Map<string, string>;
+}
+
 /**
- * Reads the provision log file and returns a map of ARN -> estimated monthly cost.
- * Returns an empty map if the file does not exist or cannot be parsed.
+ * Reads the provision log file and returns maps of ARN -> estimated monthly cost
+ * and ARN -> timestamp. Returns empty maps if the file does not exist or cannot be parsed.
  */
-function loadProvisionCosts(): Map<string, string> {
+function loadProvisionData(): ProvisionLookup {
   const costMap = new Map<string, string>();
+  const timestampMap = new Map<string, string>();
   const provisionLogPath = path.join(
     os.homedir(),
     ".assignee",
@@ -129,13 +136,16 @@ function loadProvisionCosts(): Map<string, string> {
         if (entry.resourceArn && entry.estimatedMonthlyCost) {
           costMap.set(entry.resourceArn, entry.estimatedMonthlyCost);
         }
+        if (entry.resourceArn && entry.timestamp) {
+          timestampMap.set(entry.resourceArn, entry.timestamp);
+        }
       }
     }
   } catch {
-    // File missing or parse error — return empty map (cost shows "N/A")
+    // File missing or parse error — return empty maps (cost/date shows "N/A")
   }
 
-  return costMap;
+  return { costMap, timestampMap };
 }
 
 /**
@@ -164,7 +174,7 @@ export async function fetchManagedResources(
       : {}),
   });
 
-  const costMap = loadProvisionCosts();
+  const { costMap, timestampMap } = loadProvisionData();
   const resources: ManagedResource[] = [];
   let paginationToken: string | undefined;
 
@@ -185,14 +195,14 @@ export async function fetchManagedResources(
       const arn = mapping.ResourceARN ?? "";
       const parsed = parseArn(arn);
 
-      // Look for created date from tags
-      const createdTag = mapping.Tags?.find((t) => t.Key === "assignee-run-id");
+      // Use provision log timestamp; fall back to "N/A"
+      const createdDate = timestampMap.get(arn) ?? "N/A";
 
       resources.push({
         resourceType: parsed.resourceType,
         arn,
         region: parsed.region || resolvedRegion,
-        createdDate: createdTag?.Value ?? "N/A",
+        createdDate,
         estimatedMonthlyCost: costMap.get(arn) ?? "N/A",
       });
     }

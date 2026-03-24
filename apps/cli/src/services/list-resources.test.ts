@@ -72,7 +72,7 @@ describe("list-resources service", () => {
         resourceType: "AWS::S3::Bucket",
         arn: "arn:aws:s3:::my-bucket",
         region: "us-east-1",
-        createdDate: "run-123",
+        createdDate: "N/A",
         estimatedMonthlyCost: "N/A",
       });
     });

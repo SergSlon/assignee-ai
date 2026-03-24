@@ -65,7 +65,9 @@ async function checkSecurityPosture(
       }
     }
   } catch {
-    console.warn("Security posture check skipped (MCP server unavailable)");
+    process.stderr.write(
+      "Security posture check skipped (MCP server unavailable)\n",
+    );
     log({
       ts: new Date().toISOString(),
       runId,

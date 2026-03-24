@@ -1,0 +1,22 @@
+id: BP-SG-001
+title: "Security group should not allow wide-open ingress on non-HTTP ports"
+severity: CRITICAL
+resource_type: "AWS::EC2::SecurityGroup"
+property_path: "SecurityGroupIngress"
+check_type: "not_equals"
+expected_value: "0.0.0.0/0"
+source: "AWS Security Hub FSBP"
+source_id: "EC2.18"
+description: "Security groups must not allow unrestricted inbound traffic (0.0.0.0/0) on ports other than 80 and 443. Wide-open ingress exposes services to the entire internet, dramatically increasing attack surface."
+remediation: "Restrict ingress CidrIp to specific IP ranges or security group references. Only ports 80 (HTTP) and 443 (HTTPS) should accept 0.0.0.0/0 traffic. All other ports must use restrictive CIDR blocks."
+category: security
+lastVerified: "2026-03-23"
+blocking: true
+autoFixable: false
+fixType: interactive
+interactiveOptions:
+  - label: "Restrict to VPC CIDR (10.0.0.0/8)"
+    action: prompt_value
+    targetField: "SecurityGroupIngress"
+  - label: "Skip — I will fix manually"
+    action: skip

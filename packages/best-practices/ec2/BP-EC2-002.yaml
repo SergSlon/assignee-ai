@@ -11,3 +11,8 @@ description: "EC2 instances must use encrypted EBS volumes to protect data at re
 remediation: "Set BlockDeviceMappings[*].Ebs.Encrypted to true. Enable EBS encryption by default at the account level to ensure all new volumes are encrypted."
 category: security
 lastVerified: "2026-03-22"
+autoFixable: true
+desiredStatePatch:
+  BlockDeviceMappings:
+    - Ebs:
+        Encrypted: true

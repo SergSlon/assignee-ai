@@ -66,8 +66,12 @@ export const CostEstimate = {
 } as const;
 
 /**
- * Lambda pricing rates (stable since 2014 — verified 2025).
- * Used to compute a per-million-invocations estimate from desiredState.MemorySize.
+ * Lambda pricing rates — LOCAL FALLBACK ONLY (stable since 2014 — verified 2025).
+ * Production code uses the Lambda PricingDecomposer (Story 23.3) which queries
+ * Pricing MCP at runtime. These constants are retained only as offline fallback
+ * for the legacy lambdaPricingStrategy.estimateLocal().
+ *
+ * @see Story 23.5 — zero hardcoded prices in display paths
  * @see https://aws.amazon.com/lambda/pricing/
  */
 export const LambdaPricing = {

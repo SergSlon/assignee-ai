@@ -99,21 +99,12 @@ describe("completions command", () => {
   it("rejects invalid shell argument with error message", async () => {
     const { completionsCommand } = await buildTestCli();
 
-    // The action calls process.exit(1) for invalid shells
+    // The action throws AssigneeError for invalid shells
     expect(() => {
-      completionsCommand.parse(["node", "completions", "powershell"], {
+      completionsCommand.parse(["powershell"], {
         from: "user",
       });
-    }).toThrow();
-
-    // Verify error was written to stderr
-    const stderrOutput = stderrSpy.mock.calls
-      .map((call: unknown[]) => call[0])
-      .join("");
-    expect(stderrOutput).toContain("unsupported shell");
-    expect(stderrOutput).toContain("zsh");
-    expect(stderrOutput).toContain("bash");
-    expect(stderrOutput).toContain("fish");
+    }).toThrow('Unsupported shell "powershell"');
   });
 
   it("handles case-insensitive shell names", async () => {

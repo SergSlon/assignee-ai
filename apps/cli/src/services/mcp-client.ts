@@ -6,12 +6,13 @@ import {
   getMcpServerConfigs,
   getOptionalMcpServerConfigs,
 } from "../config/mcp-servers.js";
-import { ProcessExitCode } from "../constants/errors.js";
+import { McpError } from "@assignee/core";
 import { ToolName } from "../constants/tools.js";
 import type { StructuredTool } from "@langchain/core/tools";
 
 let client: MultiServerMCPClient | null = null;
 let optionalClient: MultiServerMCPClient | null = null;
+let optionalInitPromise: Promise<void> | null = null;
 
 /**
  * Creates and initializes a MultiServerMCPClient connecting to all configured MCP servers.
@@ -64,25 +65,30 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
       // Ensure config is defined before accessing properties
       if (config) {
         const installCmd = `${config.command} ${config.args.join(" ")}`;
-        console.error(
+        process.stderr.write(
           `\n✖ MCP server '${failedServer}' failed to start.\n  Is it installed? Run: ${installCmd}\n`,
         );
       } else {
-        console.error(
+        process.stderr.write(
           `\n✖ MCP server '${failedServer}' failed to start.\n  Please check your installation.\n`,
         );
       }
     } else {
-      console.error(
+      process.stderr.write(
         `\n✖ An unknown MCP server failed to start.\n  Error details: ${errMsg}\n`,
       );
     }
 
-    process.exit(ProcessExitCode.MCP_STARTUP_FAILED);
+    throw new McpError(
+      failedServer
+        ? `MCP server '${failedServer}' failed to start.`
+        : `An unknown MCP server failed to start: ${errMsg}`,
+      "MCP_STARTUP_FAILED",
+    );
   }
 
-  // Story 19.1: Initialize optional intelligence servers (IAM, WA Security, Billing).
-  // These use ASSIGNEE_AUDITOR_* or ASSIGNEE_READER_* credentials (mapped to AWS_* in subprocess env).
+  // Story 9.14: Initialize optional intelligence servers IN PARALLEL with core.
+  // These use ASSIGNEE_AUDITOR_* or ASSIGNEE_READER_* credentials.
   // Spawned as a separate client so failures don't crash the core servers.
   const optionalConfigs = getOptionalMcpServerConfigs();
   if (Object.keys(optionalConfigs).length > 0) {
@@ -101,21 +107,23 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
       ),
     };
 
-    try {
-      optionalClient = new MultiServerMCPClient(optionalClientConfig);
-      await optionalClient.initializeConnections();
-    } catch {
-      // Graceful degradation: optional servers failed, continue without them.
-      // The tools simply won't appear in the tools[] array.
-      if (optionalClient) {
+    // Non-blocking: don't await — let optional init run while caller proceeds.
+    // Tools from optional servers are merged in getMcpTools() when ready.
+    const pendingOptional = new MultiServerMCPClient(optionalClientConfig);
+    optionalInitPromise = pendingOptional
+      .initializeConnections()
+      .then(() => {
+        optionalClient = pendingOptional;
+      })
+      .catch(async () => {
+        // Graceful degradation: optional servers failed, continue without them.
         try {
-          await optionalClient.close();
+          await pendingOptional.close();
         } catch {
           // Ignore close errors
         }
-      }
-      optionalClient = null;
-    }
+        optionalClient = null;
+      });
   }
 
   return client;
@@ -133,6 +141,20 @@ export async function getMcpTools(
   mcpClient: MultiServerMCPClient,
 ): Promise<StructuredTool[]> {
   const coreTools = await mcpClient.getTools();
+
+  // Await the optional client initialization with a timeout to avoid a race
+  // where getMcpTools() is called before the optional client finishes connecting.
+  if (optionalInitPromise && !optionalClient) {
+    try {
+      await Promise.race([
+        optionalInitPromise,
+        new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
+      ]);
+    } catch {
+      // Timeout or init error — proceed with core tools only
+    }
+  }
+
   if (optionalClient) {
     try {
       const optTools = await optionalClient.getTools();

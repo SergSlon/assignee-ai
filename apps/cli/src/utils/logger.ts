@@ -43,6 +43,7 @@ export const LOG_ACTIONS = {
   SECURITY_CHECK_SKIPPED: "security_check_skipped",
   MEMORY_WRITE_FAILED: "memory_write_failed",
   OPTION_ELICITED: "option_elicited",
+  FIX_APPLIED: "fix_applied",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

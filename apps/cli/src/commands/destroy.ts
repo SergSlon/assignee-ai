@@ -15,7 +15,13 @@ import * as clack from "@clack/prompts";
 import chalk from "chalk";
 import boxen from "boxen";
 import { Command } from "commander";
-import { CCAPI_FALLBACK_TYPES, CCAPI_REDIRECT_TYPES } from "@assignee/core";
+import {
+  CCAPI_FALLBACK_TYPES,
+  CCAPI_REDIRECT_TYPES,
+  AssigneeError,
+  ConfigurationError,
+  UserCancelledError,
+} from "@assignee/core";
 import {
   CommandName,
   CommandDescription,
@@ -23,7 +29,6 @@ import {
 } from "../constants/commands.js";
 import { getCostSavingsEstimate } from "../services/billing.js";
 import { getBillingMcpToolsAsync } from "../services/mcp-client.js";
-import { ProcessExitCode } from "../constants/errors.js";
 import { renderError, startSpinner, stopSpinner } from "../utils/display.js";
 import { createCloudControlClient } from "../services/cloudcontrol-client.js";
 import { CloudControlAdapter } from "../services/cloudcontrol-adapter.js";
@@ -130,11 +135,10 @@ export async function destroyAction(
 ): Promise<void> {
   // ── Reject --all explicitly ──────────────────────────────────────────
   if (resource === "--all") {
-    renderError(
+    throw new AssigneeError(
       "--all is not supported. Destroy resources individually for safety:\n  assignee destroy <resource-arn-or-name>",
-      "Use 'assignee list' to see managed resources.",
+      "DESTROY_ERROR",
     );
-    process.exit(ProcessExitCode.GENERIC_ERROR);
   }
 
   // ── Initialize AWS clients ──────────────────────────────────────────
@@ -143,11 +147,9 @@ export async function destroyAction(
   try {
     taggingClient = createTaggingClient(awsConfig);
   } catch {
-    renderError(
-      "AWS credentials are not configured.",
-      "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables, or run `assignee setup`.",
+    throw new ConfigurationError(
+      "AWS credentials are not configured. Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables, or run `assignee setup`.",
     );
-    process.exit(ProcessExitCode.GENERIC_ERROR);
   }
 
   // ── Resolve resource ────────────────────────────────────────────────
@@ -162,11 +164,10 @@ export async function destroyAction(
   stopSpinner();
 
   if (!resolved) {
-    renderError(
-      `No managed resource found matching "${resource}".`,
-      "Run 'assignee list' to see managed resources.",
+    throw new AssigneeError(
+      `No managed resource found matching "${resource}". Run 'assignee list' to see managed resources.`,
+      "DESTROY_ERROR",
     );
-    process.exit(ProcessExitCode.GENERIC_ERROR);
   }
 
   // ── Estimate cost savings (Story 19.7) ──────────────────────────────
@@ -198,11 +199,10 @@ export async function destroyAction(
   } else {
     // Non-TTY without --yes is an error
     if (!process.stdin.isTTY) {
-      renderError(
-        "Destroy requires confirmation.",
-        "Use --yes for non-interactive mode.",
+      throw new AssigneeError(
+        "Destroy requires confirmation. Use --yes for non-interactive mode.",
+        "DESTROY_ERROR",
       );
-      process.exit(ProcessExitCode.GENERIC_ERROR);
     }
 
     // Strict confirmation: require "yes"
@@ -212,7 +212,7 @@ export async function destroyAction(
 
     if (clack.isCancel(answer) || answer !== "yes") {
       clack.outro("Destroy cancelled.");
-      process.exit(ProcessExitCode.SUCCESS);
+      throw new UserCancelledError("Destroy cancelled.");
     }
   }
 
@@ -224,11 +224,10 @@ export async function destroyAction(
   // Check if this is a redirect type (cannot be deleted)
   if (CCAPI_REDIRECT_TYPES[resourceType]) {
     stopSpinner();
-    renderError(
-      `${resourceType} cannot be deleted through assignee.ai.`,
-      `This resource type requires manual deletion.`,
+    throw new AssigneeError(
+      `${resourceType} cannot be deleted through assignee.ai. This resource type requires manual deletion.`,
+      "DESTROY_ERROR",
     );
-    process.exit(ProcessExitCode.GENERIC_ERROR);
   }
 
   // Route to SDK fallback for CCAPI gap types
@@ -252,23 +251,22 @@ export async function destroyAction(
 
       const [deleteErr] = deleteResult;
       if (deleteErr) {
-        renderError(
+        throw new AssigneeError(
           `Failed to destroy resource: ${deleteErr.message}`,
-          "Check that the resource still exists and you have permission to delete it.",
+          "DESTROY_ERROR",
         );
-        process.exit(ProcessExitCode.GENERIC_ERROR);
       }
 
       renderDestroySuccess(estimatedMonthlyCost);
-      process.exit(ProcessExitCode.SUCCESS);
+      return;
     } catch (err) {
       stopSpinner();
+      if (err instanceof AssigneeError) throw err;
       const message = err instanceof Error ? err.message : String(err);
-      renderError(
+      throw new AssigneeError(
         `Failed to destroy resource: ${message}`,
-        "Check AWS credentials and permissions.",
+        "DESTROY_ERROR",
       );
-      process.exit(ProcessExitCode.GENERIC_ERROR);
     }
     return;
   }
@@ -285,11 +283,10 @@ export async function destroyAction(
 
     if (deleteErr) {
       stopSpinner();
-      renderError(
+      throw new AssigneeError(
         `Failed to destroy resource: ${deleteErr.message}`,
-        "Check that the resource still exists and you have permission to delete it.",
+        "DESTROY_ERROR",
       );
-      process.exit(ProcessExitCode.GENERIC_ERROR);
     }
 
     // Poll for delete completion
@@ -301,22 +298,21 @@ export async function destroyAction(
     stopSpinner();
 
     if (!pollResult.success) {
-      renderError(
+      throw new AssigneeError(
         `Destroy failed: ${pollResult.message}`,
-        "The resource may have dependencies or be in a state that prevents deletion.",
+        "DESTROY_ERROR",
       );
-      process.exit(ProcessExitCode.GENERIC_ERROR);
     }
 
     renderDestroySuccess(estimatedMonthlyCost);
   } catch (err) {
     stopSpinner();
+    if (err instanceof AssigneeError) throw err;
     const message = err instanceof Error ? err.message : String(err);
-    renderError(
+    throw new AssigneeError(
       `Failed to destroy resource: ${message}`,
-      "Check AWS credentials and permissions.",
+      "DESTROY_ERROR",
     );
-    process.exit(ProcessExitCode.GENERIC_ERROR);
   }
 }
 

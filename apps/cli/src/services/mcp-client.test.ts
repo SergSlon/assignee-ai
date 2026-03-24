@@ -5,21 +5,17 @@ const TEST_TIMEOUT_MS = 20000; // 20s timeout since 'uvx' might need to download
 
 // Skip in CI unless MCP servers are explicitly available
 describe.skipIf(!!process.env["CI"])("MCP integration", () => {
-  let exitSpy: { mockRestore: () => void };
-  let consoleSpy: { mockRestore: () => void };
+  let stderrSpy: { mockRestore: () => void };
 
   beforeAll(() => {
-    // Prevent process.exit from crashing vitest runner
-    exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
-      throw new Error("process.exit called");
-    });
-    // Silence expected console errors during tests
-    consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Silence expected stderr output during tests
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((() => true) as any);
   });
 
   afterAll(() => {
-    exitSpy.mockRestore();
-    consoleSpy.mockRestore();
+    stderrSpy.mockRestore();
   });
 
   it(
@@ -39,9 +35,14 @@ describe.skipIf(!!process.env["CI"])("MCP integration", () => {
         );
         expect(knowTool).toBeDefined();
       } catch (err: unknown) {
-        if (err instanceof Error && err.message === "process.exit called") {
-          console.warn(
-            "Skipping integration test due to MCP server startup failure.",
+        // McpError thrown when MCP server fails to start — skip gracefully
+        if (
+          err instanceof Error &&
+          (err.message.includes("MCP server") ||
+            err.message === "process.exit called")
+        ) {
+          process.stderr.write(
+            "Skipping integration test due to MCP server startup failure.\n",
           );
           return;
         }

@@ -7,7 +7,7 @@
 ## Unit tests
 
 ```bash
-pnpm test          # 808 tests across 52 files (724 CLI + 84 MCP)
+pnpm test          # 1171 tests across 65 files
 pnpm check-types   # TypeScript type check
 ```
 
@@ -532,6 +532,8 @@ assignee plan "Create an S3 bucket"
 ---
 
 ## Test 10 — Option Elicitation — EC2 with live pricing (Story 7.3)
+
+> **Note:** Actual prices come from AWS Pricing MCP at runtime. The dollar amounts shown below are examples and will vary by region and date.
 
 **Purpose:** Verify EC2 instance type enum is enriched with live $/hr prices from the AWS Pricing MCP server.
 

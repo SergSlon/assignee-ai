@@ -13,7 +13,7 @@
 
 import { Command } from "commander";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { ProcessExitCode } from "../constants/errors.js";
+import { AssigneeError } from "@assignee/core";
 import { fetchManagedResources } from "../services/list-resources.js";
 import {
   renderStatusSummary,
@@ -32,7 +32,6 @@ export const statusCommand = new Command(CommandName.STATUS)
 
       if (resources.length === 0) {
         renderEmptyStatus();
-        process.exit(ProcessExitCode.SUCCESS);
         return;
       }
 
@@ -40,12 +39,10 @@ export const statusCommand = new Command(CommandName.STATUS)
 
       if (opts.json) {
         process.stdout.write(JSON.stringify(statusData, null, 2) + "\n");
-        process.exit(ProcessExitCode.SUCCESS);
         return;
       }
 
       renderStatusSummary(statusData);
-      process.exit(ProcessExitCode.SUCCESS);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       renderError(
@@ -53,6 +50,9 @@ export const statusCommand = new Command(CommandName.STATUS)
         "Check your AWS credentials and try again.",
         { why: err.message },
       );
-      process.exit(ProcessExitCode.GENERIC_ERROR);
+      throw new AssigneeError(
+        err.message || "Failed to fetch status.",
+        "STATUS_ERROR",
+      );
     }
   });

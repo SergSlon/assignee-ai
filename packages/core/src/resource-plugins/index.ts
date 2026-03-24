@@ -3,6 +3,17 @@ import { s3BucketPlugin } from "./plugins/s3-bucket.js";
 import { ec2InstancePlugin } from "./plugins/ec2-instance.js";
 import { rdsDbInstancePlugin } from "./plugins/rds-dbinstance.js";
 import { lambdaFunctionPlugin } from "./plugins/lambda-function.js";
+import { securityGroupPlugin } from "./plugins/security-group.js";
+import { dynamodbTablePlugin } from "./plugins/dynamodb-table.js";
+import { vpcPlugin } from "./plugins/vpc.js";
+import { subnetPlugin } from "./plugins/subnet.js";
+import { sqsQueuePlugin } from "./plugins/sqs-queue.js";
+import { snsTopicPlugin } from "./plugins/sns-topic.js";
+import { ssmParameterPlugin } from "./plugins/ssm-parameter.js";
+import { iamRolePlugin } from "./plugins/iam-role.js";
+import { ecsClusterPlugin } from "./plugins/ecs-cluster.js";
+import { ecrRepositoryPlugin } from "./plugins/ecr-repository.js";
+import { elbv2LoadBalancerPlugin } from "./plugins/elbv2-loadbalancer.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -19,6 +30,17 @@ defaultPluginRegistry.register(s3BucketPlugin);
 defaultPluginRegistry.register(ec2InstancePlugin);
 defaultPluginRegistry.register(rdsDbInstancePlugin);
 defaultPluginRegistry.register(lambdaFunctionPlugin);
+defaultPluginRegistry.register(securityGroupPlugin);
+defaultPluginRegistry.register(dynamodbTablePlugin);
+defaultPluginRegistry.register(vpcPlugin);
+defaultPluginRegistry.register(subnetPlugin);
+defaultPluginRegistry.register(sqsQueuePlugin);
+defaultPluginRegistry.register(snsTopicPlugin);
+defaultPluginRegistry.register(ssmParameterPlugin);
+defaultPluginRegistry.register(iamRolePlugin);
+defaultPluginRegistry.register(ecsClusterPlugin);
+defaultPluginRegistry.register(ecrRepositoryPlugin);
+defaultPluginRegistry.register(elbv2LoadBalancerPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 export { PluginRegistry };
@@ -26,6 +48,17 @@ export { s3BucketPlugin } from "./plugins/s3-bucket.js";
 export { ec2InstancePlugin } from "./plugins/ec2-instance.js";
 export { rdsDbInstancePlugin } from "./plugins/rds-dbinstance.js";
 export { lambdaFunctionPlugin } from "./plugins/lambda-function.js";
+export { securityGroupPlugin } from "./plugins/security-group.js";
+export { dynamodbTablePlugin } from "./plugins/dynamodb-table.js";
+export { vpcPlugin } from "./plugins/vpc.js";
+export { subnetPlugin } from "./plugins/subnet.js";
+export { sqsQueuePlugin } from "./plugins/sqs-queue.js";
+export { snsTopicPlugin } from "./plugins/sns-topic.js";
+export { ssmParameterPlugin } from "./plugins/ssm-parameter.js";
+export { iamRolePlugin } from "./plugins/iam-role.js";
+export { ecsClusterPlugin } from "./plugins/ecs-cluster.js";
+export { ecrRepositoryPlugin } from "./plugins/ecr-repository.js";
+export { elbv2LoadBalancerPlugin } from "./plugins/elbv2-loadbalancer.js";
 export { genericPlugin } from "./plugins/generic.js";
 export type {
   ResourcePlugin,

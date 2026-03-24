@@ -36,13 +36,13 @@ describe("PricingStrategyRegistry", () => {
     expect(result.label).toContain("512MB");
   });
 
-  it("returns 'Pricing unavailable' for unregistered DynamoDB::Table", () => {
+  it("returns local estimate for registered DynamoDB::Table", () => {
     const result = defaultPricingRegistry.estimate(
       "AWS::DynamoDB::Table",
       undefined,
     );
-    expect(result.perMonth).toBeNull();
-    expect(result.label).toBe("Pricing unavailable");
+    expect(result.label).toBeDefined();
+    expect(result.label).not.toBe("Pricing unavailable");
   });
 
   it("provides McpPricingConfig for S3::Bucket (requires MCP pricing call)", () => {

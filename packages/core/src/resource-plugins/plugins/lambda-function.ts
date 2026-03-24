@@ -229,8 +229,8 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       name: "Environment",
       question: {
         type: "string",
-        label: "Environment variables",
-        placeholder: "DB_HOST=localhost,API_KEY=xxx",
+        label: "Environment Variables",
+        placeholder: "KEY1=value1,KEY2=value2",
         hint: "Comma-separated KEY=VALUE pairs. These are injected into the function's runtime environment. Sensitive values should use SSM Parameter Store references instead.",
       },
       toCfn: (value: unknown) => {
@@ -246,6 +246,29 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         }
         return Object.keys(vars).length > 0 ? { Variables: vars } : undefined;
       },
+    },
+    {
+      name: "Architectures",
+      question: {
+        type: "enum",
+        label: "CPU Architecture",
+        hint: "Instruction set architecture. arm64 (Graviton) is ~20% cheaper and offers better price-performance for most workloads. x86_64 is required for some native dependencies.",
+        options: [
+          {
+            value: "x86_64",
+            label: "x86_64 (Intel/AMD)",
+            fitHint: "Widest compatibility",
+          },
+          {
+            value: "arm64",
+            label: "arm64 (Graviton — 20% cheaper)",
+            fitHint: "Best price-performance",
+            recommended: true,
+          },
+        ],
+        initialValue: "x86_64",
+      },
+      toCfn: (v: unknown) => (v ? [String(v)] : undefined),
     },
     {
       name: "Tags",
@@ -299,13 +322,84 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         },
       },
     },
+    {
+      name: "EphemeralStorage",
+      question: {
+        type: "enum",
+        label: "Ephemeral storage (/tmp)",
+        hint: "Disk space available in /tmp. Default 512 MB is free. Larger sizes incur additional cost. Useful for ML models, large file processing, or caching.",
+        options: [
+          { value: "512", label: "512 MB (default, free)" },
+          { value: "1024", label: "1024 MB" },
+          { value: "2048", label: "2048 MB" },
+          { value: "4096", label: "4096 MB" },
+          { value: "10240", label: "10240 MB (10 GB max)" },
+        ],
+        initialValue: "512",
+      },
+      toCfn: (v: unknown) =>
+        v ? { Size: parseInt(String(v), 10) } : undefined,
+    },
+    {
+      name: "VpcSubnetIds",
+      question: {
+        type: "multi",
+        label: "VPC Subnets (for RDS/ElastiCache access)",
+        hint: "Place the function inside a VPC to access private resources like RDS or ElastiCache. Select private subnets only — public subnets will not grant internet access without a NAT Gateway.",
+        fetcher: "discover-subnets",
+      },
+      /** toCfn produces the VpcConfig.SubnetIds portion; merged with SecurityGroupIds at assembly. */
+      toCfn: (v: unknown) => {
+        if (!Array.isArray(v) || v.length === 0) return undefined;
+        return { SubnetIds: v.map(String) };
+      },
+    },
+    {
+      name: "VpcSecurityGroupIds",
+      question: {
+        type: "multi",
+        label: "VPC Security Groups",
+        hint: "Security groups control which VPC resources the function can reach. Must allow outbound traffic to the target service ports (e.g., 3306 for MySQL, 6379 for Redis).",
+        fetcher: "discover-security-groups",
+        showIf: { field: "VpcSubnetIds", value: true },
+      },
+      /** toCfn produces the VpcConfig.SecurityGroupIds portion; merged with SubnetIds at assembly. */
+      toCfn: (v: unknown) => {
+        if (!Array.isArray(v) || v.length === 0) return undefined;
+        return { SecurityGroupIds: v.map(String) };
+      },
+    },
+    {
+      name: "Layers",
+      question: {
+        type: "string",
+        label: "Lambda Layers (comma-separated ARNs)",
+        placeholder: "arn:aws:lambda:us-east-1:123456789012:layer:my-layer:1",
+        hint: "Up to 5 Lambda Layers providing shared code or dependencies. Each ARN must include the version number. Total unzipped size of all layers + function must be under 250 MB.",
+      },
+      toCfn: (v: unknown) => {
+        if (!v || typeof v !== "string" || !v.trim()) return undefined;
+        const arns = v
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        return arns.length > 0 ? arns : undefined;
+      },
+    },
   ],
   defaults: {
     MemorySize: 128,
     Timeout: 30,
+    Architectures: ["x86_64"],
+    EphemeralStorage: { Size: 512 },
   },
   configHints: [
     buildRuntimeHint(runtimeOptions),
     "Lambda Role: if the user did not provide a specific IAM role ARN, OMIT the Role property — do NOT invent placeholder ARNs",
+    "Environment: must be a CloudFormation Environment object with a Variables map, e.g. { Variables: { KEY: 'value' } }. Parse comma-separated KEY=VALUE input.",
+    "Architectures: must be an array with exactly one element — either ['x86_64'] or ['arm64']. arm64 (Graviton) is ~20% cheaper.",
+    "EphemeralStorage: must be an object { Size: <number> } where Size is one of 512, 1024, 2048, 4096, 10240 MB. Default 512 MB is free.",
+    "VpcConfig: if VpcSubnetIds are provided, emit a single VpcConfig object combining SubnetIds and SecurityGroupIds arrays. Do NOT set VpcConfig without subnets.",
+    "Layers: must be an array of full Lambda Layer ARNs including version number. Max 5 layers.",
   ],
 };

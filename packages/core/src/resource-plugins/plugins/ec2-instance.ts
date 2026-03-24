@@ -329,6 +329,48 @@ export const ec2InstancePlugin: ResourcePlugin = {
         placeholder: "#!/bin/bash\\necho hello",
       },
     },
+    {
+      name: "Monitoring",
+      question: {
+        type: "boolean",
+        label: "Detailed CloudWatch Monitoring",
+        initialValue: false,
+        hint: "Enables 1-minute interval metrics (vs default 5-minute). Recommended for production.",
+      },
+    },
+    {
+      name: "AssociatePublicIpAddress",
+      question: {
+        type: "boolean",
+        label: "Associate Public IP",
+        initialValue: false,
+        hint: "Assign a public IPv4 address. Only works in public subnets with internet gateway.",
+      },
+    },
+    {
+      name: "CreditSpecification",
+      question: {
+        type: "enum",
+        label: "CPU Credit Specification",
+        options: [
+          {
+            value: "standard",
+            label: "Standard (stop earning credits at baseline)",
+          },
+          {
+            value: "unlimited",
+            label: "Unlimited (can burst beyond baseline, charges apply)",
+          },
+        ],
+        initialValue: "standard",
+        hint: "Controls CPU credit behavior for burstable (t3/t4g) instances. Standard pauses bursting when credits run out; Unlimited allows sustained bursting at extra cost.",
+        showIf: { field: "InstanceType", pattern: "^t[34]" },
+      },
+      toCfn: (answer: unknown) => {
+        if (typeof answer !== "string") return undefined;
+        return { CpuCredits: answer };
+      },
+    },
   ],
   defaults: {
     MetadataOptions: { HttpTokens: "required" },
@@ -347,5 +389,8 @@ export const ec2InstancePlugin: ResourcePlugin = {
     "EC2 IamInstanceProfile: if the user did not provide an instance profile, OMIT IamInstanceProfile",
     'EC2 IMDSv2: ALWAYS include MetadataOptions: { HttpTokens: "required" } to enforce IMDSv2. This is an AWS security best practice — never omit it.',
     'EC2 EBS Encryption: ALWAYS include BlockDeviceMappings with Ebs.Encrypted: true and VolumeType: "gp3". Example: BlockDeviceMappings: [{ DeviceName: "/dev/xvda", Ebs: { Encrypted: true, VolumeType: "gp3" } }]',
+    "EC2 Monitoring: if Monitoring is true, include Monitoring: { Enabled: true }. If false or not set, OMIT the Monitoring property.",
+    "EC2 AssociatePublicIpAddress: if true, set via NetworkInterfaces[0].AssociatePublicIpAddress. Only valid in public subnets. If false or not set, OMIT it.",
+    "EC2 CreditSpecification: only applies to burstable instance types (t3/t4g). Set CreditSpecification: { CpuCredits: 'standard' | 'unlimited' }. OMIT for non-burstable types.",
   ],
 };

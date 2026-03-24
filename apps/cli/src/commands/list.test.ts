@@ -69,7 +69,7 @@ describe("assignee list command", () => {
     await runListCommand();
 
     expect(renderResourceTable).toHaveBeenCalledWith(MOCK_RESOURCES);
-    expect(mockExit).toHaveBeenCalledWith(0);
+    // Command completes without throwing (process.exit removed)
   });
 
   it("--json flag outputs valid JSON to stdout", async () => {
@@ -87,7 +87,7 @@ describe("assignee list command", () => {
     expect(Array.isArray(parsed)).toBe(true);
     expect(parsed).toHaveLength(2);
     expect(parsed[0].arn).toBe("arn:aws:s3:::my-bucket");
-    expect(mockExit).toHaveBeenCalledWith(0);
+    // Command completes without throwing (process.exit removed)
   });
 
   it("empty result shows helpful message", async () => {
@@ -97,7 +97,7 @@ describe("assignee list command", () => {
 
     expect(renderEmptyList).toHaveBeenCalled();
     expect(renderResourceTable).not.toHaveBeenCalled();
-    expect(mockExit).toHaveBeenCalledWith(0);
+    // Command completes without throwing (process.exit removed)
   });
 
   it("--region is forwarded to the service", async () => {
@@ -113,7 +113,7 @@ describe("assignee list command", () => {
     (error as unknown as { name: string }).name = "AccessDeniedException";
     vi.mocked(fetchManagedResources).mockRejectedValueOnce(error);
 
-    await runListCommand();
+    await expect(runListCommand()).rejects.toThrow("Access Denied");
 
     expect(renderError).toHaveBeenCalledWith(
       "Cannot list managed resources.",
@@ -122,33 +122,30 @@ describe("assignee list command", () => {
         why: expect.stringContaining("tag:GetResources"),
       }),
     );
-    expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   it("renders error on network failure", async () => {
     const error = new Error("getaddrinfo ENOTFOUND");
     vi.mocked(fetchManagedResources).mockRejectedValueOnce(error);
 
-    await runListCommand();
+    await expect(runListCommand()).rejects.toThrow("getaddrinfo ENOTFOUND");
 
     expect(renderError).toHaveBeenCalledWith(
       "Failed to connect to AWS.",
       expect.stringContaining("internet connection"),
     );
-    expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   it("renders generic error for unknown failures", async () => {
     const error = new Error("Something went wrong");
     vi.mocked(fetchManagedResources).mockRejectedValueOnce(error);
 
-    await runListCommand();
+    await expect(runListCommand()).rejects.toThrow("Something went wrong");
 
     expect(renderError).toHaveBeenCalledWith(
       "Failed to list managed resources.",
       expect.stringContaining("AWS credentials"),
       expect.objectContaining({ why: "Something went wrong" }),
     );
-    expect(mockExit).toHaveBeenCalledWith(1);
   });
 });

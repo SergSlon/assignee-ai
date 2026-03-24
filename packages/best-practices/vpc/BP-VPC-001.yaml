@@ -1,0 +1,17 @@
+id: BP-VPC-001
+title: "VPC should have DNS hostnames enabled"
+severity: HIGH
+resource_type: "AWS::EC2::VPC"
+property_path: "EnableDnsHostnames"
+check_type: "equals"
+expected_value: true
+source: "AWS Well-Architected Framework"
+source_id: "REL-04"
+description: "VPCs should have DNS hostnames enabled so instances receive public DNS names. Many AWS services (ELB, RDS, ECS) require DNS hostnames to function correctly. Disabling this can cause service discovery and connectivity failures."
+remediation: "Set EnableDnsHostnames to true. This is free and has no performance impact."
+category: reliability
+lastVerified: "2026-03-23"
+blocking: false
+autoFixable: true
+desiredStatePatch:
+  EnableDnsHostnames: true

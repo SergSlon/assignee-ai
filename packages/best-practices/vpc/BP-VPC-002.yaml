@@ -1,0 +1,15 @@
+id: BP-VPC-002
+title: "VPC should have flow logs enabled"
+severity: MEDIUM
+resource_type: "AWS::EC2::VPC"
+property_path: "FlowLogs"
+check_type: "exists"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "EC2.6"
+description: "VPC Flow Logs capture information about IP traffic going to and from network interfaces in the VPC. They are essential for security monitoring, troubleshooting connectivity issues, and compliance audits. Without flow logs, network anomalies go undetected."
+remediation: "Enable VPC Flow Logs by creating an AWS::EC2::FlowLog resource attached to this VPC. Configure delivery to CloudWatch Logs or S3. Use REJECT or ALL traffic filter depending on your monitoring needs."
+category: security
+lastVerified: "2026-03-23"
+blocking: false
+autoFixable: false

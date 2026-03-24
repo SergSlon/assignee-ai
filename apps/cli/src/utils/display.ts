@@ -9,7 +9,7 @@ import * as clack from "@clack/prompts";
 import chalk from "chalk";
 import boxen from "boxen";
 import { AWS_REGION, BEDROCK_MODEL_ID } from "../config/constants.js";
-import { AssigneeError } from "@assignee/core";
+import { AssigneeError, UserCancelledError } from "@assignee/core";
 import type {
   ResourceField,
   ResolvedFieldConfig,
@@ -19,7 +19,8 @@ import type {
   LlmPort,
 } from "@assignee/core";
 import type { BPFinding } from "@assignee/best-practices";
-import type { SecurityFinding } from "../services/graph-state.js";
+import type { SecurityFinding, AppliedFix } from "../services/graph-state.js";
+import type { PricingBreakdown } from "@assignee/core";
 import type { FreeTierNote } from "./free-tier.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
@@ -48,6 +49,8 @@ export interface RenderableState {
   freeTierNote?: FreeTierNote;
   bpFindings?: BPFinding[];
   memoryHints?: string[];
+  appliedFixes?: AppliedFix[];
+  pricingBreakdown?: PricingBreakdown;
   verbose?: boolean;
 }
 
@@ -227,45 +230,22 @@ export function renderIntro(): void {
   }
 }
 
-/** EBS volume pricing per GB-month by volume type (us-east-1 On-Demand). */
-const EBS_PRICE_PER_GB_MONTH: Record<string, number> = {
-  gp3: 0.08,
-  gp2: 0.1,
-  io1: 0.125,
-};
-
 /**
- * Builds a cost string with EBS storage breakdown when BlockDeviceMappings
- * are present in the desiredState. Returns the original cost string when
- * no EBS info is available.
+ * Formats the estimated cost display. When a pricing breakdown is available
+ * (from decomposer), it is rendered separately. This function just returns
+ * the base estimate label from Pricing MCP (no hardcoded rates).
+ *
+ * @see Story 23.5 — zero hardcoded dollar amounts
  */
-function formatEbsCostBreakdown(
-  desiredState: Record<string, unknown> | undefined,
-  estimatedMonthlyCost: string | undefined,
-): string {
-  const baseCost = estimatedMonthlyCost ?? "N/A";
-  if (!desiredState) return baseCost;
-
-  const bdm = desiredState["BlockDeviceMappings"];
-  if (!Array.isArray(bdm) || bdm.length === 0) return baseCost;
-
-  const vol = bdm[0] as Record<string, unknown> | undefined;
-  const ebs = vol?.["Ebs"] as Record<string, unknown> | undefined;
-  if (!ebs) return baseCost;
-
-  const volumeType = String(ebs["VolumeType"] ?? "gp3");
-  const volumeSize = Number(ebs["VolumeSize"] ?? 8);
-  const pricePerGb = EBS_PRICE_PER_GB_MONTH[volumeType];
-  if (!pricePerGb || isNaN(volumeSize) || volumeSize <= 0) return baseCost;
-
-  const storageMonthlyCost = volumeSize * pricePerGb;
-  const storageCostStr = `$${storageMonthlyCost.toFixed(2)}/mo`;
-
-  return `Compute: ${baseCost} + Storage: ${volumeSize} GB ${volumeType} ~${storageCostStr}`;
+function formatCostLine(estimatedMonthlyCost: string | undefined): string {
+  return estimatedMonthlyCost ?? "N/A";
 }
 
 export function renderPlanBox(state: RenderableState): void {
   stopSpinner();
+
+  // Story 22.3: Auto-fixed best practice findings
+  const appliedFixesLine = formatAppliedFixes(state.appliedFixes);
 
   // Story 18.10: Unified findings section (merged guardrails + best practices)
   const findingsLine = formatFindings(state.bpFindings);
@@ -280,20 +260,24 @@ export function renderPlanBox(state: RenderableState): void {
     ? formatDesiredState(state.desiredState)
     : "(none)";
 
-  // Calculate EBS storage cost from desiredState BlockDeviceMappings if available
-  const ebsCostLine = formatEbsCostBreakdown(
-    state.desiredState,
-    state.estimatedMonthlyCost,
-  );
+  // Story 23.5: Cost from Pricing MCP (no hardcoded rates)
+  const costLine = formatCostLine(state.estimatedMonthlyCost);
+
+  // Story 23.6: Pricing breakdown from decomposers (if available)
+  const breakdownLines = state.pricingBreakdown
+    ? formatPricingBreakdown(state.pricingBreakdown)
+    : null;
 
   const content = [
     `Resource Type:   ${state.resourceType}`,
     `Region:          ${regionLabel()}`,
     `Config:`,
     configBlock,
-    `Estimated Cost:  ${ebsCostLine}`,
+    `Estimated Cost:  ${costLine}`,
+    ...(breakdownLines ? [breakdownLines] : []),
     ...(freeTierLine ? [freeTierLine] : []),
     ...(memoryHintLines ? [memoryHintLines] : []),
+    ...(appliedFixesLine ? [appliedFixesLine] : []),
     findingsLine,
     ...(state.verbose || process.argv.includes("--verbose")
       ? [`Run ID:          ${state.runId}`]
@@ -312,6 +296,88 @@ export function renderPlanBox(state: RenderableState): void {
   } else {
     process.stdout.write(`=== Plan ===\n${content}\n============\n`);
   }
+}
+
+/**
+ * Formats the pricing breakdown for display in the plan box.
+ * Shows fixed costs as a table, subtotal, and usage-based per-unit rates.
+ *
+ * @see Story 23.6
+ */
+function formatPricingBreakdown(breakdown: PricingBreakdown): string {
+  const lines: string[] = [];
+  const isTTY = process.stdout.isTTY;
+
+  if (breakdown.fixedItems.length > 0) {
+    // Calculate max label width for alignment
+    const maxLabel = Math.max(
+      ...breakdown.fixedItems.map((item) => item.lineItem.label.length),
+    );
+
+    for (const item of breakdown.fixedItems) {
+      const label = item.lineItem.label.padEnd(maxLabel);
+      const desc = item.lineItem.description.padEnd(20);
+      const price = item.displayPrice;
+      lines.push(`  ${label}   ${desc} ${price}`);
+    }
+
+    // Separator + subtotal
+    lines.push(`  ${"─".repeat(maxLabel + 25)}`);
+    const subtotal =
+      breakdown.fixedSubtotal > 0
+        ? `$${breakdown.fixedSubtotal.toFixed(2)}/mo`
+        : "N/A";
+    lines.push(`  ${"Subtotal (fixed)".padEnd(maxLabel + 20)} ${subtotal}`);
+  }
+
+  if (breakdown.usageBasedItems.length > 0) {
+    lines.push(``);
+    lines.push(`  Usage-based (per-unit rates):`);
+    for (const item of breakdown.usageBasedItems) {
+      const price = item.displayPrice;
+      lines.push(`  · ${item.lineItem.label.padEnd(24)} ${price}`);
+    }
+  }
+
+  // Fetched timestamp
+  const fetchedNote = isTTY
+    ? chalk.dim(`  Prices fetched at ${breakdown.fetchedAt}`)
+    : `  Prices fetched at ${breakdown.fetchedAt}`;
+  lines.push(fetchedNote);
+
+  if (breakdown.hasPartialFailure) {
+    const warning = isTTY
+      ? chalk.yellow(`  ⚠ Some prices unavailable`)
+      : `  ⚠ Some prices unavailable`;
+    lines.push(warning);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Formats auto-fixed best practice items for display in the plan box.
+ * Returns null if no fixes were applied.
+ *
+ * @see Story 22.3
+ */
+function formatAppliedFixes(fixes: AppliedFix[] | undefined): string | null {
+  if (!fixes || fixes.length === 0) return null;
+  const isTTY = process.stdout.isTTY;
+
+  const header = `Auto-fixed:      ${fixes.length} fix${fixes.length === 1 ? "" : "es"} applied`;
+  const lines = fixes.map((f) => {
+    const detail = `  \u2713 ${f.title} (${f.fieldPath}: ${formatFixValue(f.oldValue)} \u2192 ${formatFixValue(f.newValue)})`;
+    return isTTY ? chalk.green(detail) : detail;
+  });
+
+  return [header, ...lines].join("\n");
+}
+
+function formatFixValue(value: unknown): string {
+  if (value === undefined || value === null) return "unset";
+  if (typeof value === "boolean") return value ? "enabled" : "disabled";
+  return String(value);
 }
 
 /**
@@ -354,14 +420,17 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
       `Findings:        ${summary}`,
       ...items.map((f) => {
         const hint = f.remediation ? ` (${f.remediation})` : "";
-        if (f.blocking) return chalk.red(`  BLOCK  ${f.message}${hint}`);
+        const userChoice = f.userExplicitChoice ? " (user choice)" : "";
+        const skipped = f.userSkipped ? " (skipped)" : "";
+        const suffix = `${userChoice}${skipped}${hint}`;
+        if (f.blocking) return chalk.red(`  BLOCK  ${f.message}${suffix}`);
         if (f.severity === "CRITICAL")
-          return chalk.red(`  CRIT   ${f.message}${hint}`);
+          return chalk.red.bold(`  CRIT   ${f.message}${suffix}`);
         if (f.severity === "HIGH")
-          return chalk.red(`  HIGH   ${f.message}${hint}`);
+          return chalk.red(`  HIGH   ${f.message}${suffix}`);
         if (f.severity === "MEDIUM")
-          return chalk.yellow(`  WARN   ${f.message}${hint}`);
-        return chalk.blue(`  INFO   ${f.message}${hint}`);
+          return chalk.yellow(`  WARN   ${f.message}${suffix}`);
+        return chalk.blue(`  INFO   ${f.message}${suffix}`);
       }),
     ];
     return lines.join("\n");
@@ -372,11 +441,15 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
     `Findings:        ${summary}`,
     ...items.map((f) => {
       const hint = f.remediation ? ` (${f.remediation})` : "";
-      if (f.blocking) return `  [BLOCK] ${f.message}${hint}`;
-      if (f.severity === "CRITICAL") return `  [CRITICAL] ${f.message}${hint}`;
-      if (f.severity === "HIGH") return `  [HIGH] ${f.message}${hint}`;
-      if (f.severity === "MEDIUM") return `  [MEDIUM] ${f.message}${hint}`;
-      return `  [INFO] ${f.message}${hint}`;
+      const userChoice = f.userExplicitChoice ? " (user choice)" : "";
+      const skipped = f.userSkipped ? " (skipped)" : "";
+      const suffix = `${userChoice}${skipped}${hint}`;
+      if (f.blocking) return `  [BLOCK] ${f.message}${suffix}`;
+      if (f.severity === "CRITICAL")
+        return `  [CRITICAL] ${f.message}${suffix}`;
+      if (f.severity === "HIGH") return `  [HIGH] ${f.message}${suffix}`;
+      if (f.severity === "MEDIUM") return `  [MEDIUM] ${f.message}${suffix}`;
+      return `  [INFO] ${f.message}${suffix}`;
     }),
   ];
   return lines.join("\n");
@@ -525,7 +598,7 @@ export async function renderHitlConfirm(
 
   if (clack.isCancel(result)) {
     clack.cancel("Cancelled.");
-    process.exit(130);
+    throw new UserCancelledError();
   }
   return result === true;
 }
@@ -553,7 +626,7 @@ export async function renderHitlCompoundConfirm(
 
   if (clack.isCancel(result)) {
     clack.cancel("Cancelled.");
-    process.exit(130);
+    throw new UserCancelledError();
   }
   return result === true;
 }
@@ -581,16 +654,18 @@ export function renderCompoundSuccess(
   pattern: ArchitecturePattern,
 ): void {
   stopSpinner();
-  const lines = [
-    chalk.green.bold(`✓ ${pattern.displayName} provisioned successfully`),
-    "",
-    ...results.map(
-      (r, i) =>
-        `  ${i + 1}. ${r.resourceType}${r.resourceArn ? ` → ${r.resourceArn}` : ""}`,
-    ),
-  ];
+
+  const resultLines = results.map(
+    (r, i) =>
+      `  ${i + 1}. ${r.resourceType}${r.resourceArn ? ` → ${r.resourceArn}` : ""}`,
+  );
 
   if (process.stdout.isTTY) {
+    const lines = [
+      chalk.green.bold(`✓ ${pattern.displayName} provisioned successfully`),
+      "",
+      ...resultLines,
+    ];
     process.stdout.write(
       boxen(lines.join("\n"), {
         padding: 1,
@@ -600,6 +675,11 @@ export function renderCompoundSuccess(
       }) + "\n",
     );
   } else {
+    const lines = [
+      `✓ ${pattern.displayName} provisioned successfully`,
+      "",
+      ...resultLines,
+    ];
     process.stdout.write(
       `=== Compound Provisioning Complete ===\n${lines.join("\n")}\n======================================\n`,
     );
@@ -621,16 +701,16 @@ export function renderSecurityWarnings(
 ): void {
   if (findings.length === 0) return;
 
-  console.log(`\n\u26A0 Security findings for ${resourceArn}:`);
+  process.stdout.write(`\n\u26A0 Security findings for ${resourceArn}:\n`);
   for (const finding of findings) {
     const icon =
       finding.severity === "CRITICAL" ? "\uD83D\uDD34" : "\uD83D\uDFE1";
-    console.log(`  ${icon} [${finding.severity}] ${finding.title}`);
+    process.stdout.write(`  ${icon} [${finding.severity}] ${finding.title}\n`);
     if (finding.recommendation) {
-      console.log(`     \u2192 ${finding.recommendation}`);
+      process.stdout.write(`     \u2192 ${finding.recommendation}\n`);
     }
   }
-  console.log(""); // trailing newline
+  process.stdout.write("\n"); // trailing newline
 }
 
 // ── Trade-off analysis help (Story 10.6) ──────────────────────────────────────
@@ -986,13 +1066,26 @@ export function renderEmptyStatus(): void {
  * Non-TTY: returns resolved default without prompting (CI-safe).
  * Cancel: returns resolved default as graceful fallback.
  */
+/** Sentinel returned when user selects "< Back" in a wizard prompt. */
+export const BACK_SENTINEL = "__back__" as const;
+
 export async function renderOptionPrompt(
   field: ResourceField,
   resolved: ResolvedFieldConfig,
+  showBack = false,
 ): Promise<unknown> {
   const defaultValue = resolved.value ?? field.question.initialValue;
 
   if (!process.stdin.isTTY) return defaultValue;
+
+  const backOption = showBack
+    ? [
+        {
+          value: BACK_SENTINEL,
+          label: "\u2190 Back \u2014 return to previous field",
+        },
+      ]
+    : [];
 
   // Display contextual hint before the prompt if present (Story 10.2)
   if (field.question.hint && process.stdout.isTTY) {
@@ -1011,6 +1104,7 @@ export async function renderOptionPrompt(
       result = await clack.select({
         message: question.label,
         options: [
+          ...backOption,
           { value: "true", label: "Yes" },
           { value: "false", label: "No" },
           { value: "?", label: "\u2753 ? \u2014 explain this field" },
@@ -1021,6 +1115,7 @@ export async function renderOptionPrompt(
     }
     case "enum": {
       const enumOptions = [
+        ...backOption,
         ...(question.options ?? []).map((o) => ({
           value: o.value,
           label: o.label,
@@ -1048,16 +1143,28 @@ export async function renderOptionPrompt(
       break;
     }
     case "string": {
+      const placeholder = showBack
+        ? "Type value (or 'back' to return to previous field)"
+        : (question.placeholder ?? "");
       result = await clack.text({
         message: question.label,
-        placeholder: question.placeholder ?? "",
+        placeholder,
         initialValue:
           typeof defaultValue === "string" ? defaultValue : undefined,
         validate: (value) => {
           if (value === "?") return undefined; // Bypass validation for field help
+          if (showBack && value?.toLowerCase() === "back") return undefined;
           return question.validate?.(value);
         },
       });
+      // Handle "back" typed in text field
+      if (
+        showBack &&
+        typeof result === "string" &&
+        result.toLowerCase() === "back"
+      ) {
+        return BACK_SENTINEL;
+      }
       break;
     }
     case "multi": {
@@ -1069,6 +1176,7 @@ export async function renderOptionPrompt(
         return undefined;
       }
       const multiOptions = [
+        ...backOption,
         { value: "?", label: "\u2753 ? \u2014 explain these options" },
         ...question.options.map((o) => ({
           value: o.value,
@@ -1099,7 +1207,7 @@ export async function renderOptionPrompt(
         });
         if (clack.isCancel(customInput)) {
           clack.cancel("Wizard cancelled.");
-          process.exit(130);
+          throw new UserCancelledError();
         }
         if (typeof customInput === "string" && customInput.trim()) {
           const customValues = customInput
@@ -1136,95 +1244,118 @@ export async function renderOptionPrompt(
         }
       }
 
-      // Step 1: Category selection (unless skipped by intent)
-      if (!skipCategory) {
-        let categoryResult: string | symbol;
+      // Outer loop: Back in Step 2 returns to Step 1 (category selection)
+      categoryLoop: while (true) {
+        // Step 1: Category selection (unless skipped by intent)
+        if (!skipCategory) {
+          let categoryResult: string | symbol;
 
-        // Category select loop (supports ? help)
-        while (true) {
-          categoryResult = (await clack.select({
-            message: `${question.label} — Choose a category`,
-            options: [
-              ...categories.map((cat) => ({
-                value: cat.key,
-                label: cat.label,
-                hint: cat.description,
-              })),
-              {
-                value: "__other__",
-                label: "Other \u2014 enter any instance type manually",
-              },
-              { value: "?", label: "\u2753 ? \u2014 explain this field" },
-            ],
-            initialValue: categories[0]?.key,
-          })) as string | symbol;
+          // Category select loop (supports ? help)
+          while (true) {
+            categoryResult = (await clack.select({
+              message: `${question.label} — Choose a category`,
+              options: [
+                ...backOption,
+                ...categories.map((cat) => ({
+                  value: cat.key,
+                  label: cat.label,
+                  hint: cat.description,
+                })),
+                {
+                  value: "__other__",
+                  label: "Other \u2014 enter any instance type manually",
+                },
+                { value: "?", label: "\u2753 ? \u2014 explain this field" },
+              ],
+              initialValue: categories[0]?.key,
+            })) as string | symbol;
 
-          if (clack.isCancel(categoryResult)) {
-            clack.cancel("Wizard cancelled.");
-            process.exit(130);
+            if (clack.isCancel(categoryResult)) {
+              clack.cancel("Wizard cancelled.");
+              throw new UserCancelledError();
+            }
+
+            if (categoryResult === BACK_SENTINEL) return BACK_SENTINEL;
+
+            if (categoryResult === "?") {
+              const helpLines = categories
+                .map((cat) => `${cat.label}\n  ${cat.description}`)
+                .join("\n\n");
+              clack.note(helpLines, "Instance Type Categories");
+              continue;
+            }
+
+            // "Other" — return sentinel so promptWithHelp handles LLM-assisted input
+            if (categoryResult === "__other__") {
+              return "__other__";
+            }
+
+            selectedCategoryKey = categoryResult as string;
+            break;
           }
-
-          if (categoryResult === "?") {
-            const helpLines = categories
-              .map((cat) => `${cat.label}\n  ${cat.description}`)
-              .join("\n\n");
-            clack.note(helpLines, "Instance Type Categories");
-            continue;
+        } else {
+          // Show info that category was auto-selected
+          const matchedCat = categories.find(
+            (c) => c.key === selectedCategoryKey,
+          );
+          if (matchedCat) {
+            clack.log.info(
+              `Category auto-selected: ${matchedCat.label} — based on your intent`,
+            );
           }
-
-          // "Other" — return sentinel so promptWithHelp handles LLM-assisted input
-          if (categoryResult === "__other__") {
-            return "__other__";
-          }
-
-          selectedCategoryKey = categoryResult as string;
-          break;
         }
-      } else {
-        // Show info that category was auto-selected
-        const matchedCat = categories.find(
+
+        // Step 2: Size selection within the selected category
+        const selectedCategory = categories.find(
           (c) => c.key === selectedCategoryKey,
         );
-        if (matchedCat) {
-          clack.log.info(
-            `Category auto-selected: ${matchedCat.label} — based on your intent`,
-          );
+        if (!selectedCategory) {
+          return defaultValue;
         }
+
+        const sizeOptions = [
+          {
+            value: BACK_SENTINEL,
+            label: "\u2190 Back \u2014 return to category selection",
+          },
+          ...selectedCategory.options.map((o) => ({
+            value: o.value,
+            label: o.label,
+          })),
+          {
+            value: "__other__",
+            label: "Other \u2014 enter size manually",
+          },
+          { value: "?", label: "\u2753 ? \u2014 explain this field" },
+        ];
+
+        // Pre-select the default if it exists in this category, otherwise first option
+        const sizeInitial =
+          typeof defaultValue === "string" &&
+          selectedCategory.options.some((o) => o.value === defaultValue)
+            ? defaultValue
+            : selectedCategory.options[0]?.value;
+
+        result = await clack.select({
+          message: `${question.label} — ${selectedCategory.label.split(" — ")[0]}`,
+          options: sizeOptions,
+          initialValue: sizeInitial,
+        });
+
+        if (clack.isCancel(result)) {
+          clack.cancel("Wizard cancelled.");
+          throw new UserCancelledError();
+        }
+
+        // Back in Step 2 loops back to Step 1 (category selection)
+        if (result === BACK_SENTINEL) {
+          skipCategory = false;
+          selectedCategoryKey = undefined;
+          continue categoryLoop;
+        }
+        // "__other__" or actual value — exit the category loop
+        break;
       }
-
-      // Step 2: Size selection within the selected category
-      const selectedCategory = categories.find(
-        (c) => c.key === selectedCategoryKey,
-      );
-      if (!selectedCategory) {
-        return defaultValue;
-      }
-
-      const sizeOptions = [
-        ...selectedCategory.options.map((o) => ({
-          value: o.value,
-          label: o.label,
-        })),
-        {
-          value: "__other__",
-          label: "Other \u2014 enter size manually",
-        },
-        { value: "?", label: "\u2753 ? \u2014 explain this field" },
-      ];
-
-      // Pre-select the default if it exists in this category, otherwise first option
-      const sizeInitial =
-        typeof defaultValue === "string" &&
-        selectedCategory.options.some((o) => o.value === defaultValue)
-          ? defaultValue
-          : selectedCategory.options[0]?.value;
-
-      result = await clack.select({
-        message: `${question.label} — ${selectedCategory.label.split(" — ")[0]}`,
-        options: sizeOptions,
-        initialValue: sizeInitial,
-      });
-      // "__other__" returned as-is — promptWithHelp handles LLM-assisted input
       break;
     }
     default: {
@@ -1238,7 +1369,7 @@ export async function renderOptionPrompt(
 
   if (clack.isCancel(result)) {
     clack.cancel("Wizard cancelled.");
-    process.exit(130);
+    throw new UserCancelledError();
   }
 
   // Normalise boolean-select results back to actual booleans.
@@ -1269,7 +1400,7 @@ export async function renderAdvancedConfirm(): Promise<boolean> {
   });
   if (clack.isCancel(result)) {
     clack.cancel("Cancelled.");
-    process.exit(130);
+    throw new UserCancelledError();
   }
   return result === true;
 }
@@ -1292,7 +1423,7 @@ export async function renderApplyNowConfirm(
 
   if (clack.isCancel(result)) {
     clack.cancel("Cancelled.");
-    process.exit(130);
+    throw new UserCancelledError();
   }
   return result === true;
 }

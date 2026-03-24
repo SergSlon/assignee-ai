@@ -89,7 +89,6 @@ const KNOWN_PLACEHOLDERS = [
   "arn:aws:iam::123456789012:role/my-role",
   "my-instance-profile",
   "placeholder",
-  "TODO",
   "CHANGE_ME",
   "example",
 ];

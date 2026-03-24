@@ -247,12 +247,7 @@ describe("assignee init command", () => {
         "  3) AWS SSO login (aws sso login)",
     });
 
-    await runInitAction();
-
-    expect(clack.log.error).toHaveBeenCalledWith(
-      expect.stringContaining("No AWS credentials found"),
-    );
-    expect(mockExit).toHaveBeenCalledWith(1);
+    await expect(runInitAction()).rejects.toThrow("No AWS credentials found");
   });
 
   it("shows success summary with region and profile", async () => {

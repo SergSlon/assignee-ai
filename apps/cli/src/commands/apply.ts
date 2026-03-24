@@ -22,6 +22,7 @@ import {
   ExecutionMode,
   ExecutionStatus,
   CheckpointError,
+  AssigneeError,
   safeTry,
 } from "@assignee/core";
 import {
@@ -29,7 +30,6 @@ import {
   CommandDescription,
   CommandArgs,
 } from "../constants/commands.js";
-import { ProcessExitCode } from "../constants/errors.js";
 import type { AgentState } from "../services/graph.js";
 import { renderError, startSpinner, stopSpinner } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
@@ -59,6 +59,7 @@ function buildCheckpointState(
     runId: checkpoint.runId,
     executionMode: ExecutionMode.APPLY,
     startedAt: Date.now(),
+    projectDir: process.cwd(),
     resourceType: checkpoint.resourceType,
     desiredState: checkpoint.desiredState,
     estimatedMonthlyCost: checkpoint.estimatedMonthlyCost,
@@ -102,13 +103,12 @@ export const applyCommand = new Command(CommandName.APPLY)
           resolvedCheckpoint = await loadCheckpointFromPath(cpPath);
         } catch (err) {
           if (err instanceof CheckpointError) {
-            console.error(err.message);
-          } else {
-            console.error(
-              `Checkpoint file not found: ${cpPath}. Run \`assignee plan\` to create a new plan.`,
-            );
+            throw err;
           }
-          process.exit(ProcessExitCode.GENERIC_ERROR);
+          throw new AssigneeError(
+            `Checkpoint file not found: ${cpPath}. Run \`assignee plan\` to create a new plan.`,
+            "CHECKPOINT_ERROR",
+          );
         }
       } else if (!intent) {
         // No intent and no --checkpoint: attempt auto-detection
@@ -135,11 +135,11 @@ export const applyCommand = new Command(CommandName.APPLY)
 
         // No checkpoint resolved and no intent: usage error
         if (!resolvedCheckpoint) {
-          console.error(
+          throw new AssigneeError(
             'Usage: assignee apply "Create an S3 bucket named my-bucket"\n' +
               "       assignee apply --checkpoint .assignee/checkpoint-<runId>.json",
+            "USAGE_ERROR",
           );
-          process.exit(ProcessExitCode.GENERIC_ERROR);
         }
       }
 
@@ -247,6 +247,7 @@ export const applyCommand = new Command(CommandName.APPLY)
                   runId: ctx.runId,
                   executionMode: ExecutionMode.APPLY,
                   startedAt: Date.now(),
+                  projectDir: process.cwd(),
                   ...(opts.wizard === false ? { noWizard: true } : {}),
                   ...(opts.yes ? { autoApprove: true } : {}),
                   ...(userConfig ? { userConfig } : {}),

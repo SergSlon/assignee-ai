@@ -18,6 +18,7 @@ import {
   RESOURCE_TYPES,
   defaultPluginRegistry,
   MissingRequiredFieldsError,
+  UserCancelledError,
 } from "@assignee/core";
 import { defaultMemoryService } from "../services/memory.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
@@ -460,6 +461,21 @@ function getDiscoverySpinnerMessage(fields: ResourceField[]): string | null {
 }
 
 /**
+ * Evaluates a showIf condition against the current field answers.
+ * Supports exact `value` match and regex `pattern` match.
+ */
+function evaluateShowIf(
+  condition: { field: string; value?: unknown; pattern?: string },
+  answers: Record<string, unknown>,
+): boolean {
+  const depValue = answers[condition.field];
+  if (condition.pattern) {
+    return new RegExp(condition.pattern).test(String(depValue ?? ""));
+  }
+  return depValue === condition.value;
+}
+
+/**
  * Resolves dynamic fields by fetching live options from AWS.
  * Fields with a `fetcher` identifier get their options populated at runtime.
  * If a fetch returns empty results, the field reverts to string type for manual entry.
@@ -469,7 +485,9 @@ function getDiscoverySpinnerMessage(fields: ResourceField[]): string | null {
 /** Unique key for a field in fetchResults — disambiguates fields sharing the same name (e.g., EngineVersion per engine). */
 function fieldFetchKey(field: ResourceField): string {
   if (field.question.showIf) {
-    return `${field.name}::${field.question.showIf.field}=${String(field.question.showIf.value)}`;
+    const cond = field.question.showIf;
+    const suffix = cond.pattern ?? String(cond.value);
+    return `${field.name}::${cond.field}=${suffix}`;
   }
   return field.name;
 }
@@ -709,6 +727,9 @@ async function fetchSuggestionPrice(
   }
 }
 
+/** Sentinel value returned when user chooses "Back" in the wizard. */
+const BACK_SENTINEL = "__back__";
+
 async function promptWithHelp(
   field: ResourceField,
   resolved: ResolvedFieldConfig,
@@ -716,6 +737,7 @@ async function promptWithHelp(
   tools: StructuredTool[],
   llmClient?: LlmPort,
   userIntent?: string,
+  showBack = false,
 ): Promise<unknown> {
   let cachedHint: string | null = null;
 
@@ -728,7 +750,15 @@ async function promptWithHelp(
         }
       : field;
 
-    const answer = await renderOptionPrompt(promptField, resolved);
+    const answer = await renderOptionPrompt(promptField, resolved, showBack);
+
+    // Back navigation — return sentinel to caller (handle both scalar and array from multi-select)
+    if (
+      answer === BACK_SENTINEL ||
+      (Array.isArray(answer) && answer.includes(BACK_SENTINEL))
+    ) {
+      return BACK_SENTINEL;
+    }
 
     // Multi fields: when user selects only '?', trigger help
     const isHelpRequest =
@@ -780,7 +810,7 @@ async function promptWithHelp(
       });
       if (clack.isCancel(description)) {
         clack.cancel("Wizard cancelled.");
-        process.exit(130);
+        throw new UserCancelledError();
       }
       const userDesc =
         typeof description === "string" ? description.trim() : "";
@@ -824,7 +854,7 @@ async function promptWithHelp(
           });
           if (clack.isCancel(amiChoice)) {
             clack.cancel("Wizard cancelled.");
-            process.exit(130);
+            throw new UserCancelledError();
           }
           if (amiChoice !== "__none__") {
             return amiChoice as string;
@@ -889,7 +919,7 @@ async function promptWithHelp(
             });
             if (clack.isCancel(confirm)) {
               clack.cancel("Wizard cancelled.");
-              process.exit(130);
+              throw new UserCancelledError();
             }
             if (confirm) return suggested;
             // User rejected suggestion — re-prompt the field
@@ -907,7 +937,7 @@ async function promptWithHelp(
       });
       if (clack.isCancel(manualValue)) {
         clack.cancel("Wizard cancelled.");
-        process.exit(130);
+        throw new UserCancelledError();
       }
       const val = typeof manualValue === "string" ? manualValue.trim() : "";
       if (val) return val;
@@ -1187,25 +1217,56 @@ export async function optionElicitorNode(
     };
   };
 
-  // ── Common tier ──────────────────────────────────────────────────────────────
-  for (const field of commonFields.map(applyPatternHint)) {
+  // ── Common tier (with back navigation) ─────────────────────────────────────
+  const hintedCommon = commonFields.map(applyPatternHint);
+  const commonHistory: number[] = []; // Stack of visited field indices
+
+  // Pre-compute total visible fields for progress indicator
+  const totalVisible = hintedCommon.filter((f) => {
+    const res = resolvedCommon[fieldFetchKey(f)];
+    if (!res) return false;
+    if (res.policy === FieldPolicy.NEVER_ASK) return false;
+    // showIf fields are conditionally visible — count them optimistically
+    // since we can't know their visibility before the loop
+    if (f.question.showIf) return false;
+    return true;
+  }).length;
+
+  let ci = 0;
+  let visibleIndex = 0;
+  while (ci < hintedCommon.length) {
+    const field = hintedCommon[ci]!;
     const resolved = resolvedCommon[fieldFetchKey(field)];
-    if (!resolved) continue;
+    if (!resolved) {
+      ci++;
+      continue;
+    }
 
     // showIf conditional — skip if condition not met
     if (field.question.showIf) {
-      const depValue = elicitedOptions[field.question.showIf.field];
-      if (depValue !== field.question.showIf.value) continue;
+      if (!evaluateShowIf(field.question.showIf, elicitedOptions)) {
+        ci++;
+        continue;
+      }
     }
 
     if (resolved.policy === FieldPolicy.NEVER_ASK) {
       if (resolved.value !== undefined)
         elicitedOptions[field.name] = resolved.value;
+      ci++;
       continue;
     }
 
     if (resolved.policy === FieldPolicy.ASK_IF_NOT_SET) {
-      if (elicitedOptions[field.name] !== undefined) continue;
+      if (elicitedOptions[field.name] !== undefined) {
+        ci++;
+        continue;
+      }
+    }
+
+    // Progress indicator (TTY only, common fields only)
+    if (process.stdout.isTTY && totalVisible > 1) {
+      clack.log.info(`Step ${visibleIndex + 1} of ${totalVisible}`);
     }
 
     const answer = await promptWithHelp(
@@ -1215,29 +1276,80 @@ export async function optionElicitorNode(
       tools ?? [],
       llmClient,
       state.userIntent,
+      commonHistory.length > 0, // show back if not the first visible field
     );
+
+    if (answer === BACK_SENTINEL) {
+      // Go back to previous visible field
+      const prevIndex = commonHistory.pop();
+      if (prevIndex !== undefined) {
+        const prevField = hintedCommon[prevIndex]!;
+        delete elicitedOptions[prevField.name];
+        // Clean up showIf-dependent values that depended on the reverted field
+        for (const f of hintedCommon) {
+          if (f.question.showIf?.field === prevField.name) {
+            delete elicitedOptions[f.name];
+          }
+        }
+        ci = prevIndex;
+        if (visibleIndex > 0) visibleIndex--;
+      }
+      continue;
+    }
+
+    commonHistory.push(ci);
     if (answer !== undefined && answer !== "") {
       elicitedOptions[field.name] = answer;
     }
+    visibleIndex++;
+    ci++;
   }
 
   // ── Advanced tier gate ───────────────────────────────────────────────────────
   if (advancedFields.length > 0) {
     const showAdvanced = await renderAdvancedConfirm();
     if (showAdvanced) {
-      for (const field of advancedFields.map(applyPatternHint)) {
+      const hintedAdvanced = advancedFields.map(applyPatternHint);
+      const advHistory: number[] = [];
+
+      // Pre-compute total visible advanced fields for progress indicator
+      const totalVisibleAdv = hintedAdvanced.filter((f) => {
+        const res = resolvedAdvanced[fieldFetchKey(f)];
+        if (!res) return false;
+        if (res.policy === FieldPolicy.NEVER_ASK) return false;
+        if (f.question.showIf) return false;
+        return true;
+      }).length;
+
+      let ai = 0;
+      let advVisibleIndex = 0;
+      while (ai < hintedAdvanced.length) {
+        const field = hintedAdvanced[ai]!;
         const resolved = resolvedAdvanced[fieldFetchKey(field)];
-        if (!resolved) continue;
+        if (!resolved) {
+          ai++;
+          continue;
+        }
 
         if (field.question.showIf) {
-          const depValue = elicitedOptions[field.question.showIf.field];
-          if (depValue !== field.question.showIf.value) continue;
+          if (!evaluateShowIf(field.question.showIf, elicitedOptions)) {
+            ai++;
+            continue;
+          }
         }
 
         if (resolved.policy === FieldPolicy.NEVER_ASK) {
           if (resolved.value !== undefined)
             elicitedOptions[field.name] = resolved.value;
+          ai++;
           continue;
+        }
+
+        // Progress indicator (TTY only, advanced fields)
+        if (process.stdout.isTTY && totalVisibleAdv > 1) {
+          clack.log.info(
+            `Advanced step ${advVisibleIndex + 1} of ${totalVisibleAdv}`,
+          );
         }
 
         const answer = await promptWithHelp(
@@ -1247,10 +1359,31 @@ export async function optionElicitorNode(
           tools ?? [],
           llmClient,
           state.userIntent,
+          advHistory.length > 0,
         );
+
+        if (answer === BACK_SENTINEL) {
+          const prevIndex = advHistory.pop();
+          if (prevIndex !== undefined) {
+            const prevField = hintedAdvanced[prevIndex]!;
+            delete elicitedOptions[prevField.name];
+            for (const f of hintedAdvanced) {
+              if (f.question.showIf?.field === prevField.name) {
+                delete elicitedOptions[f.name];
+              }
+            }
+            ai = prevIndex;
+            if (advVisibleIndex > 0) advVisibleIndex--;
+          }
+          continue;
+        }
+
+        advHistory.push(ai);
         if (answer !== undefined && answer !== "") {
           elicitedOptions[field.name] = answer;
         }
+        advVisibleIndex++;
+        ai++;
       }
     }
   }

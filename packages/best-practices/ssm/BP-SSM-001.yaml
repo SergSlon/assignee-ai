@@ -1,0 +1,12 @@
+id: BP-SSM-001
+title: "SSM parameter should use SecureString for sensitive values"
+severity: HIGH
+resource_type: "AWS::SSM::Parameter"
+property_path: "Type"
+check_type: "equals"
+expected_value: "SecureString"
+source: "AWS Well-Architected Framework — Security Pillar"
+description: "SSM parameters containing secrets, passwords, or API keys should use SecureString type which encrypts the value with KMS. String type stores values in plaintext."
+remediation: "Set Type to 'SecureString' for any parameter containing sensitive data. Specify a KmsKeyId for customer-managed encryption or use the default aws/ssm key."
+category: security
+lastVerified: "2026-03-24"

@@ -14,7 +14,7 @@ import { Command } from "commander";
 import * as clack from "@clack/prompts";
 import { stringify as yamlStringify } from "yaml";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { ProcessExitCode } from "../constants/errors.js";
+import { ConfigurationError } from "@assignee/core";
 import {
   detectCredentials,
   detectRegion,
@@ -44,6 +44,8 @@ export interface ProjectConfig {
     "managed-by": string;
     environment: string;
   };
+  autoFixBestPractices?: boolean;
+  priceCacheTtlMinutes?: number;
 }
 
 export const initCommand = new Command(CommandName.INIT)
@@ -55,14 +57,13 @@ export const initCommand = new Command(CommandName.INIT)
     const credentialResult = await detectCredentials();
 
     if (!credentialResult.detected) {
-      clack.log.error(
+      throw new ConfigurationError(
         credentialResult.reason ??
           "No AWS credentials found. Configure credentials via:\n" +
             "  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n" +
             "  2) ~/.aws/credentials file\n" +
             "  3) AWS SSO login (aws sso login)",
       );
-      process.exit(ProcessExitCode.GENERIC_ERROR);
     }
 
     clack.log.success(
@@ -123,6 +124,17 @@ export const initCommand = new Command(CommandName.INIT)
       return;
     }
 
+    const autoFix = await clack.confirm({
+      message:
+        "Auto-apply security best practices? (encryption, IMDSv2, public access blocking, etc.)",
+      initialValue: true,
+    });
+
+    if (clack.isCancel(autoFix)) {
+      clack.outro("Initialization cancelled.");
+      return;
+    }
+
     // ── Write config file ─────────────────────────────────────────────
     const config: ProjectConfig = {
       region: region as string,
@@ -131,6 +143,7 @@ export const initCommand = new Command(CommandName.INIT)
         "managed-by": "assignee-ai",
         environment: environment as string,
       },
+      autoFixBestPractices: autoFix as boolean,
     };
 
     await fs.mkdir(configDir, { recursive: true });

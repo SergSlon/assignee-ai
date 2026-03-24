@@ -49,8 +49,9 @@
     "prepublishOnly": "cd ../.. && npx turbo build --filter=@assignee/mcp-server"
   },
   "dependencies": {
-    "@assignee/core": "workspace:*",
     "@assignee/best-practices": "workspace:*",
+    "@assignee/core": "workspace:*",
+    "@aws-sdk/client-cloudcontrol": "^3.1015.0",
     "@aws-sdk/client-resource-groups-tagging-api": "^3.1014.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "assignee": "workspace:*",

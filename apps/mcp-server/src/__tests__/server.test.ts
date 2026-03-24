@@ -14,6 +14,7 @@ const EXPECTED_TOOLS = [
   "apply_plan",
   "list_managed_resources",
   "estimate_cost",
+  "destroy_resource",
 ] as const;
 
 async function createTestServerAndClient() {
@@ -44,7 +45,7 @@ describe("MCP Server", () => {
     expect(server).toBeDefined();
   });
 
-  it("should register all 4 tools", async () => {
+  it("should register all 5 tools", async () => {
     const { client } = await createTestServerAndClient();
 
     const result = await client.listTools();
@@ -53,11 +54,11 @@ describe("MCP Server", () => {
     expect(toolNames).toEqual([...EXPECTED_TOOLS].sort());
   });
 
-  it("tools/list should return exactly 4 tools", async () => {
+  it("tools/list should return exactly 5 tools", async () => {
     const { client } = await createTestServerAndClient();
 
     const result = await client.listTools();
-    expect(result.tools).toHaveLength(4);
+    expect(result.tools).toHaveLength(5);
   });
 
   it("each tool should have a valid inputSchema with type 'object'", async () => {

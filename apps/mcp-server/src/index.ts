@@ -27,7 +27,7 @@ async function main() {
     );
   }
 
-  // Register all 4 MCP tools
+  // Register all 5 MCP tools
   registerTools(server, ctx);
 
   // Start stdio transport

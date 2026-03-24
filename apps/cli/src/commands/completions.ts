@@ -15,6 +15,7 @@
 
 import { Command } from "commander";
 import { CommandName, CommandDescription } from "../constants/commands.js";
+import { AssigneeError } from "@assignee/core";
 import {
   generateCompletionScript,
   SUPPORTED_SHELLS,
@@ -28,10 +29,10 @@ export const completionsCommand = new Command(CommandName.COMPLETIONS)
     const normalizedShell = shell.toLowerCase();
 
     if (!SUPPORTED_SHELLS.includes(normalizedShell as SupportedShell)) {
-      process.stderr.write(
-        `Error: unsupported shell "${shell}". Valid options: ${SUPPORTED_SHELLS.join(", ")}\n`,
+      throw new AssigneeError(
+        `Unsupported shell "${shell}". Valid options: ${SUPPORTED_SHELLS.join(", ")}`,
+        "USAGE_ERROR",
       );
-      process.exit(1);
     }
 
     // Walk up to the root program (parent of this command) to get the full command tree.

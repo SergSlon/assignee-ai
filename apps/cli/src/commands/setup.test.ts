@@ -36,8 +36,48 @@ vi.mock("@aws-sdk/client-iam", () => {
     DeleteAccessKeyCommand: vi
       .fn()
       .mockImplementation((input) => ({ _type: "DeleteAccessKey", input })),
+    GetRoleCommand: vi
+      .fn()
+      .mockImplementation((input) => ({ _type: "GetRole", input })),
+    CreateRoleCommand: vi
+      .fn()
+      .mockImplementation((input) => ({ _type: "CreateRole", input })),
+    PutRolePolicyCommand: vi
+      .fn()
+      .mockImplementation((input) => ({ _type: "PutRolePolicy", input })),
+    TagUserCommand: vi
+      .fn()
+      .mockImplementation((input) => ({ _type: "TagUser", input })),
+    TagRoleCommand: vi
+      .fn()
+      .mockImplementation((input) => ({ _type: "TagRole", input })),
+    TagPolicyCommand: vi
+      .fn()
+      .mockImplementation((input) => ({ _type: "TagPolicy", input })),
   };
 });
+
+// Mock CloudWatch Logs and Bedrock clients (used by Bedrock logging setup)
+vi.mock("@aws-sdk/client-cloudwatch-logs", () => ({
+  CloudWatchLogsClient: vi
+    .fn()
+    .mockImplementation(() => ({ send: vi.fn().mockResolvedValue({}) })),
+  CreateLogGroupCommand: vi
+    .fn()
+    .mockImplementation((input) => ({ _type: "CreateLogGroup", input })),
+}));
+
+vi.mock("@aws-sdk/client-bedrock", () => ({
+  BedrockClient: vi
+    .fn()
+    .mockImplementation(() => ({ send: vi.fn().mockResolvedValue({}) })),
+  PutModelInvocationLoggingConfigurationCommand: vi
+    .fn()
+    .mockImplementation((input) => ({
+      _type: "PutModelInvocationLogging",
+      input,
+    })),
+}));
 
 // Mock @aws-sdk/client-sts
 const mockStsSend = vi.fn();
@@ -255,8 +295,9 @@ describe("setup command", () => {
     mockStsSend.mockRejectedValue(new Error("STS unreachable"));
 
     const { setupCommand } = await import("./setup.js");
-    await setupCommand.parseAsync(["node", "setup"]);
 
-    expect(mockExit).toHaveBeenCalledWith(1);
+    await expect(setupCommand.parseAsync(["node", "setup"])).rejects.toThrow(
+      "Cannot reach AWS STS",
+    );
   });
 });
