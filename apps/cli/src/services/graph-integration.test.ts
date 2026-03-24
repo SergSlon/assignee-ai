@@ -964,9 +964,10 @@ describe("Graph integration — new resource types", () => {
 });
 
 describe("Graph integration — apply flow", () => {
-  // TODO: Apply flow requires full HITL interrupt/resume cycle with CloudControl mock.
+  // DEFERRED: Apply flow requires full HITL interrupt/resume cycle with CloudControl mock.
   // Current LangGraph interruptBefore pattern needs graph.invoke(null, config) resume
-  // which requires proper checkpoint state. Tracked as a follow-up story.
+  // which requires proper checkpoint state.
+  // Tracked: Epic 34 — Apply Flow E2E Integration (post-Sprint K)
   it.skip("SSM Parameter: apply with autoApprove completes successfully", async () => {
     const state = JSON.stringify({
       Name: "/test/param",

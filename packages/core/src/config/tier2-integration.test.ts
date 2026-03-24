@@ -47,40 +47,46 @@ describe("Tier 2 pricing strategy registrations", () => {
 });
 
 describe("Tier 2 IAM action registrations", () => {
-  it("AWS::ApiGatewayV2::Api has 7 service-specific IAM actions", () => {
+  it("AWS::ApiGatewayV2::Api has complete service-specific IAM actions", () => {
     const actions = getRequiredIamActions("AWS::ApiGatewayV2::Api");
     const serviceActions = actions.filter((a) => a.startsWith("apigateway:"));
-    expect(serviceActions).toHaveLength(7);
+    expect(serviceActions.length).toBeGreaterThanOrEqual(7);
     expect(serviceActions).toContain("apigateway:CreateApi");
+    expect(serviceActions).toContain("apigateway:DeleteApi");
+    expect(serviceActions).toContain("apigateway:GetApi");
+    expect(serviceActions).toContain("apigateway:UpdateApi");
     expect(serviceActions).toContain("apigateway:CreateRoute");
     expect(serviceActions).toContain("apigateway:CreateIntegration");
     expect(serviceActions).toContain("apigateway:CreateStage");
     expect(serviceActions).toContain("apigateway:CreateDeployment");
-    expect(serviceActions).toContain("apigateway:UpdateApi");
     expect(serviceActions).toContain("apigateway:TagResource");
   });
 
-  it("AWS::CloudWatch::Alarm has 4 service-specific IAM actions", () => {
+  it("AWS::CloudWatch::Alarm has complete service-specific IAM actions", () => {
     const actions = getRequiredIamActions("AWS::CloudWatch::Alarm");
     const serviceActions = actions.filter((a) => a.startsWith("cloudwatch:"));
-    expect(serviceActions).toHaveLength(4);
+    expect(serviceActions.length).toBeGreaterThanOrEqual(4);
     expect(serviceActions).toContain("cloudwatch:PutMetricAlarm");
+    expect(serviceActions).toContain("cloudwatch:DeleteAlarms");
     expect(serviceActions).toContain("cloudwatch:DescribeAlarms");
     expect(serviceActions).toContain("cloudwatch:TagResource");
     expect(serviceActions).toContain("cloudwatch:EnableAlarmActions");
+    expect(serviceActions).toContain("cloudwatch:DisableAlarmActions");
   });
 
-  it("AWS::SecretsManager::Secret has 5 service-specific IAM actions", () => {
+  it("AWS::SecretsManager::Secret has complete service-specific IAM actions", () => {
     const actions = getRequiredIamActions("AWS::SecretsManager::Secret");
     const serviceActions = actions.filter((a) =>
       a.startsWith("secretsmanager:"),
     );
-    expect(serviceActions).toHaveLength(5);
+    expect(serviceActions.length).toBeGreaterThanOrEqual(5);
     expect(serviceActions).toContain("secretsmanager:CreateSecret");
+    expect(serviceActions).toContain("secretsmanager:DeleteSecret");
+    expect(serviceActions).toContain("secretsmanager:DescribeSecret");
+    expect(serviceActions).toContain("secretsmanager:UpdateSecret");
     expect(serviceActions).toContain("secretsmanager:TagResource");
     expect(serviceActions).toContain("secretsmanager:PutSecretValue");
     expect(serviceActions).toContain("secretsmanager:GetSecretValue");
-    expect(serviceActions).toContain("secretsmanager:DescribeSecret");
   });
 });
 

@@ -21,6 +21,13 @@ vi.mock("../views/drift-detail.js", () => ({
   renderDriftDetail: vi.fn().mockReturnValue("mock detail view"),
 }));
 
+// Mock drift detector factory
+const mockCreateDriftDetectorFromEnv = vi.fn();
+vi.mock("../services/drift-detector-factory.js", () => ({
+  createDriftDetectorFromEnv: (...args: unknown[]) =>
+    mockCreateDriftDetectorFromEnv(...args),
+}));
+
 import { driftCommand } from "./drift.js";
 import { MemoryService } from "../services/memory.js";
 
@@ -42,8 +49,8 @@ describe("drift command", () => {
   afterEach(() => {
     stdoutSpy.mockRestore();
     vi.restoreAllMocks();
+    mockCreateDriftDetectorFromEnv.mockReset();
     process.exitCode = undefined;
-    delete (globalThis as Record<string, unknown>)["__assigneeDriftPort"];
   });
 
   it("displays empty state message when no provisions exist", async () => {
@@ -79,7 +86,7 @@ describe("drift command", () => {
         }) as any,
     );
 
-    delete (globalThis as Record<string, unknown>)["__assigneeDriftPort"];
+    mockCreateDriftDetectorFromEnv.mockReturnValue(undefined);
 
     await driftCommand.parseAsync(["node", "drift"]);
 
@@ -101,22 +108,27 @@ describe("drift command", () => {
     ];
 
     const mockPort = {
-      getResource: vi
-        .fn()
-        .mockResolvedValue([
-          null,
-          {
-            ResourceDescription: {
-              Properties: JSON.stringify({ BucketName: "bucket-1" }),
-            },
+      getResource: vi.fn().mockResolvedValue([
+        null,
+        {
+          ResourceDescription: {
+            Properties: JSON.stringify({ BucketName: "bucket-1" }),
           },
-        ]),
+        },
+      ]),
       createResource: vi.fn(),
       deleteResource: vi.fn(),
+      updateResource: vi.fn(),
       getRequestStatus: vi.fn(),
     };
 
-    (globalThis as Record<string, unknown>)["__assigneeDriftPort"] = mockPort;
+    const { DriftDetectorService } =
+      await import("../services/drift-detector.js");
+    const detector = new DriftDetectorService({ provisioningPort: mockPort });
+    mockCreateDriftDetectorFromEnv.mockReturnValue({
+      detector,
+      port: mockPort,
+    });
 
     vi.mocked(MemoryService).mockImplementation(
       () =>
@@ -154,10 +166,17 @@ describe("drift command", () => {
         ]),
       createResource: vi.fn(),
       deleteResource: vi.fn(),
+      updateResource: vi.fn(),
       getRequestStatus: vi.fn(),
     };
 
-    (globalThis as Record<string, unknown>)["__assigneeDriftPort"] = mockPort;
+    const { DriftDetectorService } =
+      await import("../services/drift-detector.js");
+    const detector = new DriftDetectorService({ provisioningPort: mockPort });
+    mockCreateDriftDetectorFromEnv.mockReturnValue({
+      detector,
+      port: mockPort,
+    });
 
     vi.mocked(MemoryService).mockImplementation(
       () =>

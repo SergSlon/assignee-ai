@@ -22,6 +22,13 @@ vi.mock("../views/drift-detail.js", () => ({
   renderDriftDetail: vi.fn().mockReturnValue("mock detail view"),
 }));
 
+// Mock drift detector factory
+const mockCreateDriftDetectorFromEnv = vi.fn();
+vi.mock("../services/drift-detector-factory.js", () => ({
+  createDriftDetectorFromEnv: (...args: unknown[]) =>
+    mockCreateDriftDetectorFromEnv(...args),
+}));
+
 import {
   reconcileCommand,
   buildPatchDocument,
@@ -84,7 +91,7 @@ describe("reconcile command", () => {
   afterEach(() => {
     stdoutSpy.mockRestore();
     vi.restoreAllMocks();
-    delete (globalThis as Record<string, unknown>)["__assigneeDriftPort"];
+    mockCreateDriftDetectorFromEnv.mockReset();
     delete (globalThis as Record<string, unknown>)["__reconcilePromptFn"];
     delete (globalThis as Record<string, unknown>)["__reconcileConfirmFn"];
   });
@@ -121,7 +128,7 @@ describe("reconcile command", () => {
         }) as any,
     );
 
-    delete (globalThis as Record<string, unknown>)["__assigneeDriftPort"];
+    mockCreateDriftDetectorFromEnv.mockReturnValue(undefined);
     await reconcileCommand.parseAsync(["node", "reconcile"]);
 
     const output = stdoutSpy.mock.calls.map((c) => c[0]).join("");
@@ -139,7 +146,13 @@ describe("reconcile command", () => {
         },
       ]),
     });
-    (globalThis as Record<string, unknown>)["__assigneeDriftPort"] = mockPort;
+    const { DriftDetectorService } =
+      await import("../services/drift-detector.js");
+    const detector = new DriftDetectorService({ provisioningPort: mockPort });
+    mockCreateDriftDetectorFromEnv.mockReturnValue({
+      detector,
+      port: mockPort,
+    });
 
     vi.mocked(MemoryService).mockImplementation(
       () =>
@@ -326,7 +339,13 @@ describe("reconcile command", () => {
             },
           ]),
       });
-      (globalThis as Record<string, unknown>)["__assigneeDriftPort"] = mockPort;
+      const { DriftDetectorService } =
+        await import("../services/drift-detector.js");
+      const detector = new DriftDetectorService({ provisioningPort: mockPort });
+      mockCreateDriftDetectorFromEnv.mockReturnValue({
+        detector,
+        port: mockPort,
+      });
       (globalThis as Record<string, unknown>)["__reconcilePromptFn"] = vi
         .fn()
         .mockResolvedValueOnce("Skip")

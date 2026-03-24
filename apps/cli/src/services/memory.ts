@@ -151,13 +151,43 @@ export class MemoryService {
 
   /**
    * Rotate provisions: keep only the most recent `maxRecords` entries.
+   * If a preserveFilter is provided, records matching the filter are never removed
+   * even if they exceed maxRecords — only older non-preserved records are trimmed.
    * @returns Number of records removed.
    */
-  async rotateProvisions(maxRecords = 200): Promise<number> {
+  async rotateProvisions(
+    maxRecords = 200,
+    preserveFilter?: (record: ProvisionRecord) => boolean,
+  ): Promise<number> {
     const existing = await this.readProvisions();
     if (existing.length <= maxRecords) return 0;
-    const removed = existing.length - maxRecords;
-    const trimmed = existing.slice(-maxRecords);
+
+    let trimmed: ProvisionRecord[];
+    if (preserveFilter) {
+      // Split into preserved (must keep) and candidates (can trim)
+      const preserved: ProvisionRecord[] = [];
+      const candidates: ProvisionRecord[] = [];
+      for (const record of existing) {
+        if (preserveFilter(record)) {
+          preserved.push(record);
+        } else {
+          candidates.push(record);
+        }
+      }
+      // Keep the most recent candidates up to the remaining budget
+      const budget = Math.max(0, maxRecords - preserved.length);
+      const keptCandidates = candidates.slice(-budget);
+      trimmed = [...keptCandidates, ...preserved].sort(
+        (a, b) =>
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+    } else {
+      trimmed = existing.slice(-maxRecords);
+    }
+
+    const removed = existing.length - trimmed.length;
+    if (removed === 0) return 0;
+
     await this.ensureDir();
     await fs.writeFile(
       this.filePath("provisions.json"),

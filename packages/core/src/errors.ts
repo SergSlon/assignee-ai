@@ -102,6 +102,7 @@ export class UserCancelledError extends AssigneeError {
 }
 
 export type ProvisioningErrorCode =
+  | "AccessDenied"
   | "AlreadyExists"
   | "NotFound"
   | "Throttled"

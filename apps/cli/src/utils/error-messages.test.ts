@@ -161,6 +161,32 @@ describe("ErrorMessageRegistry — AWS provisioning errors", () => {
     expect(entry.code).toBe("ResourceNotFoundException");
     expect(entry.howToFix).toContain("exist");
   });
+
+  it("resolves ProvisioningError with InvalidParameterValue from message text", () => {
+    const err = new ProvisioningError(
+      "InvalidParameterValue: invalid instance type",
+      "Unknown",
+    );
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.code).toBe("InvalidParameterValue");
+    expect(entry.howToFix).toContain("parameter");
+  });
+
+  it("resolves ProvisioningError with AccessDenied code directly", () => {
+    const err = new ProvisioningError("Not authorized", "AccessDenied");
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.code).toBe("AccessDenied");
+    expect(entry.howToFix).toContain("IAM");
+  });
+
+  it("matches 'already exists' substring from generic message", () => {
+    const err = new ProvisioningError(
+      "Resource already exists in account",
+      "Unknown",
+    );
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.code).toBe("AlreadyExists");
+  });
 });
 
 // ── AC 3: Configuration errors ───────────────────────────────────────────────
@@ -196,6 +222,15 @@ describe("ErrorMessageRegistry — configuration errors", () => {
     const entry = defaultErrorMessageRegistry.resolve(err);
     expect(entry.code).toBe("INVALID_YAML");
     expect(entry.howToFix).toContain("config.yaml");
+  });
+
+  it("resolves missing credentials error", () => {
+    const err = new ConfigurationError(
+      "No AWS credentials detected in environment",
+    );
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.code).toBe("MISSING_CREDENTIALS");
+    expect(entry.howToFix).toContain("ASSIGNEE_OPERATOR");
   });
 });
 
@@ -395,6 +430,17 @@ describe("ErrorMessageRegistry — resolveMessage", () => {
     );
     expect(entry.what).toContain("Completely unknown error scenario");
     expect(entry.howToFix).toBeTruthy();
+  });
+});
+
+// ── MISSING_INTENT error ──────────────────────────────────────────────────────
+
+describe("ErrorMessageRegistry — MISSING_INTENT", () => {
+  it("MISSING_INTENT entry exists and has actionable howToFix", () => {
+    const entry = defaultErrorMessageRegistry.get("MISSING_INTENT");
+    expect(entry).toBeDefined();
+    expect(entry!.code).toBe("MISSING_INTENT");
+    expect(entry!.howToFix).toContain("assignee plan");
   });
 });
 

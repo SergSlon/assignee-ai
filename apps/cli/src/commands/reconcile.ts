@@ -7,6 +7,8 @@
  * @see Story 28.4
  */
 
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { Command } from "commander";
 import chalk from "chalk";
 import {
@@ -25,6 +27,58 @@ import type {
   ProvisioningPort,
   ProvisioningPortError,
 } from "../services/provisioning-port.js";
+import { createDriftDetectorFromEnv } from "../services/drift-detector-factory.js";
+import { CHECKPOINT_DIR } from "../config/constants.js";
+
+/**
+ * Resolve desired state for a resource by scanning checkpoint files.
+ * Returns the desiredState from the most recent checkpoint that matches the resource ARN.
+ */
+async function resolveDesiredState(
+  resourceArn: string,
+): Promise<Record<string, unknown> | undefined> {
+  const dir = path.resolve(process.cwd(), CHECKPOINT_DIR);
+  try {
+    const files = await fs.readdir(dir);
+    const checkpoints = files
+      .filter((f) => f.startsWith("checkpoint-") && f.endsWith(".json"))
+      .sort()
+      .reverse(); // newest first by filename
+
+    for (const file of checkpoints) {
+      try {
+        const raw = await fs.readFile(path.join(dir, file), "utf-8");
+        const cp = JSON.parse(raw);
+        // Check single-resource checkpoint
+        if (cp.desiredState && cp.resourceType) {
+          const arn =
+            cp.desiredState?.Arn ??
+            cp.desiredState?.BucketName ??
+            cp.desiredState?.FunctionName;
+          if (arn === resourceArn || cp.runId === resourceArn) {
+            return cp.desiredState;
+          }
+        }
+        // Check compound checkpoint with resourceQueue
+        if (cp.resourceQueue) {
+          for (const r of cp.resourceQueue) {
+            if (
+              r.desiredState &&
+              (r.resourceId === resourceArn || r.displayName === resourceArn)
+            ) {
+              return r.desiredState;
+            }
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // No checkpoint dir
+  }
+  return undefined;
+}
 
 /** Action chosen for each drifted resource. */
 export type ReconcileAction = "reconcile" | "accept" | "skip";
@@ -208,28 +262,26 @@ export const reconcileCommand = new Command(CommandName.RECONCILE)
         filtered = filtered.filter((p) => p.resourceType === opts.resource);
       }
 
-      const portOrUndefined = (globalThis as Record<string, unknown>)[
-        "__assigneeDriftPort"
-      ] as DriftDetectorOptions["provisioningPort"] | undefined;
+      // Build drift detector from environment credentials (no globalThis DI)
+      const detectorResult = createDriftDetectorFromEnv();
 
-      if (!portOrUndefined) {
+      if (!detectorResult) {
         process.stdout.write(
           "Reconcile requires AWS credentials. Configure credentials and try again.\n",
         );
         return;
       }
 
-      const detector = new DriftDetectorService({
-        provisioningPort: portOrUndefined,
-      });
+      const { detector, port: portOrUndefined } = detectorResult;
 
-      // Run drift detection
+      // Run drift detection with resolved desiredState (same as drift.ts)
       const results: DriftResult[] = [];
       for (const provision of filtered) {
+        const desiredState = await resolveDesiredState(provision.resourceArn);
         const driftResult = await detector.checkResource(
           provision.resourceType,
           provision.resourceArn,
-          undefined,
+          desiredState,
         );
         results.push(driftResult);
       }

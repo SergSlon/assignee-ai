@@ -19,6 +19,7 @@ import {
   DriftDetectorService,
   type DriftDetectorOptions,
 } from "../services/drift-detector.js";
+import { createDriftDetectorFromEnv } from "../services/drift-detector-factory.js";
 import { renderDriftDetail } from "../views/drift-detail.js";
 import { buildDriftReport } from "../views/drift-report.js";
 import { renderProgressBar } from "../views/drift-progress.js";
@@ -175,24 +176,17 @@ export const driftCommand = new Command("drift")
         filtered = filtered.filter((p) => p.region === opts.region);
       }
 
-      // Build a minimal drift detector with a stub port (actual integration requires
-      // CloudControlAdapter, but we keep the command testable)
-      const portOrUndefined = (globalThis as Record<string, unknown>)[
-        "__assigneeDriftPort"
-      ] as DriftDetectorOptions["provisioningPort"] | undefined;
+      // Build drift detector from environment credentials (no globalThis DI)
+      const detectorResult = createDriftDetectorFromEnv();
 
-      if (!portOrUndefined) {
-        // In production, we would instantiate CloudControlAdapter here.
-        // For now, report that drift checking requires AWS connectivity.
+      if (!detectorResult) {
         process.stdout.write(
           "Drift detection requires AWS credentials. Configure credentials and try again.\n",
         );
         return;
       }
 
-      const detector = new DriftDetectorService({
-        provisioningPort: portOrUndefined,
-      });
+      const { detector } = detectorResult;
 
       // Single resource detail view (Story 28.3)
       if (resourceId) {
