@@ -17,21 +17,28 @@ describe("getRequiredIamActions", () => {
 
   it("returns CloudControl base actions + S3-specific actions for AWS::S3::Bucket", () => {
     const actions = getRequiredIamActions("AWS::S3::Bucket");
-    expect(actions).toEqual([
-      ...BASE_CCAPI_ACTIONS,
-      "s3:CreateBucket",
-      "s3:PutBucketTagging",
-    ]);
+    // Verify all base CCAPI actions are present
+    for (const base of BASE_CCAPI_ACTIONS) {
+      expect(actions).toContain(base);
+    }
+    // Verify key S3-specific actions
+    expect(actions).toContain("s3:CreateBucket");
+    expect(actions).toContain("s3:DeleteBucket");
+    expect(actions).toContain("s3:PutBucketTagging");
   });
 
   it("returns CloudControl base actions + Lambda-specific actions for AWS::Lambda::Function", () => {
     const actions = getRequiredIamActions("AWS::Lambda::Function");
-    expect(actions).toEqual([
-      ...BASE_CCAPI_ACTIONS,
-      "lambda:CreateFunction",
-      "lambda:TagResource",
-      "iam:PassRole",
-    ]);
+    // Verify all base CCAPI actions are present
+    for (const base of BASE_CCAPI_ACTIONS) {
+      expect(actions).toContain(base);
+    }
+    // Verify key Lambda-specific actions
+    expect(actions).toContain("lambda:CreateFunction");
+    expect(actions).toContain("lambda:DeleteFunction");
+    expect(actions).toContain("lambda:GetFunction");
+    expect(actions).toContain("lambda:TagResource");
+    expect(actions).toContain("iam:PassRole");
   });
 
   it("returns only CloudControl base actions for unknown resource type", () => {

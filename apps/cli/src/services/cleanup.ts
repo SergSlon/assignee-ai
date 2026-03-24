@@ -240,7 +240,18 @@ export async function runFullCleanup(opts: {
       if (dryRun) {
         report.memory = await dryRunMemory(memoryService);
       } else {
-        const provisions = await memoryService.rotateProvisions();
+        // Pass preserveFilter to rotateProvisions: never trim records less than 30 days old.
+        // This prevents deletion of records for resources still actively managed.
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const preserveFilter = (record: { timestamp?: string }) => {
+          if (!record.timestamp) return false;
+          const recordAge = Date.now() - new Date(record.timestamp).getTime();
+          return recordAge < THIRTY_DAYS_MS;
+        };
+        const provisions = await memoryService.rotateProvisions(
+          undefined,
+          preserveFilter,
+        );
         const failures = await memoryService.rotateFailures();
         const patterns = await memoryService.rotatePatterns();
         report.memory = { provisions, failures, patterns };
