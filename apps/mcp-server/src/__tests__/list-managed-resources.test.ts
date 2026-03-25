@@ -186,3 +186,53 @@ describe("list_managed_resources", () => {
     expect(ResourceGroupsTaggingAPIClient).toHaveBeenCalled();
   });
 });
+
+// ── Tagging API error scenarios ──────────────────────────────────────────────
+
+describe("list_managed_resources — Tagging API errors", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should propagate ThrottlingException from Tagging API", async () => {
+    const mockSend = getMockSend();
+    const throttleError = Object.assign(new Error("Rate exceeded"), {
+      name: "ThrottlingException",
+      $metadata: { httpStatusCode: 429 },
+    });
+    mockSend.mockRejectedValueOnce(throttleError);
+
+    await expect(fetchManagedResources("us-east-1")).rejects.toThrow(
+      "Rate exceeded",
+    );
+  });
+
+  it("should propagate InternalServiceException from Tagging API", async () => {
+    const mockSend = getMockSend();
+    const internalError = Object.assign(new Error("Internal service error"), {
+      name: "InternalServiceException",
+      $metadata: { httpStatusCode: 500 },
+    });
+    mockSend.mockRejectedValueOnce(internalError);
+
+    await expect(fetchManagedResources("us-east-1")).rejects.toThrow(
+      "Internal service error",
+    );
+  });
+
+  it("should propagate InvalidParameterException from Tagging API", async () => {
+    const mockSend = getMockSend();
+    const paramError = Object.assign(
+      new Error("Invalid parameter: TagFilters"),
+      {
+        name: "InvalidParameterException",
+        $metadata: { httpStatusCode: 400 },
+      },
+    );
+    mockSend.mockRejectedValueOnce(paramError);
+
+    await expect(fetchManagedResources("us-east-1")).rejects.toThrow(
+      "Invalid parameter: TagFilters",
+    );
+  });
+});

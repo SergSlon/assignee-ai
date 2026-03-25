@@ -27,6 +27,11 @@ function makeState(overrides: Record<string, unknown> = {}) {
       properties: {
         BucketName: { type: "string" },
         Tags: { type: "array" },
+        BucketEncryption: { type: "object" },
+        PublicAccessBlockConfiguration: { type: "object" },
+        VersioningConfiguration: { type: "object" },
+        OwnershipControls: { type: "object" },
+        LoggingConfiguration: { type: "object" },
       },
       required: ["BucketName"],
     },

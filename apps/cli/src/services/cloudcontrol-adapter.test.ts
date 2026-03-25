@@ -307,3 +307,66 @@ describe("classifyError — all error code mappings", () => {
     expect(err!.message).toBe("raw string error");
   });
 });
+
+// ── Additional error scenarios ───────────────────────────────────────────────
+
+describe("classifyError — unmapped and network errors", () => {
+  it("InvalidInputException → returns UNKNOWN error kind", async () => {
+    const error = Object.assign(new Error("Invalid input provided"), {
+      name: "InvalidInputException",
+      $metadata: { httpStatusCode: 400 },
+    });
+    mockClient.send.mockRejectedValue(error);
+
+    const [err, result] = await adapter.getResource(
+      "AWS::S3::Bucket",
+      "bad-input",
+    );
+
+    expect(err).not.toBeNull();
+    expect(err!.kind).toBe(ProvisioningErrorKind.UNKNOWN);
+    expect(err!.message).toContain("Invalid input provided");
+    expect(result).toBeNull();
+  });
+
+  it("network ECONNREFUSED error → returns UNKNOWN error", async () => {
+    const error = Object.assign(
+      new Error("connect ECONNREFUSED 127.0.0.1:443"),
+      {
+        code: "ECONNREFUSED",
+        errno: -111,
+        syscall: "connect",
+      },
+    );
+    mockClient.send.mockRejectedValue(error);
+
+    const [err, result] = await adapter.createResource(
+      "AWS::S3::Bucket",
+      '{"BucketName":"unreachable"}',
+      "client-token-net",
+    );
+
+    expect(err).not.toBeNull();
+    expect(err!.kind).toBe(ProvisioningErrorKind.UNKNOWN);
+    expect(err!.message).toContain("ECONNREFUSED");
+    expect(result).toBeNull();
+  });
+
+  it("AbortError (timeout) → returns UNKNOWN error", async () => {
+    const error = Object.assign(new Error("Request timed out"), {
+      name: "AbortError",
+      code: "ABORT_ERR",
+    });
+    mockClient.send.mockRejectedValue(error);
+
+    const [err, result] = await adapter.deleteResource(
+      "AWS::S3::Bucket",
+      "slow-bucket",
+    );
+
+    expect(err).not.toBeNull();
+    expect(err!.kind).toBe(ProvisioningErrorKind.UNKNOWN);
+    expect(err!.message).toContain("Request timed out");
+    expect(result).toBeNull();
+  });
+});

@@ -1008,13 +1008,33 @@ export async function optionElicitorNode(
 
   if (state.executionStatus !== ExecutionStatus.PENDING) return {};
 
-  // Story 11.1: --no-wizard bypasses all interactive prompts, uses plugin defaults
+  // Story 11.1: --no-wizard bypasses all interactive prompts, uses plugin defaults.
+  // When called from MCP server (noWizard=true), missing required fields are allowed —
+  // the plan-generator LLM will extract them from the user intent, and preflight-guard
+  // performs the final required-field validation.
   if (state.noWizard) {
     const plugin =
       defaultPluginRegistry.get(state.resourceType) ??
       defaultPluginRegistry.get("generic")!;
-    const elicitedOptions = populateDefaultOptions(plugin);
-    return { elicitedOptions };
+    try {
+      const elicitedOptions = populateDefaultOptions(plugin);
+      return { elicitedOptions };
+    } catch (err) {
+      if (err instanceof MissingRequiredFieldsError) {
+        // Populate only available defaults; let plan-generator handle the rest
+        const partial: Record<string, unknown> = {};
+        const allFields = [...plugin.commonFields, ...plugin.advancedFields];
+        for (const field of allFields) {
+          if (field.question.showIf) continue;
+          const iv = field.question.initialValue;
+          const pd = plugin.defaults[field.name];
+          if (iv !== undefined) partial[field.name] = iv;
+          else if (pd !== undefined) partial[field.name] = pd;
+        }
+        return { elicitedOptions: partial };
+      }
+      throw err;
+    }
   }
 
   // Non-TTY (CI/pipes): skip all prompts

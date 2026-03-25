@@ -659,4 +659,255 @@ describe("apply_plan tool", () => {
       expect(body.message).toContain("graph context not initialized");
     });
   });
+
+  describe("compound provisioning and timeout (Story E2E.2)", () => {
+    it("should use recursionLimit of 50 in graph config", async () => {
+      await setCheckpointFile(makeCheckpointJSON());
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/checkpoint.json",
+          confirmed: true,
+        },
+      });
+
+      // Verify the config passed to graph.invoke includes recursionLimit: 50
+      const invokeCall = (ctx.graph.invoke as ReturnType<typeof vi.fn>).mock
+        .calls[0]!;
+      const config = invokeCall[1] as {
+        recursionLimit: number;
+        configurable: Record<string, string>;
+      };
+      expect(config.recursionLimit).toBe(50);
+      expect(config.configurable).toBeDefined();
+      expect(config.configurable["thread_id"]).toContain("mcp-apply");
+    });
+
+    it("should handle compound pattern with multiple resources", async () => {
+      await setCheckpointFile(
+        makeCheckpointJSON({
+          resourceQueue: [
+            {
+              resourceId: "res-1",
+              resourceType: "AWS::S3::Bucket",
+              displayName: "Bucket 1",
+              desiredState: {},
+            },
+            {
+              resourceId: "res-2",
+              resourceType: "AWS::Lambda::Function",
+              displayName: "Function 1",
+              desiredState: {},
+            },
+            {
+              resourceId: "res-3",
+              resourceType: "AWS::DynamoDB::Table",
+              displayName: "Table 1",
+              desiredState: {},
+            },
+          ],
+        }),
+      );
+
+      const completedResources = [
+        {
+          resourceId: "res-1",
+          resourceType: "AWS::S3::Bucket",
+          arn: "arn:aws:s3:::bucket-1",
+        },
+        {
+          resourceId: "res-2",
+          resourceType: "AWS::Lambda::Function",
+          arn: "arn:aws:lambda:us-east-1:123:function:fn-1",
+        },
+        {
+          resourceId: "res-3",
+          resourceType: "AWS::DynamoDB::Table",
+          arn: "arn:aws:dynamodb:us-east-1:123:table/table-1",
+        },
+      ];
+
+      // Simulate 3-resource provisioning loop: three iterations with next nodes, then empty
+      const ctx = makeMockGraphContext({ completedResources }, [
+        { next: ["resource_provisioner"] },
+        { next: ["resource_provisioner"] },
+        { next: ["resource_provisioner"] },
+        { next: [] },
+      ]);
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/compound-3-resources.json",
+          confirmed: true,
+        },
+      });
+
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      expect(body.status).toBe("SUCCESS");
+      expect(body.completedResources).toHaveLength(3);
+      expect(body.completedResources).toEqual(completedResources);
+
+      // Phase 1 invoke + 4 provisioning loop invokes (3 with next + 1 final) = 5 total
+      expect(ctx.graph.invoke).toHaveBeenCalledTimes(5);
+    });
+
+    it("should return TIMEOUT error when provisioning exceeds 5 minutes", async () => {
+      await setCheckpointFile(makeCheckpointJSON());
+
+      // Track how many times graph.invoke is called. On the 2nd loop invoke,
+      // advance time past the 5-minute timeout so the NEXT while-loop check triggers.
+      const realDateNow = Date.now.bind(Date);
+      let timeOffset = 0;
+      vi.spyOn(Date, "now").mockImplementation(
+        () => realDateNow() + timeOffset,
+      );
+
+      let invokeCount = 0;
+      const ctx: GraphContext = {
+        graph: {
+          invoke: vi.fn().mockImplementation(() => {
+            invokeCount++;
+            // After the phase-1 invoke (call 1) and the first loop invoke (call 2),
+            // jump time forward past 5 minutes so the next while-check triggers timeout
+            if (invokeCount >= 2) {
+              timeOffset = 5 * 60 * 1000 + 1;
+            }
+            return Promise.resolve({});
+          }),
+          getState: vi.fn().mockResolvedValue({
+            values: { executionStatus: ExecutionStatus.SUCCESS },
+            next: ["resource_provisioner"], // Always has more work
+          }),
+        },
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      };
+
+      try {
+        const { client } = await createTestClient(ctx);
+
+        const result = await client.callTool({
+          name: "apply_plan",
+          arguments: {
+            checkpointPath: "/tmp/timeout-checkpoint.json",
+            confirmed: true,
+          },
+        });
+
+        expect(result.isError).toBe(true);
+        const body = JSON.parse(
+          (result.content as Array<{ type: string; text: string }>)[0]!.text,
+        );
+        expect(body.status).toBe("TIMEOUT");
+        expect(body.message).toContain("timed out");
+        expect(body.message).toContain("300s");
+      } finally {
+        vi.spyOn(Date, "now").mockRestore();
+      }
+    });
+
+    it("should handle partial success in compound provisioning", async () => {
+      await setCheckpointFile(
+        makeCheckpointJSON({
+          resourceQueue: [
+            {
+              resourceId: "res-1",
+              resourceType: "AWS::S3::Bucket",
+              displayName: "Bucket 1",
+              desiredState: {},
+            },
+            {
+              resourceId: "res-2",
+              resourceType: "AWS::Lambda::Function",
+              displayName: "Function 1",
+              desiredState: {},
+            },
+            {
+              resourceId: "res-3",
+              resourceType: "AWS::DynamoDB::Table",
+              displayName: "Table 1",
+              desiredState: {},
+            },
+          ],
+        }),
+      );
+
+      // Simulate: 2 resources succeed, then graph invoke throws on the 3rd
+      let invokeCallCount = 0;
+      const ctx: GraphContext = {
+        graph: {
+          invoke: vi.fn().mockImplementation(() => {
+            invokeCallCount++;
+            // Phase 1 invoke + 2 successful loop invokes, then fail on 3rd loop invoke
+            if (invokeCallCount <= 3) {
+              return Promise.resolve({
+                executionStatus: ExecutionStatus.SUCCESS,
+                completedResources: [
+                  {
+                    resourceId: "res-1",
+                    resourceType: "AWS::S3::Bucket",
+                    arn: "arn:aws:s3:::bucket-1",
+                  },
+                  {
+                    resourceId: "res-2",
+                    resourceType: "AWS::Lambda::Function",
+                    arn: "arn:aws:lambda:us-east-1:123:function:fn-1",
+                  },
+                ],
+              });
+            }
+            return Promise.reject(
+              new Error(
+                "CloudControl API error: DynamoDB table creation failed — limit exceeded",
+              ),
+            );
+          }),
+          getState: vi.fn().mockImplementation(() => {
+            // First two getState calls: more work to do. Third: would continue but invoke fails.
+            return Promise.resolve({
+              values: {
+                executionStatus: ExecutionStatus.SUCCESS,
+                completedResources: [
+                  {
+                    resourceId: "res-1",
+                    resourceType: "AWS::S3::Bucket",
+                    arn: "arn:aws:s3:::bucket-1",
+                  },
+                  {
+                    resourceId: "res-2",
+                    resourceType: "AWS::Lambda::Function",
+                    arn: "arn:aws:lambda:us-east-1:123:function:fn-1",
+                  },
+                ],
+              },
+              next: ["resource_provisioner"],
+            });
+          }),
+        },
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/partial-success.json",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      expect(body.message).toContain("DynamoDB table creation failed");
+    });
+  });
 });

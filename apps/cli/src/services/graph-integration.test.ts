@@ -282,7 +282,7 @@ describe("Graph integration — plan mode", () => {
     expect(renderPlanBox).toHaveBeenCalled();
   });
 
-  it("Lambda function: schema validation catches missing required field", async () => {
+  it("Lambda function: repairer injects Code from plugin defaults when missing (Story E2E.3)", async () => {
     // LLM generates a plan that is MISSING the required "Code" field
     mockLlmForPlanFlow(
       "AWS::Lambda::Function",
@@ -300,10 +300,12 @@ describe("Graph integration — plan mode", () => {
       { configurable: { thread_id: "integration-lambda-missing-field" } },
     );
 
-    // preflight_guard should fail because Code is required but missing
-    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(result.errorMessage).toContain("Code");
-    expect(renderError).toHaveBeenCalled();
+    // Generic repairer (Story E2E.3) fills Code from Lambda plugin defaults
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+    expect(result.desiredState).toHaveProperty("Code");
+    expect(
+      (result.desiredState as Record<string, unknown>)["Code"],
+    ).toHaveProperty("ZipFile");
   });
 
   it("EC2 instance: happy path with all required fields", async () => {

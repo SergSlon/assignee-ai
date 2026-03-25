@@ -60,6 +60,7 @@ function isArn(input: string): boolean {
  * TODO: Extract into a shared @assignee/core utility to eliminate duplication.
  */
 const SERVICE_TYPE_MAP: Record<string, Record<string, string>> = {
+  // Tier 0
   s3: { "": "AWS::S3::Bucket" },
   ssm: { parameter: "AWS::SSM::Parameter" },
   iam: { role: "AWS::IAM::Role" },
@@ -68,6 +69,11 @@ const SERVICE_TYPE_MAP: Record<string, Record<string, string>> = {
     vpc: "AWS::EC2::VPC",
     subnet: "AWS::EC2::Subnet",
     "security-group": "AWS::EC2::SecurityGroup",
+    // Tier 1 networking
+    "internet-gateway": "AWS::EC2::InternetGateway",
+    "route-table": "AWS::EC2::RouteTable",
+    natgateway: "AWS::EC2::NatGateway",
+    // Route has no ARN (composite identifier) — not resolvable by ARN
   },
   rds: { db: "AWS::RDS::DBInstance" },
   lambda: {
@@ -82,25 +88,90 @@ const SERVICE_TYPE_MAP: Record<string, Record<string, string>> = {
   },
   ecs: { cluster: "AWS::ECS::Cluster" },
   ecr: { repository: "AWS::ECR::Repository" },
+  // Tier 1
+  logs: { "log-group": "AWS::Logs::LogGroup" },
+  // Tier 2
+  cloudwatch: { alarm: "AWS::CloudWatch::Alarm" },
+  secretsmanager: { secret: "AWS::SecretsManager::Secret" },
+  apigateway: { apis: "AWS::ApiGatewayV2::Api" },
+  "execute-api": { "": "AWS::ApiGatewayV2::Api" },
 };
 
-function arnToResourceType(arn: string): string | null {
+/** @internal Exported for testing only. */
+export function arnToResourceType(arn: string): string | null {
   const parts = arn.split(":");
   if (parts.length < 6) return null;
   const service = parts[2];
   const resourcePart = parts[5] ?? "";
-  const resourceType = resourcePart.split("/")[0] ?? "";
+  // Extract resource type segment: first segment before "/" (handles most ARNs)
+  // For API Gateway ARNs like arn:aws:apigateway:region::/apis/id, resourcePart starts with "/"
+  const segments = resourcePart.split("/").filter(Boolean);
+  const resourceType = segments[0] ?? "";
   if (!service) return null;
   const serviceTypes = SERVICE_TYPE_MAP[service];
   if (!serviceTypes) return null;
   return serviceTypes[resourceType] ?? serviceTypes[""] ?? null;
 }
 
-function extractIdentifierFromArn(arn: string): string {
+/** @internal Exported for testing only. */
+export function extractIdentifierFromArn(arn: string): string {
   const parts = arn.split(":");
+  if (parts.length < 6) return arn;
+
+  // Rejoin everything after the 5th colon (resource section may contain colons)
   const resourceSection = parts.slice(5).join(":");
-  const segments = resourceSection.split(/[:/]/).filter(Boolean);
-  return segments[segments.length - 1] ?? arn;
+
+  // ARN resource formats:
+  //  "type/id"              → ec2:instance/i-abc → "i-abc"
+  //  "type:id"              → rds:db:my-db → "my-db", cloudwatch:alarm:my-alarm → "my-alarm"
+  //  "id" (no separator)    → sqs:my-queue, sns:my-topic → "my-queue"
+  //  "parameter/path/name"  → ssm:parameter/app/db → "app/db" (full path after "parameter/")
+  //  "log-group:/path"      → logs:log-group:/aws/fn → "/aws/fn" (preserve leading /)
+  //  "secret:name/suffix"   → secretsmanager:secret:app/db-AbC → "app/db-AbC"
+  //  "/apis/id"             → apigateway:/apis/abc → "abc"
+
+  // Detect colon-separated format: "type:identifier" (rds:db:name, cloudwatch:alarm:name, etc.)
+  const colonParts = resourceSection.split(":");
+  if (colonParts.length >= 2) {
+    const resourceType = colonParts[0]!;
+    const afterType = colonParts.slice(1).join(":");
+
+    // SSM parameter: "parameter/path/to/name" — but uses slash, not colon, for type separator
+    if (resourceType === "parameter") {
+      // Everything after "parameter/" is the identifier
+      return resourceSection.slice("parameter/".length);
+    }
+
+    // Log group: "log-group:/path/name" or "log-group:simple-name"
+    if (resourceType === "log-group") {
+      return afterType;
+    }
+
+    // Secret: "secret:name-with-suffix" or "secret:path/name-suffix"
+    if (resourceType === "secret") {
+      return afterType;
+    }
+
+    // Generic colon-separated: "db:my-db", "alarm:my-alarm", etc.
+    if (afterType && !resourceType.includes("/")) {
+      return afterType;
+    }
+  }
+
+  // Detect slash-separated: "type/identifier" or "/apis/id"
+  const slashIdx = resourceSection.indexOf("/");
+  if (slashIdx !== -1) {
+    const afterSlash = resourceSection.slice(slashIdx + 1);
+    // API Gateway: "/apis/abc123" — extract last segment
+    if (resourceSection.startsWith("/")) {
+      const segments = resourceSection.split("/").filter(Boolean);
+      return segments[segments.length - 1] ?? arn;
+    }
+    return afterSlash || arn;
+  }
+
+  // No separator — the resource section IS the identifier (SQS queue name, SNS topic name)
+  return resourceSection || arn;
 }
 
 function extractRegionFromArn(arn: string, defaultRegion: string): string {

@@ -392,6 +392,12 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
     Timeout: 30,
     Architectures: ["x86_64"],
     EphemeralStorage: { Size: 512 },
+    // Story E2E.3: Placeholder Code for noWizard/MCP mode.
+    // Lambda cannot be created without Code; repairer injects this when LLM omits it.
+    Code: {
+      ZipFile:
+        "exports.handler = async (event) => ({ statusCode: 200, body: 'placeholder' });",
+    },
   },
   configHints: [
     buildRuntimeHint(runtimeOptions),
