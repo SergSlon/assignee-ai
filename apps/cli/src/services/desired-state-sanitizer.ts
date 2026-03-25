@@ -176,5 +176,17 @@ function sanitizeValue(
     }
   }
 
+  // Type coercion: integer/number → string (e.g., RDS AllocatedStorage: schema expects "20" not 20)
+  if (schemaType === "string" && typeof value === "number") {
+    coercedKeys.push({ path, from: "number", to: "string" });
+    return String(value);
+  }
+
+  // Type coercion: boolean → string
+  if (schemaType === "string" && typeof value === "boolean") {
+    coercedKeys.push({ path, from: "boolean", to: "string" });
+    return String(value);
+  }
+
   return value;
 }
