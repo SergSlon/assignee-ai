@@ -179,6 +179,42 @@ function extractRegionFromArn(arn: string, defaultRegion: string): string {
   return parts[3] || defaultRegion;
 }
 
+/**
+ * Resource types whose CloudControl primaryIdentifier is the full ARN.
+ * For these types, DeleteResourceCommand.Identifier must be the ARN itself,
+ * NOT the extracted name/id.
+ */
+const ARN_IDENTIFIER_TYPES = new Set([
+  "AWS::SNS::Topic", // primaryIdentifier: /properties/TopicArn
+  "AWS::ElasticLoadBalancingV2::LoadBalancer", // /properties/LoadBalancerArn
+  "AWS::SecretsManager::Secret", // /properties/Id (which is the ARN)
+  "AWS::ECS::Cluster", // /properties/Arn
+]);
+
+/**
+ * Returns the correct CloudControl Identifier for a resource given its ARN and type.
+ * Most types use the extracted name/id, but some need the full ARN.
+ */
+function getCloudControlIdentifier(
+  arn: string,
+  resourceType: string,
+  extractedId: string,
+): string {
+  if (ARN_IDENTIFIER_TYPES.has(resourceType)) {
+    return arn;
+  }
+  // SQS uses QueueUrl as identifier — construct from ARN
+  if (resourceType === "AWS::SQS::Queue") {
+    // arn:aws:sqs:us-east-1:123456789012:queue-name → https://sqs.us-east-1.amazonaws.com/123456789012/queue-name
+    const parts = arn.split(":");
+    const region = parts[3] || "us-east-1";
+    const account = parts[4] || "";
+    const queueName = parts[5] || extractedId;
+    return `https://sqs.${region}.amazonaws.com/${account}/${queueName}`;
+  }
+  return extractedId;
+}
+
 // ── Resolved resource shape ──────────────────────────────────────────────────
 
 interface ResolvedResource {
@@ -228,11 +264,13 @@ async function resolveResource(
       const matchesName = !isArn(input) && identifier === input;
 
       if (matchesArn || matchesName) {
+        const resourceType = arnToResourceType(arn) ?? "Unknown";
         return {
           arn,
-          resourceType: arnToResourceType(arn) ?? "Unknown",
+          resourceType,
           region: extractRegionFromArn(arn, region),
-          identifier,
+          // Use the correct CloudControl identifier (full ARN for SNS/SQS/ELB/etc.)
+          identifier: getCloudControlIdentifier(arn, resourceType, identifier),
         };
       }
     }

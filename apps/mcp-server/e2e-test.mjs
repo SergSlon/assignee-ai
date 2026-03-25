@@ -52,7 +52,7 @@ const RESOURCE_TYPES = [
   { short: "SSM-Parameter",     desc: `Create an SSM Parameter with Name /e2e-test/param-${RUN_ID} and Type String and Value test123`, expensive: false },
   { short: "IAM-Role",          desc: `Create an IAM Role named e2e-role-${RUN_ID} with AssumeRolePolicyDocument allowing lambda.amazonaws.com to assume the role`, expensive: false },
   { short: "S3-Bucket",         desc: `Create an S3 Bucket named e2e-s3-${RUN_ID}`, expensive: false },
-  { short: "DynamoDB-Table",    desc: `Create a DynamoDB Table named e2e-ddb-${RUN_ID} with TableName e2e-ddb-${RUN_ID} and partition key named id of type S in PAY_PER_REQUEST billing mode`, expensive: false },
+  { short: "DynamoDB-Table",    desc: `Create a DynamoDB Table named e2e-ddb-${RUN_ID} with TableName e2e-ddb-${RUN_ID} and partition key named id of type S in PAY_PER_REQUEST billing mode and DeletionProtectionEnabled false`, expensive: false },
   { short: "SQS-Queue",         desc: `Create an SQS Queue named e2e-sqs-${RUN_ID} with QueueName e2e-sqs-${RUN_ID}`, expensive: false },
   { short: "SNS-Topic",         desc: `Create an SNS Topic with TopicName e2e-sns-${RUN_ID}`, expensive: false },
   { short: "ECS-Cluster",       desc: "Create an ECS Cluster with ClusterName e2e-ecs-cluster-test", expensive: false },
@@ -158,8 +158,8 @@ async function stopMcpServer() {
 
 // ── MCP tool helpers ─────────────────────────────────────────────────────────
 
-// 5-minute timeout for all MCP tool calls — CloudControl provisioning can take 60-300s
-const MCP_TOOL_TIMEOUT = { timeout: 300_000 };
+// 15-minute timeout for MCP tool calls — RDS provisioning can take 8-15 minutes
+const MCP_TOOL_TIMEOUT = { timeout: 900_000 };
 
 function parseToolResult(result) {
   const content = result.content;
