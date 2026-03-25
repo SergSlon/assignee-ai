@@ -1,6 +1,6 @@
 # Story E2E.6: Fix Remaining 9 E2E Failures (112/150 → 150/150)
 
-Status: backlog
+Status: ready-for-dev
 
 ## Current State (Run 13, 2026-03-25)
 
@@ -42,10 +42,70 @@ Status: backlog
 
 8-9. **Compound-MessageQueue/ServerlessAPI destroy**: Same compound identifier issue as #7
 
-## Priority Order
+## Tasks / Subtasks
 
-1. Lambda IAM delay (trivial fix — just increase timer)
-2. DynamoDB DeletionProtection (remove from defaults or disable before delete)
-3. RDS timeout (increase status-poller timeout)
-4. SQS/Route/API-GW destroy identifier mapping (systematic fix in getCloudControlIdentifier)
-5. Compound pattern destroy (fix E2E harness to use per-resource ARNs)
+- [ ] Task 1: Lambda IAM delay (AC: apply #1)
+  - [ ] 1.1 In e2e-test.mjs, increase IAM propagation delay from 10s to 20s
+  - [ ] 1.2 Test Lambda apply passes
+
+- [ ] Task 2: DynamoDB DeletionProtection (AC: destroy #4)
+  - [ ] 2.1 Remove DeletionProtectionEnabled from dynamodb-table.ts plugin defaults
+  - [ ] 2.2 Update dynamodb-table.test.ts to match
+  - [ ] 2.3 Test DynamoDB destroy passes
+
+- [ ] Task 3: RDS timeout (AC: apply #2)
+  - [ ] 3.1 In apps/cli/src/nodes/status-poller.ts, increase MAX_POLL_ATTEMPTS or POLL_INTERVAL for RDS
+  - [ ] 3.2 Test RDS apply completes within 15min
+
+- [ ] Task 4: Destroy identifier mapping (AC: destroy #3,5,6,7,8,9)
+  - [ ] 4.1 In destroy-resource.ts getCloudControlIdentifier(), verify SQS ARN→QueueUrl conversion works when called with ARN
+  - [ ] 4.2 Add Route composite identifier handling — accept `rtb-xxx|cidr` directly, skip Tagging API resolution
+  - [ ] 4.3 Fix E2E harness: for compound patterns, use list_managed_resources ARNs per resource type instead of compound result IDs
+  - [ ] 4.4 Add IAM destroy retry logic (Tagging API eventual consistency)
+
+- [ ] Task 5: Verify all 25/25 apply + 25/25 destroy pass
+  - [ ] 5.1 Run full E2E, confirm 150/150 (or document any remaining AWS-level constraints)
+
+## Dev Notes
+
+### Key Files
+
+| File                                                           | Change Needed                                      |
+| -------------------------------------------------------------- | -------------------------------------------------- |
+| `apps/mcp-server/e2e-test.mjs`                                 | IAM delay 10→20s, compound destroy via list ARNs   |
+| `packages/core/src/resource-plugins/plugins/dynamodb-table.ts` | Remove DeletionProtectionEnabled from defaults     |
+| `apps/cli/src/nodes/status-poller.ts`                          | Increase timeout for RDS                           |
+| `apps/mcp-server/src/tools/destroy-resource.ts`                | Route composite ID, SQS QueueUrl verify, IAM retry |
+
+### How to Run
+
+```bash
+# Build
+npx turbo build --force
+
+# Unit tests (must all pass)
+pnpm test
+
+# E2E against real AWS
+node apps/mcp-server/e2e-test.mjs 2>&1 | tee /tmp/mcp-e2e.log
+
+# Quick single-type test
+node apps/mcp-server/e2e-test.mjs --type Lambda
+node apps/mcp-server/e2e-test.mjs --type RDS
+```
+
+### AWS Prerequisites
+
+- IAM policy v18 deployed (cloudformation:\*, iam:CreateServiceLinkedRole)
+- Root account via default profile (us-east-1)
+- Clean stale resources before run: `aws resourcegroupstaggingapi get-resources --tag-filters Key=managed-by,Values=assignee-ai`
+
+## Dev Agent Record
+
+### Agent Model Used
+
+Claude Opus 4.6
+
+### Previous Session Summary
+
+10 commits, 13 E2E runs, 2972 unit tests. Created: desired-state-sanitizer, required-field-repairer, updated both MCP+CLI destroy resolvers, added getCloudControlIdentifier(), fixed BP blocking in MCP mode, Route no-tag injection, NatGateway EIP auto-allocation.
