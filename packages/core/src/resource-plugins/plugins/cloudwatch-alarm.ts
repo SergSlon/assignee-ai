@@ -38,6 +38,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
         type: "string",
         label: "Metric name",
         placeholder: "CPUUtilization",
+        initialValue: "CPUUtilization",
         hint: "The CloudWatch metric to monitor. Common metrics: CPUUtilization, Errors, ApproximateNumberOfMessagesVisible, TargetResponseTime, DatabaseConnections.",
         validate: (value: unknown) => {
           if (!value || !String(value).trim()) return "Metric name is required";
@@ -62,6 +63,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
           },
           { value: "Custom", label: "Custom namespace (enter manually)" },
         ],
+        initialValue: "AWS/EC2",
         hint: "The namespace that contains the metric. AWS services publish to their own namespace (e.g., AWS/EC2). Custom applications can publish to any namespace.",
       },
     },
@@ -72,6 +74,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
         type: "string",
         label: "Threshold value",
         placeholder: "80",
+        initialValue: "80",
         hint: "The value to compare the metric against. Examples: CPU at 80%, error count at 1, queue depth at 0, latency at 1 second.",
         validate: (value: unknown) => {
           if (

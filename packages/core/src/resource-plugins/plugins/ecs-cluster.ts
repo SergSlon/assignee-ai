@@ -113,6 +113,7 @@ export const ecsClusterPlugin: ResourcePlugin = {
   ],
   defaults: {
     ClusterSettings: [{ Name: "containerInsights", Value: "enabled" }],
+    CapacityProviders: ["FARGATE"],
   },
   companionResources(desiredState: Record<string, unknown>): CfnOutput[] {
     const clusterName = desiredState["ClusterName"];

@@ -155,6 +155,9 @@ async function stopMcpServer() {
 
 // ── MCP tool helpers ─────────────────────────────────────────────────────────
 
+// 5-minute timeout for all MCP tool calls — CloudControl provisioning can take 60-300s
+const MCP_TOOL_TIMEOUT = { timeout: 300_000 };
+
 function parseToolResult(result) {
   const content = result.content;
   if (!content || !content[0] || content[0].type !== "text") {
@@ -172,7 +175,7 @@ async function mcpPlanResource(description) {
   const result = await client.callTool({
     name: "plan_resource",
     arguments: { description, region: "us-east-1" },
-  });
+  }, undefined, MCP_TOOL_TIMEOUT);
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   const body = parseToolResult(result);
   return { ...body, isError: !!result.isError, elapsed };
@@ -183,7 +186,7 @@ async function mcpEstimateCost(description) {
   const result = await client.callTool({
     name: "estimate_cost",
     arguments: { description },
-  });
+  }, undefined, MCP_TOOL_TIMEOUT);
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   const body = parseToolResult(result);
   return { ...body, isError: !!result.isError, elapsed };
@@ -194,7 +197,7 @@ async function mcpApplyPlan(checkpointPath) {
   const result = await client.callTool({
     name: "apply_plan",
     arguments: { checkpointPath, confirmed: true },
-  });
+  }, undefined, MCP_TOOL_TIMEOUT);
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   const body = parseToolResult(result);
   return { ...body, isError: !!result.isError, elapsed };
@@ -205,7 +208,7 @@ async function mcpListResources() {
   const result = await client.callTool({
     name: "list_managed_resources",
     arguments: {},
-  });
+  }, undefined, MCP_TOOL_TIMEOUT);
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   const body = parseToolResult(result);
   return { ...body, isError: !!result.isError, elapsed };
@@ -216,7 +219,7 @@ async function mcpDestroyResource(identifier) {
   const result = await client.callTool({
     name: "destroy_resource",
     arguments: { resource_identifier: identifier, confirmed: true },
-  });
+  }, undefined, MCP_TOOL_TIMEOUT);
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   const body = parseToolResult(result);
   return { ...body, isError: !!result.isError, elapsed };

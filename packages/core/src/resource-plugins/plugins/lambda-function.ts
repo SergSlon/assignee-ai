@@ -139,13 +139,15 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
     },
     {
       name: "Handler",
+      required: true,
       question: {
         type: "string",
         label: "Handler (file.method)",
         placeholder: "index.handler",
+        initialValue: "index.handler",
         hint: "Entry point for your function: file name + exported method. Node.js: 'index.handler'. Python: 'lambda_function.lambda_handler'. Must match your code exactly.",
         validate: (value: unknown) => {
-          if (!value) return undefined; // Optional
+          if (!value) return undefined;
           const s = String(value);
           if (!s.includes("."))
             return "Handler must be in file.method format (e.g., index.handler)";
@@ -390,6 +392,8 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
   defaults: {
     MemorySize: 128,
     Timeout: 30,
+    Runtime: "nodejs22.x",
+    Handler: "index.handler",
     Architectures: ["x86_64"],
     EphemeralStorage: { Size: 512 },
     // Story E2E.3: Placeholder Code for noWizard/MCP mode.
