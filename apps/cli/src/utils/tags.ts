@@ -31,6 +31,13 @@ const TAG_VALUE_ENVIRONMENT = "poc";
 const FLAT_MAP_TAG_TYPES = new Set(["AWS::SSM::Parameter"]);
 
 /**
+ * Resource types that do NOT support Tags at all.
+ * Tag injection is skipped entirely for these types.
+ * @see AWS::EC2::Route — CloudControl rejects Tags property.
+ */
+const NO_TAG_TYPES = new Set(["AWS::EC2::Route"]);
+
+/**
  * Merges mandatory Assignee.ai tags into a desiredState object.
  * Emits Tags in the correct format for the given resource type:
  *   - flat map  { key: value }         for FLAT_MAP_TAG_TYPES (e.g. SSM Parameter)
@@ -47,6 +54,11 @@ export function injectMandatoryTags(
   runId: string,
   resourceType?: string,
 ): Record<string, unknown> {
+  // Skip tag injection for resource types that don't support Tags
+  if (resourceType && NO_TAG_TYPES.has(resourceType)) {
+    return { ...desiredState };
+  }
+
   const mandatory: Record<string, string> = {
     [TAG_KEY_MANAGED_BY]: TAG_VALUE_MANAGED_BY,
     [TAG_KEY_RUN_ID]: runId,

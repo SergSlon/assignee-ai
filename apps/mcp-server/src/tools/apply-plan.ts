@@ -144,7 +144,7 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
       const runId = checkpoint.runId;
       const config = {
         configurable: { thread_id: `${runId}-mcp-apply` },
-        recursionLimit: 50, // Story E2E.1: increased from default 25 for compound patterns
+        recursionLimit: 200, // Story E2E.5: RDS/ELBv2 provisioning requires many polling cycles
       };
 
       try {
