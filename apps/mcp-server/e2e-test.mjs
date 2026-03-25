@@ -314,30 +314,19 @@ async function testResourceLifecycle(type, description, isCompound = false) {
   }
 
   // Step 5: destroy_resource
+  // Always use ARNs from list_managed_resources for destroy — apply_plan may return
+  // names/internal-IDs that CloudControl can't resolve. The Tagging API ARNs are authoritative.
   console.log(`  [5/6] destroy_resource...`);
   const identifiers = [];
 
-  if (isCompound && applyResult.completedResources?.length) {
-    for (const r of [...applyResult.completedResources].reverse()) {
-      identifiers.push(r.arn || r.identifier || r.resourceId);
-    }
-  } else if (applyResult.resourceArn) {
-    identifiers.push(applyResult.resourceArn);
-  } else if (applyResult.completedResources?.[0]) {
-    identifiers.push(applyResult.completedResources[0].arn || applyResult.completedResources[0].identifier);
-  }
-
-  if (identifiers.length === 0) {
-    // Fallback: list resources and destroy all
-    try {
-      const listed = await mcpListResources();
-      if (listed.resources?.length) {
-        for (const r of listed.resources) {
-          identifiers.push(r.arn);
-        }
+  try {
+    const listed = await mcpListResources();
+    if (listed.resources?.length) {
+      for (const r of [...listed.resources].reverse()) {
+        identifiers.push(r.arn);
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
   let allDestroyed = true;
   const destroyDetails = [];
