@@ -314,19 +314,40 @@ async function testResourceLifecycle(type, description, isCompound = false) {
   }
 
   // Step 5: destroy_resource
-  // Always use ARNs from list_managed_resources for destroy — apply_plan may return
-  // names/internal-IDs that CloudControl can't resolve. The Tagging API ARNs are authoritative.
+  // Use ARN from list_managed_resources when available (authoritative identifier),
+  // but fall back to apply result when list returns too many resources.
   console.log(`  [5/6] destroy_resource...`);
   const identifiers = [];
 
-  try {
-    const listed = await mcpListResources();
-    if (listed.resources?.length) {
-      for (const r of [...listed.resources].reverse()) {
-        identifiers.push(r.arn);
-      }
+  // First try: get ARN from apply result
+  if (isCompound && applyResult.completedResources?.length) {
+    for (const r of [...applyResult.completedResources].reverse()) {
+      identifiers.push(r.arn || r.identifier || r.resourceId);
     }
-  } catch {}
+  } else if (applyResult.resourceArn) {
+    // If resourceArn looks like an ARN, use it directly for destroy
+    const arn = applyResult.resourceArn;
+    if (typeof arn === "string" && arn.startsWith("arn:aws:")) {
+      identifiers.push(arn);
+    } else {
+      // Non-ARN identifier — look up the real ARN from list_managed_resources
+      try {
+        const listed = await mcpListResources();
+        const match = listed.resources?.find(r => r.arn?.includes(arn) || r.identifier === arn);
+        if (match) identifiers.push(match.arn);
+        else identifiers.push(arn); // fallback to raw identifier
+      } catch { identifiers.push(arn); }
+    }
+  }
+
+  if (identifiers.length === 0) {
+    try {
+      const listed = await mcpListResources();
+      if (listed.resources?.length) {
+        for (const r of listed.resources) identifiers.push(r.arn);
+      }
+    } catch {}
+  }
 
   let allDestroyed = true;
   const destroyDetails = [];
