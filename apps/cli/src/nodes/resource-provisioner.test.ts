@@ -142,10 +142,16 @@ describe("resourceProvisionerNode", () => {
       expect(result.requestToken).toBe("0ff011d6-654f-4110-8a37-9754bd6aad59");
     });
 
-    it("fails when getResource throws a non-NOT_FOUND error", async () => {
+    it("proceeds with creation when getResource throws a non-NOT_FOUND error (Story E2E.4)", async () => {
+      // State guard now treats ALL non-NOT_FOUND errors as "can't verify, proceed"
+      // This handles: UNKNOWN, invalid identifiers (SecretsManager, Route), etc.
       mockProvisioner.getResource.mockResolvedValueOnce([
-        { kind: ProvisioningErrorKind.UNKNOWN, message: "Access denied" },
+        { kind: ProvisioningErrorKind.UNKNOWN, message: "Invalid identifier" },
         null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "token-unknown-skip" },
       ]);
 
       const result = await resourceProvisionerNode(
@@ -153,11 +159,8 @@ describe("resourceProvisionerNode", () => {
         mockProvisioner,
       );
 
-      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(
-        /State Guard: unable to verify resource state/,
-      );
-      expect(mockProvisioner.createResource).not.toHaveBeenCalled();
+      // Should proceed to create, not fail at state guard
+      expect(mockProvisioner.createResource).toHaveBeenCalled();
     });
 
     it("proceeds with creation when getResource returns ACCESS_DENIED", async () => {
