@@ -5,7 +5,7 @@
  * @see Story 20.2
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -54,17 +54,6 @@ function parseToolResult(result: any): Record<string, unknown> {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("plan_resource tool", () => {
-  const originalRegion = process.env["AWS_REGION"];
-
-  afterEach(() => {
-    // Restore AWS_REGION
-    if (originalRegion !== undefined) {
-      process.env["AWS_REGION"] = originalRegion;
-    } else {
-      delete process.env["AWS_REGION"];
-    }
-  });
-
   describe("success path", () => {
     it("should return a plan with resourceType, desiredState, estimatedMonthlyCost, and checkpointPath", async () => {
       const mockState = {
@@ -304,26 +293,16 @@ describe("plan_resource tool", () => {
   });
 
   describe("region override", () => {
-    it("should forward region parameter to process.env.AWS_REGION during invocation", async () => {
-      let capturedRegion: string | undefined;
-
-      const ctx: GraphContext = {
-        graph: {
-          invoke: vi.fn().mockImplementation(async () => {
-            capturedRegion = process.env["AWS_REGION"];
-            return {
-              executionStatus: ExecutionStatus.SUCCESS,
-              resourceType: "AWS::S3::Bucket",
-              desiredState: { BucketName: "test" },
-              estimatedMonthlyCost: "$0.00",
-              preflightPassed: true,
-            };
-          }),
-          getState: vi.fn().mockResolvedValue({ values: {}, next: [] }),
-        },
-        cleanup: vi.fn().mockResolvedValue(undefined),
+    it("should pass region through graph state as awsRegion, not process.env", async () => {
+      const mockState = {
+        executionStatus: ExecutionStatus.SUCCESS,
+        resourceType: "AWS::S3::Bucket",
+        desiredState: { BucketName: "test" },
+        estimatedMonthlyCost: "$0.00",
+        preflightPassed: true,
       };
 
+      const ctx = createMockGraphContext(mockState);
       const { client } = await createTestClient(ctx);
 
       await client.callTool({
@@ -334,22 +313,51 @@ describe("plan_resource tool", () => {
         },
       });
 
-      expect(capturedRegion).toBe("eu-west-1");
-      // Region should be restored after invocation
-      expect(process.env["AWS_REGION"]).toBe(originalRegion);
+      const invokeCall = (ctx.graph.invoke as ReturnType<typeof vi.fn>).mock
+        .calls[0]!;
+      const invokeInput = invokeCall[0] as Record<string, unknown>;
+
+      // Region passed through graph state, not process.env
+      expect(invokeInput["awsRegion"]).toBe("eu-west-1");
     });
 
-    it("should restore original AWS_REGION after invocation even on error", async () => {
-      process.env["AWS_REGION"] = "us-east-1";
-
-      const ctx: GraphContext = {
-        graph: {
-          invoke: vi.fn().mockRejectedValue(new Error("boom")),
-          getState: vi.fn().mockResolvedValue({ values: {}, next: [] }),
-        },
-        cleanup: vi.fn().mockResolvedValue(undefined),
+    it("should not include awsRegion in graph state when region is not provided", async () => {
+      const mockState = {
+        executionStatus: ExecutionStatus.SUCCESS,
+        resourceType: "AWS::S3::Bucket",
+        desiredState: { BucketName: "test" },
+        estimatedMonthlyCost: "$0.00",
+        preflightPassed: true,
       };
 
+      const ctx = createMockGraphContext(mockState);
+      const { client } = await createTestClient(ctx);
+
+      await client.callTool({
+        name: "plan_resource",
+        arguments: {
+          description: "Create an S3 bucket",
+        },
+      });
+
+      const invokeCall = (ctx.graph.invoke as ReturnType<typeof vi.fn>).mock
+        .calls[0]!;
+      const invokeInput = invokeCall[0] as Record<string, unknown>;
+
+      expect(invokeInput["awsRegion"]).toBeUndefined();
+    });
+
+    it("should not mutate process.env.AWS_REGION (concurrent-safe)", async () => {
+      const originalEnvRegion = process.env["AWS_REGION"];
+      const mockState = {
+        executionStatus: ExecutionStatus.SUCCESS,
+        resourceType: "AWS::S3::Bucket",
+        desiredState: { BucketName: "test" },
+        estimatedMonthlyCost: "$0.00",
+        preflightPassed: true,
+      };
+
+      const ctx = createMockGraphContext(mockState);
       const { client } = await createTestClient(ctx);
 
       await client.callTool({
@@ -360,7 +368,8 @@ describe("plan_resource tool", () => {
         },
       });
 
-      expect(process.env["AWS_REGION"]).toBe("us-east-1");
+      // process.env should not have been touched
+      expect(process.env["AWS_REGION"]).toBe(originalEnvRegion);
     });
   });
 

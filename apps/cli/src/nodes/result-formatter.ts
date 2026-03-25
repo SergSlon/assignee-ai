@@ -359,19 +359,40 @@ export async function resultFormatterNode(
       // Legacy hint from ErrorHintRegistry as fallback for howToFix
       const legacyHint = defaultErrorHintRegistry.getHint(state.error);
 
-      // Compound mode: show partial results with cleanup message
+      // Compound mode: show partial results with cleanup guidance (EC-22)
       if (
         state.resourcePattern &&
         state.completedResources &&
         state.completedResources.length > 0
       ) {
-        const provisioned = state.completedResources
-          .filter((r) => r.executionStatus === ExecutionStatus.SUCCESS)
+        const successfulResources = state.completedResources.filter(
+          (r) => r.executionStatus === ExecutionStatus.SUCCESS,
+        );
+        const provisioned = successfulResources
           .map((r) => r.resourceType)
           .join(", ");
         const haltedAt = state.resourceType ?? "unknown resource";
+
+        // Build cleanup guidance with ARNs in reverse dependency order
+        const resourcesWithArns = successfulResources.filter(
+          (r) => r.resourceArn,
+        );
+        const reversedResources = [...resourcesWithArns].reverse();
+
+        let cleanupGuidance = "";
+        if (reversedResources.length > 0) {
+          const arnList = reversedResources
+            .map(
+              (r) => `  - ${r.resourceType}: assignee destroy ${r.resourceArn}`,
+            )
+            .join("\n");
+          cleanupGuidance =
+            `\n\nSuccessfully created resources:\n${arnList}` +
+            `\n\nTo clean up partially created resources, run the destroy commands above in the listed order (reverse dependency order).`;
+        }
+
         renderError(
-          `Provision halted at ${haltedAt}. Previously provisioned: ${provisioned}. Manual cleanup may be required.`,
+          `Provision halted at ${haltedAt}. Previously provisioned: ${provisioned}. Manual cleanup may be required.${cleanupGuidance}`,
           legacyHint ?? resolved.howToFix,
           { why: resolved.why },
         );

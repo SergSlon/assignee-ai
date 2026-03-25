@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import {
   DriftDetectorService,
   deepDiff,
+  deepEqual,
+  canonicalSort,
   normalizeValue,
 } from "./drift-detector.js";
 import { DriftStatus, ChangeType } from "@assignee/core";
@@ -468,6 +470,204 @@ describe("DriftDetectorService", () => {
       const actual = { Enabled: "true" };
       const diffs = deepDiff(desired, actual, "AWS::S3::Bucket");
       expect(diffs).toHaveLength(0);
+    });
+  });
+
+  describe("array ordering — false drift prevention (EC-2 #9)", () => {
+    it("Tags in different order → IN_SYNC (not DRIFTED)", () => {
+      const desired = {
+        Tags: [
+          { Key: "env", Value: "prod" },
+          { Key: "team", Value: "platform" },
+          { Key: "app", Value: "api" },
+        ],
+      };
+      const actual = {
+        Tags: [
+          { Key: "team", Value: "platform" },
+          { Key: "app", Value: "api" },
+          { Key: "env", Value: "prod" },
+        ],
+      };
+      const diffs = deepDiff(desired, actual, "AWS::EC2::Instance");
+      expect(diffs).toHaveLength(0);
+    });
+
+    it("SecurityGroup rules in different order → IN_SYNC", () => {
+      const desired = {
+        SecurityGroupIngress: [
+          {
+            IpProtocol: "tcp",
+            FromPort: 443,
+            ToPort: 443,
+            CidrIp: "0.0.0.0/0",
+          },
+          { IpProtocol: "tcp", FromPort: 80, ToPort: 80, CidrIp: "0.0.0.0/0" },
+        ],
+      };
+      const actual = {
+        SecurityGroupIngress: [
+          { IpProtocol: "tcp", FromPort: 80, ToPort: 80, CidrIp: "0.0.0.0/0" },
+          {
+            IpProtocol: "tcp",
+            FromPort: 443,
+            ToPort: 443,
+            CidrIp: "0.0.0.0/0",
+          },
+        ],
+      };
+      const diffs = deepDiff(desired, actual, "AWS::EC2::SecurityGroup");
+      expect(diffs).toHaveLength(0);
+    });
+
+    it("Objects with reordered keys → IN_SYNC", () => {
+      const desired = {
+        Config: { zebra: 1, alpha: 2, middle: 3 },
+      };
+      const actual = {
+        Config: { alpha: 2, middle: 3, zebra: 1 },
+      };
+      const diffs = deepDiff(desired, actual, "AWS::S3::Bucket");
+      expect(diffs).toHaveLength(0);
+    });
+
+    it("Actually different arrays → still DRIFTED", () => {
+      const desired = {
+        Tags: [
+          { Key: "env", Value: "prod" },
+          { Key: "team", Value: "platform" },
+        ],
+      };
+      const actual = {
+        Tags: [
+          { Key: "env", Value: "staging" },
+          { Key: "team", Value: "platform" },
+        ],
+      };
+      const diffs = deepDiff(desired, actual, "AWS::EC2::Instance");
+      expect(diffs.length).toBeGreaterThan(0);
+    });
+
+    it("Nested objects with different key ordering → IN_SYNC", () => {
+      const desired = {
+        Policy: {
+          Statement: [
+            { Effect: "Allow", Action: "s3:GetObject", Resource: "*" },
+          ],
+        },
+      };
+      const actual = {
+        Policy: {
+          Statement: [
+            { Resource: "*", Action: "s3:GetObject", Effect: "Allow" },
+          ],
+        },
+      };
+      const diffs = deepDiff(desired, actual, "AWS::IAM::Policy");
+      expect(diffs).toHaveLength(0);
+    });
+
+    it("Mixed: some fields same (reordered), some actually different → correct diff", () => {
+      const desired = {
+        Tags: [
+          { Key: "env", Value: "prod" },
+          { Key: "team", Value: "platform" },
+        ],
+        Description: "original",
+      };
+      const actual = {
+        Tags: [
+          { Key: "team", Value: "platform" },
+          { Key: "env", Value: "prod" },
+        ],
+        Description: "modified",
+      };
+      const diffs = deepDiff(desired, actual, "AWS::EC2::SecurityGroup");
+      // Tags are the same (just reordered) so no drift there
+      // Description is genuinely different
+      expect(diffs).toHaveLength(1);
+      expect(diffs[0]!.path).toBe("Description");
+      expect(diffs[0]!.changeType).toBe(ChangeType.MODIFIED);
+    });
+
+    it("arrays with extra element in actual → ADDED_EXTERNALLY", () => {
+      const desired = {
+        Tags: [{ Key: "env", Value: "prod" }],
+      };
+      const actual = {
+        Tags: [
+          { Key: "env", Value: "prod" },
+          { Key: "team", Value: "platform" },
+        ],
+      };
+      const diffs = deepDiff(desired, actual, "AWS::EC2::Instance");
+      expect(diffs).toHaveLength(1);
+      expect(diffs[0]!.changeType).toBe(ChangeType.ADDED_EXTERNALLY);
+    });
+
+    it("arrays of primitives in different order → IN_SYNC", () => {
+      const desired = {
+        AvailabilityZones: ["us-east-1a", "us-east-1b", "us-east-1c"],
+      };
+      const actual = {
+        AvailabilityZones: ["us-east-1c", "us-east-1a", "us-east-1b"],
+      };
+      const diffs = deepDiff(
+        desired,
+        actual,
+        "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      );
+      expect(diffs).toHaveLength(0);
+    });
+  });
+
+  describe("canonicalSort", () => {
+    it("sorts arrays of objects deterministically", () => {
+      const input = [
+        { Key: "zebra", Value: "z" },
+        { Key: "alpha", Value: "a" },
+      ];
+      const sorted = canonicalSort(input) as Array<Record<string, string>>;
+      expect((sorted[0] as Record<string, string>)["Key"]).toBe("alpha");
+      expect((sorted[1] as Record<string, string>)["Key"]).toBe("zebra");
+    });
+
+    it("sorts object keys alphabetically", () => {
+      const input = { z: 1, a: 2, m: 3 };
+      const sorted = canonicalSort(input) as Record<string, number>;
+      expect(Object.keys(sorted)).toEqual(["a", "m", "z"]);
+    });
+
+    it("handles nested structures recursively", () => {
+      const input = {
+        outer: [
+          { b: 2, a: 1 },
+          { d: 4, c: 3 },
+        ],
+      };
+      const sorted = canonicalSort(input) as Record<string, unknown>;
+      const arr = (sorted as { outer: Array<Record<string, number>> }).outer;
+      expect(Object.keys(arr[0]!)).toEqual(["a", "b"]);
+      expect(Object.keys(arr[1]!)).toEqual(["c", "d"]);
+    });
+  });
+
+  describe("deepEqual", () => {
+    it("considers objects with different key order as equal", () => {
+      expect(deepEqual({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true);
+    });
+
+    it("considers arrays with different order as equal", () => {
+      expect(deepEqual([3, 1, 2], [1, 2, 3])).toBe(true);
+    });
+
+    it("detects actually different values", () => {
+      expect(deepEqual({ a: 1 }, { a: 2 })).toBe(false);
+    });
+
+    it("handles null and undefined", () => {
+      expect(deepEqual(null, null)).toBe(true);
+      expect(deepEqual(null, undefined)).toBe(false);
     });
   });
 });

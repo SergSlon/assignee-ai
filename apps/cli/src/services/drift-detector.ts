@@ -20,6 +20,73 @@ import {
   type ProvisioningPort,
 } from "./provisioning-port.js";
 
+/**
+ * Recursively sort a value for order-independent comparison.
+ * - Arrays of objects: sorted by canonical key (Key, FromPort, CidrIp, etc.) or JSON.stringify fallback
+ * - Arrays of primitives: sorted by value
+ * - Objects: keys sorted alphabetically, values recursively sorted
+ * - Primitives: returned as-is
+ */
+export function canonicalSort(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+
+  if (Array.isArray(value)) {
+    const sorted = value.map((item) => canonicalSort(item));
+    sorted.sort((a, b) => {
+      const aStr = stableStringify(a);
+      const bStr = stableStringify(b);
+      if (aStr < bStr) return -1;
+      if (aStr > bStr) return 1;
+      return 0;
+    });
+    return sorted;
+  }
+
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const sortedObj: Record<string, unknown> = {};
+    const keys = Object.keys(obj).sort();
+    for (const key of keys) {
+      sortedObj[key] = canonicalSort(obj[key]);
+    }
+    return sortedObj;
+  }
+
+  return value;
+}
+
+/**
+ * Produce a stable JSON string with sorted keys (for comparison purposes).
+ */
+function stableStringify(value: unknown): string {
+  if (value === null || value === undefined) return String(value);
+  if (typeof value !== "object") return JSON.stringify(value);
+
+  if (Array.isArray(value)) {
+    return "[" + value.map((v) => stableStringify(v)).join(",") + "]";
+  }
+
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return (
+    "{" +
+    keys
+      .map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k]))
+      .join(",") +
+    "}"
+  );
+}
+
+/**
+ * Deep equality check that is independent of key ordering and array element ordering
+ * within nested structures' keys.
+ */
+export function deepEqual(a: unknown, b: unknown): boolean {
+  return (
+    stableStringify(canonicalSort(a)) === stableStringify(canonicalSort(b))
+  );
+}
+
 /** Options for the drift detector. */
 export interface DriftDetectorOptions {
   /** Port for fetching actual resource state. */
@@ -145,11 +212,11 @@ export function deepDiff(
 
     // Primitive comparison
     if (desiredVal !== actualVal) {
-      // Deep equality check for non-primitive values
+      // Deep equality check for non-primitive values (order-independent)
       if (
         typeof desiredVal === "object" &&
         typeof actualVal === "object" &&
-        JSON.stringify(desiredVal) === JSON.stringify(actualVal)
+        deepEqual(desiredVal, actualVal)
       ) {
         continue;
       }
@@ -174,36 +241,40 @@ function diffArrays(
   resourceType: string,
   prefix: string,
 ): DriftedField[] {
+  // Canonically sort both arrays to avoid false drift from ordering differences
+  const sortedDesired = canonicalSort(desired) as unknown[];
+  const sortedActual = canonicalSort(actual) as unknown[];
+
   const fields: DriftedField[] = [];
-  const maxLen = Math.max(desired.length, actual.length);
+  const maxLen = Math.max(sortedDesired.length, sortedActual.length);
 
   for (let i = 0; i < maxLen; i++) {
     const path = `${prefix}[${i}]`;
 
-    if (i >= desired.length) {
+    if (i >= sortedDesired.length) {
       // Added externally
       fields.push({
         path,
         desiredValue: undefined,
-        actualValue: actual[i],
+        actualValue: sortedActual[i],
         changeType: ChangeType.ADDED_EXTERNALLY,
       });
       continue;
     }
 
-    if (i >= actual.length) {
+    if (i >= sortedActual.length) {
       // Removed
       fields.push({
         path,
-        desiredValue: desired[i],
+        desiredValue: sortedDesired[i],
         actualValue: undefined,
         changeType: ChangeType.REMOVED,
       });
       continue;
     }
 
-    const d = desired[i];
-    const a = actual[i];
+    const d = sortedDesired[i];
+    const a = sortedActual[i];
 
     // If both are objects, deep diff
     if (
@@ -226,10 +297,11 @@ function diffArrays(
 
     const normalizedA = normalizeValue(a, d);
     if (d !== normalizedA) {
+      // Order-independent deep equality check
       if (
         typeof d === "object" &&
         typeof normalizedA === "object" &&
-        JSON.stringify(d) === JSON.stringify(normalizedA)
+        deepEqual(d, normalizedA)
       ) {
         continue;
       }

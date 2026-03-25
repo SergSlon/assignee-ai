@@ -65,119 +65,101 @@ export function registerPlanResource(
       try {
         const runId = crypto.randomUUID();
 
-        // Task 3.1: If region is provided, set AWS_REGION for graph invocation
-        const previousRegion = process.env["AWS_REGION"];
-        if (region) {
-          process.env["AWS_REGION"] = region;
-        }
-
         // Task 3.2: If env is provided, prepend to description for intent parser
         const enrichedDescription = env
           ? `[env:${env}] ${description}`
           : description;
 
-        try {
-          // Task 1.2: Invoke the LangGraph graph in PLAN mode
-          const finalState = await ctx.graph.invoke(
-            {
-              userIntent: enrichedDescription,
-              runId,
-              executionMode: ExecutionMode.PLAN,
-              startedAt: Date.now(),
-              noWizard: true, // MCP server never prompts interactively
-            },
-            { configurable: { thread_id: runId } },
-          );
-
-          // Task 1.3: Check for execution errors
-          if (
-            finalState["executionStatus"] === ExecutionStatus.FAILED ||
-            finalState["executionStatus"] ===
-              ExecutionStatus.UNSUPPORTED_RESOURCE
-          ) {
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: JSON.stringify({
-                    error: true,
-                    message:
-                      (finalState["errorMessage"] as string) ??
-                      "Plan generation failed",
-                    status: finalState["executionStatus"],
-                    ...(finalState["executionStatus"] ===
-                    ExecutionStatus.UNSUPPORTED_RESOURCE
-                      ? {
-                          hint: "Supported types: S3, Lambda, DynamoDB, SQS, SNS, EC2, RDS, IAM Role, SSM Parameter, CloudWatch Logs, EventBridge Rule.",
-                        }
-                      : {}),
-                  }),
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          // Task 1.4: Serialize checkpoint and return structured plan
-          const checkpoint = serializeCheckpoint({
-            runId,
+        // Task 1.2: Invoke the LangGraph graph in PLAN mode
+        // Task 3.1: Pass region through graph state, not process.env (concurrent-safe)
+        const finalState = await ctx.graph.invoke(
+          {
             userIntent: enrichedDescription,
-            resourceType: finalState["resourceType"] as string | undefined,
-            desiredState: finalState["desiredState"] as
-              | Record<string, unknown>
-              | undefined,
-            estimatedMonthlyCost: finalState["estimatedMonthlyCost"] as
-              | string
-              | undefined,
-            preflightPassed: finalState["preflightPassed"] as
-              | boolean
-              | undefined,
-            elicitedOptions: finalState["elicitedOptions"] as
-              | Record<string, unknown>
-              | undefined,
-            resourcePattern: finalState["resourcePattern"] as
-              | { patternId?: string }
-              | undefined,
-            resourceQueue: finalState["resourceQueue"] as
-              | Array<{
-                  resourceId: string;
-                  resourceType: string;
-                  displayName: string;
-                }>
-              | undefined,
-          });
+            runId,
+            executionMode: ExecutionMode.PLAN,
+            startedAt: Date.now(),
+            noWizard: true, // MCP server never prompts interactively
+            ...(region ? { awsRegion: region } : {}),
+          },
+          { configurable: { thread_id: runId } },
+        );
 
-          const checkpointPath = await saveCheckpoint(
-            checkpoint,
-            MCP_CHECKPOINT_DIR,
-          );
-
+        // Task 1.3: Check for execution errors
+        if (
+          finalState["executionStatus"] === ExecutionStatus.FAILED ||
+          finalState["executionStatus"] === ExecutionStatus.UNSUPPORTED_RESOURCE
+        ) {
           return {
             content: [
               {
                 type: "text" as const,
                 text: JSON.stringify({
-                  resourceType: finalState["resourceType"],
-                  desiredState: finalState["desiredState"],
-                  estimatedMonthlyCost: finalState["estimatedMonthlyCost"],
-                  bpFindings: (finalState["bpFindings"] as unknown[]) ?? [],
-                  freeTierNote: finalState["freeTierNote"],
-                  checkpointPath,
-                  runId,
+                  error: true,
+                  message:
+                    (finalState["errorMessage"] as string) ??
+                    "Plan generation failed",
+                  status: finalState["executionStatus"],
+                  ...(finalState["executionStatus"] ===
+                  ExecutionStatus.UNSUPPORTED_RESOURCE
+                    ? {
+                        hint: "Supported types: S3, Lambda, DynamoDB, SQS, SNS, EC2, RDS, IAM Role, SSM Parameter, CloudWatch Logs, EventBridge Rule.",
+                      }
+                    : {}),
                 }),
               },
             ],
+            isError: true,
           };
-        } finally {
-          // Restore region env var
-          if (region) {
-            if (previousRegion !== undefined) {
-              process.env["AWS_REGION"] = previousRegion;
-            } else {
-              delete process.env["AWS_REGION"];
-            }
-          }
         }
+
+        // Task 1.4: Serialize checkpoint and return structured plan
+        const checkpoint = serializeCheckpoint({
+          runId,
+          userIntent: enrichedDescription,
+          resourceType: finalState["resourceType"] as string | undefined,
+          desiredState: finalState["desiredState"] as
+            | Record<string, unknown>
+            | undefined,
+          estimatedMonthlyCost: finalState["estimatedMonthlyCost"] as
+            | string
+            | undefined,
+          preflightPassed: finalState["preflightPassed"] as boolean | undefined,
+          elicitedOptions: finalState["elicitedOptions"] as
+            | Record<string, unknown>
+            | undefined,
+          resourcePattern: finalState["resourcePattern"] as
+            | { patternId?: string }
+            | undefined,
+          resourceQueue: finalState["resourceQueue"] as
+            | Array<{
+                resourceId: string;
+                resourceType: string;
+                displayName: string;
+              }>
+            | undefined,
+        });
+
+        const checkpointPath = await saveCheckpoint(
+          checkpoint,
+          MCP_CHECKPOINT_DIR,
+        );
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                resourceType: finalState["resourceType"],
+                desiredState: finalState["desiredState"],
+                estimatedMonthlyCost: finalState["estimatedMonthlyCost"],
+                bpFindings: (finalState["bpFindings"] as unknown[]) ?? [],
+                freeTierNote: finalState["freeTierNote"],
+                checkpointPath,
+                runId,
+              }),
+            },
+          ],
+        };
       } catch (err) {
         // Catch unexpected errors and return as structured MCP error
         const message = err instanceof Error ? err.message : String(err);

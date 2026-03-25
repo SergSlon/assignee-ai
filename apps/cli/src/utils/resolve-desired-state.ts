@@ -8,6 +8,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { CHECKPOINT_DIR } from "../config/constants.js";
+import { RESOURCE_IDENTIFIER_KEYS, type ResourceType } from "@assignee/core";
 
 /**
  * Resolve desired state for a resource by scanning checkpoint files.
@@ -30,10 +31,14 @@ export async function resolveDesiredState(
         const cp = JSON.parse(raw);
         // Check single-resource checkpoint
         if (cp.desiredState && cp.resourceType) {
-          const arn =
-            cp.desiredState?.Arn ??
-            cp.desiredState?.BucketName ??
-            cp.desiredState?.FunctionName;
+          // Use RESOURCE_IDENTIFIER_KEYS to extract the primary identifier for ANY resource type
+          const identifierKey =
+            RESOURCE_IDENTIFIER_KEYS[cp.resourceType as ResourceType];
+          const identifierValue = identifierKey
+            ? cp.desiredState[identifierKey]
+            : undefined;
+          // Also check Arn as a universal fallback
+          const arn = identifierValue ?? cp.desiredState?.Arn;
           if (arn === resourceArn || cp.runId === resourceArn) {
             return cp.desiredState;
           }

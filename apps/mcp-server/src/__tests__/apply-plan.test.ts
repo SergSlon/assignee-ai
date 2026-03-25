@@ -9,7 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { ExecutionStatus, CHECKPOINT_VERSION } from "@assignee/core";
-import { registerApplyPlan } from "../tools/apply-plan.js";
+import { registerApplyPlan, _resetActiveApplies } from "../tools/apply-plan.js";
 import type { GraphContext } from "../services/graph-init.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -110,6 +110,7 @@ async function setCheckpointFileNotFound() {
 describe("apply_plan tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    _resetActiveApplies();
   });
 
   describe("safety gate (confirmed parameter)", () => {
@@ -502,6 +503,140 @@ describe("apply_plan tool", () => {
 
       // Phase 1 invoke + 2 provisioning loop invokes = 3 total
       expect(ctx.graph.invoke).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe("concurrency guard", () => {
+    it("should reject a second apply on the same checkpoint while first is in progress", async () => {
+      await setCheckpointFile(makeCheckpointJSON());
+
+      // Create a graph context where invoke blocks until we release it
+      let resolveInvoke!: (val: Record<string, unknown>) => void;
+      const invokePromise = new Promise<Record<string, unknown>>((resolve) => {
+        resolveInvoke = resolve;
+      });
+
+      const ctx: GraphContext = {
+        graph: {
+          invoke: vi.fn().mockReturnValue(invokePromise),
+          getState: vi.fn().mockResolvedValue({
+            values: {
+              executionStatus: ExecutionStatus.SUCCESS,
+              resourceArn: "arn:aws:s3:::test-bucket",
+              resourceType: "AWS::S3::Bucket",
+              estimatedMonthlyCost: "$0.00",
+              securityFindings: [],
+              completedResources: [],
+            },
+            next: [],
+          }),
+        },
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const { client } = await createTestClient(ctx);
+
+      // Start first apply (will block on invoke)
+      const firstApply = client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/checkpoint.json",
+          confirmed: true,
+        },
+      });
+
+      // Give the first call a tick to enter the handler and acquire the lock
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Second apply on the same checkpoint should be rejected immediately
+      const secondResult = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/checkpoint.json",
+          confirmed: true,
+        },
+      });
+
+      expect(secondResult.isError).toBe(true);
+      const body = JSON.parse(
+        (secondResult.content as Array<{ type: string; text: string }>)[0]!
+          .text,
+      );
+      expect(body.message).toContain("already being applied");
+
+      // Resolve the first apply so it completes cleanly
+      resolveInvoke({
+        executionStatus: ExecutionStatus.SUCCESS,
+        resourceArn: "arn:aws:s3:::test-bucket",
+        resourceType: "AWS::S3::Bucket",
+        estimatedMonthlyCost: "$0.00",
+      });
+      await firstApply;
+    });
+
+    it("should release the lock after apply completes (allow re-apply)", async () => {
+      await setCheckpointFile(makeCheckpointJSON());
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      // First apply should succeed
+      const first = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/checkpoint.json",
+          confirmed: true,
+        },
+      });
+      expect(first.isError).toBeUndefined();
+
+      // Second apply on same checkpoint should also succeed (lock released)
+      const second = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/checkpoint.json",
+          confirmed: true,
+        },
+      });
+      expect(second.isError).toBeUndefined();
+    });
+
+    it("should release the lock even when provisioning fails", async () => {
+      await setCheckpointFile(makeCheckpointJSON());
+      const ctx = makeMockGraphContext();
+      (ctx.graph.invoke as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error("AWS error"),
+      );
+      const { client } = await createTestClient(ctx);
+
+      // First apply fails
+      const first = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/checkpoint.json",
+          confirmed: true,
+        },
+      });
+      expect(first.isError).toBe(true);
+
+      // Mock a success for the retry
+      (ctx.graph.invoke as ReturnType<typeof vi.fn>).mockResolvedValue({
+        executionStatus: ExecutionStatus.SUCCESS,
+        resourceArn: "arn:aws:s3:::test-bucket",
+        resourceType: "AWS::S3::Bucket",
+        estimatedMonthlyCost: "$0.00",
+        securityFindings: [],
+        completedResources: [],
+      });
+
+      // Second apply should succeed (lock released despite failure)
+      const second = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/checkpoint.json",
+          confirmed: true,
+        },
+      });
+      expect(second.isError).toBeUndefined();
     });
   });
 
