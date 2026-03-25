@@ -61,10 +61,14 @@ export async function preflightGuardNode(
 
   // Story 18.10: Blocking BP findings (replaces old guardrail engine + CRITICAL BP check)
   // BP evaluation is synchronous (<1ms) — run before the parallel block.
+  // Story E2E.4: In noWizard/MCP mode, BP blocking is advisory only — the confirmed gate
+  // in apply_plan serves as the safety mechanism. The fix_applicator has already had
+  // its chance to auto-fix. Blocking here prevents MCP provisioning for common BPs
+  // like ECR scan-on-push, CloudWatch alarm actions, etc.
   const bpFindings = state.bpFindings ?? [];
   const blockingFindings = bpFindings.filter((f) => f.blocking);
   let bpBlocked = false;
-  if (blockingFindings.length > 0) {
+  if (blockingFindings.length > 0 && !state.noWizard) {
     bpBlocked = true;
     log({
       ts: new Date().toISOString(),
@@ -73,6 +77,19 @@ export async function preflightGuardNode(
       action: LOG_ACTIONS.BP_EVALUATED,
       extras: {
         blocked: true,
+        blockingCount: blockingFindings.length,
+        practiceIds: blockingFindings.map((f) => f.practiceId),
+      },
+    });
+  } else if (blockingFindings.length > 0 && state.noWizard) {
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "warn",
+      action: LOG_ACTIONS.BP_EVALUATED,
+      extras: {
+        blockedSkipped: true,
+        reason: "noWizard mode — BP blocking is advisory only",
         blockingCount: blockingFindings.length,
         practiceIds: blockingFindings.map((f) => f.practiceId),
       },

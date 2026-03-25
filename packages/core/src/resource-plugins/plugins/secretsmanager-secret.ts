@@ -66,7 +66,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
         type: "string",
         label: "KMS Key ID or ARN",
         placeholder: "arn:aws:kms:... or alias/my-key",
-        initialValue: "aws/secretsmanager",
+        initialValue: "",
         hint: "ARN or alias of a KMS key for encryption. Default uses the AWS-managed key (aws/secretsmanager). Use a customer-managed key (CMK) for full control over key rotation, auditing, and cross-account access.",
         validate: (value: unknown) => {
           if (!value) return undefined;
@@ -166,7 +166,6 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
   ],
   defaults: {
     GenerateSecretString: true,
-    KmsKeyId: "aws/secretsmanager",
   },
   configHints: [
     "ALWAYS prefer GenerateSecretString over plaintext SecretString — plaintext values are visible in CloudFormation state and template files.",

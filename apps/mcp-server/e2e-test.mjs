@@ -42,22 +42,25 @@ function loadEnvFile() {
   return envVars;
 }
 
+// ── Unique suffix for this test run (prevents stale-resource collisions) ──────
+const RUN_ID = Date.now().toString(36).slice(-6); // e.g., "k3m1f2"
+
 // ── Resource type definitions ────────────────────────────────────────────────
 
 const RESOURCE_TYPES = [
   // Free / cheap resources — descriptions include ALL required fields for noWizard mode
-  { short: "SSM-Parameter",     desc: "Create an SSM Parameter with Name /e2e-test/ssm-param-test and Type String and Value test123", expensive: false },
-  { short: "IAM-Role",          desc: "Create an IAM Role named e2e-iam-role-test with AssumeRolePolicyDocument allowing lambda.amazonaws.com to assume the role", expensive: false },
-  { short: "S3-Bucket",         desc: "Create an S3 Bucket named e2e-s3-bucket-test-20260325", expensive: false },
-  { short: "DynamoDB-Table",    desc: "Create a DynamoDB Table named e2e-dynamodb-table-test with TableName e2e-dynamodb-table-test and partition key named id of type S in PAY_PER_REQUEST billing mode", expensive: false },
-  { short: "SQS-Queue",         desc: "Create an SQS Queue named e2e-sqs-queue-test with QueueName e2e-sqs-queue-test", expensive: false },
-  { short: "SNS-Topic",         desc: "Create an SNS Topic with TopicName e2e-sns-topic-test2", expensive: false },
+  { short: "SSM-Parameter",     desc: `Create an SSM Parameter with Name /e2e-test/param-${RUN_ID} and Type String and Value test123`, expensive: false },
+  { short: "IAM-Role",          desc: `Create an IAM Role named e2e-role-${RUN_ID} with AssumeRolePolicyDocument allowing lambda.amazonaws.com to assume the role`, expensive: false },
+  { short: "S3-Bucket",         desc: `Create an S3 Bucket named e2e-s3-${RUN_ID}`, expensive: false },
+  { short: "DynamoDB-Table",    desc: `Create a DynamoDB Table named e2e-ddb-${RUN_ID} with TableName e2e-ddb-${RUN_ID} and partition key named id of type S in PAY_PER_REQUEST billing mode`, expensive: false },
+  { short: "SQS-Queue",         desc: `Create an SQS Queue named e2e-sqs-${RUN_ID} with QueueName e2e-sqs-${RUN_ID}`, expensive: false },
+  { short: "SNS-Topic",         desc: `Create an SNS Topic with TopicName e2e-sns-${RUN_ID}`, expensive: false },
   { short: "ECS-Cluster",       desc: "Create an ECS Cluster with ClusterName e2e-ecs-cluster-test", expensive: false },
-  { short: "ECR-Repository",    desc: "Create an ECR Repository with RepositoryName e2e-ecr-repo-test", expensive: false },
-  { short: "Lambda-Function",   desc: "Create a Lambda Function with FunctionName e2e-lambda-test, Runtime nodejs20.x, Handler index.handler", expensive: false, needsRole: true },
-  { short: "LogGroup",          desc: "Create a CloudWatch Logs LogGroup with LogGroupName /e2e-test/loggroup-test and retention of 7 days", expensive: false },
-  { short: "CloudWatch-Alarm",  desc: "Create a CloudWatch Alarm with AlarmName e2e-cw-alarm-test MetricName CPUUtilization Namespace AWS/EC2 ComparisonOperator GreaterThanThreshold Threshold 80 Period 300 EvaluationPeriods 1 Statistic Average", expensive: false },
-  { short: "SecretsManager",    desc: "Create a SecretsManager Secret with Name e2e-secret-test and SecretString test-value-123", expensive: false },
+  { short: "ECR-Repository",    desc: `Create an ECR Repository with RepositoryName e2e-ecr-${RUN_ID}`, expensive: false },
+  { short: "Lambda-Function",   desc: `Create a Lambda Function with FunctionName e2e-fn-${RUN_ID}, Runtime nodejs20.x, Handler index.handler`, expensive: false, needsRole: true },
+  { short: "LogGroup",          desc: `Create a CloudWatch Logs LogGroup with LogGroupName /e2e-test/lg-${RUN_ID} and retention of 7 days`, expensive: false },
+  { short: "CloudWatch-Alarm",  desc: `Create a CloudWatch Alarm with AlarmName e2e-alarm-${RUN_ID} MetricName CPUUtilization Namespace AWS/EC2 ComparisonOperator GreaterThanThreshold Threshold 80 Period 300 EvaluationPeriods 1 Statistic Average`, expensive: false },
+  { short: "SecretsManager",    desc: `Create a SecretsManager Secret with Name e2e-secret-${RUN_ID} and GenerateSecretString with PasswordLength 32`, expensive: false },
   // Networking — provide all required fields including VPC/Subnet IDs where needed
   { short: "VPC",               desc: "Create a VPC named e2e-vpc-test with CidrBlock 10.99.0.0/16", expensive: false },
   { short: "InternetGateway",   desc: "Create an InternetGateway named e2e-igw-test", expensive: false },
@@ -65,10 +68,10 @@ const RESOURCE_TYPES = [
   { short: "RouteTable",        desc: "Create a RouteTable", expensive: false, needsVpc: true },
   { short: "Route",             desc: "Create a Route with DestinationCidrBlock 10.99.99.0/24 and GatewayId local", expensive: false, needsRouteTable: true },
   { short: "SecurityGroup",     desc: "Create a SecurityGroup with GroupName e2e-sg-test and GroupDescription E2E test security group", expensive: false, needsVpc: true },
-  { short: "API-Gateway-V2",    desc: "Create an API Gateway V2 HTTP API with Name e2e-apigw-test and ProtocolType HTTP", expensive: false },
+  { short: "API-Gateway-V2",    desc: `Create an API Gateway V2 HTTP API with Name e2e-apigw-${RUN_ID} and ProtocolType HTTP`, expensive: false },
   // Expensive resources
   { short: "EC2-Instance",      desc: "Create an EC2 Instance with InstanceType t3.micro and ImageId resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64", expensive: true },
-  { short: "RDS-DBInstance",    desc: "Create an RDS DBInstance with DBInstanceIdentifier e2e-rds-test DBInstanceClass db.t3.micro Engine postgres MasterUsername adminuser MasterUserPassword TestPass123! AllocatedStorage 20", expensive: true },
+  { short: "RDS-DBInstance",    desc: `Create an RDS DBInstance with DBInstanceIdentifier e2e-rds-${RUN_ID} DBInstanceClass db.t3.micro Engine postgres MasterUsername adminuser MasterUserPassword TestPass123x AllocatedStorage 20`, expensive: true },
   { short: "ELBv2-LoadBalancer",desc: "Create an Application Load Balancer with Name e2e-elbv2-test Type application", expensive: true, needsSubnets: true },
   { short: "NatGateway",        desc: "Create a NatGateway with ConnectivityType public", expensive: true, needsSubnet: true },
 ];
@@ -645,6 +648,9 @@ async function main() {
           } catch { console.log(`  ⚠ Lambda IAM Role creation failed: ${roleErr.message}`); }
         }
 
+        // Wait for IAM role propagation (AWS IAM is eventually consistent, ~10s)
+        console.log("  Waiting 10s for IAM role propagation...");
+        await sleep(10000);
         console.log("  ✅ Shared infrastructure ready\n");
       } catch (err) {
         console.log(`  ⚠ Shared infra setup error: ${err.message}. Some dependent tests may fail.\n`);

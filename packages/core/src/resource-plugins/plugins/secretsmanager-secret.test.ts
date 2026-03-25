@@ -68,11 +68,11 @@ describe("secretsManagerSecretPlugin", () => {
     expect(field?.question.initialValue).toBe(true);
   });
 
-  it("KmsKeyId defaults to aws/secretsmanager", () => {
+  it("KmsKeyId defaults to empty (AWS auto-uses default key)", () => {
     const field = secretsManagerSecretPlugin.commonFields.find(
       (f) => f.name === "KmsKeyId",
     );
-    expect(field?.question.initialValue).toBe("aws/secretsmanager");
+    expect(field?.question.initialValue).toBe("");
   });
 
   describe("KmsKeyId validation", () => {
@@ -174,10 +174,9 @@ describe("secretsManagerSecretPlugin", () => {
     });
   });
 
-  it("defaults include GenerateSecretString and KmsKeyId", () => {
+  it("defaults include GenerateSecretString (KmsKeyId removed — AWS auto-uses default key)", () => {
     expect(secretsManagerSecretPlugin.defaults).toEqual({
       GenerateSecretString: true,
-      KmsKeyId: "aws/secretsmanager",
     });
   });
 
