@@ -75,6 +75,7 @@ export const routePlugin: ResourcePlugin = {
     RouteType: "public",
   },
   configHints: [
+    "NEVER include Tags — AWS::EC2::Route does not support tagging. Omit Tags entirely.",
     "A Route MUST have exactly one target — either GatewayId (InternetGateway) or NatGatewayId (NatGateway), never both",
     "Public route tables use GatewayId referencing an InternetGateway for 0.0.0.0/0 traffic",
     "Private route tables use NatGatewayId referencing a NatGateway for 0.0.0.0/0 traffic",

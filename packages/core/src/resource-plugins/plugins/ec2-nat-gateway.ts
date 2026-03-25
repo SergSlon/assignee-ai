@@ -87,7 +87,7 @@ export const natGatewayPlugin: ResourcePlugin = {
   },
   configHints: [
     "NatGateway SubnetId: REQUIRED. The NatGateway MUST be placed in a public subnet (one with a route to an InternetGateway). Placing it in a private subnet will not work.",
-    "NatGateway EIP: When ConnectivityType is 'public', an Elastic IP (AWS::EC2::EIP) is auto-provisioned and wired via AllocationId. Do NOT ask the user for an AllocationId — it is handled automatically.",
+    "NatGateway AllocationId: When ConnectivityType is 'public', you MUST include AllocationId in the output. Set it to 'AUTO_ALLOCATE_EIP' — the provisioner will replace it with a real EIP at runtime. NEVER omit AllocationId for public NatGateway.",
     "NatGateway ConnectivityType: defaults to 'public'. Only set to 'private' if the user explicitly requests private connectivity (no internet egress).",
     "NatGateway cost: significant cost driver — hourly charges (~$0.045/hr ≈ $32/month) PLUS per-GB data processing fees apply even with zero traffic. Consider VPC endpoints for S3/DynamoDB to reduce data processing costs.",
     "NatGateway HA: For production, deploy one NatGateway per AZ to avoid cross-AZ single point of failure. Each NatGateway needs its own EIP.",

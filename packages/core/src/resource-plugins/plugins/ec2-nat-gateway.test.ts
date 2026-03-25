@@ -98,9 +98,9 @@ describe("natGatewayPlugin", () => {
     expect(hints).toContain("public subnet");
   });
 
-  it("configHints mention EIP auto-provisioning", () => {
+  it("configHints mention AllocationId for EIP", () => {
     const hints = natGatewayPlugin.configHints!.join(" ");
-    expect(hints).toContain("Elastic IP");
+    expect(hints).toContain("AllocationId");
   });
 
   it("configHints mention cost", () => {
