@@ -7,13 +7,14 @@
  * @see Story 28.4
  */
 
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import { Command } from "commander";
 import chalk from "chalk";
+import * as clack from "@clack/prompts";
 import {
   DriftStatus,
   ChangeType,
+  CloudFormationSchemaService,
+  adaptDescribeTypeToMcpFormat,
   type DriftResult,
   type DriftedField,
 } from "@assignee/core";
@@ -28,57 +29,7 @@ import type {
   ProvisioningPortError,
 } from "../services/provisioning-port.js";
 import { createDriftDetectorFromEnv } from "../services/drift-detector-factory.js";
-import { CHECKPOINT_DIR } from "../config/constants.js";
-
-/**
- * Resolve desired state for a resource by scanning checkpoint files.
- * Returns the desiredState from the most recent checkpoint that matches the resource ARN.
- */
-async function resolveDesiredState(
-  resourceArn: string,
-): Promise<Record<string, unknown> | undefined> {
-  const dir = path.resolve(process.cwd(), CHECKPOINT_DIR);
-  try {
-    const files = await fs.readdir(dir);
-    const checkpoints = files
-      .filter((f) => f.startsWith("checkpoint-") && f.endsWith(".json"))
-      .sort()
-      .reverse(); // newest first by filename
-
-    for (const file of checkpoints) {
-      try {
-        const raw = await fs.readFile(path.join(dir, file), "utf-8");
-        const cp = JSON.parse(raw);
-        // Check single-resource checkpoint
-        if (cp.desiredState && cp.resourceType) {
-          const arn =
-            cp.desiredState?.Arn ??
-            cp.desiredState?.BucketName ??
-            cp.desiredState?.FunctionName;
-          if (arn === resourceArn || cp.runId === resourceArn) {
-            return cp.desiredState;
-          }
-        }
-        // Check compound checkpoint with resourceQueue
-        if (cp.resourceQueue) {
-          for (const r of cp.resourceQueue) {
-            if (
-              r.desiredState &&
-              (r.resourceId === resourceArn || r.displayName === resourceArn)
-            ) {
-              return r.desiredState;
-            }
-          }
-        }
-      } catch {
-        continue;
-      }
-    }
-  } catch {
-    // No checkpoint dir
-  }
-  return undefined;
-}
+import { resolveDesiredState } from "../utils/resolve-desired-state.js";
 
 /** Action chosen for each drifted resource. */
 export type ReconcileAction = "reconcile" | "accept" | "skip";
@@ -92,14 +43,56 @@ export interface ReconcileSummary {
 }
 
 /**
- * Build a JSON Patch (RFC 6902) from drifted fields to restore desired state.
+ * Fetch the createOnlyProperties for a CloudFormation resource type.
+ * Returns an array of JSON pointer paths (e.g. ["/properties/FunctionName"]).
  */
-export function buildPatchDocument(driftedFields: DriftedField[]): object[] {
+async function fetchCreateOnlyProperties(
+  resourceType: string,
+): Promise<string[]> {
+  try {
+    const service = new CloudFormationSchemaService();
+    const rawSchema = await service.getSchema(resourceType);
+    const adapted = adaptDescribeTypeToMcpFormat(
+      rawSchema as Record<string, unknown>,
+    );
+    return adapted.createOnlyProperties ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Normalise a drifted-field path to the JSON-pointer format used by
+ * CloudFormation's createOnlyProperties (e.g. "/properties/FunctionName").
+ */
+function fieldPathToSchemaPointer(fieldPath: string): string {
+  const jsonPath =
+    "/" + fieldPath.replace(/\./g, "/").replace(/\[(\d+)\]/g, "/$1");
+  return "/properties" + jsonPath;
+}
+
+/**
+ * Build a JSON Patch (RFC 6902) from drifted fields to restore desired state.
+ * If createOnlyProperties are provided, fields that are create-only are excluded
+ * from the patch and warnings are emitted.
+ */
+export function buildPatchDocument(
+  driftedFields: DriftedField[],
+  createOnlyProperties: string[] = [],
+): { ops: object[]; skippedCreateOnly: DriftedField[] } {
   const ops: object[] = [];
+  const skippedCreateOnly: DriftedField[] = [];
 
   for (const field of driftedFields) {
     const jsonPath =
       "/" + field.path.replace(/\./g, "/").replace(/\[(\d+)\]/g, "/$1");
+
+    // Check if this field is a create-only (immutable) property
+    const schemaPointer = fieldPathToSchemaPointer(field.path);
+    if (createOnlyProperties.includes(schemaPointer)) {
+      skippedCreateOnly.push(field);
+      continue;
+    }
 
     switch (field.changeType) {
       case ChangeType.MODIFIED:
@@ -116,7 +109,7 @@ export function buildPatchDocument(driftedFields: DriftedField[]): object[] {
     }
   }
 
-  return ops;
+  return { ops, skippedCreateOnly };
 }
 
 /**
@@ -182,7 +175,7 @@ export async function reconcileResource(
   }
 
   if (action === "accept") {
-    // Update desired state to match actual
+    // Update desired state to match actual and persist to disk
     if (result.actualState) {
       const provisions = await memory.readProvisions();
       const provision = provisions.find(
@@ -194,6 +187,7 @@ export async function reconcileResource(
           12,
         );
         provision.timestamp = new Date().toISOString();
+        await memory.appendProvision(provision);
       }
     }
     process.stdout.write(
@@ -214,7 +208,32 @@ export async function reconcileResource(
     }
   }
 
-  const patchOps = buildPatchDocument(result.driftedFields);
+  // Fetch create-only properties to prevent destructive updates on immutable fields
+  const createOnlyProps = await fetchCreateOnlyProperties(result.resourceType);
+  const { ops: patchOps, skippedCreateOnly } = buildPatchDocument(
+    result.driftedFields,
+    createOnlyProps,
+  );
+
+  // Warn about create-only fields that cannot be patched
+  for (const skipped of skippedCreateOnly) {
+    process.stdout.write(
+      chalk.yellow(
+        `  WARNING: ${skipped.path} is a create-only (immutable) property — skipped. ` +
+          `Use \`assignee plan\` to recreate the resource.\n`,
+      ),
+    );
+  }
+
+  if (patchOps.length === 0) {
+    process.stdout.write(
+      chalk.gray(
+        `  All drifted fields are create-only. Nothing to patch for ${result.resourceId}.\n`,
+      ),
+    );
+    return "skip";
+  }
+
   const patchDocument = JSON.stringify(patchOps);
 
   const [error] = await port.updateResource(
@@ -317,12 +336,24 @@ export const reconcileCommand = new Command(CommandName.RECONCILE)
         errors: 0,
       };
 
-      // Default prompt/confirm functions (tests inject their own)
-      const promptFn: PromptFn = async (_msg, choices) => {
-        // In a real CLI, use inquirer/clack. For now, default to Skip.
-        return choices[2] ?? "Skip";
+      // Default prompt/confirm functions using @clack/prompts (tests inject their own)
+      const promptFn: PromptFn = async (msg, choices) => {
+        const answer = await clack.select({
+          message: msg,
+          options: choices.map((c) => ({ value: c, label: c })),
+        });
+        if (clack.isCancel(answer)) {
+          return "Skip";
+        }
+        return answer as string;
       };
-      const confirmFn: ConfirmFn = async () => true;
+      const confirmFn: ConfirmFn = async (msg) => {
+        const answer = await clack.confirm({ message: msg });
+        if (clack.isCancel(answer)) {
+          return false;
+        }
+        return answer;
+      };
 
       for (const result of drifted) {
         try {

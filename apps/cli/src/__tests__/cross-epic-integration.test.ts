@@ -173,7 +173,7 @@ describe("Cross-epic: provision log -> drift detect -> reconcile", () => {
     const { buildPatchDocument } = await import("../commands/reconcile.js");
     const { ChangeType } = await import("@assignee/core");
 
-    const patch = buildPatchDocument([
+    const { ops: patch } = buildPatchDocument([
       {
         path: "VersioningConfiguration.Status",
         desiredValue: "Enabled",

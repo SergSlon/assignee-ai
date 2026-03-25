@@ -21,6 +21,9 @@ import { driftCommand } from "./commands/drift.js";
 import { listCommand } from "./commands/list.js";
 import { setupCommand } from "./commands/setup.js";
 import { statusCommand } from "./commands/status.js";
+import { cleanCommand } from "./commands/clean.js";
+import { reconcileCommand } from "./commands/reconcile.js";
+import { cacheCommand } from "./commands/cache.js";
 import { ProcessExitCode } from "./constants/errors.js";
 import { SUPPORTED_TYPES_HINT } from "./config/constants.js";
 
@@ -53,6 +56,9 @@ program.addCommand(planCommand);
 program.addCommand(setupCommand);
 program.addCommand(statusCommand);
 program.addCommand(applyCommand);
+program.addCommand(cleanCommand);
+program.addCommand(reconcileCommand);
+program.addCommand(cacheCommand);
 
 // EPIPE: stdout pipe closed (e.g. piped to grep/head that exits early).
 // Node.js throws by default; suppress and exit cleanly instead.
@@ -63,12 +69,17 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
 // Graceful shutdown handlers for MCP servers
 process.on("SIGINT", async () => {
   await closeMcpClient();
-  process.exit(ProcessExitCode.SUCCESS);
+  process.exit(128 + 2); // SIGINT = 130
 });
 
 process.on("SIGTERM", async () => {
   await closeMcpClient();
-  process.exit(ProcessExitCode.SUCCESS);
+  process.exit(128 + 15); // SIGTERM = 143
 });
 
-program.parseAsync(process.argv);
+program.parseAsync(process.argv).catch((err) => {
+  process.stderr.write(
+    `Error: ${err instanceof Error ? err.message : String(err)}\n`,
+  );
+  process.exitCode = 1;
+});
