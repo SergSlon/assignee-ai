@@ -167,8 +167,9 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
           config,
         );
 
-        // Phase 2: provisioning loop with 5-minute timeout (Story E2E.1 AC3)
-        const APPLY_TIMEOUT_MS = 5 * 60 * 1000;
+        // Phase 2: provisioning loop with 10-minute timeout.
+        // RDS/ELBv2 can take 5-10 min with many polling cycles; compound patterns multiply this.
+        const APPLY_TIMEOUT_MS = 10 * 60 * 1000;
         const applyStarted = Date.now();
 
         while (true) {

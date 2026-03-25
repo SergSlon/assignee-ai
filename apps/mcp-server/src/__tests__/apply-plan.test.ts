@@ -758,11 +758,11 @@ describe("apply_plan tool", () => {
       expect(ctx.graph.invoke).toHaveBeenCalledTimes(5);
     });
 
-    it("should return TIMEOUT error when provisioning exceeds 5 minutes", async () => {
+    it("should return TIMEOUT error when provisioning exceeds 10 minutes", async () => {
       await setCheckpointFile(makeCheckpointJSON());
 
       // Track how many times graph.invoke is called. On the 2nd loop invoke,
-      // advance time past the 5-minute timeout so the NEXT while-loop check triggers.
+      // advance time past the 10-minute timeout so the NEXT while-loop check triggers.
       const realDateNow = Date.now.bind(Date);
       let timeOffset = 0;
       vi.spyOn(Date, "now").mockImplementation(
@@ -775,9 +775,9 @@ describe("apply_plan tool", () => {
           invoke: vi.fn().mockImplementation(() => {
             invokeCount++;
             // After the phase-1 invoke (call 1) and the first loop invoke (call 2),
-            // jump time forward past 5 minutes so the next while-check triggers timeout
+            // jump time forward past 10 minutes so the next while-check triggers timeout
             if (invokeCount >= 2) {
-              timeOffset = 5 * 60 * 1000 + 1;
+              timeOffset = 10 * 60 * 1000 + 1;
             }
             return Promise.resolve({});
           }),
@@ -806,7 +806,7 @@ describe("apply_plan tool", () => {
         );
         expect(body.status).toBe("TIMEOUT");
         expect(body.message).toContain("timed out");
-        expect(body.message).toContain("300s");
+        expect(body.message).toContain("600s");
       } finally {
         vi.spyOn(Date, "now").mockRestore();
       }

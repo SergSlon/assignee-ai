@@ -577,6 +577,32 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       }
     }
 
+    // Story E2E.5: NatGateway with public connectivity requires an EIP AllocationId.
+    // If the LLM generated AUTO_ALLOCATE_EIP or omitted AllocationId, allocate a real EIP.
+    if (
+      state.resourceType === "AWS::EC2::NatGateway" &&
+      (desiredState["ConnectivityType"] === "public" ||
+        !desiredState["ConnectivityType"]) &&
+      (!desiredState["AllocationId"] ||
+        desiredState["AllocationId"] === "AUTO_ALLOCATE_EIP")
+    ) {
+      try {
+        const { EC2Client, AllocateAddressCommand } =
+          await import("@aws-sdk/client-ec2");
+        const ec2 = new EC2Client({
+          region: process.env["AWS_REGION"] ?? "us-east-1",
+        });
+        const eipResult = await ec2.send(
+          new AllocateAddressCommand({ Domain: "vpc" }),
+        );
+        if (eipResult.AllocationId) {
+          desiredState["AllocationId"] = eipResult.AllocationId;
+        }
+      } catch {
+        // EIP allocation failed — let provisioner handle the error
+      }
+    }
+
     // Story E2E.3: Generic required-field repairer — fills missing required fields
     // from plugin defaults. Replaces one-off Lambda Code special case.
     const { repaired: repairedState, injectedFields } = repairRequiredFields(

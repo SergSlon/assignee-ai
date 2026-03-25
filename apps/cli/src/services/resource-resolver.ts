@@ -42,9 +42,11 @@ function arnToResourceType(arn: string): string | null {
 
   const service = parts[2];
   const resourcePart = parts[5] ?? "";
-  const resourceType = resourcePart.split("/")[0] ?? "";
+  const segments = resourcePart.split("/").filter(Boolean);
+  const resourceType = segments[0] ?? "";
 
   const serviceMap: Record<string, Record<string, string>> = {
+    // Tier 0
     s3: { "": "AWS::S3::Bucket" },
     ssm: { parameter: "AWS::SSM::Parameter" },
     iam: { role: "AWS::IAM::Role" },
@@ -53,6 +55,10 @@ function arnToResourceType(arn: string): string | null {
       vpc: "AWS::EC2::VPC",
       subnet: "AWS::EC2::Subnet",
       "security-group": "AWS::EC2::SecurityGroup",
+      // Tier 1 networking
+      "internet-gateway": "AWS::EC2::InternetGateway",
+      "route-table": "AWS::EC2::RouteTable",
+      natgateway: "AWS::EC2::NatGateway",
     },
     rds: { db: "AWS::RDS::DBInstance" },
     lambda: {
@@ -61,14 +67,19 @@ function arnToResourceType(arn: string): string | null {
     },
     dynamodb: { table: "AWS::DynamoDB::Table" },
     sqs: { "": "AWS::SQS::Queue" },
-    sns: {
-      "": "AWS::SNS::Topic",
-    },
+    sns: { "": "AWS::SNS::Topic" },
     elasticloadbalancing: {
       loadbalancer: "AWS::ElasticLoadBalancingV2::LoadBalancer",
     },
     ecs: { cluster: "AWS::ECS::Cluster" },
     ecr: { repository: "AWS::ECR::Repository" },
+    // Tier 1
+    logs: { "log-group": "AWS::Logs::LogGroup" },
+    // Tier 2
+    cloudwatch: { alarm: "AWS::CloudWatch::Alarm" },
+    secretsmanager: { secret: "AWS::SecretsManager::Secret" },
+    apigateway: { apis: "AWS::ApiGatewayV2::Api" },
+    "execute-api": { "": "AWS::ApiGatewayV2::Api" },
   };
 
   if (!service) return null;
@@ -85,15 +96,41 @@ function arnToResourceType(arn: string): string | null {
  */
 function extractIdentifierFromArn(arn: string): string {
   const parts = arn.split(":");
-  // For S3: arn:aws:s3:::bucket-name → parts[5] = "bucket-name"
-  // For Lambda: arn:aws:lambda:region:account:function:name → parts[6] = "name"
-  // For IAM: arn:aws:iam::account:role/role-name → resourcePart = "role/role-name"
-  // General: take the resource portion (parts[5:]), join by ":",
-  // then split by "/" to get the last segment
+  if (parts.length < 6) return arn;
+
   const resourceSection = parts.slice(5).join(":");
-  // Split by both "/" and ":" to extract the final identifier
-  const segments = resourceSection.split(/[:/]/).filter(Boolean);
-  return segments[segments.length - 1] ?? arn;
+
+  // Colon-separated: "type:identifier" (rds:db:name, cloudwatch:alarm:name, etc.)
+  const colonParts = resourceSection.split(":");
+  if (colonParts.length >= 2) {
+    const resourceType = colonParts[0]!;
+    const afterType = colonParts.slice(1).join(":");
+
+    if (resourceType === "parameter") {
+      return resourceSection.slice("parameter/".length);
+    }
+    if (resourceType === "log-group") {
+      return afterType;
+    }
+    if (resourceType === "secret") {
+      return afterType;
+    }
+    if (afterType && !resourceType.includes("/")) {
+      return afterType;
+    }
+  }
+
+  // Slash-separated: "type/identifier"
+  const slashIdx = resourceSection.indexOf("/");
+  if (slashIdx !== -1) {
+    if (resourceSection.startsWith("/")) {
+      const segments = resourceSection.split("/").filter(Boolean);
+      return segments[segments.length - 1] ?? arn;
+    }
+    return resourceSection.slice(slashIdx + 1) || arn;
+  }
+
+  return resourceSection || arn;
 }
 
 /**
