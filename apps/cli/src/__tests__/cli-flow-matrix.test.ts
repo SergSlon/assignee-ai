@@ -104,7 +104,7 @@ describe("buildPatchDocument (reconcile)", () => {
   });
 
   it("generates replace op for MODIFIED fields", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "VersioningConfiguration.Status",
         desiredValue: "Enabled",
@@ -122,7 +122,7 @@ describe("buildPatchDocument (reconcile)", () => {
   });
 
   it("generates add op for REMOVED fields", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "Tags.environment",
         desiredValue: "prod",
@@ -136,7 +136,7 @@ describe("buildPatchDocument (reconcile)", () => {
   });
 
   it("generates remove op for ADDED_EXTERNALLY fields", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "Tags.unwanted",
         desiredValue: undefined,
@@ -148,7 +148,7 @@ describe("buildPatchDocument (reconcile)", () => {
   });
 
   it("converts dot notation to JSON pointer paths", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "a.b.c",
         desiredValue: 42,
@@ -164,7 +164,7 @@ describe("buildPatchDocument (reconcile)", () => {
   });
 
   it("converts array index notation to JSON pointer", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "Rules[0].Effect",
         desiredValue: "Allow",
@@ -180,7 +180,7 @@ describe("buildPatchDocument (reconcile)", () => {
   });
 
   it("handles multiple drifted fields", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "Field1",
         desiredValue: "a",
@@ -206,8 +206,8 @@ describe("buildPatchDocument (reconcile)", () => {
     expect(ops[2]).toHaveProperty("op", "remove");
   });
 
-  it("returns empty array for no drifted fields", () => {
-    const ops = buildPatchDocument([]);
+  it("returns empty ops array for no drifted fields", () => {
+    const { ops } = buildPatchDocument([]);
     expect(ops).toEqual([]);
   });
 });
@@ -611,6 +611,7 @@ describe("reconcileResource", () => {
           timestamp: "2024-01-01",
         },
       ]),
+      appendProvision: vi.fn().mockResolvedValue(undefined),
       writeProvision: vi.fn().mockResolvedValue(undefined),
     } as never;
 

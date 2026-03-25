@@ -382,7 +382,7 @@ describe("reconcile command", () => {
 
 describe("buildPatchDocument", () => {
   it("builds replace ops for MODIFIED fields", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "VersioningConfiguration.Status",
         desiredValue: "Enabled",
@@ -401,7 +401,7 @@ describe("buildPatchDocument", () => {
   });
 
   it("builds add ops for REMOVED fields", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "Encryption.SSEAlgorithm",
         desiredValue: "aws:kms",
@@ -416,7 +416,7 @@ describe("buildPatchDocument", () => {
   });
 
   it("builds remove ops for ADDED_EXTERNALLY fields", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "LoggingConfiguration",
         desiredValue: undefined,
@@ -429,7 +429,7 @@ describe("buildPatchDocument", () => {
   });
 
   it("handles array index paths", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "Tags[0].Value",
         desiredValue: "prod",
@@ -444,7 +444,7 @@ describe("buildPatchDocument", () => {
   });
 
   it("builds multiple ops from multiple drifted fields", () => {
-    const ops = buildPatchDocument([
+    const { ops } = buildPatchDocument([
       {
         path: "A",
         desiredValue: 1,
@@ -460,5 +460,30 @@ describe("buildPatchDocument", () => {
     ]);
 
     expect(ops).toHaveLength(2);
+  });
+
+  it("skips create-only properties and returns them separately", () => {
+    const { ops, skippedCreateOnly } = buildPatchDocument(
+      [
+        {
+          path: "BucketName",
+          desiredValue: "old-name",
+          actualValue: "new-name",
+          changeType: ChangeType.MODIFIED,
+        },
+        {
+          path: "VersioningConfiguration.Status",
+          desiredValue: "Enabled",
+          actualValue: "Suspended",
+          changeType: ChangeType.MODIFIED,
+        },
+      ],
+      ["/properties/BucketName"],
+    );
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toHaveProperty("path", "/VersioningConfiguration/Status");
+    expect(skippedCreateOnly).toHaveLength(1);
+    expect(skippedCreateOnly[0]!.path).toBe("BucketName");
   });
 });

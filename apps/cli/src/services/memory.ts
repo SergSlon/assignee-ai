@@ -38,6 +38,46 @@ export class MemoryService {
     await fs.mkdir(this.dir, { recursive: true });
   }
 
+  /**
+   * Atomically write a file: write to a temp file first, then rename.
+   * Prevents corruption from partial writes / crashes.
+   */
+  private async atomicWrite(filePath: string, data: string): Promise<void> {
+    const tmpPath = filePath + ".tmp." + process.pid;
+    await fs.writeFile(tmpPath, data, "utf-8");
+    await fs.rename(tmpPath, filePath);
+  }
+
+  /**
+   * Acquire a simple advisory lock file. Returns true if acquired.
+   * Skips if a lock exists and is less than 10 seconds old.
+   */
+  private async acquireLock(filePath: string): Promise<boolean> {
+    const lockPath = filePath + ".lock";
+    try {
+      const stat = await fs.stat(lockPath);
+      const ageMs = Date.now() - stat.mtimeMs;
+      if (ageMs < 10_000) {
+        // Lock is fresh — another writer is active
+        return false;
+      }
+      // Stale lock — remove it
+      await fs.unlink(lockPath).catch(() => {});
+    } catch {
+      // No lock file — proceed
+    }
+    await fs.writeFile(lockPath, String(process.pid), "utf-8");
+    return true;
+  }
+
+  /**
+   * Release an advisory lock file.
+   */
+  private async releaseLock(filePath: string): Promise<void> {
+    const lockPath = filePath + ".lock";
+    await fs.unlink(lockPath).catch(() => {});
+  }
+
   // --- Provisions (append-only) ---
 
   async readProvisions(): Promise<ProvisionRecord[]> {
@@ -55,13 +95,15 @@ export class MemoryService {
 
   async appendProvision(record: ProvisionRecord): Promise<void> {
     await this.ensureDir();
-    const existing = await this.readProvisions();
-    existing.push(record);
-    await fs.writeFile(
-      this.filePath("provisions.json"),
-      JSON.stringify(existing, null, 2),
-      "utf-8",
-    );
+    const target = this.filePath("provisions.json");
+    const acquired = await this.acquireLock(target);
+    try {
+      const existing = await this.readProvisions();
+      existing.push(record);
+      await this.atomicWrite(target, JSON.stringify(existing, null, 2));
+    } finally {
+      if (acquired) await this.releaseLock(target);
+    }
   }
 
   // --- Failures (append-only) — stub for Story 19.4 ---
@@ -81,13 +123,15 @@ export class MemoryService {
 
   async appendFailure(record: FailureRecord): Promise<void> {
     await this.ensureDir();
-    const existing = await this.readFailures();
-    existing.push(record);
-    await fs.writeFile(
-      this.filePath("failures.json"),
-      JSON.stringify(existing, null, 2),
-      "utf-8",
-    );
+    const target = this.filePath("failures.json");
+    const acquired = await this.acquireLock(target);
+    try {
+      const existing = await this.readFailures();
+      existing.push(record);
+      await this.atomicWrite(target, JSON.stringify(existing, null, 2));
+    } finally {
+      if (acquired) await this.releaseLock(target);
+    }
   }
 
   /**
