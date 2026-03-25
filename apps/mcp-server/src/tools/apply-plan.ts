@@ -18,6 +18,14 @@ import {
 import type { GraphContext } from "../services/graph-init.js";
 import { loadCheckpointFromPath } from "../services/checkpoint.js";
 
+/** In-memory set of checkpoint paths currently being applied. Prevents duplicate provisioning. */
+const activeApplies = new Set<string>();
+
+/** Exported for testing — clears the active-apply lock set. */
+export function _resetActiveApplies(): void {
+  activeApplies.clear();
+}
+
 export const applyPlanParams = {
   checkpointPath: z
     .string()
@@ -91,6 +99,24 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
           isError: true,
         };
       }
+
+      // ── Concurrency guard: prevent duplicate applies on the same checkpoint ──
+      if (activeApplies.has(checkpointPath)) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                error: true,
+                message:
+                  "This plan is already being applied. Wait for the current operation to complete.",
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
+      activeApplies.add(checkpointPath);
 
       // ── Invoke graph in APPLY mode from checkpoint ─────────────────────
       const runId = checkpoint.runId;
@@ -178,6 +204,8 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
           ],
           isError: true,
         };
+      } finally {
+        activeApplies.delete(checkpointPath);
       }
     },
   );

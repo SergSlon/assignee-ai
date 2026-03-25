@@ -39,6 +39,31 @@ export class MemoryService {
   }
 
   /**
+   * Back up a corrupt file before returning empty data.
+   * Prevents silent total data loss when JSON.parse fails on a non-empty file.
+   * The corrupt file is copied to `{filename}.corrupt.{timestamp}` so the user
+   * can attempt manual recovery.
+   *
+   * @see EC-29
+   */
+  private async backupCorruptFile(fileName: string): Promise<void> {
+    const filePath = this.filePath(fileName);
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.size > 0) {
+        const ts = Date.now();
+        const backupPath = `${filePath}.corrupt.${ts}`;
+        await fs.copyFile(filePath, backupPath);
+        process.stderr.write(
+          `WARNING: ${fileName} appears corrupt. Backup saved to ${fileName}.corrupt.${ts}. Previous data may be recoverable.\n`,
+        );
+      }
+    } catch {
+      // File doesn't exist or can't be stat'd — nothing to back up
+    }
+  }
+
+  /**
    * Atomically write a file: write to a temp file first, then rename.
    * Prevents corruption from partial writes / crashes.
    */
@@ -87,8 +112,13 @@ export class MemoryService {
     if (err) return [];
     try {
       const parsed = ProvisionLogSchema.safeParse(JSON.parse(raw));
-      return parsed.success ? parsed.data : [];
+      if (parsed.success) return parsed.data;
+      // Valid JSON but wrong schema — back up before returning empty
+      await this.backupCorruptFile("provisions.json");
+      return [];
     } catch {
+      // Invalid JSON — back up the corrupt file before returning empty
+      await this.backupCorruptFile("provisions.json");
       return [];
     }
   }
@@ -115,8 +145,11 @@ export class MemoryService {
     if (err) return [];
     try {
       const parsed = FailureLogSchema.safeParse(JSON.parse(raw));
-      return parsed.success ? parsed.data : [];
+      if (parsed.success) return parsed.data;
+      await this.backupCorruptFile("failures.json");
+      return [];
     } catch {
+      await this.backupCorruptFile("failures.json");
       return [];
     }
   }
@@ -162,8 +195,11 @@ export class MemoryService {
     if (err) return [];
     try {
       const parsed = PatternLogSchema.safeParse(JSON.parse(raw));
-      return parsed.success ? parsed.data : [];
+      if (parsed.success) return parsed.data;
+      await this.backupCorruptFile("patterns.json");
+      return [];
     } catch {
+      await this.backupCorruptFile("patterns.json");
       return [];
     }
   }

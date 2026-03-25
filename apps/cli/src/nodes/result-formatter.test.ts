@@ -284,6 +284,49 @@ describe("resultFormatterNode — compound FAILED with partial results", () => {
     expect(errorMsg).toContain("Manual cleanup may be required");
   });
 
+  it("includes ARNs and reverse-order destroy commands in cleanup guidance (EC-22)", async () => {
+    const resourceQueue = makeResourceQueue();
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      resourcePattern: mockPattern,
+      resourceQueue,
+      currentResourceIndex: 2,
+      completedResources: [
+        {
+          resourceId: "lambda-execution-role",
+          resourceType: "AWS::IAM::Role",
+          resourceArn: "arn:aws:iam::123:role/exec-role",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+        {
+          resourceId: "lambda-fn",
+          resourceType: "AWS::Lambda::Function",
+          resourceArn: "arn:aws:lambda::123:function:my-fn",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+      resourceType: "AWS::ApiGatewayV2::Api",
+      errorMessage: "API Gateway creation failed",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(renderError).toHaveBeenCalledOnce();
+    const [errorMsg] = vi.mocked(renderError).mock.calls[0] as [
+      string,
+      ...unknown[],
+    ];
+    // Should list ARNs
+    expect(errorMsg).toContain("arn:aws:iam::123:role/exec-role");
+    expect(errorMsg).toContain("arn:aws:lambda::123:function:my-fn");
+    // Should include destroy commands in reverse order (Lambda before IAM)
+    const lambdaIdx = errorMsg.indexOf("assignee destroy arn:aws:lambda");
+    const iamIdx = errorMsg.indexOf("assignee destroy arn:aws:iam");
+    expect(lambdaIdx).toBeLessThan(iamIdx);
+    // Should mention reverse dependency order
+    expect(errorMsg).toContain("reverse dependency order");
+  });
+
   it("renders standard error message when no resources were provisioned yet", async () => {
     const resourceQueue = makeResourceQueue();
     const state = makeState({

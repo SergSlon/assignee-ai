@@ -3,7 +3,15 @@
  * Uses os.tmpdir() + unique subdirectory for test isolation.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type MockInstance,
+} from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -315,5 +323,162 @@ describe("MemoryService — patterns (Story 19.5)", () => {
 
     const records = await service.readPatterns();
     expect(records).toEqual([]);
+  });
+});
+
+// ── EC-29: Corrupt file backup tests ─────────────────────────────────────────
+
+describe("MemoryService — corrupt file backup (EC-29)", () => {
+  let stderrSpy: MockInstance<any>;
+
+  beforeEach(() => {
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((() => true) as any);
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+  });
+
+  it("backs up corrupt provisions.json before returning empty array", async () => {
+    const corruptContent = "not valid json {{{";
+    await fs.writeFile(
+      path.join(tmpDir, "provisions.json"),
+      corruptContent,
+      "utf-8",
+    );
+
+    const records = await service.readProvisions();
+    expect(records).toEqual([]);
+
+    // Verify backup file was created
+    const files = await fs.readdir(tmpDir);
+    const backupFile = files.find((f) =>
+      f.startsWith("provisions.json.corrupt."),
+    );
+    expect(backupFile).toBeTruthy();
+
+    // Verify backup content matches the corrupt file
+    const backupContent = await fs.readFile(
+      path.join(tmpDir, backupFile!),
+      "utf-8",
+    );
+    expect(backupContent).toBe(corruptContent);
+
+    // Verify warning was printed
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining("provisions.json appears corrupt"),
+    );
+  });
+
+  it("backs up corrupt failures.json before returning empty array", async () => {
+    const corruptContent = '{"truncated": true';
+    await fs.writeFile(
+      path.join(tmpDir, "failures.json"),
+      corruptContent,
+      "utf-8",
+    );
+
+    const records = await service.readFailures();
+    expect(records).toEqual([]);
+
+    const files = await fs.readdir(tmpDir);
+    const backupFile = files.find((f) =>
+      f.startsWith("failures.json.corrupt."),
+    );
+    expect(backupFile).toBeTruthy();
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining("failures.json appears corrupt"),
+    );
+  });
+
+  it("backs up corrupt patterns.json before returning empty array", async () => {
+    const corruptContent = "[{broken";
+    await fs.writeFile(
+      path.join(tmpDir, "patterns.json"),
+      corruptContent,
+      "utf-8",
+    );
+
+    const records = await service.readPatterns();
+    expect(records).toEqual([]);
+
+    const files = await fs.readdir(tmpDir);
+    const backupFile = files.find((f) =>
+      f.startsWith("patterns.json.corrupt."),
+    );
+    expect(backupFile).toBeTruthy();
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining("patterns.json appears corrupt"),
+    );
+  });
+
+  it("does NOT create backup for missing file (returns empty array silently)", async () => {
+    const records = await service.readProvisions();
+    expect(records).toEqual([]);
+
+    const files = await fs.readdir(tmpDir);
+    const backupFiles = files.filter((f) => f.includes(".corrupt."));
+    expect(backupFiles).toHaveLength(0);
+
+    expect(stderrSpy).not.toHaveBeenCalled();
+  });
+
+  it("does NOT create backup for empty file (size === 0)", async () => {
+    await fs.writeFile(path.join(tmpDir, "provisions.json"), "", "utf-8");
+
+    const records = await service.readProvisions();
+    expect(records).toEqual([]);
+
+    const files = await fs.readdir(tmpDir);
+    const backupFiles = files.filter((f) => f.includes(".corrupt."));
+    expect(backupFiles).toHaveLength(0);
+  });
+
+  it("backs up file with valid JSON but invalid schema", async () => {
+    await fs.writeFile(
+      path.join(tmpDir, "provisions.json"),
+      JSON.stringify([{ bad: "data" }]),
+      "utf-8",
+    );
+
+    const records = await service.readProvisions();
+    expect(records).toEqual([]);
+
+    const files = await fs.readdir(tmpDir);
+    const backupFile = files.find((f) =>
+      f.startsWith("provisions.json.corrupt."),
+    );
+    expect(backupFile).toBeTruthy();
+  });
+
+  it("subsequent append after corruption writes only the new record (not lost data)", async () => {
+    await fs.writeFile(
+      path.join(tmpDir, "provisions.json"),
+      "not valid json {{{",
+      "utf-8",
+    );
+
+    // Read triggers backup
+    await service.readProvisions();
+
+    // Now append a new record
+    await service.appendProvision(
+      makeProvision({ resourceType: "AWS::Lambda::Function" }),
+    );
+
+    const records = await service.readProvisions();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.resourceType).toBe("AWS::Lambda::Function");
+
+    // Backup still exists for recovery
+    const files = await fs.readdir(tmpDir);
+    const backupFile = files.find((f) =>
+      f.startsWith("provisions.json.corrupt."),
+    );
+    expect(backupFile).toBeTruthy();
   });
 });
