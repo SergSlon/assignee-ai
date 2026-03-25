@@ -78,6 +78,28 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
         };
       }
 
+      // ── Path validation: reject path traversal attempts ───────────────
+      if (
+        checkpointPath.includes("..") ||
+        (!checkpointPath.startsWith("/tmp/") &&
+          !checkpointPath.startsWith("/var/") &&
+          !checkpointPath.includes("assignee"))
+      ) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                error: true,
+                message:
+                  "Invalid checkpoint path. Path must be within the assignee checkpoint directory.",
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
+
       // ── Load and validate checkpoint ───────────────────────────────────
       let checkpoint;
       try {
@@ -120,7 +142,10 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
 
       // ── Invoke graph in APPLY mode from checkpoint ─────────────────────
       const runId = checkpoint.runId;
-      const config = { configurable: { thread_id: `${runId}-mcp-apply` } };
+      const config = {
+        configurable: { thread_id: `${runId}-mcp-apply` },
+        recursionLimit: 50, // Story E2E.1: increased from default 25 for compound patterns
+      };
 
       try {
         // Phase 1: inject checkpoint state, auto-approve (no HITL in MCP context)
@@ -142,8 +167,26 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
           config,
         );
 
-        // Phase 2: provisioning loop (same as CLI's runProvisioningLoop)
+        // Phase 2: provisioning loop with 5-minute timeout (Story E2E.1 AC3)
+        const APPLY_TIMEOUT_MS = 5 * 60 * 1000;
+        const applyStarted = Date.now();
+
         while (true) {
+          if (Date.now() - applyStarted > APPLY_TIMEOUT_MS) {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({
+                    error: true,
+                    message: `Provisioning timed out after ${APPLY_TIMEOUT_MS / 1000}s. Some resources may have been partially created. Use list_managed_resources to check.`,
+                    status: "TIMEOUT",
+                  }),
+                },
+              ],
+              isError: true,
+            };
+          }
           await ctx.graph.invoke(null, config);
           const graphState = await ctx.graph.getState(config);
           if (graphState.next.length === 0) break;

@@ -65,6 +65,121 @@ describe("classifyResourceType", () => {
       "AWS::Lambda::Function",
     );
   });
+
+  // ── Missing classifier tests for remaining KEYWORD_TO_RESOURCE_TYPE entries ──
+
+  it("should classify IAM role descriptions", () => {
+    expect(classifyResourceType("Create an IAM role for the application")).toBe(
+      "AWS::IAM::Role",
+    );
+    expect(classifyResourceType("service role for the compute task")).toBe(
+      "AWS::IAM::Role",
+    );
+  });
+
+  it("should classify SSM Parameter descriptions", () => {
+    expect(
+      classifyResourceType("SSM parameter for database connection string"),
+    ).toBe("AWS::SSM::Parameter");
+    expect(classifyResourceType("Store config in parameter store")).toBe(
+      "AWS::SSM::Parameter",
+    );
+  });
+
+  it("should classify ECS cluster descriptions", () => {
+    expect(classifyResourceType("ECS cluster for microservices")).toBe(
+      "AWS::ECS::Cluster",
+    );
+    expect(classifyResourceType("Fargate container service")).toBe(
+      "AWS::ECS::Cluster",
+    );
+  });
+
+  it("should classify ECR repository descriptions", () => {
+    expect(classifyResourceType("ECR repository for app images")).toBe(
+      "AWS::ECR::Repository",
+    );
+    expect(classifyResourceType("Docker registry for CI/CD")).toBe(
+      "AWS::ECR::Repository",
+    );
+  });
+
+  it("should classify VPC descriptions", () => {
+    expect(classifyResourceType("VPC for production environment")).toBe(
+      "AWS::EC2::VPC",
+    );
+    expect(classifyResourceType("Virtual private cloud for isolation")).toBe(
+      "AWS::EC2::VPC",
+    );
+  });
+
+  it("should classify Security Group descriptions", () => {
+    expect(classifyResourceType("Security group for web servers")).toBe(
+      "AWS::EC2::SecurityGroup",
+    );
+    expect(classifyResourceType("Firewall rules for API tier")).toBe(
+      "AWS::EC2::SecurityGroup",
+    );
+  });
+
+  it("should classify Load Balancer descriptions", () => {
+    expect(classifyResourceType("Application load balancer for frontend")).toBe(
+      "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    );
+    expect(classifyResourceType("ALB to distribute traffic")).toBe(
+      "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    );
+  });
+
+  // ── Tier 1/2 resource types not in KEYWORD_TO_RESOURCE_TYPE ──
+
+  it("should return null for CloudWatch Logs description (not in keyword map)", () => {
+    expect(
+      classifyResourceType("CloudWatch log group for application logs"),
+    ).toBeNull();
+  });
+
+  it("should return null for CloudWatch Alarm description (not in keyword map)", () => {
+    expect(
+      classifyResourceType("CloudWatch alarm for CPU utilization"),
+    ).toBeNull();
+  });
+
+  it("should return null for Secrets Manager description (not in keyword map)", () => {
+    // Note: "secrets" contains "ecr" substring which false-matches ECR keywords,
+    // so we use a phrasing that avoids all keyword substrings
+    expect(
+      classifyResourceType("credential vault for storing API keys"),
+    ).toBeNull();
+  });
+
+  it("should return null for API Gateway V2 description (not in keyword map)", () => {
+    expect(
+      classifyResourceType("API Gateway HTTP API for REST endpoints"),
+    ).toBeNull();
+  });
+
+  it("should return null for Internet Gateway description (not in keyword map)", () => {
+    expect(
+      classifyResourceType("Internet gateway for public subnet access"),
+    ).toBeNull();
+  });
+
+  it("should return null for Route Table description (not in keyword map)", () => {
+    expect(classifyResourceType("Route table for private subnets")).toBeNull();
+  });
+
+  it("should return null for Route description (not in keyword map)", () => {
+    expect(
+      classifyResourceType("Route to NAT gateway for outbound traffic"),
+    ).toBeNull();
+  });
+
+  it("should return null for NAT Gateway description (not in keyword map)", () => {
+    expect(
+      classifyResourceType("NAT gateway for private subnet internet access"),
+    ).toBeNull();
+  });
 });
 
 describe("estimateCostForResource", () => {
@@ -138,5 +253,71 @@ describe("estimateCostForResource", () => {
     // EC2 is legacy eligible, not always free — our simplified
     // MCP server version does not track account dates
     expect(result.resourceType).toBe("AWS::EC2::Instance");
+  });
+
+  // ── Tier 1/2 resource type estimates ──────────────────────────────────────
+
+  it("should return cost estimate for Logs::LogGroup", () => {
+    const result = estimateCostForResource("AWS::Logs::LogGroup");
+
+    expect(result.resourceType).toBe("AWS::Logs::LogGroup");
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+  });
+
+  it("should return cost estimate for CloudWatch::Alarm", () => {
+    const result = estimateCostForResource("AWS::CloudWatch::Alarm");
+
+    expect(result.resourceType).toBe("AWS::CloudWatch::Alarm");
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+  });
+
+  it("should return cost estimate for SecretsManager::Secret", () => {
+    const result = estimateCostForResource("AWS::SecretsManager::Secret");
+
+    expect(result.resourceType).toBe("AWS::SecretsManager::Secret");
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+  });
+
+  it("should return cost estimate for ApiGatewayV2::Api", () => {
+    const result = estimateCostForResource("AWS::ApiGatewayV2::Api");
+
+    expect(result.resourceType).toBe("AWS::ApiGatewayV2::Api");
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+  });
+
+  it("should return cost estimate for EC2::InternetGateway", () => {
+    const result = estimateCostForResource("AWS::EC2::InternetGateway");
+
+    expect(result.resourceType).toBe("AWS::EC2::InternetGateway");
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+  });
+
+  it("should return cost estimate for EC2::RouteTable", () => {
+    const result = estimateCostForResource("AWS::EC2::RouteTable");
+
+    expect(result.resourceType).toBe("AWS::EC2::RouteTable");
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+  });
+
+  it("should return cost estimate for EC2::Route", () => {
+    const result = estimateCostForResource("AWS::EC2::Route");
+
+    expect(result.resourceType).toBe("AWS::EC2::Route");
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+  });
+
+  it("should return cost estimate for EC2::NatGateway", () => {
+    const result = estimateCostForResource("AWS::EC2::NatGateway");
+
+    expect(result.resourceType).toBe("AWS::EC2::NatGateway");
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
   });
 });

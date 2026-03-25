@@ -19,6 +19,8 @@ import { SCHEMA_EXCERPT_MAX_CHARS } from "../config/constants.js";
 import { CloudFormationKey } from "../constants/cfn-keys.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
+import { sanitizeDesiredState } from "../services/desired-state-sanitizer.js";
+import { repairRequiredFields } from "../services/required-field-repairer.js";
 
 /**
  * Transforms elicited options using plugin toCfn mappers.
@@ -497,18 +499,6 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       }
     }
 
-    // Validate against schema — drop hallucinated fields (Zod.strict equivalent)
-    if (schemaKeys.length > 0) {
-      const validated: Record<string, unknown> = {};
-      for (const [key, val] of Object.entries(desiredState)) {
-        if (schemaKeys.includes(key)) {
-          validated[key] = val;
-        }
-        // silently drop fields not in schema
-      }
-      desiredState = validated;
-    }
-
     // Remove empty placeholders and plugin placeholder values the LLM may have inserted
     const pluginPlaceholders = collectPluginPlaceholders(
       state.resourceType ?? "",
@@ -543,6 +533,30 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       }
     }
 
+    // Sanitize against schema — strip extraneous keys (recursive) + coerce types.
+    // MUST run AFTER elicitedOptions merge since plugins may add non-schema keys
+    // (e.g., DynamoDB PointInTimeRecoveryEnabled is a plugin field, not a CFN property).
+    if (schemaKeys.length > 0) {
+      const { sanitized, strippedKeys, coercedKeys } = sanitizeDesiredState(
+        desiredState,
+        state.resourceSchema,
+      );
+      desiredState = sanitized;
+      if (strippedKeys.length > 0 || coercedKeys.length > 0) {
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.PLAN_GENERATED,
+          extras: {
+            sanitized: true,
+            strippedKeys,
+            coercedKeys: coercedKeys.map((c) => `${c.path}: ${c.from}→${c.to}`),
+          },
+        });
+      }
+    }
+
     // Resolve OS name to real AMI ID for EC2 instances
     if (
       state.resourceType === "AWS::EC2::Instance" &&
@@ -563,6 +577,15 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       }
     }
 
+    // Story E2E.3: Generic required-field repairer — fills missing required fields
+    // from plugin defaults. Replaces one-off Lambda Code special case.
+    const { repaired: repairedState, injectedFields } = repairRequiredFields(
+      desiredState,
+      state.resourceType ?? "",
+      requiredKeys,
+    );
+    desiredState = repairedState;
+
     const durationMs = Date.now() - startedAt;
     log({
       ts: new Date().toISOString(),
@@ -570,7 +593,16 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       level: "info",
       action: LOG_ACTIONS.PLAN_GENERATED,
       durationMs,
-      extras: { resourceType: state.resourceType },
+      extras: {
+        resourceType: state.resourceType,
+        ...(injectedFields.length > 0
+          ? {
+              repairedFields: injectedFields.map(
+                (f) => `${f.field}(${f.source})`,
+              ),
+            }
+          : {}),
+      },
     });
 
     return {

@@ -144,6 +144,11 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
     default: () => undefined,
   }),
+  // Story E2E.1: Lambda placeholder Code was auto-injected (display-only flag)
+  placeholderCodeInjected: Annotation<boolean | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
   // Story 22.2: auto-fix applied patches (display-only, non-blocking)
   appliedFixes: Annotation<AppliedFix[] | undefined>({
     reducer: (_, b) => b,
