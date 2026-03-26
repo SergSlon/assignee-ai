@@ -159,7 +159,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       question: {
         type: "boolean",
         label: "Enable deletion protection?",
-        initialValue: true,
+        initialValue: false,
         hint: "Prevents accidental table deletion. Must be explicitly disabled before the table can be deleted. Recommended for production.",
       },
     },
@@ -176,7 +176,6 @@ export const dynamodbTablePlugin: ResourcePlugin = {
   defaults: {
     BillingMode: "PAY_PER_REQUEST",
     PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
-    DeletionProtectionEnabled: true,
     SSESpecification: { SSEEnabled: true },
   },
   configHints: [
@@ -185,7 +184,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
     "KeySchema requires exactly one HASH key; RANGE key is optional.",
     "AttributeDefinitions MUST include all attributes used in KeySchema.",
     "Set PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled to true unless user explicitly opts out.",
-    "Set DeletionProtectionEnabled to true unless user explicitly opts out.",
+    "Only set DeletionProtectionEnabled to true when the user explicitly requests it. Default is false to allow destroy lifecycle.",
     "Set SSESpecification.SSEEnabled to true for CMK encryption unless user explicitly opts out.",
   ],
 };

@@ -248,7 +248,8 @@ describe("destroy_resource success for all resource types (Story E2E.2 AC1)", ()
   });
 
   it("returns error when resource not found", async () => {
-    mockTaggingSend.mockResolvedValueOnce({
+    // Use mockResolvedValue (not Once) since resolveResource retries 3 times
+    mockTaggingSend.mockResolvedValue({
       ResourceTagMappingList: [],
       PaginationToken: undefined,
     });
@@ -262,7 +263,7 @@ describe("destroy_resource success for all resource types (Story E2E.2 AC1)", ()
     expect(result.isError).toBe(true);
     const body = parseResult(result);
     expect(body.message).toContain("No managed resource found");
-  });
+  }, 30000);
 
   it("returns error when delete operation fails", async () => {
     mockTagResolution("arn:aws:s3:::test-bucket");

@@ -598,8 +598,18 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         if (eipResult.AllocationId) {
           desiredState["AllocationId"] = eipResult.AllocationId;
         }
-      } catch {
-        // EIP allocation failed — let provisioner handle the error
+      } catch (eipErr: unknown) {
+        const errMsg =
+          eipErr instanceof Error ? eipErr.message : String(eipErr);
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "warn",
+          action: LOG_ACTIONS.PLAN_GENERATED,
+          extras: { eipAllocationFailed: true, error: errMsg },
+        });
+        // Fallback: remove the placeholder so CloudControl gets a clean error
+        delete desiredState["AllocationId"];
       }
     }
 
