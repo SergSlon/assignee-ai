@@ -194,10 +194,16 @@ export async function resourceProvisionerNode(
   );
 
   // ── CloudControl async create ─────────────────────────────────────────────
+  // Compound patterns reuse runId across resources — append index for unique ClientToken
+  const clientToken =
+    state.currentResourceIndex != null && state.currentResourceIndex > 0
+      ? `${state.runId}-${state.currentResourceIndex}`
+      : state.runId;
+
   const [createErr, createResult] = await provisioner.createResource(
     state.resourceType,
     JSON.stringify(propertiesWithTags),
-    state.runId,
+    clientToken,
   );
 
   if (createErr) {
