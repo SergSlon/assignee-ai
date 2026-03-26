@@ -8,6 +8,7 @@ import {
   loadCheckpoint,
   loadCheckpointFromPath,
   findNewestValidCheckpoint,
+  pruneExpiredCheckpoints,
 } from "./checkpoint.js";
 import { routeCheckpointEntry } from "./graph-routing.js";
 import type { AgentState } from "./graph-state.js";
@@ -407,6 +408,107 @@ describe("loadCheckpointFromPath (Story 11.3)", () => {
     await expect(loadCheckpointFromPath(filePath)).rejects.toThrow(
       /no desiredState/,
     );
+  });
+});
+
+describe("pruneExpiredCheckpoints (Story 33.2)", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await makeTempDir();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns { pruned: 0, kept: 0 } when directory does not exist", async () => {
+    const result = await pruneExpiredCheckpoints(
+      path.join(tmpDir, "nonexistent"),
+    );
+    expect(result).toEqual({ pruned: 0, kept: 0 });
+  });
+
+  it("returns { pruned: 0, kept: 0 } when directory is empty", async () => {
+    const result = await pruneExpiredCheckpoints(tmpDir);
+    expect(result).toEqual({ pruned: 0, kept: 0 });
+  });
+
+  it("keeps the 3 newest checkpoints regardless of expiry", async () => {
+    // Create 4 expired checkpoints
+    for (let i = 1; i <= 4; i++) {
+      const cp = serializeCheckpoint(baseGraphState as AgentState);
+      cp.runId = `00000000-0000-0000-0000-00000000000${i}`;
+      cp.ttl_hours = 1;
+      cp.created_at = new Date(
+        Date.now() - (100 + i) * 60 * 60 * 1000,
+      ).toISOString();
+      const filePath = await saveCheckpoint(cp, tmpDir);
+      // Touch the file with an old mtime so it's not "recently modified"
+      const oldTime = new Date(Date.now() - 60 * 60 * 1000);
+      await fs.utimes(filePath, oldTime, oldTime);
+    }
+
+    const result = await pruneExpiredCheckpoints(tmpDir, {
+      skipRecentMinutes: 0,
+    });
+
+    // 3 kept (newest rule), 1 pruned
+    expect(result.kept).toBe(3);
+    expect(result.pruned).toBe(1);
+  });
+
+  it("does not prune non-expired checkpoints beyond the top 3", async () => {
+    for (let i = 1; i <= 5; i++) {
+      const cp = serializeCheckpoint(baseGraphState as AgentState);
+      cp.runId = `00000000-0000-0000-0000-00000000000${i}`;
+      cp.ttl_hours = 999;
+      cp.created_at = new Date(Date.now() - i * 60 * 1000).toISOString();
+      await saveCheckpoint(cp, tmpDir);
+    }
+
+    const result = await pruneExpiredCheckpoints(tmpDir, {
+      skipRecentMinutes: 0,
+    });
+    // All 5 are non-expired, so all are kept
+    expect(result.pruned).toBe(0);
+    expect(result.kept).toBe(5);
+  });
+
+  it("skips recently modified files even if expired", async () => {
+    // Create 5 expired checkpoints with different created_at times
+    // The "newest 3" by created_at are kept automatically.
+    // The 4th oldest is recently modified (mtime is now) so should be kept.
+    // The 5th oldest has old mtime and is expired, so it gets pruned.
+    for (let i = 1; i <= 5; i++) {
+      const cp = serializeCheckpoint(baseGraphState as AgentState);
+      cp.runId = `00000000-0000-0000-0000-00000000000${i}`;
+      cp.ttl_hours = 1;
+      // i=1 is oldest, i=5 is newest
+      cp.created_at = new Date(
+        Date.now() - (200 - i) * 60 * 60 * 1000,
+      ).toISOString();
+      const fp = await saveCheckpoint(cp, tmpDir);
+      if (i <= 1) {
+        // oldest file: old mtime => pruneable
+        const oldTime = new Date(Date.now() - 60 * 60 * 1000);
+        await fs.utimes(fp, oldTime, oldTime);
+      } else if (i === 2) {
+        // 4th from top: keep mtime as now (recently modified) => should be kept
+        // (mtime is already "now" from the write)
+      } else {
+        // i=3,4,5 are the newest 3 by created_at => kept automatically
+        const oldTime = new Date(Date.now() - 60 * 60 * 1000);
+        await fs.utimes(fp, oldTime, oldTime);
+      }
+    }
+
+    const result = await pruneExpiredCheckpoints(tmpDir, {
+      skipRecentMinutes: 10,
+    });
+    // 3 kept (newest by created_at) + 1 kept (recently modified) = 4 kept, 1 pruned
+    expect(result.kept).toBe(4);
+    expect(result.pruned).toBe(1);
   });
 });
 

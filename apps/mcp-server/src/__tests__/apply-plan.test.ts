@@ -910,4 +910,209 @@ describe("apply_plan tool", () => {
       expect(body.message).toContain("DynamoDB table creation failed");
     });
   });
+
+  describe("path validation edge cases", () => {
+    it("should reject path traversal with '..' in checkpoint path", async () => {
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/../etc/passwd",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      expect(body.message).toContain("Invalid checkpoint path");
+    });
+
+    it("should reject path outside allowed directories", async () => {
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/home/user/malicious.json",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      expect(body.message).toContain("Invalid checkpoint path");
+    });
+
+    it("should accept path under /var/", async () => {
+      await setCheckpointFile(makeCheckpointJSON());
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/var/assignee/checkpoint.json",
+          confirmed: true,
+        },
+      });
+
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      // Should succeed (path is valid), so no "Invalid checkpoint path" error
+      expect(body.status).toBe("SUCCESS");
+    });
+
+    it("should accept path containing 'assignee' anywhere", async () => {
+      await setCheckpointFile(makeCheckpointJSON());
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/home/user/.assignee/checkpoints/cp.json",
+          confirmed: true,
+        },
+      });
+
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      // Should succeed (path contains 'assignee'), so no path validation error
+      expect(body.status).toBe("SUCCESS");
+    });
+  });
+
+  describe("checkpoint error handling", () => {
+    it("should return CheckpointError message when checkpoint throws CheckpointError", async () => {
+      const { readFile } = await import("node:fs/promises");
+      // Simulate invalid checkpoint schema by providing JSON missing required fields
+      (readFile as ReturnType<typeof vi.fn>).mockResolvedValue(
+        JSON.stringify({ invalid: true }),
+      );
+
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/bad-schema.json",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      // CheckpointError from invalid schema should be caught
+      expect(body.error).toBe(true);
+    });
+
+    it("should return generic message when checkpoint throws non-CheckpointError", async () => {
+      const { readFile } = await import("node:fs/promises");
+      (readFile as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error("ENOENT: no such file or directory"),
+      );
+
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/missing.json",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      expect(body.message).toContain("not found");
+    });
+  });
+
+  describe("provisioning loop edge cases", () => {
+    it("should pass resourceQueue from checkpoint to graph invoke", async () => {
+      const resourceQueue = [
+        {
+          resourceId: "res-1",
+          resourceType: "AWS::EC2::VPC",
+          displayName: "VPC 1",
+          desiredState: {},
+        },
+      ];
+      await setCheckpointFile(makeCheckpointJSON({ resourceQueue }));
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/queue-checkpoint.json",
+          confirmed: true,
+        },
+      });
+
+      const invokeCall = (ctx.graph.invoke as ReturnType<typeof vi.fn>).mock
+        .calls[0]!;
+      expect(invokeCall[0]).toMatchObject({
+        resourceQueue,
+        checkpointResumed: true,
+      });
+    });
+
+    it("should pass elicitedOptions from checkpoint to graph invoke", async () => {
+      const elicitedOptions = { instanceType: "t3.micro", az: "us-east-1a" };
+      await setCheckpointFile(makeCheckpointJSON({ elicitedOptions }));
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/options-checkpoint.json",
+          confirmed: true,
+        },
+      });
+
+      const invokeCall = (ctx.graph.invoke as ReturnType<typeof vi.fn>).mock
+        .calls[0]!;
+      expect(invokeCall[0]).toMatchObject({ elicitedOptions });
+    });
+
+    it("should handle non-Error thrown by graph invoke", async () => {
+      await setCheckpointFile(makeCheckpointJSON());
+      const ctx = makeMockGraphContext();
+      (ctx.graph.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(
+        "string error value",
+      );
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/string-error.json",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      expect(body.message).toContain("string error value");
+    });
+  });
 });

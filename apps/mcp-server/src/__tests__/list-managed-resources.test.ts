@@ -236,3 +236,334 @@ describe("list_managed_resources — Tagging API errors", () => {
     );
   });
 });
+
+// ── SERVICE_SUBTYPE_MAP resolution ──────────────────────────────────────────
+
+describe("list_managed_resources — SERVICE_SUBTYPE_MAP resolution", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should resolve EC2 instance ARN via subtype map", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:ec2:us-east-1:123456789012:instance/i-0abc123",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.resourceType).toBe("AWS::EC2::Instance");
+  });
+
+  it("should resolve EC2 VPC ARN via subtype map", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0abc",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.resourceType).toBe("AWS::EC2::VPC");
+  });
+
+  it("should resolve EC2 security-group ARN via subtype map", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN:
+            "arn:aws:ec2:us-east-1:123456789012:security-group/sg-0abc",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.resourceType).toBe("AWS::EC2::SecurityGroup");
+  });
+
+  it("should resolve apigateway /apis ARN via prefixed subtype", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:apigateway:us-east-1::/apis/abc123",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.resourceType).toBe("AWS::ApiGatewayV2::Api");
+  });
+
+  it("should resolve execute-api ARN via empty-string subtype fallback", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:execute-api:us-east-1:123456789012:abc123",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.resourceType).toBe("AWS::ApiGatewayV2::Api");
+  });
+
+  it("should resolve ELBv2 loadbalancer ARN via subtype map", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN:
+            "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/app/my-lb/abc",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.resourceType).toBe(
+      "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    );
+  });
+
+  it("should resolve ELBv2 targetgroup ARN via subtype map", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN:
+            "arn:aws:elasticloadbalancing:us-east-1:123:targetgroup/my-tg/abc",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.resourceType).toBe(
+      "AWS::ElasticLoadBalancingV2::TargetGroup",
+    );
+  });
+
+  it("should use fallback type construction for unknown service", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:newservice:us-east-1:123456789012:widget/w-123",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    // Fallback: AWS::<Capitalized service>::<Capitalized resource>
+    expect(resources[0]!.resourceType).toBe("AWS::Newservice::Widget");
+  });
+});
+
+// ── Provision log integration ────────────────────────────────────────────────
+
+describe("list_managed_resources — provision log cost enrichment", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should enrich resources with cost data from provision log", async () => {
+    // Override the fs mock to return valid provision log data
+    const fsMod = await import("node:fs");
+    (fsMod.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      JSON.stringify([
+        {
+          resourceArn: "arn:aws:s3:::cost-bucket",
+          estimatedMonthlyCost: "$1.50",
+        },
+      ]),
+    );
+
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:s3:::cost-bucket",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.estimatedMonthlyCost).toBe("$1.50");
+  });
+
+  it("should show N/A cost when provision log entry lacks cost data", async () => {
+    const fsMod = await import("node:fs");
+    (fsMod.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      JSON.stringify([
+        {
+          resourceArn: "arn:aws:s3:::no-cost-bucket",
+          // no estimatedMonthlyCost
+        },
+      ]),
+    );
+
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:s3:::no-cost-bucket",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.estimatedMonthlyCost).toBe("N/A");
+  });
+
+  it("should handle provision log that is not an array", async () => {
+    const fsMod = await import("node:fs");
+    (fsMod.readFileSync as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      JSON.stringify({ not: "an array" }),
+    );
+
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:s3:::some-bucket",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.estimatedMonthlyCost).toBe("N/A");
+  });
+});
+
+// ── Edge cases: empty/null tag mappings ──────────────────────────────────────
+
+describe("list_managed_resources — tag edge cases", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should handle null ResourceTagMappingList", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: undefined,
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources).toEqual([]);
+  });
+
+  it("should handle resource with empty ResourceARN", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources).toHaveLength(1);
+    // The empty ARN still gets processed
+    expect(resources[0]!.arn).toBe("");
+  });
+
+  it("should handle resource with no assignee-run-id tag (createdDate N/A)", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:s3:::no-run-id-bucket",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.createdDate).toBe("N/A");
+  });
+
+  it("should handle resource with no Tags array at all", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:s3:::no-tags-bucket",
+          // no Tags field
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("us-east-1");
+    expect(resources[0]!.createdDate).toBe("N/A");
+  });
+
+  it("should use resolvedRegion when ARN has empty region field", async () => {
+    const mockSend = getMockSend();
+    // S3 ARNs have empty region: arn:aws:s3:::bucket-name
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:s3:::global-bucket",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources("eu-west-1");
+    expect(resources[0]!.region).toBe("eu-west-1");
+  });
+
+  it("should return empty array when resourceType filter matches nothing", async () => {
+    const mockSend = getMockSend();
+    mockSend.mockResolvedValueOnce({
+      ResourceTagMappingList: [
+        {
+          ResourceARN: "arn:aws:s3:::bucket-1",
+          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+        },
+      ],
+      PaginationToken: undefined,
+    });
+
+    const resources = await fetchManagedResources(
+      "us-east-1",
+      "AWS::RDS::DBInstance",
+    );
+    expect(resources).toEqual([]);
+  });
+});

@@ -71,6 +71,24 @@ vi.mock("@aws-sdk/client-cloudcontrol", () => {
   };
 });
 
+// Mock the EC2 API (for IGW detach)
+const mockEc2Send = vi.fn();
+vi.mock("@aws-sdk/client-ec2", () => {
+  return {
+    EC2Client: vi.fn().mockImplementation(() => ({
+      send: mockEc2Send,
+    })),
+    DescribeInternetGatewaysCommand: vi.fn().mockImplementation((input) => ({
+      ...input,
+      _type: "DescribeInternetGatewaysCommand",
+    })),
+    DetachInternetGatewayCommand: vi.fn().mockImplementation((input) => ({
+      ...input,
+      _type: "DetachInternetGatewayCommand",
+    })),
+  };
+});
+
 // ── Tagging response helpers ─────────────────────────────────────────────────
 
 function makeManagedResourceResponse(
@@ -488,6 +506,440 @@ describe("destroy_resource tool", () => {
       const body = parseResult(result);
       expect(body.message).toContain("Network timeout");
       expect(body.message).toContain("transient");
+    });
+  });
+
+  describe("ARN fallback path", () => {
+    it("should use ARN fallback for unknown resource type ARN (still not found)", async () => {
+      // ARN with a service not in the type map → resourceType will be null → resolved stays null
+      mockTaggingSend.mockResolvedValue(makeEmptyTaggingResponse());
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier:
+            "arn:aws:unknownservice:us-east-1:123456789012:thing/t-123",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = parseResult(result);
+      expect(body.message).toContain("No managed resource found");
+    }, 30000);
+
+    it("should use ARN fallback for Lambda function ARN not found in Tagging API", async () => {
+      mockTaggingSend.mockResolvedValue(makeEmptyTaggingResponse());
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-lambda-fallback" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier:
+            "arn:aws:lambda:us-east-1:123456789012:function:my-fn",
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+      expect(body.resource.resourceType).toBe("AWS::Lambda::Function");
+      expect(body.resource.identifier).toBe("my-fn");
+    }, 30000);
+
+    it("should use ARN fallback and use full ARN as identifier for SNS Topic", async () => {
+      const topicArn = "arn:aws:sns:us-east-1:123456789012:my-topic";
+      mockTaggingSend.mockResolvedValue(makeEmptyTaggingResponse());
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-sns-fallback" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: topicArn,
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+      // SNS Topic uses full ARN as CloudControl identifier
+      expect(body.resource.identifier).toBe(topicArn);
+    }, 30000);
+
+    it("should construct SQS Queue URL as identifier in ARN fallback", async () => {
+      const sqsArn = "arn:aws:sqs:us-east-1:123456789012:my-queue";
+      mockTaggingSend.mockResolvedValue(makeEmptyTaggingResponse());
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-sqs-fallback" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: sqsArn,
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+      expect(body.resource.identifier).toBe(
+        "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue",
+      );
+    }, 30000);
+  });
+
+  describe("IGW detach path", () => {
+    it("should attempt IGW detach before deleting InternetGateway", async () => {
+      const igwArn =
+        "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-abc";
+      mockTaggingSend.mockResolvedValue(makeManagedResourceResponse(igwArn));
+
+      mockEc2Send
+        .mockResolvedValueOnce({
+          InternetGateways: [
+            {
+              InternetGatewayId: "igw-abc",
+              Attachments: [{ VpcId: "vpc-123", State: "available" }],
+            },
+          ],
+        })
+        .mockResolvedValueOnce({}); // DetachInternetGatewayCommand
+
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-igw" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: igwArn,
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+      // EC2 should have been called for describe + detach
+      expect(mockEc2Send).toHaveBeenCalledTimes(2);
+    });
+
+    it("should continue deletion even if IGW detach fails", async () => {
+      const igwArn =
+        "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-fail";
+      mockTaggingSend.mockResolvedValue(makeManagedResourceResponse(igwArn));
+
+      mockEc2Send.mockRejectedValue(new Error("EC2 describe failed"));
+
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-igw-fail" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: igwArn,
+          confirmed: true,
+        },
+      });
+
+      // Should still succeed — detach failure is non-fatal
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+    });
+
+    it("should skip detach when IGW attachment is already detached", async () => {
+      const igwArn =
+        "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-detached";
+      mockTaggingSend.mockResolvedValue(makeManagedResourceResponse(igwArn));
+
+      mockEc2Send.mockResolvedValueOnce({
+        InternetGateways: [
+          {
+            InternetGatewayId: "igw-detached",
+            Attachments: [{ VpcId: "vpc-123", State: "detached" }],
+          },
+        ],
+      });
+
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-igw-skip" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: igwArn,
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+      // Only describe call, no detach since already detached
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
+    });
+
+    it("should skip detach when IGW has no attachments", async () => {
+      const igwArn =
+        "arn:aws:ec2:us-east-1:123456789012:internet-gateway/igw-noattach";
+      mockTaggingSend.mockResolvedValue(makeManagedResourceResponse(igwArn));
+
+      mockEc2Send.mockResolvedValueOnce({
+        InternetGateways: [
+          {
+            InternetGatewayId: "igw-noattach",
+            Attachments: [],
+          },
+        ],
+      });
+
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-igw-noattach" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: igwArn,
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("transient error retry path", () => {
+    it("should recover from a single transient poll error", async () => {
+      mockTaggingSend.mockResolvedValue(
+        makeManagedResourceResponse("arn:aws:s3:::transient-bucket"),
+      );
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-transient" },
+        })
+        // First poll: transient error
+        .mockRejectedValueOnce(new Error("Transient network error"))
+        // Second poll: success
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: "arn:aws:s3:::transient-bucket",
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+    });
+
+    it("should recover from two transient poll errors", async () => {
+      mockTaggingSend.mockResolvedValue(
+        makeManagedResourceResponse("arn:aws:s3:::double-transient"),
+      );
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-double" },
+        })
+        .mockRejectedValueOnce(new Error("Error 1"))
+        .mockRejectedValueOnce(new Error("Error 2"))
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: "arn:aws:s3:::double-transient",
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+    });
+  });
+
+  describe("composite identifier edge cases", () => {
+    it("should not treat pipe without rtb- prefix as composite", async () => {
+      // Input has pipe but doesn't start with rtb-
+      mockTaggingSend.mockResolvedValue(makeEmptyTaggingResponse());
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: "sg-123|something",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = parseResult(result);
+      expect(body.message).toContain("No managed resource found");
+    }, 30000);
+
+    it("should resolve Route composite with 0.0.0.0/0 CIDR", async () => {
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-default-route" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: "rtb-abc123|0.0.0.0/0",
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+      expect(body.resource.resourceType).toBe("AWS::EC2::Route");
+      expect(body.resource.identifier).toBe("rtb-abc123|0.0.0.0/0");
+    });
+  });
+
+  describe("poll FAILED with no StatusMessage", () => {
+    it("should return default failure message when StatusMessage is absent", async () => {
+      mockTaggingSend.mockResolvedValue(
+        makeManagedResourceResponse("arn:aws:s3:::fail-no-msg"),
+      );
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-no-msg" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: {
+            OperationStatus: "FAILED",
+            // no StatusMessage
+          },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: "arn:aws:s3:::fail-no-msg",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = parseResult(result);
+      expect(body.message).toContain("Delete operation failed");
+    });
+  });
+
+  describe("region extraction from ARN", () => {
+    it("should extract region from ARN in fallback path", async () => {
+      const arn = "arn:aws:lambda:eu-west-1:123456789012:function:my-fn";
+      mockTaggingSend.mockResolvedValue(makeEmptyTaggingResponse());
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-eu" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: arn,
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.resource.region).toBe("eu-west-1");
+    }, 30000);
+  });
+
+  describe("dry-run with composite identifier", () => {
+    it("should return PENDING_CONFIRMATION for composite Route identifier when not confirmed", async () => {
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: "rtb-xyz|10.0.0.0/16",
+          confirmed: false,
+        },
+      });
+
+      expect(result.isError).toBeUndefined();
+      const body = parseResult(result);
+      expect(body.status).toBe("PENDING_CONFIRMATION");
+      expect(body.resource.resourceType).toBe("AWS::EC2::Route");
     });
   });
 });
