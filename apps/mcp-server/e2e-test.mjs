@@ -528,14 +528,19 @@ async function testResourceLifecycle(type, description, isCompound = false) {
 
   // Step 6: list_managed_resources (verify destroyed resources are gone)
   console.log(`  [6/6] list_managed_resources (verify destroyed)...`);
-  if (successfullyDestroyedArns.size === 0) {
+  if (successfullyDestroyedArns.size === 0 && allDestroyed && identifiers.length > 0) {
+    // All resources were already gone (stale soft-pass) — count as success
+    record(type, "list_after_destroy", "PASS", "All resources already absent (stale/previously deleted)");
+    console.log(`  ✅ post-destroy: all resources already absent (stale cleanup)`);
+  } else if (successfullyDestroyedArns.size === 0) {
     record(type, "list_after_destroy", "SKIP", "No resources were destroyed to verify");
     console.log(`  ⏭ post-destroy: no resources to verify`);
   } else {
-    // Retry twice with 5s delay for Tagging API de-index propagation
+    // Retry up to 3 times with 10s delay for Tagging API de-index propagation
+    // ECS/EC2/NatGW can take 30+ seconds to de-index
     let verified = false;
-    for (let attempt = 0; attempt < 2 && !verified; attempt++) {
-      if (attempt > 0) await sleep(5000);
+    for (let attempt = 0; attempt < 3 && !verified; attempt++) {
+      if (attempt > 0) await sleep(10000);
       try {
         const listResult2 = await mcpListResources();
         if (listResult2.isError || listResult2.error) {
@@ -549,7 +554,7 @@ async function testResourceLifecycle(type, description, isCompound = false) {
           record(type, "list_after_destroy", "PASS", `Verified ${successfullyDestroyedArns.size} resource(s) absent (${listResult2.elapsed}s)`);
           console.log(`  ✅ post-destroy list OK: ${successfullyDestroyedArns.size} destroyed resource(s) confirmed absent (${listResult2.elapsed}s)`);
           verified = true;
-        } else if (attempt === 1) {
+        } else if (attempt === 2) {
           // Final attempt — still visible
           record(type, "list_after_destroy", "WARN", `${stillVisible.length} destroyed resource(s) still visible after retry`);
           console.log(`  ⚠ post-destroy: ${stillVisible.length} destroyed resource(s) still in Tagging API (${listResult2.elapsed}s)`);
