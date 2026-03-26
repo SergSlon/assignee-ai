@@ -163,7 +163,10 @@ export const applyCommand = new Command(CommandName.APPLY)
           ]);
           const orgConfig = await fetchOrgPolicy(authToken);
 
-          const config = { configurable: { thread_id: ctx.runId } };
+          const config = {
+            configurable: { thread_id: ctx.runId },
+            recursionLimit: 500, // Compound patterns + RDS polling need many graph cycles
+          };
 
           // ── Phase 1: plan + HITL confirmation ────────────────────────────────
           let phase1State: AgentState;

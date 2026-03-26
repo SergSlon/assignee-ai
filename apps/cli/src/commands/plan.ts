@@ -78,7 +78,7 @@ export const planCommand = new Command(CommandName.PLAN)
             ...(userConfig ? { userConfig } : {}),
             ...(orgConfig ? { orgConfig } : {}),
           },
-          { configurable: { thread_id: ctx.runId } },
+          { configurable: { thread_id: ctx.runId }, recursionLimit: 500 },
         );
 
         stopSpinner();
@@ -179,6 +179,7 @@ export const planCommand = new Command(CommandName.PLAN)
         const planState = finalState as AgentState;
         const applyConfig = {
           configurable: { thread_id: `${ctx.runId}-apply` },
+          recursionLimit: 500,
         };
 
         // Phase 1: Re-invoke graph in APPLY mode with plan state injected.
