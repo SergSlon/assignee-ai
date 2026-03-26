@@ -1,13 +1,78 @@
 # Testing Guide — Assignee.ai CLI-First MVP
 
-> Unit tests (Vitest) and end-to-end smoke tests for the `assignee plan`, `assignee apply`, `assignee list`, `assignee destroy`, `assignee status`, and `assignee init` commands.
+> Unit tests (Vitest), MCP server E2E tests against real AWS, and end-to-end smoke tests for the CLI commands.
+
+---
+
+## Quick reference
+
+```bash
+pnpm test                                    # ~2976 unit tests, ~18s, no AWS needed
+pnpm check-types                             # TypeScript type check
+pnpm --filter @assignee/mcp-server test:e2e  # MCP E2E against real AWS (~43 min)
+```
+
+---
+
+## MCP Server E2E Tests (real AWS)
+
+Full lifecycle tests for all 25 resource types through the MCP server: plan → estimate → apply → list → destroy → verify.
+
+### Prerequisites
+
+- AWS credentials configured (root account or IAM with full access)
+- IAM policy v18+ deployed (cloudformation:\*, iam:CreateServiceLinkedRole)
+- Region: us-east-1
+- Clean stale resources: `aws resourcegroupstaggingapi get-resources --tag-filters Key=managed-by,Values=assignee-ai`
+
+### Running
+
+```bash
+# Build first (E2E uses compiled MCP server)
+npx turbo build --force
+
+# Full run — 25 types × 6 steps = 150 test steps
+node apps/mcp-server/e2e-test.mjs 2>&1 | tee /tmp/mcp-e2e.log
+
+# Single resource type
+node apps/mcp-server/e2e-test.mjs --type Lambda
+node apps/mcp-server/e2e-test.mjs --type RDS
+
+# Smoke test (cheap resources only)
+node apps/mcp-server/e2e-test.mjs --smoke
+```
+
+### What it tests
+
+| Step     | What                                       | Validated                                   |
+| -------- | ------------------------------------------ | ------------------------------------------- |
+| plan     | LLM generates CloudFormation desired state | Schema compliance, required fields          |
+| estimate | Cost estimation from pricing MCP           | Price returned or N/A                       |
+| apply    | CloudControl provisions real resource      | Resource created, ARN returned              |
+| list     | Tagging API finds the resource             | managed-by tag, correct type                |
+| destroy  | CloudControl + pre-delete hooks            | Resource deleted, dependencies handled      |
+| verify   | Confirm resource absent                    | Tagging API de-index or AWS API state check |
+
+### Resource types (25)
+
+22 individual: SSM-Parameter, IAM-Role, S3-Bucket, DynamoDB-Table, SQS-Queue, SNS-Topic, ECS-Cluster, ECR-Repository, Lambda-Function, LogGroup, CloudWatch-Alarm, SecretsManager, VPC, InternetGateway, Subnet, RouteTable, Route, SecurityGroup, EC2-Instance, RDS-DBInstance, ELBv2-LoadBalancer, NatGateway.
+
+3 compound: API-Gateway-V2 (serverless-api pattern), Compound-MessageQueue, Compound-ServerlessAPI.
+
+### Cost
+
+Most resources are free-tier or cost <$0.01. RDS and ELB are the most expensive (~$0.10 total for a run). NatGateway allocates an EIP (free when attached, cleaned up after). Total cost per full run: **~$0.15**.
+
+### Duration
+
+~43 minutes. RDS provisioning is the bottleneck (~8 min apply + ~5 min destroy).
 
 ---
 
 ## Unit tests
 
 ```bash
-pnpm test          # 1171 tests across 65 files
+pnpm test          # ~2976 tests across 160 files
 pnpm check-types   # TypeScript type check
 ```
 
