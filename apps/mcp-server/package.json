@@ -44,6 +44,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
+    "test:e2e": "node e2e-test.mjs",
     "start": "node ./dist/index.js",
     "check-types": "tsc --noEmit",
     "prepublishOnly": "cd ../.. && npx turbo build --filter=@assignee/mcp-server"
