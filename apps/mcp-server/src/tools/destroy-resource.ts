@@ -42,6 +42,7 @@ const SLOW_DELETE_TYPES = new Set([
   "AWS::RDS::DBInstance",
   "AWS::RDS::DBCluster",
   "AWS::EC2::NatGateway",
+  "AWS::EC2::InternetGateway", // detach + delete can exceed 2min
   "AWS::ElasticLoadBalancingV2::LoadBalancer",
 ]);
 
