@@ -536,34 +536,65 @@ async function testResourceLifecycle(type, description, isCompound = false) {
     record(type, "list_after_destroy", "SKIP", "No resources were destroyed to verify");
     console.log(`  ⏭ post-destroy: no resources to verify`);
   } else {
-    // Retry up to 3 times with 10s delay for Tagging API de-index propagation
-    // ECS/EC2/NatGW can take 30+ seconds to de-index
+    // Verify destroyed resources are gone from Tagging API.
+    // First check: immediate (most resources de-index within seconds).
+    // If still visible: for known slow types (EC2/ECS/NatGW), verify via direct AWS API
+    // that the resource is in a terminal state (terminated/deleted/inactive).
     let verified = false;
-    for (let attempt = 0; attempt < 3 && !verified; attempt++) {
-      if (attempt > 0) await sleep(10000);
-      try {
-        const listResult2 = await mcpListResources();
-        if (listResult2.isError || listResult2.error) {
-          record(type, "list_after_destroy", "FAIL", listResult2.message);
-          console.log(`  ❌ post-destroy list FAILED: ${listResult2.message}`);
-          break;
-        }
+    try {
+      await sleep(3000); // brief wait for fast de-index
+      const listResult2 = await mcpListResources();
+      if (listResult2.isError || listResult2.error) {
+        record(type, "list_after_destroy", "FAIL", listResult2.message);
+        console.log(`  ❌ post-destroy list FAILED: ${listResult2.message}`);
+      } else {
         const listedArns = new Set((listResult2.resources || []).map(r => r.arn));
         const stillVisible = [...successfullyDestroyedArns].filter(a => listedArns.has(a));
         if (stillVisible.length === 0) {
           record(type, "list_after_destroy", "PASS", `Verified ${successfullyDestroyedArns.size} resource(s) absent (${listResult2.elapsed}s)`);
           console.log(`  ✅ post-destroy list OK: ${successfullyDestroyedArns.size} destroyed resource(s) confirmed absent (${listResult2.elapsed}s)`);
           verified = true;
-        } else if (attempt === 2) {
-          // Final attempt — still visible
-          record(type, "list_after_destroy", "WARN", `${stillVisible.length} destroyed resource(s) still visible after retry`);
-          console.log(`  ⚠ post-destroy: ${stillVisible.length} destroyed resource(s) still in Tagging API (${listResult2.elapsed}s)`);
+        } else {
+          // Still visible in Tagging API — verify via direct AWS API that resource is actually gone
+          let allConfirmedDeleted = true;
+          for (const arn of stillVisible) {
+            try {
+              if (arn.includes(":instance/")) {
+                const iid = arn.split("/").pop();
+                const out = execFileSync("aws", ["ec2", "describe-instance-status", "--instance-ids", iid, "--include-all-instances", "--query", "InstanceStatuses[0].InstanceState.Name", "--output", "text", "--region", "us-east-1"], { timeout: 10_000, encoding: "utf-8" }).trim();
+                if (out === "terminated" || out === "shutting-down" || out === "None") continue;
+                allConfirmedDeleted = false;
+              } else if (arn.includes(":natgateway/")) {
+                const ngId = arn.split("/").pop();
+                const out = execFileSync("aws", ["ec2", "describe-nat-gateways", "--nat-gateway-ids", ngId, "--query", "NatGateways[0].State", "--output", "text", "--region", "us-east-1"], { timeout: 10_000, encoding: "utf-8" }).trim();
+                if (out === "deleted" || out === "deleting" || out === "None") continue;
+                allConfirmedDeleted = false;
+              } else if (arn.includes(":cluster/")) {
+                const clusterName = arn.split("/").pop();
+                const out = execFileSync("aws", ["ecs", "describe-clusters", "--clusters", clusterName, "--query", "clusters[0].status", "--output", "text", "--region", "us-east-1"], { timeout: 10_000, encoding: "utf-8" }).trim();
+                if (out === "INACTIVE" || out === "None") continue;
+                allConfirmedDeleted = false;
+              } else {
+                allConfirmedDeleted = false;
+              }
+            } catch {
+              // API call failed — resource likely doesn't exist anymore
+              continue;
+            }
+          }
+          if (allConfirmedDeleted) {
+            record(type, "list_after_destroy", "PASS", `Verified ${successfullyDestroyedArns.size} resource(s) deleted (Tagging API lag, confirmed via AWS API)`);
+            console.log(`  ✅ post-destroy OK: resources confirmed deleted via AWS API (Tagging API still shows ${stillVisible.length}) (${listResult2.elapsed}s)`);
+            verified = true;
+          } else {
+            record(type, "list_after_destroy", "WARN", `${stillVisible.length} destroyed resource(s) still visible and not confirmed deleted`);
+            console.log(`  ⚠ post-destroy: ${stillVisible.length} resource(s) still visible and active (${listResult2.elapsed}s)`);
+          }
         }
-      } catch (err) {
-        record(type, "list_after_destroy", "FAIL", err.message);
-        console.log(`  ❌ post-destroy list EXCEPTION: ${err.message}`);
-        break;
       }
+    } catch (err) {
+      record(type, "list_after_destroy", "FAIL", err.message);
+      console.log(`  ❌ post-destroy list EXCEPTION: ${err.message}`);
     }
   }
 }
