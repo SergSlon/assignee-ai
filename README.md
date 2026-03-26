@@ -15,6 +15,7 @@ assignee completions
 Also available as an [MCP server](#mcp-server) for AI coding agents (Claude Code, Cursor, Windsurf).
 
 [![CI](https://github.com/SergSlon/assignee-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/SergSlon/assignee-ai/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/SergSlon/COVERAGE_GIST_ID/raw/assignee-ai-coverage.json)](https://github.com/SergSlon/assignee-ai/actions)
 
 > **Note:** Both packages (`@assignee/cli` and `@assignee/mcp-server`) are `private: true` and not yet published to npm.
 
