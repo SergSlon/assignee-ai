@@ -123,7 +123,6 @@ describe("dynamodbTablePlugin", () => {
     expect(dynamodbTablePlugin.defaults).toEqual({
       BillingMode: "PAY_PER_REQUEST",
       PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
-      DeletionProtectionEnabled: true,
       SSESpecification: { SSEEnabled: true },
     });
   });

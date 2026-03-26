@@ -78,6 +78,42 @@ describe("statusPollerNode", () => {
     expect(mockProvisioner.getRequestStatus).not.toHaveBeenCalled();
   });
 
+  it("uses extended 15-minute timeout for RDS", async () => {
+    // 6 minutes in — would timeout for S3 but NOT for RDS
+    mockProvisioner.getRequestStatus.mockResolvedValueOnce([
+      null,
+      {
+        operationStatus: "IN_PROGRESS",
+        identifier: undefined,
+        statusMessage: undefined,
+      },
+    ]);
+
+    const result = await statusPollerNode(
+      makeState({
+        resourceType: "AWS::RDS::DBInstance",
+        startedAt: Date.now() - 6 * 60 * 1000,
+      }),
+      mockProvisioner,
+    );
+
+    expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+    expect(mockProvisioner.getRequestStatus).toHaveBeenCalled();
+  }, 5000);
+
+  it("times out RDS after 15 minutes", async () => {
+    const result = await statusPollerNode(
+      makeState({
+        resourceType: "AWS::RDS::DBInstance",
+        startedAt: Date.now() - 16 * 60 * 1000,
+      }),
+      mockProvisioner,
+    );
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toMatch(/timed out after 15 minutes/);
+    expect(mockProvisioner.getRequestStatus).not.toHaveBeenCalled();
+  });
+
   it("returns IN_PROGRESS for IN_PROGRESS OperationStatus", async () => {
     mockProvisioner.getRequestStatus.mockResolvedValueOnce([
       null,

@@ -661,7 +661,7 @@ describe("apply_plan tool", () => {
   });
 
   describe("compound provisioning and timeout (Story E2E.2)", () => {
-    it("should use recursionLimit of 200 in graph config", async () => {
+    it("should use recursionLimit of 500 in graph config", async () => {
       await setCheckpointFile(makeCheckpointJSON());
       const ctx = makeMockGraphContext();
       const { client } = await createTestClient(ctx);
@@ -674,14 +674,14 @@ describe("apply_plan tool", () => {
         },
       });
 
-      // Verify the config passed to graph.invoke includes recursionLimit: 200
+      // Verify the config passed to graph.invoke includes recursionLimit: 500
       const invokeCall = (ctx.graph.invoke as ReturnType<typeof vi.fn>).mock
         .calls[0]!;
       const config = invokeCall[1] as {
         recursionLimit: number;
         configurable: Record<string, string>;
       };
-      expect(config.recursionLimit).toBe(200);
+      expect(config.recursionLimit).toBe(500);
       expect(config.configurable).toBeDefined();
       expect(config.configurable["thread_id"]).toContain("mcp-apply");
     });

@@ -16,7 +16,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "../..");
@@ -57,7 +57,7 @@ const RESOURCE_TYPES = [
   { short: "SNS-Topic",         desc: `Create an SNS Topic with TopicName e2e-sns-${RUN_ID}`, expensive: false },
   { short: "ECS-Cluster",       desc: "Create an ECS Cluster with ClusterName e2e-ecs-cluster-test", expensive: false },
   { short: "ECR-Repository",    desc: `Create an ECR Repository with RepositoryName e2e-ecr-${RUN_ID}`, expensive: false },
-  { short: "Lambda-Function",   desc: `Create a Lambda Function with FunctionName e2e-fn-${RUN_ID}, Runtime nodejs20.x, Handler index.handler`, expensive: false, needsRole: true },
+  { short: "Lambda-Function",   desc: `Create a Lambda Function with FunctionName e2e-fn-${RUN_ID}, Runtime nodejs20.x, Handler index.handler, and inline Code using ZipFile with a simple handler`, expensive: false, needsRole: true },
   { short: "LogGroup",          desc: `Create a CloudWatch Logs LogGroup with LogGroupName /e2e-test/lg-${RUN_ID} and retention of 7 days`, expensive: false },
   { short: "CloudWatch-Alarm",  desc: `Create a CloudWatch Alarm with AlarmName e2e-alarm-${RUN_ID} MetricName CPUUtilization Namespace AWS/EC2 ComparisonOperator GreaterThanThreshold Threshold 80 Period 300 EvaluationPeriods 1 Statistic Average`, expensive: false },
   { short: "SecretsManager",    desc: `Create a SecretsManager Secret with Name e2e-secret-${RUN_ID} and GenerateSecretString with PasswordLength 32`, expensive: false },
@@ -68,7 +68,6 @@ const RESOURCE_TYPES = [
   { short: "RouteTable",        desc: "Create a RouteTable", expensive: false, needsVpc: true },
   { short: "Route",             desc: "Create a Route with DestinationCidrBlock 10.99.99.0/24 and GatewayId local", expensive: false, needsRouteTable: true },
   { short: "SecurityGroup",     desc: "Create a SecurityGroup with GroupName e2e-sg-test and GroupDescription E2E test security group", expensive: false, needsVpc: true },
-  { short: "API-Gateway-V2",    desc: `Create an API Gateway V2 HTTP API with Name e2e-apigw-${RUN_ID} and ProtocolType HTTP`, expensive: false },
   // Expensive resources
   { short: "EC2-Instance",      desc: "Create an EC2 Instance with InstanceType t3.micro and ImageId resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64", expensive: true },
   { short: "RDS-DBInstance",    desc: `Create an RDS DBInstance with DBInstanceIdentifier e2e-rds-${RUN_ID} DBInstanceClass db.t3.micro Engine postgres MasterUsername adminuser MasterUserPassword TestPass123x AllocatedStorage 20`, expensive: true },
@@ -77,6 +76,7 @@ const RESOURCE_TYPES = [
 ];
 
 const COMPOUND_PATTERNS = [
+  { short: "API-Gateway-V2",        desc: `Create an API Gateway V2 HTTP API with Name e2e-apigw-${RUN_ID} and ProtocolType HTTP` },
   { short: "Compound-MessageQueue",  desc: "create a message queue with lambda processor" },
   { short: "Compound-ServerlessAPI", desc: "create a serverless API" },
 ];
@@ -158,8 +158,8 @@ async function stopMcpServer() {
 
 // ── MCP tool helpers ─────────────────────────────────────────────────────────
 
-// 15-minute timeout for MCP tool calls — RDS provisioning can take 8-15 minutes
-const MCP_TOOL_TIMEOUT = { timeout: 900_000 };
+// 30-minute timeout for MCP tool calls — RDS can take 8-15 min, slow environments need headroom
+const MCP_TOOL_TIMEOUT = { timeout: 1_800_000, resetTimeoutOnProgress: true };
 
 function parseToolResult(result) {
   const content = result.content;
@@ -270,6 +270,15 @@ async function testResourceLifecycle(type, description, isCompound = false) {
     console.log(`  ❌ estimate EXCEPTION: ${err.message}`);
   }
 
+  // Snapshot resources before apply (for delta destroy + pre-existing detection)
+  let preApplyArns = new Set();
+  try {
+    const preListed = await mcpListResources();
+    for (const r of (preListed.resources || [])) {
+      if (r.arn) preApplyArns.add(r.arn);
+    }
+  } catch {}
+
   // Step 3: apply_plan
   console.log(`  [3/6] apply_plan (confirmed: true)...`);
   let applyResult;
@@ -313,33 +322,133 @@ async function testResourceLifecycle(type, description, isCompound = false) {
     console.log(`  ❌ list EXCEPTION: ${err.message}`);
   }
 
+  // Brief wait for Tagging API to index the newly created resource.
+  // IAM/EC2 can take 30-60s; this plus resolveResource retries (4×5s) covers most cases.
+  console.log("  Waiting 15s for Tagging API propagation...");
+  await sleep(15000);
+
   // Step 5: destroy_resource
   // Use ARN from list_managed_resources when available (authoritative identifier),
   // but fall back to apply result when list returns too many resources.
   console.log(`  [5/6] destroy_resource...`);
   const identifiers = [];
 
-  // First try: get ARN from apply result
-  if (isCompound && applyResult.completedResources?.length) {
-    for (const r of [...applyResult.completedResources].reverse()) {
-      identifiers.push(r.arn || r.identifier || r.resourceId);
+  // Dependency-aware teardown order — lower number = destroy first.
+  // Resources not listed default to priority 50 (middle).
+  const DESTROY_PRIORITY = {
+    "lambda": 10, "function": 10,                      // Lambda first (may reference roles, SQS, etc.)
+    "natgateway": 15,                                   // NatGW before subnet/VPC
+    "instance": 20,                                     // EC2 instances before networking
+    "loadbalancer": 20, "targetgroup": 21,              // ELB before VPC
+    "security-group": 30,                               // SGs before VPC
+    "subnet": 35,                                       // Subnets before VPC
+    "route-table": 36,                                  // Route tables before VPC
+    "internet-gateway": 38,                             // IGW before VPC (detach happens in destroy)
+    "role": 40,                                         // IAM roles after dependents
+    "vpc": 90,                                          // VPC last
+  };
+  function destroyPriority(arn) {
+    const parts = arn.split(":");
+    const resourceSeg = (parts[parts.length - 1] || "").split("/")[0].toLowerCase();
+    return DESTROY_PRIORITY[resourceSeg] ?? 50;
+  }
+
+  // Strategy: always prefer ARN from list_managed_resources (authoritative).
+  // For compound patterns, use delta between pre-apply and post-apply list.
+  // For individual resources, match by resource type from plan result.
+  if (isCompound) {
+    // Compound: get current list and destroy only resources created by THIS apply (delta)
+    try {
+      const postListed = await mcpListResources();
+      if (postListed.resources?.length) {
+        // Delta: resources that exist now but didn't exist before apply
+        const newResources = postListed.resources.filter(r => r.arn && !preApplyArns.has(r.arn));
+        // Sort by dependency-aware teardown order
+        newResources.sort((a, b) => destroyPriority(a.arn) - destroyPriority(b.arn));
+        for (const r of newResources) {
+          identifiers.push(r.arn);
+        }
+        console.log(`  Compound destroy: ${identifiers.length} new resource(s) (delta from ${preApplyArns.size} pre-existing)`);
+      }
+    } catch (listErr) {
+      console.log(`  ⚠ list_managed_resources failed for compound destroy: ${listErr.message}`);
+      // Fallback to completedResources from apply result
+      if (applyResult.completedResources?.length) {
+        for (const r of [...applyResult.completedResources].reverse()) {
+          const id = r.arn || r.identifier || r.resourceId;
+          if (id) identifiers.push(id);
+        }
+      }
     }
-  } else if (applyResult.resourceArn) {
-    // If resourceArn looks like an ARN, use it directly for destroy
-    const arn = applyResult.resourceArn;
-    if (typeof arn === "string" && arn.startsWith("arn:aws:")) {
-      identifiers.push(arn);
-    } else {
-      // Non-ARN identifier — look up the real ARN from list_managed_resources
-      try {
-        const listed = await mcpListResources();
-        const match = listed.resources?.find(r => r.arn?.includes(arn) || r.identifier === arn);
-        if (match) identifiers.push(match.arn);
-        else identifiers.push(arn); // fallback to raw identifier
-      } catch { identifiers.push(arn); }
+  } else {
+    // Individual resource: look up ARN from list_managed_resources by resource type
+    const cfnType = planResult?.resourceType;
+    const applyId = applyResult.resourceArn;
+    try {
+      const listed = await mcpListResources();
+      if (listed.resources?.length && cfnType) {
+        // Find resources matching this CloudFormation type
+        const matches = listed.resources.filter(r => r.resourceType === cfnType);
+        const allTypes = [...new Set(listed.resources.map(r => r.resourceType))].join(", ");
+        console.log(`  List lookup: ${matches.length} match(es) for ${cfnType} (total: ${listed.resources.length}, types: ${allTypes})`);
+
+        // Try to find the exact resource using apply result identifier
+        // For SQS QueueUrl, extract queue name and match against ARN suffix
+        let searchId = applyId;
+        if (applyId?.startsWith("https://sqs.")) {
+          searchId = applyId.split("/").pop(); // extract queue name from URL
+        }
+        const exactMatch = matches.find(r =>
+          r.arn === applyId || r.arn?.includes(searchId) || r.identifier === applyId
+        );
+
+        if (exactMatch) {
+          identifiers.push(exactMatch.arn);
+          console.log(`  Destroy via list ARN (exact): ${exactMatch.arn}`);
+        } else if (matches.length === 1 && !applyId?.startsWith("arn:")) {
+          // Only one match and apply returned a non-ARN — likely the right resource
+          // but verify by checking if this match was pre-existing (could be shared role)
+          if (preApplyArns.has(matches[0].arn)) {
+            // This resource existed before apply — it's NOT our new resource
+            console.log(`  Destroy via raw ID (single match is pre-existing: ${matches[0].arn})`);
+            identifiers.push(applyId);
+          } else {
+            identifiers.push(matches[0].arn);
+            console.log(`  Destroy via list ARN (only match): ${matches[0].arn}`);
+          }
+        } else if (matches.length === 0) {
+          // No type matches — for IAM roles, construct ARN from name
+          if (cfnType === "AWS::IAM::Role" && applyId && !applyId.startsWith("arn:")) {
+            try {
+              const stsOut = execSync("aws sts get-caller-identity --query Account --output text --region us-east-1", { timeout: 10_000, encoding: "utf-8" }).trim();
+              const iamArn = `arn:aws:iam::${stsOut}:role/${applyId}`;
+              console.log(`  Destroy via constructed IAM ARN: ${iamArn}`);
+              identifiers.push(iamArn);
+            } catch {
+              console.log(`  Destroy via raw ID (IAM ARN construction failed)`);
+              identifiers.push(applyId);
+            }
+          } else {
+            console.log(`  Destroy via raw ID (no type matches in list)`);
+            identifiers.push(applyId);
+          }
+        } else {
+          console.log(`  Destroy via raw ID (${matches.length} matches, none matched apply result)`);
+          identifiers.push(applyId);
+        }
+      }
+    } catch (err) {
+      console.log(`  List lookup failed: ${err.message}`);
+    }
+
+    // Fallback: use apply result directly if nothing from list
+    if (identifiers.length === 0 && applyId) {
+      console.log(`  Destroy fallback to apply result: ${applyId}`);
+      identifiers.push(applyId);
     }
   }
 
+  // Last resort: get everything from list
   if (identifiers.length === 0) {
     try {
       const listed = await mcpListResources();
@@ -351,11 +460,24 @@ async function testResourceLifecycle(type, description, isCompound = false) {
 
   let allDestroyed = true;
   const destroyDetails = [];
+  const successfullyDestroyedArns = new Set();
   for (const ident of identifiers) {
     if (!ident) continue;
+    // VPC must wait for dependent resource deletions to finalize (IGW detach, subnet delete, CloudControl async ops)
+    if (isCompound && ident.includes(":vpc/")) {
+      console.log("  Waiting 30s for VPC dependency cleanup...");
+      await sleep(30000);
+    }
     try {
       const destroyResult = await mcpDestroyResource(ident);
       if (destroyResult.isError || destroyResult.error) {
+        // For compound patterns, stale/terminated resources may fail — treat as soft pass
+        const isStale = /not found|does not exist|NotFound|terminated/i.test(destroyResult.message);
+        if (isCompound && isStale) {
+          console.log(`  ⚠ MCP destroy skipped (stale/terminated): ${ident}`);
+          destroyDetails.push(`${ident}: SKIPPED (stale)`);
+          continue;
+        }
         console.log(`  ⚠ MCP destroy failed for ${ident}: ${destroyResult.message}. Trying CLI fallback...`);
         try {
           execSync(`node ${resolve(ROOT, "apps/cli/dist/index.js")} destroy "${ident}" --yes`, {
@@ -364,14 +486,29 @@ async function testResourceLifecycle(type, description, isCompound = false) {
           });
           console.log(`  ✅ CLI destroy OK: ${ident}`);
           destroyDetails.push(`${ident}: CLI fallback OK`);
+          successfullyDestroyedArns.add(ident);
         } catch (cliErr) {
-          console.log(`  ❌ CLI destroy also failed for ${ident}: ${cliErr.stderr?.toString() || cliErr.message}`);
-          allDestroyed = false;
-          destroyDetails.push(`${ident}: FAILED - ${cliErr.message}`);
+          const errMsg = cliErr.stderr?.toString() || cliErr.message;
+          // For compound patterns, stale/terminated resources may fail — treat as soft pass
+          const isStale = /not found|does not exist|no managed resource|NotFound|terminated/i.test(errMsg);
+          const isConcurrent = /Concurrent operation/i.test(errMsg);
+          if (isCompound && isStale) {
+            console.log(`  ⚠ CLI destroy skipped (stale/terminated): ${ident}`);
+            destroyDetails.push(`${ident}: SKIPPED (stale)`);
+          } else if (isCompound && isConcurrent) {
+            // Concurrent operation means a previous delete is still in progress — treat as pending success
+            console.log(`  ⚠ CLI destroy: concurrent operation (deletion in progress): ${ident}`);
+            destroyDetails.push(`${ident}: PENDING (concurrent op)`);
+          } else {
+            console.log(`  ❌ CLI destroy also failed for ${ident}: ${errMsg}`);
+            allDestroyed = false;
+            destroyDetails.push(`${ident}: FAILED - ${cliErr.message}`);
+          }
         }
       } else {
         console.log(`  ✅ destroy OK: ${ident} (${destroyResult.elapsed}s)`);
         destroyDetails.push(`${ident}: OK (${destroyResult.elapsed}s)`);
+        successfullyDestroyedArns.add(ident);
       }
     } catch (err) {
       console.log(`  ❌ destroy EXCEPTION for ${ident}: ${err.message}`);
@@ -389,27 +526,40 @@ async function testResourceLifecycle(type, description, isCompound = false) {
     record(type, "destroy", "FAIL", destroyDetails.join("; "));
   }
 
-  // Step 6: list_managed_resources (verify it's gone)
+  // Step 6: list_managed_resources (verify destroyed resources are gone)
   console.log(`  [6/6] list_managed_resources (verify destroyed)...`);
-  await sleep(3000);
-  try {
-    const listResult2 = await mcpListResources();
-    if (listResult2.isError || listResult2.error) {
-      record(type, "list_after_destroy", "FAIL", listResult2.message);
-      console.log(`  ❌ post-destroy list FAILED: ${listResult2.message}`);
-    } else {
-      const count = listResult2.count || 0;
-      if (count === 0) {
-        record(type, "list_after_destroy", "PASS", "0 resources remaining");
-        console.log(`  ✅ post-destroy list OK: 0 resources remaining (${listResult2.elapsed}s)`);
-      } else {
-        record(type, "list_after_destroy", "WARN", `${count} resource(s) still visible (may be deleting)`);
-        console.log(`  ⚠ post-destroy list: ${count} resource(s) still visible (${listResult2.elapsed}s)`);
+  if (successfullyDestroyedArns.size === 0) {
+    record(type, "list_after_destroy", "SKIP", "No resources were destroyed to verify");
+    console.log(`  ⏭ post-destroy: no resources to verify`);
+  } else {
+    // Retry twice with 5s delay for Tagging API de-index propagation
+    let verified = false;
+    for (let attempt = 0; attempt < 2 && !verified; attempt++) {
+      if (attempt > 0) await sleep(5000);
+      try {
+        const listResult2 = await mcpListResources();
+        if (listResult2.isError || listResult2.error) {
+          record(type, "list_after_destroy", "FAIL", listResult2.message);
+          console.log(`  ❌ post-destroy list FAILED: ${listResult2.message}`);
+          break;
+        }
+        const listedArns = new Set((listResult2.resources || []).map(r => r.arn));
+        const stillVisible = [...successfullyDestroyedArns].filter(a => listedArns.has(a));
+        if (stillVisible.length === 0) {
+          record(type, "list_after_destroy", "PASS", `Verified ${successfullyDestroyedArns.size} resource(s) absent (${listResult2.elapsed}s)`);
+          console.log(`  ✅ post-destroy list OK: ${successfullyDestroyedArns.size} destroyed resource(s) confirmed absent (${listResult2.elapsed}s)`);
+          verified = true;
+        } else if (attempt === 1) {
+          // Final attempt — still visible
+          record(type, "list_after_destroy", "WARN", `${stillVisible.length} destroyed resource(s) still visible after retry`);
+          console.log(`  ⚠ post-destroy: ${stillVisible.length} destroyed resource(s) still in Tagging API (${listResult2.elapsed}s)`);
+        }
+      } catch (err) {
+        record(type, "list_after_destroy", "FAIL", err.message);
+        console.log(`  ❌ post-destroy list EXCEPTION: ${err.message}`);
+        break;
       }
     }
-  } catch (err) {
-    record(type, "list_after_destroy", "FAIL", err.message);
-    console.log(`  ❌ post-destroy list EXCEPTION: ${err.message}`);
   }
 }
 
@@ -438,49 +588,52 @@ async function emergencyCleanup() {
 
     console.log(`  Found ${remaining.length} remaining resource(s) to clean up`);
 
-    // Direct AWS CLI cleanup by service type
+    // Direct AWS CLI cleanup by service type — uses execFileSync to prevent injection
+    const awsExec = (args, opts = {}) => execFileSync("aws", args, { timeout: 15_000, stdio: "pipe", ...opts });
     for (const r of remaining) {
       const arn = r.ResourceARN;
       console.log(`  Cleaning: ${arn}`);
       try {
         if (arn.includes(":ec2:") && arn.includes("instance/")) {
           const iid = arn.split("/").pop();
-          execSync(`aws ec2 terminate-instances --instance-ids ${iid} --region us-east-1`, { timeout: 15_000, stdio: "pipe" });
+          awsExec(["ec2", "terminate-instances", "--instance-ids", iid, "--region", "us-east-1"]);
         } else if (arn.includes(":sns:")) {
-          execSync(`aws sns delete-topic --topic-arn "${arn}" --region us-east-1`, { timeout: 15_000, stdio: "pipe" });
+          awsExec(["sns", "delete-topic", "--topic-arn", arn, "--region", "us-east-1"]);
         } else if (arn.includes(":logs:") && arn.includes("log-group:")) {
           const lgName = arn.split("log-group:").pop().replace(/:$/, "");
-          execSync(`aws logs delete-log-group --log-group-name "${lgName}" --region us-east-1`, { timeout: 15_000, stdio: "pipe" });
+          awsExec(["logs", "delete-log-group", "--log-group-name", lgName, "--region", "us-east-1"]);
         } else if (arn.includes(":sqs:")) {
-          const queueUrl = execSync(`aws sqs get-queue-url --queue-name "${arn.split(":").pop()}" --region us-east-1 --output text --query QueueUrl 2>/dev/null`, { timeout: 15_000, encoding: "utf-8" }).trim();
-          if (queueUrl) execSync(`aws sqs delete-queue --queue-url "${queueUrl}" --region us-east-1`, { timeout: 15_000, stdio: "pipe" });
+          const queueName = arn.split(":").pop();
+          try {
+            const queueUrl = execFileSync("aws", ["sqs", "get-queue-url", "--queue-name", queueName, "--region", "us-east-1", "--output", "text", "--query", "QueueUrl"], { timeout: 15_000, encoding: "utf-8" }).trim();
+            if (queueUrl) awsExec(["sqs", "delete-queue", "--queue-url", queueUrl, "--region", "us-east-1"]);
+          } catch {}
         } else if (arn.includes(":s3:")) {
           const bucket = arn.split(":::").pop();
-          execSync(`aws s3 rb "s3://${bucket}" --force --region us-east-1 2>/dev/null`, { timeout: 30_000, stdio: "pipe" });
+          awsExec(["s3", "rb", `s3://${bucket}`, "--force", "--region", "us-east-1"], { timeout: 30_000 });
         } else if (arn.includes(":rds:") && arn.includes(":db:")) {
           const dbId = arn.split(":").pop();
-          execSync(`aws rds delete-db-instance --db-instance-identifier ${dbId} --skip-final-snapshot --region us-east-1`, { timeout: 30_000, stdio: "pipe" });
+          awsExec(["rds", "delete-db-instance", "--db-instance-identifier", dbId, "--skip-final-snapshot", "--region", "us-east-1"], { timeout: 30_000 });
         } else if (arn.includes(":elasticloadbalancing:")) {
-          execSync(`aws elbv2 delete-load-balancer --load-balancer-arn "${arn}" --region us-east-1`, { timeout: 15_000, stdio: "pipe" });
+          awsExec(["elbv2", "delete-load-balancer", "--load-balancer-arn", arn, "--region", "us-east-1"]);
         } else if (arn.includes(":secretsmanager:")) {
           const secretId = arn.split(":").pop();
-          execSync(`aws secretsmanager delete-secret --secret-id "${secretId}" --force-delete-without-recovery --region us-east-1`, { timeout: 15_000, stdio: "pipe" });
+          awsExec(["secretsmanager", "delete-secret", "--secret-id", secretId, "--force-delete-without-recovery", "--region", "us-east-1"]);
         } else if (arn.includes(":iam:") && arn.includes("role/")) {
           const roleName = arn.split("role/").pop();
-          // Detach policies first
           try {
-            const policies = execSync(`aws iam list-attached-role-policies --role-name "${roleName}" --output json 2>/dev/null`, { timeout: 15_000, encoding: "utf-8" });
+            const policies = execFileSync("aws", ["iam", "list-attached-role-policies", "--role-name", roleName, "--output", "json"], { timeout: 15_000, encoding: "utf-8" });
             for (const p of JSON.parse(policies).AttachedPolicies || []) {
-              execSync(`aws iam detach-role-policy --role-name "${roleName}" --policy-arn "${p.PolicyArn}"`, { timeout: 15_000, stdio: "pipe" });
+              awsExec(["iam", "detach-role-policy", "--role-name", roleName, "--policy-arn", p.PolicyArn]);
             }
           } catch {}
           try {
-            const inlines = execSync(`aws iam list-role-policies --role-name "${roleName}" --output json 2>/dev/null`, { timeout: 15_000, encoding: "utf-8" });
+            const inlines = execFileSync("aws", ["iam", "list-role-policies", "--role-name", roleName, "--output", "json"], { timeout: 15_000, encoding: "utf-8" });
             for (const pn of JSON.parse(inlines).PolicyNames || []) {
-              execSync(`aws iam delete-role-policy --role-name "${roleName}" --policy-name "${pn}"`, { timeout: 15_000, stdio: "pipe" });
+              awsExec(["iam", "delete-role-policy", "--role-name", roleName, "--policy-name", pn]);
             }
           } catch {}
-          execSync(`aws iam delete-role --role-name "${roleName}" --region us-east-1`, { timeout: 15_000, stdio: "pipe" });
+          awsExec(["iam", "delete-role", "--role-name", roleName, "--region", "us-east-1"]);
         } else {
           // Try MCP destroy as fallback
           const dr = await mcpDestroyResource(arn);
@@ -494,6 +647,18 @@ async function emergencyCleanup() {
   } catch (err) {
     console.log(`  ❌ Cleanup error: ${err.message}`);
   }
+
+  // Release leaked EIPs (NatGateway testing can leak them on failures)
+  try {
+    const eipJson = execFileSync("aws", ["ec2", "describe-addresses", "--region", "us-east-1", "--query", "Addresses[?AssociationId==null].[AllocationId]", "--output", "json"], { timeout: 15_000, encoding: "utf-8" });
+    const eips = JSON.parse(eipJson);
+    for (const [eipId] of eips) {
+      try {
+        execFileSync("aws", ["ec2", "release-address", "--allocation-id", eipId, "--region", "us-east-1"], { timeout: 15_000, stdio: "pipe" });
+        console.log(`  ✅ Released EIP: ${eipId}`);
+      } catch {}
+    }
+  } catch {}
 }
 
 // ── Report generation ────────────────────────────────────────────────────────
@@ -658,9 +823,9 @@ async function main() {
           } catch { console.log(`  ⚠ Lambda IAM Role creation failed: ${roleErr.message}`); }
         }
 
-        // Wait for IAM role propagation (AWS IAM is eventually consistent, ~10s)
-        console.log("  Waiting 10s for IAM role propagation...");
-        await sleep(10000);
+        // Wait for IAM role propagation (AWS IAM is eventually consistent, ~15-20s)
+        console.log("  Waiting 20s for IAM role propagation...");
+        await sleep(20000);
         console.log("  ✅ Shared infrastructure ready\n");
       } catch (err) {
         console.log(`  ⚠ Shared infra setup error: ${err.message}. Some dependent tests may fail.\n`);

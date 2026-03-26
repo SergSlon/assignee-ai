@@ -13,8 +13,23 @@ import type { ProvisioningPort } from "../services/provisioning-port.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph-state.js";
 
-const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const POLL_INTERVAL_MS = 2_000; // 2 seconds
+
+/** Resource types that need extended provisioning timeouts. */
+const EXTENDED_TIMEOUT_TYPES = new Set([
+  "AWS::RDS::DBInstance",
+  "AWS::RDS::DBCluster",
+  "AWS::ElasticLoadBalancingV2::LoadBalancer",
+  "AWS::EC2::NatGateway",
+]);
+const EXTENDED_POLL_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+function getPollTimeout(resourceType: string): number {
+  return EXTENDED_TIMEOUT_TYPES.has(resourceType)
+    ? EXTENDED_POLL_TIMEOUT_MS
+    : DEFAULT_POLL_TIMEOUT_MS;
+}
 
 const ProvisioningStatus = {
   SUCCESS: "SUCCESS",
@@ -34,13 +49,14 @@ export async function statusPollerNode(
     };
   }
 
-  // Timeout guard
+  // Timeout guard (resource-type-aware)
   const startedAt = state.startedAt ?? Date.now();
-  if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+  const timeoutMs = getPollTimeout(state.resourceType ?? "");
+  const timeoutMin = Math.round(timeoutMs / 60_000);
+  if (Date.now() - startedAt > timeoutMs) {
     return {
       executionStatus: ExecutionStatus.FAILED,
-      errorMessage:
-        "Resource provisioning timed out after 5 minutes. Hint: check the AWS CloudFormation console for resource status.",
+      errorMessage: `Resource provisioning timed out after ${timeoutMin} minutes. Hint: check the AWS CloudFormation console for resource status.`,
     };
   }
 

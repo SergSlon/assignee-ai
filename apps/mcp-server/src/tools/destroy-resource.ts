@@ -22,6 +22,11 @@ import {
   DeleteResourceCommand,
   GetResourceRequestStatusCommand,
 } from "@aws-sdk/client-cloudcontrol";
+import {
+  EC2Client,
+  DescribeInternetGatewaysCommand,
+  DetachInternetGatewayCommand,
+} from "@aws-sdk/client-ec2";
 import { CCAPI_FALLBACK_TYPES, CCAPI_REDIRECT_TYPES } from "@assignee/core";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -30,7 +35,15 @@ const TAG_KEY_MANAGED_BY = "managed-by";
 const TAG_VALUE_MANAGED_BY = "assignee-ai";
 const DEFAULT_REGION = process.env["AWS_REGION"] ?? "us-east-1";
 const MAX_POLL_ATTEMPTS = 60;
+const EXTENDED_POLL_ATTEMPTS = 300; // 10 minutes for slow deletes (RDS, NatGW)
 const POLL_INTERVAL_MS = 2_000;
+
+const SLOW_DELETE_TYPES = new Set([
+  "AWS::RDS::DBInstance",
+  "AWS::RDS::DBCluster",
+  "AWS::EC2::NatGateway",
+  "AWS::ElasticLoadBalancingV2::LoadBalancer",
+]);
 
 // ── Zod schema ───────────────────────────────────────────────────────────────
 
@@ -236,47 +249,90 @@ function tagsToRecord(mapping: ResourceTagMapping): Record<string, string> {
   return tags;
 }
 
+// ── Composite identifier detection ──────────────────────────────────────────
+
+/**
+ * Some resource types (e.g., Route) have no ARN — they use composite
+ * primaryIdentifiers like "rtb-xxx|0.0.0.0/0". Detect and handle these
+ * directly without Tagging API resolution.
+ */
+function tryResolveCompositeIdentifier(
+  input: string,
+  region: string,
+): ResolvedResource | null {
+  // Route: "rtb-xxx|cidr" composite identifier
+  if (input.includes("|") && input.startsWith("rtb-")) {
+    return {
+      arn: input, // no real ARN — use composite ID as-is
+      resourceType: "AWS::EC2::Route",
+      region,
+      identifier: input,
+    };
+  }
+  return null;
+}
+
 // ── Resource resolution ──────────────────────────────────────────────────────
+
+const MAX_RESOLVE_RETRIES = 4;
+const RESOLVE_RETRY_DELAY_MS = 5_000;
 
 async function resolveResource(
   input: string,
   taggingClient: ResourceGroupsTaggingAPIClient,
   region: string,
 ): Promise<ResolvedResource | null> {
-  let paginationToken: string | undefined;
+  // Check for composite identifiers first (no Tagging API needed)
+  const composite = tryResolveCompositeIdentifier(input, region);
+  if (composite) return composite;
 
-  do {
-    const response = await taggingClient.send(
-      new GetResourcesCommand({
-        TagFilters: [
-          { Key: TAG_KEY_MANAGED_BY, Values: [TAG_VALUE_MANAGED_BY] },
-        ],
-        PaginationToken: paginationToken,
-      }),
-    );
+  // Retry loop for Tagging API eventual consistency (especially IAM)
+  for (let attempt = 0; attempt < MAX_RESOLVE_RETRIES; attempt++) {
+    let paginationToken: string | undefined;
 
-    for (const mapping of response.ResourceTagMappingList ?? []) {
-      const arn = mapping.ResourceARN;
-      if (!arn) continue;
+    do {
+      const response = await taggingClient.send(
+        new GetResourcesCommand({
+          TagFilters: [
+            { Key: TAG_KEY_MANAGED_BY, Values: [TAG_VALUE_MANAGED_BY] },
+          ],
+          PaginationToken: paginationToken,
+        }),
+      );
 
-      const identifier = extractIdentifierFromArn(arn);
-      const matchesArn = isArn(input) && arn === input;
-      const matchesName = !isArn(input) && identifier === input;
+      for (const mapping of response.ResourceTagMappingList ?? []) {
+        const arn = mapping.ResourceARN;
+        if (!arn) continue;
 
-      if (matchesArn || matchesName) {
-        const resourceType = arnToResourceType(arn) ?? "Unknown";
-        return {
-          arn,
-          resourceType,
-          region: extractRegionFromArn(arn, region),
-          // Use the correct CloudControl identifier (full ARN for SNS/SQS/ELB/etc.)
-          identifier: getCloudControlIdentifier(arn, resourceType, identifier),
-        };
+        const identifier = extractIdentifierFromArn(arn);
+        const matchesArn = isArn(input) && arn === input;
+        const matchesName = !isArn(input) && identifier === input;
+
+        if (matchesArn || matchesName) {
+          const resourceType = arnToResourceType(arn) ?? "Unknown";
+          return {
+            arn,
+            resourceType,
+            region: extractRegionFromArn(arn, region),
+            identifier: getCloudControlIdentifier(
+              arn,
+              resourceType,
+              identifier,
+            ),
+          };
+        }
       }
-    }
 
-    paginationToken = response.PaginationToken;
-  } while (paginationToken);
+      paginationToken = response.PaginationToken;
+    } while (paginationToken);
+
+    // Not found — wait and retry (Tagging API eventual consistency)
+    if (attempt < MAX_RESOLVE_RETRIES - 1) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, RESOLVE_RETRY_DELAY_MS),
+      );
+    }
+  }
 
   return null;
 }
@@ -286,8 +342,15 @@ async function resolveResource(
 async function pollDeleteStatus(
   ccClient: CloudControlClient,
   requestToken: string,
+  resourceType?: string,
 ): Promise<{ success: boolean; message?: string }> {
-  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
+  const MAX_TRANSIENT_ERRORS = 3;
+  let transientErrors = 0;
+  const maxAttempts =
+    resourceType && SLOW_DELETE_TYPES.has(resourceType)
+      ? EXTENDED_POLL_ATTEMPTS
+      : MAX_POLL_ATTEMPTS;
+  for (let i = 0; i < maxAttempts; i++) {
     try {
       const result = await ccClient.send(
         new GetResourceRequestStatusCommand({ RequestToken: requestToken }),
@@ -303,17 +366,50 @@ async function pollDeleteStatus(
         };
       }
     } catch (err) {
-      return {
-        success: false,
-        message: `Poll error: ${err instanceof Error ? err.message : String(err)}`,
-      };
+      transientErrors++;
+      if (transientErrors >= MAX_TRANSIENT_ERRORS) {
+        return {
+          success: false,
+          message: `Poll error (after ${transientErrors} transient failures): ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+      // Transient error — wait longer and retry
     }
 
-    // IN_PROGRESS — wait and poll again
+    // IN_PROGRESS or transient error — wait and poll again
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
 
   return { success: false, message: "Delete operation timed out" };
+}
+
+// ── Pre-delete hooks ─────────────────────────────────────────────────────────
+
+/**
+ * InternetGateways must be detached from their VPC before CloudControl can delete them.
+ * This function finds all VPC attachments and detaches the IGW.
+ */
+async function detachInternetGatewayIfNeeded(
+  igwId: string,
+  region: string,
+): Promise<void> {
+  const ec2 = new EC2Client({ region });
+  const desc = await ec2.send(
+    new DescribeInternetGatewaysCommand({
+      InternetGatewayIds: [igwId],
+    }),
+  );
+  const attachments = desc.InternetGateways?.[0]?.Attachments ?? [];
+  for (const att of attachments) {
+    if (att.VpcId && att.State !== "detached") {
+      await ec2.send(
+        new DetachInternetGatewayCommand({
+          InternetGatewayId: igwId,
+          VpcId: att.VpcId,
+        }),
+      );
+    }
+  }
 }
 
 // ── Tool registration ────────────────────────────────────────────────────────
@@ -368,18 +464,46 @@ export function registerDestroyResource(server: McpServer): void {
       }
 
       if (!resolved) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify({
-                error: true,
-                message: `No managed resource found matching "${resource_identifier}". Use list_managed_resources to see available resources.`,
-              }),
-            },
-          ],
-          isError: true,
-        };
+        // Fallback: if input is an ARN, attempt direct CloudControl delete
+        // without Tagging API verification. This handles IAM and other resources
+        // where Tagging API eventual consistency causes lookup failures.
+        if (isArn(resource_identifier)) {
+          const resourceType = arnToResourceType(resource_identifier);
+          if (resourceType && resourceType !== "Unknown") {
+            const extractedId = extractIdentifierFromArn(resource_identifier);
+            resolved = {
+              arn: resource_identifier,
+              resourceType,
+              region: extractRegionFromArn(resource_identifier, region),
+              identifier: getCloudControlIdentifier(
+                resource_identifier,
+                resourceType,
+                extractedId,
+              ),
+            };
+            // SAFETY NOTE: This bypasses managed-by tag verification.
+            // Only used when Tagging API hasn't indexed the resource yet.
+            // CloudControl will reject if the resource doesn't exist.
+            console.error(
+              `[destroy_resource] ARN fallback (Tagging API miss): ${resource_identifier}`,
+            );
+          }
+        }
+
+        if (!resolved) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify({
+                  error: true,
+                  message: `No managed resource found matching "${resource_identifier}". Use list_managed_resources to see available resources.`,
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
       }
 
       // ── Dry-run: return resource details without deleting ─────────────
@@ -422,8 +546,10 @@ export function registerDestroyResource(server: McpServer): void {
       }
 
       // ── Check for SDK fallback types (not supported in MCP server) ────
-      const fallbackValues = Object.values(CCAPI_FALLBACK_TYPES) as string[];
-      if (fallbackValues.includes(resolved.resourceType)) {
+      const fallbackSet = new Set(
+        Object.values(CCAPI_FALLBACK_TYPES) as string[],
+      );
+      if (fallbackSet.has(resolved.resourceType)) {
         return {
           content: [
             {
@@ -457,6 +583,24 @@ export function registerDestroyResource(server: McpServer): void {
         };
       }
 
+      // ── Pre-delete hooks ────────────────────────────────────────────
+      // InternetGateway must be detached from VPC before deletion
+      if (resolved.resourceType === "AWS::EC2::InternetGateway") {
+        try {
+          await detachInternetGatewayIfNeeded(
+            resolved.identifier,
+            resolved.region,
+          );
+        } catch (detachErr: unknown) {
+          // Non-fatal — log for debugging, CloudControl will give a clearer error if still attached
+          const msg =
+            detachErr instanceof Error ? detachErr.message : String(detachErr);
+          console.error(
+            `[destroy_resource] IGW detach warning for ${resolved.identifier}: ${msg}`,
+          );
+        }
+      }
+
       try {
         const deleteResult = await ccClient.send(
           new DeleteResourceCommand({
@@ -483,7 +627,11 @@ export function registerDestroyResource(server: McpServer): void {
         }
 
         // ── Poll for completion ───────────────────────────────────────────
-        const pollResult = await pollDeleteStatus(ccClient, requestToken);
+        const pollResult = await pollDeleteStatus(
+          ccClient,
+          requestToken,
+          resolved.resourceType,
+        );
 
         if (!pollResult.success) {
           return {
