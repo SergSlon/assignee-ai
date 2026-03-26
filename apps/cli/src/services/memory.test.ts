@@ -326,6 +326,140 @@ describe("MemoryService — patterns (Story 19.5)", () => {
   });
 });
 
+// ── Story 20.13: clearFailuresForType tests ──────────────────────────────────
+
+describe("MemoryService — clearFailuresForType (Story 20.13)", () => {
+  it("removes failures matching the given resource type", async () => {
+    await service.appendFailure(
+      makeFailure({ resourceType: "AWS::S3::Bucket", errorCode: "A" }),
+    );
+    await service.appendFailure(
+      makeFailure({
+        runId: "660e8400-e29b-41d4-a716-446655440000",
+        resourceType: "AWS::Lambda::Function",
+        errorCode: "B",
+      }),
+    );
+
+    await service.clearFailuresForType("AWS::S3::Bucket");
+
+    const records = await service.readFailures();
+    expect(records).toHaveLength(1);
+    expect(records[0]!.resourceType).toBe("AWS::Lambda::Function");
+  });
+
+  it("does nothing when no failures match the type", async () => {
+    await service.appendFailure(
+      makeFailure({ resourceType: "AWS::S3::Bucket" }),
+    );
+
+    await service.clearFailuresForType("AWS::Lambda::Function");
+
+    const records = await service.readFailures();
+    expect(records).toHaveLength(1);
+  });
+
+  it("does nothing when failures file is empty", async () => {
+    await service.clearFailuresForType("AWS::S3::Bucket");
+    const records = await service.readFailures();
+    expect(records).toEqual([]);
+  });
+});
+
+// ── Rotation tests ────────────────────────────────────────────────────────────
+
+describe("MemoryService — rotateProvisions", () => {
+  it("returns 0 when records are within the cap", async () => {
+    await service.appendProvision(makeProvision());
+    const removed = await service.rotateProvisions(10);
+    expect(removed).toBe(0);
+  });
+
+  it("trims oldest records to stay within maxRecords", async () => {
+    for (let i = 0; i < 5; i++) {
+      await service.appendProvision(
+        makeProvision({
+          runId: `550e8400-e29b-41d4-a716-44665544000${i}`,
+          timestamp: `2026-03-${20 + i}T10:00:00.000Z`,
+        }),
+      );
+    }
+
+    const removed = await service.rotateProvisions(3);
+    expect(removed).toBe(2);
+
+    const remaining = await service.readProvisions();
+    expect(remaining).toHaveLength(3);
+  });
+
+  it("respects preserveFilter — never removes preserved records", async () => {
+    for (let i = 0; i < 5; i++) {
+      await service.appendProvision(
+        makeProvision({
+          runId: `550e8400-e29b-41d4-a716-44665544000${i}`,
+          resourceType: i === 0 ? "AWS::Lambda::Function" : "AWS::S3::Bucket",
+          timestamp: `2026-03-${20 + i}T10:00:00.000Z`,
+        }),
+      );
+    }
+
+    const removed = await service.rotateProvisions(
+      2,
+      (r) => r.resourceType === "AWS::Lambda::Function",
+    );
+
+    expect(removed).toBeGreaterThan(0);
+
+    const remaining = await service.readProvisions();
+    const lambdas = remaining.filter(
+      (r) => r.resourceType === "AWS::Lambda::Function",
+    );
+    expect(lambdas).toHaveLength(1); // preserved record is kept
+  });
+});
+
+describe("MemoryService — rotateFailures", () => {
+  it("returns 0 when records are within the cap", async () => {
+    await service.appendFailure(makeFailure());
+    const removed = await service.rotateFailures(10);
+    expect(removed).toBe(0);
+  });
+
+  it("trims oldest failure records to stay within maxRecords", async () => {
+    for (let i = 0; i < 5; i++) {
+      await service.appendFailure(
+        makeFailure({
+          runId: `550e8400-e29b-41d4-a716-44665544000${i}`,
+        }),
+      );
+    }
+    const removed = await service.rotateFailures(2);
+    expect(removed).toBe(3);
+
+    const remaining = await service.readFailures();
+    expect(remaining).toHaveLength(2);
+  });
+});
+
+describe("MemoryService — rotatePatterns", () => {
+  it("returns 0 when records are within the cap", async () => {
+    await service.upsertPattern(makePattern());
+    const removed = await service.rotatePatterns(10);
+    expect(removed).toBe(0);
+  });
+
+  it("trims oldest pattern records to stay within maxRecords", async () => {
+    for (let i = 0; i < 5; i++) {
+      await service.upsertPattern(makePattern({ pattern: `pattern-${i}` }));
+    }
+    const removed = await service.rotatePatterns(2);
+    expect(removed).toBe(3);
+
+    const remaining = await service.readPatterns();
+    expect(remaining).toHaveLength(2);
+  });
+});
+
 // ── EC-29: Corrupt file backup tests ─────────────────────────────────────────
 
 describe("MemoryService — corrupt file backup (EC-29)", () => {

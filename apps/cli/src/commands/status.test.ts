@@ -43,6 +43,12 @@ vi.mock("../services/status-aggregator.js", async (importOriginal) => {
   };
 });
 
+// Mock bp-coverage module used by status command's --bp-coverage path
+vi.mock("./status-bp-coverage.js", () => ({
+  computeBPCoverage: vi.fn(),
+  renderBPCoverage: vi.fn(),
+}));
+
 describe("status command", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let stdoutSpy: any;
@@ -164,5 +170,46 @@ describe("status command registration", () => {
     expect(statusCommand.description()).toBe(
       "Show summary of managed infrastructure",
     );
+  });
+});
+
+describe("status command options registration", () => {
+  it("has --bp-coverage option registered", async () => {
+    const { statusCommand } = await import("./status.js");
+    const bpOption = statusCommand.options.find(
+      (opt) => opt.long === "--bp-coverage",
+    );
+    expect(bpOption).toBeDefined();
+    expect(bpOption!.description).toBe("Show BP rule coverage dashboard");
+  });
+
+  it("has --region option registered", async () => {
+    const { statusCommand } = await import("./status.js");
+    const regionOption = statusCommand.options.find(
+      (opt) => opt.long === "--region",
+    );
+    expect(regionOption).toBeDefined();
+    expect(regionOption!.description).toBe("Filter to a specific AWS region");
+  });
+
+  it("has --json option registered", async () => {
+    const { statusCommand } = await import("./status.js");
+    const jsonOption = statusCommand.options.find(
+      (opt) => opt.long === "--json",
+    );
+    expect(jsonOption).toBeDefined();
+    expect(jsonOption!.description).toBe("Output status data as JSON");
+  });
+
+  it("parses --region value correctly", async () => {
+    const { statusCommand } = await import("./status.js");
+    statusCommand.parseOptions(["--region", "eu-west-1"]);
+    expect(statusCommand.opts()["region"]).toBe("eu-west-1");
+  });
+
+  it("parses --bp-coverage flag correctly", async () => {
+    const { statusCommand } = await import("./status.js");
+    statusCommand.parseOptions(["--bp-coverage"]);
+    expect(statusCommand.opts()["bpCoverage"]).toBe(true);
   });
 });
