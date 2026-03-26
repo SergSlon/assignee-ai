@@ -11,6 +11,10 @@
       "dependsOn": [],
       "outputs": ["coverage/**"]
     },
+    "test:coverage": {
+      "dependsOn": [],
+      "outputs": ["coverage/**"]
+    },
     "lint": {
       "dependsOn": ["^lint"]
     },

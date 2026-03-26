@@ -50,6 +50,7 @@
     "generate-completions": "npx tsx scripts/generate-completions.ts",
     "prepublishOnly": "cd ../.. && npx turbo build --filter=assignee",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "start": "node ./dist/index.js",
     "check-types": "tsc --noEmit"
   },

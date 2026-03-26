@@ -26,5 +26,52 @@ jobs:
       - name: Build all packages
         run: npx turbo build
 
-      - name: Run all tests
-        run: npx turbo test
+      - name: Run tests with coverage
+        run: npx turbo test:coverage
+
+      - name: Merge coverage summaries
+        id: coverage
+        run: |
+          node -e "
+            const fs = require('fs');
+            const dirs = ['apps/cli', 'apps/mcp-server', 'packages/core', 'packages/best-practices'];
+            let tS=0,cS=0,tB=0,cB=0,tF=0,cF=0,tL=0,cL=0;
+            for (const d of dirs) {
+              try {
+                const s = JSON.parse(fs.readFileSync(d+'/coverage/coverage-summary.json','utf-8')).total;
+                tS+=s.statements.total; cS+=s.statements.covered;
+                tB+=s.branches.total; cB+=s.branches.covered;
+                tF+=s.functions.total; cF+=s.functions.covered;
+                tL+=s.lines.total; cL+=s.lines.covered;
+              } catch {}
+            }
+            const pct = tL>0?((cL/tL)*100).toFixed(1):'0';
+            console.log('Lines: '+pct+'%');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'lines='+pct+'\n');
+          "
+
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main' && vars.COVERAGE_GIST_ID != ''
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: ${{ vars.COVERAGE_GIST_ID }}
+          filename: assignee-ai-coverage.json
+          label: coverage
+          message: ${{ steps.coverage.outputs.lines }}%
+          valColorRange: ${{ steps.coverage.outputs.lines }}
+          minColorRange: 50
+          maxColorRange: 90
+          namedLogo: vitest
+
+      - name: Upload coverage HTML reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            apps/cli/coverage/
+            apps/mcp-server/coverage/
+            packages/core/coverage/
+            packages/best-practices/coverage/
+          retention-days: 30
