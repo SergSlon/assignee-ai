@@ -8,6 +8,7 @@
 import {
   AssigneeError,
   ProvisioningError,
+  PROVISIONING_ERROR_CODES,
   type ProvisioningErrorCode,
 } from "../errors.js";
 
@@ -30,18 +31,18 @@ export class ErrorHintRegistry {
 export const defaultErrorHintRegistry = new ErrorHintRegistry();
 
 defaultErrorHintRegistry.register(
-  "AlreadyExists",
+  PROVISIONING_ERROR_CODES.ALREADY_EXISTS,
   "A resource with this name already exists. Try a different name.",
 );
 defaultErrorHintRegistry.register(
-  "NotFound",
+  PROVISIONING_ERROR_CODES.NOT_FOUND,
   "Resource was removed during provisioning. Re-run `assignee plan` to get a fresh plan.",
 );
 defaultErrorHintRegistry.register(
-  "Throttled",
+  PROVISIONING_ERROR_CODES.THROTTLED,
   "AWS is throttling requests. Wait 30 seconds and retry.",
 );
 defaultErrorHintRegistry.register(
-  "StateMismatch",
+  PROVISIONING_ERROR_CODES.STATE_MISMATCH,
   "Resource already exists. Choose a different name and re-run 'assignee plan'.",
 );

@@ -163,6 +163,7 @@ export {
   ProvisioningError,
   MissingRequiredFieldsError,
   UserCancelledError,
+  PROVISIONING_ERROR_CODES,
   type ProvisioningErrorCode,
 } from "./errors.js";
 export {

@@ -9,9 +9,11 @@
 import {
   ExecutionStatus,
   defaultPluginRegistry,
+  RESOURCE_TYPES,
   type ProvisionRecord,
   type FailureRecord,
 } from "@assignee/core";
+import { TWENTY_FOUR_HOURS_MS } from "../config/constants.js";
 import { defaultMemoryService } from "../services/memory.js";
 import { resolveAmiFromOsName } from "../utils/aws-resource-discovery.js";
 import type { LlmPort } from "@assignee/core";
@@ -52,10 +54,10 @@ export function applyToCfnTransforms(
   }
 
   // Post-transform: assemble composite CFN structures from sub-fields
-  if (resourceType === "AWS::S3::Bucket") {
+  if (resourceType === RESOURCE_TYPES.S3_BUCKET) {
     assembleS3Composites(transformed, elicitedOptions);
   }
-  if (resourceType === "AWS::EC2::Instance") {
+  if (resourceType === RESOURCE_TYPES.EC2_INSTANCE) {
     assembleEc2Storage(transformed, elicitedOptions);
   }
 
@@ -299,12 +301,12 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       const shortId = state.runId.slice(0, 8);
       const resourceId = currentResource.resourceId;
       const NAME_FIELDS: Record<string, string> = {
-        "AWS::SQS::Queue": "QueueName",
-        "AWS::DynamoDB::Table": "TableName",
-        "AWS::IAM::Role": "RoleName",
-        "AWS::Lambda::Function": "FunctionName",
-        "AWS::S3::Bucket": "BucketName",
-        "AWS::SNS::Topic": "TopicName",
+        [RESOURCE_TYPES.SQS_QUEUE]: "QueueName",
+        [RESOURCE_TYPES.DYNAMODB_TABLE]: "TableName",
+        [RESOURCE_TYPES.IAM_ROLE]: "RoleName",
+        [RESOURCE_TYPES.LAMBDA_FUNCTION]: "FunctionName",
+        [RESOURCE_TYPES.S3_BUCKET]: "BucketName",
+        [RESOURCE_TYPES.SNS_TOPIC]: "TopicName",
       };
       const nameField = NAME_FIELDS[currentResource.resourceType];
       if (nameField && !desiredState[nameField]) {
@@ -316,11 +318,11 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       if (state.completedResources && state.completedResources.length > 0) {
         const completed = state.completedResources;
         if (
-          currentResource.resourceType === "AWS::Lambda::Function" &&
+          currentResource.resourceType === RESOURCE_TYPES.LAMBDA_FUNCTION &&
           !desiredState["Role"]
         ) {
           const role = completed.find(
-            (r) => r.resourceType === "AWS::IAM::Role",
+            (r) => r.resourceType === RESOURCE_TYPES.IAM_ROLE,
           );
           if (role?.resourceArn) {
             const roleName = String(role.resourceArn);
@@ -464,7 +466,6 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
           latestSuccess &&
           latestFailure.timestamp.localeCompare(latestSuccess.timestamp) <= 0;
         // Also treat failures older than 24 hours as stale regardless of success history
-        const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
         const failureAge =
           Date.now() - new Date(latestFailure.timestamp).getTime();
         const failureIsTooOld = failureAge > TWENTY_FOUR_HOURS_MS;
@@ -619,7 +620,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
 
     // Resolve OS name to real AMI ID for EC2 instances
     if (
-      state.resourceType === "AWS::EC2::Instance" &&
+      state.resourceType === RESOURCE_TYPES.EC2_INSTANCE &&
       typeof desiredState["ImageId"] === "string" &&
       !String(desiredState["ImageId"]).startsWith("ami-")
     ) {
@@ -640,7 +641,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     // Story E2E.5: NatGateway with public connectivity requires an EIP AllocationId.
     // If the LLM generated AUTO_ALLOCATE_EIP or omitted AllocationId, allocate a real EIP.
     if (
-      state.resourceType === "AWS::EC2::NatGateway" &&
+      state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
       (desiredState["ConnectivityType"] === "public" ||
         !desiredState["ConnectivityType"]) &&
       (!desiredState["AllocationId"] ||
