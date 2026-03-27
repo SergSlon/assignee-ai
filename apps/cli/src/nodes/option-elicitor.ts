@@ -1266,8 +1266,8 @@ export async function optionElicitorNode(
   if (state.userIntent) {
     const nameMatch = state.userIntent.match(/\bnamed?\s+([^\s,]+)/i);
     if (nameMatch?.[1]) {
-      // The first required commonField is typically the resource name
-      const nameField = commonFields.find((f) => f.required);
+      // The first commonField is typically the resource name (required or not)
+      const nameField = commonFields[0];
       if (nameField) {
         const key = fieldFetchKey(nameField);
         if (resolvedCommon[key] && !resolvedCommon[key]!.value) {
