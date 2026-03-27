@@ -49,7 +49,13 @@ function arnToResourceType(arn: string): string | null {
     // Tier 0
     s3: { "": "AWS::S3::Bucket" },
     ssm: { parameter: "AWS::SSM::Parameter" },
-    iam: { role: "AWS::IAM::Role" },
+    iam: {
+      role: "AWS::IAM::Role",
+      policy: "AWS::IAM::ManagedPolicy",
+      user: "AWS::IAM::User",
+      group: "AWS::IAM::Group",
+      "instance-profile": "AWS::IAM::InstanceProfile",
+    },
     ec2: {
       instance: "AWS::EC2::Instance",
       vpc: "AWS::EC2::VPC",
