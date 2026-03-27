@@ -1406,6 +1406,7 @@ export async function renderOptionPrompt(
   // but the rest of the app expects actual boolean values.
   if (question.type === "boolean") {
     if (result === "?") return "?";
+    if (result === BACK_SENTINEL) return BACK_SENTINEL;
     return result === "true";
   }
 
