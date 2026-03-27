@@ -45,11 +45,15 @@ export const messageProcessingPattern: ArchitecturePattern = {
     ["processor-fn"],
   ],
   defaultOptions: {
-    dlq: { MessageRetentionPeriod: 1209600 },
+    dlq: {
+      MessageRetentionPeriod: 1209600,
+      SqsManagedSseEnabled: true,
+    },
     "main-queue": {
       VisibilityTimeout: 180,
       MessageRetentionPeriod: 1209600,
       ReceiveMessageWaitTimeSeconds: 20,
+      SqsManagedSseEnabled: true,
     },
     "results-table": {
       BillingMode: "PAY_PER_REQUEST",
