@@ -292,6 +292,43 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         ...patternDefaults,
         ...transformedOptions,
       };
+
+      // Compound cross-reference: inject ARNs from previously completed resources
+      // e.g., Lambda needs the IAM Role ARN from a prior step
+      if (state.completedResources && state.completedResources.length > 0) {
+        const completed = state.completedResources;
+        if (
+          currentResource.resourceType === "AWS::Lambda::Function" &&
+          !desiredState["Role"]
+        ) {
+          const role = completed.find(
+            (r) => r.resourceType === "AWS::IAM::Role",
+          );
+          if (role?.resourceArn) {
+            const roleName = String(role.resourceArn);
+            if (roleName.startsWith("arn:")) {
+              desiredState["Role"] = roleName;
+            } else {
+              // CloudControl returns the role name — construct the full ARN
+              try {
+                const { STSClient, GetCallerIdentityCommand } =
+                  await import("@aws-sdk/client-sts");
+                const sts = new STSClient({
+                  region: process.env["AWS_REGION"] ?? "us-east-1",
+                });
+                const identity = await sts.send(
+                  new GetCallerIdentityCommand({}),
+                );
+                desiredState["Role"] =
+                  `arn:aws:iam::${identity.Account}:role/${roleName}`;
+              } catch {
+                desiredState["Role"] = roleName;
+              }
+            }
+          }
+        }
+      }
+
       // Story 19.5: Read pattern memory for compound mode hints
       const compoundMemoryHints: string[] = [];
       try {

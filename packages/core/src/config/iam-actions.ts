@@ -58,6 +58,8 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "dynamodb:DeleteTable",
       "dynamodb:DescribeTable",
       "dynamodb:UpdateTable",
+      "dynamodb:UpdateContinuousBackups",
+      "dynamodb:DescribeContinuousBackups",
       "dynamodb:TagResource",
       "dynamodb:ListTagsOfResource",
     ],

@@ -58,12 +58,36 @@ export const messageProcessingPattern: ArchitecturePattern = {
     "results-table": {
       BillingMode: "PAY_PER_REQUEST",
       PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
+      KeySchema: [{ AttributeName: "messageId", KeyType: "HASH" }],
+      AttributeDefinitions: [
+        { AttributeName: "messageId", AttributeType: "S" },
+      ],
+    },
+    "lambda-role": {
+      AssumeRolePolicyDocument: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { Service: "lambda.amazonaws.com" },
+            Action: "sts:AssumeRole",
+          },
+        ],
+      },
+      ManagedPolicyArns: [
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      ],
     },
     "processor-fn": {
       Runtime: "nodejs22.x",
+      Handler: "index.handler",
       MemorySize: 512,
       Timeout: 180,
       Architectures: ["arm64"],
+      Code: {
+        ZipFile:
+          "exports.handler = async (event) => ({ statusCode: 200, body: JSON.stringify({ processed: event.Records?.length ?? 0 }) });",
+      },
     },
   },
 };
