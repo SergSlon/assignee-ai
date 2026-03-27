@@ -4,6 +4,8 @@ import type { LogEvent } from './logger.js'
 
 describe('logger', () => {
   let stderrSpy: MockInstance
+  const originalArgv = process.argv
+  const originalEnv = { ...process.env }
 
   beforeEach(() => {
     stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
@@ -11,9 +13,13 @@ describe('logger', () => {
 
   afterEach(() => {
     stderrSpy.mockRestore()
+    process.argv = originalArgv
+    process.env = { ...originalEnv }
   })
 
-  it('writes valid JSON to stderr', () => {
+  it('writes valid JSON to stderr when --verbose is set', () => {
+    process.argv = [...originalArgv, '--verbose']
+
     const event: LogEvent = {
       ts: '2026-01-01T00:00:00.000Z',
       runId: '00000000-0000-0000-0000-000000000001',
@@ -29,6 +35,8 @@ describe('logger', () => {
   })
 
   it('outputs all required LogEvent fields', () => {
+    process.argv = [...originalArgv, '--verbose']
+
     const event: LogEvent = {
       ts: '2026-01-01T00:00:00.000Z',
       runId: '00000000-0000-0000-0000-000000000002',
@@ -52,6 +60,8 @@ describe('logger', () => {
   })
 
   it('writes single-line JSON (no pretty-printing)', () => {
+    process.argv = [...originalArgv, '--verbose']
+
     const event: LogEvent = {
       ts: '2026-01-01T00:00:00.000Z',
       runId: '00000000-0000-0000-0000-000000000003',
@@ -65,6 +75,69 @@ describe('logger', () => {
     // Should be exactly one line (JSON + newline)
     const lines = written.split('\n').filter(Boolean)
     expect(lines).toHaveLength(1)
+  })
+
+  it('suppresses logs when --verbose is not set', () => {
+    // No --verbose flag, no env var — logs should be suppressed
+    delete process.env['ASSIGNEE_VERBOSITY']
+    delete process.env['ASSIGNEE_LOG_LEVEL']
+
+    const event: LogEvent = {
+      ts: '2026-01-01T00:00:00.000Z',
+      runId: '00000000-0000-0000-0000-000000000004',
+      level: 'info',
+      action: LOG_ACTIONS.PLAN_STARTED,
+    }
+
+    log(event)
+
+    expect(stderrSpy).not.toHaveBeenCalled()
+  })
+
+  it('emits logs when ASSIGNEE_VERBOSITY=verbose', () => {
+    process.env['ASSIGNEE_VERBOSITY'] = 'verbose'
+
+    const event: LogEvent = {
+      ts: '2026-01-01T00:00:00.000Z',
+      runId: '00000000-0000-0000-0000-000000000005',
+      level: 'info',
+      action: LOG_ACTIONS.PLAN_STARTED,
+    }
+
+    log(event)
+
+    expect(stderrSpy).toHaveBeenCalledOnce()
+  })
+
+  it('emits logs when ASSIGNEE_LOG_LEVEL=debug', () => {
+    process.env['ASSIGNEE_LOG_LEVEL'] = 'debug'
+
+    const event: LogEvent = {
+      ts: '2026-01-01T00:00:00.000Z',
+      runId: '00000000-0000-0000-0000-000000000006',
+      level: 'info',
+      action: LOG_ACTIONS.PLAN_STARTED,
+    }
+
+    log(event)
+
+    expect(stderrSpy).toHaveBeenCalledOnce()
+  })
+
+  it('suppresses logs when ASSIGNEE_VERBOSITY=normal', () => {
+    process.env['ASSIGNEE_VERBOSITY'] = 'normal'
+    delete process.env['ASSIGNEE_LOG_LEVEL']
+
+    const event: LogEvent = {
+      ts: '2026-01-01T00:00:00.000Z',
+      runId: '00000000-0000-0000-0000-000000000007',
+      level: 'info',
+      action: LOG_ACTIONS.PLAN_STARTED,
+    }
+
+    log(event)
+
+    expect(stderrSpy).not.toHaveBeenCalled()
   })
 
   it('LOG_ACTIONS contains expected action names', () => {

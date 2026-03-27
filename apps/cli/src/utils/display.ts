@@ -422,6 +422,7 @@ function formatAppliedFixes(fixes: AppliedFix[] | undefined): string | null {
 function formatFixValue(value: unknown): string {
   if (value === undefined || value === null) return "unset";
   if (typeof value === "boolean") return value ? "enabled" : "disabled";
+  if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
 

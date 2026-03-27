@@ -44,6 +44,8 @@ export interface RunCommandOptions {
   endAction: LogAction;
   errorPrefix: string;
   errorHint: string;
+  /** When true, suppress intro/outro banners and connection spinner (used for JSON output). */
+  silent?: boolean;
   run: (ctx: CommandContext) => Promise<{ success: boolean }>;
 }
 
@@ -52,7 +54,7 @@ export interface RunCommandOptions {
  * The `run` callback should handle command-specific spinners, mid-flow logging, and error rendering.
  */
 export async function runCommand(opts: RunCommandOptions): Promise<void> {
-  renderIntro();
+  if (!opts.silent) renderIntro();
 
   // Early credential check — fail fast before the wizard, not after
   const hasOperatorKey = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
@@ -80,10 +82,10 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
     : null;
 
   try {
-    startSpinner("Connecting to AWS...");
+    if (!opts.silent) startSpinner("Connecting to AWS...");
     const mcpClient = await createMcpClient();
     let tools = await getMcpTools(mcpClient);
-    stopSpinner("Connected");
+    if (!opts.silent) stopSpinner("Connected");
 
     // Story 9.7: Wrap MCP tools with recorder when recording enabled
     if (recorder) {
@@ -123,7 +125,7 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
       recorder.finalizeSession();
     }
 
-    renderOutro(result.success);
+    if (!opts.silent) renderOutro(result.success);
     await closeMcpClient().catch(() => {});
     if (!result.success) {
       // Error was already rendered by the graph run — don't throw (which would
@@ -147,8 +149,10 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
       recorder.finalizeSession();
     }
 
-    renderError(`${opts.errorPrefix}: ${errMsg}`, opts.errorHint);
-    renderOutro(false);
+    if (!opts.silent) {
+      renderError(`${opts.errorPrefix}: ${errMsg}`, opts.errorHint);
+      renderOutro(false);
+    }
     await closeMcpClient().catch(() => {});
     if (err instanceof AssigneeError) throw err;
     throw new AssigneeError(`${opts.errorPrefix}: ${errMsg}`, "COMMAND_FAILED");

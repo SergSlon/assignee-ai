@@ -67,14 +67,36 @@ export interface LogEvent {
 }
 
 /**
+ * Returns true when the user has opted-in to verbose / structured log output.
+ *
+ * Checked (in priority order):
+ *   1. `--verbose` CLI flag
+ *   2. `ASSIGNEE_VERBOSITY=verbose` environment variable
+ *   3. `ASSIGNEE_LOG_LEVEL=debug` environment variable
+ *
+ * Without an explicit opt-in, structured logs are suppressed so they never
+ * leak into stdout/stderr and pollute user-facing output.
+ */
+function isVerbose(): boolean {
+  if (process.argv.includes("--verbose")) return true;
+  const verbosity = process.env["ASSIGNEE_VERBOSITY"];
+  if (verbosity === "verbose") return true;
+  const logLevel = process.env["ASSIGNEE_LOG_LEVEL"];
+  if (logLevel === "debug") return true;
+  return false;
+}
+
+/**
  * Writes a structured JSON log event to stderr.
  * Each log entry is a single line of JSON for log aggregation compatibility.
+ *
+ * Logs are only emitted when the user explicitly opts in via `--verbose`,
+ * `ASSIGNEE_VERBOSITY=verbose`, or `ASSIGNEE_LOG_LEVEL=debug`.
+ * This prevents structured JSON from leaking into terminal output.
  *
  * @param event - The log event to write
  */
 export function log(event: LogEvent): void {
-  // Structured JSON logs are for CI / log aggregation — suppress in interactive TTY sessions
-  // where @clack/prompts owns stderr rendering.
-  if (process.stderr.isTTY) return;
+  if (!isVerbose()) return;
   process.stderr.write(JSON.stringify(event) + "\n");
 }
