@@ -20,6 +20,7 @@ import {
   UnsupportedResourceError,
   StateGuardError,
   MissingRequiredFieldsError,
+  PROVISIONING_ERROR_CODES,
   type ProvisioningErrorCode,
 } from "@assignee/core";
 
@@ -41,36 +42,36 @@ export interface ErrorMessageEntry {
 // ── AWS Provisioning Error Messages ──────────────────────────────────────────
 
 const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
-  AlreadyExists: {
-    code: "AlreadyExists",
+  [PROVISIONING_ERROR_CODES.ALREADY_EXISTS]: {
+    code: PROVISIONING_ERROR_CODES.ALREADY_EXISTS,
     what: "A resource with this name already exists in your AWS account.",
     why: "AWS rejected the create request because an identical resource identifier is already in use.",
     howToFix:
       'Choose a different resource name in your intent, or run `assignee plan` with a unique name (e.g., "Create an S3 bucket named my-bucket-v2").',
   },
-  NotFound: {
-    code: "NotFound",
+  [PROVISIONING_ERROR_CODES.NOT_FOUND]: {
+    code: PROVISIONING_ERROR_CODES.NOT_FOUND,
     what: "The target resource was not found in AWS.",
     why: "The resource was deleted or never created. This can happen if the plan is stale or the resource was removed outside of assignee.ai.",
     howToFix:
       "Re-run `assignee plan` to generate a fresh plan against the current state of your AWS account.",
   },
-  Throttled: {
-    code: "Throttled",
+  [PROVISIONING_ERROR_CODES.THROTTLED]: {
+    code: PROVISIONING_ERROR_CODES.THROTTLED,
     what: "AWS is rate-limiting your requests.",
     why: "Too many API calls were made in a short period. AWS CloudControl API has per-account request limits.",
     howToFix:
       "Wait 30-60 seconds and retry. If this persists, check your AWS account service quotas at https://console.aws.amazon.com/servicequotas/.",
   },
-  StateMismatch: {
-    code: "StateMismatch",
+  [PROVISIONING_ERROR_CODES.STATE_MISMATCH]: {
+    code: PROVISIONING_ERROR_CODES.STATE_MISMATCH,
     what: "Resource already exists.",
     why: "A resource with the same identifier already exists in your AWS account.",
     howToFix:
       "Choose a different name and re-run 'assignee plan'.",
   },
-  UnsupportedType: {
-    code: "UnsupportedType",
+  [PROVISIONING_ERROR_CODES.UNSUPPORTED_TYPE]: {
+    code: PROVISIONING_ERROR_CODES.UNSUPPORTED_TYPE,
     what: "This resource type is not supported by AWS CloudControl API.",
     why: "Some AWS resource types require native SDK calls or have known CCAPI gaps.",
     howToFix:
@@ -392,7 +393,7 @@ export class ErrorMessageRegistry {
     }
 
     if (error instanceof StateGuardError) {
-      return this.entries.get("StateMismatch") ?? this.fallback();
+      return this.entries.get(PROVISIONING_ERROR_CODES.STATE_MISMATCH) ?? this.fallback();
     }
 
     if (error instanceof AssigneeError) {
@@ -475,9 +476,9 @@ export class ErrorMessageRegistry {
       ["ThrottlingException", "ThrottlingException"],
       ["ResourceNotFoundException", "ResourceNotFoundException"],
       ["ValidationException", "ValidationException"],
-      ["Resource already exists", "AlreadyExists"],
-      ["already exists", "AlreadyExists"],
-      ["Request throttled", "Throttled"],
+      ["Resource already exists", PROVISIONING_ERROR_CODES.ALREADY_EXISTS],
+      ["already exists", PROVISIONING_ERROR_CODES.ALREADY_EXISTS],
+      ["Request throttled", PROVISIONING_ERROR_CODES.THROTTLED],
       ["Rate exceeded", "ThrottlingException"],
     ];
 

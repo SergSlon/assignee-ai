@@ -41,3 +41,19 @@ export const MEMORY_MAX_FAILURES = 100;
 
 /** Maximum number of pattern records to keep in memory rotation. */
 export const MEMORY_MAX_PATTERNS = 100;
+
+// ── Timeout Constants ────────────────────────────────────────────────────────
+
+/** Hard timeout for pricing MCP queries (ms). Non-blocking: never blocks apply on failure. */
+export const PRICING_TIMEOUT_MS = 3000;
+
+/** Timeout for post-provision security posture checks (ms). Longer than pricing as security aggregates from multiple sources. */
+export const SECURITY_CHECK_TIMEOUT_MS = 5000;
+
+/** 24 hours in milliseconds — used for failure record staleness checks. */
+export const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+
+// ── Pricing Calculation Constants ────────────────────────────────────────────
+
+/** Average hours per month for pricing calculations (730 = 365 days * 24 hours / 12 months). */
+export const HOURS_PER_MONTH = 730;

@@ -101,14 +101,19 @@ export class UserCancelledError extends AssigneeError {
   }
 }
 
+/** Named constants for ProvisioningErrorCode — eliminates magic strings across the codebase. */
+export const PROVISIONING_ERROR_CODES = {
+  ACCESS_DENIED: "AccessDenied",
+  ALREADY_EXISTS: "AlreadyExists",
+  NOT_FOUND: "NotFound",
+  THROTTLED: "Throttled",
+  STATE_MISMATCH: "StateMismatch",
+  UNSUPPORTED_TYPE: "UnsupportedType",
+  UNKNOWN: "Unknown",
+} as const;
+
 export type ProvisioningErrorCode =
-  | "AccessDenied"
-  | "AlreadyExists"
-  | "NotFound"
-  | "Throttled"
-  | "StateMismatch"
-  | "UnsupportedType"
-  | "Unknown";
+  (typeof PROVISIONING_ERROR_CODES)[keyof typeof PROVISIONING_ERROR_CODES];
 
 /** Error from AWS CloudControl resource provisioning. */
 export class ProvisioningError extends AssigneeError {

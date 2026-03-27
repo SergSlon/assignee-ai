@@ -12,6 +12,8 @@ import {
   getPrimaryIdentifier,
   SUPPORTED_TYPES_ARRAY,
   CCAPI_FALLBACK_TYPES,
+  RESOURCE_TYPES,
+  PROVISIONING_ERROR_CODES,
   type ResourceType,
   ProvisioningError,
 } from "@assignee/core";
@@ -60,7 +62,7 @@ export async function resourceProvisionerNode(
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: redirect.message,
-        error: new ProvisioningError(redirect.message, "UnsupportedType"),
+        error: new ProvisioningError(redirect.message, PROVISIONING_ERROR_CODES.UNSUPPORTED_TYPE),
       };
     }
 
@@ -97,7 +99,7 @@ export async function resourceProvisionerNode(
           return {
             executionStatus: ExecutionStatus.FAILED,
             errorMessage: `SDK fallback provisioning failed: ${err.message}`,
-            error: new ProvisioningError(err.message, "Unknown"),
+            error: new ProvisioningError(err.message, PROVISIONING_ERROR_CODES.UNKNOWN),
           };
         }
         return {
@@ -114,7 +116,7 @@ export async function resourceProvisionerNode(
           return {
             executionStatus: ExecutionStatus.FAILED,
             errorMessage: `SDK fallback provisioning failed: ${err.message}`,
-            error: new ProvisioningError(err.message, "Unknown"),
+            error: new ProvisioningError(err.message, PROVISIONING_ERROR_CODES.UNKNOWN),
           };
         }
         return {
@@ -138,7 +140,7 @@ export async function resourceProvisionerNode(
   // (the name is reserved globally), causing a false "already exists" block.
   // Skip the state guard for S3 — the CreateResource call itself will correctly
   // return ALREADY_EXISTS if the name is genuinely taken.
-  const skipStateGuard = state.resourceType === "AWS::S3::Bucket";
+  const skipStateGuard = state.resourceType === RESOURCE_TYPES.S3_BUCKET;
 
   const identifier = skipStateGuard
     ? undefined
@@ -163,7 +165,7 @@ export async function resourceProvisionerNode(
         errorMessage: `Resource already exists (${identifier}). Choose a different name and re-run 'assignee plan'.`,
         error: new ProvisioningError(
           `Resource already exists (${identifier}). Choose a different name`,
-          "StateMismatch",
+          PROVISIONING_ERROR_CODES.STATE_MISMATCH,
         ),
       };
     }
@@ -216,10 +218,10 @@ export async function resourceProvisionerNode(
   if (createErr) {
     const errorCategory =
       createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
-        ? "AlreadyExists"
+        ? PROVISIONING_ERROR_CODES.ALREADY_EXISTS
         : createErr.kind === ProvisioningErrorKind.THROTTLED
-          ? "Throttled"
-          : "Unknown";
+          ? PROVISIONING_ERROR_CODES.THROTTLED
+          : PROVISIONING_ERROR_CODES.UNKNOWN;
     const prefix =
       createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
         ? "Resource already exists. Re-run 'assignee plan' to refresh."

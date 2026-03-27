@@ -19,7 +19,7 @@ import {
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
-import { AWS_REGION } from "../config/constants.js";
+import { AWS_REGION, PRICING_TIMEOUT_MS, HOURS_PER_MONTH } from "../config/constants.js";
 import { CostEstimate, PricingTerm } from "../constants/pricing.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { unwrapMcpText } from "../utils/mcp.js";
@@ -28,8 +28,6 @@ import { getFreeTierNote, loadAccountCreatedDate } from "../utils/free-tier.js";
 import { getRequiredIamActions } from "@assignee/core";
 import { getCachedPrice, setCachedPrice } from "../services/price-cache.js";
 import type { AgentState } from "../services/graph.js";
-
-const PRICING_TIMEOUT_MS = 3000;
 
 export async function preflightGuardNode(
   state: AgentState,
@@ -388,7 +386,7 @@ async function queryLineItemPrices(
 
         if (item.kind === "fixed" && !isNaN(rawPrice)) {
           if (item.priceUnit === "/hr") {
-            monthlyCost = rawPrice * 730 * item.quantity; // 730 hrs/month
+            monthlyCost = rawPrice * HOURS_PER_MONTH * item.quantity;
           } else if (item.priceUnit.includes("/GB-mo")) {
             monthlyCost = rawPrice * item.quantity;
           } else {

@@ -25,13 +25,11 @@ import {
 } from "../utils/display.js";
 import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
 import { ToolName } from "../constants/tools.js";
+import { SECURITY_CHECK_TIMEOUT_MS } from "../config/constants.js";
 import { unwrapMcpText } from "../utils/mcp.js";
 import { withTimeout } from "../utils/timeout.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
-
-/** Security check timeout — longer than pricing (5s vs 3s) as security services aggregate from multiple sources. */
-const SECURITY_CHECK_TIMEOUT_MS = 5000;
 
 /**
  * Post-provision security posture check (Story 19.2).
@@ -110,7 +108,7 @@ async function writeProvisionRecord(
       ts: new Date().toISOString(),
       runId,
       level: "warn",
-      action: "memory_write_failed",
+      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
       extras: { error: err instanceof Error ? err.message : String(err) },
     });
   }
@@ -152,7 +150,7 @@ async function writeFailureRecord(
       ts: new Date().toISOString(),
       runId,
       level: "warn",
-      action: "memory_write_failed" as any,
+      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
       extras: {
         memoryWriteError: "Failed to write failure record",
         error: err instanceof Error ? err.message : String(err),
@@ -176,7 +174,7 @@ async function clearFailureHistory(
       ts: new Date().toISOString(),
       runId,
       level: "warn",
-      action: "memory_write_failed" as any,
+      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
       extras: {
         memoryWriteError: "Failed to clear failure history",
         error: err instanceof Error ? err.message : String(err),
