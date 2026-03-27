@@ -159,6 +159,7 @@ export const applyCommand = new Command(CommandName.APPLY)
 
       await runCommand({
         intent: effectiveIntent,
+        commandName: "apply",
         startAction: LOG_ACTIONS.APPLY_STARTED,
         endAction: LOG_ACTIONS.APPLY_COMPLETE,
         errorPrefix: "Apply failed",

@@ -51,12 +51,21 @@ vi.mock("../services/litellm-adapter.js", () => ({
   })),
 }));
 
+vi.mock("../services/cleanup.js", () => ({
+  runAutoCleanup: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../services/memory.js", () => ({
+  defaultMemoryService: {},
+}));
+
 const { createMcpClient, getMcpTools, closeMcpClient } =
   await import("../services/mcp-client.js");
 const { createGraph } = await import("../services/graph.js");
 const { renderIntro, renderOutro, renderError, stopSpinner } =
   await import("./display.js");
 const { runCommand, runProvisioningLoop } = await import("./command-runner.js");
+const { runAutoCleanup } = await import("../services/cleanup.js");
 
 // ── Test setup ──────────────────────────────────────────────────────────────
 
@@ -351,6 +360,72 @@ describe("runCommand", () => {
 
     // Reset
     vi.mocked(isRecordingEnabled).mockReturnValue(false);
+  });
+});
+
+// ── Story 33.4: Auto-cleanup hook ──────────────────────────────────────────
+
+describe("runCommand — auto-cleanup hook", () => {
+  it("calls runAutoCleanup after successful command", async () => {
+    const mockClient = {};
+    vi.mocked(createMcpClient).mockResolvedValue(mockClient as never);
+    vi.mocked(getMcpTools).mockResolvedValue([] as never);
+    vi.mocked(createGraph).mockReturnValue({ invoke: vi.fn() } as never);
+
+    await runCommand({
+      intent: "test",
+      startAction: "plan_started",
+      endAction: "plan_complete",
+      errorPrefix: "Err",
+      errorHint: "hint",
+      run: async () => ({ success: true }),
+    });
+
+    expect(runAutoCleanup).toHaveBeenCalled();
+  });
+
+  it("calls runAutoCleanup after failed command", async () => {
+    const mockClient = {};
+    vi.mocked(createMcpClient).mockResolvedValue(mockClient as never);
+    vi.mocked(getMcpTools).mockResolvedValue([] as never);
+    vi.mocked(createGraph).mockReturnValue({ invoke: vi.fn() } as never);
+
+    await expect(
+      runCommand({
+        intent: "test",
+        startAction: "plan_started",
+        endAction: "plan_complete",
+        errorPrefix: "Err",
+        errorHint: "hint",
+        run: async () => {
+          throw new Error("boom");
+        },
+      }),
+    ).rejects.toThrow();
+
+    expect(runAutoCleanup).toHaveBeenCalled();
+  });
+
+  it("runAutoCleanup error does not affect command exit", async () => {
+    const mockClient = {};
+    vi.mocked(createMcpClient).mockResolvedValue(mockClient as never);
+    vi.mocked(getMcpTools).mockResolvedValue([] as never);
+    vi.mocked(createGraph).mockReturnValue({ invoke: vi.fn() } as never);
+    vi.mocked(runAutoCleanup).mockRejectedValueOnce(
+      new Error("cleanup failed"),
+    );
+
+    // Should not throw — cleanup error is swallowed
+    await runCommand({
+      intent: "test",
+      startAction: "plan_started",
+      endAction: "plan_complete",
+      errorPrefix: "Err",
+      errorHint: "hint",
+      run: async () => ({ success: true }),
+    });
+
+    expect(runAutoCleanup).toHaveBeenCalled();
   });
 });
 

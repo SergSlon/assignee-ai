@@ -11,6 +11,7 @@ import {
   getMcpTools,
   closeMcpClient,
 } from "../services/mcp-client.js";
+import { getRequiredServers } from "../mcp/server-map.js";
 import { createGraph } from "../services/graph.js";
 import { ExecutionStatus } from "@assignee/core";
 import type { AgentState } from "../services/graph-state.js";
@@ -29,6 +30,9 @@ import {
   wrapToolWithRecorder,
   RecordingLlmAdapter,
 } from "./recorder.js";
+import { runAutoCleanup } from "../services/cleanup.js";
+import { defaultMemoryService } from "../services/memory.js";
+import { CHECKPOINT_DIR } from "../config/constants.js";
 
 export interface CommandContext {
   intent: string;
@@ -40,6 +44,8 @@ export interface CommandContext {
 
 export interface RunCommandOptions {
   intent: string;
+  /** CLI command name (e.g. "plan", "apply") — used to determine which MCP servers to start. @see Story 29.3 */
+  commandName?: string;
   startAction: LogAction;
   endAction: LogAction;
   errorPrefix: string;
@@ -82,80 +88,96 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
     : null;
 
   try {
-    if (!opts.silent) startSpinner("Connecting to AWS...");
-    const mcpClient = await createMcpClient();
-    let tools = await getMcpTools(mcpClient);
-    if (!opts.silent) stopSpinner("Connected");
+    try {
+      if (!opts.silent) startSpinner("Connecting to AWS...");
+      // Story 29.3: Only start MCP servers required by this command
+      const requiredServers = opts.commandName
+        ? getRequiredServers(opts.commandName)
+        : null;
+      const mcpClient = await createMcpClient(requiredServers);
+      let tools = await getMcpTools(mcpClient);
+      if (!opts.silent) stopSpinner("Connected");
 
-    // Story 9.7: Wrap MCP tools with recorder when recording enabled
-    if (recorder) {
-      tools = tools.map((t) => wrapToolWithRecorder(t, recorder));
+      // Story 9.7: Wrap MCP tools with recorder when recording enabled
+      if (recorder) {
+        tools = tools.map((t) => wrapToolWithRecorder(t, recorder));
+      }
+
+      // Story 9.7: Wrap LLM adapter with recorder when recording enabled
+      const { LiteLLMAdapter } = await import(
+        "../services/litellm-adapter.js"
+      );
+      const baseLlm = new LiteLLMAdapter({
+        modelString: process.env["ASSIGNEE_MODEL"],
+        guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
+        guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],
+      });
+      const llmClient = recorder
+        ? new RecordingLlmAdapter(
+            baseLlm,
+            recorder,
+            process.env["ASSIGNEE_MODEL"] ?? "bedrock/amazon.nova-lite-v1:0",
+          )
+        : undefined;
+
+      const graph = createGraph(tools, {
+        llmClient,
+        recorder: recorder ?? undefined,
+      });
+
+      const result = await opts.run({
+        intent: opts.intent,
+        runId,
+        startTs,
+        tools,
+        graph,
+      });
+
+      // Story 9.7: Finalize recording session
+      if (recorder) {
+        recorder.finalizeSession();
+      }
+
+      if (!opts.silent) renderOutro(result.success);
+      await closeMcpClient().catch(() => {});
+      if (!result.success) {
+        // Error was already rendered by the graph run — don't throw (which would
+        // double-render via the catch block). Just return so the process exits cleanly.
+        return;
+      }
+    } catch (err: unknown) {
+      stopSpinner();
+      const errMsg = err instanceof Error ? err.message : String(err);
+      log({
+        ts: new Date().toISOString(),
+        runId,
+        level: "error",
+        action: opts.endAction,
+        durationMs: Date.now() - startTs,
+        result: "error",
+      });
+
+      // Story 9.7: Finalize recording even on error
+      if (recorder) {
+        recorder.finalizeSession();
+      }
+
+      if (!opts.silent) {
+        renderError(`${opts.errorPrefix}: ${errMsg}`, opts.errorHint);
+        renderOutro(false);
+      }
+      await closeMcpClient().catch(() => {});
+      if (err instanceof AssigneeError) throw err;
+      throw new AssigneeError(
+        `${opts.errorPrefix}: ${errMsg}`,
+        "COMMAND_FAILED",
+      );
     }
-
-    // Story 9.7: Wrap LLM adapter with recorder when recording enabled
-    const { LiteLLMAdapter } = await import("../services/litellm-adapter.js");
-    const baseLlm = new LiteLLMAdapter({
-      modelString: process.env["ASSIGNEE_MODEL"],
-      guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
-      guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],
-    });
-    const llmClient = recorder
-      ? new RecordingLlmAdapter(
-          baseLlm,
-          recorder,
-          process.env["ASSIGNEE_MODEL"] ?? "bedrock/amazon.nova-lite-v1:0",
-        )
-      : undefined;
-
-    const graph = createGraph(tools, {
-      llmClient,
-      recorder: recorder ?? undefined,
-    });
-
-    const result = await opts.run({
-      intent: opts.intent,
-      runId,
-      startTs,
-      tools,
-      graph,
-    });
-
-    // Story 9.7: Finalize recording session
-    if (recorder) {
-      recorder.finalizeSession();
-    }
-
-    if (!opts.silent) renderOutro(result.success);
-    await closeMcpClient().catch(() => {});
-    if (!result.success) {
-      // Error was already rendered by the graph run — don't throw (which would
-      // double-render via the catch block). Just return so the process exits cleanly.
-      return;
-    }
-  } catch (err: unknown) {
-    stopSpinner();
-    const errMsg = err instanceof Error ? err.message : String(err);
-    log({
-      ts: new Date().toISOString(),
-      runId,
-      level: "error",
-      action: opts.endAction,
-      durationMs: Date.now() - startTs,
-      result: "error",
-    });
-
-    // Story 9.7: Finalize recording even on error
-    if (recorder) {
-      recorder.finalizeSession();
-    }
-
-    if (!opts.silent) {
-      renderError(`${opts.errorPrefix}: ${errMsg}`, opts.errorHint);
-      renderOutro(false);
-    }
-    await closeMcpClient().catch(() => {});
-    if (err instanceof AssigneeError) throw err;
-    throw new AssigneeError(`${opts.errorPrefix}: ${errMsg}`, "COMMAND_FAILED");
+  } finally {
+    // Story 33.4: Fire-and-forget auto-cleanup after every command run.
+    // Uses void to explicitly discard the promise; .catch() swallows errors
+    // so cleanup failures never affect the command exit code.
+    void runAutoCleanup(CHECKPOINT_DIR, defaultMemoryService).catch(() => {});
   }
 }
 
