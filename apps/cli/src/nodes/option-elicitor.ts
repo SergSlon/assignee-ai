@@ -1262,6 +1262,40 @@ export async function optionElicitorNode(
   const resolvedCommon = resolveFieldsWithConfig(commonFields);
   const resolvedAdvanced = resolveFieldsWithConfig(advancedFields);
 
+  // Pre-fill name fields from user intent (e.g., "named poc-smoke-test")
+  if (state.userIntent) {
+    const nameMatch = state.userIntent.match(/\bnamed?\s+([^\s,]+)/i);
+    if (nameMatch?.[1]) {
+      const intentName = nameMatch[1];
+      // Find the primary name field for this resource type
+      const NAME_FIELDS = [
+        "BucketName",
+        "TableName",
+        "QueueName",
+        "TopicName",
+        "FunctionName",
+        "RoleName",
+        "ClusterName",
+        "RepositoryName",
+        "Name",
+        "DBInstanceIdentifier",
+        "LogGroupName",
+        "AlarmName",
+      ];
+      for (const nf of NAME_FIELDS) {
+        const key = nf;
+        if (resolvedCommon[key] && !resolvedCommon[key].value) {
+          resolvedCommon[key] = {
+            ...resolvedCommon[key],
+            value: intentName,
+            source: FieldSource.PLUGIN_DEFAULT, // treated as pre-fill, user can override
+          };
+          break;
+        }
+      }
+    }
+  }
+
   // Story 27.4: Log resolved field sources for diagnostics
   if (state.runId) {
     for (const [fieldName, resolved] of Object.entries(resolvedCommon)) {
