@@ -45,20 +45,17 @@ interface ProvisionLogEntry {
  * Maps common AWS service names to CloudFormation resource types.
  * Falls back to `AWS::<Service>::Resource` for unmapped services.
  */
+/** Simple service→type map for services with a single resource type. */
 const SERVICE_TYPE_MAP: Record<string, string> = {
   s3: "AWS::S3::Bucket",
   lambda: "AWS::Lambda::Function",
-  ec2: "AWS::EC2::Instance",
   rds: "AWS::RDS::DBInstance",
   dynamodb: "AWS::DynamoDB::Table",
   sqs: "AWS::SQS::Queue",
   sns: "AWS::SNS::Topic",
-  iam: "AWS::IAM::Role",
   cloudformation: "AWS::CloudFormation::Stack",
-  ssm: "AWS::SSM::Parameter",
   logs: "AWS::Logs::LogGroup",
   events: "AWS::Events::Rule",
-  apigateway: "AWS::ApiGateway::RestApi",
   cloudfront: "AWS::CloudFront::Distribution",
   ecs: "AWS::ECS::Cluster",
   eks: "AWS::EKS::Cluster",
@@ -69,6 +66,47 @@ const SERVICE_TYPE_MAP: Record<string, string> = {
   states: "AWS::StepFunctions::StateMachine",
 };
 
+/** Services with multiple resource types — resolved by ARN resource segment. */
+const SERVICE_SUBTYPE_MAP: Record<string, Record<string, string>> = {
+  ec2: {
+    instance: "AWS::EC2::Instance",
+    vpc: "AWS::EC2::VPC",
+    subnet: "AWS::EC2::Subnet",
+    "security-group": "AWS::EC2::SecurityGroup",
+    "internet-gateway": "AWS::EC2::InternetGateway",
+    "route-table": "AWS::EC2::RouteTable",
+    natgateway: "AWS::EC2::NatGateway",
+    "elastic-ip": "AWS::EC2::EIP",
+  },
+  iam: {
+    role: "AWS::IAM::Role",
+    policy: "AWS::IAM::ManagedPolicy",
+    user: "AWS::IAM::User",
+    group: "AWS::IAM::Group",
+    "instance-profile": "AWS::IAM::InstanceProfile",
+  },
+  apigateway: {
+    "/apis": "AWS::ApiGatewayV2::Api",
+    restapis: "AWS::ApiGateway::RestApi",
+  },
+  "execute-api": {
+    "": "AWS::ApiGatewayV2::Api",
+  },
+  elasticloadbalancing: {
+    loadbalancer: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    targetgroup: "AWS::ElasticLoadBalancingV2::TargetGroup",
+  },
+  ecr: {
+    repository: "AWS::ECR::Repository",
+  },
+  cloudwatch: {
+    alarm: "AWS::CloudWatch::Alarm",
+  },
+  ssm: {
+    parameter: "AWS::SSM::Parameter",
+  },
+};
+
 /**
  * Converts an AWS service name and resource component from an ARN
  * into a CloudFormation-style type string.
@@ -77,10 +115,24 @@ export function arnToCloudFormationType(
   service: string,
   resourcePart: string,
 ): string {
+  // Check subtype map first (for services with multiple resource types)
+  const subtypes = SERVICE_SUBTYPE_MAP[service];
+  if (subtypes) {
+    const segments = resourcePart.split(/[:/]/).filter(Boolean);
+    const resourceSeg = segments[0] ?? "";
+    if (resourcePart.startsWith("/")) {
+      const prefixed = "/" + resourceSeg;
+      if (subtypes[prefixed]) return subtypes[prefixed]!;
+    }
+    if (subtypes[resourceSeg]) return subtypes[resourceSeg]!;
+    if (subtypes[""]) return subtypes[""]!;
+  }
+
+  // Simple service→type map
   const mapped = SERVICE_TYPE_MAP[service];
   if (mapped) return mapped;
 
-  // Capitalize service name for a best-effort CloudFormation type
+  // Fallback: construct from service + resource
   const capitalizedService = service.charAt(0).toUpperCase() + service.slice(1);
   const resourceType = resourcePart.split(/[:/]/)[0] ?? "Resource";
   const capitalizedResource =
@@ -133,11 +185,19 @@ function loadProvisionData(): ProvisionLookup {
 
     if (Array.isArray(entries)) {
       for (const entry of entries) {
-        if (entry.resourceArn && entry.estimatedMonthlyCost) {
-          costMap.set(entry.resourceArn, entry.estimatedMonthlyCost);
-        }
-        if (entry.resourceArn && entry.timestamp) {
-          timestampMap.set(entry.resourceArn, entry.timestamp);
+        if (entry.resourceArn) {
+          const key = entry.resourceArn;
+          if (entry.estimatedMonthlyCost) {
+            costMap.set(key, entry.estimatedMonthlyCost);
+            // Also index by resource name suffix for cross-format matching
+            const name = key.split("/").pop() ?? key.split(":").pop() ?? "";
+            if (name) costMap.set(name, entry.estimatedMonthlyCost);
+          }
+          if (entry.timestamp) {
+            timestampMap.set(key, entry.timestamp);
+            const name = key.split("/").pop() ?? key.split(":").pop() ?? "";
+            if (name) timestampMap.set(name, entry.timestamp);
+          }
         }
       }
     }
@@ -196,14 +256,17 @@ export async function fetchManagedResources(
       const parsed = parseArn(arn);
 
       // Use provision log timestamp; fall back to "N/A"
-      const createdDate = timestampMap.get(arn) ?? "N/A";
+      // Try matching by full ARN, then by resource name suffix
+      const arnName = arn.split("/").pop() ?? arn.split(":").pop() ?? "";
+      const createdDate =
+        timestampMap.get(arn) ?? timestampMap.get(arnName) ?? "N/A";
 
       resources.push({
         resourceType: parsed.resourceType,
         arn,
         region: parsed.region || resolvedRegion,
         createdDate,
-        estimatedMonthlyCost: costMap.get(arn) ?? "N/A",
+        estimatedMonthlyCost: costMap.get(arn) ?? costMap.get(arnName) ?? "N/A",
       });
     }
 
