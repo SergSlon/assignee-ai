@@ -192,6 +192,32 @@ function buildFinding(bp: BestPractice): BPFinding {
  * Pure function — no I/O, no side effects, no async.
  * Must complete in <10ms for up to 50 practices.
  *
+/**
+ * Compound patterns may satisfy certain best practices at the pattern level
+ * (e.g., a DLQ is a separate resource in the pattern, not a RedrivePolicy on the queue).
+ * Skip these checks when the pattern guarantees the intent is met.
+ */
+function shouldSkipForPattern(bp: BestPractice, context: EvalContext): boolean {
+  // message-processing pattern includes a dedicated DLQ — skip "needs RedrivePolicy" for SQS queues
+  if (
+    context.patternId === "message-processing" &&
+    bp.id === "BP-SQS-002" // DLQ check
+  ) {
+    return true;
+  }
+
+  // SSE-SQS (SqsManagedSseEnabled) satisfies encryption — skip KMS-specific check
+  if (
+    bp.id === "BP-SQS-003" &&
+    context.desiredState["SqsManagedSseEnabled"] === true
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * @param context - The resource being evaluated (type + desiredState)
  * @param practices - All loaded BestPractice entries
  * @returns Array of BPFinding for practices that failed their checks
@@ -213,6 +239,12 @@ export function evaluateTriggers(
     } else {
       // No triggers array — fall back to matching by resource_type field
       if (bp.resource_type !== context.resourceType) continue;
+    }
+
+    // Compound pattern awareness: skip rules that are satisfied at the pattern level
+    // rather than the individual resource level
+    if (context.patternId && shouldSkipForPattern(bp, context)) {
+      continue;
     }
 
     // Evaluate the check condition against the desiredState
