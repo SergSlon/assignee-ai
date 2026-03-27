@@ -591,6 +591,23 @@ export function registerDestroyResource(server: McpServer): void {
       }
 
       // ── Pre-delete hooks ────────────────────────────────────────────
+      // DynamoDB: disable deletion protection before deleting
+      if (resolved.resourceType === "AWS::DynamoDB::Table") {
+        try {
+          const { DynamoDBClient, UpdateTableCommand } =
+            await import("@aws-sdk/client-dynamodb");
+          const ddb = new DynamoDBClient({ region: resolved.region });
+          await ddb.send(
+            new UpdateTableCommand({
+              TableName: resolved.identifier,
+              DeletionProtectionEnabled: false,
+            }),
+          );
+        } catch {
+          // Non-fatal — table may not have protection enabled
+        }
+      }
+
       // InternetGateway must be detached from VPC before deletion
       if (resolved.resourceType === "AWS::EC2::InternetGateway") {
         try {
