@@ -700,15 +700,8 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       },
     });
 
-    // --set overrides: merge simple fields into desiredState (takes priority over LLM)
-    // Complex CFN structures (objects/arrays) are not overridden — use wizard for those
-    if (state.presetFields) {
-      for (const [key, val] of Object.entries(state.presetFields)) {
-        const existing = desiredState[key];
-        if (typeof existing === "object" && existing !== null) continue;
-        desiredState[key] = val;
-      }
-    }
+    // --set values are now included in elicitedOptions (merged in option-elicitor),
+    // so they flow through applyToCfnTransforms above. No separate merge needed.
 
     return {
       desiredState,
