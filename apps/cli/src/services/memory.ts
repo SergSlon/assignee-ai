@@ -75,11 +75,13 @@ export class MemoryService {
 
   /**
    * Acquire a simple advisory lock file. Returns true if acquired.
+   * Uses O_CREAT|O_EXCL for atomic creation to prevent TOCTOU race conditions.
    * Skips if a lock exists and is less than 10 seconds old.
    */
   private async acquireLock(filePath: string): Promise<boolean> {
     const lockPath = filePath + ".lock";
     try {
+      // Check for stale locks first
       const stat = await fs.stat(lockPath);
       const ageMs = Date.now() - stat.mtimeMs;
       if (ageMs < 10_000) {
@@ -89,10 +91,23 @@ export class MemoryService {
       // Stale lock — remove it
       await fs.unlink(lockPath).catch(() => {});
     } catch {
-      // No lock file — proceed
+      // No lock file — proceed to create
     }
-    await fs.writeFile(lockPath, String(process.pid), "utf-8");
-    return true;
+    // Use O_CREAT|O_EXCL|O_WRONLY for atomic lock creation.
+    // If another process creates the file between stat and open, this will throw EEXIST.
+    try {
+      const { constants } = await import("node:fs");
+      const fh = await fs.open(
+        lockPath,
+        constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+      );
+      await fh.write(String(process.pid));
+      await fh.close();
+      return true;
+    } catch {
+      // EEXIST or other error — another process won the race
+      return false;
+    }
   }
 
   /**

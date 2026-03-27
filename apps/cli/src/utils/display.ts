@@ -98,6 +98,20 @@ const FRIENDLY_NAMES: Record<string, string> = {
 };
 
 /**
+ * Fields whose values must NEVER be displayed in plaintext.
+ * These are masked with asterisks in all user-facing output (plan box, logs).
+ * @see SECURITY-AUDIT.md — SEC-02 Sensitive field exposure
+ */
+const SENSITIVE_FIELDS = new Set([
+  "MasterUserPassword",
+  "SecretString",
+  "Password",
+  "AccessKey",
+  "SecretAccessKey",
+  "SessionToken",
+]);
+
+/**
  * Converts a PascalCase key to a spaced name (fallback for unknown keys).
  * E.g., "IamInstanceProfile" -> "Iam Instance Profile"
  */
@@ -122,6 +136,11 @@ export function formatDesiredState(state: Record<string, unknown>): string {
   for (const [key, value] of entries) {
     const friendlyKey = FRIENDLY_NAMES[key] ?? spacePascalCase(key);
     const padded = friendlyKey.padEnd(maxKeyLen);
+    // Mask sensitive fields — never display passwords/secrets in plaintext
+    if (SENSITIVE_FIELDS.has(key) && value !== undefined && value !== null) {
+      lines.push(`  ${padded}   ********`);
+      continue;
+    }
     const formatted = formatSpecialValue(key, value) ?? formatValue(value);
     lines.push(`  ${padded}   ${formatted}`);
   }
