@@ -38,6 +38,9 @@ import {
   renderTradeoffHelp,
   startSpinner,
   stopSpinner,
+  BACK_SENTINEL,
+  HELP_SENTINEL,
+  OTHER_SENTINEL,
 } from "../utils/display.js";
 import { enrichOptionLabel } from "../utils/option-enrichment.js";
 import {
@@ -735,8 +738,7 @@ async function fetchSuggestionPrice(
   }
 }
 
-/** Sentinel value returned when user chooses "Back" in the wizard. */
-const BACK_SENTINEL = "__back__";
+// Sentinel values (BACK_SENTINEL, HELP_SENTINEL, OTHER_SENTINEL) imported from display.ts above
 
 async function promptWithHelp(
   field: ResourceField,
@@ -770,7 +772,8 @@ async function promptWithHelp(
 
     // Multi fields: when user selects only '?', trigger help
     const isHelpRequest =
-      answer === "?" || (Array.isArray(answer) && answer.includes("?"));
+      answer === HELP_SENTINEL ||
+      (Array.isArray(answer) && answer.includes(HELP_SENTINEL));
 
     if (isHelpRequest) {
       const isEnumOrMulti =
@@ -811,7 +814,7 @@ async function promptWithHelp(
     }
 
     // "Other" — LLM-assisted value input for any enum/categorySelect field
-    if (answer === "__other__") {
+    if (answer === OTHER_SENTINEL) {
       const description = await clack.text({
         message: `${field.question.label} — Describe what you need`,
         placeholder: "e.g., 'GPU for ML training' or enter exact value",
