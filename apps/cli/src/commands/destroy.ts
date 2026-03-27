@@ -230,10 +230,11 @@ export async function destroyAction(
     );
   }
 
-  // Route to SDK fallback for CCAPI gap types
+  // Route to SDK fallback for CCAPI gap types and types with known CloudControl issues
   if (
     resourceType === CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING ||
-    resourceType === CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION
+    resourceType === CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION ||
+    resourceType === "AWS::SNS::Topic"
   ) {
     try {
       const dispatcher = new SDKFallbackDispatcher(awsConfig);
@@ -243,6 +244,10 @@ export async function destroyAction(
         deleteResult = await dispatcher.deleteEventSourceMapping(
           resolved.identifier,
         );
+      } else if (resourceType === "AWS::SNS::Topic") {
+        // SNS Topic delete via CloudControl fails with invalid TopicArn format.
+        // Use native SDK DeleteTopicCommand instead.
+        deleteResult = await dispatcher.deleteTopic(resolved.arn);
       } else {
         deleteResult = await dispatcher.unsubscribe(resolved.arn);
       }

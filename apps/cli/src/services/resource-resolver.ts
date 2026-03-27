@@ -31,6 +31,35 @@ function isArn(input: string): boolean {
 }
 
 /**
+ * Checks if a string is an SQS queue URL.
+ * Format: https://sqs.{region}.amazonaws.com/{account-id}/{queue-name}
+ */
+function isSqsQueueUrl(input: string): boolean {
+  return /^https:\/\/sqs\.[a-z0-9-]+\.amazonaws\.com\/\d+\/[^/]+$/.test(input);
+}
+
+/**
+ * Parses an SQS queue URL into its components.
+ * @param url - SQS queue URL like https://sqs.us-east-1.amazonaws.com/054125018476/my-queue
+ * @returns Parsed components or null if not a valid SQS URL
+ */
+function parseSqsQueueUrl(url: string): {
+  region: string;
+  accountId: string;
+  queueName: string;
+} | null {
+  const match = url.match(
+    /^https:\/\/sqs\.([a-z0-9-]+)\.amazonaws\.com\/(\d+)\/([^/]+)$/,
+  );
+  if (!match) return null;
+  return {
+    region: match[1]!,
+    accountId: match[2]!,
+    queueName: match[3]!,
+  };
+}
+
+/**
  * Extracts the CloudFormation resource type from an ARN.
  * e.g. "arn:aws:s3:::my-bucket" → "AWS::S3::Bucket"
  *
@@ -140,6 +169,48 @@ function extractIdentifierFromArn(arn: string): string {
 }
 
 /**
+ * Returns the correct CloudControl identifier for a given ARN and resource type.
+ *
+ * Most resource types use the extracted name/id from the ARN, but some types
+ * require specific identifier formats:
+ * - AWS::SNS::Topic uses the full TopicArn as identifier
+ * - AWS::SQS::Queue uses the queue URL as identifier
+ * - AWS::ElasticLoadBalancingV2::LoadBalancer uses the full ARN as identifier
+ * - AWS::ECS::Cluster uses the full ARN as identifier
+ */
+function getCloudControlIdentifier(
+  arn: string,
+  resourceType: string | null,
+): string {
+  // SNS Topics: CloudControl identifier is the full TopicArn
+  if (resourceType === "AWS::SNS::Topic") {
+    return arn;
+  }
+
+  // SQS Queues: CloudControl identifier is the queue URL
+  if (resourceType === "AWS::SQS::Queue") {
+    const parts = arn.split(":");
+    const region = parts[3] ?? "";
+    const accountId = parts[4] ?? "";
+    const queueName = parts[5] ?? "";
+    return `https://sqs.${region}.amazonaws.com/${accountId}/${queueName}`;
+  }
+
+  // ELBv2 LoadBalancer: CloudControl identifier is the full ARN
+  if (resourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer") {
+    return arn;
+  }
+
+  // ECS Cluster: CloudControl identifier is the full ARN
+  if (resourceType === "AWS::ECS::Cluster") {
+    return arn;
+  }
+
+  // Default: extract the name/id from the ARN
+  return extractIdentifierFromArn(arn);
+}
+
+/**
  * Extracts the region from an ARN.
  * Returns the provided default if the ARN has no region (e.g. S3, IAM).
  */
@@ -204,6 +275,13 @@ export async function resolveResource(
   if (isArn(input)) {
     return resolveByArn(input, taggingClient, region);
   }
+
+  // SQS queue URLs: the CloudControl identifier for AWS::SQS::Queue IS the queue URL.
+  // Resolve by extracting the queue name and searching managed resources.
+  if (isSqsQueueUrl(input)) {
+    return resolveSqsQueueUrl(input, taggingClient, region);
+  }
+
   return resolveByName(input, taggingClient, region);
 }
 
@@ -235,7 +313,58 @@ async function resolveByArn(
           resourceType: resourceType ?? "Unknown",
           region: extractRegionFromArn(arn, defaultRegion),
           tags: tagsToRecord(mapping),
-          identifier: extractIdentifierFromArn(arn),
+          identifier: getCloudControlIdentifier(arn, resourceType),
+        };
+      }
+    }
+
+    paginationToken = response.PaginationToken;
+  } while (paginationToken);
+
+  return null;
+}
+
+/**
+ * Resolves an SQS queue by its queue URL.
+ * The queue URL IS the CloudControl identifier for AWS::SQS::Queue.
+ * Searches managed resources for a matching SQS queue name, then returns
+ * the resolved resource with the queue URL as the identifier.
+ */
+async function resolveSqsQueueUrl(
+  queueUrl: string,
+  taggingClient: ResourceGroupsTaggingAPIClient,
+  defaultRegion: string,
+): Promise<ResolvedResource | null> {
+  const parsed = parseSqsQueueUrl(queueUrl);
+  if (!parsed) return null;
+
+  // Search managed resources for an SQS queue with a matching name
+  let paginationToken: string | undefined;
+  do {
+    const response = await taggingClient.send(
+      new GetResourcesCommand({
+        TagFilters: [
+          { Key: TAG_KEY_MANAGED_BY, Values: [TAG_VALUE_MANAGED_BY] },
+        ],
+        PaginationToken: paginationToken,
+      }),
+    );
+
+    for (const mapping of response.ResourceTagMappingList ?? []) {
+      const arn = mapping.ResourceARN;
+      if (!arn) continue;
+
+      // Match SQS ARN: arn:aws:sqs:{region}:{account}:{queue-name}
+      if (
+        arn.startsWith("arn:aws:sqs:") &&
+        arn.endsWith(":" + parsed.queueName)
+      ) {
+        return {
+          arn,
+          resourceType: "AWS::SQS::Queue",
+          region: parsed.region || defaultRegion,
+          tags: tagsToRecord(mapping),
+          identifier: queueUrl, // CloudControl identifier for SQS is the queue URL
         };
       }
     }
@@ -269,15 +398,15 @@ async function resolveByName(
       const arn = mapping.ResourceARN;
       if (!arn) continue;
 
-      const identifier = extractIdentifierFromArn(arn);
-      if (identifier === name) {
+      const nameFromArn = extractIdentifierFromArn(arn);
+      if (nameFromArn === name) {
         const resourceType = arnToResourceType(arn);
         return {
           arn,
           resourceType: resourceType ?? "Unknown",
           region: extractRegionFromArn(arn, defaultRegion),
           tags: tagsToRecord(mapping),
-          identifier,
+          identifier: getCloudControlIdentifier(arn, resourceType),
         };
       }
     }
