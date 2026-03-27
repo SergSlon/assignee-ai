@@ -1262,35 +1262,20 @@ export async function optionElicitorNode(
   const resolvedCommon = resolveFieldsWithConfig(commonFields);
   const resolvedAdvanced = resolveFieldsWithConfig(advancedFields);
 
-  // Pre-fill name fields from user intent (e.g., "named poc-smoke-test")
+  // Pre-fill the primary name field from user intent (e.g., "named poc-smoke-test")
   if (state.userIntent) {
     const nameMatch = state.userIntent.match(/\bnamed?\s+([^\s,]+)/i);
     if (nameMatch?.[1]) {
-      const intentName = nameMatch[1];
-      // Find the primary name field for this resource type
-      const NAME_FIELDS = [
-        "BucketName",
-        "TableName",
-        "QueueName",
-        "TopicName",
-        "FunctionName",
-        "RoleName",
-        "ClusterName",
-        "RepositoryName",
-        "Name",
-        "DBInstanceIdentifier",
-        "LogGroupName",
-        "AlarmName",
-      ];
-      for (const nf of NAME_FIELDS) {
-        const key = nf;
-        if (resolvedCommon[key] && !resolvedCommon[key].value) {
+      // The first required commonField is typically the resource name
+      const nameField = commonFields.find((f) => f.required);
+      if (nameField) {
+        const key = fieldFetchKey(nameField);
+        if (resolvedCommon[key] && !resolvedCommon[key]!.value) {
           resolvedCommon[key] = {
-            ...resolvedCommon[key],
-            value: intentName,
-            source: FieldSource.PLUGIN_DEFAULT, // treated as pre-fill, user can override
+            ...resolvedCommon[key]!,
+            value: nameMatch[1],
+            source: FieldSource.PLUGIN_DEFAULT,
           };
-          break;
         }
       }
     }
