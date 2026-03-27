@@ -68,7 +68,7 @@ export async function preflightGuardNode(
   const bpFindings = state.bpFindings ?? [];
   const blockingFindings = bpFindings.filter((f) => f.blocking);
   let bpBlocked = false;
-  if (blockingFindings.length > 0 && !state.noWizard) {
+  if (blockingFindings.length > 0 && !state.noWizard && !state.autoApprove) {
     bpBlocked = true;
     log({
       ts: new Date().toISOString(),
@@ -81,7 +81,10 @@ export async function preflightGuardNode(
         practiceIds: blockingFindings.map((f) => f.practiceId),
       },
     });
-  } else if (blockingFindings.length > 0 && state.noWizard) {
+  } else if (
+    blockingFindings.length > 0 &&
+    (state.noWizard || state.autoApprove)
+  ) {
     log({
       ts: new Date().toISOString(),
       runId: state.runId,

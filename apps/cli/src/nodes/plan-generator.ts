@@ -695,11 +695,13 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       },
     });
 
-    // --set overrides: merge preset fields into desiredState (takes priority over LLM)
+    // --set overrides: merge simple fields into desiredState (takes priority over LLM)
+    // Complex CFN structures (objects/arrays) are not overridden — use wizard for those
     if (state.presetFields) {
       for (const [key, val] of Object.entries(state.presetFields)) {
-        desiredState[key] =
-          val === "true" ? true : val === "false" ? false : val;
+        const existing = desiredState[key];
+        if (typeof existing === "object" && existing !== null) continue;
+        desiredState[key] = val;
       }
     }
 
