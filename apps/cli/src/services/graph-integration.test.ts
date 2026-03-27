@@ -28,6 +28,9 @@ import {
   createMockTool,
   createPricingMockTools,
   createAllMockTools,
+  createS3PricingDispatchTool,
+  createEc2PricingDispatchTool,
+  createRdsPricingDispatchTool,
 } from "../test-fixtures/mcp-mock-responses.js";
 import { ToolName } from "../constants/tools.js";
 
@@ -248,7 +251,10 @@ describe("Graph integration — plan mode", () => {
     });
     mockLlmForPlanFlow("AWS::S3::Bucket", bpCompliantS3);
 
-    const tools = createPricingMockTools(McpMocks.pricing.s3Storage.success);
+    // Use filter-dispatched S3 pricing tool — returns DIFFERENT prices for
+    // storage vs PUT vs GET vs data transfer, catching filter-dispatch bugs
+    const s3PricingTool = createS3PricingDispatchTool();
+    const tools = [s3PricingTool];
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -272,9 +278,8 @@ describe("Graph integration — plan mode", () => {
     // Schema fetcher called CloudFormationSchemaService (not MCP tool)
     expect(mockGetSchema).toHaveBeenCalledWith("AWS::S3::Bucket");
 
-    // Pricing tool called for cost estimation
-    const pricingTool = tools[0]!;
-    expect(pricingTool.invoke).toHaveBeenCalledWith(
+    // Pricing tool called for cost estimation with correct S3 filters
+    expect(s3PricingTool.invoke).toHaveBeenCalledWith(
       expect.objectContaining({ service_code: "AmazonS3" }),
     );
 
@@ -317,7 +322,9 @@ describe("Graph integration — plan mode", () => {
     });
     mockLlmForPlanFlow("AWS::EC2::Instance", bpCompliantEc2);
 
-    const tools = createPricingMockTools(McpMocks.pricing.ec2T3Micro.success);
+    // Use filter-dispatched EC2 pricing tool — returns DIFFERENT prices for
+    // compute vs EBS storage vs data transfer, catching filter-dispatch bugs
+    const tools = [createEc2PricingDispatchTool()];
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -403,9 +410,9 @@ describe("Graph integration — plan mode", () => {
     });
     mockLlmForPlanFlow("AWS::RDS::DBInstance", bpCompliantRds);
 
-    const tools = createPricingMockTools(
-      McpMocks.pricing.rdsT3MicroPostgres.success,
-    );
+    // Use filter-dispatched RDS pricing tool — returns DIFFERENT prices for
+    // compute vs storage vs backup, catching filter-dispatch bugs in decomposer
+    const tools = [createRdsPricingDispatchTool()];
 
     const graph = createGraph(tools);
     const result = await graph.invoke(
@@ -723,7 +730,10 @@ describe("Graph integration — fix_applicator + pricing breakdown", () => {
     });
     mockLlmForPlanFlow("AWS::EC2::Instance", ec2State);
 
-    const tools = createPricingMockTools(McpMocks.pricing.ec2T3Micro.success);
+    // Use filter-dispatched EC2 pricing tool — decomposer issues separate
+    // MCP calls for compute, EBS storage, and data transfer.  A static mock
+    // would return the SAME compute price for all three, masking dispatch bugs.
+    const tools = [createEc2PricingDispatchTool()];
 
     const graph = createGraph(tools);
     const result = await graph.invoke(

@@ -4423,6 +4423,54 @@ export function createS3PricingDispatchTool(): StructuredTool {
   });
 }
 
+/**
+ * Creates an EC2-specific pricing dispatch tool that routes queries by
+ * productFamily filters to the correct EC2 mock response.
+ *
+ * Dispatches:
+ *  - productFamily=Compute Instance + instanceType=t3.micro → ec2T3Micro
+ *  - productFamily=Storage + volumeApiName=gp3              → ebsGp3Storage
+ *  - productFamily=IP Address                               → publicIpv4
+ *  - productFamily=Data Transfer                            → dataTransferOut
+ *  - (anything else)                                        → emptyData
+ */
+export function createEc2PricingDispatchTool(
+  instanceType = "t3.micro",
+  instanceMock = McpMocks.pricing.ec2T3Micro.success,
+): StructuredTool {
+  return createServicePricingDispatchTool({
+    [`productFamily=Compute Instance+instanceType=${instanceType}`]: instanceMock,
+    "productFamily=Storage+volumeApiName=gp3":
+      McpMocks.pricing.ebsGp3Storage.success,
+    "productFamily=IP Address":
+      McpMocks.pricing.publicIpv4.success,
+    "productFamily=Data Transfer":
+      McpMocks.pricing.dataTransferOut.success,
+  });
+}
+
+/**
+ * Creates an RDS-specific pricing dispatch tool that routes queries by
+ * productFamily filters to the correct RDS mock response.
+ *
+ * Dispatches:
+ *  - productFamily=Database Instance → rdsT3MicroPostgres (or custom)
+ *  - productFamily=Database Storage  → rdsStorageGp3
+ *  - productFamily=Storage Snapshot  → rdsBackupStorage
+ *  - (anything else)                 → emptyData
+ */
+export function createRdsPricingDispatchTool(
+  computeMock = McpMocks.pricing.rdsT3MicroPostgres.success,
+): StructuredTool {
+  return createServicePricingDispatchTool({
+    "productFamily=Database Instance": computeMock,
+    "productFamily=Database Storage":
+      McpMocks.pricing.rdsStorageGp3.success,
+    "productFamily=Storage Snapshot":
+      McpMocks.pricing.rdsBackupStorage.success,
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pricing response builder — for generating custom pricing responses
 // ═══════════════════════════════════════════════════════════════════════════════
