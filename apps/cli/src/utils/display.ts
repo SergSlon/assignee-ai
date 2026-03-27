@@ -1124,8 +1124,10 @@ export function renderEmptyStatus(): void {
  * Non-TTY: returns resolved default without prompting (CI-safe).
  * Cancel: returns resolved default as graceful fallback.
  */
-/** Sentinel returned when user selects "< Back" in a wizard prompt. */
+/** Wizard prompt sentinel values — single source of truth. */
 export const BACK_SENTINEL = "__back__" as const;
+export const HELP_SENTINEL = "?" as const;
+export const OTHER_SENTINEL = "__other__" as const;
 
 export async function renderOptionPrompt(
   field: ResourceField,
@@ -1165,7 +1167,7 @@ export async function renderOptionPrompt(
           ...backOption,
           { value: "true", label: "Yes" },
           { value: "false", label: "No" },
-          { value: "?", label: "\u2753 ? \u2014 explain this field" },
+          { value: HELP_SENTINEL, label: "\u2753 ? \u2014 explain this field" },
         ],
         initialValue: boolDefault,
       });
@@ -1178,8 +1180,8 @@ export async function renderOptionPrompt(
           value: o.value,
           label: o.label,
         })),
-        { value: "__other__", label: "Other \u2014 enter manually" },
-        { value: "?", label: "\u2753 ? \u2014 explain this field" },
+        { value: OTHER_SENTINEL, label: "Other \u2014 enter manually" },
+        { value: HELP_SENTINEL, label: "\u2753 ? \u2014 explain this field" },
       ];
       // Use searchable autocomplete for large option lists (>10 items)
       if (enumOptions.length > 12) {
@@ -1210,7 +1212,7 @@ export async function renderOptionPrompt(
         initialValue:
           typeof defaultValue === "string" ? defaultValue : undefined,
         validate: (value) => {
-          if (value === "?") return undefined; // Bypass validation for field help
+          if (value === HELP_SENTINEL) return undefined; // Bypass validation for field help
           if (showBack && value?.toLowerCase() === "back") return undefined;
           return question.validate?.(value);
         },
@@ -1235,12 +1237,15 @@ export async function renderOptionPrompt(
       }
       const multiOptions = [
         ...backOption,
-        { value: "?", label: "\u2753 ? \u2014 explain these options" },
+        {
+          value: HELP_SENTINEL,
+          label: "\u2753 ? \u2014 explain these options",
+        },
         ...question.options.map((o) => ({
           value: o.value,
           label: o.label,
         })),
-        { value: "__other__", label: "Other \u2014 enter manually" },
+        { value: OTHER_SENTINEL, label: "Other \u2014 enter manually" },
       ];
       // Use searchable autocomplete multiselect for large lists
       if (multiOptions.length > 12) {
@@ -1257,8 +1262,8 @@ export async function renderOptionPrompt(
         });
       }
       // If user selected "__other__", prompt for comma-separated custom values
-      if (Array.isArray(result) && result.includes("__other__")) {
-        const otherValues = result.filter((v: string) => v !== "__other__");
+      if (Array.isArray(result) && result.includes(OTHER_SENTINEL)) {
+        const otherValues = result.filter((v: string) => v !== OTHER_SENTINEL);
         const customInput = await clack.text({
           message: `${question.label} \u2014 Enter additional values (comma-separated)`,
           placeholder: "value1, value2",
@@ -1323,7 +1328,10 @@ export async function renderOptionPrompt(
                   value: "__other__",
                   label: "Other \u2014 enter any instance type manually",
                 },
-                { value: "?", label: "\u2753 ? \u2014 explain this field" },
+                {
+                  value: HELP_SENTINEL,
+                  label: "\u2753 ? \u2014 explain this field",
+                },
               ],
               initialValue: categories[0]?.key,
             })) as string | symbol;
@@ -1335,7 +1343,7 @@ export async function renderOptionPrompt(
 
             if (categoryResult === BACK_SENTINEL) return BACK_SENTINEL;
 
-            if (categoryResult === "?") {
+            if (categoryResult === HELP_SENTINEL) {
               const helpLines = categories
                 .map((cat) => `${cat.label}\n  ${cat.description}`)
                 .join("\n\n");
@@ -1344,8 +1352,8 @@ export async function renderOptionPrompt(
             }
 
             // "Other" — return sentinel so promptWithHelp handles LLM-assisted input
-            if (categoryResult === "__other__") {
-              return "__other__";
+            if (categoryResult === OTHER_SENTINEL) {
+              return OTHER_SENTINEL;
             }
 
             selectedCategoryKey = categoryResult as string;
@@ -1384,7 +1392,7 @@ export async function renderOptionPrompt(
             value: "__other__",
             label: "Other \u2014 enter size manually",
           },
-          { value: "?", label: "\u2753 ? \u2014 explain this field" },
+          { value: HELP_SENTINEL, label: "\u2753 ? \u2014 explain this field" },
         ];
 
         // Pre-select the default if it exists in this category, otherwise first option
@@ -1434,7 +1442,7 @@ export async function renderOptionPrompt(
   // The boolean case uses clack.select which returns "true"/"false" strings,
   // but the rest of the app expects actual boolean values.
   if (question.type === "boolean") {
-    if (result === "?") return "?";
+    if (result === HELP_SENTINEL) return HELP_SENTINEL;
     if (result === BACK_SENTINEL) return BACK_SENTINEL;
     return result === "true";
   }
