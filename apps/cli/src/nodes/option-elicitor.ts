@@ -1011,6 +1011,14 @@ export async function optionElicitorNode(
 
   if (state.executionStatus !== ExecutionStatus.PENDING) return {};
 
+  // --set key=value pre-fills: parse into typed values early so all exit paths include them
+  const presetElicited: Record<string, unknown> = {};
+  if (state.presetFields) {
+    for (const [key, val] of Object.entries(state.presetFields)) {
+      presetElicited[key] = val === "true" ? true : val === "false" ? false : val;
+    }
+  }
+
   // Story 11.1: --no-wizard bypasses all interactive prompts, uses plugin defaults.
   // When called from MCP server (noWizard=true), missing required fields are allowed —
   // the plan-generator LLM will extract them from the user intent, and preflight-guard
@@ -1021,7 +1029,7 @@ export async function optionElicitorNode(
       defaultPluginRegistry.get("generic")!;
     try {
       const elicitedOptions = populateDefaultOptions(plugin);
-      return { elicitedOptions };
+      return { elicitedOptions: { ...elicitedOptions, ...presetElicited } };
     } catch (err) {
       if (err instanceof MissingRequiredFieldsError) {
         // Populate only available defaults; let plan-generator handle the rest
@@ -1034,14 +1042,14 @@ export async function optionElicitorNode(
           if (iv !== undefined) partial[field.name] = iv;
           else if (pd !== undefined) partial[field.name] = pd;
         }
-        return { elicitedOptions: partial };
+        return { elicitedOptions: { ...partial, ...presetElicited } };
       }
       throw err;
     }
   }
 
-  // Non-TTY (CI/pipes): skip all prompts
-  if (!process.stdin.isTTY) return { elicitedOptions: {} };
+  // Non-TTY (CI/pipes): skip all prompts but include --set values
+  if (!process.stdin.isTTY) return { elicitedOptions: { ...presetElicited } };
 
   // Stop the outer "Generating plan..." spinner before interactive prompts
   stopSpinner();
