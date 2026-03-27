@@ -271,6 +271,26 @@ export async function destroyAction(
     return;
   }
 
+  // Pre-delete hooks
+  // DynamoDB: disable deletion protection before deleting
+  if (resourceType === "AWS::DynamoDB::Table") {
+    try {
+      const { DynamoDBClient, UpdateTableCommand } =
+        await import("@aws-sdk/client-dynamodb");
+      const ddb = new DynamoDBClient({
+        region: awsConfig.region ?? "us-east-1",
+      });
+      await ddb.send(
+        new UpdateTableCommand({
+          TableName: resolved.identifier,
+          DeletionProtectionEnabled: false,
+        }),
+      );
+    } catch {
+      // Non-fatal — table may not have protection enabled
+    }
+  }
+
   // Default: use CloudControl API
   try {
     const ccClient = createCloudControlClient(awsConfig);
