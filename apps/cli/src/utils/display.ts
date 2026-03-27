@@ -512,14 +512,21 @@ function formatFreeTierNote(note: FreeTierNote | undefined): string | null {
 
 /**
  * Formats memory hints for display in the plan box (Story 19.3).
+ * Separates cost history (provision records) from warnings (failure records).
  * Returns null if no hints are present.
  */
 function formatMemoryHints(hints: string[] | undefined): string | null {
   if (!hints || hints.length === 0) return null;
   const isTTY = process.stdout.isTTY;
-  const lines = hints.map((h) =>
-    isTTY ? chalk.dim(`Cost History:    ${h}`) : `Cost History:    ${h}`,
-  );
+  const lines = hints.map((h) => {
+    // Failure warnings get a different label from cost history
+    const isWarning = h.startsWith("\u26A0");
+    const label = isWarning ? "Warning:         " : "Cost History:    ";
+    const formatted = isWarning ? h.replace(/^\u26A0\uFE0F?\s*/, "") : h;
+    return isTTY
+      ? (isWarning ? chalk.yellow(`${label}${formatted}`) : chalk.dim(`${label}${formatted}`))
+      : `${label}${formatted}`;
+  });
   return lines.join("\n");
 }
 

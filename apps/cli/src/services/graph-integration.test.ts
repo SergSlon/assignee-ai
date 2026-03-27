@@ -547,14 +547,11 @@ describe("Graph integration — plan generator resilience", () => {
     expect(result.desiredState).not.toHaveProperty("NonExistentField");
     // Empty arrays are also stripped by stripEmpty()
     expect(result.desiredState).not.toHaveProperty("Tags");
-    // Minimal S3 state triggers BP CRITICALs (missing encryption, versioning, etc.)
-    expect(result.preflightPassed).toBe(false);
-    expect(result.bpFindings).toBeDefined();
-    expect(
-      result.bpFindings!.some(
-        (f: { severity: string }) => f.severity === "CRITICAL",
-      ),
-    ).toBe(true);
+    // Auto-fix resolves blocking CRITICAL findings (encryption, versioning, lifecycle)
+    // when autoFixBestPractices is enabled in .assignee/config.yaml
+    expect(result.preflightPassed).toBe(true);
+    expect(result.appliedFixes).toBeDefined();
+    expect(result.appliedFixes!.length).toBeGreaterThan(0);
   });
 
   it("unwraps nested CloudFormation Resources format from LLM", async () => {
@@ -576,9 +573,9 @@ describe("Graph integration — plan generator resilience", () => {
     );
 
     // plan_generator should unwrap the nested format
-    expect(result.desiredState).toEqual({ BucketName: "unwrapped-bucket" });
-    // Minimal S3 state triggers BP CRITICALs — this is correct behavior
-    expect(result.preflightPassed).toBe(false);
+    expect(result.desiredState).toHaveProperty("BucketName", "unwrapped-bucket");
+    // Auto-fix resolves blocking CRITICAL findings when autoFixBestPractices is enabled
+    expect(result.preflightPassed).toBe(true);
   });
 
   it("handles LLM returning markdown-fenced JSON", async () => {
@@ -598,9 +595,9 @@ describe("Graph integration — plan generator resilience", () => {
       { configurable: { thread_id: "integration-fenced-json" } },
     );
 
-    expect(result.desiredState).toEqual({ BucketName: "fenced-bucket" });
-    // Minimal S3 state triggers BP CRITICALs — this is correct behavior
-    expect(result.preflightPassed).toBe(false);
+    expect(result.desiredState).toHaveProperty("BucketName", "fenced-bucket");
+    // Auto-fix resolves blocking CRITICAL findings when autoFixBestPractices is enabled
+    expect(result.preflightPassed).toBe(true);
   });
 });
 
@@ -624,8 +621,8 @@ describe("Graph integration — pricing edge cases", () => {
 
     // Pricing fallback to N/A on timeout
     expect(result.estimatedMonthlyCost).toBe("N/A");
-    // Minimal S3 state triggers BP CRITICALs — expected
-    expect(result.preflightPassed).toBe(false);
+    // Auto-fix resolves blocking CRITICAL findings when autoFixBestPractices is enabled
+    expect(result.preflightPassed).toBe(true);
   });
 
   it("no pricing tool available: falls back to N/A", async () => {
@@ -644,7 +641,8 @@ describe("Graph integration — pricing edge cases", () => {
     );
 
     expect(result.estimatedMonthlyCost).toBe("N/A");
-    expect(result.preflightPassed).toBe(false);
+    // Auto-fix resolves blocking CRITICAL findings when autoFixBestPractices is enabled
+    expect(result.preflightPassed).toBe(true);
   });
 
   it("malformed pricing response: preflight still passes", async () => {
@@ -669,8 +667,8 @@ describe("Graph integration — pricing edge cases", () => {
       { configurable: { thread_id: "integration-malformed-pricing" } },
     );
 
-    // Pricing parse failure is caught — cost is N/A. BP CRITICALs fire on minimal S3 state
-    expect(result.preflightPassed).toBe(false);
+    // Auto-fix resolves blocking CRITICAL findings when autoFixBestPractices is enabled
+    expect(result.preflightPassed).toBe(true);
   });
 });
 

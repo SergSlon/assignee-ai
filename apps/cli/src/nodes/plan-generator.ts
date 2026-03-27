@@ -462,7 +462,12 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         const failureIsStale =
           latestSuccess &&
           latestFailure.timestamp.localeCompare(latestSuccess.timestamp) <= 0;
-        if (!failureIsStale) {
+        // Also treat failures older than 24 hours as stale regardless of success history
+        const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+        const failureAge =
+          Date.now() - new Date(latestFailure.timestamp).getTime();
+        const failureIsTooOld = failureAge > TWENTY_FOUR_HOURS_MS;
+        if (!failureIsStale && !failureIsTooOld) {
           const fixSuffix = latestFailure.suggestedFix
             ? ` Fix: ${latestFailure.suggestedFix}`
             : "";

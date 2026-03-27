@@ -153,9 +153,9 @@ export async function resourceProvisionerNode(
       });
       return {
         executionStatus: ExecutionStatus.FAILED,
-        errorMessage: `Stale Plan: Resource already exists (${identifier}). Re-run 'assignee plan' to refresh.`,
+        errorMessage: `Resource already exists (${identifier}). Choose a different name and re-run 'assignee plan'.`,
         error: new ProvisioningError(
-          `Stale Plan: Resource already exists (${identifier})`,
+          `Resource already exists (${identifier}). Choose a different name`,
           "StateMismatch",
         ),
       };

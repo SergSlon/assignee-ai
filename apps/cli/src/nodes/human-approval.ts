@@ -49,6 +49,18 @@ export async function humanApprovalNode(
     );
   }
 
+  // Plan-to-apply flow: user already confirmed in plan.ts, skip second prompt
+  if (state.checkpointResumed) {
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.PLAN_APPROVED,
+      extras: { checkpointResumed: true, source: "plan-to-apply" },
+    });
+    return {};
+  }
+
   let confirmed: boolean;
 
   if (state.resourcePattern && state.resourceQueue) {
@@ -64,7 +76,6 @@ export async function humanApprovalNode(
       state.resourceQueue.length,
     );
   } else {
-    // Single-resource intent: existing behaviour — unchanged
     renderPlanBox(state);
     confirmed = await renderHitlConfirm(state);
   }

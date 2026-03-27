@@ -114,7 +114,7 @@ describe("resourceProvisionerNode", () => {
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(/Stale Plan/);
+      expect(result.errorMessage).toMatch(/already exists/);
       expect(result.errorMessage).toMatch(/poc-smoke-test/);
       expect(mockProvisioner.getResource).toHaveBeenCalledWith(
         "AWS::S3::Bucket",

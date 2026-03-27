@@ -264,7 +264,7 @@ describe("planGeneratorNode — Story 19.3 memory hints", () => {
         region: "us-east-1",
         desiredStateHash: "abc123",
         estimatedMonthlyCost: "$0.50",
-        timestamp: "2026-03-20T10:00:00.000Z",
+        timestamp: new Date().toISOString(),
       },
     ]);
 
@@ -319,7 +319,7 @@ describe("planGeneratorNode — Story 19.3 memory hints", () => {
         region: "us-east-1",
         desiredStateHash: "abc123",
         estimatedMonthlyCost: "$0.50",
-        timestamp: "2026-03-18T10:00:00.000Z",
+        timestamp: new Date(Date.now() - 3600_000).toISOString(),
       },
       {
         runId: "550e8400-e29b-41d4-a716-446655440002",
@@ -328,7 +328,7 @@ describe("planGeneratorNode — Story 19.3 memory hints", () => {
         region: "us-east-1",
         desiredStateHash: "def456",
         estimatedMonthlyCost: "$1.00",
-        timestamp: "2026-03-20T10:00:00.000Z",
+        timestamp: new Date().toISOString(),
       },
     ]);
 
@@ -381,7 +381,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
         errorCode: "AlreadyExists",
         errorMessage: "Bucket already exists",
         suggestedFix: "Try a different name.",
-        timestamp: "2026-03-20T10:00:00.000Z",
+        timestamp: new Date().toISOString(),
       },
     ]);
 
@@ -427,7 +427,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
         errorCode: "AlreadyExists",
         errorMessage: "Old error",
         suggestedFix: "Old fix.",
-        timestamp: "2026-03-18T10:00:00.000Z",
+        timestamp: new Date(Date.now() - 3600_000).toISOString(),
       },
       {
         runId: "550e8400-e29b-41d4-a716-446655440002",
@@ -435,7 +435,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
         errorCode: "Throttled",
         errorMessage: "Recent throttle error",
         suggestedFix: "Wait and retry.",
-        timestamp: "2026-03-20T10:00:00.000Z",
+        timestamp: new Date().toISOString(),
       },
     ]);
 
@@ -461,7 +461,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
         errorCode: "Unknown",
         errorMessage: "Unknown error occurred",
         suggestedFix: "",
-        timestamp: "2026-03-20T10:00:00.000Z",
+        timestamp: new Date().toISOString(),
       },
     ]);
 
@@ -486,7 +486,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
         errorCode: "AlreadyExists",
         errorMessage: "Function already exists",
         suggestedFix: "Try a different name.",
-        timestamp: "2026-03-20T10:00:00.000Z",
+        timestamp: new Date().toISOString(),
       },
     ]);
 
@@ -529,7 +529,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
         region: "us-east-1",
         desiredStateHash: "abc123",
         estimatedMonthlyCost: "$0.50/mo",
-        timestamp: "2026-03-20T12:00:00.000Z",
+        timestamp: new Date().toISOString(),
       },
     ];
     vi.mocked(defaultMemoryService.readFailures).mockResolvedValueOnce([
@@ -539,7 +539,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
         errorCode: "AlreadyExists",
         errorMessage: "Bucket already exists",
         suggestedFix: "Try a different name.",
-        timestamp: "2026-03-18T10:00:00.000Z",
+        timestamp: new Date(Date.now() - 3600_000).toISOString(),
       },
     ]);
     // First call: cost-hint section; second call: failure-check section
@@ -569,7 +569,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
         region: "us-east-1",
         desiredStateHash: "abc123",
         estimatedMonthlyCost: "$0.50/mo",
-        timestamp: "2026-03-20T12:00:00.000Z",
+        timestamp: new Date(Date.now() - 7200_000).toISOString(),
       },
     ];
     vi.mocked(defaultMemoryService.readFailures).mockResolvedValueOnce([
@@ -579,7 +579,7 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
         errorCode: "AlreadyExists",
         errorMessage: "Bucket already exists",
         suggestedFix: "Try a different name.",
-        timestamp: "2026-03-22T10:00:00.000Z",
+        timestamp: new Date().toISOString(),
       },
     ]);
     // First call: cost-hint section; second call: failure-check section

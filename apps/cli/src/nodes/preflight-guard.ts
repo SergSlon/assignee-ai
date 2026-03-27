@@ -369,6 +369,7 @@ async function queryLineItemPrices(
           data,
           item.priceUnit,
           item.scale,
+          item.filters,
         );
 
         if (!priceStr) {
