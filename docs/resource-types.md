@@ -1,6 +1,6 @@
 # Supported Resource Types
 
-assignee.ai supports 22 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
+assignee.ai supports 23 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
 
 ## Resource Type Table
 
@@ -31,6 +31,22 @@ assignee.ai supports 22 AWS resource types via CloudFormation CloudControl API, 
 | 23  | `AWS::SecretsManager::Secret`               | Secrets Manager      | secretsmanager-secret | -             |
 
 A **generic plugin** handles any resource type not covered by a dedicated plugin, using CloudFormation schema defaults.
+
+## Provisioning Notes
+
+### State Guard
+
+Before provisioning, the resource provisioner performs a "state guard" check (Read-Before-Write) via CloudControl to detect if a resource with the same identifier already exists. This prevents accidental overwrites.
+
+**Exception:** The state guard is **skipped for S3 buckets** because bucket names are globally unique across all AWS accounts. Another account may own a bucket with the same name, which would cause a false-positive conflict. The CloudControl `CreateResource` call itself correctly handles name collisions for S3.
+
+### Tags Format
+
+All resource plugins accept tags in `Key:Value` format (comma-separated). Tags are validated at input time -- invalid formats (missing colon separator) are rejected with an error message:
+
+```
+Invalid tag format. Use Key:Value pairs separated by commas (e.g. env:production, team:backend)
+```
 
 ## CCAPI Fallback Types
 

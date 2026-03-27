@@ -105,6 +105,10 @@ import {
   createIamMockTool,
   createSecurityMockTool,
   createBillingMockTool,
+  createS3PricingDispatchTool,
+  createServicePricingDispatchTool,
+  createEc2PricingDispatchTool,
+  createRdsPricingDispatchTool,
   RawSchemasByType,
 } from "../test-fixtures/mcp-mock-responses.js";
 
@@ -121,6 +125,37 @@ const tools = createPricingMockTools(McpMocks.pricing.ec2T3Micro.success);
 const iamTool = createIamMockTool(McpMocks.iam.s3BucketAllowed);
 const secTool = createSecurityMockTool(McpMocks.security.s3BucketPosture);
 const billTool = createBillingMockTool(McpMocks.billing.s3BucketCost);
+
+// Filter-dispatched pricing mocks (return DIFFERENT prices based on the
+// filter string in the pricing query — e.g., storage vs PUT vs GET vs
+// data transfer for S3, or compute vs EBS vs data transfer for EC2)
+import {
+  createS3PricingDispatchTool,
+  createServicePricingDispatchTool,
+} from "../test-fixtures/mcp-mock-responses.js";
+
+const s3PricingTool = createS3PricingDispatchTool();
+const ec2PricingTool = createServicePricingDispatchTool({
+  computePrice: "0.0104",
+  storagePrice: "0.08",
+  dataTransferPrice: "0.09",
+});
+```
+
+### Filter-dispatched pricing mocks
+
+The cost estimator decomposes resource pricing into line items (e.g., S3 storage, PUT requests, GET requests, data transfer). Each line item issues a separate pricing MCP call with a different `filter` parameter. The `createS3PricingDispatchTool()` and `createServicePricingDispatchTool()` factories return mock tools that inspect the filter string and return the correct price for each line item. This catches bugs where the wrong price is applied to the wrong line item.
+
+```typescript
+// S3: dispatches based on filter keywords (storage, PUT, GET, data transfer)
+const tool = createS3PricingDispatchTool();
+
+// Generic services (EC2, RDS, etc.): dispatches based on service-specific filters
+const tool = createServicePricingDispatchTool({
+  computePrice: "0.0104",   // compute/instance hours
+  storagePrice: "0.08",     // EBS/storage
+  dataTransferPrice: "0.09" // data transfer
+});
 ```
 
 **Refreshing fixtures from live servers:**
@@ -241,10 +276,10 @@ assignee plan "Create an S3 bucket named poc-smoke-test"
 - [ ] No AWS resource created (check S3 console — bucket must NOT exist)
 - [ ] Exits with code 0: `echo $?` → `0`
 
-**Structured logs check** (stderr):
+**Structured logs check** (stderr -- requires `--verbose` flag, logs are suppressed by default):
 
 ```bash
-assignee plan "Create an S3 bucket named poc-smoke-test" 2>/tmp/assignee-logs.txt 1>/dev/null; jq . /tmp/assignee-logs.txt
+assignee plan --verbose "Create an S3 bucket named poc-smoke-test" 2>/tmp/assignee-logs.txt 1>/dev/null; jq . /tmp/assignee-logs.txt
 ```
 
 Expected log sequence:

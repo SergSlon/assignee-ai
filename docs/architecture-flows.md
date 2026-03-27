@@ -27,7 +27,7 @@ flowchart TD
         subgraph PHASE1["Phase 1 — Planning"]
             IP["1. INTENT_PARSER<br/>—————<br/>Pattern match OR<br/>Bedrock LLM classify"]
             SF["2. SCHEMA_FETCHER<br/>—————<br/>MCP: cfn-mcp-server<br/>get_resource_schema"]
-            OE["3. OPTION_ELICITOR<br/>—————<br/>Interactive wizard<br/>+ live pricing<br/>+ AWS discovery<br/>+ workload classification<br/>+ option ranking"]
+            OE["3. OPTION_ELICITOR<br/>—————<br/>Interactive wizard<br/>+ live pricing<br/>+ AWS discovery<br/>+ workload classification<br/>+ option ranking<br/>+ --set key=value pre-fills"]
             CD["4. COMPOUND_DISPATCHER<br/>—————<br/>Single vs multi-resource<br/>routing"]
             PG["5. PLAN_GENERATOR<br/>—————<br/>LLM generates CFN JSON<br/>+ toCfn transforms<br/>+ assembleComposites"]
             BP["6. BP_EVALUATOR<br/>—————<br/>YAML best practices<br/>evaluate findings"]
@@ -35,10 +35,10 @@ flowchart TD
             PF["8. PREFLIGHT_GUARD<br/>—————<br/>Cost estimate<br/>+ IAM pre-check<br/>+ blocking BP check"]
         end
 
-        HA["9. HUMAN_APPROVAL<br/>—————<br/>Display plan + cost<br/>User confirms / cancels<br/>⚡ LangGraph INTERRUPT"]
+        HA["9. HUMAN_APPROVAL<br/>—————<br/>Display plan + cost<br/>User confirms / cancels<br/>⚡ LangGraph INTERRUPT<br/>Auto-approve on checkpoint resume<br/>(no double confirm)"]
 
         subgraph PHASE2["Phase 2 — Provisioning"]
-            RP["10. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>OR SDK fallback"]
+            RP["10. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>OR SDK fallback<br/>State guard skipped for S3<br/>(globally unique names)"]
             SP["11. STATUS_POLLER<br/>—————<br/>Poll every 2s<br/>max 60 attempts (5 min)"]
             RF["12. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
         end
