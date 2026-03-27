@@ -17,6 +17,7 @@ import {
   SNSClient,
   SubscribeCommand,
   UnsubscribeCommand,
+  DeleteTopicCommand,
 } from "@aws-sdk/client-sns";
 import {
   CCAPI_FALLBACK_TYPES,
@@ -166,6 +167,26 @@ export class SDKFallbackDispatcher {
     try {
       await this.snsClient.send(
         new UnsubscribeCommand({ SubscriptionArn: subscriptionArn }),
+      );
+      return [null, { success: true }];
+    } catch (err) {
+      return [classifySdkError(err), null];
+    }
+  }
+
+  /**
+   * Deletes an SNS Topic via the SNS SDK.
+   * CloudControl API has known issues with SNS Topic deletion (invalid TopicArn format errors).
+   *
+   * @param topicArn - The topic ARN to delete
+   * @returns Error-first tuple with void result on success
+   */
+  async deleteTopic(
+    topicArn: string,
+  ): Promise<FallbackResult<{ success: true }>> {
+    try {
+      await this.snsClient.send(
+        new DeleteTopicCommand({ TopicArn: topicArn }),
       );
       return [null, { success: true }];
     } catch (err) {
