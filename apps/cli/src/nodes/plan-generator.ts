@@ -293,6 +293,23 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         ...transformedOptions,
       };
 
+      // Inject human-readable resource names for compound patterns
+      // CloudControl generates random names if not specified
+      const shortId = state.runId.slice(0, 8);
+      const resourceId = currentResource.resourceId;
+      const NAME_FIELDS: Record<string, string> = {
+        "AWS::SQS::Queue": "QueueName",
+        "AWS::DynamoDB::Table": "TableName",
+        "AWS::IAM::Role": "RoleName",
+        "AWS::Lambda::Function": "FunctionName",
+        "AWS::S3::Bucket": "BucketName",
+        "AWS::SNS::Topic": "TopicName",
+      };
+      const nameField = NAME_FIELDS[currentResource.resourceType];
+      if (nameField && !desiredState[nameField]) {
+        desiredState[nameField] = `assignee-${resourceId}-${shortId}`;
+      }
+
       // Compound cross-reference: inject ARNs from previously completed resources
       // e.g., Lambda needs the IAM Role ARN from a prior step
       if (state.completedResources && state.completedResources.length > 0) {
