@@ -26,13 +26,15 @@ _assignee() {
         plan)
           _arguments \
             '--output[Output format (json|text)]:format:' \
-            '--no-apply[Skip the apply prompt after plan display]'
+            '--no-apply[Skip the apply prompt after plan display]' \
+            '--set[Pre-set wizard field values (repeatable)]:key=value...:'
           ;;
         apply)
           _arguments \
             '--no-wizard[Skip interactive option prompts, use defaults]' \
             '--yes[Auto-confirm apply without interactive prompt (for CI/CD)]' \
-            '--checkpoint[Use a saved plan checkpoint instead of running Phase 1]:path:'
+            '--checkpoint[Use a saved plan checkpoint instead of running Phase 1]:path:' \
+            '--set[Pre-set wizard field values (repeatable)]:key=value...:'
           ;;
         init)
           _arguments \

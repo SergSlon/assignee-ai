@@ -13,11 +13,13 @@ complete -c assignee -n __fish_use_subcommand -a completions -d 'Output shell co
 # Options for 'plan'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l output -s o -r -d 'Output format (json|text)'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l no-apply -d 'Skip the apply prompt after plan display'
+complete -c assignee -n "__fish_seen_subcommand_from plan" -l set -r -d 'Pre-set wizard field values (repeatable)'
 
 # Options for 'apply'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l no-wizard -d 'Skip interactive option prompts, use defaults'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l yes -s y -d 'Auto-confirm apply without interactive prompt (for CI/CD)'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l checkpoint -s c -r -d 'Use a saved plan checkpoint instead of running Phase 1'
+complete -c assignee -n "__fish_seen_subcommand_from apply" -l set -r -d 'Pre-set wizard field values (repeatable)'
 
 # Options for 'init'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l global -d 'Create global user config (~/.config/assignee/config.yaml) instead of project config'
