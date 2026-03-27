@@ -86,6 +86,9 @@ export const graphAnnotation = Annotation.Root({
   elicitedOptions: Annotation<Record<string, unknown> | undefined>({
     reducer: (_, b) => b,
   }),
+  presetFields: Annotation<Record<string, string> | undefined>({
+    reducer: (_, b) => b,
+  }),
   resourcePattern: Annotation<ArchitecturePattern | undefined>({
     reducer: (_, b) => b,
   }),

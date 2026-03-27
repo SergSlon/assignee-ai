@@ -84,6 +84,12 @@ export const applyCommand = new Command(CommandName.APPLY)
     "-c, --checkpoint <path>",
     "Use a saved plan checkpoint instead of running Phase 1",
   )
+  .option(
+    "--set <key=value...>",
+    "Pre-set wizard field values (repeatable)",
+    (val: string, prev: string[]) => [...prev, val],
+    [] as string[],
+  )
   .addHelpText(
     "after",
     `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee apply "Create an S3 bucket named my-bucket"\n  assignee apply --checkpoint .assignee/checkpoint-abc123.json\n  assignee apply --no-wizard "Create an S3 bucket named logs-prod"\n  assignee apply "Create an EC2 t3.micro instance"\n  assignee apply "Create a Lambda function for image processing"`,
@@ -91,7 +97,12 @@ export const applyCommand = new Command(CommandName.APPLY)
   .action(
     async (
       intent: string | undefined,
-      opts: { wizard?: boolean; yes?: boolean; checkpoint?: string },
+      opts: {
+        wizard?: boolean;
+        yes?: boolean;
+        checkpoint?: string;
+        set?: string[];
+      },
     ) => {
       // ── Resolve checkpoint source ──────────────────────────────────────
       let resolvedCheckpoint: PlanCheckpoint | null = null;
@@ -255,6 +266,18 @@ export const applyCommand = new Command(CommandName.APPLY)
                   ...(opts.yes ? { autoApprove: true } : {}),
                   ...(userConfig ? { userConfig } : {}),
                   ...(orgConfig ? { orgConfig } : {}),
+                  ...(opts.set?.length
+                    ? {
+                        presetFields: Object.fromEntries(
+                          opts.set.map((kv) => {
+                            const eq = kv.indexOf("=");
+                            return eq > 0
+                              ? [kv.slice(0, eq), kv.slice(eq + 1)]
+                              : [kv, "true"];
+                          }),
+                        ),
+                      }
+                    : {}),
                 },
                 config,
               );

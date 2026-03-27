@@ -695,6 +695,14 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       },
     });
 
+    // --set overrides: merge preset fields into desiredState (takes priority over LLM)
+    if (state.presetFields) {
+      for (const [key, val] of Object.entries(state.presetFields)) {
+        desiredState[key] =
+          val === "true" ? true : val === "false" ? false : val;
+      }
+    }
+
     return {
       desiredState,
       ...(memoryHints.length > 0 ? { memoryHints } : {}),

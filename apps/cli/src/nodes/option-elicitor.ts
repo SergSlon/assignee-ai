@@ -1281,6 +1281,29 @@ export async function optionElicitorNode(
     }
   }
 
+  // --set key=value pre-fills: inject into resolved configs as NEVER_ASK
+  if (state.presetFields) {
+    for (const [fieldName, value] of Object.entries(state.presetFields)) {
+      // Check common fields
+      const commonKey = fieldName;
+      if (resolvedCommon[commonKey]) {
+        resolvedCommon[commonKey] = {
+          policy: FieldPolicy.NEVER_ASK,
+          value: value === "true" ? true : value === "false" ? false : value,
+          source: FieldSource.PLUGIN_DEFAULT,
+        };
+      }
+      // Check advanced fields
+      if (resolvedAdvanced[commonKey]) {
+        resolvedAdvanced[commonKey] = {
+          policy: FieldPolicy.NEVER_ASK,
+          value: value === "true" ? true : value === "false" ? false : value,
+          source: FieldSource.PLUGIN_DEFAULT,
+        };
+      }
+    }
+  }
+
   // Story 27.4: Log resolved field sources for diagnostics
   if (state.runId) {
     for (const [fieldName, resolved] of Object.entries(resolvedCommon)) {

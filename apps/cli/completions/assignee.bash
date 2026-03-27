@@ -18,10 +18,10 @@ _assignee_completions() {
   local command="${COMP_WORDS[1]}"
   case "${command}" in
     plan)
-      COMPREPLY=( $(compgen -W "--output --no-apply" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--output --no-apply --set" -- "${cur}") )
       ;;
     apply)
-      COMPREPLY=( $(compgen -W "--no-wizard --yes --checkpoint" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--no-wizard --yes --checkpoint --set" -- "${cur}") )
       ;;
     init)
       COMPREPLY=( $(compgen -W "--global" -- "${cur}") )
