@@ -940,9 +940,11 @@ import type { ManagedResource } from "../services/list-resources.js";
  */
 export function renderResourceTable(resources: ManagedResource[]): void {
   if (process.stdout.isTTY) {
+    // Calculate dynamic column width for ARN based on longest ARN
+    const maxArnLen = Math.max(60, ...resources.map((r) => r.arn.length + 2));
     const header = chalk.bold(
       "Type".padEnd(30) +
-        "ARN".padEnd(60) +
+        "ARN".padEnd(maxArnLen) +
         "Region".padEnd(15) +
         "Created".padEnd(20) +
         "Est. Cost",
@@ -950,13 +952,15 @@ export function renderResourceTable(resources: ManagedResource[]): void {
     const rows = resources.map(
       (r) =>
         r.resourceType.padEnd(30) +
-        r.arn.padEnd(60) +
+        r.arn.padEnd(maxArnLen) +
         r.region.padEnd(15) +
         r.createdDate.padEnd(20) +
         r.estimatedMonthlyCost,
     );
-
-    const content = [header, chalk.dim("-".repeat(130)), ...rows].join("\n");
+    const lineWidth = 30 + maxArnLen + 15 + 20 + 20;
+    const content = [header, chalk.dim("-".repeat(lineWidth)), ...rows].join(
+      "\n",
+    );
 
     process.stdout.write(
       boxen(content, {
