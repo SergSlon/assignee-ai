@@ -158,6 +158,32 @@ function formatSpecialValue(key: string, value: unknown): string | null {
       ? "IMDSv2 required"
       : "IMDSv1 allowed";
   }
+  // ServerSideEncryptionConfiguration → show algorithm
+  if (
+    key === "ServerSideEncryptionConfiguration" &&
+    typeof value === "object" &&
+    value !== null
+  ) {
+    const rules = (value as Record<string, unknown>)["Rules"] as unknown[];
+    if (Array.isArray(rules) && rules.length > 0) {
+      const rule = rules[0] as Record<string, unknown>;
+      const sse = rule?.["ApplyServerSideEncryptionByDefault"] as
+        | Record<string, unknown>
+        | undefined;
+      if (sse?.["SSEAlgorithm"]) return `${sse["SSEAlgorithm"]} enabled`;
+    }
+    return "Enabled";
+  }
+  // CorsConfiguration → show rule count
+  if (
+    key === "CorsConfiguration" &&
+    typeof value === "object" &&
+    value !== null
+  ) {
+    const rules = (value as Record<string, unknown>)["CorsRules"] as unknown[];
+    if (Array.isArray(rules)) return `${rules.length} CORS rule(s)`;
+    return "Configured";
+  }
   return null;
 }
 
@@ -180,14 +206,17 @@ function formatValue(value: unknown): string {
         )
         .join(", ");
     }
-    return value.map(String).join(", ");
+    return value.map((item) => formatValue(item)).join(", ");
   }
   if (typeof value === "object") {
     // Nested objects — show key: value pairs inline
     const obj = value as Record<string, unknown>;
-    return Object.entries(obj)
-      .map(([k, v]) => `${k}: ${formatValue(v)}`)
-      .join(", ");
+    const entries = Object.entries(obj);
+    // For deeply nested configs (e.g., encryption), summarize instead of dumping
+    if (entries.length > 4) {
+      return `${entries.length} properties configured`;
+    }
+    return entries.map(([k, v]) => `${k}: ${formatValue(v)}`).join(", ");
   }
   return String(value);
 }
