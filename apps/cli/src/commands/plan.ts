@@ -51,9 +51,10 @@ export const planCommand = new Command(CommandName.PLAN)
   .action(
     async (
       intent: string | undefined,
-      opts: { apply?: boolean; set?: string[] },
+      opts: { apply?: boolean; set?: string[]; output?: string },
     ) => {
       const noApply = opts.apply === false;
+      const outputFormat = opts.output ?? "text";
       // Parse --set key=value pairs into a pre-fill map
       const presetFields: Record<string, string> = {};
       for (const kv of opts.set ?? []) {
@@ -76,6 +77,7 @@ export const planCommand = new Command(CommandName.PLAN)
         errorPrefix: "Plan generation failed",
         errorHint:
           "Check that AWS credentials are configured and Bedrock is accessible in your region.",
+        silent: outputFormat === "json",
         run: async (ctx) => {
           // Story 7.2: load user config + org policy before graph invocation
           const [userConfig, authToken] = await Promise.all([
@@ -84,7 +86,7 @@ export const planCommand = new Command(CommandName.PLAN)
           ]);
           const orgConfig = await fetchOrgPolicy(authToken);
 
-          startSpinner("Generating plan...");
+          if (outputFormat !== "json") startSpinner("Generating plan...");
 
           const finalState = await ctx.graph.invoke(
             {
@@ -96,11 +98,12 @@ export const planCommand = new Command(CommandName.PLAN)
               ...(userConfig ? { userConfig } : {}),
               ...(orgConfig ? { orgConfig } : {}),
               ...(Object.keys(presetFields).length > 0 ? { presetFields } : {}),
+              ...(outputFormat !== "text" ? { outputFormat } : {}),
             },
             { configurable: { thread_id: ctx.runId }, recursionLimit: 500 },
           );
 
-          stopSpinner();
+          if (outputFormat !== "json") stopSpinner();
 
           const failed =
             finalState.executionStatus === ExecutionStatus.FAILED ||
@@ -149,7 +152,7 @@ export const planCommand = new Command(CommandName.PLAN)
                 action: LOG_ACTIONS.CHECKPOINT_SAVED,
                 extras: { path: filePath },
               });
-              if (process.stdout.isTTY) {
+              if (process.stdout.isTTY && outputFormat !== "json") {
                 process.stdout.write(
                   `\nPlan saved to ${CHECKPOINT_DIR}/checkpoint-${ctx.runId}.json (valid for ${checkpoint.ttl_hours}h)\n`,
                 );
@@ -158,6 +161,11 @@ export const planCommand = new Command(CommandName.PLAN)
           }
 
           if (failed) return { success: false };
+
+          // JSON output — plan data already written by result_formatter; skip interactive prompts
+          if (outputFormat === "json") {
+            return { success: true };
+          }
 
           // ── "Apply now?" prompt (AC: #1, #2, #3) ──────────────────────────
           if (noApply || !process.stdin.isTTY) {

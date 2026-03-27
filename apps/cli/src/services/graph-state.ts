@@ -167,6 +167,11 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
     default: () => undefined,
   }),
+  // CLI output format flag — "json" suppresses interactive rendering in result_formatter
+  outputFormat: Annotation<string | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
 });
 
 export type AgentState = typeof graphAnnotation.State;

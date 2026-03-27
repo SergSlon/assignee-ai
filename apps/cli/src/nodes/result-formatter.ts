@@ -423,7 +423,25 @@ export async function resultFormatterNode(
     default:
       // PENDING = plan mode — render plan preview box
       if (state.executionMode === ExecutionMode.PLAN) {
-        renderPlanBox(state);
+        if (state.outputFormat === "json") {
+          const region =
+            process.env["AWS_REGION"] ??
+            process.env["AWS_DEFAULT_REGION"] ??
+            "us-east-1";
+          const jsonPayload = {
+            resourceType: state.resourceType,
+            region,
+            desiredState: state.desiredState ?? null,
+            estimatedMonthlyCost: state.estimatedMonthlyCost ?? null,
+            pricingBreakdown: state.pricingBreakdown ?? null,
+            bpFindings: state.bpFindings ?? [],
+            appliedFixes: state.appliedFixes ?? [],
+            freeTierNote: state.freeTierNote ?? null,
+          };
+          process.stdout.write(JSON.stringify(jsonPayload, null, 2) + "\n");
+        } else {
+          renderPlanBox(state);
+        }
       }
       break;
   }
