@@ -72,6 +72,7 @@ export const planCommand = new Command(CommandName.PLAN)
 
       await runCommand({
         intent,
+        commandName: "plan",
         startAction: LOG_ACTIONS.PLAN_STARTED,
         endAction: LOG_ACTIONS.PLAN_COMPLETE,
         errorPrefix: "Plan generation failed",

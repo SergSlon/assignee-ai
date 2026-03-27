@@ -8,6 +8,7 @@ import {
 } from "../config/mcp-servers.js";
 import { McpError } from "@assignee/core";
 import { ToolName } from "../constants/tools.js";
+import type { McpServerNameType } from "../constants/mcp.js";
 import type { StructuredTool } from "@langchain/core/tools";
 
 let client: MultiServerMCPClient | null = null;
@@ -15,16 +16,34 @@ let optionalClient: MultiServerMCPClient | null = null;
 let optionalInitPromise: Promise<void> | null = null;
 
 /**
- * Creates and initializes a MultiServerMCPClient connecting to all configured MCP servers.
+ * Creates and initializes a MultiServerMCPClient connecting to configured MCP servers.
  * Acts as a singleton: subsequent calls return the already-initialized client.
  * Server connection is deferred until this factory is called.
  *
- * @returns {Promise<MultiServerMCPClient>} An initialized client with connections to all MCP servers.
+ * @param requiredServers - When provided, only start servers whose names are in this list.
+ *   Pass an empty array to skip all servers. Pass null/undefined to start all (legacy behavior).
+ *   Unknown commands should pass null to get the safe fallback of starting all servers.
+ * @returns {Promise<MultiServerMCPClient>} An initialized client with connections to MCP servers.
+ * @see Story 29.3 — MCP Server Lazy Loading
  */
-export async function createMcpClient(): Promise<MultiServerMCPClient> {
+export async function createMcpClient(
+  requiredServers?: McpServerNameType[] | null,
+): Promise<MultiServerMCPClient> {
   if (client) return client;
 
-  const serverConfigs = getMcpServerConfigs();
+  const allServerConfigs = getMcpServerConfigs();
+
+  // Story 29.3: Filter server configs to only those required by the current command.
+  // null/undefined = start all (safe fallback for unknown commands).
+  const serverConfigs =
+    requiredServers != null
+      ? Object.fromEntries(
+          Object.entries(allServerConfigs).filter(([name]) =>
+            requiredServers.includes(name as McpServerNameType),
+          ),
+        )
+      : allServerConfigs;
+
   const clientConfig: ClientConfig = {
     mcpServers: Object.fromEntries(
       Object.entries(serverConfigs).map(([name, config]) => [
@@ -90,7 +109,16 @@ export async function createMcpClient(): Promise<MultiServerMCPClient> {
   // Story 9.14: Initialize optional intelligence servers IN PARALLEL with core.
   // These use ASSIGNEE_AUDITOR_* or ASSIGNEE_READER_* credentials.
   // Spawned as a separate client so failures don't crash the core servers.
-  const optionalConfigs = getOptionalMcpServerConfigs();
+  // Story 29.3: Filter optional configs by requiredServers when provided.
+  const allOptionalConfigs = getOptionalMcpServerConfigs();
+  const optionalConfigs =
+    requiredServers != null
+      ? Object.fromEntries(
+          Object.entries(allOptionalConfigs).filter(([name]) =>
+            requiredServers.includes(name as McpServerNameType),
+          ),
+        )
+      : allOptionalConfigs;
   if (Object.keys(optionalConfigs).length > 0) {
     const optionalClientConfig: ClientConfig = {
       mcpServers: Object.fromEntries(

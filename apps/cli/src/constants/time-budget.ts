@@ -25,14 +25,22 @@ export interface BudgetCheckResult {
   message: string;
 }
 
+/* Individual budget constants (ms) for direct import. */
+export const CLI_PARSE_MS = 50;
+export const CREDENTIAL_CHECK_MS = 200;
+export const MCP_STARTUP_PER_SERVER_MS = 1000;
+export const MCP_STARTUP_TOTAL_MS = 3000;
+export const FIRST_LLM_CALL_MS = 5000;
+export const TOTAL_COLD_START_MS = 10000;
+
 /** Per-phase startup time budgets. */
 export const STARTUP_BUDGETS = {
-  CLI_PARSE: { label: "CLI parse", budgetMs: 50 },
-  CREDENTIAL_CHECK: { label: "Credential check", budgetMs: 200 },
-  MCP_PER_SERVER: { label: "MCP startup (server)", budgetMs: 1000 },
-  MCP_TOTAL_PLAN: { label: "MCP startup (plan)", budgetMs: 3000 },
-  LLM_FIRST_CALL: { label: "First LLM call", budgetMs: 5000 },
-  TOTAL_COLD_START: { label: "Total cold start", budgetMs: 10000 },
+  CLI_PARSE: { label: "CLI parse", budgetMs: CLI_PARSE_MS },
+  CREDENTIAL_CHECK: { label: "Credential check", budgetMs: CREDENTIAL_CHECK_MS },
+  MCP_PER_SERVER: { label: "MCP startup (server)", budgetMs: MCP_STARTUP_PER_SERVER_MS },
+  MCP_TOTAL_PLAN: { label: "MCP startup (plan)", budgetMs: MCP_STARTUP_TOTAL_MS },
+  LLM_FIRST_CALL: { label: "First LLM call", budgetMs: FIRST_LLM_CALL_MS },
+  TOTAL_COLD_START: { label: "Total cold start", budgetMs: TOTAL_COLD_START_MS },
 } as const;
 
 /** All budgets as an iterable array. */

@@ -10,6 +10,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { STARTUP_BUDGETS, checkBudget } from "../constants/time-budget.js";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -111,6 +112,36 @@ export async function withTiming<T>(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Budget comparison                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Map of timing labels to their corresponding budget entry. */
+const LABEL_TO_BUDGET: Record<string, { label: string; budgetMs: number }> = {
+  "cli-parse": STARTUP_BUDGETS.CLI_PARSE,
+  "credential-check": STARTUP_BUDGETS.CREDENTIAL_CHECK,
+  "mcp-startup": STARTUP_BUDGETS.MCP_TOTAL_PLAN,
+  "first-llm-call": STARTUP_BUDGETS.LLM_FIRST_CALL,
+  total: STARTUP_BUDGETS.TOTAL_COLD_START,
+};
+
+/**
+ * Check completed timings against budgets and emit warnings to stderr
+ * for any phase that exceeds its budget. Called automatically after
+ * persisting timings.
+ */
+export function checkTimingsAgainstBudgets(): void {
+  for (const [timerLabel, budget] of Object.entries(LABEL_TO_BUDGET)) {
+    const actualMs = completed.get(timerLabel);
+    if (actualMs === undefined) continue;
+
+    const result = checkBudget(budget.label, actualMs, budget.budgetMs);
+    if (!result.passed) {
+      process.stderr.write(`[assignee] WARNING: ${result.message}\n`);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Persistence                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -177,6 +208,9 @@ export function persistTimings(runId: string, homeDir?: string): void {
   } catch {
     // Best-effort — don't crash the CLI for telemetry issues
   }
+
+  // After persisting, check if any phase exceeded its budget
+  checkTimingsAgainstBudgets();
 }
 
 /**

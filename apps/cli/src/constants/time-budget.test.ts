@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
+  CLI_PARSE_MS,
+  CREDENTIAL_CHECK_MS,
+  MCP_STARTUP_PER_SERVER_MS,
+  MCP_STARTUP_TOTAL_MS,
+  FIRST_LLM_CALL_MS,
+  TOTAL_COLD_START_MS,
   STARTUP_BUDGETS,
   ALL_BUDGETS,
   checkBudget,
@@ -7,6 +13,32 @@ import {
 } from "./time-budget.js";
 
 describe("time-budget", () => {
+  describe("individual budget constants", () => {
+    it("exports CLI_PARSE_MS = 50", () => {
+      expect(CLI_PARSE_MS).toBe(50);
+    });
+
+    it("exports CREDENTIAL_CHECK_MS = 200", () => {
+      expect(CREDENTIAL_CHECK_MS).toBe(200);
+    });
+
+    it("exports MCP_STARTUP_PER_SERVER_MS = 1000", () => {
+      expect(MCP_STARTUP_PER_SERVER_MS).toBe(1000);
+    });
+
+    it("exports MCP_STARTUP_TOTAL_MS = 3000", () => {
+      expect(MCP_STARTUP_TOTAL_MS).toBe(3000);
+    });
+
+    it("exports FIRST_LLM_CALL_MS = 5000", () => {
+      expect(FIRST_LLM_CALL_MS).toBe(5000);
+    });
+
+    it("exports TOTAL_COLD_START_MS = 10000", () => {
+      expect(TOTAL_COLD_START_MS).toBe(10000);
+    });
+  });
+
   describe("STARTUP_BUDGETS constants", () => {
     it("defines CLI_PARSE budget at 50ms", () => {
       expect(STARTUP_BUDGETS.CLI_PARSE.budgetMs).toBe(50);

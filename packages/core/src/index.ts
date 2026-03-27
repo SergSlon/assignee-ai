@@ -86,6 +86,7 @@ export { PlanSchema, type Plan } from "./types/plan.js";
 export {
   defaultPluginRegistry,
   PluginRegistry,
+  collectCompanionResources,
 } from "./resource-plugins/index.js";
 
 // Pattern Templates (Story 8.1)
@@ -106,7 +107,12 @@ export type {
   QuestionType,
   ShowIfCondition,
   OptionMetadata,
+  CfnOutput,
 } from "./resource-plugins/types.js";
+export type {
+  CollectCompanionOptions,
+  PlannedResource,
+} from "./resource-plugins/companion-resources.js";
 
 // Resource Policy (config types for option elicitation — full loader in Story 7.2)
 export type {

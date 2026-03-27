@@ -1,6 +1,7 @@
 /**
  * Unit tests for mcp-client.ts
  * Story 9.9 — T7.12-T7.15: mcp-client.ts unit tests with mocked MCP servers
+ * Story 29.3 — MCP Server Lazy Loading: requiredServers filter
  * Story 31.4 — Removed cfn-mcp-server (IAC); core servers now 3 (Pricing, Knowledge, Docs)
  */
 
@@ -133,6 +134,123 @@ describe("createMcpClient", () => {
 
     const errorCall = stderrWriteSpy.mock.calls[0]?.[0] as string;
     expect(errorCall).toContain("unknown MCP server");
+  });
+});
+
+describe("createMcpClient — lazy loading (Story 29.3)", () => {
+  /** Fresh import with multiple core servers to test filtering */
+  async function freshImportMultiServer() {
+    vi.resetModules();
+    vi.doMock("@langchain/mcp-adapters", () => ({
+      MultiServerMCPClient: MockMultiServerMCPClient,
+    }));
+    vi.doMock("../config/mcp-servers.js", () => ({
+      getMcpServerConfigs: vi.fn(() => ({
+        "aws-pricing-mcp-server": {
+          command: "uvx",
+          args: ["awslabs.aws-pricing-mcp-server@latest"],
+          env: {},
+        },
+        "aws-documentation-mcp-server": {
+          command: "uvx",
+          args: ["awslabs.aws-documentation-mcp-server@latest"],
+        },
+      })),
+      getOptionalMcpServerConfigs: vi.fn(() => ({
+        "aws-knowledge-mcp-server": {
+          command: "uvx",
+          args: ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"],
+        },
+        "iam-mcp-server": {
+          command: "uvx",
+          args: ["awslabs.iam-mcp-server@latest", "--readonly"],
+          env: {},
+        },
+      })),
+    }));
+    return import("./mcp-client.js");
+  }
+
+  it("null requiredServers starts all core and optional servers", async () => {
+    mockInitializeConnections.mockResolvedValue(undefined);
+    const { createMcpClient } = await freshImportMultiServer();
+
+    await createMcpClient(null);
+
+    // Core client created with all servers
+    const coreConfig = MockMultiServerMCPClient.mock.calls[0]?.[0];
+    expect(Object.keys(coreConfig.mcpServers)).toEqual([
+      "aws-pricing-mcp-server",
+      "aws-documentation-mcp-server",
+    ]);
+    // Optional client created (2nd call) with all optional servers
+    expect(MockMultiServerMCPClient).toHaveBeenCalledTimes(2);
+    const optionalConfig = MockMultiServerMCPClient.mock.calls[1]?.[0];
+    expect(Object.keys(optionalConfig.mcpServers)).toEqual([
+      "aws-knowledge-mcp-server",
+      "iam-mcp-server",
+    ]);
+  });
+
+  it("undefined requiredServers starts all servers (legacy behavior)", async () => {
+    mockInitializeConnections.mockResolvedValue(undefined);
+    const { createMcpClient } = await freshImportMultiServer();
+
+    await createMcpClient();
+
+    const coreConfig = MockMultiServerMCPClient.mock.calls[0]?.[0];
+    expect(Object.keys(coreConfig.mcpServers)).toEqual([
+      "aws-pricing-mcp-server",
+      "aws-documentation-mcp-server",
+    ]);
+  });
+
+  it("requiredServers filters core servers to only requested ones", async () => {
+    mockInitializeConnections.mockResolvedValue(undefined);
+    const { createMcpClient } = await freshImportMultiServer();
+
+    await createMcpClient(["aws-pricing-mcp-server"] as any);
+
+    const coreConfig = MockMultiServerMCPClient.mock.calls[0]?.[0];
+    expect(Object.keys(coreConfig.mcpServers)).toEqual([
+      "aws-pricing-mcp-server",
+    ]);
+  });
+
+  it("requiredServers filters optional servers too", async () => {
+    mockInitializeConnections.mockResolvedValue(undefined);
+    const { createMcpClient } = await freshImportMultiServer();
+
+    // Request only pricing (core) + iam (optional)
+    await createMcpClient([
+      "aws-pricing-mcp-server",
+      "iam-mcp-server",
+    ] as any);
+
+    // Core: only pricing
+    const coreConfig = MockMultiServerMCPClient.mock.calls[0]?.[0];
+    expect(Object.keys(coreConfig.mcpServers)).toEqual([
+      "aws-pricing-mcp-server",
+    ]);
+    // Optional: only iam
+    expect(MockMultiServerMCPClient).toHaveBeenCalledTimes(2);
+    const optionalConfig = MockMultiServerMCPClient.mock.calls[1]?.[0];
+    expect(Object.keys(optionalConfig.mcpServers)).toEqual([
+      "iam-mcp-server",
+    ]);
+  });
+
+  it("empty requiredServers array starts zero optional servers", async () => {
+    mockInitializeConnections.mockResolvedValue(undefined);
+    const { createMcpClient } = await freshImportMultiServer();
+
+    await createMcpClient([]);
+
+    // Core client still created (with empty mcpServers)
+    const coreConfig = MockMultiServerMCPClient.mock.calls[0]?.[0];
+    expect(Object.keys(coreConfig.mcpServers)).toEqual([]);
+    // No optional client created since no optional servers matched
+    expect(MockMultiServerMCPClient).toHaveBeenCalledTimes(1);
   });
 });
 

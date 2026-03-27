@@ -97,4 +97,12 @@ export type {
   FetcherContext,
   QuestionType,
   ShowIfCondition,
+  CfnOutput,
 } from "./types.js";
+
+// Story 25.6: LogGroup co-provisioning
+export {
+  collectCompanionResources,
+  type CollectCompanionOptions,
+  type PlannedResource,
+} from "./companion-resources.js";
