@@ -18,8 +18,41 @@ import type { AgentState } from "./graph-state.js";
 import { CHECKPOINT_DEFAULT_TTL_HOURS } from "../config/constants.js";
 
 /**
+ * Fields that must be redacted before writing to disk.
+ * These may contain passwords, secrets, or tokens that should never persist in checkpoint files.
+ * @see SECURITY-AUDIT.md — SEC-02
+ */
+const SENSITIVE_STATE_KEYS = new Set([
+  "MasterUserPassword",
+  "SecretString",
+  "Password",
+  "AccessKey",
+  "SecretAccessKey",
+  "SessionToken",
+]);
+
+/**
+ * Shallow-redact sensitive keys from a desiredState record.
+ * Returns a new object with sensitive values replaced by "[REDACTED]".
+ */
+function redactSensitiveFields(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(state)) {
+    if (SENSITIVE_STATE_KEYS.has(key)) {
+      result[key] = "[REDACTED]";
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
  * Extracts serializable fields from GraphState into a PlanCheckpoint.
  * Excludes: messages, resourceSchema, resourcePattern (non-serializable).
+ * Redacts sensitive fields (MasterUserPassword, SecretString) from desiredState.
  */
 export function serializeCheckpoint(state: AgentState): PlanCheckpoint {
   return {
@@ -38,7 +71,7 @@ export function serializeCheckpoint(state: AgentState): PlanCheckpoint {
           desiredState: {},
         }))
       : undefined,
-    desiredState: state.desiredState ?? {},
+    desiredState: redactSensitiveFields(state.desiredState ?? {}),
     estimatedMonthlyCost: state.estimatedMonthlyCost ?? "N/A",
     preflightPassed: state.preflightPassed,
     elicitedOptions: state.elicitedOptions,

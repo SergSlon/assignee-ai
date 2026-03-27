@@ -62,6 +62,54 @@ export interface RecordingManifest {
   files: string[];
 }
 
+// ── Sensitive data redaction ──────────────────────────────────────────────────
+
+/**
+ * Keys whose values must be redacted from recorded fixtures.
+ * Prevents accidental credential leakage in test recordings.
+ * @see SECURITY-AUDIT.md — SEC-03
+ */
+const REDACTED_KEYS = new Set([
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
+  "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+  "ASSIGNEE_READER_ACCESS_KEY_ID",
+  "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+  "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
+  "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+  "MasterUserPassword",
+  "SecretString",
+  "Password",
+  "accessToken",
+  "secretAccessKey",
+  "sessionToken",
+]);
+
+/**
+ * Recursively redact sensitive keys from an object before writing to disk.
+ * Returns a new object (does not mutate the original).
+ */
+function redactSensitive(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.map(redactSensitive);
+  if (typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (REDACTED_KEYS.has(k) && typeof v === "string") {
+        result[k] = "[REDACTED]";
+      } else {
+        result[k] = redactSensitive(v);
+      }
+    }
+    return result;
+  }
+  return value;
+}
+
 // ── Env check ────────────────────────────────────────────────────────────────
 
 /**
@@ -135,13 +183,16 @@ export class RecordingInterceptor {
   /**
    * Records a single call to a JSON file. Fire-and-forget — errors are swallowed
    * to never impact CLI behavior.
+   * Sensitive fields (credentials, passwords, tokens) are redacted before writing.
    */
   recordCall(call: RecordedCall): void {
     try {
       this.ensureDir();
       const filename = this.makeFilename(call);
       const filePath = path.join(this.dir, filename);
-      fs.writeFileSync(filePath, JSON.stringify(call, null, 2) + "\n");
+      // Redact sensitive data before writing to disk
+      const sanitized = redactSensitive(call);
+      fs.writeFileSync(filePath, JSON.stringify(sanitized, null, 2) + "\n");
       this.files.push(filename);
     } catch {
       // Recording is best-effort — never fail the CLI

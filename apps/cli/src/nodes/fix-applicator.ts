@@ -54,6 +54,10 @@ function deepMergePatch(
   const result = { ...target };
 
   for (const [key, patchValue] of Object.entries(patch)) {
+    // Prototype pollution guard: reject __proto__, constructor, prototype keys
+    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      continue;
+    }
     const targetValue = result[key];
 
     if (Array.isArray(patchValue) && Array.isArray(targetValue)) {
