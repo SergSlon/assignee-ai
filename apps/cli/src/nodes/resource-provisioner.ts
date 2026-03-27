@@ -132,10 +132,17 @@ export async function resourceProvisionerNode(
       errorMessage: `Cannot provision: unsupported or missing resourceType "${state.resourceType ?? ""}".`,
     };
   }
-  const identifier = getPrimaryIdentifier(
-    state.resourceType,
-    state.desiredState,
-  );
+
+  // S3 bucket names are globally unique across ALL AWS accounts. CloudControl
+  // GetResource may return success for a bucket owned by a *different* account
+  // (the name is reserved globally), causing a false "already exists" block.
+  // Skip the state guard for S3 — the CreateResource call itself will correctly
+  // return ALREADY_EXISTS if the name is genuinely taken.
+  const skipStateGuard = state.resourceType === "AWS::S3::Bucket";
+
+  const identifier = skipStateGuard
+    ? undefined
+    : getPrimaryIdentifier(state.resourceType, state.desiredState);
 
   if (identifier) {
     const [stateGuardErr] = await provisioner.getResource(

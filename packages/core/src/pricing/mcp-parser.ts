@@ -26,25 +26,28 @@ function itemMatchesFilters(
   item: { product?: ProductInfo },
   filters: McpPricingFilter[],
 ): boolean {
-  if (!item.product) return false; // No product metadata — cannot validate, skip to fallback pass
+  if (!item.product) return false; // No product metadata — cannot validate
   const product = item.product;
   for (const filter of filters) {
     const field = filter.Field;
     const expected = filter.Value;
-    // Check productFamily directly
+    // Check productFamily directly (top-level, always present in MCP responses)
     if (field === "productFamily") {
       if (!product.productFamily || product.productFamily !== expected) {
         return false;
       }
       continue;
     }
-    // Check in attributes (case-insensitive key lookup)
-    if (!product.attributes) return false;
-    const attrKey = Object.keys(product.attributes).find(
-      (k) => k.toLowerCase() === field.toLowerCase(),
-    );
-    if (!attrKey || product.attributes[attrKey] !== expected) {
-      return false;
+    // Check in attributes — only reject if the key IS present but has wrong value.
+    // Missing attributes or missing key = cannot validate, let it pass.
+    // This handles MCP responses that include productFamily but sparse attributes.
+    if (product.attributes) {
+      const attrKey = Object.keys(product.attributes).find(
+        (k) => k.toLowerCase() === field.toLowerCase(),
+      );
+      if (attrKey && product.attributes[attrKey] !== expected) {
+        return false;
+      }
     }
   }
   return true;
@@ -58,12 +61,18 @@ export function extractFirstTierPrice(
 ): string | null {
   const items = data.data ?? [];
 
-  // When expectedFilters are provided, ONLY consider items that match.
-  // Do NOT fall back to unfiltered items — returning the wrong price
-  // (e.g. storage $0.023 for a PUT request query) is worse than "unavailable".
-  const passes = expectedFilters
-    ? [items.filter((item) => itemMatchesFilters(item, expectedFilters))]
-    : [items];
+  // When expectedFilters are provided, prefer items that match.
+  // Fallback: if only 1 item returned AND it has no product metadata (can't validate),
+  // trust it — the MCP already filtered server-side.
+  // If the single item HAS metadata that doesn't match, reject it.
+  const filtered = expectedFilters
+    ? items.filter((item) => itemMatchesFilters(item, expectedFilters))
+    : items;
+  const singleItemNoMetadata =
+    expectedFilters && filtered.length === 0 && items.length === 1 && !items[0]?.product;
+  const passes = singleItemNoMetadata
+    ? [items]  // Single-item, no metadata: MCP filtered server-side, trust it
+    : [filtered];
 
   for (const candidates of passes) {
     for (const item of candidates) {

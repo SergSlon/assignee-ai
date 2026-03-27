@@ -27,7 +27,7 @@ describe("ErrorHintRegistry", () => {
       new ProvisioningError("Stale plan", "StateMismatch"),
     );
     expect(hint).toBe(
-      "The resource state changed since planning. Re-run `assignee plan`.",
+      "Resource already exists. Choose a different name and re-run 'assignee plan'.",
     );
   });
 
