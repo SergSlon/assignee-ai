@@ -940,24 +940,49 @@ import type { ManagedResource } from "../services/list-resources.js";
  */
 export function renderResourceTable(resources: ManagedResource[]): void {
   if (process.stdout.isTTY) {
-    // Calculate dynamic column width for ARN based on longest ARN
-    const maxArnLen = Math.max(60, ...resources.map((r) => r.arn.length + 2));
+    // Dynamic column widths based on data
+    const col = (label: string, values: string[], min: number) =>
+      Math.max(min, label.length + 2, ...values.map((v) => v.length + 2));
+    const cType = col(
+      "Type",
+      resources.map((r) => r.resourceType),
+      25,
+    );
+    const cArn = col(
+      "ARN",
+      resources.map((r) => r.arn),
+      40,
+    );
+    const cRegion = col(
+      "Region",
+      resources.map((r) => r.region),
+      12,
+    );
+    const cDate = col(
+      "Created",
+      resources.map((r) =>
+        r.createdDate === "N/A" ? "N/A" : r.createdDate.slice(0, 10),
+      ),
+      10,
+    );
+    // Shorten ISO dates to YYYY-MM-DD for display
+    const fmtDate = (d: string) => (d === "N/A" ? "N/A" : d.slice(0, 10));
     const header = chalk.bold(
-      "Type".padEnd(30) +
-        "ARN".padEnd(maxArnLen) +
-        "Region".padEnd(15) +
-        "Created".padEnd(20) +
+      "Type".padEnd(cType) +
+        "ARN".padEnd(cArn) +
+        "Region".padEnd(cRegion) +
+        "Created".padEnd(cDate) +
         "Est. Cost",
     );
     const rows = resources.map(
       (r) =>
-        r.resourceType.padEnd(30) +
-        r.arn.padEnd(maxArnLen) +
-        r.region.padEnd(15) +
-        r.createdDate.padEnd(20) +
+        r.resourceType.padEnd(cType) +
+        r.arn.padEnd(cArn) +
+        r.region.padEnd(cRegion) +
+        fmtDate(r.createdDate).padEnd(cDate) +
         r.estimatedMonthlyCost,
     );
-    const lineWidth = 30 + maxArnLen + 15 + 20 + 20;
+    const lineWidth = cType + cArn + cRegion + cDate + 20;
     const content = [header, chalk.dim("-".repeat(lineWidth)), ...rows].join(
       "\n",
     );
