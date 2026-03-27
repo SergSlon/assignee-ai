@@ -159,20 +159,36 @@ function formatSpecialValue(key: string, value: unknown): string | null {
       : "IMDSv1 allowed";
   }
   // ServerSideEncryptionConfiguration → show algorithm
+  // S3 encryption — handle both BucketEncryption and ServerSideEncryptionConfiguration
   if (
-    key === "ServerSideEncryptionConfiguration" &&
+    (key === "ServerSideEncryptionConfiguration" ||
+      key === "BucketEncryption") &&
+    typeof value === "object" &&
+    value !== null
+  ) {
+    // Walk nested structure to find SSEAlgorithm
+    const json = JSON.stringify(value);
+    if (json.includes("aws:kms")) return "SSE-KMS enabled";
+    if (json.includes("AES256")) return "AES-256 (SSE-S3) enabled";
+    return "Encryption enabled";
+  }
+  // LifecycleConfiguration → summarize rules
+  if (
+    key === "LifecycleConfiguration" &&
     typeof value === "object" &&
     value !== null
   ) {
     const rules = (value as Record<string, unknown>)["Rules"] as unknown[];
     if (Array.isArray(rules) && rules.length > 0) {
       const rule = rules[0] as Record<string, unknown>;
-      const sse = rule?.["ApplyServerSideEncryptionByDefault"] as
-        | Record<string, unknown>
-        | undefined;
-      if (sse?.["SSEAlgorithm"]) return `${sse["SSEAlgorithm"]} enabled`;
+      const parts: string[] = [];
+      if (rule["TransitionInDays"] || rule["Transitions"])
+        parts.push("transition");
+      if (rule["ExpirationInDays"])
+        parts.push(`expire after ${rule["ExpirationInDays"]}d`);
+      return parts.length > 0 ? parts.join(", ") : `${rules.length} rule(s)`;
     }
-    return "Enabled";
+    return "Configured";
   }
   // CorsConfiguration → show rule count
   if (
