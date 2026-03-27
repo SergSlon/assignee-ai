@@ -111,7 +111,8 @@ function assembleS3Composites(
       ],
     };
     if (expirationDays && expirationDays > 0) {
-      rule["ExpirationInDays"] = expirationDays;
+      // AWS requires expiration > transition days; clamp to transitionDays + 1 minimum
+      rule["ExpirationInDays"] = Math.max(expirationDays, transitionDays + 1);
     }
     transformed["LifecycleConfiguration"] = { Rules: [rule] };
   }
