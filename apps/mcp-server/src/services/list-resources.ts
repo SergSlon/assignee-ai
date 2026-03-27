@@ -57,7 +57,7 @@ const SERVICE_TYPE_MAP: Record<string, string> = {
   dynamodb: "AWS::DynamoDB::Table",
   sqs: "AWS::SQS::Queue",
   sns: "AWS::SNS::Topic",
-  iam: "AWS::IAM::Role",
+  // iam moved to SERVICE_SUBTYPE_MAP (has role, policy, user, group)
   cloudformation: "AWS::CloudFormation::Stack",
   logs: "AWS::Logs::LogGroup",
   events: "AWS::Events::Rule",
@@ -102,6 +102,13 @@ const SERVICE_SUBTYPE_MAP: Record<string, Record<string, string>> = {
   },
   cloudwatch: {
     alarm: "AWS::CloudWatch::Alarm",
+  },
+  iam: {
+    role: "AWS::IAM::Role",
+    policy: "AWS::IAM::ManagedPolicy",
+    user: "AWS::IAM::User",
+    group: "AWS::IAM::Group",
+    "instance-profile": "AWS::IAM::InstanceProfile",
   },
   ssm: {
     parameter: "AWS::SSM::Parameter",
@@ -179,7 +186,12 @@ function loadProvisionCosts(): Map<string, string> {
     if (Array.isArray(entries)) {
       for (const entry of entries) {
         if (entry.resourceArn && entry.estimatedMonthlyCost) {
-          costMap.set(entry.resourceArn, entry.estimatedMonthlyCost);
+          const key = entry.resourceArn;
+          costMap.set(key, entry.estimatedMonthlyCost);
+          // Also index by the resource name suffix for cross-format matching
+          // (provision log may store QueueUrl but Tagging API returns ARN)
+          const name = key.split("/").pop() ?? key.split(":").pop() ?? "";
+          if (name) costMap.set(name, entry.estimatedMonthlyCost);
         }
       }
     }
@@ -236,7 +248,11 @@ export async function fetchManagedResources(
         arn,
         region: parsed.region || resolvedRegion,
         createdDate: createdTag?.Value ?? "N/A",
-        estimatedMonthlyCost: costMap.get(arn) ?? "N/A",
+        estimatedMonthlyCost:
+          costMap.get(arn) ??
+          costMap.get(arn.split("/").pop() ?? "") ??
+          costMap.get(arn.split(":").pop() ?? "") ??
+          "N/A",
       });
     }
 
