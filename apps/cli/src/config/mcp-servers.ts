@@ -72,12 +72,6 @@ function auditorEnv(
  */
 export function getMcpServerConfigs(): Record<string, McpServerConfig> {
   return {
-    // Knowledge server: yanked uvx package — use remote API via fastmcp instead
-    // Matches .gemini/antigravity/mcp_config.json "aws-knowledge-mcp-server"
-    [McpServerName.KNOWLEDGE]: {
-      command: McpCommand.UVX,
-      args: ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"],
-    },
     // Pricing API is only available in us-east-1
     // --with "botocore[crt]" is required for the pricing server's AWS credential chain
     [McpServerName.PRICING]: {
@@ -109,6 +103,11 @@ export function getMcpServerConfigs(): Record<string, McpServerConfig> {
  */
 export function getOptionalMcpServerConfigs(): Record<string, McpServerConfig> {
   return {
+    // Knowledge server: remote API via fastmcp — non-critical, used for doc lookup
+    [McpServerName.KNOWLEDGE]: {
+      command: McpCommand.UVX,
+      args: ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"],
+    },
     [McpServerName.IAM]: {
       command: McpCommand.UVX,
       args: ["awslabs.iam-mcp-server@latest", "--readonly"],

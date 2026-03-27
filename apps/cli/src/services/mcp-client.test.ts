@@ -19,21 +19,17 @@ describe.skipIf(!!process.env["CI"])("MCP integration", () => {
   });
 
   it(
-    "fetches SDK docs from knowledge mcp-server",
+    "connects to core MCP servers and fetches tools",
     async () => {
       try {
-        // 1. Initialize client (this spawns the 4 servers using standard uvx commands)
+        // 1. Initialize client (spawns core servers: Pricing + Docs)
         const client = await createMcpClient();
 
         // 2. Fetch tools
         const tools = await getMcpTools(client);
 
-        // Verify basic tools loaded
+        // Verify basic tools loaded from core servers
         expect(tools.length).toBeGreaterThan(0);
-        const knowTool = tools.find(
-          (t) => t.name === "aws___search_documentation",
-        );
-        expect(knowTool).toBeDefined();
       } catch (err: unknown) {
         // McpError thrown when MCP server fails to start — skip gracefully
         if (

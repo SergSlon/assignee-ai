@@ -31,16 +31,22 @@ describe("McpServerName", () => {
 });
 
 describe("getMcpServerConfigs", () => {
-  it("returns exactly 3 core servers", () => {
+  it("returns exactly 2 core servers (Pricing, Docs)", () => {
     const configs = getMcpServerConfigs();
-    expect(Object.keys(configs)).toHaveLength(3);
+    expect(Object.keys(configs)).toHaveLength(2);
   });
 
-  it("includes Knowledge, Pricing, and Docs servers", () => {
+  it("includes Pricing and Docs servers", () => {
     const configs = getMcpServerConfigs();
-    expect(configs[McpServerName.KNOWLEDGE]).toBeDefined();
     expect(configs[McpServerName.PRICING]).toBeDefined();
     expect(configs[McpServerName.DOCS]).toBeDefined();
+  });
+
+  it("Knowledge server is optional (not core)", () => {
+    const core = getMcpServerConfigs();
+    const optional = getOptionalMcpServerConfigs();
+    expect(core[McpServerName.KNOWLEDGE]).toBeUndefined();
+    expect(optional[McpServerName.KNOWLEDGE]).toBeDefined();
   });
 
   it("does not include cfn-mcp-server in any entry", () => {
