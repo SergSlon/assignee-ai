@@ -2070,13 +2070,13 @@ describe("formatDesiredState", () => {
     expect(result).toBe("(none)");
   });
 
-  it("handles nested objects", () => {
+  it("handles nested objects — S3 encryption shows friendly format", () => {
     const result = formatDesiredState({
       BucketEncryption: {
         ServerSideEncryptionConfiguration: "AES256",
       },
     });
-    expect(result).toContain("ServerSideEncryptionConfiguration: AES256");
+    expect(result).toContain("AES-256 (SSE-S3) enabled");
   });
 });
 

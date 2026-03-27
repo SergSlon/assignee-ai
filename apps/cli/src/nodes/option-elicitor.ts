@@ -1347,16 +1347,20 @@ export async function optionElicitorNode(
   const hintedCommon = commonFields.map(applyPatternHint);
   const commonHistory: number[] = []; // Stack of visited field indices
 
-  // Pre-compute total visible fields for progress indicator
-  const totalVisible = hintedCommon.filter((f) => {
-    const res = resolvedCommon[fieldFetchKey(f)];
-    if (!res) return false;
-    if (res.policy === FieldPolicy.NEVER_ASK) return false;
-    // showIf fields are conditionally visible — count them optimistically
-    // since we can't know their visibility before the loop
-    if (f.question.showIf) return false;
-    return true;
-  }).length;
+  // Total visible fields is computed dynamically since showIf fields
+  // may appear/disappear based on previous answers
+  const getTotalVisible = () =>
+    hintedCommon.filter((f) => {
+      const res = resolvedCommon[fieldFetchKey(f)];
+      if (!res) return false;
+      if (res.policy === FieldPolicy.NEVER_ASK) return false;
+      if (
+        f.question.showIf &&
+        !evaluateShowIf(f.question.showIf, elicitedOptions)
+      )
+        return false;
+      return true;
+    }).length;
 
   let ci = 0;
   let visibleIndex = 0;
@@ -1391,6 +1395,7 @@ export async function optionElicitorNode(
     }
 
     // Progress indicator (TTY only, common fields only)
+    const totalVisible = getTotalVisible();
     if (process.stdout.isTTY && totalVisible > 1) {
       clack.log.info(`Step ${visibleIndex + 1} of ${totalVisible}`);
     }
@@ -1440,14 +1445,19 @@ export async function optionElicitorNode(
       const hintedAdvanced = advancedFields.map(applyPatternHint);
       const advHistory: number[] = [];
 
-      // Pre-compute total visible advanced fields for progress indicator
-      const totalVisibleAdv = hintedAdvanced.filter((f) => {
-        const res = resolvedAdvanced[fieldFetchKey(f)];
-        if (!res) return false;
-        if (res.policy === FieldPolicy.NEVER_ASK) return false;
-        if (f.question.showIf) return false;
-        return true;
-      }).length;
+      // Dynamic count of visible advanced fields (showIf may change)
+      const getTotalVisibleAdv = () =>
+        hintedAdvanced.filter((f) => {
+          const res = resolvedAdvanced[fieldFetchKey(f)];
+          if (!res) return false;
+          if (res.policy === FieldPolicy.NEVER_ASK) return false;
+          if (
+            f.question.showIf &&
+            !evaluateShowIf(f.question.showIf, elicitedOptions)
+          )
+            return false;
+          return true;
+        }).length;
 
       let ai = 0;
       let advVisibleIndex = 0;
@@ -1474,6 +1484,7 @@ export async function optionElicitorNode(
         }
 
         // Progress indicator (TTY only, advanced fields)
+        const totalVisibleAdv = getTotalVisibleAdv();
         if (process.stdout.isTTY && totalVisibleAdv > 1) {
           clack.log.info(
             `Advanced step ${advVisibleIndex + 1} of ${totalVisibleAdv}`,
