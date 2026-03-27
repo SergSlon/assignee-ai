@@ -1407,6 +1407,8 @@ export async function optionElicitorNode(
       const prevIndex = commonHistory.pop();
       if (prevIndex !== undefined) {
         const prevField = hintedCommon[prevIndex]!;
+        // Delete the current field's answer too (not just prev)
+        delete elicitedOptions[field.name];
         delete elicitedOptions[prevField.name];
         // Clean up showIf-dependent values that depended on the reverted field
         for (const f of hintedCommon) {
