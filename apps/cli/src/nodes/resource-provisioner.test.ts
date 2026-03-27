@@ -109,18 +109,42 @@ describe("resourceProvisionerNode", () => {
       mockProvisioner.getResource.mockResolvedValueOnce([null, {}]);
 
       const result = await resourceProvisionerNode(
-        makeState(),
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          desiredState: {
+            RoleName: "existing-role",
+            AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] },
+          },
+        }),
         mockProvisioner,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/already exists/);
-      expect(result.errorMessage).toMatch(/poc-smoke-test/);
+      expect(result.errorMessage).toMatch(/existing-role/);
       expect(mockProvisioner.getResource).toHaveBeenCalledWith(
-        "AWS::S3::Bucket",
-        "poc-smoke-test",
+        "AWS::IAM::Role",
+        "existing-role",
       );
       expect(mockProvisioner.createResource).not.toHaveBeenCalled();
+    });
+
+    it("skips state guard for S3 buckets (globally unique names cause false positives)", async () => {
+      // S3 GetResource can return success for buckets in OTHER accounts,
+      // so the state guard is skipped entirely for S3.
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "s3-skip-guard-token" },
+      ]);
+
+      const result = await resourceProvisionerNode(
+        makeState(),
+        mockProvisioner,
+      );
+
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
+      expect(mockProvisioner.createResource).toHaveBeenCalled();
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     });
 
     it("proceeds when getResource returns NOT_FOUND (resource not found — safe to create)", async () => {
@@ -134,7 +158,13 @@ describe("resourceProvisionerNode", () => {
       ]);
 
       const result = await resourceProvisionerNode(
-        makeState(),
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          desiredState: {
+            RoleName: "new-role",
+            AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] },
+          },
+        }),
         mockProvisioner,
       );
 
@@ -155,7 +185,13 @@ describe("resourceProvisionerNode", () => {
       ]);
 
       const result = await resourceProvisionerNode(
-        makeState(),
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          desiredState: {
+            RoleName: "role-unknown-err",
+            AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] },
+          },
+        }),
         mockProvisioner,
       );
 
@@ -174,7 +210,13 @@ describe("resourceProvisionerNode", () => {
       ]);
 
       const result = await resourceProvisionerNode(
-        makeState(),
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          desiredState: {
+            RoleName: "role-access-denied",
+            AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] },
+          },
+        }),
         mockProvisioner,
       );
 
@@ -211,7 +253,13 @@ describe("resourceProvisionerNode", () => {
       ]);
 
       const result = await resourceProvisionerNode(
-        makeState(),
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          desiredState: {
+            RoleName: "poc-role-test",
+            AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] },
+          },
+        }),
         mockProvisioner,
       );
 
@@ -220,21 +268,17 @@ describe("resourceProvisionerNode", () => {
       expect(result.startedAt).toBeDefined();
 
       expect(mockProvisioner.getResource).toHaveBeenCalledWith(
-        "AWS::S3::Bucket",
-        "poc-smoke-test",
+        "AWS::IAM::Role",
+        "poc-role-test",
       );
       expect(mockProvisioner.createResource).toHaveBeenCalledWith(
-        "AWS::S3::Bucket",
-        expect.stringContaining("poc-smoke-test"),
+        "AWS::IAM::Role",
+        expect.stringContaining("poc-role-test"),
         "run-prov-test-001",
       );
     });
 
     it("injects mandatory tags into createResource desiredState", async () => {
-      mockProvisioner.getResource.mockResolvedValueOnce([
-        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
-        null,
-      ]);
       mockProvisioner.createResource.mockResolvedValueOnce([
         null,
         { requestToken: "tag-test-token" },
@@ -328,10 +372,6 @@ describe("resourceProvisionerNode", () => {
 
   describe("missing RequestToken guard", () => {
     it("fails when createResource returns error with no RequestToken (no ProgressEvent)", async () => {
-      mockProvisioner.getResource.mockResolvedValueOnce([
-        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
-        null,
-      ]);
       mockProvisioner.createResource.mockResolvedValueOnce([
         {
           kind: ProvisioningErrorKind.UNKNOWN,
@@ -350,10 +390,6 @@ describe("resourceProvisionerNode", () => {
     });
 
     it("fails when createResource returns error with empty ProgressEvent", async () => {
-      mockProvisioner.getResource.mockResolvedValueOnce([
-        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
-        null,
-      ]);
       mockProvisioner.createResource.mockResolvedValueOnce([
         {
           kind: ProvisioningErrorKind.UNKNOWN,
@@ -374,10 +410,6 @@ describe("resourceProvisionerNode", () => {
 
   describe("error handling — typed provisioning errors (Story 9.2: AC #3)", () => {
     it("maps ALREADY_EXISTS to FAILED with 'already exists' message", async () => {
-      mockProvisioner.getResource.mockResolvedValueOnce([
-        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
-        null,
-      ]);
       mockProvisioner.createResource.mockResolvedValueOnce([
         {
           kind: ProvisioningErrorKind.ALREADY_EXISTS,
@@ -397,10 +429,6 @@ describe("resourceProvisionerNode", () => {
     });
 
     it("maps THROTTLED to FAILED with 'throttled' message", async () => {
-      mockProvisioner.getResource.mockResolvedValueOnce([
-        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
-        null,
-      ]);
       mockProvisioner.createResource.mockResolvedValueOnce([
         { kind: ProvisioningErrorKind.THROTTLED, message: "Rate exceeded" },
         null,
@@ -416,10 +444,6 @@ describe("resourceProvisionerNode", () => {
     });
 
     it("falls back to generic message for unknown errors", async () => {
-      mockProvisioner.getResource.mockResolvedValueOnce([
-        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
-        null,
-      ]);
       mockProvisioner.createResource.mockResolvedValueOnce([
         {
           kind: ProvisioningErrorKind.UNKNOWN,
@@ -590,7 +614,13 @@ describe("resourceProvisionerNode", () => {
       ]);
 
       const result = await resourceProvisionerNode(
-        makeState(),
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          desiredState: {
+            RoleName: "fallback-test-role",
+            AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] },
+          },
+        }),
         mockProvisioner,
         mockFallback as unknown as SDKFallbackDispatcher,
       );

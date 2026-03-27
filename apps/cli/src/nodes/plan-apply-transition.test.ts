@@ -86,13 +86,13 @@ function createMockProvisioner(): ProvisioningPort & {
 
 function makeProvisionerState(overrides: Record<string, unknown> = {}) {
   return {
-    userIntent: "Create an S3 bucket named plan-apply-test",
+    userIntent: "Create an IAM role named plan-apply-test",
     runId: "run-prov-transition",
     executionStatus: ExecutionStatus.PENDING,
     executionMode: "apply",
-    resourceType: "AWS::S3::Bucket",
+    resourceType: "AWS::IAM::Role",
     resourceSchema: undefined,
-    desiredState: { BucketName: "plan-apply-test" },
+    desiredState: { RoleName: "plan-apply-test", AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] } },
     estimatedMonthlyCost: "$0.0230/GB-month",
     requestToken: undefined,
     resourceArn: undefined,

@@ -193,11 +193,11 @@ describe("extractFirstTierPrice — contract tests for AwsPricingResponse shape"
     expect(result).toBeNull();
   });
 
-  it("returns null when items lack product metadata and expectedFilters are provided", () => {
+  it("trusts single item with no product metadata when filters are provided (MCP filtered server-side)", () => {
     const data: AwsPricingResponse = {
       data: [
         {
-          // No product field at all — itemMatchesFilters returns false
+          // No product field — single-item fallback trusts MCP server-side filtering
           terms: {
             OnDemand: {
               "term-1": {
@@ -219,8 +219,8 @@ describe("extractFirstTierPrice — contract tests for AwsPricingResponse shape"
     ];
 
     const result = extractFirstTierPrice(data, "/1k requests", 1, filters);
-    // No fallback to unfiltered items — return null
-    expect(result).toBeNull();
+    // Single item, no metadata: trust MCP server-side filtering
+    expect(result).toBe("$0.0230/1k requests");
   });
 
   it("returns price from unfiltered items when no expectedFilters provided", () => {

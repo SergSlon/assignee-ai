@@ -527,7 +527,7 @@ describe("extractFirstTierPrice — filter validation", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null when product has no attributes and filter requires one", () => {
+  it("accepts item when productFamily matches but attributes are missing (lenient for real MCP)", () => {
     const noAttrData: AwsPricingResponse = {
       data: [
         {
@@ -560,7 +560,8 @@ describe("extractFirstTierPrice — filter validation", () => {
     ];
 
     const result = extractFirstTierPrice(noAttrData, "/GB-mo", 1, filters);
-    expect(result).toBeNull();
+    // productFamily matches; missing attributes are treated as pass (lenient for sparse MCP responses)
+    expect(result).toBe("$0.0230/GB-mo");
   });
 
   it("without expectedFilters, returns first beginRange=0 price (legacy behavior)", () => {
