@@ -2,7 +2,9 @@
 
 All commands follow the pattern: `assignee <command> [args] [options]`
 
-Global options: `--version`, `--help`
+Global options: `--version`, `--help`, `--verbose`
+
+The `--verbose` flag can be passed to any command. When set, structured JSON logs are written to stderr. Without it, logs are suppressed so they never pollute terminal output. You can also enable verbose output via `ASSIGNEE_VERBOSITY=verbose` or `ASSIGNEE_LOG_LEVEL=debug` environment variables.
 
 ## Exit Codes
 
@@ -32,17 +34,20 @@ assignee plan [intent] [options]
 
 **Options:**
 
-| Flag                    | Description                                     | Default |
-| ----------------------- | ----------------------------------------------- | ------- |
-| `-o, --output <format>` | Output format (`json` or `text`)                | `text`  |
-| `--no-apply`            | Skip the "Apply now?" prompt after plan display | false   |
+| Flag                        | Description                                          | Default |
+| --------------------------- | ---------------------------------------------------- | ------- |
+| `-o, --output <format>`     | Output format (`json` or `text`)                     | `text`  |
+| `--no-apply`                | Skip the "Apply now?" prompt after plan display      | false   |
+| `--set <key=value...>`      | Pre-set wizard field values (repeatable)             | -       |
 
 **Behavior:**
 
 - Runs the 12-node pipeline in plan mode (stops before provisioning)
 - Saves a checkpoint to `.assignee/checkpoint-<runId>.json` (valid 72h)
+- `-o json` outputs structured JSON to stdout (suppresses spinners, prompts, and the "Apply now?" prompt)
 - If preflight passes and `--no-apply` is not set, prompts "Apply now?"
-- Accepting the prompt transitions directly to provisioning without re-running the plan
+- Accepting the prompt transitions directly to provisioning without re-running the plan or re-confirming (auto-approved on checkpoint resume)
+- `--set` pre-fills wizard fields, skipping their interactive prompts (e.g., `--set BucketName=my-bucket --set Tags=env:prod`)
 
 **Examples:**
 
@@ -52,6 +57,7 @@ assignee plan "Create an EC2 t3.micro instance"
 assignee plan "Create a Lambda function for image processing"
 assignee plan --no-apply "Create a VPC with public and private subnets"
 assignee plan -o json "Create a DynamoDB table named users" | jq .
+assignee plan --set BucketName=my-logs "Create an S3 bucket"
 ```
 
 ### apply
@@ -70,11 +76,12 @@ assignee apply [intent] [options]
 
 **Options:**
 
-| Flag                      | Description                                          | Default |
-| ------------------------- | ---------------------------------------------------- | ------- |
-| `--no-wizard`             | Skip interactive option prompts, use plugin defaults | false   |
-| `-y, --yes`               | Auto-confirm without interactive prompt (CI/CD mode) | false   |
-| `-c, --checkpoint <path>` | Use a saved plan checkpoint instead of re-planning   | -       |
+| Flag                        | Description                                          | Default |
+| --------------------------- | ---------------------------------------------------- | ------- |
+| `--no-wizard`               | Skip interactive option prompts, use plugin defaults | false   |
+| `-y, --yes`                 | Auto-confirm without interactive prompt (CI/CD mode) | false   |
+| `-c, --checkpoint <path>`   | Use a saved plan checkpoint instead of re-planning   | -       |
+| `--set <key=value...>`      | Pre-set wizard field values (repeatable)             | -       |
 
 **Behavior:**
 
@@ -89,6 +96,7 @@ assignee apply "Create an S3 bucket named my-bucket"
 assignee apply --checkpoint .assignee/checkpoint-abc123.json
 assignee apply --yes "Create an S3 bucket named logs-prod"
 assignee apply --no-wizard "Create an EC2 t3.micro instance"
+assignee apply --set InstanceType=t3.small "Create an EC2 instance"
 assignee apply  # auto-detects latest checkpoint
 ```
 

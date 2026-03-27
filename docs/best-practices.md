@@ -65,6 +65,16 @@ desiredStatePatch:
 
 When this rule fires, the fix is applied by merging `desiredStatePatch` into the plan.
 
+**Additional S3 auto-fix rules:**
+
+| Rule ID    | Title                                | Severity   | Category      | What it fixes                                                            |
+| ---------- | ------------------------------------ | ---------- | ------------- | ------------------------------------------------------------------------ |
+| BP-S3-005  | Versioning should be enabled         | HIGH       | reliability   | Sets `VersioningConfiguration.Status` to `Enabled`                       |
+| BP-S3-006  | Server-side encryption required      | CRITICAL   | security      | Adds `BucketEncryption` with SSE-S3 (AES256)                            |
+| BP-S3-010  | Lifecycle configuration recommended  | HIGH       | cost          | Adds lifecycle rules (STANDARD_IA at 30d, GLACIER at 90d, expire 365d)  |
+
+**Lifecycle expiration clamping:** When auto-fix applies BP-S3-010 or the user configures lifecycle rules, the plan generator automatically clamps `ExpirationInDays` to be greater than the highest `TransitionInDays` value (AWS requires expiration > transition days).
+
 ### Type B: Interactive Fix (`fixType: interactive`)
 
 The rule presents choices to the user. Each option specifies an action (`prompt_value`, `set_value`, `remove_property`, `skip`) and an optional `targetField`.

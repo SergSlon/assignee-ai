@@ -6,16 +6,33 @@ assignee.ai uses a layered configuration system. Everything works out of the box
 
 Settings are resolved in this order (highest priority first):
 
-| Priority | Source                | Example                                 |
-| -------- | --------------------- | --------------------------------------- |
-| 1        | CLI flags             | `--yes`, `-o json`                      |
-| 2        | Environment variables | `ASSIGNEE_AUTO_FIX=apply`               |
-| 3        | Project config        | `.assignee/config.yaml`                 |
-| 4        | User config           | `~/.config/assignee/config.yaml`        |
-| 5        | Org policy            | SaaS-delivered or local org policy file |
-| 6        | Plugin defaults       | Built-in defaults per resource type     |
+| Priority | Source                | Example                                          |
+| -------- | --------------------- | ------------------------------------------------ |
+| 1        | CLI flags             | `--yes`, `-o json`, `--set BucketName=my-bucket` |
+| 2        | Environment variables | `ASSIGNEE_AUTO_FIX=apply`                        |
+| 3        | Project config        | `.assignee/config.yaml`                          |
+| 4        | User config           | `~/.config/assignee/config.yaml`                 |
+| 5        | Org policy            | SaaS-delivered or local org policy file          |
+| 6        | Plugin defaults       | Built-in defaults per resource type              |
 
 Higher-priority values override lower ones. Unknown keys are silently ignored for forward compatibility.
+
+### `--set` Flag
+
+The `--set key=value` flag (available on `plan` and `apply` commands) pre-fills wizard fields at the highest priority level (CLI flags). This skips the interactive prompt for that field entirely. It is repeatable:
+
+```bash
+assignee plan --set BucketName=my-logs --set Tags=env:prod "Create an S3 bucket"
+assignee apply --set InstanceType=t3.small "Create an EC2 instance"
+```
+
+### `--verbose` Flag
+
+The `--verbose` flag controls structured JSON log output to stderr. Logs are suppressed by default so they never pollute terminal output. Enable via:
+
+- `--verbose` CLI flag (any command)
+- `ASSIGNEE_VERBOSITY=verbose` environment variable
+- `ASSIGNEE_LOG_LEVEL=debug` environment variable
 
 ## Config File Locations
 
@@ -109,6 +126,8 @@ Pass-through section for organization-wide policies. Keys are domain-specific (e
 | `ASSIGNEE_READER_SECRET_ACCESS_KEY`   | Secret key for the reader IAM user (MCP)             | -                          |
 | `ASSIGNEE_AUDITOR_ACCESS_KEY_ID`      | Access key for the auditor IAM user (MCP)            | -                          |
 | `ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY`  | Secret key for the auditor IAM user (MCP)            | -                          |
+| `ASSIGNEE_VERBOSITY`                  | Set to `verbose` to enable structured log output     | -                          |
+| `ASSIGNEE_LOG_LEVEL`                  | Set to `debug` to enable structured log output       | -                          |
 | `ASSIGNEE_SAAS_URL`                   | SaaS API base URL for org policy fetch               | `https://app.assignee.ai`  |
 | `ASSIGNEE_ORG_POLICY_TTL_MS`          | TTL for cached org policy (milliseconds)             | `300000` (5 min)           |
 
