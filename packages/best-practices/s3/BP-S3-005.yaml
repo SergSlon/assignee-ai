@@ -11,3 +11,7 @@ description: "S3 buckets should have versioning enabled to preserve, retrieve, a
 remediation: "Set VersioningConfiguration.Status to 'Enabled'. This preserves all object versions and enables recovery from accidental deletions or overwrites."
 category: reliability
 lastVerified: "2026-03-22"
+autoFixable: true
+desiredStatePatch:
+  VersioningConfiguration:
+    Status: "Enabled"

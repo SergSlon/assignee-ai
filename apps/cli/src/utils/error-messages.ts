@@ -64,10 +64,10 @@ const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
   },
   StateMismatch: {
     code: "StateMismatch",
-    what: "The resource state has changed since your plan was created.",
-    why: "Another process or user modified the resource between plan and apply. The plan is now stale.",
+    what: "Resource already exists.",
+    why: "A resource with the same identifier already exists in your AWS account.",
     howToFix:
-      "Re-run `assignee plan` to get a fresh plan that reflects the current state of your AWS account.",
+      "Choose a different name and re-run 'assignee plan'.",
   },
   UnsupportedType: {
     code: "UnsupportedType",

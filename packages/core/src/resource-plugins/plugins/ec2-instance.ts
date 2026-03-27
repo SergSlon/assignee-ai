@@ -257,13 +257,14 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;
-        return answer
+        const tags = answer
           .split(",")
           .filter((p) => p.includes(":"))
           .map((pair) => {
             const [Key, ...rest] = pair.trim().split(":");
             return { Key: Key!.trim(), Value: rest.join(":").trim() };
           });
+        return tags.length > 0 ? tags : undefined;
       },
     },
   ],

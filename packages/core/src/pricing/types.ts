@@ -16,6 +16,10 @@ export interface AwsPricingTerm {
 
 /** A single item from the AWS Pricing API response. */
 export interface AwsPricingItem {
+  product?: {
+    productFamily?: string;
+    attributes?: Record<string, string>;
+  };
   terms?: {
     OnDemand?: Record<string, AwsPricingTerm>;
   };

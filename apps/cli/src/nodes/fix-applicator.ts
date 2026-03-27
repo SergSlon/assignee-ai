@@ -129,6 +129,9 @@ function isFieldExplicitlySet(
       StorageEncrypted: ["StorageEncrypted"],
       MultiAZ: ["MultiAZ"],
       DeletionProtection: ["DeletionProtection"],
+      VersioningConfiguration: ["VersioningConfiguration"],
+      BucketEncryption: ["BucketEncryption", "KMSMasterKeyID"],
+      LifecycleConfiguration: ["EnableLifecycle", "LifecycleTransitionDays", "LifecycleExpirationDays"],
     };
 
     const wizardKeys = wizardKeyMap[key];

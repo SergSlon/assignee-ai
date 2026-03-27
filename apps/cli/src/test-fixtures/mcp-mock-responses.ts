@@ -2057,6 +2057,61 @@ const pricingResponses = {
     }),
   },
 
+  /** S3 decomposer: Data Transfer. Input: { service_code: "AWSDataTransfer", filters: [productFamily=Data Transfer, usagetype=DataTransfer-Out-Bytes] } */
+  s3DataTransfer: {
+    success: mcpText({
+      status: "success",
+      service_name: "AWSDataTransfer",
+      data: [
+        {
+          product: {
+            productFamily: "Data Transfer",
+            attributes: {
+              regionCode: "us-east-1",
+              usagetype: "DataTransfer-Out-Bytes",
+              transferType: "AWS Outbound",
+              fromLocation: "US East (N. Virginia)",
+              fromLocationType: "AWS Region",
+              toLocation: "External",
+              toLocationType: "Other",
+              servicecode: "AWSDataTransfer",
+              servicename: "AWS Data Transfer",
+            },
+            sku: "DTOUTSKU00000001",
+          },
+          terms: {
+            OnDemand: {
+              "DTOUTSKU00000001.JRTCKXETXF": {
+                priceDimensions: {
+                  "DTOUTSKU00000001.JRTCKXETXF.6YS6EN2CT7": {
+                    unit: "GB",
+                    endRange: "Inf",
+                    description:
+                      "$0.09 per GB - next 9.999 TB / month data transfer out beyond the global free tier",
+                    appliesTo: [],
+                    rateCode: "DTOUTSKU00000001.JRTCKXETXF.6YS6EN2CT7",
+                    beginRange: "1",
+                    pricePerUnit: {
+                      USD: "0.0900000000",
+                    },
+                  },
+                },
+                sku: "DTOUTSKU00000001",
+                effectiveDate: "2026-03-01T00:00:00Z",
+                offerTermCode: "JRTCKXETXF",
+                termAttributes: {},
+              },
+            },
+          },
+          version: "20260223232215",
+          publicationDate: "2026-02-23T23:22:15Z",
+        },
+      ],
+      message:
+        "Retrieved pricing for AWSDataTransfer in us-east-1 from AWS Pricing API",
+    }),
+  },
+
   /** Lambda decomposer: Requests. Input: { service_code: "AWSLambda", filters: [productFamily=Serverless, group=AWS-Lambda-Requests, usagetype=Request] } */
   lambdaRequests: {
     success: mcpText({
@@ -4270,6 +4325,102 @@ export function createPricingLookupTool(
         },
       ),
   } as unknown as StructuredTool;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Filter-dispatched pricing tools — match responses by filter fields
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Generic filter-dispatched pricing tool factory.
+ * Takes a dispatch map where each key encodes filter field=value pairs
+ * (separated by `+`) and returns the matching response.
+ *
+ * Matching logic: ALL filter pairs in a dispatch key must be present in the
+ * tool invocation's `filters` array for that entry to match. First match wins.
+ *
+ * @param dispatchMap - Record of `"field1=value1+field2=value2"` → response
+ * @returns A mock StructuredTool that dispatches by filter matching
+ *
+ * @example
+ *   const tool = createServicePricingDispatchTool({
+ *     "productFamily=Storage+usagetype=TimedStorage-ByteHrs": McpMocks.pricing.s3Storage.success,
+ *     "productFamily=API Request+usagetype=Requests-Tier1": McpMocks.pricing.s3PutRequests.success,
+ *   });
+ */
+export function createServicePricingDispatchTool(
+  dispatchMap: Record<string, unknown>,
+): StructuredTool {
+  // Pre-parse keys into arrays of { Field, Value } for efficient matching
+  const parsedEntries = Object.entries(dispatchMap).map(([key, response]) => {
+    const conditions = key.split("+").map((pair) => {
+      const eqIdx = pair.indexOf("=");
+      return { Field: pair.slice(0, eqIdx), Value: pair.slice(eqIdx + 1) };
+    });
+    return { conditions, response };
+  });
+
+  return {
+    name: ToolName.GET_PRICING,
+    description: "",
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        async (args: {
+          filters?: Array<{ Field: string; Value: string }>;
+          service_code?: string;
+        }) => {
+          const filters = args.filters ?? [];
+
+          for (const entry of parsedEntries) {
+            const allMatch = entry.conditions.every((cond) =>
+              filters.some(
+                (f) => f.Field === cond.Field && f.Value === cond.Value,
+              ),
+            );
+            if (allMatch) {
+              return entry.response;
+            }
+          }
+
+          return McpMocks.pricing.emptyData.success;
+        },
+      ),
+  } as unknown as StructuredTool;
+}
+
+/**
+ * Creates an S3-specific pricing dispatch tool that routes queries by
+ * productFamily + usagetype filters to the correct S3 mock response.
+ *
+ * Dispatches:
+ *  - productFamily=Storage + usagetype=TimedStorage-ByteHrs → s3Storage
+ *  - productFamily=API Request + usagetype=Requests-Tier1   → s3PutRequests
+ *  - productFamily=API Request + usagetype=Requests-Tier2   → s3GetRequests
+ *  - productFamily=Data Transfer                            → s3DataTransfer
+ *  - (anything else)                                        → emptyData
+ *
+ * @example
+ *   const tool = createS3PricingDispatchTool();
+ *   const storageResult = await tool.invoke({
+ *     service_code: "AmazonS3",
+ *     filters: [
+ *       { Field: "productFamily", Value: "Storage" },
+ *       { Field: "usagetype", Value: "TimedStorage-ByteHrs" },
+ *     ],
+ *   });
+ */
+export function createS3PricingDispatchTool(): StructuredTool {
+  return createServicePricingDispatchTool({
+    "productFamily=Storage+usagetype=TimedStorage-ByteHrs":
+      McpMocks.pricing.s3Storage.success,
+    "productFamily=API Request+usagetype=Requests-Tier1":
+      McpMocks.pricing.s3PutRequests.success,
+    "productFamily=API Request+usagetype=Requests-Tier2":
+      McpMocks.pricing.s3GetRequests.success,
+    "productFamily=Data Transfer":
+      McpMocks.pricing.s3DataTransfer.success,
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
