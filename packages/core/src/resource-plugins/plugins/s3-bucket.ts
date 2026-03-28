@@ -206,7 +206,8 @@ export const s3BucketPlugin: ResourcePlugin = {
         type: "boolean",
         label: "Enable cross-region replication?",
         initialValue: false,
-        hint: "Copies objects to a bucket in another region for disaster recovery or compliance. Requires a destination bucket and IAM role. Adds cross-region transfer costs.",
+        hint: "Copies objects to a bucket in another region for disaster recovery or compliance. Requires versioning, a destination bucket, and an IAM role. Adds cross-region transfer costs.",
+        showIf: { field: "VersioningConfiguration", value: true },
       },
     },
     {

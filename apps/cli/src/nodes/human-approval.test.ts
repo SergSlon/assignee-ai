@@ -130,8 +130,10 @@ describe("humanApprovalNode", () => {
 
     const state = makeState({ autoApprove: false });
 
-    await expect(humanApprovalNode(state)).rejects.toThrow(
-      "Error: Apply requires confirmation. Use --yes for non-interactive mode.",
+    const result = await humanApprovalNode(state);
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toContain(
+      "Apply requires confirmation. Use --yes for non-interactive mode.",
     );
   });
 

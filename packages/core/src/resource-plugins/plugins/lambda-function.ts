@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin, OptionMetadata, CfnOutput } from "../types.js";
+import { TAGS_VALIDATE } from "../shared-fields.js";
 
 /** Lambda duration pricing rate ($/GB-second) — stable since 2014. Exported for test use. */
 export const LAMBDA_USD_PER_GB_SECOND = 0.0000166667;
@@ -279,6 +280,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         label: "Tags",
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+        validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;

@@ -88,6 +88,10 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
           return undefined;
         },
       },
+      toCfn: (v: unknown) => {
+        const n = Number(v);
+        return isNaN(n) ? undefined : n;
+      },
     },
     {
       name: "ComparisonOperator",
@@ -173,6 +177,10 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
           return undefined;
         },
       },
+      toCfn: (v: unknown) => {
+        const n = Number(v);
+        return isNaN(n) ? undefined : n;
+      },
     },
     {
       name: "EvaluationPeriods",
@@ -189,6 +197,10 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
             return "Evaluation periods must be a positive integer";
           return undefined;
         },
+      },
+      toCfn: (v: unknown) => {
+        const n = Number(v);
+        return isNaN(n) ? undefined : n;
       },
     },
     {
@@ -298,6 +310,10 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
             return "DatapointsToAlarm must be a positive integer";
           return undefined;
         },
+      },
+      toCfn: (v: unknown) => {
+        const n = Number(v);
+        return isNaN(n) ? undefined : n;
       },
     },
   ],

@@ -231,5 +231,6 @@ export async function closeMcpClient(): Promise<void> {
     closePromises.push(optionalClient.close());
     optionalClient = null;
   }
+  optionalInitPromise = null;
   await Promise.allSettled(closePromises);
 }

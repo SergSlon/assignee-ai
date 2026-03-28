@@ -681,13 +681,14 @@ describe("applyToCfnTransforms", () => {
     expect(result["LifecycleConfiguration"]).toEqual({
       Rules: [
         {
+          Id: "assignee-default-lifecycle",
           Status: "Enabled",
           Transitions: [{ StorageClass: "STANDARD_IA", TransitionInDays: 30 }],
         },
       ],
     });
     expect(result["CorsConfiguration"]).toEqual({
-      CorsRules: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"] }],
+      CorsRules: [{ AllowedHeaders: ["*"], AllowedMethods: ["GET"], AllowedOrigins: ["*"] }],
     });
     // Intermediate keys must be removed
     expect(result["EnableLifecycle"]).toBeUndefined();

@@ -142,12 +142,18 @@ export class MemoryService {
     await this.ensureDir();
     const target = this.filePath("provisions.json");
     const acquired = await this.acquireLock(target);
+    if (!acquired) {
+      process.stderr.write(
+        "WARNING: Could not acquire lock for provisions.json — skipping write to prevent corruption.\n",
+      );
+      return;
+    }
     try {
       const existing = await this.readProvisions();
       existing.push(record);
       await this.atomicWrite(target, JSON.stringify(existing, null, 2));
     } finally {
-      if (acquired) await this.releaseLock(target);
+      await this.releaseLock(target);
     }
   }
 
@@ -173,12 +179,18 @@ export class MemoryService {
     await this.ensureDir();
     const target = this.filePath("failures.json");
     const acquired = await this.acquireLock(target);
+    if (!acquired) {
+      process.stderr.write(
+        "WARNING: Could not acquire lock for failures.json — skipping write to prevent corruption.\n",
+      );
+      return;
+    }
     try {
       const existing = await this.readFailures();
       existing.push(record);
       await this.atomicWrite(target, JSON.stringify(existing, null, 2));
     } finally {
-      if (acquired) await this.releaseLock(target);
+      await this.releaseLock(target);
     }
   }
 
@@ -190,15 +202,23 @@ export class MemoryService {
    */
   async clearFailuresForType(resourceType: string): Promise<void> {
     await this.ensureDir();
+    const target = this.filePath("failures.json");
     const existing = await this.readFailures();
     const filtered = existing.filter((f) => f.resourceType !== resourceType);
     // Skip write if nothing changed
     if (filtered.length === existing.length) return;
-    await fs.writeFile(
-      this.filePath("failures.json"),
-      JSON.stringify(filtered, null, 2),
-      "utf-8",
-    );
+    const acquired = await this.acquireLock(target);
+    if (!acquired) {
+      process.stderr.write(
+        "WARNING: Could not acquire lock for failures.json — skipping write to prevent corruption.\n",
+      );
+      return;
+    }
+    try {
+      await this.atomicWrite(target, JSON.stringify(filtered, null, 2));
+    } finally {
+      await this.releaseLock(target);
+    }
   }
 
   // --- Patterns (upsert) — stub for Story 19.5 ---
@@ -221,26 +241,34 @@ export class MemoryService {
 
   async upsertPattern(record: PatternRecord): Promise<void> {
     await this.ensureDir();
-    const existing = await this.readPatterns();
-    const idx = existing.findIndex((p) => p.pattern === record.pattern);
-    if (idx >= 0) {
-      // Update existing — increment count, update options and lastUsed
-      existing[idx] = {
-        ...existing[idx],
-        pattern: record.pattern,
-        optionsSelected: record.optionsSelected,
-        count: existing[idx]!.count + 1,
-        lastUsed: record.lastUsed,
-      };
-    } else {
-      // New pattern — insert with count = 1
-      existing.push({ ...record, count: 1 });
+    const target = this.filePath("patterns.json");
+    const acquired = await this.acquireLock(target);
+    if (!acquired) {
+      process.stderr.write(
+        "WARNING: Could not acquire lock for patterns.json — skipping write to prevent corruption.\n",
+      );
+      return;
     }
-    await fs.writeFile(
-      this.filePath("patterns.json"),
-      JSON.stringify(existing, null, 2),
-      "utf-8",
-    );
+    try {
+      const existing = await this.readPatterns();
+      const idx = existing.findIndex((p) => p.pattern === record.pattern);
+      if (idx >= 0) {
+        // Update existing — increment count, update options and lastUsed
+        existing[idx] = {
+          ...existing[idx],
+          pattern: record.pattern,
+          optionsSelected: record.optionsSelected,
+          count: existing[idx]!.count + 1,
+          lastUsed: record.lastUsed,
+        };
+      } else {
+        // New pattern — insert with count = 1
+        existing.push({ ...record, count: 1 });
+      }
+      await this.atomicWrite(target, JSON.stringify(existing, null, 2));
+    } finally {
+      await this.releaseLock(target);
+    }
   }
   // --- Rotation (trim oldest records to stay within caps) ---
 
@@ -284,11 +312,19 @@ export class MemoryService {
     if (removed === 0) return 0;
 
     await this.ensureDir();
-    await fs.writeFile(
-      this.filePath("provisions.json"),
-      JSON.stringify(trimmed, null, 2),
-      "utf-8",
-    );
+    const target = this.filePath("provisions.json");
+    const acquired = await this.acquireLock(target);
+    if (!acquired) {
+      process.stderr.write(
+        "WARNING: Could not acquire lock for provisions.json — skipping rotation to prevent corruption.\n",
+      );
+      return 0;
+    }
+    try {
+      await this.atomicWrite(target, JSON.stringify(trimmed, null, 2));
+    } finally {
+      await this.releaseLock(target);
+    }
     return removed;
   }
 
@@ -302,11 +338,19 @@ export class MemoryService {
     const removed = existing.length - maxRecords;
     const trimmed = existing.slice(-maxRecords);
     await this.ensureDir();
-    await fs.writeFile(
-      this.filePath("failures.json"),
-      JSON.stringify(trimmed, null, 2),
-      "utf-8",
-    );
+    const target = this.filePath("failures.json");
+    const acquired = await this.acquireLock(target);
+    if (!acquired) {
+      process.stderr.write(
+        "WARNING: Could not acquire lock for failures.json — skipping rotation to prevent corruption.\n",
+      );
+      return 0;
+    }
+    try {
+      await this.atomicWrite(target, JSON.stringify(trimmed, null, 2));
+    } finally {
+      await this.releaseLock(target);
+    }
     return removed;
   }
 
@@ -320,11 +364,19 @@ export class MemoryService {
     const removed = existing.length - maxRecords;
     const trimmed = existing.slice(-maxRecords);
     await this.ensureDir();
-    await fs.writeFile(
-      this.filePath("patterns.json"),
-      JSON.stringify(trimmed, null, 2),
-      "utf-8",
-    );
+    const target = this.filePath("patterns.json");
+    const acquired = await this.acquireLock(target);
+    if (!acquired) {
+      process.stderr.write(
+        "WARNING: Could not acquire lock for patterns.json — skipping rotation to prevent corruption.\n",
+      );
+      return 0;
+    }
+    try {
+      await this.atomicWrite(target, JSON.stringify(trimmed, null, 2));
+    } finally {
+      await this.releaseLock(target);
+    }
     return removed;
   }
 }
