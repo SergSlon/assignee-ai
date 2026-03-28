@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
+import { TAGS_VALIDATE } from "../shared-fields.js";
 
 /**
  * ResourcePlugin for AWS::EC2::NatGateway.
@@ -50,6 +51,7 @@ export const natGatewayPlugin: ResourcePlugin = {
         label: "Tags",
         placeholder: "env:production, team:platform",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
+        validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;

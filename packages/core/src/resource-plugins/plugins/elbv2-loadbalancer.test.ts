@@ -155,7 +155,7 @@ describe("elbv2LoadBalancerPlugin", () => {
   it("defaults include Type, Scheme, and IpAddressType", () => {
     expect(elbv2LoadBalancerPlugin.defaults).toEqual({
       Type: "application",
-      Scheme: "internal",
+      Scheme: "internet-facing",
       IpAddressType: "ipv4",
     });
   });

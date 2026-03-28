@@ -135,11 +135,11 @@ describe("apiGatewayV2Plugin", () => {
       (f) => f.name === "Tags",
     )!;
 
-    it("transforms comma-separated key:value pairs to object", () => {
-      expect(field.toCfn!("env:production, team:backend")).toEqual({
-        env: "production",
-        team: "backend",
-      });
+    it("transforms comma-separated key:value pairs to Key/Value array", () => {
+      expect(field.toCfn!("env:production, team:backend")).toEqual([
+        { Key: "env", Value: "production" },
+        { Key: "team", Value: "backend" },
+      ]);
     });
 
     it("returns undefined for empty string", () => {

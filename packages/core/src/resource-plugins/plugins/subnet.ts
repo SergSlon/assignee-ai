@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin } from "../types.js";
+import { TAGS_VALIDATE } from "../shared-fields.js";
 
 /** Validates IPv4 CIDR notation for subnets (e.g. "10.0.1.0/24"). */
 function validateSubnetCidr(value: unknown): string | undefined {
@@ -73,6 +74,7 @@ export const subnetPlugin: ResourcePlugin = {
         label: "Tags",
         placeholder: "env:production, tier:public",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
+        validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;

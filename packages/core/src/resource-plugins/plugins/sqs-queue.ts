@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin } from "../types.js";
+import { TAGS_VALIDATE } from "../shared-fields.js";
 
 /**
  * ResourcePlugin for AWS::SQS::Queue.
@@ -50,6 +51,10 @@ export const sqsQueuePlugin: ResourcePlugin = {
           return undefined;
         },
       },
+      toCfn: (v: unknown) => {
+        const n = Number(v);
+        return isNaN(n) ? undefined : n;
+      },
     },
     {
       name: "MessageRetentionPeriod",
@@ -66,6 +71,10 @@ export const sqsQueuePlugin: ResourcePlugin = {
         initialValue: "86400",
         hint: "How long unprocessed messages are kept before automatic deletion. Longer retention uses more storage.",
       },
+      toCfn: (v: unknown) => {
+        const n = Number(v);
+        return isNaN(n) ? undefined : n;
+      },
     },
     {
       name: "Tags",
@@ -74,6 +83,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
         label: "Tags",
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
+        validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;
@@ -104,6 +114,10 @@ export const sqsQueuePlugin: ResourcePlugin = {
           return undefined;
         },
       },
+      toCfn: (v: unknown) => {
+        const n = Number(v);
+        return isNaN(n) ? undefined : n;
+      },
     },
     {
       name: "MaximumMessageSize",
@@ -117,6 +131,10 @@ export const sqsQueuePlugin: ResourcePlugin = {
         ],
         initialValue: "262144",
         hint: "Maximum size of a single message. For larger payloads, use S3 with the Extended Client Library.",
+      },
+      toCfn: (v: unknown) => {
+        const n = Number(v);
+        return isNaN(n) ? undefined : n;
       },
     },
     {

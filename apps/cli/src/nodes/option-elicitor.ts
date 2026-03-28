@@ -1547,6 +1547,7 @@ export async function optionElicitorNode(
           const prevIndex = advHistory.pop();
           if (prevIndex !== undefined) {
             const prevField = hintedAdvanced[prevIndex]!;
+            delete elicitedOptions[field.name];
             delete elicitedOptions[prevField.name];
             for (const f of hintedAdvanced) {
               if (f.question.showIf?.field === prevField.name) {

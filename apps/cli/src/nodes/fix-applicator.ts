@@ -133,6 +133,7 @@ function isFieldExplicitlySet(
       StorageEncrypted: ["StorageEncrypted"],
       MultiAZ: ["MultiAZ"],
       DeletionProtection: ["DeletionProtection"],
+      OwnershipControls: ["OwnershipControls"],
       VersioningConfiguration: ["VersioningConfiguration"],
       BucketEncryption: ["BucketEncryption", "KMSMasterKeyID"],
       LifecycleConfiguration: ["EnableLifecycle", "LifecycleTransitionDays", "LifecycleExpirationDays"],

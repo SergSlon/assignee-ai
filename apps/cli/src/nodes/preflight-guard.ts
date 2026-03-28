@@ -285,6 +285,26 @@ export async function preflightGuardNode(
     headlineCost = `$${pricingBreakdown.fixedSubtotal.toFixed(2)}/mo`;
   }
 
+  // If headline is still "N/A" but the breakdown has usage-based items with valid
+  // per-unit prices (e.g., S3 storage where fixedSubtotal=0), use the first
+  // usage-based unit price as the headline (e.g., "$0.0230/GB-month").
+  // Only apply when the breakdown completed without partial failure — if the
+  // top-level pricing timed out, we keep "N/A" rather than showing a possibly
+  // incomplete per-unit rate.
+  if (
+    headlineCost === CostEstimate.NA &&
+    pricingBreakdown &&
+    !pricingBreakdown.hasPartialFailure &&
+    pricingBreakdown.usageBasedItems.length > 0
+  ) {
+    const firstPriced = pricingBreakdown.usageBasedItems.find(
+      (item) => item.unitPrice !== null,
+    );
+    if (firstPriced) {
+      headlineCost = firstPriced.displayPrice;
+    }
+  }
+
   return {
     estimatedMonthlyCost: headlineCost,
     preflightPassed: !bpBlocked,

@@ -47,6 +47,7 @@ export const routePlugin: ResourcePlugin = {
         initialValue: "public",
         hint: "Public routes target an InternetGateway for direct internet access. Private routes target a NatGateway for outbound-only internet access.",
       },
+      toCfn: () => undefined,
     },
     {
       name: "GatewayId",

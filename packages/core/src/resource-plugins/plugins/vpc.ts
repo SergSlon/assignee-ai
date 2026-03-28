@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin } from "../types.js";
+import { TAGS_VALIDATE } from "../shared-fields.js";
 
 /** Validates IPv4 CIDR notation (e.g. "10.0.0.0/16"). */
 function validateCidr(value: unknown): string | undefined {
@@ -61,6 +62,7 @@ export const vpcPlugin: ResourcePlugin = {
         label: "Tags",
         placeholder: "env:production, team:platform",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
+        validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;

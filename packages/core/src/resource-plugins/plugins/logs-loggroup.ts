@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin } from "../types.js";
+import { TAGS_VALIDATE } from "../shared-fields.js";
 
 /**
  * ResourcePlugin for AWS::Logs::LogGroup.
@@ -87,6 +88,7 @@ export const logGroupPlugin: ResourcePlugin = {
         label: "Tags",
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+        validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;

@@ -11,3 +11,8 @@ description: "S3 buckets should use BucketOwnerEnforced ownership to disable ACL
 remediation: "Set OwnershipControls.Rules[0].ObjectOwnership to 'BucketOwnerEnforced'. This disables ACLs and ensures all access is managed via IAM and bucket policies."
 category: security
 lastVerified: "2026-03-22"
+autoFixable: true
+desiredStatePatch:
+  OwnershipControls:
+    Rules:
+      - ObjectOwnership: "BucketOwnerEnforced"

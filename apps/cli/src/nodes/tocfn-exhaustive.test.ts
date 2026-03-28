@@ -228,7 +228,8 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
       expect(typeof result["VersioningConfiguration"]).toBe("object");
       expect(typeof result["LifecycleConfiguration"]).toBe("object");
       expect(typeof result["CorsConfiguration"]).toBe("object");
-      expect(typeof result["ReplicationConfiguration"]).toBe("object");
+      // Replication skipped without IAM Role — no ReplicationConfiguration produced
+      expect(result["ReplicationConfiguration"]).toBeUndefined();
     });
 
     it("String fields pass through unchanged alongside boolean transforms", () => {
@@ -262,6 +263,7 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
       expect(result["LifecycleConfiguration"]).toEqual({
         Rules: [
           {
+            Id: "assignee-default-lifecycle",
             Status: "Enabled",
             Transitions: [
               { StorageClass: "STANDARD_IA", TransitionInDays: 60 },
@@ -284,6 +286,7 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
       expect(result["LifecycleConfiguration"]).toEqual({
         Rules: [
           {
+            Id: "assignee-default-lifecycle",
             Status: "Enabled",
             Transitions: [
               { StorageClass: "STANDARD_IA", TransitionInDays: 30 },
@@ -315,6 +318,7 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
       expect(result["CorsConfiguration"]).toEqual({
         CorsRules: [
           {
+            AllowedHeaders: ["*"],
             AllowedMethods: ["GET", "PUT"],
             AllowedOrigins: ["https://example.com"],
           },
@@ -335,7 +339,7 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
       expect(result["CorsAllowedOrigins"]).toBeUndefined();
     });
 
-    it("Replication: assembles ReplicationConfiguration from sub-fields", () => {
+    it("Replication: skipped without IAM Role (warns instead of producing invalid CFN)", () => {
       const result = applyToCfnTransforms(
         {
           EnableReplication: true,
@@ -343,14 +347,9 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
         },
         "AWS::S3::Bucket",
       );
-      expect(result["ReplicationConfiguration"]).toEqual({
-        Rules: [
-          {
-            Status: "Enabled",
-            Destination: { Bucket: "arn:aws:s3:::replica" },
-          },
-        ],
-      });
+      // Replication requires an IAM Role which can't be auto-created in the wizard
+      // The assembly now skips ReplicationConfiguration and logs a warning instead
+      expect(result["ReplicationConfiguration"]).toBeUndefined();
       expect(result["EnableReplication"]).toBeUndefined();
       expect(result["ReplicationDestinationBucket"]).toBeUndefined();
     });

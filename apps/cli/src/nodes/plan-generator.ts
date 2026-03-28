@@ -40,7 +40,14 @@ export function applyToCfnTransforms(
   const transformed: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(elicitedOptions)) {
-    const field = allFields.find((f) => f.name === key);
+    // When multiple fields share the same name (e.g., EngineVersion with different showIf),
+    // find the one whose showIf condition is satisfied by the current elicitedOptions.
+    const field = allFields.find((f) => {
+      if (f.name !== key) return false;
+      if (!f.question.showIf) return true;
+      const { field: depField, value: depValue } = f.question.showIf;
+      return elicitedOptions[depField] === depValue;
+    }) ?? allFields.find((f) => f.name === key);
     if (field?.toCfn) {
       const cfnValue = field.toCfn(value);
       if (cfnValue !== undefined) {
@@ -107,6 +114,7 @@ function assembleS3Composites(
         : undefined;
 
     const rule: Record<string, unknown> = {
+      Id: "assignee-default-lifecycle",
       Status: "Enabled",
       Transitions: [
         { StorageClass: "STANDARD_IA", TransitionInDays: transitionDays },
@@ -114,6 +122,11 @@ function assembleS3Composites(
     };
     if (expirationDays && expirationDays > 0) {
       // AWS requires expiration > transition days; clamp to transitionDays + 1 minimum
+      if (expirationDays <= transitionDays) {
+        process.stderr.write(
+          `Warning: Expiration (${expirationDays}d) must be greater than transition (${transitionDays}d). Adjusted to ${transitionDays + 1}d.\n`,
+        );
+      }
       rule["ExpirationInDays"] = Math.max(expirationDays, transitionDays + 1);
     }
     transformed["LifecycleConfiguration"] = { Rules: [rule] };
@@ -133,7 +146,7 @@ function assembleS3Composites(
       .map((s) => s.trim())
       .filter(Boolean);
     transformed["CorsConfiguration"] = {
-      CorsRules: [{ AllowedMethods: methods, AllowedOrigins: origins }],
+      CorsRules: [{ AllowedHeaders: ["*"], AllowedMethods: methods, AllowedOrigins: origins }],
     };
   }
   delete transformed["EnableCors"];
@@ -141,22 +154,16 @@ function assembleS3Composites(
   delete transformed["CorsAllowedMethods"];
 
   // ── Replication ──
+  // Replication requires an IAM Role ARN. Since the wizard cannot auto-create
+  // IAM roles, we skip ReplicationConfiguration entirely if no role is provided
+  // and log a warning so the user knows why replication was not configured.
   if (
     options["EnableReplication"] === true &&
     options["ReplicationDestinationBucket"]
   ) {
-    // Role must come from the user or a future IAM role creation feature.
-    // Omitted here so stripEmpty does not produce invalid CFN.
-    transformed["ReplicationConfiguration"] = {
-      Rules: [
-        {
-          Status: "Enabled",
-          Destination: {
-            Bucket: String(options["ReplicationDestinationBucket"]),
-          },
-        },
-      ],
-    };
+    process.stderr.write(
+      "Warning: Cross-region replication requires an IAM Role ARN that cannot be auto-created in the wizard. Skipping ReplicationConfiguration. Create the role manually and add it to your template.\n",
+    );
   }
   delete transformed["EnableReplication"];
   delete transformed["ReplicationDestinationBucket"];
@@ -310,7 +317,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       };
       const nameField = NAME_FIELDS[currentResource.resourceType];
       if (nameField && !desiredState[nameField]) {
-        desiredState[nameField] = `assignee-${resourceId}-${shortId}`;
+        desiredState[nameField] = `assignee-${resourceId}-${shortId}`.toLowerCase();
       }
 
       // Compound cross-reference: inject ARNs from previously completed resources
@@ -583,7 +590,13 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       if (plugin) {
         const allFields = [...plugin.commonFields, ...plugin.advancedFields];
         for (const [key, value] of Object.entries(state.elicitedOptions)) {
-          const field = allFields.find((f) => f.name === key);
+          const field =
+            allFields.find((f) => {
+              if (f.name !== key) return false;
+              if (!f.question.showIf) return true;
+              const { field: depField, value: depValue } = f.question.showIf;
+              return state.elicitedOptions![depField] === depValue;
+            }) ?? allFields.find((f) => f.name === key);
           if (field?.toCfn) {
             const cfnValue = field.toCfn(value);
             if (cfnValue === undefined) {

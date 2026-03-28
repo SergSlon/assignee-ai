@@ -44,9 +44,11 @@ export async function humanApprovalNode(
 
   // Story 11.2: non-TTY without --yes is an error
   if (!process.stdin.isTTY) {
-    throw new Error(
-      "Error: Apply requires confirmation. Use --yes for non-interactive mode.",
-    );
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage:
+        "Apply requires confirmation. Use --yes for non-interactive mode.",
+    };
   }
 
   // Plan-to-apply flow: user already confirmed in plan.ts, skip second prompt

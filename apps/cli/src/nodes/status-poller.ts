@@ -25,6 +25,9 @@ const EXTENDED_TIMEOUT_TYPES = new Set([
 ]);
 const EXTENDED_POLL_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
+/** Maximum number of poll iterations as a safety guard (450 = 15min at 2s intervals). */
+const MAX_POLL_ITERATIONS = 450;
+
 function getPollTimeout(resourceType: string): number {
   return EXTENDED_TIMEOUT_TYPES.has(resourceType)
     ? EXTENDED_POLL_TIMEOUT_MS
@@ -57,6 +60,17 @@ export async function statusPollerNode(
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: `Resource provisioning timed out after ${timeoutMin} minutes. Hint: check the AWS CloudFormation console for resource status.`,
+    };
+  }
+
+  // Iteration guard: fail if we exceed MAX_POLL_ITERATIONS regardless of wall-clock time.
+  // This catches edge cases where the wall-clock timeout is not reached but the poller
+  // has looped excessively (e.g., due to clock skew or mismatched timeout configuration).
+  const elapsedIterations = Math.floor((Date.now() - startedAt) / POLL_INTERVAL_MS);
+  if (elapsedIterations >= MAX_POLL_ITERATIONS) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: `Resource provisioning timed out after ${MAX_POLL_ITERATIONS} poll iterations (~${Math.round((MAX_POLL_ITERATIONS * POLL_INTERVAL_MS) / 60_000)} minutes). Hint: check the AWS CloudFormation console for resource status.`,
     };
   }
 

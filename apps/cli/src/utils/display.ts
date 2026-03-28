@@ -201,8 +201,13 @@ function formatSpecialValue(key: string, value: unknown): string | null {
     if (Array.isArray(rules) && rules.length > 0) {
       const rule = rules[0] as Record<string, unknown>;
       const parts: string[] = [];
-      if (rule["TransitionInDays"] || rule["Transitions"])
-        parts.push("transition");
+      if (rule["Transitions"] && Array.isArray(rule["Transitions"]) && (rule["Transitions"] as Record<string, unknown>[]).length > 0) {
+        const t = (rule["Transitions"] as Record<string, unknown>[])[0];
+        const days = t?.["TransitionInDays"];
+        parts.push(days ? `transition to IA after ${days}d` : "transition");
+      } else if (rule["TransitionInDays"]) {
+        parts.push(`transition to IA after ${rule["TransitionInDays"]}d`);
+      }
       if (rule["ExpirationInDays"])
         parts.push(`expire after ${rule["ExpirationInDays"]}d`);
       return parts.length > 0 ? parts.join(", ") : `${rules.length} rule(s)`;

@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin } from "../types.js";
+import { TAGS_VALIDATE } from "../shared-fields.js";
 
 /**
  * ResourcePlugin for AWS::ElasticLoadBalancingV2::LoadBalancer.
@@ -88,6 +89,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
         label: "Tags",
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
+        validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;
@@ -145,7 +147,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
   ],
   defaults: {
     Type: "application",
-    Scheme: "internal",
+    Scheme: "internet-facing",
     IpAddressType: "ipv4",
   },
 };
