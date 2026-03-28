@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { TAGS_VALIDATE } from "../shared-fields.js";
 import type { ResourcePlugin } from "../types.js";
 
 /**
@@ -90,21 +91,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         label: "Tags",
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
-        validate: (value: unknown) => {
-          if (!value) return undefined; // Optional
-          const s = String(value).trim();
-          if (!s) return undefined;
-          const pairs = s.split(",").map((p) => p.trim()).filter(Boolean);
-          const validPairs = pairs.filter((p) => p.includes(":"));
-          if (validPairs.length === 0) {
-            return "Invalid tag format. Use Key:Value pairs separated by commas (e.g. env:production, team:backend)";
-          }
-          if (validPairs.length < pairs.length) {
-            const invalid = pairs.filter((p) => !p.includes(":"));
-            return `Some tags are missing a colon separator and will be ignored: ${invalid.join(", ")}. Use Key:Value format.`;
-          }
-          return undefined;
-        },
+        validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;

@@ -286,6 +286,7 @@ This means the LangGraph pipeline failed to start. Common causes:
 
 - Missing Amazon Bedrock access in the configured `AWS_REGION`
 - Insufficient IAM permissions for `bedrock:InvokeModel`
+- Stale MCP client state -- the `optionalInitPromise` is reset on close to prevent dangling references after reconnect
 
 Check the server logs in your IDE's MCP output panel.
 

@@ -38,15 +38,44 @@ A **generic plugin** handles any resource type not covered by a dedicated plugin
 
 Before provisioning, the resource provisioner performs a "state guard" check (Read-Before-Write) via CloudControl to detect if a resource with the same identifier already exists. This prevents accidental overwrites.
 
-**Exception:** The state guard is **skipped for S3 buckets** because bucket names are globally unique across all AWS accounts. Another account may own a bucket with the same name, which would cause a false-positive conflict. The CloudControl `CreateResource` call itself correctly handles name collisions for S3.
+**Exception:** The state guard is **skipped for S3 buckets** because bucket names are globally unique across all AWS accounts. Another account may own a bucket with the same name, which would cause a false-positive conflict. The CloudControl `CreateResource` call itself correctly handles name collisions for S3. When a bucket name is already taken, the error message reads: "S3 bucket name is already taken globally. Choose a different name."
 
 ### Tags Format
 
-All resource plugins accept tags in `Key:Value` format (comma-separated). Tags are validated at input time -- invalid formats (missing colon separator) are rejected with an error message:
+All 22 resource plugins accept tags in `Key:Value` format (comma-separated). Tags are validated at input time via a shared `TAGS_VALIDATE` function -- invalid formats (missing colon separator) are rejected with an error message:
 
 ```
 Invalid tag format. Use Key:Value pairs separated by commas (e.g. env:production, team:backend)
 ```
+
+### Virtual Fields
+
+Some plugins use virtual wizard fields that are stripped before sending to CloudFormation:
+
+- **`RouteType`** (`AWS::EC2::Route`): An enum field (`public`/`private`) that controls which target field is shown (`GatewayId` for public, `NatGatewayId` for private). Stripped via `toCfn: () => undefined`.
+
+### Numeric Field Conversion
+
+Several plugins (CloudWatch Alarm, SQS Queue, RDS DBInstance) convert string inputs to numbers via `toCfn` using `Number()` to satisfy CloudFormation's type requirements.
+
+### ELBv2 Defaults
+
+The `AWS::ElasticLoadBalancingV2::LoadBalancer` plugin defaults `Scheme` to `internet-facing` (not `internal`).
+
+### S3 Bucket Specifics
+
+- **OwnershipControls**: Auto-fixed by BP-S3-008 to `BucketOwnerEnforced` (disables ACLs)
+- **Lifecycle rules**: Use `Id: "assignee-default-lifecycle"`. Expiration <= 30d is rejected at prompt time. Expiration is clamped above transition days in `assembleS3Composites`
+- **CORS**: `AllowedHeaders` defaults to `["*"]`
+- **Replication**: Only shown when versioning is enabled. Skipped without an IAM Role ARN
+
+### ApiGatewayV2 Tags
+
+`AWS::ApiGatewayV2::Api` Tags are formatted as `[{Key, Value}]` array (not the `{Key: Value}` map format used by some other services).
+
+### RDS Password
+
+`AWS::RDS::DBInstance` `MasterUserPassword` has no hardcoded `initialValue`. Leaving it blank triggers AWS Secrets Manager auto-generation.
 
 ## CCAPI Fallback Types
 

@@ -203,10 +203,6 @@ export class MemoryService {
   async clearFailuresForType(resourceType: string): Promise<void> {
     await this.ensureDir();
     const target = this.filePath("failures.json");
-    const existing = await this.readFailures();
-    const filtered = existing.filter((f) => f.resourceType !== resourceType);
-    // Skip write if nothing changed
-    if (filtered.length === existing.length) return;
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -215,6 +211,10 @@ export class MemoryService {
       return;
     }
     try {
+      const existing = await this.readFailures();
+      const filtered = existing.filter((f) => f.resourceType !== resourceType);
+      // Skip write if nothing changed
+      if (filtered.length === existing.length) return;
       await this.atomicWrite(target, JSON.stringify(filtered, null, 2));
     } finally {
       await this.releaseLock(target);
