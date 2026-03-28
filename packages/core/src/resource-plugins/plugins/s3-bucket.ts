@@ -159,6 +159,8 @@ export const s3BucketPlugin: ResourcePlugin = {
           const n = Number(value);
           if (!Number.isInteger(n) || n < 1)
             return "Must be a positive integer (days)";
+          if (n <= 30)
+            return `Expiration (${n}d) must be greater than the transition period (min 30d). Use at least 31.`;
           return undefined;
         },
       },
