@@ -179,7 +179,7 @@ describe("Tags field — validate", () => {
     const result = tagsValidate("env:prod, badtag, team:be");
     expect(result).toBeDefined();
     expect(result).toContain("badtag");
-    expect(result).toContain("missing a colon");
+    expect(result).toContain("missing colon");
   });
 
   it("accepts empty string (optional field)", () => {

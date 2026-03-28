@@ -18,6 +18,7 @@ import { Command } from "commander";
 import {
   CCAPI_FALLBACK_TYPES,
   CCAPI_REDIRECT_TYPES,
+  RESOURCE_TYPES,
   AssigneeError,
   ConfigurationError,
   UserCancelledError,
@@ -234,7 +235,7 @@ export async function destroyAction(
   if (
     resourceType === CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING ||
     resourceType === CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION ||
-    resourceType === "AWS::SNS::Topic"
+    resourceType === RESOURCE_TYPES.SNS_TOPIC
   ) {
     try {
       const dispatcher = new SDKFallbackDispatcher(awsConfig);
@@ -244,7 +245,7 @@ export async function destroyAction(
         deleteResult = await dispatcher.deleteEventSourceMapping(
           resolved.identifier,
         );
-      } else if (resourceType === "AWS::SNS::Topic") {
+      } else if (resourceType === RESOURCE_TYPES.SNS_TOPIC) {
         // SNS Topic delete via CloudControl fails with invalid TopicArn format.
         // Use native SDK DeleteTopicCommand instead.
         deleteResult = await dispatcher.deleteTopic(resolved.arn);
@@ -278,7 +279,7 @@ export async function destroyAction(
 
   // Pre-delete hooks
   // DynamoDB: disable deletion protection before deleting
-  if (resourceType === "AWS::DynamoDB::Table") {
+  if (resourceType === RESOURCE_TYPES.DYNAMODB_TABLE) {
     try {
       const { DynamoDBClient, UpdateTableCommand } =
         await import("@aws-sdk/client-dynamodb");

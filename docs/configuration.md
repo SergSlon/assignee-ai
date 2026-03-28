@@ -154,13 +154,16 @@ These constants control system behavior and are not user-configurable:
 | `MEMORY_MAX_PROVISIONS`        | 200         | Max provision records in memory rotation     |
 | `MEMORY_MAX_FAILURES`          | 100         | Max failure records in memory rotation       |
 | `MEMORY_MAX_PATTERNS`          | 100         | Max pattern records in memory rotation       |
+| `MAX_POLL_ITERATIONS`          | 450         | Safety guard for status poller iterations    |
+| `POLL_INTERVAL_MS`             | 2000        | Status poller interval (2 seconds)           |
+| `EXTENDED_POLL_TIMEOUT_MS`     | 900000      | Extended timeout for RDS/ELBv2/NatGateway (15 min) |
 
 ## State Directories
 
 | Path                          | Purpose                                          |
 | ----------------------------- | ------------------------------------------------ |
 | `~/.assignee/`                | Global state directory (created on first run)    |
-| `~/.assignee/memory/`         | Provision logs, failure records, pattern history |
+| `~/.assignee/memory/`         | Provision logs, failure records, pattern history (all writes use `acquireLock` + `atomicWrite` for concurrency safety) |
 | `.assignee/`                  | Project-level checkpoint and config directory    |
 | `.assignee/config.yaml`       | Project configuration                            |
 | `.assignee/checkpoint-*.json` | Saved plan checkpoints                           |

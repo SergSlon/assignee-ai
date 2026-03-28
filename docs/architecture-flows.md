@@ -39,7 +39,7 @@ flowchart TD
 
         subgraph PHASE2["Phase 2 — Provisioning"]
             RP["10. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>OR SDK fallback<br/>State guard skipped for S3<br/>(globally unique names)"]
-            SP["11. STATUS_POLLER<br/>—————<br/>Poll every 2s<br/>max 60 attempts (5 min)"]
+            SP["11. STATUS_POLLER<br/>—————<br/>Poll every 2s<br/>MAX_POLL_ITERATIONS=450 guard<br/>Extended timeout for RDS/ELBv2/<br/>NatGateway (15 min)"]
             RF["12. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
         end
 
@@ -182,11 +182,11 @@ flowchart TD
     subgraph ADVANCED["Advanced Fields (8)"]
         A1["✅ EnableLifecycle<br/>type: boolean, initial: false<br/>─────<br/>📦 HARDCODED"]
         A2["📋 LifecycleTransitionDays<br/>type: enum: 30/60/90/180<br/>showIf: EnableLifecycle=true<br/>─────<br/>📦 HARDCODED"]
-        A3["🔤 LifecycleExpirationDays<br/>type: string<br/>showIf: EnableLifecycle=true<br/>─────<br/>📦 HARDCODED"]
+        A3["🔤 LifecycleExpirationDays<br/>type: string<br/>showIf: EnableLifecycle=true<br/>validation: rejects ≤30d at prompt<br/>─────<br/>📦 HARDCODED"]
         A4["✅ EnableCors<br/>type: boolean, initial: false<br/>─────<br/>📦 HARDCODED"]
         A5["🔤 CorsAllowedOrigins<br/>type: string<br/>showIf: EnableCors=true<br/>─────<br/>📦 HARDCODED"]
         A6["📋 CorsAllowedMethods<br/>type: enum: GET / GET,PUT / All<br/>showIf: EnableCors=true<br/>─────<br/>📦 HARDCODED"]
-        A7["✅ EnableReplication<br/>type: boolean, initial: false<br/>─────<br/>📦 HARDCODED"]
+        A7["✅ EnableReplication<br/>type: boolean, initial: false<br/>showIf: VersioningConfiguration=true<br/>─────<br/>📦 HARDCODED<br/>Skipped without IAM Role<br/>(warns instead of invalid CFN)"]
         A8["🔤 ReplicationDestinationBucket<br/>type: string, arn:aws:s3:::<br/>showIf: EnableReplication=true<br/>─────<br/>📦 HARDCODED"]
     end
 
@@ -205,7 +205,7 @@ flowchart TD
     A7D -->|true| A8 --> TOCFN
     A7D -->|false| TOCFN
 
-    TOCFN["applyToCfnTransforms<br/>+ assembleS3Composites<br/>─────<br/>BucketEncryption true → CFN object<br/>false booleans → omitted<br/>Tags → Key/Value array<br/>Composite assembly:<br/>Lifecycle/CORS/Replication"]
+    TOCFN["applyToCfnTransforms<br/>+ assembleS3Composites<br/>─────<br/>BucketEncryption true → CFN object<br/>false booleans → omitted<br/>Tags → Key/Value array<br/>Composite assembly:<br/>Lifecycle (Id: assignee-default-lifecycle,<br/>clamp: expiration > transition + warn),<br/>CORS (AllowedHeaders: ★),<br/>Replication (skipped w/o IAM Role),<br/>OwnershipControls (BP-S3-008<br/>BucketOwnerEnforced auto-fix)"]
 
     TOCFN --> PG([Plan Generator])
 

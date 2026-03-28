@@ -1,5 +1,6 @@
 import { PricingStrategyRegistry } from "./registry.js";
 import { PricingDecomposerRegistry } from "./decomposer-registry.js";
+import { RESOURCE_TYPES } from "../config/resource-types.js";
 import { s3PricingStrategy } from "./strategies/s3.js";
 import { ssmPricingStrategy } from "./strategies/ssm.js";
 import { iamRolePricingStrategy } from "./strategies/iam-role.js";
@@ -40,55 +41,55 @@ import { dynamodbPricingDecomposer } from "./decomposers/dynamodb.js";
  *   Zero changes to preflight-guard or other nodes are required.
  */
 export const defaultPricingRegistry = new PricingStrategyRegistry();
-defaultPricingRegistry.register("AWS::S3::Bucket", s3PricingStrategy);
-defaultPricingRegistry.register("AWS::SSM::Parameter", ssmPricingStrategy);
-defaultPricingRegistry.register("AWS::IAM::Role", iamRolePricingStrategy);
-defaultPricingRegistry.register("AWS::EC2::Instance", ec2PricingStrategy);
-defaultPricingRegistry.register("AWS::RDS::DBInstance", rdsPricingStrategy);
-defaultPricingRegistry.register("AWS::Lambda::Function", lambdaPricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.S3_BUCKET, s3PricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.SSM_PARAMETER, ssmPricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.IAM_ROLE, iamRolePricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.EC2_INSTANCE, ec2PricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.RDS_DB_INSTANCE, rdsPricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.LAMBDA_FUNCTION, lambdaPricingStrategy);
 defaultPricingRegistry.register(
-  "AWS::EC2::SecurityGroup",
+  RESOURCE_TYPES.EC2_SECURITY_GROUP,
   securityGroupPricingStrategy,
 );
 defaultPricingRegistry.register(
-  "AWS::DynamoDB::Table",
+  RESOURCE_TYPES.DYNAMODB_TABLE,
   dynamodbPricingStrategy,
 );
-defaultPricingRegistry.register("AWS::EC2::VPC", vpcPricingStrategy);
-defaultPricingRegistry.register("AWS::EC2::Subnet", subnetPricingStrategy);
-defaultPricingRegistry.register("AWS::SQS::Queue", sqsPricingStrategy);
-defaultPricingRegistry.register("AWS::SNS::Topic", snsPricingStrategy);
-defaultPricingRegistry.register("AWS::ECS::Cluster", ecsClusterPricingStrategy);
-defaultPricingRegistry.register("AWS::ECR::Repository", ecrPricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.EC2_VPC, vpcPricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.EC2_SUBNET, subnetPricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.SQS_QUEUE, sqsPricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.SNS_TOPIC, snsPricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.ECS_CLUSTER, ecsClusterPricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.ECR_REPOSITORY, ecrPricingStrategy);
 defaultPricingRegistry.register(
-  "AWS::ElasticLoadBalancingV2::LoadBalancer",
+  RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
   elbv2PricingStrategy,
 );
 // Sprint F: Tier 1 resources (Epic 25)
-defaultPricingRegistry.register("AWS::Logs::LogGroup", logsPricingStrategy);
+defaultPricingRegistry.register(RESOURCE_TYPES.LOGS_LOG_GROUP, logsPricingStrategy);
 defaultPricingRegistry.register(
-  "AWS::EC2::InternetGateway",
+  RESOURCE_TYPES.EC2_INTERNET_GATEWAY,
   internetGatewayPricingStrategy,
 );
 defaultPricingRegistry.register(
-  "AWS::EC2::RouteTable",
+  RESOURCE_TYPES.EC2_ROUTE_TABLE,
   routeTablePricingStrategy,
 );
 defaultPricingRegistry.register(
-  "AWS::EC2::NatGateway",
+  RESOURCE_TYPES.EC2_NAT_GATEWAY,
   natGatewayPricingStrategy,
 );
 // Sprint G: Tier 2 resources (Epic 26)
 defaultPricingRegistry.register(
-  "AWS::ApiGatewayV2::Api",
+  RESOURCE_TYPES.APIGATEWAYV2_API,
   apiGatewayV2PricingStrategy,
 );
 defaultPricingRegistry.register(
-  "AWS::CloudWatch::Alarm",
+  RESOURCE_TYPES.CLOUDWATCH_ALARM,
   cloudWatchAlarmPricingStrategy,
 );
 defaultPricingRegistry.register(
-  "AWS::SecretsManager::Secret",
+  RESOURCE_TYPES.SECRETSMANAGER_SECRET,
   secretsManagerPricingStrategy,
 );
 

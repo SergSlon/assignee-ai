@@ -84,7 +84,8 @@ export function getCachedPrice(
   projectDir?: string,
 ): unknown | null {
   const hash = computeHash(serviceCode, filters);
-  const filePath = path.join(CACHE_DIR, `${serviceCode}-${hash}.json`);
+  const safe = serviceCode.replace(/[^a-zA-Z0-9_-]/g, '');
+  const filePath = path.join(CACHE_DIR, `${safe}-${hash}.json`);
 
   try {
     const content = fs.readFileSync(filePath, "utf-8");
@@ -128,7 +129,8 @@ export function setCachedPrice(
   try {
     ensureCacheDir();
     const hash = computeHash(serviceCode, filters);
-    const filePath = path.join(CACHE_DIR, `${serviceCode}-${hash}.json`);
+    const safe = serviceCode.replace(/[^a-zA-Z0-9_-]/g, '');
+    const filePath = path.join(CACHE_DIR, `${safe}-${hash}.json`);
 
     const entry: CacheEntry = {
       data,

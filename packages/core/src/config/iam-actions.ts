@@ -8,6 +8,8 @@
  * @see Story 19.1 — IAM MCP Server Integration (FR-43)
  */
 
+import { RESOURCE_TYPES } from "./resource-types.js";
+
 /**
  * Returns the IAM actions required to provision a given CloudFormation resource type.
  * Includes both CloudControl API base actions and service-specific actions.
@@ -29,7 +31,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
   ];
 
   const serviceActionMap: Record<string, string[]> = {
-    "AWS::S3::Bucket": [
+    [RESOURCE_TYPES.S3_BUCKET]: [
       "s3:CreateBucket",
       "s3:DeleteBucket",
       "s3:GetBucketTagging",
@@ -59,7 +61,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "s3:GetIntelligentTieringConfiguration",
       "s3:PutIntelligentTieringConfiguration",
     ],
-    "AWS::Lambda::Function": [
+    [RESOURCE_TYPES.LAMBDA_FUNCTION]: [
       "lambda:CreateFunction",
       "lambda:DeleteFunction",
       "lambda:GetFunction",
@@ -69,7 +71,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "lambda:ListTags",
       "iam:PassRole",
     ],
-    "AWS::DynamoDB::Table": [
+    [RESOURCE_TYPES.DYNAMODB_TABLE]: [
       "dynamodb:CreateTable",
       "dynamodb:DeleteTable",
       "dynamodb:DescribeTable",
@@ -79,7 +81,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "dynamodb:TagResource",
       "dynamodb:ListTagsOfResource",
     ],
-    "AWS::SQS::Queue": [
+    [RESOURCE_TYPES.SQS_QUEUE]: [
       "sqs:CreateQueue",
       "sqs:DeleteQueue",
       "sqs:GetQueueAttributes",
@@ -88,7 +90,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "sqs:TagQueue",
       "sqs:ListQueueTags",
     ],
-    "AWS::SNS::Topic": [
+    [RESOURCE_TYPES.SNS_TOPIC]: [
       "sns:CreateTopic",
       "sns:DeleteTopic",
       "sns:GetTopicAttributes",
@@ -96,7 +98,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "sns:TagResource",
       "sns:ListTagsForResource",
     ],
-    "AWS::SSM::Parameter": [
+    [RESOURCE_TYPES.SSM_PARAMETER]: [
       "ssm:PutParameter",
       "ssm:GetParameter",
       "ssm:GetParameters",
@@ -104,7 +106,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ssm:AddTagsToResource",
       "ssm:ListTagsForResource",
     ],
-    "AWS::EC2::Instance": [
+    [RESOURCE_TYPES.EC2_INSTANCE]: [
       "ec2:RunInstances",
       "ec2:TerminateInstances",
       "ec2:CreateTags",
@@ -117,7 +119,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ssm:GetParameter",
       "iam:PassRole",
     ],
-    "AWS::RDS::DBInstance": [
+    [RESOURCE_TYPES.RDS_DB_INSTANCE]: [
       "rds:CreateDBInstance",
       "rds:DeleteDBInstance",
       "rds:DescribeDBInstances",
@@ -125,7 +127,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "rds:AddTagsToResource",
       "rds:ListTagsForResource",
     ],
-    "AWS::EC2::SecurityGroup": [
+    [RESOURCE_TYPES.EC2_SECURITY_GROUP]: [
       "ec2:CreateSecurityGroup",
       "ec2:DeleteSecurityGroup",
       "ec2:AuthorizeSecurityGroupIngress",
@@ -137,14 +139,14 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ec2:DescribeSecurityGroups",
       "ec2:DescribeVpcs",
     ],
-    "AWS::EC2::VPC": [
+    [RESOURCE_TYPES.EC2_VPC]: [
       "ec2:CreateVpc",
       "ec2:DeleteVpc",
       "ec2:ModifyVpcAttribute",
       "ec2:DescribeVpcs",
       "ec2:CreateTags",
     ],
-    "AWS::IAM::Role": [
+    [RESOURCE_TYPES.IAM_ROLE]: [
       "iam:CreateRole",
       "iam:DeleteRole",
       "iam:GetRole",
@@ -156,7 +158,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "iam:TagRole",
       "iam:PassRole",
     ],
-    "AWS::EC2::Subnet": [
+    [RESOURCE_TYPES.EC2_SUBNET]: [
       "ec2:CreateSubnet",
       "ec2:DeleteSubnet",
       "ec2:DescribeSubnets",
@@ -164,7 +166,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ec2:CreateTags",
       "ec2:DescribeAvailabilityZones",
     ],
-    "AWS::ECS::Cluster": [
+    [RESOURCE_TYPES.ECS_CLUSTER]: [
       "ecs:CreateCluster",
       "ecs:DeleteCluster",
       "ecs:DescribeClusters",
@@ -172,7 +174,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ecs:PutClusterCapacityProviders",
       "ecs:TagResource",
     ],
-    "AWS::ECR::Repository": [
+    [RESOURCE_TYPES.ECR_REPOSITORY]: [
       "ecr:CreateRepository",
       "ecr:DeleteRepository",
       "ecr:DescribeRepositories",
@@ -181,7 +183,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ecr:SetRepositoryPolicy",
       "ecr:TagResource",
     ],
-    "AWS::ElasticLoadBalancingV2::LoadBalancer": [
+    [RESOURCE_TYPES.ELBV2_LOAD_BALANCER]: [
       "elasticloadbalancing:CreateLoadBalancer",
       "elasticloadbalancing:DeleteLoadBalancer",
       "elasticloadbalancing:DescribeLoadBalancers",
@@ -191,7 +193,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ec2:DescribeSecurityGroups",
     ],
     // Sprint F: Tier 1 resources (Epic 25)
-    "AWS::Logs::LogGroup": [
+    [RESOURCE_TYPES.LOGS_LOG_GROUP]: [
       "logs:CreateLogGroup",
       "logs:DeleteLogGroup",
       "logs:DescribeLogGroups",
@@ -199,7 +201,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "logs:TagLogGroup",
       "logs:ListTagsLogGroup",
     ],
-    "AWS::EC2::InternetGateway": [
+    [RESOURCE_TYPES.EC2_INTERNET_GATEWAY]: [
       "ec2:CreateInternetGateway",
       "ec2:DeleteInternetGateway",
       "ec2:DescribeInternetGateways",
@@ -207,7 +209,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ec2:DetachInternetGateway",
       "ec2:CreateTags",
     ],
-    "AWS::EC2::RouteTable": [
+    [RESOURCE_TYPES.EC2_ROUTE_TABLE]: [
       "ec2:CreateRouteTable",
       "ec2:DeleteRouteTable",
       "ec2:DescribeRouteTables",
@@ -215,13 +217,13 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ec2:DisassociateRouteTable",
       "ec2:CreateTags",
     ],
-    "AWS::EC2::Route": [
+    [RESOURCE_TYPES.EC2_ROUTE]: [
       "ec2:CreateRoute",
       "ec2:DeleteRoute",
       "ec2:ReplaceRoute",
       "ec2:DescribeRouteTables",
     ],
-    "AWS::EC2::NatGateway": [
+    [RESOURCE_TYPES.EC2_NAT_GATEWAY]: [
       "ec2:CreateNatGateway",
       "ec2:DeleteNatGateway",
       "ec2:DescribeNatGateways",
@@ -230,7 +232,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ec2:ReleaseAddress",
     ],
     // Sprint G: Tier 2 resources (Epic 26)
-    "AWS::ApiGatewayV2::Api": [
+    [RESOURCE_TYPES.APIGATEWAYV2_API]: [
       "apigateway:CreateApi",
       "apigateway:DeleteApi",
       "apigateway:GetApi",
@@ -241,7 +243,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "apigateway:CreateDeployment",
       "apigateway:TagResource",
     ],
-    "AWS::CloudWatch::Alarm": [
+    [RESOURCE_TYPES.CLOUDWATCH_ALARM]: [
       "cloudwatch:PutMetricAlarm",
       "cloudwatch:DeleteAlarms",
       "cloudwatch:DescribeAlarms",
@@ -250,7 +252,7 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "cloudwatch:EnableAlarmActions",
       "cloudwatch:DisableAlarmActions",
     ],
-    "AWS::SecretsManager::Secret": [
+    [RESOURCE_TYPES.SECRETSMANAGER_SECRET]: [
       "secretsmanager:CreateSecret",
       "secretsmanager:DeleteSecret",
       "secretsmanager:DescribeSecret",

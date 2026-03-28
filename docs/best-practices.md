@@ -71,9 +71,14 @@ When this rule fires, the fix is applied by merging `desiredStatePatch` into the
 | ---------- | ------------------------------------ | ---------- | ------------- | ------------------------------------------------------------------------ |
 | BP-S3-005  | Versioning should be enabled         | HIGH       | reliability   | Sets `VersioningConfiguration.Status` to `Enabled`                       |
 | BP-S3-006  | Server-side encryption required      | CRITICAL   | security      | Adds `BucketEncryption` with SSE-S3 (AES256)                            |
-| BP-S3-010  | Lifecycle configuration recommended  | HIGH       | cost          | Adds lifecycle rules (STANDARD_IA at 30d, GLACIER at 90d, expire 365d)  |
+| BP-S3-008  | Ownership controls enforced           | HIGH       | security      | Sets `OwnershipControls.Rules[0].ObjectOwnership` to `BucketOwnerEnforced` (disables ACLs) |
+| BP-S3-010  | Lifecycle configuration recommended  | HIGH       | cost          | Adds lifecycle rules (Id: `assignee-default-lifecycle`, STANDARD_IA at 30d, GLACIER at 90d, expire 365d)  |
 
-**Lifecycle expiration clamping:** When auto-fix applies BP-S3-010 or the user configures lifecycle rules, the plan generator automatically clamps `ExpirationInDays` to be greater than the highest `TransitionInDays` value (AWS requires expiration > transition days).
+**Lifecycle expiration validation:** At prompt time, expiration values <= 30 days are rejected. In `assembleS3Composites`, `ExpirationInDays` is clamped to be greater than the highest `TransitionInDays` value (AWS requires expiration > transition days), with a warning emitted to stderr when clamping occurs.
+
+**CORS defaults:** When CORS is enabled, `AllowedHeaders` defaults to `["*"]`.
+
+**Replication gating:** The `EnableReplication` field is only shown when versioning is enabled (`showIf: VersioningConfiguration=true`). Replication is silently skipped (with a warning) if no IAM Role ARN is provided, since the wizard cannot auto-create one.
 
 ### Type B: Interactive Fix (`fixType: interactive`)
 
