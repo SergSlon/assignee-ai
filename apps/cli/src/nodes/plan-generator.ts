@@ -460,7 +460,14 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         .sort((a: FailureRecord, b: FailureRecord) =>
           b.timestamp.localeCompare(a.timestamp),
         );
-      const latestFailure = previousFailuresForType[0];
+      // Only show provisioning failures (apply errors), not transient plan errors
+      const provisioningFailures = previousFailuresForType.filter(
+        (f: FailureRecord) =>
+          !f.errorMessage.includes("invalid JSON") &&
+          !f.errorMessage.includes("Plan generator") &&
+          !f.errorMessage.includes("Intent parsing"),
+      );
+      const latestFailure = provisioningFailures[0];
       if (latestFailure) {
         // Only show if failure is newer than latest success for this type
         const provisions = await defaultMemoryService.readProvisions();

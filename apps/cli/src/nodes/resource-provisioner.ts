@@ -216,15 +216,18 @@ export async function resourceProvisionerNode(
   );
 
   if (createErr) {
-    const errorCategory =
-      createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
+    const isBucketAlreadyExists =
+      createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS &&
+      state.resourceType === RESOURCE_TYPES.S3_BUCKET;
+    const errorCategory = createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
         ? PROVISIONING_ERROR_CODES.ALREADY_EXISTS
         : createErr.kind === ProvisioningErrorKind.THROTTLED
           ? PROVISIONING_ERROR_CODES.THROTTLED
           : PROVISIONING_ERROR_CODES.UNKNOWN;
-    const prefix =
-      createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
-        ? "Resource already exists. Re-run 'assignee plan' to refresh."
+    const prefix = isBucketAlreadyExists
+      ? "S3 bucket name is already taken globally. Choose a different name."
+      : createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
+        ? "Resource already exists. Choose a different name."
         : createErr.kind === ProvisioningErrorKind.THROTTLED
           ? "Request throttled by AWS. Please wait and retry."
           : createErr.message;
