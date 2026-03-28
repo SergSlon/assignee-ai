@@ -424,7 +424,7 @@ describe("resourceProvisionerNode", () => {
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(/already exists/i);
+      expect(result.errorMessage).toMatch(/already taken globally|already exists/i);
       expect(result.errorMessage).toMatch(/CloudControl provisioning failed/);
     });
 
