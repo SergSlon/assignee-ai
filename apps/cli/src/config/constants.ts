@@ -80,3 +80,6 @@ export const CLEANUP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /** Threshold for deduplicating memory lock acquisition attempts (ms). */
 export const MEMORY_DEDUP_THRESHOLD_MS = 10_000;
+
+/** Maximum iterations for the provisioning loop before aborting. */
+export const MAX_PROVISION_LOOPS = 50;

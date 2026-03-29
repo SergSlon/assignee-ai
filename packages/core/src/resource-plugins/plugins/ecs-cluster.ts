@@ -1,4 +1,4 @@
-import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -131,7 +131,7 @@ export const ecsClusterPlugin: ResourcePlugin = {
     return [
       {
         logicalId: `${sanitized}LogGroup`,
-        type: COMPANION_RESOURCE_TYPES.LOGS_LOG_GROUP,
+        type: RESOURCE_TYPES.LOGS_LOG_GROUP,
         properties: {
           LogGroupName: `/ecs/${clusterName}`,
           RetentionInDays: retention,

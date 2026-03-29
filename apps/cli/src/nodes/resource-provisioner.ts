@@ -215,7 +215,10 @@ export async function resourceProvisionerNode(
       if (eipResult.AllocationId) {
         state.desiredState["AllocationId"] = eipResult.AllocationId;
       } else {
-        delete state.desiredState["AllocationId"];
+        return {
+          executionStatus: ExecutionStatus.FAILED,
+          errorMessage: "EIP allocation succeeded but returned no AllocationId.",
+        };
       }
     } catch (eipErr: unknown) {
       const errMsg =
@@ -263,6 +266,19 @@ export async function resourceProvisionerNode(
         : createErr.kind === ProvisioningErrorKind.THROTTLED
           ? "Request throttled by AWS. Please wait and retry."
           : createErr.message;
+    // Release EIP if we allocated one for NatGateway — best-effort cleanup
+    if (
+      state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
+      state.desiredState["AllocationId"] &&
+      state.desiredState["AllocationId"] !== "AUTO_ALLOCATE_EIP"
+    ) {
+      try {
+        const { EC2Client, ReleaseAddressCommand } = await import("@aws-sdk/client-ec2");
+        const ec2 = new EC2Client({ region: process.env["AWS_REGION"] ?? "us-east-1" });
+        await ec2.send(new ReleaseAddressCommand({ AllocationId: state.desiredState["AllocationId"] as string }));
+      } catch { /* best-effort cleanup */ }
+    }
+
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: `CloudControl provisioning failed: ${prefix}`,
