@@ -11,7 +11,7 @@
  *
  * NFR-15: maxOutputTokens capped at 1024 by default.
  *
- * @see Story 14.1 — LiteLLM Provider Gateway Integration
+ * @see Story 14.1 — LLM Provider Gateway Integration
  */
 
 import { generateText, Output } from "ai";
@@ -145,7 +145,7 @@ async function createLanguageModel(
   }
 }
 
-export interface LiteLLMAdapterConfig {
+export interface LlmAdapterConfig {
   /** Model string, e.g. "anthropic/claude-sonnet-4-5". Defaults to DEFAULT_MODEL. */
   modelString?: string;
   /** Optional Bedrock guardrail identifier (only applies to bedrock/ provider). */
@@ -154,12 +154,12 @@ export interface LiteLLMAdapterConfig {
   guardrailVersion?: string;
 }
 
-export class LiteLLMAdapter implements LlmPort {
+export class LlmAdapter implements LlmPort {
   private readonly parsed: ParsedModel;
   private readonly guardrailOpts: Record<string, string>;
   private languageModel: LanguageModel | null = null;
 
-  constructor(private readonly config: LiteLLMAdapterConfig = {}) {
+  constructor(private readonly config: LlmAdapterConfig = {}) {
     const modelString = config.modelString ?? DEFAULT_MODEL;
     this.parsed = parseModelString(modelString);
 

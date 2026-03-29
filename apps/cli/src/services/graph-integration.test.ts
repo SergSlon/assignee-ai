@@ -3,7 +3,7 @@
  *
  * These tests exercise the REAL node implementations (schema_fetcher, preflight_guard,
  * plan_generator, etc.) with mocked external boundaries:
- *   - LLM: mocked via `ai` module (LiteLLMAdapter mock delegates to it)
+ *   - LLM: mocked via `ai` module (LlmAdapter mock delegates to it)
  *   - MCP tools: mocked via test-fixtures/mcp-mock-responses.ts
  *   - CloudControl: mocked module to prevent real AWS calls
  *   - Display/Prompts: mocked to prevent TTY output
@@ -64,12 +64,12 @@ vi.mock("@ai-sdk/amazon-bedrock", () => ({
   createAmazonBedrock: vi.fn(() => vi.fn()),
 }));
 
-// Mock LiteLLMAdapter — delegates to the same ai mock so existing test fixtures work.
-vi.mock("./litellm-adapter.js", async () => {
+// Mock LlmAdapter — delegates to the same ai mock so existing test fixtures work.
+vi.mock("./llm-adapter.js", async () => {
   const { LlmError, safeTry } = await import("@assignee/core");
   const ai = await import("ai");
   return {
-    LiteLLMAdapter: vi.fn().mockImplementation(() => ({
+    LlmAdapter: vi.fn().mockImplementation(() => ({
       generateStructured: async (
         prompt: string,
         schema: unknown,

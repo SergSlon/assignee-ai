@@ -67,7 +67,7 @@ function auditorEnv(
  *   - Knowledge: no AWS creds — public remote API via fastmcp
  *   - Docs:    no AWS creds — public documentation API via uvx subprocess
  *
- * Note: Schema fetching (previously via cfn-mcp-server / IAC) is now handled
+ * Note: Schema fetching is handled
  * by CloudFormationSchemaService (direct SDK) — see Story 31.3.
  */
 export function getMcpServerConfigs(): Record<string, McpServerConfig> {

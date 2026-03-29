@@ -104,10 +104,10 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
       }
 
       // Story 9.7: Wrap LLM adapter with recorder when recording enabled
-      const { LiteLLMAdapter } = await import(
-        "../services/litellm-adapter.js"
+      const { LlmAdapter } = await import(
+        "../services/llm-adapter.js"
       );
-      const baseLlm = new LiteLLMAdapter({
+      const baseLlm = new LlmAdapter({
         modelString: process.env["ASSIGNEE_MODEL"],
         guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
         guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],

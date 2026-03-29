@@ -27,10 +27,10 @@ vi.mock("ai", () => ({
 
 import {
   parseModelString,
-  LiteLLMAdapter,
+  LlmAdapter,
   DEFAULT_MODEL,
   DEFAULT_MAX_TOKENS,
-} from "../litellm-adapter.js";
+} from "../llm-adapter.js";
 import { generateText } from "ai";
 
 const savedEnv = { ...process.env };
@@ -102,7 +102,7 @@ describe("DEFAULT_MAX_TOKENS", () => {
   });
 });
 
-describe("LiteLLMAdapter", () => {
+describe("LlmAdapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Set required API keys for tests
@@ -117,12 +117,12 @@ describe("LiteLLMAdapter", () => {
 
   it("uses DEFAULT_MODEL when no modelString is provided", () => {
     // Should not throw — defaults to bedrock which doesn't need API key env var
-    const adapter = new LiteLLMAdapter();
+    const adapter = new LlmAdapter();
     expect(adapter).toBeDefined();
   });
 
   it("accepts explicit modelString", () => {
-    const adapter = new LiteLLMAdapter({
+    const adapter = new LlmAdapter({
       modelString: "anthropic/claude-sonnet-4-5",
     });
     expect(adapter).toBeDefined();
@@ -130,7 +130,7 @@ describe("LiteLLMAdapter", () => {
 
   describe("generateText", () => {
     it("calls Vercel AI SDK generateText with default maxTokens", async () => {
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "bedrock/amazon.nova-lite-v1:0",
       });
       const [err, result] = await adapter.generateText("Hello");
@@ -147,7 +147,7 @@ describe("LiteLLMAdapter", () => {
     });
 
     it("respects maxTokens override", async () => {
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "bedrock/amazon.nova-lite-v1:0",
       });
       await adapter.generateText("Hello", { maxTokens: 2048 });
@@ -162,7 +162,7 @@ describe("LiteLLMAdapter", () => {
     it("returns LlmError on failure", async () => {
       vi.mocked(generateText).mockRejectedValueOnce(new Error("API down"));
 
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "bedrock/amazon.nova-lite-v1:0",
       });
       const [err, result] = await adapter.generateText("Hello");
@@ -173,7 +173,7 @@ describe("LiteLLMAdapter", () => {
     });
 
     it("includes guardrail opts for bedrock provider", async () => {
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "bedrock/amazon.nova-lite-v1:0",
         guardrailId: "my-guardrail",
         guardrailVersion: "2",
@@ -189,7 +189,7 @@ describe("LiteLLMAdapter", () => {
     });
 
     it("does not include guardrail opts for non-bedrock providers", async () => {
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "anthropic/claude-sonnet-4-5",
         guardrailId: "my-guardrail",
       });
@@ -203,7 +203,7 @@ describe("LiteLLMAdapter", () => {
   describe("generateStructured", () => {
     it("returns validated structured output", async () => {
       const schema = z.object({ foo: z.string() });
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "bedrock/amazon.nova-lite-v1:0",
       });
 
@@ -220,7 +220,7 @@ describe("LiteLLMAdapter", () => {
       vi.mocked(generateText).mockRejectedValueOnce(new Error("schema fail"));
 
       const schema = z.object({ foo: z.string() });
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "bedrock/amazon.nova-lite-v1:0",
       });
       const [err, result] = await adapter.generateStructured(
@@ -237,7 +237,7 @@ describe("LiteLLMAdapter", () => {
   describe("missing API key errors", () => {
     it("produces clear error for missing ANTHROPIC_API_KEY", async () => {
       delete process.env["ANTHROPIC_API_KEY"];
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "anthropic/claude-sonnet-4-5",
       });
       const [err] = await adapter.generateText("Hello");
@@ -248,7 +248,7 @@ describe("LiteLLMAdapter", () => {
 
     it("produces clear error for missing OPENAI_API_KEY", async () => {
       delete process.env["OPENAI_API_KEY"];
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "openai/gpt-4o",
       });
       const [err] = await adapter.generateText("Hello");
@@ -259,7 +259,7 @@ describe("LiteLLMAdapter", () => {
 
     it("produces clear error for missing GOOGLE_GENERATIVE_AI_API_KEY", async () => {
       delete process.env["GOOGLE_GENERATIVE_AI_API_KEY"];
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "google/gemini-2.0-flash",
       });
       const [err] = await adapter.generateText("Hello");
@@ -269,7 +269,7 @@ describe("LiteLLMAdapter", () => {
     });
 
     it("bedrock does not require explicit API key env var", async () => {
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "bedrock/amazon.nova-lite-v1:0",
       });
       const [err] = await adapter.generateText("Hello");
@@ -278,7 +278,7 @@ describe("LiteLLMAdapter", () => {
     });
 
     it("ollama does not require explicit API key env var", async () => {
-      const adapter = new LiteLLMAdapter({
+      const adapter = new LlmAdapter({
         modelString: "ollama/llama3",
       });
       const [err] = await adapter.generateText("Hello");

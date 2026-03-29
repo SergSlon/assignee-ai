@@ -34,7 +34,7 @@ import { fixApplicatorNode } from "../nodes/fix-applicator.js";
 import { createCloudControlClient } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
-import { LiteLLMAdapter } from "./litellm-adapter.js";
+import { LlmAdapter } from "./llm-adapter.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import type { LlmPort } from "@assignee/core";
 import {
@@ -73,7 +73,7 @@ export function createGraph(
 
   const llmAdapter: LlmPort =
     options.llmClient ??
-    new LiteLLMAdapter({
+    new LlmAdapter({
       modelString: process.env["ASSIGNEE_MODEL"],
       guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
       guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],

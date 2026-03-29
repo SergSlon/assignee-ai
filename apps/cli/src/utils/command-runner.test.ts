@@ -44,8 +44,8 @@ vi.mock("./recorder.js", () => ({
   RecordingLlmAdapter: vi.fn(),
 }));
 
-vi.mock("../services/litellm-adapter.js", () => ({
-  LiteLLMAdapter: vi.fn().mockImplementation(() => ({
+vi.mock("../services/llm-adapter.js", () => ({
+  LlmAdapter: vi.fn().mockImplementation(() => ({
     generateText: vi.fn(),
     generateStructured: vi.fn(),
   })),

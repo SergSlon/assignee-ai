@@ -5,7 +5,7 @@
  *   aws-pricing-mcp-server        → cost estimation
  *   aws-documentation-mcp-server  → contextual field help
  *
- * Note: Schema fetching (previously via cfn-mcp-server / get_resource_schema_information)
+ * Note: Schema fetching is handled by CloudFormationSchemaService (direct SDK)
  * is now handled by CloudFormationSchemaService (direct SDK) — see Story 31.3.
  */
 
