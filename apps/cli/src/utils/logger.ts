@@ -44,6 +44,7 @@ export const LOG_ACTIONS = {
   MEMORY_WRITE_FAILED: "memory_write_failed",
   OPTION_ELICITED: "option_elicited",
   FIX_APPLIED: "fix_applied",
+  PROVISION_LOOP_EXCEEDED: "provision_loop_exceeded",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

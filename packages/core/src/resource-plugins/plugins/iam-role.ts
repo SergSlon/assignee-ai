@@ -93,6 +93,7 @@ export const iamRolePlugin: ResourcePlugin = {
         const key = String(answer);
         const policy = TRUST_POLICIES[key];
         if (!policy) {
+          process.stderr.write(`Warning: Unknown trust policy "${key}". AssumeRolePolicyDocument omitted.\n`);
           return undefined;
         }
         return policy;

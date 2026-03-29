@@ -12,6 +12,16 @@ import type { AgentState } from "./graph-state.js";
 export function routeCheckpointEntry(
   state: AgentState,
 ): typeof GraphNode.INTENT_PARSER | typeof GraphNode.HUMAN_APPROVAL {
+  // Terminal states must never reach HUMAN_APPROVAL — short-circuit to INTENT_PARSER
+  // which will fall through to result_formatter.
+  if (
+    state.executionStatus === ExecutionStatus.FAILED ||
+    state.executionStatus === ExecutionStatus.CANCELLED ||
+    state.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE ||
+    state.executionStatus === ExecutionStatus.POLICY_BLOCKED
+  ) {
+    return GraphNode.INTENT_PARSER;
+  }
   if (state.checkpointResumed && state.desiredState) {
     return GraphNode.HUMAN_APPROVAL;
   }
@@ -31,7 +41,9 @@ export function routePreflightGuard(
   // even if preflightPassed is true (e.g., checkpoint-resumed failed run).
   if (
     state.executionStatus === ExecutionStatus.FAILED ||
-    state.executionStatus === ExecutionStatus.CANCELLED
+    state.executionStatus === ExecutionStatus.CANCELLED ||
+    state.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE ||
+    state.executionStatus === ExecutionStatus.POLICY_BLOCKED
   ) {
     return GraphNode.RESULT_FORMATTER;
   }

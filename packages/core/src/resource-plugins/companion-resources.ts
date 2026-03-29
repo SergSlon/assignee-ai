@@ -1,4 +1,4 @@
-import { COMPANION_RESOURCE_TYPES } from "../config/resource-types.js";
+import { RESOURCE_TYPES } from "../config/resource-types.js";
 import type { CfnOutput, ResourcePlugin } from "./types.js";
 
 /**
@@ -42,7 +42,7 @@ export function collectCompanionResources(
   // Build a set of already-planned LogGroupNames for deduplication.
   const existingLogGroupNames = new Set<string>();
   for (const { plugin, desiredState } of planned) {
-    if (plugin.resourceType === COMPANION_RESOURCE_TYPES.LOGS_LOG_GROUP) {
+    if (plugin.resourceType === RESOURCE_TYPES.LOGS_LOG_GROUP) {
       const name = desiredState["LogGroupName"];
       if (typeof name === "string") {
         existingLogGroupNames.add(name);
@@ -59,7 +59,7 @@ export function collectCompanionResources(
     const generated = plugin.companionResources(desiredState);
     for (const companion of generated) {
       // Deduplicate LogGroups by LogGroupName.
-      if (companion.type === COMPANION_RESOURCE_TYPES.LOGS_LOG_GROUP) {
+      if (companion.type === RESOURCE_TYPES.LOGS_LOG_GROUP) {
         const lgName = companion.properties["LogGroupName"];
         if (typeof lgName === "string" && seenLogGroupNames.has(lgName)) {
           continue; // Already exists in plan or from another companion.

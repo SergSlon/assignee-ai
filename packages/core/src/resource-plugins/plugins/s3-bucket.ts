@@ -50,7 +50,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);
-          if (!s.startsWith("arn:aws:kms:"))
+          if (!s.match(/^arn:aws(-us-gov|-cn)?:kms:/))
             return "Must be a KMS key ARN (arn:aws:kms:...)";
           return undefined;
         },
@@ -211,7 +211,7 @@ export const s3BucketPlugin: ResourcePlugin = {
           if (!value || !String(value).trim())
             return "Destination bucket ARN is required when replication is enabled";
           const s = String(value);
-          if (!s.startsWith("arn:aws:s3:::"))
+          if (!s.match(/^arn:aws(-us-gov|-cn)?:s3:::/))
             return "Must be an S3 bucket ARN (arn:aws:s3:::bucket-name)";
           return undefined;
         },

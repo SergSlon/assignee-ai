@@ -219,6 +219,8 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           const s = String(value);
           if (s.length < 8)
             return "Password must be at least 8 characters";
+          if (s.length > 128)
+            return "Password must be 128 characters or less";
           if (/[/@" ]/.test(s))
             return 'Password must not contain /, @, " (double quote), or spaces';
           return undefined;

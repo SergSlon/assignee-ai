@@ -23,7 +23,7 @@ import {
   updateSpinner,
   stopSpinner,
 } from "./display.js";
-import { log, type LogAction } from "./logger.js";
+import { log, LOG_ACTIONS, type LogAction } from "./logger.js";
 import {
   isRecordingEnabled,
   RecordingInterceptor,
@@ -32,7 +32,7 @@ import {
 } from "./recorder.js";
 import { runAutoCleanup } from "../services/cleanup.js";
 import { defaultMemoryService } from "../services/memory.js";
-import { CHECKPOINT_DIR } from "../config/constants.js";
+import { CHECKPOINT_DIR, MAX_PROVISION_LOOPS } from "../config/constants.js";
 
 export interface CommandContext {
   intent: string;
@@ -195,7 +195,6 @@ export async function runProvisioningLoop(
   const isCompound = !!phase1State.resourcePattern;
   const totalResources = phase1State.resourceQueue?.length ?? 1;
   let resourcesProvisioned = 0;
-  const MAX_PROVISION_LOOPS = 50;
   let loopCount = 0;
 
   while (true) {
@@ -205,7 +204,7 @@ export async function runProvisioningLoop(
         ts: new Date().toISOString(),
         runId: phase1State.runId,
         level: "error",
-        action: "PROVISION_LOOP_EXCEEDED" as any,
+        action: LOG_ACTIONS.PROVISION_LOOP_EXCEEDED,
         extras: { maxLoops: MAX_PROVISION_LOOPS },
       });
       stopSpinner();

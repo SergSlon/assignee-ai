@@ -89,7 +89,6 @@ export const CCAPI_FALLBACK_TYPES = {
 
 /** Named constants for companion-only resource types that are not independently provisioned. */
 export const COMPANION_RESOURCE_TYPES = {
-  LOGS_LOG_GROUP: "AWS::Logs::LogGroup",
   EC2_EIP: "AWS::EC2::EIP",
   SECRETSMANAGER_SECRET_TARGET_ATTACHMENT:
     "AWS::SecretsManager::SecretTargetAttachment",
