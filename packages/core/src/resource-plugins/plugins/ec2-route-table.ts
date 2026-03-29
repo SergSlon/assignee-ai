@@ -1,4 +1,4 @@
-import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -59,7 +59,7 @@ export const routeTablePlugin: ResourcePlugin = {
 
     const routeTableResource: CfnOutput = {
       logicalId,
-      type: "AWS::EC2::RouteTable",
+      type: RESOURCE_TYPES.EC2_ROUTE_TABLE,
       properties: {
         VpcId: desiredState["VpcId"],
         ...(desiredState["Tags"] ? { Tags: desiredState["Tags"] } : {}),
@@ -71,7 +71,7 @@ export const routeTablePlugin: ResourcePlugin = {
     if (subnetId) {
       resources.push({
         logicalId: `${logicalId}SubnetAssociation`,
-        type: "AWS::EC2::SubnetRouteTableAssociation",
+        type: COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
         properties: {
           RouteTableId: { Ref: logicalId },
           SubnetId: subnetId,

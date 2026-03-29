@@ -6,13 +6,14 @@
  * @see Story 24.1
  */
 
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
 
 export const dynamodbPricingDecomposer: PricingDecomposer = {
-  resourceType: "AWS::DynamoDB::Table",
+  resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];

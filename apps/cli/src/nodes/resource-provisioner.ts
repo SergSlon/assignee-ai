@@ -195,6 +195,38 @@ export async function resourceProvisionerNode(
     });
   }
 
+  // ── EIP allocation for NatGateway (deferred from plan_generator) ─────────
+  // Plan generator sets AllocationId = "AUTO_ALLOCATE_EIP" as a placeholder
+  // to avoid leaking EIPs when the user runs `plan` but never `apply`.
+  // We resolve it here at apply time so the EIP is only allocated when actually needed.
+  if (
+    state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
+    state.desiredState["AllocationId"] === "AUTO_ALLOCATE_EIP"
+  ) {
+    try {
+      const { EC2Client, AllocateAddressCommand } =
+        await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({
+        region: process.env["AWS_REGION"] ?? "us-east-1",
+      });
+      const eipResult = await ec2.send(
+        new AllocateAddressCommand({ Domain: "vpc" }),
+      );
+      if (eipResult.AllocationId) {
+        state.desiredState["AllocationId"] = eipResult.AllocationId;
+      } else {
+        delete state.desiredState["AllocationId"];
+      }
+    } catch (eipErr: unknown) {
+      const errMsg =
+        eipErr instanceof Error ? eipErr.message : String(eipErr);
+      return {
+        executionStatus: ExecutionStatus.FAILED,
+        errorMessage: `EIP allocation failed for NatGateway: ${errMsg}`,
+      };
+    }
+  }
+
   // ── Inject mandatory tags (NFR-14) ───────────────────────────────────────
   const propertiesWithTags = injectMandatoryTags(
     state.desiredState,

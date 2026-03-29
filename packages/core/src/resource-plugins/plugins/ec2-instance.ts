@@ -188,6 +188,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
   commonFields: [
     {
       name: "InstanceType",
+      required: true,
       question: {
         type: "categorySelect",
         label: "Instance type",

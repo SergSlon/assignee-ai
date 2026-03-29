@@ -32,6 +32,21 @@ export const routePlugin: ResourcePlugin = {
         initialValue: "0.0.0.0/0",
         placeholder: "0.0.0.0/0",
         hint: "The IPv4 CIDR address block for the route destination. 0.0.0.0/0 matches all traffic (default route).",
+        validate: (value: unknown) => {
+          if (!value) return "Destination CIDR block is required";
+          const s = String(value);
+          const cidrRegex = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+          if (!cidrRegex.test(s))
+            return "Must be valid CIDR notation (e.g. 0.0.0.0/0 or 10.0.0.0/16)";
+          const [ip, prefix] = s.split("/");
+          const octets = ip!.split(".").map(Number);
+          if (octets.some((o) => o < 0 || o > 255))
+            return "Invalid IP address in CIDR";
+          const prefixLen = Number(prefix);
+          if (prefixLen < 0 || prefixLen > 32)
+            return "CIDR prefix must be between /0 and /32";
+          return undefined;
+        },
       },
     },
     {

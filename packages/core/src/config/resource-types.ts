@@ -84,6 +84,19 @@ export const CCAPI_FALLBACK_TYPES = {
   ELASTICACHE_REPLICATION_GROUP: "AWS::ElastiCache::ReplicationGroup",
 } as const;
 
+// ── Companion Resource Types ────────────────────────────────────────────────
+// Resource types used only as companions (auto-provisioned alongside a primary resource).
+
+/** Named constants for companion-only resource types that are not independently provisioned. */
+export const COMPANION_RESOURCE_TYPES = {
+  LOGS_LOG_GROUP: "AWS::Logs::LogGroup",
+  EC2_EIP: "AWS::EC2::EIP",
+  SECRETSMANAGER_SECRET_TARGET_ATTACHMENT:
+    "AWS::SecretsManager::SecretTargetAttachment",
+  EC2_SUBNET_ROUTE_TABLE_ASSOCIATION:
+    "AWS::EC2::SubnetRouteTableAssociation",
+} as const;
+
 /** Union of all CCAPI fallback resource type strings. */
 export type CcapiFallbackType =
   (typeof CCAPI_FALLBACK_TYPES)[keyof typeof CCAPI_FALLBACK_TYPES];

@@ -15,6 +15,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import { MEMORY_DEDUP_THRESHOLD_MS } from "../config/constants.js";
 import {
   ProvisionLogSchema,
   FailureLogSchema,
@@ -84,7 +85,7 @@ export class MemoryService {
       // Check for stale locks first
       const stat = await fs.stat(lockPath);
       const ageMs = Date.now() - stat.mtimeMs;
-      if (ageMs < 10_000) {
+      if (ageMs < MEMORY_DEDUP_THRESHOLD_MS) {
         // Lock is fresh — another writer is active
         return false;
       }

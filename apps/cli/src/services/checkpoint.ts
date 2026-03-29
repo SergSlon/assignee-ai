@@ -15,7 +15,7 @@ import {
   type PlanCheckpoint,
 } from "@assignee/core";
 import type { AgentState } from "./graph-state.js";
-import { CHECKPOINT_DEFAULT_TTL_HOURS } from "../config/constants.js";
+import { CHECKPOINT_DEFAULT_TTL_HOURS, CLEANUP_SKIP_RECENT_MINUTES } from "../config/constants.js";
 
 /**
  * Fields that must be redacted before writing to disk.
@@ -198,7 +198,7 @@ export async function pruneExpiredCheckpoints(
   dir: string,
   opts: { skipRecentMinutes?: number } = {},
 ): Promise<{ pruned: number; kept: number }> {
-  const skipRecentMs = (opts.skipRecentMinutes ?? 10) * 60 * 1000;
+  const skipRecentMs = (opts.skipRecentMinutes ?? CLEANUP_SKIP_RECENT_MINUTES) * 60 * 1000;
 
   let entries: string[];
   try {

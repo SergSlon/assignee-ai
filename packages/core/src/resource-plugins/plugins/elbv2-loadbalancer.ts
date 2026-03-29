@@ -79,6 +79,13 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
         options: [],
         hint: "Select at least 2 subnets in different Availability Zones. Internet-facing ALBs require public subnets. Internal ALBs use private subnets.",
         fetcher: "discover-subnets",
+        validate: (value: unknown) => {
+          if (!value) return "At least 2 subnets are required";
+          const arr = Array.isArray(value) ? value : [value];
+          if (arr.length < 2)
+            return "At least 2 subnets in different Availability Zones are required";
+          return undefined;
+        },
       },
       required: true,
     },
@@ -114,6 +121,11 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
         hint: "Security groups control inbound/outbound traffic. Required for ALBs. Typically allow ports 80/443 inbound.",
         showIf: { field: "Type", value: "application" },
         fetcher: "discover-security-groups",
+        validate: (value: unknown) => {
+          if (!value || (Array.isArray(value) && value.length === 0))
+            return "At least one security group is required for Application Load Balancers";
+          return undefined;
+        },
       },
     },
     {

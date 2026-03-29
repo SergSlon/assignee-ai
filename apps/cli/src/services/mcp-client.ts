@@ -7,6 +7,7 @@ import {
   getOptionalMcpServerConfigs,
 } from "../config/mcp-servers.js";
 import { McpError } from "@assignee/core";
+import { MCP_SHUTDOWN_DELAY_MS } from "../config/constants.js";
 import { ToolName } from "../constants/tools.js";
 import type { McpServerNameType } from "../constants/mcp.js";
 import type { StructuredTool } from "@langchain/core/tools";
@@ -176,7 +177,7 @@ export async function getMcpTools(
     try {
       await Promise.race([
         optionalInitPromise,
-        new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
+        new Promise<void>((resolve) => setTimeout(resolve, MCP_SHUTDOWN_DELAY_MS)),
       ]);
     } catch {
       // Timeout or init error — proceed with core tools only

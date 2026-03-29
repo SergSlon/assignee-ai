@@ -12,7 +12,7 @@ import {
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
-import { ConfigurationError } from "@assignee/core";
+import { ConfigurationError, RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "@assignee/core";
 
 /** Resolved resource returned by the resource resolver. */
 export interface ResolvedResource {
@@ -76,45 +76,45 @@ function arnToResourceType(arn: string): string | null {
 
   const serviceMap: Record<string, Record<string, string>> = {
     // Tier 0
-    s3: { "": "AWS::S3::Bucket" },
-    ssm: { parameter: "AWS::SSM::Parameter" },
+    s3: { "": RESOURCE_TYPES.S3_BUCKET },
+    ssm: { parameter: RESOURCE_TYPES.SSM_PARAMETER },
     iam: {
-      role: "AWS::IAM::Role",
+      role: RESOURCE_TYPES.IAM_ROLE,
       policy: "AWS::IAM::ManagedPolicy",
       user: "AWS::IAM::User",
       group: "AWS::IAM::Group",
       "instance-profile": "AWS::IAM::InstanceProfile",
     },
     ec2: {
-      instance: "AWS::EC2::Instance",
-      vpc: "AWS::EC2::VPC",
-      subnet: "AWS::EC2::Subnet",
-      "security-group": "AWS::EC2::SecurityGroup",
+      instance: RESOURCE_TYPES.EC2_INSTANCE,
+      vpc: RESOURCE_TYPES.EC2_VPC,
+      subnet: RESOURCE_TYPES.EC2_SUBNET,
+      "security-group": RESOURCE_TYPES.EC2_SECURITY_GROUP,
       // Tier 1 networking
-      "internet-gateway": "AWS::EC2::InternetGateway",
-      "route-table": "AWS::EC2::RouteTable",
-      natgateway: "AWS::EC2::NatGateway",
+      "internet-gateway": RESOURCE_TYPES.EC2_INTERNET_GATEWAY,
+      "route-table": RESOURCE_TYPES.EC2_ROUTE_TABLE,
+      natgateway: RESOURCE_TYPES.EC2_NAT_GATEWAY,
     },
-    rds: { db: "AWS::RDS::DBInstance" },
+    rds: { db: RESOURCE_TYPES.RDS_DB_INSTANCE },
     lambda: {
-      function: "AWS::Lambda::Function",
+      function: RESOURCE_TYPES.LAMBDA_FUNCTION,
       "event-source-mapping": "AWS::Lambda::EventSourceMapping",
     },
-    dynamodb: { table: "AWS::DynamoDB::Table" },
-    sqs: { "": "AWS::SQS::Queue" },
-    sns: { "": "AWS::SNS::Topic" },
+    dynamodb: { table: RESOURCE_TYPES.DYNAMODB_TABLE },
+    sqs: { "": RESOURCE_TYPES.SQS_QUEUE },
+    sns: { "": RESOURCE_TYPES.SNS_TOPIC },
     elasticloadbalancing: {
-      loadbalancer: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      loadbalancer: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
     },
-    ecs: { cluster: "AWS::ECS::Cluster" },
-    ecr: { repository: "AWS::ECR::Repository" },
+    ecs: { cluster: RESOURCE_TYPES.ECS_CLUSTER },
+    ecr: { repository: RESOURCE_TYPES.ECR_REPOSITORY },
     // Tier 1
-    logs: { "log-group": "AWS::Logs::LogGroup" },
+    logs: { "log-group": RESOURCE_TYPES.LOGS_LOG_GROUP },
     // Tier 2
-    cloudwatch: { alarm: "AWS::CloudWatch::Alarm" },
-    secretsmanager: { secret: "AWS::SecretsManager::Secret" },
-    apigateway: { apis: "AWS::ApiGatewayV2::Api" },
-    "execute-api": { "": "AWS::ApiGatewayV2::Api" },
+    cloudwatch: { alarm: RESOURCE_TYPES.CLOUDWATCH_ALARM },
+    secretsmanager: { secret: RESOURCE_TYPES.SECRETSMANAGER_SECRET },
+    apigateway: { apis: RESOURCE_TYPES.APIGATEWAYV2_API },
+    "execute-api": { "": RESOURCE_TYPES.APIGATEWAYV2_API },
   };
 
   if (!service) return null;
@@ -183,12 +183,12 @@ function getCloudControlIdentifier(
   resourceType: string | null,
 ): string {
   // SNS Topics: CloudControl identifier is the full TopicArn
-  if (resourceType === "AWS::SNS::Topic") {
+  if (resourceType === RESOURCE_TYPES.SNS_TOPIC) {
     return arn;
   }
 
   // SQS Queues: CloudControl identifier is the queue URL
-  if (resourceType === "AWS::SQS::Queue") {
+  if (resourceType === RESOURCE_TYPES.SQS_QUEUE) {
     const parts = arn.split(":");
     const region = parts[3] ?? "";
     const accountId = parts[4] ?? "";
@@ -197,12 +197,12 @@ function getCloudControlIdentifier(
   }
 
   // ELBv2 LoadBalancer: CloudControl identifier is the full ARN
-  if (resourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer") {
+  if (resourceType === RESOURCE_TYPES.ELBV2_LOAD_BALANCER) {
     return arn;
   }
 
   // ECS Cluster: CloudControl identifier is the full ARN
-  if (resourceType === "AWS::ECS::Cluster") {
+  if (resourceType === RESOURCE_TYPES.ECS_CLUSTER) {
     return arn;
   }
 
@@ -361,7 +361,7 @@ async function resolveSqsQueueUrl(
       ) {
         return {
           arn,
-          resourceType: "AWS::SQS::Queue",
+          resourceType: RESOURCE_TYPES.SQS_QUEUE,
           region: parsed.region || defaultRegion,
           tags: tagsToRecord(mapping),
           identifier: queueUrl, // CloudControl identifier for SQS is the queue URL

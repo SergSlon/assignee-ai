@@ -18,13 +18,23 @@ export function routeCheckpointEntry(
   return GraphNode.INTENT_PARSER;
 }
 
-/** Routes after preflight_guard: plan → result, apply → approval or provisioner. */
+/** Routes after preflight_guard: plan → result, apply → approval or provisioner.
+ *  Safety: a checkpoint-resumed run whose state is FAILED/CANCELLED must never
+ *  reach HUMAN_APPROVAL — always short-circuit to RESULT_FORMATTER. */
 export function routePreflightGuard(
   state: AgentState,
 ):
   | typeof GraphNode.HUMAN_APPROVAL
   | typeof GraphNode.RESULT_FORMATTER
   | typeof GraphNode.RESOURCE_PROVISIONER {
+  // Guard: terminal execution states always go straight to result formatting,
+  // even if preflightPassed is true (e.g., checkpoint-resumed failed run).
+  if (
+    state.executionStatus === ExecutionStatus.FAILED ||
+    state.executionStatus === ExecutionStatus.CANCELLED
+  ) {
+    return GraphNode.RESULT_FORMATTER;
+  }
   if (state.executionMode === ExecutionMode.PLAN || !state.preflightPassed) {
     return GraphNode.RESULT_FORMATTER;
   }

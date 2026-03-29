@@ -127,6 +127,28 @@ describe("routePreflightGuard", () => {
     expect(result).toBe(GraphNode.RESOURCE_PROVISIONER);
   });
 
+  it("FAILED status with preflightPassed → routes to RESULT_FORMATTER (safety guard)", () => {
+    const result = routePreflightGuard(
+      makeState({
+        executionMode: ExecutionMode.APPLY,
+        preflightPassed: true,
+        executionStatus: ExecutionStatus.FAILED,
+      }),
+    );
+    expect(result).toBe(GraphNode.RESULT_FORMATTER);
+  });
+
+  it("CANCELLED status with preflightPassed → routes to RESULT_FORMATTER (safety guard)", () => {
+    const result = routePreflightGuard(
+      makeState({
+        executionMode: ExecutionMode.APPLY,
+        preflightPassed: true,
+        executionStatus: ExecutionStatus.CANCELLED,
+      }),
+    );
+    expect(result).toBe(GraphNode.RESULT_FORMATTER);
+  });
+
   it("compound, first resource (index 0) → routes to HUMAN_APPROVAL", () => {
     const result = routePreflightGuard(
       makeState({

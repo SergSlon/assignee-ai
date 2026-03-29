@@ -181,6 +181,15 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         label: "Initial database name",
         placeholder: "myapp",
         hint: "Name of the initial database created on launch. If omitted, no database is created and you must create one manually after provisioning. Use lowercase letters and underscores.",
+        validate: (value: unknown) => {
+          if (!value) return undefined; // optional field
+          const s = String(value);
+          if (s.length < 1 || s.length > 64)
+            return "Database name must be between 1 and 64 characters";
+          if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(s))
+            return "Database name must start with a letter and contain only letters, numbers, and underscores";
+          return undefined;
+        },
       },
     },
     {
@@ -205,6 +214,15 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         label: "Master password",
         placeholder: "Auto-generated if blank",
         hint: 'Set a strong password (min 8 chars, uppercase + lowercase + numbers). Leave blank to auto-generate a secure password stored in AWS Secrets Manager. Avoid /, @, " and spaces.',
+        validate: (value: unknown) => {
+          if (!value) return undefined; // blank = auto-generate
+          const s = String(value);
+          if (s.length < 8)
+            return "Password must be at least 8 characters";
+          if (/[/@" ]/.test(s))
+            return 'Password must not contain /, @, " (double quote), or spaces';
+          return undefined;
+        },
       },
     },
     {

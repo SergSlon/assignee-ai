@@ -21,6 +21,12 @@ export async function schemaFetcherNode(
 ): Promise<Partial<AgentState>> {
   if (state.resourcePattern) return {}; // compound pattern path — schema_fetcher is single-resource only; compound-dispatcher handles this
   if (state.executionStatus !== ExecutionStatus.PENDING) return {}; // skip if already failed
+  if (!state.resourceType) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: "Missing resource type",
+    };
+  }
 
   try {
     const service = getSchemaService();

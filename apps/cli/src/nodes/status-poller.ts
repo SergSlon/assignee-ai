@@ -8,7 +8,7 @@
  * @see Story 7-6, Story 9-2
  */
 
-import { ExecutionStatus } from "@assignee/core";
+import { ExecutionStatus, RESOURCE_TYPES } from "@assignee/core";
 import type { ProvisioningPort } from "../services/provisioning-port.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph-state.js";
@@ -18,10 +18,10 @@ const POLL_INTERVAL_MS = 2_000; // 2 seconds
 
 /** Resource types that need extended provisioning timeouts. */
 const EXTENDED_TIMEOUT_TYPES = new Set([
-  "AWS::RDS::DBInstance",
+  RESOURCE_TYPES.RDS_DB_INSTANCE,
   "AWS::RDS::DBCluster",
-  "AWS::ElasticLoadBalancingV2::LoadBalancer",
-  "AWS::EC2::NatGateway",
+  RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+  RESOURCE_TYPES.EC2_NAT_GATEWAY,
 ]);
 const EXTENDED_POLL_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 

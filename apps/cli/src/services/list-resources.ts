@@ -17,6 +17,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
@@ -47,21 +48,21 @@ interface ProvisionLogEntry {
  */
 /** Simple service→type map for services with a single resource type. */
 const SERVICE_TYPE_MAP: Record<string, string> = {
-  s3: "AWS::S3::Bucket",
-  lambda: "AWS::Lambda::Function",
-  rds: "AWS::RDS::DBInstance",
-  dynamodb: "AWS::DynamoDB::Table",
-  sqs: "AWS::SQS::Queue",
-  sns: "AWS::SNS::Topic",
+  s3: RESOURCE_TYPES.S3_BUCKET,
+  lambda: RESOURCE_TYPES.LAMBDA_FUNCTION,
+  rds: RESOURCE_TYPES.RDS_DB_INSTANCE,
+  dynamodb: RESOURCE_TYPES.DYNAMODB_TABLE,
+  sqs: RESOURCE_TYPES.SQS_QUEUE,
+  sns: RESOURCE_TYPES.SNS_TOPIC,
   cloudformation: "AWS::CloudFormation::Stack",
-  logs: "AWS::Logs::LogGroup",
+  logs: RESOURCE_TYPES.LOGS_LOG_GROUP,
   events: "AWS::Events::Rule",
   cloudfront: "AWS::CloudFront::Distribution",
-  ecs: "AWS::ECS::Cluster",
+  ecs: RESOURCE_TYPES.ECS_CLUSTER,
   eks: "AWS::EKS::Cluster",
   elasticache: "AWS::ElastiCache::CacheCluster",
   kinesis: "AWS::Kinesis::Stream",
-  secretsmanager: "AWS::SecretsManager::Secret",
+  secretsmanager: RESOURCE_TYPES.SECRETSMANAGER_SECRET,
   stepfunctions: "AWS::StepFunctions::StateMachine",
   states: "AWS::StepFunctions::StateMachine",
 };
@@ -69,41 +70,41 @@ const SERVICE_TYPE_MAP: Record<string, string> = {
 /** Services with multiple resource types — resolved by ARN resource segment. */
 const SERVICE_SUBTYPE_MAP: Record<string, Record<string, string>> = {
   ec2: {
-    instance: "AWS::EC2::Instance",
-    vpc: "AWS::EC2::VPC",
-    subnet: "AWS::EC2::Subnet",
-    "security-group": "AWS::EC2::SecurityGroup",
-    "internet-gateway": "AWS::EC2::InternetGateway",
-    "route-table": "AWS::EC2::RouteTable",
-    natgateway: "AWS::EC2::NatGateway",
-    "elastic-ip": "AWS::EC2::EIP",
+    instance: RESOURCE_TYPES.EC2_INSTANCE,
+    vpc: RESOURCE_TYPES.EC2_VPC,
+    subnet: RESOURCE_TYPES.EC2_SUBNET,
+    "security-group": RESOURCE_TYPES.EC2_SECURITY_GROUP,
+    "internet-gateway": RESOURCE_TYPES.EC2_INTERNET_GATEWAY,
+    "route-table": RESOURCE_TYPES.EC2_ROUTE_TABLE,
+    natgateway: RESOURCE_TYPES.EC2_NAT_GATEWAY,
+    "elastic-ip": COMPANION_RESOURCE_TYPES.EC2_EIP,
   },
   iam: {
-    role: "AWS::IAM::Role",
+    role: RESOURCE_TYPES.IAM_ROLE,
     policy: "AWS::IAM::ManagedPolicy",
     user: "AWS::IAM::User",
     group: "AWS::IAM::Group",
     "instance-profile": "AWS::IAM::InstanceProfile",
   },
   apigateway: {
-    "/apis": "AWS::ApiGatewayV2::Api",
+    "/apis": RESOURCE_TYPES.APIGATEWAYV2_API,
     restapis: "AWS::ApiGateway::RestApi",
   },
   "execute-api": {
-    "": "AWS::ApiGatewayV2::Api",
+    "": RESOURCE_TYPES.APIGATEWAYV2_API,
   },
   elasticloadbalancing: {
-    loadbalancer: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    loadbalancer: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
     targetgroup: "AWS::ElasticLoadBalancingV2::TargetGroup",
   },
   ecr: {
-    repository: "AWS::ECR::Repository",
+    repository: RESOURCE_TYPES.ECR_REPOSITORY,
   },
   cloudwatch: {
-    alarm: "AWS::CloudWatch::Alarm",
+    alarm: RESOURCE_TYPES.CLOUDWATCH_ALARM,
   },
   ssm: {
-    parameter: "AWS::SSM::Parameter",
+    parameter: RESOURCE_TYPES.SSM_PARAMETER,
   },
 };
 
