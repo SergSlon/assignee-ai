@@ -5,7 +5,7 @@
  *
  * ## Background
  *
- * The old cfn-mcp-server `get_resource_schema_information` tool returned the
+ * The raw AWS DescribeType API returns the
  * CloudFormation Resource Provider Schema mostly as-is.  The new
  * `CloudFormationSchemaService.getSchema()` (Story 31.1) fetches the same
  * schema via the DescribeType API.  Both sources return objects conforming to
@@ -96,7 +96,7 @@ export interface AdaptedSchema {
  * and downstream pipeline nodes.
  *
  * The DescribeType API returns the full CloudFormation Resource Provider Schema.
- * The old MCP tool (`get_resource_schema_information`) returned essentially the
+ * The raw DescribeType output contains essentially the
  * same structure. This adapter normalises edge cases and strips non-essential
  * fields to produce format parity with the old MCP output.
  *

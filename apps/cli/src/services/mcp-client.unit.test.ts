@@ -2,7 +2,7 @@
  * Unit tests for mcp-client.ts
  * Story 9.9 — T7.12-T7.15: mcp-client.ts unit tests with mocked MCP servers
  * Story 29.3 — MCP Server Lazy Loading: requiredServers filter
- * Story 31.4 — Removed cfn-mcp-server (IAC); core servers now 3 (Pricing, Knowledge, Docs)
+ * Core servers: Pricing + Docs. Schema fetching via direct SDK.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";

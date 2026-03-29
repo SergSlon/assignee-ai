@@ -2,11 +2,11 @@
  * Tests for MCP server configuration.
  *
  * Story 19.7 — billing server registration.
- * Story 31.4 — removed cfn-mcp-server (IAC); core servers are now 3.
+ * Core MCP servers: Pricing + Docs. Optional: Knowledge, IAM, WA-Security, Billing.
  *
  * Verifies:
  * - getMcpServerConfigs() returns exactly 3 core servers (Knowledge, Pricing, Docs)
- * - No entry contains cfn-mcp-server
+ * - No deprecated server references
  * - IAC constant no longer exists on McpServerName
  * - BILLING constant is defined in McpServerName
  * - Billing server appears in getOptionalMcpServerConfigs() output

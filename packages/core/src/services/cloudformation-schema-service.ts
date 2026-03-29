@@ -2,7 +2,7 @@
  * CloudFormation Schema Fetcher Service.
  * Fetches resource type schemas via the AWS SDK DescribeType API with disk caching.
  *
- * Replaces cfn-mcp-server dependency for schema retrieval.
+ * Fetches CloudFormation resource schemas via direct AWS SDK DescribeType calls.
  *
  * @see Story 31.1
  */

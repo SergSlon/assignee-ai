@@ -2,7 +2,7 @@
  * Tests for the Schema Adapter Layer (Story 31.2).
  *
  * Verifies that `adaptDescribeTypeToMcpFormat()` produces output matching
- * what the old cfn-mcp-server `get_resource_schema_information` tool returned.
+ * the raw DescribeType API output format.
  *
  * Test data mirrors the captured MCP responses in:
  *   apps/cli/src/test-fixtures/mcp-mock-responses.ts
