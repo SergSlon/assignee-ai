@@ -52,6 +52,14 @@ export async function statusPollerNode(
     };
   }
 
+  log({
+    ts: new Date().toISOString(),
+    runId: state.runId,
+    level: "info",
+    action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
+    extras: { phase: "poll_start", requestToken: state.requestToken, resourceType: state.resourceType },
+  });
+
   // Timeout guard (resource-type-aware)
   const startedAt = state.startedAt ?? Date.now();
   const timeoutMs = getPollTimeout(state.resourceType ?? "");

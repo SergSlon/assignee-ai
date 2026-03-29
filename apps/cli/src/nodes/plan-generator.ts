@@ -288,7 +288,10 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       state.currentResourceIndex !== undefined
     ) {
       const currentResource = state.resourceQueue[state.currentResourceIndex];
-      if (!currentResource) return {};
+      if (!currentResource) return {
+        executionStatus: ExecutionStatus.FAILED,
+        errorMessage: `Compound resource index ${state.currentResourceIndex} out of bounds (queue length ${state.resourceQueue.length})`,
+      };
       const patternDefaults =
         (state.resourcePattern.defaultOptions[currentResource.resourceId] as
           | Record<string, unknown>
