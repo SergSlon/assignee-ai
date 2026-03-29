@@ -53,6 +53,7 @@ export { validateConfig, CONFIG_DEFAULTS } from "./config/index.js";
 // Config — resource type constants and identifier mappings
 export {
   RESOURCE_TYPES,
+  COMPANION_RESOURCE_TYPES,
   type ResourceType,
   SUPPORTED_TYPES_ARRAY,
   SUPPORTED_POC_TYPES,

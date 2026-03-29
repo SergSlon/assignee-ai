@@ -1,4 +1,4 @@
-import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -129,7 +129,7 @@ export const natGatewayPlugin: ResourcePlugin = {
       const eipLogicalId = `${logicalPrefix}EIP`;
       resources.push({
         logicalId: eipLogicalId,
-        type: "AWS::EC2::EIP",
+        type: COMPANION_RESOURCE_TYPES.EC2_EIP,
         properties: {
           Domain: "vpc",
           ...(tags ? { Tags: tags } : {}),
@@ -144,7 +144,7 @@ export const natGatewayPlugin: ResourcePlugin = {
 
     resources.push({
       logicalId: logicalPrefix,
-      type: "AWS::EC2::NatGateway",
+      type: RESOURCE_TYPES.EC2_NAT_GATEWAY,
       properties: natGwProps,
     });
 

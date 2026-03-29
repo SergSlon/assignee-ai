@@ -5,13 +5,14 @@
  * @see Story 23.3
  */
 
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
 
 export const s3PricingDecomposer: PricingDecomposer = {
-  resourceType: "AWS::S3::Bucket",
+  resourceType: RESOURCE_TYPES.S3_BUCKET,
 
   decompose(_desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];

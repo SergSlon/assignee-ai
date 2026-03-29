@@ -21,6 +21,7 @@ import {
   MissingRequiredFieldsError,
   UserCancelledError,
 } from "@assignee/core";
+import { PRICING_LOOKUP_TIMEOUT_MS } from "../config/constants.js";
 import { defaultMemoryService } from "../services/memory.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type {
@@ -483,6 +484,15 @@ function evaluateShowIf(
   if (condition.pattern) {
     return new RegExp(condition.pattern).test(String(depValue ?? ""));
   }
+  // When value is boolean true, treat as a truthy check (supports arrays, strings, etc.)
+  if (condition.value === true) {
+    if (Array.isArray(depValue)) return depValue.length > 0;
+    return !!depValue;
+  }
+  if (condition.value === false) {
+    if (Array.isArray(depValue)) return depValue.length === 0;
+    return !depValue;
+  }
   return depValue === condition.value;
 }
 
@@ -713,19 +723,19 @@ async function fetchSuggestionPrice(
   try {
     let priceMap: Record<string, string> | null = null;
 
-    if (resourceType === "AWS::EC2::Instance" && fieldName === "InstanceType") {
+    if (resourceType === RESOURCE_TYPES.EC2_INSTANCE && fieldName === "InstanceType") {
       priceMap = await withTimeout(
         fetchEc2InstancePrices(tools, [suggested]),
-        3000,
+        PRICING_LOOKUP_TIMEOUT_MS,
       );
     } else if (
-      resourceType === "AWS::RDS::DBInstance" &&
+      resourceType === RESOURCE_TYPES.RDS_DB_INSTANCE &&
       fieldName === "DBInstanceClass"
     ) {
       // Default to postgres since we may not know the selected engine here
       priceMap = await withTimeout(
         fetchRdsInstancePrices(tools, [suggested], "postgres"),
-        3000,
+        PRICING_LOOKUP_TIMEOUT_MS,
       );
     } else {
       return null;

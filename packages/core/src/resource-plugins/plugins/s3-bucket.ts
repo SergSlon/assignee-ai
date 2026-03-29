@@ -208,7 +208,8 @@ export const s3BucketPlugin: ResourcePlugin = {
         hint: "The S3 bucket ARN in another region where replicas will be stored. The bucket must already exist and have versioning enabled.",
         showIf: { field: "EnableReplication", value: true },
         validate: (value: unknown) => {
-          if (!value) return undefined;
+          if (!value || !String(value).trim())
+            return "Destination bucket ARN is required when replication is enabled";
           const s = String(value);
           if (!s.startsWith("arn:aws:s3:::"))
             return "Must be an S3 bucket ARN (arn:aws:s3:::bucket-name)";

@@ -13,7 +13,7 @@ import * as os from "node:os";
 import { pruneExpiredCheckpoints } from "./checkpoint.js";
 import { sweepExpiredPrices } from "./price-cache.js";
 import type { MemoryService } from "./memory.js";
-import { AUTO_CLEANUP_INTERVAL_MS } from "../config/constants.js";
+import { AUTO_CLEANUP_INTERVAL_MS, CLEANUP_SKIP_RECENT_MINUTES, CLEANUP_MAX_AGE_MS } from "../config/constants.js";
 
 /** Per-category counts returned by a cleanup run. */
 export interface CleanupReport {
@@ -106,7 +106,7 @@ async function dryRunCheckpoints(
 
   let pruned = 0;
   let kept = 0;
-  const skipRecentMs = 10 * 60 * 1000;
+  const skipRecentMs = CLEANUP_SKIP_RECENT_MINUTES * 60 * 1000;
 
   for (let i = 0; i < infos.length; i++) {
     const info = infos[i]!;
@@ -128,7 +128,7 @@ async function dryRunCheckpoints(
  * For dry-run mode: count how many cache files would be swept without deleting.
  */
 async function dryRunCacheSweep(
-  maxAgeMs: number = 24 * 60 * 60 * 1000,
+  maxAgeMs: number = CLEANUP_MAX_AGE_MS,
 ): Promise<{ removed: number; remaining: number }> {
   const cacheDir = path.join(os.homedir(), ".assignee", "cache", "pricing");
   let entries: string[];
@@ -290,7 +290,7 @@ export async function runAutoCleanup(
     }
 
     // Run checkpoint pruning with skipRecentMinutes: 10
-    await pruneExpiredCheckpoints(checkpointDir, { skipRecentMinutes: 10 });
+    await pruneExpiredCheckpoints(checkpointDir, { skipRecentMinutes: CLEANUP_SKIP_RECENT_MINUTES });
 
     // Run cache sweep
     sweepExpiredPrices();

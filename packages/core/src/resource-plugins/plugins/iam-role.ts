@@ -93,9 +93,7 @@ export const iamRolePlugin: ResourcePlugin = {
         const key = String(answer);
         const policy = TRUST_POLICIES[key];
         if (!policy) {
-          throw new Error(
-            `Unknown trust policy key: "${key}". Valid keys: ${Object.keys(TRUST_POLICIES).join(", ")}`,
-          );
+          return undefined;
         }
         return policy;
       },

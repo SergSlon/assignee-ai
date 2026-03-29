@@ -5,6 +5,7 @@
  * @see Story 23.2
  */
 
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
   PricingLineItem,
@@ -13,7 +14,7 @@ import type {
 const EXTENDED_TIMEOUT_MS = 8000;
 
 export const rdsPricingDecomposer: PricingDecomposer = {
-  resourceType: "AWS::RDS::DBInstance",
+  resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];

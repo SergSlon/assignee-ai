@@ -15,6 +15,7 @@ import {
   type DriftedField,
   type DriftStatusType,
 } from "@assignee/core";
+import { DRIFT_MAX_RETRIES } from "../config/constants.js";
 import {
   ProvisioningErrorKind,
   type ProvisioningPort,
@@ -409,7 +410,7 @@ export class DriftDetectorService {
     typeName: string,
     identifier: string,
     desiredState?: Record<string, unknown>,
-    maxRetries = 3,
+    maxRetries = DRIFT_MAX_RETRIES,
   ): Promise<DriftResult> {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const result = await this.checkResource(

@@ -13,7 +13,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import type { OrgResourceConfig } from "@assignee/core";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
-import { SAAS_API_URL, ORG_POLICY_TTL_MS } from "./constants.js";
+import { SAAS_API_URL, ORG_POLICY_TTL_MS, ORG_POLICY_FETCH_TIMEOUT_MS } from "./constants.js";
 import { loadLocalOrgPolicy, mergeOrgPolicies } from "./org-policy-loader.js";
 
 /** Shape of the cache envelope persisted to disk. */
@@ -114,7 +114,7 @@ export async function fetchOrgPolicy(
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
+    const timeout = setTimeout(() => controller.abort(), ORG_POLICY_FETCH_TIMEOUT_MS);
 
     const response = await fetch(`${SAAS_API_URL}/api/org/resource-policy`, {
       headers: {

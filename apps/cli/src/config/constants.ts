@@ -57,3 +57,26 @@ export const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 /** Average hours per month for pricing calculations (730 = 365 days * 24 hours / 12 months). */
 export const HOURS_PER_MONTH = 730;
+
+// ── Additional Timeout / Threshold Constants ────────────────────────────────
+
+/** Timeout for pricing lookups during option elicitation (ms). */
+export const PRICING_LOOKUP_TIMEOUT_MS = 3000;
+
+/** Timeout for fetching org policy from SaaS API (ms). */
+export const ORG_POLICY_FETCH_TIMEOUT_MS = 2000;
+
+/** Delay for optional MCP client initialization before proceeding with core tools (ms). */
+export const MCP_SHUTDOWN_DELAY_MS = 3000;
+
+/** Maximum retries for drift detection resource checks. */
+export const DRIFT_MAX_RETRIES = 3;
+
+/** Skip checkpoint files modified within this many minutes during cleanup. */
+export const CLEANUP_SKIP_RECENT_MINUTES = 10;
+
+/** Default max age for cache entries (24 hours in ms). */
+export const CLEANUP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** Threshold for deduplicating memory lock acquisition attempts (ms). */
+export const MEMORY_DEDUP_THRESHOLD_MS = 10_000;

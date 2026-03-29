@@ -340,14 +340,20 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
               try {
                 const { STSClient, GetCallerIdentityCommand } =
                   await import("@aws-sdk/client-sts");
-                const sts = new STSClient({
-                  region: process.env["AWS_REGION"] ?? "us-east-1",
-                });
+                const region = process.env["AWS_REGION"] ?? "us-east-1";
+                const sts = new STSClient({ region });
                 const identity = await sts.send(
                   new GetCallerIdentityCommand({}),
                 );
+                // Detect partition from region: aws-us-gov for GovCloud,
+                // aws-cn for China, aws for everything else.
+                const partition = region.startsWith("us-gov-")
+                  ? "aws-us-gov"
+                  : region.startsWith("cn-")
+                    ? "aws-cn"
+                    : "aws";
                 desiredState["Role"] =
-                  `arn:aws:iam::${identity.Account}:role/${roleName}`;
+                  `arn:${partition}:iam::${identity.Account}:role/${roleName}`;
               } catch {
                 desiredState["Role"] = roleName;
               }
@@ -659,7 +665,10 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     }
 
     // Story E2E.5: NatGateway with public connectivity requires an EIP AllocationId.
-    // If the LLM generated AUTO_ALLOCATE_EIP or omitted AllocationId, allocate a real EIP.
+    // If the LLM generated AUTO_ALLOCATE_EIP or omitted AllocationId, insert a
+    // placeholder that resource_provisioner will resolve at apply time.
+    // IMPORTANT: We must NOT allocate a real EIP during plan generation because
+    // if the user runs `plan` but never `apply`, the EIP would leak ($3.60/month).
     if (
       state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
       (desiredState["ConnectivityType"] === "public" ||
@@ -667,31 +676,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       (!desiredState["AllocationId"] ||
         desiredState["AllocationId"] === "AUTO_ALLOCATE_EIP")
     ) {
-      try {
-        const { EC2Client, AllocateAddressCommand } =
-          await import("@aws-sdk/client-ec2");
-        const ec2 = new EC2Client({
-          region: process.env["AWS_REGION"] ?? "us-east-1",
-        });
-        const eipResult = await ec2.send(
-          new AllocateAddressCommand({ Domain: "vpc" }),
-        );
-        if (eipResult.AllocationId) {
-          desiredState["AllocationId"] = eipResult.AllocationId;
-        }
-      } catch (eipErr: unknown) {
-        const errMsg =
-          eipErr instanceof Error ? eipErr.message : String(eipErr);
-        log({
-          ts: new Date().toISOString(),
-          runId: state.runId,
-          level: "warn",
-          action: LOG_ACTIONS.PLAN_GENERATED,
-          extras: { eipAllocationFailed: true, error: errMsg },
-        });
-        // Fallback: remove the placeholder so CloudControl gets a clean error
-        delete desiredState["AllocationId"];
-      }
+      desiredState["AllocationId"] = "AUTO_ALLOCATE_EIP";
     }
 
     // Story E2E.3: Generic required-field repairer — fills missing required fields

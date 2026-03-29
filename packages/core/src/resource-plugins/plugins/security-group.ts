@@ -62,6 +62,14 @@ export const securityGroupPlugin: ResourcePlugin = {
         label: "Security Group description",
         placeholder: "Web server security group",
         hint: "A human-readable description. Required by AWS and cannot be changed after creation.",
+        validate: (value: unknown) => {
+          if (!value || !String(value).trim())
+            return "Group description is required";
+          const s = String(value);
+          if (s.length > 255)
+            return "Group description must be 255 characters or fewer";
+          return undefined;
+        },
       },
     },
     {
