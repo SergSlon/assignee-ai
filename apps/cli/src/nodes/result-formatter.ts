@@ -204,7 +204,10 @@ export async function resultFormatterNode(
         state.currentResourceIndex !== undefined
       ) {
         const currentResource = state.resourceQueue[state.currentResourceIndex];
-        if (!currentResource) return {};
+        if (!currentResource) return {
+          executionStatus: ExecutionStatus.FAILED,
+          errorMessage: `Compound resource index ${state.currentResourceIndex} out of bounds (queue length ${state.resourceQueue.length})`,
+        };
         const completedEntry: ResourceResult = {
           resourceId: currentResource.resourceId,
           resourceType: currentResource.resourceType,
@@ -220,7 +223,27 @@ export async function resultFormatterNode(
         if (nextIndex < state.resourceQueue.length) {
           // More resources to provision — update state for next iteration
           const nextResource = state.resourceQueue[nextIndex];
-          if (!nextResource) break;
+          if (!nextResource) {
+            // Next resource missing — render success for what was completed and return
+            renderCompoundSuccess(updatedCompleted, state.resourcePattern);
+            log({
+              ts: new Date().toISOString(),
+              runId: state.runId,
+              level: "warn",
+              action: LOG_ACTIONS.APPLY_SUCCEEDED,
+              extras: { compound: true, completedCount: updatedCompleted.length, note: "nextResource missing, rendering partial success" },
+            });
+            for (const completed of updatedCompleted) {
+              await writeProvisionRecord(
+                state.runId,
+                completed.resourceType,
+                completed.resourceArn,
+                undefined,
+                state.perResourceCosts?.[completed.resourceId ?? ""],
+              );
+            }
+            return { completedResources: updatedCompleted };
+          }
           log({
             ts: new Date().toISOString(),
             runId: state.runId,

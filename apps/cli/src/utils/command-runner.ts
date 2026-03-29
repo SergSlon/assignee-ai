@@ -195,8 +195,22 @@ export async function runProvisioningLoop(
   const isCompound = !!phase1State.resourcePattern;
   const totalResources = phase1State.resourceQueue?.length ?? 1;
   let resourcesProvisioned = 0;
+  const MAX_PROVISION_LOOPS = 50;
+  let loopCount = 0;
 
   while (true) {
+    loopCount++;
+    if (loopCount > MAX_PROVISION_LOOPS) {
+      log({
+        ts: new Date().toISOString(),
+        runId: phase1State.runId,
+        level: "error",
+        action: "PROVISION_LOOP_EXCEEDED" as any,
+        extras: { maxLoops: MAX_PROVISION_LOOPS },
+      });
+      stopSpinner();
+      break;
+    }
     const resourceLabel = isCompound
       ? `Provisioning resource ${resourcesProvisioned + 1} of ${totalResources} (${phase1State.resourceQueue?.[resourcesProvisioned]?.displayName ?? "..."})...`
       : "Provisioning resource...";
