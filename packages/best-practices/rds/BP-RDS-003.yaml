@@ -11,6 +11,3 @@ description: "RDS DB instances should be configured for Multi-AZ deployments to 
 remediation: "Set MultiAZ to true. This creates a synchronous standby replica in a different AZ. For Aurora, use multiple instances across AZs instead."
 category: reliability
 lastVerified: "2026-03-22"
-autoFixable: true
-desiredStatePatch:
-  MultiAZ: true

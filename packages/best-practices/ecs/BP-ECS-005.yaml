@@ -11,8 +11,3 @@ description: "ECS containers should use a read-only root filesystem to prevent a
 remediation: "Set ReadonlyRootFilesystem to true in the container definition. Mount specific writable paths as tmpfs volumes for temporary files."
 category: security
 lastVerified: "2026-03-24"
-fixType: "auto"
-autoFixable: true
-desiredStatePatch:
-  ContainerDefinitions:
-    - ReadonlyRootFilesystem: true
