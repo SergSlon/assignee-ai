@@ -800,7 +800,7 @@ const TRADEOFF_TIMEOUT_MS = 10_000;
  * Falls back to `renderDocHelp` on timeout, LLM failure, or missing llmClient.
  *
  * @param fieldName    - The field being configured (e.g. "InstanceType")
- * @param resourceType - The AWS resource type (e.g. "AWS::EC2::Instance")
+ * @param resourceType - The AWS resource type (e.g. RESOURCE_TYPES.EC2_INSTANCE)
  * @param options      - Available enum/multi options with value and label
  * @param userIntent   - The user's original natural-language intent
  * @param tools        - LangChain tools array (passed through for fallback)

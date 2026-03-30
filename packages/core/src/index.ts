@@ -54,6 +54,7 @@ export { validateConfig, CONFIG_DEFAULTS } from "./config/index.js";
 export {
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
+  LIST_RESOURCE_TYPES,
   type ResourceType,
   SUPPORTED_TYPES_ARRAY,
   SUPPORTED_POC_TYPES,

@@ -13,6 +13,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as crypto from "node:crypto";
 import { parse as parseYaml } from "yaml";
+import { CLEANUP_MAX_AGE_MS } from "../config/constants.js";
 
 const CACHE_DIR = path.join(os.homedir(), ".assignee", "cache", "pricing");
 const PROJECT_CONFIG_DIR = ".assignee";
@@ -155,7 +156,7 @@ export function setCachedPrice(
  * @see Story 33.1
  */
 export function sweepExpiredPrices(
-  maxAgeMs: number = 24 * 60 * 60 * 1000,
+  maxAgeMs: number = CLEANUP_MAX_AGE_MS,
   cacheDir: string = CACHE_DIR,
 ): { removed: number; remaining: number } {
   let entries: string[];

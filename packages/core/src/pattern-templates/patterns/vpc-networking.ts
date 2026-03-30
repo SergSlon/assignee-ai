@@ -1,15 +1,11 @@
-import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 
-/**
- * Resource types used in the VPC compound pattern that are not yet in RESOURCE_TYPES.
- * These auxiliary resources are generated as part of the compound topology but
- * are not independently provisioned via Cloud Control API in the current implementation.
- */
-const EC2_VPC_GATEWAY_ATTACHMENT = "AWS::EC2::VPCGatewayAttachment" as const;
+/** Shorthand aliases for companion resource type constants used in this pattern. */
+const EC2_VPC_GATEWAY_ATTACHMENT = COMPANION_RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT;
 const EC2_SUBNET_ROUTE_TABLE_ASSOCIATION =
-  "AWS::EC2::SubnetRouteTableAssociation" as const;
-const EC2_EIP = "AWS::EC2::EIP" as const;
+  COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION;
+const EC2_EIP = COMPANION_RESOURCE_TYPES.EC2_EIP;
 
 /**
  * Full VPC networking pattern — produces a complete multi-AZ topology with

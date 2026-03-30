@@ -18,7 +18,7 @@ import { defaultMemoryService } from "../services/memory.js";
 import { resolveAmiFromOsName } from "../utils/aws-resource-discovery.js";
 import type { LlmPort } from "@assignee/core";
 import { SCHEMA_EXCERPT_MAX_CHARS } from "../config/constants.js";
-import { CloudFormationKey } from "../constants/cfn-keys.js";
+import { CloudFormationKey, CFN_RESOURCE_TYPE_PREFIX } from "../constants/cfn-keys.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 import { sanitizeDesiredState } from "../services/desired-state-sanitizer.js";
@@ -531,7 +531,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       ...(provisionHintLine ? ["", `COST CONTEXT: ${provisionHintLine}`] : []),
       "",
       'CORRECT format example: { "BucketName": "payments-data-prod" }',
-      'WRONG format example: { "MyBucket": { "Type": "AWS::S3::Bucket", "Properties": { "BucketName": "payments-data-prod" } } }',
+      `WRONG format example: { "MyBucket": { "Type": "${RESOURCE_TYPES.S3_BUCKET}", "Properties": { "BucketName": "payments-data-prod" } } }`,
       "",
       `Schema excerpt:\n${JSON.stringify(state.resourceSchema, null, 2).slice(0, SCHEMA_EXCERPT_MAX_CHARS)}`,
       "",
@@ -573,7 +573,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       const inner = topValues[0] as Record<string, unknown>;
       if (
         typeof inner[CloudFormationKey.TYPE] === "string" &&
-        (inner[CloudFormationKey.TYPE] as string).startsWith("AWS::") &&
+        (inner[CloudFormationKey.TYPE] as string).startsWith(CFN_RESOURCE_TYPE_PREFIX) &&
         typeof inner[CloudFormationKey.PROPERTIES] === "object"
       ) {
         desiredState = inner[CloudFormationKey.PROPERTIES] as Record<

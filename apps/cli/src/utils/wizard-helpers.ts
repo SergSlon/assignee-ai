@@ -746,7 +746,7 @@ export async function fetchSuggestionPrice(
  *
  * @param field        - The resource field being prompted
  * @param resolved     - Resolved policy/value config for the field
- * @param resourceType - The AWS resource type (e.g. "AWS::S3::Bucket")
+ * @param resourceType - The AWS resource type (e.g. RESOURCE_TYPES.S3_BUCKET)
  * @param tools        - LangChain tools array (passed through from node)
  * @param llmClient    - Optional LLM client forwarded to renderDocHelp/renderTradeoffHelp
  * @param userIntent   - Optional user intent string for context-aware trade-off analysis

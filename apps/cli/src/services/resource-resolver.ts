@@ -12,7 +12,7 @@ import {
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
-import { ConfigurationError, RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "@assignee/core";
+import { ConfigurationError, RESOURCE_TYPES, COMPANION_RESOURCE_TYPES, LIST_RESOURCE_TYPES, CCAPI_FALLBACK_TYPES } from "@assignee/core";
 
 /** Resolved resource returned by the resource resolver. */
 export interface ResolvedResource {
@@ -61,7 +61,7 @@ function parseSqsQueueUrl(url: string): {
 
 /**
  * Extracts the CloudFormation resource type from an ARN.
- * e.g. "arn:aws:s3:::my-bucket" → "AWS::S3::Bucket"
+ * e.g. "arn:aws:s3:::my-bucket" → RESOURCE_TYPES.S3_BUCKET
  *
  * Returns null if the ARN service is not recognized.
  */
@@ -80,10 +80,10 @@ function arnToResourceType(arn: string): string | null {
     ssm: { parameter: RESOURCE_TYPES.SSM_PARAMETER },
     iam: {
       role: RESOURCE_TYPES.IAM_ROLE,
-      policy: "AWS::IAM::ManagedPolicy",
-      user: "AWS::IAM::User",
-      group: "AWS::IAM::Group",
-      "instance-profile": "AWS::IAM::InstanceProfile",
+      policy: LIST_RESOURCE_TYPES.IAM_MANAGED_POLICY,
+      user: LIST_RESOURCE_TYPES.IAM_USER,
+      group: LIST_RESOURCE_TYPES.IAM_GROUP,
+      "instance-profile": LIST_RESOURCE_TYPES.IAM_INSTANCE_PROFILE,
     },
     ec2: {
       instance: RESOURCE_TYPES.EC2_INSTANCE,
@@ -98,7 +98,7 @@ function arnToResourceType(arn: string): string | null {
     rds: { db: RESOURCE_TYPES.RDS_DB_INSTANCE },
     lambda: {
       function: RESOURCE_TYPES.LAMBDA_FUNCTION,
-      "event-source-mapping": "AWS::Lambda::EventSourceMapping",
+      "event-source-mapping": CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING,
     },
     dynamodb: { table: RESOURCE_TYPES.DYNAMODB_TABLE },
     sqs: { "": RESOURCE_TYPES.SQS_QUEUE },

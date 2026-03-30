@@ -90,10 +90,37 @@ export const CCAPI_FALLBACK_TYPES = {
 /** Named constants for companion-only resource types that are not independently provisioned. */
 export const COMPANION_RESOURCE_TYPES = {
   EC2_EIP: "AWS::EC2::EIP",
+  EC2_VPC_GATEWAY_ATTACHMENT: "AWS::EC2::VPCGatewayAttachment",
   SECRETSMANAGER_SECRET_TARGET_ATTACHMENT:
     "AWS::SecretsManager::SecretTargetAttachment",
   EC2_SUBNET_ROUTE_TABLE_ASSOCIATION:
     "AWS::EC2::SubnetRouteTableAssociation",
+  APIGATEWAYV2_INTEGRATION: "AWS::ApiGatewayV2::Integration",
+  APIGATEWAYV2_ROUTE: "AWS::ApiGatewayV2::Route",
+  APIGATEWAYV2_STAGE: "AWS::ApiGatewayV2::Stage",
+  LAMBDA_PERMISSION: "AWS::Lambda::Permission",
+} as const;
+
+// ── Listing-Only Resource Types ─────────────────────────────────────────────
+// Resource types used only for ARN-to-type mapping in listing/resolve commands.
+// Not independently provisioned via Cloud Control API.
+
+/** Named constants for resource types that appear only in listing/resolve operations. */
+export const LIST_RESOURCE_TYPES = {
+  CLOUDFORMATION_STACK: "AWS::CloudFormation::Stack",
+  EVENTS_RULE: "AWS::Events::Rule",
+  CLOUDFRONT_DISTRIBUTION: "AWS::CloudFront::Distribution",
+  EKS_CLUSTER: "AWS::EKS::Cluster",
+  ELASTICACHE_CACHE_CLUSTER: "AWS::ElastiCache::CacheCluster",
+  KINESIS_STREAM: "AWS::Kinesis::Stream",
+  STEPFUNCTIONS_STATE_MACHINE: "AWS::StepFunctions::StateMachine",
+  IAM_MANAGED_POLICY: "AWS::IAM::ManagedPolicy",
+  IAM_USER: "AWS::IAM::User",
+  IAM_GROUP: "AWS::IAM::Group",
+  IAM_INSTANCE_PROFILE: "AWS::IAM::InstanceProfile",
+  APIGATEWAY_REST_API: "AWS::ApiGateway::RestApi",
+  ELBV2_TARGET_GROUP: "AWS::ElasticLoadBalancingV2::TargetGroup",
+  RDS_DB_CLUSTER: "AWS::RDS::DBCluster",
 } as const;
 
 /** Union of all CCAPI fallback resource type strings. */

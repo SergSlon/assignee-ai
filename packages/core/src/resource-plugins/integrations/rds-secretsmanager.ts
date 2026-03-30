@@ -8,7 +8,7 @@
  * @see Story 26.5 — SecretsManager + RDS Integration
  */
 
-import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
 
 /** Characters excluded from generated passwords for RDS compatibility. */
 export const RDS_SAFE_EXCLUDE_CHARACTERS = "/@\"\\'";
@@ -90,11 +90,11 @@ export function analyzeRdsSecretsIntegration(
     },
     attachmentResource: {
       logicalId: attachmentLogicalId,
-      type: "AWS::SecretsManager::SecretTargetAttachment",
+      type: COMPANION_RESOURCE_TYPES.SECRETSMANAGER_SECRET_TARGET_ATTACHMENT,
       properties: {
         SecretId: { Ref: secretLogicalId },
         TargetId: { Ref: rdsLogicalId },
-        TargetType: "AWS::RDS::DBInstance",
+        TargetType: RESOURCE_TYPES.RDS_DB_INSTANCE,
       },
     },
     dynamicReference: secretDynamicReference(secretLogicalId),
