@@ -49,7 +49,7 @@ export const routeTablePlugin: ResourcePlugin = {
   defaults: {},
   configHints: [
     "VpcId MUST reference a valid VPC in the plan",
-    "AWS::EC2::SubnetRouteTableAssociation is IMMUTABLE — any change triggers resource replacement (no in-place update supported by CloudFormation)",
+    `${COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION} is IMMUTABLE — any change triggers resource replacement (no in-place update supported by CloudFormation)`,
     "Every route table should be explicitly associated with at least one subnet; avoid relying on the VPC main route table",
     "Public route tables need a 0.0.0.0/0 route targeting an InternetGateway; private route tables use a NatGateway",
   ],

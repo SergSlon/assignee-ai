@@ -109,7 +109,7 @@ export interface ResourceField {
 export interface CfnOutput {
   /** Logical ID for the CloudFormation resource, e.g. "NatGateway" */
   logicalId: string;
-  /** CloudFormation resource type, e.g. "AWS::EC2::NatGateway" */
+  /** CloudFormation resource type, e.g. RESOURCE_TYPES.EC2_NAT_GATEWAY */
   type: string;
   /** CloudFormation resource properties */
   properties: Record<string, unknown>;
@@ -120,7 +120,7 @@ export interface CfnOutput {
  * Consumed by the option-elicitor node to determine which questions to ask.
  */
 export interface ResourcePlugin {
-  /** CloudFormation resource type, e.g. "AWS::S3::Bucket" */
+  /** CloudFormation resource type, e.g. RESOURCE_TYPES.S3_BUCKET */
   resourceType: string;
   /**
    * Fields surfaced to all users by default (≤10).

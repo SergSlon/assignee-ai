@@ -7,7 +7,7 @@ import type { ExecutionStatusType } from "../schema/graph-state.js";
 export interface ResourceResult {
   /** Logical resource ID from the pattern definition, e.g. "lambda-execution-role" */
   resourceId: string;
-  /** CloudFormation resource type, e.g. "AWS::IAM::Role" */
+  /** CloudFormation resource type, e.g. RESOURCE_TYPES.IAM_ROLE */
   resourceType: string;
   /** ARN of the created resource (undefined if provisioning failed) */
   resourceArn?: string;
@@ -20,7 +20,7 @@ export interface ResourceResult {
  * The `resourceId` is the logical name used in `dependencyOrder` ordering.
  */
 export interface ResourceSpec {
-  /** CloudFormation resource type, e.g. "AWS::Lambda::Function" */
+  /** CloudFormation resource type, e.g. RESOURCE_TYPES.LAMBDA_FUNCTION */
   resourceType: string;
   /** Logical identifier within the pattern, e.g. "lambda-execution-role" (used in dependencyOrder) */
   resourceId: string;

@@ -72,7 +72,7 @@ export interface PricingBreakdown {
  * Each resource type implements this to provide granular pricing.
  */
 export interface PricingDecomposer {
-  /** Resource type this decomposer handles (e.g., "AWS::EC2::Instance") */
+  /** Resource type this decomposer handles (e.g., RESOURCE_TYPES.EC2_INSTANCE) */
   resourceType: string;
   /** Extract billable components from the desired state */
   decompose(desiredState: Record<string, unknown>): PricingLineItem[];

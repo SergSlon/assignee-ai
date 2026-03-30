@@ -40,7 +40,7 @@ export interface DriftedField {
 }
 
 export interface DriftResult {
-  /** CloudFormation resource type (e.g., "AWS::S3::Bucket") */
+  /** CloudFormation resource type (e.g., RESOURCE_TYPES.S3_BUCKET) */
   resourceType: string;
   /** Resource identifier (e.g., ARN or physical ID) */
   resourceId: string;

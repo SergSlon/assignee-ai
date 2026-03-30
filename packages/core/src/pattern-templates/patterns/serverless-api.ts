@@ -1,15 +1,11 @@
-import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 
-/**
- * API Gateway V2 sub-resource types used in the serverless API pattern.
- * These auxiliary resources are generated as part of the compound topology but
- * are not independently provisioned via Cloud Control API.
- */
-const APIGATEWAYV2_INTEGRATION = "AWS::ApiGatewayV2::Integration" as const;
-const APIGATEWAYV2_ROUTE = "AWS::ApiGatewayV2::Route" as const;
-const APIGATEWAYV2_STAGE = "AWS::ApiGatewayV2::Stage" as const;
-const LAMBDA_PERMISSION = "AWS::Lambda::Permission" as const;
+/** Shorthand aliases for companion resource type constants used in this pattern. */
+const APIGATEWAYV2_INTEGRATION = COMPANION_RESOURCE_TYPES.APIGATEWAYV2_INTEGRATION;
+const APIGATEWAYV2_ROUTE = COMPANION_RESOURCE_TYPES.APIGATEWAYV2_ROUTE;
+const APIGATEWAYV2_STAGE = COMPANION_RESOURCE_TYPES.APIGATEWAYV2_STAGE;
+const LAMBDA_PERMISSION = COMPANION_RESOURCE_TYPES.LAMBDA_PERMISSION;
 
 /**
  * Full Serverless API compound pattern.

@@ -15,7 +15,7 @@ import {
   type DriftedField,
   type DriftStatusType,
 } from "@assignee/core";
-import { DRIFT_MAX_RETRIES } from "../config/constants.js";
+import { DRIFT_MAX_RETRIES, DRIFT_RETRY_BASE_DELAY_MS, DRIFT_RETRY_JITTER_MS } from "../config/constants.js";
 import {
   ProvisioningErrorKind,
   type ProvisioningPort,
@@ -392,7 +392,7 @@ export class DriftDetectorService {
           entry.typeName,
           entry.identifier,
           entry.desiredState,
-          3, // max retries
+          DRIFT_MAX_RETRIES,
         );
         completed++;
         opts.onProgress?.(completed, entries.length, result);
@@ -428,8 +428,8 @@ export class DriftDetectorService {
           result.errorMessage.includes("TooManyRequests"))
       ) {
         if (attempt < maxRetries) {
-          const baseDelay = 200 * Math.pow(2, attempt); // 200, 400, 800
-          const jitter = Math.random() * 100;
+          const baseDelay = DRIFT_RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+          const jitter = Math.random() * DRIFT_RETRY_JITTER_MS;
           await new Promise((resolve) =>
             setTimeout(resolve, baseDelay + jitter),
           );

@@ -17,7 +17,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "@assignee/core";
+import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES, LIST_RESOURCE_TYPES, CCAPI_FALLBACK_TYPES } from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
@@ -54,17 +54,17 @@ const SERVICE_TYPE_MAP: Record<string, string> = {
   dynamodb: RESOURCE_TYPES.DYNAMODB_TABLE,
   sqs: RESOURCE_TYPES.SQS_QUEUE,
   sns: RESOURCE_TYPES.SNS_TOPIC,
-  cloudformation: "AWS::CloudFormation::Stack",
+  cloudformation: LIST_RESOURCE_TYPES.CLOUDFORMATION_STACK,
   logs: RESOURCE_TYPES.LOGS_LOG_GROUP,
-  events: "AWS::Events::Rule",
-  cloudfront: "AWS::CloudFront::Distribution",
+  events: LIST_RESOURCE_TYPES.EVENTS_RULE,
+  cloudfront: LIST_RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
   ecs: RESOURCE_TYPES.ECS_CLUSTER,
-  eks: "AWS::EKS::Cluster",
-  elasticache: "AWS::ElastiCache::CacheCluster",
-  kinesis: "AWS::Kinesis::Stream",
+  eks: LIST_RESOURCE_TYPES.EKS_CLUSTER,
+  elasticache: LIST_RESOURCE_TYPES.ELASTICACHE_CACHE_CLUSTER,
+  kinesis: LIST_RESOURCE_TYPES.KINESIS_STREAM,
   secretsmanager: RESOURCE_TYPES.SECRETSMANAGER_SECRET,
-  stepfunctions: "AWS::StepFunctions::StateMachine",
-  states: "AWS::StepFunctions::StateMachine",
+  stepfunctions: LIST_RESOURCE_TYPES.STEPFUNCTIONS_STATE_MACHINE,
+  states: LIST_RESOURCE_TYPES.STEPFUNCTIONS_STATE_MACHINE,
 };
 
 /** Services with multiple resource types — resolved by ARN resource segment. */
@@ -81,21 +81,21 @@ const SERVICE_SUBTYPE_MAP: Record<string, Record<string, string>> = {
   },
   iam: {
     role: RESOURCE_TYPES.IAM_ROLE,
-    policy: "AWS::IAM::ManagedPolicy",
-    user: "AWS::IAM::User",
-    group: "AWS::IAM::Group",
-    "instance-profile": "AWS::IAM::InstanceProfile",
+    policy: LIST_RESOURCE_TYPES.IAM_MANAGED_POLICY,
+    user: LIST_RESOURCE_TYPES.IAM_USER,
+    group: LIST_RESOURCE_TYPES.IAM_GROUP,
+    "instance-profile": LIST_RESOURCE_TYPES.IAM_INSTANCE_PROFILE,
   },
   apigateway: {
     "/apis": RESOURCE_TYPES.APIGATEWAYV2_API,
-    restapis: "AWS::ApiGateway::RestApi",
+    restapis: LIST_RESOURCE_TYPES.APIGATEWAY_REST_API,
   },
   "execute-api": {
     "": RESOURCE_TYPES.APIGATEWAYV2_API,
   },
   elasticloadbalancing: {
     loadbalancer: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
-    targetgroup: "AWS::ElasticLoadBalancingV2::TargetGroup",
+    targetgroup: LIST_RESOURCE_TYPES.ELBV2_TARGET_GROUP,
   },
   ecr: {
     repository: RESOURCE_TYPES.ECR_REPOSITORY,

@@ -199,7 +199,7 @@ const INTENT_RULES: IntentRule[] = [
  * First matching rule per field wins — no conflicting overrides.
  *
  * @param userIntent  - The user's natural-language intent string
- * @param resourceType - CloudFormation resource type, e.g. "AWS::EC2::Instance"
+ * @param resourceType - CloudFormation resource type, e.g. RESOURCE_TYPES.EC2_INSTANCE
  * @returns Array of field overrides (empty if no keywords match)
  */
 export function getIntentDefaults(

@@ -72,6 +72,12 @@ export const MCP_SHUTDOWN_DELAY_MS = 3000;
 /** Maximum retries for drift detection resource checks. */
 export const DRIFT_MAX_RETRIES = 3;
 
+/** Base delay for drift detection exponential backoff (ms). */
+export const DRIFT_RETRY_BASE_DELAY_MS = 200;
+
+/** Maximum jitter added to drift detection retry delay (ms). */
+export const DRIFT_RETRY_JITTER_MS = 100;
+
 /** Skip checkpoint files modified within this many minutes during cleanup. */
 export const CLEANUP_SKIP_RECENT_MINUTES = 10;
 

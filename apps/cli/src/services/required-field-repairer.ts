@@ -30,7 +30,7 @@ export interface RepairResult {
  * toCfn transforms are applied to injected values.
  *
  * @param desiredState - The LLM-generated + sanitized desiredState
- * @param resourceType - CloudFormation resource type (e.g. "AWS::S3::Bucket")
+ * @param resourceType - CloudFormation resource type (e.g. RESOURCE_TYPES.S3_BUCKET)
  * @param schemaRequired - Array of required field names from the CloudFormation schema
  * @returns Repaired desiredState with injection audit trail
  */

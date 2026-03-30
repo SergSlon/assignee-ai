@@ -218,7 +218,7 @@ export class CloudFormationSchemaService {
 
       // Retry once on throttling
       if (!retried && isThrottlingError(err)) {
-        await delay(1000);
+        await delay(THROTTLE_RETRY_DELAY_MS);
         return this.fetchFromApi(typeName, true);
       }
 
@@ -239,6 +239,9 @@ function isThrottlingError(error: Error): boolean {
     message.includes("Throttling")
   );
 }
+
+/** Delay before retrying a throttled DescribeType request (ms). */
+const THROTTLE_RETRY_DELAY_MS = 1000;
 
 /** Promise-based delay. */
 function delay(ms: number): Promise<void> {

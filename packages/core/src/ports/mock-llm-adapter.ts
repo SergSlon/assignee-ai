@@ -5,7 +5,7 @@
  * @example
  * ```typescript
  * // intent-parser test
- * const mock = new MockLlmAdapter({ resourceType: "AWS::S3::Bucket" });
+ * const mock = new MockLlmAdapter({ resourceType: RESOURCE_TYPES.S3_BUCKET });
  * const node = createIntentParserNode({ llmClient: mock });
  *
  * // plan-generator test

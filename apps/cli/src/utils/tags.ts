@@ -4,10 +4,12 @@
  *
  * CloudFormation tag formats differ by resource type:
  *   - Most resources (S3, IAM, etc.): Tags: [{ Key: string, Value: string }]
- *   - AWS::SSM::Parameter:            Tags: { key: value }  (flat map)
+ *   - SSM Parameter:                  Tags: { key: value }  (flat map)
  *
  * @see Story 2-5, NFR-14
  */
+
+import { RESOURCE_TYPES } from "@assignee/core";
 
 /** CloudFormation tag shape used by most resource types. */
 export interface CfnTag {
@@ -28,14 +30,14 @@ const TAG_VALUE_ENVIRONMENT = "poc";
  * Resource types that use a flat { key: value } map for Tags
  * instead of the standard [{ Key, Value }] array format.
  */
-const FLAT_MAP_TAG_TYPES = new Set(["AWS::SSM::Parameter"]);
+const FLAT_MAP_TAG_TYPES: Set<string> = new Set([RESOURCE_TYPES.SSM_PARAMETER]);
 
 /**
  * Resource types that do NOT support Tags at all.
  * Tag injection is skipped entirely for these types.
  * @see AWS::EC2::Route — CloudControl rejects Tags property.
  */
-const NO_TAG_TYPES = new Set(["AWS::EC2::Route"]);
+const NO_TAG_TYPES: Set<string> = new Set([RESOURCE_TYPES.EC2_ROUTE]);
 
 /**
  * Merges mandatory Assignee.ai tags into a desiredState object.
@@ -46,7 +48,7 @@ const NO_TAG_TYPES = new Set(["AWS::EC2::Route"]);
  *
  * @param desiredState - The resource's desired state object
  * @param runId - Current run UUID (NFR-14 traceability)
- * @param resourceType - CloudFormation resource type (e.g. "AWS::SSM::Parameter")
+ * @param resourceType - CloudFormation resource type (e.g. RESOURCE_TYPES.SSM_PARAMETER)
  * @returns New desiredState with Tags fully merged
  */
 export function injectMandatoryTags(
