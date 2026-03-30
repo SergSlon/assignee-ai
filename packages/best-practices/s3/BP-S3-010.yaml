@@ -11,15 +11,3 @@ description: "S3 buckets should have lifecycle policies configured to manage obj
 remediation: "Configure LifecycleConfiguration with rules to transition objects to cheaper storage classes (e.g., Glacier) and expire objects that are no longer needed."
 category: cost
 lastVerified: "2026-03-22"
-autoFixable: true
-desiredStatePatch:
-  LifecycleConfiguration:
-    Rules:
-      - Id: "default-lifecycle"
-        Status: "Enabled"
-        Transitions:
-          - StorageClass: "STANDARD_IA"
-            TransitionInDays: 30
-          - StorageClass: "GLACIER"
-            TransitionInDays: 90
-        ExpirationInDays: 365

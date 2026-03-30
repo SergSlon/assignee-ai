@@ -11,7 +11,3 @@ description: "DynamoDB tables should have deletion protection enabled to prevent
 remediation: "Set DeletionProtectionEnabled to true. This prevents the table from being deleted via the console, CLI, or API until the protection is explicitly disabled."
 category: reliability
 lastVerified: "2026-03-24"
-fixType: "auto"
-autoFixable: true
-desiredStatePatch:
-  DeletionProtectionEnabled: true
