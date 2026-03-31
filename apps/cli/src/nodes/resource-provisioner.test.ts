@@ -424,7 +424,9 @@ describe("resourceProvisionerNode", () => {
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(/already taken globally|already exists/i);
+      expect(result.errorMessage).toMatch(
+        /already taken globally|already exists/i,
+      );
       expect(result.errorMessage).toMatch(/CloudControl provisioning failed/);
     });
 
@@ -655,6 +657,66 @@ describe("resourceProvisionerNode", () => {
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/SDK fallback provisioning failed/);
       expect(result.errorMessage).toMatch(/Function not found/);
+    });
+  });
+
+  // ── provisionable=false skip (Epic 37) ──────────────────────────────────
+
+  describe("provisionable=false resources", () => {
+    it("skips provisioning and returns SUCCESS for non-provisionable resources", async () => {
+      const state = makeState({
+        resourceType: "AWS::CloudFront::Distribution",
+        desiredState: undefined, // No desired state for companion resources
+        resourceQueue: [
+          {
+            resourceType: "AWS::S3::Bucket",
+            resourceId: "bucket",
+            displayName: "Bucket",
+          },
+          {
+            resourceType: "AWS::CloudFront::Distribution",
+            resourceId: "cdn",
+            displayName: "CDN",
+            provisionable: false,
+          },
+        ],
+        currentResourceIndex: 1, // Points to the non-provisionable resource
+      });
+
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
+      expect(result.resourceArn).toBeUndefined();
+      // CloudControl should NOT have been called
+      expect(mockProvisioner.createResource).not.toHaveBeenCalled();
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
+    });
+
+    it("does NOT skip provisionable=true resources (default)", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "tok-123" },
+      ]);
+
+      const state = makeState({
+        resourceQueue: [
+          {
+            resourceType: "AWS::S3::Bucket",
+            resourceId: "bucket",
+            displayName: "Bucket",
+          },
+        ],
+        currentResourceIndex: 0,
+      });
+
+      await resourceProvisionerNode(state, mockProvisioner);
+
+      // CloudControl SHOULD have been called
+      expect(mockProvisioner.createResource).toHaveBeenCalled();
     });
   });
 });

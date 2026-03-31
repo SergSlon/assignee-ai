@@ -899,7 +899,7 @@ describe("renderPlanBox with unified findings — non-TTY", () => {
           blocking: true,
         },
         {
-          practiceId: "BP-S3-007",
+          practiceId: "BP-S3-010",
           title: "S3 lifecycle",
           severity: "MEDIUM",
           category: "cost",
@@ -943,7 +943,7 @@ describe("renderPlanBox with unified findings — non-TTY", () => {
           blocking: true,
         },
         {
-          practiceId: "BP-S3-007",
+          practiceId: "BP-S3-010",
           title: "Lifecycle",
           severity: "MEDIUM",
           category: "cost",
@@ -1153,9 +1153,7 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
     const output = chunks.join("");
     expect(output).toContain("1 critical");
     expect(output).toContain("1 medium");
-    expect(output).toContain(
-      "[CRITICAL] Enable S3 Default Encryption",
-    );
+    expect(output).toContain("[CRITICAL] Enable S3 Default Encryption");
     expect(output).toContain("[MEDIUM] Enable S3 Bucket Versioning");
     // Remediation hints shown
     expect(output).toContain("Configure ServerSideEncryptionConfiguration");
@@ -2220,7 +2218,11 @@ describe("renderOptionPrompt — categorySelect", () => {
 // ── Epic 35 — Actionable Findings test matrix ─────────────────────────────────
 
 import type { BPFinding } from "@assignee/best-practices";
-import { resolveAction, countFixable, countAutoFixable } from "./fix-command-resolver.js";
+import {
+  resolveAction,
+  countFixable,
+  countAutoFixable,
+} from "./fix-command-resolver.js";
 
 /**
  * Realistic BP-style findings used across the Epic 35 test matrix.
@@ -2319,12 +2321,13 @@ const ec2EbsEncryptionFinding: BPFinding = {
 };
 
 const s3LifecycleFinding: BPFinding = {
-  practiceId: "BP-S3-007",
+  practiceId: "BP-S3-010",
   title: "Configure S3 Lifecycle Rules",
   severity: "MEDIUM",
   category: "cost",
   message: "S3 bucket has no lifecycle rules for cost management",
-  remediation: "Add LifecycleConfiguration rules to transition or expire objects",
+  remediation:
+    "Add LifecycleConfiguration rules to transition or expire objects",
   blocking: false,
   autoFixable: false,
   propertyPath: "LifecycleConfiguration",
@@ -2381,7 +2384,9 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
         const result = formatFindings([s3PublicAccessFinding]);
         const lines = result.split("\n");
         // First line is summary, then finding title, then hint
-        const titleLine = lines.find((l) => l.includes("Block S3 Public Access"));
+        const titleLine = lines.find((l) =>
+          l.includes("Block S3 Public Access"),
+        );
         expect(titleLine).toBeDefined();
         const titleIdx = lines.indexOf(titleLine!);
         const hintLine = lines[titleIdx + 1];
@@ -2405,7 +2410,10 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
 
       it("2. findings show title with [SEVERITY] marker, hint with -> prefix", async () => {
         const { formatFindings } = await import("./display.js");
-        const result = formatFindings([s3LifecycleFinding, s3VersioningInfoFinding]);
+        const result = formatFindings([
+          s3LifecycleFinding,
+          s3VersioningInfoFinding,
+        ]);
         expect(result).toContain("[MEDIUM] Configure S3 Lifecycle Rules");
         expect(result).toContain("[INFO] Enable Versioning for Backup");
         // Hints use -> prefix in non-TTY
@@ -2427,7 +2435,10 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
 
       it("4. summary does NOT show '(fixable)' when 0 findings are fixable", async () => {
         const { formatFindings } = await import("./display.js");
-        const result = formatFindings([s3LifecycleFinding, s3VersioningInfoFinding]);
+        const result = formatFindings([
+          s3LifecycleFinding,
+          s3VersioningInfoFinding,
+        ]);
         expect(result).not.toContain("fixable");
       });
 
@@ -2447,8 +2458,8 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       it("6. each hint line has exactly one of: Fix:, Manual:, Info: prefix", async () => {
         const { formatFindings } = await import("./display.js");
         const result = formatFindings([
-          s3PublicAccessFinding,   // auto-fixable → Fix:
-          s3LifecycleFinding,     // manual → Manual:
+          s3PublicAccessFinding, // auto-fixable → Fix:
+          s3LifecycleFinding, // manual → Manual:
           s3VersioningInfoFinding, // awareness → Info:
         ]);
         const lines = result.split("\n");
@@ -2530,7 +2541,11 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       renderPlanBox({
         ...mockState,
         autoFixEnabled: false,
-        bpFindings: [s3PublicAccessFinding, s3EncryptionFinding, s3LifecycleFinding],
+        bpFindings: [
+          s3PublicAccessFinding,
+          s3EncryptionFinding,
+          s3LifecycleFinding,
+        ],
       });
       restore();
 
@@ -2543,7 +2558,9 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       const { renderPlanBox } = await import("./display.js");
 
       // Single auto-fixable
-      const { chunks: chunks1, restore: restore1 } = captureStream(process.stdout);
+      const { chunks: chunks1, restore: restore1 } = captureStream(
+        process.stdout,
+      );
       renderPlanBox({
         ...mockState,
         autoFixEnabled: false,
@@ -2555,7 +2572,9 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       expect(output1).not.toContain("1 findings");
 
       // Multiple auto-fixable
-      const { chunks: chunks2, restore: restore2 } = captureStream(process.stdout);
+      const { chunks: chunks2, restore: restore2 } = captureStream(
+        process.stdout,
+      );
       renderPlanBox({
         ...mockState,
         autoFixEnabled: false,
@@ -2682,7 +2701,11 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       const result = await promptFixSelection({
         ...mockState,
         desiredState: { BucketName: "my-bucket" },
-        bpFindings: [s3PublicAccessFinding, s3EncryptionFinding, s3LifecycleFinding],
+        bpFindings: [
+          s3PublicAccessFinding,
+          s3EncryptionFinding,
+          s3LifecycleFinding,
+        ],
       });
 
       expect(result).not.toBeNull();
@@ -2690,12 +2713,15 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       expect(result!.appliedFixes.length).toBe(2);
       // Residual findings should only contain the non-fixable lifecycle finding
       expect(result!.bpFindings.length).toBe(1);
-      expect(result!.bpFindings[0]!.practiceId).toBe("BP-S3-007");
+      expect(result!.bpFindings[0]!.practiceId).toBe("BP-S3-010");
       // Desired state should contain the merged patches
       expect(result!.desiredState).toHaveProperty("BucketName", "my-bucket");
-      expect(result!.desiredState).toHaveProperty("PublicAccessBlockConfiguration");
+      expect(result!.desiredState).toHaveProperty(
+        "PublicAccessBlockConfiguration",
+      );
       expect(
-        (result!.desiredState as any).PublicAccessBlockConfiguration.BlockPublicAcls,
+        (result!.desiredState as any).PublicAccessBlockConfiguration
+          .BlockPublicAcls,
       ).toBe(true);
       expect(result!.desiredState).toHaveProperty("BucketEncryption");
 
@@ -2714,10 +2740,10 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       });
       // First select → "choose", then Y for PublicAccess, N for Encryption, Y for PublicPolicy
       vi.mocked(select)
-        .mockResolvedValueOnce("choose")   // initial menu
-        .mockResolvedValueOnce("fix")      // finding 1: PublicAccess → fix
-        .mockResolvedValueOnce("skip")     // finding 2: Encryption → skip
-        .mockResolvedValueOnce("fix");     // finding 3: PublicPolicy → fix
+        .mockResolvedValueOnce("choose") // initial menu
+        .mockResolvedValueOnce("fix") // finding 1: PublicAccess → fix
+        .mockResolvedValueOnce("skip") // finding 2: Encryption → skip
+        .mockResolvedValueOnce("fix"); // finding 3: PublicPolicy → fix
       vi.mocked(isCancel).mockReturnValue(false);
 
       const { promptFixSelection } = await import("./display.js");
@@ -2728,22 +2754,36 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
           s3PublicAccessFinding,
           s3EncryptionFinding,
           s3PublicPolicyFinding,
-          s3LifecycleFinding,   // non-fixable — should stay in residual
+          s3LifecycleFinding, // non-fixable — should stay in residual
         ],
       });
 
       expect(result).not.toBeNull();
       // Only 2 fixes applied (PublicAccess + PublicPolicy), Encryption was skipped
       expect(result!.appliedFixes.length).toBe(2);
-      expect(result!.appliedFixes.map((f) => f.practiceId)).toContain("BP-S3-001");
-      expect(result!.appliedFixes.map((f) => f.practiceId)).toContain("BP-S3-001b");
+      expect(result!.appliedFixes.map((f) => f.practiceId)).toContain(
+        "BP-S3-001",
+      );
+      expect(result!.appliedFixes.map((f) => f.practiceId)).toContain(
+        "BP-S3-001b",
+      );
       // Residual: skipped Encryption + non-fixable Lifecycle
       expect(result!.bpFindings.length).toBe(2);
-      expect(result!.bpFindings.map((f) => f.practiceId)).toContain("BP-S3-006");
-      expect(result!.bpFindings.map((f) => f.practiceId)).toContain("BP-S3-007");
+      expect(result!.bpFindings.map((f) => f.practiceId)).toContain(
+        "BP-S3-006",
+      );
+      expect(result!.bpFindings.map((f) => f.practiceId)).toContain(
+        "BP-S3-010",
+      );
       // DesiredState has patches from fixed findings only
-      expect((result!.desiredState as any).PublicAccessBlockConfiguration.BlockPublicAcls).toBe(true);
-      expect((result!.desiredState as any).PublicAccessBlockConfiguration.BlockPublicPolicy).toBe(true);
+      expect(
+        (result!.desiredState as any).PublicAccessBlockConfiguration
+          .BlockPublicAcls,
+      ).toBe(true);
+      expect(
+        (result!.desiredState as any).PublicAccessBlockConfiguration
+          .BlockPublicPolicy,
+      ).toBe(true);
       // Encryption patch was skipped — should NOT be in desiredState
       expect(result!.desiredState).not.toHaveProperty("BucketEncryption");
 
@@ -2761,9 +2801,9 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
         configurable: true,
       });
       vi.mocked(select)
-        .mockResolvedValueOnce("choose")   // initial menu
-        .mockResolvedValueOnce("skip")     // finding 1 → skip
-        .mockResolvedValueOnce("skip");    // finding 2 → skip
+        .mockResolvedValueOnce("choose") // initial menu
+        .mockResolvedValueOnce("skip") // finding 1 → skip
+        .mockResolvedValueOnce("skip"); // finding 2 → skip
       vi.mocked(isCancel).mockReturnValue(false);
 
       const { promptFixSelection } = await import("./display.js");
@@ -2879,9 +2919,13 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       expect(result!.appliedFixes.length).toBe(1);
       expect(result!.appliedFixes[0]!.practiceId).toBe("BP-S3-001");
       // The fixed finding should be removed from residual
-      expect(result!.bpFindings.some((f) => f.practiceId === "BP-S3-001")).toBe(false);
+      expect(result!.bpFindings.some((f) => f.practiceId === "BP-S3-001")).toBe(
+        false,
+      );
       // The unfixed finding should remain
-      expect(result!.bpFindings.some((f) => f.practiceId === "BP-S3-006")).toBe(true);
+      expect(result!.bpFindings.some((f) => f.practiceId === "BP-S3-006")).toBe(
+        true,
+      );
 
       Object.defineProperty(process.stdin, "isTTY", {
         value: undefined,
@@ -2928,7 +2972,9 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
     it("20. Manual finding with fix_hint shows the hint, not raw remediation", () => {
       const action = resolveAction(manualFindingWithHint);
       expect(action.fixable).toBe(false);
-      expect(action.hint).toBe("Review CORS requirements for your web application");
+      expect(action.hint).toBe(
+        "Review CORS requirements for your web application",
+      );
       // Must NOT show raw remediation
       expect(action.hint).not.toContain("raw remediation text");
     });

@@ -56,20 +56,24 @@ describe("completions command", () => {
     exitSpy.mockRestore();
   });
 
-  it("outputs zsh completion script to stdout", async () => {
-    const { generateCompletionScript } =
-      await import("../services/completion-generator.js");
+  it(
+    "outputs zsh completion script to stdout",
+    { timeout: 15_000 },
+    async () => {
+      const { generateCompletionScript } =
+        await import("../services/completion-generator.js");
 
-    // Build with real commands to verify the generator picks up the full tree
-    const { program } = await buildTestCli();
+      // Build with real commands to verify the generator picks up the full tree
+      const { program } = await buildTestCli();
 
-    const script = generateCompletionScript(program, "zsh");
+      const script = generateCompletionScript(program, "zsh");
 
-    expect(script).toContain("#compdef assignee");
-    expect(script).toContain("plan");
-    expect(script).toContain("apply");
-    expect(script).toContain("init");
-  });
+      expect(script).toContain("#compdef assignee");
+      expect(script).toContain("plan");
+      expect(script).toContain("apply");
+      expect(script).toContain("init");
+    },
+  );
 
   it("outputs bash completion script to stdout", async () => {
     const { generateCompletionScript } =

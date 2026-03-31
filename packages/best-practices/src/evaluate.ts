@@ -55,9 +55,14 @@ export function getField(obj: Record<string, unknown>, path: string): unknown {
       } else if (Array.isArray(container)) {
         // String key on an array — find element by key match (ELBv2 LoadBalancerAttributes pattern)
         const found = container.find(
-          (item) => typeof item === "object" && item !== null && (item as Record<string, unknown>)["Key"] === bracketKey,
+          (item) =>
+            typeof item === "object" &&
+            item !== null &&
+            (item as Record<string, unknown>)["Key"] === bracketKey,
         );
-        current = found ? (found as Record<string, unknown>)["Value"] : undefined;
+        current = found
+          ? (found as Record<string, unknown>)["Value"]
+          : undefined;
       } else if (typeof container === "object") {
         // String key on an object — direct lookup
         current = (container as Record<string, unknown>)[bracketKey!];
@@ -295,6 +300,15 @@ export function evaluateTriggers(
   const findings: BPFinding[] = [];
 
   for (const bp of practices) {
+    // Pattern-level exclusion: if any trigger declares excludePatterns
+    // containing the current patternId, suppress the entire rule.
+    if (
+      context.patternId &&
+      bp.triggers?.some((t) => t.excludePatterns?.includes(context.patternId!))
+    ) {
+      continue;
+    }
+
     // Determine if this practice applies to the current resource
     if (bp.triggers !== undefined && bp.triggers.length > 0) {
       // Has explicit triggers — at least one must match

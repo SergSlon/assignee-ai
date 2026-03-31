@@ -141,4 +141,70 @@ describe("ec2InstancePlugin", () => {
       ],
     });
   });
+
+  describe("EbsVolumeSize validation", () => {
+    const field = ec2InstancePlugin.advancedFields.find(
+      (f) => f.name === "EbsVolumeSize",
+    )!;
+
+    it("accepts empty value", () => {
+      expect(field.question.validate?.("")).toBeUndefined();
+    });
+
+    it("accepts valid volume size", () => {
+      expect(field.question.validate?.("8")).toBeUndefined();
+      expect(field.question.validate?.("100")).toBeUndefined();
+      expect(field.question.validate?.("16384")).toBeUndefined();
+    });
+
+    it("rejects value below 1", () => {
+      expect(field.question.validate?.("0")).toBeDefined();
+    });
+
+    it("rejects value above 16384", () => {
+      expect(field.question.validate?.("16385")).toBeDefined();
+    });
+
+    it("rejects non-numeric value", () => {
+      expect(field.question.validate?.("abc")).toBeDefined();
+    });
+  });
+
+  describe("configHints", () => {
+    it("has configHints defined", () => {
+      expect(ec2InstancePlugin.configHints).toBeDefined();
+      expect(ec2InstancePlugin.configHints!.length).toBeGreaterThan(0);
+    });
+
+    it("includes guidance about ImageId (AMI)", () => {
+      const hints = ec2InstancePlugin.configHints!.join(" ");
+      expect(hints).toMatch(/ImageId/i);
+      expect(hints).toMatch(/AMI/i);
+    });
+
+    it("includes guidance about IMDSv2", () => {
+      const hints = ec2InstancePlugin.configHints!.join(" ");
+      expect(hints).toMatch(/IMDSv2/i);
+      expect(hints).toMatch(/HttpTokens/i);
+    });
+
+    it("includes guidance about EBS encryption", () => {
+      const hints = ec2InstancePlugin.configHints!.join(" ");
+      expect(hints).toMatch(/Encrypted/i);
+      expect(hints).toMatch(/gp3/i);
+    });
+
+    it("includes guidance about KeyName and SecurityGroupIds omission", () => {
+      const hints = ec2InstancePlugin.configHints!.join(" ");
+      expect(hints).toMatch(/KeyName/i);
+      expect(hints).toMatch(/SecurityGroupIds/i);
+      expect(hints).toMatch(/OMIT/i);
+    });
+
+    it("includes guidance about CreditSpecification for burstable types", () => {
+      const hints = ec2InstancePlugin.configHints!.join(" ");
+      expect(hints).toMatch(/CreditSpecification/i);
+      expect(hints).toMatch(/burstable/i);
+    });
+  });
 });

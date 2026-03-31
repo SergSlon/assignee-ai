@@ -12,3 +12,5 @@ remediation: "Configure NotificationConfiguration with EventBridge, SNS, SQS, or
 fix_hint: "Enable EventBridge or configure SNS/SQS notifications"
 category: security
 lastVerified: "2026-03-22"
+triggers:
+  - excludePatterns: ["static-website"]

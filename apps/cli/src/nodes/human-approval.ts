@@ -75,6 +75,19 @@ export async function humanApprovalNode(
       state.perResourceCosts,
       state.bpFindings,
     );
+
+    // Interactive fix selection for compound patterns too (same as single resource)
+    fixResult = await promptFixSelection(state);
+    if (fixResult) {
+      // Re-render dependency plan with updated findings
+      renderDependencyPlan(
+        state.resourcePattern,
+        state.resourceQueue,
+        state.perResourceCosts,
+        fixResult.bpFindings,
+      );
+    }
+
     confirmed = await renderHitlCompoundConfirm(
       state.resourcePattern,
       state.resourceQueue.length,

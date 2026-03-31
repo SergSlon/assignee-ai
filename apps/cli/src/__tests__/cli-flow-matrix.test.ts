@@ -233,16 +233,25 @@ describe("destroyAction", () => {
     restoreOutput();
   });
 
-  it("rejects --all flag with safety message", async () => {
+  it("rejects --include-iam without --all", async () => {
     const { destroyAction } = await import("../commands/destroy.js");
-    await expect(destroyAction("--all", {})).rejects.toThrow(
-      "--all is not supported",
-    );
+    await expect(
+      destroyAction("some-resource", { includeIam: true }),
+    ).rejects.toThrow("--include-iam can only be used with --all");
   });
 
-  it("rejects --all flag with guidance to destroy individually", async () => {
+  it("rejects --dry-run without --all", async () => {
     const { destroyAction } = await import("../commands/destroy.js");
-    await expect(destroyAction("--all", {})).rejects.toThrow(/individually/);
+    await expect(
+      destroyAction("some-resource", { dryRun: true }),
+    ).rejects.toThrow("--dry-run can only be used with --all");
+  });
+
+  it("rejects missing resource when --all not set", async () => {
+    const { destroyAction } = await import("../commands/destroy.js");
+    await expect(destroyAction(undefined, {})).rejects.toThrow(
+      "Resource ARN or name is required",
+    );
   });
 });
 
@@ -890,11 +899,29 @@ describe("destroy command definition", () => {
     expect(opt!.short).toBe("-y");
   });
 
-  it("requires <resource> argument", async () => {
+  it("has optional [resource] argument (optional for --all mode)", async () => {
     const { destroyCommand } = await import("../commands/destroy.js");
     expect(destroyCommand.registeredArguments.length).toBeGreaterThanOrEqual(1);
     expect(destroyCommand.registeredArguments[0]!.name()).toBe("resource");
-    expect(destroyCommand.registeredArguments[0]!.required).toBe(true);
+    expect(destroyCommand.registeredArguments[0]!.required).toBe(false);
+  });
+
+  it("has --all option", async () => {
+    const { destroyCommand } = await import("../commands/destroy.js");
+    const opt = destroyCommand.options.find((o) => o.long === "--all");
+    expect(opt).toBeDefined();
+  });
+
+  it("has --include-iam option", async () => {
+    const { destroyCommand } = await import("../commands/destroy.js");
+    const opt = destroyCommand.options.find((o) => o.long === "--include-iam");
+    expect(opt).toBeDefined();
+  });
+
+  it("has --dry-run option", async () => {
+    const { destroyCommand } = await import("../commands/destroy.js");
+    const opt = destroyCommand.options.find((o) => o.long === "--dry-run");
+    expect(opt).toBeDefined();
   });
 });
 

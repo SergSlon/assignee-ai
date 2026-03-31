@@ -156,4 +156,35 @@ describe("rdsDbInstancePlugin", () => {
       expect(field.question.validate?.("7.5")).toBeDefined();
     });
   });
+
+  describe("configHints", () => {
+    it("has configHints defined", () => {
+      expect(rdsDbInstancePlugin.configHints).toBeDefined();
+      expect(rdsDbInstancePlugin.configHints!.length).toBeGreaterThan(0);
+    });
+
+    it("includes guidance about MasterUserPassword auto-generation", () => {
+      const hints = rdsDbInstancePlugin.configHints!.join(" ");
+      expect(hints).toMatch(/MasterUserPassword/i);
+      expect(hints).toMatch(/OMIT/i);
+    });
+
+    it("includes guidance about EngineVersion validity", () => {
+      const hints = rdsDbInstancePlugin.configHints!.join(" ");
+      expect(hints).toMatch(/EngineVersion/i);
+      expect(hints).toMatch(/deprecated/i);
+    });
+
+    it("includes guidance about PubliclyAccessible and VPC", () => {
+      const hints = rdsDbInstancePlugin.configHints!.join(" ");
+      expect(hints).toMatch(/PubliclyAccessible/i);
+      expect(hints).toMatch(/VpcSecurityGroupIds/i);
+    });
+
+    it("includes guidance about observability", () => {
+      const hints = rdsDbInstancePlugin.configHints!.join(" ");
+      expect(hints).toMatch(/CloudwatchLogsExports/i);
+      expect(hints).toMatch(/PerformanceInsights/i);
+    });
+  });
 });

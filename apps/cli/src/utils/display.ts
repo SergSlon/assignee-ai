@@ -90,6 +90,8 @@ export interface RenderableState {
   verbose?: boolean;
   autoFixEnabled?: boolean;
   autoApprove?: boolean;
+  sourceDir?: string;
+  sourceFileCount?: number;
 }
 
 // ── Friendly key names for plan box rendering (Story 18.11) ─────────────────
@@ -239,7 +241,11 @@ export function formatSpecialValue(key: string, value: unknown): string | null {
     if (Array.isArray(rules) && rules.length > 0) {
       const rule = rules[0] as Record<string, unknown>;
       const parts: string[] = [];
-      if (rule["Transitions"] && Array.isArray(rule["Transitions"]) && (rule["Transitions"] as Record<string, unknown>[]).length > 0) {
+      if (
+        rule["Transitions"] &&
+        Array.isArray(rule["Transitions"]) &&
+        (rule["Transitions"] as Record<string, unknown>[]).length > 0
+      ) {
         const t = (rule["Transitions"] as Record<string, unknown>[])[0];
         const days = t?.["TransitionInDays"];
         parts.push(days ? `transition to IA after ${days}d` : "transition");

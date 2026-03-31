@@ -27,6 +27,7 @@ _assignee() {
           _arguments \
             '--output[Output format (json|text)]:format:' \
             '--no-apply[Skip the apply prompt after plan display]' \
+            '--source[Path to local files to upload after provisioning (e.g., static site)]:path:' \
             '--set[Pre-set wizard field values (repeatable)]:key=value...:'
           ;;
         apply)
@@ -34,6 +35,7 @@ _assignee() {
             '--no-wizard[Skip interactive option prompts, use defaults]' \
             '--yes[Auto-confirm apply without interactive prompt (for CI/CD)]' \
             '--checkpoint[Use a saved plan checkpoint instead of running Phase 1]:path:' \
+            '--source[Path to local files to upload after provisioning (e.g., static site)]:path:' \
             '--set[Pre-set wizard field values (repeatable)]:key=value...:'
           ;;
         init)

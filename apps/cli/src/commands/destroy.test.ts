@@ -17,6 +17,8 @@ const {
   mockSnsSend,
   mockResolveResource,
   mockCreateTaggingClient,
+  mockPlanBulkDestroy,
+  mockDestroySingleResource,
 } = vi.hoisted(() => ({
   mockText: vi.fn(),
   mockOutro: vi.fn(),
@@ -27,6 +29,8 @@ const {
   mockSnsSend: vi.fn(),
   mockResolveResource: vi.fn(),
   mockCreateTaggingClient: vi.fn().mockReturnValue({}),
+  mockPlanBulkDestroy: vi.fn(),
+  mockDestroySingleResource: vi.fn(),
 }));
 
 // ── Mock @clack/prompts ─────────────────────────────────────────────────────
@@ -49,15 +53,20 @@ vi.mock("boxen", () => ({
 }));
 
 // ── Mock chalk ──────────────────────────────────────────────────────────────
-vi.mock("chalk", () => ({
-  default: {
-    red: (s: string) => s,
-    green: (s: string) => s,
-    yellow: (s: string) => s,
-    cyan: { bold: (s: string) => s },
-    dim: (s: string) => s,
-  },
-}));
+vi.mock("chalk", () => {
+  const identity = (s: string) => s;
+  const withBold = Object.assign(identity, { bold: identity });
+  return {
+    default: {
+      red: Object.assign(identity, { bold: withBold }),
+      green: Object.assign(identity, { bold: withBold }),
+      yellow: Object.assign(identity, { bold: withBold }),
+      cyan: Object.assign(identity, { bold: withBold }),
+      dim: identity,
+      bold: identity,
+    },
+  };
+});
 
 // ── Mock AWS SDK clients ────────────────────────────────────────────────────
 vi.mock("@aws-sdk/client-cloudcontrol", () => {
@@ -143,6 +152,37 @@ vi.mock("../services/cloudcontrol-client.js", () => ({
   createCloudControlClient: vi.fn().mockReturnValue({ send: mockCCSend }),
 }));
 
+vi.mock("../services/destroy-service.js", () => ({
+  destroySingleResource: (...args: unknown[]) =>
+    mockDestroySingleResource(...args),
+}));
+
+vi.mock("../services/bulk-destroy.js", () => ({
+  planBulkDestroy: (...args: unknown[]) => mockPlanBulkDestroy(...args),
+}));
+
+vi.mock("../services/billing.js", () => ({
+  getCostSavingsEstimate: vi.fn().mockResolvedValue("$5.00/mo"),
+}));
+
+vi.mock("../services/mcp-client.js", () => ({
+  getBillingMcpToolsAsync: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("../utils/display.js", () => ({
+  startSpinner: vi.fn(),
+  stopSpinner: vi.fn(),
+  updateSpinner: vi.fn(),
+}));
+
+vi.mock("../config/operator-credentials.js", () => ({
+  operatorCredentials: vi.fn(() => ({
+    accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+    secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    region: "us-east-1",
+  })),
+}));
+
 // ── Import after mocks ─────────────────────────────────────────────────────
 import { destroyAction } from "./destroy.js";
 
@@ -215,10 +255,26 @@ const mockResource = {
 };
 
 describe("assignee destroy", () => {
-  describe("--all rejection", () => {
-    it("rejects --all with error message", async () => {
-      await expect(destroyAction("--all", {})).rejects.toThrow(
-        "--all is not supported",
+  describe("--include-iam without --all", () => {
+    it("rejects --include-iam without --all", async () => {
+      await expect(
+        destroyAction("some-resource", { includeIam: true }),
+      ).rejects.toThrow("--include-iam can only be used with --all");
+    });
+  });
+
+  describe("--dry-run without --all", () => {
+    it("rejects --dry-run without --all", async () => {
+      await expect(
+        destroyAction("some-resource", { dryRun: true }),
+      ).rejects.toThrow("--dry-run can only be used with --all");
+    });
+  });
+
+  describe("missing resource argument", () => {
+    it("rejects when no resource and no --all", async () => {
+      await expect(destroyAction(undefined, {})).rejects.toThrow(
+        "Resource ARN or name is required",
       );
     });
   });
@@ -237,13 +293,11 @@ describe("assignee destroy", () => {
     it('exact "yes" input proceeds with delete', async () => {
       mockResolveResource.mockResolvedValue(mockResource);
       mockText.mockResolvedValue("yes");
-      // deleteResource call
-      mockCCSend.mockResolvedValueOnce({
-        ProgressEvent: { RequestToken: "tok-123" },
-      });
-      // getRequestStatus call
-      mockCCSend.mockResolvedValueOnce({
-        ProgressEvent: { OperationStatus: "SUCCESS" },
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "AWS::S3::Bucket",
+        identifier: "test-bucket",
+        arn: "arn:aws:s3:::test-bucket",
       });
 
       await destroyAction("test-bucket", {});
@@ -316,11 +370,11 @@ describe("assignee destroy", () => {
   describe("--yes flag", () => {
     it("auto-confirms without prompt", async () => {
       mockResolveResource.mockResolvedValue(mockResource);
-      mockCCSend.mockResolvedValueOnce({
-        ProgressEvent: { RequestToken: "tok-123" },
-      });
-      mockCCSend.mockResolvedValueOnce({
-        ProgressEvent: { OperationStatus: "SUCCESS" },
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "AWS::S3::Bucket",
+        identifier: "test-bucket",
+        arn: "arn:aws:s3:::test-bucket",
       });
 
       await destroyAction("test-bucket", { yes: true });
@@ -330,11 +384,11 @@ describe("assignee destroy", () => {
 
     it("warns when used in interactive TTY", async () => {
       mockResolveResource.mockResolvedValue(mockResource);
-      mockCCSend.mockResolvedValueOnce({
-        ProgressEvent: { RequestToken: "tok-123" },
-      });
-      mockCCSend.mockResolvedValueOnce({
-        ProgressEvent: { OperationStatus: "SUCCESS" },
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "AWS::S3::Bucket",
+        identifier: "test-bucket",
+        arn: "arn:aws:s3:::test-bucket",
       });
 
       await destroyAction("test-bucket", { yes: true });
@@ -361,11 +415,11 @@ describe("assignee destroy", () => {
   describe("cost savings display", () => {
     it("displays cost savings message on success", async () => {
       mockResolveResource.mockResolvedValue(mockResource);
-      mockCCSend.mockResolvedValueOnce({
-        ProgressEvent: { RequestToken: "tok-123" },
-      });
-      mockCCSend.mockResolvedValueOnce({
-        ProgressEvent: { OperationStatus: "SUCCESS" },
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "AWS::S3::Bucket",
+        identifier: "test-bucket",
+        arn: "arn:aws:s3:::test-bucket",
       });
 
       await destroyAction("test-bucket", { yes: true });
@@ -376,19 +430,176 @@ describe("assignee destroy", () => {
   describe("delete failure", () => {
     it("produces actionable error on delete failure", async () => {
       mockResolveResource.mockResolvedValue(mockResource);
-      mockCCSend.mockResolvedValueOnce({
-        ProgressEvent: { RequestToken: "tok-123" },
-      });
-      mockCCSend.mockResolvedValueOnce({
-        ProgressEvent: {
-          OperationStatus: "FAILED",
-          StatusMessage: "BucketNotEmpty: The bucket is not empty",
-        },
+      mockDestroySingleResource.mockResolvedValue({
+        success: false,
+        resourceType: "AWS::S3::Bucket",
+        identifier: "test-bucket",
+        arn: "arn:aws:s3:::test-bucket",
+        error: "Destroy failed: BucketNotEmpty: The bucket is not empty",
       });
 
       await expect(destroyAction("test-bucket", { yes: true })).rejects.toThrow(
         "Destroy failed: BucketNotEmpty",
       );
+    });
+  });
+
+  // ── Bulk destroy (--all) ──────────────────────────────────────────────────
+  describe("--all bulk destroy", () => {
+    const tier1Resource = {
+      arn: "arn:aws:logs:us-east-1:123456:log-group:my-logs",
+      resourceType: "AWS::Logs::LogGroup",
+      identifier: "my-logs",
+      region: "us-east-1",
+      tier: 1,
+    };
+    const tier2Resource = {
+      arn: "arn:aws:lambda:us-east-1:123456:function:my-func",
+      resourceType: "AWS::Lambda::Function",
+      identifier: "my-func",
+      region: "us-east-1",
+      tier: 2,
+    };
+    const tier5Resource = {
+      arn: "arn:aws:s3:::my-bucket",
+      resourceType: "AWS::S3::Bucket",
+      identifier: "my-bucket",
+      region: "us-east-1",
+      tier: 5,
+    };
+
+    it("calls planBulkDestroy and destroySingleResource for each resource", async () => {
+      mockPlanBulkDestroy.mockResolvedValue({
+        resources: [tier1Resource, tier2Resource],
+        totalCount: 2,
+        iamCount: 0,
+        excludedCount: 0,
+      });
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "AWS::Logs::LogGroup",
+        identifier: "my-logs",
+        arn: "arn:aws:logs:us-east-1:123456:log-group:my-logs",
+      });
+
+      await destroyAction(undefined, { all: true, yes: true });
+
+      expect(mockPlanBulkDestroy).toHaveBeenCalled();
+      expect(mockDestroySingleResource).toHaveBeenCalledTimes(2);
+      expect(stdoutOutput).toContain("2 destroyed");
+    });
+
+    it("--all --dry-run shows plan but never calls destroySingleResource", async () => {
+      mockPlanBulkDestroy.mockResolvedValue({
+        resources: [tier1Resource, tier5Resource],
+        totalCount: 2,
+        iamCount: 0,
+        excludedCount: 0,
+      });
+
+      await destroyAction(undefined, { all: true, dryRun: true });
+
+      expect(mockPlanBulkDestroy).toHaveBeenCalled();
+      expect(mockDestroySingleResource).not.toHaveBeenCalled();
+      expect(stdoutOutput).toContain("Dry run");
+    });
+
+    it("--all with zero resources shows no-resources message", async () => {
+      mockPlanBulkDestroy.mockResolvedValue({
+        resources: [],
+        totalCount: 0,
+        iamCount: 0,
+        excludedCount: 0,
+      });
+
+      await destroyAction(undefined, { all: true, yes: true });
+
+      expect(mockDestroySingleResource).not.toHaveBeenCalled();
+      expect(stdoutOutput).toContain("No managed resources found");
+    });
+
+    it("destroys in tier order (tier 1 before tier 5)", async () => {
+      mockPlanBulkDestroy.mockResolvedValue({
+        resources: [tier1Resource, tier2Resource, tier5Resource],
+        totalCount: 3,
+        iamCount: 0,
+        excludedCount: 0,
+      });
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "test",
+        identifier: "test",
+        arn: "test",
+      });
+
+      await destroyAction(undefined, { all: true, yes: true });
+
+      const calls = mockDestroySingleResource.mock.calls;
+      expect(calls[0]![0].tier).toBe(1);
+      expect(calls[1]![0].tier).toBe(2);
+      expect(calls[2]![0].tier).toBe(5);
+    });
+
+    it("failed destroy continues to next resource", async () => {
+      mockPlanBulkDestroy.mockResolvedValue({
+        resources: [tier1Resource, tier2Resource],
+        totalCount: 2,
+        iamCount: 0,
+        excludedCount: 0,
+      });
+      mockDestroySingleResource
+        .mockResolvedValueOnce({
+          success: false,
+          resourceType: "AWS::Logs::LogGroup",
+          identifier: "my-logs",
+          arn: tier1Resource.arn,
+          error: "Access denied",
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          resourceType: "AWS::Lambda::Function",
+          identifier: "my-func",
+          arn: tier2Resource.arn,
+        });
+
+      await destroyAction(undefined, { all: true, yes: true });
+
+      // Both resources were attempted
+      expect(mockDestroySingleResource).toHaveBeenCalledTimes(2);
+    });
+
+    it("summary shows correct destroyed/failed counts", async () => {
+      mockPlanBulkDestroy.mockResolvedValue({
+        resources: [tier1Resource, tier2Resource, tier5Resource],
+        totalCount: 3,
+        iamCount: 0,
+        excludedCount: 0,
+      });
+      mockDestroySingleResource
+        .mockResolvedValueOnce({
+          success: true,
+          resourceType: tier1Resource.resourceType,
+          identifier: tier1Resource.identifier,
+          arn: tier1Resource.arn,
+        })
+        .mockResolvedValueOnce({
+          success: false,
+          resourceType: tier2Resource.resourceType,
+          identifier: tier2Resource.identifier,
+          arn: tier2Resource.arn,
+          error: "BucketNotEmpty",
+        })
+        .mockResolvedValueOnce({
+          success: true,
+          resourceType: tier5Resource.resourceType,
+          identifier: tier5Resource.identifier,
+          arn: tier5Resource.arn,
+        });
+
+      await destroyAction(undefined, { all: true, yes: true });
+
+      expect(stdoutOutput).toContain("2 destroyed");
+      expect(stdoutOutput).toContain("1 failed");
     });
   });
 });

@@ -255,10 +255,18 @@ describe("Individual pattern data integrity", () => {
     expect(mainQueueGroup).toContain("main-queue");
   });
 
-  it("staticWebsitePattern only includes S3 bucket for MVP", () => {
-    expect(staticWebsitePattern.resourceList).toHaveLength(1);
+  it("staticWebsitePattern includes S3 bucket + CloudFront + OAC", () => {
+    expect(staticWebsitePattern.resourceList).toHaveLength(3);
     expect(staticWebsitePattern.resourceList[0]?.resourceType).toBe(
       "AWS::S3::Bucket",
     );
+    expect(staticWebsitePattern.resourceList[1]?.resourceType).toBe(
+      "AWS::CloudFront::Distribution",
+    );
+    expect(staticWebsitePattern.resourceList[1]?.provisionable).toBe(false);
+    expect(staticWebsitePattern.resourceList[2]?.resourceType).toBe(
+      "AWS::CloudFront::OriginAccessControl",
+    );
+    expect(staticWebsitePattern.resourceList[2]?.provisionable).toBe(false);
   });
 });

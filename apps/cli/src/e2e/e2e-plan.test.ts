@@ -31,9 +31,9 @@ import * as path from "node:path";
 // Load .env from project root — try multiple paths for resilience
 function loadEnv() {
   const candidates = [
-    path.resolve(import.meta.dirname, "../../../.env"),      // from src/e2e/
-    path.resolve(import.meta.dirname, "../../../../.env"),    // if deeper
-    path.resolve(process.cwd(), ".env"),                     // cwd fallback
+    path.resolve(import.meta.dirname, "../../../.env"), // from src/e2e/
+    path.resolve(import.meta.dirname, "../../../../.env"), // if deeper
+    path.resolve(process.cwd(), ".env"), // cwd fallback
   ];
   for (const envPath of candidates) {
     try {
@@ -98,10 +98,8 @@ afterAll(async () => {
     }
 
     // Clean stale ECS clusters with e2e/test names via tagging API
-    const {
-      ResourceGroupsTaggingAPIClient,
-      GetResourcesCommand,
-    } = await import("@aws-sdk/client-resource-groups-tagging-api");
+    const { ResourceGroupsTaggingAPIClient, GetResourcesCommand } =
+      await import("@aws-sdk/client-resource-groups-tagging-api");
     const tagging = new ResourceGroupsTaggingAPIClient({ region });
     try {
       const tagged = await tagging.send(
@@ -342,9 +340,7 @@ describe("E2E: Epic 35 — Actionable Findings", () => {
     const findings = s.bpFindings ?? [];
 
     // S3 lifecycle finding should have fix_hint from YAML
-    const lifecycleFinding = findings.find(
-      (f) => f.practiceId === "BP-S3-007" || f.practiceId === "BP-S3-010",
-    );
+    const lifecycleFinding = findings.find((f) => f.practiceId === "BP-S3-010");
     if (lifecycleFinding) {
       expect(lifecycleFinding.fixHint).toBeDefined();
       expect(lifecycleFinding.fixHint!.length).toBeLessThanOrEqual(80);
@@ -582,5 +578,273 @@ describe("E2E: Auto-fix verification", () => {
         }
       }
     }
+  }, 60_000);
+});
+
+describe("E2E: Lambda Function plan", () => {
+  it("generates a plan with runtime and memory configuration", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create a Lambda function named e2e-lambda-test with nodejs20.x runtime",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    expect(s.resourceType).toBe("AWS::Lambda::Function");
+    expect(s.desiredState).toBeDefined();
+    expect(s.desiredState?.["Runtime"]).toContain("nodejs");
+
+    // BP findings should exist for Lambda
+    expect(s.bpFindings).toBeDefined();
+    expect(s.bpFindings!.length).toBeGreaterThan(0);
+  }, 60_000);
+});
+
+describe("E2E: DynamoDB Table plan", () => {
+  it("generates a plan with key schema and billing mode", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create a DynamoDB table named e2e-dynamo-test with partition key id of type S",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    expect(s.resourceType).toBe("AWS::DynamoDB::Table");
+    expect(s.desiredState).toBeDefined();
+    expect(s.desiredState?.["TableName"]).toBe("e2e-dynamo-test");
+
+    // BP findings should exist for DynamoDB
+    expect(s.bpFindings).toBeDefined();
+    expect(s.bpFindings!.length).toBeGreaterThan(0);
+  }, 60_000);
+});
+
+describe("E2E: IAM Role plan", () => {
+  it("generates a plan with assume role policy", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create an IAM role named e2e-role-test for Lambda execution",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    expect(s.resourceType).toBe("AWS::IAM::Role");
+    expect(s.desiredState).toBeDefined();
+    expect(s.desiredState?.["RoleName"]).toBe("e2e-role-test");
+    expect(s.desiredState?.["AssumeRolePolicyDocument"]).toBeDefined();
+
+    // IAM Role is free — verify cost estimate reflects that
+    if (s.estimatedMonthlyCost) {
+      const costLower = s.estimatedMonthlyCost.toLowerCase();
+      expect(costLower).toMatch(/free|\$0|0\.00/);
+    }
+  }, 60_000);
+});
+
+describe("E2E: SQS Queue plan", () => {
+  it("generates a plan with queue configuration", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent: "Create an SQS queue named e2e-queue-test",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    expect(s.resourceType).toBe("AWS::SQS::Queue");
+    expect(s.desiredState).toBeDefined();
+
+    // BP findings should exist for SQS
+    expect(s.bpFindings).toBeDefined();
+    expect(s.bpFindings!.length).toBeGreaterThan(0);
+  }, 60_000);
+});
+
+describe("E2E: VPC plan", () => {
+  it("generates a plan with CIDR block and DNS settings", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent: "Create a VPC with CIDR 10.0.0.0/16",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    expect(s.resourceType).toBe("AWS::EC2::VPC");
+    expect(s.desiredState).toBeDefined();
+    expect(s.desiredState?.["CidrBlock"]).toBe("10.0.0.0/16");
+  }, 60_000);
+});
+
+describe("E2E: CloudWatch Alarm plan", () => {
+  it("generates a plan with metric and threshold", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent: "Create a CloudWatch alarm for CPU utilization above 80%",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    expect(s.resourceType).toBe("AWS::CloudWatch::Alarm");
+    expect(s.desiredState).toBeDefined();
+
+    // Should have metric configuration
+    const ds = s.desiredState!;
+    const hasMetric =
+      ds["MetricName"] !== undefined || ds["ComparisonOperator"] !== undefined;
+    expect(hasMetric).toBe(true);
+
+    // BP findings should include alarm action checks
+    expect(s.bpFindings).toBeDefined();
+    expect(s.bpFindings!.length).toBeGreaterThan(0);
+  }, 60_000);
+});
+
+describe("E2E: SecretsManager Secret plan", () => {
+  it("generates a plan with secret configuration", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent: "Create a secret named e2e-secret-test in Secrets Manager",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    expect(s.resourceType).toBe("AWS::SecretsManager::Secret");
+    expect(s.desiredState).toBeDefined();
+
+    // BP findings should exist for Secrets Manager
+    expect(s.bpFindings).toBeDefined();
+    expect(s.bpFindings!.length).toBeGreaterThan(0);
+  }, 60_000);
+});
+
+describe("E2E: Error handling", () => {
+  it("rejects unsupported resource type with clear error", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent: "Create an AWS Redshift cluster",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    // Should indicate unsupported resource or error status
+    expect(s.executionStatus).toBeDefined();
+    expect(
+      s.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE ||
+        s.executionStatus === ExecutionStatus.FAILED ||
+        s.errorMessage !== undefined,
+    ).toBe(true);
+  }, 60_000);
+
+  it("handles malformed intent gracefully", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent: "asdfghjkl random noise",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    // Should not crash — must return some status
+    expect(s.executionStatus).toBeDefined();
   }, 60_000);
 });

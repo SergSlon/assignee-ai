@@ -163,4 +163,46 @@ describe("lambdaFunctionPlugin", () => {
       expect(field.question.validate?.("handler")).toBeDefined();
     });
   });
+
+  describe("configHints", () => {
+    it("has configHints defined", () => {
+      expect(lambdaFunctionPlugin.configHints).toBeDefined();
+      expect(lambdaFunctionPlugin.configHints!.length).toBeGreaterThan(0);
+    });
+
+    it("includes guidance about Lambda Runtime", () => {
+      const hints = lambdaFunctionPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/Runtime/i);
+      expect(hints).toMatch(/deprecated/i);
+    });
+
+    it("includes guidance about Role ARN", () => {
+      const hints = lambdaFunctionPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/Role/);
+      expect(hints).toMatch(/OMIT/i);
+    });
+
+    it("includes guidance about Environment Variables", () => {
+      const hints = lambdaFunctionPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/Environment/i);
+      expect(hints).toMatch(/Variables/i);
+    });
+
+    it("includes guidance about Architectures", () => {
+      const hints = lambdaFunctionPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/Architectures/i);
+      expect(hints).toMatch(/arm64/i);
+    });
+
+    it("includes guidance about VpcConfig", () => {
+      const hints = lambdaFunctionPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/VpcConfig/i);
+    });
+
+    it("includes guidance about Layers", () => {
+      const hints = lambdaFunctionPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/Layers/i);
+      expect(hints).toMatch(/ARN/i);
+    });
+  });
 });

@@ -13,6 +13,7 @@ const triggerSchema = z
     patternId: z.string().optional(),
     intentKeywords: z.array(z.string()).optional(),
     always: z.boolean().optional(),
+    excludePatterns: z.array(z.string()).optional(),
   })
   .strict();
 

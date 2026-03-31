@@ -25,7 +25,11 @@ import { cleanCommand } from "./commands/clean.js";
 import { reconcileCommand } from "./commands/reconcile.js";
 import { cacheCommand } from "./commands/cache.js";
 import { ProcessExitCode } from "./constants/errors.js";
-import { SUPPORTED_TYPES_HINT } from "./config/constants.js";
+import {
+  SUPPORTED_TYPES_HINT,
+  PATTERNS_HINT,
+  EXAMPLES_HINT,
+} from "./config/constants.js";
 
 import { closeMcpClient } from "./services/mcp-client.js";
 import { bootstrapFirstRun } from "./utils/first-run.js";
@@ -45,7 +49,10 @@ program
   .name("assignee")
   .description("Assignee.ai — AI-Native Cloud Operator")
   .version(pkg.version as string)
-  .addHelpText("after", `\n${SUPPORTED_TYPES_HINT}`);
+  .addHelpText(
+    "after",
+    `\n${SUPPORTED_TYPES_HINT}\n\n${PATTERNS_HINT}\n\n${EXAMPLES_HINT}`,
+  );
 
 program.addCommand(completionsCommand);
 program.addCommand(destroyCommand);

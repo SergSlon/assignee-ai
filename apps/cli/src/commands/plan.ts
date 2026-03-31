@@ -5,6 +5,7 @@
  * @see Story 1-6, Story 1-8, Story 9-6
  */
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as clack from "@clack/prompts";
 import { Command } from "commander";
@@ -39,6 +40,10 @@ export const planCommand = new Command(CommandName.PLAN)
   .option("-o, --output <format>", "Output format (json|text)", "text")
   .option("--no-apply", "Skip the apply prompt after plan display")
   .option(
+    "-s, --source <path>",
+    "Path to local files to upload after provisioning (e.g., static site)",
+  )
+  .option(
     "--set <key=value...>",
     "Pre-set wizard field values (repeatable)",
     (val: string, prev: string[]) => [...prev, val],
@@ -51,7 +56,12 @@ export const planCommand = new Command(CommandName.PLAN)
   .action(
     async (
       intent: string | undefined,
-      opts: { apply?: boolean; set?: string[]; output?: string },
+      opts: {
+        apply?: boolean;
+        source?: string;
+        set?: string[];
+        output?: string;
+      },
     ) => {
       const noApply = opts.apply === false;
       const outputFormat = opts.output ?? "text";
@@ -63,6 +73,47 @@ export const planCommand = new Command(CommandName.PLAN)
           presetFields[kv.slice(0, eqIdx)] = kv.slice(eqIdx + 1);
         }
       }
+      // Story 37.1: validate --source directory
+      if (opts.source !== undefined && opts.source.trim() === "") {
+        throw new AssigneeError(
+          "--source requires a non-empty directory path",
+          "INVALID_SOURCE_DIR",
+        );
+      }
+      const resolvedSourceDir = opts.source
+        ? path.resolve(opts.source)
+        : undefined;
+      let sourceFileCount = 0;
+      if (resolvedSourceDir) {
+        if (
+          !fs.existsSync(resolvedSourceDir) ||
+          !fs.statSync(resolvedSourceDir).isDirectory()
+        ) {
+          throw new AssigneeError(
+            `Source directory does not exist: ${resolvedSourceDir}`,
+            "INVALID_SOURCE_DIR",
+          );
+        }
+        const countFiles = (dir: string): number => {
+          let count = 0;
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isDirectory()) {
+              count += countFiles(path.join(dir, entry.name));
+            } else {
+              count++;
+            }
+          }
+          return count;
+        };
+        sourceFileCount = countFiles(resolvedSourceDir);
+        if (sourceFileCount === 0) {
+          throw new AssigneeError(
+            `Source directory is empty: ${resolvedSourceDir}`,
+            "INVALID_SOURCE_DIR",
+          );
+        }
+      }
+
       if (!intent) {
         throw new AssigneeError(
           'Missing intent. Usage: assignee plan "Create an S3 bucket named my-bucket"',
@@ -96,6 +147,9 @@ export const planCommand = new Command(CommandName.PLAN)
               executionMode: ExecutionMode.PLAN,
               startedAt: Date.now(),
               projectDir: process.cwd(),
+              ...(resolvedSourceDir
+                ? { sourceDir: resolvedSourceDir, sourceFileCount }
+                : {}),
               ...(userConfig ? { userConfig } : {}),
               ...(orgConfig ? { orgConfig } : {}),
               ...(Object.keys(presetFields).length > 0 ? { presetFields } : {}),

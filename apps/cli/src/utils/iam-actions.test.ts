@@ -24,7 +24,7 @@ describe("getRequiredIamActions", () => {
     // Verify key S3-specific actions
     expect(actions).toContain("s3:CreateBucket");
     expect(actions).toContain("s3:DeleteBucket");
-    expect(actions).toContain("s3:PutBucketTagging");
+    expect(actions).toContain("s3:PutBucket*");
   });
 
   it("returns CloudControl base actions + Lambda-specific actions for AWS::Lambda::Function", () => {
@@ -60,7 +60,7 @@ describe("getRequiredIamActions", () => {
     for (const resourceType of allResourceTypes) {
       const actions = getRequiredIamActions(resourceType);
       for (const action of actions) {
-        expect(action).toMatch(/^[a-z0-9]+:[A-Za-z]+$/);
+        expect(action).toMatch(/^[a-z0-9]+:[A-Za-z*]+$/);
       }
     }
   });
