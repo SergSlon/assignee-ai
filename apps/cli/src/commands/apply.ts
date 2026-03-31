@@ -15,6 +15,7 @@
  * @see Story 2-6, Story 1-8, Story 9-6, Story 11-2, Story 11-3
  */
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as clack from "@clack/prompts";
 import { Command } from "commander";
@@ -85,6 +86,10 @@ export const applyCommand = new Command(CommandName.APPLY)
     "Use a saved plan checkpoint instead of running Phase 1",
   )
   .option(
+    "-s, --source <path>",
+    "Path to local files to upload after provisioning (e.g., static site)",
+  )
+  .option(
     "--set <key=value...>",
     "Pre-set wizard field values (repeatable)",
     (val: string, prev: string[]) => [...prev, val],
@@ -101,6 +106,7 @@ export const applyCommand = new Command(CommandName.APPLY)
         wizard?: boolean;
         yes?: boolean;
         checkpoint?: string;
+        source?: string;
         set?: string[];
       },
     ) => {
@@ -150,6 +156,47 @@ export const applyCommand = new Command(CommandName.APPLY)
             'Usage: assignee apply "Create an S3 bucket named my-bucket"\n' +
               "       assignee apply --checkpoint .assignee/checkpoint-<runId>.json",
             "USAGE_ERROR",
+          );
+        }
+      }
+
+      // Story 37.1: validate --source directory
+      if (opts.source !== undefined && opts.source.trim() === "") {
+        throw new AssigneeError(
+          "--source requires a non-empty directory path",
+          "INVALID_SOURCE_DIR",
+        );
+      }
+      const resolvedSourceDir = opts.source
+        ? path.resolve(opts.source)
+        : undefined;
+      let sourceFileCount: number | undefined;
+      if (resolvedSourceDir) {
+        if (
+          !fs.existsSync(resolvedSourceDir) ||
+          !fs.statSync(resolvedSourceDir).isDirectory()
+        ) {
+          throw new AssigneeError(
+            `Source directory does not exist: ${resolvedSourceDir}`,
+            "INVALID_SOURCE_DIR",
+          );
+        }
+        const countFiles = (dir: string): number => {
+          let count = 0;
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isDirectory()) {
+              count += countFiles(path.join(dir, entry.name));
+            } else {
+              count++;
+            }
+          }
+          return count;
+        };
+        sourceFileCount = countFiles(resolvedSourceDir);
+        if (sourceFileCount === 0) {
+          throw new AssigneeError(
+            `Source directory is empty: ${resolvedSourceDir}`,
+            "INVALID_SOURCE_DIR",
           );
         }
       }
@@ -205,13 +252,19 @@ export const applyCommand = new Command(CommandName.APPLY)
             );
           } else {
             // ── Auto-detect checkpoint (when intent is provided) ─────────────
+            // Only offer reuse if the checkpoint intent matches the current one.
             const checkpointDir = path.resolve(process.cwd(), CHECKPOINT_DIR);
             const [cpErr, existingCheckpoint] = await safeTry(
               findNewestValidCheckpoint(checkpointDir),
             );
 
             let useAutoCheckpoint = false;
-            if (!cpErr && existingCheckpoint) {
+            const intentMatches =
+              existingCheckpoint &&
+              intent &&
+              existingCheckpoint.userIntent.toLowerCase().trim() ===
+                intent.toLowerCase().trim();
+            if (!cpErr && existingCheckpoint && intentMatches) {
               if (process.stdin.isTTY) {
                 const createdDate = new Date(
                   existingCheckpoint.created_at,
@@ -263,6 +316,9 @@ export const applyCommand = new Command(CommandName.APPLY)
                   executionMode: ExecutionMode.APPLY,
                   startedAt: Date.now(),
                   projectDir: process.cwd(),
+                  ...(resolvedSourceDir
+                    ? { sourceDir: resolvedSourceDir, sourceFileCount }
+                    : {}),
                   ...(opts.wizard === false ? { noWizard: true } : {}),
                   ...(opts.yes ? { autoApprove: true } : {}),
                   ...(userConfig ? { userConfig } : {}),

@@ -1,11 +1,37 @@
 /**
- * Tests for `assignee clean` CLI command (Story 33.3).
+ * Tests for `assignee clean` CLI command (Story 33.3, Story 36.4).
  *
  * Mocks runFullCleanup and formatCleanupReport to verify the command's
  * flag-parsing, output routing, and dry-run default behaviour.
+ * Also tests the --resources flag for AWS resource cleanup.
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// ─── Hoisted mocks ─────────────────────────────────────────────────
+const {
+  mockPlanBulkDestroy,
+  mockDestroySingleResource,
+  mockSpinnerStart,
+  mockSpinnerStop,
+  mockSpinnerMessage,
+  mockText,
+  mockIsCancel,
+  mockLogInfo,
+  mockLogWarn,
+  mockLogError,
+} = vi.hoisted(() => ({
+  mockPlanBulkDestroy: vi.fn(),
+  mockDestroySingleResource: vi.fn(),
+  mockSpinnerStart: vi.fn(),
+  mockSpinnerStop: vi.fn(),
+  mockSpinnerMessage: vi.fn(),
+  mockText: vi.fn(),
+  mockIsCancel: vi.fn().mockReturnValue(false),
+  mockLogInfo: vi.fn(),
+  mockLogWarn: vi.fn(),
+  mockLogError: vi.fn(),
+}));
 
 // ─── Mocks ──────────────────────────────────────────────────────────
 
@@ -22,6 +48,28 @@ vi.mock("@clack/prompts", () => ({
   intro: vi.fn(),
   outro: vi.fn(),
   note: vi.fn(),
+  text: (...args: unknown[]) => mockText(...args),
+  isCancel: (...args: unknown[]) => mockIsCancel(...args),
+  spinner: () => ({
+    start: mockSpinnerStart,
+    stop: mockSpinnerStop,
+    message: mockSpinnerMessage,
+  }),
+  log: {
+    info: mockLogInfo,
+    warn: mockLogWarn,
+    error: mockLogError,
+    success: vi.fn(),
+  },
+}));
+
+vi.mock("../services/bulk-destroy.js", () => ({
+  planBulkDestroy: (...args: unknown[]) => mockPlanBulkDestroy(...args),
+}));
+
+vi.mock("../services/destroy-service.js", () => ({
+  destroySingleResource: (...args: unknown[]) =>
+    mockDestroySingleResource(...args),
 }));
 
 import { createCleanCommand } from "./clean.js";
@@ -227,5 +275,164 @@ describe("assignee clean", () => {
     await run();
 
     expect(process.exitCode).toBe(1);
+  });
+
+  // ── --resources flag (Story 36.4) ────────────────────────────────
+
+  describe("--resources flag", () => {
+    const sampleResources = [
+      {
+        arn: "arn:aws:ssm:us-east-1:123:parameter/e2e-test/param1",
+        resourceType: "AWS::SSM::Parameter",
+        identifier: "/e2e-test/param1",
+        region: "us-east-1",
+        tier: 1,
+      },
+      {
+        arn: "arn:aws:s3:::test-bucket-123",
+        resourceType: "AWS::S3::Bucket",
+        identifier: "test-bucket-123",
+        region: "us-east-1",
+        tier: 5,
+      },
+    ];
+
+    const emptyPlan = {
+      resources: [],
+      totalCount: 0,
+      iamCount: 0,
+      excludedCount: 0,
+    };
+
+    const samplePlan = {
+      resources: sampleResources,
+      totalCount: 2,
+      iamCount: 0,
+      excludedCount: 0,
+    };
+
+    beforeEach(() => {
+      mockPlanBulkDestroy.mockResolvedValue(emptyPlan);
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "",
+        identifier: "",
+        arn: "",
+      });
+    });
+
+    it("calls planBulkDestroy with e2e|test pattern when --resources is passed", async () => {
+      await run("--resources", "--confirm");
+
+      expect(mockPlanBulkDestroy).toHaveBeenCalledWith({
+        pattern: expect.any(RegExp),
+      });
+      const regex = mockPlanBulkDestroy.mock.calls[0]![0].pattern as RegExp;
+      expect(regex.test("e2e-test")).toBe(true);
+      expect(regex.test("my-test-bucket")).toBe(true);
+      expect(regex.test("production-db")).toBe(false);
+    });
+
+    it("shows 'No stale test resources found' when no matches", async () => {
+      mockPlanBulkDestroy.mockResolvedValue(emptyPlan);
+
+      await run("--resources", "--confirm");
+
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        "No stale test resources found.",
+      );
+    });
+
+    it("displays resource table when matches found", async () => {
+      mockPlanBulkDestroy.mockResolvedValue(samplePlan);
+
+      await run("--resources", "--confirm");
+
+      expect(note).toHaveBeenCalledWith(
+        expect.stringContaining("AWS::SSM::Parameter"),
+        expect.stringContaining("2 test/e2e resources found"),
+      );
+    });
+
+    it("does not destroy resources in dry-run mode", async () => {
+      mockPlanBulkDestroy.mockResolvedValue(samplePlan);
+
+      await run("--resources");
+
+      expect(mockDestroySingleResource).not.toHaveBeenCalled();
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        expect.stringContaining("Dry run"),
+      );
+    });
+
+    it("destroys resources with --confirm and shows progress", async () => {
+      mockPlanBulkDestroy.mockResolvedValue(samplePlan);
+
+      await run("--resources", "--confirm");
+
+      expect(mockDestroySingleResource).toHaveBeenCalledTimes(2);
+      expect(mockSpinnerStart).toHaveBeenCalled();
+      expect(mockSpinnerStop).toHaveBeenCalledWith(
+        expect.stringContaining("Cleaned 2 resources, 0 failed"),
+      );
+    });
+
+    it("destroys resources with --yes and shows progress", async () => {
+      mockPlanBulkDestroy.mockResolvedValue(samplePlan);
+
+      await run("--resources", "--yes");
+
+      expect(mockDestroySingleResource).toHaveBeenCalledTimes(2);
+    });
+
+    it("reports failures in summary", async () => {
+      mockPlanBulkDestroy.mockResolvedValue(samplePlan);
+      mockDestroySingleResource
+        .mockResolvedValueOnce({
+          success: true,
+          resourceType: "AWS::SSM::Parameter",
+          identifier: "/e2e-test/param1",
+          arn: "arn:aws:ssm:us-east-1:123:parameter/e2e-test/param1",
+        })
+        .mockResolvedValueOnce({
+          success: false,
+          resourceType: "AWS::S3::Bucket",
+          identifier: "test-bucket-123",
+          arn: "arn:aws:s3:::test-bucket-123",
+          error: "Access denied",
+        });
+
+      await run("--resources", "--confirm");
+
+      expect(mockSpinnerStop).toHaveBeenCalledWith(
+        "Cleaned 1 resources, 1 failed",
+      );
+    });
+
+    it("skips local cleanup when only --resources is passed", async () => {
+      await run("--resources", "--confirm");
+
+      expect(mockRunFullCleanup).not.toHaveBeenCalled();
+    });
+
+    it("runs local cleanup first when --resources combined with --cache", async () => {
+      await run("--resources", "--cache", "--confirm");
+
+      expect(mockRunFullCleanup).toHaveBeenCalledWith(
+        expect.objectContaining({ categories: ["cache"] }),
+      );
+      expect(mockPlanBulkDestroy).toHaveBeenCalled();
+    });
+
+    it("passes region to destroySingleResource for each resource", async () => {
+      mockPlanBulkDestroy.mockResolvedValue(samplePlan);
+
+      await run("--resources", "--yes");
+
+      expect(mockDestroySingleResource).toHaveBeenCalledWith(
+        expect.objectContaining({ region: "us-east-1" }),
+        expect.objectContaining({ region: "us-east-1", silent: true }),
+      );
+    });
   });
 });

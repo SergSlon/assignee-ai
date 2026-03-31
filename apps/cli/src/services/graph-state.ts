@@ -177,6 +177,16 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
     default: () => undefined,
   }),
+  // Story 37.1: path to local files to upload after provisioning (e.g., static site)
+  sourceDir: Annotation<string | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
+  // Story 37.1: number of files in sourceDir (for display/plan output)
+  sourceFileCount: Annotation<number | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
 });
 
 export type AgentState = typeof graphAnnotation.State;

@@ -83,4 +83,41 @@ describe("snsTopicPlugin", () => {
   it("advancedFields is empty", () => {
     expect(snsTopicPlugin.advancedFields).toHaveLength(0);
   });
+
+  describe("KmsMasterKeyId validation", () => {
+    const field = snsTopicPlugin.commonFields.find(
+      (f) => f.name === "KmsMasterKeyId",
+    )!;
+
+    it("accepts empty value", () => {
+      expect(field.question.validate?.("")).toBeUndefined();
+    });
+
+    it("accepts valid KMS ARN", () => {
+      expect(
+        field.question.validate?.("arn:aws:kms:us-east-1:123456789012:key/abc"),
+      ).toBeUndefined();
+    });
+
+    it("accepts alias format", () => {
+      expect(field.question.validate?.("alias/aws/sns")).toBeUndefined();
+    });
+
+    it("rejects invalid format", () => {
+      expect(field.question.validate?.("not-a-valid-key")).toBeDefined();
+    });
+  });
+
+  describe("configHints", () => {
+    it("has configHints defined", () => {
+      expect(snsTopicPlugin.configHints).toBeDefined();
+      expect(snsTopicPlugin.configHints!.length).toBeGreaterThan(0);
+    });
+
+    it("includes guidance about KMS encryption", () => {
+      const hints = snsTopicPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/KmsMasterKeyId/i);
+      expect(hints).toMatch(/encryption/i);
+    });
+  });
 });

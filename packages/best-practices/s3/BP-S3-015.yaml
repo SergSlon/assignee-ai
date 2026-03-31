@@ -12,3 +12,5 @@ remediation: "Configure ReplicationConfiguration with at least one rule targetin
 fix_hint: "Configure cross-region replication (requires versioning)"
 category: reliability
 lastVerified: "2026-03-24"
+triggers:
+  - excludePatterns: ["static-website"]

@@ -11,6 +11,24 @@ export { SUPPORTED_TYPES_ARRAY as SUPPORTED_TYPES } from "@assignee/core";
 /** Human-readable hint shown when an unsupported resource type is requested. */
 export const SUPPORTED_TYPES_HINT = `Supported types: ${SUPPORTED_TYPES_ARRAY.join(", ")}`;
 
+/** Architecture patterns hint shown in help text. */
+export const PATTERNS_HINT = `Architecture patterns (multi-resource):
+  "Create a serverless API"                → Lambda + API Gateway + IAM Role + LogGroup
+  "Create a three-tier web app"            → EC2 + RDS + SecurityGroup
+  "Create a VPC with public/private subnets" → VPC + Subnets + IGW + NAT + Routes (17 resources)
+  "Create a message processing pipeline"   → SQS + Lambda + DLQ
+  "Create a container service"             → ECS Cluster + ECR + IAM Role
+  "Create a static website"               → S3 Bucket (+ CloudFront)`;
+
+/** Examples hint shown in help text. */
+export const EXAMPLES_HINT = `Examples:
+  assignee plan "Create an S3 bucket"             Plan a single resource
+  assignee plan "Create a serverless API"          Plan a multi-resource architecture
+  assignee apply "Create a Lambda function"        Plan and deploy in one step
+  assignee destroy --all --dry-run                 Preview bulk destruction
+  assignee clean --resources                       Remove stale e2e/test resources
+  assignee drift                                   Check all resources for drift`;
+
 /** Maximum characters of the CFN schema excerpt passed to the plan generator prompt. */
 export const SCHEMA_EXCERPT_MAX_CHARS = 3000;
 

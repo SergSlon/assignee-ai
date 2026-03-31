@@ -30,7 +30,11 @@ vi.mock("../utils/logger.js", () => ({
 }));
 
 import { humanApprovalNode } from "./human-approval.js";
-import { renderPlanBox, renderHitlConfirm, promptFixSelection } from "../utils/display.js";
+import {
+  renderPlanBox,
+  renderHitlConfirm,
+  promptFixSelection,
+} from "../utils/display.js";
 import { log } from "../utils/logger.js";
 
 function makeState(overrides: Partial<AgentState> = {}): AgentState {
@@ -239,15 +243,33 @@ describe("humanApprovalNode — interactive fix selection (Story 35.4)", () => {
     vi.clearAllMocks();
     originalStdinIsTTY = process.stdin.isTTY;
     originalStdoutIsTTY = process.stdout.isTTY;
-    stderrWriteSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    stderrWriteSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
     // Default: TTY mode for interactive tests
-    Object.defineProperty(process.stdin, "isTTY", { value: true, writable: true, configurable: true });
-    Object.defineProperty(process.stdout, "isTTY", { value: true, writable: true, configurable: true });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      writable: true,
+      configurable: true,
+    });
   });
 
   afterEach(() => {
-    Object.defineProperty(process.stdin, "isTTY", { value: originalStdinIsTTY, writable: true, configurable: true });
-    Object.defineProperty(process.stdout, "isTTY", { value: originalStdoutIsTTY, writable: true, configurable: true });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: originalStdinIsTTY,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: originalStdoutIsTTY,
+      writable: true,
+      configurable: true,
+    });
     stderrWriteSpy.mockRestore();
   });
 
@@ -266,10 +288,19 @@ describe("humanApprovalNode — interactive fix selection (Story 35.4)", () => {
 
   it("TTY + user fixes findings → plan re-renders, updated state returned on approval", async () => {
     const fixResult = {
-      desiredState: { BucketName: "test", VersioningConfiguration: { Status: "Enabled" } },
+      desiredState: {
+        BucketName: "test",
+        VersioningConfiguration: { Status: "Enabled" },
+      },
       bpFindings: [], // all fixed
       appliedFixes: [
-        { practiceId: "BP-S3-005", title: "Versioning", fieldPath: "VersioningConfiguration.Status", oldValue: undefined, newValue: "Enabled" },
+        {
+          practiceId: "BP-S3-005",
+          title: "Versioning",
+          fieldPath: "VersioningConfiguration.Status",
+          oldValue: undefined,
+          newValue: "Enabled",
+        },
       ],
     };
 
@@ -278,7 +309,17 @@ describe("humanApprovalNode — interactive fix selection (Story 35.4)", () => {
 
     const state = makeState({
       bpFindings: [
-        { practiceId: "BP-S3-005", title: "Versioning", severity: "HIGH", category: "security", message: "No versioning", blocking: false, autoFixable: true, desiredStatePatch: { VersioningConfiguration: { Status: "Enabled" } }, propertyPath: "VersioningConfiguration.Status" },
+        {
+          practiceId: "BP-S3-005",
+          title: "Versioning",
+          severity: "HIGH",
+          category: "security",
+          message: "No versioning",
+          blocking: false,
+          autoFixable: true,
+          desiredStatePatch: { VersioningConfiguration: { Status: "Enabled" } },
+          propertyPath: "VersioningConfiguration.Status",
+        },
       ],
     });
 
@@ -301,9 +342,20 @@ describe("humanApprovalNode — interactive fix selection (Story 35.4)", () => {
 
   it("TTY + user fixes findings then DECLINES apply → CANCELLED, fix state NOT returned", async () => {
     const fixResult = {
-      desiredState: { BucketName: "test", VersioningConfiguration: { Status: "Enabled" } },
+      desiredState: {
+        BucketName: "test",
+        VersioningConfiguration: { Status: "Enabled" },
+      },
       bpFindings: [],
-      appliedFixes: [{ practiceId: "BP-S3-005", title: "V", fieldPath: "V.S", oldValue: undefined, newValue: "Enabled" }],
+      appliedFixes: [
+        {
+          practiceId: "BP-S3-005",
+          title: "V",
+          fieldPath: "V.S",
+          oldValue: undefined,
+          newValue: "Enabled",
+        },
+      ],
     };
 
     vi.mocked(promptFixSelection).mockResolvedValue(fixResult);
@@ -327,7 +379,11 @@ describe("humanApprovalNode — interactive fix selection (Story 35.4)", () => {
   });
 
   it("non-TTY → promptFixSelection NOT called", async () => {
-    Object.defineProperty(process.stdin, "isTTY", { value: false, writable: true, configurable: true });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
 
     const state = makeState({ autoApprove: false });
     const result = await humanApprovalNode(state);
@@ -336,19 +392,29 @@ describe("humanApprovalNode — interactive fix selection (Story 35.4)", () => {
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
   });
 
-  it("compound intent → promptFixSelection NOT called (only single-resource flow)", async () => {
+  it("compound intent → promptFixSelection IS called (fix selection works for all flows)", async () => {
     vi.mocked(renderHitlConfirm).mockResolvedValue(true);
     const { renderHitlCompoundConfirm } = await import("../utils/display.js");
     vi.mocked(renderHitlCompoundConfirm).mockResolvedValue(true);
 
     const state = makeState({
-      resourcePattern: { patternId: "test", displayName: "Test", resources: [] } as any,
-      resourceQueue: [{ resourceType: "AWS::S3::Bucket", resourceId: "r1", displayName: "Bucket" }] as any,
+      resourcePattern: {
+        patternId: "test",
+        displayName: "Test",
+        resources: [],
+      } as any,
+      resourceQueue: [
+        {
+          resourceType: "AWS::S3::Bucket",
+          resourceId: "r1",
+          displayName: "Bucket",
+        },
+      ] as any,
     });
 
     await humanApprovalNode(state);
 
-    expect(promptFixSelection).not.toHaveBeenCalled();
+    expect(promptFixSelection).toHaveBeenCalledWith(state);
   });
 
   it("checkpointResumed=true → promptFixSelection NOT called (plan-to-apply)", async () => {

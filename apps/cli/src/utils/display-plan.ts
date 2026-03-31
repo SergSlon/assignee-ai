@@ -4,6 +4,8 @@
  * formatAppliedFixes, formatFixValue, formatAutoFixHint, regionLabel.
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import chalk from "chalk";
 import boxen from "boxen";
 import { AWS_REGION, BEDROCK_MODEL_ID } from "../config/constants.js";
@@ -16,7 +18,11 @@ import type { RenderableState } from "./display.js";
 // This is safe because: (1) RenderableState is type-only (erased at runtime),
 // (2) formatDesiredState is defined directly in display.ts (not re-exported from
 // another sub-module), so it is available by the time any function here executes.
-import { formatFindings, formatFreeTierNote, formatMemoryHints } from "./display-findings.js";
+import {
+  formatFindings,
+  formatFreeTierNote,
+  formatMemoryHints,
+} from "./display-findings.js";
 import { stopSpinner } from "./display-output.js";
 
 /** Returns the region label for the plan box.
@@ -35,7 +41,9 @@ export function regionLabel(): string {
  *
  * @see Story 23.5 — zero hardcoded dollar amounts
  */
-export function formatCostLine(estimatedMonthlyCost: string | undefined): string {
+export function formatCostLine(
+  estimatedMonthlyCost: string | undefined,
+): string {
   return estimatedMonthlyCost ?? "N/A";
 }
 
@@ -68,12 +76,21 @@ export function renderPlanBox(state: RenderableState): void {
 
   const autoFixHintLine = formatAutoFixHint(state);
 
+  // Story 37.1: source files line
+  let sourceFilesLine: string | null = null;
+  if (state.sourceDir) {
+    const fileCount =
+      state.sourceFileCount ?? countFilesRecursive(state.sourceDir);
+    sourceFilesLine = `Source files:    ${fileCount} file${fileCount === 1 ? "" : "s"} from ${state.sourceDir}`;
+  }
+
   const content = [
     `Resource Type:   ${state.resourceType}`,
     `Region:          ${regionLabel()}`,
     `Config:`,
     configBlock,
     `Estimated Cost:  ${costLine}`,
+    ...(sourceFilesLine ? [sourceFilesLine] : []),
     ...(breakdownLines ? [breakdownLines] : []),
     ...(freeTierLine ? [freeTierLine] : []),
     ...(memoryHintLines ? [memoryHintLines] : []),
@@ -162,7 +179,9 @@ export function formatPricingBreakdown(breakdown: PricingBreakdown): string {
  *
  * @see Story 22.3
  */
-export function formatAppliedFixes(fixes: AppliedFix[] | undefined): string | null {
+export function formatAppliedFixes(
+  fixes: AppliedFix[] | undefined,
+): string | null {
   if (!fixes || fixes.length === 0) return null;
   const isTTY = process.stdout.isTTY;
 
@@ -197,4 +216,24 @@ export function formatAutoFixHint(state: RenderableState): string | null {
   const isTTY = process.stdout.isTTY;
   const msg = `${autoFixCount} finding${autoFixCount === 1 ? "" : "s"} can be auto-fixed. Run \`assignee init\` to enable.`;
   return isTTY ? chalk.cyan(`  \u{1F4A1} ${msg}`) : `  * ${msg}`;
+}
+
+/**
+ * Story 37.1: Recursively count files in a directory.
+ * Used by renderPlanBox to display the source file count.
+ */
+function countFilesRecursive(dir: string): number {
+  try {
+    let count = 0;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        count += countFilesRecursive(path.join(dir, entry.name));
+      } else {
+        count++;
+      }
+    }
+    return count;
+  } catch {
+    return 0;
+  }
 }

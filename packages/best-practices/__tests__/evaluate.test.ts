@@ -582,9 +582,7 @@ describe("evaluateTriggers — edge cases", () => {
     });
     const ctx = makeCtx({
       desiredState: {
-        Tags: [
-          { Key: "PublicAccess", Value: "true" },
-        ],
+        Tags: [{ Key: "PublicAccess", Value: "true" }],
       },
     });
 
@@ -688,7 +686,8 @@ describe("evaluateTriggers — BPFinding field propagation (Stories 35.5, 35.7)"
   it("P0-5. propagates fix_hint to BPFinding.fixHint (Story 35.7)", () => {
     // With fix_hint set
     const bp = makeBP({
-      fix_hint: "Enable versioning in the S3 console under Properties > Bucket Versioning",
+      fix_hint:
+        "Enable versioning in the S3 console under Properties > Bucket Versioning",
       check_type: "exists",
       property_path: "VersioningConfiguration.Status",
     });
@@ -714,7 +713,11 @@ describe("evaluateTriggers — BPFinding field propagation (Stories 35.5, 35.7)"
     const bp = makeBP({
       fixType: "interactive",
       interactiveOptions: [
-        { label: "IMDSv2 (recommended)", action: "prompt_value" as const, targetField: "HttpTokens" },
+        {
+          label: "IMDSv2 (recommended)",
+          action: "prompt_value" as const,
+          targetField: "HttpTokens",
+        },
         { label: "Skip", action: "skip" as const },
       ],
       property_path: "MetadataOptions.HttpTokens",
@@ -726,7 +729,9 @@ describe("evaluateTriggers — BPFinding field propagation (Stories 35.5, 35.7)"
     expect(findings).toHaveLength(1);
     expect(findings[0]!.fixType).toBe("interactive");
     expect(findings[0]!.interactiveOptions).toHaveLength(2);
-    expect(findings[0]!.interactiveOptions![0]!.label).toBe("IMDSv2 (recommended)");
+    expect(findings[0]!.interactiveOptions![0]!.label).toBe(
+      "IMDSv2 (recommended)",
+    );
     expect(findings[0]!.interactiveOptions![0]!.action).toBe("prompt_value");
     expect(findings[0]!.interactiveOptions![0]!.targetField).toBe("HttpTokens");
     expect(findings[0]!.interactiveOptions![1]!.label).toBe("Skip");
@@ -855,6 +860,92 @@ describe("evaluateTriggers — awareness check_type always fires (P2-5)", () => 
     const findings = evaluateTriggers(ctx, [bp]);
 
     expect(findings).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// evaluateTriggers — excludePatterns (pattern-level suppression)
+// ---------------------------------------------------------------------------
+
+describe("evaluateTriggers — excludePatterns", () => {
+  it("suppresses rule when context patternId matches an excludePattern", () => {
+    const bp = makeBP({
+      id: "BP-S3-009",
+      property_path: "NotificationConfiguration",
+      check_type: "exists",
+      triggers: [{ excludePatterns: ["static-website"] }],
+    });
+    const ctx = makeCtx({
+      patternId: "static-website",
+      desiredState: {},
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("does NOT suppress rule when context patternId is not in excludePatterns", () => {
+    const bp = makeBP({
+      id: "BP-S3-009",
+      property_path: "NotificationConfiguration",
+      check_type: "exists",
+      triggers: [{ excludePatterns: ["static-website"] }],
+    });
+    const ctx = makeCtx({
+      patternId: "api-backend",
+      desiredState: {},
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+  });
+
+  it("does NOT suppress rule when context has no patternId", () => {
+    const bp = makeBP({
+      id: "BP-S3-009",
+      property_path: "NotificationConfiguration",
+      check_type: "exists",
+      triggers: [{ excludePatterns: ["static-website"] }],
+    });
+    const ctx = makeCtx({ desiredState: {} });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+  });
+
+  it("suppresses when excludePatterns contains multiple entries and one matches", () => {
+    const bp = makeBP({
+      id: "BP-S3-017",
+      property_path: "LoggingConfiguration",
+      check_type: "exists",
+      triggers: [{ excludePatterns: ["static-website", "cdn-origin"] }],
+    });
+    const ctx = makeCtx({
+      patternId: "cdn-origin",
+      desiredState: {},
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("excludePatterns on one trigger suppresses even if another trigger would match", () => {
+    const bp = makeBP({
+      id: "BP-S3-011",
+      property_path: "BucketPolicy.Statement",
+      check_type: "awareness",
+      triggers: [
+        { excludePatterns: ["static-website"] },
+        { resourceType: "AWS::S3::Bucket", always: true },
+      ],
+    });
+    const ctx = makeCtx({
+      patternId: "static-website",
+      desiredState: {},
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
   });
 });
 

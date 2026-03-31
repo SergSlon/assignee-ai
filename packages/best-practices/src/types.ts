@@ -33,6 +33,8 @@ export interface Trigger {
   patternId?: string;
   intentKeywords?: string[];
   always?: boolean;
+  /** When the EvalContext patternId matches any entry, suppress this rule entirely. */
+  excludePatterns?: string[];
 }
 
 export const BP_FIX_TYPE = ["auto", "interactive", "info"] as const;

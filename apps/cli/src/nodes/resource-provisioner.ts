@@ -35,6 +35,29 @@ export async function resourceProvisionerNode(
 ): Promise<Partial<AgentState>> {
   if (state.executionStatus === ExecutionStatus.CANCELLED) return {};
 
+  // ── Skip non-provisionable resources (companion/post-provision) ──────────
+  // Resources like CloudFront Distribution and OAC are created post-provision
+  // via SDK, not through CloudControl. Mark them as SUCCESS and advance the loop.
+  const currentResource =
+    state.resourceQueue?.[state.currentResourceIndex ?? 0];
+  if (currentResource?.provisionable === false) {
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.SDK_FALLBACK_DISPATCHED,
+      extras: {
+        resourceType: state.resourceType,
+        dispatchPath: "companion-skip",
+        message: `Skipping non-provisionable resource: ${currentResource.displayName}`,
+      },
+    });
+    return {
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceArn: undefined,
+    };
+  }
+
   if (!state.desiredState) {
     return {
       executionStatus: ExecutionStatus.FAILED,
@@ -62,7 +85,10 @@ export async function resourceProvisionerNode(
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: redirect.message,
-        error: new ProvisioningError(redirect.message, PROVISIONING_ERROR_CODES.UNSUPPORTED_TYPE),
+        error: new ProvisioningError(
+          redirect.message,
+          PROVISIONING_ERROR_CODES.UNSUPPORTED_TYPE,
+        ),
       };
     }
 
@@ -99,7 +125,10 @@ export async function resourceProvisionerNode(
           return {
             executionStatus: ExecutionStatus.FAILED,
             errorMessage: `SDK fallback provisioning failed: ${err.message}`,
-            error: new ProvisioningError(err.message, PROVISIONING_ERROR_CODES.UNKNOWN),
+            error: new ProvisioningError(
+              err.message,
+              PROVISIONING_ERROR_CODES.UNKNOWN,
+            ),
           };
         }
         return {
@@ -116,7 +145,10 @@ export async function resourceProvisionerNode(
           return {
             executionStatus: ExecutionStatus.FAILED,
             errorMessage: `SDK fallback provisioning failed: ${err.message}`,
-            error: new ProvisioningError(err.message, PROVISIONING_ERROR_CODES.UNKNOWN),
+            error: new ProvisioningError(
+              err.message,
+              PROVISIONING_ERROR_CODES.UNKNOWN,
+            ),
           };
         }
         return {
@@ -217,12 +249,12 @@ export async function resourceProvisionerNode(
       } else {
         return {
           executionStatus: ExecutionStatus.FAILED,
-          errorMessage: "EIP allocation succeeded but returned no AllocationId.",
+          errorMessage:
+            "EIP allocation succeeded but returned no AllocationId.",
         };
       }
     } catch (eipErr: unknown) {
-      const errMsg =
-        eipErr instanceof Error ? eipErr.message : String(eipErr);
+      const errMsg = eipErr instanceof Error ? eipErr.message : String(eipErr);
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: `EIP allocation failed for NatGateway: ${errMsg}`,
@@ -254,7 +286,8 @@ export async function resourceProvisionerNode(
     const isBucketAlreadyExists =
       createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS &&
       state.resourceType === RESOURCE_TYPES.S3_BUCKET;
-    const errorCategory = createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
+    const errorCategory =
+      createErr.kind === ProvisioningErrorKind.ALREADY_EXISTS
         ? PROVISIONING_ERROR_CODES.ALREADY_EXISTS
         : createErr.kind === ProvisioningErrorKind.THROTTLED
           ? PROVISIONING_ERROR_CODES.THROTTLED
@@ -273,10 +306,19 @@ export async function resourceProvisionerNode(
       state.desiredState["AllocationId"] !== "AUTO_ALLOCATE_EIP"
     ) {
       try {
-        const { EC2Client, ReleaseAddressCommand } = await import("@aws-sdk/client-ec2");
-        const ec2 = new EC2Client({ region: process.env["AWS_REGION"] ?? "us-east-1" });
-        await ec2.send(new ReleaseAddressCommand({ AllocationId: state.desiredState["AllocationId"] as string }));
-      } catch { /* best-effort cleanup */ }
+        const { EC2Client, ReleaseAddressCommand } =
+          await import("@aws-sdk/client-ec2");
+        const ec2 = new EC2Client({
+          region: process.env["AWS_REGION"] ?? "us-east-1",
+        });
+        await ec2.send(
+          new ReleaseAddressCommand({
+            AllocationId: state.desiredState["AllocationId"] as string,
+          }),
+        );
+      } catch {
+        /* best-effort cleanup */
+      }
     }
 
     return {

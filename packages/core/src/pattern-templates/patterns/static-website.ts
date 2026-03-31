@@ -2,10 +2,9 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 
 /**
- * Static Website pattern (S3 only for MVP).
- * Note: CloudFront, Route53, and ACM resources require domain configuration from the user
- * (cannot be provisioned with defaults). Omitted from this MVP implementation.
- * Story 8.2 can expand to include CloudFront as a follow-up.
+ * Static Website pattern — S3 bucket + CloudFront distribution.
+ * S3 is provisioned via CloudControl. CloudFront + OAC are created post-provision
+ * via direct SDK calls (not CloudControl). File upload uses --source flag.
  */
 export const staticWebsitePattern: ArchitecturePattern = {
   patternId: "static-website",
@@ -24,15 +23,31 @@ export const staticWebsitePattern: ArchitecturePattern = {
       resourceId: "website-bucket",
       displayName: "S3 Website Bucket",
     },
+    {
+      resourceType: "AWS::CloudFront::Distribution",
+      resourceId: "cdn-distribution",
+      displayName: "CloudFront CDN (HTTPS)",
+      provisionable: false, // Created post-provision via SDK when --source is used
+    },
+    {
+      resourceType: "AWS::CloudFront::OriginAccessControl",
+      resourceId: "cdn-oac",
+      displayName: "Origin Access Control",
+      provisionable: false, // Created alongside CloudFront distribution
+    },
   ],
-  dependencyOrder: [["website-bucket"]],
+  dependencyOrder: [["website-bucket"], ["cdn-oac", "cdn-distribution"]],
   defaultOptions: {
     "website-bucket": {
+      WebsiteConfiguration: {
+        IndexDocument: "index.html",
+        ErrorDocument: "error.html",
+      },
       PublicAccessBlockConfiguration: {
-        BlockPublicAcls: true,
-        BlockPublicPolicy: true,
-        IgnorePublicAcls: true,
-        RestrictPublicBuckets: true,
+        BlockPublicAcls: false,
+        BlockPublicPolicy: false,
+        IgnorePublicAcls: false,
+        RestrictPublicBuckets: false,
       },
     },
   },

@@ -292,7 +292,7 @@ describe("planCommand — run callback (no --no-apply)", () => {
         preflightPassed: false,
         bpFindings: [
           {
-            practiceId: "BP-S3-007",
+            practiceId: "BP-S3-010",
             title: "S3 lifecycle",
             severity: "MEDIUM",
             category: "cost",
@@ -337,7 +337,7 @@ describe("planCommand — run callback (no --no-apply)", () => {
         userIntent: "Create an S3 bucket",
         bpFindings: [
           {
-            practiceId: "BP-S3-007",
+            practiceId: "BP-S3-010",
             title: "S3 lifecycle",
             severity: "MEDIUM",
             category: "cost",

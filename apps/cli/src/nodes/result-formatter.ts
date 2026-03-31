@@ -14,6 +14,8 @@ import {
   ProvisioningError,
   type ResourceResult,
 } from "@assignee/core";
+import * as clack from "@clack/prompts";
+import chalk from "chalk";
 import { defaultMemoryService } from "../services/memory.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
@@ -184,6 +186,153 @@ async function clearFailureHistory(
   }
 }
 
+/** Format byte count into a human-readable string. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Post-provision: upload static site files to S3, create CloudFront distribution,
+ * and show the website URLs (Story 37.4).
+ * Non-blocking: upload/CloudFront failures are logged as warnings but never mark
+ * the provision as failed.
+ */
+async function uploadStaticSiteFiles(
+  bucketName: string,
+  sourceDir: string,
+  createCloudFront = false,
+): Promise<void> {
+  const { uploadStaticSite } = await import("../services/s3-upload.js");
+
+  const region =
+    process.env["AWS_REGION"] ??
+    process.env["AWS_DEFAULT_REGION"] ??
+    "us-east-1";
+
+  // 1. Upload files to S3
+  const spinner = clack.spinner();
+  spinner.start("Uploading files...");
+
+  const result = await uploadStaticSite(bucketName, sourceDir, {
+    onProgress: (p: { current: number; total: number; file: string }) => {
+      spinner.message(`Uploading ${p.current}/${p.total}: ${p.file}`);
+    },
+  });
+
+  spinner.stop(
+    `Uploaded ${result.uploaded} files (${formatBytes(result.totalBytes)})`,
+  );
+
+  if (result.failed > 0) {
+    process.stderr.write(
+      chalk.yellow(`\u26A0 ${result.failed} files failed to upload\n`),
+    );
+    for (const err of result.errors) {
+      process.stderr.write(chalk.dim(`  ${err.file}: ${err.error}\n`));
+    }
+  }
+
+  if (!createCloudFront) {
+    // No CloudFront — set public-read bucket policy and show S3 website URL only
+    try {
+      const { configureBucketPolicy } =
+        await import("../services/s3-upload.js");
+      await configureBucketPolicy(bucketName);
+    } catch {
+      process.stderr.write(
+        chalk.dim("  Could not set public-read bucket policy.\n"),
+      );
+    }
+
+    const s3Url = `http://${bucketName}.s3-website-${region}.amazonaws.com`;
+    process.stdout.write(chalk.cyan(`\n\uD83C\uDF10 Website URL: ${s3Url}\n`));
+    return;
+  }
+
+  // 2. Create CloudFront distribution with OAC
+  try {
+    const { createCloudFrontDistribution, generateCloudFrontBucketPolicy } =
+      await import("../services/cloudfront-setup.js");
+    const { PutBucketPolicyCommand, S3Client } =
+      await import("@aws-sdk/client-s3");
+    const { operatorCredentials: getOperatorCreds } =
+      await import("../config/operator-credentials.js");
+
+    const cfSpinner = clack.spinner();
+    cfSpinner.start("Creating CloudFront distribution...");
+
+    const cfResult = await createCloudFrontDistribution(bucketName, region);
+
+    // 3. Update bucket policy to use OAC (replaces public-read)
+    const creds = getOperatorCreds();
+    creds.region = region;
+    const s3Client = new S3Client({
+      region: creds.region,
+      credentials: {
+        accessKeyId: creds.accessKeyId,
+        secretAccessKey: creds.secretAccessKey,
+      },
+    });
+    const oacPolicy = generateCloudFrontBucketPolicy(
+      bucketName,
+      cfResult.distributionArn,
+    );
+    await s3Client.send(
+      new PutBucketPolicyCommand({
+        Bucket: bucketName,
+        Policy: oacPolicy,
+      }),
+    );
+
+    cfSpinner.stop("CloudFront distribution created");
+
+    // Show both URLs
+    const s3Url = `http://${bucketName}.s3-website-${region}.amazonaws.com`;
+    const cfUrl = `https://${cfResult.domainName}`;
+    process.stdout.write(
+      chalk.cyan(`\n\uD83C\uDF10 S3 Website URL: ${s3Url}\n`),
+    );
+    process.stdout.write(
+      chalk.cyan(`\u2601 CloudFront distribution created: ${cfUrl}\n`),
+    );
+    process.stdout.write(
+      chalk.dim(`  Distribution ID: ${cfResult.distributionId}\n`),
+    );
+    process.stdout.write(
+      chalk.dim(
+        "  Status: InProgress (may take 5-15 minutes to fully deploy)\n",
+      ),
+    );
+    process.stdout.write(chalk.green(`  Recommended URL: ${cfUrl}\n`));
+  } catch (cfErr) {
+    // CloudFront failure is non-blocking — fall back to S3 website URL
+    process.stderr.write(
+      chalk.yellow(
+        `\u26A0 CloudFront setup failed: ${cfErr instanceof Error ? cfErr.message : String(cfErr)}\n`,
+      ),
+    );
+    process.stderr.write(
+      chalk.dim("  Falling back to S3 website hosting (HTTP only).\n"),
+    );
+
+    // Set public-read bucket policy as fallback
+    try {
+      const { configureBucketPolicy } =
+        await import("../services/s3-upload.js");
+      await configureBucketPolicy(bucketName);
+    } catch {
+      process.stderr.write(
+        chalk.dim("  Could not set public-read bucket policy either.\n"),
+      );
+    }
+
+    const s3Url = `http://${bucketName}.s3-website-${region}.amazonaws.com`;
+    process.stdout.write(chalk.cyan(`\n\uD83C\uDF10 Website URL: ${s3Url}\n`));
+  }
+}
+
 export async function resultFormatterNode(
   state: AgentState,
   tools?: StructuredTool[],
@@ -205,10 +354,11 @@ export async function resultFormatterNode(
         state.currentResourceIndex !== undefined
       ) {
         const currentResource = state.resourceQueue[state.currentResourceIndex];
-        if (!currentResource) return {
-          executionStatus: ExecutionStatus.FAILED,
-          errorMessage: `Compound resource index ${state.currentResourceIndex} out of bounds (queue length ${state.resourceQueue.length})`,
-        };
+        if (!currentResource)
+          return {
+            executionStatus: ExecutionStatus.FAILED,
+            errorMessage: `Compound resource index ${state.currentResourceIndex} out of bounds (queue length ${state.resourceQueue.length})`,
+          };
         const completedEntry: ResourceResult = {
           resourceId: currentResource.resourceId,
           resourceType: currentResource.resourceType,
@@ -232,7 +382,11 @@ export async function resultFormatterNode(
               runId: state.runId,
               level: "warn",
               action: LOG_ACTIONS.APPLY_SUCCEEDED,
-              extras: { compound: true, completedCount: updatedCompleted.length, note: "nextResource missing, rendering partial success" },
+              extras: {
+                compound: true,
+                completedCount: updatedCompleted.length,
+                note: "nextResource missing, rendering partial success",
+              },
             });
             for (const completed of updatedCompleted) {
               await writeProvisionRecord(
@@ -331,6 +485,57 @@ export async function resultFormatterNode(
           }
         }
 
+        // Story 37.4: Post-provision upload of static site files (compound path)
+        if (state.sourceDir) {
+          const s3Resource = updatedCompleted.find(
+            (r) => r.resourceType === "AWS::S3::Bucket" && r.resourceArn,
+          );
+          if (s3Resource?.resourceArn) {
+            const parts = s3Resource.resourceArn.split(":::");
+            const bucketName = parts[1];
+            if (!bucketName) {
+              process.stderr.write(
+                chalk.yellow(
+                  `\u26A0 Could not parse bucket name from ARN: ${s3Resource.resourceArn}\n`,
+                ),
+              );
+              // Skip upload for this resource
+            } else {
+              try {
+                const createCf =
+                  state.resourcePattern?.patternId === "static-website";
+                await uploadStaticSiteFiles(
+                  bucketName,
+                  state.sourceDir,
+                  createCf,
+                );
+              } catch (err) {
+                process.stderr.write(
+                  chalk.yellow(
+                    `\u26A0 File upload failed: ${err instanceof Error ? err.message : String(err)}\n`,
+                  ),
+                );
+                process.stderr.write(
+                  chalk.dim(
+                    "  Files can be uploaded manually: aws s3 sync <dir> s3://<bucket>\n",
+                  ),
+                );
+              }
+            }
+          }
+        }
+
+        const hasS3InCompleted = updatedCompleted.some(
+          (r) => r.resourceType === "AWS::S3::Bucket",
+        );
+        if (state.sourceDir && !hasS3InCompleted) {
+          process.stderr.write(
+            chalk.yellow(
+              `\u26A0 --source flag ignored: file upload only supported for S3 buckets, not ${state.resourceType}\n`,
+            ),
+          );
+        }
+
         return { completedResources: updatedCompleted };
       }
 
@@ -343,6 +548,48 @@ export async function resultFormatterNode(
         action: LOG_ACTIONS.APPLY_SUCCEEDED,
         extras: { resourceArn: state.resourceArn },
       });
+
+      // Story 37.4: Post-provision upload of static site files
+      if (
+        state.sourceDir &&
+        state.resourceType === "AWS::S3::Bucket" &&
+        state.resourceArn
+      ) {
+        const parts = state.resourceArn.split(":::");
+        const bucketName = parts[1];
+        if (!bucketName) {
+          process.stderr.write(
+            chalk.yellow(
+              `\u26A0 Could not parse bucket name from ARN: ${state.resourceArn}\n`,
+            ),
+          );
+          // Skip upload for this resource
+        } else {
+          try {
+            await uploadStaticSiteFiles(bucketName, state.sourceDir);
+          } catch (err) {
+            // Upload failure must NOT mark the provision as failed
+            process.stderr.write(
+              chalk.yellow(
+                `\u26A0 File upload failed: ${err instanceof Error ? err.message : String(err)}\n`,
+              ),
+            );
+            process.stderr.write(
+              chalk.dim(
+                "  Files can be uploaded manually: aws s3 sync <dir> s3://<bucket>\n",
+              ),
+            );
+          }
+        }
+      }
+
+      if (state.sourceDir && state.resourceType !== "AWS::S3::Bucket") {
+        process.stderr.write(
+          chalk.yellow(
+            `\u26A0 --source flag ignored: file upload only supported for S3 buckets, not ${state.resourceType}\n`,
+          ),
+        );
+      }
 
       // Story 19.3: write provision record for single-resource success
       await writeProvisionRecord(
@@ -459,6 +706,23 @@ export async function resultFormatterNode(
             bpFindings: state.bpFindings ?? [],
             appliedFixes: state.appliedFixes ?? [],
             freeTierNote: state.freeTierNote ?? null,
+            // Compound pattern info (Epic 37)
+            ...(state.resourcePattern
+              ? {
+                  resourcePattern: {
+                    patternId: state.resourcePattern.patternId,
+                    displayName: state.resourcePattern.displayName,
+                    resourceCount: state.resourceQueue?.length ?? 1,
+                  },
+                  resourceQueue:
+                    state.resourceQueue?.map((r) => ({
+                      resourceId: r.resourceId,
+                      resourceType: r.resourceType,
+                      displayName: r.displayName,
+                      provisionable: r.provisionable !== false,
+                    })) ?? null,
+                }
+              : {}),
           };
           process.stdout.write(JSON.stringify(jsonPayload, null, 2) + "\n");
         } else {

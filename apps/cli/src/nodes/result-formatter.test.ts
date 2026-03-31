@@ -19,6 +19,73 @@ import {
   createSecurityMockTool,
 } from "../test-fixtures/mcp-mock-responses.js";
 
+// Mock @clack/prompts spinner (used by Story 37.4 upload flow)
+vi.mock("@clack/prompts", () => ({
+  intro: vi.fn(),
+  outro: vi.fn(),
+  spinner: vi.fn(() => ({
+    start: vi.fn(),
+    stop: vi.fn(),
+    message: vi.fn(),
+  })),
+  select: vi.fn(),
+  confirm: vi.fn(),
+  isCancel: vi.fn(() => false),
+  multiselect: vi.fn(),
+}));
+
+// Mock s3-upload service (Story 37.4)
+vi.mock("../services/s3-upload.js", () => ({
+  uploadStaticSite: vi.fn().mockResolvedValue({
+    uploaded: 3,
+    failed: 0,
+    totalBytes: 15360,
+    errors: [],
+  }),
+  configureBucketPolicy: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock cloudfront-setup service (Epic 37 — CloudFront distribution)
+vi.mock("../services/cloudfront-setup.js", () => ({
+  createCloudFrontDistribution: vi.fn().mockResolvedValue({
+    distributionId: "E1234EXAMPLE",
+    domainName: "d1234example.cloudfront.net",
+    distributionArn:
+      "arn:aws:cloudfront::123456789012:distribution/E1234EXAMPLE",
+  }),
+  generateCloudFrontBucketPolicy: vi.fn().mockReturnValue(
+    JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "AllowCloudFrontServicePrincipalReadOnly",
+          Effect: "Allow",
+          Principal: { Service: "cloudfront.amazonaws.com" },
+          Action: "s3:GetObject",
+          Resource: "arn:aws:s3:::mock-bucket/*",
+        },
+      ],
+    }),
+  ),
+}));
+
+// Mock operator-credentials for CloudFront bucket policy update
+vi.mock("../config/operator-credentials.js", () => ({
+  operatorCredentials: vi.fn().mockReturnValue({
+    accessKeyId: "test-key",
+    secretAccessKey: "test-secret",
+    region: "us-east-1",
+  }),
+}));
+
+// Mock @aws-sdk/client-s3 PutBucketPolicyCommand (used in uploadStaticSiteFiles for OAC policy)
+vi.mock("@aws-sdk/client-s3", () => ({
+  S3Client: vi.fn().mockImplementation(() => ({
+    send: vi.fn().mockResolvedValue({}),
+  })),
+  PutBucketPolicyCommand: vi.fn(),
+}));
+
 // Suppress display output for all tests
 vi.mock("../utils/display.js", () => ({
   renderApplySuccess: vi.fn(),
@@ -61,6 +128,14 @@ import {
   type FixSelectionResult,
 } from "../utils/display.js";
 import { defaultMemoryService } from "../services/memory.js";
+import {
+  uploadStaticSite,
+  configureBucketPolicy,
+} from "../services/s3-upload.js";
+import {
+  createCloudFrontDistribution,
+  generateCloudFrontBucketPolicy,
+} from "../services/cloudfront-setup.js";
 
 /** 3-resource pattern for compound tests */
 const mockPattern: ArchitecturePattern = {
@@ -855,7 +930,7 @@ describe("resultFormatterNode — P1-2 plan mode promptFixSelection integration"
       },
       bpFindings: [
         {
-          practiceId: "BP-S3-007",
+          practiceId: "BP-S3-010",
           title: "S3 lifecycle",
           severity: "MEDIUM",
           category: "cost",
@@ -875,7 +950,9 @@ describe("resultFormatterNode — P1-2 plan mode promptFixSelection integration"
       ],
     };
 
-    vi.mocked(promptFixSelection).mockResolvedValueOnce(mockFixResult as FixSelectionResult);
+    vi.mocked(promptFixSelection).mockResolvedValueOnce(
+      mockFixResult as FixSelectionResult,
+    );
 
     const state = makeState({
       executionStatus: ExecutionStatus.PENDING,
@@ -896,7 +973,7 @@ describe("resultFormatterNode — P1-2 plan mode promptFixSelection integration"
           },
         },
         {
-          practiceId: "BP-S3-007",
+          practiceId: "BP-S3-010",
           title: "S3 lifecycle",
           severity: "MEDIUM",
           category: "cost",
@@ -999,5 +1076,211 @@ describe("resultFormatterNode — P1-3 plan mode JSON skips promptFixSelection",
     expect(parsed.desiredState).toEqual({ BucketName: "my-bucket" });
     expect(parsed.bpFindings).toHaveLength(1);
     expect(result).toEqual({});
+  });
+});
+
+// ── Story 37.4: Post-provision static site upload ───────────────────────────
+
+describe("resultFormatterNode — Story 37.4 static site upload", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stdoutSpy: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stderrSpy: any;
+
+  beforeEach(() => {
+    stdoutSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((() => true) as any);
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((() => true) as any);
+  });
+
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  it("uploads files and shows website URL when sourceDir is set for S3 bucket (no CloudFront for single-resource)", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "arn:aws:s3:::my-static-site-bucket",
+      sourceDir: "/tmp/build",
+    });
+
+    const result = await resultFormatterNode(state);
+
+    // Should call uploadStaticSite with bucket name and sourceDir
+    expect(uploadStaticSite).toHaveBeenCalledWith(
+      "my-static-site-bucket",
+      "/tmp/build",
+      expect.objectContaining({ onProgress: expect.any(Function) }),
+    );
+
+    // Single-resource S3 buckets do NOT get CloudFront
+    expect(createCloudFrontDistribution).not.toHaveBeenCalled();
+
+    // Should set public-read bucket policy instead
+    expect(configureBucketPolicy).toHaveBeenCalledWith("my-static-site-bucket");
+
+    // Should show S3 website URL only (no CloudFront)
+    const allStdout = stdoutSpy.mock.calls
+      .map((c: unknown[]) => String(c[0]))
+      .join("");
+    expect(allStdout).toContain("my-static-site-bucket.s3-website-");
+    expect(allStdout).toContain(".amazonaws.com");
+    expect(allStdout).not.toContain("d1234example.cloudfront.net");
+
+    // Result should be empty — upload does not affect provision status
+    expect(result).toEqual({});
+  });
+
+  it("does NOT upload when sourceDir is not set", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "my-bucket",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(uploadStaticSite).not.toHaveBeenCalled();
+    expect(createCloudFrontDistribution).not.toHaveBeenCalled();
+  });
+
+  it("does NOT upload for non-S3 resource types", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceType: "AWS::Lambda::Function",
+      resourceArn: "arn:aws:lambda::123:function:my-fn",
+      sourceDir: "/tmp/build",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(uploadStaticSite).not.toHaveBeenCalled();
+    expect(createCloudFrontDistribution).not.toHaveBeenCalled();
+  });
+
+  it("does NOT upload when resourceArn is undefined", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: undefined,
+      sourceDir: "/tmp/build",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(uploadStaticSite).not.toHaveBeenCalled();
+  });
+
+  it("upload failure does NOT mark provision as failed", async () => {
+    vi.mocked(uploadStaticSite).mockRejectedValueOnce(
+      new Error("Access denied"),
+    );
+
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "arn:aws:s3:::my-bucket",
+      sourceDir: "/tmp/build",
+    });
+
+    const result = await resultFormatterNode(state);
+
+    // renderApplySuccess should still have been called
+    expect(renderApplySuccess).toHaveBeenCalledWith(state);
+
+    // Should show warning about upload failure
+    const allStderr = stderrSpy.mock.calls
+      .map((c: unknown[]) => String(c[0]))
+      .join("");
+    expect(allStderr).toContain("File upload failed");
+    expect(allStderr).toContain("aws s3 sync");
+
+    // Result should be empty — provision is still successful
+    expect(result).toEqual({});
+  });
+
+  it("shows warning when some files fail to upload", async () => {
+    vi.mocked(uploadStaticSite).mockResolvedValueOnce({
+      uploaded: 2,
+      failed: 1,
+      totalBytes: 10240,
+      errors: [{ file: "broken.html", error: "Permission denied" }],
+    });
+
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "arn:aws:s3:::my-bucket",
+      sourceDir: "/tmp/build",
+    });
+
+    await resultFormatterNode(state);
+
+    const allStderr = stderrSpy.mock.calls
+      .map((c: unknown[]) => String(c[0]))
+      .join("");
+    expect(allStderr).toContain("1 files failed to upload");
+    expect(allStderr).toContain("broken.html");
+    expect(allStderr).toContain("Permission denied");
+  });
+
+  it("single-resource S3 bucket uses public-read policy (no CloudFront attempted)", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "arn:aws:s3:::my-bucket",
+      sourceDir: "/tmp/build",
+    });
+
+    await resultFormatterNode(state);
+
+    // Upload should succeed
+    expect(uploadStaticSite).toHaveBeenCalled();
+
+    // Single-resource path should NOT attempt CloudFront
+    expect(createCloudFrontDistribution).not.toHaveBeenCalled();
+
+    // Should set public-read bucket policy directly
+    expect(configureBucketPolicy).toHaveBeenCalledWith("my-bucket");
+
+    // Should show S3 website URL
+    const allStdout = stdoutSpy.mock.calls
+      .map((c: unknown[]) => String(c[0]))
+      .join("");
+    expect(allStdout).toContain("my-bucket.s3-website-");
+  });
+
+  it("uses AWS_REGION env for website URL", async () => {
+    const originalRegion = process.env["AWS_REGION"];
+    process.env["AWS_REGION"] = "eu-west-1";
+
+    try {
+      const state = makeState({
+        executionStatus: ExecutionStatus.SUCCESS,
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "arn:aws:s3:::my-bucket",
+        sourceDir: "/tmp/build",
+      });
+
+      await resultFormatterNode(state);
+
+      const allStdout = stdoutSpy.mock.calls
+        .map((c: unknown[]) => String(c[0]))
+        .join("");
+      expect(allStdout).toContain(
+        "my-bucket.s3-website-eu-west-1.amazonaws.com",
+      );
+    } finally {
+      if (originalRegion !== undefined) {
+        process.env["AWS_REGION"] = originalRegion;
+      } else {
+        delete process.env["AWS_REGION"];
+      }
+    }
   });
 });
