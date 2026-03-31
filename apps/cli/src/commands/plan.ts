@@ -173,7 +173,15 @@ export const planCommand = new Command(CommandName.PLAN)
             return { success: true };
           }
 
-          if (!(finalState as AgentState).preflightPassed) {
+          // Re-check blocking findings — interactive fix selection may have
+          // resolved them after the original preflight (Story 35.4).
+          // If bpFindings is available, check for remaining blockers;
+          // if not available, trust the original preflightPassed flag.
+          const currentFindings = (finalState as AgentState).bpFindings;
+          const hasBlocking = currentFindings
+            ? currentFindings.some((f) => f.blocking)
+            : true; // no findings data → trust preflightPassed
+          if (!(finalState as AgentState).preflightPassed && hasBlocking) {
             clack.log.warn(
               "Cannot apply: blocking best-practice findings detected. Fix the issues above and re-run `assignee plan`.",
             );

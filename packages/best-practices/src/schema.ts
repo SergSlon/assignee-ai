@@ -42,6 +42,7 @@ export const bestPracticeSchema = z
     desiredStatePatch: z.record(z.unknown()).optional(),
     blocking: z.boolean().optional().default(false),
     condition: z.record(z.unknown()).optional(),
+    fix_hint: z.string().max(80).optional(),
     fixType: z.enum(BP_FIX_TYPE).optional(),
     interactiveOptions: z
       .array(

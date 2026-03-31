@@ -26,6 +26,7 @@ vi.mock("../utils/display.js", () => ({
   renderError: vi.fn(),
   renderPlanBox: vi.fn(),
   renderSecurityWarnings: vi.fn(),
+  promptFixSelection: vi.fn().mockResolvedValue(null),
 }));
 
 // Suppress logger output
@@ -56,6 +57,8 @@ import {
   renderError,
   renderPlanBox,
   renderSecurityWarnings,
+  promptFixSelection,
+  type FixSelectionResult,
 } from "../utils/display.js";
 import { defaultMemoryService } from "../services/memory.js";
 
@@ -829,6 +832,172 @@ describe("resultFormatterNode — Story 20.13 clear failure history on success",
     const result = await resultFormatterNode(state);
 
     expect(renderApplySuccess).toHaveBeenCalledWith(state);
+    expect(result).toEqual({});
+  });
+});
+
+// ── P1-2: Plan mode text — promptFixSelection applied → returns updated state ──
+
+describe("resultFormatterNode — P1-2 plan mode promptFixSelection integration", () => {
+  beforeEach(() => {
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    vi.mocked(process.stdout.write).mockRestore();
+  });
+
+  it("plan mode: promptFixSelection applied → returns updated desiredState/bpFindings/appliedFixes", async () => {
+    const mockFixResult = {
+      desiredState: {
+        BucketName: "my-bucket",
+        PublicAccessBlockConfiguration: { BlockPublicAcls: true },
+      },
+      bpFindings: [
+        {
+          practiceId: "BP-S3-007",
+          title: "S3 lifecycle",
+          severity: "MEDIUM",
+          category: "cost",
+          message: "Missing lifecycle",
+          blocking: false,
+          propertyPath: "LifecycleConfiguration",
+        },
+      ],
+      appliedFixes: [
+        {
+          practiceId: "BP-S3-001",
+          title: "Block S3 Public Access",
+          fieldPath: "PublicAccessBlockConfiguration.BlockPublicAcls",
+          oldValue: undefined,
+          newValue: true,
+        },
+      ],
+    };
+
+    vi.mocked(promptFixSelection).mockResolvedValueOnce(mockFixResult as FixSelectionResult);
+
+    const state = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      executionMode: ExecutionMode.PLAN,
+      desiredState: { BucketName: "my-bucket" },
+      bpFindings: [
+        {
+          practiceId: "BP-S3-001",
+          title: "Block S3 Public Access",
+          severity: "CRITICAL",
+          category: "security",
+          message: "S3 bucket allows public access",
+          blocking: true,
+          autoFixable: true,
+          propertyPath: "PublicAccessBlockConfiguration.BlockPublicAcls",
+          desiredStatePatch: {
+            PublicAccessBlockConfiguration: { BlockPublicAcls: true },
+          },
+        },
+        {
+          practiceId: "BP-S3-007",
+          title: "S3 lifecycle",
+          severity: "MEDIUM",
+          category: "cost",
+          message: "Missing lifecycle",
+          blocking: false,
+          propertyPath: "LifecycleConfiguration",
+        },
+      ] as any,
+    });
+
+    const result = await resultFormatterNode(state);
+
+    // renderPlanBox called twice: initial render + re-render after fix
+    expect(renderPlanBox).toHaveBeenCalledTimes(2);
+    // First call with original state
+    expect(renderPlanBox).toHaveBeenNthCalledWith(1, state);
+    // Second call with updated state (patched desiredState, residual findings)
+    expect(renderPlanBox).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        desiredState: mockFixResult.desiredState,
+        bpFindings: mockFixResult.bpFindings,
+        appliedFixes: mockFixResult.appliedFixes,
+        estimatedMonthlyCost: undefined,
+        pricingBreakdown: undefined,
+      }),
+    );
+
+    // Return value contains the updated fields
+    expect(result).toEqual({
+      desiredState: mockFixResult.desiredState,
+      bpFindings: mockFixResult.bpFindings,
+      appliedFixes: mockFixResult.appliedFixes,
+    });
+  });
+
+  it("plan mode: promptFixSelection returns null → no re-render, returns empty", async () => {
+    vi.mocked(promptFixSelection).mockResolvedValueOnce(null);
+
+    const state = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      executionMode: ExecutionMode.PLAN,
+      desiredState: { BucketName: "my-bucket" },
+    });
+
+    const result = await resultFormatterNode(state);
+
+    // renderPlanBox called only once (initial render)
+    expect(renderPlanBox).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({});
+  });
+});
+
+// ── P1-3: Plan mode JSON — promptFixSelection NOT called ──
+
+describe("resultFormatterNode — P1-3 plan mode JSON skips promptFixSelection", () => {
+  let stdoutCalls: string[];
+
+  beforeEach(() => {
+    stdoutCalls = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+      stdoutCalls.push(String(chunk));
+      return true;
+    });
+  });
+
+  afterEach(() => {
+    vi.mocked(process.stdout.write).mockRestore();
+  });
+
+  it("plan mode JSON: promptFixSelection NOT called, JSON written to stdout", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      executionMode: ExecutionMode.PLAN,
+      outputFormat: "json",
+      resourceType: "AWS::S3::Bucket",
+      desiredState: { BucketName: "my-bucket" },
+      bpFindings: [
+        {
+          practiceId: "BP-S3-001",
+          title: "Block S3 Public Access",
+          severity: "CRITICAL",
+          category: "security",
+          message: "S3 bucket allows public access",
+          blocking: true,
+        },
+      ] as any,
+    });
+
+    const result = await resultFormatterNode(state);
+
+    // promptFixSelection must NOT be called for JSON output
+    expect(promptFixSelection).not.toHaveBeenCalled();
+    // renderPlanBox must NOT be called for JSON output
+    expect(renderPlanBox).not.toHaveBeenCalled();
+    // JSON should have been written to stdout
+    const written = stdoutCalls.join("");
+    const parsed = JSON.parse(written.trim());
+    expect(parsed.resourceType).toBe("AWS::S3::Bucket");
+    expect(parsed.desiredState).toEqual({ BucketName: "my-bucket" });
+    expect(parsed.bpFindings).toHaveLength(1);
     expect(result).toEqual({});
   });
 });

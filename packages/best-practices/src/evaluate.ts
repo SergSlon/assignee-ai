@@ -42,14 +42,28 @@ export function getField(obj: Record<string, unknown>, path: string): unknown {
       return undefined;
     }
 
-    // Check for array index notation: "fieldName[0]"
-    const arrayMatch = segment.match(/^([^[]+)\[(\d+)\]$/);
-    if (arrayMatch) {
-      const [, fieldName, indexStr] = arrayMatch;
-      const arr = (current as Record<string, unknown>)[fieldName!];
-      if (!Array.isArray(arr)) return undefined;
-      const index = parseInt(indexStr!, 10);
-      current = arr[index];
+    // Check for bracket notation: "fieldName[0]" (numeric) or "fieldName[key]" (string)
+    const bracketMatch = segment.match(/^([^[]+)\[(.+)\]$/);
+    if (bracketMatch) {
+      const [, fieldName, bracketKey] = bracketMatch;
+      const container = (current as Record<string, unknown>)[fieldName!];
+      if (container === null || container === undefined) return undefined;
+      // Numeric index → array access
+      if (/^\d+$/.test(bracketKey!)) {
+        if (!Array.isArray(container)) return undefined;
+        current = container[parseInt(bracketKey!, 10)];
+      } else if (Array.isArray(container)) {
+        // String key on an array — find element by key match (ELBv2 LoadBalancerAttributes pattern)
+        const found = container.find(
+          (item) => typeof item === "object" && item !== null && (item as Record<string, unknown>)["Key"] === bracketKey,
+        );
+        current = found ? (found as Record<string, unknown>)["Value"] : undefined;
+      } else if (typeof container === "object") {
+        // String key on an object — direct lookup
+        current = (container as Record<string, unknown>)[bracketKey!];
+      } else {
+        return undefined;
+      }
     } else {
       current = (current as Record<string, unknown>)[segment];
     }
@@ -82,18 +96,63 @@ function checkPasses(
       return fieldValue === undefined;
 
     case "greater_than": {
+      // Missing expected_value or fieldValue → fail to surface the finding
+      if (expectedValue === undefined || expectedValue === null) return false;
+      if (fieldValue === undefined || fieldValue === null) return false;
       const numField = Number(fieldValue);
       const numExpected = Number(expectedValue);
-      if (Number.isNaN(numField) || Number.isNaN(numExpected)) return true;
+      // Non-numeric values → fail (surface finding for misconfigured fields)
+      if (Number.isNaN(numField) || Number.isNaN(numExpected)) return false;
       return numField > numExpected;
     }
 
     case "less_than": {
+      if (expectedValue === undefined || expectedValue === null) return false;
+      if (fieldValue === undefined || fieldValue === null) return false;
       const numField = Number(fieldValue);
       const numExpected = Number(expectedValue);
-      if (Number.isNaN(numField) || Number.isNaN(numExpected)) return true;
+      if (Number.isNaN(numField) || Number.isNaN(numExpected)) return false;
       return numField < numExpected;
     }
+
+    case "contains": {
+      // Missing field cannot contain anything → fail
+      if (fieldValue === undefined || fieldValue === null) return false;
+      if (typeof fieldValue === "string" && typeof expectedValue === "string") {
+        return fieldValue.includes(expectedValue);
+      }
+      if (Array.isArray(fieldValue)) {
+        const expected = JSON.stringify(expectedValue);
+        return fieldValue.some((item) => JSON.stringify(item) === expected);
+      }
+      // Non-string, non-array (number, boolean, object) → cannot "contain" → fail
+      return false;
+    }
+
+    case "not_contains": {
+      // Missing field trivially does not contain the value → pass
+      if (fieldValue === undefined || fieldValue === null) return true;
+      if (typeof fieldValue === "string" && typeof expectedValue === "string") {
+        return !fieldValue.includes(expectedValue);
+      }
+      if (Array.isArray(fieldValue)) {
+        const expected = JSON.stringify(expectedValue);
+        return !fieldValue.some((item) => JSON.stringify(item) === expected);
+      }
+      // Non-string, non-array → cannot meaningfully contain anything → pass
+      return true;
+    }
+
+    case "conditional_forbidden":
+      // Field must not exist when the condition is met. Both undefined and
+      // null are treated as "absent" (CFN uses null for unset fields).
+      return fieldValue === undefined || fieldValue === null;
+
+    case "awareness":
+    case "cross_resource_count":
+    case "cross_resource_reference":
+      // Awareness checks always "fire" — they surface informational findings.
+      return false;
 
     default:
       return true;
@@ -167,7 +226,7 @@ function buildFinding(bp: BestPractice): BPFinding {
     category: bp.category,
     message:
       bp.description ??
-      `${bp.title} — expected ${bp.property_path} ${bp.check_type} ${bp.expected_value}`,
+      `${bp.title} — expected ${bp.property_path} ${bp.check_type} ${typeof bp.expected_value === "object" ? JSON.stringify(bp.expected_value) : bp.expected_value}`,
     remediation: bp.remediation,
     blocking: bp.blocking ?? false,
   };
@@ -177,10 +236,17 @@ function buildFinding(bp: BestPractice): BPFinding {
     finding.desiredStatePatch = bp.desiredStatePatch;
   }
 
+  // Story 35.5: Always propagate property_path so FixCommandResolver can categorize
+  finding.propertyPath = bp.property_path;
+
+  // Story 35.7: Propagate human-readable fix hint
+  if (bp.fix_hint) {
+    finding.fixHint = bp.fix_hint;
+  }
+
   if (bp.fixType) {
     finding.fixType = bp.fixType;
     finding.interactiveOptions = bp.interactiveOptions;
-    finding.propertyPath = bp.property_path;
   }
 
   return finding;

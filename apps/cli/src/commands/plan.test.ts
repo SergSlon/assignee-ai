@@ -279,6 +279,118 @@ describe("planCommand — run callback (no --no-apply)", () => {
     expect(result.success).toBe(true);
   });
 
+  it("T2.6: TTY + preflightPassed=false but no blocking findings after fix → shows apply prompt", async () => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+
+    // Simulate: preflight failed originally, but interactive fix removed all blocking findings
+    const ctx = makeCtx(() =>
+      Promise.resolve({
+        executionStatus: ExecutionStatus.SUCCESS,
+        preflightPassed: false,
+        bpFindings: [
+          {
+            practiceId: "BP-S3-007",
+            title: "S3 lifecycle",
+            severity: "MEDIUM",
+            category: "cost",
+            message: "Missing lifecycle",
+            blocking: false, // no blocking findings remain
+            propertyPath: "LifecycleConfiguration",
+          },
+        ],
+      }),
+    );
+
+    const result = await capturedOpts!.run(ctx);
+
+    // Should NOT show the blocking warning — blocking findings were resolved
+    const clack = await import("@clack/prompts");
+    expect(clack.log.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("Cannot apply"),
+    );
+    // Should show the apply prompt since blockers are gone
+    expect(renderApplyNowConfirm).toHaveBeenCalled();
+    expect(result.success).toBe(true);
+  });
+
+  it("P1-1: blocking findings removed after interactive fix → 'Apply now?' prompt appears", async () => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+
+    // Graph returns preflightPassed=false (blockers existed at evaluation time),
+    // but result-formatter's promptFixSelection already removed all blocking findings
+    // from bpFindings (simulating the user fixing them interactively).
+    const ctx = makeCtx(() =>
+      Promise.resolve({
+        executionStatus: ExecutionStatus.SUCCESS,
+        preflightPassed: false,
+        resourceType: "AWS::S3::Bucket",
+        desiredState: {
+          BucketName: "test",
+          PublicAccessBlockConfiguration: { BlockPublicAcls: true },
+        },
+        userIntent: "Create an S3 bucket",
+        bpFindings: [
+          {
+            practiceId: "BP-S3-007",
+            title: "S3 lifecycle",
+            severity: "MEDIUM",
+            category: "cost",
+            message: "Missing lifecycle",
+            blocking: false, // was blocking, but fix resolved it
+            propertyPath: "LifecycleConfiguration",
+          },
+        ],
+      }),
+    );
+
+    vi.mocked(renderApplyNowConfirm).mockResolvedValue(false);
+    const result = await capturedOpts!.run(ctx);
+
+    // The blocking re-check in plan.ts should see no remaining blockers
+    // and present the "Apply now?" prompt instead of the "Cannot apply" warning
+    const clack = await import("@clack/prompts");
+    expect(clack.log.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("Cannot apply"),
+    );
+    expect(renderApplyNowConfirm).toHaveBeenCalled();
+    expect(result.success).toBe(true);
+  });
+
+  it("P1-1b: plan with no findings (all checks passed) shows no fix prompt and offers apply", async () => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+
+    const ctx = makeCtx(() =>
+      Promise.resolve({
+        executionStatus: ExecutionStatus.SUCCESS,
+        preflightPassed: true,
+        resourceType: "AWS::S3::Bucket",
+        desiredState: { BucketName: "test" },
+        userIntent: "Create an S3 bucket",
+        bpFindings: [], // no findings at all — "All checks passed"
+      }),
+    );
+
+    vi.mocked(renderApplyNowConfirm).mockResolvedValue(false);
+    const result = await capturedOpts!.run(ctx);
+
+    // No blocking warning, apply prompt appears
+    const clack = await import("@clack/prompts");
+    expect(clack.log.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("Cannot apply"),
+    );
+    expect(renderApplyNowConfirm).toHaveBeenCalled();
+    expect(result.success).toBe(true);
+  });
+
   it("T2.7: non-TTY — no apply prompt", async () => {
     const ctx = makeCtx();
     const result = await capturedOpts!.run(ctx);
@@ -400,5 +512,36 @@ describe("planCommand — run callback (no --no-apply)", () => {
 
     expect(renderError).toHaveBeenCalledWith("Apply failed");
     expect(result.success).toBe(false);
+  });
+});
+
+// ── P1-6: --no-apply skips renderApplyNowConfirm ──────────────────────────
+// MUST be last describe block — Commander is a singleton and parseAsync with
+// --no-apply mutates the shared command instance's opts.
+
+describe("planCommand — run callback (--no-apply)", () => {
+  beforeEach(async () => {
+    capturedOpts = null;
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--no-apply",
+      "Create an S3 bucket",
+    ]);
+    expect(capturedOpts).not.toBeNull();
+  });
+
+  it("P1-6: --no-apply skips renderApplyNowConfirm entirely", async () => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+
+    const ctx = makeCtx();
+    const result = await capturedOpts!.run(ctx);
+
+    expect(renderApplyNowConfirm).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
   });
 });

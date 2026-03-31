@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "EC2.2"
 description: "EC2 instances should not use the default security group. Default security groups allow all inbound traffic from instances in the same group and all outbound traffic, creating overly permissive network access."
 remediation: "Create a custom security group with least-privilege rules and assign it to the instance instead of the default security group."
+fix_hint: "Create a custom security group with least-privilege rules"
 category: security
 lastVerified: "2026-03-24"

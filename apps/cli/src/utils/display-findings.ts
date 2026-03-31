@@ -1,0 +1,157 @@
+/**
+ * Findings display helpers for Assignee.ai CLI.
+ * Extracted from display.ts — formatFindings, formatFreeTierNote, formatMemoryHints.
+ */
+
+import chalk from "chalk";
+import type { BPFinding } from "@assignee/best-practices";
+import type { FreeTierNote } from "./free-tier.js";
+import {
+  resolveAction,
+  countFixable,
+} from "./fix-command-resolver.js";
+
+/**
+ * Formats all findings (blocking + non-blocking) for display in the plan box.
+ * Each finding shows a second line with actionable fix hint from FixCommandResolver.
+ * Summary line includes fixable count.
+ * TTY mode uses chalk coloring. Non-TTY mode uses plain text markers.
+ *
+ * @see Story 18.10, Story 35.3
+ */
+export function formatFindings(findings: BPFinding[] | undefined): string {
+  const items = findings ?? [];
+  const isTTY = process.stdout.isTTY;
+
+  if (items.length === 0) {
+    return isTTY
+      ? `Findings:        ${chalk.green("All checks passed")}`
+      : "Findings:        PASS All checks passed";
+  }
+
+  const blocking = items.filter((f) => f.blocking);
+  const critical = items.filter(
+    (f) => !f.blocking && f.severity === "CRITICAL",
+  );
+  const high = items.filter((f) => !f.blocking && f.severity === "HIGH");
+  const medium = items.filter((f) => !f.blocking && f.severity === "MEDIUM");
+  const info = items.filter((f) => !f.blocking && f.severity === "INFO");
+
+  const fixableCount = countFixable(items);
+
+  const severitySummary = [
+    blocking.length > 0 ? `${blocking.length} blocking` : null,
+    critical.length > 0 ? `${critical.length} critical` : null,
+    high.length > 0 ? `${high.length} high` : null,
+    medium.length > 0 ? `${medium.length} medium` : null,
+    info.length > 0 ? `${info.length} info` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const summary =
+    fixableCount > 0
+      ? `${severitySummary} (${fixableCount} fixable)`
+      : severitySummary;
+
+  if (isTTY) {
+    const lines = [
+      `Findings:        ${summary}`,
+      ...items.flatMap((f) => {
+        const action = resolveAction(f);
+        const userChoice = f.userExplicitChoice ? " (user choice)" : "";
+        const skipped = f.userSkipped ? " (skipped)" : "";
+        const suffix = `${userChoice}${skipped}`;
+
+        let severityLine: string;
+        if (f.blocking)
+          severityLine = chalk.red(`  BLOCK  ${f.title}${suffix}`);
+        else if (f.severity === "CRITICAL")
+          severityLine = chalk.red.bold(`  CRIT   ${f.title}${suffix}`);
+        else if (f.severity === "HIGH")
+          severityLine = chalk.red(`  HIGH   ${f.title}${suffix}`);
+        else if (f.severity === "MEDIUM")
+          severityLine = chalk.yellow(`  WARN   ${f.title}${suffix}`);
+        else severityLine = chalk.blue(`  INFO   ${f.title}${suffix}`);
+
+        // Action hint line
+        const hintPrefix =
+          action.category === "auto-fixable"
+            ? "Fix"
+            : action.category === "wizard-fixable"
+              ? "Fix"
+              : action.category === "manual"
+                ? "Manual"
+                : "Info";
+        const hintLine = chalk.dim(
+          `         \u2192 ${hintPrefix}: ${action.hint}`,
+        );
+
+        return [severityLine, hintLine];
+      }),
+    ];
+    return lines.join("\n");
+  }
+
+  // Non-TTY: plain text without chalk
+  const lines = [
+    `Findings:        ${summary}`,
+    ...items.flatMap((f) => {
+      const action = resolveAction(f);
+      const userChoice = f.userExplicitChoice ? " (user choice)" : "";
+      const skipped = f.userSkipped ? " (skipped)" : "";
+      const suffix = `${userChoice}${skipped}`;
+
+      let severityLine: string;
+      if (f.blocking) severityLine = `  [BLOCK] ${f.title}${suffix}`;
+      else if (f.severity === "CRITICAL")
+        severityLine = `  [CRITICAL] ${f.title}${suffix}`;
+      else if (f.severity === "HIGH")
+        severityLine = `  [HIGH] ${f.title}${suffix}`;
+      else if (f.severity === "MEDIUM")
+        severityLine = `  [MEDIUM] ${f.title}${suffix}`;
+      else severityLine = `  [INFO] ${f.title}${suffix}`;
+
+      const hintPrefix =
+        action.category === "auto-fixable" || action.category === "wizard-fixable"
+          ? "Fix"
+          : action.category === "manual"
+            ? "Manual"
+            : "Info";
+      const hintLine = `         -> ${hintPrefix}: ${action.hint}`;
+
+      return [severityLine, hintLine];
+    }),
+  ];
+  return lines.join("\n");
+}
+
+/**
+ * Formats a free tier note for display in the plan box.
+ * Returns null if no note is present.
+ */
+export function formatFreeTierNote(note: FreeTierNote | undefined): string | null {
+  if (!note) return null;
+  const icon = note.type === "always_free" ? "\u2713" : "\u2139";
+  return `Free Tier:       ${icon} ${note.message}`;
+}
+
+/**
+ * Formats memory hints for display in the plan box (Story 19.3).
+ * Separates cost history (provision records) from warnings (failure records).
+ * Returns null if no hints are present.
+ */
+export function formatMemoryHints(hints: string[] | undefined): string | null {
+  if (!hints || hints.length === 0) return null;
+  const isTTY = process.stdout.isTTY;
+  const lines = hints.map((h) => {
+    // Failure warnings get a different label from cost history
+    const isWarning = h.startsWith("\u26A0");
+    const label = isWarning ? "Warning:         " : "Cost History:    ";
+    const formatted = isWarning ? h.replace(/^\u26A0\uFE0F?\s*/, "") : h;
+    return isTTY
+      ? (isWarning ? chalk.yellow(`${label}${formatted}`) : chalk.dim(`${label}${formatted}`))
+      : `${label}${formatted}`;
+  });
+  return lines.join("\n");
+}

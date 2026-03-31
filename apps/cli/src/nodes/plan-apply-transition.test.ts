@@ -24,6 +24,7 @@ vi.mock("../utils/display.js", () => ({
   renderDependencyPlan: vi.fn(),
   renderHitlCompoundConfirm: vi.fn(),
   stopSpinner: vi.fn(),
+  promptFixSelection: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../utils/logger.js", () => ({

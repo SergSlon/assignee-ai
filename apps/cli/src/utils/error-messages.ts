@@ -84,6 +84,13 @@ const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     howToFix:
       'Choose a more specific bucket name (e.g., "my-company-logs-2026") or add a random suffix.',
   },
+  BucketNameNotAvailable: {
+    code: "BucketNameNotAvailable",
+    what: "The requested S3 bucket name is not available.",
+    why: "The S3 bucket name is already taken by another AWS account. S3 bucket names are globally unique across all AWS accounts.",
+    howToFix:
+      "Choose a different bucket name and re-run the command. Tip: use a prefix like your org name (e.g., myorg-my-bucket).",
+  },
   AccessDenied: {
     code: "AccessDenied",
     what: "AWS denied access to perform this operation.",
@@ -467,6 +474,8 @@ export class ErrorMessageRegistry {
 
   private matchAwsErrorName(message: string): ErrorMessageEntry | undefined {
     const awsPatterns: Array<[RegExp | string, string]> = [
+      ["bucket name is not available", "BucketNameNotAvailable"],
+      ["bucket name is already taken", "BucketNameNotAvailable"],
       ["BucketAlreadyExists", "BucketAlreadyExists"],
       ["BucketAlreadyOwnedByYou", "BucketAlreadyExists"],
       ["AccessDenied", "AccessDenied"],

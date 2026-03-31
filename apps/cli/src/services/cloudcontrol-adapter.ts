@@ -36,6 +36,11 @@ function classifyError(err: unknown): ProvisioningPortError {
     return { kind: ProvisioningErrorKind.THROTTLED, message: err.message };
   }
   if (err instanceof GeneralServiceException) {
+    // S3 "bucket name is not available" comes as GeneralServiceException
+    // but is semantically an ALREADY_EXISTS error (globally unique names).
+    if (err.message.includes("bucket name is not available")) {
+      return { kind: ProvisioningErrorKind.ALREADY_EXISTS, message: err.message };
+    }
     return { kind: ProvisioningErrorKind.SERVICE_ERROR, message: err.message };
   }
   // AccessDeniedException is not exported as a class by the CloudControl SDK;

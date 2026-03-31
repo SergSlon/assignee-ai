@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "EC2.9"
 description: "EC2 instances should not have public IP addresses unless absolutely required. Public IPs expose instances directly to the internet, increasing the attack surface for brute-force, scanning, and exploitation."
 remediation: "Set AssociatePublicIpAddress to false. Place instances in private subnets and use a NAT gateway for outbound access. Use an ALB or NLB for inbound traffic."
+fix_hint: "Disable public IP; use private subnet with NAT/ALB"
 category: security
 lastVerified: "2026-03-22"

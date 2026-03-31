@@ -320,7 +320,7 @@ describe("evaluateTriggers — greater_than", () => {
     expect(findings).toHaveLength(0);
   });
 
-  it("does NOT fire when field is non-numeric (safe default)", () => {
+  it("fires when field is non-numeric (surfaces misconfiguration)", () => {
     const bp = makeBP({
       check_type: "greater_than",
       expected_value: 90,
@@ -329,7 +329,7 @@ describe("evaluateTriggers — greater_than", () => {
     const ctx = makeCtx({ desiredState: { RetentionDays: "not-a-number" } });
 
     const findings = evaluateTriggers(ctx, [bp]);
-    expect(findings).toHaveLength(0);
+    expect(findings).toHaveLength(1);
   });
 });
 
@@ -542,6 +542,93 @@ describe("evaluateTriggers — edge cases", () => {
     expect(findings[0]!.blocking).toBe(false);
   });
 
+  it("contains check: fieldValue is undefined → should fail (finding fires)", () => {
+    const bp = makeBP({
+      check_type: "contains",
+      expected_value: "something",
+      property_path: "Tags",
+    });
+    const ctx = makeCtx({ desiredState: {} }); // Tags is undefined
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.practiceId).toBe("BP-TEST-001");
+  });
+
+  it("contains check: fieldValue is array of objects, expectedValue is structurally equal object → should pass", () => {
+    const bp = makeBP({
+      check_type: "contains",
+      expected_value: { Key: "Environment", Value: "prod" },
+      property_path: "Tags",
+    });
+    const ctx = makeCtx({
+      desiredState: {
+        Tags: [
+          { Key: "Name", Value: "my-bucket" },
+          { Key: "Environment", Value: "prod" },
+        ],
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0); // check passes, no finding
+  });
+
+  it("not_contains check: fieldValue is array with structurally equal object → should fail (finding fires)", () => {
+    const bp = makeBP({
+      check_type: "not_contains",
+      expected_value: { Key: "PublicAccess", Value: "true" },
+      property_path: "Tags",
+    });
+    const ctx = makeCtx({
+      desiredState: {
+        Tags: [
+          { Key: "PublicAccess", Value: "true" },
+        ],
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1); // not_contains fails → finding fires
+  });
+
+  it("conditional_forbidden: fieldValue is null → should pass (null treated as absent)", () => {
+    const bp = makeBP({
+      check_type: "conditional_forbidden",
+      property_path: "PublicAccess",
+    });
+    const ctx = makeCtx({
+      desiredState: { PublicAccess: null },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0); // null is treated as absent → passes
+  });
+
+  it("greater_than: expectedValue is undefined → should fail (finding fires)", () => {
+    const bp = makeBP({
+      check_type: "greater_than",
+      expected_value: undefined,
+      property_path: "RetentionDays",
+    });
+    const ctx = makeCtx({ desiredState: { RetentionDays: 90 } });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1); // undefined expected is a config error → finding fires
+  });
+
+  it("less_than: expectedValue is undefined → should fail (finding fires)", () => {
+    const bp = makeBP({
+      check_type: "less_than",
+      expected_value: undefined,
+      property_path: "MaxRetries",
+    });
+    const ctx = makeCtx({ desiredState: { MaxRetries: 2 } });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1); // undefined expected is a config error → finding fires
+  });
+
   it("uses fallback message when description is undefined", () => {
     const bp = makeBP({
       description: undefined,
@@ -557,6 +644,217 @@ describe("evaluateTriggers — edge cases", () => {
     expect(findings[0]!.message).toBe(
       "My Rule — expected Foo exists undefined",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// evaluateTriggers — Story 35.5/35.7 field propagation to BPFinding
+// ---------------------------------------------------------------------------
+
+describe("evaluateTriggers — BPFinding field propagation (Stories 35.5, 35.7)", () => {
+  it("P0-4. propagates propertyPath from BP to BPFinding (Story 35.5)", () => {
+    // Dot-notation path
+    const bp1 = makeBP({
+      property_path: "PublicAccessBlockConfiguration.BlockPublicAcls",
+      check_type: "equals",
+      expected_value: true,
+    });
+    const ctx1 = makeCtx({ desiredState: {} });
+    const findings1 = evaluateTriggers(ctx1, [bp1]);
+    expect(findings1).toHaveLength(1);
+    expect(findings1[0]!.propertyPath).toBe(
+      "PublicAccessBlockConfiguration.BlockPublicAcls",
+    );
+
+    // Array-notation path
+    const bp2 = makeBP({
+      id: "BP-EC2-003",
+      resource_type: "AWS::EC2::Instance",
+      property_path: "BlockDeviceMappings[0].Ebs.Encrypted",
+      check_type: "equals",
+      expected_value: true,
+    });
+    const ctx2 = makeCtx({
+      resourceType: "AWS::EC2::Instance",
+      desiredState: {},
+    });
+    const findings2 = evaluateTriggers(ctx2, [bp2]);
+    expect(findings2).toHaveLength(1);
+    expect(findings2[0]!.propertyPath).toBe(
+      "BlockDeviceMappings[0].Ebs.Encrypted",
+    );
+  });
+
+  it("P0-5. propagates fix_hint to BPFinding.fixHint (Story 35.7)", () => {
+    // With fix_hint set
+    const bp = makeBP({
+      fix_hint: "Enable versioning in the S3 console under Properties > Bucket Versioning",
+      check_type: "exists",
+      property_path: "VersioningConfiguration.Status",
+    });
+    const ctx = makeCtx({ desiredState: {} });
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.fixHint).toBe(
+      "Enable versioning in the S3 console under Properties > Bucket Versioning",
+    );
+
+    // Without fix_hint — fixHint should be undefined (not null, not empty string)
+    const bpNoHint = makeBP({
+      check_type: "exists",
+      property_path: "EncryptionConfiguration",
+    });
+    const ctxNoHint = makeCtx({ desiredState: {} });
+    const findingsNoHint = evaluateTriggers(ctxNoHint, [bpNoHint]);
+    expect(findingsNoHint).toHaveLength(1);
+    expect(findingsNoHint[0]!.fixHint).toBeUndefined();
+  });
+
+  it("P0-6. propagates fixType and interactiveOptions to BPFinding", () => {
+    const bp = makeBP({
+      fixType: "interactive",
+      interactiveOptions: [
+        { label: "IMDSv2 (recommended)", action: "prompt_value" as const, targetField: "HttpTokens" },
+        { label: "Skip", action: "skip" as const },
+      ],
+      property_path: "MetadataOptions.HttpTokens",
+      check_type: "equals",
+      expected_value: "required",
+    });
+    const ctx = makeCtx({ desiredState: {} });
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.fixType).toBe("interactive");
+    expect(findings[0]!.interactiveOptions).toHaveLength(2);
+    expect(findings[0]!.interactiveOptions![0]!.label).toBe("IMDSv2 (recommended)");
+    expect(findings[0]!.interactiveOptions![0]!.action).toBe("prompt_value");
+    expect(findings[0]!.interactiveOptions![0]!.targetField).toBe("HttpTokens");
+    expect(findings[0]!.interactiveOptions![1]!.label).toBe("Skip");
+    expect(findings[0]!.interactiveOptions![1]!.action).toBe("skip");
+
+    // Without fixType — should be undefined
+    const bpNoFix = makeBP({
+      check_type: "exists",
+      property_path: "SomeField",
+    });
+    const ctxNoFix = makeCtx({ desiredState: {} });
+    const findingsNoFix = evaluateTriggers(ctxNoFix, [bpNoFix]);
+    expect(findingsNoFix).toHaveLength(1);
+    expect(findingsNoFix[0]!.fixType).toBeUndefined();
+    expect(findingsNoFix[0]!.interactiveOptions).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-4: autoFixable + desiredStatePatch propagation in buildFinding
+// ---------------------------------------------------------------------------
+
+describe("evaluateTriggers — autoFixable and desiredStatePatch propagation (P2-4)", () => {
+  it("propagates autoFixable=true and desiredStatePatch when set on BP", () => {
+    const bp = makeBP({
+      autoFixable: true,
+      desiredStatePatch: {
+        PublicAccessBlockConfiguration: { BlockPublicAcls: true },
+      },
+      check_type: "equals",
+      expected_value: true,
+      property_path: "PublicAccessBlockConfiguration.BlockPublicAcls",
+    });
+    const ctx = makeCtx({ desiredState: {} });
+    const findings = evaluateTriggers(ctx, [bp]);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.autoFixable).toBe(true);
+    expect(findings[0]!.desiredStatePatch).toEqual({
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true },
+    });
+  });
+
+  it("does not set autoFixable when BP.autoFixable is undefined", () => {
+    const bp = makeBP({
+      // autoFixable not set (undefined)
+      check_type: "exists",
+      property_path: "SomeField",
+    });
+    const ctx = makeCtx({ desiredState: {} });
+    const findings = evaluateTriggers(ctx, [bp]);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.autoFixable).toBeUndefined();
+    expect(findings[0]!.desiredStatePatch).toBeUndefined();
+  });
+
+  it("does not set autoFixable when BP.autoFixable is false", () => {
+    const bp = makeBP({
+      autoFixable: false,
+      desiredStatePatch: { ShouldNotAppear: true },
+      check_type: "exists",
+      property_path: "MissingField",
+    });
+    const ctx = makeCtx({ desiredState: {} });
+    const findings = evaluateTriggers(ctx, [bp]);
+
+    expect(findings).toHaveLength(1);
+    // autoFixable is false (falsy) so buildFinding should NOT copy it or desiredStatePatch
+    expect(findings[0]!.autoFixable).toBeUndefined();
+    expect(findings[0]!.desiredStatePatch).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-5: awareness check_type always fires (returns false from checkPasses)
+// ---------------------------------------------------------------------------
+
+describe("evaluateTriggers — awareness check_type always fires (P2-5)", () => {
+  it("awareness check_type fires regardless of field value", () => {
+    const bp = makeBP({
+      check_type: "awareness",
+      property_path: "SomeField",
+      expected_value: undefined,
+    });
+    // Even when the field exists and matches, awareness should still fire
+    const ctx = makeCtx({ desiredState: { SomeField: "any-value" } });
+    const findings = evaluateTriggers(ctx, [bp]);
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.practiceId).toBe("BP-TEST-001");
+  });
+
+  it("awareness check_type fires even when field is missing", () => {
+    const bp = makeBP({
+      check_type: "awareness",
+      property_path: "MissingField",
+      expected_value: undefined,
+    });
+    const ctx = makeCtx({ desiredState: {} });
+    const findings = evaluateTriggers(ctx, [bp]);
+
+    expect(findings).toHaveLength(1);
+  });
+
+  it("cross_resource_count check_type always fires (same as awareness)", () => {
+    const bp = makeBP({
+      check_type: "cross_resource_count",
+      property_path: "SomeField",
+      expected_value: 3,
+    });
+    const ctx = makeCtx({ desiredState: { SomeField: 3 } });
+    const findings = evaluateTriggers(ctx, [bp]);
+
+    // Even though field value matches expected, cross_resource_count always fires
+    expect(findings).toHaveLength(1);
+  });
+
+  it("cross_resource_reference check_type always fires", () => {
+    const bp = makeBP({
+      check_type: "cross_resource_reference",
+      property_path: "RoleArn",
+      expected_value: "some-arn",
+    });
+    const ctx = makeCtx({ desiredState: { RoleArn: "some-arn" } });
+    const findings = evaluateTriggers(ctx, [bp]);
+
+    expect(findings).toHaveLength(1);
   });
 });
 
