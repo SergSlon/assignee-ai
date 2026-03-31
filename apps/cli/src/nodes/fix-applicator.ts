@@ -17,6 +17,7 @@ import type { BPFinding } from "@assignee/best-practices";
 import type { AgentState } from "../services/graph.js";
 import type { AppliedFix } from "../services/graph-state.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { wizardKeyMap } from "../utils/wizard-key-map.js";
 
 /** Directory name for project-level config. */
 const CONFIG_DIR = ".assignee";
@@ -119,31 +120,13 @@ function isFieldExplicitlySet(
     if (key in elicitedOptions) return true;
 
     // Check nested: if patch has { BlockDeviceMappings: [...] } and elicited has { EbsEncrypted: ... }
-    // We need a mapping from BP patch keys to wizard field names
-    const wizardKeyMap: Record<string, string[]> = {
-      BlockDeviceMappings: ["EbsEncrypted", "EbsVolumeType", "EbsVolumeSize"],
-      MetadataOptions: ["HttpTokens"],
-      PublicAccessBlockConfiguration: [
-        "BlockPublicAcls",
-        "BlockPublicPolicy",
-        "IgnorePublicAcls",
-        "RestrictPublicBuckets",
-      ],
-      PubliclyAccessible: ["PubliclyAccessible"],
-      StorageEncrypted: ["StorageEncrypted"],
-      MultiAZ: ["MultiAZ"],
-      DeletionProtection: ["DeletionProtection"],
-      OwnershipControls: ["OwnershipControls"],
-      VersioningConfiguration: ["VersioningConfiguration"],
-      BucketEncryption: ["BucketEncryption", "KMSMasterKeyID"],
-      LifecycleConfiguration: ["EnableLifecycle", "LifecycleTransitionDays", "LifecycleExpirationDays"],
-    };
-
+    // Uses shared wizardKeyMap (Story 35.1)
     const wizardKeys = wizardKeyMap[key];
     if (wizardKeys === undefined) {
-      // Unknown patch key not in wizardKeyMap — safe default: assume explicitly set
-      // to avoid overriding unknown fields.
-      return true;
+      // Unknown patch key not in wizardKeyMap — check if the key itself
+      // was directly set by the user. Only block if it was.
+      if (key in elicitedOptions) return true;
+      continue;
     }
     if (wizardKeys.some((wk) => wk in elicitedOptions)) {
       return true;
@@ -154,16 +137,39 @@ function isFieldExplicitlySet(
 }
 
 /**
- * Extract the "old value" from desiredState for the first key in a patch,
- * for display purposes in the applied fix record.
+ * Extract the "old value" from desiredState by walking the same nested path
+ * as the patch, so the display shows the actual value being replaced (leaf),
+ * not the entire top-level object.
  */
 function extractOldValue(
   desiredState: Record<string, unknown>,
   patch: Record<string, unknown>,
 ): unknown {
-  const firstKey = Object.keys(patch)[0];
-  if (!firstKey) return undefined;
-  return desiredState[firstKey];
+  let current: unknown = desiredState;
+  let patchLevel: unknown = patch;
+
+  while (
+    typeof patchLevel === "object" &&
+    patchLevel !== null &&
+    !Array.isArray(patchLevel)
+  ) {
+    const keys = Object.keys(patchLevel as Record<string, unknown>);
+    if (keys.length === 0) break;
+    const key = keys[0]!;
+    const nextPatch = (patchLevel as Record<string, unknown>)[key];
+    if (typeof current === "object" && current !== null && !Array.isArray(current)) {
+      current = (current as Record<string, unknown>)[key];
+    } else {
+      return undefined;
+    }
+    // If the next level of the patch is a scalar, we've found the leaf — return current
+    if (typeof nextPatch !== "object" || nextPatch === null || Array.isArray(nextPatch)) {
+      return current;
+    }
+    patchLevel = nextPatch;
+  }
+
+  return current;
 }
 
 /**
@@ -201,6 +207,33 @@ function extractFieldPath(patch: Record<string, unknown>): string {
 }
 
 /**
+ * Check if every key-value in a patch already exists in the target state.
+ * Walks the patch tree recursively and compares leaf values.
+ */
+function isPatchAlreadyApplied(
+  state: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): boolean {
+  for (const [key, patchValue] of Object.entries(patch)) {
+    const stateValue = state[key];
+    if (typeof patchValue === "object" && patchValue !== null && !Array.isArray(patchValue)) {
+      if (typeof stateValue !== "object" || stateValue === null || Array.isArray(stateValue)) {
+        return false;
+      }
+      if (!isPatchAlreadyApplied(stateValue as Record<string, unknown>, patchValue as Record<string, unknown>)) {
+        return false;
+      }
+    } else {
+      // Compare with JSON for arrays/primitives
+      if (JSON.stringify(stateValue) !== JSON.stringify(patchValue)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
  * fix_applicator graph node.
  *
  * Applies auto-fixable best practice patches when the user has opted in.
@@ -223,16 +256,11 @@ export async function fixApplicatorNode(
 
   const autoFixEnabled = readAutoFixPreference(state.projectDir);
 
-  // Auto-fix disabled → pass through (all findings remain), but set appliedFixes field
-  if (!autoFixEnabled) {
-    return { appliedFixes: [] };
-  }
+  const autoFixable = autoFixEnabled
+    ? findings.filter((f) => f.autoFixable && f.desiredStatePatch)
+    : [];
 
-  const autoFixable = findings.filter(
-    (f) => f.autoFixable && f.desiredStatePatch,
-  );
-
-  // Check for interactive findings that need TTY handling
+  // Interactive findings are user-driven — not gated behind autoFixBestPractices
   const hasInteractive = findings.some(
     (f) =>
       f.fixType === "interactive" &&
@@ -240,18 +268,22 @@ export async function fixApplicatorNode(
       f.interactiveOptions.length > 0,
   );
 
-  // No auto-fixable and no interactive findings → pass through, but set appliedFixes field
+  // Nothing to do → pass through
   if (autoFixable.length === 0 && !hasInteractive) {
-    return { appliedFixes: [] };
+    return { appliedFixes: [], autoFixEnabled };
   }
 
   const appliedFixes: AppliedFix[] = [];
+  // Keep original for oldValue lookups; mutations go to patchedState
+  const originalState = { ...desiredState };
   let patchedState = { ...desiredState };
   const fixedPracticeIds = new Set<string>();
   const userChoicePracticeIds = new Set<string>();
   const skippedPracticeIds = new Set<string>();
 
   for (const finding of autoFixable) {
+    // Skip if already satisfied by an earlier fix (dedup overlapping BPs)
+    if (fixedPracticeIds.has(finding.practiceId)) continue;
     const patch = finding.desiredStatePatch!;
 
     // Story 22.5: Skip if user explicitly set this field in the wizard
@@ -260,7 +292,16 @@ export async function fixApplicatorNode(
       continue;
     }
 
-    const oldValue = extractOldValue(patchedState, patch);
+    // Check if this patch is already satisfied by a prior fix.
+    // Compare the full patch JSON against the same key path in patchedState
+    // to avoid first-leaf-only comparison bugs with multi-sub-key objects.
+    if (isPatchAlreadyApplied(patchedState, patch)) {
+      fixedPracticeIds.add(finding.practiceId);
+      continue;
+    }
+
+    // Read old value from ORIGINAL state, not already-patched state
+    const oldValue = extractOldValue(originalState, patch);
     patchedState = deepMergePatch(patchedState, patch);
 
     appliedFixes.push({
@@ -283,6 +324,20 @@ export async function fixApplicatorNode(
       !fixedPracticeIds.has(f.practiceId),
   );
 
+  if (interactiveFindings.length > 0 && !process.stdin.isTTY) {
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.FIX_APPLIED,
+      extras: {
+        skippedInteractive: interactiveFindings.length,
+        reason: "non-TTY environment — interactive prompts unavailable",
+        practiceIds: interactiveFindings.map((f) => f.practiceId),
+      },
+    });
+  }
+
   if (interactiveFindings.length > 0 && process.stdin.isTTY) {
     for (const finding of interactiveFindings) {
       const options = finding.interactiveOptions!;
@@ -304,6 +359,7 @@ export async function fixApplicatorNode(
       if (option.action === "prompt_value" && option.targetField) {
         const value = await clack.text({
           message: `Enter value for ${option.targetField}:`,
+          validate: (v) => (!v || v.trim().length === 0 ? "Value cannot be empty" : undefined),
         });
 
         if (!clack.isCancel(value) && value) {
@@ -316,7 +372,37 @@ export async function fixApplicatorNode(
             newValue: value as string,
           });
           fixedPracticeIds.add(finding.practiceId);
+        } else if (!clack.isCancel(value)) {
+          // Empty value after validation bypass — treat as skip
+          skippedPracticeIds.add(finding.practiceId);
         }
+      } else if (option.action === "prompt_value" && !option.targetField) {
+        // Misconfigured option — no targetField to write to; skip
+        skippedPracticeIds.add(finding.practiceId);
+      } else if (option.action === "set_value" && option.targetField) {
+        // Set a predefined value (e.g., ConnectivityType → "private")
+        const oldVal = patchedState[option.targetField];
+        patchedState[option.targetField] = option.targetValue;
+        appliedFixes.push({
+          practiceId: finding.practiceId,
+          title: finding.title,
+          fieldPath: option.targetField,
+          oldValue: oldVal,
+          newValue: option.targetValue,
+        });
+        fixedPracticeIds.add(finding.practiceId);
+      } else if (option.action === "remove_property" && option.targetField) {
+        // Remove a property from desiredState (e.g., remove GatewayId)
+        const oldVal = patchedState[option.targetField];
+        delete patchedState[option.targetField];
+        appliedFixes.push({
+          practiceId: finding.practiceId,
+          title: finding.title,
+          fieldPath: option.targetField,
+          oldValue: oldVal,
+          newValue: undefined,
+        });
+        fixedPracticeIds.add(finding.practiceId);
       } else if (option.action === "skip") {
         skippedPracticeIds.add(finding.practiceId);
       }
@@ -353,5 +439,6 @@ export async function fixApplicatorNode(
     desiredState: patchedState,
     bpFindings: residualFindings,
     appliedFixes,
+    autoFixEnabled: true,
   };
 }

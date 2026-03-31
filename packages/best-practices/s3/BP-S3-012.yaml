@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "S3.15"
 description: "S3 buckets storing compliance-critical data should have Object Lock enabled to prevent accidental or malicious deletion of objects during the retention period."
 remediation: "Enable Object Lock at bucket creation time. Object Lock cannot be enabled on existing buckets — create a new bucket with Object Lock enabled and migrate data."
+fix_hint: "Enable at bucket creation only — cannot add to existing buckets"
 category: compliance
 lastVerified: "2026-03-24"

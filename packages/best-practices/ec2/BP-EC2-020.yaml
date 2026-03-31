@@ -9,5 +9,6 @@ source: "TrustedAdvisor"
 source_id: "DAvU99Dc4C"
 description: "Trusted Advisor identifies EBS volumes with very low read/write IOPS over 14 days. Underutilized volumes represent wasted storage costs, especially GP3 and IO2 volumes."
 remediation: "Review volume utilization metrics and downsize or change volume type. Consider GP3 for variable workloads or deleting unattached volumes."
+fix_hint: "Downsize, switch to gp3, or delete unattached EBS volumes"
 category: cost_optimization
 lastVerified: "2026-03-24"

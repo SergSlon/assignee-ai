@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "S3.7"
 description: "S3 buckets storing critical data should have cross-region replication configured for disaster recovery. Replication ensures data availability even if an entire AWS region becomes unavailable."
 remediation: "Configure ReplicationConfiguration with at least one rule targeting a bucket in a different region. Requires versioning to be enabled on both source and destination buckets."
+fix_hint: "Configure cross-region replication (requires versioning)"
 category: reliability
 lastVerified: "2026-03-24"

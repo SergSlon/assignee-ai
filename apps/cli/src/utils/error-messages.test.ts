@@ -187,6 +187,25 @@ describe("ErrorMessageRegistry — AWS provisioning errors", () => {
     const entry = defaultErrorMessageRegistry.resolve(err);
     expect(entry.code).toBe("AlreadyExists");
   });
+
+  it("matches 'bucket name is not available' from message text", () => {
+    const err = new ProvisioningError(
+      "The requested bucket name is not available. The bucket namespace is shared by all users of the system.",
+      "Unknown",
+    );
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.code).toBe("BucketNameNotAvailable");
+    expect(entry.why).toContain("globally unique");
+    expect(entry.howToFix).toContain("different bucket name");
+  });
+
+  it("matches 'S3 bucket name is already taken' from provisioner prefix", () => {
+    const entry = defaultErrorMessageRegistry.resolveMessage(
+      "CloudControl provisioning failed: S3 bucket name is already taken globally. Choose a different name.",
+    );
+    expect(entry.code).toBe("BucketNameNotAvailable");
+    expect(entry.howToFix).toContain("different bucket name");
+  });
 });
 
 // ── AC 3: Configuration errors ───────────────────────────────────────────────

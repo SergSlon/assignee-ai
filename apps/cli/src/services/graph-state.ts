@@ -162,6 +162,11 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
     default: () => undefined,
   }),
+  // Story 35.6: whether auto-fix is enabled (for display hint in plan box)
+  autoFixEnabled: Annotation<boolean>({
+    reducer: (_, b) => b,
+    default: () => false,
+  }),
   // Project directory for config resolution (MCP servers may have different cwd)
   projectDir: Annotation<string | undefined>({
     reducer: (_, b) => b,

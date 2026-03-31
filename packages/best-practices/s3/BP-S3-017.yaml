@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "S3.9"
 description: "S3 buckets should have server access logging enabled to track requests for security auditing and troubleshooting. Without logging, unauthorized access attempts cannot be investigated."
 remediation: "Configure LoggingConfiguration.DestinationBucketName to point to a dedicated logging bucket. Ensure the logging bucket has appropriate lifecycle rules."
+fix_hint: "Set a logging destination bucket for access logs"
 category: security
 lastVerified: "2026-03-24"

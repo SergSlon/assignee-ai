@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "EC2.25"
 description: "Production EC2 instances should have API termination protection enabled to prevent accidental termination via the console, CLI, or API. Accidental termination can cause service outages and data loss."
 remediation: "Set DisableApiTermination to true for production instances. This can be changed at any time without restarting the instance."
+fix_hint: "Enable termination protection to prevent accidental deletion"
 category: reliability
 lastVerified: "2026-03-24"

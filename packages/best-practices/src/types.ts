@@ -40,8 +40,9 @@ export type BPFixType = (typeof BP_FIX_TYPE)[number];
 
 export interface InteractiveFixOption {
   label: string;
-  action: "prompt_value" | "skip";
+  action: "prompt_value" | "set_value" | "remove_property" | "skip";
   targetField?: string;
+  targetValue?: unknown;
 }
 
 export interface BestPractice {
@@ -65,6 +66,7 @@ export interface BestPractice {
   blocking?: boolean;
   fixType?: BPFixType;
   interactiveOptions?: InteractiveFixOption[];
+  fix_hint?: string;
 }
 
 export interface BPFinding {
@@ -80,6 +82,7 @@ export interface BPFinding {
   fixType?: BPFixType;
   interactiveOptions?: InteractiveFixOption[];
   propertyPath?: string;
+  fixHint?: string;
   userSkipped?: boolean;
   userExplicitChoice?: boolean;
 }

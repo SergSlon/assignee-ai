@@ -759,6 +759,7 @@ export async function promptWithHelp(
   llmClient?: LlmPort,
   userIntent?: string,
   showBack = false,
+  answers?: Record<string, unknown>,
 ): Promise<unknown> {
   let cachedHint: string | null = null;
 
@@ -771,7 +772,7 @@ export async function promptWithHelp(
         }
       : field;
 
-    const answer = await renderOptionPrompt(promptField, resolved, showBack);
+    const answer = await renderOptionPrompt(promptField, resolved, showBack, answers);
 
     // Back navigation — return sentinel to caller (handle both scalar and array from multi-select)
     if (

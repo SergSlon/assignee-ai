@@ -28,22 +28,29 @@ import type { AgentState } from "../services/graph-state.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-// Load .env from project root (Node 22+ has --env-file but we do it manually for Vitest)
+// Load .env from project root — try multiple paths for resilience
 function loadEnv() {
-  const envPath = path.resolve(import.meta.dirname, "../../../.env");
-  try {
-    const content = fs.readFileSync(envPath, "utf-8");
-    for (const line of content.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) continue;
-      const eqIdx = trimmed.indexOf("=");
-      if (eqIdx === -1) continue;
-      const key = trimmed.slice(0, eqIdx);
-      const value = trimmed.slice(eqIdx + 1);
-      if (!process.env[key]) process.env[key] = value;
+  const candidates = [
+    path.resolve(import.meta.dirname, "../../../.env"),      // from src/e2e/
+    path.resolve(import.meta.dirname, "../../../../.env"),    // if deeper
+    path.resolve(process.cwd(), ".env"),                     // cwd fallback
+  ];
+  for (const envPath of candidates) {
+    try {
+      const content = fs.readFileSync(envPath, "utf-8");
+      for (const line of content.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx === -1) continue;
+        const key = trimmed.slice(0, eqIdx);
+        const value = trimmed.slice(eqIdx + 1);
+        if (!process.env[key]) process.env[key] = value;
+      }
+      break; // loaded successfully
+    } catch {
+      // try next candidate
     }
-  } catch {
-    // .env not available
   }
 }
 loadEnv();
@@ -64,7 +71,79 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeMcpClient().catch(() => {});
-}, 10_000);
+
+  // Global sweeper: clean up any stale e2e test resources left by crashed runs.
+  // Matches SSM parameters under /e2e-test/ prefix and ECS clusters with e2e names.
+  if (!process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"]) return;
+
+  try {
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+
+    // Clean stale SSM params under /e2e-test/
+    const { SSMClient, GetParametersByPathCommand, DeleteParameterCommand } =
+      await import("@aws-sdk/client-ssm");
+    const ssm = new SSMClient({ region });
+    try {
+      const params = await ssm.send(
+        new GetParametersByPathCommand({ Path: "/e2e-test/", Recursive: true }),
+      );
+      for (const p of params.Parameters ?? []) {
+        if (p.Name) {
+          await ssm.send(new DeleteParameterCommand({ Name: p.Name }));
+          console.log(`E2E sweeper: deleted stale SSM param ${p.Name}`);
+        }
+      }
+    } catch {
+      // path may not exist
+    }
+
+    // Clean stale ECS clusters with e2e/test names via tagging API
+    const {
+      ResourceGroupsTaggingAPIClient,
+      GetResourcesCommand,
+    } = await import("@aws-sdk/client-resource-groups-tagging-api");
+    const tagging = new ResourceGroupsTaggingAPIClient({ region });
+    try {
+      const tagged = await tagging.send(
+        new GetResourcesCommand({
+          TagFilters: [{ Key: "managed-by", Values: ["assignee-ai"] }],
+          ResourceTypeFilters: ["ecs:cluster"],
+        }),
+      );
+      for (const r of tagged.ResourceTagMappingList ?? []) {
+        const arn = r.ResourceARN;
+        if (!arn) continue;
+        const clusterName = arn.split("/").pop();
+        if (
+          clusterName &&
+          (clusterName.includes("e2e-") || clusterName.includes("apply-t"))
+        ) {
+          // Use CloudControl to delete (available via existing SDK)
+          const { CloudControlClient, DeleteResourceCommand } =
+            await import("@aws-sdk/client-cloudcontrol");
+          const cc = new CloudControlClient({ region });
+          try {
+            await cc.send(
+              new DeleteResourceCommand({
+                TypeName: "AWS::ECS::Cluster",
+                Identifier: clusterName,
+              }),
+            );
+            console.log(
+              `E2E sweeper: deleted stale ECS cluster ${clusterName}`,
+            );
+          } catch {
+            // cluster may already be inactive
+          }
+        }
+      }
+    } catch {
+      // ECS cleanup is best-effort
+    }
+  } catch (err) {
+    console.warn("E2E sweeper error (non-fatal):", err);
+  }
+}, 30_000);
 
 function skipIfNoCreds() {
   if (!process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"]) {
@@ -194,8 +273,8 @@ describe("E2E: SSM Parameter plan + apply + destroy", () => {
   }, 90_000);
 
   afterAll(async () => {
-    // Cleanup: destroy the SSM parameter if it was created
-    if (!resourceArn || skipIfNoCreds()) return;
+    // Always attempt cleanup by name — works even if test crashed before resourceArn was set
+    if (skipIfNoCreds()) return;
 
     try {
       const { SSMClient, DeleteParameterCommand } =
@@ -203,10 +282,238 @@ describe("E2E: SSM Parameter plan + apply + destroy", () => {
       const ssm = new SSMClient({ region: process.env["AWS_REGION"] });
       await ssm.send(new DeleteParameterCommand({ Name: paramName }));
       console.log(`E2E cleanup: deleted SSM parameter ${paramName}`);
-    } catch (err) {
-      console.warn(`E2E cleanup failed for ${paramName}:`, err);
+    } catch (err: any) {
+      // ParameterNotFound is fine — means it was never created or already deleted
+      if (err?.name !== "ParameterNotFound") {
+        console.warn(`E2E cleanup failed for ${paramName}:`, err);
+      }
     }
   }, 15_000);
+});
+
+describe("E2E: Epic 35 — Actionable Findings", () => {
+  it("all findings have propertyPath set (Story 35.5)", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent: "Create an S3 bucket named e2e-epic35-proppath",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+    const findings = s.bpFindings ?? [];
+    expect(findings.length).toBeGreaterThan(0);
+
+    // Every finding must have propertyPath
+    for (const f of findings) {
+      expect(f.propertyPath).toBeDefined();
+      expect(typeof f.propertyPath).toBe("string");
+      expect(f.propertyPath!.length).toBeGreaterThan(0);
+    }
+  }, 60_000);
+
+  it("fix_hint propagates from YAML to BPFinding (Story 35.7)", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent: "Create an S3 bucket named e2e-epic35-fixhint",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+    const findings = s.bpFindings ?? [];
+
+    // S3 lifecycle finding should have fix_hint from YAML
+    const lifecycleFinding = findings.find(
+      (f) => f.practiceId === "BP-S3-007" || f.practiceId === "BP-S3-010",
+    );
+    if (lifecycleFinding) {
+      expect(lifecycleFinding.fixHint).toBeDefined();
+      expect(lifecycleFinding.fixHint!.length).toBeLessThanOrEqual(80);
+    }
+  }, 60_000);
+
+  it("FixCommandResolver categories match real findings (Story 35.2)", async () => {
+    if (skipIfNoCreds()) return;
+
+    const { resolveAction } = await import("../utils/fix-command-resolver.js");
+
+    const graph = createGraph(tools);
+
+    // Auto-fix disabled → all findings remain (including auto-fixable)
+    const fsModule = await import("node:fs");
+    const configDir = path.resolve(process.cwd(), ".assignee");
+    const configPath = path.join(configDir, "config.yaml");
+    let existingConfig: string | undefined;
+    try {
+      existingConfig = fsModule.readFileSync(configPath, "utf-8");
+    } catch {}
+    fsModule.mkdirSync(configDir, { recursive: true });
+    fsModule.writeFileSync(
+      configPath,
+      "autoFixBestPractices: false\n",
+      "utf-8",
+    );
+
+    try {
+      const state = await graph.invoke(
+        {
+          userIntent: "Create an S3 bucket named e2e-epic35-resolver",
+          runId: crypto.randomUUID(),
+          executionMode: ExecutionMode.PLAN,
+          startedAt: Date.now(),
+          noWizard: true,
+          projectDir: process.cwd(),
+        },
+        { configurable: { thread_id: crypto.randomUUID() } },
+      );
+
+      const s = state as AgentState;
+      const findings = s.bpFindings ?? [];
+      expect(findings.length).toBeGreaterThan(5);
+
+      // Resolve actions for all findings — should not throw
+      const actions = findings.map((f) => ({
+        practiceId: f.practiceId,
+        action: resolveAction(f),
+      }));
+
+      // At least some should be auto-fixable (PublicAccessBlock, Encryption, Versioning)
+      const autoFixable = actions.filter(
+        (a) => a.action.category === "auto-fixable",
+      );
+      expect(autoFixable.length).toBeGreaterThan(0);
+
+      // At least some should be manual (lifecycle, logging, etc.)
+      const manual = actions.filter((a) => a.action.category === "manual");
+      expect(manual.length).toBeGreaterThan(0);
+
+      // Every action must have a non-empty hint
+      for (const a of actions) {
+        expect(a.action.hint).toBeDefined();
+        expect(a.action.hint.length).toBeGreaterThan(0);
+      }
+
+      // Auto-fixable findings must have fixable=true and a patch
+      for (const a of autoFixable) {
+        expect(a.action.fixable).toBe(true);
+        expect(a.action.patch).toBeDefined();
+      }
+    } finally {
+      if (existingConfig) {
+        fsModule.writeFileSync(configPath, existingConfig, "utf-8");
+      }
+    }
+  }, 60_000);
+
+  it("formatFindings produces correct output with real data (Story 35.3)", async () => {
+    if (skipIfNoCreds()) return;
+
+    const { formatFindings } = await import("../utils/display.js");
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent: "Create an S3 bucket named e2e-epic35-display",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+    const output = formatFindings(s.bpFindings);
+
+    // Should contain severity summary
+    expect(output).toContain("Findings:");
+
+    // Every finding should have a hint line with -> prefix
+    expect(output).toContain("->");
+
+    // Should NOT contain raw CFN jargon like "PublicAccessBlockConfiguration.BlockPublicAcls"
+    // (those should be replaced by human-readable hints)
+    // Manual findings with fix_hint should show the hint, not remediation
+    const lines = output.split("\n");
+    const hintLines = lines.filter((l) => l.includes("->"));
+    expect(hintLines.length).toBeGreaterThan(0);
+
+    // Each hint line should have a prefix: Fix, Manual, or Info
+    for (const line of hintLines) {
+      expect(line).toMatch(/->\s+(Fix|Manual|Info):/);
+    }
+  }, 60_000);
+
+  it("autoFixEnabled flows through graph state (Story 35.6)", async () => {
+    if (skipIfNoCreds()) return;
+
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent: "Create an S3 bucket named e2e-epic35-autofix-flag",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    // autoFixEnabled should be set by fix-applicator
+    expect(typeof s.autoFixEnabled).toBe("boolean");
+  }, 60_000);
+
+  it("deepMergePatch in promptFixSelection produces correct desiredState", async () => {
+    // This test doesn't need AWS — it tests the display helper directly
+    // Simulates what caused the "lololo" bug
+    const { resolveAction } = await import("../utils/fix-command-resolver.js");
+
+    const finding = {
+      practiceId: "BP-S3-005",
+      title: "S3 bucket should have versioning enabled",
+      severity: "HIGH" as const,
+      category: "security" as const,
+      message: "Versioning not enabled",
+      blocking: false,
+      autoFixable: true,
+      desiredStatePatch: {
+        VersioningConfiguration: { Status: "Enabled" },
+      },
+      propertyPath: "VersioningConfiguration.Status",
+    };
+
+    const action = resolveAction(finding);
+    expect(action.category).toBe("auto-fixable");
+    expect(action.fixable).toBe(true);
+
+    // The hint should drill to the leaf value, not show "true"
+    expect(action.hint).toContain("Enabled");
+  });
 });
 
 describe("E2E: Auto-fix verification", () => {

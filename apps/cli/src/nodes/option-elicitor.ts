@@ -551,6 +551,7 @@ export async function optionElicitorNode(
       llmClient,
       state.userIntent,
       commonHistory.length > 0, // show back if not the first visible field
+      elicitedOptions,
     );
 
     if (answer === BACK_SENTINEL) {
@@ -638,6 +639,7 @@ export async function optionElicitorNode(
           llmClient,
           state.userIntent,
           advHistory.length > 0,
+          elicitedOptions,
         );
 
         if (answer === BACK_SENTINEL) {

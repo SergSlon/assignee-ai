@@ -299,6 +299,24 @@ describe("classifyError — all error code mappings", () => {
     expect(err!.kind).toBe(ProvisioningErrorKind.SERVICE_ERROR);
   });
 
+  it("GeneralServiceException with 'bucket name is not available' maps to ALREADY_EXISTS", async () => {
+    mockClient.send.mockRejectedValue(
+      new GeneralServiceException({
+        message:
+          "The requested bucket name is not available. The bucket namespace is shared by all users of the system.",
+        $metadata: {},
+      }),
+    );
+
+    const [err] = await adapter.createResource(
+      "AWS::S3::Bucket",
+      '{"BucketName":"taken-bucket"}',
+      "token-123",
+    );
+    expect(err!.kind).toBe(ProvisioningErrorKind.ALREADY_EXISTS);
+    expect(err!.message).toContain("bucket name is not available");
+  });
+
   it("T7.11c: non-Error throw stringified to UNKNOWN", async () => {
     mockClient.send.mockRejectedValue("raw string error");
 

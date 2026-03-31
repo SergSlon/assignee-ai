@@ -127,7 +127,7 @@ describe("fixApplicatorNode", () => {
     const finding = makeFinding();
     const state = makeState({ bpFindings: [finding] });
     const result = await fixApplicatorNode(state);
-    expect(result).toEqual({ appliedFixes: [] });
+    expect(result).toEqual({ appliedFixes: [], autoFixEnabled: false });
   });
 
   it("auto-fix enabled + autoFixable findings -> patches desiredState and returns appliedFixes", async () => {
@@ -360,7 +360,54 @@ describe("fixApplicatorNode", () => {
     const result = await fixApplicatorNode(state);
 
     // Auto-fix is disabled when config is missing
-    expect(result).toEqual({ appliedFixes: [] });
+    expect(result).toEqual({ appliedFixes: [], autoFixEnabled: false });
+  });
+
+  it("interactive option with prompt_value but undefined targetField → skipped (residual with userSkipped)", async () => {
+    enableAutoFix();
+
+    // Set TTY so interactive path triggers
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+
+    const finding: BPFinding = {
+      practiceId: "BP-EC2-MISCONFIG",
+      title: "Misconfigured interactive option",
+      severity: "MEDIUM",
+      category: "security",
+      message: "Option has no targetField",
+      blocking: false,
+      fixType: "interactive",
+      interactiveOptions: [
+        {
+          label: "Enter a value",
+          action: "prompt_value",
+          targetField: undefined,
+        },
+        { label: "Skip", action: "skip" },
+      ],
+    };
+
+    // User selects the first option (index 0) which has action=prompt_value but no targetField
+    vi.mocked(clack.select).mockResolvedValueOnce(0);
+
+    const state = makeState({
+      desiredState: { BucketName: "my-bucket" },
+      bpFindings: [finding],
+    });
+
+    const result = await fixApplicatorNode(state);
+
+    // Finding should be in residual findings with userSkipped flag
+    expect(result.bpFindings).toHaveLength(1);
+    expect(result.bpFindings![0]!.practiceId).toBe("BP-EC2-MISCONFIG");
+    expect(result.bpFindings![0]!.userSkipped).toBe(true);
+    // Should NOT have been applied
+    expect(result.appliedFixes).toHaveLength(0);
+    // desiredState should be unchanged
+    expect(result.desiredState).toEqual({ BucketName: "my-bucket" });
   });
 
   it("non-autoFixable findings are NOT patched", async () => {
@@ -380,6 +427,6 @@ describe("fixApplicatorNode", () => {
     const result = await fixApplicatorNode(state);
 
     // No autoFixable findings, so pass through with empty appliedFixes
-    expect(result).toEqual({ appliedFixes: [] });
+    expect(result).toEqual({ appliedFixes: [], autoFixEnabled: true });
   });
 });

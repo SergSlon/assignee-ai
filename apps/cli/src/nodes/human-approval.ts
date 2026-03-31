@@ -15,6 +15,7 @@ import {
   renderHitlConfirm,
   renderDependencyPlan,
   renderHitlCompoundConfirm,
+  promptFixSelection,
 } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
@@ -64,6 +65,7 @@ export async function humanApprovalNode(
   }
 
   let confirmed: boolean;
+  let fixResult: Awaited<ReturnType<typeof promptFixSelection>> = null;
 
   if (state.resourcePattern && state.resourceQueue) {
     // Compound intent: show dependency plan (Story 8.3)
@@ -79,7 +81,24 @@ export async function humanApprovalNode(
     );
   } else {
     renderPlanBox(state);
-    confirmed = await renderHitlConfirm(state);
+
+    // Story 35.4: Interactive fix selection after plan display (TTY only)
+    let effectiveState = state;
+    fixResult = await promptFixSelection(state);
+    if (fixResult) {
+      effectiveState = {
+        ...state,
+        desiredState: fixResult.desiredState,
+        bpFindings: fixResult.bpFindings,
+        appliedFixes: fixResult.appliedFixes,
+        // Clear stale cost — fixes may change config that affects pricing
+        estimatedMonthlyCost: undefined,
+        pricingBreakdown: undefined,
+      } as AgentState;
+      renderPlanBox(effectiveState);
+    }
+
+    confirmed = await renderHitlConfirm(effectiveState);
   }
 
   if (!confirmed) {
@@ -98,6 +117,18 @@ export async function humanApprovalNode(
     level: "info",
     action: LOG_ACTIONS.PLAN_APPROVED,
   });
+
+  // Story 35.4: Return updated state if fixes were applied
+  if (fixResult) {
+    return {
+      desiredState: fixResult.desiredState,
+      bpFindings: fixResult.bpFindings,
+      appliedFixes: fixResult.appliedFixes,
+      // Clear stale cost in graph state too (not just display)
+      estimatedMonthlyCost: undefined,
+      pricingBreakdown: undefined,
+    };
+  }
 
   return {};
 }

@@ -22,6 +22,7 @@ import {
   renderError,
   renderPlanBox,
   renderSecurityWarnings,
+  promptFixSelection,
 } from "../utils/display.js";
 import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
 import { ToolName } from "../constants/tools.js";
@@ -462,6 +463,26 @@ export async function resultFormatterNode(
           process.stdout.write(JSON.stringify(jsonPayload, null, 2) + "\n");
         } else {
           renderPlanBox(state);
+
+          // Story 35.4: Interactive fix selection after plan display (TTY only)
+          const fixResult = await promptFixSelection(state);
+          if (fixResult) {
+            // Re-render plan box with updated state (clear stale cost)
+            const updatedState = {
+              ...state,
+              desiredState: fixResult.desiredState,
+              bpFindings: fixResult.bpFindings,
+              appliedFixes: fixResult.appliedFixes,
+              estimatedMonthlyCost: undefined,
+              pricingBreakdown: undefined,
+            };
+            renderPlanBox(updatedState);
+            return {
+              desiredState: fixResult.desiredState,
+              bpFindings: fixResult.bpFindings,
+              appliedFixes: fixResult.appliedFixes,
+            };
+          }
         }
       }
       break;

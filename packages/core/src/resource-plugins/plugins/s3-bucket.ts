@@ -141,13 +141,20 @@ export const s3BucketPlugin: ResourcePlugin = {
         placeholder: "365",
         hint: "Permanently deletes objects after this many days. Leave blank to keep objects forever. Common: 365 for logs, 90 for temp files.",
         showIf: { field: "EnableLifecycle", value: true },
-        validate: (value: unknown) => {
+        validate: (value: unknown, answers?: Record<string, unknown>) => {
           if (!value) return undefined;
           const n = Number(value);
           if (!Number.isInteger(n) || n < 1)
             return "Must be a positive integer (days)";
-          if (n <= 30)
-            return `Expiration (${n}d) must be greater than the transition period (min 30d). Use at least 31.`;
+          // Expiration must be greater than the transition period
+          const transitionRaw = answers?.["LifecycleTransitionDays"];
+          const transitionDays = typeof transitionRaw === "number"
+            ? transitionRaw
+            : typeof transitionRaw === "string"
+              ? parseInt(transitionRaw, 10) || 30
+              : 30;
+          if (n <= transitionDays)
+            return `Expiration (${n}d) must be greater than the transition period (${transitionDays}d). Use at least ${transitionDays + 1}.`;
           return undefined;
         },
       },

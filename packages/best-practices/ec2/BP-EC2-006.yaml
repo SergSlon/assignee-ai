@@ -8,5 +8,6 @@ expected_value: true
 source: "AWS Well-Architected Framework — Reliability Pillar"
 description: "Production EC2 instances should have API termination protection enabled to prevent accidental termination via the console, CLI, or API."
 remediation: "Set DisableApiTermination to true for production instances. This prevents accidental termination — the setting must be explicitly disabled before the instance can be terminated."
+fix_hint: "Enable termination protection for production instances"
 category: reliability
 lastVerified: "2026-03-22"
