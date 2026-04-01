@@ -690,8 +690,11 @@ export async function resultFormatterNode(
     }
 
     default:
-      // PENDING = plan mode — render plan preview box
-      if (state.executionMode === ExecutionMode.PLAN) {
+      // PENDING — render plan preview box (plan mode OR apply blocked by BP findings)
+      if (
+        state.executionMode === ExecutionMode.PLAN ||
+        (state.executionMode === ExecutionMode.APPLY && !state.preflightPassed)
+      ) {
         if (state.outputFormat === "json") {
           const region =
             process.env["AWS_REGION"] ??
