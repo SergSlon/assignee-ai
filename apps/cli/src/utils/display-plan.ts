@@ -222,12 +222,13 @@ export function formatAutoFixHint(state: RenderableState): string | null {
  * Story 37.1: Recursively count files in a directory.
  * Used by renderPlanBox to display the source file count.
  */
-function countFilesRecursive(dir: string): number {
+function countFilesRecursive(dir: string, maxDepth = 20): number {
+  if (maxDepth <= 0) return 0;
   try {
     let count = 0;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (entry.isDirectory()) {
-        count += countFilesRecursive(path.join(dir, entry.name));
+        count += countFilesRecursive(path.join(dir, entry.name), maxDepth - 1);
       } else {
         count++;
       }

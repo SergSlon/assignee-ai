@@ -11,6 +11,7 @@ import { MCP_SHUTDOWN_DELAY_MS } from "../config/constants.js";
 import { ToolName } from "../constants/tools.js";
 import type { McpServerNameType } from "../constants/mcp.js";
 import type { StructuredTool } from "@langchain/core/tools";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
 
 let client: MultiServerMCPClient | null = null;
 let optionalClient: MultiServerMCPClient | null = null;
@@ -144,8 +145,15 @@ export async function createMcpClient(
       .then(() => {
         optionalClient = pendingOptional;
       })
-      .catch(async () => {
+      .catch(async (err) => {
         // Graceful degradation: optional servers failed, continue without them.
+        log({
+          ts: new Date().toISOString(),
+          runId: "",
+          level: "warn",
+          action: LOG_ACTIONS.MCP_OPTIONAL_INIT_FAILED,
+          extras: { error: err instanceof Error ? err.message : String(err) },
+        });
         try {
           await pendingOptional.close();
         } catch {
@@ -177,7 +185,9 @@ export async function getMcpTools(
     try {
       await Promise.race([
         optionalInitPromise,
-        new Promise<void>((resolve) => setTimeout(resolve, MCP_SHUTDOWN_DELAY_MS)),
+        new Promise<void>((resolve) =>
+          setTimeout(resolve, MCP_SHUTDOWN_DELAY_MS),
+        ),
       ]);
     } catch {
       // Timeout or init error — proceed with core tools only

@@ -48,6 +48,16 @@ export function stopSpinner(message?: string): void {
   }
 }
 
+process.on("exit", () => {
+  if (_spinner) {
+    try {
+      _spinner.stop();
+    } catch {
+      /* ignore */
+    }
+  }
+});
+
 // ── Core render functions ─────────────────────────────────────────────────────
 
 export function renderIntro(): void {

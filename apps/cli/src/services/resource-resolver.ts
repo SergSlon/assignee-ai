@@ -12,7 +12,13 @@ import {
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
-import { ConfigurationError, RESOURCE_TYPES, COMPANION_RESOURCE_TYPES, LIST_RESOURCE_TYPES, CCAPI_FALLBACK_TYPES } from "@assignee/core";
+import {
+  ConfigurationError,
+  RESOURCE_TYPES,
+  COMPANION_RESOURCE_TYPES,
+  LIST_RESOURCE_TYPES,
+  CCAPI_FALLBACK_TYPES,
+} from "@assignee/core";
 
 /** Resolved resource returned by the resource resolver. */
 export interface ResolvedResource {
@@ -69,7 +75,7 @@ function arnToResourceType(arn: string): string | null {
   const parts = arn.split(":");
   if (parts.length < 6) return null;
 
-  const service = parts[2];
+  const service = parts[2] ?? "";
   const resourcePart = parts[5] ?? "";
   const segments = resourcePart.split("/").filter(Boolean);
   const resourceType = segments[0] ?? "";

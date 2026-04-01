@@ -121,6 +121,18 @@ describe("routePreflightGuard", () => {
         executionMode: ExecutionMode.APPLY,
         preflightPassed: true,
         resourcePattern: { patternId: "test" } as never,
+        resourceQueue: [
+          {
+            resourceId: "r0",
+            resourceType: "AWS::S3::Bucket",
+            displayName: "Bucket 0",
+          },
+          {
+            resourceId: "r1",
+            resourceType: "AWS::S3::Bucket",
+            displayName: "Bucket 1",
+          },
+        ] as never,
         currentResourceIndex: 1,
       }),
     );

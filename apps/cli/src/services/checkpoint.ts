@@ -15,7 +15,10 @@ import {
   type PlanCheckpoint,
 } from "@assignee/core";
 import type { AgentState } from "./graph-state.js";
-import { CHECKPOINT_DEFAULT_TTL_HOURS, CLEANUP_SKIP_RECENT_MINUTES } from "../config/constants.js";
+import {
+  CHECKPOINT_DEFAULT_TTL_HOURS,
+  CLEANUP_SKIP_RECENT_MINUTES,
+} from "../config/constants.js";
 
 /**
  * Fields that must be redacted before writing to disk.
@@ -122,6 +125,15 @@ export async function loadCheckpoint(
 }
 
 /**
+ * Checks whether a checkpoint has exceeded its TTL.
+ */
+function isCheckpointExpired(checkpoint: PlanCheckpoint): boolean {
+  const createdMs = new Date(checkpoint.created_at).getTime();
+  const expiresMs = createdMs + checkpoint.ttl_hours * 60 * 60 * 1000;
+  return Date.now() > expiresMs;
+}
+
+/**
  * Loads and validates a checkpoint from an explicit file path.
  * Validates schema, TTL, preflight status, and desiredState presence.
  *
@@ -144,6 +156,12 @@ export async function loadCheckpointFromPath(
   try {
     json = JSON.parse(raw);
   } catch {
+    // Backup corrupt file for debugging
+    try {
+      await fs.copyFile(filePath, `${filePath}.corrupt.${Date.now()}`);
+    } catch {
+      /* best-effort */
+    }
     throw new CheckpointError(
       `Corrupt checkpoint file (invalid JSON): ${filePath}`,
     );
@@ -159,10 +177,7 @@ export async function loadCheckpointFromPath(
   const cp = parsed.data;
 
   // TTL validation
-  const createdMs = new Date(cp.created_at).getTime();
-  const expiresMs = createdMs + cp.ttl_hours * 60 * 60 * 1000;
-  const now = Date.now();
-  if (now > expiresMs) {
+  if (isCheckpointExpired(cp)) {
     const createdDate = new Date(cp.created_at).toLocaleString();
     throw new CheckpointError(
       `Checkpoint expired: created ${createdDate}, TTL ${cp.ttl_hours}h. Run \`assignee plan\` to create a new plan.`,
@@ -198,7 +213,8 @@ export async function pruneExpiredCheckpoints(
   dir: string,
   opts: { skipRecentMinutes?: number } = {},
 ): Promise<{ pruned: number; kept: number }> {
-  const skipRecentMs = (opts.skipRecentMinutes ?? CLEANUP_SKIP_RECENT_MINUTES) * 60 * 1000;
+  const skipRecentMs =
+    (opts.skipRecentMinutes ?? CLEANUP_SKIP_RECENT_MINUTES) * 60 * 1000;
 
   let entries: string[];
   try {
@@ -299,7 +315,6 @@ export async function findNewestValidCheckpoint(
 
   if (checkpointFiles.length === 0) return null;
 
-  const now = Date.now();
   let newest: PlanCheckpoint | null = null;
   let newestTime = 0;
 
@@ -319,11 +334,9 @@ export async function findNewestValidCheckpoint(
     if (!parsed.success) continue;
 
     const cp = parsed.data;
+    if (isCheckpointExpired(cp)) continue; // expired
+
     const createdMs = new Date(cp.created_at).getTime();
-    const expiresMs = createdMs + cp.ttl_hours * 60 * 60 * 1000;
-
-    if (now > expiresMs) continue; // expired
-
     if (createdMs > newestTime) {
       newest = cp;
       newestTime = createdMs;

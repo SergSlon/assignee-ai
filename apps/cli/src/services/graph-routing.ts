@@ -50,7 +50,12 @@ export function routePreflightGuard(
   if (state.executionMode === ExecutionMode.PLAN || !state.preflightPassed) {
     return GraphNode.RESULT_FORMATTER;
   }
-  if (state.resourcePattern && (state.currentResourceIndex ?? 0) > 0) {
+  if (
+    state.resourcePattern &&
+    state.resourceQueue &&
+    state.resourceQueue.length > (state.currentResourceIndex ?? 0) &&
+    (state.currentResourceIndex ?? 0) > 0
+  ) {
     return GraphNode.RESOURCE_PROVISIONER;
   }
   return GraphNode.HUMAN_APPROVAL;

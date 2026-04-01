@@ -136,7 +136,15 @@ function isIamType(resourceType: string): boolean {
 export async function planBulkDestroy(
   options?: BulkDestroyOptions,
 ): Promise<BulkDestroyPlan> {
-  const fetchedResources = await fetchManagedResources(options?.region);
+  let fetchedResources;
+  try {
+    fetchedResources = await fetchManagedResources(options?.region);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to list managed resources. Check your AWS credentials and network connection. Details: ${message}`,
+    );
+  }
 
   return buildPlanFromResources(fetchedResources, options);
 }
