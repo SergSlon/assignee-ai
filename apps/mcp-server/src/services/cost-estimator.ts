@@ -69,11 +69,15 @@ const KEYWORD_TO_RESOURCE_TYPE: Array<{
     resourceType: "AWS::ECS::Cluster",
   },
   {
+    keywords: ["secrets manager", "secret", "credentials store"],
+    resourceType: "AWS::SecretsManager::Secret",
+  },
+  {
     keywords: ["ecr", "container registry", "docker registry"],
     resourceType: "AWS::ECR::Repository",
   },
   {
-    keywords: ["vpc", "virtual private cloud", "network"],
+    keywords: ["vpc", "virtual private cloud"],
     resourceType: "AWS::EC2::VPC",
   },
   {
@@ -81,8 +85,45 @@ const KEYWORD_TO_RESOURCE_TYPE: Array<{
     resourceType: "AWS::EC2::SecurityGroup",
   },
   {
-    keywords: ["load balancer", "alb", "elb"],
+    keywords: [
+      "load balancer",
+      "application load balancer",
+      "network load balancer",
+      "elastic load balancer",
+    ],
     resourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+  },
+  {
+    keywords: ["subnet", "private subnet", "public subnet"],
+    resourceType: "AWS::EC2::Subnet",
+  },
+  {
+    keywords: ["route table", "routing table"],
+    resourceType: "AWS::EC2::RouteTable",
+  },
+  {
+    keywords: ["internet gateway", "igw"],
+    resourceType: "AWS::EC2::InternetGateway",
+  },
+  {
+    keywords: ["nat gateway", "network address translation"],
+    resourceType: "AWS::EC2::NatGateway",
+  },
+  {
+    keywords: ["cloudwatch logs", "log group", "logging"],
+    resourceType: "AWS::Logs::LogGroup",
+  },
+  {
+    keywords: ["api gateway", "http api", "websocket api"],
+    resourceType: "AWS::ApiGatewayV2::Api",
+  },
+  {
+    keywords: ["cloudwatch alarm", "metric alarm", "monitoring alarm"],
+    resourceType: "AWS::CloudWatch::Alarm",
+  },
+  {
+    keywords: ["route", "network route"],
+    resourceType: "AWS::EC2::Route",
   },
 ];
 

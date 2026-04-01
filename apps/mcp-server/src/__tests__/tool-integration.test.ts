@@ -297,10 +297,10 @@ describe("free-tier service", () => {
     expect(result!.type).toBe("always_free");
   });
 
-  it("should return always_free for DynamoDB Table", () => {
+  it("should return usage_limited for DynamoDB Table", () => {
     const result = getFreeTierNote("AWS::DynamoDB::Table");
     expect(result).not.toBeNull();
-    expect(result!.type).toBe("always_free");
+    expect(result!.type).toBe("usage_limited");
   });
 
   it("should return usage_limited for Lambda Function", () => {

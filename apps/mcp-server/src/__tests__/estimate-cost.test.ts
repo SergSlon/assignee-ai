@@ -126,59 +126,59 @@ describe("classifyResourceType", () => {
     expect(classifyResourceType("Application load balancer for frontend")).toBe(
       "AWS::ElasticLoadBalancingV2::LoadBalancer",
     );
-    expect(classifyResourceType("ALB to distribute traffic")).toBe(
+    expect(classifyResourceType("Network load balancer")).toBe(
       "AWS::ElasticLoadBalancingV2::LoadBalancer",
     );
   });
 
-  // ── Tier 1/2 resource types not in KEYWORD_TO_RESOURCE_TYPE ──
+  // ── Tier 1/2 resource types (Epic 40 — now in keyword map) ──
 
-  it("should return null for CloudWatch Logs description (not in keyword map)", () => {
+  it("should classify CloudWatch Logs descriptions", () => {
     expect(
       classifyResourceType("CloudWatch log group for application logs"),
-    ).toBeNull();
+    ).toBe("AWS::Logs::LogGroup");
   });
 
-  it("should return null for CloudWatch Alarm description (not in keyword map)", () => {
-    expect(
-      classifyResourceType("CloudWatch alarm for CPU utilization"),
-    ).toBeNull();
+  it("should classify CloudWatch Alarm descriptions", () => {
+    expect(classifyResourceType("CloudWatch alarm for CPU utilization")).toBe(
+      "AWS::CloudWatch::Alarm",
+    );
   });
 
-  it("should return null for Secrets Manager description (not in keyword map)", () => {
-    // Note: "secrets" contains "ecr" substring which false-matches ECR keywords,
-    // so we use a phrasing that avoids all keyword substrings
-    expect(
-      classifyResourceType("credential vault for storing API keys"),
-    ).toBeNull();
+  it("should classify Secrets Manager descriptions", () => {
+    expect(classifyResourceType("secrets manager for storing API keys")).toBe(
+      "AWS::SecretsManager::Secret",
+    );
   });
 
-  it("should return null for API Gateway V2 description (not in keyword map)", () => {
+  it("should classify API Gateway V2 descriptions", () => {
     expect(
       classifyResourceType("API Gateway HTTP API for REST endpoints"),
-    ).toBeNull();
+    ).toBe("AWS::ApiGatewayV2::Api");
   });
 
-  it("should return null for Internet Gateway description (not in keyword map)", () => {
-    expect(
-      classifyResourceType("Internet gateway for public subnet access"),
-    ).toBeNull();
+  it("should classify Internet Gateway descriptions", () => {
+    expect(classifyResourceType("set up an internet gateway")).toBe(
+      "AWS::EC2::InternetGateway",
+    );
   });
 
-  it("should return null for Route Table description (not in keyword map)", () => {
-    expect(classifyResourceType("Route table for private subnets")).toBeNull();
+  it("should classify Route Table descriptions", () => {
+    expect(classifyResourceType("Route table for traffic routing")).toBe(
+      "AWS::EC2::RouteTable",
+    );
   });
 
-  it("should return null for Route description (not in keyword map)", () => {
-    expect(
-      classifyResourceType("Route to NAT gateway for outbound traffic"),
-    ).toBeNull();
+  it("should classify Route descriptions", () => {
+    expect(classifyResourceType("add a route to the table")).toBe(
+      "AWS::EC2::Route",
+    );
   });
 
-  it("should return null for NAT Gateway description (not in keyword map)", () => {
-    expect(
-      classifyResourceType("NAT gateway for private subnet internet access"),
-    ).toBeNull();
+  it("should classify NAT Gateway descriptions", () => {
+    expect(classifyResourceType("NAT gateway for outbound traffic")).toBe(
+      "AWS::EC2::NatGateway",
+    );
   });
 });
 

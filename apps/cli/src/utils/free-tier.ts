@@ -30,14 +30,23 @@ const ALWAYS_FREE_RESOURCES: Record<string, string> = {
   [RESOURCE_TYPES.IAM_ROLE]: "Always free tier",
   [RESOURCE_TYPES.SSM_PARAMETER]:
     "Always free tier (standard params, up to 10K)",
-  [RESOURCE_TYPES.DYNAMODB_TABLE]:
-    "Always free tier (up to 25 GB storage, 25 WCU/RCU)",
+  [RESOURCE_TYPES.EC2_VPC]: "Always free tier",
+  [RESOURCE_TYPES.EC2_SUBNET]: "Always free tier",
+  [RESOURCE_TYPES.EC2_SECURITY_GROUP]: "Always free tier",
+  [RESOURCE_TYPES.EC2_INTERNET_GATEWAY]: "Always free tier",
+  [RESOURCE_TYPES.EC2_ROUTE_TABLE]: "Always free tier",
+  [RESOURCE_TYPES.EC2_ROUTE]: "Always free tier",
+  [RESOURCE_TYPES.ECS_CLUSTER]:
+    "Always free tier (compute charged separately via tasks)",
 };
 
 /** Resources that are always free but with usage limits. */
 const ALWAYS_FREE_WITH_LIMITS: Record<string, string> = {
+  [RESOURCE_TYPES.DYNAMODB_TABLE]: "Up to 25 GB storage, 25 WCU/RCU",
   [RESOURCE_TYPES.LAMBDA_FUNCTION]:
     "1M requests/month + 400K GB-seconds compute",
+  [RESOURCE_TYPES.SQS_QUEUE]: "1M requests/month",
+  [RESOURCE_TYPES.SNS_TOPIC]: "1M publishes/month",
 };
 
 /**
