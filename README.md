@@ -252,23 +252,37 @@ node build-fixture-ts.mjs
 
 ### Completed epics
 
-| Epic   | Description                                                                       | Status                                      |
-| :----- | :-------------------------------------------------------------------------------- | :------------------------------------------ |
-| **0**  | Project Foundation & Monorepo Setup                                               | Done                                        |
-| **1**  | Plan Command (LangGraph, MCP, intent parsing, plan generation)                    | Done                                        |
-| **2**  | Apply Command (HITL, provisioning, status polling, tagging)                       | Done                                        |
-| **7**  | Resource Intelligence (23 types, option elicitation, pricing, doc hints)          | Done                                        |
-| **8**  | Compound Provisioning (6 architecture patterns, dependency ordering)              | Done                                        |
-| **9**  | Architecture Hardening (type safety, error handling, prompt injection guard)      | Done                                        |
-| **10** | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)           | Done                                        |
-| **11** | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                        | Done                                        |
-| **12** | Best Practices Library (YAML schema, trigger engine, 45+ rules, FSBP)             | In progress (12.4, 12.6 remaining)          |
-| **14** | LiteLLM Provider Gateway (multi-provider LLM support)                             | In progress (14.1 done; 14.2-14.4 deferred) |
-| **18** | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action) | Done                                        |
-| **19** | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)     | Done                                        |
-| **20** | MCP Server (plan, apply, list, estimate tools for AI agents)                      | Done                                        |
-| **22** | Auto-Fix Round (apply auto-fixable BP patches with user consent)                  | Done                                        |
-| **23** | Real-Time Pricing Breakdown (live pricing via AWS Pricing MCP, zero hardcoded $)  | Done                                        |
+| Epic   | Description                                                                       | Status                     |
+| :----- | :-------------------------------------------------------------------------------- | :------------------------- |
+| **0**  | Project Foundation & Monorepo Setup                                               | Done                       |
+| **1**  | Plan Command (LangGraph, MCP, intent parsing, plan generation)                    | Done                       |
+| **2**  | Apply Command (HITL, provisioning, status polling, tagging)                       | Done                       |
+| **7**  | Resource Intelligence (23 types, option elicitation, pricing, doc hints)          | Done                       |
+| **8**  | Compound Provisioning (6 architecture patterns, dependency ordering)              | Done                       |
+| **9**  | Architecture Hardening (type safety, error handling, prompt injection guard)      | Done                       |
+| **10** | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)           | Done                       |
+| **11** | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                        | Done                       |
+| **12** | Best Practices Library (YAML schema, trigger engine, 130 rules, FSBP)             | Done (12.4, 12.6 deferred) |
+| **14** | LiteLLM Provider Gateway (multi-provider LLM support)                             | Done (14.2-14.4 deferred)  |
+| **18** | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action) | Done                       |
+| **19** | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)     | Done                       |
+| **20** | MCP Server (plan, apply, list, estimate tools for AI agents)                      | Done                       |
+| **22** | Auto-Fix Round (apply auto-fixable BP patches with user consent)                  | Done                       |
+| **23** | Real-Time Pricing Breakdown (live pricing via AWS Pricing MCP, zero hardcoded $)  | Done                       |
+| **24** | Instance Type Selection UX (category filters, workload classification)            | Done                       |
+| **25** | Sprint F — Tier 1 Resources (LogGroup, IGW, RouteTable, Route, NatGateway)        | Done                       |
+| **26** | Sprint G — Tier 2 Resources (ApiGatewayV2, CloudWatch Alarm, SecretsManager)      | Done                       |
+| **27** | Config Precedence (user, project, org policy, env overrides, CLI flags)           | Done                       |
+| **28** | Drift Detection (`assignee drift`, `assignee reconcile`)                          | Done                       |
+| **29** | MCP Connection Pre-Warming & Resilience                                           | Done (29.4 deferred)       |
+| **30** | Request/Response Recording & Replay                                               | Done                       |
+| **31** | CloudFormation Schema SDK Migration (direct SDK, no MCP dependency)               | Done                       |
+| **33** | Auto-Cleanup (checkpoints, cache rotation, memory TTL)                            | Done                       |
+| **34** | Quality Hardening (node robustness, code splitting, error compensation)           | Done                       |
+| **35** | Actionable Findings (interactive fix selection, fix hints, fix categories)        | Done                       |
+| **36** | Bulk Destroy (`--all`, `--include-iam`, `--dry-run`, `clean --resources`)         | Done                       |
+| **37** | Static Site Deploy (`--source`, S3 upload, CloudFront + OAC)                      | Done                       |
+| **38** | Full Codebase Hardening (bounds checks, timeout caps, input validation)           | Done                       |
 
 ### Deferred epics (post-traction / SaaS phase)
 
