@@ -1,0 +1,13 @@
+id: BP-ECS-008
+title: "ECS cluster should have execute command logging configured"
+severity: MEDIUM
+resource_type: "AWS::ECS::Cluster"
+property_path: "Configuration.ExecuteCommandConfiguration.Logging"
+check_type: "exists"
+expected_value: true
+source: "AWS Well-Architected Security Pillar"
+description: "ECS clusters that support ECS Exec should configure logging for execute command sessions. Without logging, interactive shell sessions into containers are unauditable, creating a security blind spot for forensics and compliance."
+remediation: "Set Configuration.ExecuteCommandConfiguration.Logging to a valid value (e.g., 'OVERRIDE' with a CloudWatch log group or S3 bucket, or 'DEFAULT' to use the awslogs driver)."
+category: security
+lastVerified: "2026-04-01"
+blocking: false

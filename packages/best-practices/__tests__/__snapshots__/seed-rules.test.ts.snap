@@ -396,6 +396,27 @@ exports[`Seed BP Library — Sprint A+B + guardrail migration (47 rules) > snaps
   },
   {
     "category": "reliability",
+    "check_type": "contains",
+    "id": "BP-ECS-007",
+    "resource_type": "AWS::ECS::Cluster",
+    "severity": "HIGH",
+  },
+  {
+    "category": "security",
+    "check_type": "exists",
+    "id": "BP-ECS-008",
+    "resource_type": "AWS::ECS::Cluster",
+    "severity": "MEDIUM",
+  },
+  {
+    "category": "reliability",
+    "check_type": "exists",
+    "id": "BP-ECS-009",
+    "resource_type": "AWS::ECS::Cluster",
+    "severity": "INFO",
+  },
+  {
+    "category": "reliability",
     "check_type": "equals",
     "id": "BP-ELB-001",
     "resource_type": "AWS::ElasticLoadBalancingV2::LoadBalancer",

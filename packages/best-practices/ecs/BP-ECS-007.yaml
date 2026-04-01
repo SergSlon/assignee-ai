@@ -1,0 +1,22 @@
+id: BP-ECS-007
+title: "ECS cluster should have Container Insights enabled"
+severity: HIGH
+resource_type: "AWS::ECS::Cluster"
+property_path: "ClusterSettings"
+check_type: "contains"
+expected_value:
+  Name: "containerInsights"
+  Value: "enabled"
+source: "AWS Security Hub FSBP"
+source_id: "ECS.12"
+description: "ECS clusters should have Container Insights enabled to collect per-task metrics (CPU, memory, network, disk). Without observability, performance issues and resource exhaustion go undetected until they cause outages."
+remediation: "Add a ClusterSettings entry with Name 'containerInsights' and Value 'enabled'. Minor CloudWatch costs apply per metric stream."
+category: reliability
+lastVerified: "2026-04-01"
+blocking: true
+fixType: "auto"
+autoFixable: true
+desiredStatePatch:
+  ClusterSettings:
+    - Name: "containerInsights"
+      Value: "enabled"

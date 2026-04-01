@@ -15,8 +15,30 @@ import {
   ExecutionStatus,
   CheckpointError,
 } from "@assignee/core";
+import {
+  loadBestPractices,
+  evaluateTriggers,
+  type BestPractice,
+  type BPFinding,
+  type EvalContext,
+} from "@assignee/best-practices";
 import type { GraphContext } from "../services/graph-init.js";
 import { loadCheckpointFromPath } from "../services/checkpoint.js";
+
+/** Module-level BP cache for MCP server (Story 41.4). */
+let cachedPractices: BestPractice[] | undefined;
+
+function loadCachedPractices(): BestPractice[] {
+  if (cachedPractices === undefined) {
+    cachedPractices = loadBestPractices();
+  }
+  return cachedPractices;
+}
+
+/** Exported for testing — resets the BP cache. */
+export function _resetBPCache(): void {
+  cachedPractices = undefined;
+}
 
 /** In-memory set of checkpoint paths currently being applied. Prevents duplicate provisioning. */
 const activeApplies = new Set<string>();
@@ -140,6 +162,71 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
       }
       activeApplies.add(checkpointPath);
 
+      // ── Story 41.4: BP re-evaluation before provisioning ──────────────
+      // Re-evaluate BP rules against the checkpoint's desiredState to catch
+      // rules added/modified after the original plan was generated.
+      // MCP always enforces BPs — block on any blocking finding.
+      let bpFindings: BPFinding[] | undefined;
+      let preflightPassed = checkpoint.preflightPassed;
+
+      try {
+        const practices = loadCachedPractices();
+        const context: EvalContext = {
+          resourceType: checkpoint.resourceType,
+          desiredState: checkpoint.desiredState,
+          userIntent: checkpoint.userIntent,
+          patternId: checkpoint.resourcePatternId ?? undefined,
+        };
+        const findings = evaluateTriggers(context, practices);
+        const blockingFindings = findings.filter((f) => f.blocking);
+
+        if (blockingFindings.length > 0) {
+          preflightPassed = false;
+          activeApplies.delete(checkpointPath);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify({
+                  error: true,
+                  message: `BP re-evaluation blocked apply: ${blockingFindings.length} blocking finding(s) detected since the plan was generated.`,
+                  blockingFindings: blockingFindings.map((f) => ({
+                    practiceId: f.practiceId,
+                    title: f.title,
+                    severity: f.severity,
+                    message: f.message,
+                    remediation: f.remediation,
+                  })),
+                  hint: "Run plan_resource again to generate a new plan that satisfies current best practices.",
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+        if (findings.length > 0) {
+          bpFindings = findings;
+        }
+      } catch (bpError: unknown) {
+        // BP evaluation failure must be fail-closed in enforce mode —
+        // block provisioning rather than silently skipping all rules.
+        preflightPassed = false;
+        activeApplies.delete(checkpointPath);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                error: true,
+                message: `BP evaluation failed — cannot verify security compliance. ${bpError instanceof Error ? bpError.message : String(bpError)}`,
+                hint: "Check that best-practice rules are accessible. Run plan_resource to generate a fresh plan.",
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
+
       // ── Invoke graph in APPLY mode from checkpoint ─────────────────────
       const runId = checkpoint.runId;
       const config = {
@@ -155,14 +242,16 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
             userIntent: checkpoint.userIntent,
             runId,
             executionMode: ExecutionMode.APPLY,
+            bpEnforcementLevel: "enforce",
             startedAt: Date.now(),
             resourceType: checkpoint.resourceType,
             desiredState: checkpoint.desiredState,
             estimatedMonthlyCost: checkpoint.estimatedMonthlyCost,
-            preflightPassed: checkpoint.preflightPassed,
+            preflightPassed,
             elicitedOptions: checkpoint.elicitedOptions,
             resourceQueue: checkpoint.resourceQueue,
             autoApprove: true, // MCP server bypasses HITL (confirmed gate is the safety mechanism)
+            ...(bpFindings ? { bpFindings } : {}),
           },
           config,
         );

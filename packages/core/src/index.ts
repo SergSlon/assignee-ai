@@ -8,6 +8,8 @@ export {
   type ExecutionStatusType,
   PreflightMode,
   type PreflightModeType,
+  BPEnforcementLevel,
+  type BPEnforcementLevelType,
 } from "./schema/graph-state.js";
 export { AuditEventSchema, type AuditEvent } from "./schema/audit.js";
 export {

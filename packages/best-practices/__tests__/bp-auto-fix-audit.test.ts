@@ -207,6 +207,14 @@ const testCases: AutoFixTestCase[] = [
       // check_type is "exists" on RetentionInDays — omit to trigger
     },
   },
+  // --- ECS Cluster rules ---
+  {
+    id: "BP-ECS-007",
+    resourceType: "AWS::ECS::Cluster",
+    triggeringState: {
+      ClusterSettings: [{ Name: "containerInsights", Value: "disabled" }],
+    },
+  },
   // --- VPC / Subnet rules ---
   {
     id: "BP-SUBNET-001",

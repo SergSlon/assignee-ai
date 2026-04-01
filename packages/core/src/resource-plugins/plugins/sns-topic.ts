@@ -56,7 +56,7 @@ export const snsTopicPlugin: ResourcePlugin = {
         type: "string",
         label: "KMS Key ID for encryption",
         placeholder: "arn:aws:kms:...",
-        hint: "ARN of a KMS key for server-side encryption. Leave blank for no encryption or use 'alias/aws/sns' for the AWS-managed key.",
+        hint: "ARN of a KMS key for server-side encryption. Strongly recommended: use 'alias/aws/sns' for the AWS-managed key. Only leave blank if encryption is handled elsewhere.",
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);

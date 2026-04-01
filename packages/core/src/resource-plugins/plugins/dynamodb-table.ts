@@ -162,7 +162,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       question: {
         type: "boolean",
         label: "Enable deletion protection?",
-        initialValue: false,
+        initialValue: true,
         hint: "Prevents accidental table deletion. Must be explicitly disabled before the table can be deleted. Recommended for production.",
       },
     },

@@ -461,6 +461,10 @@ describe("Apply mode — auto-fix BP finding then provision", () => {
         userIntent: "Create an S3 bucket named auto-fix-bucket-test",
         executionMode: ExecutionMode.APPLY,
         autoApprove: true,
+        // Story 41.2: use "warn" so remaining non-auto-fixable blocking findings
+        // (e.g., SSL-only policy, event notifications) don't block provisioning.
+        // This test validates auto-fix patching + provisioning, not enforcement.
+        bpEnforcementLevel: "warn",
       },
       config,
     );

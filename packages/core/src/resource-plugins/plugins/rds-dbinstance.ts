@@ -217,10 +217,8 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         validate: (value: unknown) => {
           if (!value) return undefined; // blank = auto-generate
           const s = String(value);
-          if (s.length < 8)
-            return "Password must be at least 8 characters";
-          if (s.length > 128)
-            return "Password must be 128 characters or less";
+          if (s.length < 8) return "Password must be at least 8 characters";
+          if (s.length > 128) return "Password must be 128 characters or less";
           if (/[/@" ]/.test(s))
             return 'Password must not contain /, @, " (double quote), or spaces';
           return undefined;
@@ -232,7 +230,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "boolean",
         label: "Enable Multi-AZ deployment?",
-        initialValue: false,
+        initialValue: true,
         hint: "Doubles cost. Provides high availability with automatic failover. Best for production.",
       },
     },
@@ -241,7 +239,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "boolean",
         label: "Enable deletion protection?",
-        initialValue: false,
+        initialValue: true,
         hint: "When enabled, the database cannot be deleted via API or console until protection is removed. Strongly recommended for production to prevent accidental data loss. No cost impact.",
       },
     },
@@ -406,6 +404,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         type: "string",
         label: "Backup retention period (days)",
         placeholder: "7",
+        initialValue: "7",
         hint: "Number of days to keep automated backups (1-35). Default is 7. Longer retention increases storage cost. Set to 0 to disable backups (not recommended for production).",
         validate: (value: unknown) => {
           if (!value) return undefined;
@@ -424,6 +423,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
   defaults: {
     StorageType: "gp3",
     MultiAZ: false,
+    StorageEncrypted: true,
   },
   configHints: [
     "If the user did not provide a MasterUserPassword, OMIT it — AWS will auto-generate one via Secrets Manager",

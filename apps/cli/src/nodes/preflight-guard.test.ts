@@ -212,6 +212,86 @@ describe("preflightGuardNode", () => {
     expect(result.preflightPassed).toBe(true);
   });
 
+  // ── Story 41.2: BP enforcement levels ────────────────────────────────────────
+
+  it("enforcement=enforce + --yes + blocking → still blocked (preflightPassed=false)", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        bpEnforcementLevel: "enforce",
+        autoApprove: true,
+        bpFindings: [
+          {
+            practiceId: "BP-S3-001",
+            title: "S3 public access block",
+            severity: "HIGH",
+            category: "security",
+            message: "S3 bucket has public access enabled",
+            blocking: true,
+          },
+        ],
+      }),
+    );
+    expect(result.preflightPassed).toBe(false);
+  });
+
+  it("enforcement=enforce + noWizard + blocking → still blocked (preflightPassed=false)", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        bpEnforcementLevel: "enforce",
+        noWizard: true,
+        bpFindings: [
+          {
+            practiceId: "BP-S3-001",
+            title: "S3 public access block",
+            severity: "HIGH",
+            category: "security",
+            message: "S3 bucket has public access enabled",
+            blocking: true,
+          },
+        ],
+      }),
+    );
+    expect(result.preflightPassed).toBe(false);
+  });
+
+  it("enforcement=warn + blocking findings → preflightPassed=true (advisory only)", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        bpEnforcementLevel: "warn",
+        bpFindings: [
+          {
+            practiceId: "BP-S3-001",
+            title: "S3 public access block",
+            severity: "HIGH",
+            category: "security",
+            message: "S3 bucket has public access enabled",
+            blocking: true,
+          },
+        ],
+      }),
+    );
+    expect(result.preflightPassed).toBe(true);
+  });
+
+  it("enforcement=skip + blocking findings → preflightPassed=true (no evaluation)", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        bpEnforcementLevel: "skip",
+        bpFindings: [
+          {
+            practiceId: "BP-S3-001",
+            title: "S3 public access block",
+            severity: "HIGH",
+            category: "security",
+            message: "S3 bucket has public access enabled",
+            blocking: true,
+          },
+        ],
+      }),
+    );
+    expect(result.preflightPassed).toBe(true);
+  });
+
   it("parses real get_pricing MCP response and returns first-tier price", async () => {
     // Real response shape returned by awslabs.aws-pricing-mcp-server get_pricing tool.
     // Captured from a live call: AmazonS3, region us-east-1, filtered to TimedStorage-ByteHrs.
