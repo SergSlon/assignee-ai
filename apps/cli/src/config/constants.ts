@@ -60,6 +60,14 @@ export const MEMORY_MAX_FAILURES = 100;
 /** Maximum number of pattern records to keep in memory rotation. */
 export const MEMORY_MAX_PATTERNS = 100;
 
+// ── Destroy Polling Constants ────────────────────────────────────────────────
+
+/** Maximum number of polls before giving up on delete status. */
+export const DESTROY_MAX_POLL_ATTEMPTS = 60;
+
+/** Delay between destroy status polls in milliseconds. */
+export const DESTROY_POLL_INTERVAL_MS = 2000;
+
 // ── Timeout Constants ────────────────────────────────────────────────────────
 
 /** Hard timeout for pricing MCP queries (ms). Non-blocking: never blocks apply on failure. */

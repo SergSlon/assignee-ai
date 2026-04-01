@@ -13,6 +13,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
 import { defaultMemoryService } from "./memory.js";
 import { unwrapMcpText } from "../utils/mcp.js";
+import { AWS_REGION } from "../config/constants.js";
 import type { ManagedResource } from "./list-resources.js";
 
 export interface BillingCostData {
@@ -153,7 +154,7 @@ export async function getCostSavingsEstimate(
     const dummyResource: ManagedResource = {
       resourceType: "unknown",
       arn,
-      region: "us-east-1",
+      region: AWS_REGION,
       createdDate: "N/A",
       estimatedMonthlyCost: "N/A",
     };

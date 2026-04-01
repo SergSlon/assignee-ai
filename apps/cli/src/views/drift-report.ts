@@ -7,6 +7,7 @@
 import { randomUUID } from "node:crypto";
 import type { DriftResult, DriftStatusType } from "@assignee/core";
 import { DriftStatus } from "@assignee/core";
+import { AWS_REGION } from "../config/constants.js";
 
 export interface DriftReportSummary {
   total: number;
@@ -60,7 +61,7 @@ export function buildDriftReport(
   return {
     reportId: randomUUID(),
     generatedAt: new Date().toISOString(),
-    region: opts.region ?? "us-east-1",
+    region: opts.region ?? AWS_REGION,
     summary,
     metadata: {
       assigneeVersion: opts.assigneeVersion ?? "0.0.0",

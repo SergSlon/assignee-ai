@@ -34,8 +34,10 @@ import { CCAPI_FALLBACK_TYPES, CCAPI_REDIRECT_TYPES } from "@assignee/core";
 const TAG_KEY_MANAGED_BY = "managed-by";
 const TAG_VALUE_MANAGED_BY = "assignee-ai";
 const DEFAULT_REGION = process.env["AWS_REGION"] ?? "us-east-1";
+/** @see DESTROY_MAX_POLL_ATTEMPTS in apps/cli/src/config/constants.ts — keep in sync */
 const MAX_POLL_ATTEMPTS = 60;
 const EXTENDED_POLL_ATTEMPTS = 300; // 10 minutes for slow deletes (RDS, NatGW)
+/** @see DESTROY_POLL_INTERVAL_MS in apps/cli/src/config/constants.ts — keep in sync */
 const POLL_INTERVAL_MS = 2_000;
 
 const SLOW_DELETE_TYPES = new Set([

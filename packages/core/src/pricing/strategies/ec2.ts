@@ -4,8 +4,9 @@ import type {
   McpPricingConfig,
 } from "../types.js";
 
+import { EXTENDED_TIMEOUT_MS } from "../constants.js";
+
 const DEFAULT_INSTANCE_TYPE = "t3.micro";
-const EXTENDED_TIMEOUT_MS = 8000;
 
 export const ec2PricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {

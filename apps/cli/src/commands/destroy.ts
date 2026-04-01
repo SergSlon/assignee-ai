@@ -37,6 +37,7 @@ import {
   createTaggingClient,
 } from "../services/resource-resolver.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
+import { AWS_REGION } from "../config/constants.js";
 import { destroySingleResource } from "../services/destroy-service.js";
 import {
   planBulkDestroy,
@@ -413,7 +414,7 @@ export async function destroyAction(
   const resolved = await resolveResource(
     resource,
     taggingClient,
-    awsConfig.region || "us-east-1",
+    awsConfig.region || AWS_REGION,
   );
 
   stopSpinner();

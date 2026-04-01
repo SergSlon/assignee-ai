@@ -10,8 +10,7 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
-
-const EXTENDED_TIMEOUT_MS = 8000;
+import { EXTENDED_TIMEOUT_MS } from "../constants.js";
 
 export const rdsPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,

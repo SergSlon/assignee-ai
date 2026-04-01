@@ -9,7 +9,11 @@
  * @see Story 20.4
  */
 
-import { defaultPricingRegistry, type PricingEstimate } from "@assignee/core";
+import {
+  defaultPricingRegistry,
+  RESOURCE_TYPES,
+  type PricingEstimate,
+} from "@assignee/core";
 import { getFreeTierNote, type FreeTierInfo } from "./free-tier.js";
 
 /** Result shape for the estimate_cost tool. */
@@ -30,59 +34,59 @@ const KEYWORD_TO_RESOURCE_TYPE: Array<{
 }> = [
   {
     keywords: ["s3", "bucket", "object storage"],
-    resourceType: "AWS::S3::Bucket",
+    resourceType: RESOURCE_TYPES.S3_BUCKET,
   },
   {
     keywords: ["lambda", "serverless function", "function as a service"],
-    resourceType: "AWS::Lambda::Function",
+    resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
   },
   {
     keywords: ["dynamodb", "dynamo", "nosql table"],
-    resourceType: "AWS::DynamoDB::Table",
+    resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
   },
   {
     keywords: ["ec2", "virtual machine", "compute instance"],
-    resourceType: "AWS::EC2::Instance",
+    resourceType: RESOURCE_TYPES.EC2_INSTANCE,
   },
   {
     keywords: ["rds", "relational database", "postgresql", "mysql", "aurora"],
-    resourceType: "AWS::RDS::DBInstance",
+    resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
   },
   {
     keywords: ["sqs", "message queue", "queue service"],
-    resourceType: "AWS::SQS::Queue",
+    resourceType: RESOURCE_TYPES.SQS_QUEUE,
   },
   {
     keywords: ["sns", "notification", "pub/sub", "publish subscribe"],
-    resourceType: "AWS::SNS::Topic",
+    resourceType: RESOURCE_TYPES.SNS_TOPIC,
   },
   {
     keywords: ["iam role", "execution role", "service role"],
-    resourceType: "AWS::IAM::Role",
+    resourceType: RESOURCE_TYPES.IAM_ROLE,
   },
   {
     keywords: ["ssm parameter", "parameter store", "systems manager parameter"],
-    resourceType: "AWS::SSM::Parameter",
+    resourceType: RESOURCE_TYPES.SSM_PARAMETER,
   },
   {
     keywords: ["ecs", "container service", "fargate"],
-    resourceType: "AWS::ECS::Cluster",
+    resourceType: RESOURCE_TYPES.ECS_CLUSTER,
   },
   {
     keywords: ["secrets manager", "secret", "credentials store"],
-    resourceType: "AWS::SecretsManager::Secret",
+    resourceType: RESOURCE_TYPES.SECRETSMANAGER_SECRET,
   },
   {
     keywords: ["ecr", "container registry", "docker registry"],
-    resourceType: "AWS::ECR::Repository",
+    resourceType: RESOURCE_TYPES.ECR_REPOSITORY,
   },
   {
     keywords: ["vpc", "virtual private cloud"],
-    resourceType: "AWS::EC2::VPC",
+    resourceType: RESOURCE_TYPES.EC2_VPC,
   },
   {
     keywords: ["security group", "firewall"],
-    resourceType: "AWS::EC2::SecurityGroup",
+    resourceType: RESOURCE_TYPES.EC2_SECURITY_GROUP,
   },
   {
     keywords: [
@@ -91,39 +95,39 @@ const KEYWORD_TO_RESOURCE_TYPE: Array<{
       "network load balancer",
       "elastic load balancer",
     ],
-    resourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
   },
   {
     keywords: ["subnet", "private subnet", "public subnet"],
-    resourceType: "AWS::EC2::Subnet",
+    resourceType: RESOURCE_TYPES.EC2_SUBNET,
   },
   {
     keywords: ["route table", "routing table"],
-    resourceType: "AWS::EC2::RouteTable",
+    resourceType: RESOURCE_TYPES.EC2_ROUTE_TABLE,
   },
   {
     keywords: ["internet gateway", "igw"],
-    resourceType: "AWS::EC2::InternetGateway",
+    resourceType: RESOURCE_TYPES.EC2_INTERNET_GATEWAY,
   },
   {
     keywords: ["nat gateway", "network address translation"],
-    resourceType: "AWS::EC2::NatGateway",
+    resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
   },
   {
     keywords: ["cloudwatch logs", "log group", "logging"],
-    resourceType: "AWS::Logs::LogGroup",
+    resourceType: RESOURCE_TYPES.LOGS_LOG_GROUP,
   },
   {
     keywords: ["api gateway", "http api", "websocket api"],
-    resourceType: "AWS::ApiGatewayV2::Api",
+    resourceType: RESOURCE_TYPES.APIGATEWAYV2_API,
   },
   {
     keywords: ["cloudwatch alarm", "metric alarm", "monitoring alarm"],
-    resourceType: "AWS::CloudWatch::Alarm",
+    resourceType: RESOURCE_TYPES.CLOUDWATCH_ALARM,
   },
   {
     keywords: ["route", "network route"],
-    resourceType: "AWS::EC2::Route",
+    resourceType: RESOURCE_TYPES.EC2_ROUTE,
   },
 ];
 

@@ -25,6 +25,7 @@ import {
 } from "@aws-sdk/client-rds";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { withTimeout } from "./timeout.js";
+import { AWS_REGION } from "../config/constants.js";
 
 const DISCOVERY_TIMEOUT_MS = 6000;
 
@@ -101,7 +102,7 @@ function readerCredentials(): {
   return {
     accessKeyId: process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] ?? "",
     secretAccessKey: process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] ?? "",
-    region: process.env["AWS_REGION"] ?? "us-east-1",
+    region: AWS_REGION,
   };
 }
 

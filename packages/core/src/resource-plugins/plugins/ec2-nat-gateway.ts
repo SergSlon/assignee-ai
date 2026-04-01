@@ -1,4 +1,7 @@
-import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
+import {
+  RESOURCE_TYPES,
+  COMPANION_RESOURCE_TYPES,
+} from "../../config/resource-types.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -18,7 +21,7 @@ export const natGatewayPlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Subnet",
-        hint: "NatGateway MUST be placed in a public subnet (one with a route to an InternetGateway). Private subnets route 0.0.0.0/0 through the NatGateway.",
+        hint: "Must be a public subnet (with route to Internet Gateway). Placing in a private subnet will prevent outbound internet access. Private subnets should route 0.0.0.0/0 through the NatGateway, not host it.",
         placeholder: "subnet-0abc1234",
         options: [],
         fetcher: "discover-subnets",

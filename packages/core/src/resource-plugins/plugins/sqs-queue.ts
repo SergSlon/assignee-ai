@@ -18,12 +18,23 @@ export const sqsQueuePlugin: ResourcePlugin = {
         hint: "Must be 1-80 chars. FIFO queues get .fifo appended automatically. Leave blank for an auto-generated name.",
         validate: (value: unknown) => {
           if (!value) return undefined;
-          const s = String(value);
+          let s = String(value);
+          // Strip .fifo suffix — AWS appends it automatically for FIFO queues
+          if (s.endsWith(".fifo")) s = s.slice(0, -5);
           if (s.length > 80) return "Queue name must be 1-80 characters";
           if (!/^[a-zA-Z0-9_-]+$/.test(s))
             return "Queue name can only contain alphanumeric characters, hyphens, and underscores";
           return undefined;
         },
+      },
+      toCfn: (v: unknown) => {
+        if (!v) return undefined;
+        let s = String(v);
+        // Strip .fifo suffix if user included it — AWS adds .fifo automatically for FIFO queues
+        if (s.endsWith(".fifo")) {
+          s = s.slice(0, -5);
+        }
+        return s || undefined;
       },
     },
     {

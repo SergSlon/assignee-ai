@@ -23,11 +23,14 @@ import type { AwsConfig } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
+import {
+  AWS_REGION,
+  DESTROY_MAX_POLL_ATTEMPTS,
+  DESTROY_POLL_INTERVAL_MS,
+} from "../config/constants.js";
 
-/** Maximum number of polls before giving up on delete status. */
-const MAX_POLL_ATTEMPTS = 60;
-/** Delay between polls in milliseconds. */
-const POLL_INTERVAL_MS = 2000;
+const MAX_POLL_ATTEMPTS = DESTROY_MAX_POLL_ATTEMPTS;
+const POLL_INTERVAL_MS = DESTROY_POLL_INTERVAL_MS;
 
 export interface DestroyResult {
   success: boolean;
@@ -171,7 +174,7 @@ export async function destroySingleResource(
         };
       }
       const cf = new CloudFrontClient({
-        region: awsConfig.region ?? "us-east-1",
+        region: awsConfig.region ?? AWS_REGION,
         credentials: {
           accessKeyId: awsConfig.accessKeyId,
           secretAccessKey: awsConfig.secretAccessKey,
@@ -262,7 +265,7 @@ export async function destroySingleResource(
       const { DynamoDBClient, UpdateTableCommand } =
         await import("@aws-sdk/client-dynamodb");
       const ddb = new DynamoDBClient({
-        region: awsConfig.region ?? "us-east-1",
+        region: awsConfig.region ?? AWS_REGION,
       });
       await ddb.send(
         new UpdateTableCommand({
@@ -288,7 +291,7 @@ export async function destroySingleResource(
         };
       }
       const s3 = new S3Client({
-        region: awsConfig.region ?? "us-east-1",
+        region: awsConfig.region ?? AWS_REGION,
         credentials: {
           accessKeyId: awsConfig.accessKeyId,
           secretAccessKey: awsConfig.secretAccessKey,

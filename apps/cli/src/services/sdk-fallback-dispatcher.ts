@@ -30,6 +30,7 @@ import {
   type ProvisioningPortError,
 } from "./provisioning-port.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
+import { AWS_REGION } from "../config/constants.js";
 
 /** Result type alias following error-first tuple convention. */
 type FallbackResult<T> = [ProvisioningPortError, null] | [null, T];
@@ -73,7 +74,7 @@ export class SDKFallbackDispatcher {
       secretAccessKey: config.secretAccessKey,
     };
 
-    const region = config.region || "us-east-1";
+    const region = config.region || AWS_REGION;
 
     this.lambdaClient = new LambdaClient({
       region,
@@ -185,9 +186,7 @@ export class SDKFallbackDispatcher {
     topicArn: string,
   ): Promise<FallbackResult<{ success: true }>> {
     try {
-      await this.snsClient.send(
-        new DeleteTopicCommand({ TopicArn: topicArn }),
-      );
+      await this.snsClient.send(new DeleteTopicCommand({ TopicArn: topicArn }));
       return [null, { success: true }];
     } catch (err) {
       return [classifySdkError(err), null];
