@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -11,7 +12,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
   commonFields: [
     {
-      name: "TableName",
+      name: CfnKey.TABLE_NAME,
       required: true,
       question: {
         type: "string",
@@ -30,7 +31,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "BillingMode",
+      name: CfnKey.BILLING_MODE,
       question: {
         type: "enum",
         label: "Billing mode",
@@ -90,7 +91,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -113,14 +114,14 @@ export const dynamodbTablePlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "ReadCapacityUnits",
+      name: CfnKey.READ_CAPACITY_UNITS,
       question: {
         type: "string",
         label: "Read capacity units (RCUs)",
         placeholder: "5",
         initialValue: "5",
         hint: "1 RCU = one strongly consistent 4 KB read/sec. Only applies to provisioned billing mode.",
-        showIf: { field: "BillingMode", value: "PROVISIONED" },
+        showIf: { field: CfnKey.BILLING_MODE, value: "PROVISIONED" },
         validate: (value: unknown) => {
           if (!value) return "RCUs required for provisioned mode";
           const n = Number(value);
@@ -131,14 +132,14 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "WriteCapacityUnits",
+      name: CfnKey.WRITE_CAPACITY_UNITS,
       question: {
         type: "string",
         label: "Write capacity units (WCUs)",
         placeholder: "5",
         initialValue: "5",
         hint: "1 WCU = one 1 KB write/sec. Only applies to provisioned billing mode.",
-        showIf: { field: "BillingMode", value: "PROVISIONED" },
+        showIf: { field: CfnKey.BILLING_MODE, value: "PROVISIONED" },
         validate: (value: unknown) => {
           if (!value) return "WCUs required for provisioned mode";
           const n = Number(value);
@@ -149,7 +150,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "PointInTimeRecoveryEnabled",
+      name: CfnKey.PITR_ENABLED,
       question: {
         type: "boolean",
         label: "Enable point-in-time recovery (PITR)?",
@@ -158,7 +159,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "DeletionProtectionEnabled",
+      name: CfnKey.DELETION_PROTECTION_ENABLED,
       question: {
         type: "boolean",
         label: "Enable deletion protection?",
@@ -167,7 +168,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "SSEEnabled",
+      name: CfnKey.SSE_ENABLED,
       question: {
         type: "boolean",
         label: "Enable CMK encryption at rest?",
@@ -177,9 +178,9 @@ export const dynamodbTablePlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    BillingMode: "PAY_PER_REQUEST",
-    PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
-    SSESpecification: { SSEEnabled: true },
+    [CfnKey.BILLING_MODE]: "PAY_PER_REQUEST",
+    [CfnKey.PITR_SPECIFICATION]: { [CfnKey.PITR_ENABLED]: true },
+    [CfnKey.SSE_SPECIFICATION]: { [CfnKey.SSE_ENABLED]: true },
   },
   configHints: [
     "BillingMode MUST be either PAY_PER_REQUEST or PROVISIONED — never omit it.",

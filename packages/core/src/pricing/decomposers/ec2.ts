@@ -5,6 +5,7 @@
  * @see Story 23.1
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -18,7 +19,7 @@ export const ec2PricingDecomposer: PricingDecomposer = {
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
     const instanceType =
-      (desiredState["InstanceType"] as string | undefined) ?? "t3.micro";
+      (desiredState[CfnKey.INSTANCE_TYPE] as string | undefined) ?? "t3.micro";
 
     // 1. Compute (instance hourly rate)
     items.push({
@@ -45,7 +46,7 @@ export const ec2PricingDecomposer: PricingDecomposer = {
     });
 
     // 2. EBS Storage — iterate ALL volumes, not just the first
-    const bdm = desiredState["BlockDeviceMappings"];
+    const bdm = desiredState[CfnKey.BLOCK_DEVICE_MAPPINGS];
     if (Array.isArray(bdm) && bdm.length > 0) {
       for (let idx = 0; idx < bdm.length; idx++) {
         const vol = bdm[idx] as Record<string, unknown> | undefined;
@@ -79,7 +80,7 @@ export const ec2PricingDecomposer: PricingDecomposer = {
     }
 
     // 3. Public IPv4 — only if explicitly requested via AssociatePublicIpAddress
-    const hasPublicIp = desiredState["AssociatePublicIpAddress"] === true;
+    const hasPublicIp = desiredState[CfnKey.ASSOCIATE_PUBLIC_IP] === true;
 
     if (hasPublicIp) {
       items.push({

@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -26,7 +27,7 @@ export const vpcPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.EC2_VPC,
   commonFields: [
     {
-      name: "CidrBlock",
+      name: CfnKey.CIDR_BLOCK,
       required: true,
       question: {
         type: "string",
@@ -38,7 +39,7 @@ export const vpcPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "EnableDnsHostnames",
+      name: CfnKey.ENABLE_DNS_HOSTNAMES,
       question: {
         type: "boolean",
         label: "Enable DNS hostnames?",
@@ -47,7 +48,7 @@ export const vpcPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "EnableDnsSupport",
+      name: CfnKey.ENABLE_DNS_SUPPORT,
       question: {
         type: "boolean",
         label: "Enable DNS support?",
@@ -56,7 +57,7 @@ export const vpcPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -79,7 +80,7 @@ export const vpcPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "InstanceTenancy",
+      name: CfnKey.INSTANCE_TENANCY,
       question: {
         type: "enum",
         label: "Instance tenancy",
@@ -93,10 +94,10 @@ export const vpcPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    CidrBlock: "10.0.0.0/16",
-    EnableDnsHostnames: true,
-    EnableDnsSupport: true,
-    InstanceTenancy: "default",
+    [CfnKey.CIDR_BLOCK]: "10.0.0.0/16",
+    [CfnKey.ENABLE_DNS_HOSTNAMES]: true,
+    [CfnKey.ENABLE_DNS_SUPPORT]: true,
+    [CfnKey.INSTANCE_TENANCY]: "default",
   },
   configHints: [
     "CidrBlock MUST be valid IPv4 CIDR between /16 and /28",

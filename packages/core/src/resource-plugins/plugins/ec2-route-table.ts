@@ -1,4 +1,8 @@
-import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
+import {
+  RESOURCE_TYPES,
+  COMPANION_RESOURCE_TYPES,
+} from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -13,7 +17,7 @@ export const routeTablePlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.EC2_ROUTE_TABLE,
   commonFields: [
     {
-      name: "VpcId",
+      name: CfnKey.VPC_ID,
       required: true,
       question: {
         type: "enum",
@@ -24,7 +28,7 @@ export const routeTablePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -55,14 +59,16 @@ export const routeTablePlugin: ResourcePlugin = {
   ],
   toCfn(desiredState: Record<string, unknown>): CfnOutput[] {
     const logicalId = (desiredState["logicalId"] as string) ?? "RouteTable";
-    const subnetId = desiredState["SubnetId"] as string | undefined;
+    const subnetId = desiredState[CfnKey.SUBNET_ID] as string | undefined;
 
     const routeTableResource: CfnOutput = {
       logicalId,
       type: RESOURCE_TYPES.EC2_ROUTE_TABLE,
       properties: {
-        VpcId: desiredState["VpcId"],
-        ...(desiredState["Tags"] ? { Tags: desiredState["Tags"] } : {}),
+        [CfnKey.VPC_ID]: desiredState[CfnKey.VPC_ID],
+        ...(desiredState[CfnKey.TAGS]
+          ? { [CfnKey.TAGS]: desiredState[CfnKey.TAGS] }
+          : {}),
       },
     };
 
@@ -73,8 +79,8 @@ export const routeTablePlugin: ResourcePlugin = {
         logicalId: `${logicalId}SubnetAssociation`,
         type: COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
         properties: {
-          RouteTableId: { Ref: logicalId },
-          SubnetId: subnetId,
+          [CfnKey.ROUTE_TABLE_ID]: { Ref: logicalId },
+          [CfnKey.SUBNET_ID]: subnetId,
         },
       });
     }

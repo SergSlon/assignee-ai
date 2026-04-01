@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 
 /**
@@ -15,7 +16,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.CLOUDWATCH_ALARM,
   commonFields: [
     {
-      name: "AlarmName",
+      name: CfnKey.ALARM_NAME,
       required: true,
       question: {
         type: "string",
@@ -32,7 +33,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "MetricName",
+      name: CfnKey.METRIC_NAME,
       required: true,
       question: {
         type: "string",
@@ -47,7 +48,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Namespace",
+      name: CfnKey.NAMESPACE,
       required: true,
       question: {
         type: "enum",
@@ -68,7 +69,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Threshold",
+      name: CfnKey.THRESHOLD,
       required: true,
       question: {
         type: "string",
@@ -94,7 +95,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "ComparisonOperator",
+      name: CfnKey.COMPARISON_OPERATOR,
       required: true,
       question: {
         type: "enum",
@@ -122,7 +123,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "AlarmActions",
+      name: CfnKey.ALARM_ACTIONS,
       question: {
         type: "multi",
         label: "Alarm actions (SNS topic ARNs)",
@@ -145,7 +146,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "Statistic",
+      name: CfnKey.STATISTIC,
       question: {
         type: "enum",
         label: "Statistic",
@@ -161,7 +162,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Period",
+      name: CfnKey.PERIOD,
       question: {
         type: "string",
         label: "Period (seconds)",
@@ -183,7 +184,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "EvaluationPeriods",
+      name: CfnKey.EVALUATION_PERIODS,
       question: {
         type: "string",
         label: "Evaluation periods",
@@ -204,7 +205,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "OKActions",
+      name: CfnKey.OK_ACTIONS,
       question: {
         type: "multi",
         label: "OK actions (SNS topic ARNs)",
@@ -225,7 +226,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "InsufficientDataActions",
+      name: CfnKey.INSUFFICIENT_DATA_ACTIONS,
       question: {
         type: "multi",
         label: "Insufficient data actions (SNS topic ARNs)",
@@ -246,7 +247,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Dimensions",
+      name: CfnKey.DIMENSIONS,
       question: {
         type: "string",
         label: 'Dimensions (JSON: [{"Name":"...","Value":"..."}])',
@@ -270,7 +271,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "TreatMissingData",
+      name: CfnKey.TREAT_MISSING_DATA,
       question: {
         type: "enum",
         label: "Treat missing data as",
@@ -297,7 +298,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "DatapointsToAlarm",
+      name: CfnKey.DATAPOINTS_TO_ALARM,
       question: {
         type: "string",
         label: "Datapoints to alarm (M of N)",
@@ -318,10 +319,10 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    Statistic: "Average",
-    Period: "300",
-    EvaluationPeriods: "3",
-    TreatMissingData: "missing",
+    [CfnKey.STATISTIC]: "Average",
+    [CfnKey.PERIOD]: "300",
+    [CfnKey.EVALUATION_PERIODS]: "3",
+    [CfnKey.TREAT_MISSING_DATA]: "missing",
   },
   configHints: [
     "SQS Dead Letter Queue depth alarm: Namespace=AWS/SQS, MetricName=ApproximateNumberOfMessagesVisible, ComparisonOperator=GreaterThanThreshold, Threshold=0. Fires when any message lands in the DLQ.",

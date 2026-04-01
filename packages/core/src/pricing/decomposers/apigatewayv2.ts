@@ -5,6 +5,7 @@
  * @see Story 23.3
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -16,7 +17,7 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
-    const protocolType = String(desiredState["ProtocolType"] ?? "HTTP");
+    const protocolType = String(desiredState[CfnKey.PROTOCOL_TYPE] ?? "HTTP");
 
     if (protocolType === "WEBSOCKET") {
       // 1. Messages

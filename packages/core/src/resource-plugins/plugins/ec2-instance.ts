@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -187,7 +188,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.EC2_INSTANCE,
   commonFields: [
     {
-      name: "InstanceType",
+      name: CfnKey.INSTANCE_TYPE,
       required: true,
       question: {
         type: "categorySelect",
@@ -198,7 +199,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "ImageId",
+      name: CfnKey.IMAGE_ID,
       required: true,
       question: {
         type: "enum",
@@ -219,7 +220,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "KeyName",
+      name: CfnKey.KEY_NAME,
       question: {
         type: "enum",
         label: "EC2 Key Pair",
@@ -229,7 +230,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "SubnetId",
+      name: CfnKey.SUBNET_ID,
       question: {
         type: "enum",
         label: "Subnet",
@@ -240,7 +241,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "SecurityGroupIds",
+      name: CfnKey.SECURITY_GROUP_IDS,
       question: {
         type: "multi",
         label: "Security Groups",
@@ -250,7 +251,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -273,7 +274,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "IamInstanceProfile",
+      name: CfnKey.IAM_INSTANCE_PROFILE,
       question: {
         type: "string",
         label: "IAM Instance Profile name",
@@ -325,7 +326,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "UserData",
+      name: CfnKey.USER_DATA,
       question: {
         type: "string",
         label: "User data script (base64)",
@@ -334,7 +335,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Monitoring",
+      name: CfnKey.MONITORING,
       question: {
         type: "boolean",
         label: "Detailed CloudWatch Monitoring",
@@ -343,7 +344,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "AssociatePublicIpAddress",
+      name: CfnKey.ASSOCIATE_PUBLIC_IP,
       question: {
         type: "boolean",
         label: "Associate Public IP",
@@ -352,7 +353,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "CreditSpecification",
+      name: CfnKey.CREDIT_SPECIFICATION,
       question: {
         type: "enum",
         label: "CPU Credit Specification",
@@ -368,7 +369,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
         ],
         initialValue: "standard",
         hint: "Controls CPU credit behavior for burstable (t3/t4g) instances. Standard pauses bursting when credits run out; Unlimited allows sustained bursting at extra cost.",
-        showIf: { field: "InstanceType", pattern: "^t[34]" },
+        showIf: { field: CfnKey.INSTANCE_TYPE, pattern: "^t[34]" },
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string") return undefined;
@@ -377,8 +378,8 @@ export const ec2InstancePlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    MetadataOptions: { HttpTokens: "required" },
-    BlockDeviceMappings: [
+    [CfnKey.METADATA_OPTIONS]: { HttpTokens: "required" },
+    [CfnKey.BLOCK_DEVICE_MAPPINGS]: [
       {
         DeviceName: "/dev/xvda",
         Ebs: { Encrypted: true, VolumeType: "gp3" },

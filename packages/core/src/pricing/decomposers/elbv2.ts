@@ -5,6 +5,7 @@
  * @see Story 23.x
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -16,7 +17,9 @@ export const elbv2PricingDecomposer: PricingDecomposer = {
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
-    const lbType = String(desiredState["Type"] ?? "application").toLowerCase();
+    const lbType = String(
+      desiredState[CfnKey.TYPE] ?? "application",
+    ).toLowerCase();
 
     if (lbType === "network") {
       // NLB hourly rate

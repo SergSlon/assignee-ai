@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -11,7 +12,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.APIGATEWAYV2_API,
   commonFields: [
     {
-      name: "Name",
+      name: CfnKey.NAME,
       required: true,
       question: {
         type: "string",
@@ -27,7 +28,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       },
     },
     {
-      name: "ProtocolType",
+      name: CfnKey.PROTOCOL_TYPE,
       question: {
         type: "enum",
         label: "Protocol type",
@@ -43,7 +44,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       },
     },
     {
-      name: "Description",
+      name: CfnKey.DESCRIPTION,
       question: {
         type: "string",
         label: "Description",
@@ -114,7 +115,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       },
     },
     {
-      name: "DisableExecuteApiEndpoint",
+      name: CfnKey.DISABLE_EXECUTE_API,
       question: {
         type: "boolean",
         label: "Disable default execute-api endpoint?",
@@ -123,7 +124,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -146,7 +147,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "RouteSelectionExpression",
+      name: CfnKey.ROUTE_SELECTION_EXPRESSION,
       question: {
         type: "string",
         label: "Route selection expression",
@@ -156,7 +157,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       },
     },
     {
-      name: "Version",
+      name: CfnKey.VERSION,
       question: {
         type: "string",
         label: "API version",
@@ -166,7 +167,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    ProtocolType: "HTTP",
+    [CfnKey.PROTOCOL_TYPE]: "HTTP",
   },
   configHints: [
     "HTTP API is simpler and ~70% cheaper than REST API (API Gateway v1). Use HTTP API unless you need REST API features like request validation, caching, or usage plans.",

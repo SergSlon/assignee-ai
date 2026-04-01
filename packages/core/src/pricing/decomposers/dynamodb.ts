@@ -6,6 +6,7 @@
  * @see Story 24.1
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -18,15 +19,16 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
     const billingMode =
-      (desiredState["BillingMode"] as string | undefined) ?? "PAY_PER_REQUEST";
+      (desiredState[CfnKey.BILLING_MODE] as string | undefined) ??
+      "PAY_PER_REQUEST";
     const isProvisioned = billingMode === "PROVISIONED";
 
     if (isProvisioned) {
-      const throughput = desiredState["ProvisionedThroughput"] as
+      const throughput = desiredState[CfnKey.PROVISIONED_THROUGHPUT] as
         | Record<string, unknown>
         | undefined;
-      const rcu = Number(throughput?.["ReadCapacityUnits"] ?? 5);
-      const wcu = Number(throughput?.["WriteCapacityUnits"] ?? 5);
+      const rcu = Number(throughput?.[CfnKey.READ_CAPACITY_UNITS] ?? 5);
+      const wcu = Number(throughput?.[CfnKey.WRITE_CAPACITY_UNITS] ?? 5);
 
       // 1. Read capacity (provisioned)
       items.push({

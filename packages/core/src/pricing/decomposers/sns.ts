@@ -5,6 +5,7 @@
  * @see Story 23.3
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -16,8 +17,8 @@ export const snsPricingDecomposer: PricingDecomposer = {
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
-    const topicName = String(desiredState["TopicName"] ?? "");
-    const fifoFlag = desiredState["FifoTopic"];
+    const topicName = String(desiredState[CfnKey.TOPIC_NAME] ?? "");
+    const fifoFlag = desiredState[CfnKey.FIFO_TOPIC];
     const isFifo =
       fifoFlag === true || fifoFlag === "true" || topicName.endsWith(".fifo");
 

@@ -5,6 +5,7 @@
  * @see Story 23.3
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -16,7 +17,9 @@ export const logsPricingDecomposer: PricingDecomposer = {
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
-    const logGroupClass = String(desiredState["LogGroupClass"] ?? "STANDARD");
+    const logGroupClass = String(
+      desiredState[CfnKey.LOG_GROUP_CLASS] ?? "STANDARD",
+    );
     const isInfrequent = logGroupClass === "INFREQUENT_ACCESS";
 
     // 1. Log ingestion

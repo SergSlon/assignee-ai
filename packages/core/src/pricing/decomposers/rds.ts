@@ -5,6 +5,7 @@
  * @see Story 23.2
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -18,9 +19,11 @@ export const rdsPricingDecomposer: PricingDecomposer = {
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
     const instanceClass =
-      (desiredState["DBInstanceClass"] as string | undefined) ?? "db.t3.micro";
-    const engine = (desiredState["Engine"] as string | undefined) ?? "mysql";
-    const multiAZ = desiredState["MultiAZ"] === true;
+      (desiredState[CfnKey.DB_INSTANCE_CLASS] as string | undefined) ??
+      "db.t3.micro";
+    const engine =
+      (desiredState[CfnKey.ENGINE] as string | undefined) ?? "mysql";
+    const multiAZ = desiredState[CfnKey.MULTI_AZ] === true;
 
     // 1. Compute (query the actual deployment option — Multi-AZ price includes standby)
     items.push({
@@ -53,8 +56,10 @@ export const rdsPricingDecomposer: PricingDecomposer = {
     });
 
     // 2. Storage
-    const allocatedStorage = Number(desiredState["AllocatedStorage"] ?? 20);
-    const storageType = String(desiredState["StorageType"] ?? "gp3");
+    const allocatedStorage = Number(
+      desiredState[CfnKey.ALLOCATED_STORAGE] ?? 20,
+    );
+    const storageType = String(desiredState[CfnKey.STORAGE_TYPE] ?? "gp3");
 
     items.push({
       label: "Storage",
@@ -84,7 +89,9 @@ export const rdsPricingDecomposer: PricingDecomposer = {
     });
 
     // 3. Backup storage (usage-based, depends on retention period)
-    const backupRetention = Number(desiredState["BackupRetentionPeriod"] ?? 7);
+    const backupRetention = Number(
+      desiredState[CfnKey.BACKUP_RETENTION_PERIOD] ?? 7,
+    );
     if (backupRetention > 0) {
       items.push({
         label: "Backup",

@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -10,7 +11,7 @@ export const ecsClusterPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.ECS_CLUSTER,
   commonFields: [
     {
-      name: "ClusterName",
+      name: CfnKey.CLUSTER_NAME,
       question: {
         type: "string",
         label: "Cluster name",
@@ -27,7 +28,7 @@ export const ecsClusterPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "ContainerInsights",
+      name: CfnKey.CONTAINER_INSIGHTS,
       question: {
         type: "boolean",
         label: "Enable Container Insights?",
@@ -40,7 +41,7 @@ export const ecsClusterPlugin: ResourcePlugin = {
           : [{ Name: "containerInsights", Value: "disabled" }],
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -63,7 +64,7 @@ export const ecsClusterPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "CapacityProviders",
+      name: CfnKey.CAPACITY_PROVIDERS,
       question: {
         type: "multi",
         label: "Capacity providers",
@@ -85,7 +86,7 @@ export const ecsClusterPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "DefaultCapacityProviderStrategy",
+      name: CfnKey.DEFAULT_CAPACITY_STRATEGY,
       question: {
         type: "enum",
         label: "Default capacity provider strategy",
@@ -115,11 +116,13 @@ export const ecsClusterPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    ClusterSettings: [{ Name: "containerInsights", Value: "enabled" }],
-    CapacityProviders: ["FARGATE"],
+    [CfnKey.CLUSTER_SETTINGS]: [
+      { Name: "containerInsights", Value: "enabled" },
+    ],
+    [CfnKey.CAPACITY_PROVIDERS]: ["FARGATE"],
   },
   companionResources(desiredState: Record<string, unknown>): CfnOutput[] {
-    const clusterName = desiredState["ClusterName"];
+    const clusterName = desiredState[CfnKey.CLUSTER_NAME];
     if (typeof clusterName !== "string" || !clusterName) return [];
 
     const retention =
@@ -133,8 +136,8 @@ export const ecsClusterPlugin: ResourcePlugin = {
         logicalId: `${sanitized}LogGroup`,
         type: RESOURCE_TYPES.LOGS_LOG_GROUP,
         properties: {
-          LogGroupName: `/ecs/${clusterName}`,
-          RetentionInDays: retention,
+          [CfnKey.LOG_GROUP_NAME]: `/ecs/${clusterName}`,
+          [CfnKey.RETENTION_IN_DAYS]: retention,
         },
       },
     ];

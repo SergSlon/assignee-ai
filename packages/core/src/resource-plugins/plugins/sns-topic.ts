@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -10,7 +11,7 @@ export const snsTopicPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.SNS_TOPIC,
   commonFields: [
     {
-      name: "TopicName",
+      name: CfnKey.TOPIC_NAME,
       question: {
         type: "string",
         label: "Topic name",
@@ -38,7 +39,7 @@ export const snsTopicPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "FifoTopic",
+      name: CfnKey.FIFO_TOPIC,
       question: {
         type: "boolean",
         label: "FIFO topic?",
@@ -47,7 +48,7 @@ export const snsTopicPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "DisplayName",
+      name: CfnKey.DISPLAY_NAME,
       question: {
         type: "string",
         label: "Display name",
@@ -62,7 +63,7 @@ export const snsTopicPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "KmsMasterKeyId",
+      name: CfnKey.KMS_MASTER_KEY_ID,
       question: {
         type: "string",
         label: "KMS Key ID for encryption",
@@ -78,7 +79,7 @@ export const snsTopicPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",

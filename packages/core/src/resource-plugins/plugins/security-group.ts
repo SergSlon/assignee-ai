@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -94,7 +95,7 @@ export const securityGroupPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.EC2_SECURITY_GROUP,
   commonFields: [
     {
-      name: "GroupDescription",
+      name: CfnKey.GROUP_DESCRIPTION,
       required: true,
       question: {
         type: "string",
@@ -112,7 +113,7 @@ export const securityGroupPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "VpcId",
+      name: CfnKey.VPC_ID,
       question: {
         type: "enum",
         label: "VPC",
@@ -122,7 +123,7 @@ export const securityGroupPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -145,7 +146,7 @@ export const securityGroupPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "SecurityGroupIngress",
+      name: CfnKey.SG_INGRESS,
       question: {
         type: "string",
         label: "Ingress rules (protocol:port:source)",
@@ -167,7 +168,7 @@ export const securityGroupPlugin: ResourcePlugin = {
       toCfn: (answer: unknown) => parseRules(answer, "ingress"),
     },
     {
-      name: "SecurityGroupEgress",
+      name: CfnKey.SG_EGRESS,
       question: {
         type: "string",
         label: "Egress rules (protocol:port:destination)",
@@ -190,10 +191,10 @@ export const securityGroupPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    SecurityGroupIngress: [
+    [CfnKey.SG_INGRESS]: [
       { IpProtocol: "tcp", FromPort: 443, ToPort: 443, CidrIp: "0.0.0.0/0" },
     ],
-    SecurityGroupEgress: [{ IpProtocol: "-1", CidrIp: "0.0.0.0/0" }],
+    [CfnKey.SG_EGRESS]: [{ IpProtocol: "-1", CidrIp: "0.0.0.0/0" }],
   },
   configHints: [
     "SecurityGroup GroupDescription: REQUIRED. Cannot be changed after creation. Must be a meaningful description.",

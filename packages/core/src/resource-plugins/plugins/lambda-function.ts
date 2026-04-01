@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin, OptionMetadata, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -111,7 +112,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
   commonFields: [
     {
-      name: "FunctionName",
+      name: CfnKey.FUNCTION_NAME,
       required: true,
       question: {
         type: "string",
@@ -129,7 +130,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Runtime",
+      name: CfnKey.RUNTIME,
       question: {
         type: "enum",
         label: "Runtime",
@@ -139,7 +140,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Handler",
+      name: CfnKey.HANDLER,
       required: true,
       question: {
         type: "string",
@@ -157,7 +158,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Role",
+      name: CfnKey.ROLE,
       required: true,
       question: {
         type: "string",
@@ -173,7 +174,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "MemorySize",
+      name: CfnKey.MEMORY_SIZE,
       question: {
         type: "enum",
         label: "Memory (MB)",
@@ -211,7 +212,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       toCfn: (v: unknown) => (v ? parseInt(String(v), 10) : undefined),
     },
     {
-      name: "Timeout",
+      name: CfnKey.TIMEOUT,
       question: {
         type: "string",
         label: "Timeout (seconds, 1-900)",
@@ -229,7 +230,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       toCfn: (v: unknown) => (v ? parseInt(String(v), 10) : undefined),
     },
     {
-      name: "Environment",
+      name: CfnKey.ENVIRONMENT,
       question: {
         type: "string",
         label: "Environment Variables",
@@ -251,7 +252,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Architectures",
+      name: CfnKey.ARCHITECTURES,
       question: {
         type: "enum",
         label: "CPU Architecture",
@@ -274,7 +275,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       toCfn: (v: unknown) => (v ? [String(v)] : undefined),
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -297,7 +298,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "Description",
+      name: CfnKey.DESCRIPTION,
       question: {
         type: "string",
         label: "Function description",
@@ -312,7 +313,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "ReservedConcurrentExecutions",
+      name: CfnKey.RESERVED_CONCURRENT_EXECUTIONS,
       question: {
         type: "string",
         label: "Reserved concurrent executions (-1 = unreserved)",
@@ -328,7 +329,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "EphemeralStorage",
+      name: CfnKey.EPHEMERAL_STORAGE,
       question: {
         type: "enum",
         label: "Ephemeral storage (/tmp)",
@@ -375,7 +376,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Layers",
+      name: CfnKey.LAYERS,
       question: {
         type: "string",
         label: "Lambda Layers (comma-separated ARNs)",
@@ -393,15 +394,15 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    MemorySize: 128,
-    Timeout: 30,
-    Runtime: "nodejs22.x",
-    Handler: "index.handler",
-    Architectures: ["x86_64"],
-    EphemeralStorage: { Size: 512 },
+    [CfnKey.MEMORY_SIZE]: 128,
+    [CfnKey.TIMEOUT]: 30,
+    [CfnKey.RUNTIME]: "nodejs22.x",
+    [CfnKey.HANDLER]: "index.handler",
+    [CfnKey.ARCHITECTURES]: ["x86_64"],
+    [CfnKey.EPHEMERAL_STORAGE]: { Size: 512 },
     // Story E2E.3: Placeholder Code for noWizard/MCP mode.
     // Lambda cannot be created without Code; repairer injects this when LLM omits it.
-    Code: {
+    [CfnKey.CODE]: {
       ZipFile:
         "exports.handler = async (event) => ({ statusCode: 200, body: 'placeholder' });",
     },
@@ -416,7 +417,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
     "Layers: must be an array of full Lambda Layer ARNs including version number. Max 5 layers.",
   ],
   companionResources(desiredState: Record<string, unknown>): CfnOutput[] {
-    const functionName = desiredState["FunctionName"];
+    const functionName = desiredState[CfnKey.FUNCTION_NAME];
     if (typeof functionName !== "string" || !functionName) return [];
 
     const retention =
@@ -430,8 +431,8 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         logicalId: `${sanitized}LogGroup`,
         type: RESOURCE_TYPES.LOGS_LOG_GROUP,
         properties: {
-          LogGroupName: `/aws/lambda/${functionName}`,
-          RetentionInDays: retention,
+          [CfnKey.LOG_GROUP_NAME]: `/aws/lambda/${functionName}`,
+          [CfnKey.RETENTION_IN_DAYS]: retention,
         },
       },
     ];

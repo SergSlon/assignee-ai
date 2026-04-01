@@ -5,6 +5,7 @@
  * @see Story 23.3
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -16,8 +17,8 @@ export const sqsPricingDecomposer: PricingDecomposer = {
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
-    const queueName = String(desiredState["QueueName"] ?? "");
-    const fifoFlag = desiredState["FifoQueue"];
+    const queueName = String(desiredState[CfnKey.QUEUE_NAME] ?? "");
+    const fifoFlag = desiredState[CfnKey.FIFO_QUEUE];
     const isFifo =
       fifoFlag === true || fifoFlag === "true" || queueName.endsWith(".fifo");
 

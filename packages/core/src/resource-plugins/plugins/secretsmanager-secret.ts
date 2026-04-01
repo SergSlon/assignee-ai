@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -17,7 +18,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.SECRETSMANAGER_SECRET,
   commonFields: [
     {
-      name: "Name",
+      name: CfnKey.NAME,
       required: true,
       question: {
         type: "string",
@@ -36,7 +37,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Description",
+      name: CfnKey.DESCRIPTION,
       question: {
         type: "string",
         label: "Description",
@@ -51,7 +52,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "GenerateSecretString",
+      name: CfnKey.GENERATE_SECRET_STRING,
       question: {
         type: "boolean",
         label: "Auto-generate a random secret value?",
@@ -83,7 +84,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -106,13 +107,13 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "SecretString",
+      name: CfnKey.SECRET_STRING,
       question: {
         type: "string",
         label: "Secret value (plaintext — NOT recommended)",
         placeholder: "my-secret-value",
         hint: "WARNING: This value will be stored in plaintext in the CloudFormation template and state file. Use auto-generate instead unless you must supply a specific value. Never use for production credentials.",
-        showIf: { field: "GenerateSecretString", value: false },
+        showIf: { field: CfnKey.GENERATE_SECRET_STRING, value: false },
         validate: (value: unknown) => {
           if (!value)
             return "Secret value is required when not using auto-generate";
@@ -129,7 +130,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
         label: "Password generation config (JSON)",
         placeholder: '{"PasswordLength":32,"ExcludeCharacters":"@/\\\\"}',
         hint: "JSON object to customize generated password: PasswordLength (default 32), ExcludeCharacters, ExcludePunctuation (bool), ExcludeUppercase (bool), ExcludeLowercase (bool), ExcludeNumbers (bool), IncludeSpace (bool), RequireEachIncludedType (bool).",
-        showIf: { field: "GenerateSecretString", value: true },
+        showIf: { field: CfnKey.GENERATE_SECRET_STRING, value: true },
         validate: (value: unknown) => {
           if (!value) return undefined;
           try {
@@ -150,7 +151,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "ReplicaRegions",
+      name: CfnKey.REPLICA_REGIONS,
       question: {
         type: "string",
         label: "Replica regions (comma-separated)",
@@ -168,7 +169,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    GenerateSecretString: true,
+    [CfnKey.GENERATE_SECRET_STRING]: true,
   },
   configHints: [
     "ALWAYS prefer GenerateSecretString over plaintext SecretString — plaintext values are visible in CloudFormation state and template files.",

@@ -2,6 +2,7 @@ import {
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
 } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -16,7 +17,7 @@ export const natGatewayPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
   commonFields: [
     {
-      name: "SubnetId",
+      name: CfnKey.SUBNET_ID,
       required: true,
       question: {
         type: "enum",
@@ -28,7 +29,7 @@ export const natGatewayPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "ConnectivityType",
+      name: CfnKey.CONNECTIVITY_TYPE,
       question: {
         type: "enum",
         label: "Connectivity type",
@@ -48,7 +49,7 @@ export const natGatewayPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -71,7 +72,7 @@ export const natGatewayPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "MaxDrainDurationSeconds",
+      name: CfnKey.MAX_DRAIN_DURATION,
       question: {
         type: "string",
         label: "Max drain duration (seconds)",
@@ -89,7 +90,7 @@ export const natGatewayPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    ConnectivityType: "public",
+    [CfnKey.CONNECTIVITY_TYPE]: "public",
   },
   configHints: [
     "NatGateway SubnetId: REQUIRED. The NatGateway MUST be placed in a public subnet (one with a route to an InternetGateway). Placing it in a private subnet will not work.",
@@ -101,10 +102,10 @@ export const natGatewayPlugin: ResourcePlugin = {
   ],
   toCfn(desiredState: Record<string, unknown>) {
     const connectivityType =
-      (desiredState["ConnectivityType"] as string) ?? "public";
-    const subnetId = desiredState["SubnetId"] as string | undefined;
-    const tags = desiredState["Tags"] as unknown;
-    const maxDrain = desiredState["MaxDrainDurationSeconds"] as
+      (desiredState[CfnKey.CONNECTIVITY_TYPE] as string) ?? "public";
+    const subnetId = desiredState[CfnKey.SUBNET_ID] as string | undefined;
+    const tags = desiredState[CfnKey.TAGS] as unknown;
+    const maxDrain = desiredState[CfnKey.MAX_DRAIN_DURATION] as
       | string
       | undefined;
 
@@ -112,17 +113,17 @@ export const natGatewayPlugin: ResourcePlugin = {
       (desiredState["_logicalId"] as string) ?? "NatGateway";
 
     const natGwProps: Record<string, unknown> = {
-      ConnectivityType: connectivityType,
+      [CfnKey.CONNECTIVITY_TYPE]: connectivityType,
     };
 
     if (subnetId) {
-      natGwProps["SubnetId"] = subnetId;
+      natGwProps[CfnKey.SUBNET_ID] = subnetId;
     }
     if (tags) {
-      natGwProps["Tags"] = tags;
+      natGwProps[CfnKey.TAGS] = tags;
     }
     if (maxDrain) {
-      natGwProps["MaxDrainDurationSeconds"] = parseInt(maxDrain, 10);
+      natGwProps[CfnKey.MAX_DRAIN_DURATION] = parseInt(maxDrain, 10);
     }
 
     const resources: CfnOutput[] = [];
@@ -134,14 +135,14 @@ export const natGatewayPlugin: ResourcePlugin = {
         logicalId: eipLogicalId,
         type: COMPANION_RESOURCE_TYPES.EC2_EIP,
         properties: {
-          Domain: "vpc",
-          ...(tags ? { Tags: tags } : {}),
+          [CfnKey.DOMAIN]: "vpc",
+          ...(tags ? { [CfnKey.TAGS]: tags } : {}),
         },
       });
 
       // Wire AllocationId to the EIP via !GetAtt
-      natGwProps["AllocationId"] = {
-        "Fn::GetAtt": [eipLogicalId, "AllocationId"],
+      natGwProps[CfnKey.ALLOCATION_ID] = {
+        "Fn::GetAtt": [eipLogicalId, CfnKey.ALLOCATION_ID],
       };
     }
 

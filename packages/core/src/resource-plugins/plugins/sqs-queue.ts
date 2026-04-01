@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -10,7 +11,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.SQS_QUEUE,
   commonFields: [
     {
-      name: "QueueName",
+      name: CfnKey.QUEUE_NAME,
       question: {
         type: "string",
         label: "Queue name",
@@ -38,7 +39,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "FifoQueue",
+      name: CfnKey.FIFO_QUEUE,
       question: {
         type: "boolean",
         label: "FIFO queue?",
@@ -47,7 +48,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "VisibilityTimeoutSeconds",
+      name: CfnKey.VISIBILITY_TIMEOUT,
       question: {
         type: "string",
         label: "Visibility timeout (seconds)",
@@ -68,7 +69,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "MessageRetentionPeriod",
+      name: CfnKey.MESSAGE_RETENTION,
       question: {
         type: "enum",
         label: "Message retention period",
@@ -88,7 +89,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -111,7 +112,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "DelaySeconds",
+      name: CfnKey.DELAY_SECONDS,
       question: {
         type: "string",
         label: "Delivery delay (seconds)",
@@ -131,7 +132,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "MaximumMessageSize",
+      name: CfnKey.MAX_MESSAGE_SIZE,
       question: {
         type: "enum",
         label: "Maximum message size",
@@ -149,7 +150,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "KmsMasterKeyId",
+      name: CfnKey.KMS_MASTER_KEY_ID,
       question: {
         type: "string",
         label: "KMS Key ID for encryption",
@@ -165,7 +166,7 @@ export const sqsQueuePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "RedrivePolicy",
+      name: CfnKey.REDRIVE_POLICY,
       question: {
         type: "string",
         label: "Dead-letter queue ARN",
@@ -186,6 +187,6 @@ export const sqsQueuePlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    SqsManagedSseEnabled: true,
+    [CfnKey.SQS_MANAGED_SSE]: true,
   },
 };
