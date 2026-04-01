@@ -77,10 +77,20 @@ describe("cross-system consistency", () => {
     }
   });
 
-  describe("paid resources are NOT in always-free map", () => {
+  describe("legacy-eligible resources return legacy_eligible", () => {
+    const LEGACY_TYPES = ["AWS::EC2::Instance", "AWS::RDS::DBInstance"];
+
+    for (const type of LEGACY_TYPES) {
+      it(`${type} returns legacy_eligible`, () => {
+        const note = getFreeTierNote(type);
+        expect(note).not.toBeNull();
+        expect(note!.type).toBe("legacy_eligible");
+      });
+    }
+  });
+
+  describe("paid resources return null from free tier", () => {
     const KNOWN_PAID = [
-      "AWS::EC2::Instance",
-      "AWS::RDS::DBInstance",
       "AWS::EC2::NatGateway",
       "AWS::ElasticLoadBalancingV2::LoadBalancer",
       "AWS::CloudWatch::Alarm",

@@ -35,6 +35,14 @@ const ALWAYS_FREE_WITH_LIMITS: Record<string, string> = {
   "AWS::SNS::Topic": "AWS SNS Free Tier: 1M publishes/month",
 };
 
+/** Resources that may be eligible for legacy 12-month free tier or AWS credits. */
+const LEGACY_ELIGIBLE: Record<string, string> = {
+  "AWS::EC2::Instance":
+    "May be free tier eligible (750 hrs/month t2.micro/t3.micro — depends on account age)",
+  "AWS::RDS::DBInstance":
+    "May be free tier eligible (750 hrs/month db.t2.micro/db.t3.micro — depends on account age)",
+};
+
 /**
  * Returns free tier information for a resource type, or null if not applicable.
  */
@@ -47,6 +55,11 @@ export function getFreeTierNote(resourceType: string): FreeTierInfo | null {
   const usageLimited = ALWAYS_FREE_WITH_LIMITS[resourceType];
   if (usageLimited) {
     return { type: "usage_limited", message: usageLimited };
+  }
+
+  const legacyEligible = LEGACY_ELIGIBLE[resourceType];
+  if (legacyEligible) {
+    return { type: "legacy_eligible", message: legacyEligible };
   }
 
   return null;

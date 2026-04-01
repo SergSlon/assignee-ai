@@ -53,12 +53,25 @@ describe("getFreeTierNote (MCP)", () => {
     }
   });
 
+  // ── Legacy-eligible resources ───────────────────────────────────────────────
+
+  describe("legacy-eligible resources return { type: 'legacy_eligible' }", () => {
+    const legacyTypes = ["AWS::EC2::Instance", "AWS::RDS::DBInstance"];
+
+    for (const resourceType of legacyTypes) {
+      it(`returns legacy_eligible for ${resourceType}`, () => {
+        const result = getFreeTierNote(resourceType);
+        expect(result).not.toBeNull();
+        expect(result!.type).toBe("legacy_eligible");
+        expect(result!.message).toContain("free tier eligible");
+      });
+    }
+  });
+
   // ── Paid / unknown resources ────────────────────────────────────────────────
 
   describe("paid resources return null", () => {
     const paidTypes = [
-      "AWS::EC2::Instance",
-      "AWS::RDS::DBInstance",
       "AWS::EC2::NatGateway",
       "AWS::ElasticLoadBalancingV2::LoadBalancer",
       "AWS::S3::Bucket",
