@@ -139,12 +139,63 @@ Move all type-specific logic (IGW detach, SQS URL construction, CloudFront disab
 
 ---
 
-### Story 42.9 — Centralize Remaining Constants
+### Story 42.9 — Eliminate Magic Strings: CloudFormation Property Keys (LARGE)
+
+The codebase has **hundreds of raw CloudFormation property names** used as strings in plugins, toCfn transforms, plan-generator, and desiredState access. Currently only 2 keys are in `cfn-keys.ts` and 7 in `resource-fields.ts`.
+
+**Phase 1: Expand `constants/cfn-keys.ts`** with service-scoped constants:
+
+```typescript
+export const CfnKey = {
+  // S3
+  BUCKET_NAME: "BucketName",
+  BUCKET_ENCRYPTION: "BucketEncryption",
+  VERSIONING_CONFIGURATION: "VersioningConfiguration",
+  PUBLIC_ACCESS_BLOCK: "PublicAccessBlockConfiguration",
+  LIFECYCLE_CONFIGURATION: "LifecycleConfiguration",
+  CORS_CONFIGURATION: "CorsConfiguration",
+  // EC2
+  INSTANCE_TYPE: "InstanceType",
+  IMAGE_ID: "ImageId",
+  BLOCK_DEVICE_MAPPINGS: "BlockDeviceMappings",
+  ASSOCIATE_PUBLIC_IP: "AssociatePublicIpAddress",
+  METADATA_OPTIONS: "MetadataOptions",
+  // RDS
+  DB_INSTANCE_CLASS: "DBInstanceClass",
+  ENGINE: "Engine",
+  STORAGE_ENCRYPTED: "StorageEncrypted",
+  DELETION_PROTECTION: "DeletionProtection",
+  MULTI_AZ: "MultiAZ",
+  // ... ALL property keys used in plugins
+} as const;
+```
+
+**Phase 2: Replace raw strings in ALL plugin files:**
+
+- Every `transformed["BucketEncryption"]` → `transformed[CfnKey.BUCKET_ENCRYPTION]`
+- Every `desiredState["InstanceType"]` → `desiredState[CfnKey.INSTANCE_TYPE]`
+- Every `name: "BucketName"` field definition → `name: CfnKey.BUCKET_NAME`
+
+**Phase 3: Replace in non-plugin code:**
+
+- plan-generator.ts (field references)
+- pricing decomposers (desiredState access)
+- bp-evaluator (property_path references)
+- result-formatter (display logic)
+
+**Scope:** ~500 replacements across ~40 files. Use `replace_all` where possible.
+
+**Test:** All existing tests must pass — behavior unchanged, only string references centralized.
+
+---
+
+### Story 42.10 — Centralize Infrastructure Constants
 
 - Move all `"us-east-1"` fallbacks to use `AWS_REGION` from `config/constants.ts`
-- Move `POLL_INTERVAL_MS` (defined twice) to `config/constants.ts`
+- Move `POLL_INTERVAL_MS` (defined twice in destroy-service + destroy-resource) to `config/constants.ts`
 - Move `MAX_POLL_ATTEMPTS` (defined twice) to `config/constants.ts`
 - Extract Lambda memory thresholds (128/256/512) in wizard-recommendations.ts to named constants
+- Consolidate `EXTENDED_TIMEOUT_MS` in pricing decomposers (defined in ec2.ts and rds.ts separately)
 
 ---
 
@@ -152,21 +203,24 @@ Move all type-specific logic (IGW detach, SQS URL construction, CloudFront disab
 
 **Phase 1 (P0 + P1 bugs):** Stories 42.1, 42.2 — parallel subagents, 3 max
 **Phase 2 (BP + patterns):** Stories 42.3, 42.4 — parallel
-**Phase 3 (Constants + validation):** Stories 42.5, 42.6, 42.9 — parallel
-**Phase 4 (SOLID refactoring):** Stories 42.7, 42.8 — parallel
-**Phase 5:** BMAD quality loop (code-review + adversarial + edge-case)
-**Phase 6:** Final build + test + commit
+**Phase 3 (Constants + validation):** Stories 42.5, 42.6, 42.10 — parallel
+**Phase 4 (Magic strings):** Story 42.9 — large, needs dedicated focus
+**Phase 5 (SOLID refactoring):** Stories 42.7, 42.8 — parallel
+**Phase 6:** BMAD quality loop (code-review + adversarial + edge-case)
+**Phase 7:** Final build + test + commit
 
 ## Estimated Complexity
 
 - Stories 42.1, 42.2: Medium (bug fixes with tests)
 - Stories 42.3, 42.4: Small (YAML edits + pattern config)
-- Stories 42.5, 42.9: Small (find-replace with constants)
+- Stories 42.5, 42.10: Small (find-replace with constants)
 - Story 42.6: Medium (validation logic + tests)
+- **Story 42.9: LARGE** (~500 replacements across ~40 files, must not break anything)
 - Stories 42.7, 42.8: Large (refactoring, tests, many file moves)
 
 ## Risks
 
+- **Story 42.9** is the biggest — touching 40+ files with string replacements. Must run full test suite after each batch.
 - **Story 42.7 refactoring** may break import chains — need careful dependency management
 - **Story 42.8** changes destroy flow — comprehensive testing needed since it touches real AWS resources
 - **Story 42.6c** (IAM PermissionsBoundary required) may break existing users without boundaries — needs config escape hatch
