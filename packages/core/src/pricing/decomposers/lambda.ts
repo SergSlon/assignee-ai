@@ -5,6 +5,7 @@
  * @see Story 23.3
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -16,7 +17,7 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
-    const memoryMb = Number(desiredState["MemorySize"] ?? 128);
+    const memoryMb = Number(desiredState[CfnKey.MEMORY_SIZE] ?? 128);
 
     // 1. Requests (per million) — use usagetype=Request to find request pricing
     items.push({
