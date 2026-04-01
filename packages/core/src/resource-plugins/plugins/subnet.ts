@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -26,7 +27,7 @@ export const subnetPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.EC2_SUBNET,
   commonFields: [
     {
-      name: "VpcId",
+      name: CfnKey.VPC_ID,
       required: true,
       question: {
         type: "enum",
@@ -37,7 +38,7 @@ export const subnetPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "CidrBlock",
+      name: CfnKey.CIDR_BLOCK,
       required: true,
       question: {
         type: "string",
@@ -48,7 +49,7 @@ export const subnetPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "AvailabilityZone",
+      name: CfnKey.AVAILABILITY_ZONE,
       required: true,
       question: {
         type: "enum",
@@ -59,7 +60,7 @@ export const subnetPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "MapPublicIpOnLaunch",
+      name: CfnKey.MAP_PUBLIC_IP,
       question: {
         type: "boolean",
         label: "Auto-assign public IP on launch?",
@@ -68,7 +69,7 @@ export const subnetPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -91,7 +92,7 @@ export const subnetPlugin: ResourcePlugin = {
   ],
   advancedFields: [],
   defaults: {
-    MapPublicIpOnLaunch: false,
+    [CfnKey.MAP_PUBLIC_IP]: false,
   },
   configHints: [
     "VpcId MUST reference an existing VPC — use discover-vpcs fetcher",

@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -10,7 +11,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.SSM_PARAMETER,
   commonFields: [
     {
-      name: "Name",
+      name: CfnKey.NAME,
       required: true,
       question: {
         type: "string",
@@ -30,7 +31,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Type",
+      name: CfnKey.SSM_TYPE,
       required: true,
       question: {
         type: "enum",
@@ -51,7 +52,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Value",
+      name: CfnKey.SSM_VALUE,
       required: true,
       question: {
         type: "string",
@@ -67,7 +68,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Description",
+      name: CfnKey.DESCRIPTION,
       question: {
         type: "string",
         label: "Description",
@@ -82,7 +83,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -105,7 +106,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "Tier",
+      name: CfnKey.TIER,
       question: {
         type: "enum",
         label: "Parameter tier",
@@ -130,7 +131,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
         label: "KMS Key ID",
         placeholder: "arn:aws:kms:...",
         hint: "ARN of a custom KMS key for SecureString encryption. Leave blank to use the default AWS-managed key (aws/ssm).",
-        showIf: { field: "Type", value: "SecureString" },
+        showIf: { field: CfnKey.SSM_TYPE, value: "SecureString" },
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);
@@ -142,7 +143,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    Type: "String",
-    Tier: "Standard",
+    [CfnKey.SSM_TYPE]: "String",
+    [CfnKey.TIER]: "Standard",
   },
 };

@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 import type { ResourcePlugin } from "../types.js";
 
@@ -11,7 +12,7 @@ export const s3BucketPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.S3_BUCKET,
   commonFields: [
     {
-      name: "BucketName",
+      name: CfnKey.BUCKET_NAME,
       question: {
         type: "string",
         label: "Bucket name",
@@ -31,7 +32,7 @@ export const s3BucketPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "BucketEncryption",
+      name: CfnKey.BUCKET_ENCRYPTION,
       question: {
         type: "boolean",
         label: "Enable server-side encryption?",
@@ -46,7 +47,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         label: "KMS Key ID (leave blank for SSE-S3)",
         placeholder: "arn:aws:kms:...",
         hint: "ARN of a KMS key for server-side encryption. Leave blank to use the free SSE-S3 (AES-256). KMS adds ~$1/month per key plus $0.03 per 10K requests. Use KMS when you need key rotation or audit trails.",
-        showIf: { field: "BucketEncryption", value: true },
+        showIf: { field: CfnKey.BUCKET_ENCRYPTION, value: true },
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);
@@ -57,7 +58,7 @@ export const s3BucketPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "PublicAccessBlockConfiguration",
+      name: CfnKey.PUBLIC_ACCESS_BLOCK,
       question: {
         type: "boolean",
         label: "Block all public access?",
@@ -75,7 +76,7 @@ export const s3BucketPlugin: ResourcePlugin = {
           : undefined,
     },
     {
-      name: "VersioningConfiguration",
+      name: CfnKey.VERSIONING_CONFIGURATION,
       question: {
         type: "boolean",
         label: "Enable versioning?",
@@ -85,7 +86,7 @@ export const s3BucketPlugin: ResourcePlugin = {
       toCfn: (answer: unknown) => (answer ? { Status: "Enabled" } : undefined),
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -204,7 +205,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         label: "Enable cross-region replication?",
         initialValue: false,
         hint: "Copies objects to a bucket in another region for disaster recovery or compliance. Requires versioning, a destination bucket, and an IAM role. Adds cross-region transfer costs.",
-        showIf: { field: "VersioningConfiguration", value: true },
+        showIf: { field: CfnKey.VERSIONING_CONFIGURATION, value: true },
       },
     },
     {
@@ -227,7 +228,7 @@ export const s3BucketPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    PublicAccessBlockConfiguration: {
+    [CfnKey.PUBLIC_ACCESS_BLOCK]: {
       BlockPublicAcls: true,
       BlockPublicPolicy: true,
       IgnorePublicAcls: true,

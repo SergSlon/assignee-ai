@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -10,7 +11,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.ECR_REPOSITORY,
   commonFields: [
     {
-      name: "RepositoryName",
+      name: CfnKey.REPOSITORY_NAME,
       required: true,
       question: {
         type: "string",
@@ -29,7 +30,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "ImageTagMutability",
+      name: CfnKey.IMAGE_TAG_MUTABILITY,
       question: {
         type: "enum",
         label: "Image tag mutability",
@@ -51,17 +52,17 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "ScanOnPush",
+      name: CfnKey.SCAN_ON_PUSH,
       question: {
         type: "boolean",
         label: "Scan images on push?",
         initialValue: true,
         hint: "Automatically scans images for OS vulnerabilities when pushed. Free for basic scanning. Recommended for security compliance.",
       },
-      toCfn: (answer: unknown) => ({ ScanOnPush: Boolean(answer) }),
+      toCfn: (answer: unknown) => ({ [CfnKey.SCAN_ON_PUSH]: Boolean(answer) }),
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -84,7 +85,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "EncryptionType",
+      name: CfnKey.ENCRYPTION_TYPE,
       question: {
         type: "enum",
         label: "Encryption type",
@@ -122,7 +123,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "LifecyclePolicyText",
+      name: CfnKey.LIFECYCLE_POLICY_TEXT,
       question: {
         type: "string",
         label: "Lifecycle policy (JSON)",
@@ -132,7 +133,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    ImageTagMutability: "IMMUTABLE",
-    ImageScanningConfiguration: { ScanOnPush: true },
+    [CfnKey.IMAGE_TAG_MUTABILITY]: "IMMUTABLE",
+    [CfnKey.IMAGE_SCANNING_CONFIGURATION]: { [CfnKey.SCAN_ON_PUSH]: true },
   },
 };

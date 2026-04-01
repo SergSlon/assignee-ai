@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -9,7 +10,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
   commonFields: [
     {
-      name: "DBInstanceClass",
+      name: CfnKey.DB_INSTANCE_CLASS,
       question: {
         type: "enum",
         label: "DB instance class",
@@ -57,7 +58,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Engine",
+      name: CfnKey.ENGINE,
       question: {
         type: "enum",
         label: "Database engine",
@@ -86,7 +87,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "EngineVersion",
+      name: CfnKey.ENGINE_VERSION,
       question: {
         type: "enum",
         label: "PostgreSQL version",
@@ -100,12 +101,12 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           },
           { value: "15", label: "PostgreSQL 15", fitHint: "Stable" },
         ],
-        showIf: { field: "Engine", value: "postgres" },
+        showIf: { field: CfnKey.ENGINE, value: "postgres" },
         fetcher: "discover-rds-engine-versions",
       },
     },
     {
-      name: "EngineVersion",
+      name: CfnKey.ENGINE_VERSION,
       question: {
         type: "enum",
         label: "MySQL version",
@@ -119,12 +120,12 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           },
           { value: "8.0", label: "MySQL 8.0", fitHint: "Stable, widely used" },
         ],
-        showIf: { field: "Engine", value: "mysql" },
+        showIf: { field: CfnKey.ENGINE, value: "mysql" },
         fetcher: "discover-rds-engine-versions",
       },
     },
     {
-      name: "EngineVersion",
+      name: CfnKey.ENGINE_VERSION,
       question: {
         type: "enum",
         label: "MariaDB version",
@@ -138,12 +139,12 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           },
           { value: "10.11", label: "MariaDB 10.11", fitHint: "LTS" },
         ],
-        showIf: { field: "Engine", value: "mariadb" },
+        showIf: { field: CfnKey.ENGINE, value: "mariadb" },
         fetcher: "discover-rds-engine-versions",
       },
     },
     {
-      name: "EngineVersion",
+      name: CfnKey.ENGINE_VERSION,
       question: {
         type: "enum",
         label: "Aurora MySQL version",
@@ -156,12 +157,12 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           },
           { value: "3.05.2", label: "Aurora MySQL 3.05.2 (stable)" },
         ],
-        showIf: { field: "Engine", value: "aurora-mysql" },
+        showIf: { field: CfnKey.ENGINE, value: "aurora-mysql" },
         fetcher: "discover-rds-engine-versions",
       },
     },
     {
-      name: "EngineVersion",
+      name: CfnKey.ENGINE_VERSION,
       question: {
         type: "enum",
         label: "Aurora PostgreSQL version",
@@ -170,12 +171,12 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           { value: "16.4", label: "Aurora PostgreSQL 16.4", recommended: true },
           { value: "15.8", label: "Aurora PostgreSQL 15.8 (stable)" },
         ],
-        showIf: { field: "Engine", value: "aurora-postgresql" },
+        showIf: { field: CfnKey.ENGINE, value: "aurora-postgresql" },
         fetcher: "discover-rds-engine-versions",
       },
     },
     {
-      name: "DBName",
+      name: CfnKey.DB_NAME,
       question: {
         type: "string",
         label: "Initial database name",
@@ -193,7 +194,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "MasterUsername",
+      name: CfnKey.MASTER_USERNAME,
       required: true,
       question: {
         type: "string",
@@ -208,7 +209,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "MasterUserPassword",
+      name: CfnKey.MASTER_USER_PASSWORD,
       question: {
         type: "string",
         label: "Master password",
@@ -226,7 +227,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "MultiAZ",
+      name: CfnKey.MULTI_AZ,
       question: {
         type: "boolean",
         label: "Enable Multi-AZ deployment?",
@@ -235,7 +236,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "DeletionProtection",
+      name: CfnKey.DELETION_PROTECTION,
       question: {
         type: "boolean",
         label: "Enable deletion protection?",
@@ -244,7 +245,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "StorageType",
+      name: CfnKey.STORAGE_TYPE,
       question: {
         type: "enum",
         label: "Storage type",
@@ -272,7 +273,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "AllocatedStorage",
+      name: CfnKey.ALLOCATED_STORAGE,
       question: {
         type: "enum",
         label: "Storage size (GB)",
@@ -305,7 +306,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       toCfn: (v: unknown) => (v ? parseInt(String(v), 10) : undefined),
     },
     {
-      name: "PubliclyAccessible",
+      name: CfnKey.PUBLICLY_ACCESSIBLE,
       question: {
         type: "boolean",
         label: "Publicly Accessible",
@@ -314,7 +315,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -337,7 +338,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "DBSubnetGroupName",
+      name: CfnKey.DB_SUBNET_GROUP_NAME,
       question: {
         type: "enum",
         label: "DB Subnet Group",
@@ -346,7 +347,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "VpcSecurityGroupIds",
+      name: CfnKey.VPC_SECURITY_GROUP_IDS,
       question: {
         type: "multi",
         label: "VPC Security Groups",
@@ -355,7 +356,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Port",
+      name: CfnKey.PORT,
       question: {
         type: "string",
         label: "Database Port",
@@ -372,7 +373,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       toCfn: (v: unknown) => (v ? parseInt(String(v), 10) : undefined),
     },
     {
-      name: "EnableCloudwatchLogsExports",
+      name: CfnKey.ENABLE_CW_LOGS_EXPORTS,
       question: {
         type: "multi",
         label: "CloudWatch Logs Exports",
@@ -390,7 +391,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "PerformanceInsightsEnabled",
+      name: CfnKey.PERFORMANCE_INSIGHTS,
       question: {
         type: "boolean",
         label: "Performance Insights",
@@ -399,7 +400,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "BackupRetentionPeriod",
+      name: CfnKey.BACKUP_RETENTION_PERIOD,
       question: {
         type: "string",
         label: "Backup retention period (days)",
@@ -421,9 +422,9 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    StorageType: "gp3",
-    MultiAZ: false,
-    StorageEncrypted: true,
+    [CfnKey.STORAGE_TYPE]: "gp3",
+    [CfnKey.MULTI_AZ]: false,
+    [CfnKey.STORAGE_ENCRYPTED]: true,
   },
   configHints: [
     "If the user did not provide a MasterUserPassword, OMIT it — AWS will auto-generate one via Secrets Manager",

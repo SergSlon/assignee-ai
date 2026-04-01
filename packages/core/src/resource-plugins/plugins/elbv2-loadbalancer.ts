@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -10,7 +11,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
   commonFields: [
     {
-      name: "Name",
+      name: CfnKey.NAME,
       question: {
         type: "string",
         label: "Load balancer name",
@@ -28,7 +29,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
       required: true,
     },
     {
-      name: "Type",
+      name: CfnKey.TYPE,
       question: {
         type: "enum",
         label: "Load balancer type",
@@ -51,7 +52,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Scheme",
+      name: CfnKey.SCHEME,
       question: {
         type: "enum",
         label: "Scheme",
@@ -72,7 +73,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Subnets",
+      name: CfnKey.SUBNETS,
       question: {
         type: "multi",
         label: "Subnets",
@@ -90,7 +91,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
       required: true,
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -119,7 +120,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
         label: "Security groups",
         options: [],
         hint: "Security groups control inbound/outbound traffic. Required for ALBs. Typically allow ports 80/443 inbound.",
-        showIf: { field: "Type", value: "application" },
+        showIf: { field: CfnKey.TYPE, value: "application" },
         fetcher: "discover-security-groups",
         validate: (value: unknown) => {
           if (!value || (Array.isArray(value) && value.length === 0))
@@ -129,7 +130,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "IpAddressType",
+      name: CfnKey.IP_ADDRESS_TYPE,
       question: {
         type: "enum",
         label: "IP address type",
@@ -142,7 +143,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "DeletionProtection",
+      name: CfnKey.DELETION_PROTECTION,
       question: {
         type: "boolean",
         label: "Enable deletion protection?",
@@ -158,8 +159,8 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    Type: "application",
-    Scheme: "internet-facing",
-    IpAddressType: "ipv4",
+    [CfnKey.TYPE]: "application",
+    [CfnKey.SCHEME]: "internet-facing",
+    [CfnKey.IP_ADDRESS_TYPE]: "ipv4",
   },
 };

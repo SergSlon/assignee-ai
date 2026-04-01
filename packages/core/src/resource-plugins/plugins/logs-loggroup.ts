@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -11,7 +12,7 @@ export const logGroupPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.LOGS_LOG_GROUP,
   commonFields: [
     {
-      name: "LogGroupName",
+      name: CfnKey.LOG_GROUP_NAME,
       question: {
         type: "string",
         label: "Log group name",
@@ -29,7 +30,7 @@ export const logGroupPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "RetentionInDays",
+      name: CfnKey.RETENTION_IN_DAYS,
       question: {
         type: "enum",
         label: "Log retention period",
@@ -66,7 +67,7 @@ export const logGroupPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "KmsKeyId",
+      name: CfnKey.KMS_KEY_ID,
       question: {
         type: "string",
         label: "KMS Key ARN for encryption (optional)",
@@ -82,7 +83,7 @@ export const logGroupPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -105,7 +106,7 @@ export const logGroupPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "LogGroupClass",
+      name: CfnKey.LOG_GROUP_CLASS,
       question: {
         type: "enum",
         label: "Log group class",
@@ -126,7 +127,7 @@ export const logGroupPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "DataProtectionPolicy",
+      name: CfnKey.DATA_PROTECTION_POLICY,
       question: {
         type: "string",
         label: "Data protection policy (JSON)",
@@ -136,8 +137,8 @@ export const logGroupPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    RetentionInDays: 30,
-    LogGroupClass: "STANDARD",
+    [CfnKey.RETENTION_IN_DAYS]: 30,
+    [CfnKey.LOG_GROUP_CLASS]: "STANDARD",
   },
   configHints: [
     "LogGroupName follows AWS naming conventions: /aws/lambda/<function-name> for Lambda, /aws/ecs/<cluster>/<service> for ECS.",

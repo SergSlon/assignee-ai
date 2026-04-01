@@ -5,6 +5,7 @@
  * @see Story 23.3
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -16,7 +17,7 @@ export const cloudWatchAlarmPricingDecomposer: PricingDecomposer = {
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
-    const rawPeriod = desiredState["Period"];
+    const rawPeriod = desiredState[CfnKey.PERIOD];
     const period =
       typeof rawPeriod === "number" || typeof rawPeriod === "string"
         ? Number(rawPeriod)

@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -45,7 +46,7 @@ export const iamRolePlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.IAM_ROLE,
   commonFields: [
     {
-      name: "RoleName",
+      name: CfnKey.ROLE_NAME,
       question: {
         type: "string",
         label: "Role name",
@@ -62,7 +63,7 @@ export const iamRolePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Description",
+      name: CfnKey.DESCRIPTION,
       question: {
         type: "string",
         label: "Description",
@@ -77,7 +78,7 @@ export const iamRolePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "AssumeRolePolicyDocument",
+      name: CfnKey.ASSUME_ROLE_POLICY,
       required: true,
       question: {
         type: "enum",
@@ -102,7 +103,7 @@ export const iamRolePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "MaxSessionDuration",
+      name: CfnKey.MAX_SESSION_DURATION,
       question: {
         type: "enum",
         label: "Maximum session duration",
@@ -119,7 +120,7 @@ export const iamRolePlugin: ResourcePlugin = {
       toCfn: (answer: unknown) => (answer ? Number(answer) : 3600),
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -140,7 +141,7 @@ export const iamRolePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "PermissionsBoundary",
+      name: CfnKey.PERMISSIONS_BOUNDARY,
       question: {
         type: "string",
         label: "Permissions boundary ARN",
@@ -157,7 +158,7 @@ export const iamRolePlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "ManagedPolicyArns",
+      name: CfnKey.MANAGED_POLICY_ARNS,
       question: {
         type: "string",
         label: "Managed policy ARNs (comma-separated)",
@@ -188,7 +189,7 @@ export const iamRolePlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    MaxSessionDuration: 3600,
+    [CfnKey.MAX_SESSION_DURATION]: 3600,
   },
   configHints: [
     "NEVER attach AdministratorAccess — all roles MUST have a permissions boundary.",

@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 
 /**
@@ -14,7 +15,7 @@ export const routePlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.EC2_ROUTE,
   commonFields: [
     {
-      name: "RouteTableId",
+      name: CfnKey.ROUTE_TABLE_ID,
       required: true,
       question: {
         type: "string",
@@ -24,7 +25,7 @@ export const routePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "DestinationCidrBlock",
+      name: CfnKey.DESTINATION_CIDR_BLOCK,
       required: true,
       question: {
         type: "string",
@@ -65,7 +66,7 @@ export const routePlugin: ResourcePlugin = {
       toCfn: () => undefined,
     },
     {
-      name: "GatewayId",
+      name: CfnKey.GATEWAY_ID,
       question: {
         type: "string",
         label: "Internet Gateway ID",
@@ -75,7 +76,7 @@ export const routePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "NatGatewayId",
+      name: CfnKey.NAT_GATEWAY_ID,
       question: {
         type: "string",
         label: "NAT Gateway ID",
@@ -87,7 +88,7 @@ export const routePlugin: ResourcePlugin = {
   ],
   advancedFields: [],
   defaults: {
-    DestinationCidrBlock: "0.0.0.0/0",
+    [CfnKey.DESTINATION_CIDR_BLOCK]: "0.0.0.0/0",
     RouteType: "public",
   },
   configHints: [

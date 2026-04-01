@@ -7,6 +7,7 @@
  * @see Story 23.3
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -36,8 +37,8 @@ export const natGatewayPricingDecomposer: PricingDecomposer = {
       kind: "fixed",
       description:
         "NAT Gateway" +
-        (_desiredState["ConnectivityType"]
-          ? ` (${_desiredState["ConnectivityType"]})`
+        (_desiredState[CfnKey.CONNECTIVITY_TYPE]
+          ? ` (${_desiredState[CfnKey.CONNECTIVITY_TYPE]})`
           : ""),
       priceUnit: "/hr",
     });

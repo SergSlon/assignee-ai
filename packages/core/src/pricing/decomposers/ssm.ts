@@ -6,6 +6,7 @@
  * and API call charges.
  */
 
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -16,7 +17,7 @@ export const ssmPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.SSM_PARAMETER,
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
-    const tier = String(desiredState["Tier"] ?? "Standard").toLowerCase();
+    const tier = String(desiredState[CfnKey.TIER] ?? "Standard").toLowerCase();
 
     // Standard tier is free — no billable components
     if (tier === "standard") {
