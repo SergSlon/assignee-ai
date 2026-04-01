@@ -381,6 +381,22 @@ export const applyCommand = new Command(CommandName.APPLY)
             return { success: false };
           }
 
+          // BP findings blocked the apply — plan box already rendered by result_formatter
+          if (
+            phase1State.executionStatus === ExecutionStatus.PENDING &&
+            phase1State.preflightPassed === false
+          ) {
+            log({
+              ts: new Date().toISOString(),
+              runId: ctx.runId,
+              level: "info",
+              action: LOG_ACTIONS.APPLY_COMPLETE,
+              durationMs: Date.now() - ctx.startTs,
+              result: "bp_blocked",
+            });
+            return { success: true }; // Plan box shown with findings — not an error
+          }
+
           // Catch-all: unexpected status after phase 1 (not IN_PROGRESS, not approved)
           if (
             phase1State.executionStatus !== ExecutionStatus.IN_PROGRESS &&
