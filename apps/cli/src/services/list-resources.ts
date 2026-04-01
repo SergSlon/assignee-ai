@@ -17,7 +17,12 @@ import type { StructuredTool } from "@langchain/core/tools";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES, LIST_RESOURCE_TYPES, CCAPI_FALLBACK_TYPES } from "@assignee/core";
+import {
+  RESOURCE_TYPES,
+  COMPANION_RESOURCE_TYPES,
+  LIST_RESOURCE_TYPES,
+  CCAPI_FALLBACK_TYPES,
+} from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
@@ -202,8 +207,17 @@ function loadProvisionData(): ProvisionLookup {
         }
       }
     }
-  } catch {
-    // File missing or parse error — return empty maps (cost/date shows "N/A")
+  } catch (err: unknown) {
+    // Only warn if the file exists but is corrupted — missing file is normal for new users
+    const isNotFound =
+      err instanceof Error &&
+      "code" in err &&
+      (err as NodeJS.ErrnoException).code === "ENOENT";
+    if (!isNotFound) {
+      process.stderr.write(
+        "⚠ Warning: Provision log is corrupted or unreadable. Run 'assignee clean --memory' to reset.\n",
+      );
+    }
   }
 
   return { costMap, timestampMap };

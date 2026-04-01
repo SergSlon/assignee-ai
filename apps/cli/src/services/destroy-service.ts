@@ -211,7 +211,8 @@ export async function destroySingleResource(
           const status = await cf.send(
             new GetDistributionCommand({ Id: resource.identifier }),
           );
-          if (status.Distribution?.Status === "Deployed") {
+          const distStatus = status.Distribution?.Status;
+          if (distStatus === "Deployed") {
             // Step 3: Delete with latest ETag
             await cf.send(
               new DeleteDistributionCommand({
@@ -220,6 +221,13 @@ export async function destroySingleResource(
               }),
             );
             return { ...baseResult, success: true };
+          }
+          if (distStatus && distStatus !== "InProgress") {
+            return {
+              ...baseResult,
+              success: false,
+              error: `CloudFront disable failed with status: ${distStatus}`,
+            };
           }
         }
         return {

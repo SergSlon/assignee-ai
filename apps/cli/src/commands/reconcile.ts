@@ -55,7 +55,9 @@ async function fetchCreateOnlyProperties(
     const adapted = adaptDescribeTypeToMcpFormat(
       rawSchema as Record<string, unknown>,
     );
-    return adapted.createOnlyProperties ?? [];
+    return Array.isArray(adapted.createOnlyProperties)
+      ? adapted.createOnlyProperties
+      : [];
   } catch {
     return [];
   }

@@ -39,7 +39,10 @@ function classifyError(err: unknown): ProvisioningPortError {
     // S3 "bucket name is not available" comes as GeneralServiceException
     // but is semantically an ALREADY_EXISTS error (globally unique names).
     if (err.message.includes("bucket name is not available")) {
-      return { kind: ProvisioningErrorKind.ALREADY_EXISTS, message: err.message };
+      return {
+        kind: ProvisioningErrorKind.ALREADY_EXISTS,
+        message: err.message,
+      };
     }
     return { kind: ProvisioningErrorKind.SERVICE_ERROR, message: err.message };
   }
@@ -166,6 +169,15 @@ export class CloudControlAdapter implements ProvisioningPort {
   async getRequestStatus(
     requestToken: string,
   ): Promise<[ProvisioningPortError, null] | [null, GetRequestStatusResult]> {
+    if (!requestToken || requestToken.trim() === "") {
+      return [
+        {
+          kind: ProvisioningErrorKind.UNKNOWN,
+          message: "getRequestStatus called with empty requestToken",
+        },
+        null,
+      ];
+    }
     try {
       const result = await this.client.send(
         new GetResourceRequestStatusCommand({ RequestToken: requestToken }),

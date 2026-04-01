@@ -15,7 +15,11 @@ import {
   type DriftedField,
   type DriftStatusType,
 } from "@assignee/core";
-import { DRIFT_MAX_RETRIES, DRIFT_RETRY_BASE_DELAY_MS, DRIFT_RETRY_JITTER_MS } from "../config/constants.js";
+import {
+  DRIFT_MAX_RETRIES,
+  DRIFT_RETRY_BASE_DELAY_MS,
+  DRIFT_RETRY_JITTER_MS,
+} from "../config/constants.js";
 import {
   ProvisioningErrorKind,
   type ProvisioningPort,
@@ -382,10 +386,8 @@ export class DriftDetectorService {
   ): Promise<DriftResult[]> {
     const concurrency = Math.min(Math.max(opts.concurrency ?? 10, 1), 50);
     let completed = 0;
-    let currentConcurrency = concurrency;
-
     const results = await runWithConcurrency(
-      currentConcurrency,
+      concurrency,
       entries,
       async (entry) => {
         const result = await this.checkResourceWithRetry(
@@ -428,7 +430,10 @@ export class DriftDetectorService {
           result.errorMessage.includes("TooManyRequests"))
       ) {
         if (attempt < maxRetries) {
-          const baseDelay = DRIFT_RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+          const baseDelay = Math.min(
+            DRIFT_RETRY_BASE_DELAY_MS * Math.pow(2, attempt),
+            30_000,
+          );
           const jitter = Math.random() * DRIFT_RETRY_JITTER_MS;
           await new Promise((resolve) =>
             setTimeout(resolve, baseDelay + jitter),

@@ -12,7 +12,7 @@
 import * as fs from "node:fs/promises";
 import { Command } from "commander";
 import chalk from "chalk";
-import { DriftStatus, type DriftResult } from "@assignee/core";
+import { DriftStatus, AssigneeError, type DriftResult } from "@assignee/core";
 import { MemoryService } from "../services/memory.js";
 import {
   DriftDetectorService,
@@ -176,10 +176,14 @@ export const driftCommand = new Command("drift")
       }
 
       // Parse concurrency option (Story 28.6)
-      const concurrency = Math.min(
-        Math.max(parseInt(opts.concurrency ?? "10", 10) || 10, 1),
-        50,
-      );
+      const concNum = parseInt(opts.concurrency ?? "10", 10);
+      if (isNaN(concNum) || concNum < 1) {
+        throw new AssigneeError(
+          "--concurrency must be a positive integer",
+          "USAGE_ERROR",
+        );
+      }
+      const concurrency = Math.min(Math.max(concNum, 1), 50);
 
       // Batch check all resources with parallelism (Story 28.6)
       const startTime = Date.now();
