@@ -28,7 +28,7 @@ import {
 } from "../utils/display.js";
 import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
 import { ToolName } from "../constants/tools.js";
-import { SECURITY_CHECK_TIMEOUT_MS } from "../config/constants.js";
+import { AWS_REGION, SECURITY_CHECK_TIMEOUT_MS } from "../config/constants.js";
 import { unwrapMcpText } from "../utils/mcp.js";
 import { withTimeout } from "../utils/timeout.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
@@ -209,7 +209,7 @@ async function uploadStaticSiteFiles(
   const region =
     process.env["AWS_REGION"] ??
     process.env["AWS_DEFAULT_REGION"] ??
-    "us-east-1";
+    AWS_REGION;
 
   // 1. Upload files to S3
   const spinner = clack.spinner();
@@ -681,7 +681,7 @@ export async function resultFormatterNode(
           const region =
             process.env["AWS_REGION"] ??
             process.env["AWS_DEFAULT_REGION"] ??
-            "us-east-1";
+            AWS_REGION;
           const jsonPayload = {
             resourceType: state.resourceType,
             region,

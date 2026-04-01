@@ -39,6 +39,45 @@ function parseRuleString(
   return result;
 }
 
+/**
+ * Validates a compact ingress/egress rule string.
+ * Returns an error string if invalid, undefined if valid.
+ */
+function validateRuleString(rule: string): string | undefined {
+  const parts = rule.trim().split(":");
+  if (parts.length < 3)
+    return `Invalid rule format: "${rule.trim()}" — expected "protocol:port:cidr"`;
+
+  const [protocol, port, ...cidrParts] = parts;
+  const cidr = cidrParts.join(":");
+
+  if (protocol !== "all" && port !== "-1") {
+    if (port!.includes("-")) {
+      const [fromStr, toStr] = port!.split("-");
+      const from = parseInt(fromStr!, 10);
+      const to = parseInt(toStr!, 10);
+      if (isNaN(from) || isNaN(to) || from < 1 || to > 65535)
+        return `Port range must be between 1 and 65535, got "${port}"`;
+      if (from > to) return `fromPort (${from}) must be <= toPort (${to})`;
+    } else {
+      const p = parseInt(port!, 10);
+      if (isNaN(p) || p < 1 || p > 65535)
+        return `Port must be between 1 and 65535, got "${port}"`;
+    }
+  }
+
+  // Warn (non-blocking) for SSH open to the internet — returned as hint-style prefix
+  if (
+    protocol === "tcp" &&
+    port === "22" &&
+    (cidr === "0.0.0.0/0" || cidr === "::/0")
+  ) {
+    return "WARNING: SSH (port 22) open to the entire internet (0.0.0.0/0) is a security risk. Restrict to specific IPs.";
+  }
+
+  return undefined;
+}
+
 function parseRules(
   answer: unknown,
   direction: "ingress" | "egress",
@@ -111,7 +150,19 @@ export const securityGroupPlugin: ResourcePlugin = {
         type: "string",
         label: "Ingress rules (protocol:port:source)",
         placeholder: "tcp:443:0.0.0.0/0, tcp:22:10.0.0.0/8",
-        hint: 'Comma-separated inbound rules. Format: "protocol:port:cidr". Use "all:-1:0.0.0.0/0" for all traffic. Default: SSH from private range + HTTPS from anywhere.',
+        hint: 'Comma-separated inbound rules. Format: "protocol:port:cidr". Ports must be 1-65535. Use "all:-1:0.0.0.0/0" for all traffic. Default: SSH from private range + HTTPS from anywhere.',
+        validate: (value: unknown) => {
+          if (!value || !String(value).trim()) return undefined;
+          const rules = String(value)
+            .split(",")
+            .map((r) => r.trim())
+            .filter(Boolean);
+          for (const rule of rules) {
+            const err = validateRuleString(rule);
+            if (err) return err;
+          }
+          return undefined;
+        },
       },
       toCfn: (answer: unknown) => parseRules(answer, "ingress"),
     },
@@ -121,7 +172,19 @@ export const securityGroupPlugin: ResourcePlugin = {
         type: "string",
         label: "Egress rules (protocol:port:destination)",
         placeholder: "all:-1:0.0.0.0/0",
-        hint: 'Comma-separated outbound rules. Format: "protocol:port:cidr". Default: all outbound traffic allowed.',
+        hint: 'Comma-separated outbound rules. Format: "protocol:port:cidr". Ports must be 1-65535. Default: all outbound traffic allowed.',
+        validate: (value: unknown) => {
+          if (!value || !String(value).trim()) return undefined;
+          const rules = String(value)
+            .split(",")
+            .map((r) => r.trim())
+            .filter(Boolean);
+          for (const rule of rules) {
+            const err = validateRuleString(rule);
+            if (err) return err;
+          }
+          return undefined;
+        },
       },
       toCfn: (answer: unknown) => parseRules(answer, "egress"),
     },

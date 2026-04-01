@@ -19,6 +19,7 @@ import {
   LIST_RESOURCE_TYPES,
   CCAPI_FALLBACK_TYPES,
 } from "@assignee/core";
+import { AWS_REGION } from "../config/constants.js";
 
 /** Resolved resource returned by the resource resolver. */
 export interface ResolvedResource {
@@ -243,7 +244,7 @@ export function createTaggingClient(
   }
 
   return new ResourceGroupsTaggingAPIClient({
-    region: config.region || "us-east-1",
+    region: config.region || AWS_REGION,
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,

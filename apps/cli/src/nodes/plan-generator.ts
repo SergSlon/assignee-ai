@@ -17,7 +17,7 @@ import { TWENTY_FOUR_HOURS_MS } from "../config/constants.js";
 import { defaultMemoryService } from "../services/memory.js";
 import { resolveAmiFromOsName } from "../utils/aws-resource-discovery.js";
 import type { LlmPort } from "@assignee/core";
-import { SCHEMA_EXCERPT_MAX_CHARS } from "../config/constants.js";
+import { AWS_REGION, SCHEMA_EXCERPT_MAX_CHARS } from "../config/constants.js";
 import {
   CloudFormationKey,
   CFN_RESOURCE_TYPE_PREFIX,
@@ -355,7 +355,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
               try {
                 const { STSClient, GetCallerIdentityCommand } =
                   await import("@aws-sdk/client-sts");
-                const region = process.env["AWS_REGION"] ?? "us-east-1";
+                const region = AWS_REGION;
                 const sts = new STSClient({ region });
                 const identity = await sts.send(
                   new GetCallerIdentityCommand({}),

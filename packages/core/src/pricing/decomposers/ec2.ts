@@ -10,8 +10,7 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
-
-const EXTENDED_TIMEOUT_MS = 8000;
+import { EXTENDED_TIMEOUT_MS } from "../constants.js";
 
 export const ec2PricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.EC2_INSTANCE,

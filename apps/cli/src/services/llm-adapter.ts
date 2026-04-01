@@ -19,6 +19,7 @@ import type { LanguageModel } from "ai";
 import type { ZodSchema } from "zod";
 import { LlmError, safeTry } from "@assignee/core";
 import type { LlmPort, Result } from "@assignee/core";
+import { AWS_REGION } from "../config/constants.js";
 
 /** Supported provider prefixes. */
 export type ProviderPrefix =
@@ -112,7 +113,7 @@ async function createLanguageModel(
     case "bedrock": {
       const { createAmazonBedrock } = await import("@ai-sdk/amazon-bedrock");
       const bedrock = createAmazonBedrock({
-        region: process.env["AWS_REGION"] ?? "us-east-1",
+        region: AWS_REGION,
         accessKeyId: process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"],
         secretAccessKey: process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"],
       });

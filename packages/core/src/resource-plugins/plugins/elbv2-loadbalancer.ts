@@ -77,7 +77,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
         type: "multi",
         label: "Subnets",
         options: [],
-        hint: "Select at least 2 subnets in different Availability Zones. Internet-facing ALBs require public subnets. Internal ALBs use private subnets.",
+        hint: "AWS recommends subnets in at least 2 Availability Zones for high availability. Internet-facing ALBs require public subnets. Internal ALBs use private subnets.",
         fetcher: "discover-subnets",
         validate: (value: unknown) => {
           if (!value) return "At least 2 subnets are required";

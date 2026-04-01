@@ -93,7 +93,9 @@ export const iamRolePlugin: ResourcePlugin = {
         const key = String(answer);
         const policy = TRUST_POLICIES[key];
         if (!policy) {
-          process.stderr.write(`Warning: Unknown trust policy "${key}". AssumeRolePolicyDocument omitted.\n`);
+          process.stderr.write(
+            `Warning: Unknown trust policy "${key}". AssumeRolePolicyDocument omitted.\n`,
+          );
           return undefined;
         }
         return policy;
@@ -169,6 +171,8 @@ export const iamRolePlugin: ResourcePlugin = {
             .filter(Boolean);
           for (const arn of arns) {
             if (!arn.startsWith("arn:aws:iam:")) return `Invalid ARN: ${arn}`;
+            if (arn.includes("AdministratorAccess"))
+              return "AdministratorAccess policy is not allowed. Use least-privilege policies instead.";
           }
           if (arns.length > 10) return "Maximum 10 managed policies per role";
           return undefined;

@@ -22,6 +22,7 @@ import { ProvisioningErrorKind } from "../services/provisioning-port.js";
 import type { SDKFallbackDispatcher } from "../services/sdk-fallback-dispatcher.js";
 import { injectMandatoryTags } from "../utils/tags.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { AWS_REGION } from "../config/constants.js";
 import type { AgentState } from "../services/graph-state.js";
 
 function isResourceType(s: string): s is ResourceType {
@@ -246,7 +247,7 @@ export async function resourceProvisionerNode(
         CreateTagsCommand,
       } = await import("@aws-sdk/client-ec2");
       const ec2 = new EC2Client({
-        region: process.env["AWS_REGION"] ?? "us-east-1",
+        region: AWS_REGION,
       });
 
       // Check for an existing EIP allocated by a previous attempt for this runId
@@ -360,7 +361,7 @@ export async function resourceProvisionerNode(
         const { EC2Client, ReleaseAddressCommand } =
           await import("@aws-sdk/client-ec2");
         const ec2 = new EC2Client({
-          region: process.env["AWS_REGION"] ?? "us-east-1",
+          region: AWS_REGION,
         });
         await ec2.send(
           new ReleaseAddressCommand({

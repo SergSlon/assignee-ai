@@ -41,6 +41,7 @@ import {
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { ConfigurationError } from "@assignee/core";
 import { mergeEnvFile } from "../utils/env-writer.js";
+import { AWS_REGION } from "../config/constants.js";
 
 /** Maps role keys to their policy generators, user names, and env var prefixes. */
 const ROLES = [
@@ -414,7 +415,7 @@ export const setupCommand = new Command(CommandName.SETUP)
     }
 
     // ── Bedrock invocation logging (Tasks 1–3 from aws-bootstrap.md) ──
-    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const region = AWS_REGION;
     const logSp = clack.spinner();
     logSp.start("Setting up Bedrock invocation logging...");
 

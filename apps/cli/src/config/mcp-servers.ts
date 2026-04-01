@@ -16,6 +16,7 @@
  * @see architecture.md — MCP Servers Catalog section
  */
 import { McpServerName, McpCommand } from "../constants/mcp.js";
+import { AWS_REGION } from "./constants.js";
 
 export interface McpServerConfig {
   /** The command to execute (e.g. 'uvx', 'npx') */
@@ -30,9 +31,7 @@ export interface McpServerConfig {
  * Reader credential env block — maps ASSIGNEE_READER_* to standard AWS_* for MCP subprocess.
  * Used by: aws-pricing-mcp-server, aws-cost-management-mcp-server.
  */
-function readerEnv(
-  region = process.env["AWS_REGION"] ?? "us-east-1",
-): Record<string, string> {
+function readerEnv(region = AWS_REGION): Record<string, string> {
   return {
     AWS_ACCESS_KEY_ID: process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] ?? "",
     AWS_SECRET_ACCESS_KEY:
@@ -46,9 +45,7 @@ function readerEnv(
  * Auditor credential env block — maps ASSIGNEE_AUDITOR_* to standard AWS_* for MCP subprocess.
  * Used by: iam-mcp-server, well-architected-security-mcp-server.
  */
-function auditorEnv(
-  region = process.env["AWS_REGION"] ?? "us-east-1",
-): Record<string, string> {
+function auditorEnv(region = AWS_REGION): Record<string, string> {
   return {
     AWS_ACCESS_KEY_ID: process.env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"] ?? "",
     AWS_SECRET_ACCESS_KEY:
