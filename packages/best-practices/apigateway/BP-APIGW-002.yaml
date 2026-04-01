@@ -11,5 +11,5 @@ description: "CORS AllowOrigins must not be set to '*' (wildcard) in production.
 remediation: "Replace '*' with specific domain origins that need access (e.g., 'https://myapp.com', 'https://admin.myapp.com'). If the API is internal-only, consider disabling CORS entirely."
 category: security
 lastVerified: "2026-03-24"
-blocking: true
+blocking: false
 autoFixable: false

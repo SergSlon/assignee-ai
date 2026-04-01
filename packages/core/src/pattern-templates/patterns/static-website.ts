@@ -43,6 +43,12 @@ export const staticWebsitePattern: ArchitecturePattern = {
         IndexDocument: "index.html",
         ErrorDocument: "error.html",
       },
+      BucketEncryption: {
+        ServerSideEncryptionConfiguration: [
+          { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
+        ],
+      },
+      VersioningConfiguration: { Status: "Enabled" },
       PublicAccessBlockConfiguration: {
         BlockPublicAcls: false,
         BlockPublicPolicy: false,

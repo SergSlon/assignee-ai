@@ -1,8 +1,12 @@
-import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
+import {
+  RESOURCE_TYPES,
+  COMPANION_RESOURCE_TYPES,
+} from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 
 /** Shorthand aliases for companion resource type constants used in this pattern. */
-const APIGATEWAYV2_INTEGRATION = COMPANION_RESOURCE_TYPES.APIGATEWAYV2_INTEGRATION;
+const APIGATEWAYV2_INTEGRATION =
+  COMPANION_RESOURCE_TYPES.APIGATEWAYV2_INTEGRATION;
 const APIGATEWAYV2_ROUTE = COMPANION_RESOURCE_TYPES.APIGATEWAYV2_ROUTE;
 const APIGATEWAYV2_STAGE = COMPANION_RESOURCE_TYPES.APIGATEWAYV2_STAGE;
 const LAMBDA_PERMISSION = COMPANION_RESOURCE_TYPES.LAMBDA_PERMISSION;
@@ -138,7 +142,9 @@ export const serverlessApiPattern: ArchitecturePattern = {
     "http-api": {
       ProtocolType: "HTTP",
       CorsConfiguration: {
-        AllowOrigins: ["*"],
+        // SECURITY: Configure AllowOrigins for your specific domain(s).
+        // Example: ["https://example.com", "https://app.example.com"]
+        AllowOrigins: [] as string[],
         AllowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         AllowHeaders: ["Content-Type", "Authorization"],
       },

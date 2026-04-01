@@ -1567,4 +1567,17 @@ describe("BP All Rules Audit", () => {
       ).toEqual([]);
     });
   });
+
+  describe("blocking rules safety net", () => {
+    it("every blocking rule has a fix mechanism (auto or interactive)", () => {
+      const blockingRules = allPractices.filter((r) => r.blocking === true);
+      for (const rule of blockingRules) {
+        const hasFix =
+          rule.desiredStatePatch != null || rule.fixType === "interactive";
+        expect(hasFix, `${rule.id} is blocking but has no fix mechanism`).toBe(
+          true,
+        );
+      }
+    });
+  });
 });
