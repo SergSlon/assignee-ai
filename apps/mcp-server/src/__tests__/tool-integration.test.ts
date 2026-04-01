@@ -322,14 +322,16 @@ describe("free-tier service", () => {
     expect(result!.type).toBe("usage_limited");
   });
 
-  it("should return null for EC2 instances (not tracked in MCP server)", () => {
+  it("should return legacy_eligible for EC2 instances", () => {
     const result = getFreeTierNote("AWS::EC2::Instance");
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("legacy_eligible");
   });
 
-  it("should return null for RDS instances", () => {
+  it("should return legacy_eligible for RDS instances", () => {
     const result = getFreeTierNote("AWS::RDS::DBInstance");
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("legacy_eligible");
   });
 
   it("should return null for unknown resource types", () => {
