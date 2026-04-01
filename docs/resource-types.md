@@ -192,11 +192,14 @@ Cost: ~$32/month (NAT Gateway is the dominant cost driver).
 
 **Trigger keywords**: "static website", "static site", "frontend hosting", "spa hosting"
 
-| Resource          | Type              |
-| ----------------- | ----------------- |
-| S3 Website Bucket | `AWS::S3::Bucket` |
+| Resource                   | Type                                   |
+| -------------------------- | -------------------------------------- |
+| S3 Website Bucket          | `AWS::S3::Bucket`                      |
+| CloudFront Distribution    | `AWS::CloudFront::Distribution`        |
+| CloudFront OAC             | `AWS::CloudFront::OriginAccessControl` |
+| S3 Upload (post-provision) | SDK: S3 PutObject                      |
 
-All public access is blocked by default. CloudFront integration is planned for a future release.
+All public access on S3 is blocked by default. CloudFront serves content via Origin Access Control (OAC). When `--source <path>` is provided, files are uploaded to S3 after provisioning as a post-provision hook.
 
 ## Usage
 

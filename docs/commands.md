@@ -34,11 +34,12 @@ assignee plan [intent] [options]
 
 **Options:**
 
-| Flag                        | Description                                          | Default |
-| --------------------------- | ---------------------------------------------------- | ------- |
-| `-o, --output <format>`     | Output format (`json` or `text`)                     | `text`  |
-| `--no-apply`                | Skip the "Apply now?" prompt after plan display      | false   |
-| `--set <key=value...>`      | Pre-set wizard field values (repeatable)             | -       |
+| Flag                    | Description                                     | Default |
+| ----------------------- | ----------------------------------------------- | ------- |
+| `-o, --output <format>` | Output format (`json` or `text`)                | `text`  |
+| `--no-apply`            | Skip the "Apply now?" prompt after plan display | false   |
+| `--set <key=value...>`  | Pre-set wizard field values (repeatable)        | -       |
+| `--source <path>`       | Source directory for static website S3 upload   | -       |
 
 **Behavior:**
 
@@ -76,12 +77,13 @@ assignee apply [intent] [options]
 
 **Options:**
 
-| Flag                        | Description                                          | Default |
-| --------------------------- | ---------------------------------------------------- | ------- |
-| `--no-wizard`               | Skip interactive option prompts, use plugin defaults | false   |
-| `-y, --yes`                 | Auto-confirm without interactive prompt (CI/CD mode) | false   |
-| `-c, --checkpoint <path>`   | Use a saved plan checkpoint instead of re-planning   | -       |
-| `--set <key=value...>`      | Pre-set wizard field values (repeatable)             | -       |
+| Flag                      | Description                                          | Default |
+| ------------------------- | ---------------------------------------------------- | ------- |
+| `--no-wizard`             | Skip interactive option prompts, use plugin defaults | false   |
+| `-y, --yes`               | Auto-confirm without interactive prompt (CI/CD mode) | false   |
+| `-c, --checkpoint <path>` | Use a saved plan checkpoint instead of re-planning   | -       |
+| `--set <key=value...>`    | Pre-set wizard field values (repeatable)             | -       |
+| `--source <path>`         | Source directory for static website S3 upload        | -       |
 
 **Behavior:**
 
@@ -168,28 +170,29 @@ Safely destroy a managed AWS resource.
 
 ```
 assignee destroy <resource> [options]
+assignee destroy --all [options]
 ```
 
 **Arguments:**
 
-| Argument   | Description                                                    |
-| ---------- | -------------------------------------------------------------- |
-| `resource` | Resource ARN or name (must be tagged `managed-by=assignee-ai`) |
+| Argument   | Description                                                                            |
+| ---------- | -------------------------------------------------------------------------------------- |
+| `resource` | Resource ARN or name (must be tagged `managed-by=assignee-ai`). Optional with `--all`. |
 
 **Options:**
 
-| Flag        | Description                                          | Default |
-| ----------- | ---------------------------------------------------- | ------- |
-| `-y, --yes` | Auto-confirm without interactive prompt (CI/CD mode) | false   |
+| Flag            | Description                                             | Default |
+| --------------- | ------------------------------------------------------- | ------- |
+| `-y, --yes`     | Auto-confirm without interactive prompt (CI/CD mode)    | false   |
+| `--all`         | Destroy all managed resources (bulk destroy)            | false   |
+| `--include-iam` | Include IAM roles in bulk destroy (excluded by default) | false   |
+| `--dry-run`     | Preview what would be destroyed without making changes  | false   |
 
 **Behavior:**
 
-- Resolves the resource via the Resource Groups Tagging API
-- Displays resource details (type, ARN, region, estimated cost savings)
-- Requires typing "yes" for confirmation (strict confirmation, not Y/n)
-- Deletes via CloudControl API and polls for completion
+- **Single resource**: Resolves the resource via the Resource Groups Tagging API, displays resource details (type, ARN, region, estimated cost savings), requires typing "yes" for confirmation (strict confirmation, not Y/n), deletes via CloudControl API and polls for completion
+- **Bulk destroy (`--all`)**: Lists all managed resources, orders by tier (compute/storage first, networking/IAM last), destroys in reverse-dependency order. IAM roles are excluded by default (use `--include-iam` to include them). `--dry-run` previews the destruction plan without executing it
 - Uses SDK fallback for types with known CloudControl gaps (EventSourceMapping, SNS Subscription)
-- `--all` is explicitly rejected for safety
 
 **Examples:**
 
@@ -197,6 +200,8 @@ assignee destroy <resource> [options]
 assignee destroy arn:aws:s3:::my-bucket
 assignee destroy my-bucket
 assignee destroy --yes arn:aws:lambda:us-east-1:123456789012:function:my-fn
+assignee destroy --all --dry-run
+assignee destroy --all --include-iam --yes
 ```
 
 ---
@@ -388,6 +393,7 @@ assignee clean [options]
 | `--checkpoints` | Only clean checkpoint files            | false                   |
 | `--cache`       | Only clean price cache                 | false                   |
 | `--memory`      | Only rotate memory files               | false                   |
+| `--resources`   | Clean orphaned resource records        | false                   |
 | `--json`        | Output results as JSON                 | false                   |
 
 **Behavior:**
