@@ -79,7 +79,7 @@ export const s3BucketPlugin: ResourcePlugin = {
       question: {
         type: "boolean",
         label: "Enable versioning?",
-        initialValue: false,
+        initialValue: true,
         hint: "Keeps all object versions. Increases storage cost. Best for data protection.",
       },
       toCfn: (answer: unknown) => (answer ? { Status: "Enabled" } : undefined),
@@ -148,11 +148,12 @@ export const s3BucketPlugin: ResourcePlugin = {
             return "Must be a positive integer (days)";
           // Expiration must be greater than the transition period
           const transitionRaw = answers?.["LifecycleTransitionDays"];
-          const transitionDays = typeof transitionRaw === "number"
-            ? transitionRaw
-            : typeof transitionRaw === "string"
-              ? parseInt(transitionRaw, 10) || 30
-              : 30;
+          const transitionDays =
+            typeof transitionRaw === "number"
+              ? transitionRaw
+              : typeof transitionRaw === "string"
+                ? parseInt(transitionRaw, 10) || 30
+                : 30;
           if (n <= transitionDays)
             return `Expiration (${n}d) must be greater than the transition period (${transitionDays}d). Use at least ${transitionDays + 1}.`;
           return undefined;

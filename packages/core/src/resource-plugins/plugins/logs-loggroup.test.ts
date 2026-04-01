@@ -48,8 +48,8 @@ describe("logGroupPlugin", () => {
       expect(field.question.type).toBe("enum");
     });
 
-    it("defaults to 14", () => {
-      expect(field.question.initialValue).toBe("14");
+    it("defaults to 30", () => {
+      expect(field.question.initialValue).toBe("30");
     });
 
     it("includes all 22 valid retention values (21 numeric + never)", () => {
@@ -190,8 +190,8 @@ describe("logGroupPlugin", () => {
     });
   });
 
-  it("defaults contain RetentionInDays: 14", () => {
-    expect(logGroupPlugin.defaults["RetentionInDays"]).toBe(14);
+  it("defaults contain RetentionInDays: 30", () => {
+    expect(logGroupPlugin.defaults["RetentionInDays"]).toBe(30);
   });
 
   it("defaults contain LogGroupClass: STANDARD", () => {

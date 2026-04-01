@@ -11,6 +11,8 @@ import {
   type ExecutionStatusType,
   PreflightMode,
   type PreflightModeType,
+  BPEnforcementLevel,
+  type BPEnforcementLevelType,
   type ArchitecturePattern,
   type ResourceSpec,
   type ResourceResult,
@@ -176,6 +178,11 @@ export const graphAnnotation = Annotation.Root({
   outputFormat: Annotation<string | undefined>({
     reducer: (_, b) => b,
     default: () => undefined,
+  }),
+  // Story 41.2: best-practice enforcement level (enforce | warn | skip)
+  bpEnforcementLevel: Annotation<BPEnforcementLevelType>({
+    reducer: (_, b) => b,
+    default: () => BPEnforcementLevel.ENFORCE,
   }),
   // Story 37.1: path to local files to upload after provisioning (e.g., static site)
   sourceDir: Annotation<string | undefined>({

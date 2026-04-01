@@ -25,6 +25,14 @@ export const ExecutionStatus = {
 export type ExecutionStatusType =
   (typeof ExecutionStatus)[keyof typeof ExecutionStatus];
 
+export const BPEnforcementLevel = {
+  ENFORCE: "enforce",
+  WARN: "warn",
+  SKIP: "skip",
+} as const;
+export type BPEnforcementLevelType =
+  (typeof BPEnforcementLevel)[keyof typeof BPEnforcementLevel];
+
 export const PreflightMode = {
   LOCAL: "local",
   SAAS: "saas",
@@ -91,6 +99,11 @@ export const GraphStateSchema = z.object({
     )
     .optional(),
   userConfig: z.record(z.record(z.unknown())).optional(),
+
+  // Best-practice enforcement level (Story 41.2)
+  bpEnforcementLevel: z
+    .enum(["enforce", "warn", "skip"])
+    .default(BPEnforcementLevel.ENFORCE),
 
   // LangGraph message history
   messages: z.array(z.unknown()).default([]),

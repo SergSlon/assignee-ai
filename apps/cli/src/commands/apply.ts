@@ -40,20 +40,107 @@ import {
   findNewestValidCheckpoint,
   loadCheckpointFromPath,
 } from "../services/checkpoint.js";
-import { loadUserConfig } from "../config/user-config-loader.js";
+import {
+  loadUserConfig,
+  type UserConfig,
+} from "../config/user-config-loader.js";
 import { fetchOrgPolicy, readAuthToken } from "../config/org-policy-cache.js";
 import type { PlanCheckpoint } from "@assignee/core";
+import { reEvaluateBP } from "../utils/bp-reeval.js";
 
 /**
  * Builds graph initial state from a loaded checkpoint.
  * Preserves the original runId for audit trail continuity.
+ *
+ * Story 41.3: Re-evaluates BP rules against the checkpoint's desiredState
+ * to catch rules added/modified after the original plan was generated.
+ * Blocking findings update preflightPassed; findings are injected into
+ * graph state so preflight_guard and result_formatter can display them.
  */
 function buildCheckpointState(
   checkpoint: PlanCheckpoint,
   opts: { yes?: boolean },
-  userConfig: unknown,
+  userConfig: UserConfig | undefined,
   orgConfig: unknown,
 ): Record<string, unknown> {
+  const bpLevel = userConfig?.bestPractices?.enforcement ?? "enforce";
+
+  // Story 41.3: BP re-evaluation for checkpoint resume
+  let bpFindings: ReturnType<typeof reEvaluateBP>["findings"] | undefined;
+  let preflightPassed = checkpoint.preflightPassed;
+
+  if (bpLevel !== "skip") {
+    let reEval: ReturnType<typeof reEvaluateBP>;
+    try {
+      reEval = reEvaluateBP({
+        resourceType: checkpoint.resourceType,
+        desiredState: checkpoint.desiredState,
+        userIntent: checkpoint.userIntent,
+        patternId: checkpoint.resourcePatternId ?? undefined,
+      });
+    } catch {
+      // BP evaluation failure in enforce mode must be fail-closed
+      if (bpLevel === "enforce") {
+        preflightPassed = false;
+      }
+      return {
+        checkpointResumed: true,
+        userIntent: checkpoint.userIntent,
+        runId: checkpoint.runId,
+        executionMode: ExecutionMode.APPLY,
+        startedAt: Date.now(),
+        projectDir: process.cwd(),
+        resourceType: checkpoint.resourceType,
+        desiredState: checkpoint.desiredState,
+        estimatedMonthlyCost: checkpoint.estimatedMonthlyCost,
+        preflightPassed,
+        elicitedOptions: checkpoint.elicitedOptions,
+        resourceQueue: checkpoint.resourceQueue,
+        bpEnforcementLevel: bpLevel,
+        errorMessage:
+          "BP evaluation failed — cannot verify security compliance. Re-run plan to regenerate.",
+        executionStatus: bpLevel === "enforce" ? "FAILED" : undefined,
+        ...(opts.yes ? { autoApprove: true } : {}),
+        ...(userConfig ? { userConfig } : {}),
+        ...(orgConfig ? { orgConfig } : {}),
+      };
+    }
+
+    if (reEval.findings.length > 0) {
+      bpFindings = reEval.findings;
+
+      if (bpLevel === "enforce" && reEval.hasBlocking) {
+        preflightPassed = false;
+        log({
+          ts: new Date().toISOString(),
+          runId: checkpoint.runId,
+          level: "warn",
+          action: LOG_ACTIONS.BP_EVALUATED,
+          extras: {
+            context: "checkpoint_resume",
+            enforcement: "enforce",
+            blocked: true,
+            blockingCount: reEval.blockingFindings.length,
+            practiceIds: reEval.blockingFindings.map((f) => f.practiceId),
+          },
+        });
+      } else if (bpLevel === "warn" && reEval.hasBlocking) {
+        log({
+          ts: new Date().toISOString(),
+          runId: checkpoint.runId,
+          level: "warn",
+          action: LOG_ACTIONS.BP_EVALUATED,
+          extras: {
+            context: "checkpoint_resume",
+            enforcement: "warn",
+            blockingCount: reEval.blockingFindings.length,
+            practiceIds: reEval.blockingFindings.map((f) => f.practiceId),
+          },
+        });
+      }
+    }
+  }
+
   return {
     checkpointResumed: true,
     userIntent: checkpoint.userIntent,
@@ -64,9 +151,11 @@ function buildCheckpointState(
     resourceType: checkpoint.resourceType,
     desiredState: checkpoint.desiredState,
     estimatedMonthlyCost: checkpoint.estimatedMonthlyCost,
-    preflightPassed: checkpoint.preflightPassed,
+    preflightPassed,
     elicitedOptions: checkpoint.elicitedOptions,
     resourceQueue: checkpoint.resourceQueue,
+    bpEnforcementLevel: bpLevel,
+    ...(bpFindings ? { bpFindings } : {}),
     ...(opts.yes ? { autoApprove: true } : {}),
     ...(userConfig ? { userConfig } : {}),
     ...(orgConfig ? { orgConfig } : {}),
@@ -316,6 +405,8 @@ export const applyCommand = new Command(CommandName.APPLY)
                   executionMode: ExecutionMode.APPLY,
                   startedAt: Date.now(),
                   projectDir: process.cwd(),
+                  bpEnforcementLevel:
+                    userConfig?.bestPractices?.enforcement ?? "enforce",
                   ...(resolvedSourceDir
                     ? { sourceDir: resolvedSourceDir, sourceFileCount }
                     : {}),

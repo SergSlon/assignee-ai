@@ -9,7 +9,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { ExecutionStatus, CHECKPOINT_VERSION } from "@assignee/core";
-import { registerApplyPlan, _resetActiveApplies } from "../tools/apply-plan.js";
+import {
+  registerApplyPlan,
+  _resetActiveApplies,
+  _resetBPCache,
+} from "../tools/apply-plan.js";
 import type { GraphContext } from "../services/graph-init.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -87,6 +91,13 @@ async function createTestClient(ctx?: GraphContext) {
   return { server, client };
 }
 
+// ── Mock BP loading so re-evaluation doesn't block on minimal test fixtures ──
+
+vi.mock("@assignee/best-practices", () => ({
+  loadBestPractices: vi.fn().mockReturnValue([]),
+  evaluateTriggers: vi.fn().mockReturnValue([]),
+}));
+
 // ── Mock fs for checkpoint loading ───────────────────────────────────────────
 
 vi.mock("node:fs/promises", () => ({
@@ -111,6 +122,7 @@ describe("apply_plan tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     _resetActiveApplies();
+    _resetBPCache();
   });
 
   describe("safety gate (confirmed parameter)", () => {

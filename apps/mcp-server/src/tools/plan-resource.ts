@@ -79,6 +79,7 @@ export function registerPlanResource(
             executionMode: ExecutionMode.PLAN,
             startedAt: Date.now(),
             noWizard: true, // MCP server never prompts interactively
+            bpEnforcementLevel: "enforce", // Always enforce BPs in MCP
             ...(region ? { awsRegion: region } : {}),
           },
           { configurable: { thread_id: runId } },

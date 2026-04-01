@@ -913,6 +913,27 @@ const ecsRules: RuleSpec[] = [
     checkType: "awareness",
     expectedValue: true,
   },
+  {
+    id: "BP-ECS-007",
+    resourceType: "AWS::ECS::Cluster",
+    propertyPath: "ClusterSettings",
+    checkType: "contains",
+    expectedValue: { Name: "containerInsights", Value: "enabled" },
+  },
+  {
+    id: "BP-ECS-008",
+    resourceType: "AWS::ECS::Cluster",
+    propertyPath: "Configuration.ExecuteCommandConfiguration.Logging",
+    checkType: "exists",
+    expectedValue: true,
+  },
+  {
+    id: "BP-ECS-009",
+    resourceType: "AWS::ECS::Cluster",
+    propertyPath: "ServiceConnectDefaults.Namespace",
+    checkType: "exists",
+    expectedValue: true,
+  },
 ];
 
 const cloudwatchRules: RuleSpec[] = [
@@ -1413,7 +1434,7 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("ECS (6 rules)", () => {
+  describe("ECS (9 rules)", () => {
     for (const spec of ecsRules) {
       runRuleTests(spec);
     }
@@ -1524,8 +1545,8 @@ describe("BP All Rules Audit", () => {
       ...asgRules,
     ];
 
-    it("covers exactly 130 rule specs", () => {
-      expect(allSpecs.length).toBe(130);
+    it("covers exactly 133 rule specs", () => {
+      expect(allSpecs.length).toBe(133);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

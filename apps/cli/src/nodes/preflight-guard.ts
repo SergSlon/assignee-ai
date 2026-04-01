@@ -19,7 +19,11 @@ import {
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
-import { AWS_REGION, PRICING_TIMEOUT_MS, HOURS_PER_MONTH } from "../config/constants.js";
+import {
+  AWS_REGION,
+  PRICING_TIMEOUT_MS,
+  HOURS_PER_MONTH,
+} from "../config/constants.js";
 import { CostEstimate, PricingTerm } from "../constants/pricing.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { unwrapMcpText } from "../utils/mcp.js";
@@ -59,42 +63,51 @@ export async function preflightGuardNode(
 
   // Story 18.10: Blocking BP findings (replaces old guardrail engine + CRITICAL BP check)
   // BP evaluation is synchronous (<1ms) — run before the parallel block.
-  // Story E2E.4: In noWizard/MCP mode, BP blocking is advisory only — the confirmed gate
-  // in apply_plan serves as the safety mechanism. The fix_applicator has already had
-  // its chance to auto-fix. Blocking here prevents MCP provisioning for common BPs
-  // like ECR scan-on-push, CloudWatch alarm actions, etc.
+  // Story 41.2: Enforcement level controls blocking behaviour:
+  //   "enforce" (default) — block on any blocking finding, regardless of --yes/--no-wizard
+  //   "warn"              — log findings but never block
+  //   "skip"              — no evaluation at all
   const bpFindings = state.bpFindings ?? [];
   const blockingFindings = bpFindings.filter((f) => f.blocking);
   let bpBlocked = false;
-  if (blockingFindings.length > 0 && !state.noWizard && !state.autoApprove) {
-    bpBlocked = true;
-    log({
-      ts: new Date().toISOString(),
-      runId: state.runId,
-      level: "warn",
-      action: LOG_ACTIONS.BP_EVALUATED,
-      extras: {
-        blocked: true,
-        blockingCount: blockingFindings.length,
-        practiceIds: blockingFindings.map((f) => f.practiceId),
-      },
-    });
-  } else if (
-    blockingFindings.length > 0 &&
-    (state.noWizard || state.autoApprove)
-  ) {
-    log({
-      ts: new Date().toISOString(),
-      runId: state.runId,
-      level: "warn",
-      action: LOG_ACTIONS.BP_EVALUATED,
-      extras: {
-        blockedSkipped: true,
-        reason: "noWizard mode — BP blocking is advisory only",
-        blockingCount: blockingFindings.length,
-        practiceIds: blockingFindings.map((f) => f.practiceId),
-      },
-    });
+  const bpLevel = state.bpEnforcementLevel ?? "enforce";
+
+  if (bpLevel === "skip") {
+    // User explicitly opted out of BP evaluation — no blocking, minimal logging
+    bpBlocked = false;
+  } else if (bpLevel === "warn") {
+    // Advisory mode — log findings but don't block
+    if (blockingFindings.length > 0) {
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "warn",
+        action: LOG_ACTIONS.BP_EVALUATED,
+        extras: {
+          enforcement: "warn",
+          blockingCount: blockingFindings.length,
+          practiceIds: blockingFindings.map((f) => f.practiceId),
+        },
+      });
+    }
+    bpBlocked = false;
+  } else {
+    // "enforce" (default) — block regardless of --yes or --no-wizard
+    if (blockingFindings.length > 0) {
+      bpBlocked = true;
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "warn",
+        action: LOG_ACTIONS.BP_EVALUATED,
+        extras: {
+          blocked: true,
+          enforcement: "enforce",
+          blockingCount: blockingFindings.length,
+          practiceIds: blockingFindings.map((f) => f.practiceId),
+        },
+      });
+    }
   }
 
   // Story 7.8: Free tier awareness — non-blocking (AC #6)

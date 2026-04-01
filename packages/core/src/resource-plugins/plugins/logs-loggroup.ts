@@ -5,7 +5,7 @@ import { TAGS_VALIDATE } from "../shared-fields.js";
 /**
  * ResourcePlugin for AWS::Logs::LogGroup.
  * commonFields contains 4 properties (≤10 as required).
- * RetentionInDays defaults to 14 (best practice: never leave infinite).
+ * RetentionInDays defaults to 30 (best practice: never leave infinite).
  */
 export const logGroupPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.LOGS_LOG_GROUP,
@@ -38,8 +38,8 @@ export const logGroupPlugin: ResourcePlugin = {
           { value: "3", label: "3 days" },
           { value: "5", label: "5 days" },
           { value: "7", label: "7 days" },
-          { value: "14", label: "14 days (recommended)", recommended: true },
-          { value: "30", label: "30 days" },
+          { value: "14", label: "14 days" },
+          { value: "30", label: "30 days (recommended)", recommended: true },
           { value: "60", label: "60 days" },
           { value: "90", label: "90 days" },
           { value: "120", label: "120 days" },
@@ -57,8 +57,8 @@ export const logGroupPlugin: ResourcePlugin = {
           { value: "3653", label: "3653 days (10 years)" },
           { value: "never", label: "Never expire (not recommended)" },
         ],
-        initialValue: "14",
-        hint: "How long to keep log data. Longer retention increases storage costs. 14 days is recommended for development, 90-365 days for production. 'Never expire' is discouraged — it leads to unbounded storage costs.",
+        initialValue: "30",
+        hint: "How long to keep log data. Longer retention increases storage costs. 30 days is recommended for development, 90-365 days for production. 'Never expire' is discouraged — it leads to unbounded storage costs.",
       },
       toCfn: (answer: unknown) => {
         if (answer === "never" || answer === undefined) return undefined;
@@ -136,7 +136,7 @@ export const logGroupPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    RetentionInDays: 14,
+    RetentionInDays: 30,
     LogGroupClass: "STANDARD",
   },
   configHints: [

@@ -11,8 +11,19 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { parse as parseYaml } from "yaml";
-import type { UserResourceConfig } from "@assignee/core";
+import type {
+  UserResourceConfig,
+  BPEnforcementLevelType,
+} from "@assignee/core";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
+
+/** Extended user config with top-level preferences (beyond per-resource overrides). */
+export type UserConfig = UserResourceConfig & {
+  bestPractices?: {
+    enforcement?: BPEnforcementLevelType;
+    autoFix?: boolean;
+  };
+};
 
 /** Resolve the config file path from env override or XDG default. */
 export function resolveConfigPath(): string {
@@ -27,9 +38,7 @@ export function resolveConfigPath(): string {
  *
  * @returns Parsed user config or undefined (never throws)
  */
-export async function loadUserConfig(): Promise<
-  UserResourceConfig | undefined
-> {
+export async function loadUserConfig(): Promise<UserConfig | undefined> {
   const configPath = resolveConfigPath();
   try {
     const content = await fs.readFile(configPath, "utf-8");
@@ -54,7 +63,7 @@ export async function loadUserConfig(): Promise<
       extras: { path: configPath },
     });
 
-    return parsed as UserResourceConfig;
+    return parsed as UserConfig;
   } catch (err: unknown) {
     if (
       err instanceof Error &&

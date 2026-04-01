@@ -150,6 +150,8 @@ export const planCommand = new Command(CommandName.PLAN)
               ...(resolvedSourceDir
                 ? { sourceDir: resolvedSourceDir, sourceFileCount }
                 : {}),
+              bpEnforcementLevel:
+                userConfig?.bestPractices?.enforcement ?? "enforce",
               ...(userConfig ? { userConfig } : {}),
               ...(orgConfig ? { orgConfig } : {}),
               ...(Object.keys(presetFields).length > 0 ? { presetFields } : {}),
@@ -296,6 +298,8 @@ export const planCommand = new Command(CommandName.PLAN)
               completedResources: planState.completedResources,
               perResourceCosts: planState.perResourceCosts,
               bpFindings: planState.bpFindings,
+              bpEnforcementLevel:
+                userConfig?.bestPractices?.enforcement ?? "enforce",
               checkpointResumed: true,
             },
             applyConfig,
