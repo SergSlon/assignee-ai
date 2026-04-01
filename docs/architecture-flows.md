@@ -38,7 +38,7 @@ flowchart TD
         HA["9. HUMAN_APPROVAL<br/>—————<br/>Display plan + cost<br/>User confirms / cancels<br/>⚡ LangGraph INTERRUPT<br/>Auto-approve on checkpoint resume<br/>(no double confirm)"]
 
         subgraph PHASE2["Phase 2 — Provisioning"]
-            RP["10. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>OR SDK fallback<br/>State guard skipped for S3<br/>(globally unique names)"]
+            RP["10. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>OR SDK fallback<br/>State guard skipped for S3<br/>(globally unique names)<br/>provisionable=false → skip<br/>Post-hooks: S3 upload,<br/>CloudFront creation"]
             SP["11. STATUS_POLLER<br/>—————<br/>Poll every 2s<br/>MAX_POLL_ITERATIONS=450 guard<br/>Extended timeout for RDS/ELBv2/<br/>NatGateway (15 min)"]
             RF["12. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
         end
@@ -66,7 +66,7 @@ flowchart TD
     APPLY_MODE --> IP
     RESUME -->|"checkpoint loaded"| HA
 
-    DESTROY["DESTROY<br/>—————<br/>Resolve ARN via Tags API<br/>CloudControl DeleteResource<br/>OR SDK fallback<br/>+ Billing MCP cost savings"]
+    DESTROY["DESTROY<br/>—————<br/>Single: Resolve ARN via Tags API<br/>CloudControl DeleteResource<br/>OR SDK fallback<br/>+ Billing MCP cost savings<br/>—————<br/>Bulk (--all): List all managed<br/>resources, tier-ordered destroy<br/>(compute → storage → network → IAM)<br/>--include-iam / --dry-run"]
     LIST["LIST<br/>—————<br/>Resource Groups Tagging API<br/>Filter: managed-by=assignee-ai"]
     SETUP["SETUP<br/>—————<br/>Create 3 IAM users<br/>operator / reader / auditor<br/>Least-privilege policies"]
     INIT["INIT<br/>—————<br/>Detect AWS creds/region<br/>Create .assignee/config.yaml"]
@@ -136,7 +136,7 @@ flowchart LR
 
     subgraph LOCAL["Hardcoded / Embedded"]
         direction TB
-        PLUGINS["Resource Plugins<br/>5 plugins × fields<br/>Labels, hints, validators<br/>toCfn transforms"]
+        PLUGINS["Resource Plugins<br/>23 plugins × fields<br/>Labels, hints, validators<br/>toCfn transforms"]
         BPYAML["Best Practices<br/>YAML rules<br/>Severity + remediation"]
         PATTERNS["Intent Patterns<br/>Regex matchers<br/>Zero-latency shortcut"]
         LOCALP["Local Pricing Registry<br/>Fallback estimates"]

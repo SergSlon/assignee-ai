@@ -41,16 +41,17 @@ All AI calls stay local — no AWS credentials ever leave your machine.
 
 ## Commands
 
-| Command                       | Description                                    | Key flags                                                 |
-| :---------------------------- | :--------------------------------------------- | :-------------------------------------------------------- |
-| `assignee plan <intent>`      | Generate infrastructure plan                   | `--region`, `--json`                                      |
-| `assignee apply <intent>`     | Plan + provision with HITL approval            | `--yes`, `--no-wizard`, `--checkpoint <path>`, `--region` |
-| `assignee init`               | Initialize `.assignee/` project directory      | —                                                         |
-| `assignee list`               | Show managed resources with cost               | `--region`, `--json`                                      |
-| `assignee destroy <resource>` | Safe teardown with confirmation                | `--yes`                                                   |
-| `assignee status`             | Intelligence summary (memory, findings, costs) | `--json`                                                  |
-| `assignee setup`              | Automate IAM role/policy creation              | —                                                         |
-| `assignee completions`        | Generate shell completions (bash/zsh)          | —                                                         |
+| Command                       | Description                                    | Key flags                                                             |
+| :---------------------------- | :--------------------------------------------- | :-------------------------------------------------------------------- |
+| `assignee plan <intent>`      | Generate infrastructure plan                   | `--source`, `--region`, `--json`                                      |
+| `assignee apply <intent>`     | Plan + provision with HITL approval            | `--source`, `--yes`, `--no-wizard`, `--checkpoint <path>`, `--region` |
+| `assignee init`               | Initialize `.assignee/` project directory      | —                                                                     |
+| `assignee list`               | Show managed resources with cost               | `--region`, `--json`                                                  |
+| `assignee destroy <resource>` | Safe teardown with confirmation                | `--yes`, `--all`, `--include-iam`, `--dry-run`                        |
+| `assignee clean`              | Remove stale checkpoints, cache, memory        | `--resources`, `--checkpoints`, `--cache`, `--confirm`                |
+| `assignee status`             | Intelligence summary (memory, findings, costs) | `--json`                                                              |
+| `assignee setup`              | Automate IAM role/policy creation              | —                                                                     |
+| `assignee completions`        | Generate shell completions (bash/zsh)          | —                                                                     |
 
 ---
 
@@ -97,7 +98,7 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 
 ## Supported resource types
 
-15 CCAPI types + 2 SDK-routable fallback types = 17 total:
+21 CCAPI types + 2 SDK-routable fallback types = 23 total:
 
 | Type                                        | Notes                                                      |
 | :------------------------------------------ | :--------------------------------------------------------- |
@@ -116,6 +117,14 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 | `AWS::ElasticLoadBalancingV2::LoadBalancer` |                                                            |
 | `AWS::ECS::Cluster`                         |                                                            |
 | `AWS::ECR::Repository`                      |                                                            |
+| `AWS::Logs::LogGroup`                       | Co-provisioned with Lambda and ECS                         |
+| `AWS::EC2::InternetGateway`                 | Used in VPC Networking pattern                             |
+| `AWS::EC2::RouteTable`                      | Used in VPC Networking pattern                             |
+| `AWS::EC2::Route`                           | Used in VPC Networking pattern                             |
+| `AWS::EC2::NatGateway`                      | Used in VPC Networking pattern                             |
+| `AWS::ApiGatewayV2::Api`                    | Used in Serverless API pattern                             |
+| `AWS::CloudWatch::Alarm`                    | Monitoring                                                 |
+| `AWS::SecretsManager::Secret`               | Secret management                                          |
 | `AWS::Lambda::EventSourceMapping`           | SDK fallback (not CCAPI)                                   |
 | `AWS::SNS::Subscription`                    | SDK fallback (not CCAPI)                                   |
 
@@ -123,13 +132,14 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 
 Multi-resource intents are detected by keyword matching (zero LLM latency) and provisioned in dependency order:
 
-| Pattern            | Resources                                    | Trigger keywords                    |
-| :----------------- | :------------------------------------------- | :---------------------------------- |
-| Serverless API     | IAM Role → Lambda → DynamoDB → API Gateway   | "serverless api", "lambda api"      |
-| Static Website     | S3 Bucket (website-configured)               | "static website", "static site"     |
-| Message Processing | SQS DLQ → SQS + DynamoDB + IAM Role → Lambda | "message queue", "event processing" |
-| Three-Tier Web     | VPC → Subnet → SecurityGroup → ECS → ALB     | "three tier", "web application"     |
-| Container Service  | ECR → ECS Cluster → IAM Role                 | "container service", "ecs"          |
+| Pattern            | Resources                                              | Trigger keywords                    |
+| :----------------- | :----------------------------------------------------- | :---------------------------------- |
+| VPC Networking     | VPC → Subnets → IGW → RouteTables → NAT (17 resources) | "create a vpc", "vpc with subnets"  |
+| Serverless API     | IAM Role → Lambda → API Gateway V2 (8 resources)       | "serverless api", "lambda api"      |
+| Static Website     | S3 Bucket + CloudFront + OAC + S3 upload               | "static website", "static site"     |
+| Message Processing | SQS DLQ → SQS + DynamoDB + IAM Role → Lambda           | "message queue", "event processing" |
+| Three-Tier Web     | VPC → Subnet → SecurityGroup → ECS → ALB               | "three tier", "web application"     |
+| Container Service  | ECR → ECS Cluster → IAM Role                           | "container service", "ecs"          |
 
 ---
 
@@ -148,14 +158,14 @@ apps/
   cli/
     src/
       commands/        plan.ts · apply.ts · init.ts · list.ts · destroy.ts
-                       status.ts · completions.ts
+                       status.ts · clean.ts · completions.ts
       nodes/           intent-parser · schema-fetcher · option-elicitor
                        compound-dispatcher · plan-generator · bp-evaluator
                        fix-applicator · preflight-guard · human-approval
                        resource-provisioner · status-poller · result-formatter
       services/        graph.ts (LangGraph) · mcp-client.ts · memory.ts
                        list-resources.ts · resource-resolver.ts · billing.ts
-                       status-aggregator.ts · litellm-adapter.ts
+                       status-aggregator.ts · litellm-adapter.ts · bulk-destroy.ts
       config/          mcp-servers.ts
       utils/           display.ts · logger.ts · tags.ts · mcp.ts · pricing-lookup.ts
       test-fixtures/   mcp-mock-responses.ts (real MCP captures)
@@ -173,7 +183,7 @@ packages/
                                    lambda-function · generic
       pattern-templates/ registry.ts · types.ts
                          patterns/ serverless-api · static-website · message-processing
-                                   three-tier-web · container-service
+                                   three-tier-web · container-service · vpc-networking
       pricing/         pricing data and lookup
       guardrails/      built-in guardrail rules
       errors.ts
@@ -218,7 +228,7 @@ Optional servers (IAM, Well-Architected Security, Billing) are spawned only when
 ## Development
 
 ```bash
-pnpm test          # 1171 tests across 65 files
+pnpm test          # 2040 tests across 187 files (105 CLI + 60 core + 9 BP + 13 MCP)
 pnpm check-types   # TypeScript type check
 pnpm build         # compile all packages
 ```
@@ -247,8 +257,8 @@ node build-fixture-ts.mjs
 | **0**  | Project Foundation & Monorepo Setup                                               | Done                                        |
 | **1**  | Plan Command (LangGraph, MCP, intent parsing, plan generation)                    | Done                                        |
 | **2**  | Apply Command (HITL, provisioning, status polling, tagging)                       | Done                                        |
-| **7**  | Resource Intelligence (17 types, option elicitation, pricing, doc hints)          | Done                                        |
-| **8**  | Compound Provisioning (5 architecture patterns, dependency ordering)              | Done                                        |
+| **7**  | Resource Intelligence (23 types, option elicitation, pricing, doc hints)          | Done                                        |
+| **8**  | Compound Provisioning (6 architecture patterns, dependency ordering)              | Done                                        |
 | **9**  | Architecture Hardening (type safety, error handling, prompt injection guard)      | Done                                        |
 | **10** | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)           | Done                                        |
 | **11** | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                        | Done                                        |
@@ -288,8 +298,10 @@ See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the full IAM policy setup
 | Document                 | Scope               | Location                                                                             |
 | ------------------------ | ------------------- | ------------------------------------------------------------------------------------ |
 | Architecture Flows       | CLI (current)       | [docs/architecture-flows.md](docs/architecture-flows.md)                             |
+| Commands Reference       | CLI (current)       | [docs/commands.md](docs/commands.md)                                                 |
+| Resource Types           | CLI (current)       | [docs/resource-types.md](docs/resource-types.md)                                     |
+| Best Practices Engine    | CLI (current)       | [docs/best-practices.md](docs/best-practices.md)                                     |
 | AWS Setup Guide          | CLI (current)       | [docs/aws-bootstrap.md](docs/aws-bootstrap.md)                                       |
-| Testing Guide            | CLI (current)       | [docs/testing-guide.md](docs/testing-guide.md)                                       |
 | CLI Architecture         | CLI (authoritative) | [planning: cli-architecture.md](_bmad-output/planning-artifacts/cli-architecture.md) |
 | Full Vision Architecture | SaaS (deferred)     | [planning: architecture.md](_bmad-output/planning-artifacts/architecture.md)         |
 | Product Requirements     | Both                | [planning: prd.md](_bmad-output/planning-artifacts/prd.md)                           |

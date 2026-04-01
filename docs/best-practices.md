@@ -10,7 +10,7 @@ The best practices pipeline runs as three nodes in the 12-node LangGraph graph:
 plan_generator -> bp_evaluator -> auto_fix_applier -> preflight_guard
 ```
 
-1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. Completes in <10ms for up to 50 rules.
+1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **130 rules** (12 duplicates were removed during consolidation). Completes in <10ms for all rules.
 
 2. **auto_fix_applier**: For findings with `fixType: auto`, patches the `desiredState` directly using `desiredStatePatch`. For findings with `fixType: interactive`, prompts the user with choices. Respects the `preferences.auto_fix` config setting (`ask` / `apply` / `skip`).
 
@@ -67,12 +67,12 @@ When this rule fires, the fix is applied by merging `desiredStatePatch` into the
 
 **Additional S3 auto-fix rules:**
 
-| Rule ID    | Title                                | Severity   | Category      | What it fixes                                                            |
-| ---------- | ------------------------------------ | ---------- | ------------- | ------------------------------------------------------------------------ |
-| BP-S3-005  | Versioning should be enabled         | HIGH       | reliability   | Sets `VersioningConfiguration.Status` to `Enabled`                       |
-| BP-S3-006  | Server-side encryption required      | CRITICAL   | security      | Adds `BucketEncryption` with SSE-S3 (AES256)                            |
-| BP-S3-008  | Ownership controls enforced           | HIGH       | security      | Sets `OwnershipControls.Rules[0].ObjectOwnership` to `BucketOwnerEnforced` (disables ACLs) |
-| BP-S3-010  | Lifecycle configuration recommended  | HIGH       | cost          | Adds lifecycle rules (Id: `assignee-default-lifecycle`, STANDARD_IA at 30d, GLACIER at 90d, expire 365d)  |
+| Rule ID   | Title                               | Severity | Category    | What it fixes                                                                                            |
+| --------- | ----------------------------------- | -------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| BP-S3-005 | Versioning should be enabled        | HIGH     | reliability | Sets `VersioningConfiguration.Status` to `Enabled`                                                       |
+| BP-S3-006 | Server-side encryption required     | CRITICAL | security    | Adds `BucketEncryption` with SSE-S3 (AES256)                                                             |
+| BP-S3-008 | Ownership controls enforced         | HIGH     | security    | Sets `OwnershipControls.Rules[0].ObjectOwnership` to `BucketOwnerEnforced` (disables ACLs)               |
+| BP-S3-010 | Lifecycle configuration recommended | HIGH     | cost        | Adds lifecycle rules (Id: `assignee-default-lifecycle`, STANDARD_IA at 30d, GLACIER at 90d, expire 365d) |
 
 **Lifecycle expiration validation:** At prompt time, expiration values <= 30 days are rejected. In `assembleS3Composites`, `ExpirationInDays` is clamped to be greater than the highest `TransitionInDays` value (AWS requires expiration > transition days), with a warning emitted to stderr when clamping occurs.
 
@@ -182,8 +182,22 @@ AWS::EC2::Instance                            14        8           1      5    
 AWS::RDS::DBInstance                          10        6           1      3    2026-03-22
 ...
 
-Summary: 95 rules | 52 auto-fixable (55%) | 8 interactive | 35 manual
+Summary: 130 rules | 72 auto-fixable (55%) | 12 interactive | 46 manual
 ```
+
+## Excluding Rules
+
+Rules can be excluded from evaluation using `excludePatterns` in the project or global config:
+
+```yaml
+bestPractices:
+  excludePatterns:
+    - "BP-S3-010" # Exclude a specific rule by ID
+    - "BP-EC2-*" # Exclude all EC2 rules (glob pattern)
+    - "cost_optimization" # Exclude by category
+```
+
+Patterns support exact ID matching, glob wildcards, and category-based exclusion. Excluded rules are skipped entirely during evaluation and do not produce findings.
 
 ## Controlling Auto-Fix Behavior
 
