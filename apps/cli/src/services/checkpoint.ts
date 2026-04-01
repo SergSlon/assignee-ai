@@ -93,7 +93,9 @@ export async function saveCheckpoint(
 ): Promise<string> {
   await fs.mkdir(dir, { recursive: true });
   const filePath = path.join(dir, `checkpoint-${checkpoint.runId}.json`);
-  await fs.writeFile(filePath, JSON.stringify(checkpoint, null, 2), "utf-8");
+  const tmpPath = `${filePath}.tmp.${process.pid}`;
+  await fs.writeFile(tmpPath, JSON.stringify(checkpoint, null, 2), "utf-8");
+  await fs.rename(tmpPath, filePath);
   return filePath;
 }
 

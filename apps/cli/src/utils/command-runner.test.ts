@@ -438,7 +438,7 @@ describe("runProvisioningLoop", () => {
         .mockResolvedValueOnce({ next: [] }) // after invoke: no more interrupts
         .mockResolvedValueOnce({
           values: { executionStatus: ExecutionStatus.SUCCESS },
-        }),
+        }), // finalState query
     };
     const config = { configurable: { thread_id: "test-run" } };
     const phase1State = { executionStatus: ExecutionStatus.PENDING } as never;

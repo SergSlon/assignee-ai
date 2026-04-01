@@ -7,6 +7,31 @@ import {
 } from "../services/provisioning-port.js";
 import type { SDKFallbackDispatcher } from "../services/sdk-fallback-dispatcher.js";
 
+// ── EC2 SDK mock for EIP allocation tests ─────────────────────────────────
+const { mockEc2Send } = vi.hoisted(() => ({
+  mockEc2Send: vi.fn(),
+}));
+
+vi.mock("@aws-sdk/client-ec2", () => ({
+  EC2Client: vi.fn().mockImplementation(() => ({ send: mockEc2Send })),
+  AllocateAddressCommand: vi.fn().mockImplementation((input: unknown) => ({
+    _type: "AllocateAddressCommand",
+    input,
+  })),
+  DescribeAddressesCommand: vi.fn().mockImplementation((input: unknown) => ({
+    _type: "DescribeAddressesCommand",
+    input,
+  })),
+  CreateTagsCommand: vi.fn().mockImplementation((input: unknown) => ({
+    _type: "CreateTagsCommand",
+    input,
+  })),
+  ReleaseAddressCommand: vi.fn().mockImplementation((input: unknown) => ({
+    _type: "ReleaseAddressCommand",
+    input,
+  })),
+}));
+
 // ── Mock provisioning port ──────────────────────────────────────────────────
 
 function createMockProvisioner(): ProvisioningPort & {
@@ -717,6 +742,144 @@ describe("resourceProvisionerNode", () => {
 
       // CloudControl SHOULD have been called
       expect(mockProvisioner.createResource).toHaveBeenCalled();
+    });
+  });
+
+  // ── P0: EIP leak prevention for NatGateway (Story 42.1) ─────────────────
+  describe("EIP allocation for NatGateway — leak prevention", () => {
+    function makeNatGwState(overrides: Record<string, unknown> = {}) {
+      return makeState({
+        resourceType: "AWS::EC2::NatGateway",
+        runId: "run-natgw-eip-001",
+        desiredState: {
+          SubnetId: "subnet-abc123",
+          AllocationId: "AUTO_ALLOCATE_EIP",
+        },
+        ...overrides,
+      });
+    }
+
+    beforeEach(() => {
+      mockEc2Send.mockReset();
+    });
+
+    it("allocates a new EIP and tags it with runId on first attempt", async () => {
+      // DescribeAddresses returns no existing EIPs for this runId
+      mockEc2Send
+        .mockResolvedValueOnce({ Addresses: [] }) // DescribeAddressesCommand
+        .mockResolvedValueOnce({ AllocationId: "eipalloc-new-001" }) // AllocateAddressCommand
+        .mockResolvedValueOnce({}); // CreateTagsCommand
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "natgw-token-001" },
+      ]);
+
+      const state = makeNatGwState();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+
+      // Verify EIP was allocated
+      expect(mockEc2Send).toHaveBeenCalledTimes(3); // Describe + Allocate + CreateTags
+      expect(state.desiredState!["AllocationId"]).toBe("eipalloc-new-001");
+
+      // Verify CreateTags was called to tag the EIP for retry tracking
+      const createTagsCall = mockEc2Send.mock.calls[2]![0] as {
+        _type: string;
+        input: { Resources: string[]; Tags: { Key: string; Value: string }[] };
+      };
+      expect(createTagsCall._type).toBe("CreateTagsCommand");
+      expect(createTagsCall.input.Resources).toEqual(["eipalloc-new-001"]);
+      expect(createTagsCall.input.Tags).toEqual([
+        { Key: "assignee:runId", Value: "run-natgw-eip-001" },
+      ]);
+    });
+
+    it("reuses existing EIP on retry instead of allocating a new one (P0 leak fix)", async () => {
+      // DescribeAddresses returns an EIP already tagged with this runId
+      mockEc2Send.mockResolvedValueOnce({
+        Addresses: [{ AllocationId: "eipalloc-existing-999" }],
+      }); // DescribeAddressesCommand
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "natgw-retry-token" },
+      ]);
+
+      const state = makeNatGwState();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+
+      // Should NOT have called AllocateAddress — only DescribeAddresses
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
+      expect(state.desiredState!["AllocationId"]).toBe("eipalloc-existing-999");
+
+      // Verify DescribeAddresses filter used the runId tag
+      const describeCall = mockEc2Send.mock.calls[0]![0] as {
+        _type: string;
+        input: {
+          Filters: { Name: string; Values: string[] }[];
+        };
+      };
+      expect(describeCall._type).toBe("DescribeAddressesCommand");
+      expect(describeCall.input.Filters).toEqual(
+        expect.arrayContaining([
+          { Name: "tag:assignee:runId", Values: ["run-natgw-eip-001"] },
+        ]),
+      );
+    });
+
+    it("falls back to allocating new EIP if DescribeAddresses fails", async () => {
+      // DescribeAddresses throws an error
+      mockEc2Send
+        .mockRejectedValueOnce(new Error("Access denied")) // DescribeAddressesCommand fails
+        .mockResolvedValueOnce({ AllocationId: "eipalloc-fallback-001" }) // AllocateAddressCommand
+        .mockResolvedValueOnce({}); // CreateTagsCommand
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "natgw-fallback-token" },
+      ]);
+
+      const state = makeNatGwState();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      expect(state.desiredState!["AllocationId"]).toBe("eipalloc-fallback-001");
+    });
+
+    it("releases EIP on CloudControl failure (best-effort cleanup)", async () => {
+      // First attempt: allocate EIP successfully
+      mockEc2Send
+        .mockResolvedValueOnce({ Addresses: [] }) // DescribeAddressesCommand
+        .mockResolvedValueOnce({ AllocationId: "eipalloc-cleanup-001" }) // AllocateAddressCommand
+        .mockResolvedValueOnce({}) // CreateTagsCommand
+        .mockResolvedValueOnce({}); // ReleaseAddressCommand
+
+      // CloudControl fails
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        {
+          kind: ProvisioningErrorKind.UNKNOWN,
+          message: "NAT Gateway creation failed",
+        },
+        null,
+      ]);
+
+      const state = makeNatGwState();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+
+      // Verify ReleaseAddress was called for cleanup
+      expect(mockEc2Send).toHaveBeenCalledTimes(4);
+      const releaseCall = mockEc2Send.mock.calls[3]![0] as {
+        _type: string;
+        input: { AllocationId: string };
+      };
+      expect(releaseCall._type).toBe("ReleaseAddressCommand");
+      expect(releaseCall.input.AllocationId).toBe("eipalloc-cleanup-001");
     });
   });
 });

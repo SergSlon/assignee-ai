@@ -93,7 +93,10 @@ function makeProvisionerState(overrides: Record<string, unknown> = {}) {
     executionMode: "apply",
     resourceType: "AWS::IAM::Role",
     resourceSchema: undefined,
-    desiredState: { RoleName: "plan-apply-test", AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] } },
+    desiredState: {
+      RoleName: "plan-apply-test",
+      AssumeRolePolicyDocument: { Version: "2012-10-17", Statement: [] },
+    },
     estimatedMonthlyCost: "$0.0230/GB-month",
     requestToken: undefined,
     resourceArn: undefined,
@@ -218,7 +221,7 @@ describe("plan-to-apply transition: humanApprovalNode", () => {
       expect(result.executionStatus).toBeUndefined();
     });
 
-    it("logs PLAN_APPROVED without checkpointResumed extras", async () => {
+    it("logs PLAN_APPROVED with approvalSource: interactive", async () => {
       Object.defineProperty(process.stdin, "isTTY", {
         value: true,
         writable: true,
@@ -235,17 +238,16 @@ describe("plan-to-apply transition: humanApprovalNode", () => {
           action: "plan_approved",
         }),
       );
-      // The non-checkpoint log call should NOT have checkpointResumed in extras
       const logCalls = vi.mocked(log).mock.calls;
       const approvedCall = logCalls.find(
-        (call) =>
-          (call[0] as any).action === "plan_approved",
+        (call) => (call[0] as any).action === "plan_approved",
       );
       expect(approvedCall).toBeDefined();
       const extras = (approvedCall![0] as any).extras as
         | Record<string, unknown>
         | undefined;
-      expect(extras).toBeUndefined();
+      // Story 42.2d: audit trail now includes approval source
+      expect(extras).toEqual({ approvalSource: "interactive" });
     });
   });
 
@@ -414,9 +416,8 @@ describe("plan-to-apply transition: cost history display", () => {
   it('warning hint (starts with ⚠) gets "Warning:" label', async () => {
     // Need the real renderPlanBox, not the mock
     vi.doUnmock("../utils/display.js");
-    const { renderPlanBox: realRenderPlanBox } = await import(
-      "../utils/display.js"
-    );
+    const { renderPlanBox: realRenderPlanBox } =
+      await import("../utils/display.js");
 
     realRenderPlanBox({
       resourceType: "AWS::S3::Bucket",
@@ -443,9 +444,8 @@ describe("plan-to-apply transition: cost history display", () => {
 
   it('cost history hint gets "Cost History:" label', async () => {
     vi.doUnmock("../utils/display.js");
-    const { renderPlanBox: realRenderPlanBox } = await import(
-      "../utils/display.js"
-    );
+    const { renderPlanBox: realRenderPlanBox } =
+      await import("../utils/display.js");
 
     realRenderPlanBox({
       resourceType: "AWS::S3::Bucket",
@@ -471,9 +471,8 @@ describe("plan-to-apply transition: cost history display", () => {
 
   it("mix of warning and cost history hints applies correct labels", async () => {
     vi.doUnmock("../utils/display.js");
-    const { renderPlanBox: realRenderPlanBox } = await import(
-      "../utils/display.js"
-    );
+    const { renderPlanBox: realRenderPlanBox } =
+      await import("../utils/display.js");
 
     realRenderPlanBox({
       resourceType: "AWS::S3::Bucket",

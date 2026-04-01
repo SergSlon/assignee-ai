@@ -231,28 +231,79 @@ export async function resourceProvisionerNode(
   // Plan generator sets AllocationId = "AUTO_ALLOCATE_EIP" as a placeholder
   // to avoid leaking EIPs when the user runs `plan` but never `apply`.
   // We resolve it here at apply time so the EIP is only allocated when actually needed.
+  //
+  // P0 FIX: On retry after a failed NAT Gateway provisioning, reuse any
+  // previously-allocated EIP tagged with this runId instead of leaking a new one.
   if (
     state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
     state.desiredState["AllocationId"] === "AUTO_ALLOCATE_EIP"
   ) {
     try {
-      const { EC2Client, AllocateAddressCommand } =
-        await import("@aws-sdk/client-ec2");
+      const {
+        EC2Client,
+        AllocateAddressCommand,
+        DescribeAddressesCommand,
+        CreateTagsCommand,
+      } = await import("@aws-sdk/client-ec2");
       const ec2 = new EC2Client({
         region: process.env["AWS_REGION"] ?? "us-east-1",
       });
-      const eipResult = await ec2.send(
-        new AllocateAddressCommand({ Domain: "vpc" }),
-      );
-      if (eipResult.AllocationId) {
-        state.desiredState["AllocationId"] = eipResult.AllocationId;
-      } else {
-        return {
-          executionStatus: ExecutionStatus.FAILED,
-          errorMessage:
-            "EIP allocation succeeded but returned no AllocationId.",
-        };
+
+      // Check for an existing EIP allocated by a previous attempt for this runId
+      let allocationId: string | undefined;
+      try {
+        const existing = await ec2.send(
+          new DescribeAddressesCommand({
+            Filters: [
+              { Name: "tag:assignee:runId", Values: [state.runId] },
+              { Name: "domain", Values: ["vpc"] },
+            ],
+          }),
+        );
+        if (existing.Addresses?.length && existing.Addresses[0]?.AllocationId) {
+          allocationId = existing.Addresses[0].AllocationId;
+          log({
+            ts: new Date().toISOString(),
+            runId: state.runId,
+            level: "info",
+            action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
+            extras: {
+              reason: "eip_reuse",
+              allocationId,
+              message: `Reusing existing EIP ${allocationId} from previous attempt`,
+            },
+          });
+        }
+      } catch {
+        // DescribeAddresses failure is non-fatal — fall through to allocate a new EIP
       }
+
+      if (!allocationId) {
+        const eipResult = await ec2.send(
+          new AllocateAddressCommand({ Domain: "vpc" }),
+        );
+        allocationId = eipResult.AllocationId;
+        if (!allocationId) {
+          return {
+            executionStatus: ExecutionStatus.FAILED,
+            errorMessage:
+              "EIP allocation succeeded but returned no AllocationId.",
+          };
+        }
+        // Tag the EIP with runId so it can be found on retry
+        try {
+          await ec2.send(
+            new CreateTagsCommand({
+              Resources: [allocationId],
+              Tags: [{ Key: "assignee:runId", Value: state.runId }],
+            }),
+          );
+        } catch {
+          // Tagging failure is non-fatal — EIP is still usable
+        }
+      }
+
+      state.desiredState["AllocationId"] = allocationId;
     } catch (eipErr: unknown) {
       const errMsg = eipErr instanceof Error ? eipErr.message : String(eipErr);
       return {
