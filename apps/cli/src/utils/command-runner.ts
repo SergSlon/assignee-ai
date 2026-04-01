@@ -208,6 +208,15 @@ export async function runProvisioningLoop(
       stopSpinner();
       break;
     }
+    if (
+      isCompound &&
+      phase1State.resourceQueue &&
+      resourcesProvisioned >= phase1State.resourceQueue.length
+    ) {
+      stopSpinner();
+      renderError("Internal error: resource queue index out of bounds");
+      break;
+    }
     const resourceLabel = isCompound
       ? `Provisioning resource ${resourcesProvisioned + 1} of ${totalResources} (${phase1State.resourceQueue?.[resourcesProvisioned]?.displayName ?? "..."})...`
       : "Provisioning resource...";

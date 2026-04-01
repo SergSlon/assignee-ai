@@ -375,29 +375,11 @@ export async function resultFormatterNode(
           // More resources to provision — update state for next iteration
           const nextResource = state.resourceQueue[nextIndex];
           if (!nextResource) {
-            // Next resource missing — render success for what was completed and return
-            renderCompoundSuccess(updatedCompleted, state.resourcePattern);
-            log({
-              ts: new Date().toISOString(),
-              runId: state.runId,
-              level: "warn",
-              action: LOG_ACTIONS.APPLY_SUCCEEDED,
-              extras: {
-                compound: true,
-                completedCount: updatedCompleted.length,
-                note: "nextResource missing, rendering partial success",
-              },
-            });
-            for (const completed of updatedCompleted) {
-              await writeProvisionRecord(
-                state.runId,
-                completed.resourceType,
-                completed.resourceArn,
-                undefined,
-                state.perResourceCosts?.[completed.resourceId ?? ""],
-              );
-            }
-            return { completedResources: updatedCompleted };
+            return {
+              executionStatus: ExecutionStatus.FAILED,
+              errorMessage: `Internal error: resource queue corrupted at index ${nextIndex}. ${updatedCompleted.length} of ${state.resourceQueue!.length} resources completed.`,
+              completedResources: updatedCompleted,
+            };
           }
           log({
             ts: new Date().toISOString(),

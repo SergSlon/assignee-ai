@@ -18,7 +18,10 @@ import { defaultMemoryService } from "../services/memory.js";
 import { resolveAmiFromOsName } from "../utils/aws-resource-discovery.js";
 import type { LlmPort } from "@assignee/core";
 import { SCHEMA_EXCERPT_MAX_CHARS } from "../config/constants.js";
-import { CloudFormationKey, CFN_RESOURCE_TYPE_PREFIX } from "../constants/cfn-keys.js";
+import {
+  CloudFormationKey,
+  CFN_RESOURCE_TYPE_PREFIX,
+} from "../constants/cfn-keys.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 import { sanitizeDesiredState } from "../services/desired-state-sanitizer.js";
@@ -42,12 +45,13 @@ export function applyToCfnTransforms(
   for (const [key, value] of Object.entries(elicitedOptions)) {
     // When multiple fields share the same name (e.g., EngineVersion with different showIf),
     // find the one whose showIf condition is satisfied by the current elicitedOptions.
-    const field = allFields.find((f) => {
-      if (f.name !== key) return false;
-      if (!f.question.showIf) return true;
-      const { field: depField, value: depValue } = f.question.showIf;
-      return elicitedOptions[depField] === depValue;
-    }) ?? allFields.find((f) => f.name === key);
+    const field =
+      allFields.find((f) => {
+        if (f.name !== key) return false;
+        if (!f.question.showIf) return true;
+        const { field: depField, value: depValue } = f.question.showIf;
+        return elicitedOptions[depField] === depValue;
+      }) ?? allFields.find((f) => f.name === key);
     if (field?.toCfn) {
       const cfnValue = field.toCfn(value);
       if (cfnValue !== undefined) {
@@ -146,7 +150,13 @@ function assembleS3Composites(
       .map((s) => s.trim())
       .filter(Boolean);
     transformed["CorsConfiguration"] = {
-      CorsRules: [{ AllowedHeaders: ["*"], AllowedMethods: methods, AllowedOrigins: origins }],
+      CorsRules: [
+        {
+          AllowedHeaders: ["*"],
+          AllowedMethods: methods,
+          AllowedOrigins: origins,
+        },
+      ],
     };
   }
   delete transformed["EnableCors"];
@@ -288,10 +298,11 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       state.currentResourceIndex !== undefined
     ) {
       const currentResource = state.resourceQueue[state.currentResourceIndex];
-      if (!currentResource) return {
-        executionStatus: ExecutionStatus.FAILED,
-        errorMessage: `Compound resource index ${state.currentResourceIndex} out of bounds (queue length ${state.resourceQueue.length})`,
-      };
+      if (!currentResource)
+        return {
+          executionStatus: ExecutionStatus.FAILED,
+          errorMessage: `Compound resource index ${state.currentResourceIndex} out of bounds (queue length ${state.resourceQueue.length})`,
+        };
       const patternDefaults =
         (state.resourcePattern.defaultOptions[currentResource.resourceId] as
           | Record<string, unknown>
@@ -320,7 +331,8 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       };
       const nameField = NAME_FIELDS[currentResource.resourceType];
       if (nameField && !desiredState[nameField]) {
-        desiredState[nameField] = `assignee-${resourceId}-${shortId}`.toLowerCase();
+        desiredState[nameField] =
+          `assignee-${resourceId}-${shortId}`.toLowerCase();
       }
 
       // Compound cross-reference: inject ARNs from previously completed resources
@@ -573,7 +585,9 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       const inner = topValues[0] as Record<string, unknown>;
       if (
         typeof inner[CloudFormationKey.TYPE] === "string" &&
-        (inner[CloudFormationKey.TYPE] as string).startsWith(CFN_RESOURCE_TYPE_PREFIX) &&
+        (inner[CloudFormationKey.TYPE] as string).startsWith(
+          CFN_RESOURCE_TYPE_PREFIX,
+        ) &&
         typeof inner[CloudFormationKey.PROPERTIES] === "object"
       ) {
         desiredState = inner[CloudFormationKey.PROPERTIES] as Record<
@@ -611,7 +625,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
               if (f.name !== key) return false;
               if (!f.question.showIf) return true;
               const { field: depField, value: depValue } = f.question.showIf;
-              return state.elicitedOptions![depField] === depValue;
+              return state.elicitedOptions?.[depField] === depValue;
             }) ?? allFields.find((f) => f.name === key);
           if (field?.toCfn) {
             const cfnValue = field.toCfn(value);

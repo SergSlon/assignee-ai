@@ -37,7 +37,12 @@ export async function humanApprovalNode(
       runId: state.runId,
       level: "info",
       action: LOG_ACTIONS.APPLY_AUTO_APPROVED,
-      extras: { autoApproved: true, flag: "--yes" },
+      extras: {
+        autoApproved: true,
+        flag: "--yes",
+        approvalSource: "autoApprove",
+        isTTY: process.stdin.isTTY,
+      },
     });
 
     return {};
@@ -59,7 +64,11 @@ export async function humanApprovalNode(
       runId: state.runId,
       level: "info",
       action: LOG_ACTIONS.PLAN_APPROVED,
-      extras: { checkpointResumed: true, source: "plan-to-apply" },
+      extras: {
+        checkpointResumed: true,
+        source: "plan-to-apply",
+        approvalSource: "checkpointResume",
+      },
     });
     return {};
   }
@@ -129,6 +138,7 @@ export async function humanApprovalNode(
     runId: state.runId,
     level: "info",
     action: LOG_ACTIONS.PLAN_APPROVED,
+    extras: { approvalSource: "interactive" },
   });
 
   // Story 35.4: Return updated state if fixes were applied
