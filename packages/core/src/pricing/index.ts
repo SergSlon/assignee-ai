@@ -20,6 +20,7 @@ import { elbv2PricingStrategy } from "./strategies/elbv2.js";
 import { logsPricingStrategy } from "./strategies/logs.js";
 import { internetGatewayPricingStrategy } from "./strategies/internet-gateway.js";
 import { routeTablePricingStrategy } from "./strategies/route-table.js";
+import { routePricingStrategy } from "./strategies/route.js";
 import { natGatewayPricingStrategy } from "./strategies/nat-gateway.js";
 // Sprint G: Tier 2 pricing strategies (Epic 26)
 import { apiGatewayV2PricingStrategy } from "./strategies/apigatewayv2.js";
@@ -123,6 +124,7 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.EC2_ROUTE_TABLE,
   routeTablePricingStrategy,
 );
+defaultPricingRegistry.register(RESOURCE_TYPES.EC2_ROUTE, routePricingStrategy);
 defaultPricingRegistry.register(
   RESOURCE_TYPES.EC2_NAT_GATEWAY,
   natGatewayPricingStrategy,

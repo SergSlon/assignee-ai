@@ -16,11 +16,19 @@ export interface FreeTierInfo {
 const ALWAYS_FREE: Record<string, string> = {
   "AWS::IAM::Role": "Always free tier",
   "AWS::SSM::Parameter": "Always free tier (standard params, up to 10K)",
-  "AWS::DynamoDB::Table": "Always free tier (up to 25 GB storage, 25 WCU/RCU)",
+  "AWS::EC2::VPC": "Always free tier",
+  "AWS::EC2::Subnet": "Always free tier",
+  "AWS::EC2::SecurityGroup": "Always free tier",
+  "AWS::EC2::InternetGateway": "Always free tier",
+  "AWS::EC2::RouteTable": "Always free tier",
+  "AWS::EC2::Route": "Always free tier",
+  "AWS::ECS::Cluster":
+    "Always free tier (compute charged separately via tasks)",
 };
 
 /** Resources that are always free but with usage limits. */
 const ALWAYS_FREE_WITH_LIMITS: Record<string, string> = {
+  "AWS::DynamoDB::Table": "Always free tier (up to 25 GB storage, 25 WCU/RCU)",
   "AWS::Lambda::Function":
     "AWS Lambda Free Tier: 1M requests/month + 400,000 GB-s compute",
   "AWS::SQS::Queue": "AWS SQS Free Tier: 1M requests/month",

@@ -92,9 +92,76 @@ describe("getFreeTierNote", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null for SQS::Queue (not in any map)", () => {
+  it("returns always_free for SQS::Queue (always free with limits)", () => {
     const result = getFreeTierNote("AWS::SQS::Queue");
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      type: "always_free",
+      message: expect.stringContaining("1M requests/month"),
+    });
+  });
+
+  it("returns always_free for SNS::Topic (always free with limits)", () => {
+    const result = getFreeTierNote("AWS::SNS::Topic");
+    expect(result).toEqual({
+      type: "always_free",
+      message: expect.stringContaining("1M publishes/month"),
+    });
+  });
+
+  it("returns always_free for EC2::VPC", () => {
+    const result = getFreeTierNote("AWS::EC2::VPC");
+    expect(result).toEqual({
+      type: "always_free",
+      message: "Always free tier",
+    });
+  });
+
+  it("returns always_free for EC2::Subnet", () => {
+    const result = getFreeTierNote("AWS::EC2::Subnet");
+    expect(result).toEqual({
+      type: "always_free",
+      message: "Always free tier",
+    });
+  });
+
+  it("returns always_free for EC2::SecurityGroup", () => {
+    const result = getFreeTierNote("AWS::EC2::SecurityGroup");
+    expect(result).toEqual({
+      type: "always_free",
+      message: "Always free tier",
+    });
+  });
+
+  it("returns always_free for EC2::InternetGateway", () => {
+    const result = getFreeTierNote("AWS::EC2::InternetGateway");
+    expect(result).toEqual({
+      type: "always_free",
+      message: "Always free tier",
+    });
+  });
+
+  it("returns always_free for EC2::RouteTable", () => {
+    const result = getFreeTierNote("AWS::EC2::RouteTable");
+    expect(result).toEqual({
+      type: "always_free",
+      message: "Always free tier",
+    });
+  });
+
+  it("returns always_free for EC2::Route", () => {
+    const result = getFreeTierNote("AWS::EC2::Route");
+    expect(result).toEqual({
+      type: "always_free",
+      message: "Always free tier",
+    });
+  });
+
+  it("returns always_free for ECS::Cluster", () => {
+    const result = getFreeTierNote("AWS::ECS::Cluster");
+    expect(result).toEqual({
+      type: "always_free",
+      message: expect.stringContaining("compute charged separately"),
+    });
   });
 
   it("returns null for unknown resource types", () => {
