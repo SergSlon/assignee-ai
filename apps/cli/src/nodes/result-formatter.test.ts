@@ -226,6 +226,40 @@ describe("resultFormatterNode — plan mode (PENDING)", () => {
   });
 });
 
+describe("resultFormatterNode — apply mode with BP blocking (PENDING + preflightPassed=false)", () => {
+  it("calls renderPlanBox in apply mode when preflightPassed is false", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      executionMode: ExecutionMode.APPLY,
+      preflightPassed: false,
+      bpFindings: [
+        {
+          practiceId: "BP-S3-001",
+          title: "Block public ACLs",
+          severity: "CRITICAL",
+          category: "security",
+          message: "S3 bucket should block public ACLs",
+          blocking: true,
+        },
+      ],
+    });
+    await resultFormatterNode(state);
+    expect(renderPlanBox).toHaveBeenCalledWith(state);
+  });
+
+  it("does NOT call renderPlanBox in apply mode when preflightPassed is true", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      executionMode: ExecutionMode.APPLY,
+      preflightPassed: true,
+    });
+    await resultFormatterNode(state);
+    // preflightPassed=true in apply mode should NOT render plan box
+    // (graph should have routed to human_approval instead)
+    expect(renderPlanBox).not.toHaveBeenCalled();
+  });
+});
+
 // ── Compound SUCCESS routing ─────────────────────────────────────────────────
 
 describe("resultFormatterNode — compound SUCCESS with more resources", () => {

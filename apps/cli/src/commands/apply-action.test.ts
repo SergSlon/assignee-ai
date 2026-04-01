@@ -286,6 +286,143 @@ describe("applyCommand — fresh intent flow (run callback)", () => {
   });
 });
 
+describe("applyCommand — phase 1 status combinations (gap coverage)", () => {
+  beforeEach(async () => {
+    capturedOpts = null;
+    const { applyCommand } = await import("./apply.js");
+    await applyCommand.parseAsync(["node", "apply", "Create an S3 bucket"]);
+    expect(capturedOpts).not.toBeNull();
+  });
+
+  it("POLICY_BLOCKED — renders error, returns failure", async () => {
+    const ctx = makeCtx(() =>
+      Promise.resolve({
+        executionStatus: ExecutionStatus.POLICY_BLOCKED,
+        errorMessage: "Org policy blocks this resource",
+      }),
+    );
+
+    const result = await capturedOpts!.run(ctx);
+
+    expect(renderError).toHaveBeenCalledWith(
+      "Org policy blocks this resource",
+      undefined,
+    );
+    expect(result.success).toBe(false);
+    expect(runProvisioningLoop).not.toHaveBeenCalled();
+  });
+
+  it("POLICY_BLOCKED with no errorMessage — uses fallback message", async () => {
+    const ctx = makeCtx(() =>
+      Promise.resolve({
+        executionStatus: ExecutionStatus.POLICY_BLOCKED,
+      }),
+    );
+
+    const result = await capturedOpts!.run(ctx);
+
+    expect(renderError).toHaveBeenCalledWith(
+      "Apply failed during planning phase",
+      undefined,
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("PENDING + preflightPassed=false (BP blocked) — returns success, no provisioning", async () => {
+    const ctx = makeCtx(() =>
+      Promise.resolve({
+        executionStatus: ExecutionStatus.PENDING,
+        preflightPassed: false,
+        bpFindings: [
+          { practiceId: "BP-S3-001", blocking: true },
+          { practiceId: "BP-S3-006", blocking: true },
+        ],
+      }),
+    );
+
+    const result = await capturedOpts!.run(ctx);
+
+    // BP-blocked apply shows plan box (handled by result_formatter), not an error
+    expect(result.success).toBe(true);
+    expect(runProvisioningLoop).not.toHaveBeenCalled();
+    // Should NOT render an error — plan box with findings is the expected UX
+    expect(renderError).not.toHaveBeenCalled();
+  });
+
+  it("PENDING + preflightPassed=undefined (default) — enters provisioning loop", async () => {
+    vi.mocked(runProvisioningLoop).mockResolvedValue({
+      finalState: { executionStatus: ExecutionStatus.SUCCESS } as never,
+      success: true,
+    });
+
+    const ctx = makeCtx(() =>
+      Promise.resolve({
+        executionStatus: ExecutionStatus.PENDING,
+        // preflightPassed not set — defaults to undefined (truthy path)
+      }),
+    );
+
+    const result = await capturedOpts!.run(ctx);
+
+    expect(runProvisioningLoop).toHaveBeenCalled();
+    expect(result.success).toBe(true);
+  });
+
+  it("unexpected status (SUCCESS in phase 1) — renders error, returns failure", async () => {
+    const ctx = makeCtx(() =>
+      Promise.resolve({
+        executionStatus: ExecutionStatus.SUCCESS,
+      }),
+    );
+
+    const result = await capturedOpts!.run(ctx);
+
+    expect(renderError).toHaveBeenCalledWith(
+      expect.stringContaining("Unexpected status"),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("FAILED with no errorMessage — uses fallback", async () => {
+    const ctx = makeCtx(() =>
+      Promise.resolve({
+        executionStatus: ExecutionStatus.FAILED,
+      }),
+    );
+
+    const result = await capturedOpts!.run(ctx);
+
+    expect(renderError).toHaveBeenCalledWith(
+      "Apply failed during planning phase",
+      undefined,
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("provisioning loop failure — renderError called with error message", async () => {
+    vi.mocked(runProvisioningLoop).mockResolvedValue({
+      finalState: {
+        executionStatus: ExecutionStatus.FAILED,
+        errorMessage: "CloudControl API timeout",
+      } as never,
+      success: false,
+    });
+
+    const ctx = makeCtx(() =>
+      Promise.resolve({
+        executionStatus: ExecutionStatus.PENDING,
+        preflightPassed: true,
+      }),
+    );
+
+    const result = await capturedOpts!.run(ctx);
+
+    expect(result.success).toBe(false);
+    // runProvisioningLoop now renders the error internally
+    expect(runProvisioningLoop).toHaveBeenCalled();
+  });
+});
+
 describe("applyCommand — --yes flag", () => {
   it("T1.3: --yes sets autoApprove in graph state", async () => {
     capturedOpts = null;
