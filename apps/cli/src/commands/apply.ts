@@ -356,10 +356,12 @@ export const applyCommand = new Command(CommandName.APPLY)
             return { success: true }; // intentional — not an error
           }
 
-          // Early failure (intent parse, schema fetch, plan gen, preflight)
+          // Early failure (intent parse, schema fetch, plan gen, preflight, policy)
           if (
             phase1State.executionStatus === ExecutionStatus.FAILED ||
-            phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
+            phase1State.executionStatus ===
+              ExecutionStatus.UNSUPPORTED_RESOURCE ||
+            phase1State.executionStatus === ExecutionStatus.POLICY_BLOCKED
           ) {
             log({
               ts: new Date().toISOString(),
@@ -375,6 +377,27 @@ export const applyCommand = new Command(CommandName.APPLY)
                 ExecutionStatus.UNSUPPORTED_RESOURCE
                 ? SUPPORTED_TYPES_HINT
                 : undefined,
+            );
+            return { success: false };
+          }
+
+          // Catch-all: unexpected status after phase 1 (not IN_PROGRESS, not approved)
+          if (
+            phase1State.executionStatus !== ExecutionStatus.IN_PROGRESS &&
+            phase1State.executionStatus !== ExecutionStatus.PENDING
+          ) {
+            log({
+              ts: new Date().toISOString(),
+              runId: ctx.runId,
+              level: "error",
+              action: LOG_ACTIONS.APPLY_COMPLETE,
+              durationMs: Date.now() - ctx.startTs,
+              result: phase1State.executionStatus,
+              extras: { errorMessage: phase1State.errorMessage },
+            });
+            renderError(
+              phase1State.errorMessage ??
+                `Unexpected status after planning: ${phase1State.executionStatus}`,
             );
             return { success: false };
           }

@@ -104,9 +104,7 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
       }
 
       // Story 9.7: Wrap LLM adapter with recorder when recording enabled
-      const { LlmAdapter } = await import(
-        "../services/llm-adapter.js"
-      );
+      const { LlmAdapter } = await import("../services/llm-adapter.js");
       const baseLlm = new LlmAdapter({
         modelString: process.env["ASSIGNEE_MODEL"],
         guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
@@ -229,6 +227,18 @@ export async function runProvisioningLoop(
     finalState.executionStatus === ExecutionStatus.SUCCESS ||
     (isCompound &&
       (finalState.completedResources?.length ?? 0) === totalResources);
+
+  // Surface error message when provisioning fails silently
+  if (!success && finalState.errorMessage) {
+    renderError(finalState.errorMessage);
+  } else if (
+    !success &&
+    finalState.executionStatus !== ExecutionStatus.SUCCESS
+  ) {
+    renderError(
+      `Provisioning ended with status: ${finalState.executionStatus}`,
+    );
+  }
 
   return { finalState, success };
 }
