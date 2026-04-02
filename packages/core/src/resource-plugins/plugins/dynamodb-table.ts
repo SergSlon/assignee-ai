@@ -53,7 +53,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "PartitionKey",
+      name: CfnKey.PARTITION_KEY,
       required: true,
       question: {
         type: "string",
@@ -75,7 +75,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "SortKey",
+      name: CfnKey.SORT_KEY,
       question: {
         type: "string",
         label: "Sort key (name:type, optional)",

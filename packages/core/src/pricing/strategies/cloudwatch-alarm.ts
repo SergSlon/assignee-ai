@@ -3,6 +3,7 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 
 /**
  * Pricing strategy for AWS::CloudWatch::Alarm.
@@ -16,7 +17,7 @@ import type {
  */
 export const cloudWatchAlarmPricingStrategy: PricingStrategy = {
   estimateLocal(desiredState?: Record<string, unknown>): PricingEstimate {
-    const period = Number(desiredState?.["Period"] ?? 300);
+    const period = Number(desiredState?.[CfnKey.PERIOD] ?? 300);
     const isHighRes = period < 60;
 
     return {
@@ -27,7 +28,7 @@ export const cloudWatchAlarmPricingStrategy: PricingStrategy = {
     };
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
-    const period = Number(desiredState?.["Period"] ?? 300);
+    const period = Number(desiredState?.[CfnKey.PERIOD] ?? 300);
     const isHighRes = period < 60;
 
     return {

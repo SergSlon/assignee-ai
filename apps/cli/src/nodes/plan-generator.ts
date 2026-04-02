@@ -134,7 +134,10 @@ function assembleS3Composites(
           `Warning: Expiration (${expirationDays}d) must be greater than transition (${transitionDays}d). Adjusted to ${transitionDays + 1}d.\n`,
         );
       }
-      rule["ExpirationInDays"] = Math.max(expirationDays, transitionDays + 1);
+      rule[CfnKey.EXPIRATION_IN_DAYS] = Math.max(
+        expirationDays,
+        transitionDays + 1,
+      );
     }
     transformed[CfnKey.LIFECYCLE_CONFIGURATION] = { Rules: [rule] };
   }

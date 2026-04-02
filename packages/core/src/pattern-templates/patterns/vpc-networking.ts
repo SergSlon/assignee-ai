@@ -1,8 +1,13 @@
-import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
+import {
+  RESOURCE_TYPES,
+  COMPANION_RESOURCE_TYPES,
+} from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ArchitecturePattern } from "../types.js";
 
 /** Shorthand aliases for companion resource type constants used in this pattern. */
-const EC2_VPC_GATEWAY_ATTACHMENT = COMPANION_RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT;
+const EC2_VPC_GATEWAY_ATTACHMENT =
+  COMPANION_RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT;
 const EC2_SUBNET_ROUTE_TABLE_ASSOCIATION =
   COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION;
 const EC2_EIP = COMPANION_RESOURCE_TYPES.EC2_EIP;
@@ -222,7 +227,9 @@ export const vpcNetworkingPattern: ArchitecturePattern = {
     "nat-gateway": {
       SubnetId: { Ref: "public-subnet-1" },
       ConnectivityType: "public",
-      AllocationId: { "Fn::GetAtt": ["nat-eip", "AllocationId"] },
+      [CfnKey.ALLOCATION_ID]: {
+        "Fn::GetAtt": ["nat-eip", CfnKey.ALLOCATION_ID],
+      },
     },
     "public-subnet-1-rt-assoc": {
       SubnetId: { Ref: "public-subnet-1" },

@@ -63,7 +63,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
         answer ? { PasswordLength: 32, ExcludePunctuation: false } : undefined,
     },
     {
-      name: "KmsKeyId",
+      name: CfnKey.KMS_KEY_ID,
       question: {
         type: "string",
         label: "KMS Key ID or ARN",
@@ -124,7 +124,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "GenerateSecretStringConfig",
+      name: CfnKey.GENERATE_SECRET_STRING_CONFIG,
       question: {
         type: "string",
         label: "Password generation config (JSON)",

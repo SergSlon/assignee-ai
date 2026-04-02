@@ -5,6 +5,7 @@ import type {
 } from "../types.js";
 
 import { EXTENDED_TIMEOUT_MS } from "../constants.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 
 const DEFAULT_INSTANCE_CLASS = "db.t3.micro";
 const DEFAULT_ENGINE = "mysql";
@@ -15,10 +16,10 @@ export const rdsPricingStrategy: PricingStrategy = {
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
     const instanceClass =
-      (desiredState?.["DBInstanceClass"] as string | undefined) ??
+      (desiredState?.[CfnKey.DB_INSTANCE_CLASS] as string | undefined) ??
       DEFAULT_INSTANCE_CLASS;
     const engine =
-      (desiredState?.["Engine"] as string | undefined) ?? DEFAULT_ENGINE;
+      (desiredState?.[CfnKey.ENGINE] as string | undefined) ?? DEFAULT_ENGINE;
     return {
       serviceCode: "AmazonRDS",
       filters: [

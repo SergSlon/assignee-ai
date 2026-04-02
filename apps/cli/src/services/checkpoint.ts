@@ -8,6 +8,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {
+  CfnKey,
   PlanCheckpointSchema,
   CHECKPOINT_VERSION,
   CheckpointError,
@@ -25,13 +26,13 @@ import {
  * These may contain passwords, secrets, or tokens that should never persist in checkpoint files.
  * @see SECURITY-AUDIT.md — SEC-02
  */
-const SENSITIVE_STATE_KEYS = new Set([
-  "MasterUserPassword",
-  "SecretString",
-  "Password",
-  "AccessKey",
-  "SecretAccessKey",
-  "SessionToken",
+const SENSITIVE_STATE_KEYS: Set<string> = new Set([
+  CfnKey.MASTER_USER_PASSWORD,
+  CfnKey.SECRET_STRING,
+  CfnKey.PASSWORD,
+  CfnKey.ACCESS_KEY,
+  CfnKey.SECRET_ACCESS_KEY,
+  CfnKey.SESSION_TOKEN,
 ]);
 
 /**

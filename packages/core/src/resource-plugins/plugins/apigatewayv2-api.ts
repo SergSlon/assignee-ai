@@ -53,7 +53,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       },
     },
     {
-      name: "EnableCors",
+      name: CfnKey.ENABLE_CORS,
       question: {
         type: "boolean",
         label: "Enable CORS?",
@@ -62,13 +62,13 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       },
     },
     {
-      name: "CorsAllowOrigins",
+      name: CfnKey.CORS_ALLOW_ORIGINS,
       question: {
         type: "string",
         label: "Allowed origins (comma-separated)",
         placeholder: "https://example.com, https://app.example.com",
         hint: "Which domains can make cross-origin requests. Use specific domains in production — avoid '*' (wildcard) for security. Example: https://myapp.com",
-        showIf: { field: "EnableCors", value: true },
+        showIf: { field: CfnKey.ENABLE_CORS, value: true },
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;
@@ -79,14 +79,14 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       },
     },
     {
-      name: "CorsAllowMethods",
+      name: CfnKey.CORS_ALLOW_METHODS,
       question: {
         type: "string",
         label: "Allowed HTTP methods (comma-separated)",
         placeholder: "GET, POST, PUT, DELETE, OPTIONS",
         initialValue: "GET, POST, OPTIONS",
         hint: "HTTP methods permitted for CORS requests. Common: GET, POST, PUT, DELETE, OPTIONS. OPTIONS is needed for preflight requests.",
-        showIf: { field: "EnableCors", value: true },
+        showIf: { field: CfnKey.ENABLE_CORS, value: true },
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;
@@ -97,14 +97,14 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       },
     },
     {
-      name: "CorsAllowHeaders",
+      name: CfnKey.CORS_ALLOW_HEADERS,
       question: {
         type: "string",
         label: "Allowed headers (comma-separated)",
         placeholder: "Content-Type, Authorization",
         initialValue: "Content-Type, Authorization",
         hint: "Request headers permitted for CORS requests. Common: Content-Type, Authorization, X-Api-Key.",
-        showIf: { field: "EnableCors", value: true },
+        showIf: { field: CfnKey.ENABLE_CORS, value: true },
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;

@@ -50,10 +50,10 @@ export const ec2PricingDecomposer: PricingDecomposer = {
     if (Array.isArray(bdm) && bdm.length > 0) {
       for (let idx = 0; idx < bdm.length; idx++) {
         const vol = bdm[idx] as Record<string, unknown> | undefined;
-        const ebs = vol?.["Ebs"] as Record<string, unknown> | undefined;
+        const ebs = vol?.[CfnKey.EBS] as Record<string, unknown> | undefined;
         if (ebs) {
-          const volumeType = String(ebs["VolumeType"] ?? "gp3");
-          const volumeSize = Number(ebs["VolumeSize"] ?? 8);
+          const volumeType = String(ebs[CfnKey.VOLUME_TYPE] ?? "gp3");
+          const volumeSize = Number(ebs[CfnKey.VOLUME_SIZE] ?? 8);
           const volumeApiName = mapVolumeType(volumeType);
           const volLabel =
             bdm.length > 1 ? `Storage (vol ${idx + 1})` : "Storage";

@@ -1,5 +1,6 @@
 import type { PricingStrategy, PricingEstimate } from "../types.js";
 import { LAMBDA_USD_PER_GB_SECOND } from "../../resource-plugins/plugins/lambda-function.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 
 // Lambda pricing rates (stable since 2014 — verified 2025)
 const USD_PER_MILLION_REQUESTS = 0.2;
@@ -19,8 +20,8 @@ function computeLambdaLabel(memoryMb: number): string {
 export const lambdaPricingStrategy: PricingStrategy = {
   estimateLocal(desiredState?: Record<string, unknown>): PricingEstimate {
     const memoryMb =
-      typeof desiredState?.["MemorySize"] === "number"
-        ? (desiredState["MemorySize"] as number)
+      typeof desiredState?.[CfnKey.MEMORY_SIZE] === "number"
+        ? (desiredState[CfnKey.MEMORY_SIZE] as number)
         : DEFAULT_MEMORY_MB;
     return { perMonth: null, label: computeLambdaLabel(memoryMb) };
   },

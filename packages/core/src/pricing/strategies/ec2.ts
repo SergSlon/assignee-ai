@@ -5,6 +5,7 @@ import type {
 } from "../types.js";
 
 import { EXTENDED_TIMEOUT_MS } from "../constants.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 
 const DEFAULT_INSTANCE_TYPE = "t3.micro";
 
@@ -14,7 +15,7 @@ export const ec2PricingStrategy: PricingStrategy = {
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
     const instanceType =
-      (desiredState?.["InstanceType"] as string | undefined) ??
+      (desiredState?.[CfnKey.INSTANCE_TYPE] as string | undefined) ??
       DEFAULT_INSTANCE_TYPE;
     return {
       serviceCode: "AmazonEC2",

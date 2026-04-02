@@ -347,7 +347,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         v ? { Size: parseInt(String(v), 10) } : undefined,
     },
     {
-      name: "VpcSubnetIds",
+      name: CfnKey.VPC_SUBNET_IDS,
       question: {
         type: "multi",
         label: "VPC Subnets (for RDS/ElastiCache access)",
@@ -361,13 +361,13 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "VpcSecurityGroupIds",
+      name: CfnKey.VPC_SECURITY_GROUP_IDS,
       question: {
         type: "multi",
         label: "VPC Security Groups",
         hint: "Security groups control which VPC resources the function can reach. Must allow outbound traffic to the target service ports (e.g., 3306 for MySQL, 6379 for Redis).",
         fetcher: "discover-security-groups",
-        showIf: { field: "VpcSubnetIds", value: true },
+        showIf: { field: CfnKey.VPC_SUBNET_IDS, value: true },
       },
       /** toCfn produces the VpcConfig.SecurityGroupIds portion; merged with SubnetIds at assembly. */
       toCfn: (v: unknown) => {

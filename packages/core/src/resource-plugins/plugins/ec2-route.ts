@@ -51,7 +51,7 @@ export const routePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "RouteType",
+      name: CfnKey.ROUTE_TYPE,
       required: true,
       question: {
         type: "enum",
@@ -72,7 +72,7 @@ export const routePlugin: ResourcePlugin = {
         label: "Internet Gateway ID",
         hint: "The ID of the InternetGateway target. Use a Ref to the IGW logical ID in the plan.",
         placeholder: "igw-0123456789abcdef0",
-        showIf: { field: "RouteType", value: "public" },
+        showIf: { field: CfnKey.ROUTE_TYPE, value: "public" },
       },
     },
     {
@@ -82,14 +82,14 @@ export const routePlugin: ResourcePlugin = {
         label: "NAT Gateway ID",
         hint: "The ID of the NatGateway target. Use a Ref to the NatGateway logical ID in the plan.",
         placeholder: "nat-0123456789abcdef0",
-        showIf: { field: "RouteType", value: "private" },
+        showIf: { field: CfnKey.ROUTE_TYPE, value: "private" },
       },
     },
   ],
   advancedFields: [],
   defaults: {
     [CfnKey.DESTINATION_CIDR_BLOCK]: "0.0.0.0/0",
-    RouteType: "public",
+    [CfnKey.ROUTE_TYPE]: "public",
   },
   configHints: [
     "NEVER include Tags — AWS::EC2::Route does not support tagging. Omit Tags entirely.",

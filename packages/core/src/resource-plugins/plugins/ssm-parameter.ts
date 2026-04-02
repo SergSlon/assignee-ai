@@ -125,7 +125,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "KmsKeyId",
+      name: CfnKey.KMS_KEY_ID,
       question: {
         type: "string",
         label: "KMS Key ID",

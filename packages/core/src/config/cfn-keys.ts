@@ -18,6 +18,12 @@ export const CfnKey = {
   LIFECYCLE_CONFIGURATION: "LifecycleConfiguration",
   CORS_CONFIGURATION: "CorsConfiguration",
   REPLICATION_CONFIGURATION: "ReplicationConfiguration",
+  OWNERSHIP_CONTROLS: "OwnershipControls",
+  SERVER_SIDE_ENCRYPTION_CONFIGURATION: "ServerSideEncryptionConfiguration",
+  BLOCK_PUBLIC_ACLS: "BlockPublicAcls",
+  BLOCK_PUBLIC_POLICY: "BlockPublicPolicy",
+  IGNORE_PUBLIC_ACLS: "IgnorePublicAcls",
+  RESTRICT_PUBLIC_BUCKETS: "RestrictPublicBuckets",
 
   // ── EC2 ─────────────────────────────────────────────────────
   INSTANCE_TYPE: "InstanceType",
@@ -28,6 +34,7 @@ export const CfnKey = {
   ASSOCIATE_PUBLIC_IP: "AssociatePublicIpAddress",
   BLOCK_DEVICE_MAPPINGS: "BlockDeviceMappings",
   METADATA_OPTIONS: "MetadataOptions",
+  HTTP_TOKENS: "HttpTokens",
   MONITORING: "Monitoring",
   CREDIT_SPECIFICATION: "CreditSpecification",
   USER_DATA: "UserData",
@@ -151,6 +158,10 @@ export const CfnKey = {
   GENERATE_SECRET_STRING: "GenerateSecretString",
   SECRET_STRING: "SecretString",
   REPLICA_REGIONS: "ReplicaRegions",
+  PASSWORD: "Password",
+  ACCESS_KEY: "AccessKey",
+  SECRET_ACCESS_KEY: "SecretAccessKey",
+  SESSION_TOKEN: "SessionToken",
 
   // ── SSM ─────────────────────────────────────────────────────
   SSM_TYPE: "Type",
@@ -190,9 +201,39 @@ export const CfnKey = {
   DOMAIN: "Domain",
 
   // ── EBS (nested under BlockDeviceMappings) ─────────────────
+  EBS: "Ebs",
   VOLUME_TYPE: "VolumeType",
   VOLUME_SIZE: "VolumeSize",
   ENCRYPTED: "Encrypted",
+
+  // ── Lambda Event Source Mapping ────────────────────────────
+  EVENT_SOURCE_ARN: "EventSourceArn",
+  BATCH_SIZE: "BatchSize",
+  STARTING_POSITION: "StartingPosition",
+  ENABLED: "Enabled",
+
+  // ── SNS Subscription ──────────────────────────────────────
+  TOPIC_ARN: "TopicArn",
+  PROTOCOL: "Protocol",
+  ENDPOINT: "Endpoint",
+
+  // ── S3 Lifecycle (nested keys) ─────────────────────────────
+  RULES: "Rules",
+  TRANSITIONS: "Transitions",
+  TRANSITION_IN_DAYS: "TransitionInDays",
+  EXPIRATION_IN_DAYS: "ExpirationInDays",
+  CORS_RULES: "CorsRules",
+
+  // ── Auto-populated / read-only fields (drift comparison) ──
+  CREATION_DATE: "CreationDate",
+  LAST_MODIFIED_DATE: "LastModifiedDate",
+  LAST_MODIFIED_TIME: "LastModifiedTime",
+  OWNER_ID: "OwnerId",
+  ACCOUNT_ID: "AccountId",
+  DOMAIN_NAME_CFN: "DomainName",
+  REGIONAL_DOMAIN_NAME: "RegionalDomainName",
+  DUAL_STACK_DOMAIN_NAME: "DualStackDomainName",
+  WEBSITE_URL: "WebsiteURL",
 
   // ── Plugin-level keys (not direct CFN properties) ──────────
   LOG_RETENTION_IN_DAYS: "LogRetentionInDays",
@@ -212,6 +253,33 @@ export const CfnKey = {
   EBS_VOLUME_TYPE: "EbsVolumeType",
   EBS_VOLUME_SIZE: "EbsVolumeSize",
   EBS_ENCRYPTED: "EbsEncrypted",
+
+  // ── DynamoDB wizard-only ───────────────────────────────────
+  PARTITION_KEY: "PartitionKey",
+  SORT_KEY: "SortKey",
+
+  // ── EC2 Route wizard-only ──────────────────────────────────
+  ROUTE_TYPE: "RouteType",
+
+  // ── ECR wizard-only ────────────────────────────────────────
+  KMS_KEY: "KmsKey",
+
+  // ── ELBv2 wizard-only ──────────────────────────────────────
+  SECURITY_GROUPS: "SecurityGroups",
+
+  // ── Lambda wizard-only ─────────────────────────────────────
+  VPC_SUBNET_IDS: "VpcSubnetIds",
+
+  // ── SecretsManager wizard-only ─────────────────────────────
+  GENERATE_SECRET_STRING_CONFIG: "GenerateSecretStringConfig",
+
+  // ── API Gateway V2 wizard-only ─────────────────────────────
+  CORS_ALLOW_ORIGINS: "CorsAllowOrigins",
+  CORS_ALLOW_METHODS: "CorsAllowMethods",
+  CORS_ALLOW_HEADERS: "CorsAllowHeaders",
+
+  // ── Generic plugin wizard-only ─────────────────────────────
+  RESOURCE_NAME: "ResourceName",
 } as const;
 
 export type CfnKeyType = (typeof CfnKey)[keyof typeof CfnKey];

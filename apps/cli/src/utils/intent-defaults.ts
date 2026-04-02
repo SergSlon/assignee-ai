@@ -8,7 +8,7 @@
  * @see Story 10.5
  */
 
-import { RESOURCE_TYPES } from "@assignee/core";
+import { CfnKey, RESOURCE_TYPES } from "@assignee/core";
 import type { ResourceField } from "@assignee/core";
 
 /** A single field default override derived from intent analysis. */
@@ -41,7 +41,7 @@ const INTENT_RULES: IntentRule[] = [
     keywords: ["web server", "web app", "web service", "api server"],
     overrides: [
       {
-        fieldName: "InstanceType",
+        fieldName: CfnKey.INSTANCE_TYPE,
         value: "t3.small",
         reason: "Selected for web serving — burstable with 2 GiB RAM",
         categoryHint: "burstable",
@@ -54,7 +54,7 @@ const INTENT_RULES: IntentRule[] = [
     keywords: ["machine learning", "ml training", "ml model", "deep learning"],
     overrides: [
       {
-        fieldName: "InstanceType",
+        fieldName: CfnKey.INSTANCE_TYPE,
         value: "c5.xlarge",
         reason: "Selected for ML/compute — 4 vCPU, 8 GiB, compute-optimized",
         categoryHint: "compute",
@@ -67,7 +67,7 @@ const INTENT_RULES: IntentRule[] = [
     keywords: ["database", "db server", "cache", "redis", "memcached"],
     overrides: [
       {
-        fieldName: "InstanceType",
+        fieldName: CfnKey.INSTANCE_TYPE,
         value: "r5.large",
         reason: "Selected for data workloads — 16 GiB memory-optimized",
         categoryHint: "memory",
@@ -80,19 +80,19 @@ const INTENT_RULES: IntentRule[] = [
     keywords: ["logs", "logging", "log storage", "audit trail"],
     overrides: [
       {
-        fieldName: "EnableLifecycle",
+        fieldName: CfnKey.ENABLE_LIFECYCLE,
         value: true,
         reason:
           "Pre-configured for log retention — 90-day IA transition, 365-day expiration",
       },
       {
-        fieldName: "LifecycleTransitionDays",
+        fieldName: CfnKey.LIFECYCLE_TRANSITION_DAYS,
         value: "90",
         reason:
           "Pre-configured for log retention — 90-day IA transition, 365-day expiration",
       },
       {
-        fieldName: "LifecycleExpirationDays",
+        fieldName: CfnKey.LIFECYCLE_EXPIRATION_DAYS,
         value: "365",
         reason:
           "Pre-configured for log retention — 90-day IA transition, 365-day expiration",
@@ -110,12 +110,12 @@ const INTENT_RULES: IntentRule[] = [
     ],
     overrides: [
       {
-        fieldName: "EnableCors",
+        fieldName: CfnKey.ENABLE_CORS,
         value: true,
         reason: "Pre-configured for static web hosting — CORS enabled",
       },
       {
-        fieldName: "PublicAccessBlockConfiguration",
+        fieldName: CfnKey.PUBLIC_ACCESS_BLOCK,
         value: false,
         reason: "Pre-configured for static web hosting — public access allowed",
       },
@@ -127,13 +127,13 @@ const INTENT_RULES: IntentRule[] = [
     keywords: ["api handler", "api endpoint"],
     overrides: [
       {
-        fieldName: "MemorySize",
+        fieldName: CfnKey.MEMORY_SIZE,
         value: "512",
         reason:
           "Selected for API handling — 512 MB provides proportional CPU for fast response times",
       },
       {
-        fieldName: "Timeout",
+        fieldName: CfnKey.TIMEOUT,
         value: "30",
         reason:
           "Selected for API handling — 30s timeout suits synchronous HTTP requests",
@@ -146,7 +146,7 @@ const INTENT_RULES: IntentRule[] = [
     keywords: ["background job", "worker"],
     overrides: [
       {
-        fieldName: "Timeout",
+        fieldName: CfnKey.TIMEOUT,
         value: "300",
         reason:
           "Selected for background processing — 300s timeout for long-running tasks",
@@ -159,19 +159,19 @@ const INTENT_RULES: IntentRule[] = [
     keywords: ["production", "prod db", "production database"],
     overrides: [
       {
-        fieldName: "MultiAZ",
+        fieldName: CfnKey.MULTI_AZ,
         value: true,
         reason:
           "Selected for production — Multi-AZ provides high availability with automatic failover",
       },
       {
-        fieldName: "BackupRetentionPeriod",
+        fieldName: CfnKey.BACKUP_RETENTION_PERIOD,
         value: "7",
         reason:
           "Selected for production — 7-day backup retention for point-in-time recovery",
       },
       {
-        fieldName: "DeletionProtection",
+        fieldName: CfnKey.DELETION_PROTECTION,
         value: true,
         reason:
           "Selected for production — deletion protection prevents accidental data loss",
@@ -184,7 +184,7 @@ const INTENT_RULES: IntentRule[] = [
     keywords: ["dev database", "dev db"],
     overrides: [
       {
-        fieldName: "MultiAZ",
+        fieldName: CfnKey.MULTI_AZ,
         value: false,
         reason:
           "Selected for development — single-AZ reduces cost for non-critical environments",
@@ -254,8 +254,7 @@ export function applyIntentOverrides(
 
     // Special warning for PublicAccessBlock=false
     const finalHint =
-      field.name === "PublicAccessBlockConfiguration" &&
-      override.value === false
+      field.name === CfnKey.PUBLIC_ACCESS_BLOCK && override.value === false
         ? `${combinedHint}\nWarning: Public access will be enabled. Ensure this bucket does not contain sensitive data.`
         : combinedHint;
 

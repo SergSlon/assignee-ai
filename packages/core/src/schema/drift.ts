@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { CfnKey } from "../config/cfn-keys.js";
 
 // ── Enums ────────────────────────────────────────────────────────────────
 
@@ -65,15 +66,15 @@ export const AUTO_POPULATED_FIELDS: Record<string, Set<string>> = {
   _global: new Set([
     "Arn",
     "Id",
-    "CreationDate",
-    "LastModifiedDate",
-    "LastModifiedTime",
-    "OwnerId",
-    "AccountId",
-    "DomainName",
-    "RegionalDomainName",
-    "DualStackDomainName",
-    "WebsiteURL",
+    CfnKey.CREATION_DATE,
+    CfnKey.LAST_MODIFIED_DATE,
+    CfnKey.LAST_MODIFIED_TIME,
+    CfnKey.OWNER_ID,
+    CfnKey.ACCOUNT_ID,
+    CfnKey.DOMAIN_NAME_CFN,
+    CfnKey.REGIONAL_DOMAIN_NAME,
+    CfnKey.DUAL_STACK_DOMAIN_NAME,
+    CfnKey.WEBSITE_URL,
   ]),
 };
 

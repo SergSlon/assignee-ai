@@ -11,6 +11,7 @@ import {
   RESOURCE_TYPES,
   MissingRequiredFieldsError,
   UserCancelledError,
+  CfnKey,
 } from "@assignee/core";
 import { PRICING_LOOKUP_TIMEOUT_MS } from "../config/constants.js";
 import type {
@@ -709,14 +710,17 @@ export async function fetchSuggestionPrice(
   try {
     let priceMap: Record<string, string> | null = null;
 
-    if (resourceType === RESOURCE_TYPES.EC2_INSTANCE && fieldName === "InstanceType") {
+    if (
+      resourceType === RESOURCE_TYPES.EC2_INSTANCE &&
+      fieldName === CfnKey.INSTANCE_TYPE
+    ) {
       priceMap = await withTimeout(
         fetchEc2InstancePrices(tools, [suggested]),
         PRICING_LOOKUP_TIMEOUT_MS,
       );
     } else if (
       resourceType === RESOURCE_TYPES.RDS_DB_INSTANCE &&
-      fieldName === "DBInstanceClass"
+      fieldName === CfnKey.DB_INSTANCE_CLASS
     ) {
       // Default to postgres since we may not know the selected engine here
       priceMap = await withTimeout(
@@ -772,7 +776,12 @@ export async function promptWithHelp(
         }
       : field;
 
-    const answer = await renderOptionPrompt(promptField, resolved, showBack, answers);
+    const answer = await renderOptionPrompt(
+      promptField,
+      resolved,
+      showBack,
+      answers,
+    );
 
     // Back navigation — return sentinel to caller (handle both scalar and array from multi-select)
     if (
@@ -858,7 +867,7 @@ export async function promptWithHelp(
       }
 
       // Story 20.9: AMI search by description via ec2:DescribeImages
-      if (field.name === "ImageId") {
+      if (field.name === CfnKey.IMAGE_ID) {
         const amiSpinner = clack.spinner();
         amiSpinner.start("Searching for matching AMIs...");
         const amiResults = await searchAmis(userDesc);

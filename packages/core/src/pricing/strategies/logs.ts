@@ -3,6 +3,7 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 
 /**
  * Pricing strategy for AWS::Logs::LogGroup.
@@ -16,7 +17,7 @@ export const logsPricingStrategy: PricingStrategy = {
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
     const logGroupClass =
-      (desiredState?.["LogGroupClass"] as string) ?? "STANDARD";
+      (desiredState?.[CfnKey.LOG_GROUP_CLASS] as string) ?? "STANDARD";
     const isInfrequentAccess = logGroupClass === "INFREQUENT_ACCESS";
 
     return {

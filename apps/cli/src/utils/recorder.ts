@@ -14,6 +14,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { StructuredTool } from "@langchain/core/tools";
+import { CfnKey } from "@assignee/core";
 import type { LlmPort, Result, LlmError } from "@assignee/core";
 import type { ZodSchema } from "zod";
 
@@ -79,9 +80,9 @@ const REDACTED_KEYS = new Set([
   "ASSIGNEE_READER_SECRET_ACCESS_KEY",
   "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
   "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
-  "MasterUserPassword",
-  "SecretString",
-  "Password",
+  CfnKey.MASTER_USER_PASSWORD,
+  CfnKey.SECRET_STRING,
+  CfnKey.PASSWORD,
   "accessToken",
   "secretAccessKey",
   "sessionToken",
