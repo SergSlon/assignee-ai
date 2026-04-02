@@ -43,7 +43,12 @@ import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import { mergeEnvFile } from "../utils/env-writer.js";
 import { AWS_REGION, PromiseStatus, UserMessage } from "../config/constants.js";
 import { AwsErrorName } from "../constants/aws-errors.js";
-import { IamEffect, IamPolicy, AwsServicePrincipal } from "@assignee/core";
+import {
+  IamAction,
+  IamEffect,
+  IamPolicy,
+  AwsServicePrincipal,
+} from "@assignee/core";
 
 /** Maps role keys to their policy generators, user names, and env var prefixes. */
 const ROLES = [
@@ -478,10 +483,10 @@ export const setupCommand = new Command(CommandName.SETUP)
             {
               Effect: IamEffect.ALLOW,
               Action: [
-                "logs:CreateLogGroup",
-                "logs:CreateLogStream",
-                "logs:PutLogEvents",
-                "logs:DescribeLogGroups",
+                IamAction.LOGS_CREATE_LOG_GROUP,
+                IamAction.LOGS_CREATE_LOG_STREAM,
+                IamAction.LOGS_PUT_LOG_EVENTS,
+                IamAction.LOGS_DESCRIBE_LOG_GROUPS,
               ],
               Resource: `arn:aws:logs:${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
             },

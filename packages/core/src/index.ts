@@ -249,5 +249,6 @@ export {
   AwsManagedPolicy,
   BEDROCK_MODEL_ARN_WILDCARD,
   IamPolicy,
+  IamAction,
   AwsServicePrincipal,
 } from "./config/aws-arns.js";

@@ -17,7 +17,12 @@ import {
 import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
-import { IamEffect, IamPolicy, AwsServicePrincipal } from "@assignee/core";
+import {
+  IamAction,
+  IamEffect,
+  IamPolicy,
+  AwsServicePrincipal,
+} from "@assignee/core";
 import { CredentialError } from "../config/constants.js";
 
 export interface CloudFrontResult {
@@ -185,7 +190,7 @@ export function generateCloudFrontBucketPolicy(
         Principal: {
           Service: AwsServicePrincipal.CLOUDFRONT,
         },
-        Action: "s3:GetObject",
+        Action: IamAction.S3_GET_OBJECT,
         Resource: `arn:aws:s3:::${bucketName}/*`,
         Condition: {
           StringEquals: {
