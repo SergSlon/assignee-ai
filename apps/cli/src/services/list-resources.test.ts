@@ -23,6 +23,7 @@ vi.mock("node:fs", () => ({
 // Mock constants
 vi.mock("../config/constants.js", () => ({
   AWS_REGION: "us-east-1",
+  PROVISIONS_FILE: "provisions.json",
 }));
 
 vi.mock("../utils/tags.js", () => ({

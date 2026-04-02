@@ -20,6 +20,7 @@ import {
   defaultPluginRegistry,
   MissingRequiredFieldsError,
   CfnKey,
+  QuestionTypeName,
 } from "@assignee/core";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { ResourceField } from "@assignee/core";
@@ -36,6 +37,7 @@ import {
   type InstanceTypeCategory,
 } from "../utils/aws-resource-discovery.js";
 import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
+import { PromiseStatus } from "../config/constants.js";
 import { loadUserConfig } from "../config/user-config-loader.js";
 import { loadProjectConfig } from "../config/project-config-loader.js";
 import { fetchOrgPolicy, readAuthToken } from "../config/org-policy-cache.js";
@@ -201,23 +203,23 @@ export async function optionElicitorNode(
   ]);
 
   // Story 21.1: Extract classification result
-  if (classificationSettled.status === "fulfilled") {
+  if (classificationSettled.status === PromiseStatus.FULFILLED) {
     workloadProfile = classificationSettled.value;
   }
 
   const pricedFields =
-    pricingSettled.status === "fulfilled"
+    pricingSettled.status === PromiseStatus.FULFILLED
       ? pricingSettled.value
       : plugin.commonFields;
 
   const discoveredFields =
-    discoverySettled.status === "fulfilled"
+    discoverySettled.status === PromiseStatus.FULFILLED
       ? discoverySettled.value
       : plugin.commonFields;
 
   // If real instance types were fetched, replace hardcoded categories on the InstanceType field
   const liveCategories: InstanceTypeCategory[] | null =
-    instanceTypesSettled.status === "fulfilled"
+    instanceTypesSettled.status === PromiseStatus.FULFILLED
       ? (instanceTypesSettled.value as InstanceTypeCategory[] | null)
       : null;
 
@@ -229,7 +231,7 @@ export async function optionElicitorNode(
     dynamicFields = dynamicFields.map((field) => {
       if (
         field.name !== CfnKey.INSTANCE_TYPE ||
-        field.question.type !== "categorySelect"
+        field.question.type !== QuestionTypeName.CATEGORY_SELECT
       )
         return field;
       return {

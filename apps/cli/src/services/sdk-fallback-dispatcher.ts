@@ -32,6 +32,7 @@ import {
 } from "./provisioning-port.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { AWS_REGION } from "../config/constants.js";
+import { AwsErrorName } from "../constants/aws-errors.js";
 
 /** Result type alias following error-first tuple convention. */
 type FallbackResult<T> = [ProvisioningPortError, null] | [null, T];
@@ -280,22 +281,28 @@ export class SDKFallbackDispatcher {
 function classifySdkError(err: unknown): ProvisioningPortError {
   if (err instanceof Error) {
     const name = err.name;
-    if (name === "ResourceNotFoundException" || name === "NotFoundException") {
+    if (
+      name === AwsErrorName.RESOURCE_NOT_FOUND ||
+      name === AwsErrorName.NOT_FOUND
+    ) {
       return { kind: ProvisioningErrorKind.NOT_FOUND, message: err.message };
     }
     if (
-      name === "ResourceConflictException" ||
-      name === "InvalidParameterValueException"
+      name === AwsErrorName.RESOURCE_CONFLICT ||
+      name === AwsErrorName.INVALID_PARAMETER
     ) {
       return {
         kind: ProvisioningErrorKind.ALREADY_EXISTS,
         message: err.message,
       };
     }
-    if (name === "TooManyRequestsException" || name === "ThrottlingException") {
+    if (
+      name === AwsErrorName.TOO_MANY_REQUESTS ||
+      name === AwsErrorName.THROTTLING
+    ) {
       return { kind: ProvisioningErrorKind.THROTTLED, message: err.message };
     }
-    if (name === "ServiceException") {
+    if (name === AwsErrorName.SERVICE_EXCEPTION) {
       return {
         kind: ProvisioningErrorKind.SERVICE_ERROR,
         message: err.message,

@@ -32,6 +32,9 @@ const TAG_VALUE_MANAGED_BY = AssigneeTag.VALUE;
 /** Default AWS region when none is specified. */
 const DEFAULT_REGION = process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
 
+/** File name for the provision log in the memory directory. */
+const PROVISIONS_FILE = "provisions.json";
+
 /** Shape of a managed resource returned by the list service. */
 export interface ManagedResource {
   resourceType: string;
@@ -181,7 +184,7 @@ function loadProvisionCosts(): Map<string, string> {
     os.homedir(),
     ".assignee",
     "memory",
-    "provisions.json",
+    PROVISIONS_FILE,
   );
 
   try {

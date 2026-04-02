@@ -99,6 +99,7 @@ export type {
   ShowIfCondition,
   CfnOutput,
 } from "./types.js";
+export { QuestionTypeName } from "./types.js";
 
 // Story 25.6: LogGroup co-provisioning
 export {

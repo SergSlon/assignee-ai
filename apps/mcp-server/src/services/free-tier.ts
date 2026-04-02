@@ -14,25 +14,25 @@ export interface FreeTierInfo {
   message: string;
 }
 
+/** Standard free tier message used for resources with no usage limits. */
+const FREE_TIER_MESSAGE = "Always free tier";
+
 /** Resources that are always free regardless of account age. */
 const ALWAYS_FREE: Record<string, string> = {
-  [RESOURCE_TYPES.IAM_ROLE]: "Always free tier",
-  [RESOURCE_TYPES.SSM_PARAMETER]:
-    "Always free tier (standard params, up to 10K)",
-  [RESOURCE_TYPES.EC2_VPC]: "Always free tier",
-  [RESOURCE_TYPES.EC2_SUBNET]: "Always free tier",
-  [RESOURCE_TYPES.EC2_SECURITY_GROUP]: "Always free tier",
-  [RESOURCE_TYPES.EC2_INTERNET_GATEWAY]: "Always free tier",
-  [RESOURCE_TYPES.EC2_ROUTE_TABLE]: "Always free tier",
-  [RESOURCE_TYPES.EC2_ROUTE]: "Always free tier",
-  [RESOURCE_TYPES.ECS_CLUSTER]:
-    "Always free tier (compute charged separately via tasks)",
+  [RESOURCE_TYPES.IAM_ROLE]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.SSM_PARAMETER]: `${FREE_TIER_MESSAGE} (standard params, up to 10K)`,
+  [RESOURCE_TYPES.EC2_VPC]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.EC2_SUBNET]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.EC2_SECURITY_GROUP]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.EC2_INTERNET_GATEWAY]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.EC2_ROUTE_TABLE]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.EC2_ROUTE]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.ECS_CLUSTER]: `${FREE_TIER_MESSAGE} (compute charged separately via tasks)`,
 };
 
 /** Resources that are always free but with usage limits. */
 const ALWAYS_FREE_WITH_LIMITS: Record<string, string> = {
-  [RESOURCE_TYPES.DYNAMODB_TABLE]:
-    "Always free tier (up to 25 GB storage, 25 WCU/RCU)",
+  [RESOURCE_TYPES.DYNAMODB_TABLE]: `${FREE_TIER_MESSAGE} (up to 25 GB storage, 25 WCU/RCU)`,
   [RESOURCE_TYPES.LAMBDA_FUNCTION]:
     "AWS Lambda Free Tier: 1M requests/month + 400,000 GB-s compute",
   [RESOURCE_TYPES.SQS_QUEUE]: "AWS SQS Free Tier: 1M requests/month",

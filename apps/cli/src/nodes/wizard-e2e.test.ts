@@ -38,6 +38,15 @@ vi.mock("../utils/aws-resource-discovery.js", () => ({
   discoverRdsInstanceClasses: vi.fn().mockResolvedValue([]),
   clearDiscoveryCache: vi.fn(),
   resolveAmiFromOsName: vi.fn().mockResolvedValue(null),
+  DiscoveryCacheKey: {
+    AMIS: "discover-amis",
+    SUBNETS: "discover-subnets",
+    KEY_PAIRS: "discover-key-pairs",
+    SECURITY_GROUPS: "discover-security-groups",
+    RDS_ENGINE_VERSIONS: "discover-rds-engine-versions",
+    RDS_INSTANCE_CLASSES: "discover-rds-instance-classes",
+    LAMBDA_RUNTIMES: "discover-lambda-runtimes",
+  },
 }));
 
 vi.mock("../utils/display.js", async (importOriginal) => {
@@ -52,16 +61,6 @@ vi.mock("../utils/display.js", async (importOriginal) => {
     stopSpinner: vi.fn(),
   };
 });
-
-vi.mock("../utils/aws-resource-discovery.js", () => ({
-  discoverAmis: vi.fn().mockResolvedValue([]),
-  discoverSubnets: vi.fn().mockResolvedValue([]),
-  discoverSecurityGroups: vi.fn().mockResolvedValue([]),
-  discoverKeyPairs: vi.fn().mockResolvedValue([]),
-  discoverInstanceTypes: vi.fn().mockResolvedValue(null),
-  discoverRdsEngineVersions: vi.fn().mockResolvedValue([]),
-  discoverRdsInstanceClasses: vi.fn().mockResolvedValue([]),
-}));
 
 // Story 27.4: Mock config loaders — return undefined by default (no config)
 vi.mock("../config/user-config-loader.js", () => ({

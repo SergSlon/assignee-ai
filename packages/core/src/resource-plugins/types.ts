@@ -16,6 +16,15 @@ export type QuestionType =
   | "multi"
   | "categorySelect";
 
+/** Named constants for question types to eliminate magic strings. */
+export const QuestionTypeName = {
+  BOOLEAN: "boolean" as const,
+  ENUM: "enum" as const,
+  STRING: "string" as const,
+  MULTI: "multi" as const,
+  CATEGORY_SELECT: "categorySelect" as const,
+};
+
 /**
  * Optional metadata for enriched option display (Story 10.2).
  * Extensible — BP library (Epic 12) will add compliance/security flags later.
@@ -64,7 +73,10 @@ export interface FieldQuestion {
   /** Contextual hint displayed before the prompt (e.g., cost/tradeoff note for boolean fields) */
   hint?: string;
   /** Optional inline validation — return error string or undefined. Second arg is current answers for cross-field validation. */
-  validate?: (value: unknown, answers?: Record<string, unknown>) => string | undefined;
+  validate?: (
+    value: unknown,
+    answers?: Record<string, unknown>,
+  ) => string | undefined;
   /** If set, only show this field when the condition is met */
   showIf?: ShowIfCondition;
   /** Optional identifier for runtime option discovery (e.g., "discover-amis"). When set, the option-elicitor fetches options dynamically before prompting. */

@@ -15,7 +15,11 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import { MEMORY_DEDUP_THRESHOLD_MS } from "../config/constants.js";
+import {
+  MEMORY_DEDUP_THRESHOLD_MS,
+  PROVISIONS_FILE,
+  FAILURES_FILE,
+} from "../config/constants.js";
 import {
   ProvisionLogSchema,
   FailureLogSchema,
@@ -123,25 +127,25 @@ export class MemoryService {
 
   async readProvisions(): Promise<ProvisionRecord[]> {
     const [err, raw] = await safeTry(
-      fs.readFile(this.filePath("provisions.json"), "utf-8"),
+      fs.readFile(this.filePath(PROVISIONS_FILE), "utf-8"),
     );
     if (err) return [];
     try {
       const parsed = ProvisionLogSchema.safeParse(JSON.parse(raw));
       if (parsed.success) return parsed.data;
       // Valid JSON but wrong schema — back up before returning empty
-      await this.backupCorruptFile("provisions.json");
+      await this.backupCorruptFile(PROVISIONS_FILE);
       return [];
     } catch {
       // Invalid JSON — back up the corrupt file before returning empty
-      await this.backupCorruptFile("provisions.json");
+      await this.backupCorruptFile(PROVISIONS_FILE);
       return [];
     }
   }
 
   async appendProvision(record: ProvisionRecord): Promise<void> {
     await this.ensureDir();
-    const target = this.filePath("provisions.json");
+    const target = this.filePath(PROVISIONS_FILE);
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -162,23 +166,23 @@ export class MemoryService {
 
   async readFailures(): Promise<FailureRecord[]> {
     const [err, raw] = await safeTry(
-      fs.readFile(this.filePath("failures.json"), "utf-8"),
+      fs.readFile(this.filePath(FAILURES_FILE), "utf-8"),
     );
     if (err) return [];
     try {
       const parsed = FailureLogSchema.safeParse(JSON.parse(raw));
       if (parsed.success) return parsed.data;
-      await this.backupCorruptFile("failures.json");
+      await this.backupCorruptFile(FAILURES_FILE);
       return [];
     } catch {
-      await this.backupCorruptFile("failures.json");
+      await this.backupCorruptFile(FAILURES_FILE);
       return [];
     }
   }
 
   async appendFailure(record: FailureRecord): Promise<void> {
     await this.ensureDir();
-    const target = this.filePath("failures.json");
+    const target = this.filePath(FAILURES_FILE);
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -203,7 +207,7 @@ export class MemoryService {
    */
   async clearFailuresForType(resourceType: string): Promise<void> {
     await this.ensureDir();
-    const target = this.filePath("failures.json");
+    const target = this.filePath(FAILURES_FILE);
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -313,7 +317,7 @@ export class MemoryService {
     if (removed === 0) return 0;
 
     await this.ensureDir();
-    const target = this.filePath("provisions.json");
+    const target = this.filePath(PROVISIONS_FILE);
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -339,7 +343,7 @@ export class MemoryService {
     const removed = existing.length - maxRecords;
     const trimmed = existing.slice(-maxRecords);
     await this.ensureDir();
-    const target = this.filePath("failures.json");
+    const target = this.filePath(FAILURES_FILE);
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(

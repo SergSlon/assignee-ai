@@ -9,6 +9,7 @@
  * @see Story 18.3 — Error Message Quality Audit
  */
 
+import { AwsErrorName } from "../constants/aws-errors.js";
 import {
   AssigneeError,
   ProvisioningError,
@@ -67,8 +68,7 @@ const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     code: PROVISIONING_ERROR_CODES.STATE_MISMATCH,
     what: "Resource already exists.",
     why: "A resource with the same identifier already exists in your AWS account.",
-    howToFix:
-      "Choose a different name and re-run 'assignee plan'.",
+    howToFix: "Choose a different name and re-run 'assignee plan'.",
   },
   [PROVISIONING_ERROR_CODES.UNSUPPORTED_TYPE]: {
     code: PROVISIONING_ERROR_CODES.UNSUPPORTED_TYPE,
@@ -105,15 +105,15 @@ const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     howToFix:
       'Rephrase your intent with valid parameter values. For example, ensure ARNs are correctly formatted and instance types exist in your region (e.g., "t3.micro" instead of "t3.invalid").',
   },
-  ThrottlingException: {
-    code: "ThrottlingException",
+  [AwsErrorName.THROTTLING]: {
+    code: AwsErrorName.THROTTLING,
     what: "AWS is throttling your API requests.",
     why: "You have exceeded the AWS API rate limit for this service.",
     howToFix:
       "Wait 30-60 seconds and retry. Consider reducing concurrent operations.",
   },
-  ResourceNotFoundException: {
-    code: "ResourceNotFoundException",
+  [AwsErrorName.RESOURCE_NOT_FOUND]: {
+    code: AwsErrorName.RESOURCE_NOT_FOUND,
     what: "The referenced AWS resource does not exist.",
     why: "A resource ARN or identifier in your plan refers to a resource that has been deleted or was never created.",
     howToFix:
@@ -400,7 +400,10 @@ export class ErrorMessageRegistry {
     }
 
     if (error instanceof StateGuardError) {
-      return this.entries.get(PROVISIONING_ERROR_CODES.STATE_MISMATCH) ?? this.fallback();
+      return (
+        this.entries.get(PROVISIONING_ERROR_CODES.STATE_MISMATCH) ??
+        this.fallback()
+      );
     }
 
     if (error instanceof AssigneeError) {
@@ -478,17 +481,17 @@ export class ErrorMessageRegistry {
       ["bucket name is already taken", "BucketNameNotAvailable"],
       ["BucketAlreadyExists", "BucketAlreadyExists"],
       ["BucketAlreadyOwnedByYou", "BucketAlreadyExists"],
-      ["AccessDenied", "AccessDenied"],
-      ["AccessDeniedException", "AccessDenied"],
+      [AwsErrorName.ACCESS_DENIED_SHORT, "AccessDenied"],
+      [AwsErrorName.ACCESS_DENIED, "AccessDenied"],
       ["InvalidParameterValue", "InvalidParameterValue"],
-      ["InvalidParameterValueException", "InvalidParameterValue"],
-      ["ThrottlingException", "ThrottlingException"],
-      ["ResourceNotFoundException", "ResourceNotFoundException"],
+      [AwsErrorName.INVALID_PARAMETER, "InvalidParameterValue"],
+      [AwsErrorName.THROTTLING, AwsErrorName.THROTTLING],
+      [AwsErrorName.RESOURCE_NOT_FOUND, AwsErrorName.RESOURCE_NOT_FOUND],
       ["ValidationException", "ValidationException"],
       ["Resource already exists", PROVISIONING_ERROR_CODES.ALREADY_EXISTS],
       ["already exists", PROVISIONING_ERROR_CODES.ALREADY_EXISTS],
       ["Request throttled", PROVISIONING_ERROR_CODES.THROTTLED],
-      ["Rate exceeded", "ThrottlingException"],
+      ["Rate exceeded", AwsErrorName.THROTTLING],
     ];
 
     for (const [pattern, code] of awsPatterns) {
@@ -545,7 +548,7 @@ export class ErrorMessageRegistry {
     if (
       message.includes("rate limit") ||
       message.includes("Rate exceeded") ||
-      message.includes("ThrottlingException")
+      message.includes(AwsErrorName.THROTTLING)
     ) {
       return this.entries.get("LLM_RATE_LIMIT");
     }

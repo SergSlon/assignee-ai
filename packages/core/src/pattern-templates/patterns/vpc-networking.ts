@@ -12,6 +12,27 @@ const EC2_SUBNET_ROUTE_TABLE_ASSOCIATION =
   COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION;
 const EC2_EIP = COMPANION_RESOURCE_TYPES.EC2_EIP;
 
+/** Logical resource IDs used in VPC patterns — single source of truth. */
+const VpcResourceId = {
+  VPC: "vpc",
+  PUBLIC_SUBNET_1: "public-subnet-1",
+  PUBLIC_SUBNET_2: "public-subnet-2",
+  PRIVATE_SUBNET_1: "private-subnet-1",
+  PRIVATE_SUBNET_2: "private-subnet-2",
+  IGW: "igw",
+  IGW_ATTACHMENT: "igw-attachment",
+  PUBLIC_ROUTE_TABLE: "public-route-table",
+  PRIVATE_ROUTE_TABLE: "private-route-table",
+  PUBLIC_ROUTE: "public-route",
+  PRIVATE_ROUTE: "private-route",
+  NAT_EIP: "nat-eip",
+  NAT_GATEWAY: "nat-gateway",
+  PUBLIC_SUBNET_1_RT_ASSOC: "public-subnet-1-rt-assoc",
+  PUBLIC_SUBNET_2_RT_ASSOC: "public-subnet-2-rt-assoc",
+  PRIVATE_SUBNET_1_RT_ASSOC: "private-subnet-1-rt-assoc",
+  PRIVATE_SUBNET_2_RT_ASSOC: "private-subnet-2-rt-assoc",
+} as const;
+
 /**
  * Full VPC networking pattern — produces a complete multi-AZ topology with
  * public and private subnets, internet gateway, NAT gateway, route tables,
@@ -47,205 +68,209 @@ export const vpcNetworkingPattern: ArchitecturePattern = {
     // VPC
     {
       resourceType: RESOURCE_TYPES.EC2_VPC,
-      resourceId: "vpc",
+      resourceId: VpcResourceId.VPC,
       displayName: "VPC",
     },
     // Public Subnets (multi-AZ)
     {
       resourceType: RESOURCE_TYPES.EC2_SUBNET,
-      resourceId: "public-subnet-1",
+      resourceId: VpcResourceId.PUBLIC_SUBNET_1,
       displayName: "Public Subnet (AZ-1)",
     },
     {
       resourceType: RESOURCE_TYPES.EC2_SUBNET,
-      resourceId: "public-subnet-2",
+      resourceId: VpcResourceId.PUBLIC_SUBNET_2,
       displayName: "Public Subnet (AZ-2)",
     },
     // Private Subnets (multi-AZ)
     {
       resourceType: RESOURCE_TYPES.EC2_SUBNET,
-      resourceId: "private-subnet-1",
+      resourceId: VpcResourceId.PRIVATE_SUBNET_1,
       displayName: "Private Subnet (AZ-1)",
     },
     {
       resourceType: RESOURCE_TYPES.EC2_SUBNET,
-      resourceId: "private-subnet-2",
+      resourceId: VpcResourceId.PRIVATE_SUBNET_2,
       displayName: "Private Subnet (AZ-2)",
     },
     // Internet Gateway + VPC attachment
     {
       resourceType: RESOURCE_TYPES.EC2_INTERNET_GATEWAY,
-      resourceId: "igw",
+      resourceId: VpcResourceId.IGW,
       displayName: "Internet Gateway",
     },
     {
       resourceType: EC2_VPC_GATEWAY_ATTACHMENT,
-      resourceId: "igw-attachment",
+      resourceId: VpcResourceId.IGW_ATTACHMENT,
       displayName: "VPC Gateway Attachment (IGW)",
       provisionable: false,
     },
     // Route Tables
     {
       resourceType: RESOURCE_TYPES.EC2_ROUTE_TABLE,
-      resourceId: "public-route-table",
+      resourceId: VpcResourceId.PUBLIC_ROUTE_TABLE,
       displayName: "Public Route Table",
     },
     {
       resourceType: RESOURCE_TYPES.EC2_ROUTE_TABLE,
-      resourceId: "private-route-table",
+      resourceId: VpcResourceId.PRIVATE_ROUTE_TABLE,
       displayName: "Private Route Table",
     },
     // Routes
     {
       resourceType: RESOURCE_TYPES.EC2_ROUTE,
-      resourceId: "public-route",
+      resourceId: VpcResourceId.PUBLIC_ROUTE,
       displayName: "Public Route (0.0.0.0/0 → IGW)",
     },
     {
       resourceType: RESOURCE_TYPES.EC2_ROUTE,
-      resourceId: "private-route",
+      resourceId: VpcResourceId.PRIVATE_ROUTE,
       displayName: "Private Route (0.0.0.0/0 → NAT)",
     },
     // NAT Gateway + EIP
     {
       resourceType: EC2_EIP,
-      resourceId: "nat-eip",
+      resourceId: VpcResourceId.NAT_EIP,
       displayName: "Elastic IP (for NAT Gateway)",
       provisionable: false,
     },
     {
       resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
-      resourceId: "nat-gateway",
+      resourceId: VpcResourceId.NAT_GATEWAY,
       displayName: "NAT Gateway",
     },
     // Subnet ↔ RouteTable associations
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
-      resourceId: "public-subnet-1-rt-assoc",
+      resourceId: VpcResourceId.PUBLIC_SUBNET_1_RT_ASSOC,
       displayName: "Public Subnet 1 ↔ Public RT",
       provisionable: false,
     },
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
-      resourceId: "public-subnet-2-rt-assoc",
+      resourceId: VpcResourceId.PUBLIC_SUBNET_2_RT_ASSOC,
       displayName: "Public Subnet 2 ↔ Public RT",
       provisionable: false,
     },
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
-      resourceId: "private-subnet-1-rt-assoc",
+      resourceId: VpcResourceId.PRIVATE_SUBNET_1_RT_ASSOC,
       displayName: "Private Subnet 1 ↔ Private RT",
       provisionable: false,
     },
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
-      resourceId: "private-subnet-2-rt-assoc",
+      resourceId: VpcResourceId.PRIVATE_SUBNET_2_RT_ASSOC,
       displayName: "Private Subnet 2 ↔ Private RT",
       provisionable: false,
     },
   ],
   dependencyOrder: [
     // Group 0: VPC first — everything else depends on it
-    ["vpc"],
+    [VpcResourceId.VPC],
     // Group 1: Subnets + IGW + EIP — all need VpcId (or are independent like EIP)
     [
-      "public-subnet-1",
-      "public-subnet-2",
-      "private-subnet-1",
-      "private-subnet-2",
-      "igw",
-      "nat-eip",
+      VpcResourceId.PUBLIC_SUBNET_1,
+      VpcResourceId.PUBLIC_SUBNET_2,
+      VpcResourceId.PRIVATE_SUBNET_1,
+      VpcResourceId.PRIVATE_SUBNET_2,
+      VpcResourceId.IGW,
+      VpcResourceId.NAT_EIP,
     ],
     // Group 2: IGW attachment + RouteTables — need VpcId + IGW
-    ["igw-attachment", "public-route-table", "private-route-table"],
+    [
+      VpcResourceId.IGW_ATTACHMENT,
+      VpcResourceId.PUBLIC_ROUTE_TABLE,
+      VpcResourceId.PRIVATE_ROUTE_TABLE,
+    ],
     // Group 3: Public route + NatGateway — public route needs RT + IGW; NAT needs public subnet + EIP
-    ["public-route", "nat-gateway"],
+    [VpcResourceId.PUBLIC_ROUTE, VpcResourceId.NAT_GATEWAY],
     // Group 4: Private route — needs RT + NatGateway
-    ["private-route"],
+    [VpcResourceId.PRIVATE_ROUTE],
     // Group 5: Subnet ↔ RouteTable associations — need both subnet and RT
     [
-      "public-subnet-1-rt-assoc",
-      "public-subnet-2-rt-assoc",
-      "private-subnet-1-rt-assoc",
-      "private-subnet-2-rt-assoc",
+      VpcResourceId.PUBLIC_SUBNET_1_RT_ASSOC,
+      VpcResourceId.PUBLIC_SUBNET_2_RT_ASSOC,
+      VpcResourceId.PRIVATE_SUBNET_1_RT_ASSOC,
+      VpcResourceId.PRIVATE_SUBNET_2_RT_ASSOC,
     ],
   ],
   defaultOptions: {
-    vpc: {
+    [VpcResourceId.VPC]: {
       CidrBlock: "10.0.0.0/16",
       EnableDnsSupport: true,
       EnableDnsHostnames: true,
     },
-    "public-subnet-1": {
+    [VpcResourceId.PUBLIC_SUBNET_1]: {
       CidrBlock: "10.0.1.0/24",
       AvailabilityZone: { "Fn::Select": [0, { "Fn::GetAZs": "" }] },
       MapPublicIpOnLaunch: true,
-      VpcId: { Ref: "vpc" },
+      VpcId: { Ref: VpcResourceId.VPC },
     },
-    "public-subnet-2": {
+    [VpcResourceId.PUBLIC_SUBNET_2]: {
       CidrBlock: "10.0.2.0/24",
       AvailabilityZone: { "Fn::Select": [1, { "Fn::GetAZs": "" }] },
       MapPublicIpOnLaunch: true,
-      VpcId: { Ref: "vpc" },
+      VpcId: { Ref: VpcResourceId.VPC },
     },
-    "private-subnet-1": {
+    [VpcResourceId.PRIVATE_SUBNET_1]: {
       CidrBlock: "10.0.3.0/24",
       AvailabilityZone: { "Fn::Select": [0, { "Fn::GetAZs": "" }] },
       MapPublicIpOnLaunch: false,
-      VpcId: { Ref: "vpc" },
+      VpcId: { Ref: VpcResourceId.VPC },
     },
-    "private-subnet-2": {
+    [VpcResourceId.PRIVATE_SUBNET_2]: {
       CidrBlock: "10.0.4.0/24",
       AvailabilityZone: { "Fn::Select": [1, { "Fn::GetAZs": "" }] },
       MapPublicIpOnLaunch: false,
-      VpcId: { Ref: "vpc" },
+      VpcId: { Ref: VpcResourceId.VPC },
     },
-    igw: {},
-    "igw-attachment": {
-      VpcId: { Ref: "vpc" },
-      InternetGatewayId: { Ref: "igw" },
+    [VpcResourceId.IGW]: {},
+    [VpcResourceId.IGW_ATTACHMENT]: {
+      VpcId: { Ref: VpcResourceId.VPC },
+      InternetGatewayId: { Ref: VpcResourceId.IGW },
     },
-    "public-route-table": {
-      VpcId: { Ref: "vpc" },
+    [VpcResourceId.PUBLIC_ROUTE_TABLE]: {
+      VpcId: { Ref: VpcResourceId.VPC },
     },
-    "private-route-table": {
-      VpcId: { Ref: "vpc" },
+    [VpcResourceId.PRIVATE_ROUTE_TABLE]: {
+      VpcId: { Ref: VpcResourceId.VPC },
     },
-    "public-route": {
-      RouteTableId: { Ref: "public-route-table" },
+    [VpcResourceId.PUBLIC_ROUTE]: {
+      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
       DestinationCidrBlock: "0.0.0.0/0",
-      GatewayId: { Ref: "igw" },
+      GatewayId: { Ref: VpcResourceId.IGW },
     },
-    "private-route": {
-      RouteTableId: { Ref: "private-route-table" },
+    [VpcResourceId.PRIVATE_ROUTE]: {
+      RouteTableId: { Ref: VpcResourceId.PRIVATE_ROUTE_TABLE },
       DestinationCidrBlock: "0.0.0.0/0",
-      NatGatewayId: { Ref: "nat-gateway" },
+      NatGatewayId: { Ref: VpcResourceId.NAT_GATEWAY },
     },
-    "nat-eip": {
+    [VpcResourceId.NAT_EIP]: {
       Domain: "vpc",
     },
-    "nat-gateway": {
-      SubnetId: { Ref: "public-subnet-1" },
+    [VpcResourceId.NAT_GATEWAY]: {
+      SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_1 },
       ConnectivityType: "public",
       [CfnKey.ALLOCATION_ID]: {
-        "Fn::GetAtt": ["nat-eip", CfnKey.ALLOCATION_ID],
+        "Fn::GetAtt": [VpcResourceId.NAT_EIP, CfnKey.ALLOCATION_ID],
       },
     },
-    "public-subnet-1-rt-assoc": {
-      SubnetId: { Ref: "public-subnet-1" },
-      RouteTableId: { Ref: "public-route-table" },
+    [VpcResourceId.PUBLIC_SUBNET_1_RT_ASSOC]: {
+      SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_1 },
+      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
     },
-    "public-subnet-2-rt-assoc": {
-      SubnetId: { Ref: "public-subnet-2" },
-      RouteTableId: { Ref: "public-route-table" },
+    [VpcResourceId.PUBLIC_SUBNET_2_RT_ASSOC]: {
+      SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_2 },
+      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
     },
-    "private-subnet-1-rt-assoc": {
-      SubnetId: { Ref: "private-subnet-1" },
-      RouteTableId: { Ref: "private-route-table" },
+    [VpcResourceId.PRIVATE_SUBNET_1_RT_ASSOC]: {
+      SubnetId: { Ref: VpcResourceId.PRIVATE_SUBNET_1 },
+      RouteTableId: { Ref: VpcResourceId.PRIVATE_ROUTE_TABLE },
     },
-    "private-subnet-2-rt-assoc": {
-      SubnetId: { Ref: "private-subnet-2" },
-      RouteTableId: { Ref: "private-route-table" },
+    [VpcResourceId.PRIVATE_SUBNET_2_RT_ASSOC]: {
+      SubnetId: { Ref: VpcResourceId.PRIVATE_SUBNET_2 },
+      RouteTableId: { Ref: VpcResourceId.PRIVATE_ROUTE_TABLE },
     },
   },
 };
@@ -279,98 +304,105 @@ export const vpcPublicOnlyPattern: ArchitecturePattern = {
   resourceList: [
     {
       resourceType: RESOURCE_TYPES.EC2_VPC,
-      resourceId: "vpc",
+      resourceId: VpcResourceId.VPC,
       displayName: "VPC",
     },
     {
       resourceType: RESOURCE_TYPES.EC2_SUBNET,
-      resourceId: "public-subnet-1",
+      resourceId: VpcResourceId.PUBLIC_SUBNET_1,
       displayName: "Public Subnet (AZ-1)",
     },
     {
       resourceType: RESOURCE_TYPES.EC2_SUBNET,
-      resourceId: "public-subnet-2",
+      resourceId: VpcResourceId.PUBLIC_SUBNET_2,
       displayName: "Public Subnet (AZ-2)",
     },
     {
       resourceType: RESOURCE_TYPES.EC2_INTERNET_GATEWAY,
-      resourceId: "igw",
+      resourceId: VpcResourceId.IGW,
       displayName: "Internet Gateway",
     },
     {
       resourceType: EC2_VPC_GATEWAY_ATTACHMENT,
-      resourceId: "igw-attachment",
+      resourceId: VpcResourceId.IGW_ATTACHMENT,
       displayName: "VPC Gateway Attachment (IGW)",
       provisionable: false,
     },
     {
       resourceType: RESOURCE_TYPES.EC2_ROUTE_TABLE,
-      resourceId: "public-route-table",
+      resourceId: VpcResourceId.PUBLIC_ROUTE_TABLE,
       displayName: "Public Route Table",
     },
     {
       resourceType: RESOURCE_TYPES.EC2_ROUTE,
-      resourceId: "public-route",
+      resourceId: VpcResourceId.PUBLIC_ROUTE,
       displayName: "Public Route (0.0.0.0/0 → IGW)",
     },
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
-      resourceId: "public-subnet-1-rt-assoc",
+      resourceId: VpcResourceId.PUBLIC_SUBNET_1_RT_ASSOC,
       displayName: "Public Subnet 1 ↔ Public RT",
       provisionable: false,
     },
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
-      resourceId: "public-subnet-2-rt-assoc",
+      resourceId: VpcResourceId.PUBLIC_SUBNET_2_RT_ASSOC,
       displayName: "Public Subnet 2 ↔ Public RT",
       provisionable: false,
     },
   ],
   dependencyOrder: [
-    ["vpc"],
-    ["public-subnet-1", "public-subnet-2", "igw"],
-    ["igw-attachment", "public-route-table"],
-    ["public-route"],
-    ["public-subnet-1-rt-assoc", "public-subnet-2-rt-assoc"],
+    [VpcResourceId.VPC],
+    [
+      VpcResourceId.PUBLIC_SUBNET_1,
+      VpcResourceId.PUBLIC_SUBNET_2,
+      VpcResourceId.IGW,
+    ],
+    [VpcResourceId.IGW_ATTACHMENT, VpcResourceId.PUBLIC_ROUTE_TABLE],
+    [VpcResourceId.PUBLIC_ROUTE],
+    [
+      VpcResourceId.PUBLIC_SUBNET_1_RT_ASSOC,
+      VpcResourceId.PUBLIC_SUBNET_2_RT_ASSOC,
+    ],
   ],
   defaultOptions: {
-    vpc: {
+    [VpcResourceId.VPC]: {
       CidrBlock: "10.0.0.0/16",
       EnableDnsSupport: true,
       EnableDnsHostnames: true,
     },
-    "public-subnet-1": {
+    [VpcResourceId.PUBLIC_SUBNET_1]: {
       CidrBlock: "10.0.1.0/24",
       AvailabilityZone: { "Fn::Select": [0, { "Fn::GetAZs": "" }] },
       MapPublicIpOnLaunch: true,
-      VpcId: { Ref: "vpc" },
+      VpcId: { Ref: VpcResourceId.VPC },
     },
-    "public-subnet-2": {
+    [VpcResourceId.PUBLIC_SUBNET_2]: {
       CidrBlock: "10.0.2.0/24",
       AvailabilityZone: { "Fn::Select": [1, { "Fn::GetAZs": "" }] },
       MapPublicIpOnLaunch: true,
-      VpcId: { Ref: "vpc" },
+      VpcId: { Ref: VpcResourceId.VPC },
     },
-    igw: {},
-    "igw-attachment": {
-      VpcId: { Ref: "vpc" },
-      InternetGatewayId: { Ref: "igw" },
+    [VpcResourceId.IGW]: {},
+    [VpcResourceId.IGW_ATTACHMENT]: {
+      VpcId: { Ref: VpcResourceId.VPC },
+      InternetGatewayId: { Ref: VpcResourceId.IGW },
     },
-    "public-route-table": {
-      VpcId: { Ref: "vpc" },
+    [VpcResourceId.PUBLIC_ROUTE_TABLE]: {
+      VpcId: { Ref: VpcResourceId.VPC },
     },
-    "public-route": {
-      RouteTableId: { Ref: "public-route-table" },
+    [VpcResourceId.PUBLIC_ROUTE]: {
+      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
       DestinationCidrBlock: "0.0.0.0/0",
-      GatewayId: { Ref: "igw" },
+      GatewayId: { Ref: VpcResourceId.IGW },
     },
-    "public-subnet-1-rt-assoc": {
-      SubnetId: { Ref: "public-subnet-1" },
-      RouteTableId: { Ref: "public-route-table" },
+    [VpcResourceId.PUBLIC_SUBNET_1_RT_ASSOC]: {
+      SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_1 },
+      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
     },
-    "public-subnet-2-rt-assoc": {
-      SubnetId: { Ref: "public-subnet-2" },
-      RouteTableId: { Ref: "public-route-table" },
+    [VpcResourceId.PUBLIC_SUBNET_2_RT_ASSOC]: {
+      SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_2 },
+      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
     },
   },
 };

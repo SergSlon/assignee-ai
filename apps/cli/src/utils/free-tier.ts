@@ -25,19 +25,20 @@ export interface FreeTierNote {
 
 // ── Resource maps ────────────────────────────────────────────────────────────
 
+/** Standard free tier message used for resources with no usage limits. */
+export const FREE_TIER_MESSAGE = "Always free tier";
+
 /** Resources that are always free regardless of account age. */
 const ALWAYS_FREE_RESOURCES: Record<string, string> = {
-  [RESOURCE_TYPES.IAM_ROLE]: "Always free tier",
-  [RESOURCE_TYPES.SSM_PARAMETER]:
-    "Always free tier (standard params, up to 10K)",
-  [RESOURCE_TYPES.EC2_VPC]: "Always free tier",
-  [RESOURCE_TYPES.EC2_SUBNET]: "Always free tier",
-  [RESOURCE_TYPES.EC2_SECURITY_GROUP]: "Always free tier",
-  [RESOURCE_TYPES.EC2_INTERNET_GATEWAY]: "Always free tier",
-  [RESOURCE_TYPES.EC2_ROUTE_TABLE]: "Always free tier",
-  [RESOURCE_TYPES.EC2_ROUTE]: "Always free tier",
-  [RESOURCE_TYPES.ECS_CLUSTER]:
-    "Always free tier (compute charged separately via tasks)",
+  [RESOURCE_TYPES.IAM_ROLE]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.SSM_PARAMETER]: `${FREE_TIER_MESSAGE} (standard params, up to 10K)`,
+  [RESOURCE_TYPES.EC2_VPC]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.EC2_SUBNET]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.EC2_SECURITY_GROUP]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.EC2_INTERNET_GATEWAY]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.EC2_ROUTE_TABLE]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.EC2_ROUTE]: FREE_TIER_MESSAGE,
+  [RESOURCE_TYPES.ECS_CLUSTER]: `${FREE_TIER_MESSAGE} (compute charged separately via tasks)`,
 };
 
 /** Resources that are always free but with usage limits. */

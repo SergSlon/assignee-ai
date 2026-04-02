@@ -29,6 +29,7 @@ import {
   detectRegion,
 } from "../services/credential-detector.js";
 import { resolveConfigPath } from "../config/user-config-loader.js";
+import { UserMessage } from "../config/constants.js";
 
 /** Directory name for assignee project config. */
 const CONFIG_DIR = ".assignee";
@@ -74,7 +75,7 @@ export async function promptGlobalConfig(): Promise<
   });
 
   if (clack.isCancel(region)) {
-    clack.outro("Initialization cancelled.");
+    clack.outro(UserMessage.INIT_CANCELLED);
     return undefined;
   }
 
@@ -87,7 +88,7 @@ export async function promptGlobalConfig(): Promise<
     });
 
     if (clack.isCancel(entry)) {
-      clack.outro("Initialization cancelled.");
+      clack.outro(UserMessage.INIT_CANCELLED);
       return undefined;
     }
 
@@ -109,7 +110,7 @@ export async function promptGlobalConfig(): Promise<
   });
 
   if (clack.isCancel(prefix)) {
-    clack.outro("Initialization cancelled.");
+    clack.outro(UserMessage.INIT_CANCELLED);
     return undefined;
   }
 
@@ -125,7 +126,7 @@ export async function promptGlobalConfig(): Promise<
   });
 
   if (clack.isCancel(autoFix)) {
-    clack.outro("Initialization cancelled.");
+    clack.outro(UserMessage.INIT_CANCELLED);
     return undefined;
   }
 
@@ -140,7 +141,7 @@ export async function promptGlobalConfig(): Promise<
   });
 
   if (clack.isCancel(outputFormat)) {
-    clack.outro("Initialization cancelled.");
+    clack.outro(UserMessage.INIT_CANCELLED);
     return undefined;
   }
 
@@ -156,7 +157,7 @@ export async function promptGlobalConfig(): Promise<
   });
 
   if (clack.isCancel(verbosity)) {
-    clack.outro("Initialization cancelled.");
+    clack.outro(UserMessage.INIT_CANCELLED);
     return undefined;
   }
 
@@ -293,7 +294,7 @@ export const initCommand = new Command(CommandName.INIT)
     });
 
     if (clack.isCancel(region)) {
-      clack.outro("Initialization cancelled.");
+      clack.outro(UserMessage.INIT_CANCELLED);
       return;
     }
 
@@ -303,7 +304,7 @@ export const initCommand = new Command(CommandName.INIT)
     });
 
     if (clack.isCancel(profile)) {
-      clack.outro("Initialization cancelled.");
+      clack.outro(UserMessage.INIT_CANCELLED);
       return;
     }
 
@@ -313,7 +314,7 @@ export const initCommand = new Command(CommandName.INIT)
     });
 
     if (clack.isCancel(environment)) {
-      clack.outro("Initialization cancelled.");
+      clack.outro(UserMessage.INIT_CANCELLED);
       return;
     }
 
@@ -324,7 +325,7 @@ export const initCommand = new Command(CommandName.INIT)
     });
 
     if (clack.isCancel(autoFix)) {
-      clack.outro("Initialization cancelled.");
+      clack.outro(UserMessage.INIT_CANCELLED);
       return;
     }
 
