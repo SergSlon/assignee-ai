@@ -7,7 +7,7 @@
 ## Quick reference
 
 ```bash
-pnpm test                                    # ~3817 unit tests across 187 files, ~37s, no AWS needed
+pnpm test                                    # ~4591 unit tests across 207 files, ~37s, no AWS needed
 pnpm check-types                             # TypeScript type check
 pnpm --filter @assignee/mcp-server test:e2e  # MCP E2E against real AWS (~43 min)
 ```
@@ -72,7 +72,7 @@ Most resources are free-tier or cost <$0.01. RDS and ELB are the most expensive 
 ## Unit tests
 
 ```bash
-pnpm test          # ~4448 tests across 198 files (105 CLI + 73 core + 9 BP + 16 MCP)
+pnpm test          # ~4591 tests across 207 files (107 CLI + 74 core + 9 BP + 17 MCP)
 pnpm check-types   # TypeScript type check
 ```
 
@@ -200,7 +200,7 @@ node build-fixture-ts.mjs           # generates final mcp-mock-responses.ts
 | `list-managed-resources.test.ts`      | —     | MCP list-managed-resources tool handler                                              |
 | `estimate-cost.test.ts` (MCP)         | —     | MCP estimate-cost tool handler                                                       |
 | Plugin tests (core)                   | ~100+ | S3, EC2, RDS, Lambda, generic plugin config hints                                    |
-| `bp-all-rules-audit.test.ts`          | 256   | All 130 BP rules fire correctly (was 18/142)                                         |
+| `bp-all-rules-audit.test.ts`          | 266   | All 133 BP rules fire correctly (was 18/142)                                         |
 | `bp-auto-fix-audit.test.ts`           | 55    | All 27 auto-fixable rules verified end-to-end                                        |
 | `compound-provisioning-audit.test.ts` | 69    | All 6 compound patterns through dispatcher+provisioner                               |
 | `apply-mode-audit.test.ts`            | 5     | Full apply mode: plan->bp->fix->approval->provision->result                          |
@@ -208,6 +208,11 @@ node build-fixture-ts.mjs           # generates final mcp-mock-responses.ts
 | `cloudfront-setup.test.ts`            | 9     | CloudFront distribution + OAC creation                                               |
 | `s3-upload.test.ts`                   | 19    | S3 file upload with MIME types, progress, error handling                             |
 | `bulk-destroy.test.ts`                | 21    | Tier ordering, IAM exclusion, pattern filtering                                      |
+| `decomposer-integration.test.ts`      | —     | Decomposer integration across all resource types                                     |
+| `bp-enforcement-integration.test.ts`  | —     | Best-practice enforcement modes (enforce/warn/skip) integration                      |
+| `secure-defaults-audit.test.ts`       | —     | Secure default values audit across all resource types                                |
+| `cost-estimator-e2e.test.ts`          | —     | Cost estimator end-to-end with real pricing data                                     |
+| `coverage.test.ts`                    | 47    | Integration: asserts 23/23 pricing strategies + 23/23 decomposers registered         |
 
 ### Pricing decomposer tests (Epic 39)
 

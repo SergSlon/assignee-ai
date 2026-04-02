@@ -110,6 +110,32 @@ org_policy:
 | `preferences.output_format` | enum | `table`  | Output format: `table` or `json`                       |
 | `preferences.verbosity`     | enum | `normal` | Verbosity: `quiet`, `normal`, or `verbose`             |
 
+### `bestPractices` Section
+
+Controls how best practice rules are evaluated and enforced.
+
+```yaml
+# .assignee/config.yaml
+bestPractices:
+  enforcement: enforce # enforce | warn | skip (default: enforce)
+  autoFix: true # auto-fix best-practice violations when possible
+```
+
+| Key                         | Type | Default   | Description                                               |
+| --------------------------- | ---- | --------- | --------------------------------------------------------- |
+| `bestPractices.enforcement` | enum | `enforce` | How blocking BP violations are handled                    |
+| `bestPractices.autoFix`     | bool | `true`    | Whether auto-fixable violations are patched automatically |
+
+**Enforcement modes:**
+
+| Mode      | Behavior                                                                                        |
+| --------- | ----------------------------------------------------------------------------------------------- |
+| `enforce` | Blocking BP violations halt ALL flows including `--yes` and `--no-wizard`. This is the default. |
+| `warn`    | Blocking violations are logged as warnings but provisioning proceeds.                           |
+| `skip`    | BP evaluation is disabled entirely. No rules are evaluated, no findings are produced.           |
+
+**Org policy override:** When an org policy sets `bestPractices.enforcement: locked`, the user cannot downgrade from `enforce`. For example, if the org policy locks `enforce`, setting `warn` or `skip` in project or user config is silently ignored. This ensures security-critical rules cannot be bypassed in managed environments.
+
 ### `org_policy` Section
 
 Pass-through section for organization-wide policies. Keys are domain-specific (e.g., `security`, `cost`). No deep validation -- the policy engine interprets them at runtime.
@@ -145,28 +171,28 @@ Org policy keys support three enforcement modes:
 
 These constants control system behavior and are not user-configurable:
 
-| Constant                       | Value       | Description                                  |
-| ------------------------------ | ----------- | -------------------------------------------- |
-| `CHECKPOINT_DEFAULT_TTL_HOURS` | 72          | Hours before a plan checkpoint expires       |
-| `CHECKPOINT_DIR`               | `.assignee` | Directory for checkpoint files               |
-| `SCHEMA_EXCERPT_MAX_CHARS`     | 3000        | Max characters of CFN schema sent to Bedrock |
-| `AUTO_CLEANUP_INTERVAL_MS`     | 3600000     | Auto-cleanup throttle (1 hour)               |
-| `MEMORY_MAX_PROVISIONS`        | 200         | Max provision records in memory rotation     |
-| `MEMORY_MAX_FAILURES`          | 100         | Max failure records in memory rotation       |
-| `MEMORY_MAX_PATTERNS`          | 100         | Max pattern records in memory rotation       |
-| `MAX_POLL_ITERATIONS`          | 450         | Safety guard for status poller iterations    |
-| `POLL_INTERVAL_MS`             | 2000        | Status poller interval (2 seconds)           |
+| Constant                       | Value       | Description                                        |
+| ------------------------------ | ----------- | -------------------------------------------------- |
+| `CHECKPOINT_DEFAULT_TTL_HOURS` | 72          | Hours before a plan checkpoint expires             |
+| `CHECKPOINT_DIR`               | `.assignee` | Directory for checkpoint files                     |
+| `SCHEMA_EXCERPT_MAX_CHARS`     | 3000        | Max characters of CFN schema sent to Bedrock       |
+| `AUTO_CLEANUP_INTERVAL_MS`     | 3600000     | Auto-cleanup throttle (1 hour)                     |
+| `MEMORY_MAX_PROVISIONS`        | 200         | Max provision records in memory rotation           |
+| `MEMORY_MAX_FAILURES`          | 100         | Max failure records in memory rotation             |
+| `MEMORY_MAX_PATTERNS`          | 100         | Max pattern records in memory rotation             |
+| `MAX_POLL_ITERATIONS`          | 450         | Safety guard for status poller iterations          |
+| `POLL_INTERVAL_MS`             | 2000        | Status poller interval (2 seconds)                 |
 | `EXTENDED_POLL_TIMEOUT_MS`     | 900000      | Extended timeout for RDS/ELBv2/NatGateway (15 min) |
 
 ## State Directories
 
-| Path                          | Purpose                                          |
-| ----------------------------- | ------------------------------------------------ |
-| `~/.assignee/`                | Global state directory (created on first run)    |
+| Path                          | Purpose                                                                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `~/.assignee/`                | Global state directory (created on first run)                                                                          |
 | `~/.assignee/memory/`         | Provision logs, failure records, pattern history (all writes use `acquireLock` + `atomicWrite` for concurrency safety) |
-| `.assignee/`                  | Project-level checkpoint and config directory    |
-| `.assignee/config.yaml`       | Project configuration                            |
-| `.assignee/checkpoint-*.json` | Saved plan checkpoints                           |
+| `.assignee/`                  | Project-level checkpoint and config directory                                                                          |
+| `.assignee/config.yaml`       | Project configuration                                                                                                  |
+| `.assignee/checkpoint-*.json` | Saved plan checkpoints                                                                                                 |
 
 ## Setup Wizard
 

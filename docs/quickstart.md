@@ -53,6 +53,7 @@ What happens:
 8. **Cost Estimator** -- fetches real-time pricing via the Pricing MCP
 
 > **Tip:** Use `--set key=value` to pre-fill wizard fields without interactive prompts:
+>
 > ```bash
 > assignee plan --set BucketName=my-logs --set Tags=env:prod "Create an S3 bucket"
 > ```
@@ -85,7 +86,7 @@ The 12-node LangGraph pipeline processed your intent through these stages:
 
 ```
 intent_parser -> schema_fetcher -> option_elicitor -> compound_dispatcher
-     -> plan_generator -> bp_evaluator -> auto_fix_applier
+     -> plan_generator -> bp_evaluator -> fix_applicator
      -> preflight_guard -> human_approval -> resource_provisioner
      -> status_poller -> result_formatter
 ```

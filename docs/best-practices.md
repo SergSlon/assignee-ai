@@ -10,7 +10,7 @@ The best practices pipeline runs as three nodes in the 12-node LangGraph graph:
 plan_generator -> bp_evaluator -> auto_fix_applier -> preflight_guard
 ```
 
-1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **130 rules** (12 duplicates were removed during consolidation). Completes in <10ms for all rules.
+1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **133 rules** (12 duplicates were removed during consolidation). Completes in <10ms for all rules.
 
 2. **auto_fix_applier**: For findings with `fixType: auto`, patches the `desiredState` directly using `desiredStatePatch`. For findings with `fixType: interactive`, prompts the user with choices. Respects the `preferences.auto_fix` config setting (`ask` / `apply` / `skip`).
 
@@ -79,6 +79,14 @@ When this rule fires, the fix is applied by merging `desiredStatePatch` into the
 **CORS defaults:** When CORS is enabled, `AllowedHeaders` defaults to `["*"]`.
 
 **Replication gating:** The `EnableReplication` field is only shown when versioning is enabled (`showIf: VersioningConfiguration=true`). Replication is silently skipped (with a warning) if no IAM Role ARN is provided, since the wizard cannot auto-create one.
+
+**ECS rules (BP-ECS-007 through BP-ECS-009):**
+
+| Rule ID    | Title                      | Severity | Category    | Blocking | What it checks                                                              |
+| ---------- | -------------------------- | -------- | ----------- | -------- | --------------------------------------------------------------------------- |
+| BP-ECS-007 | Container Insights enabled | HIGH     | security    | Yes      | ECS cluster has Container Insights enabled for monitoring and observability |
+| BP-ECS-008 | Execute command logging    | MEDIUM   | security    | No       | ECS services log execute-command sessions for audit compliance              |
+| BP-ECS-009 | Service Connect namespace  | MEDIUM   | reliability | No       | ECS services using Service Connect have a namespace configured              |
 
 ### Type B: Interactive Fix (`fixType: interactive`)
 
@@ -180,9 +188,10 @@ Resource Type                              Rules Auto-Fix Interactive Manual Las
 AWS::S3::Bucket                               18       12           2      4    2026-03-22
 AWS::EC2::Instance                            14        8           1      5    2026-03-22
 AWS::RDS::DBInstance                          10        6           1      3    2026-03-22
+AWS::ECS::Service                              9        5           1      3    2026-03-22
 ...
 
-Summary: 130 rules | 72 auto-fixable (55%) | 12 interactive | 46 manual
+Summary: 133 rules | 75 auto-fixable (56%) | 12 interactive | 46 manual
 ```
 
 ## Excluding Rules
