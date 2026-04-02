@@ -9,8 +9,7 @@ import * as os from "node:os";
 import { parse } from "yaml";
 import { z } from "zod";
 import { bestPracticeSchema } from "../src/schema.js";
-
-const SKIP_DIRS = new Set(["src", "dist", "node_modules", "__tests__"]);
+import { SKIP_DIRS } from "../src/loader.js";
 
 interface ValidationError {
   filePath: string;

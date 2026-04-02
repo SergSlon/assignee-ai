@@ -1,4 +1,5 @@
-import { SUPPORTED_TYPES_ARRAY } from "@assignee/core";
+import { SUPPORTED_TYPES_ARRAY, ASSIGNEE_DIR } from "@assignee/core";
+export { ASSIGNEE_DIR } from "@assignee/core";
 import { EnvVar } from "../constants/env-vars.js";
 
 export const BEDROCK_MODEL_ID =
@@ -39,7 +40,7 @@ export const SCHEMA_EXCERPT_MAX_CHARS = 3000;
 export const CHECKPOINT_DEFAULT_TTL_HOURS = 72;
 
 /** Directory for checkpoint files, relative to project root. */
-export const CHECKPOINT_DIR = ".assignee";
+export const CHECKPOINT_DIR = ASSIGNEE_DIR;
 
 /** SaaS API base URL for org policy fetch (Story 7.2). */
 export const SAAS_API_URL =
@@ -204,3 +205,24 @@ export const BoxenBorderColor = {
 
 /** Generic "unknown" fallback for missing metadata fields (ARN parts, resource type, etc.). */
 export const UNKNOWN_FALLBACK = "unknown" as const;
+
+// ── AWS Service Identifiers ────────────────────────────────────────────────
+
+/** ARN service identifier for API Gateway V2 execute endpoints. */
+export const AWS_SERVICE_EXECUTE_API = "execute-api" as const;
+
+// ── Shared User-Facing Strings ────────────────────────────────────────────
+
+/** Error prefix used when plan generation fails. */
+export const PLAN_GENERATION_FAILED = "Plan generation failed" as const;
+
+/** Example S3 intent used in help text and error messages. */
+export const EXAMPLE_S3_INTENT = "Create an S3 bucket named my-bucket" as const;
+
+// ── Credential Error Messages ──────────────────────────────────────────────
+
+/** Standard error messages for missing operator credentials. */
+export const CredentialError = {
+  MISSING_ACCESS_KEY: "ASSIGNEE_OPERATOR_ACCESS_KEY_ID is missing or empty",
+  MISSING_SECRET_KEY: "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY is missing or empty",
+} as const;

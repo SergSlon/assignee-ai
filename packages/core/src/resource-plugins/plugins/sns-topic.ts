@@ -1,7 +1,11 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
-import { TAGS_VALIDATE } from "../shared-fields.js";
+import {
+  TAGS_VALIDATE,
+  TAGS_HINT,
+  KMS_ARN_VALIDATION_MSG,
+} from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
 /**
@@ -74,7 +78,7 @@ export const snsTopicPlugin: ResourcePlugin = {
           if (!value) return undefined;
           const s = String(value);
           if (!s.startsWith("arn:aws:kms:") && !s.startsWith("alias/"))
-            return "Must be a KMS key ARN or alias";
+            return KMS_ARN_VALIDATION_MSG;
           return undefined;
         },
       },
@@ -85,7 +89,7 @@ export const snsTopicPlugin: ResourcePlugin = {
         type: "string",
         label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
-        hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
+        hint: TAGS_HINT,
         validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {

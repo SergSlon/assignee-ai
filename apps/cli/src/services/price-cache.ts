@@ -13,10 +13,14 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as crypto from "node:crypto";
 import { parse as parseYaml } from "yaml";
-import { CLEANUP_MAX_AGE_MS, FileName } from "../config/constants.js";
+import {
+  ASSIGNEE_DIR,
+  CLEANUP_MAX_AGE_MS,
+  FileName,
+} from "../config/constants.js";
 
-const CACHE_DIR = path.join(os.homedir(), ".assignee", "cache", "pricing");
-const PROJECT_CONFIG_DIR = ".assignee";
+const CACHE_DIR = path.join(os.homedir(), ASSIGNEE_DIR, "cache", "pricing");
+const PROJECT_CONFIG_DIR = ASSIGNEE_DIR;
 const PROJECT_CONFIG_FILE = FileName.CONFIG;
 
 /** Default TTL in minutes by pricing category. */

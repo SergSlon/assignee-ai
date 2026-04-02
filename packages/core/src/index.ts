@@ -46,6 +46,7 @@ export {
 
 // Config — CloudFormation property key constants (Story 42.9)
 export {
+  ASSIGNEE_DIR,
   CfnKey,
   type CfnKeyType,
   EIP_AUTO_ALLOCATE,
@@ -55,7 +56,19 @@ export {
   RdsEngineDisplay,
   CloudWatchStatistic,
   AmiOs,
+  RdsEngineId,
+  SizeLabel,
+  RDS_ENGINE_VERSION_HINT,
+  AWS_SERVICE_EXECUTE_API,
+  UNKNOWN_FALLBACK,
 } from "./config/cfn-keys.js";
+
+// Config — ARN-to-CloudFormation type mapping
+export {
+  SERVICE_TYPE_MAP,
+  SERVICE_SUBTYPE_MAP,
+  arnToCloudFormationType,
+} from "./config/arn-type-map.js";
 
 // Config — AssigneeConfig schema and validation (Story 27.1)
 export type {
@@ -89,6 +102,7 @@ export {
   RESOURCE_IDENTIFIER_KEYS,
   getPrimaryIdentifier,
 } from "./config/resource-identifiers.js";
+export { DiscoveryCacheKey } from "./config/discovery-keys.js";
 
 // IAM — action map and policy generators
 export { getRequiredIamActions } from "./config/iam-actions.js";
@@ -184,6 +198,7 @@ export {
   PricingServiceCode,
   PricingProductFamily,
   CostEstimateLabel,
+  FREE_TIER_MESSAGE,
   PricingFilterValue,
 } from "./pricing/index.js";
 

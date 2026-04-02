@@ -9,14 +9,12 @@ import {
   AssigneeError,
   UserCancelledError,
   QuestionTypeName,
-} from "@assignee/core";
-import type {
-  ResourceField,
-  ResolvedFieldConfig,
-  ArchitecturePattern,
+  CostEstimateLabel,
+  type ResourceField,
+  type ResolvedFieldConfig,
+  type ArchitecturePattern,
 } from "@assignee/core";
 import type { RenderableState } from "./display.js";
-import { CostEstimate } from "../constants/pricing.js";
 import { UserMessage } from "../config/constants.js";
 
 /** Wizard prompt sentinel values — single source of truth. */
@@ -101,7 +99,7 @@ export async function renderApplyNowConfirm(
   if (!process.stdin.isTTY) return false;
 
   const result = await clack.confirm({
-    message: `Apply now? (${state.resourceType}, est. ${state.estimatedMonthlyCost ?? CostEstimate.NA}/mo) [y/N]`,
+    message: `Apply now? (${state.resourceType}, est. ${state.estimatedMonthlyCost ?? CostEstimateLabel.NA}/mo) [y/N]`,
     initialValue: false,
   });
 

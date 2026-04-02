@@ -33,3 +33,14 @@ export const LineItemLabel = {
   PUT_REQUESTS: "PUT requests",
   GET_REQUESTS: "GET requests",
 } as const;
+
+/**
+ * Named constants for decomposer description strings.
+ * Zero magic strings policy — every description literal must reference this map.
+ */
+export const DecomposerDescription = {
+  PER_MILLION: "per million",
+  PER_GB: "per GB",
+  PER_100K: "per 100K",
+  STANDARD: "Standard",
+} as const;

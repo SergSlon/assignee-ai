@@ -19,7 +19,11 @@ import {
   LIST_RESOURCE_TYPES,
   CCAPI_FALLBACK_TYPES,
 } from "@assignee/core";
-import { AWS_REGION } from "../config/constants.js";
+import {
+  AWS_REGION,
+  AWS_SERVICE_EXECUTE_API,
+  CredentialError,
+} from "../config/constants.js";
 
 /** Resolved resource returned by the resource resolver. */
 export interface ResolvedResource {
@@ -121,7 +125,7 @@ function arnToResourceType(arn: string): string | null {
     cloudwatch: { alarm: RESOURCE_TYPES.CLOUDWATCH_ALARM },
     secretsmanager: { secret: RESOURCE_TYPES.SECRETSMANAGER_SECRET },
     apigateway: { apis: RESOURCE_TYPES.APIGATEWAYV2_API },
-    "execute-api": { "": RESOURCE_TYPES.APIGATEWAYV2_API },
+    [AWS_SERVICE_EXECUTE_API]: { "": RESOURCE_TYPES.APIGATEWAYV2_API },
   };
 
   if (!service) return null;
@@ -233,14 +237,10 @@ export function createTaggingClient(
   config: AwsConfig,
 ): ResourceGroupsTaggingAPIClient {
   if (!config.accessKeyId) {
-    throw new ConfigurationError(
-      "ASSIGNEE_OPERATOR_ACCESS_KEY_ID is missing or empty",
-    );
+    throw new ConfigurationError(CredentialError.MISSING_ACCESS_KEY);
   }
   if (!config.secretAccessKey) {
-    throw new ConfigurationError(
-      "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY is missing or empty",
-    );
+    throw new ConfigurationError(CredentialError.MISSING_SECRET_KEY);
   }
 
   return new ResourceGroupsTaggingAPIClient({

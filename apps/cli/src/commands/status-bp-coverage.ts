@@ -11,10 +11,8 @@ import * as path from "node:path";
 import { parse } from "yaml";
 import chalk from "chalk";
 import { SUPPORTED_TYPES_ARRAY } from "@assignee/core";
-import { FixType } from "@assignee/best-practices";
+import { FixType, SKIP_DIRS } from "@assignee/best-practices";
 import { UNKNOWN_FALLBACK } from "../config/constants.js";
-
-const SKIP_DIRS = new Set(["src", "dist", "node_modules", "__tests__"]);
 
 export interface ResourceTypeCoverage {
   resourceType: string;

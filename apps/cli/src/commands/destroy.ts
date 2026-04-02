@@ -24,6 +24,7 @@ import {
   AssigneeError,
   ConfigurationError,
   UserCancelledError,
+  CostEstimateLabel,
 } from "@assignee/core";
 import {
   CommandName,
@@ -39,7 +40,6 @@ import {
 } from "../services/resource-resolver.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { AWS_REGION, UserMessage } from "../config/constants.js";
-import { CostEstimate } from "../constants/pricing.js";
 import { ErrorCode } from "../constants/errors.js";
 import { destroySingleResource } from "../services/destroy-service.js";
 import {
@@ -436,7 +436,7 @@ export async function destroyAction(
     billingTools,
   );
   const estimatedMonthlyCost =
-    savingsEstimate !== CostEstimate.NA
+    savingsEstimate !== CostEstimateLabel.NA
       ? savingsEstimate
       : "(cost data unavailable)";
 

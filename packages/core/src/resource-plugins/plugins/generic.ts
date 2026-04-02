@@ -1,5 +1,6 @@
 import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
+import { TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
 /**
@@ -26,7 +27,7 @@ export const genericPlugin: ResourcePlugin = {
         type: "string",
         label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
-        hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+        hint: TAGS_HINT,
         validate: (value: unknown) => {
           if (!value) return undefined; // Optional
           const s = String(value).trim();

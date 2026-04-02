@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ZodError } from "zod";
 import { bestPracticeSchema } from "./schema.js";
-const SKIP_DIRS = new Set(["src", "dist", "node_modules", "__tests__"]);
+export const SKIP_DIRS = new Set(["src", "dist", "node_modules", "__tests__"]);
 export class BPSchemaError extends Error {
     filePath;
     fieldErrors;

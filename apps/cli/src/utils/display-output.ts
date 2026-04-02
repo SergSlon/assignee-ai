@@ -8,12 +8,12 @@
 import * as clack from "@clack/prompts";
 import chalk from "chalk";
 import boxen from "boxen";
-import type {
-  ResourceResult,
-  ArchitecturePattern,
-  ResourceSpec,
+import {
+  CostEstimateLabel,
+  type ResourceResult,
+  type ArchitecturePattern,
+  type ResourceSpec,
 } from "@assignee/core";
-import { CostEstimate } from "../constants/pricing.js";
 import { BoxenAlign, BoxenBorderColor } from "../config/constants.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { SecurityFinding } from "../services/graph-state.js";
@@ -116,7 +116,7 @@ export function renderApplySuccess(state: RenderableState): void {
     process.stdout.write(chalk.dim(`   Run ID: ${state.runId}\n`));
   } else {
     process.stdout.write(
-      `SUCCESS\nARN: ${state.resourceArn ?? CostEstimate.NA}\nRun ID: ${state.runId}\n`,
+      `SUCCESS\nARN: ${state.resourceArn ?? CostEstimateLabel.NA}\nRun ID: ${state.runId}\n`,
     );
   }
 }
@@ -226,7 +226,9 @@ export function renderDependencyPlan(
       .map((r) => perResourceCosts[r.resourceId])
       .filter(
         (c): c is string =>
-          Boolean(c) && c !== CostEstimate.NA && c !== CostEstimate.FREE,
+          Boolean(c) &&
+          c !== CostEstimateLabel.NA &&
+          c !== CostEstimateLabel.FREE,
       );
     if (knownCosts.length > 0) {
       lines.push(``);
@@ -294,15 +296,15 @@ export function renderResourceTable(resources: ManagedResource[]): void {
     const cDate = col(
       "Created",
       resources.map((r) =>
-        r.createdDate === CostEstimate.NA
-          ? CostEstimate.NA
+        r.createdDate === CostEstimateLabel.NA
+          ? CostEstimateLabel.NA
           : r.createdDate.slice(0, 10),
       ),
       10,
     );
     // Shorten ISO dates to YYYY-MM-DD for display
     const fmtDate = (d: string) =>
-      d === CostEstimate.NA ? CostEstimate.NA : d.slice(0, 10);
+      d === CostEstimateLabel.NA ? CostEstimateLabel.NA : d.slice(0, 10);
     const header = chalk.bold(
       "Type".padEnd(cType) +
         "ARN".padEnd(cArn) +

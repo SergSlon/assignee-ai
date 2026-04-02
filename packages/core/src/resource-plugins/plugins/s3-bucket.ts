@@ -1,6 +1,10 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
-import { TAGS_VALIDATE } from "../shared-fields.js";
+import {
+  TAGS_VALIDATE,
+  TAGS_HINT,
+  KMS_ARN_FULL_VALIDATION_MSG,
+} from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 import type { ResourcePlugin } from "../types.js";
 
@@ -53,7 +57,7 @@ export const s3BucketPlugin: ResourcePlugin = {
           if (!value) return undefined;
           const s = String(value);
           if (!s.match(/^arn:aws(-us-gov|-cn)?:kms:/))
-            return "Must be a KMS key ARN (arn:aws:kms:...)";
+            return KMS_ARN_FULL_VALIDATION_MSG;
           return undefined;
         },
       },
@@ -93,7 +97,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         type: "string",
         label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
-        hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+        hint: TAGS_HINT,
         validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {

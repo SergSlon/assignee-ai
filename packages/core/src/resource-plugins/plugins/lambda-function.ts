@@ -1,7 +1,7 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault, SizeLabel } from "../../config/cfn-keys.js";
 import type { ResourcePlugin, OptionMetadata, CfnOutput } from "../types.js";
-import { TAGS_VALIDATE } from "../shared-fields.js";
+import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
 /** Lambda duration pricing rate ($/GB-second) — stable since 2014. Exported for test use. */
@@ -267,7 +267,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
           {
             value: AwsDefault.ARCH_ARM,
             label: "arm64 (Graviton — 20% cheaper)",
-            fitHint: "Best price-performance",
+            fitHint: SizeLabel.BEST_PRICE_PERFORMANCE,
             recommended: true,
           },
         ],
@@ -281,7 +281,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         type: "string",
         label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
-        hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+        hint: TAGS_HINT,
         validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {

@@ -1,4 +1,5 @@
 import type { PricingStrategy, PricingEstimate } from "../types.js";
+import { CostEstimateLabel } from "../filter-constants.js";
 
 /**
  * Pricing strategy for AWS::EC2::Route.
@@ -8,7 +9,7 @@ import type { PricingStrategy, PricingEstimate } from "../types.js";
  */
 export const routePricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: "No charge", isFree: true };
+    return { perMonth: null, label: CostEstimateLabel.NO_CHARGE, isFree: true };
   },
   // No mcpConfig — Routes are free AWS resources
 };

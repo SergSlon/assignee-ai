@@ -13,6 +13,9 @@ import {
   BPEnforcementLevel,
   StateField,
 } from "@assignee/core";
+
+/** Error prefix used when plan generation fails. */
+const PLAN_GENERATION_FAILED = "Plan generation failed" as const;
 import type { GraphContext } from "../services/graph-init.js";
 import {
   serializeCheckpoint,
@@ -104,7 +107,7 @@ export function registerPlanResource(
                   error: true,
                   message:
                     (finalState[StateField.ERROR_MESSAGE] as string) ??
-                    "Plan generation failed",
+                    PLAN_GENERATION_FAILED,
                   status: finalState[StateField.EXECUTION_STATUS],
                   ...(finalState[StateField.EXECUTION_STATUS] ===
                   ExecutionStatus.UNSUPPORTED_RESOURCE

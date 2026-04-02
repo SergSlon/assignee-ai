@@ -1,4 +1,4 @@
-export { loadBestPractices, BPSchemaError } from "./loader.js";
+export { loadBestPractices, BPSchemaError, SKIP_DIRS } from "./loader.js";
 export { bestPracticeSchema } from "./schema.js";
 export { evaluateTriggers } from "./evaluate.js";
 export type { EvalContext } from "./evaluate.js";

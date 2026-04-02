@@ -1,7 +1,11 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
-import { TAGS_VALIDATE } from "../shared-fields.js";
+import {
+  TAGS_VALIDATE,
+  TAGS_HINT,
+  KMS_ARN_FULL_VALIDATION_MSG,
+} from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
 /**
@@ -68,7 +72,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
         type: "string",
         label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
-        hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
+        hint: TAGS_HINT,
         validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {
@@ -117,8 +121,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);
-          if (!s.startsWith("arn:aws:kms:"))
-            return "Must be a KMS key ARN (arn:aws:kms:...)";
+          if (!s.startsWith("arn:aws:kms:")) return KMS_ARN_FULL_VALIDATION_MSG;
           return undefined;
         },
       },

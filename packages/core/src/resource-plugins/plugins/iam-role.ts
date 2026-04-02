@@ -2,7 +2,7 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
 import { IamEffect } from "../../config/iam-effects.js";
 import type { ResourcePlugin } from "../types.js";
-import { TAGS_VALIDATE } from "../shared-fields.js";
+import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
 /** Common trust policies for AWS service principals. */
@@ -127,7 +127,7 @@ export const iamRolePlugin: ResourcePlugin = {
         type: "string",
         label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
-        hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
+        hint: TAGS_HINT,
         validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {

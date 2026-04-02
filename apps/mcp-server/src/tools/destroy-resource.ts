@@ -27,6 +27,9 @@ import {
   CCAPI_REDIRECT_TYPES,
   DEFAULT_AWS_REGION,
   AssigneeTag,
+  RESOURCE_TYPES,
+  SERVICE_TYPE_MAP,
+  SERVICE_SUBTYPE_MAP,
 } from "@assignee/core";
 import { destroyRegistry } from "../services/destroy-strategies/index.js";
 
@@ -56,76 +59,46 @@ export const destroyResourceParams = {
     ),
 };
 
-// ── ARN helpers (self-contained — no CLI dependency) ─────────────────────────
+// ── ARN helpers ─────────────────────────────────────────────────────────────
 
 function isArn(input: string): boolean {
   return input.startsWith("arn:aws:");
 }
 
 /**
- * Service+resource to CloudFormation type map.
- * WARNING: This map is duplicated from the CLI's resource resolver.
- * Any changes here MUST be mirrored in the CLI resolver (and vice-versa).
- * TODO: Extract into a shared @assignee/core utility to eliminate duplication.
+ * Resolves an ARN to a known CloudFormation resource type.
+ * Returns null if the service/resource combination is not recognized
+ * (unlike arnToCloudFormationType which produces a best-guess fallback).
+ *
+ * Uses SERVICE_TYPE_MAP and SERVICE_SUBTYPE_MAP from @assignee/core.
+ * @internal Exported for testing only.
  */
-const SERVICE_TYPE_MAP: Record<string, Record<string, string>> = {
-  // Tier 0
-  s3: { "": "AWS::S3::Bucket" },
-  ssm: { parameter: "AWS::SSM::Parameter" },
-  iam: {
-    role: "AWS::IAM::Role",
-    policy: "AWS::IAM::ManagedPolicy",
-    user: "AWS::IAM::User",
-    group: "AWS::IAM::Group",
-    "instance-profile": "AWS::IAM::InstanceProfile",
-  },
-  ec2: {
-    instance: "AWS::EC2::Instance",
-    vpc: "AWS::EC2::VPC",
-    subnet: "AWS::EC2::Subnet",
-    "security-group": "AWS::EC2::SecurityGroup",
-    // Tier 1 networking
-    "internet-gateway": "AWS::EC2::InternetGateway",
-    "route-table": "AWS::EC2::RouteTable",
-    natgateway: "AWS::EC2::NatGateway",
-    // Route has no ARN (composite identifier) — not resolvable by ARN
-  },
-  rds: { db: "AWS::RDS::DBInstance" },
-  lambda: {
-    function: "AWS::Lambda::Function",
-    "event-source-mapping": "AWS::Lambda::EventSourceMapping",
-  },
-  dynamodb: { table: "AWS::DynamoDB::Table" },
-  sqs: { "": "AWS::SQS::Queue" },
-  sns: { "": "AWS::SNS::Topic" },
-  elasticloadbalancing: {
-    loadbalancer: "AWS::ElasticLoadBalancingV2::LoadBalancer",
-  },
-  ecs: { cluster: "AWS::ECS::Cluster" },
-  ecr: { repository: "AWS::ECR::Repository" },
-  // Tier 1
-  logs: { "log-group": "AWS::Logs::LogGroup" },
-  // Tier 2
-  cloudwatch: { alarm: "AWS::CloudWatch::Alarm" },
-  secretsmanager: { secret: "AWS::SecretsManager::Secret" },
-  apigateway: { apis: "AWS::ApiGatewayV2::Api" },
-  "execute-api": { "": "AWS::ApiGatewayV2::Api" },
-};
-
-/** @internal Exported for testing only. */
 export function arnToResourceType(arn: string): string | null {
   const parts = arn.split(":");
   if (parts.length < 6) return null;
   const service = parts[2];
   const resourcePart = parts[5] ?? "";
-  // Extract resource type segment: first segment before "/" (handles most ARNs)
-  // For API Gateway ARNs like arn:aws:apigateway:region::/apis/id, resourcePart starts with "/"
-  const segments = resourcePart.split("/").filter(Boolean);
-  const resourceType = segments[0] ?? "";
   if (!service) return null;
-  const serviceTypes = SERVICE_TYPE_MAP[service];
-  if (!serviceTypes) return null;
-  return serviceTypes[resourceType] ?? serviceTypes[""] ?? null;
+
+  // Check subtype map first (ec2, iam, apigateway, etc.)
+  const subtypes = SERVICE_SUBTYPE_MAP[service];
+  if (subtypes) {
+    const segments = resourcePart.split(/[:/]/).filter(Boolean);
+    const resourceSeg = segments[0] ?? "";
+    if (resourcePart.startsWith("/")) {
+      const prefixed = "/" + resourceSeg;
+      if (subtypes[prefixed]) return subtypes[prefixed]!;
+    }
+    if (subtypes[resourceSeg]) return subtypes[resourceSeg]!;
+    if (subtypes[""]) return subtypes[""]!;
+  }
+
+  // Simple service→type map
+  const mapped = SERVICE_TYPE_MAP[service];
+  if (mapped) return mapped;
+
+  // Unlike arnToCloudFormationType, return null for unknown services
+  return null;
 }
 
 /** @internal Exported for testing only. */

@@ -25,7 +25,11 @@ import {
   promptFixSelection,
 } from "../utils/display.js";
 import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
-import { defaultErrorHintRegistry, PatternId } from "@assignee/core";
+import {
+  defaultErrorHintRegistry,
+  PatternId,
+  RESOURCE_TYPES,
+} from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
@@ -311,7 +315,7 @@ export async function resultFormatterNode(
         // Story 37.4: Post-provision upload of static site files (compound path)
         if (state.sourceDir) {
           const s3Resource = updatedCompleted.find(
-            (r) => r.resourceType === "AWS::S3::Bucket" && r.resourceArn,
+            (r) => r.resourceType === RESOURCE_TYPES.S3_BUCKET && r.resourceArn,
           );
           if (s3Resource?.resourceArn) {
             const parts = s3Resource.resourceArn.split(":::");
@@ -349,7 +353,7 @@ export async function resultFormatterNode(
         }
 
         const hasS3InCompleted = updatedCompleted.some(
-          (r) => r.resourceType === "AWS::S3::Bucket",
+          (r) => r.resourceType === RESOURCE_TYPES.S3_BUCKET,
         );
         if (state.sourceDir && !hasS3InCompleted) {
           process.stderr.write(
@@ -375,7 +379,7 @@ export async function resultFormatterNode(
       // Story 37.4: Post-provision upload of static site files
       if (
         state.sourceDir &&
-        state.resourceType === "AWS::S3::Bucket" &&
+        state.resourceType === RESOURCE_TYPES.S3_BUCKET &&
         state.resourceArn
       ) {
         const parts = state.resourceArn.split(":::");
@@ -406,7 +410,7 @@ export async function resultFormatterNode(
         }
       }
 
-      if (state.sourceDir && state.resourceType !== "AWS::S3::Bucket") {
+      if (state.sourceDir && state.resourceType !== RESOURCE_TYPES.S3_BUCKET) {
         process.stderr.write(
           chalk.yellow(
             `\u26A0 --source flag ignored: file upload only supported for S3 buckets, not ${state.resourceType}\n`,

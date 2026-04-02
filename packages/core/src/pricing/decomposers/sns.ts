@@ -20,7 +20,7 @@ import {
 } from "../filter-constants.js";
 import { PricingFilterValue as FV } from "../pricing-filter-values.js";
 import { PriceUnit } from "../price-units.js";
-import { LineItemLabel } from "../line-item-labels.js";
+import { LineItemLabel, DecomposerDescription } from "../line-item-labels.js";
 import { PricingUnit } from "../units.js";
 
 export const snsPricingDecomposer: PricingDecomposer = {
@@ -71,7 +71,7 @@ export const snsPricingDecomposer: PricingDecomposer = {
         },
       ],
       kind: K.USAGE_BASED,
-      description: "per 100K",
+      description: DecomposerDescription.PER_100K,
       priceUnit: PriceUnit.PER_100K_NOTIFS,
     });
 

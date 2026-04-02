@@ -18,20 +18,23 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import {
-  RESOURCE_TYPES,
-  COMPANION_RESOURCE_TYPES,
-  LIST_RESOURCE_TYPES,
   CCAPI_FALLBACK_TYPES,
+  CostEstimateLabel,
+  arnToCloudFormationType,
 } from "@assignee/core";
 import {
+  ASSIGNEE_DIR,
   AWS_REGION,
+  AWS_SERVICE_EXECUTE_API,
   PROVISIONS_FILE,
   UNKNOWN_FALLBACK,
 } from "../config/constants.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import { fetchBillingData } from "./billing.js";
-import { CostEstimate } from "../constants/pricing.js";
+
+// Re-export for consumers that import from this module
+export { arnToCloudFormationType } from "@assignee/core";
 
 /** Shape of a managed resource returned by the list service. */
 export interface ManagedResource {
@@ -50,106 +53,6 @@ interface ProvisionLogEntry {
   region?: string;
   estimatedMonthlyCost?: string;
   timestamp?: string;
-}
-
-/**
- * Maps common AWS service names to CloudFormation resource types.
- * Falls back to `AWS::<Service>::Resource` for unmapped services.
- */
-/** Simple service→type map for services with a single resource type. */
-const SERVICE_TYPE_MAP: Record<string, string> = {
-  s3: RESOURCE_TYPES.S3_BUCKET,
-  lambda: RESOURCE_TYPES.LAMBDA_FUNCTION,
-  rds: RESOURCE_TYPES.RDS_DB_INSTANCE,
-  dynamodb: RESOURCE_TYPES.DYNAMODB_TABLE,
-  sqs: RESOURCE_TYPES.SQS_QUEUE,
-  sns: RESOURCE_TYPES.SNS_TOPIC,
-  cloudformation: LIST_RESOURCE_TYPES.CLOUDFORMATION_STACK,
-  logs: RESOURCE_TYPES.LOGS_LOG_GROUP,
-  events: LIST_RESOURCE_TYPES.EVENTS_RULE,
-  cloudfront: LIST_RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
-  ecs: RESOURCE_TYPES.ECS_CLUSTER,
-  eks: LIST_RESOURCE_TYPES.EKS_CLUSTER,
-  elasticache: LIST_RESOURCE_TYPES.ELASTICACHE_CACHE_CLUSTER,
-  kinesis: LIST_RESOURCE_TYPES.KINESIS_STREAM,
-  secretsmanager: RESOURCE_TYPES.SECRETSMANAGER_SECRET,
-  stepfunctions: LIST_RESOURCE_TYPES.STEPFUNCTIONS_STATE_MACHINE,
-  states: LIST_RESOURCE_TYPES.STEPFUNCTIONS_STATE_MACHINE,
-};
-
-/** Services with multiple resource types — resolved by ARN resource segment. */
-const SERVICE_SUBTYPE_MAP: Record<string, Record<string, string>> = {
-  ec2: {
-    instance: RESOURCE_TYPES.EC2_INSTANCE,
-    vpc: RESOURCE_TYPES.EC2_VPC,
-    subnet: RESOURCE_TYPES.EC2_SUBNET,
-    "security-group": RESOURCE_TYPES.EC2_SECURITY_GROUP,
-    "internet-gateway": RESOURCE_TYPES.EC2_INTERNET_GATEWAY,
-    "route-table": RESOURCE_TYPES.EC2_ROUTE_TABLE,
-    natgateway: RESOURCE_TYPES.EC2_NAT_GATEWAY,
-    "elastic-ip": COMPANION_RESOURCE_TYPES.EC2_EIP,
-  },
-  iam: {
-    role: RESOURCE_TYPES.IAM_ROLE,
-    policy: LIST_RESOURCE_TYPES.IAM_MANAGED_POLICY,
-    user: LIST_RESOURCE_TYPES.IAM_USER,
-    group: LIST_RESOURCE_TYPES.IAM_GROUP,
-    "instance-profile": LIST_RESOURCE_TYPES.IAM_INSTANCE_PROFILE,
-  },
-  apigateway: {
-    "/apis": RESOURCE_TYPES.APIGATEWAYV2_API,
-    restapis: LIST_RESOURCE_TYPES.APIGATEWAY_REST_API,
-  },
-  "execute-api": {
-    "": RESOURCE_TYPES.APIGATEWAYV2_API,
-  },
-  elasticloadbalancing: {
-    loadbalancer: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
-    targetgroup: LIST_RESOURCE_TYPES.ELBV2_TARGET_GROUP,
-  },
-  ecr: {
-    repository: RESOURCE_TYPES.ECR_REPOSITORY,
-  },
-  cloudwatch: {
-    alarm: RESOURCE_TYPES.CLOUDWATCH_ALARM,
-  },
-  ssm: {
-    parameter: RESOURCE_TYPES.SSM_PARAMETER,
-  },
-};
-
-/**
- * Converts an AWS service name and resource component from an ARN
- * into a CloudFormation-style type string.
- */
-export function arnToCloudFormationType(
-  service: string,
-  resourcePart: string,
-): string {
-  // Check subtype map first (for services with multiple resource types)
-  const subtypes = SERVICE_SUBTYPE_MAP[service];
-  if (subtypes) {
-    const segments = resourcePart.split(/[:/]/).filter(Boolean);
-    const resourceSeg = segments[0] ?? "";
-    if (resourcePart.startsWith("/")) {
-      const prefixed = "/" + resourceSeg;
-      if (subtypes[prefixed]) return subtypes[prefixed]!;
-    }
-    if (subtypes[resourceSeg]) return subtypes[resourceSeg]!;
-    if (subtypes[""]) return subtypes[""]!;
-  }
-
-  // Simple service→type map
-  const mapped = SERVICE_TYPE_MAP[service];
-  if (mapped) return mapped;
-
-  // Fallback: construct from service + resource
-  const capitalizedService = service.charAt(0).toUpperCase() + service.slice(1);
-  const resourceType = resourcePart.split(/[:/]/)[0] ?? "Resource";
-  const capitalizedResource =
-    resourceType.charAt(0).toUpperCase() + resourceType.slice(1);
-
-  return `AWS::${capitalizedService}::${capitalizedResource}`;
 }
 
 /**
@@ -185,7 +88,7 @@ function loadProvisionData(): ProvisionLookup {
   const timestampMap = new Map<string, string>();
   const provisionLogPath = path.join(
     os.homedir(),
-    ".assignee",
+    ASSIGNEE_DIR,
     "memory",
     PROVISIONS_FILE,
   );
@@ -279,7 +182,9 @@ export async function fetchManagedResources(
       // Try matching by full ARN, then by resource name suffix
       const arnName = arn.split("/").pop() ?? arn.split(":").pop() ?? "";
       const createdDate =
-        timestampMap.get(arn) ?? timestampMap.get(arnName) ?? CostEstimate.NA;
+        timestampMap.get(arn) ??
+        timestampMap.get(arnName) ??
+        CostEstimateLabel.NA;
 
       resources.push({
         resourceType: parsed.resourceType,
@@ -287,7 +192,7 @@ export async function fetchManagedResources(
         region: parsed.region || resolvedRegion,
         createdDate,
         estimatedMonthlyCost:
-          costMap.get(arn) ?? costMap.get(arnName) ?? CostEstimate.NA,
+          costMap.get(arn) ?? costMap.get(arnName) ?? CostEstimateLabel.NA,
       });
     }
 

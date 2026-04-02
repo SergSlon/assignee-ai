@@ -31,7 +31,7 @@ import {
   type ProvisioningPortError,
 } from "./provisioning-port.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
-import { AWS_REGION } from "../config/constants.js";
+import { AWS_REGION, CredentialError } from "../config/constants.js";
 import { AwsErrorName } from "../constants/aws-errors.js";
 
 /** Result type alias following error-first tuple convention. */
@@ -61,14 +61,10 @@ export class SDKFallbackDispatcher {
 
   constructor(config: AwsConfig) {
     if (!config.accessKeyId) {
-      throw new ConfigurationError(
-        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID is missing or empty",
-      );
+      throw new ConfigurationError(CredentialError.MISSING_ACCESS_KEY);
     }
     if (!config.secretAccessKey) {
-      throw new ConfigurationError(
-        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY is missing or empty",
-      );
+      throw new ConfigurationError(CredentialError.MISSING_SECRET_KEY);
     }
 
     const credentials = {

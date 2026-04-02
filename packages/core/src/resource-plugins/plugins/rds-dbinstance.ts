@@ -4,9 +4,12 @@ import {
   ResourceDefault,
   AwsDefault,
   RdsEngineDisplay,
+  RdsEngineId,
+  SizeLabel,
+  RDS_ENGINE_VERSION_HINT,
 } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
-import { TAGS_VALIDATE } from "../shared-fields.js";
+import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
 /**
@@ -30,13 +33,13 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           {
             value: "db.t3.small",
             label: "db.t3.small  (2 vCPU,  2 GiB) — ~$0.034/hr",
-            fitHint: "Small production",
+            fitHint: SizeLabel.SMALL_PRODUCTION,
             recommended: true,
           },
           {
             value: "db.t3.medium",
             label: "db.t3.medium (2 vCPU,  4 GiB) — ~$0.068/hr",
-            fitHint: "Medium production",
+            fitHint: SizeLabel.MEDIUM_PRODUCTION,
           },
           {
             value: "db.m5.large",
@@ -87,12 +90,12 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
             fitHint: "MySQL-compatible",
           },
           {
-            value: "aurora-mysql",
+            value: RdsEngineId.AURORA_MYSQL,
             label: RdsEngineDisplay.AURORA_MYSQL,
             fitHint: "AWS-native, auto-scaling",
           },
           {
-            value: "aurora-postgresql",
+            value: RdsEngineId.AURORA_POSTGRESQL,
             label: RdsEngineDisplay.AURORA_POSTGRESQL,
             fitHint: "AWS-native, auto-scaling",
           },
@@ -105,7 +108,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "PostgreSQL version",
-        hint: "Newer versions offer better performance and security. Cannot be easily downgraded.",
+        hint: RDS_ENGINE_VERSION_HINT,
         options: [
           {
             value: "16",
@@ -127,7 +130,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "MySQL version",
-        hint: "Newer versions offer better performance and security. Cannot be easily downgraded.",
+        hint: RDS_ENGINE_VERSION_HINT,
         options: [
           {
             value: "8.4",
@@ -146,7 +149,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "MariaDB version",
-        hint: "Newer versions offer better performance and security. Cannot be easily downgraded.",
+        hint: RDS_ENGINE_VERSION_HINT,
         options: [
           {
             value: "11.4",
@@ -174,7 +177,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           },
           { value: "3.05.2", label: "Aurora MySQL 3.05.2 (stable)" },
         ],
-        showIf: { field: CfnKey.ENGINE, value: "aurora-mysql" },
+        showIf: { field: CfnKey.ENGINE, value: RdsEngineId.AURORA_MYSQL },
         fetcher: "discover-rds-engine-versions",
       },
     },
@@ -188,7 +191,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           { value: "16.4", label: "Aurora PostgreSQL 16.4", recommended: true },
           { value: "15.8", label: "Aurora PostgreSQL 15.8 (stable)" },
         ],
-        showIf: { field: CfnKey.ENGINE, value: "aurora-postgresql" },
+        showIf: { field: CfnKey.ENGINE, value: RdsEngineId.AURORA_POSTGRESQL },
         fetcher: "discover-rds-engine-versions",
       },
     },
@@ -271,7 +274,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           {
             value: AwsDefault.EBS_VOLUME_TYPE,
             label: "gp3 (General Purpose SSD v3) — ~$0.023/GB-month",
-            fitHint: "Best price-performance",
+            fitHint: SizeLabel.BEST_PRICE_PERFORMANCE,
             recommended: true,
           },
           {
@@ -305,12 +308,12 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           {
             value: "50",
             label: "50 GB (~$1.15/mo)",
-            fitHint: "Small production",
+            fitHint: SizeLabel.SMALL_PRODUCTION,
           },
           {
             value: "100",
             label: "100 GB (~$2.30/mo)",
-            fitHint: "Medium production",
+            fitHint: SizeLabel.MEDIUM_PRODUCTION,
           },
           {
             value: "200",
@@ -337,7 +340,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         type: "string",
         label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
-        hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+        hint: TAGS_HINT,
         validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {

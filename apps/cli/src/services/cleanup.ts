@@ -14,6 +14,7 @@ import { pruneExpiredCheckpoints } from "./checkpoint.js";
 import { sweepExpiredPrices } from "./price-cache.js";
 import type { MemoryService } from "./memory.js";
 import {
+  ASSIGNEE_DIR,
   AUTO_CLEANUP_INTERVAL_MS,
   CHECKPOINT_FILE_PREFIX,
   CleanupCategoryName,
@@ -35,7 +36,7 @@ export type CleanupCategory =
 /** Path to the throttle file for auto-cleanup. */
 const LAST_CLEANUP_PATH = path.join(
   os.homedir(),
-  ".assignee",
+  ASSIGNEE_DIR,
   "cache",
   ".last-cleanup",
 );
@@ -137,7 +138,7 @@ async function dryRunCheckpoints(
 async function dryRunCacheSweep(
   maxAgeMs: number = CLEANUP_MAX_AGE_MS,
 ): Promise<{ removed: number; remaining: number }> {
-  const cacheDir = path.join(os.homedir(), ".assignee", "cache", "pricing");
+  const cacheDir = path.join(os.homedir(), ASSIGNEE_DIR, "cache", "pricing");
   let entries: string[];
   try {
     const fsSync = await import("node:fs");

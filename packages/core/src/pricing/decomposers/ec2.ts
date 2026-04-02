@@ -20,7 +20,7 @@ import {
   PricingServiceCode as SC,
 } from "../filter-constants.js";
 import { PriceUnit } from "../price-units.js";
-import { LineItemLabel } from "../line-item-labels.js";
+import { LineItemLabel, DecomposerDescription } from "../line-item-labels.js";
 import { PricingFilterValue as FV } from "../pricing-filter-values.js";
 import { PricingUnit } from "../units.js";
 
@@ -137,7 +137,7 @@ export const ec2PricingDecomposer: PricingDecomposer = {
         { Field: F.TRANSFER_TYPE, Value: FV.AWS_OUTBOUND, Type: M.TERM_MATCH },
       ],
       kind: K.USAGE_BASED,
-      description: "per GB",
+      description: DecomposerDescription.PER_GB,
       priceUnit: PriceUnit.PER_GB,
     });
 
