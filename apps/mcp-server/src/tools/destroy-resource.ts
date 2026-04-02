@@ -23,6 +23,7 @@ import {
   GetResourceRequestStatusCommand,
 } from "@aws-sdk/client-cloudcontrol";
 import {
+  ArnPrefix,
   CCAPI_FALLBACK_TYPES,
   CCAPI_REDIRECT_TYPES,
   DEFAULT_AWS_REGION,
@@ -62,7 +63,7 @@ export const destroyResourceParams = {
 // ── ARN helpers ─────────────────────────────────────────────────────────────
 
 function isArn(input: string): boolean {
-  return input.startsWith("arn:aws:");
+  return input.startsWith(ArnPrefix.AWS);
 }
 
 /**

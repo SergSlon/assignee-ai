@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, AwsDefault, SizeLabel } from "../../config/cfn-keys.js";
+import { ArnPrefix } from "../../config/aws-arns.js";
 import type { ResourcePlugin, OptionMetadata, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
@@ -168,7 +169,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         hint: "IAM role that grants the function permissions to access AWS services (S3, DynamoDB, etc.). If omitted, assignee will create a minimal-privilege role for you.",
         validate: (value: unknown) => {
           if (!value) return undefined; // Optional field
-          return typeof value === "string" && value.startsWith("arn:aws:iam::")
+          return typeof value === "string" && value.startsWith(ArnPrefix.IAM)
             ? undefined
             : "Must be a valid IAM role ARN";
         },

@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
+import { ArnPrefix } from "../../config/aws-arns.js";
 import type { ResourcePlugin } from "../types.js";
 import {
   TAGS_VALIDATE,
@@ -81,7 +82,7 @@ export const logGroupPlugin: ResourcePlugin = {
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);
-          if (!s.startsWith("arn:aws:kms:")) return KMS_ARN_FULL_VALIDATION_MSG;
+          if (!s.startsWith(ArnPrefix.KMS)) return KMS_ARN_FULL_VALIDATION_MSG;
           return undefined;
         },
       },

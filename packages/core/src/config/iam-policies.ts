@@ -8,6 +8,7 @@
 import { SUPPORTED_TYPES_ARRAY } from "./resource-types.js";
 import { getRequiredIamActions } from "./iam-actions.js";
 import { IamEffect, type IamEffectType } from "./iam-effects.js";
+import { BEDROCK_MODEL_ARN_WILDCARD } from "./aws-arns.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ export const IAM_POLICY_NAMES = {
  * @param modelArn - Optional Bedrock model ARN. Defaults to wildcard foundation model.
  */
 export function operatorPolicy(
-  modelArn = "arn:aws:bedrock:*::foundation-model/*",
+  modelArn: string = BEDROCK_MODEL_ARN_WILDCARD,
 ): PolicyDocument {
   // Aggregate all service-specific actions across all supported types
   const allActions = new Set<string>();

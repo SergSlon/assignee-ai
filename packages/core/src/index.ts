@@ -242,3 +242,10 @@ export {
   type WarmResult,
   type WarmOptions,
 } from "./services/schema-cache-warmer.js";
+
+export {
+  ArnPrefix,
+  KMS_ALIAS_PREFIX,
+  AwsManagedPolicy,
+  BEDROCK_MODEL_ARN_WILDCARD,
+} from "./config/aws-arns.js";
