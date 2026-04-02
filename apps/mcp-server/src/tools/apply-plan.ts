@@ -14,6 +14,7 @@ import {
   ExecutionMode,
   ExecutionStatus,
   CheckpointError,
+  BPEnforcementLevel,
 } from "@assignee/core";
 import {
   loadBestPractices,
@@ -242,7 +243,7 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
             userIntent: checkpoint.userIntent,
             runId,
             executionMode: ExecutionMode.APPLY,
-            bpEnforcementLevel: "enforce",
+            bpEnforcementLevel: BPEnforcementLevel.ENFORCE,
             startedAt: Date.now(),
             resourceType: checkpoint.resourceType,
             desiredState: checkpoint.desiredState,
