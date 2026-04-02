@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
+import { ArnPrefix, KMS_ALIAS_PREFIX } from "../../config/aws-arns.js";
 import type { ResourcePlugin } from "../types.js";
 import {
   TAGS_VALIDATE,
@@ -140,7 +141,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);
-          if (!s.startsWith("arn:aws:kms:") && !s.startsWith("alias/"))
+          if (!s.startsWith(ArnPrefix.KMS) && !s.startsWith(KMS_ALIAS_PREFIX))
             return KMS_ARN_VALIDATION_MSG;
           return undefined;
         },

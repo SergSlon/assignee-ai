@@ -1,6 +1,7 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { AwsDefault } from "../../config/cfn-keys.js";
 import { IamEffect } from "../../config/iam-effects.js";
+import { AwsManagedPolicy } from "../../config/aws-arns.js";
 import type { ArchitecturePattern } from "../types.js";
 import { MessageProcessingResourceId as R } from "../pattern-resource-ids.js";
 import { PatternId } from "../pattern-ids.js";
@@ -78,9 +79,7 @@ export const messageProcessingPattern: ArchitecturePattern = {
           },
         ],
       },
-      ManagedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-      ],
+      ManagedPolicyArns: [AwsManagedPolicy.LAMBDA_BASIC_EXECUTION],
     },
     [R.PROCESSOR_FN]: {
       Runtime: AwsDefault.LAMBDA_RUNTIME,

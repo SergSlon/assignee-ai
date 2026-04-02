@@ -4,6 +4,7 @@ import {
 } from "../../config/resource-types.js";
 import { AwsDefault } from "../../config/cfn-keys.js";
 import { IamEffect } from "../../config/iam-effects.js";
+import { AwsManagedPolicy } from "../../config/aws-arns.js";
 import type { ArchitecturePattern } from "../types.js";
 import { ServerlessApiResourceId as R } from "../pattern-resource-ids.js";
 import { PatternId } from "../pattern-ids.js";
@@ -130,7 +131,7 @@ export const serverlessApiPattern: ArchitecturePattern = {
           },
         ],
       },
-      PermissionsBoundary: "arn:aws:iam::aws:policy/PowerUserAccess",
+      PermissionsBoundary: AwsManagedPolicy.POWER_USER_ACCESS,
     },
     [R.LAMBDA_FN]: {
       Runtime: AwsDefault.LAMBDA_RUNTIME,

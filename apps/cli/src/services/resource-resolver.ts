@@ -13,6 +13,7 @@ import {
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import {
+  ArnPrefix,
   ConfigurationError,
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
@@ -38,7 +39,7 @@ export interface ResolvedResource {
  * Checks if a string looks like an ARN.
  */
 function isArn(input: string): boolean {
-  return input.startsWith("arn:aws:");
+  return input.startsWith(ArnPrefix.AWS);
 }
 
 /**
@@ -363,7 +364,7 @@ async function resolveSqsQueueUrl(
 
       // Match SQS ARN: arn:aws:sqs:{region}:{account}:{queue-name}
       if (
-        arn.startsWith("arn:aws:sqs:") &&
+        arn.startsWith(ArnPrefix.SQS) &&
         arn.endsWith(":" + parsed.queueName)
       ) {
         return {
