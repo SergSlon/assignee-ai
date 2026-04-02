@@ -72,6 +72,7 @@ export {
 import type { FreeTierNote } from "./free-tier.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { AppliedFix } from "../services/graph-state.js";
+import { CfnKey } from "@assignee/core";
 import type { PricingBreakdown } from "@assignee/core";
 
 /** Minimal state shape needed for rendering — avoids circular imports with graph.ts */
@@ -97,44 +98,44 @@ export interface RenderableState {
 // ── Friendly key names for plan box rendering (Story 18.11) ─────────────────
 
 export const FRIENDLY_NAMES: Record<string, string> = {
-  InstanceType: "Instance Type",
-  ImageId: "AMI",
-  KeyName: "Key Pair",
-  SubnetId: "Subnet",
-  SecurityGroupIds: "Security Groups",
-  BucketName: "Bucket Name",
-  BucketEncryption: "Encryption",
-  PublicAccessBlockConfiguration: "Block Public Access",
-  VersioningConfiguration: "Versioning",
-  DBInstanceClass: "DB Instance Class",
-  Engine: "Engine",
-  MasterUsername: "Master Username",
-  MasterUserPassword: "Master Password",
-  AllocatedStorage: "Storage (GB)",
-  MultiAZ: "Multi-AZ",
-  StorageType: "Storage Type",
-  FunctionName: "Function Name",
-  Runtime: "Runtime",
-  Handler: "Handler",
-  MemorySize: "Memory (MB)",
-  Timeout: "Timeout (s)",
-  Role: "Execution Role",
-  Tags: "Tags",
-  DBName: "Database Name",
-  EngineVersion: "Engine Version",
-  DeletionProtection: "Deletion Protection",
-  BackupRetentionPeriod: "Backup Retention (days)",
-  Description: "Description",
-  ReservedConcurrentExecutions: "Reserved Concurrency",
-  Environment: "Environment Variables",
-  IamInstanceProfile: "IAM Instance Profile",
-  UserData: "User Data",
-  KMSMasterKeyID: "KMS Key ID",
-  EnableLifecycle: "Lifecycle Rules",
-  EnableCors: "CORS",
-  EnableReplication: "Cross-Region Replication",
-  MetadataOptions: "Instance Metadata",
-  BlockDeviceMappings: "Storage",
+  [CfnKey.INSTANCE_TYPE]: "Instance Type",
+  [CfnKey.IMAGE_ID]: "AMI",
+  [CfnKey.KEY_NAME]: "Key Pair",
+  [CfnKey.SUBNET_ID]: "Subnet",
+  [CfnKey.SECURITY_GROUP_IDS]: "Security Groups",
+  [CfnKey.BUCKET_NAME]: "Bucket Name",
+  [CfnKey.BUCKET_ENCRYPTION]: "Encryption",
+  [CfnKey.PUBLIC_ACCESS_BLOCK]: "Block Public Access",
+  [CfnKey.VERSIONING_CONFIGURATION]: "Versioning",
+  [CfnKey.DB_INSTANCE_CLASS]: "DB Instance Class",
+  [CfnKey.ENGINE]: "Engine",
+  [CfnKey.MASTER_USERNAME]: "Master Username",
+  [CfnKey.MASTER_USER_PASSWORD]: "Master Password",
+  [CfnKey.ALLOCATED_STORAGE]: "Storage (GB)",
+  [CfnKey.MULTI_AZ]: "Multi-AZ",
+  [CfnKey.STORAGE_TYPE]: "Storage Type",
+  [CfnKey.FUNCTION_NAME]: "Function Name",
+  [CfnKey.RUNTIME]: "Runtime",
+  [CfnKey.HANDLER]: "Handler",
+  [CfnKey.MEMORY_SIZE]: "Memory (MB)",
+  [CfnKey.TIMEOUT]: "Timeout (s)",
+  [CfnKey.ROLE]: "Execution Role",
+  [CfnKey.TAGS]: "Tags",
+  [CfnKey.DB_NAME]: "Database Name",
+  [CfnKey.ENGINE_VERSION]: "Engine Version",
+  [CfnKey.DELETION_PROTECTION]: "Deletion Protection",
+  [CfnKey.BACKUP_RETENTION_PERIOD]: "Backup Retention (days)",
+  [CfnKey.DESCRIPTION]: "Description",
+  [CfnKey.RESERVED_CONCURRENT_EXECUTIONS]: "Reserved Concurrency",
+  [CfnKey.ENVIRONMENT]: "Environment Variables",
+  [CfnKey.IAM_INSTANCE_PROFILE]: "IAM Instance Profile",
+  [CfnKey.USER_DATA]: "User Data",
+  [CfnKey.KMS_MASTER_KEY_ID_S3]: "KMS Key ID",
+  [CfnKey.ENABLE_LIFECYCLE]: "Lifecycle Rules",
+  [CfnKey.ENABLE_CORS]: "CORS",
+  [CfnKey.ENABLE_REPLICATION]: "Cross-Region Replication",
+  [CfnKey.METADATA_OPTIONS]: "Instance Metadata",
+  [CfnKey.BLOCK_DEVICE_MAPPINGS]: "Storage",
 };
 
 /**
@@ -142,13 +143,13 @@ export const FRIENDLY_NAMES: Record<string, string> = {
  * These are masked with asterisks in all user-facing output (plan box, logs).
  * @see SECURITY-AUDIT.md — SEC-02 Sensitive field exposure
  */
-export const SENSITIVE_FIELDS = new Set([
-  "MasterUserPassword",
-  "SecretString",
-  "Password",
-  "AccessKey",
-  "SecretAccessKey",
-  "SessionToken",
+export const SENSITIVE_FIELDS: Set<string> = new Set([
+  CfnKey.MASTER_USER_PASSWORD,
+  CfnKey.SECRET_STRING,
+  CfnKey.PASSWORD,
+  CfnKey.ACCESS_KEY,
+  CfnKey.SECRET_ACCESS_KEY,
+  CfnKey.SESSION_TOKEN,
 ]);
 
 /**
@@ -194,34 +195,34 @@ export function formatDesiredState(state: Record<string, unknown>): string {
  */
 export function formatSpecialValue(key: string, value: unknown): string | null {
   if (
-    key === "BlockDeviceMappings" &&
+    key === CfnKey.BLOCK_DEVICE_MAPPINGS &&
     Array.isArray(value) &&
     value.length > 0
   ) {
     const vol = value[0] as Record<string, unknown>;
-    const ebs = vol?.["Ebs"] as Record<string, unknown> | undefined;
+    const ebs = vol?.[CfnKey.EBS] as Record<string, unknown> | undefined;
     if (!ebs) return null;
     const parts: string[] = [];
-    if (ebs["VolumeType"]) parts.push(String(ebs["VolumeType"]));
-    if (ebs["VolumeSize"]) parts.push(`${ebs["VolumeSize"]} GB`);
-    parts.push(ebs["Encrypted"] ? "encrypted" : "unencrypted");
+    if (ebs[CfnKey.VOLUME_TYPE]) parts.push(String(ebs[CfnKey.VOLUME_TYPE]));
+    if (ebs[CfnKey.VOLUME_SIZE]) parts.push(`${ebs[CfnKey.VOLUME_SIZE]} GB`);
+    parts.push(ebs[CfnKey.ENCRYPTED] ? "encrypted" : "unencrypted");
     return parts.join(", ");
   }
   if (
-    key === "MetadataOptions" &&
+    key === CfnKey.METADATA_OPTIONS &&
     typeof value === "object" &&
     value !== null
   ) {
     const opts = value as Record<string, unknown>;
-    return opts["HttpTokens"] === "required"
+    return opts[CfnKey.HTTP_TOKENS] === "required"
       ? "IMDSv2 required"
       : "IMDSv1 allowed";
   }
   // ServerSideEncryptionConfiguration → show algorithm
   // S3 encryption — handle both BucketEncryption and ServerSideEncryptionConfiguration
   if (
-    (key === "ServerSideEncryptionConfiguration" ||
-      key === "BucketEncryption") &&
+    (key === CfnKey.SERVER_SIDE_ENCRYPTION_CONFIGURATION ||
+      key === CfnKey.BUCKET_ENCRYPTION) &&
     typeof value === "object" &&
     value !== null
   ) {
@@ -233,38 +234,42 @@ export function formatSpecialValue(key: string, value: unknown): string | null {
   }
   // LifecycleConfiguration → summarize rules
   if (
-    key === "LifecycleConfiguration" &&
+    key === CfnKey.LIFECYCLE_CONFIGURATION &&
     typeof value === "object" &&
     value !== null
   ) {
-    const rules = (value as Record<string, unknown>)["Rules"] as unknown[];
+    const rules = (value as Record<string, unknown>)[CfnKey.RULES] as unknown[];
     if (Array.isArray(rules) && rules.length > 0) {
       const rule = rules[0] as Record<string, unknown>;
       const parts: string[] = [];
       if (
-        rule["Transitions"] &&
-        Array.isArray(rule["Transitions"]) &&
-        (rule["Transitions"] as Record<string, unknown>[]).length > 0
+        rule[CfnKey.TRANSITIONS] &&
+        Array.isArray(rule[CfnKey.TRANSITIONS]) &&
+        (rule[CfnKey.TRANSITIONS] as Record<string, unknown>[]).length > 0
       ) {
-        const t = (rule["Transitions"] as Record<string, unknown>[])[0];
-        const days = t?.["TransitionInDays"];
+        const t = (rule[CfnKey.TRANSITIONS] as Record<string, unknown>[])[0];
+        const days = t?.[CfnKey.TRANSITION_IN_DAYS];
         parts.push(days ? `transition to IA after ${days}d` : "transition");
-      } else if (rule["TransitionInDays"]) {
-        parts.push(`transition to IA after ${rule["TransitionInDays"]}d`);
+      } else if (rule[CfnKey.TRANSITION_IN_DAYS]) {
+        parts.push(
+          `transition to IA after ${rule[CfnKey.TRANSITION_IN_DAYS]}d`,
+        );
       }
-      if (rule["ExpirationInDays"])
-        parts.push(`expire after ${rule["ExpirationInDays"]}d`);
+      if (rule[CfnKey.EXPIRATION_IN_DAYS])
+        parts.push(`expire after ${rule[CfnKey.EXPIRATION_IN_DAYS]}d`);
       return parts.length > 0 ? parts.join(", ") : `${rules.length} rule(s)`;
     }
     return "Configured";
   }
   // CorsConfiguration → show rule count
   if (
-    key === "CorsConfiguration" &&
+    key === CfnKey.CORS_CONFIGURATION &&
     typeof value === "object" &&
     value !== null
   ) {
-    const rules = (value as Record<string, unknown>)["CorsRules"] as unknown[];
+    const rules = (value as Record<string, unknown>)[
+      CfnKey.CORS_RULES
+    ] as unknown[];
     if (Array.isArray(rules)) return `${rules.length} CORS rule(s)`;
     return "Configured";
   }

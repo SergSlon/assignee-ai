@@ -114,7 +114,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
   ],
   advancedFields: [
     {
-      name: "SecurityGroups",
+      name: CfnKey.SECURITY_GROUPS,
       question: {
         type: "multi",
         label: "Security groups",

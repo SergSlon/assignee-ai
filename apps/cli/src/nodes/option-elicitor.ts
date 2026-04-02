@@ -19,6 +19,7 @@ import {
   RESOURCE_TYPES,
   defaultPluginRegistry,
   MissingRequiredFieldsError,
+  CfnKey,
 } from "@assignee/core";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { ResourceField } from "@assignee/core";
@@ -112,7 +113,8 @@ export async function optionElicitorNode(
   const presetElicited: Record<string, unknown> = {};
   if (state.presetFields) {
     for (const [key, val] of Object.entries(state.presetFields)) {
-      presetElicited[key] = val === "true" ? true : val === "false" ? false : val;
+      presetElicited[key] =
+        val === "true" ? true : val === "false" ? false : val;
     }
   }
 
@@ -226,7 +228,7 @@ export async function optionElicitorNode(
   if (liveCategories && liveCategories.length > 0) {
     dynamicFields = dynamicFields.map((field) => {
       if (
-        field.name !== "InstanceType" ||
+        field.name !== CfnKey.INSTANCE_TYPE ||
         field.question.type !== "categorySelect"
       )
         return field;
@@ -341,9 +343,7 @@ export async function optionElicitorNode(
 
   // Resolve field configs using mergeConfigs, re-keyed by fieldFetchKey
   // so showIf-variant fields (e.g., multiple EngineVersion per engine) are preserved.
-  const resolveFieldsWithConfig = (
-    fields: ResourceField[],
-  ) => {
+  const resolveFieldsWithConfig = (fields: ResourceField[]) => {
     const mergeInput: MergeConfigsInput = {
       pluginFields: fields,
       resourceType: state.resourceType,
@@ -353,7 +353,8 @@ export async function optionElicitorNode(
     };
     const raw = mergeConfigs(mergeInput);
     // Re-key from field.name to fieldFetchKey for disambiguation
-    const result: Record<string, import("@assignee/core").ResolvedFieldConfig> = {};
+    const result: Record<string, import("@assignee/core").ResolvedFieldConfig> =
+      {};
     for (const field of fields) {
       const key = fieldFetchKey(field);
       const resolved = raw[field.name];
@@ -500,7 +501,11 @@ export async function optionElicitorNode(
       const res = resolvedCommon[fieldFetchKey(f)];
       if (!res) return false;
       if (res.policy === FieldPolicy.NEVER_ASK) return false;
-      if (f.question.showIf && !evaluateShowIf(f.question.showIf, elicitedOptions)) return false;
+      if (
+        f.question.showIf &&
+        !evaluateShowIf(f.question.showIf, elicitedOptions)
+      )
+        return false;
       return true;
     }).length;
   let totalCommon = countVisibleCommon();
@@ -596,7 +601,11 @@ export async function optionElicitorNode(
           const res = resolvedAdvanced[fieldFetchKey(f)];
           if (!res) return false;
           if (res.policy === FieldPolicy.NEVER_ASK) return false;
-          if (f.question.showIf && !evaluateShowIf(f.question.showIf, elicitedOptions)) return false;
+          if (
+            f.question.showIf &&
+            !evaluateShowIf(f.question.showIf, elicitedOptions)
+          )
+            return false;
           return true;
         }).length;
       let totalAdv = countVisibleAdv();

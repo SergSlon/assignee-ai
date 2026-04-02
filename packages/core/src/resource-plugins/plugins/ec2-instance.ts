@@ -283,7 +283,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "EbsVolumeType",
+      name: CfnKey.EBS_VOLUME_TYPE,
       question: {
         type: "enum",
         label: "EBS volume type (gp3/gp2/io1)",
@@ -301,7 +301,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "EbsVolumeSize",
+      name: CfnKey.EBS_VOLUME_SIZE,
       question: {
         type: "string",
         label: "Root volume size (GB)",
@@ -317,7 +317,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       },
     },
     {
-      name: "EbsEncrypted",
+      name: CfnKey.EBS_ENCRYPTED,
       question: {
         type: "boolean",
         label: "Encrypt root volume?",

@@ -3,6 +3,7 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 
 /**
  * Pricing strategy for AWS::ApiGatewayV2::Api.
@@ -15,7 +16,7 @@ import type {
  */
 export const apiGatewayV2PricingStrategy: PricingStrategy = {
   estimateLocal(desiredState?: Record<string, unknown>): PricingEstimate {
-    const protocol = desiredState?.["ProtocolType"] ?? "HTTP";
+    const protocol = desiredState?.[CfnKey.PROTOCOL_TYPE] ?? "HTTP";
     if (protocol === "WEBSOCKET") {
       return {
         perMonth: null,
@@ -30,7 +31,7 @@ export const apiGatewayV2PricingStrategy: PricingStrategy = {
   },
 
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig | null {
-    const protocol = desiredState?.["ProtocolType"] ?? "HTTP";
+    const protocol = desiredState?.[CfnKey.PROTOCOL_TYPE] ?? "HTTP";
 
     if (protocol === "WEBSOCKET") {
       return {

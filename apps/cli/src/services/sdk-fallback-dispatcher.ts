@@ -24,6 +24,7 @@ import {
   CCAPI_SDK_ROUTABLE_TYPES,
   CCAPI_REDIRECT_TYPES,
   ConfigurationError,
+  CfnKey,
 } from "@assignee/core";
 import {
   ProvisioningErrorKind,
@@ -205,16 +206,17 @@ export class SDKFallbackDispatcher {
   ): Promise<FallbackResult<{ identifier: string }>> {
     try {
       const command = new CreateEventSourceMappingCommand({
-        EventSourceArn: desiredState["EventSourceArn"] as string,
-        FunctionName: desiredState["FunctionName"] as string,
-        BatchSize: (desiredState["BatchSize"] as number | undefined) ?? 10,
-        Enabled: (desiredState["Enabled"] as boolean | undefined) ?? true,
-        StartingPosition: desiredState["StartingPosition"] as
+        EventSourceArn: desiredState[CfnKey.EVENT_SOURCE_ARN] as string,
+        FunctionName: desiredState[CfnKey.FUNCTION_NAME] as string,
+        BatchSize:
+          (desiredState[CfnKey.BATCH_SIZE] as number | undefined) ?? 10,
+        Enabled: (desiredState[CfnKey.ENABLED] as boolean | undefined) ?? true,
+        StartingPosition: desiredState[CfnKey.STARTING_POSITION] as
           | "TRIM_HORIZON"
           | "LATEST"
           | "AT_TIMESTAMP"
           | undefined,
-        Tags: desiredState["Tags"] as Record<string, string> | undefined,
+        Tags: desiredState[CfnKey.TAGS] as Record<string, string> | undefined,
       });
 
       const result = await this.lambdaClient.send(command);
@@ -246,9 +248,9 @@ export class SDKFallbackDispatcher {
   ): Promise<FallbackResult<{ identifier: string }>> {
     try {
       const command = new SubscribeCommand({
-        TopicArn: desiredState["TopicArn"] as string,
-        Protocol: desiredState["Protocol"] as string,
-        Endpoint: desiredState["Endpoint"] as string,
+        TopicArn: desiredState[CfnKey.TOPIC_ARN] as string,
+        Protocol: desiredState[CfnKey.PROTOCOL] as string,
+        Endpoint: desiredState[CfnKey.ENDPOINT] as string,
         ReturnSubscriptionArn: true,
       });
 

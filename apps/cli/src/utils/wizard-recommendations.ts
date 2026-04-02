@@ -11,7 +11,7 @@
 
 import * as clack from "@clack/prompts";
 import chalk from "chalk";
-import { RESOURCE_TYPES } from "@assignee/core";
+import { CfnKey, RESOURCE_TYPES } from "@assignee/core";
 import { ResourceFieldName } from "../constants/resource-fields.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ export const RECOMMENDATION_RULES: RecommendationRule[] = [
       "Versioning is disabled. Enable it if this bucket stores data " +
       "you can't afford to lose.",
     condition: (options) => {
-      const versioning = options["VersioningConfiguration"];
+      const versioning = options[CfnKey.VERSIONING_CONFIGURATION];
       if (versioning === undefined) return true;
       if (typeof versioning === "object" && versioning !== null) {
         return (versioning as Record<string, unknown>)["Status"] !== "Enabled";
@@ -95,7 +95,7 @@ export const RECOMMENDATION_RULES: RecommendationRule[] = [
       "Single-AZ deployment selected. Consider Multi-AZ for production " +
       "database high availability.",
     condition: (options, intent) => {
-      return !options["MultiAZ"] && isProductionIntent(intent);
+      return !options[CfnKey.MULTI_AZ] && isProductionIntent(intent);
     },
   },
   {
@@ -106,7 +106,7 @@ export const RECOMMENDATION_RULES: RecommendationRule[] = [
       "Consider 256+ MB for API handlers — CPU scales with memory, " +
       "improving response latency.",
     condition: (options, intent) => {
-      const mem = options["MemorySize"];
+      const mem = options[CfnKey.MEMORY_SIZE];
       const isLowMem = mem === 128 || mem === "128" || mem === undefined;
       return isLowMem && intent.toLowerCase().includes("api");
     },
@@ -119,7 +119,7 @@ export const RECOMMENDATION_RULES: RecommendationRule[] = [
       "Set reserved concurrency to prevent a single function from " +
       "consuming the account-wide Lambda concurrency pool.",
     condition: (options) => {
-      const val = options["ReservedConcurrentExecutions"];
+      const val = options[CfnKey.RESERVED_CONCURRENT_EXECUTIONS];
       return val === undefined || val === "" || val === null;
     },
   },

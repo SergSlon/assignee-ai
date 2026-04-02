@@ -3,6 +3,7 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 
 /**
  * DynamoDB pricing strategy.
@@ -11,7 +12,9 @@ import type {
  */
 export const dynamodbPricingStrategy: PricingStrategy = {
   estimateLocal(desiredState?: Record<string, unknown>): PricingEstimate {
-    const billingMode = desiredState?.["BillingMode"] as string | undefined;
+    const billingMode = desiredState?.[CfnKey.BILLING_MODE] as
+      | string
+      | undefined;
     const label =
       billingMode === "PROVISIONED"
         ? "Provisioned (per RCU/WCU-hour)"
@@ -20,7 +23,9 @@ export const dynamodbPricingStrategy: PricingStrategy = {
   },
 
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig | null {
-    const billingMode = desiredState?.["BillingMode"] as string | undefined;
+    const billingMode = desiredState?.[CfnKey.BILLING_MODE] as
+      | string
+      | undefined;
 
     if (billingMode === "PROVISIONED") {
       // Query for write capacity unit hourly rate (representative line item)

@@ -41,7 +41,7 @@ export const s3BucketPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "KMSMasterKeyID",
+      name: CfnKey.KMS_MASTER_KEY_ID_S3,
       question: {
         type: "string",
         label: "KMS Key ID (leave blank for SSE-S3)",
@@ -110,7 +110,7 @@ export const s3BucketPlugin: ResourcePlugin = {
   advancedFields: [
     // ── Lifecycle ──
     {
-      name: "EnableLifecycle",
+      name: CfnKey.ENABLE_LIFECYCLE,
       question: {
         type: "boolean",
         label: "Add lifecycle rules?",
@@ -119,7 +119,7 @@ export const s3BucketPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "LifecycleTransitionDays",
+      name: CfnKey.LIFECYCLE_TRANSITION_DAYS,
       question: {
         type: "enum",
         label: "Transition to Infrequent Access after (days)",
@@ -131,24 +131,24 @@ export const s3BucketPlugin: ResourcePlugin = {
         ],
         initialValue: "30",
         hint: "Objects older than this will move to S3 Infrequent Access (~40% cheaper). Choose based on how often you access older data.",
-        showIf: { field: "EnableLifecycle", value: true },
+        showIf: { field: CfnKey.ENABLE_LIFECYCLE, value: true },
       },
     },
     {
-      name: "LifecycleExpirationDays",
+      name: CfnKey.LIFECYCLE_EXPIRATION_DAYS,
       question: {
         type: "string",
         label: "Expire objects after (days, leave blank for never)",
         placeholder: "365",
         hint: "Permanently deletes objects after this many days. Leave blank to keep objects forever. Common: 365 for logs, 90 for temp files.",
-        showIf: { field: "EnableLifecycle", value: true },
+        showIf: { field: CfnKey.ENABLE_LIFECYCLE, value: true },
         validate: (value: unknown, answers?: Record<string, unknown>) => {
           if (!value) return undefined;
           const n = Number(value);
           if (!Number.isInteger(n) || n < 1)
             return "Must be a positive integer (days)";
           // Expiration must be greater than the transition period
-          const transitionRaw = answers?.["LifecycleTransitionDays"];
+          const transitionRaw = answers?.[CfnKey.LIFECYCLE_TRANSITION_DAYS];
           const transitionDays =
             typeof transitionRaw === "number"
               ? transitionRaw
@@ -163,7 +163,7 @@ export const s3BucketPlugin: ResourcePlugin = {
     },
     // ── CORS ──
     {
-      name: "EnableCors",
+      name: CfnKey.ENABLE_CORS,
       question: {
         type: "boolean",
         label: "Enable CORS?",
@@ -172,18 +172,18 @@ export const s3BucketPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "CorsAllowedOrigins",
+      name: CfnKey.CORS_ALLOWED_ORIGINS,
       question: {
         type: "string",
         label: "Allowed origins (comma-separated, * for all)",
         placeholder: "https://example.com, https://app.example.com",
         initialValue: "*",
         hint: "Which domains can make cross-origin requests. Use specific domains in production. '*' allows any domain (less secure).",
-        showIf: { field: "EnableCors", value: true },
+        showIf: { field: CfnKey.ENABLE_CORS, value: true },
       },
     },
     {
-      name: "CorsAllowedMethods",
+      name: CfnKey.CORS_ALLOWED_METHODS,
       question: {
         type: "enum",
         label: "Allowed HTTP methods",
@@ -194,12 +194,12 @@ export const s3BucketPlugin: ResourcePlugin = {
         ],
         initialValue: "GET",
         hint: "GET = read-only (downloads, previews). GET+PUT = read/write (file uploads). All = full access (API backends).",
-        showIf: { field: "EnableCors", value: true },
+        showIf: { field: CfnKey.ENABLE_CORS, value: true },
       },
     },
     // ── Replication ──
     {
-      name: "EnableReplication",
+      name: CfnKey.ENABLE_REPLICATION,
       question: {
         type: "boolean",
         label: "Enable cross-region replication?",
@@ -209,13 +209,13 @@ export const s3BucketPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "ReplicationDestinationBucket",
+      name: CfnKey.REPLICATION_DESTINATION_BUCKET,
       question: {
         type: "string",
         label: "Destination bucket ARN",
         placeholder: "arn:aws:s3:::my-replica-bucket",
         hint: "The S3 bucket ARN in another region where replicas will be stored. The bucket must already exist and have versioning enabled.",
-        showIf: { field: "EnableReplication", value: true },
+        showIf: { field: CfnKey.ENABLE_REPLICATION, value: true },
         validate: (value: unknown) => {
           if (!value || !String(value).trim())
             return "Destination bucket ARN is required when replication is enabled";

@@ -7,6 +7,8 @@
  * @see Story 35.1, Epic 35
  */
 
+import { CfnKey } from "@assignee/core";
+
 /**
  * Maps CFN patch root keys to the wizard field names that a user
  * would have set interactively via option_elicitor.
@@ -15,25 +17,32 @@
  * corresponding wizard fields are "EbsEncrypted", "EbsVolumeType", etc.
  */
 export const wizardKeyMap: Record<string, string[]> = {
-  BlockDeviceMappings: ["EbsEncrypted", "EbsVolumeType", "EbsVolumeSize"],
-  MetadataOptions: ["HttpTokens"],
-  PublicAccessBlockConfiguration: [
-    "BlockPublicAcls",
-    "BlockPublicPolicy",
-    "IgnorePublicAcls",
-    "RestrictPublicBuckets",
+  [CfnKey.BLOCK_DEVICE_MAPPINGS]: [
+    CfnKey.EBS_ENCRYPTED,
+    CfnKey.EBS_VOLUME_TYPE,
+    CfnKey.EBS_VOLUME_SIZE,
   ],
-  PubliclyAccessible: ["PubliclyAccessible"],
-  StorageEncrypted: ["StorageEncrypted"],
-  MultiAZ: ["MultiAZ"],
-  DeletionProtection: ["DeletionProtection"],
-  OwnershipControls: ["OwnershipControls"],
-  VersioningConfiguration: ["VersioningConfiguration"],
-  BucketEncryption: ["BucketEncryption", "KMSMasterKeyID"],
-  LifecycleConfiguration: [
-    "EnableLifecycle",
-    "LifecycleTransitionDays",
-    "LifecycleExpirationDays",
+  [CfnKey.METADATA_OPTIONS]: [CfnKey.HTTP_TOKENS],
+  [CfnKey.PUBLIC_ACCESS_BLOCK]: [
+    CfnKey.BLOCK_PUBLIC_ACLS,
+    CfnKey.BLOCK_PUBLIC_POLICY,
+    CfnKey.IGNORE_PUBLIC_ACLS,
+    CfnKey.RESTRICT_PUBLIC_BUCKETS,
+  ],
+  [CfnKey.PUBLICLY_ACCESSIBLE]: [CfnKey.PUBLICLY_ACCESSIBLE],
+  [CfnKey.STORAGE_ENCRYPTED]: [CfnKey.STORAGE_ENCRYPTED],
+  [CfnKey.MULTI_AZ]: [CfnKey.MULTI_AZ],
+  [CfnKey.DELETION_PROTECTION]: [CfnKey.DELETION_PROTECTION],
+  [CfnKey.OWNERSHIP_CONTROLS]: [CfnKey.OWNERSHIP_CONTROLS],
+  [CfnKey.VERSIONING_CONFIGURATION]: [CfnKey.VERSIONING_CONFIGURATION],
+  [CfnKey.BUCKET_ENCRYPTION]: [
+    CfnKey.BUCKET_ENCRYPTION,
+    CfnKey.KMS_MASTER_KEY_ID_S3,
+  ],
+  [CfnKey.LIFECYCLE_CONFIGURATION]: [
+    CfnKey.ENABLE_LIFECYCLE,
+    CfnKey.LIFECYCLE_TRANSITION_DAYS,
+    CfnKey.LIFECYCLE_EXPIRATION_DAYS,
   ],
 };
 
@@ -71,7 +80,11 @@ export function toSetFlagFromPatch(
 
   // Look at the patch's nested keys to find which wizard field matches
   const patchValue = patch[patchKey];
-  if (typeof patchValue === "object" && patchValue !== null && !Array.isArray(patchValue)) {
+  if (
+    typeof patchValue === "object" &&
+    patchValue !== null &&
+    !Array.isArray(patchValue)
+  ) {
     const nestedKeys = Object.keys(patchValue as Record<string, unknown>);
     for (const nk of nestedKeys) {
       if (fields.includes(nk)) return nk;

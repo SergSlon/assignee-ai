@@ -1,3 +1,4 @@
+import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 
 /**
@@ -10,7 +11,7 @@ export const genericPlugin: ResourcePlugin = {
   resourceType: "generic",
   commonFields: [
     {
-      name: "ResourceName",
+      name: CfnKey.RESOURCE_NAME,
       question: {
         type: "string",
         label: "Resource name",
@@ -19,7 +20,7 @@ export const genericPlugin: ResourcePlugin = {
       },
     },
     {
-      name: "Tags",
+      name: CfnKey.TAGS,
       question: {
         type: "string",
         label: "Tags",
@@ -29,7 +30,10 @@ export const genericPlugin: ResourcePlugin = {
           if (!value) return undefined; // Optional
           const s = String(value).trim();
           if (!s) return undefined;
-          const pairs = s.split(",").map((p) => p.trim()).filter(Boolean);
+          const pairs = s
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean);
           const validPairs = pairs.filter((p) => p.includes(":"));
           if (validPairs.length === 0) {
             return "Invalid tag format. Use Key:Value pairs separated by commas (e.g. env:production, team:backend)";
