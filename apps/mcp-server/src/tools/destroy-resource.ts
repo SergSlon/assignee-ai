@@ -22,12 +22,8 @@ import {
   DeleteResourceCommand,
   GetResourceRequestStatusCommand,
 } from "@aws-sdk/client-cloudcontrol";
-import {
-  EC2Client,
-  DescribeInternetGatewaysCommand,
-  DetachInternetGatewayCommand,
-} from "@aws-sdk/client-ec2";
 import { CCAPI_FALLBACK_TYPES, CCAPI_REDIRECT_TYPES } from "@assignee/core";
+import { destroyRegistry } from "../services/destroy-strategies/index.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -39,14 +35,6 @@ const MAX_POLL_ATTEMPTS = 60;
 const EXTENDED_POLL_ATTEMPTS = 300; // 10 minutes for slow deletes (RDS, NatGW)
 /** @see DESTROY_POLL_INTERVAL_MS in apps/cli/src/config/constants.ts — keep in sync */
 const POLL_INTERVAL_MS = 2_000;
-
-const SLOW_DELETE_TYPES = new Set([
-  "AWS::RDS::DBInstance",
-  "AWS::RDS::DBCluster",
-  "AWS::EC2::NatGateway",
-  "AWS::EC2::InternetGateway", // detach + delete can exceed 2min
-  "AWS::ElasticLoadBalancingV2::LoadBalancer",
-]);
 
 // ── Zod schema ───────────────────────────────────────────────────────────────
 
@@ -202,37 +190,24 @@ function extractRegionFromArn(arn: string, defaultRegion: string): string {
 }
 
 /**
- * Resource types whose CloudControl primaryIdentifier is the full ARN.
- * For these types, DeleteResourceCommand.Identifier must be the ARN itself,
- * NOT the extracted name/id.
- */
-const ARN_IDENTIFIER_TYPES = new Set([
-  "AWS::SNS::Topic", // primaryIdentifier: /properties/TopicArn
-  "AWS::ElasticLoadBalancingV2::LoadBalancer", // /properties/LoadBalancerArn
-  "AWS::SecretsManager::Secret", // /properties/Id (which is the ARN)
-  "AWS::ECS::Cluster", // /properties/Arn
-]);
-
-/**
  * Returns the correct CloudControl Identifier for a resource given its ARN and type.
- * Most types use the extracted name/id, but some need the full ARN.
+ * Delegates to the destroy strategy registry for type-specific identifier resolution.
+ * Most types use the extracted name/id, but some need the full ARN or custom construction.
  */
 function getCloudControlIdentifier(
   arn: string,
   resourceType: string,
   extractedId: string,
 ): string {
-  if (ARN_IDENTIFIER_TYPES.has(resourceType)) {
+  const strategy = destroyRegistry.get(resourceType);
+  if (strategy?.usesArnIdentifier) {
     return arn;
   }
-  // SQS uses QueueUrl as identifier — construct from ARN
-  if (resourceType === "AWS::SQS::Queue") {
-    // arn:aws:sqs:us-east-1:123456789012:queue-name → https://sqs.us-east-1.amazonaws.com/123456789012/queue-name
-    const parts = arn.split(":");
-    const region = parts[3] || "us-east-1";
-    const account = parts[4] || "";
-    const queueName = parts[5] || extractedId;
-    return `https://sqs.${region}.amazonaws.com/${account}/${queueName}`;
+  if (strategy?.extractIdentifier) {
+    return strategy.extractIdentifier(
+      arn,
+      extractRegionFromArn(arn, "us-east-1"),
+    );
   }
   return extractedId;
 }
@@ -355,10 +330,10 @@ async function pollDeleteStatus(
 ): Promise<{ success: boolean; message?: string }> {
   const MAX_TRANSIENT_ERRORS = 3;
   let transientErrors = 0;
-  const maxAttempts =
-    resourceType && SLOW_DELETE_TYPES.has(resourceType)
-      ? EXTENDED_POLL_ATTEMPTS
-      : MAX_POLL_ATTEMPTS;
+  const strategy = resourceType ? destroyRegistry.get(resourceType) : undefined;
+  const maxAttempts = strategy?.isSlow
+    ? EXTENDED_POLL_ATTEMPTS
+    : MAX_POLL_ATTEMPTS;
   for (let i = 0; i < maxAttempts; i++) {
     try {
       const result = await ccClient.send(
@@ -390,35 +365,6 @@ async function pollDeleteStatus(
   }
 
   return { success: false, message: "Delete operation timed out" };
-}
-
-// ── Pre-delete hooks ─────────────────────────────────────────────────────────
-
-/**
- * InternetGateways must be detached from their VPC before CloudControl can delete them.
- * This function finds all VPC attachments and detaches the IGW.
- */
-async function detachInternetGatewayIfNeeded(
-  igwId: string,
-  region: string,
-): Promise<void> {
-  const ec2 = new EC2Client({ region });
-  const desc = await ec2.send(
-    new DescribeInternetGatewaysCommand({
-      InternetGatewayIds: [igwId],
-    }),
-  );
-  const attachments = desc.InternetGateways?.[0]?.Attachments ?? [];
-  for (const att of attachments) {
-    if (att.VpcId && att.State !== "detached") {
-      await ec2.send(
-        new DetachInternetGatewayCommand({
-          InternetGatewayId: igwId,
-          VpcId: att.VpcId,
-        }),
-      );
-    }
-  }
 }
 
 // ── Tool registration ────────────────────────────────────────────────────────
@@ -592,38 +538,23 @@ export function registerDestroyResource(server: McpServer): void {
         };
       }
 
-      // ── Pre-delete hooks ────────────────────────────────────────────
-      // DynamoDB: disable deletion protection before deleting
-      if (resolved.resourceType === "AWS::DynamoDB::Table") {
-        try {
-          const { DynamoDBClient, UpdateTableCommand } =
-            await import("@aws-sdk/client-dynamodb");
-          const ddb = new DynamoDBClient({ region: resolved.region });
-          await ddb.send(
-            new UpdateTableCommand({
-              TableName: resolved.identifier,
-              DeletionProtectionEnabled: false,
-            }),
-          );
-        } catch {
-          // Non-fatal — table may not have protection enabled
-        }
-      }
-
-      // InternetGateway must be detached from VPC before deletion
-      if (resolved.resourceType === "AWS::EC2::InternetGateway") {
-        try {
-          await detachInternetGatewayIfNeeded(
-            resolved.identifier,
-            resolved.region,
-          );
-        } catch (detachErr: unknown) {
-          // Non-fatal — log for debugging, CloudControl will give a clearer error if still attached
-          const msg =
-            detachErr instanceof Error ? detachErr.message : String(detachErr);
-          console.error(
-            `[destroy_resource] IGW detach warning for ${resolved.identifier}: ${msg}`,
-          );
+      // ── Pre-delete hooks (delegated to strategy registry) ──────────
+      {
+        const preDestroyStrategy = destroyRegistry.get(resolved.resourceType);
+        if (preDestroyStrategy?.preDestroy) {
+          try {
+            await preDestroyStrategy.preDestroy(
+              resolved.identifier,
+              resolved.region,
+            );
+          } catch (preErr: unknown) {
+            // Non-fatal — log for debugging, CloudControl will give a clearer error
+            const msg =
+              preErr instanceof Error ? preErr.message : String(preErr);
+            console.error(
+              `[destroy_resource] pre-destroy warning for ${resolved.resourceType} ${resolved.identifier}: ${msg}`,
+            );
+          }
         }
       }
 
