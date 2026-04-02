@@ -54,8 +54,15 @@ describe("getFreeTierNote", () => {
   });
 
   it("returns legacy_eligible for EC2::Instance with pre-July-2025 account within 12 months", () => {
-    // Use a date that is definitely within 12 months of today (2026-03-22)
-    const result = getFreeTierNote("AWS::EC2::Instance", "2025-06-15");
+    // Use a date that is definitely within 12 months of today (dynamic)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const accountDate = sixMonthsAgo.toISOString().slice(0, 10);
+    // Ensure account date is before the July 2025 cutoff
+    const result = getFreeTierNote(
+      "AWS::EC2::Instance",
+      accountDate < "2025-07-15" ? accountDate : "2025-06-01",
+    );
     expect(result).toEqual({
       type: "legacy_eligible",
       message: expect.stringContaining("750 hrs/month"),
@@ -176,7 +183,14 @@ describe("getFreeTierNote", () => {
   });
 
   it("returns legacy_eligible for RDS with pre-July-2025 account within 12 months", () => {
-    const result = getFreeTierNote("AWS::RDS::DBInstance", "2025-04-01");
+    // Use a dynamic date that is within 12 months and before July 2025 cutoff
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const accountDate = sixMonthsAgo.toISOString().slice(0, 10);
+    const result = getFreeTierNote(
+      "AWS::RDS::DBInstance",
+      accountDate < "2025-07-15" ? accountDate : "2025-06-01",
+    );
     expect(result).toEqual({
       type: "legacy_eligible",
       message: expect.stringContaining("750 hrs/month"),
