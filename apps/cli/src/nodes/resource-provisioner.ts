@@ -16,6 +16,8 @@ import {
   PROVISIONING_ERROR_CODES,
   type ResourceType,
   ProvisioningError,
+  CfnKey,
+  EIP_AUTO_ALLOCATE,
 } from "@assignee/core";
 import type { ProvisioningPort } from "../services/provisioning-port.js";
 import { ProvisioningErrorKind } from "../services/provisioning-port.js";
@@ -229,7 +231,7 @@ export async function resourceProvisionerNode(
   }
 
   // ── EIP allocation for NatGateway (deferred from plan_generator) ─────────
-  // Plan generator sets AllocationId = "AUTO_ALLOCATE_EIP" as a placeholder
+  // Plan generator sets AllocationId = EIP_AUTO_ALLOCATE as a placeholder
   // to avoid leaking EIPs when the user runs `plan` but never `apply`.
   // We resolve it here at apply time so the EIP is only allocated when actually needed.
   //
@@ -237,7 +239,7 @@ export async function resourceProvisionerNode(
   // previously-allocated EIP tagged with this runId instead of leaking a new one.
   if (
     state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
-    state.desiredState["AllocationId"] === "AUTO_ALLOCATE_EIP"
+    state.desiredState[CfnKey.ALLOCATION_ID] === EIP_AUTO_ALLOCATE
   ) {
     try {
       const {
@@ -304,7 +306,7 @@ export async function resourceProvisionerNode(
         }
       }
 
-      state.desiredState["AllocationId"] = allocationId;
+      state.desiredState[CfnKey.ALLOCATION_ID] = allocationId;
     } catch (eipErr: unknown) {
       const errMsg = eipErr instanceof Error ? eipErr.message : String(eipErr);
       return {
@@ -354,8 +356,8 @@ export async function resourceProvisionerNode(
     // Release EIP if we allocated one for NatGateway — best-effort cleanup
     if (
       state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
-      state.desiredState["AllocationId"] &&
-      state.desiredState["AllocationId"] !== "AUTO_ALLOCATE_EIP"
+      state.desiredState[CfnKey.ALLOCATION_ID] &&
+      state.desiredState[CfnKey.ALLOCATION_ID] !== EIP_AUTO_ALLOCATE
     ) {
       try {
         const { EC2Client, ReleaseAddressCommand } =
@@ -365,7 +367,7 @@ export async function resourceProvisionerNode(
         });
         await ec2.send(
           new ReleaseAddressCommand({
-            AllocationId: state.desiredState["AllocationId"] as string,
+            AllocationId: state.desiredState[CfnKey.ALLOCATION_ID] as string,
           }),
         );
       } catch {
