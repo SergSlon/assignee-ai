@@ -505,6 +505,14 @@ export class ErrorMessageRegistry {
       [AwsErrorName.THROTTLING, AwsErrorName.THROTTLING],
       [AwsErrorName.RESOURCE_NOT_FOUND, AwsErrorName.RESOURCE_NOT_FOUND],
       [AwsErrorName.VALIDATION_EXCEPTION, AwsErrorName.VALIDATION_EXCEPTION],
+      [
+        "TagValue you have provided is invalid",
+        AwsErrorName.INVALID_PARAMETER_VALUE,
+      ],
+      [
+        "TagKey you have provided is invalid",
+        AwsErrorName.INVALID_PARAMETER_VALUE,
+      ],
       ["Resource already exists", PROVISIONING_ERROR_CODES.ALREADY_EXISTS],
       ["already exists", PROVISIONING_ERROR_CODES.ALREADY_EXISTS],
       ["Request throttled", PROVISIONING_ERROR_CODES.THROTTLED],
@@ -617,20 +625,28 @@ export class ErrorMessageRegistry {
   }
 
   private matchCheckpointError(message: string): ErrorMessageEntry | undefined {
+    // Only match checkpoint-specific patterns — avoid broad substring matches
+    // that incorrectly classify AWS service errors (e.g. "TagValue is invalid").
+    const lc = message.toLowerCase();
+    const isCheckpointContext =
+      lc.includes("checkpoint") || lc.includes("plan file");
+
     if (
-      message.includes("not found") ||
-      message.includes("ENOENT") ||
-      message.includes("no such file")
+      isCheckpointContext &&
+      (lc.includes("not found") ||
+        lc.includes("enoent") ||
+        lc.includes("no such file"))
     ) {
       return this.entries.get(ErrorCode.CHECKPOINT_NOT_FOUND);
     }
-    if (message.includes("expired") || message.includes("TTL")) {
+    if (isCheckpointContext && (lc.includes("expired") || lc.includes("ttl"))) {
       return this.entries.get(ErrorCode.CHECKPOINT_EXPIRED);
     }
     if (
-      message.includes("invalid") ||
-      message.includes("corrupt") ||
-      message.includes("schema")
+      isCheckpointContext &&
+      (lc.includes("invalid") ||
+        lc.includes("corrupt") ||
+        lc.includes("schema"))
     ) {
       return this.entries.get(ErrorCode.CHECKPOINT_INVALID);
     }

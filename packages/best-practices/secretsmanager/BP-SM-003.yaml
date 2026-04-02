@@ -8,5 +8,6 @@ expected_value: true
 source: "AWS Well-Architected Framework — Security Pillar"
 description: "Secrets should have automatic rotation enabled to reduce the risk of credential compromise. Long-lived credentials are a common attack vector. Rotation is configured via a separate AWS::SecretsManager::RotationSchedule companion resource."
 remediation: "Create an AWS::SecretsManager::RotationSchedule resource linked to this secret with an appropriate rotation interval (e.g., 30 days). Provide a Lambda rotation function ARN that handles the rotation logic for your secret type."
+consequence: "Long-lived credentials never expire — a single leak gives attackers persistent access for months or years without detection."
 category: security
 lastVerified: "2026-03-24"

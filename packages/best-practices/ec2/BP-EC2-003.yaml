@@ -8,6 +8,7 @@ expected_value: "gp3"
 source: "AWS Well-Architected Framework — Cost Optimization Pillar"
 description: "EC2 instances should use gp3 EBS volumes instead of gp2. gp3 provides 20% lower cost per GB, 3000 baseline IOPS (vs 100-3000 variable for gp2), and 125 MiB/s baseline throughput."
 remediation: "Use gp3 volumes — 20% cheaper than gp2 with better baseline performance (3000 IOPS, 125 MiB/s). Migrate existing gp2 volumes to gp3 with zero downtime using EBS Modify Volume."
+consequence: "You pay 20% more per GB for worse baseline performance — gp2 IOPS scale with volume size, so small volumes get as few as 100 IOPS."
 category: cost
 lastVerified: "2026-03-22"
 autoFixable: true

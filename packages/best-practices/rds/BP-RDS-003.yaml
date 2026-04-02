@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "RDS.5"
 description: "RDS DB instances should be configured for Multi-AZ deployments to ensure high availability. Multi-AZ provides automatic failover to a standby replica in a different Availability Zone during planned maintenance or unplanned outages."
 remediation: "Set MultiAZ to true. This creates a synchronous standby replica in a different AZ. For Aurora, use multiple instances across AZs instead."
+consequence: "An AZ outage or hardware failure takes down your database with no automatic failover — expect 30+ minutes of downtime."
 category: reliability
 lastVerified: "2026-03-22"

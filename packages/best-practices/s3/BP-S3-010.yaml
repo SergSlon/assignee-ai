@@ -9,6 +9,17 @@ source: "AWS Security Hub FSBP"
 source_id: "S3.13"
 description: "S3 buckets should have lifecycle policies configured to manage object transitions and expirations. Without lifecycle rules, storage costs grow unbounded and stale data remains accessible unnecessarily."
 remediation: "Configure LifecycleConfiguration with rules to transition objects to cheaper storage classes (e.g., Glacier) and expire objects that are no longer needed."
-fix_hint: "Add lifecycle rules to move old data to cheaper storage"
+consequence: "Storage costs grow unbounded as stale data accumulates — bills increase month over month with no automatic cleanup."
+fix_hint: "Add lifecycle rule (IA at 30d)"
 category: cost
-lastVerified: "2026-03-22"
+lastVerified: "2026-04-02"
+fixType: "auto"
+autoFixable: true
+desiredStatePatch:
+  LifecycleConfiguration:
+    Rules:
+      - Id: "assignee-default-lifecycle"
+        Status: "Enabled"
+        Transitions:
+          - StorageClass: "STANDARD_IA"
+            TransitionInDays: 30

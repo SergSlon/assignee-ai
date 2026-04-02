@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "ECR.3"
 description: "ECR repositories should have lifecycle policies to automatically remove old or untagged images. Without lifecycle policies, storage costs grow unbounded as images accumulate."
 remediation: "Configure a LifecyclePolicy to expire images based on count or age. Common patterns include keeping only the last N tagged images and removing untagged images after a set period."
+consequence: "Old and untagged images accumulate indefinitely — ECR storage costs grow unchecked with hundreds of unused image layers."
 category: cost_optimization
 lastVerified: "2026-03-24"

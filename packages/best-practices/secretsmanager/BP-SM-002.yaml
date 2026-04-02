@@ -8,5 +8,6 @@ expected_value: true
 source: "AWS Well-Architected Framework — Security Pillar"
 description: "Secrets should use a customer-managed KMS key (CMK) rather than the default AWS-managed key. Customer-managed keys provide full control over key rotation, auditing via CloudTrail, cross-account access policies, and key deletion scheduling."
 remediation: "Set KmsKeyId to the ARN or alias of a customer-managed KMS key. Create a dedicated KMS key for secrets encryption with appropriate key policies."
+consequence: "AWS-managed key offers no key policy control, no CloudTrail key-usage audit, and no cross-account access — compliance gaps and no rotation control."
 category: security
 lastVerified: "2026-03-24"

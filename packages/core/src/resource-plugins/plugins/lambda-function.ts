@@ -238,6 +238,26 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         label: "Environment Variables",
         placeholder: "KEY1=value1,KEY2=value2",
         hint: "Comma-separated KEY=VALUE pairs. These are injected into the function's runtime environment. Sensitive values should use SSM Parameter Store references instead.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value).trim();
+          if (!s) return undefined;
+          const pairs = s
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean);
+          for (const pair of pairs) {
+            const eqIdx = pair.indexOf("=");
+            if (eqIdx <= 0)
+              return `Invalid pair "${pair}" — must be KEY=VALUE format`;
+            const key = pair.slice(0, eqIdx).trim();
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key))
+              return `Invalid key "${key}" — must start with a letter or underscore and contain only alphanumerics/underscores`;
+            if (key.startsWith("AWS_"))
+              return `Key "${key}" uses reserved AWS_ prefix — Lambda reserves environment variables starting with AWS_`;
+          }
+          return undefined;
+        },
       },
       toCfn: (value: unknown) => {
         if (!value || typeof value !== "string" || !value.trim()) {
@@ -384,6 +404,21 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         label: "Lambda Layers (comma-separated ARNs)",
         placeholder: "arn:aws:lambda:us-east-1:123456789012:layer:my-layer:1",
         hint: "Up to 5 Lambda Layers providing shared code or dependencies. Each ARN must include the version number. Total unzipped size of all layers + function must be under 250 MB.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value).trim();
+          if (!s) return undefined;
+          const arns = s
+            .split(",")
+            .map((a) => a.trim())
+            .filter(Boolean);
+          if (arns.length > 5) return "Maximum 5 Lambda Layers allowed";
+          for (const arn of arns) {
+            if (!arn.startsWith("arn:aws:lambda:"))
+              return `Invalid layer ARN "${arn}" — must start with arn:aws:lambda:`;
+          }
+          return undefined;
+        },
       },
       toCfn: (v: unknown) => {
         if (!v || typeof v !== "string" || !v.trim()) return undefined;

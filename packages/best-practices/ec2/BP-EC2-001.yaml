@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "EC2.8"
 description: "EC2 instances must enforce IMDSv2 by requiring tokens. IMDSv1 is vulnerable to SSRF attacks that can leak IAM credentials from the instance metadata service."
 remediation: "Set MetadataOptions.HttpTokens to 'required' to enforce IMDSv2. This blocks IMDSv1 requests that do not include a session token."
+consequence: "A single SSRF vulnerability lets attackers steal IAM credentials from IMDSv1 in seconds — the #1 cause of EC2 credential theft in the wild."
 category: security
 lastVerified: "2026-03-22"
 autoFixable: true

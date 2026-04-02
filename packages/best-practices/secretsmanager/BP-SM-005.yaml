@@ -9,5 +9,6 @@ source: "TrustedAdvisor"
 source_id: "TA-sm-rotation"
 description: "Secrets Manager secrets should have automatic rotation configured to minimize the window of exposure for compromised credentials. Long-lived secrets are a common attack vector."
 remediation: "Configure RotationRules with a rotation Lambda function. Set AutomaticallyAfterDays to 30-90 days depending on the sensitivity of the secret."
+consequence: "Static secrets remain valid indefinitely after compromise — attackers maintain persistent access with no forced credential expiry."
 category: security
 lastVerified: "2026-03-24"

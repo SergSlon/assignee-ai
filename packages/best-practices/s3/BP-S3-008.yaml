@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "S3.12"
 description: "S3 buckets should use BucketOwnerEnforced ownership to disable ACLs entirely. ACLs are a legacy access control mechanism that is difficult to audit and can lead to unintended public access."
 remediation: "Set OwnershipControls.Rules[0].ObjectOwnership to 'BucketOwnerEnforced'. This disables ACLs and ensures all access is managed via IAM and bucket policies."
+consequence: "Legacy ACLs remain active — hard-to-audit access grants accumulate over time, creating invisible public exposure paths."
 category: security
 lastVerified: "2026-03-22"
 autoFixable: true

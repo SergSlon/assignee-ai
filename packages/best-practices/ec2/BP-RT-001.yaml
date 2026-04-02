@@ -12,6 +12,7 @@ source: "AWS Well-Architected Framework"
 source_id: "SEC-05"
 description: "A route table associated with private subnets must NOT have a 0.0.0.0/0 route pointing to an InternetGateway. Private subnets should route outbound internet traffic through a NatGateway to prevent direct inbound access from the internet. Routing private subnets through an IGW effectively makes them public, violating network segmentation."
 remediation: "Replace the InternetGateway target (GatewayId) with a NatGateway target (NatGatewayId) for any 0.0.0.0/0 route in route tables associated with private subnets. Ensure only public route tables reference an InternetGateway."
+consequence: "Routing private subnets through an IGW makes them effectively public — instances get direct inbound internet access, destroying network isolation."
 category: security
 lastVerified: "2026-03-24"
 blocking: true

@@ -8,6 +8,7 @@ expected_value: true
 source: "AWS Well-Architected Security Pillar"
 description: "ECS clusters that support ECS Exec should configure logging for execute command sessions. Without logging, interactive shell sessions into containers are unauditable, creating a security blind spot for forensics and compliance."
 remediation: "Set Configuration.ExecuteCommandConfiguration.Logging to a valid value (e.g., 'OVERRIDE' with a CloudWatch log group or S3 bucket, or 'DEFAULT' to use the awslogs driver)."
+consequence: "Interactive shell sessions into containers are completely unauditable — insider threats and breach activity leave no trace."
 category: security
 lastVerified: "2026-04-01"
 blocking: false

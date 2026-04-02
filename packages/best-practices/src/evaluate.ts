@@ -257,6 +257,11 @@ function buildFinding(bp: BestPractice): BPFinding {
     finding.interactiveOptions = bp.interactiveOptions;
   }
 
+  // Story 43.1: Propagate consequence text for risk display
+  if (bp.consequence) {
+    finding.consequence = bp.consequence;
+  }
+
   return finding;
 }
 
@@ -312,16 +317,17 @@ export function evaluateTriggers(
       continue;
     }
 
-    // Determine if this practice applies to the current resource
+    // Determine if this practice applies to the current resource.
+    // resource_type is ALWAYS checked first — triggers add extra conditions
+    // (intent keywords, pattern IDs, etc.) but never bypass the type check.
+    if (bp.resource_type !== context.resourceType) continue;
+
     if (bp.triggers !== undefined && bp.triggers.length > 0) {
       // Has explicit triggers — at least one must match
       const anyTriggerMatches = bp.triggers.some((trigger) =>
         matchesTrigger(trigger, context),
       );
       if (!anyTriggerMatches) continue;
-    } else {
-      // No triggers array — fall back to matching by resource_type field
-      if (bp.resource_type !== context.resourceType) continue;
     }
 
     // Compound pattern awareness: skip rules that are satisfied at the pattern level

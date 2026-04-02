@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "RDS.9"
 description: "RDS instances should export database logs to CloudWatch Logs for centralized monitoring and alerting. Without log exports, database errors and security events cannot be easily analyzed."
 remediation: "Set EnableCloudwatchLogsExports to include relevant log types (e.g., 'audit', 'error', 'general', 'slowquery' for MySQL; 'postgresql', 'upgrade' for PostgreSQL)."
+consequence: "Database errors and security events are trapped on the instance — no centralized alerting, no forensics after incidents."
 category: security
 lastVerified: "2026-03-24"

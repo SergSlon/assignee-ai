@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "IAM.5"
 description: "IAM users with console access should have multi-factor authentication (MFA) enabled. Without MFA, compromised passwords alone grant full access to the AWS account."
 remediation: "Enable MFA for all IAM users with console access. Use virtual MFA, hardware TOTP tokens, or FIDO2 security keys. Prefer hardware-based MFA for root and privileged users."
+consequence: "A leaked or phished password alone grants full console access — attackers walk in without any second factor challenge."
 category: security
 lastVerified: "2026-03-22"

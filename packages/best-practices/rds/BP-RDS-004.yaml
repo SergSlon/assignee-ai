@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "RDS.8"
 description: "RDS DB instances should have deletion protection enabled to prevent accidental or unauthorized deletion. This acts as a safeguard against data loss from human error or compromised credentials."
 remediation: "Set DeletionProtection to true. This prevents the instance from being deleted via the API or console until deletion protection is explicitly disabled."
+consequence: "A single misclick, rogue script, or compromised credential can permanently destroy your production database."
 category: reliability
 lastVerified: "2026-03-22"

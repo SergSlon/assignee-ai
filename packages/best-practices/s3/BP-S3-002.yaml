@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "S3.1"
 description: "S3 buckets must have BlockPublicPolicy enabled to reject bucket policies that grant public access. Without this, a misconfigured policy can expose the entire bucket."
 remediation: "Set PublicAccessBlockConfiguration.BlockPublicPolicy to true. This prevents any bucket policy from granting public access."
+consequence: "A single misconfigured bucket policy can expose every object in the bucket to the entire internet."
 category: security
 lastVerified: "2026-03-22"
 blocking: true

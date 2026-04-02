@@ -9,6 +9,7 @@ source: "AWS Cost Optimization Pillar"
 source_id: "COST-07"
 description: "NatGateway incurs hourly charges (~$32/month baseline) even with zero traffic, plus per-GB data processing fees for all traffic. If your private subnets only need access to AWS services like S3 or DynamoDB, use VPC Gateway Endpoints (free) instead. If no internet egress is needed, consider using ConnectivityType 'private' which avoids EIP costs."
 remediation: "Review traffic patterns for private subnets. Replace NatGateway with VPC Gateway Endpoints for S3 and DynamoDB access. Use VPC Interface Endpoints for other AWS services. Only use NatGateway when true internet egress is required. Consider ConnectivityType 'private' if only VPC-to-VPC communication is needed."
+consequence: "NAT gateways cost ~$32/month even idle, plus $0.045/GB processed — S3 traffic alone through NAT can cost 10x more than free VPC endpoints."
 category: cost_optimization
 lastVerified: "2026-03-24"
 blocking: false

@@ -9,6 +9,7 @@ source: "AWS Well-Architected Framework"
 source_id: "REL-02"
 description: "An InternetGateway must be attached to exactly one VPC via a VPCGatewayAttachment resource. Orphaned InternetGateways (not attached to any VPC) serve no purpose and waste resources. Each AWS account has a limit on the number of IGWs per region."
 remediation: "Ensure a VPCGatewayAttachment resource exists that references both the InternetGateway and the target VPC. Remove any orphaned InternetGateways that are not attached to a VPC."
+consequence: "An unattached IGW wastes your per-region IGW quota and provides zero connectivity — public subnets will have no internet access."
 category: reliability
 lastVerified: "2026-03-24"
 blocking: true

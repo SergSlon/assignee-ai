@@ -1,4 +1,8 @@
-import { SUPPORTED_TYPES_ARRAY, ASSIGNEE_DIR } from "@assignee/core";
+import {
+  SUPPORTED_TYPES_ARRAY,
+  ASSIGNEE_DIR,
+  CACHE_DIR_NAME,
+} from "@assignee/core";
 export { ASSIGNEE_DIR } from "@assignee/core";
 import { EnvVar } from "../constants/env-vars.js";
 
@@ -95,8 +99,28 @@ export const CHECKPOINT_FILE_PREFIX = "checkpoint-" as const;
  */
 export const CleanupCategoryName = {
   CHECKPOINTS: "checkpoints" as const,
-  CACHE: "cache" as const,
+  CACHE: CACHE_DIR_NAME,
   MEMORY: "memory" as const,
+} as const;
+
+/**
+ * Pricing category identifiers for cache TTL lookup.
+ * @see Story 43 — zero magic strings policy
+ */
+export const PricingCategory = {
+  COMPUTE: "compute" as const,
+  STORAGE: "storage" as const,
+  DEFAULT: "default" as const,
+} as const;
+
+/**
+ * Log source identifiers for structured logging extras.
+ * @see Story 43 — zero magic strings policy
+ */
+export const LogSource = {
+  CACHE: "cache" as const,
+  NETWORK: "network" as const,
+  LOCAL: "local" as const,
 } as const;
 
 // ── Promise Status Constants ────────────────────────────────────────────────

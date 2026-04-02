@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "CloudWatch.1"
 description: "CloudWatch alarms should have OKActions configured to notify when the alarm returns to OK state. Without OKActions, operators are alerted about issues but not when they resolve, causing confusion."
 remediation: "Add at least one SNS topic ARN to OKActions to receive notifications when the alarm returns to OK state."
+consequence: "Operators know something broke but never know when it recovered — stale incidents pile up and mask real ongoing problems."
 category: reliability
 lastVerified: "2026-03-24"

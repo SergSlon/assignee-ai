@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "ELB.4"
 description: "Application Load Balancers should drop invalid HTTP headers to prevent HTTP desync attacks (request smuggling). This only applies to ALBs, not NLBs."
 remediation: "Set the routing.http.drop_invalid_header_fields.enabled load balancer attribute to true. This drops HTTP headers that are not valid per RFC 7230."
+consequence: "Invalid headers pass through to backends — HTTP request smuggling/desync attacks can bypass security controls and access other users' data."
 category: security
 lastVerified: "2026-03-24"
 blocking: false

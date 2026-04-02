@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "Lambda.2-nodejs16"
 description: "Lambda functions should not use the deprecated nodejs16.x runtime. Deprecated runtimes no longer receive security patches, leaving functions vulnerable."
 remediation: "Upgrade to nodejs20.x or later. Test the function thoroughly before deploying to production."
+consequence: "nodejs16.x is EOL with unpatched CVEs — AWS will block new deployments and may disable existing invocations."
 category: security
 lastVerified: "2026-03-24"

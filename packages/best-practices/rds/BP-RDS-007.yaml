@@ -9,6 +9,7 @@ source: "FSBP"
 source_id: "RDS.6"
 description: "RDS instances should have enhanced monitoring enabled for real-time OS metrics. Basic CloudWatch monitoring only provides database-level metrics at 1-minute intervals, missing OS-level issues."
 remediation: "Set MonitoringInterval to 1, 5, 10, 15, 30, or 60 seconds. Create or use an existing IAM role for enhanced monitoring."
+consequence: "OS-level issues like memory pressure, swap usage, or disk I/O saturation go undetected until they cause outages."
 category: performance
 lastVerified: "2026-03-24"
 fixType: "interactive"

@@ -9,6 +9,7 @@ source: "FSBP"
 source_id: "EC2.10"
 description: "EC2 instances should be EBS-optimized for consistent, dedicated bandwidth to EBS volumes. Non-optimized instances share network bandwidth between EBS I/O and regular network traffic, causing unpredictable performance."
 remediation: "Set EbsOptimized to true. Most current-generation instance types support EBS optimization at no additional cost."
+consequence: "EBS I/O competes with network traffic on the same pipe — database queries and disk-heavy workloads suffer random latency spikes under load."
 category: performance
 lastVerified: "2026-03-24"
 fixType: "auto"

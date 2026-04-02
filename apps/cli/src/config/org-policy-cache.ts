@@ -17,6 +17,7 @@ import {
   SAAS_API_URL,
   ORG_POLICY_TTL_MS,
   ORG_POLICY_FETCH_TIMEOUT_MS,
+  LogSource,
 } from "./constants.js";
 import { ContentType } from "../constants/errors.js";
 import { loadLocalOrgPolicy, mergeOrgPolicies } from "./org-policy-loader.js";
@@ -179,7 +180,7 @@ export async function fetchOrgPolicy(
         level: "warn",
         action: LOG_ACTIONS.ORG_POLICY_FETCHED,
         extras: {
-          source: "cache",
+          source: LogSource.CACHE,
           reason: fetchErr instanceof Error ? fetchErr.message : "fetch failed",
         },
       });

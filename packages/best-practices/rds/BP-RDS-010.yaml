@@ -9,6 +9,7 @@ source: "FSBP"
 source_id: "RDS.13"
 description: "RDS instances should have automatic minor version upgrades enabled to receive security patches and bug fixes. Instances running outdated versions may have known vulnerabilities."
 remediation: "Set AutoMinorVersionUpgrade to true. Minor upgrades are applied during the maintenance window."
+consequence: "Database engine runs with known CVEs — attackers can exploit published vulnerabilities to compromise your data."
 category: security
 lastVerified: "2026-03-24"
 autoFixable: true

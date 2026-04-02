@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "S3.1"
 description: "S3 buckets must have RestrictPublicBuckets enabled to restrict access granted by public bucket policies to only AWS service principals and authorized users within the bucket owner's account."
 remediation: "Set PublicAccessBlockConfiguration.RestrictPublicBuckets to true. This limits access on buckets with public policies to authorized users only."
+consequence: "Any AWS account or anonymous user can access the bucket if a public policy exists — cross-account data exfiltration becomes trivial."
 category: security
 lastVerified: "2026-03-22"
 blocking: true

@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "IAM.2"
 description: "IAM policies should be attached to groups or roles, not directly to users. Direct user policy attachment makes access management complex, error-prone, and difficult to audit at scale."
 remediation: "Remove policies attached directly to IAM users. Create IAM groups with appropriate policies and add users to groups. For service access, prefer IAM roles."
+consequence: "Per-user policies create an unauditable permission sprawl — orphaned permissions persist after role changes, violating least privilege."
 category: security
 lastVerified: "2026-03-22"

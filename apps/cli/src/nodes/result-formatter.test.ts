@@ -1025,14 +1025,14 @@ describe("resultFormatterNode — P1-2 plan mode promptFixSelection integration"
     // First call with original state
     expect(renderPlanBox).toHaveBeenNthCalledWith(1, state);
     // Second call with updated state (patched desiredState, residual findings)
+    // Cost estimate is preserved (not cleared to N/A) — spread from original state
     expect(renderPlanBox).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         desiredState: mockFixResult.desiredState,
         bpFindings: mockFixResult.bpFindings,
         appliedFixes: mockFixResult.appliedFixes,
-        estimatedMonthlyCost: undefined,
-        pricingBreakdown: undefined,
+        resourceType: state.resourceType,
       }),
     );
 

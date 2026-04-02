@@ -9,6 +9,7 @@ source: "FSBP"
 source_id: "EC2.14"
 description: "Security groups should not allow unrestricted RDP access (port 3389) from 0.0.0.0/0. Open RDP ports are frequently targeted by brute-force attacks against Windows instances."
 remediation: "Restrict RDP ingress to specific IP ranges or use AWS Systems Manager Fleet Manager for remote desktop access without opening RDP ports."
+consequence: "Port 3389 open to the internet invites ransomware — RDP brute-force is the #1 initial access vector for ransomware gangs targeting Windows."
 category: security
 lastVerified: "2026-03-24"
 fixType: "interactive"

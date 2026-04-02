@@ -22,6 +22,12 @@ export const routePlugin: ResourcePlugin = {
         label: "Route Table ID",
         hint: "The ID of the route table this route belongs to. Use a Ref to the route table logical ID.",
         placeholder: "rtb-0123456789abcdef0",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          if (!/^rtb-[a-f0-9]+$/.test(String(value)))
+            return "Must be a valid route table ID (rtb-...)";
+          return undefined;
+        },
       },
     },
     {
@@ -78,6 +84,12 @@ export const routePlugin: ResourcePlugin = {
         label: "Internet Gateway ID",
         hint: "The ID of the InternetGateway target. Use a Ref to the IGW logical ID in the plan.",
         placeholder: "igw-0123456789abcdef0",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          if (!/^igw-[a-f0-9]+$/.test(String(value)))
+            return "Must be a valid internet gateway ID (igw-...)";
+          return undefined;
+        },
         showIf: {
           field: CfnKey.ROUTE_TYPE,
           value: AwsDefault.CONNECTIVITY_PUBLIC,
@@ -91,6 +103,12 @@ export const routePlugin: ResourcePlugin = {
         label: "NAT Gateway ID",
         hint: "The ID of the NatGateway target. Use a Ref to the NatGateway logical ID in the plan.",
         placeholder: "nat-0123456789abcdef0",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          if (!/^nat-[a-f0-9]+$/.test(String(value)))
+            return "Must be a valid NAT gateway ID (nat-...)";
+          return undefined;
+        },
         showIf: {
           field: CfnKey.ROUTE_TYPE,
           value: AwsDefault.CONNECTIVITY_PRIVATE,

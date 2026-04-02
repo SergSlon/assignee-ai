@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "EC2.15"
 description: "Subnets should not automatically assign public IPv4 addresses to instances on launch. Auto-assigning public IPs increases the attack surface by making instances directly reachable from the internet. Use Elastic IPs or NAT gateways for controlled outbound access instead."
 remediation: "Set MapPublicIpOnLaunch to false. Assign public IPs explicitly via Elastic IPs only to instances that genuinely need direct internet access (e.g. NAT gateways, bastion hosts)."
+consequence: "Every instance launched in this subnet automatically gets a public IP — one misconfigured security group away from full internet exposure."
 category: security
 lastVerified: "2026-03-23"
 blocking: false

@@ -9,6 +9,7 @@ source: "AWS Well-Architected Framework"
 source_id: "SEC-04"
 description: "API Gateway V2 Stages must have AccessLogSettings configured with a CloudWatch LogGroup ARN. Without access logging, you have no visibility into API requests, making it impossible to detect abuse, debug issues, or meet compliance requirements."
 remediation: "Create a CloudWatch LogGroup and configure the Stage's AccessLogSettings.DestinationArn to point to the LogGroup ARN. Use a structured log format (JSON) for easier querying in CloudWatch Insights."
+consequence: "No record of API requests — you cannot detect abuse, investigate incidents, debug errors, or prove compliance."
 category: security
 lastVerified: "2026-03-24"
 blocking: false

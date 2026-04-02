@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "Lambda.2-python37"
 description: "Lambda functions should not use the deprecated python3.7 runtime. Deprecated runtimes no longer receive security patches, leaving functions vulnerable to known exploits."
 remediation: "Upgrade to python3.12 or later. Test the function thoroughly before deploying the new runtime to production."
+consequence: "python3.7 is EOL with unpatched CVEs — AWS will block new deployments and may disable existing invocations."
 category: security
 lastVerified: "2026-03-24"

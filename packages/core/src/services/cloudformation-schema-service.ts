@@ -16,13 +16,13 @@ import {
 } from "@aws-sdk/client-cloudformation";
 import { AssigneeError } from "../errors.js";
 import { DEFAULT_AWS_REGION } from "../config/config-schema.js";
-import { ASSIGNEE_DIR } from "../config/cfn-keys.js";
+import { ASSIGNEE_DIR, CACHE_DIR_NAME } from "../config/cfn-keys.js";
 
 /** Default cache directory under ~/.assignee */
 const DEFAULT_CACHE_DIR = path.join(
   os.homedir(),
   ASSIGNEE_DIR,
-  "cache",
+  CACHE_DIR_NAME,
   "schemas",
 );
 

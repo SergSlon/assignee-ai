@@ -92,6 +92,8 @@ export interface BestPractice {
   fixType?: BPFixType;
   interactiveOptions?: InteractiveFixOption[];
   fix_hint?: string;
+  /** Human-readable explanation of the risk if this practice is not followed. */
+  consequence?: string;
 }
 
 export interface BPFinding {
@@ -108,6 +110,8 @@ export interface BPFinding {
   interactiveOptions?: InteractiveFixOption[];
   propertyPath?: string;
   fixHint?: string;
+  /** Human-readable explanation of the risk if this practice is not followed. */
+  consequence?: string;
   userSkipped?: boolean;
   userExplicitChoice?: boolean;
 }

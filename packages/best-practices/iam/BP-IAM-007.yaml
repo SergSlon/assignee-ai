@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "IAM.7"
 description: "IAM roles should limit the maximum session duration to reduce the window of exposure if temporary credentials are compromised. The default is 1 hour; extending beyond 4 hours increases risk."
 remediation: "Set MaxSessionDuration to 3600 (1 hour) or 14400 (4 hours) for roles that need extended sessions. Avoid setting the maximum of 43200 (12 hours)."
+consequence: "Stolen temporary credentials remain valid for up to 12 hours — attackers have a long window to exfiltrate data or pivot deeper."
 category: security
 lastVerified: "2026-03-24"

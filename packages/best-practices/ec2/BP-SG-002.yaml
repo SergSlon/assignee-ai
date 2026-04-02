@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "EC2.13"
 description: "SSH (port 22) must not be open to 0.0.0.0/0. Unrestricted SSH access is a top attack vector — automated bots continuously scan for open SSH ports and attempt brute-force logins."
 remediation: "Restrict SSH ingress to specific IP ranges (e.g., your corporate VPN CIDR or bastion host security group). Consider using AWS SSM Session Manager instead — it requires no open inbound ports."
+consequence: "Port 22 open to 0.0.0.0/0 exposes the instance to brute-force SSH attacks from the entire internet."
 category: security
 lastVerified: "2026-03-23"
 blocking: true

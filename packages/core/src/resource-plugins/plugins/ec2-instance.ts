@@ -5,6 +5,7 @@ import {
   AwsDefault,
   AmiOs,
   SizeLabel,
+  WorkloadProfileKey,
 } from "../../config/cfn-keys.js";
 import { QuestionTypeName, type ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
@@ -17,7 +18,7 @@ import { FieldLabel } from "../field-labels.js";
  */
 export const INSTANCE_CATEGORIES = [
   {
-    key: "burstable",
+    key: WorkloadProfileKey.BURSTABLE,
     label: "Burstable (t3/t4g) — $0.008-0.17/hr",
     description:
       "Variable CPU with burst credits. Best for dev/test and intermittent workloads. t4g (ARM) is ~20% cheaper.",
@@ -76,7 +77,7 @@ export const INSTANCE_CATEGORIES = [
     ],
   },
   {
-    key: "general",
+    key: WorkloadProfileKey.GENERAL,
     label: "General Purpose (m5/m6i) — $0.096-0.38/hr",
     description:
       "Balanced CPU/memory ratio. Best for production app servers and mid-size databases.",
@@ -114,7 +115,7 @@ export const INSTANCE_CATEGORIES = [
     ],
   },
   {
-    key: "compute",
+    key: WorkloadProfileKey.COMPUTE,
     label: "Compute Optimized (c5/c6i) — $0.085-0.34/hr",
     description:
       "High-performance CPUs. Best for batch processing, ML inference, and compute-heavy workloads.",
@@ -152,7 +153,7 @@ export const INSTANCE_CATEGORIES = [
     ],
   },
   {
-    key: "memory",
+    key: WorkloadProfileKey.MEMORY,
     label: "Memory Optimized (r5/r6i) — $0.126-0.50/hr",
     description:
       "High memory-to-CPU ratio. Best for in-memory databases, caches, and real-time analytics.",
@@ -287,6 +288,14 @@ export const ec2InstancePlugin: ResourcePlugin = {
         label: "IAM Instance Profile name",
         hint: "Grants the instance permissions to call AWS services (S3, DynamoDB, etc.). Create a role in IAM first, then attach it here.",
         placeholder: "my-instance-profile",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value);
+          if (s.startsWith("arn:aws:iam::")) return undefined;
+          if (!/^[a-zA-Z0-9+=,.@_-]+$/.test(s))
+            return "Must be a valid IAM instance profile name or ARN (arn:aws:iam::...)";
+          return undefined;
+        },
       },
     },
     {
@@ -339,6 +348,12 @@ export const ec2InstancePlugin: ResourcePlugin = {
         label: "User data script (base64)",
         hint: "Shell script that runs on first boot. Use for installing packages, configuring services, or pulling code. Max 16 KB.",
         placeholder: "#!/bin/bash\\necho hello",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          if (String(value).length > 16384)
+            return "User data must not exceed 16 KB (16384 characters)";
+          return undefined;
+        },
       },
     },
     {

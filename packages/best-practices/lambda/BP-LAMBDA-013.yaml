@@ -9,5 +9,6 @@ source: "TrustedAdvisor"
 source_id: "TA-lambda-memory"
 description: "Lambda functions using the minimum 128MB memory are often under-provisioned, leading to slower execution and higher costs per invocation. CPU allocation scales linearly with memory."
 remediation: "Right-size Lambda memory using AWS Lambda Power Tuning. Higher memory often reduces duration enough to lower total cost."
+consequence: "Under-provisioned memory starves CPU — functions run slower and often cost more due to extended execution time."
 category: performance
 lastVerified: "2026-03-24"

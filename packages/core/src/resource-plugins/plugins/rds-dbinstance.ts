@@ -222,10 +222,15 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         placeholder: "appuser",
         initialValue: "appuser",
         hint: "Admin username for the database. Avoid 'admin' or 'root' in production for security. Must start with a letter. Cannot be changed after creation.",
-        validate: (value: unknown) =>
-          typeof value === "string" && value.length > 0
-            ? undefined
-            : "Master username is required",
+        validate: (value: unknown) => {
+          if (typeof value !== "string" || value.length === 0)
+            return "Master username is required";
+          if (value.length > 41)
+            return "Master username must be at most 41 characters";
+          if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(value))
+            return "Must start with a letter and contain only letters, numbers, and underscores";
+          return undefined;
+        },
       },
     },
     {

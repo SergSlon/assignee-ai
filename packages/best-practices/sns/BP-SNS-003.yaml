@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "SNS.3"
 description: "SNS topic access policies should restrict who can publish messages. Overly permissive policies allow unauthorized message injection into event pipelines."
 remediation: "Review the SNS access policy and restrict sns:Publish to specific AWS accounts, IAM roles, or services. Remove Principal: '*' entries."
+consequence: "Anyone can publish messages to the topic — attackers inject malicious payloads into your event pipeline, triggering downstream actions."
 category: security
 lastVerified: "2026-03-24"

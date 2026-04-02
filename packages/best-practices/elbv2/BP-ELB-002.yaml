@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "ELB.5"
 description: "ELBv2 load balancers should have access logging enabled to capture detailed request information (client IP, latencies, request paths). Logs are essential for security auditing, troubleshooting, and compliance."
 remediation: "Enable access logging by setting the access_logs.s3.enabled attribute to true and specifying an S3 bucket via access_logs.s3.bucket."
+consequence: "No request logs means DDoS attacks, abuse patterns, and latency spikes are invisible — incident response is blind."
 category: security
 lastVerified: "2026-03-24"
 blocking: false

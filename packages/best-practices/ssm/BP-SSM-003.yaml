@@ -9,5 +9,6 @@ source: "TrustedAdvisor"
 source_id: "TA-ssm-secure"
 description: "SSM parameters storing sensitive data (passwords, API keys, connection strings) should use SecureString type for KMS encryption at rest. String and StringList types store values in plaintext."
 remediation: "Store sensitive values as SecureString parameters with a KMS key. Note: changing type requires deleting and recreating the parameter."
+consequence: "Passwords and connection strings stored in plaintext — visible in the console, API responses, and CloudTrail logs."
 category: security
 lastVerified: "2026-03-24"

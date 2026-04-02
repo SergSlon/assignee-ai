@@ -8,6 +8,7 @@ expected_value: true
 source: "AWS Well-Architected Reliability Pillar"
 description: "ECS clusters should define a Service Connect default namespace to enable automatic service discovery and mesh networking for services in the cluster. Without a default namespace, each service must be individually configured for service-to-service communication."
 remediation: "Set ServiceConnectDefaults.Namespace to a Cloud Map namespace ARN or name. This enables Service Connect by default for all services launched in the cluster."
+consequence: "Every service must be manually wired for discovery — new services cannot find peers without per-service configuration."
 category: reliability
 lastVerified: "2026-04-01"
 blocking: false

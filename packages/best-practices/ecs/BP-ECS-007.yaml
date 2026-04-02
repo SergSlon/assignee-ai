@@ -11,6 +11,7 @@ source: "AWS Security Hub FSBP"
 source_id: "ECS.12"
 description: "ECS clusters should have Container Insights enabled to collect per-task metrics (CPU, memory, network, disk). Without observability, performance issues and resource exhaustion go undetected until they cause outages."
 remediation: "Add a ClusterSettings entry with Name 'containerInsights' and Value 'enabled'. Minor CloudWatch costs apply per metric stream."
+consequence: "No per-task CPU/memory metrics — resource exhaustion and performance degradation go undetected until services crash."
 category: reliability
 lastVerified: "2026-04-01"
 blocking: true

@@ -263,6 +263,17 @@ describe("E2E: SSM Parameter plan + apply + destroy", () => {
 
     const finalState = graphState.values as AgentState;
 
+    if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+      console.error("SSM E2E FAILED:", {
+        status: finalState.executionStatus,
+        error: finalState.errorMessage,
+        preflightPassed: finalState.preflightPassed,
+        bpFindings: finalState.bpFindings?.map(
+          (f) => `${f.practiceId}: ${f.title} [blocking=${f.blocking}]`,
+        ),
+      });
+    }
+
     expect(finalState.resourceType).toBe("AWS::SSM::Parameter");
     expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
     expect(finalState.resourceArn).toBeDefined();

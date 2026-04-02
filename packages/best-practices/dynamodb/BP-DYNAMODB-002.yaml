@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "DynamoDB.6"
 description: "DynamoDB tables should have deletion protection enabled to prevent accidental or unauthorized table deletion. Losing a DynamoDB table can result in permanent data loss if backups are not properly configured."
 remediation: "Set DeletionProtectionEnabled to true. This prevents the table from being deleted until the protection is explicitly disabled."
+consequence: "A single API call or IaC misconfiguration can destroy the entire table and all its data irreversibly."
 category: reliability
 lastVerified: "2026-03-22"

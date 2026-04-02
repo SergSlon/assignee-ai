@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "SQS.1"
 description: "SQS queues should have server-side encryption enabled to protect message contents at rest. Unencrypted queues expose message data if the underlying storage is compromised."
 remediation: "Set SqsManagedSseEnabled to true for SSE-SQS encryption, or specify KmsMasterKeyId for SSE-KMS encryption with a customer managed key for additional control."
+consequence: "Message contents stored in plaintext — anyone with network access to the SQS endpoint can read them."
 category: security
 lastVerified: "2026-03-22"

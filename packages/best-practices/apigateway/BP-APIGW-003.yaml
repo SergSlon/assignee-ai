@@ -9,6 +9,7 @@ source: "AWS Well-Architected Framework"
 source_id: "SEC-03"
 description: "All API Gateway V2 routes should have an authorization type configured (e.g., JWT, IAM, or a custom Lambda authorizer). Routes with AuthorizationType set to NONE are publicly accessible without any authentication, increasing the attack surface."
 remediation: "Set AuthorizationType to JWT (recommended for HTTP APIs with Cognito/OIDC), AWS_IAM (for service-to-service calls), or CUSTOM (for Lambda authorizers). Only use NONE for truly public endpoints like health checks."
+consequence: "Routes are publicly accessible with zero authentication — anyone on the internet can call your API endpoints."
 category: security
 lastVerified: "2026-03-24"
 blocking: false

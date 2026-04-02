@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "ECS.8"
 description: "ECS task definitions should use the Secrets property to inject sensitive values from Secrets Manager or SSM Parameter Store, not plain-text Environment variables. Environment variables are visible in the console and API."
 remediation: "Move sensitive values from Environment to Secrets. Reference Secrets Manager secrets or SSM SecureString parameters using the Secrets array."
+consequence: "Passwords and API keys are visible in plaintext via the ECS console, API, and CloudTrail — any reader can steal them."
 category: security
 lastVerified: "2026-03-24"

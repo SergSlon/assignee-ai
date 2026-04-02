@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "Lambda.3"
 description: "Lambda functions that access private resources should be configured to run in a VPC. Functions outside a VPC cannot access resources in private subnets and cannot leverage security group controls for network-level isolation."
 remediation: "Configure VpcConfig with SubnetIds (use private subnets) and SecurityGroupIds. Ensure the VPC has a NAT gateway if the function needs outbound internet access."
+consequence: "Function runs outside your VPC with no network-level isolation — cannot access private resources or enforce security groups."
 category: security
 lastVerified: "2026-03-22"

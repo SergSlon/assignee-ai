@@ -138,6 +138,17 @@ export const logGroupPlugin: ResourcePlugin = {
         label: "Data protection policy (JSON)",
         placeholder: '{"Name": "data-protection-policy", ...}',
         hint: "JSON-formatted data protection policy to mask sensitive data (PII, credentials) in log events. AWS provides managed data identifiers for common patterns like SSNs, credit card numbers, and email addresses.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value).trim();
+          if (!s) return undefined;
+          try {
+            JSON.parse(s);
+          } catch {
+            return "Must be valid JSON";
+          }
+          return undefined;
+        },
       },
     },
   ],

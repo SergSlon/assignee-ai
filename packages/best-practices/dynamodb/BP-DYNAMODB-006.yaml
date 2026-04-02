@@ -9,5 +9,6 @@ source: "TrustedAdvisor"
 source_id: "TA-dynamodb-capacity"
 description: "Trusted Advisor identifies DynamoDB tables with provisioned capacity that consistently use less than 50% of their provisioned throughput. This represents wasted capacity costs."
 remediation: "Switch to PAY_PER_REQUEST billing mode for unpredictable workloads, or configure auto-scaling policies to match capacity to actual usage."
+consequence: "Over 50% of provisioned throughput is wasted — you are paying double what the actual usage requires every month."
 category: cost_optimization
 lastVerified: "2026-03-24"

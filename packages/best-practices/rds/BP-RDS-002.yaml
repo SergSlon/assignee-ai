@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "RDS.3"
 description: "RDS DB instances must have encryption at rest enabled using AWS KMS. Unencrypted database storage exposes data to unauthorized access if the underlying storage media is compromised."
 remediation: "Set StorageEncrypted to true and specify a KmsKeyId. Note: encryption cannot be enabled on an existing unencrypted instance — you must create an encrypted snapshot and restore from it."
+consequence: "Database contents stored in plaintext — a compromised snapshot or volume exposes all customer data."
 category: security
 lastVerified: "2026-03-22"
 blocking: true

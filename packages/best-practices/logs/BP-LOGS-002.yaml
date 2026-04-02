@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "CloudWatch.1"
 description: "CloudWatch LogGroups should be encrypted with a customer-managed KMS key. While CloudWatch Logs encrypts data at rest by default with AWS-managed keys, a customer-managed KMS key provides additional control over key rotation, access policies, and audit trails. Recommended for production environments handling sensitive data."
 remediation: "Set KmsKeyId to the ARN of a customer-managed KMS key. Ensure the key policy grants CloudWatch Logs service principal (logs.<region>.amazonaws.com) the required kms:Encrypt, kms:Decrypt, kms:GenerateDataKey*, and kms:DescribeKey permissions."
+consequence: "Logs containing sensitive data are encrypted with AWS-managed keys you cannot audit, rotate, or revoke access to."
 category: security
 lastVerified: "2026-03-24"
 blocking: false

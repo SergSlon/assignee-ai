@@ -103,6 +103,20 @@ const testCases: AutoFixTestCase[] = [
       },
     },
   },
+  {
+    id: "BP-S3-009",
+    resourceType: "AWS::S3::Bucket",
+    triggeringState: {
+      // check_type is "exists" on NotificationConfiguration — omit to trigger
+    },
+  },
+  {
+    id: "BP-S3-010",
+    resourceType: "AWS::S3::Bucket",
+    triggeringState: {
+      // check_type is "exists" on LifecycleConfiguration — omit to trigger
+    },
+  },
   // --- EC2 rules ---
   {
     id: "BP-EC2-001",
