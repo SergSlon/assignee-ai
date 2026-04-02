@@ -12,6 +12,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const ssmPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.SSM_PARAMETER,
@@ -31,20 +38,20 @@ export const ssmPricingDecomposer: PricingDecomposer = {
       label: "Parameter storage",
       quantity: 1,
       unit: "parameter",
-      serviceCode: "AWSSystemsManager",
+      serviceCode: SC.SSM,
       filters: [
         {
-          Field: "productFamily",
-          Value: "AWS Systems Manager",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.SYSTEMS_MANAGER,
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "ParameterStorage-Advanced-Tier1",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "fixed",
+      kind: K.FIXED,
       description: "Advanced tier",
       priceUnit: "/param-mo",
     });
@@ -54,20 +61,20 @@ export const ssmPricingDecomposer: PricingDecomposer = {
       label: "API calls",
       quantity: 0,
       unit: "requests",
-      serviceCode: "AWSSystemsManager",
+      serviceCode: SC.SSM,
       filters: [
         {
-          Field: "productFamily",
-          Value: "AWS Systems Manager",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.SYSTEMS_MANAGER,
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "PS-GetParameter-Transactions-Tier1",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "higher throughput API",
       priceUnit: "/10K reqs",
     });

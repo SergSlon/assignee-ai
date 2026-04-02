@@ -3,6 +3,12 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const sqsPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -10,8 +16,10 @@ export const sqsPricingStrategy: PricingStrategy = {
   },
   mcpConfig(): McpPricingConfig {
     return {
-      serviceCode: "AmazonSQS",
-      filters: [{ Field: "productFamily", Value: "Queue", Type: "TERM_MATCH" }],
+      serviceCode: SC.SQS,
+      filters: [
+        { Field: F.PRODUCT_FAMILY, Value: PF.QUEUE, Type: M.TERM_MATCH },
+      ],
       unit: "/million requests",
     };
   },

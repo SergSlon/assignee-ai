@@ -10,6 +10,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const s3PricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.S3_BUCKET,
@@ -22,16 +29,16 @@ export const s3PricingDecomposer: PricingDecomposer = {
       label: "Storage",
       quantity: 0,
       unit: "GB",
-      serviceCode: "AmazonS3",
+      serviceCode: SC.S3,
       filters: [
-        { Field: "productFamily", Value: "Storage", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.STORAGE, Type: M.TERM_MATCH },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "TimedStorage-ByteHrs",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "Standard",
       priceUnit: "/GB-mo",
     });
@@ -41,12 +48,12 @@ export const s3PricingDecomposer: PricingDecomposer = {
       label: "PUT requests",
       quantity: 0,
       unit: "requests",
-      serviceCode: "AmazonS3",
+      serviceCode: SC.S3,
       filters: [
-        { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" },
-        { Field: "usagetype", Value: "Requests-Tier1", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.API_REQUEST, Type: M.TERM_MATCH },
+        { Field: F.USAGE_TYPE, Value: "Requests-Tier1", Type: M.TERM_MATCH },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "per 1,000 requests",
       priceUnit: "/1000 reqs",
     });
@@ -56,12 +63,12 @@ export const s3PricingDecomposer: PricingDecomposer = {
       label: "GET requests",
       quantity: 0,
       unit: "requests",
-      serviceCode: "AmazonS3",
+      serviceCode: SC.S3,
       filters: [
-        { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" },
-        { Field: "usagetype", Value: "Requests-Tier2", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.API_REQUEST, Type: M.TERM_MATCH },
+        { Field: F.USAGE_TYPE, Value: "Requests-Tier2", Type: M.TERM_MATCH },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "per 1,000 requests",
       priceUnit: "/1000 reqs",
     });
@@ -71,14 +78,22 @@ export const s3PricingDecomposer: PricingDecomposer = {
       label: "Data transfer out",
       quantity: 0,
       unit: "GB",
-      serviceCode: "AWSDataTransfer",
+      serviceCode: SC.DATA_TRANSFER,
       filters: [
-        { Field: "productFamily", Value: "Data Transfer", Type: "TERM_MATCH" },
-        { Field: "fromLocationType", Value: "AWS Region", Type: "TERM_MATCH" },
-        { Field: "toLocationType", Value: "External", Type: "TERM_MATCH" },
-        { Field: "transferType", Value: "AWS Outbound", Type: "TERM_MATCH" },
+        {
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.DATA_TRANSFER,
+          Type: M.TERM_MATCH,
+        },
+        {
+          Field: F.FROM_LOCATION_TYPE,
+          Value: "AWS Region",
+          Type: M.TERM_MATCH,
+        },
+        { Field: F.TO_LOCATION_TYPE, Value: "External", Type: M.TERM_MATCH },
+        { Field: F.TRANSFER_TYPE, Value: "AWS Outbound", Type: M.TERM_MATCH },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "per GB",
       priceUnit: "/GB",
     });

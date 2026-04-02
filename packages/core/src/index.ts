@@ -57,7 +57,11 @@ export type {
   ConfigPreferences,
   ConfigNaming,
 } from "./config/index.js";
-export { validateConfig, CONFIG_DEFAULTS } from "./config/index.js";
+export {
+  validateConfig,
+  CONFIG_DEFAULTS,
+  DEFAULT_AWS_REGION,
+} from "./config/index.js";
 
 // Config — resource type constants and identifier mappings
 export {
@@ -159,6 +163,13 @@ export type {
   PricingLineItemKind,
   PricingLineItemResult,
   PricingBreakdown,
+} from "./pricing/index.js";
+export {
+  PricingMatchType,
+  PricingField,
+  PricingKind,
+  PricingServiceCode,
+  PricingProductFamily,
 } from "./pricing/index.js";
 
 // Errors

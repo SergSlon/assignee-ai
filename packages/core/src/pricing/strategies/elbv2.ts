@@ -3,6 +3,12 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const elbv2PricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -10,12 +16,12 @@ export const elbv2PricingStrategy: PricingStrategy = {
   },
   mcpConfig(): McpPricingConfig {
     return {
-      serviceCode: "ElasticLoadBalancing",
+      serviceCode: SC.ELB,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Load Balancer",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.LOAD_BALANCER,
+          Type: M.TERM_MATCH,
         },
       ],
       unit: "/hr",

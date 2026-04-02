@@ -5,6 +5,7 @@
  * The extractIdentifier hook constructs the URL from the ARN components.
  */
 
+import { DEFAULT_AWS_REGION } from "@assignee/core";
 import type { DestroyStrategy } from "./types.js";
 
 export const sqsStrategy: DestroyStrategy = {
@@ -14,7 +15,7 @@ export const sqsStrategy: DestroyStrategy = {
     // arn:aws:sqs:us-east-1:123456789012:queue-name
     //   → https://sqs.us-east-1.amazonaws.com/123456789012/queue-name
     const parts = arn.split(":");
-    const arnRegion = parts[3] || "us-east-1";
+    const arnRegion = parts[3] || DEFAULT_AWS_REGION;
     const account = parts[4] || "";
     const queueName = parts[5] || "";
     return `https://sqs.${arnRegion}.amazonaws.com/${account}/${queueName}`;

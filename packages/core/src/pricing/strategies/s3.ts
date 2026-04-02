@@ -3,6 +3,12 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const s3PricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -10,13 +16,13 @@ export const s3PricingStrategy: PricingStrategy = {
   },
   mcpConfig(): McpPricingConfig {
     return {
-      serviceCode: "AmazonS3",
+      serviceCode: SC.S3,
       filters: [
-        { Field: "productFamily", Value: "Storage", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.STORAGE, Type: M.TERM_MATCH },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "TimedStorage-ByteHrs",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
       unit: "/GB-month",

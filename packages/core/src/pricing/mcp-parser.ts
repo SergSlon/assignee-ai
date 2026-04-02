@@ -12,6 +12,7 @@
  * @param expectedFilters - Optional filters to validate response items against
  */
 import type { AwsPricingResponse, McpPricingFilter } from "./types.js";
+import { PricingField } from "./filter-constants.js";
 
 /**
  * Check if a response item's product.attributes match the expected filters.
@@ -32,7 +33,7 @@ function itemMatchesFilters(
     const field = filter.Field;
     const expected = filter.Value;
     // Check productFamily directly (top-level, always present in MCP responses)
-    if (field === "productFamily") {
+    if (field === PricingField.PRODUCT_FAMILY) {
       if (!product.productFamily || product.productFamily !== expected) {
         return false;
       }
@@ -69,9 +70,12 @@ export function extractFirstTierPrice(
     ? items.filter((item) => itemMatchesFilters(item, expectedFilters))
     : items;
   const singleItemNoMetadata =
-    expectedFilters && filtered.length === 0 && items.length === 1 && !items[0]?.product;
+    expectedFilters &&
+    filtered.length === 0 &&
+    items.length === 1 &&
+    !items[0]?.product;
   const passes = singleItemNoMetadata
-    ? [items]  // Single-item, no metadata: MCP filtered server-side, trust it
+    ? [items] // Single-item, no metadata: MCP filtered server-side, trust it
     : [filtered];
 
   for (const candidates of passes) {

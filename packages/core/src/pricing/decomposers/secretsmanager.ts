@@ -10,6 +10,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const secretsManagerPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.SECRETSMANAGER_SECRET,
@@ -22,11 +29,11 @@ export const secretsManagerPricingDecomposer: PricingDecomposer = {
       label: "Secret storage",
       quantity: 1,
       unit: "secret",
-      serviceCode: "AWSSecretsManager",
+      serviceCode: SC.SECRETS_MANAGER,
       filters: [
-        { Field: "productFamily", Value: "Secret", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.SECRET, Type: M.TERM_MATCH },
       ],
-      kind: "fixed",
+      kind: K.FIXED,
       description: "1 secret",
       priceUnit: "/secret-mo",
     });
@@ -36,11 +43,11 @@ export const secretsManagerPricingDecomposer: PricingDecomposer = {
       label: "API calls",
       quantity: 0,
       unit: "requests",
-      serviceCode: "AWSSecretsManager",
+      serviceCode: SC.SECRETS_MANAGER,
       filters: [
-        { Field: "productFamily", Value: "API Request", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.API_REQUEST, Type: M.TERM_MATCH },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "per 10,000 API calls",
       priceUnit: "/10K reqs",
     });

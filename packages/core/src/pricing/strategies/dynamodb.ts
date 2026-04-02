@@ -4,6 +4,12 @@ import type {
   McpPricingConfig,
 } from "../types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 /**
  * DynamoDB pricing strategy.
@@ -30,14 +36,14 @@ export const dynamodbPricingStrategy: PricingStrategy = {
     if (billingMode === "PROVISIONED") {
       // Query for write capacity unit hourly rate (representative line item)
       return {
-        serviceCode: "AmazonDynamoDB",
+        serviceCode: SC.DYNAMODB,
         filters: [
           {
-            Field: "productFamily",
-            Value: "Provisioned IOPS",
-            Type: "TERM_MATCH",
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.PROVISIONED_IOPS,
+            Type: M.TERM_MATCH,
           },
-          { Field: "group", Value: "DDB-WriteUnits", Type: "TERM_MATCH" },
+          { Field: F.GROUP, Value: "DDB-WriteUnits", Type: M.TERM_MATCH },
         ],
         unit: "/WCU-hr",
       };
@@ -45,14 +51,14 @@ export const dynamodbPricingStrategy: PricingStrategy = {
 
     // On-demand: query write request units
     return {
-      serviceCode: "AmazonDynamoDB",
+      serviceCode: SC.DYNAMODB,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Amazon DynamoDB PayPerRequest Throughput",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.PAY_PER_REQUEST,
+          Type: M.TERM_MATCH,
         },
-        { Field: "group", Value: "DDB-WriteUnits", Type: "TERM_MATCH" },
+        { Field: F.GROUP, Value: "DDB-WriteUnits", Type: M.TERM_MATCH },
       ],
       unit: "/M write req",
     };

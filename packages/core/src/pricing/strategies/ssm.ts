@@ -3,6 +3,12 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const ssmPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -10,12 +16,12 @@ export const ssmPricingStrategy: PricingStrategy = {
   },
   mcpConfig(): McpPricingConfig {
     return {
-      serviceCode: "AWSSystemsManager",
+      serviceCode: SC.SSM,
       filters: [
         {
-          Field: "productFamily",
-          Value: "AWS Systems Manager",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.SYSTEMS_MANAGER,
+          Type: M.TERM_MATCH,
         },
       ],
       unit: "/param-hour",

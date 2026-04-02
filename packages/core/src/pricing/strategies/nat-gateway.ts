@@ -3,6 +3,12 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 /**
  * Pricing strategy for AWS::EC2::NatGateway.
@@ -18,17 +24,17 @@ export const natGatewayPricingStrategy: PricingStrategy = {
   },
   mcpConfig(): McpPricingConfig {
     return {
-      serviceCode: "AmazonEC2",
+      serviceCode: SC.EC2,
       filters: [
         {
-          Field: "productFamily",
-          Value: "NAT Gateway",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.NAT_GATEWAY,
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "NatGateway-Hours",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
       unit: "/hour",

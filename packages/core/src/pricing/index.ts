@@ -193,3 +193,10 @@ export type {
   PricingLineItemResult,
   PricingBreakdown,
 } from "./decomposer-types.js";
+export {
+  PricingMatchType,
+  PricingField,
+  PricingKind,
+  PricingServiceCode,
+  PricingProductFamily,
+} from "./filter-constants.js";

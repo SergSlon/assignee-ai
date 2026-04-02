@@ -22,14 +22,18 @@ import {
   DeleteResourceCommand,
   GetResourceRequestStatusCommand,
 } from "@aws-sdk/client-cloudcontrol";
-import { CCAPI_FALLBACK_TYPES, CCAPI_REDIRECT_TYPES } from "@assignee/core";
+import {
+  CCAPI_FALLBACK_TYPES,
+  CCAPI_REDIRECT_TYPES,
+  DEFAULT_AWS_REGION,
+} from "@assignee/core";
 import { destroyRegistry } from "../services/destroy-strategies/index.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const TAG_KEY_MANAGED_BY = "managed-by";
 const TAG_VALUE_MANAGED_BY = "assignee-ai";
-const DEFAULT_REGION = process.env["AWS_REGION"] ?? "us-east-1";
+const DEFAULT_REGION = process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
 /** @see DESTROY_MAX_POLL_ATTEMPTS in apps/cli/src/config/constants.ts — keep in sync */
 const MAX_POLL_ATTEMPTS = 60;
 const EXTENDED_POLL_ATTEMPTS = 300; // 10 minutes for slow deletes (RDS, NatGW)
@@ -206,7 +210,7 @@ function getCloudControlIdentifier(
   if (strategy?.extractIdentifier) {
     return strategy.extractIdentifier(
       arn,
-      extractRegionFromArn(arn, "us-east-1"),
+      extractRegionFromArn(arn, DEFAULT_REGION),
     );
   }
   return extractedId;

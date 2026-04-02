@@ -12,6 +12,13 @@ import type {
   PricingLineItem,
 } from "../decomposer-types.js";
 import { EXTENDED_TIMEOUT_MS } from "../constants.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const ec2PricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.EC2_INSTANCE,
@@ -26,20 +33,20 @@ export const ec2PricingDecomposer: PricingDecomposer = {
       label: "Compute",
       quantity: 1,
       unit: "instance",
-      serviceCode: "AmazonEC2",
+      serviceCode: SC.EC2,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Compute Instance",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.COMPUTE_INSTANCE,
+          Type: M.TERM_MATCH,
         },
-        { Field: "instanceType", Value: instanceType, Type: "TERM_MATCH" },
-        { Field: "operatingSystem", Value: "Linux", Type: "TERM_MATCH" },
-        { Field: "tenancy", Value: "Shared", Type: "TERM_MATCH" },
-        { Field: "capacitystatus", Value: "Used", Type: "TERM_MATCH" },
-        { Field: "preInstalledSw", Value: "NA", Type: "TERM_MATCH" },
+        { Field: F.INSTANCE_TYPE, Value: instanceType, Type: M.TERM_MATCH },
+        { Field: F.OPERATING_SYSTEM, Value: "Linux", Type: M.TERM_MATCH },
+        { Field: F.TENANCY, Value: "Shared", Type: M.TERM_MATCH },
+        { Field: F.CAPACITY_STATUS, Value: "Used", Type: M.TERM_MATCH },
+        { Field: F.PRE_INSTALLED_SW, Value: "NA", Type: M.TERM_MATCH },
       ],
-      kind: "fixed",
+      kind: K.FIXED,
       description: instanceType,
       priceUnit: "/hr",
       timeoutMs: EXTENDED_TIMEOUT_MS,
@@ -62,16 +69,20 @@ export const ec2PricingDecomposer: PricingDecomposer = {
             label: volLabel,
             quantity: volumeSize,
             unit: "GB",
-            serviceCode: "AmazonEC2",
+            serviceCode: SC.EC2,
             filters: [
-              { Field: "productFamily", Value: "Storage", Type: "TERM_MATCH" },
               {
-                Field: "volumeApiName",
+                Field: F.PRODUCT_FAMILY,
+                Value: PF.STORAGE,
+                Type: M.TERM_MATCH,
+              },
+              {
+                Field: F.VOLUME_API_NAME,
                 Value: volumeApiName,
-                Type: "TERM_MATCH",
+                Type: M.TERM_MATCH,
               },
             ],
-            kind: "fixed",
+            kind: K.FIXED,
             description: `${volumeSize} GB ${volumeType}`,
             priceUnit: "/GB-mo",
           });
@@ -87,12 +98,12 @@ export const ec2PricingDecomposer: PricingDecomposer = {
         label: "Public IPv4",
         quantity: 1,
         unit: "address",
-        serviceCode: "AmazonVPC",
+        serviceCode: SC.VPC,
         filters: [
-          { Field: "productFamily", Value: "IP Address", Type: "TERM_MATCH" },
-          { Field: "group", Value: "ElasticIP:Address", Type: "TERM_MATCH" },
+          { Field: F.PRODUCT_FAMILY, Value: PF.IP_ADDRESS, Type: M.TERM_MATCH },
+          { Field: F.GROUP, Value: "ElasticIP:Address", Type: M.TERM_MATCH },
         ],
-        kind: "fixed",
+        kind: K.FIXED,
         description: "1 address",
         priceUnit: "/hr",
       });
@@ -103,14 +114,22 @@ export const ec2PricingDecomposer: PricingDecomposer = {
       label: "Data transfer out",
       quantity: 0,
       unit: "GB",
-      serviceCode: "AWSDataTransfer",
+      serviceCode: SC.DATA_TRANSFER,
       filters: [
-        { Field: "productFamily", Value: "Data Transfer", Type: "TERM_MATCH" },
-        { Field: "fromLocationType", Value: "AWS Region", Type: "TERM_MATCH" },
-        { Field: "toLocationType", Value: "External", Type: "TERM_MATCH" },
-        { Field: "transferType", Value: "AWS Outbound", Type: "TERM_MATCH" },
+        {
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.DATA_TRANSFER,
+          Type: M.TERM_MATCH,
+        },
+        {
+          Field: F.FROM_LOCATION_TYPE,
+          Value: "AWS Region",
+          Type: M.TERM_MATCH,
+        },
+        { Field: F.TO_LOCATION_TYPE, Value: "External", Type: M.TERM_MATCH },
+        { Field: F.TRANSFER_TYPE, Value: "AWS Outbound", Type: M.TERM_MATCH },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "per GB",
       priceUnit: "/GB",
     });

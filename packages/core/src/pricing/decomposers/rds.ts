@@ -12,6 +12,13 @@ import type {
   PricingLineItem,
 } from "../decomposer-types.js";
 import { EXTENDED_TIMEOUT_MS } from "../constants.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const rdsPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
@@ -30,26 +37,26 @@ export const rdsPricingDecomposer: PricingDecomposer = {
       label: "Compute",
       quantity: 1,
       unit: "instance",
-      serviceCode: "AmazonRDS",
+      serviceCode: SC.RDS,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Database Instance",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.DATABASE_INSTANCE,
+          Type: M.TERM_MATCH,
         },
-        { Field: "instanceType", Value: instanceClass, Type: "TERM_MATCH" },
+        { Field: F.INSTANCE_TYPE, Value: instanceClass, Type: M.TERM_MATCH },
         {
-          Field: "databaseEngine",
+          Field: F.DATABASE_ENGINE,
           Value: mapEngine(engine),
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "deploymentOption",
+          Field: F.DEPLOYMENT_OPTION,
           Value: multiAZ ? "Multi-AZ" : "Single-AZ",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "fixed",
+      kind: K.FIXED,
       description: multiAZ ? `${instanceClass} (Multi-AZ)` : instanceClass,
       priceUnit: "/hr",
       timeoutMs: EXTENDED_TIMEOUT_MS,
@@ -65,25 +72,25 @@ export const rdsPricingDecomposer: PricingDecomposer = {
       label: "Storage",
       quantity: allocatedStorage,
       unit: "GB",
-      serviceCode: "AmazonRDS",
+      serviceCode: SC.RDS,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Database Storage",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.DATABASE_STORAGE,
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "volumeType",
+          Field: F.VOLUME_TYPE,
           Value: mapStorageType(storageType),
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "deploymentOption",
+          Field: F.DEPLOYMENT_OPTION,
           Value: multiAZ ? "Multi-AZ" : "Single-AZ",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "fixed",
+      kind: K.FIXED,
       description: `${allocatedStorage} GB ${storageType}`,
       priceUnit: "/GB-mo",
     });
@@ -97,15 +104,15 @@ export const rdsPricingDecomposer: PricingDecomposer = {
         label: "Backup",
         quantity: allocatedStorage,
         unit: "GB",
-        serviceCode: "AmazonRDS",
+        serviceCode: SC.RDS,
         filters: [
           {
-            Field: "productFamily",
-            Value: "Storage Snapshot",
-            Type: "TERM_MATCH",
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.STORAGE_SNAPSHOT,
+            Type: M.TERM_MATCH,
           },
         ],
-        kind: "usage_based",
+        kind: K.USAGE_BASED,
         description: `${backupRetention} days retention`,
         priceUnit: "/GB-mo",
       });

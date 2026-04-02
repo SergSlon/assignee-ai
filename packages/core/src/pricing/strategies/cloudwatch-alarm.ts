@@ -4,6 +4,12 @@ import type {
   McpPricingConfig,
 } from "../types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 /**
  * Pricing strategy for AWS::CloudWatch::Alarm.
@@ -32,17 +38,17 @@ export const cloudWatchAlarmPricingStrategy: PricingStrategy = {
     const isHighRes = period < 60;
 
     return {
-      serviceCode: "AmazonCloudWatch",
+      serviceCode: SC.CLOUDWATCH,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Alarm",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.ALARM,
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "alarmType",
+          Field: F.ALARM_TYPE,
           Value: isHighRes ? "High Resolution" : "Standard",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
       unit: "/alarm-month",

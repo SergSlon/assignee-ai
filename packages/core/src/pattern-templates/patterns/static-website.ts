@@ -1,3 +1,4 @@
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 
@@ -48,7 +49,7 @@ export const staticWebsitePattern: ArchitecturePattern = {
           { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
         ],
       },
-      VersioningConfiguration: { Status: "Enabled" },
+      VersioningConfiguration: { Status: CfnKey.ENABLED },
       PublicAccessBlockConfiguration: {
         BlockPublicAcls: false,
         BlockPublicPolicy: false,

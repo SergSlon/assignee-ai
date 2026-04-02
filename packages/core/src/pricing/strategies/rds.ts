@@ -6,6 +6,12 @@ import type {
 
 import { EXTENDED_TIMEOUT_MS } from "../constants.js";
 import { CfnKey } from "../../config/cfn-keys.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 const DEFAULT_INSTANCE_CLASS = "db.t3.micro";
 const DEFAULT_ENGINE = "mysql";
@@ -21,16 +27,16 @@ export const rdsPricingStrategy: PricingStrategy = {
     const engine =
       (desiredState?.[CfnKey.ENGINE] as string | undefined) ?? DEFAULT_ENGINE;
     return {
-      serviceCode: "AmazonRDS",
+      serviceCode: SC.RDS,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Database Instance",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.DATABASE_INSTANCE,
+          Type: M.TERM_MATCH,
         },
-        { Field: "instanceType", Value: instanceClass, Type: "TERM_MATCH" },
-        { Field: "databaseEngine", Value: engine, Type: "TERM_MATCH" },
-        { Field: "deploymentOption", Value: "Single-AZ", Type: "TERM_MATCH" },
+        { Field: F.INSTANCE_TYPE, Value: instanceClass, Type: M.TERM_MATCH },
+        { Field: F.DATABASE_ENGINE, Value: engine, Type: M.TERM_MATCH },
+        { Field: F.DEPLOYMENT_OPTION, Value: "Single-AZ", Type: M.TERM_MATCH },
       ],
       unit: "/hour",
       timeoutMs: EXTENDED_TIMEOUT_MS,
