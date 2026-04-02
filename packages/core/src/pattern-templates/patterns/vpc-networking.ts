@@ -2,7 +2,7 @@ import {
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
 } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ArchitecturePattern } from "../types.js";
 
 /** Shorthand aliases for companion resource type constants used in this pattern. */
@@ -251,7 +251,7 @@ export const vpcNetworkingPattern: ArchitecturePattern = {
     },
     [VpcResourceId.NAT_GATEWAY]: {
       SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_1 },
-      ConnectivityType: "public",
+      ConnectivityType: AwsDefault.CONNECTIVITY_PUBLIC,
       [CfnKey.ALLOCATION_ID]: {
         "Fn::GetAtt": [VpcResourceId.NAT_EIP, CfnKey.ALLOCATION_ID],
       },

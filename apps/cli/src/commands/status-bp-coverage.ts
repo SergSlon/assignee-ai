@@ -11,6 +11,8 @@ import * as path from "node:path";
 import { parse } from "yaml";
 import chalk from "chalk";
 import { SUPPORTED_TYPES_ARRAY } from "@assignee/core";
+import { FixType } from "@assignee/best-practices";
+import { UNKNOWN_FALLBACK } from "../config/constants.js";
 
 const SKIP_DIRS = new Set(["src", "dist", "node_modules", "__tests__"]);
 
@@ -86,14 +88,14 @@ export function computeBPCoverage(bpDir: string): BPCoverageData {
   for (const [resourceType, typeRules] of byType.entries()) {
     const autoFix = typeRules.filter((r) => r.autoFixable === true).length;
     const interactive = typeRules.filter(
-      (r) => r.fixType === "interactive",
+      (r) => r.fixType === FixType.INTERACTIVE,
     ).length;
     const manual = typeRules.length - autoFix - interactive;
     const lastVerified =
       typeRules
         .map((r) => r.lastVerified)
         .sort()
-        .reverse()[0] ?? "unknown";
+        .reverse()[0] ?? UNKNOWN_FALLBACK;
 
     resourceTypes.push({
       resourceType,
@@ -111,7 +113,7 @@ export function computeBPCoverage(bpDir: string): BPCoverageData {
   // Summary
   const totalAutoFix = rules.filter((r) => r.autoFixable === true).length;
   const totalInteractive = rules.filter(
-    (r) => r.fixType === "interactive",
+    (r) => r.fixType === FixType.INTERACTIVE,
   ).length;
   const totalManual = rules.length - totalAutoFix - totalInteractive;
 
@@ -122,14 +124,14 @@ export function computeBPCoverage(bpDir: string): BPCoverageData {
   // Source breakdown
   const sources: Record<string, number> = {};
   for (const rule of rules) {
-    const src = rule.source || "unknown";
+    const src = rule.source || UNKNOWN_FALLBACK;
     sources[src] = (sources[src] ?? 0) + 1;
   }
 
   // Severity distribution
   const severityDistribution: Record<string, number> = {};
   for (const rule of rules) {
-    const sev = rule.severity || "unknown";
+    const sev = rule.severity || UNKNOWN_FALLBACK;
     severityDistribution[sev] = (severityDistribution[sev] ?? 0) + 1;
   }
 

@@ -7,7 +7,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { CHECKPOINT_DIR } from "../config/constants.js";
+import { CHECKPOINT_DIR, CHECKPOINT_FILE_PREFIX } from "../config/constants.js";
 import { RESOURCE_IDENTIFIER_KEYS, type ResourceType } from "@assignee/core";
 
 /**
@@ -21,7 +21,9 @@ export async function resolveDesiredState(
   try {
     const files = await fs.readdir(dir);
     const checkpoints = files
-      .filter((f) => f.startsWith("checkpoint-") && f.endsWith(".json"))
+      .filter(
+        (f) => f.startsWith(CHECKPOINT_FILE_PREFIX) && f.endsWith(".json"),
+      )
       .sort()
       .reverse(); // newest first by filename
 

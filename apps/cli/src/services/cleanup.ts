@@ -13,7 +13,13 @@ import * as os from "node:os";
 import { pruneExpiredCheckpoints } from "./checkpoint.js";
 import { sweepExpiredPrices } from "./price-cache.js";
 import type { MemoryService } from "./memory.js";
-import { AUTO_CLEANUP_INTERVAL_MS, CLEANUP_SKIP_RECENT_MINUTES, CLEANUP_MAX_AGE_MS } from "../config/constants.js";
+import {
+  AUTO_CLEANUP_INTERVAL_MS,
+  CHECKPOINT_FILE_PREFIX,
+  CleanupCategoryName,
+  CLEANUP_SKIP_RECENT_MINUTES,
+  CLEANUP_MAX_AGE_MS,
+} from "../config/constants.js";
 
 /** Per-category counts returned by a cleanup run. */
 export interface CleanupReport {
@@ -23,7 +29,8 @@ export interface CleanupReport {
 }
 
 /** Subset of cleanup categories that can be individually selected. */
-export type CleanupCategory = "checkpoints" | "cache" | "memory";
+export type CleanupCategory =
+  (typeof CleanupCategoryName)[keyof typeof CleanupCategoryName];
 
 /** Path to the throttle file for auto-cleanup. */
 const LAST_CLEANUP_PATH = path.join(
@@ -57,7 +64,7 @@ async function dryRunCheckpoints(
   }
 
   const files = entries.filter(
-    (f) => f.startsWith("checkpoint-") && f.endsWith(".json"),
+    (f) => f.startsWith(CHECKPOINT_FILE_PREFIX) && f.endsWith(".json"),
   );
   if (files.length === 0) return { pruned: 0, kept: 0 };
 
@@ -206,12 +213,16 @@ export async function runFullCleanup(opts: {
   categories?: CleanupCategory[];
 }): Promise<CleanupReport> {
   const { checkpointDir, memoryService, dryRun = false } = opts;
-  const categories = opts.categories ?? ["checkpoints", "cache", "memory"];
+  const categories = opts.categories ?? [
+    CleanupCategoryName.CHECKPOINTS,
+    CleanupCategoryName.CACHE,
+    CleanupCategoryName.MEMORY,
+  ];
 
   const report = emptyReport();
 
   // Run each category independently — one failure should not prevent others
-  if (categories.includes("checkpoints")) {
+  if (categories.includes(CleanupCategoryName.CHECKPOINTS)) {
     try {
       if (dryRun) {
         report.checkpoints = await dryRunCheckpoints(checkpointDir);
@@ -223,7 +234,7 @@ export async function runFullCleanup(opts: {
     }
   }
 
-  if (categories.includes("cache")) {
+  if (categories.includes(CleanupCategoryName.CACHE)) {
     try {
       if (dryRun) {
         report.cache = await dryRunCacheSweep();
@@ -235,7 +246,7 @@ export async function runFullCleanup(opts: {
     }
   }
 
-  if (categories.includes("memory")) {
+  if (categories.includes(CleanupCategoryName.MEMORY)) {
     try {
       if (dryRun) {
         report.memory = await dryRunMemory(memoryService);
@@ -290,7 +301,9 @@ export async function runAutoCleanup(
     }
 
     // Run checkpoint pruning with skipRecentMinutes: 10
-    await pruneExpiredCheckpoints(checkpointDir, { skipRecentMinutes: CLEANUP_SKIP_RECENT_MINUTES });
+    await pruneExpiredCheckpoints(checkpointDir, {
+      skipRecentMinutes: CLEANUP_SKIP_RECENT_MINUTES,
+    });
 
     // Run cache sweep
     sweepExpiredPrices();

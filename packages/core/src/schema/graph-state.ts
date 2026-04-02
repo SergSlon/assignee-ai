@@ -5,6 +5,7 @@ import type {
   ResourceResult,
 } from "../pattern-templates/types.js";
 import { SUPPORTED_TYPES_ARRAY } from "../config/resource-types.js";
+import { OrgPolicy } from "../config/resource-policy.js";
 
 export const ExecutionMode = {
   PLAN: "plan",
@@ -92,7 +93,11 @@ export const GraphStateSchema = z.object({
     .record(
       z.record(
         z.object({
-          policy: z.enum(["locked", "default", "always_ask"]),
+          policy: z.enum([
+            OrgPolicy.LOCKED,
+            OrgPolicy.DEFAULT,
+            OrgPolicy.ALWAYS_ASK,
+          ]),
           value: z.unknown().optional(),
         }),
       ),
@@ -102,7 +107,11 @@ export const GraphStateSchema = z.object({
 
   // Best-practice enforcement level (Story 41.2)
   bpEnforcementLevel: z
-    .enum(["enforce", "warn", "skip"])
+    .enum([
+      BPEnforcementLevel.ENFORCE,
+      BPEnforcementLevel.WARN,
+      BPEnforcementLevel.SKIP,
+    ])
     .default(BPEnforcementLevel.ENFORCE),
 
   // LangGraph message history
@@ -110,3 +119,26 @@ export const GraphStateSchema = z.object({
 });
 
 export type GraphState = z.infer<typeof GraphStateSchema>;
+
+/**
+ * Graph state field name constants — single source of truth for state channel
+ * names used in serialization, MCP server responses, and pipeline contract tests.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const StateField = {
+  EXECUTION_STATUS: "executionStatus",
+  RESOURCE_TYPE: "resourceType",
+  DESIRED_STATE: "desiredState",
+  ESTIMATED_MONTHLY_COST: "estimatedMonthlyCost",
+  ERROR_MESSAGE: "errorMessage",
+  RESOURCE_ARN: "resourceArn",
+  SECURITY_FINDINGS: "securityFindings",
+  COMPLETED_RESOURCES: "completedResources",
+  BP_FINDINGS: "bpFindings",
+  FREE_TIER_NOTE: "freeTierNote",
+  PREFLIGHT_PASSED: "preflightPassed",
+  ELICITED_OPTIONS: "elicitedOptions",
+  RESOURCE_PATTERN: "resourcePattern",
+  RESOURCE_QUEUE: "resourceQueue",
+} as const;

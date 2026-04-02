@@ -11,6 +11,7 @@ export const ProcessExitCode = {
  * @see Story 42.10 — zero magic strings policy
  */
 export const ErrorCode = {
+  UNKNOWN: "UNKNOWN",
   DESTROY_ERROR: "DESTROY_ERROR",
   INVALID_SOURCE_DIR: "INVALID_SOURCE_DIR",
   USAGE_ERROR: "USAGE_ERROR",
@@ -26,4 +27,48 @@ export const ErrorCode = {
   USER_CANCELLED: "USER_CANCELLED",
   MISSING_INTENT: "MISSING_INTENT",
   NON_INTERACTIVE_NO_YES: "NON_INTERACTIVE_NO_YES",
+
+  // ── Checkpoint errors ────────────────────────────────────────
+  CHECKPOINT_ERROR: "CHECKPOINT_ERROR",
+  CHECKPOINT_EXPIRED: "CHECKPOINT_EXPIRED",
+  CHECKPOINT_INVALID: "CHECKPOINT_INVALID",
+  CHECKPOINT_NOT_FOUND: "CHECKPOINT_NOT_FOUND",
+
+  // ── Config parse errors ──────────────────────────────────────
+  INVALID_YAML: "INVALID_YAML",
+
+  // ── Credential / config errors ───────────────────────────────
+  MISSING_CREDENTIALS: "MISSING_CREDENTIALS",
+  MISSING_ACCESS_KEY: "MISSING_ACCESS_KEY",
+  MISSING_SECRET_KEY: "MISSING_SECRET_KEY",
+  MISSING_REGION: "MISSING_REGION",
+
+  // ── LLM errors ──────────────────────────────────────────────
+  LLM_TIMEOUT: "LLM_TIMEOUT",
+} as const;
+
+/**
+ * LLM provider identifiers used in model string parsing and routing.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const LlmProvider = {
+  BEDROCK: "bedrock",
+  ANTHROPIC: "anthropic",
+  OPENAI: "openai",
+  GOOGLE: "google",
+  OLLAMA: "ollama",
+} as const;
+
+export type LlmProviderType = (typeof LlmProvider)[keyof typeof LlmProvider];
+
+/**
+ * MIME content type constants used in HTTP headers and S3 uploads.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const ContentType = {
+  JSON: "application/json",
+  JAVASCRIPT: "application/javascript",
+  JPEG: "image/jpeg",
 } as const;

@@ -32,7 +32,7 @@ export interface ConfigDefaults {
 /** User preference settings. */
 export interface ConfigPreferences {
   /** How to handle best practice auto-fixes. Default: "ask" */
-  auto_fix?: "ask" | "apply" | "skip";
+  auto_fix?: AutoFixModeType;
   /** Output format for CLI results. Default: "table" */
   output_format?: "table" | "json";
   /** Verbosity level. Default: "normal" */
@@ -53,6 +53,14 @@ export interface AssigneeConfig {
   org_policy?: Record<string, Record<string, unknown>>;
 }
 
+/** Named constants for auto_fix preference values. */
+export const AutoFixMode = {
+  ASK: "ask",
+  APPLY: "apply",
+  SKIP: "skip",
+} as const;
+export type AutoFixModeType = (typeof AutoFixMode)[keyof typeof AutoFixMode];
+
 // ── Default Values ───────────────────────────────────────────────────────
 
 /** Default AWS region when none is configured or provided via AWS_REGION env var. */
@@ -60,14 +68,18 @@ export const DEFAULT_AWS_REGION = "us-east-1";
 
 /** Default values for all preference fields. */
 export const CONFIG_DEFAULTS: Required<ConfigPreferences> = {
-  auto_fix: "ask",
+  auto_fix: AutoFixMode.ASK,
   output_format: "table",
   verbosity: "normal",
 } as const;
 
 // ── Enum Validation Sets ─────────────────────────────────────────────────
 
-const VALID_AUTO_FIX = new Set(["ask", "apply", "skip"]);
+const VALID_AUTO_FIX: Set<string> = new Set([
+  AutoFixMode.ASK,
+  AutoFixMode.APPLY,
+  AutoFixMode.SKIP,
+]);
 const VALID_OUTPUT_FORMAT = new Set(["table", "json"]);
 const VALID_VERBOSITY = new Set(["quiet", "normal", "verbose"]);
 

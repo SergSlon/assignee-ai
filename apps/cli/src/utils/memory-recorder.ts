@@ -15,7 +15,11 @@ import { defaultMemoryService } from "../services/memory.js";
 import { defaultErrorMessageRegistry } from "./error-messages.js";
 import { CostEstimate } from "../constants/pricing.js";
 import { EnvVar } from "../constants/env-vars.js";
+import { ErrorCode } from "../constants/errors.js";
 import { log, LOG_ACTIONS } from "./logger.js";
+
+/** Fallback value for unknown/missing metadata fields. */
+const UNKNOWN_FALLBACK = "unknown" as const;
 
 /**
  * Writes a provision record to the memory log (Story 19.3).
@@ -31,12 +35,12 @@ export async function writeProvisionRecord(
   try {
     await defaultMemoryService.appendProvision({
       runId,
-      resourceType: resourceType || "unknown",
+      resourceType: resourceType || UNKNOWN_FALLBACK,
       resourceArn: resourceArn ?? "",
       region:
         process.env[EnvVar.AWS_REGION] ??
         process.env[EnvVar.AWS_DEFAULT_REGION] ??
-        "unknown",
+        UNKNOWN_FALLBACK,
       desiredStateHash: crypto
         .createHash("sha256")
         .update(JSON.stringify(desiredState ?? {}))
@@ -75,12 +79,12 @@ export async function writeFailureRecord(
       ? error.provisioningCode
       : error instanceof AssigneeError
         ? error.code
-        : "UNKNOWN";
+        : ErrorCode.UNKNOWN;
 
   try {
     await defaultMemoryService.appendFailure({
       runId,
-      resourceType: resourceType || "unknown",
+      resourceType: resourceType || UNKNOWN_FALLBACK,
       errorCode,
       errorMessage: errorMessage ?? "Unknown error",
       suggestedFix,

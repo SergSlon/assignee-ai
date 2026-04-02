@@ -5,7 +5,12 @@
  * @see Story 23.2
  */
 
-import { CfnKey, ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
+import {
+  CfnKey,
+  ResourceDefault,
+  AwsDefault,
+  RdsEngineDisplay,
+} from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -131,17 +136,17 @@ export const rdsPricingDecomposer: PricingDecomposer = {
 
 function mapEngine(engine: string): string {
   const map: Record<string, string> = {
-    mysql: "MySQL",
-    postgres: "PostgreSQL",
-    mariadb: "MariaDB",
-    "oracle-ee": "Oracle",
-    "oracle-se2": "Oracle",
-    "sqlserver-ee": "SQL Server",
-    "sqlserver-se": "SQL Server",
-    "sqlserver-ex": "SQL Server",
-    "sqlserver-web": "SQL Server",
-    "aurora-mysql": "Aurora MySQL",
-    "aurora-postgresql": "Aurora PostgreSQL",
+    mysql: RdsEngineDisplay.MYSQL,
+    postgres: RdsEngineDisplay.POSTGRESQL,
+    mariadb: RdsEngineDisplay.MARIADB,
+    "oracle-ee": RdsEngineDisplay.ORACLE,
+    "oracle-se2": RdsEngineDisplay.ORACLE,
+    "sqlserver-ee": RdsEngineDisplay.SQL_SERVER,
+    "sqlserver-se": RdsEngineDisplay.SQL_SERVER,
+    "sqlserver-ex": RdsEngineDisplay.SQL_SERVER,
+    "sqlserver-web": RdsEngineDisplay.SQL_SERVER,
+    "aurora-mysql": RdsEngineDisplay.AURORA_MYSQL,
+    "aurora-postgresql": RdsEngineDisplay.AURORA_POSTGRESQL,
   };
   return map[engine] ?? engine;
 }

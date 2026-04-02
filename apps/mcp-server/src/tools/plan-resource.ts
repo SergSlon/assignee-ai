@@ -11,6 +11,7 @@ import {
   ExecutionMode,
   ExecutionStatus,
   BPEnforcementLevel,
+  StateField,
 } from "@assignee/core";
 import type { GraphContext } from "../services/graph-init.js";
 import {
@@ -91,8 +92,9 @@ export function registerPlanResource(
 
         // Task 1.3: Check for execution errors
         if (
-          finalState["executionStatus"] === ExecutionStatus.FAILED ||
-          finalState["executionStatus"] === ExecutionStatus.UNSUPPORTED_RESOURCE
+          finalState[StateField.EXECUTION_STATUS] === ExecutionStatus.FAILED ||
+          finalState[StateField.EXECUTION_STATUS] ===
+            ExecutionStatus.UNSUPPORTED_RESOURCE
         ) {
           return {
             content: [
@@ -101,10 +103,10 @@ export function registerPlanResource(
                 text: JSON.stringify({
                   error: true,
                   message:
-                    (finalState["errorMessage"] as string) ??
+                    (finalState[StateField.ERROR_MESSAGE] as string) ??
                     "Plan generation failed",
-                  status: finalState["executionStatus"],
-                  ...(finalState["executionStatus"] ===
+                  status: finalState[StateField.EXECUTION_STATUS],
+                  ...(finalState[StateField.EXECUTION_STATUS] ===
                   ExecutionStatus.UNSUPPORTED_RESOURCE
                     ? {
                         hint: "Supported types: S3, Lambda, DynamoDB, SQS, SNS, EC2, RDS, IAM Role, SSM Parameter, CloudWatch Logs, EventBridge Rule.",
@@ -121,21 +123,25 @@ export function registerPlanResource(
         const checkpoint = serializeCheckpoint({
           runId,
           userIntent: enrichedDescription,
-          resourceType: finalState["resourceType"] as string | undefined,
-          desiredState: finalState["desiredState"] as
-            | Record<string, unknown>
-            | undefined,
-          estimatedMonthlyCost: finalState["estimatedMonthlyCost"] as
+          resourceType: finalState[StateField.RESOURCE_TYPE] as
             | string
             | undefined,
-          preflightPassed: finalState["preflightPassed"] as boolean | undefined,
-          elicitedOptions: finalState["elicitedOptions"] as
+          desiredState: finalState[StateField.DESIRED_STATE] as
             | Record<string, unknown>
             | undefined,
-          resourcePattern: finalState["resourcePattern"] as
+          estimatedMonthlyCost: finalState[
+            StateField.ESTIMATED_MONTHLY_COST
+          ] as string | undefined,
+          preflightPassed: finalState[StateField.PREFLIGHT_PASSED] as
+            | boolean
+            | undefined,
+          elicitedOptions: finalState[StateField.ELICITED_OPTIONS] as
+            | Record<string, unknown>
+            | undefined,
+          resourcePattern: finalState[StateField.RESOURCE_PATTERN] as
             | { patternId?: string }
             | undefined,
-          resourceQueue: finalState["resourceQueue"] as
+          resourceQueue: finalState[StateField.RESOURCE_QUEUE] as
             | Array<{
                 resourceId: string;
                 resourceType: string;
@@ -154,11 +160,13 @@ export function registerPlanResource(
             {
               type: "text" as const,
               text: JSON.stringify({
-                resourceType: finalState["resourceType"],
-                desiredState: finalState["desiredState"],
-                estimatedMonthlyCost: finalState["estimatedMonthlyCost"],
-                bpFindings: (finalState["bpFindings"] as unknown[]) ?? [],
-                freeTierNote: finalState["freeTierNote"],
+                resourceType: finalState[StateField.RESOURCE_TYPE],
+                desiredState: finalState[StateField.DESIRED_STATE],
+                estimatedMonthlyCost:
+                  finalState[StateField.ESTIMATED_MONTHLY_COST],
+                bpFindings:
+                  (finalState[StateField.BP_FINDINGS] as unknown[]) ?? [],
+                freeTierNote: finalState[StateField.FREE_TIER_NOTE],
                 checkpointPath,
                 runId,
               }),

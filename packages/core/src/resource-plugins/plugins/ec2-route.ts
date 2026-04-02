@@ -1,5 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 
 /**
@@ -57,10 +57,16 @@ export const routePlugin: ResourcePlugin = {
         type: "enum",
         label: "Route target type",
         options: [
-          { value: "public", label: "Public (Internet Gateway)" },
-          { value: "private", label: "Private (NAT Gateway)" },
+          {
+            value: AwsDefault.CONNECTIVITY_PUBLIC,
+            label: "Public (Internet Gateway)",
+          },
+          {
+            value: AwsDefault.CONNECTIVITY_PRIVATE,
+            label: "Private (NAT Gateway)",
+          },
         ],
-        initialValue: "public",
+        initialValue: AwsDefault.CONNECTIVITY_PUBLIC,
         hint: "Public routes target an InternetGateway for direct internet access. Private routes target a NatGateway for outbound-only internet access.",
       },
       toCfn: () => undefined,
@@ -72,7 +78,10 @@ export const routePlugin: ResourcePlugin = {
         label: "Internet Gateway ID",
         hint: "The ID of the InternetGateway target. Use a Ref to the IGW logical ID in the plan.",
         placeholder: "igw-0123456789abcdef0",
-        showIf: { field: CfnKey.ROUTE_TYPE, value: "public" },
+        showIf: {
+          field: CfnKey.ROUTE_TYPE,
+          value: AwsDefault.CONNECTIVITY_PUBLIC,
+        },
       },
     },
     {
@@ -82,14 +91,17 @@ export const routePlugin: ResourcePlugin = {
         label: "NAT Gateway ID",
         hint: "The ID of the NatGateway target. Use a Ref to the NatGateway logical ID in the plan.",
         placeholder: "nat-0123456789abcdef0",
-        showIf: { field: CfnKey.ROUTE_TYPE, value: "private" },
+        showIf: {
+          field: CfnKey.ROUTE_TYPE,
+          value: AwsDefault.CONNECTIVITY_PRIVATE,
+        },
       },
     },
   ],
   advancedFields: [],
   defaults: {
     [CfnKey.DESTINATION_CIDR_BLOCK]: "0.0.0.0/0",
-    [CfnKey.ROUTE_TYPE]: "public",
+    [CfnKey.ROUTE_TYPE]: AwsDefault.CONNECTIVITY_PUBLIC,
   },
   configHints: [
     "NEVER include Tags — AWS::EC2::Route does not support tagging. Omit Tags entirely.",

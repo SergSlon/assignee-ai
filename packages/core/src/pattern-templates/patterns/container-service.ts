@@ -2,9 +2,10 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { AwsDefault } from "../../config/cfn-keys.js";
 import type { ArchitecturePattern } from "../types.js";
 import { ContainerServiceResourceId as R } from "../pattern-resource-ids.js";
+import { PatternId } from "../pattern-ids.js";
 
 export const containerServicePattern: ArchitecturePattern = {
-  patternId: "container-service",
+  patternId: PatternId.CONTAINER_SERVICE,
   displayName: "Container Service (ECS Fargate)",
   keywords: [
     "container service",

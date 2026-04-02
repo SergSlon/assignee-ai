@@ -55,9 +55,9 @@ export const listCommand = new Command(CommandName.LIST)
         );
       } else if (
         err.message.includes("ENOTFOUND") ||
-        err.message.includes("NetworkingError") ||
+        err.message.includes(AwsErrorName.NETWORKING_ERROR) ||
         err.message.includes("getaddrinfo") ||
-        errName === "NetworkingError"
+        errName === AwsErrorName.NETWORKING_ERROR
       ) {
         renderError(
           "Failed to connect to AWS.",

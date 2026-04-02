@@ -13,13 +13,23 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
+import { FileName } from "../config/constants.js";
 import { RESOURCE_TYPES } from "@assignee/core";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+/** Named constants for free tier eligibility categories. */
+export const FreeTierType = {
+  ALWAYS_FREE: "always_free",
+  LEGACY_ELIGIBLE: "legacy_eligible",
+  CREDITS_APPLY: "credits_apply",
+} as const;
+export type FreeTierTypeValue =
+  (typeof FreeTierType)[keyof typeof FreeTierType];
+
 /** Describes a free tier eligibility note for a given resource type. */
 export interface FreeTierNote {
-  type: "always_free" | "legacy_eligible" | "credits_apply";
+  type: FreeTierTypeValue;
   message: string;
 }
 
@@ -80,7 +90,7 @@ export function loadAccountCreatedDate(): string | undefined {
   }
 
   try {
-    const configPath = join(homedir(), ".assignee", "config.yaml");
+    const configPath = join(homedir(), ".assignee", FileName.CONFIG);
     const content = readFileSync(configPath, "utf-8");
     const parsed = parseYaml(content) as Record<string, unknown> | undefined;
     const dateValue = parsed?.["aws_account_created"];
@@ -120,13 +130,13 @@ export function getFreeTierNote(
   // 1. Always-free resources
   const alwaysFreeMsg = ALWAYS_FREE_RESOURCES[resourceType];
   if (alwaysFreeMsg) {
-    return { type: "always_free", message: alwaysFreeMsg };
+    return { type: FreeTierType.ALWAYS_FREE, message: alwaysFreeMsg };
   }
 
   // 2. Always-free with usage limits
   const alwaysFreeLimitMsg = ALWAYS_FREE_WITH_LIMITS[resourceType];
   if (alwaysFreeLimitMsg) {
-    return { type: "always_free", message: alwaysFreeLimitMsg };
+    return { type: FreeTierType.ALWAYS_FREE, message: alwaysFreeLimitMsg };
   }
 
   // 3. Legacy 12-month eligible resources
@@ -134,7 +144,7 @@ export function getFreeTierNote(
   if (legacyMsg) {
     if (accountCreatedDate === undefined) {
       return {
-        type: "credits_apply",
+        type: FreeTierType.CREDITS_APPLY,
         message:
           "Free tier eligibility unknown -- check your AWS billing dashboard",
       };
@@ -142,7 +152,7 @@ export function getFreeTierNote(
 
     if (accountCreatedDate >= FREE_TIER_CUTOFF_DATE) {
       return {
-        type: "credits_apply",
+        type: FreeTierType.CREDITS_APPLY,
         message: "AWS credits may apply -- check your billing dashboard",
       };
     }
@@ -150,7 +160,7 @@ export function getFreeTierNote(
     // Legacy account: check if still within the 12-month window
     if (isWithin12Months(accountCreatedDate)) {
       return {
-        type: "legacy_eligible",
+        type: FreeTierType.LEGACY_ELIGIBLE,
         message: `Free tier: ${legacyMsg} remaining`,
       };
     }

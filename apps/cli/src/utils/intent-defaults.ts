@@ -10,6 +10,7 @@
 
 import { CfnKey, RESOURCE_TYPES } from "@assignee/core";
 import type { ResourceField } from "@assignee/core";
+import { WorkloadProfile as WP } from "../constants/workload-profiles.js";
 
 /** A single field default override derived from intent analysis. */
 export interface IntentDefaultOverride {
@@ -44,7 +45,7 @@ const INTENT_RULES: IntentRule[] = [
         fieldName: CfnKey.INSTANCE_TYPE,
         value: "t3.small",
         reason: "Selected for web serving — burstable with 2 GiB RAM",
-        categoryHint: "burstable",
+        categoryHint: WP.BURSTABLE,
       },
     ],
   },
@@ -57,7 +58,7 @@ const INTENT_RULES: IntentRule[] = [
         fieldName: CfnKey.INSTANCE_TYPE,
         value: "c5.xlarge",
         reason: "Selected for ML/compute — 4 vCPU, 8 GiB, compute-optimized",
-        categoryHint: "compute",
+        categoryHint: WP.COMPUTE,
       },
     ],
   },
@@ -70,7 +71,7 @@ const INTENT_RULES: IntentRule[] = [
         fieldName: CfnKey.INSTANCE_TYPE,
         value: "r5.large",
         reason: "Selected for data workloads — 16 GiB memory-optimized",
-        categoryHint: "memory",
+        categoryHint: WP.MEMORY,
       },
     ],
   },

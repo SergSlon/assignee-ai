@@ -99,18 +99,22 @@ export const DriftedFieldSchema = z.object({
   path: z.string(),
   desiredValue: z.unknown(),
   actualValue: z.unknown(),
-  changeType: z.enum(["MODIFIED", "ADDED_EXTERNALLY", "REMOVED"]),
+  changeType: z.enum([
+    ChangeType.MODIFIED,
+    ChangeType.ADDED_EXTERNALLY,
+    ChangeType.REMOVED,
+  ]),
 });
 
 export const DriftResultSchema = z.object({
   resourceType: z.string(),
   resourceId: z.string(),
   status: z.enum([
-    "IN_SYNC",
-    "DRIFTED",
-    "DELETED",
-    "ERROR",
-    "BASELINE_MISSING",
+    DriftStatus.IN_SYNC,
+    DriftStatus.DRIFTED,
+    DriftStatus.DELETED,
+    DriftStatus.ERROR,
+    DriftStatus.BASELINE_MISSING,
   ]),
   driftedFields: z.array(DriftedFieldSchema),
   actualState: z.record(z.unknown()).optional(),

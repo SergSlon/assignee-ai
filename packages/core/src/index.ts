@@ -10,6 +10,7 @@ export {
   type PreflightModeType,
   BPEnforcementLevel,
   type BPEnforcementLevelType,
+  StateField,
 } from "./schema/graph-state.js";
 export { AuditEventSchema, type AuditEvent } from "./schema/audit.js";
 export {
@@ -51,6 +52,9 @@ export {
   ResourceDefault,
   AwsDefault,
   AssigneeTag,
+  RdsEngineDisplay,
+  CloudWatchStatistic,
+  AmiOs,
 } from "./config/cfn-keys.js";
 
 // Config — AssigneeConfig schema and validation (Story 27.1)
@@ -59,11 +63,13 @@ export type {
   ConfigDefaults,
   ConfigPreferences,
   ConfigNaming,
+  AutoFixModeType,
 } from "./config/index.js";
 export {
   validateConfig,
   CONFIG_DEFAULTS,
   DEFAULT_AWS_REGION,
+  AutoFixMode,
 } from "./config/index.js";
 
 // Config — resource type constants and identifier mappings
@@ -112,6 +118,7 @@ export {
 export {
   defaultPatternRegistry,
   PatternRegistry,
+  PatternId,
 } from "./pattern-templates/index.js";
 export type {
   ArchitecturePattern,
@@ -142,6 +149,7 @@ export type {
   UserResourceConfig,
   ResolvedFieldConfig,
 } from "./config/resource-policy.js";
+export { OrgPolicy } from "./config/resource-policy.js";
 
 // Utils
 export { sanitizeUserIntent, MAX_INTENT_LENGTH } from "./utils/sanitize.js";
@@ -176,6 +184,7 @@ export {
   PricingServiceCode,
   PricingProductFamily,
   CostEstimateLabel,
+  PricingFilterValue,
 } from "./pricing/index.js";
 
 // Errors

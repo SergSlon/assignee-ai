@@ -27,4 +27,15 @@ export const PricingFilterValue = {
   // RDS deployment options
   MULTI_AZ: "Multi-AZ",
   SINGLE_AZ: "Single-AZ",
+
+  // ── Usage type values (pricing API usagetype filter) ──────────
+  NAT_GATEWAY_HOURS: "NatGateway-Hours",
+  NAT_GATEWAY_BYTES: "NatGateway-Bytes",
+  API_GATEWAY_MESSAGE: "ApiGatewayMessage",
+  API_GATEWAY_HTTP_REQUEST: "ApiGatewayHttpRequest",
+  API_GATEWAY_MINUTE: "ApiGatewayMinute",
+  LAMBDA_REQUEST: "Request",
+  LAMBDA_GB_SECOND: "Lambda-GB-Second",
+  DATA_PROCESSING_BYTES: "DataProcessing-Bytes",
+  DELIVERY_ATTEMPTS_HTTP: "DeliveryAttempts-HTTP",
 } as const;

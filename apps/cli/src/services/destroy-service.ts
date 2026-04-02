@@ -32,6 +32,12 @@ import {
 const MAX_POLL_ATTEMPTS = DESTROY_MAX_POLL_ATTEMPTS;
 const POLL_INTERVAL_MS = DESTROY_POLL_INTERVAL_MS;
 
+/** AWS CloudControl API operation status values. */
+const CCAPIStatus = {
+  SUCCESS: "SUCCESS",
+  FAILED: "FAILED",
+} as const;
+
 export interface DestroyResult {
   success: boolean;
   resourceType: string;
@@ -59,10 +65,10 @@ async function pollDeleteStatus(
       return { success: false, message: err.message };
     }
 
-    if (status.operationStatus === "SUCCESS") {
+    if (status.operationStatus === CCAPIStatus.SUCCESS) {
       return { success: true };
     }
-    if (status.operationStatus === "FAILED") {
+    if (status.operationStatus === CCAPIStatus.FAILED) {
       return {
         success: false,
         message: status.statusMessage ?? "Delete operation failed",

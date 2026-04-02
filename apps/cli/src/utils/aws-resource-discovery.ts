@@ -24,10 +24,11 @@ import {
   DescribeOrderableDBInstanceOptionsCommand,
 } from "@aws-sdk/client-rds";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
-import { CfnKey, ResourceDefault } from "@assignee/core";
+import { CfnKey, ResourceDefault, AmiOs } from "@assignee/core";
 import { withTimeout } from "./timeout.js";
 import { AWS_REGION, PromiseStatus } from "../config/constants.js";
 import { EnvVar } from "../constants/env-vars.js";
+import { WorkloadProfile as WP } from "../constants/workload-profiles.js";
 
 const DISCOVERY_TIMEOUT_MS = 6000;
 
@@ -169,25 +170,25 @@ function categorizeFamily(family: string): {
   const prefix = family.toLowerCase();
   if (prefix.startsWith("t"))
     return {
-      key: "burstable",
+      key: WP.BURSTABLE,
       label: "Burstable",
       description: "Dev, small production, variable workloads",
     };
   if (prefix.startsWith("m"))
     return {
-      key: "general",
+      key: WP.GENERAL,
       label: "General Purpose",
       description: "Balanced compute, memory, networking",
     };
   if (prefix.startsWith("c"))
     return {
-      key: "compute",
+      key: WP.COMPUTE,
       label: "Compute Optimized",
       description: "Batch, HPC, gaming, ML inference",
     };
   if (prefix.startsWith("r") || prefix.startsWith("x"))
     return {
-      key: "memory",
+      key: WP.MEMORY,
       label: "Memory Optimized",
       description: "Databases, caches, in-memory analytics",
     };
@@ -198,7 +199,7 @@ function categorizeFamily(family: string): {
     prefix.startsWith("trn")
   )
     return {
-      key: "accelerated",
+      key: WP.ACCELERATED,
       label: "GPU / Accelerated",
       description: "ML training, inference, graphics, video",
     };
@@ -208,23 +209,23 @@ function categorizeFamily(family: string): {
     prefix.startsWith("h")
   )
     return {
-      key: "storage",
+      key: WP.STORAGE,
       label: "Storage Optimized",
       description: "High I/O, data warehousing, distributed filesystems",
     };
   if (prefix.startsWith("hpc"))
     return {
-      key: "hpc",
+      key: WP.HPC,
       label: "HPC",
       description: "High-performance computing",
     };
   if (prefix.startsWith("a"))
     return {
-      key: "arm",
+      key: WP.ARM,
       label: "ARM (Graviton 1st gen)",
       description: "ARM workloads, lowest cost",
     };
-  return { key: "other", label: "Other", description: prefix };
+  return { key: WP.OTHER, label: "Other", description: prefix };
 }
 
 /**
@@ -276,15 +277,15 @@ export async function discoverInstanceTypes(): Promise<InstanceTypeCategory[]> {
       const categories: InstanceTypeCategory[] = [];
       // Preferred category order
       const order = [
-        "burstable",
-        "general",
-        "compute",
-        "memory",
-        "accelerated",
-        "storage",
-        "hpc",
-        "arm",
-        "other",
+        WP.BURSTABLE,
+        WP.GENERAL,
+        WP.COMPUTE,
+        WP.MEMORY,
+        WP.ACCELERATED,
+        WP.STORAGE,
+        WP.HPC,
+        WP.ARM,
+        WP.OTHER,
       ];
 
       for (const key of order) {
@@ -391,13 +392,13 @@ export async function discoverAmis(): Promise<DiscoveryOption[]> {
  * instead of a real AMI ID (discovery failed).
  */
 const OS_TO_SSM_PATH: Record<string, string> = {
-  "amazon-linux-2023":
+  [AmiOs.AMAZON_LINUX_2023]:
     "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64",
-  "ubuntu-24.04":
+  [AmiOs.UBUNTU_24]:
     "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id",
-  "ubuntu-22.04":
+  [AmiOs.UBUNTU_22]:
     "/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id",
-  "windows-2022":
+  [AmiOs.WINDOWS_2022]:
     "/aws/service/ami-windows-latest/Windows_Server-2022-English-Full-Base",
 };
 
@@ -606,20 +607,20 @@ export async function discoverRdsInstanceClasses(
 
     // Group by family
     const familyOrder: Record<string, number> = {
-      burstable: 0,
-      general: 1,
-      memory: 2,
-      other: 3,
+      [WP.BURSTABLE]: 0,
+      [WP.GENERAL]: 1,
+      [WP.MEMORY]: 2,
+      [WP.OTHER]: 3,
     };
 
     function classifyRdsFamily(cls: string): string {
       // cls is like "db.t3.micro", "db.m5.large", "db.r6g.large"
       const parts = cls.split(".");
       const familyPrefix = parts[1]?.[0]?.toLowerCase() ?? "";
-      if (familyPrefix === "t") return "burstable";
-      if (familyPrefix === "m") return "general";
-      if (familyPrefix === "r" || familyPrefix === "x") return "memory";
-      return "other";
+      if (familyPrefix === "t") return WP.BURSTABLE;
+      if (familyPrefix === "m") return WP.GENERAL;
+      if (familyPrefix === "r" || familyPrefix === "x") return WP.MEMORY;
+      return WP.OTHER;
     }
 
     const sorted = [...allClasses].sort((a, b) => {

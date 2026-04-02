@@ -19,7 +19,9 @@ import {
   DRIFT_MAX_RETRIES,
   DRIFT_RETRY_BASE_DELAY_MS,
   DRIFT_RETRY_JITTER_MS,
+  UNKNOWN_FALLBACK,
 } from "../config/constants.js";
+import { AwsErrorName } from "../constants/aws-errors.js";
 import {
   ProvisioningErrorKind,
   type ProvisioningPort,
@@ -425,9 +427,9 @@ export class DriftDetectorService {
       if (
         result.status === DriftStatus.ERROR &&
         result.errorMessage &&
-        (result.errorMessage.includes("Rate exceeded") ||
-          result.errorMessage.includes("Throttling") ||
-          result.errorMessage.includes("TooManyRequests"))
+        (result.errorMessage.includes(AwsErrorName.RATE_EXCEEDED) ||
+          result.errorMessage.includes(AwsErrorName.THROTTLING_SHORT) ||
+          result.errorMessage.includes(AwsErrorName.TOO_MANY_REQUESTS_SHORT))
       ) {
         if (attempt < maxRetries) {
           const baseDelay = Math.min(
@@ -535,7 +537,7 @@ export class DriftDetectorService {
         driftedFields: [],
         desiredState,
         checkedAt,
-        errorMessage: `Failed to parse resource properties: ${parseErr instanceof Error ? parseErr.message : "unknown"}`,
+        errorMessage: `Failed to parse resource properties: ${parseErr instanceof Error ? parseErr.message : UNKNOWN_FALLBACK}`,
       };
     }
 

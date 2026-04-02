@@ -18,6 +18,7 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PricingFilterValue as FV } from "../pricing-filter-values.js";
 import { PriceUnit } from "../price-units.js";
 import { LineItemLabel } from "../line-item-labels.js";
 import { PricingUnit } from "../units.js";
@@ -65,7 +66,7 @@ export const snsPricingDecomposer: PricingDecomposer = {
         },
         {
           Field: F.USAGE_TYPE,
-          Value: "DeliveryAttempts-HTTP",
+          Value: FV.DELIVERY_ATTEMPTS_HTTP,
           Type: M.TERM_MATCH,
         },
       ],

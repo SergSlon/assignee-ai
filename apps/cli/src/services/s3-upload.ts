@@ -18,6 +18,7 @@ import { ConfigurationError } from "@assignee/core";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { IamEffect } from "@assignee/core";
+import { ContentType } from "../constants/errors.js";
 
 export interface UploadResult {
   uploaded: number;
@@ -38,12 +39,12 @@ export interface UploadProgress {
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
   ".css": "text/css",
-  ".js": "application/javascript",
-  ".mjs": "application/javascript",
-  ".json": "application/json",
+  ".js": ContentType.JAVASCRIPT,
+  ".mjs": ContentType.JAVASCRIPT,
+  ".json": ContentType.JSON,
   ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
+  ".jpg": ContentType.JPEG,
+  ".jpeg": ContentType.JPEG,
   ".gif": "image/gif",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
@@ -57,7 +58,7 @@ const MIME_TYPES: Record<string, string> = {
   ".xml": "application/xml",
   ".pdf": "application/pdf",
   ".zip": "application/zip",
-  ".map": "application/json",
+  ".map": ContentType.JSON,
   ".webmanifest": "application/manifest+json",
 };
 

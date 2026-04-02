@@ -13,7 +13,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
 import { defaultMemoryService } from "./memory.js";
 import { unwrapMcpText } from "../utils/mcp.js";
-import { AWS_REGION } from "../config/constants.js";
+import { AWS_REGION, UNKNOWN_FALLBACK } from "../config/constants.js";
 import type { ManagedResource } from "./list-resources.js";
 import { CostEstimate } from "../constants/pricing.js";
 
@@ -153,7 +153,7 @@ export async function getCostSavingsEstimate(
 ): Promise<string> {
   try {
     const dummyResource: ManagedResource = {
-      resourceType: "unknown",
+      resourceType: UNKNOWN_FALLBACK,
       arn,
       region: AWS_REGION,
       createdDate: CostEstimate.NA,

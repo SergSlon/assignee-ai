@@ -7,9 +7,11 @@ export type {
   ConfigDefaults,
   ConfigPreferences,
   ConfigNaming,
+  AutoFixModeType,
 } from "./config-schema.js";
 export {
   validateConfig,
   CONFIG_DEFAULTS,
   DEFAULT_AWS_REGION,
+  AutoFixMode,
 } from "./config-schema.js";

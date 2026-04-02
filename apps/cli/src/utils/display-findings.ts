@@ -5,7 +5,7 @@
 
 import chalk from "chalk";
 import { Severity, type BPFinding } from "@assignee/best-practices";
-import type { FreeTierNote } from "./free-tier.js";
+import { FreeTierType, type FreeTierNote } from "./free-tier.js";
 import {
   resolveAction,
   countFixable,
@@ -138,7 +138,7 @@ export function formatFreeTierNote(
   note: FreeTierNote | undefined,
 ): string | null {
   if (!note) return null;
-  const icon = note.type === "always_free" ? "\u2713" : "\u2139";
+  const icon = note.type === FreeTierType.ALWAYS_FREE ? "\u2713" : "\u2139";
   return `Free Tier:       ${icon} ${note.message}`;
 }
 

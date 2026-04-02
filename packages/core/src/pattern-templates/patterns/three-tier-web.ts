@@ -2,9 +2,10 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
 import type { ArchitecturePattern } from "../types.js";
 import { ThreeTierWebResourceId as R } from "../pattern-resource-ids.js";
+import { PatternId } from "../pattern-ids.js";
 
 export const threeTierWebPattern: ArchitecturePattern = {
-  patternId: "three-tier-web",
+  patternId: PatternId.THREE_TIER_WEB,
   displayName: "Three-Tier Web Application",
   keywords: [
     "three tier",

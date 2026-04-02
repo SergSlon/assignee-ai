@@ -57,6 +57,7 @@ import {
   classifyWorkload,
   type WorkloadProfile,
 } from "../utils/workload-classifier.js";
+import { WorkloadProfile as WP } from "../constants/workload-profiles.js";
 import type { AgentState } from "../services/graph.js";
 
 // ── Re-export helpers for backward compatibility ──────────────────────────────
@@ -179,7 +180,7 @@ export async function optionElicitorNode(
 
   // Story 21.1: Classify workload profile in parallel with pricing/discovery.
   // Result stored for Story 21.2 (smart option filtering).
-  let workloadProfile: WorkloadProfile = "unknown";
+  let workloadProfile: WorkloadProfile = WP.UNKNOWN;
 
   const startMs = Date.now();
   const [
@@ -199,7 +200,7 @@ export async function optionElicitorNode(
     // Story 21.1: LLM-based workload classification
     llmClient && state.userIntent
       ? classifyWorkload(state.userIntent, llmClient)
-      : Promise.resolve("unknown" as WorkloadProfile),
+      : Promise.resolve(WP.UNKNOWN as WorkloadProfile),
   ]);
 
   // Story 21.1: Extract classification result

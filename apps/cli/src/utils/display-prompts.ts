@@ -38,7 +38,7 @@ export async function renderHitlConfirm(
   });
 
   if (clack.isCancel(result)) {
-    clack.cancel("Cancelled.");
+    clack.cancel(UserMessage.CANCELLED);
     throw new UserCancelledError();
   }
   return result === true;
@@ -66,7 +66,7 @@ export async function renderHitlCompoundConfirm(
   });
 
   if (clack.isCancel(result)) {
-    clack.cancel("Cancelled.");
+    clack.cancel(UserMessage.CANCELLED);
     throw new UserCancelledError();
   }
   return result === true;
@@ -83,7 +83,7 @@ export async function renderAdvancedConfirm(): Promise<boolean> {
     initialValue: false,
   });
   if (clack.isCancel(result)) {
-    clack.cancel("Cancelled.");
+    clack.cancel(UserMessage.CANCELLED);
     throw new UserCancelledError();
   }
   return result === true;
@@ -106,7 +106,7 @@ export async function renderApplyNowConfirm(
   });
 
   if (clack.isCancel(result)) {
-    clack.cancel("Cancelled.");
+    clack.cancel(UserMessage.CANCELLED);
     throw new UserCancelledError();
   }
   return result === true;
@@ -315,7 +315,7 @@ export async function renderOptionPrompt(
                   hint: cat.description,
                 })),
                 {
-                  value: "__other__",
+                  value: OTHER_SENTINEL,
                   label: "Other \u2014 enter any instance type manually",
                 },
                 {
@@ -379,7 +379,7 @@ export async function renderOptionPrompt(
             label: o.label,
           })),
           {
-            value: "__other__",
+            value: OTHER_SENTINEL,
             label: "Other \u2014 enter size manually",
           },
           { value: HELP_SENTINEL, label: "\u2753 ? \u2014 explain this field" },

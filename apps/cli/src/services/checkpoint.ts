@@ -19,7 +19,9 @@ import {
 import type { AgentState } from "./graph-state.js";
 import {
   CHECKPOINT_DEFAULT_TTL_HOURS,
+  CHECKPOINT_FILE_PREFIX,
   CLEANUP_SKIP_RECENT_MINUTES,
+  UNKNOWN_FALLBACK,
 } from "../config/constants.js";
 
 /**
@@ -66,7 +68,7 @@ export function serializeCheckpoint(state: AgentState): PlanCheckpoint {
     ttl_hours: CHECKPOINT_DEFAULT_TTL_HOURS,
     runId: state.runId,
     userIntent: state.userIntent,
-    resourceType: state.resourceType ?? "unknown",
+    resourceType: state.resourceType ?? UNKNOWN_FALLBACK,
     resourcePatternId: state.resourcePattern?.patternId ?? undefined,
     resourceQueue: state.resourceQueue
       ? state.resourceQueue.map((r) => ({
@@ -228,7 +230,7 @@ export async function pruneExpiredCheckpoints(
   }
 
   const files = entries.filter(
-    (f) => f.startsWith("checkpoint-") && f.endsWith(".json"),
+    (f) => f.startsWith(CHECKPOINT_FILE_PREFIX) && f.endsWith(".json"),
   );
   if (files.length === 0) return { pruned: 0, kept: 0 };
 
@@ -314,7 +316,7 @@ export async function findNewestValidCheckpoint(
   if (readErr) return null;
 
   const checkpointFiles = entries.filter(
-    (f) => f.startsWith("checkpoint-") && f.endsWith(".json"),
+    (f) => f.startsWith(CHECKPOINT_FILE_PREFIX) && f.endsWith(".json"),
   );
 
   if (checkpointFiles.length === 0) return null;

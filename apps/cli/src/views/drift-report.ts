@@ -7,7 +7,7 @@
 import { randomUUID } from "node:crypto";
 import type { DriftResult, DriftStatusType } from "@assignee/core";
 import { DriftStatus } from "@assignee/core";
-import { AWS_REGION } from "../config/constants.js";
+import { AWS_REGION, UNKNOWN_FALLBACK } from "../config/constants.js";
 
 export interface DriftReportSummary {
   total: number;
@@ -65,7 +65,7 @@ export function buildDriftReport(
     summary,
     metadata: {
       assigneeVersion: opts.assigneeVersion ?? "0.0.0",
-      awsAccountId: opts.awsAccountId ?? "unknown",
+      awsAccountId: opts.awsAccountId ?? UNKNOWN_FALLBACK,
       checkDurationMs: opts.checkDurationMs ?? 0,
     },
     resources: results,

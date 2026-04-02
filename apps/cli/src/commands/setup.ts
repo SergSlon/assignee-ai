@@ -41,7 +41,7 @@ import {
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import { mergeEnvFile } from "../utils/env-writer.js";
-import { AWS_REGION, PromiseStatus } from "../config/constants.js";
+import { AWS_REGION, PromiseStatus, UserMessage } from "../config/constants.js";
 import { AwsErrorName } from "../constants/aws-errors.js";
 import { IamEffect } from "@assignee/core";
 
@@ -262,7 +262,7 @@ export const setupCommand = new Command(CommandName.SETUP)
       });
 
       if (clack.isCancel(confirmed) || !confirmed) {
-        clack.outro("Setup cancelled.");
+        clack.outro(UserMessage.SETUP_CANCELLED);
         return;
       }
     }
@@ -289,7 +289,7 @@ export const setupCommand = new Command(CommandName.SETUP)
               initialValue: false,
             });
             if (clack.isCancel(rotate)) {
-              clack.outro("Setup cancelled.");
+              clack.outro(UserMessage.SETUP_CANCELLED);
               return;
             }
             rotationDecisions.set(role.userName, !!rotate);

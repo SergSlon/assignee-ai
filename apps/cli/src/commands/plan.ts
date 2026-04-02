@@ -30,7 +30,11 @@ import {
 } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand, runProvisioningLoop } from "../utils/command-runner.js";
-import { SUPPORTED_TYPES_HINT, CHECKPOINT_DIR } from "../config/constants.js";
+import {
+  SUPPORTED_TYPES_HINT,
+  CHECKPOINT_DIR,
+  UNKNOWN_FALLBACK,
+} from "../config/constants.js";
 import { ErrorCode } from "../constants/errors.js";
 import { serializeCheckpoint, saveCheckpoint } from "../services/checkpoint.js";
 import { loadUserConfig } from "../config/user-config-loader.js";
@@ -248,7 +252,8 @@ export const planCommand = new Command(CommandName.PLAN)
           }
 
           const applyNow = await renderApplyNowConfirm({
-            resourceType: (finalState as AgentState).resourceType ?? "unknown",
+            resourceType:
+              (finalState as AgentState).resourceType ?? UNKNOWN_FALLBACK,
             desiredState: (finalState as AgentState).desiredState,
             estimatedMonthlyCost: (finalState as AgentState)
               .estimatedMonthlyCost,

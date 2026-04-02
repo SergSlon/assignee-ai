@@ -17,6 +17,7 @@ import { parse as parseYaml } from "yaml";
 import { validateConfig } from "@assignee/core";
 import type { AssigneeConfig } from "@assignee/core";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { CHECKPOINT_DIR, FileName } from "./constants.js";
 
 /** Sentinel files that indicate a project root boundary. */
 const PROJECT_ROOT_MARKERS = [".git", "package.json"] as const;
@@ -46,7 +47,7 @@ async function findProjectConfig(
   let dir = startDir;
 
   while (true) {
-    const candidate = path.join(dir, ".assignee", "config.yaml");
+    const candidate = path.join(dir, CHECKPOINT_DIR, FileName.CONFIG);
     if (await pathExists(candidate)) return candidate;
 
     // Check if we've reached a project root boundary

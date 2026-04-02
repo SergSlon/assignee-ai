@@ -12,8 +12,9 @@ import {
   InstanceCategory,
   type InstanceCategoryType,
 } from "../constants/instance-categories.js";
+import { WorkloadProfile as WP } from "../constants/workload-profiles.js";
 
-export type WorkloadProfile = InstanceCategoryType | "unknown";
+export type WorkloadProfile = InstanceCategoryType | typeof WP.UNKNOWN;
 
 export const WorkloadProfileSchema = z.object({
   profile: z.enum([
@@ -23,7 +24,7 @@ export const WorkloadProfileSchema = z.object({
     InstanceCategory.MEMORY_INTENSIVE,
     InstanceCategory.GPU_ACCELERATED,
     InstanceCategory.STORAGE_HEAVY,
-    "unknown",
+    WP.UNKNOWN,
   ]),
   confidence: z.number().min(0).max(1),
 });
@@ -49,7 +50,7 @@ export async function classifyWorkload(
   llmClient: LlmPort,
 ): Promise<WorkloadProfile> {
   const trimmed = userIntent.trim();
-  if (!trimmed) return "unknown";
+  if (!trimmed) return WP.UNKNOWN;
 
   // Check cache first
   const cached = classificationCache.get(trimmed);
@@ -65,7 +66,7 @@ export async function classifyWorkload(
     '- "memory-intensive": caches, analytics, in-memory databases',
     '- "gpu-accelerated": ML training, inference, rendering',
     '- "storage-heavy": data lakes, backups, archival',
-    '- "unknown": no clear signal',
+    `- "${WP.UNKNOWN}": no clear signal`,
     "",
     `Intent: "${trimmed}"`,
   ].join("\n");
@@ -78,18 +79,18 @@ export async function classifyWorkload(
     );
 
     if (err || !result) {
-      classificationCache.set(trimmed, "unknown");
-      return "unknown";
+      classificationCache.set(trimmed, WP.UNKNOWN);
+      return WP.UNKNOWN;
     }
 
     const profile: WorkloadProfile =
-      result.confidence < 0.5 ? "unknown" : result.profile;
+      result.confidence < 0.5 ? WP.UNKNOWN : result.profile;
 
     classificationCache.set(trimmed, profile);
     return profile;
   } catch {
-    classificationCache.set(trimmed, "unknown");
-    return "unknown";
+    classificationCache.set(trimmed, WP.UNKNOWN);
+    return WP.UNKNOWN;
   }
 }
 

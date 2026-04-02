@@ -3,9 +3,10 @@ import { AwsDefault } from "../../config/cfn-keys.js";
 import { IamEffect } from "../../config/iam-effects.js";
 import type { ArchitecturePattern } from "../types.js";
 import { MessageProcessingResourceId as R } from "../pattern-resource-ids.js";
+import { PatternId } from "../pattern-ids.js";
 
 export const messageProcessingPattern: ArchitecturePattern = {
-  patternId: "message-processing",
+  patternId: PatternId.MESSAGE_PROCESSING,
   displayName: "Message Processing Pipeline",
   keywords: [
     "message processing",

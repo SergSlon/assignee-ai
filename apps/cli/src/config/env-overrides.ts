@@ -14,10 +14,18 @@
  * @see Story 27.7 — Environment Variable Overrides
  */
 
-import type { AssigneeConfig } from "@assignee/core";
+import {
+  AutoFixMode,
+  type AssigneeConfig,
+  type AutoFixModeType,
+} from "@assignee/core";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 
-const VALID_AUTO_FIX = new Set(["ask", "apply", "skip"]);
+const VALID_AUTO_FIX = new Set([
+  AutoFixMode.ASK,
+  AutoFixMode.APPLY,
+  AutoFixMode.SKIP,
+]);
 const VALID_OUTPUT_FORMAT = new Set(["table", "json"]);
 const VALID_VERBOSITY = new Set(["quiet", "normal", "verbose"]);
 
@@ -132,7 +140,7 @@ export function loadEnvOverrides(
     const valid = validateEnum("ASSIGNEE_AUTO_FIX", autoFix, VALID_AUTO_FIX);
     if (valid) {
       if (!result.preferences) result.preferences = {};
-      result.preferences.auto_fix = valid as "ask" | "apply" | "skip";
+      result.preferences.auto_fix = valid as AutoFixModeType;
     }
   }
 

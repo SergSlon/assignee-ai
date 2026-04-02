@@ -5,6 +5,8 @@ import { containerServicePattern } from "./patterns/container-service.js";
 import { messageProcessingPattern } from "./patterns/message-processing.js";
 import { staticWebsitePattern } from "./patterns/static-website.js";
 
+export { PatternId } from "./pattern-ids.js";
+
 /**
  * Default pre-populated pattern registry.
  * Import this in intent-parser.ts — do not instantiate PatternRegistry elsewhere.

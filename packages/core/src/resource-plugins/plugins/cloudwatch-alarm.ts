@@ -1,5 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, CloudWatchStatistic } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 
 /**
@@ -151,13 +151,25 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
         type: "enum",
         label: "Statistic",
         options: [
-          { value: "Average", label: "Average" },
-          { value: "Sum", label: "Sum" },
-          { value: "Minimum", label: "Minimum" },
-          { value: "Maximum", label: "Maximum" },
-          { value: "SampleCount", label: "SampleCount" },
+          {
+            value: CloudWatchStatistic.AVERAGE,
+            label: CloudWatchStatistic.AVERAGE,
+          },
+          { value: CloudWatchStatistic.SUM, label: CloudWatchStatistic.SUM },
+          {
+            value: CloudWatchStatistic.MINIMUM,
+            label: CloudWatchStatistic.MINIMUM,
+          },
+          {
+            value: CloudWatchStatistic.MAXIMUM,
+            label: CloudWatchStatistic.MAXIMUM,
+          },
+          {
+            value: CloudWatchStatistic.SAMPLE_COUNT,
+            label: CloudWatchStatistic.SAMPLE_COUNT,
+          },
         ],
-        initialValue: "Average",
+        initialValue: CloudWatchStatistic.AVERAGE,
         hint: "The statistic applied to the metric. Average is best for utilization metrics (CPU, memory). Sum for count-based metrics (errors, invocations). Maximum for peak detection.",
       },
     },
@@ -319,7 +331,7 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    [CfnKey.STATISTIC]: "Average",
+    [CfnKey.STATISTIC]: CloudWatchStatistic.AVERAGE,
     [CfnKey.PERIOD]: "300",
     [CfnKey.EVALUATION_PERIODS]: "3",
     [CfnKey.TREAT_MISSING_DATA]: "missing",

@@ -9,7 +9,7 @@
 
 import type { StructuredTool } from "@langchain/core/tools";
 import type { AwsPricingResponse } from "@assignee/core";
-import { PricingMatchType } from "@assignee/core";
+import { PricingMatchType, RdsEngineDisplay } from "@assignee/core";
 import { ToolName } from "../constants/tools.js";
 import { AWS_REGION } from "../config/constants.js";
 import {
@@ -141,11 +141,11 @@ export async function fetchEc2InstancePrices(
  * names expected by the AWS Pricing API.
  */
 const RDS_ENGINE_API_NAME: Record<string, string> = {
-  mysql: "MySQL",
-  postgres: "PostgreSQL",
-  mariadb: "MariaDB",
-  "aurora-mysql": "Aurora MySQL",
-  "aurora-postgresql": "Aurora PostgreSQL",
+  mysql: RdsEngineDisplay.MYSQL,
+  postgres: RdsEngineDisplay.POSTGRESQL,
+  mariadb: RdsEngineDisplay.MARIADB,
+  "aurora-mysql": RdsEngineDisplay.AURORA_MYSQL,
+  "aurora-postgresql": RdsEngineDisplay.AURORA_POSTGRESQL,
 };
 
 /** Aurora engines use a different pricing SKU structure — no deploymentOption filter. */

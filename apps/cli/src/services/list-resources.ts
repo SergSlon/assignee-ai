@@ -23,7 +23,11 @@ import {
   LIST_RESOURCE_TYPES,
   CCAPI_FALLBACK_TYPES,
 } from "@assignee/core";
-import { AWS_REGION, PROVISIONS_FILE } from "../config/constants.js";
+import {
+  AWS_REGION,
+  PROVISIONS_FILE,
+  UNKNOWN_FALLBACK,
+} from "../config/constants.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import { fetchBillingData } from "./billing.js";
@@ -160,8 +164,8 @@ export function parseArn(arn: string): {
 } {
   const parts = arn.split(":");
   return {
-    service: parts[2] ?? "unknown",
-    region: parts[3] ?? "unknown",
+    service: parts[2] ?? UNKNOWN_FALLBACK,
+    region: parts[3] ?? UNKNOWN_FALLBACK,
     resourceType: arnToCloudFormationType(parts[2] ?? "", parts[5] ?? ""),
   };
 }

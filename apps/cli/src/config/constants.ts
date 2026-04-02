@@ -85,6 +85,19 @@ export const PROVISIONS_FILE = FileName.PROVISIONS;
 /** @deprecated Use FileName.FAILURES */
 export const FAILURES_FILE = FileName.FAILURES;
 
+/** Prefix for checkpoint files: checkpoint-<runId>.json */
+export const CHECKPOINT_FILE_PREFIX = "checkpoint-" as const;
+
+/**
+ * Cleanup category identifiers — single source of truth.
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const CleanupCategoryName = {
+  CHECKPOINTS: "checkpoints" as const,
+  CACHE: "cache" as const,
+  MEMORY: "memory" as const,
+} as const;
+
 // ── Promise Status Constants ────────────────────────────────────────────────
 
 /** Named constants for Promise.allSettled status values. */
@@ -98,6 +111,11 @@ export const PromiseStatus = {
 export const UserMessage = {
   INIT_CANCELLED: "Initialization cancelled.",
   WIZARD_CANCELLED: "Wizard cancelled.",
+  CANCELLED: "Cancelled.",
+  BULK_DESTROY_CANCELLED: "Bulk destroy cancelled.",
+  DESTROY_CANCELLED: "Destroy cancelled.",
+  SETUP_CANCELLED: "Setup cancelled.",
+  RESOURCE_CLEANUP_CANCELLED: "Resource cleanup cancelled.",
 } as const;
 
 // ── Destroy Polling Constants ────────────────────────────────────────────────
@@ -155,3 +173,34 @@ export const MEMORY_DEDUP_THRESHOLD_MS = 10_000;
 
 /** Maximum iterations for the provisioning loop before aborting. */
 export const MAX_PROVISION_LOOPS = 50;
+
+// ── Security Constants ─────────────────────────────────────────────────────
+
+/**
+ * Prototype pollution keys to reject in deep-merge and patch operations.
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const PROTO_POLLUTION_KEYS: ReadonlySet<string> = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+]);
+
+/** Sentinel value for "none of these" in AMI selection wizard. */
+export const WIZARD_NONE_SENTINEL = "__none__" as const;
+
+// ── Display / Boxen Alignment ──────────────────────────────────────────────
+
+export const BoxenAlign = {
+  CENTER: "center" as const,
+  LEFT: "left" as const,
+} as const;
+
+export const BoxenBorderColor = {
+  CYAN: "cyan" as const,
+} as const;
+
+// ── Fallback / Sentinel Values ──────────────────────────────────────────────
+
+/** Generic "unknown" fallback for missing metadata fields (ARN parts, resource type, etc.). */
+export const UNKNOWN_FALLBACK = "unknown" as const;

@@ -13,15 +13,20 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse as parseYaml } from "yaml";
 import * as clack from "@clack/prompts";
-import type { BPFinding } from "@assignee/best-practices";
+import { FixType, FixAction, type BPFinding } from "@assignee/best-practices";
 import type { AgentState } from "../services/graph.js";
 import type { AppliedFix } from "../services/graph-state.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { wizardKeyMap } from "../utils/wizard-key-map.js";
+import {
+  CHECKPOINT_DIR,
+  FileName,
+  PROTO_POLLUTION_KEYS,
+} from "../config/constants.js";
 
 /** Directory name for project-level config. */
-const CONFIG_DIR = ".assignee";
-const CONFIG_FILE = "config.yaml";
+const CONFIG_DIR = CHECKPOINT_DIR;
+const CONFIG_FILE = FileName.CONFIG;
 
 /**
  * Read the autoFixBestPractices preference from project config.
@@ -56,7 +61,7 @@ function deepMergePatch(
 
   for (const [key, patchValue] of Object.entries(patch)) {
     // Prototype pollution guard: reject __proto__, constructor, prototype keys
-    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+    if (PROTO_POLLUTION_KEYS.has(key)) {
       continue;
     }
     const targetValue = result[key];
@@ -157,13 +162,21 @@ function extractOldValue(
     if (keys.length === 0) break;
     const key = keys[0]!;
     const nextPatch = (patchLevel as Record<string, unknown>)[key];
-    if (typeof current === "object" && current !== null && !Array.isArray(current)) {
+    if (
+      typeof current === "object" &&
+      current !== null &&
+      !Array.isArray(current)
+    ) {
       current = (current as Record<string, unknown>)[key];
     } else {
       return undefined;
     }
     // If the next level of the patch is a scalar, we've found the leaf — return current
-    if (typeof nextPatch !== "object" || nextPatch === null || Array.isArray(nextPatch)) {
+    if (
+      typeof nextPatch !== "object" ||
+      nextPatch === null ||
+      Array.isArray(nextPatch)
+    ) {
       return current;
     }
     patchLevel = nextPatch;
@@ -216,11 +229,24 @@ function isPatchAlreadyApplied(
 ): boolean {
   for (const [key, patchValue] of Object.entries(patch)) {
     const stateValue = state[key];
-    if (typeof patchValue === "object" && patchValue !== null && !Array.isArray(patchValue)) {
-      if (typeof stateValue !== "object" || stateValue === null || Array.isArray(stateValue)) {
+    if (
+      typeof patchValue === "object" &&
+      patchValue !== null &&
+      !Array.isArray(patchValue)
+    ) {
+      if (
+        typeof stateValue !== "object" ||
+        stateValue === null ||
+        Array.isArray(stateValue)
+      ) {
         return false;
       }
-      if (!isPatchAlreadyApplied(stateValue as Record<string, unknown>, patchValue as Record<string, unknown>)) {
+      if (
+        !isPatchAlreadyApplied(
+          stateValue as Record<string, unknown>,
+          patchValue as Record<string, unknown>,
+        )
+      ) {
         return false;
       }
     } else {
@@ -263,7 +289,7 @@ export async function fixApplicatorNode(
   // Interactive findings are user-driven — not gated behind autoFixBestPractices
   const hasInteractive = findings.some(
     (f) =>
-      f.fixType === "interactive" &&
+      f.fixType === FixType.INTERACTIVE &&
       f.interactiveOptions &&
       f.interactiveOptions.length > 0,
   );
@@ -318,7 +344,7 @@ export async function fixApplicatorNode(
   // Story 22.4: Handle Type B interactive fixes (TTY only)
   const interactiveFindings = findings.filter(
     (f) =>
-      f.fixType === "interactive" &&
+      f.fixType === FixType.INTERACTIVE &&
       f.interactiveOptions &&
       f.interactiveOptions.length > 0 &&
       !fixedPracticeIds.has(f.practiceId),
@@ -359,7 +385,8 @@ export async function fixApplicatorNode(
       if (option.action === "prompt_value" && option.targetField) {
         const value = await clack.text({
           message: `Enter value for ${option.targetField}:`,
-          validate: (v) => (!v || v.trim().length === 0 ? "Value cannot be empty" : undefined),
+          validate: (v) =>
+            !v || v.trim().length === 0 ? "Value cannot be empty" : undefined,
         });
 
         if (!clack.isCancel(value) && value) {
@@ -403,7 +430,7 @@ export async function fixApplicatorNode(
           newValue: undefined,
         });
         fixedPracticeIds.add(finding.practiceId);
-      } else if (option.action === "skip") {
+      } else if (option.action === FixAction.SKIP) {
         skippedPracticeIds.add(finding.practiceId);
       }
     }

@@ -64,7 +64,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
             fitHint: "Accessible from the internet",
           },
           {
-            value: "internal",
+            value: AwsDefault.LB_SCHEME_INTERNAL,
             label: "Internal (private)",
             fitHint: "Only accessible within your VPC",
           },

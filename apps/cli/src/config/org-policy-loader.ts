@@ -14,10 +14,11 @@ import * as fsPromises from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import { parse as parseYaml } from "yaml";
-import type {
-  OrgResourceConfig,
-  OrgFieldConfig,
-  OrgFieldPolicy,
+import {
+  OrgPolicy,
+  type OrgResourceConfig,
+  type OrgFieldConfig,
+  type OrgFieldPolicy,
 } from "@assignee/core";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 
@@ -131,9 +132,9 @@ async function readPolicyFile(
         const fc = fieldConfig as Record<string, unknown>;
         const policy = fc["policy"];
         if (
-          policy !== "locked" &&
-          policy !== "default" &&
-          policy !== "always_ask"
+          policy !== OrgPolicy.LOCKED &&
+          policy !== OrgPolicy.DEFAULT &&
+          policy !== OrgPolicy.ALWAYS_ASK
         ) {
           log({
             ts: new Date().toISOString(),
