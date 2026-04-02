@@ -242,10 +242,13 @@ export function wrapToolWithRecorder(
   const originalInvoke = tool.invoke.bind(tool);
 
   const wrappedTool = Object.create(tool) as StructuredTool;
-  wrappedTool.invoke = async (input: unknown, options?: unknown) => {
+  wrappedTool.invoke = async (
+    input: unknown,
+    options?: Parameters<typeof originalInvoke>[1],
+  ) => {
     const start = Date.now();
     try {
-      const output = await originalInvoke(input, options as any);
+      const output = await originalInvoke(input, options);
       recorder.recordCall({
         type: "mcp",
         tool: tool.name,
@@ -272,47 +275,68 @@ export function wrapToolWithRecorder(
 
 // ── AWS SDK middleware ────────────────────────────────────────────────────────
 
+/** Minimal types for AWS SDK v3 middleware (avoids @smithy/types dependency). */
+interface SdkMiddlewareArgs {
+  input?: unknown;
+}
+interface SdkMiddlewareResult {
+  output?: unknown;
+}
+interface SdkMiddlewareContext {
+  commandName?: string;
+}
+type SdkNextHandler = (args: SdkMiddlewareArgs) => Promise<SdkMiddlewareResult>;
+type SdkMiddlewareFn = (
+  next: SdkNextHandler,
+  context: SdkMiddlewareContext,
+) => (args: SdkMiddlewareArgs) => Promise<SdkMiddlewareResult>;
+/** AWS SDK v3 client with a middleware stack we can hook into. */
+interface SdkClientWithMiddleware {
+  middlewareStack: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AWS SDK v3 middleware stack has complex overloaded signatures not worth replicating
+    add: (...args: any[]) => void;
+  };
+}
+
 /**
  * Adds recording middleware to an AWS SDK v3 client's middleware stack.
  * Captures command name, input, output, duration, and errors.
  */
 export function addRecordingMiddleware(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  client: { middlewareStack: { add: (...args: any[]) => void } },
+  client: SdkClientWithMiddleware,
   recorder: RecordingInterceptor,
   serviceName: string,
 ): void {
   client.middlewareStack.add(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (next: any, context: any) => async (args: any) => {
-      const start = Date.now();
-      const operationName =
-        (context as { commandName?: string }).commandName ?? "Unknown";
-      try {
-        const result = await next(args);
-        recorder.recordCall({
-          type: "sdk",
-          service: serviceName,
-          operation: operationName,
-          input: (args as { input?: unknown }).input,
-          output: (result as { output?: unknown }).output,
-          durationMs: Date.now() - start,
-          timestamp: new Date().toISOString(),
-        });
-        return result;
-      } catch (error) {
-        recorder.recordCall({
-          type: "sdk",
-          service: serviceName,
-          operation: operationName,
-          input: (args as { input?: unknown }).input,
-          error: String(error),
-          durationMs: Date.now() - start,
-          timestamp: new Date().toISOString(),
-        });
-        throw error;
-      }
-    },
+    (next: SdkNextHandler, context: SdkMiddlewareContext) =>
+      async (args: SdkMiddlewareArgs) => {
+        const start = Date.now();
+        const operationName = context.commandName ?? "Unknown";
+        try {
+          const result = await next(args);
+          recorder.recordCall({
+            type: "sdk",
+            service: serviceName,
+            operation: operationName,
+            input: args.input,
+            output: result.output,
+            durationMs: Date.now() - start,
+            timestamp: new Date().toISOString(),
+          });
+          return result;
+        } catch (error) {
+          recorder.recordCall({
+            type: "sdk",
+            service: serviceName,
+            operation: operationName,
+            input: args.input,
+            error: String(error),
+            durationMs: Date.now() - start,
+            timestamp: new Date().toISOString(),
+          });
+          throw error;
+        }
+      },
     { step: "deserialize", name: "recordingMiddleware", priority: "low" },
   );
 }
