@@ -4,7 +4,11 @@ import {
 } from "../../config/resource-types.js";
 import { AwsDefault } from "../../config/cfn-keys.js";
 import { IamEffect } from "../../config/iam-effects.js";
-import { AwsManagedPolicy } from "../../config/aws-arns.js";
+import {
+  AwsManagedPolicy,
+  IamPolicy,
+  AwsServicePrincipal,
+} from "../../config/aws-arns.js";
 import type { ArchitecturePattern } from "../types.js";
 import { ServerlessApiResourceId as R } from "../pattern-resource-ids.js";
 import { PatternId } from "../pattern-ids.js";
@@ -122,12 +126,12 @@ export const serverlessApiPattern: ArchitecturePattern = {
     [R.IAM_EXECUTION_ROLE]: {
       Path: "/",
       AssumeRolePolicyDocument: {
-        Version: "2012-10-17",
+        Version: IamPolicy.VERSION,
         Statement: [
           {
             Effect: IamEffect.ALLOW,
-            Principal: { Service: "lambda.amazonaws.com" },
-            Action: "sts:AssumeRole",
+            Principal: { Service: AwsServicePrincipal.LAMBDA },
+            Action: IamPolicy.ACTION_ASSUME_ROLE,
           },
         ],
       },

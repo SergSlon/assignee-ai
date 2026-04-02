@@ -38,3 +38,19 @@ export const AwsManagedPolicy = {
 /** Default Bedrock foundation model ARN wildcard for IAM policies. */
 export const BEDROCK_MODEL_ARN_WILDCARD =
   "arn:aws:bedrock:*::foundation-model/*" as const;
+
+/** IAM policy document constants. */
+export const IamPolicy = {
+  VERSION: "2012-10-17",
+  ACTION_ASSUME_ROLE: "sts:AssumeRole",
+} as const;
+
+/** AWS service principals for IAM trust policies. */
+export const AwsServicePrincipal = {
+  LAMBDA: "lambda.amazonaws.com",
+  EC2: "ec2.amazonaws.com",
+  ECS_TASKS: "ecs-tasks.amazonaws.com",
+  APIGATEWAY: "apigateway.amazonaws.com",
+  CLOUDFRONT: "cloudfront.amazonaws.com",
+  BEDROCK: "bedrock.amazonaws.com",
+} as const;
