@@ -21,6 +21,7 @@ import {
   ConfigurationError,
   DEFAULT_AWS_REGION,
   validateConfig,
+  AssigneeTag,
 } from "@assignee/core";
 import type { AssigneeConfig } from "@assignee/core";
 import {
@@ -50,7 +51,7 @@ export interface ProjectConfig {
   region: string;
   profile: string;
   tags: {
-    "managed-by": string;
+    [key: string]: string;
     environment: string;
   };
   autoFixBestPractices?: boolean;
@@ -332,7 +333,7 @@ export const initCommand = new Command(CommandName.INIT)
       region: region as string,
       profile: profile as string,
       tags: {
-        "managed-by": "assignee-ai",
+        [AssigneeTag.KEY]: AssigneeTag.VALUE,
         environment: environment as string,
       },
       autoFixBestPractices: autoFix as boolean,

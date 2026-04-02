@@ -14,6 +14,7 @@ import {
   ExecutionStatus,
   safeTry,
   AssigneeError,
+  BPEnforcementLevel,
 } from "@assignee/core";
 import type { AgentState } from "../services/graph-state.js";
 import {
@@ -151,7 +152,8 @@ export const planCommand = new Command(CommandName.PLAN)
                 ? { sourceDir: resolvedSourceDir, sourceFileCount }
                 : {}),
               bpEnforcementLevel:
-                userConfig?.bestPractices?.enforcement ?? "enforce",
+                userConfig?.bestPractices?.enforcement ??
+                BPEnforcementLevel.ENFORCE,
               ...(userConfig ? { userConfig } : {}),
               ...(orgConfig ? { orgConfig } : {}),
               ...(Object.keys(presetFields).length > 0 ? { presetFields } : {}),
@@ -299,7 +301,8 @@ export const planCommand = new Command(CommandName.PLAN)
               perResourceCosts: planState.perResourceCosts,
               bpFindings: planState.bpFindings,
               bpEnforcementLevel:
-                userConfig?.bestPractices?.enforcement ?? "enforce",
+                userConfig?.bestPractices?.enforcement ??
+                BPEnforcementLevel.ENFORCE,
               checkpointResumed: true,
             },
             applyConfig,

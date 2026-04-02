@@ -1,5 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -297,7 +297,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
           { value: "gp2", label: "gp2 (General Purpose SSD v2) — legacy" },
           { value: "io1", label: "io1 (Provisioned IOPS) — high-performance" },
         ],
-        initialValue: "gp3",
+        initialValue: ResourceDefault.EBS_VOLUME_TYPE,
       },
     },
     {
@@ -382,7 +382,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
     [CfnKey.BLOCK_DEVICE_MAPPINGS]: [
       {
         DeviceName: "/dev/xvda",
-        Ebs: { Encrypted: true, VolumeType: "gp3" },
+        Ebs: { Encrypted: true, VolumeType: ResourceDefault.EBS_VOLUME_TYPE },
       },
     ],
   },

@@ -48,6 +48,8 @@ export {
   CfnKey,
   type CfnKeyType,
   EIP_AUTO_ALLOCATE,
+  ResourceDefault,
+  AssigneeTag,
 } from "./config/cfn-keys.js";
 
 // Config — AssigneeConfig schema and validation (Story 27.1)
@@ -170,6 +172,7 @@ export {
   PricingKind,
   PricingServiceCode,
   PricingProductFamily,
+  CostEstimateLabel,
 } from "./pricing/index.js";
 
 // Errors

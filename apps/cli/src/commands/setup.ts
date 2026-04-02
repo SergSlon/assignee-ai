@@ -39,7 +39,7 @@ import {
   type PolicyDocument,
 } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { ConfigurationError } from "@assignee/core";
+import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import { mergeEnvFile } from "../utils/env-writer.js";
 import { AWS_REGION } from "../config/constants.js";
 
@@ -75,7 +75,7 @@ const ROLES = [
 ] as const;
 
 /** Standard tag applied to all IAM resources managed by assignee.ai. */
-const MANAGED_TAG = { Key: "managed-by", Value: "assignee-ai" };
+const MANAGED_TAG = { Key: AssigneeTag.KEY, Value: AssigneeTag.VALUE };
 
 /** Bedrock invocation logging constants. */
 const BEDROCK_LOGGING_ROLE_NAME = "AssigneeAiBedrockLoggingRole";
@@ -156,7 +156,7 @@ async function ensureUser(iam: IAMClient, userName: string): Promise<boolean> {
       await iam.send(
         new CreateUserCommand({
           UserName: userName,
-          Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+          Tags: [{ Key: AssigneeTag.KEY, Value: AssigneeTag.VALUE }],
         }),
       );
       return true;

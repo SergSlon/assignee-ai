@@ -11,13 +11,14 @@ import {
   PricingMatchType as M,
   PricingProductFamily as PF,
   PricingServiceCode as SC,
+  CostEstimateLabel,
 } from "../filter-constants.js";
 
 const DEFAULT_INSTANCE_TYPE = "t3.micro";
 
 export const ec2PricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: "N/A" };
+    return { perMonth: null, label: CostEstimateLabel.NA };
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
     const instanceType =

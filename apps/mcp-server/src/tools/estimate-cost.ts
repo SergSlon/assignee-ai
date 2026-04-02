@@ -14,7 +14,7 @@ import {
   classifyResourceType,
   estimateCostForResource,
 } from "../services/cost-estimator.js";
-import { DEFAULT_AWS_REGION } from "@assignee/core";
+import { DEFAULT_AWS_REGION, CostEstimateLabel } from "@assignee/core";
 
 export const estimateCostParams = {
   description: z
@@ -59,7 +59,7 @@ export function registerEstimateCost(server: McpServer): void {
               type: "text" as const,
               text: JSON.stringify({
                 resourceType: "unknown",
-                estimatedMonthlyCost: "N/A",
+                estimatedMonthlyCost: CostEstimateLabel.NA,
                 description,
                 region: region ?? DEFAULT_AWS_REGION,
                 note: "Resource type not recognized from description. Provide an explicit resourceType parameter for accurate estimates.",

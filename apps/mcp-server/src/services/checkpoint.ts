@@ -13,6 +13,7 @@ import {
   PlanCheckpointSchema,
   CHECKPOINT_VERSION,
   CheckpointError,
+  CostEstimateLabel,
   type PlanCheckpoint,
 } from "@assignee/core";
 
@@ -70,7 +71,7 @@ export function serializeCheckpoint(
         }))
       : undefined,
     desiredState: state.desiredState ?? {},
-    estimatedMonthlyCost: state.estimatedMonthlyCost ?? "N/A",
+    estimatedMonthlyCost: state.estimatedMonthlyCost ?? CostEstimateLabel.NA,
     preflightPassed: state.preflightPassed ?? false,
     elicitedOptions: state.elicitedOptions,
   };

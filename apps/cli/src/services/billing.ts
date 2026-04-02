@@ -15,6 +15,7 @@ import { defaultMemoryService } from "./memory.js";
 import { unwrapMcpText } from "../utils/mcp.js";
 import { AWS_REGION } from "../config/constants.js";
 import type { ManagedResource } from "./list-resources.js";
+import { CostEstimate } from "../constants/pricing.js";
 
 export interface BillingCostData {
   arn: string;
@@ -155,8 +156,8 @@ export async function getCostSavingsEstimate(
       resourceType: "unknown",
       arn,
       region: AWS_REGION,
-      createdDate: "N/A",
-      estimatedMonthlyCost: "N/A",
+      createdDate: CostEstimate.NA,
+      estimatedMonthlyCost: CostEstimate.NA,
     };
 
     const costMap = await fetchBillingData([dummyResource], mcpTools);
@@ -168,5 +169,5 @@ export async function getCostSavingsEstimate(
     // Graceful degradation
   }
 
-  return "N/A";
+  return CostEstimate.NA;
 }

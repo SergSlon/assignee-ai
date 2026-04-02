@@ -12,6 +12,7 @@ import {
   RESOURCE_TYPES,
   CfnKey,
   EIP_AUTO_ALLOCATE,
+  ResourceDefault,
   type ProvisionRecord,
   type FailureRecord,
 } from "@assignee/core";
@@ -211,7 +212,7 @@ export function assembleEc2Storage(
     if (volumeType && typeof volumeType === "string") {
       ebs[CfnKey.VOLUME_TYPE] = volumeType;
     } else {
-      ebs[CfnKey.VOLUME_TYPE] = "gp3"; // default
+      ebs[CfnKey.VOLUME_TYPE] = ResourceDefault.EBS_VOLUME_TYPE; // default
     }
 
     if (volumeSize && String(volumeSize).trim() !== "") {

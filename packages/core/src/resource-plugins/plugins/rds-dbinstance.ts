@@ -1,5 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
@@ -83,7 +83,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
             fitHint: "AWS-native, auto-scaling",
           },
         ],
-        initialValue: "postgres",
+        initialValue: ResourceDefault.RDS_ENGINE_POSTGRES,
       },
     },
     {
@@ -101,7 +101,10 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           },
           { value: "15", label: "PostgreSQL 15", fitHint: "Stable" },
         ],
-        showIf: { field: CfnKey.ENGINE, value: "postgres" },
+        showIf: {
+          field: CfnKey.ENGINE,
+          value: ResourceDefault.RDS_ENGINE_POSTGRES,
+        },
         fetcher: "discover-rds-engine-versions",
       },
     },
@@ -269,7 +272,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
             fitHint: "High-IOPS workloads",
           },
         ],
-        initialValue: "gp3",
+        initialValue: ResourceDefault.EBS_VOLUME_TYPE,
       },
     },
     {
@@ -422,7 +425,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    [CfnKey.STORAGE_TYPE]: "gp3",
+    [CfnKey.STORAGE_TYPE]: ResourceDefault.EBS_VOLUME_TYPE,
     [CfnKey.MULTI_AZ]: false,
     [CfnKey.STORAGE_ENCRYPTED]: true,
   },

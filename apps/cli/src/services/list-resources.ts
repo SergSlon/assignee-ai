@@ -27,6 +27,7 @@ import { AWS_REGION } from "../config/constants.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import { fetchBillingData } from "./billing.js";
+import { CostEstimate } from "../constants/pricing.js";
 
 /** Shape of a managed resource returned by the list service. */
 export interface ManagedResource {
@@ -274,14 +275,15 @@ export async function fetchManagedResources(
       // Try matching by full ARN, then by resource name suffix
       const arnName = arn.split("/").pop() ?? arn.split(":").pop() ?? "";
       const createdDate =
-        timestampMap.get(arn) ?? timestampMap.get(arnName) ?? "N/A";
+        timestampMap.get(arn) ?? timestampMap.get(arnName) ?? CostEstimate.NA;
 
       resources.push({
         resourceType: parsed.resourceType,
         arn,
         region: parsed.region || resolvedRegion,
         createdDate,
-        estimatedMonthlyCost: costMap.get(arn) ?? costMap.get(arnName) ?? "N/A",
+        estimatedMonthlyCost:
+          costMap.get(arn) ?? costMap.get(arnName) ?? CostEstimate.NA,
       });
     }
 

@@ -199,4 +199,5 @@ export {
   PricingKind,
   PricingServiceCode,
   PricingProductFamily,
+  CostEstimateLabel,
 } from "./filter-constants.js";

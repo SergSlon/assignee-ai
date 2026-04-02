@@ -311,3 +311,21 @@ export type CfnKeyType = (typeof CfnKey)[keyof typeof CfnKey];
  * resource_provisioner replaces this with a real AllocationId at provision time.
  */
 export const EIP_AUTO_ALLOCATE = "AUTO_ALLOCATE_EIP" as const;
+
+/**
+ * Tag key/value pair used to mark resources as managed by Assignee.ai.
+ * Use instead of raw "managed-by" / "assignee-ai" strings.
+ */
+/**
+ * Default values for resource properties used across plugins and decomposers.
+ * Use instead of raw string literals like "gp3" or "postgres".
+ */
+export const ResourceDefault = {
+  EBS_VOLUME_TYPE: "gp3",
+  RDS_ENGINE_POSTGRES: "postgres",
+} as const;
+
+export const AssigneeTag = {
+  KEY: "managed-by",
+  VALUE: "assignee-ai",
+} as const;

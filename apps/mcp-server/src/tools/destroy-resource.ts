@@ -26,13 +26,14 @@ import {
   CCAPI_FALLBACK_TYPES,
   CCAPI_REDIRECT_TYPES,
   DEFAULT_AWS_REGION,
+  AssigneeTag,
 } from "@assignee/core";
 import { destroyRegistry } from "../services/destroy-strategies/index.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const TAG_KEY_MANAGED_BY = "managed-by";
-const TAG_VALUE_MANAGED_BY = "assignee-ai";
+const TAG_KEY_MANAGED_BY = AssigneeTag.KEY;
+const TAG_VALUE_MANAGED_BY = AssigneeTag.VALUE;
 const DEFAULT_REGION = process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
 /** @see DESTROY_MAX_POLL_ATTEMPTS in apps/cli/src/config/constants.ts — keep in sync */
 const MAX_POLL_ATTEMPTS = 60;

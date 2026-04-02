@@ -10,6 +10,7 @@
 
 import type { ManagedResource } from "./list-resources.js";
 import { defaultMemoryService, type MemoryService } from "./memory.js";
+import { CostEstimate } from "../constants/pricing.js";
 
 export interface StatusByType {
   type: string;
@@ -36,7 +37,7 @@ export interface StatusData {
  * Returns 0 for unparseable strings.
  */
 export function parseCost(costStr: string): number {
-  if (!costStr || costStr === "N/A") return 0;
+  if (!costStr || costStr === CostEstimate.NA) return 0;
   const match = costStr.match(/\$?([\d.]+)/);
   if (!match?.[1]) return 0;
   const value = parseFloat(match[1]);
@@ -48,7 +49,7 @@ export function parseCost(costStr: string): number {
  * Returns "N/A" for zero or negative values.
  */
 export function formatCost(cost: number): string {
-  if (cost <= 0) return "N/A";
+  if (cost <= 0) return CostEstimate.NA;
   return `$${cost.toFixed(2)}/month`;
 }
 
@@ -89,7 +90,7 @@ export async function enrichWithBillingData(
     const memoryCost = costMap.get(r.arn);
     if (
       memoryCost &&
-      (r.estimatedMonthlyCost === "N/A" || !r.estimatedMonthlyCost)
+      (r.estimatedMonthlyCost === CostEstimate.NA || !r.estimatedMonthlyCost)
     ) {
       return { ...r, estimatedMonthlyCost: memoryCost };
     }
