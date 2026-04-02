@@ -18,6 +18,7 @@
 import { Command } from "commander";
 import * as clack from "@clack/prompts";
 import { AssigneeError } from "@assignee/core";
+import { ErrorCode } from "../constants/errors.js";
 import {
   runFullCleanup,
   formatCleanupReport,
@@ -130,7 +131,7 @@ async function cleanResources(opts: CleanOpts): Promise<void> {
     // Non-TTY without --yes is an error
     throw new AssigneeError(
       "Resource cleanup requires confirmation. Use --yes for non-interactive mode.",
-      "USAGE_ERROR",
+      ErrorCode.USAGE_ERROR,
     );
   }
 

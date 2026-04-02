@@ -9,6 +9,7 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
 
 export const ecrPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -24,7 +25,7 @@ export const ecrPricingStrategy: PricingStrategy = {
           Type: M.TERM_MATCH,
         },
       ],
-      unit: "/GB-month",
+      unit: PriceUnit.PER_GB_MONTH_LONG,
     };
   },
 };

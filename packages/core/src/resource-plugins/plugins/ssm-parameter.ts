@@ -1,7 +1,8 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::SSM::Parameter.
@@ -71,7 +72,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
       name: CfnKey.DESCRIPTION,
       question: {
         type: "string",
-        label: "Description",
+        label: FieldLabel.DESCRIPTION,
         placeholder: "Database host for my-app production",
         hint: "Human-readable description of what this parameter stores. Max 1024 characters.",
         validate: (value: unknown) => {
@@ -86,7 +87,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
         validate: TAGS_VALIDATE,
@@ -112,7 +113,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
         label: "Parameter tier",
         options: [
           {
-            value: "Standard",
+            value: AwsDefault.SSM_TIER_STANDARD,
             label: "Standard — free, 4KB max, 10K params limit",
           },
           {
@@ -120,7 +121,7 @@ export const ssmParameterPlugin: ResourcePlugin = {
             label: "Advanced — paid tier, 8KB max, 100K params limit",
           },
         ],
-        initialValue: "Standard",
+        initialValue: AwsDefault.SSM_TIER_STANDARD,
         hint: "Standard is free (up to 10,000 parameters, 4KB max value). Advanced is a paid tier but allows 8KB values and 100,000 parameters.",
       },
     },
@@ -144,6 +145,6 @@ export const ssmParameterPlugin: ResourcePlugin = {
   ],
   defaults: {
     [CfnKey.SSM_TYPE]: "String",
-    [CfnKey.TIER]: "Standard",
+    [CfnKey.TIER]: AwsDefault.SSM_TIER_STANDARD,
   },
 };

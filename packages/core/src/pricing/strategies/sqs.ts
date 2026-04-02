@@ -9,6 +9,7 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
 
 export const sqsPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -20,7 +21,7 @@ export const sqsPricingStrategy: PricingStrategy = {
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.QUEUE, Type: M.TERM_MATCH },
       ],
-      unit: "/million requests",
+      unit: PriceUnit.PER_MILLION_REQUESTS_LONG,
     };
   },
 };

@@ -5,7 +5,7 @@
  * @see Story 23.3
  */
 
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -18,20 +18,26 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingFilterValue as FV } from "../pricing-filter-values.js";
+import { PricingUnit } from "../units.js";
 
 export const apigatewayV2PricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.APIGATEWAYV2_API,
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
-    const protocolType = String(desiredState[CfnKey.PROTOCOL_TYPE] ?? "HTTP");
+    const protocolType = String(
+      desiredState[CfnKey.PROTOCOL_TYPE] ?? AwsDefault.PROTOCOL_HTTP,
+    );
 
-    if (protocolType === "WEBSOCKET") {
+    if (protocolType === AwsDefault.PROTOCOL_WEBSOCKET) {
       // 1. Messages
       items.push({
-        label: "Messages",
+        label: LineItemLabel.MESSAGES,
         quantity: 0,
-        unit: "messages",
+        unit: PricingUnit.MESSAGES,
         serviceCode: SC.API_GATEWAY,
         filters: [
           { Field: F.PRODUCT_FAMILY, Value: PF.WEBSOCKET, Type: M.TERM_MATCH },
@@ -43,15 +49,15 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
         ],
         kind: K.USAGE_BASED,
         description: "per million",
-        priceUnit: "/M msgs",
+        priceUnit: PriceUnit.PER_MILLION_MSGS,
         scale: 1_000_000,
       });
 
       // 2. Connection minutes
       items.push({
-        label: "Connection minutes",
+        label: LineItemLabel.CONNECTION_MINUTES,
         quantity: 0,
-        unit: "minutes",
+        unit: PricingUnit.MINUTES,
         serviceCode: SC.API_GATEWAY,
         filters: [
           { Field: F.PRODUCT_FAMILY, Value: PF.WEBSOCKET, Type: M.TERM_MATCH },
@@ -63,7 +69,7 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
         ],
         kind: K.USAGE_BASED,
         description: "per million",
-        priceUnit: "/M mins",
+        priceUnit: PriceUnit.PER_MILLION_MINS,
         scale: 1_000_000,
       });
     } else {
@@ -71,9 +77,9 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
 
       // 1. Requests
       items.push({
-        label: "Requests",
+        label: LineItemLabel.REQUESTS,
         quantity: 0,
-        unit: "requests",
+        unit: PricingUnit.REQUESTS,
         serviceCode: SC.API_GATEWAY,
         filters: [
           { Field: F.PRODUCT_FAMILY, Value: PF.API_CALLS, Type: M.TERM_MATCH },
@@ -85,15 +91,15 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
         ],
         kind: K.USAGE_BASED,
         description: "per million",
-        priceUnit: "/M reqs",
+        priceUnit: PriceUnit.PER_MILLION_REQS,
         scale: 1_000_000,
       });
 
       // 2. Data transfer out
       items.push({
-        label: "Data transfer out",
+        label: LineItemLabel.DATA_TRANSFER_OUT,
         quantity: 0,
-        unit: "GB",
+        unit: PricingUnit.GB,
         serviceCode: SC.DATA_TRANSFER,
         filters: [
           {
@@ -103,15 +109,19 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
           },
           {
             Field: F.FROM_LOCATION_TYPE,
-            Value: "AWS Region",
+            Value: FV.AWS_REGION,
             Type: M.TERM_MATCH,
           },
-          { Field: F.TO_LOCATION_TYPE, Value: "External", Type: M.TERM_MATCH },
-          { Field: F.TRANSFER_TYPE, Value: "AWS Outbound", Type: M.TERM_MATCH },
+          { Field: F.TO_LOCATION_TYPE, Value: FV.EXTERNAL, Type: M.TERM_MATCH },
+          {
+            Field: F.TRANSFER_TYPE,
+            Value: FV.AWS_OUTBOUND,
+            Type: M.TERM_MATCH,
+          },
         ],
         kind: K.USAGE_BASED,
         description: "per GB",
-        priceUnit: "/GB",
+        priceUnit: PriceUnit.PER_GB,
       });
     }
 

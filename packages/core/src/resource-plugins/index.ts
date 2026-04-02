@@ -100,6 +100,7 @@ export type {
   CfnOutput,
 } from "./types.js";
 export { QuestionTypeName } from "./types.js";
+export { FieldLabel } from "./field-labels.js";
 
 // Story 25.6: LogGroup co-provisioning
 export {

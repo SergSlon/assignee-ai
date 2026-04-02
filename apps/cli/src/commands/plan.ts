@@ -31,6 +31,7 @@ import {
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand, runProvisioningLoop } from "../utils/command-runner.js";
 import { SUPPORTED_TYPES_HINT, CHECKPOINT_DIR } from "../config/constants.js";
+import { ErrorCode } from "../constants/errors.js";
 import { serializeCheckpoint, saveCheckpoint } from "../services/checkpoint.js";
 import { loadUserConfig } from "../config/user-config-loader.js";
 import { fetchOrgPolicy, readAuthToken } from "../config/org-policy-cache.js";
@@ -78,7 +79,7 @@ export const planCommand = new Command(CommandName.PLAN)
       if (opts.source !== undefined && opts.source.trim() === "") {
         throw new AssigneeError(
           "--source requires a non-empty directory path",
-          "INVALID_SOURCE_DIR",
+          ErrorCode.INVALID_SOURCE_DIR,
         );
       }
       const resolvedSourceDir = opts.source
@@ -92,7 +93,7 @@ export const planCommand = new Command(CommandName.PLAN)
         ) {
           throw new AssigneeError(
             `Source directory does not exist: ${resolvedSourceDir}`,
-            "INVALID_SOURCE_DIR",
+            ErrorCode.INVALID_SOURCE_DIR,
           );
         }
         const countFiles = (dir: string): number => {
@@ -110,7 +111,7 @@ export const planCommand = new Command(CommandName.PLAN)
         if (sourceFileCount === 0) {
           throw new AssigneeError(
             `Source directory is empty: ${resolvedSourceDir}`,
-            "INVALID_SOURCE_DIR",
+            ErrorCode.INVALID_SOURCE_DIR,
           );
         }
       }

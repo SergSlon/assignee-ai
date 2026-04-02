@@ -1,7 +1,8 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
+import { CfnKey, ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::RDS::DBInstance.
@@ -53,7 +54,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
             fitHint: "Memory-optimized, Graviton",
           },
         ],
-        initialValue: "db.t3.micro",
+        initialValue: AwsDefault.DB_INSTANCE_CLASS,
         fetcher: "discover-rds-instance-classes",
       },
     },
@@ -64,9 +65,13 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         label: "Database engine",
         hint: "Database engine and version. PostgreSQL is the most feature-rich open-source option. Aurora variants offer auto-scaling but cost more. Engine cannot be changed after creation.",
         options: [
-          { value: "mysql", label: "MySQL", fitHint: "Widely supported" },
           {
-            value: "postgres",
+            value: AwsDefault.RDS_ENGINE_MYSQL,
+            label: "MySQL",
+            fitHint: "Widely supported",
+          },
+          {
+            value: AwsDefault.RDS_ENGINE_POSTGRES,
             label: "PostgreSQL",
             fitHint: "Most popular, advanced features",
             recommended: true,
@@ -123,7 +128,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           },
           { value: "8.0", label: "MySQL 8.0", fitHint: "Stable, widely used" },
         ],
-        showIf: { field: CfnKey.ENGINE, value: "mysql" },
+        showIf: { field: CfnKey.ENGINE, value: AwsDefault.RDS_ENGINE_MYSQL },
         fetcher: "discover-rds-engine-versions",
       },
     },
@@ -255,7 +260,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         hint: "gp3 is the best price-performance for most workloads. io1 is for high-IOPS needs (thousands of transactions/sec). gp2 is legacy -- prefer gp3 for new databases.",
         options: [
           {
-            value: "gp3",
+            value: AwsDefault.EBS_VOLUME_TYPE,
             label: "gp3 (General Purpose SSD v3) — ~$0.023/GB-month",
             fitHint: "Best price-performance",
             recommended: true,
@@ -321,7 +326,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
         validate: TAGS_VALIDATE,

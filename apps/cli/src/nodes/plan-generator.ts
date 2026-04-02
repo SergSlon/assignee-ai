@@ -13,6 +13,7 @@ import {
   CfnKey,
   EIP_AUTO_ALLOCATE,
   ResourceDefault,
+  AwsDefault,
   type ProvisionRecord,
   type FailureRecord,
 } from "@assignee/core";
@@ -29,6 +30,7 @@ import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 import { sanitizeDesiredState } from "../services/desired-state-sanitizer.js";
 import { repairRequiredFields } from "../services/required-field-repairer.js";
+import { EnvVar } from "../constants/env-vars.js";
 
 /**
  * Transforms elicited options using plugin toCfn mappers.
@@ -92,7 +94,10 @@ function assembleS3Composites(
   // ── Encryption ──
   if (options[CfnKey.BUCKET_ENCRYPTION] === true) {
     const kmsKey = options[CfnKey.KMS_MASTER_KEY_ID_S3];
-    const algorithm = kmsKey && String(kmsKey).trim() ? "aws:kms" : "AES256";
+    const algorithm =
+      kmsKey && String(kmsKey).trim()
+        ? "aws:kms"
+        : AwsDefault.ENCRYPTION_AES256;
     transformed[CfnKey.BUCKET_ENCRYPTION] = {
       ServerSideEncryptionConfiguration: [
         {
@@ -444,7 +449,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     const requiredKeys: string[] =
       (state.resourceSchema[CfnKey.CFN_REQUIRED] as string[] | undefined) ?? [];
 
-    if (!process.env["BEDROCK_GUARDRAIL_ID"]) {
+    if (!process.env[EnvVar.BEDROCK_GUARDRAIL_ID]) {
       log({
         ts: new Date().toISOString(),
         runId: state.runId,

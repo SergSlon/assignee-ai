@@ -1,7 +1,9 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
+import { IamEffect } from "../../config/iam-effects.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /** Common trust policies for AWS service principals. */
 const TRUST_POLICIES: Record<string, object> = {
@@ -9,7 +11,7 @@ const TRUST_POLICIES: Record<string, object> = {
     Version: "2012-10-17",
     Statement: [
       {
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Principal: { Service: "ec2.amazonaws.com" },
         Action: "sts:AssumeRole",
       },
@@ -19,7 +21,7 @@ const TRUST_POLICIES: Record<string, object> = {
     Version: "2012-10-17",
     Statement: [
       {
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Principal: { Service: "lambda.amazonaws.com" },
         Action: "sts:AssumeRole",
       },
@@ -29,7 +31,7 @@ const TRUST_POLICIES: Record<string, object> = {
     Version: "2012-10-17",
     Statement: [
       {
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Principal: { Service: "ecs-tasks.amazonaws.com" },
         Action: "sts:AssumeRole",
       },
@@ -66,7 +68,7 @@ export const iamRolePlugin: ResourcePlugin = {
       name: CfnKey.DESCRIPTION,
       question: {
         type: "string",
-        label: "Description",
+        label: FieldLabel.DESCRIPTION,
         placeholder: "Execution role for my Lambda function",
         hint: "Human-readable description of the role's purpose. Max 1000 characters.",
         validate: (value: unknown) => {
@@ -123,7 +125,7 @@ export const iamRolePlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
         validate: TAGS_VALIDATE,

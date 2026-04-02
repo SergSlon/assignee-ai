@@ -30,9 +30,13 @@ import type {
 } from "../services/provisioning-port.js";
 import { createDriftDetectorFromEnv } from "../services/drift-detector-factory.js";
 import { resolveDesiredState } from "../utils/resolve-desired-state.js";
+import {
+  ReconcileAction,
+  type ReconcileActionType,
+} from "../constants/reconcile-actions.js";
 
-/** Action chosen for each drifted resource. */
-export type ReconcileAction = "reconcile" | "accept" | "skip";
+// Re-export for consumers (tests, etc.)
+export { ReconcileAction, type ReconcileActionType };
 
 /** Summary counters for the reconcile run. */
 export interface ReconcileSummary {
@@ -137,7 +141,7 @@ export async function reconcileResource(
     promptFn: PromptFn;
     confirmFn: ConfirmFn;
   },
-): Promise<ReconcileAction> {
+): Promise<ReconcileActionType> {
   const { dryRun, autoReconcile, promptFn, confirmFn } = opts;
   const fieldCount = result.driftedFields.length;
 
@@ -153,12 +157,12 @@ export async function reconcileResource(
 
   if (dryRun) {
     process.stdout.write(chalk.gray("  [dry-run] Would prompt for action\n"));
-    return "skip";
+    return ReconcileAction.SKIP;
   }
 
-  let action: ReconcileAction;
+  let action: ReconcileActionType;
   if (autoReconcile) {
-    action = "reconcile";
+    action = ReconcileAction.RECONCILE;
   } else {
     const choice = await promptFn(
       `Action for ${result.resourceType} ${result.resourceId}?`,
@@ -166,17 +170,17 @@ export async function reconcileResource(
     );
     action =
       choice === "Reconcile"
-        ? "reconcile"
+        ? ReconcileAction.RECONCILE
         : choice === "Accept"
-          ? "accept"
-          : "skip";
+          ? ReconcileAction.ACCEPT
+          : ReconcileAction.SKIP;
   }
 
-  if (action === "skip") {
-    return "skip";
+  if (action === ReconcileAction.SKIP) {
+    return ReconcileAction.SKIP;
   }
 
-  if (action === "accept") {
+  if (action === ReconcileAction.ACCEPT) {
     // Update desired state to match actual and persist to disk
     if (result.actualState) {
       const provisions = await memory.readProvisions();
@@ -197,7 +201,7 @@ export async function reconcileResource(
         `  Accepted current state as new desired for ${result.resourceId}\n`,
       ),
     );
-    return "accept";
+    return ReconcileAction.ACCEPT;
   }
 
   // Reconcile — update actual to match desired
@@ -206,7 +210,7 @@ export async function reconcileResource(
       `Reconcile ${result.resourceType} ${result.resourceId}? This will change ${fieldCount} fields. [y/N]`,
     );
     if (!confirmed) {
-      return "skip";
+      return ReconcileAction.SKIP;
     }
   }
 
@@ -233,7 +237,7 @@ export async function reconcileResource(
         `  All drifted fields are create-only. Nothing to patch for ${result.resourceId}.\n`,
       ),
     );
-    return "skip";
+    return ReconcileAction.SKIP;
   }
 
   const patchDocument = JSON.stringify(patchOps);
@@ -251,7 +255,7 @@ export async function reconcileResource(
   process.stdout.write(
     chalk.green(`  Reconciled ${result.resourceId} successfully\n`),
   );
-  return "reconcile";
+  return ReconcileAction.RECONCILE;
 }
 
 export const reconcileCommand = new Command(CommandName.RECONCILE)
@@ -378,13 +382,13 @@ export const reconcileCommand = new Command(CommandName.RECONCILE)
           );
 
           switch (action) {
-            case "reconcile":
+            case ReconcileAction.RECONCILE:
               summary.reconciled++;
               break;
-            case "accept":
+            case ReconcileAction.ACCEPT:
               summary.accepted++;
               break;
-            case "skip":
+            case ReconcileAction.SKIP:
               summary.skipped++;
               break;
           }

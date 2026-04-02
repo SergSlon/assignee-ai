@@ -28,3 +28,10 @@ export { containerServicePattern } from "./patterns/container-service.js";
 export { messageProcessingPattern } from "./patterns/message-processing.js";
 export { staticWebsitePattern } from "./patterns/static-website.js";
 export type { ArchitecturePattern, ResourceSpec } from "./types.js";
+export {
+  ServerlessApiResourceId,
+  MessageProcessingResourceId,
+  ThreeTierWebResourceId,
+  ContainerServiceResourceId,
+  StaticWebsiteResourceId,
+} from "./pattern-resource-ids.js";

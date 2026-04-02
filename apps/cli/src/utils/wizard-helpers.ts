@@ -52,6 +52,7 @@ import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
 import { ResourceFieldName } from "../constants/resource-fields.js";
 import { rankOptions } from "../utils/option-ranker.js";
 import type { WorkloadProfile } from "../utils/workload-classifier.js";
+import { InstanceCategory } from "../constants/instance-categories.js";
 
 // ── Field key helpers ─────────────────────────────────────────────────────────
 
@@ -185,10 +186,10 @@ export function enrichFieldLabels(fields: ResourceField[]): ResourceField[] {
  * @see Story 21.3
  */
 const PROFILE_TO_CATEGORY: Partial<Record<WorkloadProfile, string>> = {
-  burstable: "burstable",
-  "general-purpose": "general",
-  "compute-heavy": "compute",
-  "memory-intensive": "memory",
+  [InstanceCategory.BURSTABLE]: "burstable",
+  [InstanceCategory.GENERAL_PURPOSE]: "general",
+  [InstanceCategory.COMPUTE_HEAVY]: "compute",
+  [InstanceCategory.MEMORY_INTENSIVE]: "memory",
 };
 
 /** GPU note shown when gpu-accelerated profile is detected. */
@@ -225,7 +226,10 @@ export function applyCategorySmartFilter(
     }
 
     // GPU profile: no matching category, just add a hint
-    if (profile === "gpu-accelerated" || profile === "storage-heavy") {
+    if (
+      profile === InstanceCategory.GPU_ACCELERATED ||
+      profile === InstanceCategory.STORAGE_HEAVY
+    ) {
       const gpuHint =
         profile === "gpu-accelerated" ? GPU_CATEGORY_NOTE : undefined;
       if (!gpuHint) return field;

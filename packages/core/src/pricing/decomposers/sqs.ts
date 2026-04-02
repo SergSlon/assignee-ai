@@ -18,6 +18,9 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingUnit } from "../units.js";
 
 export const sqsPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.SQS_QUEUE,
@@ -31,9 +34,9 @@ export const sqsPricingDecomposer: PricingDecomposer = {
 
     // 1. Requests
     items.push({
-      label: "Requests",
+      label: LineItemLabel.REQUESTS,
       quantity: 0,
-      unit: "requests",
+      unit: PricingUnit.REQUESTS,
       serviceCode: SC.SQS,
       filters: [
         {
@@ -44,7 +47,7 @@ export const sqsPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.USAGE_BASED,
       description: isFifo ? "FIFO queue" : "Standard queue",
-      priceUnit: "/M reqs",
+      priceUnit: PriceUnit.PER_MILLION_REQS,
       scale: 1_000_000,
     });
 

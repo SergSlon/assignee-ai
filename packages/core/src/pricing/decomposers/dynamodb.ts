@@ -6,7 +6,7 @@
  * @see Story 24.1
  */
 
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -19,6 +19,10 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingFilterValue as FV } from "../pricing-filter-values.js";
+import { PricingUnit } from "../units.js";
 
 export const dynamodbPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
@@ -27,8 +31,8 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
     const items: PricingLineItem[] = [];
     const billingMode =
       (desiredState[CfnKey.BILLING_MODE] as string | undefined) ??
-      "PAY_PER_REQUEST";
-    const isProvisioned = billingMode === "PROVISIONED";
+      AwsDefault.BILLING_PAY_PER_REQUEST;
+    const isProvisioned = billingMode === AwsDefault.BILLING_PROVISIONED;
 
     if (isProvisioned) {
       const throughput = desiredState[CfnKey.PROVISIONED_THROUGHPUT] as
@@ -39,9 +43,9 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
 
       // 1. Read capacity (provisioned)
       items.push({
-        label: "Read capacity",
+        label: LineItemLabel.READ_CAPACITY,
         quantity: rcu,
-        unit: "RCU",
+        unit: PricingUnit.RCU,
         serviceCode: SC.DYNAMODB,
         filters: [
           {
@@ -49,18 +53,18 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
             Value: PF.PROVISIONED_IOPS,
             Type: M.TERM_MATCH,
           },
-          { Field: F.GROUP, Value: "DDB-ReadUnits", Type: M.TERM_MATCH },
+          { Field: F.GROUP, Value: FV.DDB_READ_UNITS, Type: M.TERM_MATCH },
         ],
         kind: K.FIXED,
         description: `${rcu} RCUs`,
-        priceUnit: "/RCU-hr",
+        priceUnit: PriceUnit.PER_RCU_HOUR,
       });
 
       // 2. Write capacity (provisioned)
       items.push({
-        label: "Write capacity",
+        label: LineItemLabel.WRITE_CAPACITY,
         quantity: wcu,
-        unit: "WCU",
+        unit: PricingUnit.WCU,
         serviceCode: SC.DYNAMODB,
         filters: [
           {
@@ -68,18 +72,18 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
             Value: PF.PROVISIONED_IOPS,
             Type: M.TERM_MATCH,
           },
-          { Field: F.GROUP, Value: "DDB-WriteUnits", Type: M.TERM_MATCH },
+          { Field: F.GROUP, Value: FV.DDB_WRITE_UNITS, Type: M.TERM_MATCH },
         ],
         kind: K.FIXED,
         description: `${wcu} WCUs`,
-        priceUnit: "/WCU-hr",
+        priceUnit: PriceUnit.PER_WCU_HOUR,
       });
     } else {
       // 1. Read request units (on-demand)
       items.push({
-        label: "Read capacity",
+        label: LineItemLabel.READ_CAPACITY,
         quantity: 0,
-        unit: "requests",
+        unit: PricingUnit.REQUESTS,
         serviceCode: SC.DYNAMODB,
         filters: [
           {
@@ -87,18 +91,18 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
             Value: PF.PAY_PER_REQUEST,
             Type: M.TERM_MATCH,
           },
-          { Field: F.GROUP, Value: "DDB-ReadUnits", Type: M.TERM_MATCH },
+          { Field: F.GROUP, Value: FV.DDB_READ_UNITS, Type: M.TERM_MATCH },
         ],
         kind: K.USAGE_BASED,
         description: "per million read request units",
-        priceUnit: "/M read reqs",
+        priceUnit: PriceUnit.PER_MILLION_READ_REQS,
       });
 
       // 2. Write request units (on-demand)
       items.push({
-        label: "Write capacity",
+        label: LineItemLabel.WRITE_CAPACITY,
         quantity: 0,
-        unit: "requests",
+        unit: PricingUnit.REQUESTS,
         serviceCode: SC.DYNAMODB,
         filters: [
           {
@@ -106,19 +110,19 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
             Value: PF.PAY_PER_REQUEST,
             Type: M.TERM_MATCH,
           },
-          { Field: F.GROUP, Value: "DDB-WriteUnits", Type: M.TERM_MATCH },
+          { Field: F.GROUP, Value: FV.DDB_WRITE_UNITS, Type: M.TERM_MATCH },
         ],
         kind: K.USAGE_BASED,
         description: "per million write request units",
-        priceUnit: "/M write reqs",
+        priceUnit: PriceUnit.PER_MILLION_WRITE_REQS,
       });
     }
 
     // 3. Storage (always usage-based, per GB-month)
     items.push({
-      label: "Storage",
+      label: LineItemLabel.STORAGE,
       quantity: 0,
-      unit: "GB",
+      unit: PricingUnit.GB,
       serviceCode: SC.DYNAMODB,
       filters: [
         {
@@ -128,13 +132,13 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
         },
         {
           Field: F.USAGE_TYPE,
-          Value: "TimedStorage-ByteHrs",
+          Value: FV.TIMED_STORAGE_BYTE_HRS,
           Type: M.TERM_MATCH,
         },
       ],
       kind: K.USAGE_BASED,
       description: "per GB-month",
-      priceUnit: "/GB-mo",
+      priceUnit: PriceUnit.PER_GB_MONTH,
     });
 
     return items;

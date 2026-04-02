@@ -325,6 +325,58 @@ export const ResourceDefault = {
   RDS_ENGINE_POSTGRES: "postgres",
 } as const;
 
+/**
+ * AWS default values used across plugins, decomposers, strategies, and CLI code.
+ * Use instead of raw string literals like "t3.micro", "application", etc.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const AwsDefault = {
+  // ── EC2 ───────────────────────────────────────────────────────
+  INSTANCE_TYPE: "t3.micro",
+  EC2_AMI: "amazon-linux-2023",
+  ARCH_X86: "x86_64",
+  ARCH_ARM: "arm64",
+
+  // ── RDS ───────────────────────────────────────────────────────
+  DB_INSTANCE_CLASS: "db.t3.micro",
+  RDS_ENGINE_POSTGRES: "postgres",
+  RDS_ENGINE_MYSQL: "mysql",
+
+  // ── EBS / Storage ─────────────────────────────────────────────
+  EBS_VOLUME_TYPE: "gp3",
+
+  // ── ELBv2 ─────────────────────────────────────────────────────
+  LB_TYPE_APPLICATION: "application",
+  LB_SCHEME_INTERNET_FACING: "internet-facing",
+
+  // ── API Gateway V2 ────────────────────────────────────────────
+  PROTOCOL_HTTP: "HTTP",
+  PROTOCOL_WEBSOCKET: "WEBSOCKET",
+
+  // ── CloudWatch / Logs ─────────────────────────────────────────
+  LOG_CLASS_STANDARD: "STANDARD",
+  LOG_CLASS_INFREQUENT: "INFREQUENT_ACCESS",
+
+  // ── DynamoDB ──────────────────────────────────────────────────
+  BILLING_PAY_PER_REQUEST: "PAY_PER_REQUEST",
+  BILLING_PROVISIONED: "PROVISIONED",
+
+  // ── ECS ───────────────────────────────────────────────────────
+  CAPACITY_FARGATE: "FARGATE",
+  CAPACITY_FARGATE_SPOT: "FARGATE_SPOT",
+
+  // ── Encryption ────────────────────────────────────────────────
+  ENCRYPTION_AES256: "AES256",
+
+  // ── Lambda ────────────────────────────────────────────────────
+  LAMBDA_HANDLER: "index.handler",
+  LAMBDA_RUNTIME: "nodejs22.x",
+
+  // ── SSM ───────────────────────────────────────────────────────
+  SSM_TIER_STANDARD: "Standard",
+} as const;
+
 export const AssigneeTag = {
   KEY: "managed-by",
   VALUE: "assignee-ai",

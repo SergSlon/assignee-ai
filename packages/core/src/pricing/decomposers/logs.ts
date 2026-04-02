@@ -18,6 +18,9 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingUnit } from "../units.js";
 
 export const logsPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.LOGS_LOG_GROUP,
@@ -31,9 +34,9 @@ export const logsPricingDecomposer: PricingDecomposer = {
 
     // 1. Log ingestion
     items.push({
-      label: "Log ingestion",
+      label: LineItemLabel.LOG_INGESTION,
       quantity: 0,
-      unit: "GB",
+      unit: PricingUnit.GB,
       serviceCode: SC.CLOUDWATCH,
       filters: [
         {
@@ -51,14 +54,14 @@ export const logsPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.USAGE_BASED,
       description: isInfrequent ? "Infrequent Access class" : "Standard class",
-      priceUnit: "/GB ingested",
+      priceUnit: PriceUnit.PER_GB_INGESTED,
     });
 
     // 2. Log storage
     items.push({
-      label: "Log storage",
+      label: LineItemLabel.LOG_STORAGE,
       quantity: 0,
-      unit: "GB",
+      unit: PricingUnit.GB,
       serviceCode: SC.CLOUDWATCH,
       filters: [
         {
@@ -76,7 +79,7 @@ export const logsPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.USAGE_BASED,
       description: "archived logs",
-      priceUnit: "/GB-mo",
+      priceUnit: PriceUnit.PER_GB_MONTH,
     });
 
     return items;

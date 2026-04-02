@@ -36,6 +36,7 @@ import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
 import { LlmAdapter } from "./llm-adapter.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
+import { EnvVar } from "../constants/env-vars.js";
 import type { LlmPort } from "@assignee/core";
 import {
   isRecordingEnabled,
@@ -74,9 +75,9 @@ export function createGraph(
   const llmAdapter: LlmPort =
     options.llmClient ??
     new LlmAdapter({
-      modelString: process.env["ASSIGNEE_MODEL"],
-      guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
-      guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],
+      modelString: process.env[EnvVar.ASSIGNEE_MODEL],
+      guardrailId: process.env[EnvVar.BEDROCK_GUARDRAIL_ID],
+      guardrailVersion: process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION],
     });
 
   const intentParserNode = createIntentParserNode({ llmClient: llmAdapter });

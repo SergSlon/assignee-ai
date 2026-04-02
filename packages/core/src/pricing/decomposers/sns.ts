@@ -18,6 +18,9 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingUnit } from "../units.js";
 
 export const snsPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.SNS_TOPIC,
@@ -31,9 +34,9 @@ export const snsPricingDecomposer: PricingDecomposer = {
 
     // 1. Publishes
     items.push({
-      label: "Publishes",
+      label: LineItemLabel.PUBLISHES,
       quantity: 0,
-      unit: "requests",
+      unit: PricingUnit.REQUESTS,
       serviceCode: SC.SNS,
       filters: [
         {
@@ -44,15 +47,15 @@ export const snsPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.USAGE_BASED,
       description: isFifo ? "FIFO topic" : "Standard topic",
-      priceUnit: "/M publishes",
+      priceUnit: PriceUnit.PER_MILLION_PUBLISHES,
       scale: 1_000_000,
     });
 
     // 2. HTTP notifications
     items.push({
-      label: "HTTP notifications",
+      label: LineItemLabel.HTTP_NOTIFICATIONS,
       quantity: 0,
-      unit: "notifications",
+      unit: PricingUnit.NOTIFICATIONS,
       serviceCode: SC.SNS,
       filters: [
         {
@@ -68,7 +71,7 @@ export const snsPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.USAGE_BASED,
       description: "per 100K",
-      priceUnit: "/100K notifs",
+      priceUnit: PriceUnit.PER_100K_NOTIFS,
     });
 
     return items;

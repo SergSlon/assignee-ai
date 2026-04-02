@@ -72,7 +72,7 @@ export {
 import type { FreeTierNote } from "./free-tier.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { AppliedFix } from "../services/graph-state.js";
-import { CfnKey } from "@assignee/core";
+import { CfnKey, AwsDefault } from "@assignee/core";
 import type { PricingBreakdown } from "@assignee/core";
 
 /** Minimal state shape needed for rendering — avoids circular imports with graph.ts */
@@ -229,7 +229,8 @@ export function formatSpecialValue(key: string, value: unknown): string | null {
     // Walk nested structure to find SSEAlgorithm
     const json = JSON.stringify(value);
     if (json.includes("aws:kms")) return "SSE-KMS enabled";
-    if (json.includes("AES256")) return "AES-256 (SSE-S3) enabled";
+    if (json.includes(AwsDefault.ENCRYPTION_AES256))
+      return "AES-256 (SSE-S3) enabled";
     return "Encryption enabled";
   }
   // LifecycleConfiguration → summarize rules

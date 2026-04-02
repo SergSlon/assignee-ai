@@ -3,13 +3,14 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import {
   PricingField as F,
   PricingMatchType as M,
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
 
 /**
  * Pricing strategy for AWS::ApiGatewayV2::Api.
@@ -22,8 +23,9 @@ import {
  */
 export const apiGatewayV2PricingStrategy: PricingStrategy = {
   estimateLocal(desiredState?: Record<string, unknown>): PricingEstimate {
-    const protocol = desiredState?.[CfnKey.PROTOCOL_TYPE] ?? "HTTP";
-    if (protocol === "WEBSOCKET") {
+    const protocol =
+      desiredState?.[CfnKey.PROTOCOL_TYPE] ?? AwsDefault.PROTOCOL_HTTP;
+    if (protocol === AwsDefault.PROTOCOL_WEBSOCKET) {
       return {
         perMonth: null,
         label:
@@ -37,9 +39,10 @@ export const apiGatewayV2PricingStrategy: PricingStrategy = {
   },
 
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig | null {
-    const protocol = desiredState?.[CfnKey.PROTOCOL_TYPE] ?? "HTTP";
+    const protocol =
+      desiredState?.[CfnKey.PROTOCOL_TYPE] ?? AwsDefault.PROTOCOL_HTTP;
 
-    if (protocol === "WEBSOCKET") {
+    if (protocol === AwsDefault.PROTOCOL_WEBSOCKET) {
       return {
         serviceCode: SC.API_GATEWAY,
         filters: [
@@ -66,7 +69,7 @@ export const apiGatewayV2PricingStrategy: PricingStrategy = {
           Type: M.TERM_MATCH,
         },
       ],
-      unit: "/million requests",
+      unit: PriceUnit.PER_MILLION_REQUESTS_LONG,
       scale: 1_000_000,
     };
   },

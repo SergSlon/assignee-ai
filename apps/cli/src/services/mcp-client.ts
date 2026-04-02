@@ -8,6 +8,7 @@ import {
 } from "../config/mcp-servers.js";
 import { McpError } from "@assignee/core";
 import { MCP_SHUTDOWN_DELAY_MS } from "../config/constants.js";
+import { ErrorCode } from "../constants/errors.js";
 import { ToolName } from "../constants/tools.js";
 import type { McpServerNameType } from "../constants/mcp.js";
 import type { StructuredTool } from "@langchain/core/tools";
@@ -104,7 +105,7 @@ export async function createMcpClient(
       failedServer
         ? `MCP server '${failedServer}' failed to start.`
         : `An unknown MCP server failed to start: ${errMsg}`,
-      "MCP_STARTUP_FAILED",
+      ErrorCode.MCP_STARTUP_FAILED,
     );
   }
 

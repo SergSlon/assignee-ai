@@ -1,7 +1,8 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::ECS::Cluster.
@@ -44,7 +45,7 @@ export const ecsClusterPlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
         validate: TAGS_VALIDATE,
@@ -70,13 +71,13 @@ export const ecsClusterPlugin: ResourcePlugin = {
         label: "Capacity providers",
         options: [
           {
-            value: "FARGATE",
+            value: AwsDefault.CAPACITY_FARGATE,
             label: "Fargate (serverless)",
             recommended: true,
             fitHint: "No EC2 instances to manage",
           },
           {
-            value: "FARGATE_SPOT",
+            value: AwsDefault.CAPACITY_FARGATE_SPOT,
             label: "Fargate Spot (~70% cheaper, may be interrupted)",
             costHint: "~70% savings vs on-demand Fargate",
             fitHint: "Best for fault-tolerant workloads",
@@ -107,11 +108,21 @@ export const ecsClusterPlugin: ResourcePlugin = {
       toCfn: (answer: unknown) => {
         if (answer === "spot-primary") {
           return [
-            { CapacityProvider: "FARGATE_SPOT", Weight: 2, Base: 0 },
-            { CapacityProvider: "FARGATE", Weight: 1, Base: 1 },
+            {
+              CapacityProvider: AwsDefault.CAPACITY_FARGATE_SPOT,
+              Weight: 2,
+              Base: 0,
+            },
+            {
+              CapacityProvider: AwsDefault.CAPACITY_FARGATE,
+              Weight: 1,
+              Base: 1,
+            },
           ];
         }
-        return [{ CapacityProvider: "FARGATE", Weight: 1, Base: 0 }];
+        return [
+          { CapacityProvider: AwsDefault.CAPACITY_FARGATE, Weight: 1, Base: 0 },
+        ];
       },
     },
   ],
@@ -119,7 +130,7 @@ export const ecsClusterPlugin: ResourcePlugin = {
     [CfnKey.CLUSTER_SETTINGS]: [
       { Name: "containerInsights", Value: "enabled" },
     ],
-    [CfnKey.CAPACITY_PROVIDERS]: ["FARGATE"],
+    [CfnKey.CAPACITY_PROVIDERS]: [AwsDefault.CAPACITY_FARGATE],
   },
   companionResources(desiredState: Record<string, unknown>): CfnOutput[] {
     const clusterName = desiredState[CfnKey.CLUSTER_NAME];

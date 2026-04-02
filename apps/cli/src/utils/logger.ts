@@ -7,6 +7,8 @@
  * @see Story 9.6 — L2: LogAction exhaustive union; LogEvent index signature removed
  */
 
+import { EnvVar } from "../constants/env-vars.js";
+
 export const LOG_ACTIONS = {
   PLAN_STARTED: "plan_started",
   INTENT_PARSED: "intent_parsed",
@@ -81,9 +83,9 @@ export interface LogEvent {
  */
 function isVerbose(): boolean {
   if (process.argv.includes("--verbose")) return true;
-  const verbosity = process.env["ASSIGNEE_VERBOSITY"];
+  const verbosity = process.env[EnvVar.ASSIGNEE_VERBOSITY];
   if (verbosity === "verbose") return true;
-  const logLevel = process.env["ASSIGNEE_LOG_LEVEL"];
+  const logLevel = process.env[EnvVar.ASSIGNEE_LOG_LEVEL];
   if (logLevel === "debug") return true;
   return false;
 }

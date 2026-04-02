@@ -39,6 +39,7 @@ import {
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { AWS_REGION } from "../config/constants.js";
 import { CostEstimate } from "../constants/pricing.js";
+import { ErrorCode } from "../constants/errors.js";
 import { destroySingleResource } from "../services/destroy-service.js";
 import {
   planBulkDestroy,
@@ -252,7 +253,7 @@ async function bulkDestroyAction(opts: {
     if (!process.stdin.isTTY) {
       throw new AssigneeError(
         "Bulk destroy requires confirmation. Use --yes for non-interactive mode.",
-        "DESTROY_ERROR",
+        ErrorCode.DESTROY_ERROR,
       );
     }
 
@@ -284,7 +285,7 @@ async function bulkDestroyAction(opts: {
       if (!process.stdin.isTTY) {
         throw new AssigneeError(
           "IAM destroy requires confirmation. Use --yes for non-interactive mode.",
-          "DESTROY_ERROR",
+          ErrorCode.DESTROY_ERROR,
         );
       }
 
@@ -370,7 +371,7 @@ export async function destroyAction(
     if (resource) {
       throw new AssigneeError(
         "Cannot use --all with a specific resource. Use one or the other.",
-        "USAGE_ERROR",
+        ErrorCode.USAGE_ERROR,
       );
     }
     return bulkDestroyAction(opts);
@@ -380,13 +381,13 @@ export async function destroyAction(
   if (opts.includeIam) {
     throw new AssigneeError(
       "--include-iam can only be used with --all.",
-      "DESTROY_ERROR",
+      ErrorCode.DESTROY_ERROR,
     );
   }
   if (opts.dryRun) {
     throw new AssigneeError(
       "--dry-run can only be used with --all.",
-      "DESTROY_ERROR",
+      ErrorCode.DESTROY_ERROR,
     );
   }
 
@@ -394,7 +395,7 @@ export async function destroyAction(
   if (!resource) {
     throw new AssigneeError(
       "Resource ARN or name is required. Usage: assignee destroy <resource-arn-or-name>",
-      "DESTROY_ERROR",
+      ErrorCode.DESTROY_ERROR,
     );
   }
 
@@ -423,7 +424,7 @@ export async function destroyAction(
   if (!resolved) {
     throw new AssigneeError(
       `No managed resource found matching "${resource}". Run 'assignee list' to see managed resources.`,
-      "DESTROY_ERROR",
+      ErrorCode.DESTROY_ERROR,
     );
   }
 
@@ -460,7 +461,7 @@ export async function destroyAction(
     if (!process.stdin.isTTY) {
       throw new AssigneeError(
         "Destroy requires confirmation. Use --yes for non-interactive mode.",
-        "DESTROY_ERROR",
+        ErrorCode.DESTROY_ERROR,
       );
     }
 
@@ -485,7 +486,10 @@ export async function destroyAction(
   stopSpinner();
 
   if (!result.success) {
-    throw new AssigneeError(result.error ?? "Destroy failed", "DESTROY_ERROR");
+    throw new AssigneeError(
+      result.error ?? "Destroy failed",
+      ErrorCode.DESTROY_ERROR,
+    );
   }
 
   renderDestroySuccess(estimatedMonthlyCost);

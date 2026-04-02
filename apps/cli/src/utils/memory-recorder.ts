@@ -14,6 +14,7 @@ import {
 import { defaultMemoryService } from "../services/memory.js";
 import { defaultErrorMessageRegistry } from "./error-messages.js";
 import { CostEstimate } from "../constants/pricing.js";
+import { EnvVar } from "../constants/env-vars.js";
 import { log, LOG_ACTIONS } from "./logger.js";
 
 /**
@@ -33,8 +34,8 @@ export async function writeProvisionRecord(
       resourceType: resourceType || "unknown",
       resourceArn: resourceArn ?? "",
       region:
-        process.env["AWS_REGION"] ??
-        process.env["AWS_DEFAULT_REGION"] ??
+        process.env[EnvVar.AWS_REGION] ??
+        process.env[EnvVar.AWS_DEFAULT_REGION] ??
         "unknown",
       desiredStateHash: crypto
         .createHash("sha256")

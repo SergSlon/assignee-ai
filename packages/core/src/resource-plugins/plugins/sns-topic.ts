@@ -2,6 +2,7 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::SNS::Topic.
@@ -82,7 +83,7 @@ export const snsTopicPlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
         validate: TAGS_VALIDATE,

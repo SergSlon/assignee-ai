@@ -8,24 +8,21 @@
 
 import { z } from "zod";
 import type { LlmPort } from "@assignee/core";
+import {
+  InstanceCategory,
+  type InstanceCategoryType,
+} from "../constants/instance-categories.js";
 
-export type WorkloadProfile =
-  | "burstable" // dev/test, small apps, intermittent traffic
-  | "general-purpose" // balanced web apps, mid-size APIs
-  | "compute-heavy" // batch processing, CI/CD, encoding
-  | "memory-intensive" // caches, analytics, in-memory DBs
-  | "gpu-accelerated" // ML training, inference, rendering
-  | "storage-heavy" // data lakes, backups, archival
-  | "unknown"; // fallback — no clear signal
+export type WorkloadProfile = InstanceCategoryType | "unknown";
 
 export const WorkloadProfileSchema = z.object({
   profile: z.enum([
-    "burstable",
-    "general-purpose",
-    "compute-heavy",
-    "memory-intensive",
-    "gpu-accelerated",
-    "storage-heavy",
+    InstanceCategory.BURSTABLE,
+    InstanceCategory.GENERAL_PURPOSE,
+    InstanceCategory.COMPUTE_HEAVY,
+    InstanceCategory.MEMORY_INTENSIVE,
+    InstanceCategory.GPU_ACCELERATED,
+    InstanceCategory.STORAGE_HEAVY,
     "unknown",
   ]),
   confidence: z.number().min(0).max(1),

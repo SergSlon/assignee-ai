@@ -1,7 +1,8 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::ElasticLoadBalancingV2::LoadBalancer.
@@ -35,7 +36,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
         label: "Load balancer type",
         options: [
           {
-            value: "application",
+            value: AwsDefault.LB_TYPE_APPLICATION,
             label: "Application (ALB) — HTTP/HTTPS",
             recommended: true,
             fitHint: "Best for web apps, APIs, microservices",
@@ -47,7 +48,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
               "Best for extreme performance, static IPs, non-HTTP protocols",
           },
         ],
-        initialValue: "application",
+        initialValue: AwsDefault.LB_TYPE_APPLICATION,
         hint: "ALB operates at Layer 7 (HTTP) with path/host routing, WAF support, and WebSocket. NLB operates at Layer 4 (TCP) with ultra-low latency and static IPs.",
       },
     },
@@ -58,7 +59,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
         label: "Scheme",
         options: [
           {
-            value: "internet-facing",
+            value: AwsDefault.LB_SCHEME_INTERNET_FACING,
             label: "Internet-facing (public)",
             fitHint: "Accessible from the internet",
           },
@@ -68,7 +69,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
             fitHint: "Only accessible within your VPC",
           },
         ],
-        initialValue: "internet-facing",
+        initialValue: AwsDefault.LB_SCHEME_INTERNET_FACING,
         hint: "Internet-facing receives traffic from the internet. Internal is only reachable within your VPC. Cannot be changed after creation.",
       },
     },
@@ -94,7 +95,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
         validate: TAGS_VALIDATE,
@@ -120,7 +121,7 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
         label: "Security groups",
         options: [],
         hint: "Security groups control inbound/outbound traffic. Required for ALBs. Typically allow ports 80/443 inbound.",
-        showIf: { field: CfnKey.TYPE, value: "application" },
+        showIf: { field: CfnKey.TYPE, value: AwsDefault.LB_TYPE_APPLICATION },
         fetcher: "discover-security-groups",
         validate: (value: unknown) => {
           if (!value || (Array.isArray(value) && value.length === 0))
@@ -159,8 +160,8 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    [CfnKey.TYPE]: "application",
-    [CfnKey.SCHEME]: "internet-facing",
+    [CfnKey.TYPE]: AwsDefault.LB_TYPE_APPLICATION,
+    [CfnKey.SCHEME]: AwsDefault.LB_SCHEME_INTERNET_FACING,
     [CfnKey.IP_ADDRESS_TYPE]: "ipv4",
   },
 };

@@ -27,6 +27,7 @@ import {
 import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
 import { defaultErrorHintRegistry } from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
+import { EnvVar } from "../constants/env-vars.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 import { checkSecurityPosture } from "../utils/security-posture.js";
@@ -58,8 +59,8 @@ async function uploadStaticSiteFiles(
   const { uploadStaticSite } = await import("../services/s3-upload.js");
 
   const region =
-    process.env["AWS_REGION"] ??
-    process.env["AWS_DEFAULT_REGION"] ??
+    process.env[EnvVar.AWS_REGION] ??
+    process.env[EnvVar.AWS_DEFAULT_REGION] ??
     AWS_REGION;
 
   // 1. Upload files to S3
@@ -519,8 +520,8 @@ export async function resultFormatterNode(
       ) {
         if (state.outputFormat === "json") {
           const region =
-            process.env["AWS_REGION"] ??
-            process.env["AWS_DEFAULT_REGION"] ??
+            process.env[EnvVar.AWS_REGION] ??
+            process.env[EnvVar.AWS_DEFAULT_REGION] ??
             AWS_REGION;
           const jsonPayload = {
             resourceType: state.resourceType,

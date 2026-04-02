@@ -6,7 +6,7 @@
  * and API call charges.
  */
 
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -19,12 +19,17 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingUnit } from "../units.js";
 
 export const ssmPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.SSM_PARAMETER,
 
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
-    const tier = String(desiredState[CfnKey.TIER] ?? "Standard").toLowerCase();
+    const tier = String(
+      desiredState[CfnKey.TIER] ?? AwsDefault.SSM_TIER_STANDARD,
+    ).toLowerCase();
 
     // Standard tier is free — no billable components
     if (tier === "standard") {
@@ -35,9 +40,9 @@ export const ssmPricingDecomposer: PricingDecomposer = {
 
     // 1. Parameter storage (per parameter per month)
     items.push({
-      label: "Parameter storage",
+      label: LineItemLabel.PARAMETER_STORAGE,
       quantity: 1,
-      unit: "parameter",
+      unit: PricingUnit.PARAMETER,
       serviceCode: SC.SSM,
       filters: [
         {
@@ -53,14 +58,14 @@ export const ssmPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.FIXED,
       description: "Advanced tier",
-      priceUnit: "/param-mo",
+      priceUnit: PriceUnit.PER_PARAM_MONTH,
     });
 
     // 2. API calls (higher throughput)
     items.push({
-      label: "API calls",
+      label: LineItemLabel.API_CALLS,
       quantity: 0,
-      unit: "requests",
+      unit: PricingUnit.REQUESTS,
       serviceCode: SC.SSM,
       filters: [
         {
@@ -76,7 +81,7 @@ export const ssmPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.USAGE_BASED,
       description: "higher throughput API",
-      priceUnit: "/10K reqs",
+      priceUnit: PriceUnit.PER_10K_REQS,
     });
 
     return items;

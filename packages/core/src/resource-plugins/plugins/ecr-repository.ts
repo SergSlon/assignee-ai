@@ -1,7 +1,8 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::ECR::Repository.
@@ -65,7 +66,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
         validate: TAGS_VALIDATE,
@@ -91,7 +92,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
         label: "Encryption type",
         options: [
           {
-            value: "AES256",
+            value: AwsDefault.ENCRYPTION_AES256,
             label: "AES-256 (default, free)",
             recommended: true,
           },
@@ -101,7 +102,7 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
             costHint: "Additional KMS key and API charges apply",
           },
         ],
-        initialValue: "AES256",
+        initialValue: AwsDefault.ENCRYPTION_AES256,
         hint: "AES-256 is free and sufficient for most workloads. KMS provides key rotation and audit trails via CloudTrail.",
       },
     },

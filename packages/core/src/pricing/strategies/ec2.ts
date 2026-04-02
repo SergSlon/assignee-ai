@@ -5,7 +5,7 @@ import type {
 } from "../types.js";
 
 import { EXTENDED_TIMEOUT_MS } from "../constants.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import {
   PricingField as F,
   PricingMatchType as M,
@@ -13,8 +13,7 @@ import {
   PricingServiceCode as SC,
   CostEstimateLabel,
 } from "../filter-constants.js";
-
-const DEFAULT_INSTANCE_TYPE = "t3.micro";
+import { PriceUnit } from "../price-units.js";
 
 export const ec2PricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -23,7 +22,7 @@ export const ec2PricingStrategy: PricingStrategy = {
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
     const instanceType =
       (desiredState?.[CfnKey.INSTANCE_TYPE] as string | undefined) ??
-      DEFAULT_INSTANCE_TYPE;
+      AwsDefault.INSTANCE_TYPE;
     return {
       serviceCode: SC.EC2,
       filters: [
@@ -38,7 +37,7 @@ export const ec2PricingStrategy: PricingStrategy = {
         { Field: F.CAPACITY_STATUS, Value: "Used", Type: M.TERM_MATCH },
         { Field: F.PRE_INSTALLED_SW, Value: "NA", Type: M.TERM_MATCH },
       ],
-      unit: "/hour",
+      unit: PriceUnit.PER_HOUR_LONG,
       timeoutMs: EXTENDED_TIMEOUT_MS,
     };
   },

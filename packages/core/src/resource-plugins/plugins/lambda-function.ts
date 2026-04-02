@@ -1,7 +1,8 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin, OptionMetadata, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /** Lambda duration pricing rate ($/GB-second) — stable since 2014. Exported for test use. */
 export const LAMBDA_USD_PER_GB_SECOND = 0.0000166667;
@@ -136,7 +137,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         label: "Runtime",
         hint: "Language and version your code runs on. Node.js has the fastest cold starts. Python is popular for ML/data. Java has slower cold starts but strong enterprise support.",
         options: sortedRuntimes,
-        initialValue: "nodejs22.x",
+        initialValue: AwsDefault.LAMBDA_RUNTIME,
       },
     },
     {
@@ -145,8 +146,8 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "Handler (file.method)",
-        placeholder: "index.handler",
-        initialValue: "index.handler",
+        placeholder: AwsDefault.LAMBDA_HANDLER,
+        initialValue: AwsDefault.LAMBDA_HANDLER,
         hint: "Entry point for your function: file name + exported method. Node.js: 'index.handler'. Python: 'lambda_function.lambda_handler'. Must match your code exactly.",
         validate: (value: unknown) => {
           if (!value) return undefined;
@@ -259,18 +260,18 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         hint: "Instruction set architecture. arm64 (Graviton) is ~20% cheaper and offers better price-performance for most workloads. x86_64 is required for some native dependencies.",
         options: [
           {
-            value: "x86_64",
+            value: AwsDefault.ARCH_X86,
             label: "x86_64 (Intel/AMD)",
             fitHint: "Widest compatibility",
           },
           {
-            value: "arm64",
+            value: AwsDefault.ARCH_ARM,
             label: "arm64 (Graviton — 20% cheaper)",
             fitHint: "Best price-performance",
             recommended: true,
           },
         ],
-        initialValue: "x86_64",
+        initialValue: AwsDefault.ARCH_X86,
       },
       toCfn: (v: unknown) => (v ? [String(v)] : undefined),
     },
@@ -278,7 +279,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
         validate: TAGS_VALIDATE,
@@ -396,9 +397,9 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
   defaults: {
     [CfnKey.MEMORY_SIZE]: 128,
     [CfnKey.TIMEOUT]: 30,
-    [CfnKey.RUNTIME]: "nodejs22.x",
-    [CfnKey.HANDLER]: "index.handler",
-    [CfnKey.ARCHITECTURES]: ["x86_64"],
+    [CfnKey.RUNTIME]: AwsDefault.LAMBDA_RUNTIME,
+    [CfnKey.HANDLER]: AwsDefault.LAMBDA_HANDLER,
+    [CfnKey.ARCHITECTURES]: [AwsDefault.ARCH_X86],
     [CfnKey.EPHEMERAL_STORAGE]: { Size: 512 },
     // Story E2E.3: Placeholder Code for noWizard/MCP mode.
     // Lambda cannot be created without Code; repairer injects this when LLM omits it.

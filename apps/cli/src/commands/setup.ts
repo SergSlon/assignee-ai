@@ -43,6 +43,7 @@ import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import { mergeEnvFile } from "../utils/env-writer.js";
 import { AWS_REGION, PromiseStatus } from "../config/constants.js";
 import { AwsErrorName } from "../constants/aws-errors.js";
+import { IamEffect } from "@assignee/core";
 
 /** Maps role keys to their policy generators, user names, and env var prefixes. */
 const ROLES = [
@@ -440,7 +441,7 @@ export const setupCommand = new Command(CommandName.SETUP)
               Version: "2012-10-17",
               Statement: [
                 {
-                  Effect: "Allow",
+                  Effect: IamEffect.ALLOW,
                   Principal: { Service: "bedrock.amazonaws.com" },
                   Action: "sts:AssumeRole",
                 },
@@ -473,7 +474,7 @@ export const setupCommand = new Command(CommandName.SETUP)
           Version: "2012-10-17",
           Statement: [
             {
-              Effect: "Allow",
+              Effect: IamEffect.ALLOW,
               Action: [
                 "logs:CreateLogGroup",
                 "logs:CreateLogStream",

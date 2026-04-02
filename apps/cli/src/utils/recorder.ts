@@ -16,6 +16,7 @@ import * as path from "node:path";
 import type { StructuredTool } from "@langchain/core/tools";
 import { CfnKey } from "@assignee/core";
 import type { LlmPort, Result, LlmError } from "@assignee/core";
+import { EnvVar } from "../constants/env-vars.js";
 import type { ZodSchema } from "zod";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ function redactSensitive(value: unknown): unknown {
  * All recording logic is gated behind this check.
  */
 export function isRecordingEnabled(): boolean {
-  return process.env["ASSIGNEE_RECORD"] === "1";
+  return process.env[EnvVar.ASSIGNEE_RECORD] === "1";
 }
 
 // ── Recording directory ──────────────────────────────────────────────────────

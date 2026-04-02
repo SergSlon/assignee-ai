@@ -27,6 +27,7 @@ import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { CfnKey, ResourceDefault } from "@assignee/core";
 import { withTimeout } from "./timeout.js";
 import { AWS_REGION, PromiseStatus } from "../config/constants.js";
+import { EnvVar } from "../constants/env-vars.js";
 
 const DISCOVERY_TIMEOUT_MS = 6000;
 
@@ -112,8 +113,8 @@ function readerCredentials(): {
   region: string;
 } {
   return {
-    accessKeyId: process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] ?? "",
-    secretAccessKey: process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] ?? "",
+    accessKeyId: process.env[EnvVar.READER_ACCESS_KEY] ?? "",
+    secretAccessKey: process.env[EnvVar.READER_SECRET_KEY] ?? "",
     region: AWS_REGION,
   };
 }

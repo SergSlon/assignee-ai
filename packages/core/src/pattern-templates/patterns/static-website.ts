@@ -1,6 +1,7 @@
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
+import { StaticWebsiteResourceId as R } from "../pattern-resource-ids.js";
 
 /**
  * Static Website pattern — S3 bucket + CloudFront distribution.
@@ -21,32 +22,36 @@ export const staticWebsitePattern: ArchitecturePattern = {
   resourceList: [
     {
       resourceType: RESOURCE_TYPES.S3_BUCKET,
-      resourceId: "website-bucket",
+      resourceId: R.WEBSITE_BUCKET,
       displayName: "S3 Website Bucket",
     },
     {
       resourceType: "AWS::CloudFront::Distribution",
-      resourceId: "cdn-distribution",
+      resourceId: R.CDN_DISTRIBUTION,
       displayName: "CloudFront CDN (HTTPS)",
       provisionable: false, // Created post-provision via SDK when --source is used
     },
     {
       resourceType: "AWS::CloudFront::OriginAccessControl",
-      resourceId: "cdn-oac",
+      resourceId: R.CDN_OAC,
       displayName: "Origin Access Control",
       provisionable: false, // Created alongside CloudFront distribution
     },
   ],
-  dependencyOrder: [["website-bucket"], ["cdn-oac", "cdn-distribution"]],
+  dependencyOrder: [[R.WEBSITE_BUCKET], [R.CDN_OAC, R.CDN_DISTRIBUTION]],
   defaultOptions: {
-    "website-bucket": {
+    [R.WEBSITE_BUCKET]: {
       WebsiteConfiguration: {
         IndexDocument: "index.html",
         ErrorDocument: "error.html",
       },
       BucketEncryption: {
         ServerSideEncryptionConfiguration: [
-          { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
+          {
+            ServerSideEncryptionByDefault: {
+              SSEAlgorithm: AwsDefault.ENCRYPTION_AES256,
+            },
+          },
         ],
       },
       VersioningConfiguration: { Status: CfnKey.ENABLED },

@@ -16,6 +16,8 @@ import type {
   BPEnforcementLevelType,
 } from "@assignee/core";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { EnvVar } from "../constants/env-vars.js";
+import { FileName } from "./constants.js";
 
 /** Extended user config with top-level preferences (beyond per-resource overrides). */
 export type UserConfig = UserResourceConfig & {
@@ -28,9 +30,9 @@ export type UserConfig = UserResourceConfig & {
 /** Resolve the config file path from env override or XDG default. */
 export function resolveConfigPath(): string {
   const configDir =
-    process.env["ASSIGNEE_CONFIG_DIR"] ??
+    process.env[EnvVar.ASSIGNEE_CONFIG_DIR] ??
     path.join(os.homedir(), ".config", "assignee");
-  return path.join(configDir, "config.yaml");
+  return path.join(configDir, FileName.CONFIG);
 }
 
 /**

@@ -1,6 +1,7 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { ResourceDefault } from "../../config/cfn-keys.js";
+import { ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
 import type { ArchitecturePattern } from "../types.js";
+import { ThreeTierWebResourceId as R } from "../pattern-resource-ids.js";
 
 export const threeTierWebPattern: ArchitecturePattern = {
   patternId: "three-tier-web",
@@ -17,48 +18,54 @@ export const threeTierWebPattern: ArchitecturePattern = {
   resourceList: [
     {
       resourceType: RESOURCE_TYPES.EC2_SECURITY_GROUP,
-      resourceId: "alb-sg",
+      resourceId: R.ALB_SG,
       displayName: "ALB Security Group",
     },
     {
       resourceType: RESOURCE_TYPES.EC2_SECURITY_GROUP,
-      resourceId: "app-sg",
+      resourceId: R.APP_SG,
       displayName: "Application Security Group",
     },
     {
       resourceType: RESOURCE_TYPES.IAM_ROLE,
-      resourceId: "instance-profile-role",
+      resourceId: R.INSTANCE_PROFILE_ROLE,
       displayName: "EC2 Instance Profile Role",
     },
     {
       resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
-      resourceId: "alb",
+      resourceId: R.ALB,
       displayName: "Application Load Balancer",
     },
     {
       resourceType: RESOURCE_TYPES.EC2_INSTANCE,
-      resourceId: "ec2-instance",
+      resourceId: R.EC2_INSTANCE,
       displayName: "EC2 Application Instance",
     },
     {
       resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
-      resourceId: "rds-instance",
+      resourceId: R.RDS_INSTANCE,
       displayName: "RDS Database Instance",
     },
   ],
   dependencyOrder: [
-    ["alb-sg", "app-sg", "instance-profile-role"],
-    ["alb", "rds-instance"],
-    ["ec2-instance"],
+    [R.ALB_SG, R.APP_SG, R.INSTANCE_PROFILE_ROLE],
+    [R.ALB, R.RDS_INSTANCE],
+    [R.EC2_INSTANCE],
   ],
   defaultOptions: {
-    "rds-instance": {
+    [R.RDS_INSTANCE]: {
       Engine: ResourceDefault.RDS_ENGINE_POSTGRES,
       MultiAZ: false,
       StorageEncrypted: true,
       BackupRetentionPeriod: 7,
     },
-    "ec2-instance": { InstanceType: "t3.micro", HttpTokens: "required" },
-    alb: { Type: "application", Scheme: "internet-facing" },
+    [R.EC2_INSTANCE]: {
+      InstanceType: AwsDefault.INSTANCE_TYPE,
+      HttpTokens: "required",
+    },
+    [R.ALB]: {
+      Type: AwsDefault.LB_TYPE_APPLICATION,
+      Scheme: AwsDefault.LB_SCHEME_INTERNET_FACING,
+    },
   },
 };

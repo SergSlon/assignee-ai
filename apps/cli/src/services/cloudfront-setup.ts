@@ -17,6 +17,7 @@ import {
 import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
+import { IamEffect } from "@assignee/core";
 
 export interface CloudFrontResult {
   distributionId: string;
@@ -183,7 +184,7 @@ export function generateCloudFrontBucketPolicy(
     Statement: [
       {
         Sid: "AllowCloudFrontServicePrincipalReadOnly",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Principal: {
           Service: "cloudfront.amazonaws.com",
         },

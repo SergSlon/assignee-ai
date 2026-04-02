@@ -18,6 +18,7 @@
 import { McpServerName, McpCommand } from "../constants/mcp.js";
 import { DEFAULT_AWS_REGION } from "@assignee/core";
 import { AWS_REGION } from "./constants.js";
+import { EnvVar } from "../constants/env-vars.js";
 
 export interface McpServerConfig {
   /** The command to execute (e.g. 'uvx', 'npx') */
@@ -34,9 +35,8 @@ export interface McpServerConfig {
  */
 function readerEnv(region = AWS_REGION): Record<string, string> {
   return {
-    AWS_ACCESS_KEY_ID: process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] ?? "",
-    AWS_SECRET_ACCESS_KEY:
-      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] ?? "",
+    AWS_ACCESS_KEY_ID: process.env[EnvVar.READER_ACCESS_KEY] ?? "",
+    AWS_SECRET_ACCESS_KEY: process.env[EnvVar.READER_SECRET_KEY] ?? "",
     AWS_DEFAULT_REGION: region,
     FASTMCP_LOG_LEVEL: "ERROR",
   };
@@ -48,9 +48,8 @@ function readerEnv(region = AWS_REGION): Record<string, string> {
  */
 function auditorEnv(region = AWS_REGION): Record<string, string> {
   return {
-    AWS_ACCESS_KEY_ID: process.env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"] ?? "",
-    AWS_SECRET_ACCESS_KEY:
-      process.env["ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY"] ?? "",
+    AWS_ACCESS_KEY_ID: process.env[EnvVar.AUDITOR_ACCESS_KEY] ?? "",
+    AWS_SECRET_ACCESS_KEY: process.env[EnvVar.AUDITOR_SECRET_KEY] ?? "",
     AWS_DEFAULT_REGION: region,
     FASTMCP_LOG_LEVEL: "ERROR",
   };

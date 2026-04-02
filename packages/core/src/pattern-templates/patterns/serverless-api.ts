@@ -2,7 +2,10 @@ import {
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
 } from "../../config/resource-types.js";
+import { AwsDefault } from "../../config/cfn-keys.js";
+import { IamEffect } from "../../config/iam-effects.js";
 import type { ArchitecturePattern } from "../types.js";
+import { ServerlessApiResourceId as R } from "../pattern-resource-ids.js";
 
 /** Shorthand aliases for companion resource type constants used in this pattern. */
 const APIGATEWAYV2_INTEGRATION =
@@ -52,75 +55,75 @@ export const serverlessApiPattern: ArchitecturePattern = {
     // 1. IAM Role (no dependencies)
     {
       resourceType: RESOURCE_TYPES.IAM_ROLE,
-      resourceId: "iam-execution-role",
+      resourceId: R.IAM_EXECUTION_ROLE,
       displayName: "Lambda Execution Role",
     },
     // 2. Lambda Function (depends on Role)
     {
       resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
-      resourceId: "lambda-fn",
+      resourceId: R.LAMBDA_FN,
       displayName: "Lambda Function",
     },
     // 3. CloudWatch LogGroup (no dependencies, logically grouped after Lambda)
     {
       resourceType: RESOURCE_TYPES.LOGS_LOG_GROUP,
-      resourceId: "access-log-group",
+      resourceId: R.ACCESS_LOG_GROUP,
       displayName: "API Gateway Access LogGroup",
     },
     // 4. API Gateway V2 Api (no dependencies)
     {
       resourceType: RESOURCE_TYPES.APIGATEWAYV2_API,
-      resourceId: "http-api",
+      resourceId: R.HTTP_API,
       displayName: "HTTP API Gateway",
       provisionable: false,
     },
     // 5. Integration (depends on API + Lambda)
     {
       resourceType: APIGATEWAYV2_INTEGRATION,
-      resourceId: "lambda-integration",
+      resourceId: R.LAMBDA_INTEGRATION,
       displayName: "Lambda Proxy Integration",
       provisionable: false,
     },
     // 6. Route (depends on API + Integration)
     {
       resourceType: APIGATEWAYV2_ROUTE,
-      resourceId: "default-route",
+      resourceId: R.DEFAULT_ROUTE,
       displayName: "Default Route ($default)",
       provisionable: false,
     },
     // 7. Stage (depends on API + LogGroup)
     {
       resourceType: APIGATEWAYV2_STAGE,
-      resourceId: "default-stage",
+      resourceId: R.DEFAULT_STAGE,
       displayName: "$default Stage",
       provisionable: false,
     },
     // 8. Lambda Permission (depends on API + Lambda)
     {
       resourceType: LAMBDA_PERMISSION,
-      resourceId: "api-invoke-permission",
+      resourceId: R.API_INVOKE_PERMISSION,
       displayName: "API Gateway → Lambda Permission",
       provisionable: false,
     },
   ],
   dependencyOrder: [
     // Group 0: IAM Role first — Lambda depends on it
-    ["iam-execution-role"],
+    [R.IAM_EXECUTION_ROLE],
     // Group 1: Lambda + LogGroup + API — can be created in parallel
-    ["lambda-fn", "access-log-group", "http-api"],
+    [R.LAMBDA_FN, R.ACCESS_LOG_GROUP, R.HTTP_API],
     // Group 2: Integration — needs API + Lambda
-    ["lambda-integration"],
+    [R.LAMBDA_INTEGRATION],
     // Group 3: Route + Stage + Permission — need API + Integration/LogGroup/Lambda
-    ["default-route", "default-stage", "api-invoke-permission"],
+    [R.DEFAULT_ROUTE, R.DEFAULT_STAGE, R.API_INVOKE_PERMISSION],
   ],
   defaultOptions: {
-    "iam-execution-role": {
+    [R.IAM_EXECUTION_ROLE]: {
       Path: "/",
       AssumeRolePolicyDocument: {
         Version: "2012-10-17",
         Statement: [
           {
-            Effect: "Allow",
+            Effect: IamEffect.ALLOW,
             Principal: { Service: "lambda.amazonaws.com" },
             Action: "sts:AssumeRole",
           },
@@ -128,19 +131,19 @@ export const serverlessApiPattern: ArchitecturePattern = {
       },
       PermissionsBoundary: "arn:aws:iam::aws:policy/PowerUserAccess",
     },
-    "lambda-fn": {
-      Runtime: "nodejs22.x",
+    [R.LAMBDA_FN]: {
+      Runtime: AwsDefault.LAMBDA_RUNTIME,
       MemorySize: 512,
       Timeout: 30,
-      Architectures: ["arm64"],
-      Role: { "Fn::GetAtt": ["iam-execution-role", "Arn"] },
+      Architectures: [AwsDefault.ARCH_ARM],
+      Role: { "Fn::GetAtt": [R.IAM_EXECUTION_ROLE, "Arn"] },
     },
-    "access-log-group": {
+    [R.ACCESS_LOG_GROUP]: {
       LogGroupName: "/aws/apigateway/serverless-api",
       RetentionInDays: 14,
     },
-    "http-api": {
-      ProtocolType: "HTTP",
+    [R.HTTP_API]: {
+      ProtocolType: AwsDefault.PROTOCOL_HTTP,
       CorsConfiguration: {
         // SECURITY: Configure AllowOrigins for your specific domain(s).
         // Example: ["https://example.com", "https://app.example.com"]
@@ -149,34 +152,33 @@ export const serverlessApiPattern: ArchitecturePattern = {
         AllowHeaders: ["Content-Type", "Authorization"],
       },
     },
-    "lambda-integration": {
-      ApiId: { Ref: "http-api" },
+    [R.LAMBDA_INTEGRATION]: {
+      ApiId: { Ref: R.HTTP_API },
       IntegrationType: "AWS_PROXY",
-      IntegrationUri: { "Fn::GetAtt": ["lambda-fn", "Arn"] },
+      IntegrationUri: { "Fn::GetAtt": [R.LAMBDA_FN, "Arn"] },
       PayloadFormatVersion: "2.0",
     },
-    "default-route": {
-      ApiId: { Ref: "http-api" },
+    [R.DEFAULT_ROUTE]: {
+      ApiId: { Ref: R.HTTP_API },
       RouteKey: "$default",
       Target: {
-        "Fn::Join": ["/", ["integrations", { Ref: "lambda-integration" }]],
+        "Fn::Join": ["/", ["integrations", { Ref: R.LAMBDA_INTEGRATION }]],
       },
     },
-    "default-stage": {
-      ApiId: { Ref: "http-api" },
+    [R.DEFAULT_STAGE]: {
+      ApiId: { Ref: R.HTTP_API },
       StageName: "$default",
       AutoDeploy: true,
       AccessLogSettings: {
-        DestinationArn: { "Fn::GetAtt": ["access-log-group", "Arn"] },
+        DestinationArn: { "Fn::GetAtt": [R.ACCESS_LOG_GROUP, "Arn"] },
       },
     },
-    "api-invoke-permission": {
+    [R.API_INVOKE_PERMISSION]: {
       Action: "lambda:InvokeFunction",
-      FunctionName: { "Fn::GetAtt": ["lambda-fn", "Arn"] },
+      FunctionName: { "Fn::GetAtt": [R.LAMBDA_FN, "Arn"] },
       Principal: "apigateway.amazonaws.com",
       SourceArn: {
-        "Fn::Sub":
-          "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${http-api}/*",
+        "Fn::Sub": `arn:aws:execute-api:\${AWS::Region}:\${AWS::AccountId}:\${${R.HTTP_API}}/*`,
       },
     },
   },

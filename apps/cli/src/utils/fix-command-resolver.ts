@@ -14,10 +14,28 @@
  */
 
 import type { BPFinding } from "@assignee/best-practices";
-import { wizardKeyMap, toSetFlag, toSetFlagFromPatch } from "./wizard-key-map.js";
+import {
+  wizardKeyMap,
+  toSetFlag,
+  toSetFlagFromPatch,
+} from "./wizard-key-map.js";
+
+/**
+ * Named constants for fix categories — eliminates magic strings in comparisons.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const FixCategory = {
+  AUTO_FIXABLE: "auto-fixable",
+  WIZARD_FIXABLE: "wizard-fixable",
+  MANUAL: "manual",
+  AWARENESS: "awareness",
+} as const;
+
+export type FixCategoryType = (typeof FixCategory)[keyof typeof FixCategory];
 
 export interface FindingAction {
-  category: "auto-fixable" | "wizard-fixable" | "manual" | "awareness";
+  category: FixCategoryType;
   fixable: boolean;
   command?: string;
   hint: string;
@@ -35,23 +53,26 @@ export interface FindingAction {
  */
 export function resolveAction(finding: BPFinding): FindingAction {
   // Category A: Auto-fixable — must have a non-empty patch
-  if (finding.autoFixable && finding.desiredStatePatch && Object.keys(finding.desiredStatePatch).length > 0) {
+  if (
+    finding.autoFixable &&
+    finding.desiredStatePatch &&
+    Object.keys(finding.desiredStatePatch).length > 0
+  ) {
     const patchKeys = Object.keys(finding.desiredStatePatch);
     // Use toSetFlagFromPatch to match the specific sub-key, not just the first wizard field
-    const flagField = patchKeys.length > 0
-      ? toSetFlagFromPatch(patchKeys[0]!, finding.desiredStatePatch)
-      : null;
+    const flagField =
+      patchKeys.length > 0
+        ? toSetFlagFromPatch(patchKeys[0]!, finding.desiredStatePatch)
+        : null;
     const command = flagField
       ? `--set ${flagField}=${formatPatchValue(finding.desiredStatePatch, patchKeys[0]!)}`
       : undefined;
 
     return {
-      category: "auto-fixable",
+      category: FixCategory.AUTO_FIXABLE,
       fixable: true,
       command,
-      hint: command
-        ? command
-        : "Applied automatically when enabled",
+      hint: command ? command : "Applied automatically when enabled",
       patch: finding.desiredStatePatch,
     };
   }
@@ -59,7 +80,7 @@ export function resolveAction(finding: BPFinding): FindingAction {
   // Category D: Awareness-only (check before wizard-fixable since these can't be fixed)
   if (finding.fixType === "info") {
     return {
-      category: "awareness",
+      category: FixCategory.AWARENESS,
       fixable: false,
       hint: finding.fixHint ?? finding.remediation ?? "Check after deployment",
     };
@@ -68,17 +89,22 @@ export function resolveAction(finding: BPFinding): FindingAction {
   // For findings with no/empty propertyPath, treat as awareness
   if (!finding.propertyPath || finding.propertyPath.length === 0) {
     return {
-      category: "awareness",
+      category: FixCategory.AWARENESS,
       fixable: false,
       hint: finding.fixHint ?? finding.remediation ?? "Check after deployment",
     };
   }
 
   // Category B: Wizard-fixable — only if a desiredStatePatch exists to apply
-  if (finding.fixType === "interactive" && finding.interactiveOptions?.length && finding.desiredStatePatch && Object.keys(finding.desiredStatePatch).length > 0) {
+  if (
+    finding.fixType === "interactive" &&
+    finding.interactiveOptions?.length &&
+    finding.desiredStatePatch &&
+    Object.keys(finding.desiredStatePatch).length > 0
+  ) {
     const label = finding.interactiveOptions[0]?.label;
     return {
-      category: "wizard-fixable",
+      category: FixCategory.WIZARD_FIXABLE,
       fixable: true,
       hint: finding.fixHint ?? label ?? "Select an option to fix",
     };
@@ -89,7 +115,7 @@ export function resolveAction(finding: BPFinding): FindingAction {
   const setFlag = toSetFlag(rootKey);
   if (setFlag && finding.desiredStatePatch) {
     return {
-      category: "wizard-fixable",
+      category: FixCategory.WIZARD_FIXABLE,
       fixable: true,
       command: `--set ${setFlag}=<value>`,
       hint: finding.fixHint ?? `Fix: --set ${setFlag}=<value>`,
@@ -99,7 +125,7 @@ export function resolveAction(finding: BPFinding): FindingAction {
   // Has wizard mapping but no patch — show as manual guidance (user must --set manually)
   if (setFlag) {
     return {
-      category: "manual",
+      category: FixCategory.MANUAL,
       fixable: false,
       command: `--set ${setFlag}=<value>`,
       hint: finding.fixHint ?? `--set ${setFlag}=<value>`,
@@ -108,7 +134,7 @@ export function resolveAction(finding: BPFinding): FindingAction {
 
   // Category C: Manual — has property_path but no wizard mapping
   return {
-    category: "manual",
+    category: FixCategory.MANUAL,
     fixable: false,
     hint:
       finding.fixHint ??
@@ -121,10 +147,7 @@ export function resolveAction(finding: BPFinding): FindingAction {
  * Extract a display-friendly leaf value from a patch for the first key.
  * Drills into nested objects to find the first scalar value.
  */
-function formatPatchValue(
-  patch: Record<string, unknown>,
-  key: string,
-): string {
+function formatPatchValue(patch: Record<string, unknown>, key: string): string {
   let val: unknown = patch[key];
   // Drill into nested objects/arrays to find a leaf scalar
   for (let depth = 0; depth < 10; depth++) {
@@ -157,6 +180,7 @@ export function countFixable(findings: BPFinding[]): number {
  * Count auto-fixable findings (subset of fixable).
  */
 export function countAutoFixable(findings: BPFinding[]): number {
-  return findings.filter((f) => resolveAction(f).category === "auto-fixable")
-    .length;
+  return findings.filter(
+    (f) => resolveAction(f).category === FixCategory.AUTO_FIXABLE,
+  ).length;
 }

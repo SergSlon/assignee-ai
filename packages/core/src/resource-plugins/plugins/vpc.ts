@@ -2,6 +2,7 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /** Validates IPv4 CIDR notation (e.g. "10.0.0.0/16"). */
 function validateCidr(value: unknown): string | undefined {
@@ -60,7 +61,7 @@ export const vpcPlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:platform",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
         validate: TAGS_VALIDATE,
