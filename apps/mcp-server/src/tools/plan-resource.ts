@@ -7,7 +7,11 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ExecutionMode, ExecutionStatus } from "@assignee/core";
+import {
+  ExecutionMode,
+  ExecutionStatus,
+  BPEnforcementLevel,
+} from "@assignee/core";
 import type { GraphContext } from "../services/graph-init.js";
 import {
   serializeCheckpoint,
@@ -79,7 +83,7 @@ export function registerPlanResource(
             executionMode: ExecutionMode.PLAN,
             startedAt: Date.now(),
             noWizard: true, // MCP server never prompts interactively
-            bpEnforcementLevel: "enforce", // Always enforce BPs in MCP
+            bpEnforcementLevel: BPEnforcementLevel.ENFORCE, // Always enforce BPs in MCP
             ...(region ? { awsRegion: region } : {}),
           },
           { configurable: { thread_id: runId } },
