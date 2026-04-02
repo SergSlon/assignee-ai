@@ -12,6 +12,7 @@ import {
   MissingRequiredFieldsError,
   UserCancelledError,
   CfnKey,
+  ResourceDefault,
 } from "@assignee/core";
 import { PRICING_LOOKUP_TIMEOUT_MS } from "../config/constants.js";
 import type {
@@ -521,8 +522,8 @@ export async function fetchPricesForResource(
     const engine =
       engineField?.question.type === "enum"
         ? ((engineField.question.initialValue as string | undefined) ??
-          "postgres")
-        : "postgres";
+          ResourceDefault.RDS_ENGINE_POSTGRES)
+        : ResourceDefault.RDS_ENGINE_POSTGRES;
     if (
       instanceClassField?.question.type === "enum" &&
       instanceClassField.question.options
@@ -724,7 +725,11 @@ export async function fetchSuggestionPrice(
     ) {
       // Default to postgres since we may not know the selected engine here
       priceMap = await withTimeout(
-        fetchRdsInstancePrices(tools, [suggested], "postgres"),
+        fetchRdsInstancePrices(
+          tools,
+          [suggested],
+          ResourceDefault.RDS_ENGINE_POSTGRES,
+        ),
         PRICING_LOOKUP_TIMEOUT_MS,
       );
     } else {

@@ -19,11 +19,15 @@ import {
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { DEFAULT_AWS_REGION } from "@assignee/core";
+import {
+  DEFAULT_AWS_REGION,
+  AssigneeTag,
+  CostEstimateLabel,
+} from "@assignee/core";
 
 /** Tag key/value used to identify assignee-managed resources. */
-const TAG_KEY_MANAGED_BY = "managed-by";
-const TAG_VALUE_MANAGED_BY = "assignee-ai";
+const TAG_KEY_MANAGED_BY = AssigneeTag.KEY;
+const TAG_VALUE_MANAGED_BY = AssigneeTag.VALUE;
 
 /** Default AWS region when none is specified. */
 const DEFAULT_REGION = process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
@@ -248,12 +252,12 @@ export async function fetchManagedResources(
         resourceType: parsed.resourceType,
         arn,
         region: parsed.region || resolvedRegion,
-        createdDate: createdTag?.Value ?? "N/A",
+        createdDate: createdTag?.Value ?? CostEstimateLabel.NA,
         estimatedMonthlyCost:
           costMap.get(arn) ??
           costMap.get(arn.split("/").pop() ?? "") ??
           costMap.get(arn.split(":").pop() ?? "") ??
-          "N/A",
+          CostEstimateLabel.NA,
       });
     }
 

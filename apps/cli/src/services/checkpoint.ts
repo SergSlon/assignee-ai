@@ -13,6 +13,7 @@ import {
   CHECKPOINT_VERSION,
   CheckpointError,
   safeTry,
+  CostEstimateLabel,
   type PlanCheckpoint,
 } from "@assignee/core";
 import type { AgentState } from "./graph-state.js";
@@ -76,7 +77,7 @@ export function serializeCheckpoint(state: AgentState): PlanCheckpoint {
         }))
       : undefined,
     desiredState: redactSensitiveFields(state.desiredState ?? {}),
-    estimatedMonthlyCost: state.estimatedMonthlyCost ?? "N/A",
+    estimatedMonthlyCost: state.estimatedMonthlyCost ?? CostEstimateLabel.NA,
     preflightPassed: state.preflightPassed,
     elicitedOptions: state.elicitedOptions,
   };

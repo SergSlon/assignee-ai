@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { ResourceDefault } from "../../config/cfn-keys.js";
 import type { ArchitecturePattern } from "../types.js";
 
 export const threeTierWebPattern: ArchitecturePattern = {
@@ -52,7 +53,7 @@ export const threeTierWebPattern: ArchitecturePattern = {
   ],
   defaultOptions: {
     "rds-instance": {
-      Engine: "postgres",
+      Engine: ResourceDefault.RDS_ENGINE_POSTGRES,
       MultiAZ: false,
       StorageEncrypted: true,
       BackupRetentionPeriod: 7,

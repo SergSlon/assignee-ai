@@ -5,7 +5,7 @@
  * @see Story 23.1
  */
 
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -59,7 +59,9 @@ export const ec2PricingDecomposer: PricingDecomposer = {
         const vol = bdm[idx] as Record<string, unknown> | undefined;
         const ebs = vol?.[CfnKey.EBS] as Record<string, unknown> | undefined;
         if (ebs) {
-          const volumeType = String(ebs[CfnKey.VOLUME_TYPE] ?? "gp3");
+          const volumeType = String(
+            ebs[CfnKey.VOLUME_TYPE] ?? ResourceDefault.EBS_VOLUME_TYPE,
+          );
           const volumeSize = Number(ebs[CfnKey.VOLUME_SIZE] ?? 8);
           const volumeApiName = mapVolumeType(volumeType);
           const volLabel =
@@ -148,5 +150,5 @@ function mapVolumeType(volumeType: string): string {
     sc1: "sc1",
     standard: "standard",
   };
-  return map[volumeType] ?? "gp3";
+  return map[volumeType] ?? ResourceDefault.EBS_VOLUME_TYPE;
 }

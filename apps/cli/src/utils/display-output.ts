@@ -13,6 +13,7 @@ import type {
   ArchitecturePattern,
   ResourceSpec,
 } from "@assignee/core";
+import { CostEstimate } from "../constants/pricing.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { SecurityFinding } from "../services/graph-state.js";
 import type { ManagedResource } from "../services/list-resources.js";
@@ -114,7 +115,7 @@ export function renderApplySuccess(state: RenderableState): void {
     process.stdout.write(chalk.dim(`   Run ID: ${state.runId}\n`));
   } else {
     process.stdout.write(
-      `SUCCESS\nARN: ${state.resourceArn ?? "N/A"}\nRun ID: ${state.runId}\n`,
+      `SUCCESS\nARN: ${state.resourceArn ?? CostEstimate.NA}\nRun ID: ${state.runId}\n`,
     );
   }
 }
@@ -222,7 +223,10 @@ export function renderDependencyPlan(
   if (perResourceCosts) {
     const knownCosts = resourceQueue
       .map((r) => perResourceCosts[r.resourceId])
-      .filter((c): c is string => Boolean(c) && c !== "N/A" && c !== "Free");
+      .filter(
+        (c): c is string =>
+          Boolean(c) && c !== CostEstimate.NA && c !== CostEstimate.FREE,
+      );
     if (knownCosts.length > 0) {
       lines.push(``);
       lines.push(`Estimated cost: ${knownCosts.join(" + ")} /month`);
@@ -289,12 +293,15 @@ export function renderResourceTable(resources: ManagedResource[]): void {
     const cDate = col(
       "Created",
       resources.map((r) =>
-        r.createdDate === "N/A" ? "N/A" : r.createdDate.slice(0, 10),
+        r.createdDate === CostEstimate.NA
+          ? CostEstimate.NA
+          : r.createdDate.slice(0, 10),
       ),
       10,
     );
     // Shorten ISO dates to YYYY-MM-DD for display
-    const fmtDate = (d: string) => (d === "N/A" ? "N/A" : d.slice(0, 10));
+    const fmtDate = (d: string) =>
+      d === CostEstimate.NA ? CostEstimate.NA : d.slice(0, 10);
     const header = chalk.bold(
       "Type".padEnd(cType) +
         "ARN".padEnd(cArn) +

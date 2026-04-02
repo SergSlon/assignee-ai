@@ -9,7 +9,7 @@
  * @see Story 2-5, NFR-14
  */
 
-import { RESOURCE_TYPES, CfnKey } from "@assignee/core";
+import { RESOURCE_TYPES, CfnKey, AssigneeTag } from "@assignee/core";
 
 /** CloudFormation tag shape used by most resource types. */
 export interface CfnTag {
@@ -18,12 +18,12 @@ export interface CfnTag {
 }
 
 /** Tag keys injected on every provisioned resource (NFR-14). */
-export const TAG_KEY_MANAGED_BY = "managed-by";
+export const TAG_KEY_MANAGED_BY = AssigneeTag.KEY;
 const TAG_KEY_RUN_ID = "assignee-run-id";
 const TAG_KEY_ENVIRONMENT = "environment";
 
 /** Tag values for the static mandatory tags. */
-export const TAG_VALUE_MANAGED_BY = "assignee-ai";
+export const TAG_VALUE_MANAGED_BY = AssigneeTag.VALUE;
 const TAG_VALUE_ENVIRONMENT = "poc";
 
 /**
@@ -75,7 +75,10 @@ export function injectMandatoryTags(
       !Array.isArray(desiredState[CfnKey.TAGS])
         ? (desiredState[CfnKey.TAGS] as Record<string, string>)
         : {};
-    return { ...desiredState, Tags: { ...existingTags, ...mandatory } };
+    return {
+      ...desiredState,
+      [CfnKey.TAGS]: { ...existingTags, ...mandatory },
+    };
   }
 
   // Array format: [{ Key, Value }] — used by S3, IAM, and most others
@@ -96,5 +99,5 @@ export function injectMandatoryTags(
     ([Key, Value]) => ({ Key, Value }),
   );
 
-  return { ...desiredState, Tags: mergedTags };
+  return { ...desiredState, [CfnKey.TAGS]: mergedTags };
 }

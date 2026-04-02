@@ -12,6 +12,7 @@ import type {
   ArchitecturePattern,
 } from "@assignee/core";
 import type { RenderableState } from "./display.js";
+import { CostEstimate } from "../constants/pricing.js";
 
 /** Wizard prompt sentinel values — single source of truth. */
 export const BACK_SENTINEL = "__back__" as const;
@@ -95,7 +96,7 @@ export async function renderApplyNowConfirm(
   if (!process.stdin.isTTY) return false;
 
   const result = await clack.confirm({
-    message: `Apply now? (${state.resourceType}, est. ${state.estimatedMonthlyCost ?? "N/A"}/mo) [y/N]`,
+    message: `Apply now? (${state.resourceType}, est. ${state.estimatedMonthlyCost ?? CostEstimate.NA}/mo) [y/N]`,
     initialValue: false,
   });
 

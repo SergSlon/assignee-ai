@@ -57,6 +57,8 @@ export const PricingDefault = {
   EC2_INSTANCE_TYPE: "t3.micro",
   RDS_INSTANCE_CLASS: "db.t3.micro",
   RDS_ENGINE: "mysql",
+  EBS_VOLUME_TYPE: "gp3",
+  RDS_ENGINE_POSTGRES: "postgres",
 } as const;
 
 /** Static cost estimate labels used when no pricing API query is needed. */

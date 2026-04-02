@@ -91,3 +91,9 @@ export const PricingProductFamily = {
   // SSM
   SYSTEMS_MANAGER: "AWS Systems Manager",
 } as const;
+
+/** Static cost estimate labels used when no pricing API query is needed. */
+export const CostEstimateLabel = {
+  FREE: "Free",
+  NA: "N/A",
+} as const;

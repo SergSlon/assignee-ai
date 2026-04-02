@@ -9,6 +9,7 @@ import {
   PricingMatchType as M,
   PricingProductFamily as PF,
   PricingServiceCode as SC,
+  CostEstimateLabel,
 } from "../filter-constants.js";
 
 /**
@@ -19,7 +20,7 @@ import {
  */
 export const logsPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: "N/A" };
+    return { perMonth: null, label: CostEstimateLabel.NA };
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
     const logGroupClass =

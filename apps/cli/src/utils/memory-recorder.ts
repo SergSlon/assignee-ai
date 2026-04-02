@@ -13,6 +13,7 @@ import {
 } from "@assignee/core";
 import { defaultMemoryService } from "../services/memory.js";
 import { defaultErrorMessageRegistry } from "./error-messages.js";
+import { CostEstimate } from "../constants/pricing.js";
 import { log, LOG_ACTIONS } from "./logger.js";
 
 /**
@@ -39,7 +40,7 @@ export async function writeProvisionRecord(
         .createHash("sha256")
         .update(JSON.stringify(desiredState ?? {}))
         .digest("hex"),
-      estimatedMonthlyCost: estimatedMonthlyCost ?? "N/A",
+      estimatedMonthlyCost: estimatedMonthlyCost ?? CostEstimate.NA,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {

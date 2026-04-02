@@ -13,6 +13,7 @@ import type { AppliedFix } from "../services/graph-state.js";
 import type { PricingBreakdown } from "@assignee/core";
 import { countAutoFixable } from "./fix-command-resolver.js";
 import { formatDesiredState } from "./display.js";
+import { CostEstimate } from "../constants/pricing.js";
 import type { RenderableState } from "./display.js";
 // NOTE: display.ts re-exports from this module, creating a circular reference.
 // This is safe because: (1) RenderableState is type-only (erased at runtime),
@@ -44,7 +45,7 @@ export function regionLabel(): string {
 export function formatCostLine(
   estimatedMonthlyCost: string | undefined,
 ): string {
-  return estimatedMonthlyCost ?? "N/A";
+  return estimatedMonthlyCost ?? CostEstimate.NA;
 }
 
 export function renderPlanBox(state: RenderableState): void {
@@ -144,7 +145,7 @@ export function formatPricingBreakdown(breakdown: PricingBreakdown): string {
     const subtotal =
       breakdown.fixedSubtotal > 0
         ? `$${breakdown.fixedSubtotal.toFixed(2)}/mo`
-        : "N/A";
+        : CostEstimate.NA;
     lines.push(`  ${"Subtotal (fixed)".padEnd(maxLabel + 20)} ${subtotal}`);
   }
 

@@ -25,6 +25,7 @@ import {
   CheckpointError,
   AssigneeError,
   safeTry,
+  BPEnforcementLevel,
 } from "@assignee/core";
 import {
   CommandName,
@@ -63,13 +64,14 @@ function buildCheckpointState(
   userConfig: UserConfig | undefined,
   orgConfig: unknown,
 ): Record<string, unknown> {
-  const bpLevel = userConfig?.bestPractices?.enforcement ?? "enforce";
+  const bpLevel =
+    userConfig?.bestPractices?.enforcement ?? BPEnforcementLevel.ENFORCE;
 
   // Story 41.3: BP re-evaluation for checkpoint resume
   let bpFindings: ReturnType<typeof reEvaluateBP>["findings"] | undefined;
   let preflightPassed = checkpoint.preflightPassed;
 
-  if (bpLevel !== "skip") {
+  if (bpLevel !== BPEnforcementLevel.SKIP) {
     let reEval: ReturnType<typeof reEvaluateBP>;
     try {
       reEval = reEvaluateBP({
@@ -80,7 +82,7 @@ function buildCheckpointState(
       });
     } catch {
       // BP evaluation failure in enforce mode must be fail-closed
-      if (bpLevel === "enforce") {
+      if (bpLevel === BPEnforcementLevel.ENFORCE) {
         preflightPassed = false;
       }
       return {
@@ -99,7 +101,8 @@ function buildCheckpointState(
         bpEnforcementLevel: bpLevel,
         errorMessage:
           "BP evaluation failed — cannot verify security compliance. Re-run plan to regenerate.",
-        executionStatus: bpLevel === "enforce" ? "FAILED" : undefined,
+        executionStatus:
+          bpLevel === BPEnforcementLevel.ENFORCE ? "FAILED" : undefined,
         ...(opts.yes ? { autoApprove: true } : {}),
         ...(userConfig ? { userConfig } : {}),
         ...(orgConfig ? { orgConfig } : {}),
@@ -109,7 +112,7 @@ function buildCheckpointState(
     if (reEval.findings.length > 0) {
       bpFindings = reEval.findings;
 
-      if (bpLevel === "enforce" && reEval.hasBlocking) {
+      if (bpLevel === BPEnforcementLevel.ENFORCE && reEval.hasBlocking) {
         preflightPassed = false;
         log({
           ts: new Date().toISOString(),
@@ -118,13 +121,13 @@ function buildCheckpointState(
           action: LOG_ACTIONS.BP_EVALUATED,
           extras: {
             context: "checkpoint_resume",
-            enforcement: "enforce",
+            enforcement: BPEnforcementLevel.ENFORCE,
             blocked: true,
             blockingCount: reEval.blockingFindings.length,
             practiceIds: reEval.blockingFindings.map((f) => f.practiceId),
           },
         });
-      } else if (bpLevel === "warn" && reEval.hasBlocking) {
+      } else if (bpLevel === BPEnforcementLevel.WARN && reEval.hasBlocking) {
         log({
           ts: new Date().toISOString(),
           runId: checkpoint.runId,
@@ -132,7 +135,7 @@ function buildCheckpointState(
           action: LOG_ACTIONS.BP_EVALUATED,
           extras: {
             context: "checkpoint_resume",
-            enforcement: "warn",
+            enforcement: BPEnforcementLevel.WARN,
             blockingCount: reEval.blockingFindings.length,
             practiceIds: reEval.blockingFindings.map((f) => f.practiceId),
           },
@@ -406,7 +409,8 @@ export const applyCommand = new Command(CommandName.APPLY)
                   startedAt: Date.now(),
                   projectDir: process.cwd(),
                   bpEnforcementLevel:
-                    userConfig?.bestPractices?.enforcement ?? "enforce",
+                    userConfig?.bestPractices?.enforcement ??
+                    BPEnforcementLevel.ENFORCE,
                   ...(resolvedSourceDir
                     ? { sourceDir: resolvedSourceDir, sourceFileCount }
                     : {}),

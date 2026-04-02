@@ -5,7 +5,7 @@
  * @see Story 23.2
  */
 
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -66,7 +66,9 @@ export const rdsPricingDecomposer: PricingDecomposer = {
     const allocatedStorage = Number(
       desiredState[CfnKey.ALLOCATED_STORAGE] ?? 20,
     );
-    const storageType = String(desiredState[CfnKey.STORAGE_TYPE] ?? "gp3");
+    const storageType = String(
+      desiredState[CfnKey.STORAGE_TYPE] ?? ResourceDefault.EBS_VOLUME_TYPE,
+    );
 
     items.push({
       label: "Storage",

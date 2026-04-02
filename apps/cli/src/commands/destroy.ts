@@ -38,6 +38,7 @@ import {
 } from "../services/resource-resolver.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { AWS_REGION } from "../config/constants.js";
+import { CostEstimate } from "../constants/pricing.js";
 import { destroySingleResource } from "../services/destroy-service.js";
 import {
   planBulkDestroy,
@@ -433,7 +434,9 @@ export async function destroyAction(
     billingTools,
   );
   const estimatedMonthlyCost =
-    savingsEstimate !== "N/A" ? savingsEstimate : "(cost data unavailable)";
+    savingsEstimate !== CostEstimate.NA
+      ? savingsEstimate
+      : "(cost data unavailable)";
 
   // ── Display resource details ────────────────────────────────────────
   renderDestroyBox({

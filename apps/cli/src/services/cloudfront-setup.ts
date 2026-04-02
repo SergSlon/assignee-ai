@@ -14,7 +14,7 @@ import {
   CreateOriginAccessControlCommand,
   TagResourceCommand,
 } from "@aws-sdk/client-cloudfront";
-import { ConfigurationError } from "@assignee/core";
+import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 
@@ -148,7 +148,7 @@ export async function createCloudFrontDistribution(
         },
         Tags: {
           Items: [
-            { Key: "managed-by", Value: "assignee-ai" },
+            { Key: AssigneeTag.KEY, Value: AssigneeTag.VALUE },
             { Key: "assignee-bucket", Value: bucketName },
           ],
         },
