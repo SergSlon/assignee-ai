@@ -17,7 +17,7 @@ import {
 import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
-import { IamEffect } from "@assignee/core";
+import { IamEffect, IamPolicy, AwsServicePrincipal } from "@assignee/core";
 import { CredentialError } from "../config/constants.js";
 
 export interface CloudFrontResult {
@@ -177,13 +177,13 @@ export function generateCloudFrontBucketPolicy(
   distributionArn: string,
 ): string {
   return JSON.stringify({
-    Version: "2012-10-17",
+    Version: IamPolicy.VERSION,
     Statement: [
       {
         Sid: "AllowCloudFrontServicePrincipalReadOnly",
         Effect: IamEffect.ALLOW,
         Principal: {
-          Service: "cloudfront.amazonaws.com",
+          Service: AwsServicePrincipal.CLOUDFRONT,
         },
         Action: "s3:GetObject",
         Resource: `arn:aws:s3:::${bucketName}/*`,

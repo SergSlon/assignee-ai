@@ -1,6 +1,10 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
-import { ArnPrefix } from "../../config/aws-arns.js";
+import {
+  ArnPrefix,
+  IamPolicy,
+  AwsServicePrincipal,
+} from "../../config/aws-arns.js";
 import { IamEffect } from "../../config/iam-effects.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
@@ -9,32 +13,32 @@ import { FieldLabel } from "../field-labels.js";
 /** Common trust policies for AWS service principals. */
 const TRUST_POLICIES: Record<string, object> = {
   ec2: {
-    Version: "2012-10-17",
+    Version: IamPolicy.VERSION,
     Statement: [
       {
         Effect: IamEffect.ALLOW,
-        Principal: { Service: "ec2.amazonaws.com" },
-        Action: "sts:AssumeRole",
+        Principal: { Service: AwsServicePrincipal.EC2 },
+        Action: IamPolicy.ACTION_ASSUME_ROLE,
       },
     ],
   },
   lambda: {
-    Version: "2012-10-17",
+    Version: IamPolicy.VERSION,
     Statement: [
       {
         Effect: IamEffect.ALLOW,
-        Principal: { Service: "lambda.amazonaws.com" },
-        Action: "sts:AssumeRole",
+        Principal: { Service: AwsServicePrincipal.LAMBDA },
+        Action: IamPolicy.ACTION_ASSUME_ROLE,
       },
     ],
   },
   ecs: {
-    Version: "2012-10-17",
+    Version: IamPolicy.VERSION,
     Statement: [
       {
         Effect: IamEffect.ALLOW,
-        Principal: { Service: "ecs-tasks.amazonaws.com" },
-        Action: "sts:AssumeRole",
+        Principal: { Service: AwsServicePrincipal.ECS_TASKS },
+        Action: IamPolicy.ACTION_ASSUME_ROLE,
       },
     ],
   },

@@ -43,7 +43,7 @@ import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import { mergeEnvFile } from "../utils/env-writer.js";
 import { AWS_REGION, PromiseStatus, UserMessage } from "../config/constants.js";
 import { AwsErrorName } from "../constants/aws-errors.js";
-import { IamEffect } from "@assignee/core";
+import { IamEffect, IamPolicy, AwsServicePrincipal } from "@assignee/core";
 
 /** Maps role keys to their policy generators, user names, and env var prefixes. */
 const ROLES = [
@@ -440,12 +440,12 @@ export const setupCommand = new Command(CommandName.SETUP)
           new CreateRoleCommand({
             RoleName: BEDROCK_LOGGING_ROLE_NAME,
             AssumeRolePolicyDocument: JSON.stringify({
-              Version: "2012-10-17",
+              Version: IamPolicy.VERSION,
               Statement: [
                 {
                   Effect: IamEffect.ALLOW,
-                  Principal: { Service: "bedrock.amazonaws.com" },
-                  Action: "sts:AssumeRole",
+                  Principal: { Service: AwsServicePrincipal.BEDROCK },
+                  Action: IamPolicy.ACTION_ASSUME_ROLE,
                 },
               ],
             }),
@@ -473,7 +473,7 @@ export const setupCommand = new Command(CommandName.SETUP)
         RoleName: BEDROCK_LOGGING_ROLE_NAME,
         PolicyName: "BedrockLoggingPolicy",
         PolicyDocument: JSON.stringify({
-          Version: "2012-10-17",
+          Version: IamPolicy.VERSION,
           Statement: [
             {
               Effect: IamEffect.ALLOW,

@@ -248,4 +248,6 @@ export {
   KMS_ALIAS_PREFIX,
   AwsManagedPolicy,
   BEDROCK_MODEL_ARN_WILDCARD,
+  IamPolicy,
+  AwsServicePrincipal,
 } from "./config/aws-arns.js";
