@@ -700,7 +700,8 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     // if the user runs `plan` but never `apply`, the EIP would leak ($3.60/month).
     if (
       state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
-      (desiredState[CfnKey.CONNECTIVITY_TYPE] === "public" ||
+      (desiredState[CfnKey.CONNECTIVITY_TYPE] ===
+        AwsDefault.CONNECTIVITY_PUBLIC ||
         !desiredState[CfnKey.CONNECTIVITY_TYPE]) &&
       (!desiredState[CfnKey.ALLOCATION_ID] ||
         desiredState[CfnKey.ALLOCATION_ID] === EIP_AUTO_ALLOCATE)

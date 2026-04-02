@@ -1,5 +1,8 @@
 import type { BestPractice, BPFinding, Trigger } from "./types.js";
 
+/** Pattern ID constant for message-processing — must match @assignee/core PatternId.MESSAGE_PROCESSING */
+const PATTERN_MESSAGE_PROCESSING = "message-processing" as const;
+
 /**
  * Context for evaluating best practice triggers against a resource configuration.
  * Passed by the bp_evaluator graph node (Story 12.3).
@@ -271,7 +274,7 @@ function buildFinding(bp: BestPractice): BPFinding {
 function shouldSkipForPattern(bp: BestPractice, context: EvalContext): boolean {
   // message-processing pattern includes a dedicated DLQ — skip "needs RedrivePolicy" for SQS queues
   if (
-    context.patternId === "message-processing" &&
+    context.patternId === PATTERN_MESSAGE_PROCESSING &&
     bp.id === "BP-SQS-002" // DLQ check
   ) {
     return true;

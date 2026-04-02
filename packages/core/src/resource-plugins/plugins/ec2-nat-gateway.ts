@@ -2,7 +2,7 @@ import {
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
 } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
@@ -37,16 +37,16 @@ export const natGatewayPlugin: ResourcePlugin = {
         hint: "Public: allows private subnet resources to reach the internet (requires EIP, auto-provisioned). Private: enables communication between VPCs or on-premises networks without internet access — no EIP needed, no data processing charges for inter-AZ traffic.",
         options: [
           {
-            value: "public",
+            value: AwsDefault.CONNECTIVITY_PUBLIC,
             label: "Public — outbound internet access (requires EIP)",
             recommended: true,
           },
           {
-            value: "private",
+            value: AwsDefault.CONNECTIVITY_PRIVATE,
             label: "Private — VPC-to-VPC / on-premises only (no EIP)",
           },
         ],
-        initialValue: "public",
+        initialValue: AwsDefault.CONNECTIVITY_PUBLIC,
       },
     },
     {
@@ -91,7 +91,7 @@ export const natGatewayPlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    [CfnKey.CONNECTIVITY_TYPE]: "public",
+    [CfnKey.CONNECTIVITY_TYPE]: AwsDefault.CONNECTIVITY_PUBLIC,
   },
   configHints: [
     "NatGateway SubnetId: REQUIRED. The NatGateway MUST be placed in a public subnet (one with a route to an InternetGateway). Placing it in a private subnet will not work.",
@@ -103,7 +103,8 @@ export const natGatewayPlugin: ResourcePlugin = {
   ],
   toCfn(desiredState: Record<string, unknown>) {
     const connectivityType =
-      (desiredState[CfnKey.CONNECTIVITY_TYPE] as string) ?? "public";
+      (desiredState[CfnKey.CONNECTIVITY_TYPE] as string) ??
+      AwsDefault.CONNECTIVITY_PUBLIC;
     const subnetId = desiredState[CfnKey.SUBNET_ID] as string | undefined;
     const tags = desiredState[CfnKey.TAGS] as unknown;
     const maxDrain = desiredState[CfnKey.MAX_DRAIN_DURATION] as
@@ -129,7 +130,7 @@ export const natGatewayPlugin: ResourcePlugin = {
 
     const resources: CfnOutput[] = [];
 
-    if (connectivityType === "public") {
+    if (connectivityType === AwsDefault.CONNECTIVITY_PUBLIC) {
       // Auto-provision an Elastic IP for public NAT Gateway
       const eipLogicalId = `${logicalPrefix}EIP`;
       resources.push({

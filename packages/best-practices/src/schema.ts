@@ -4,6 +4,8 @@ import {
   BP_CATEGORY,
   BP_CHECK_TYPE,
   BP_FIX_TYPE,
+  FixType,
+  FixAction,
 } from "./types.js";
 
 const triggerSchema = z
@@ -50,10 +52,10 @@ export const bestPracticeSchema = z
         z.object({
           label: z.string(),
           action: z.enum([
-            "prompt_value",
-            "set_value",
-            "remove_property",
-            "skip",
+            FixAction.PROMPT_VALUE,
+            FixAction.SET_VALUE,
+            FixAction.REMOVE_PROPERTY,
+            FixAction.SKIP,
           ]),
           targetField: z.string().optional(),
           targetValue: z.unknown().optional(),
@@ -64,7 +66,7 @@ export const bestPracticeSchema = z
   .strict()
   .refine(
     (bp) => {
-      if (bp.fixType === "auto") {
+      if (bp.fixType === FixType.AUTO) {
         return bp.autoFixable === true && bp.desiredStatePatch != null;
       }
       return true;
@@ -76,7 +78,7 @@ export const bestPracticeSchema = z
   )
   .refine(
     (bp) => {
-      if (bp.fixType === "interactive") {
+      if (bp.fixType === FixType.INTERACTIVE) {
         return (
           bp.interactiveOptions != null && bp.interactiveOptions.length > 0
         );

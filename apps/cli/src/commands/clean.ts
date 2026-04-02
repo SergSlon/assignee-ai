@@ -26,7 +26,11 @@ import {
   type CleanupReport,
 } from "../services/cleanup.js";
 import { MemoryService } from "../services/memory.js";
-import { CHECKPOINT_DIR } from "../config/constants.js";
+import {
+  CHECKPOINT_DIR,
+  CleanupCategoryName,
+  UserMessage,
+} from "../config/constants.js";
 import {
   planBulkDestroy,
   type ManagedResource,
@@ -124,7 +128,7 @@ async function cleanResources(opts: CleanOpts): Promise<void> {
       message: `Type "clean" to destroy ${plan.resources.length} resources`,
     });
     if (clack.isCancel(answer) || answer !== "clean") {
-      clack.log.warn("Resource cleanup cancelled.");
+      clack.log.warn(UserMessage.RESOURCE_CLEANUP_CANCELLED);
       return;
     }
   } else {
@@ -179,9 +183,9 @@ async function cleanAction(opts: CleanOpts): Promise<void> {
     // ── Local cleanup (checkpoints, cache, memory) ────────────────────
     if (doLocalCleanup) {
       const categories: CleanupCategory[] = [];
-      if (opts.checkpoints) categories.push("checkpoints");
-      if (opts.cache) categories.push("cache");
-      if (opts.memory) categories.push("memory");
+      if (opts.checkpoints) categories.push(CleanupCategoryName.CHECKPOINTS);
+      if (opts.cache) categories.push(CleanupCategoryName.CACHE);
+      if (opts.memory) categories.push(CleanupCategoryName.MEMORY);
       const catParam = categories.length > 0 ? categories : undefined;
 
       const memoryService = new MemoryService();

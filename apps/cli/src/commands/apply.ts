@@ -103,7 +103,9 @@ function buildCheckpointState(
         errorMessage:
           "BP evaluation failed — cannot verify security compliance. Re-run plan to regenerate.",
         executionStatus:
-          bpLevel === BPEnforcementLevel.ENFORCE ? "FAILED" : undefined,
+          bpLevel === BPEnforcementLevel.ENFORCE
+            ? ExecutionStatus.FAILED
+            : undefined,
         ...(opts.yes ? { autoApprove: true } : {}),
         ...(userConfig ? { userConfig } : {}),
         ...(orgConfig ? { orgConfig } : {}),
@@ -217,7 +219,7 @@ export const applyCommand = new Command(CommandName.APPLY)
           }
           throw new AssigneeError(
             `Checkpoint file not found: ${cpPath}. Run \`assignee plan\` to create a new plan.`,
-            "CHECKPOINT_ERROR",
+            ErrorCode.CHECKPOINT_ERROR,
           );
         }
       } else if (!intent) {

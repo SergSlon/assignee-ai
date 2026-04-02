@@ -2,6 +2,7 @@ import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type { ArchitecturePattern } from "../types.js";
 import { StaticWebsiteResourceId as R } from "../pattern-resource-ids.js";
+import { PatternId } from "../pattern-ids.js";
 
 /**
  * Static Website pattern — S3 bucket + CloudFront distribution.
@@ -9,7 +10,7 @@ import { StaticWebsiteResourceId as R } from "../pattern-resource-ids.js";
  * via direct SDK calls (not CloudControl). File upload uses --source flag.
  */
 export const staticWebsitePattern: ArchitecturePattern = {
-  patternId: "static-website",
+  patternId: PatternId.STATIC_WEBSITE,
   displayName: "Static Website (S3 + CloudFront)",
   keywords: [
     "static website",

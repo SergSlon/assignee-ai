@@ -21,14 +21,10 @@ import { LlmError, safeTry } from "@assignee/core";
 import type { LlmPort, Result } from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
 import { EnvVar } from "../constants/env-vars.js";
+import { LlmProvider, type LlmProviderType } from "../constants/errors.js";
 
 /** Supported provider prefixes. */
-export type ProviderPrefix =
-  | "anthropic"
-  | "openai"
-  | "bedrock"
-  | "ollama"
-  | "google";
+export type ProviderPrefix = LlmProviderType;
 
 export interface ParsedModel {
   provider: ProviderPrefix;
@@ -36,18 +32,14 @@ export interface ParsedModel {
 }
 
 /** Default model when ASSIGNEE_MODEL is unset — backward compatible. */
-export const DEFAULT_MODEL = "bedrock/amazon.nova-lite-v1:0";
+export const DEFAULT_MODEL = `${LlmProvider.BEDROCK}/amazon.nova-lite-v1:0`;
 
 /** Default maxOutputTokens per NFR-15. */
 export const DEFAULT_MAX_TOKENS = 1024;
 
-const VALID_PROVIDERS: ReadonlySet<string> = new Set([
-  "anthropic",
-  "openai",
-  "bedrock",
-  "ollama",
-  "google",
-]);
+const VALID_PROVIDERS: ReadonlySet<string> = new Set(
+  Object.values(LlmProvider),
+);
 
 /**
  * Parse a model string like "anthropic/claude-sonnet-4-5" into provider + modelId.
@@ -87,10 +79,10 @@ async function createLanguageModel(
   parsed: ParsedModel,
 ): Promise<LanguageModel> {
   switch (parsed.provider) {
-    case "anthropic": {
+    case LlmProvider.ANTHROPIC: {
       if (!process.env["ANTHROPIC_API_KEY"]) {
         throw new LlmError(
-          "ANTHROPIC_API_KEY environment variable is required for anthropic/ models.",
+          `ANTHROPIC_API_KEY environment variable is required for ${LlmProvider.ANTHROPIC}/ models.`,
         );
       }
       const { createAnthropic } = await import("@ai-sdk/anthropic");
@@ -100,10 +92,10 @@ async function createLanguageModel(
       return anthropic(parsed.modelId);
     }
 
-    case "openai": {
+    case LlmProvider.OPENAI: {
       if (!process.env["OPENAI_API_KEY"]) {
         throw new LlmError(
-          "OPENAI_API_KEY environment variable is required for openai/ models.",
+          `OPENAI_API_KEY environment variable is required for ${LlmProvider.OPENAI}/ models.`,
         );
       }
       const { createOpenAI } = await import("@ai-sdk/openai");
@@ -111,7 +103,7 @@ async function createLanguageModel(
       return openai(parsed.modelId);
     }
 
-    case "bedrock": {
+    case LlmProvider.BEDROCK: {
       const { createAmazonBedrock } = await import("@ai-sdk/amazon-bedrock");
       const bedrock = createAmazonBedrock({
         region: AWS_REGION,
@@ -121,21 +113,21 @@ async function createLanguageModel(
       return bedrock(parsed.modelId);
     }
 
-    case "ollama": {
+    case LlmProvider.OLLAMA: {
       const baseURL =
         process.env["OLLAMA_BASE_URL"] ?? "http://localhost:11434/v1";
       const { createOpenAI } = await import("@ai-sdk/openai");
       const ollama = createOpenAI({
         baseURL,
-        apiKey: "ollama", // Ollama doesn't need a real key
+        apiKey: LlmProvider.OLLAMA, // Ollama doesn't need a real key
       });
       return ollama(parsed.modelId);
     }
 
-    case "google": {
+    case LlmProvider.GOOGLE: {
       if (!process.env["GOOGLE_GENERATIVE_AI_API_KEY"]) {
         throw new LlmError(
-          "GOOGLE_GENERATIVE_AI_API_KEY environment variable is required for google/ models.",
+          `GOOGLE_GENERATIVE_AI_API_KEY environment variable is required for ${LlmProvider.GOOGLE}/ models.`,
         );
       }
       const { createGoogleGenerativeAI } = await import("@ai-sdk/google");
@@ -167,7 +159,7 @@ export class LlmAdapter implements LlmPort {
 
     // Bedrock guardrails only apply to bedrock provider
     this.guardrailOpts =
-      this.parsed.provider === "bedrock" && config.guardrailId
+      this.parsed.provider === LlmProvider.BEDROCK && config.guardrailId
         ? {
             guardrailIdentifier: config.guardrailId,
             guardrailVersion: config.guardrailVersion ?? "1",

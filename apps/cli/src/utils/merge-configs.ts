@@ -17,12 +17,14 @@
  * @see Story 27.2 — 6-Level Precedence Resolver
  */
 
-import type { ResourceField } from "@assignee/core";
-import type {
-  OrgResourceConfig,
-  UserResourceConfig,
-  ResolvedFieldConfig,
+import {
+  OrgPolicy,
+  type ResourceField,
+  type OrgResourceConfig,
+  type UserResourceConfig,
+  type ResolvedFieldConfig,
 } from "@assignee/core";
+import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
 
 /**
  * Input options for the 6-level mergeConfigs resolver.
@@ -79,27 +81,30 @@ export function mergeConfigs(
     const orgField = orgFields[name];
 
     // Priority 0a: org locked → never_ask, overrides EVERYTHING including CLI flags
-    if (orgField?.policy === "locked") {
+    if (orgField?.policy === OrgPolicy.LOCKED) {
       result[name] = {
-        policy: "never_ask",
+        policy: FieldPolicy.NEVER_ASK,
         value: orgField.value,
-        source: "org_locked",
+        source: FieldSource.ORG_LOCKED,
       };
       continue;
     }
 
     // Priority 0b: org always_ask → force prompt regardless of all config
-    if (orgField?.policy === "always_ask") {
-      result[name] = { policy: "always_ask", source: "org_default" };
+    if (orgField?.policy === OrgPolicy.ALWAYS_ASK) {
+      result[name] = {
+        policy: FieldPolicy.ALWAYS_ASK,
+        source: FieldSource.ORG_DEFAULT,
+      };
       continue;
     }
 
     // Level 1: CLI flag
     if (name in cliFields && cliFields[name] !== undefined) {
       result[name] = {
-        policy: "ask_if_not_set",
+        policy: FieldPolicy.ASK_IF_NOT_SET,
         value: cliFields[name],
-        source: "cli_flag",
+        source: FieldSource.CLI_FLAG,
       };
       continue;
     }
@@ -107,9 +112,9 @@ export function mergeConfigs(
     // Level 2: Env var override
     if (name in envFields && envFields[name] !== undefined) {
       result[name] = {
-        policy: "ask_if_not_set",
+        policy: FieldPolicy.ASK_IF_NOT_SET,
         value: envFields[name],
-        source: "env_var",
+        source: FieldSource.ENV_VAR,
       };
       continue;
     }
@@ -117,9 +122,9 @@ export function mergeConfigs(
     // Level 3: Project config (.assignee/config.yaml)
     if (name in projectFields && projectFields[name] !== undefined) {
       result[name] = {
-        policy: "ask_if_not_set",
+        policy: FieldPolicy.ASK_IF_NOT_SET,
         value: projectFields[name],
-        source: "project_config",
+        source: FieldSource.PROJECT_CONFIG,
       };
       continue;
     }
@@ -127,19 +132,22 @@ export function mergeConfigs(
     // Level 4: User config (~/.config/assignee/config.yaml)
     if (name in userFields && userFields[name] !== undefined) {
       result[name] = {
-        policy: "ask_if_not_set",
+        policy: FieldPolicy.ASK_IF_NOT_SET,
         value: userFields[name],
-        source: "user_config",
+        source: FieldSource.USER_CONFIG,
       };
       continue;
     }
 
     // Level 5: Org default
-    if (orgField?.policy === "default" && orgField.value !== undefined) {
+    if (
+      orgField?.policy === OrgPolicy.DEFAULT &&
+      orgField.value !== undefined
+    ) {
       result[name] = {
-        policy: "ask_if_not_set",
+        policy: FieldPolicy.ASK_IF_NOT_SET,
         value: orgField.value,
-        source: "org_default",
+        source: FieldSource.ORG_DEFAULT,
       };
       continue;
     }
@@ -148,15 +156,18 @@ export function mergeConfigs(
     const pluginDefault = field.question.initialValue;
     if (pluginDefault !== undefined) {
       result[name] = {
-        policy: "ask_if_not_set",
+        policy: FieldPolicy.ASK_IF_NOT_SET,
         value: pluginDefault,
-        source: "plugin_default",
+        source: FieldSource.PLUGIN_DEFAULT,
       };
       continue;
     }
 
     // No default anywhere → always ask
-    result[name] = { policy: "always_ask", source: "plugin_default" };
+    result[name] = {
+      policy: FieldPolicy.ALWAYS_ASK,
+      source: FieldSource.PLUGIN_DEFAULT,
+    };
   }
 
   return result;

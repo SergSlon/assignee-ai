@@ -9,6 +9,7 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PricingFilterValue as FV } from "../pricing-filter-values.js";
 import { PriceUnit } from "../price-units.js";
 
 /**
@@ -34,7 +35,7 @@ export const natGatewayPricingStrategy: PricingStrategy = {
         },
         {
           Field: F.USAGE_TYPE,
-          Value: "NatGateway-Hours",
+          Value: FV.NAT_GATEWAY_HOURS,
           Type: M.TERM_MATCH,
         },
       ],

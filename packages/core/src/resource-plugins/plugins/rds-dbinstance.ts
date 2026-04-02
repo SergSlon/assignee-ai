@@ -1,5 +1,10 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey, ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
+import {
+  CfnKey,
+  ResourceDefault,
+  AwsDefault,
+  RdsEngineDisplay,
+} from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
@@ -67,24 +72,28 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         options: [
           {
             value: AwsDefault.RDS_ENGINE_MYSQL,
-            label: "MySQL",
+            label: RdsEngineDisplay.MYSQL,
             fitHint: "Widely supported",
           },
           {
             value: AwsDefault.RDS_ENGINE_POSTGRES,
-            label: "PostgreSQL",
+            label: RdsEngineDisplay.POSTGRESQL,
             fitHint: "Most popular, advanced features",
             recommended: true,
           },
-          { value: "mariadb", label: "MariaDB", fitHint: "MySQL-compatible" },
+          {
+            value: "mariadb",
+            label: RdsEngineDisplay.MARIADB,
+            fitHint: "MySQL-compatible",
+          },
           {
             value: "aurora-mysql",
-            label: "Aurora MySQL",
+            label: RdsEngineDisplay.AURORA_MYSQL,
             fitHint: "AWS-native, auto-scaling",
           },
           {
             value: "aurora-postgresql",
-            label: "Aurora PostgreSQL",
+            label: RdsEngineDisplay.AURORA_POSTGRESQL,
             fitHint: "AWS-native, auto-scaling",
           },
         ],

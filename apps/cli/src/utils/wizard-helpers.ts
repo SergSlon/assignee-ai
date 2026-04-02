@@ -15,7 +15,11 @@ import {
   ResourceDefault,
   QuestionTypeName,
 } from "@assignee/core";
-import { PRICING_LOOKUP_TIMEOUT_MS, UserMessage } from "../config/constants.js";
+import {
+  PRICING_LOOKUP_TIMEOUT_MS,
+  UserMessage,
+  WIZARD_NONE_SENTINEL,
+} from "../config/constants.js";
 import { DiscoveryCacheKey } from "./aws-resource-discovery.js";
 import type {
   ResourceField,
@@ -53,6 +57,7 @@ import { ResourceFieldName } from "../constants/resource-fields.js";
 import { rankOptions } from "../utils/option-ranker.js";
 import type { WorkloadProfile } from "../utils/workload-classifier.js";
 import { InstanceCategory } from "../constants/instance-categories.js";
+import { WorkloadProfile as WP } from "../constants/workload-profiles.js";
 
 // ── Field key helpers ─────────────────────────────────────────────────────────
 
@@ -186,10 +191,10 @@ export function enrichFieldLabels(fields: ResourceField[]): ResourceField[] {
  * @see Story 21.3
  */
 const PROFILE_TO_CATEGORY: Partial<Record<WorkloadProfile, string>> = {
-  [InstanceCategory.BURSTABLE]: "burstable",
-  [InstanceCategory.GENERAL_PURPOSE]: "general",
-  [InstanceCategory.COMPUTE_HEAVY]: "compute",
-  [InstanceCategory.MEMORY_INTENSIVE]: "memory",
+  [InstanceCategory.BURSTABLE]: WP.BURSTABLE,
+  [InstanceCategory.GENERAL_PURPOSE]: WP.GENERAL,
+  [InstanceCategory.COMPUTE_HEAVY]: WP.COMPUTE,
+  [InstanceCategory.MEMORY_INTENSIVE]: WP.MEMORY,
 };
 
 /** GPU note shown when gpu-accelerated profile is detected. */
@@ -213,7 +218,7 @@ export function applyCategorySmartFilter(
   fields: ResourceField[],
   profile: WorkloadProfile | undefined,
 ): ResourceField[] {
-  if (!profile || profile === "unknown") return fields;
+  if (!profile || profile === WP.UNKNOWN) return fields;
 
   const targetCategory = PROFILE_TO_CATEGORY[profile];
 
@@ -297,7 +302,7 @@ export function applyOptionRanking(
   fields: ResourceField[],
   profile: WorkloadProfile,
 ): ResourceField[] {
-  if (profile === "unknown") return fields;
+  if (profile === WP.UNKNOWN) return fields;
 
   return fields.map((field) => {
     if (field.question.type !== "enum" || !field.question.options) return field;
@@ -900,14 +905,17 @@ export async function promptWithHelp(
                 value: ami.value,
                 label: ami.label,
               })),
-              { value: "__none__", label: "None of these — let me try again" },
+              {
+                value: WIZARD_NONE_SENTINEL,
+                label: "None of these — let me try again",
+              },
             ],
           });
           if (clack.isCancel(amiChoice)) {
             clack.cancel(UserMessage.WIZARD_CANCELLED);
             throw new UserCancelledError();
           }
-          if (amiChoice !== "__none__") {
+          if (amiChoice !== WIZARD_NONE_SENTINEL) {
             return amiChoice as string;
           }
           // User rejected all results — fall through to LLM suggestion

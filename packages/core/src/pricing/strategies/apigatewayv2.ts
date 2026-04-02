@@ -10,6 +10,7 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PricingFilterValue as FV } from "../pricing-filter-values.js";
 import { PriceUnit } from "../price-units.js";
 
 /**
@@ -49,7 +50,7 @@ export const apiGatewayV2PricingStrategy: PricingStrategy = {
           { Field: F.PRODUCT_FAMILY, Value: PF.WEBSOCKET, Type: M.TERM_MATCH },
           {
             Field: F.USAGE_TYPE,
-            Value: "ApiGatewayMessage",
+            Value: FV.API_GATEWAY_MESSAGE,
             Type: M.TERM_MATCH,
           },
         ],
@@ -65,7 +66,7 @@ export const apiGatewayV2PricingStrategy: PricingStrategy = {
         { Field: F.PRODUCT_FAMILY, Value: PF.API_CALLS, Type: M.TERM_MATCH },
         {
           Field: F.USAGE_TYPE,
-          Value: "ApiGatewayHttpRequest",
+          Value: FV.API_GATEWAY_HTTP_REQUEST,
           Type: M.TERM_MATCH,
         },
       ],

@@ -43,7 +43,7 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
           { Field: F.PRODUCT_FAMILY, Value: PF.WEBSOCKET, Type: M.TERM_MATCH },
           {
             Field: F.USAGE_TYPE,
-            Value: "ApiGatewayMessage",
+            Value: FV.API_GATEWAY_MESSAGE,
             Type: M.TERM_MATCH,
           },
         ],
@@ -63,7 +63,7 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
           { Field: F.PRODUCT_FAMILY, Value: PF.WEBSOCKET, Type: M.TERM_MATCH },
           {
             Field: F.USAGE_TYPE,
-            Value: "ApiGatewayMinute",
+            Value: FV.API_GATEWAY_MINUTE,
             Type: M.TERM_MATCH,
           },
         ],
@@ -85,7 +85,7 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
           { Field: F.PRODUCT_FAMILY, Value: PF.API_CALLS, Type: M.TERM_MATCH },
           {
             Field: F.USAGE_TYPE,
-            Value: "ApiGatewayHttpRequest",
+            Value: FV.API_GATEWAY_HTTP_REQUEST,
             Type: M.TERM_MATCH,
           },
         ],

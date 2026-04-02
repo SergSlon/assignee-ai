@@ -17,6 +17,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import { CfnKey } from "@assignee/core";
 import type { LlmPort, Result, LlmError } from "@assignee/core";
 import { EnvVar } from "../constants/env-vars.js";
+import { UNKNOWN_FALLBACK } from "../config/constants.js";
 import type { ZodSchema } from "zod";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -326,7 +327,7 @@ export class RecordingLlmAdapter implements LlmPort {
   constructor(
     private readonly inner: LlmPort,
     private readonly recorder: RecordingInterceptor,
-    private readonly modelName: string = "unknown",
+    private readonly modelName: string = UNKNOWN_FALLBACK,
   ) {}
 
   async generateText(

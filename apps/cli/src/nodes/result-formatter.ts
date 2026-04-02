@@ -25,7 +25,7 @@ import {
   promptFixSelection,
 } from "../utils/display.js";
 import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
-import { defaultErrorHintRegistry } from "@assignee/core";
+import { defaultErrorHintRegistry, PatternId } from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
@@ -326,7 +326,7 @@ export async function resultFormatterNode(
             } else {
               try {
                 const createCf =
-                  state.resourcePattern?.patternId === "static-website";
+                  state.resourcePattern?.patternId === PatternId.STATIC_WEBSITE;
                 await uploadStaticSiteFiles(
                   bucketName,
                   state.sourceDir,

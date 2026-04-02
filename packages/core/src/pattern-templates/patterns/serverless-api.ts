@@ -6,6 +6,7 @@ import { AwsDefault } from "../../config/cfn-keys.js";
 import { IamEffect } from "../../config/iam-effects.js";
 import type { ArchitecturePattern } from "../types.js";
 import { ServerlessApiResourceId as R } from "../pattern-resource-ids.js";
+import { PatternId } from "../pattern-ids.js";
 
 /** Shorthand aliases for companion resource type constants used in this pattern. */
 const APIGATEWAYV2_INTEGRATION =
@@ -37,7 +38,7 @@ const LAMBDA_PERMISSION = COMPANION_RESOURCE_TYPES.LAMBDA_PERMISSION;
  * @see Story 26.4 — Serverless API Compound Pattern
  */
 export const serverlessApiPattern: ArchitecturePattern = {
-  patternId: "serverless-api",
+  patternId: PatternId.SERVERLESS_API,
   displayName: "Serverless API",
   keywords: [
     "serverless api",

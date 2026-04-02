@@ -15,6 +15,7 @@ import {
   ExecutionStatus,
   CheckpointError,
   BPEnforcementLevel,
+  StateField,
 } from "@assignee/core";
 import {
   loadBestPractices,
@@ -287,7 +288,7 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
 
         // ── Return structured result ──────────────────────────────────────
         const success =
-          finalState["executionStatus"] === ExecutionStatus.SUCCESS;
+          finalState[StateField.EXECUTION_STATUS] === ExecutionStatus.SUCCESS;
 
         if (!success) {
           return {
@@ -297,9 +298,9 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
                 text: JSON.stringify({
                   error: true,
                   message:
-                    (finalState["errorMessage"] as string) ??
+                    (finalState[StateField.ERROR_MESSAGE] as string) ??
                     "Provisioning failed",
-                  status: finalState["executionStatus"],
+                  status: finalState[StateField.EXECUTION_STATUS],
                 }),
               },
             ],
@@ -313,13 +314,15 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
               type: "text" as const,
               text: JSON.stringify({
                 status: "SUCCESS",
-                resourceArn: finalState["resourceArn"],
-                resourceType: finalState["resourceType"],
-                estimatedMonthlyCost: finalState["estimatedMonthlyCost"],
+                resourceArn: finalState[StateField.RESOURCE_ARN],
+                resourceType: finalState[StateField.RESOURCE_TYPE],
+                estimatedMonthlyCost:
+                  finalState[StateField.ESTIMATED_MONTHLY_COST],
                 securityFindings:
-                  (finalState["securityFindings"] as unknown[]) ?? [],
+                  (finalState[StateField.SECURITY_FINDINGS] as unknown[]) ?? [],
                 completedResources:
-                  (finalState["completedResources"] as unknown[]) ?? [],
+                  (finalState[StateField.COMPLETED_RESOURCES] as unknown[]) ??
+                  [],
                 runId,
               }),
             },

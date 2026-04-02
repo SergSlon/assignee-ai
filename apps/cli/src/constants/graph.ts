@@ -14,3 +14,6 @@ export const GraphNode = {
 } as const;
 
 export type GraphNodeType = (typeof GraphNode)[keyof typeof GraphNode];
+
+// Re-export StateField from core — single source of truth for graph state channel names.
+export { StateField } from "@assignee/core";

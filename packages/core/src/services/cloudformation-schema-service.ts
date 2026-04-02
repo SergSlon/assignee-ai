@@ -229,8 +229,10 @@ export class CloudFormationSchemaService {
 }
 
 /** AWS error names checked for throttling detection. */
+const THROTTLE_KEYWORD = "Throttling" as const;
+const RATE_EXCEEDED_KEYWORD = "Rate exceeded" as const;
 const THROTTLE_ERROR_NAMES = [
-  "Throttling",
+  THROTTLE_KEYWORD,
   "ThrottlingException",
   "RequestLimitExceeded",
 ] as const;
@@ -241,8 +243,8 @@ function isThrottlingError(error: Error): boolean {
   const message = error.message ?? "";
   return (
     (THROTTLE_ERROR_NAMES as readonly string[]).includes(name) ||
-    message.includes("Rate exceeded") ||
-    message.includes("Throttling")
+    message.includes(RATE_EXCEEDED_KEYWORD) ||
+    message.includes(THROTTLE_KEYWORD)
   );
 }
 

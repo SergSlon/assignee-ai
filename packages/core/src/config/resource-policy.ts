@@ -9,7 +9,14 @@
  * `default`    = admin suggests a value; user can override.
  * `always_ask` = admin forces the elicitor to always prompt.
  */
-export type OrgFieldPolicy = "locked" | "default" | "always_ask";
+/** Named constants for org field policy values. */
+export const OrgPolicy = {
+  LOCKED: "locked",
+  DEFAULT: "default",
+  ALWAYS_ASK: "always_ask",
+} as const;
+
+export type OrgFieldPolicy = (typeof OrgPolicy)[keyof typeof OrgPolicy];
 
 export interface OrgFieldConfig {
   policy: OrgFieldPolicy;

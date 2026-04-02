@@ -9,6 +9,15 @@ import * as clack from "@clack/prompts";
 import type { BPFinding } from "@assignee/best-practices";
 import type { AppliedFix } from "../services/graph-state.js";
 import { resolveAction } from "./fix-command-resolver.js";
+import { PROTO_POLLUTION_KEYS, UNKNOWN_FALLBACK } from "../config/constants.js";
+
+/** Prompt action constants for fix selection. */
+const FixPromptAction = {
+  ALL: "all",
+  CHOOSE: "choose",
+  SKIP: "skip",
+  FIX: "fix",
+} as const;
 
 export interface FixSelectionResult {
   desiredState: Record<string, unknown>;
@@ -34,17 +43,24 @@ function deepMergePatch(
 ): Record<string, unknown> {
   const result = { ...target };
   for (const [key, patchValue] of Object.entries(patch)) {
-    if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+    if (PROTO_POLLUTION_KEYS.has(key)) continue;
     const targetValue = result[key];
     if (Array.isArray(patchValue) && Array.isArray(targetValue)) {
       const merged = [...targetValue];
       for (let i = 0; i < patchValue.length; i++) {
         if (
           i < merged.length &&
-          typeof merged[i] === "object" && merged[i] !== null && !Array.isArray(merged[i]) &&
-          typeof patchValue[i] === "object" && patchValue[i] !== null && !Array.isArray(patchValue[i])
+          typeof merged[i] === "object" &&
+          merged[i] !== null &&
+          !Array.isArray(merged[i]) &&
+          typeof patchValue[i] === "object" &&
+          patchValue[i] !== null &&
+          !Array.isArray(patchValue[i])
         ) {
-          merged[i] = deepMergePatch(merged[i] as Record<string, unknown>, patchValue[i] as Record<string, unknown>);
+          merged[i] = deepMergePatch(
+            merged[i] as Record<string, unknown>,
+            patchValue[i] as Record<string, unknown>,
+          );
         } else if (i < merged.length) {
           merged[i] = patchValue[i];
         } else {
@@ -53,10 +69,17 @@ function deepMergePatch(
       }
       result[key] = merged;
     } else if (
-      typeof patchValue === "object" && patchValue !== null && !Array.isArray(patchValue) &&
-      typeof targetValue === "object" && targetValue !== null && !Array.isArray(targetValue)
+      typeof patchValue === "object" &&
+      patchValue !== null &&
+      !Array.isArray(patchValue) &&
+      typeof targetValue === "object" &&
+      targetValue !== null &&
+      !Array.isArray(targetValue)
     ) {
-      result[key] = deepMergePatch(targetValue as Record<string, unknown>, patchValue as Record<string, unknown>);
+      result[key] = deepMergePatch(
+        targetValue as Record<string, unknown>,
+        patchValue as Record<string, unknown>,
+      );
     } else {
       result[key] = patchValue;
     }
@@ -82,7 +105,12 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   if (!path) return undefined;
   let current: unknown = obj;
   for (const segment of path.split(".")) {
-    if (current === null || current === undefined || typeof current !== "object") return undefined;
+    if (
+      current === null ||
+      current === undefined ||
+      typeof current !== "object"
+    )
+      return undefined;
     current = (current as Record<string, unknown>)[segment];
   }
   return current;
@@ -93,7 +121,12 @@ function extractPatchFieldPath(patch: Record<string, unknown>): string {
   const parts: string[] = [];
   let current: unknown = patch;
   for (let depth = 0; depth < 10; depth++) {
-    if (typeof current !== "object" || current === null || Array.isArray(current)) break;
+    if (
+      typeof current !== "object" ||
+      current === null ||
+      Array.isArray(current)
+    )
+      break;
     const keys = Object.keys(current as Record<string, unknown>);
     if (keys.length === 0) break;
     parts.push(keys[0]!);
@@ -116,12 +149,18 @@ export async function promptFixSelection(
 
   const fixableFindings = items.filter((f) => {
     const action = resolveAction(f);
-    return action.fixable && f.desiredStatePatch && Object.keys(f.desiredStatePatch).length > 0;
+    return (
+      action.fixable &&
+      f.desiredStatePatch &&
+      Object.keys(f.desiredStatePatch).length > 0
+    );
   });
 
   if (fixableFindings.length === 0) return null;
 
-  const desiredState = JSON.parse(JSON.stringify(state.desiredState ?? {})) as Record<string, unknown>;
+  const desiredState = JSON.parse(
+    JSON.stringify(state.desiredState ?? {}),
+  ) as Record<string, unknown>;
   const newAppliedFixes: AppliedFix[] = [...(state.appliedFixes ?? [])];
   const fixedIds = new Set<string>();
 
@@ -129,13 +168,16 @@ export async function promptFixSelection(
     const choice = await clack.select({
       message: `${fixableFindings.length} finding${fixableFindings.length === 1 ? "" : "s"} can be fixed. Would you like to address them?`,
       options: [
-        { value: "all", label: "[1] Fix all (apply recommended patches)" },
-        { value: "choose", label: "[2] Choose which to fix" },
-        { value: "skip", label: "[3] Skip \u2014 proceed as-is" },
+        {
+          value: FixPromptAction.ALL,
+          label: "[1] Fix all (apply recommended patches)",
+        },
+        { value: FixPromptAction.CHOOSE, label: "[2] Choose which to fix" },
+        { value: FixPromptAction.SKIP, label: "[3] Skip \u2014 proceed as-is" },
       ],
     });
 
-    if (clack.isCancel(choice) || choice === "skip") return null;
+    if (clack.isCancel(choice) || choice === FixPromptAction.SKIP) return null;
 
     const isAlreadySatisfied = (f: BPFinding): boolean => {
       if (!f.desiredStatePatch) return false;
@@ -156,7 +198,7 @@ export async function promptFixSelection(
       newAppliedFixes.push({
         practiceId: f.practiceId,
         title: f.title,
-        fieldPath: fieldPath || f.propertyPath || "unknown",
+        fieldPath: fieldPath || f.propertyPath || UNKNOWN_FALLBACK,
         oldValue,
         newValue: extractPatchLeaf(patch),
       });
@@ -170,7 +212,7 @@ export async function promptFixSelection(
       }
     };
 
-    if (choice === "all") {
+    if (choice === FixPromptAction.ALL) {
       for (const f of fixableFindings) {
         if (fixedIds.has(f.practiceId)) continue;
         applyPatch(f);
@@ -182,12 +224,12 @@ export async function promptFixSelection(
         const result = await clack.select({
           message: f.title,
           options: [
-            { value: "fix", label: `[Y] Fix (${action.hint})` },
-            { value: "skip", label: "[N] Skip" },
+            { value: FixPromptAction.FIX, label: `[Y] Fix (${action.hint})` },
+            { value: FixPromptAction.SKIP, label: "[N] Skip" },
           ],
         });
 
-        if (clack.isCancel(result) || result === "skip") continue;
+        if (clack.isCancel(result) || result === FixPromptAction.SKIP) continue;
         applyPatch(f);
       }
     }

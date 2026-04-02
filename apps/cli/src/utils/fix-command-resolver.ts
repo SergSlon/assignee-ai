@@ -13,7 +13,7 @@
  * @see Story 35.2, Epic 35
  */
 
-import type { BPFinding } from "@assignee/best-practices";
+import { FixType, type BPFinding } from "@assignee/best-practices";
 import {
   wizardKeyMap,
   toSetFlag,
@@ -97,7 +97,7 @@ export function resolveAction(finding: BPFinding): FindingAction {
 
   // Category B: Wizard-fixable — only if a desiredStatePatch exists to apply
   if (
-    finding.fixType === "interactive" &&
+    finding.fixType === FixType.INTERACTIVE &&
     finding.interactiveOptions?.length &&
     finding.desiredStatePatch &&
     Object.keys(finding.desiredStatePatch).length > 0

@@ -18,6 +18,7 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PricingFilterValue as FV } from "../pricing-filter-values.js";
 import { PriceUnit } from "../price-units.js";
 import { LineItemLabel } from "../line-item-labels.js";
 import { PricingUnit } from "../units.js";
@@ -37,7 +38,7 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
       serviceCode: SC.LAMBDA,
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.SERVERLESS, Type: M.TERM_MATCH },
-        { Field: F.USAGE_TYPE, Value: "Request", Type: M.TERM_MATCH },
+        { Field: F.USAGE_TYPE, Value: FV.LAMBDA_REQUEST, Type: M.TERM_MATCH },
       ],
       kind: K.USAGE_BASED,
       description: "per million",
@@ -53,7 +54,7 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
       serviceCode: SC.LAMBDA,
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.SERVERLESS, Type: M.TERM_MATCH },
-        { Field: F.USAGE_TYPE, Value: "Lambda-GB-Second", Type: M.TERM_MATCH },
+        { Field: F.USAGE_TYPE, Value: FV.LAMBDA_GB_SECOND, Type: M.TERM_MATCH },
       ],
       kind: K.USAGE_BASED,
       description: `${memoryMb} MB, 100ms avg`,
@@ -70,7 +71,7 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
         { Field: F.PRODUCT_FAMILY, Value: PF.DATA_PAYLOAD, Type: M.TERM_MATCH },
         {
           Field: F.USAGE_TYPE,
-          Value: "DataProcessing-Bytes",
+          Value: FV.DATA_PROCESSING_BYTES,
           Type: M.TERM_MATCH,
         },
       ],

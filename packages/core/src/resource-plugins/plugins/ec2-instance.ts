@@ -1,5 +1,10 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey, ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
+import {
+  CfnKey,
+  ResourceDefault,
+  AwsDefault,
+  AmiOs,
+} from "../../config/cfn-keys.js";
 import { QuestionTypeName, type ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
@@ -212,9 +217,9 @@ export const ec2InstancePlugin: ResourcePlugin = {
             value: AwsDefault.EC2_AMI,
             label: "Amazon Linux 2023 (recommended, free tier eligible)",
           },
-          { value: "ubuntu-24.04", label: "Ubuntu 24.04 LTS" },
-          { value: "ubuntu-22.04", label: "Ubuntu 22.04 LTS" },
-          { value: "windows-2022", label: "Windows Server 2022" },
+          { value: AmiOs.UBUNTU_24, label: "Ubuntu 24.04 LTS" },
+          { value: AmiOs.UBUNTU_22, label: "Ubuntu 22.04 LTS" },
+          { value: AmiOs.WINDOWS_2022, label: "Windows Server 2022" },
         ],
         initialValue: AwsDefault.EC2_AMI,
         fetcher: "discover-amis",

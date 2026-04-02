@@ -22,6 +22,7 @@ import {
   DEFAULT_AWS_REGION,
   validateConfig,
   AssigneeTag,
+  AutoFixMode,
 } from "@assignee/core";
 import type { AssigneeConfig } from "@assignee/core";
 import {
@@ -29,13 +30,13 @@ import {
   detectRegion,
 } from "../services/credential-detector.js";
 import { resolveConfigPath } from "../config/user-config-loader.js";
-import { UserMessage } from "../config/constants.js";
+import { UserMessage, CHECKPOINT_DIR, FileName } from "../config/constants.js";
 
 /** Directory name for assignee project config. */
-const CONFIG_DIR = ".assignee";
+const CONFIG_DIR = CHECKPOINT_DIR;
 
 /** Config file name inside the config directory. */
-const CONFIG_FILE = "config.yaml";
+const CONFIG_FILE = FileName.CONFIG;
 
 /** Environment options for the interactive prompt. */
 const ENVIRONMENT_OPTIONS = [
@@ -118,11 +119,14 @@ export async function promptGlobalConfig(): Promise<
   const autoFix = await clack.select({
     message: "Auto-fix best practice violations",
     options: [
-      { value: "ask", label: "ask — prompt before each fix (default)" },
-      { value: "apply", label: "apply — fix automatically" },
-      { value: "skip", label: "skip — never auto-fix" },
+      {
+        value: AutoFixMode.ASK,
+        label: "ask — prompt before each fix (default)",
+      },
+      { value: AutoFixMode.APPLY, label: "apply — fix automatically" },
+      { value: AutoFixMode.SKIP, label: "skip — never auto-fix" },
     ],
-    initialValue: "ask",
+    initialValue: AutoFixMode.ASK,
   });
 
   if (clack.isCancel(autoFix)) {

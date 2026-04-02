@@ -13,9 +13,10 @@ import {
   InstanceCategory,
   type InstanceCategoryType,
 } from "../constants/instance-categories.js";
+import { WorkloadProfile as WP } from "../constants/workload-profiles.js";
 
 /** Workload profile type — matches workload-classifier output (Story 21.1). */
-export type WorkloadProfile = InstanceCategoryType | "unknown";
+export type WorkloadProfile = InstanceCategoryType | typeof WP.UNKNOWN;
 
 /** Result of ranking options for a given workload profile. */
 export interface RankedResult {
@@ -62,7 +63,7 @@ const PROFILE_KEYWORDS: Record<WorkloadProfile, string[]> = {
   ],
   [InstanceCategory.STORAGE_HEAVY]: ["d3", "i3", "i4", "h1", "storage"],
   [InstanceCategory.HPC]: ["hpc6a", "hpc7a", "hpc7g", "hpc", "simulation"],
-  unknown: [],
+  [WP.UNKNOWN]: [],
 };
 
 /** Score bonus for options marked as recommended. */
@@ -111,7 +112,7 @@ export function rankOptions(
   maxVisible: number = 8,
 ): RankedResult {
   // "unknown" profile: return all options unfiltered
-  if (profile === "unknown") {
+  if (profile === WP.UNKNOWN) {
     return {
       visible: options.map(({ value, label }) => ({ value, label })),
       overflow: [],

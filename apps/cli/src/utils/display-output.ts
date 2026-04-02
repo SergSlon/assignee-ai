@@ -14,6 +14,7 @@ import type {
   ResourceSpec,
 } from "@assignee/core";
 import { CostEstimate } from "../constants/pricing.js";
+import { BoxenAlign, BoxenBorderColor } from "../config/constants.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { SecurityFinding } from "../services/graph-state.js";
 import type { ManagedResource } from "../services/list-resources.js";
@@ -145,7 +146,7 @@ export function renderCompoundSuccess(
         padding: 1,
         borderColor: "green",
         title: "Compound Provisioning Complete",
-        titleAlignment: "left",
+        titleAlignment: BoxenAlign.LEFT,
       }) + "\n",
     );
   } else {
@@ -249,8 +250,8 @@ export function renderDependencyPlan(
     process.stdout.write(
       boxen(content, {
         title: "Compound Provisioning Plan",
-        titleAlignment: "left",
-        borderColor: "cyan",
+        titleAlignment: BoxenAlign.LEFT,
+        borderColor: BoxenBorderColor.CYAN,
         padding: 1,
       }) + "\n",
     );
@@ -325,8 +326,8 @@ export function renderResourceTable(resources: ManagedResource[]): void {
     process.stdout.write(
       boxen(content, {
         title: "Managed Resources",
-        titleAlignment: "center",
-        borderColor: "cyan",
+        titleAlignment: BoxenAlign.CENTER,
+        borderColor: BoxenBorderColor.CYAN,
         padding: 1,
       }) + "\n",
     );
@@ -393,8 +394,8 @@ export function renderStatusSummary(data: StatusData): void {
     process.stdout.write(
       boxen(content, {
         title: "assignee.ai \u2014 Infrastructure Status",
-        titleAlignment: "center",
-        borderColor: "cyan",
+        titleAlignment: BoxenAlign.CENTER,
+        borderColor: BoxenBorderColor.CYAN,
         padding: 1,
       }) + "\n",
     );

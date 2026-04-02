@@ -48,6 +48,21 @@ export interface Trigger {
 export const BP_FIX_TYPE = ["auto", "interactive", "info"] as const;
 export type BPFixType = (typeof BP_FIX_TYPE)[number];
 
+/** Named constants for BPFixType to eliminate magic strings in comparisons. */
+export const FixType = {
+  AUTO: "auto" as const,
+  INTERACTIVE: "interactive" as const,
+  INFO: "info" as const,
+};
+
+/** Named constants for InteractiveFixOption.action to eliminate magic strings. */
+export const FixAction = {
+  PROMPT_VALUE: "prompt_value" as const,
+  SET_VALUE: "set_value" as const,
+  REMOVE_PROPERTY: "remove_property" as const,
+  SKIP: "skip" as const,
+};
+
 export interface InteractiveFixOption {
   label: string;
   action: "prompt_value" | "set_value" | "remove_property" | "skip";

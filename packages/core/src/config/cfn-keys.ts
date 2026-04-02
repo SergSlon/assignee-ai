@@ -366,6 +366,11 @@ export const AwsDefault = {
   CAPACITY_FARGATE: "FARGATE",
   CAPACITY_FARGATE_SPOT: "FARGATE_SPOT",
 
+  // ── Connectivity / Visibility ──────────────────────────────────
+  CONNECTIVITY_PUBLIC: "public",
+  CONNECTIVITY_PRIVATE: "private",
+  LB_SCHEME_INTERNAL: "internal",
+
   // ── Encryption ────────────────────────────────────────────────
   ENCRYPTION_AES256: "AES256",
 
@@ -380,4 +385,45 @@ export const AwsDefault = {
 export const AssigneeTag = {
   KEY: "managed-by",
   VALUE: "assignee-ai",
+} as const;
+
+/**
+ * Human-readable display names for RDS database engines.
+ * Used in wizard labels, pricing decomposers, and pricing lookups.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const RdsEngineDisplay = {
+  MYSQL: "MySQL",
+  POSTGRESQL: "PostgreSQL",
+  MARIADB: "MariaDB",
+  ORACLE: "Oracle",
+  SQL_SERVER: "SQL Server",
+  AURORA_MYSQL: "Aurora MySQL",
+  AURORA_POSTGRESQL: "Aurora PostgreSQL",
+} as const;
+
+/**
+ * CloudWatch statistic names used in alarm configuration.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const CloudWatchStatistic = {
+  AVERAGE: "Average",
+  SUM: "Sum",
+  MINIMUM: "Minimum",
+  MAXIMUM: "Maximum",
+  SAMPLE_COUNT: "SampleCount",
+} as const;
+
+/**
+ * AMI OS name identifiers used in EC2 instance plugin and AMI resolution.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const AmiOs = {
+  AMAZON_LINUX_2023: "amazon-linux-2023",
+  WINDOWS_2022: "windows-2022",
+  UBUNTU_24: "ubuntu-24.04",
+  UBUNTU_22: "ubuntu-22.04",
 } as const;

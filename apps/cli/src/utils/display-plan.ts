@@ -8,7 +8,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import chalk from "chalk";
 import boxen from "boxen";
-import { AWS_REGION, BEDROCK_MODEL_ID } from "../config/constants.js";
+import {
+  AWS_REGION,
+  BEDROCK_MODEL_ID,
+  BoxenAlign,
+  BoxenBorderColor,
+} from "../config/constants.js";
 import type { AppliedFix } from "../services/graph-state.js";
 import type { PricingBreakdown } from "@assignee/core";
 import { countAutoFixable } from "./fix-command-resolver.js";
@@ -107,8 +112,8 @@ export function renderPlanBox(state: RenderableState): void {
     process.stdout.write(
       boxen(content, {
         title: "Plan",
-        titleAlignment: "center",
-        borderColor: "cyan",
+        titleAlignment: BoxenAlign.CENTER,
+        borderColor: BoxenBorderColor.CYAN,
         padding: 1,
       }) + "\n",
     );

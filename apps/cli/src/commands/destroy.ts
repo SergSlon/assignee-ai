@@ -18,6 +18,7 @@
 import * as clack from "@clack/prompts";
 import chalk from "chalk";
 import boxen from "boxen";
+import { BoxenAlign } from "../config/constants.js";
 import { Command } from "commander";
 import {
   AssigneeError,
@@ -37,7 +38,7 @@ import {
   createTaggingClient,
 } from "../services/resource-resolver.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
-import { AWS_REGION } from "../config/constants.js";
+import { AWS_REGION, UserMessage } from "../config/constants.js";
 import { CostEstimate } from "../constants/pricing.js";
 import { ErrorCode } from "../constants/errors.js";
 import { destroySingleResource } from "../services/destroy-service.js";
@@ -69,7 +70,7 @@ function renderDestroyBox(resource: {
     process.stdout.write(
       boxen(content, {
         title: "Destroy Resource",
-        titleAlignment: "center",
+        titleAlignment: BoxenAlign.CENTER,
         borderColor: "red",
         padding: 1,
       }) + "\n",
@@ -267,8 +268,8 @@ async function bulkDestroyAction(opts: {
     });
 
     if (clack.isCancel(answer)) {
-      clack.outro("Bulk destroy cancelled.");
-      throw new UserCancelledError("Bulk destroy cancelled.");
+      clack.outro(UserMessage.BULK_DESTROY_CANCELLED);
+      throw new UserCancelledError(UserMessage.BULK_DESTROY_CANCELLED);
     }
   }
 
@@ -299,8 +300,8 @@ async function bulkDestroyAction(opts: {
       });
 
       if (clack.isCancel(iamAnswer)) {
-        clack.outro("Bulk destroy cancelled.");
-        throw new UserCancelledError("Bulk destroy cancelled.");
+        clack.outro(UserMessage.BULK_DESTROY_CANCELLED);
+        throw new UserCancelledError(UserMessage.BULK_DESTROY_CANCELLED);
       }
     }
   }
@@ -471,8 +472,8 @@ export async function destroyAction(
     });
 
     if (clack.isCancel(answer) || answer !== "yes") {
-      clack.outro("Destroy cancelled.");
-      throw new UserCancelledError("Destroy cancelled.");
+      clack.outro(UserMessage.DESTROY_CANCELLED);
+      throw new UserCancelledError(UserMessage.DESTROY_CANCELLED);
     }
   }
 

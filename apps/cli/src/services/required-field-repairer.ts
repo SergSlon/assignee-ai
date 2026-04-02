@@ -15,6 +15,7 @@
  */
 
 import { defaultPluginRegistry } from "@assignee/core";
+import { InjectionSource } from "../constants/field-policy.js";
 
 export interface RepairResult {
   /** The repaired desiredState with missing required fields filled. */
@@ -69,7 +70,10 @@ export function repairRequiredFields(
         : field.question.initialValue;
       if (value !== undefined) {
         repaired[requiredKey] = value;
-        injectedFields.push({ field: requiredKey, source: "initialValue" });
+        injectedFields.push({
+          field: requiredKey,
+          source: InjectionSource.INITIAL_VALUE,
+        });
         continue;
       }
     }
@@ -77,7 +81,10 @@ export function repairRequiredFields(
     // Try plugin defaults (CloudFormation-level fallback)
     if (plugin.defaults[requiredKey] !== undefined) {
       repaired[requiredKey] = plugin.defaults[requiredKey];
-      injectedFields.push({ field: requiredKey, source: "pluginDefault" });
+      injectedFields.push({
+        field: requiredKey,
+        source: InjectionSource.PLUGIN_DEFAULT,
+      });
       continue;
     }
 
@@ -90,7 +97,7 @@ export function repairRequiredFields(
         repaired[requiredKey] = cfnValue;
         injectedFields.push({
           field: requiredKey,
-          source: "initialValue+toCfn",
+          source: InjectionSource.INITIAL_VALUE_TO_CFN,
         });
       }
     }
