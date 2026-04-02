@@ -14,6 +14,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import { EnvVar } from "../constants/env-vars.js";
 
 /** Credential source types returned by the detector. */
 export type CredentialSource = "env" | "file" | "sso";
@@ -95,19 +96,19 @@ export async function detectCredentials(
   const home = homeDir ?? os.homedir();
 
   // Priority 1: Environment variables
-  const accessKeyId = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
-  const secretAccessKey = process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+  const accessKeyId = process.env[EnvVar.OPERATOR_ACCESS_KEY];
+  const secretAccessKey = process.env[EnvVar.OPERATOR_SECRET_KEY];
 
   if (accessKeyId && secretAccessKey) {
     return {
       detected: true,
       source: "env",
-      profile: process.env["AWS_PROFILE"] ?? "default",
+      profile: process.env[EnvVar.AWS_PROFILE] ?? "default",
     };
   }
 
   // Priority 2: ~/.aws/credentials file
-  const targetProfile = process.env["AWS_PROFILE"] ?? "default";
+  const targetProfile = process.env[EnvVar.AWS_PROFILE] ?? "default";
   const credentialsPath = path.join(home, ".aws", "credentials");
 
   try {
@@ -194,19 +195,19 @@ export async function detectRegion(
   const home = homeDir ?? os.homedir();
 
   // Priority 1: AWS_REGION env var
-  const awsRegion = process.env["AWS_REGION"];
+  const awsRegion = process.env[EnvVar.AWS_REGION];
   if (awsRegion) {
     return { region: awsRegion };
   }
 
   // Priority 2: AWS_DEFAULT_REGION env var
-  const awsDefaultRegion = process.env["AWS_DEFAULT_REGION"];
+  const awsDefaultRegion = process.env[EnvVar.AWS_DEFAULT_REGION];
   if (awsDefaultRegion) {
     return { region: awsDefaultRegion };
   }
 
   // Priority 3: ~/.aws/config file
-  const targetProfile = process.env["AWS_PROFILE"] ?? "default";
+  const targetProfile = process.env[EnvVar.AWS_PROFILE] ?? "default";
   const configPath = path.join(home, ".aws", "config");
 
   try {

@@ -5,7 +5,7 @@
  * @see Story 23.3
  */
 
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -18,6 +18,9 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingUnit } from "../units.js";
 
 export const cloudWatchAlarmPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.CLOUDWATCH_ALARM,
@@ -33,9 +36,9 @@ export const cloudWatchAlarmPricingDecomposer: PricingDecomposer = {
 
     // 1. Alarm
     items.push({
-      label: "Alarm",
+      label: LineItemLabel.ALARM,
       quantity: 1,
-      unit: "alarm",
+      unit: PricingUnit.ALARM,
       serviceCode: SC.CLOUDWATCH,
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.ALARM, Type: M.TERM_MATCH },
@@ -49,7 +52,7 @@ export const cloudWatchAlarmPricingDecomposer: PricingDecomposer = {
       description: isHighRes
         ? "High resolution (<60s period)"
         : "Standard resolution",
-      priceUnit: "/alarm-mo",
+      priceUnit: PriceUnit.PER_ALARM_MONTH,
     });
 
     return items;

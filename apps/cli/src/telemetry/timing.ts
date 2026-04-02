@@ -11,6 +11,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { STARTUP_BUDGETS, checkBudget } from "../constants/time-budget.js";
+import { EnvVar } from "../constants/env-vars.js";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -156,7 +157,7 @@ function getTelemetryFile(home?: string): string {
 }
 
 function isTelemetryDisabled(): boolean {
-  return process.env["ASSIGNEE_NO_TELEMETRY"] === "1";
+  return process.env[EnvVar.ASSIGNEE_NO_TELEMETRY] === "1";
 }
 
 /**

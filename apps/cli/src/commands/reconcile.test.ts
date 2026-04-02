@@ -33,7 +33,6 @@ import {
   reconcileCommand,
   buildPatchDocument,
   reconcileResource,
-  type ReconcileAction,
 } from "./reconcile.js";
 import { MemoryService } from "../services/memory.js";
 import type { ProvisioningPort } from "../services/provisioning-port.js";

@@ -18,6 +18,9 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingUnit } from "../units.js";
 
 export const lambdaPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
@@ -28,9 +31,9 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
 
     // 1. Requests (per million) — use usagetype=Request to find request pricing
     items.push({
-      label: "Requests",
+      label: LineItemLabel.REQUESTS,
       quantity: 0,
-      unit: "requests",
+      unit: PricingUnit.REQUESTS,
       serviceCode: SC.LAMBDA,
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.SERVERLESS, Type: M.TERM_MATCH },
@@ -38,15 +41,15 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.USAGE_BASED,
       description: "per million",
-      priceUnit: "/M reqs",
+      priceUnit: PriceUnit.PER_MILLION_REQS,
       scale: 1_000_000,
     });
 
     // 2. Duration (GB-seconds) — use usagetype=Lambda-GB-Second
     items.push({
-      label: "Duration",
+      label: LineItemLabel.DURATION,
       quantity: 0,
-      unit: "GB-second",
+      unit: PricingUnit.GB_SECOND,
       serviceCode: SC.LAMBDA,
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.SERVERLESS, Type: M.TERM_MATCH },
@@ -54,14 +57,14 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.USAGE_BASED,
       description: `${memoryMb} MB, 100ms avg`,
-      priceUnit: "/GB-s",
+      priceUnit: PriceUnit.PER_GB_SECOND,
     });
 
     // 3. CloudWatch Logs (usage-based) — use usagetype for log ingestion
     items.push({
-      label: "CloudWatch Logs",
+      label: LineItemLabel.CLOUDWATCH_LOGS,
       quantity: 0,
-      unit: "GB",
+      unit: PricingUnit.GB,
       serviceCode: SC.CLOUDWATCH,
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.DATA_PAYLOAD, Type: M.TERM_MATCH },
@@ -73,7 +76,7 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.USAGE_BASED,
       description: "ingested",
-      priceUnit: "/GB ingested",
+      priceUnit: PriceUnit.PER_GB_INGESTED,
     });
 
     return items;

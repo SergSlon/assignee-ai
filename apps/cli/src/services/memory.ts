@@ -19,6 +19,7 @@ import {
   MEMORY_DEDUP_THRESHOLD_MS,
   PROVISIONS_FILE,
   FAILURES_FILE,
+  FileName,
 } from "../config/constants.js";
 import {
   ProvisionLogSchema,
@@ -230,23 +231,23 @@ export class MemoryService {
 
   async readPatterns(): Promise<PatternRecord[]> {
     const [err, raw] = await safeTry(
-      fs.readFile(this.filePath("patterns.json"), "utf-8"),
+      fs.readFile(this.filePath(FileName.PATTERNS), "utf-8"),
     );
     if (err) return [];
     try {
       const parsed = PatternLogSchema.safeParse(JSON.parse(raw));
       if (parsed.success) return parsed.data;
-      await this.backupCorruptFile("patterns.json");
+      await this.backupCorruptFile(FileName.PATTERNS);
       return [];
     } catch {
-      await this.backupCorruptFile("patterns.json");
+      await this.backupCorruptFile(FileName.PATTERNS);
       return [];
     }
   }
 
   async upsertPattern(record: PatternRecord): Promise<void> {
     await this.ensureDir();
-    const target = this.filePath("patterns.json");
+    const target = this.filePath(FileName.PATTERNS);
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -369,7 +370,7 @@ export class MemoryService {
     const removed = existing.length - maxRecords;
     const trimmed = existing.slice(-maxRecords);
     await this.ensureDir();
-    const target = this.filePath("patterns.json");
+    const target = this.filePath(FileName.PATTERNS);
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(

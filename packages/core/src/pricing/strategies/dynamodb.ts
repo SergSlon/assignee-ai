@@ -3,13 +3,15 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import {
   PricingField as F,
   PricingMatchType as M,
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PricingFilterValue as FV } from "../pricing-filter-values.js";
+import { PriceUnit } from "../price-units.js";
 
 /**
  * DynamoDB pricing strategy.
@@ -22,7 +24,7 @@ export const dynamodbPricingStrategy: PricingStrategy = {
       | string
       | undefined;
     const label =
-      billingMode === "PROVISIONED"
+      billingMode === AwsDefault.BILLING_PROVISIONED
         ? "Provisioned (per RCU/WCU-hour)"
         : "On-demand (per-request)";
     return { perMonth: null, label };
@@ -33,7 +35,7 @@ export const dynamodbPricingStrategy: PricingStrategy = {
       | string
       | undefined;
 
-    if (billingMode === "PROVISIONED") {
+    if (billingMode === AwsDefault.BILLING_PROVISIONED) {
       // Query for write capacity unit hourly rate (representative line item)
       return {
         serviceCode: SC.DYNAMODB,
@@ -43,9 +45,9 @@ export const dynamodbPricingStrategy: PricingStrategy = {
             Value: PF.PROVISIONED_IOPS,
             Type: M.TERM_MATCH,
           },
-          { Field: F.GROUP, Value: "DDB-WriteUnits", Type: M.TERM_MATCH },
+          { Field: F.GROUP, Value: FV.DDB_WRITE_UNITS, Type: M.TERM_MATCH },
         ],
-        unit: "/WCU-hr",
+        unit: PriceUnit.PER_WCU_HOUR,
       };
     }
 
@@ -58,7 +60,7 @@ export const dynamodbPricingStrategy: PricingStrategy = {
           Value: PF.PAY_PER_REQUEST,
           Type: M.TERM_MATCH,
         },
-        { Field: F.GROUP, Value: "DDB-WriteUnits", Type: M.TERM_MATCH },
+        { Field: F.GROUP, Value: FV.DDB_WRITE_UNITS, Type: M.TERM_MATCH },
       ],
       unit: "/M write req",
     };

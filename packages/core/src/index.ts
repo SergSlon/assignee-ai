@@ -49,6 +49,7 @@ export {
   type CfnKeyType,
   EIP_AUTO_ALLOCATE,
   ResourceDefault,
+  AwsDefault,
   AssigneeTag,
 } from "./config/cfn-keys.js";
 
@@ -94,6 +95,7 @@ export {
   type PolicyDocument,
   type PolicyStatement,
 } from "./config/iam-policies.js";
+export { IamEffect, type IamEffectType } from "./config/iam-effects.js";
 
 // Types
 export { type Result, safeTry } from "./types/result.js";

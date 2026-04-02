@@ -1,7 +1,8 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::DynamoDB::Table.
@@ -37,18 +38,18 @@ export const dynamodbTablePlugin: ResourcePlugin = {
         label: "Billing mode",
         options: [
           {
-            value: "PAY_PER_REQUEST",
+            value: AwsDefault.BILLING_PAY_PER_REQUEST,
             label: "On-demand (pay per request)",
             recommended: true,
             fitHint: "Best for unpredictable or new workloads",
           },
           {
-            value: "PROVISIONED",
+            value: AwsDefault.BILLING_PROVISIONED,
             label: "Provisioned (set read/write capacity)",
             fitHint: "Best for steady, predictable traffic",
           },
         ],
-        initialValue: "PAY_PER_REQUEST",
+        initialValue: AwsDefault.BILLING_PAY_PER_REQUEST,
         hint: "On-demand scales automatically with no capacity planning. Provisioned is cheaper for steady workloads but requires you to set read/write capacity units.",
       },
     },
@@ -94,7 +95,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
         validate: TAGS_VALIDATE,
@@ -121,7 +122,10 @@ export const dynamodbTablePlugin: ResourcePlugin = {
         placeholder: "5",
         initialValue: "5",
         hint: "1 RCU = one strongly consistent 4 KB read/sec. Only applies to provisioned billing mode.",
-        showIf: { field: CfnKey.BILLING_MODE, value: "PROVISIONED" },
+        showIf: {
+          field: CfnKey.BILLING_MODE,
+          value: AwsDefault.BILLING_PROVISIONED,
+        },
         validate: (value: unknown) => {
           if (!value) return "RCUs required for provisioned mode";
           const n = Number(value);
@@ -139,7 +143,10 @@ export const dynamodbTablePlugin: ResourcePlugin = {
         placeholder: "5",
         initialValue: "5",
         hint: "1 WCU = one 1 KB write/sec. Only applies to provisioned billing mode.",
-        showIf: { field: CfnKey.BILLING_MODE, value: "PROVISIONED" },
+        showIf: {
+          field: CfnKey.BILLING_MODE,
+          value: AwsDefault.BILLING_PROVISIONED,
+        },
         validate: (value: unknown) => {
           if (!value) return "WCUs required for provisioned mode";
           const n = Number(value);
@@ -178,7 +185,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    [CfnKey.BILLING_MODE]: "PAY_PER_REQUEST",
+    [CfnKey.BILLING_MODE]: AwsDefault.BILLING_PAY_PER_REQUEST,
     [CfnKey.PITR_SPECIFICATION]: { [CfnKey.PITR_ENABLED]: true },
     [CfnKey.SSE_SPECIFICATION]: { [CfnKey.SSE_ENABLED]: true },
   },

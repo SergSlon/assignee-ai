@@ -7,12 +7,13 @@
 
 import { SUPPORTED_TYPES_ARRAY } from "./resource-types.js";
 import { getRequiredIamActions } from "./iam-actions.js";
+import { IamEffect, type IamEffectType } from "./iam-effects.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface PolicyStatement {
   Sid: string;
-  Effect: "Allow" | "Deny";
+  Effect: IamEffectType;
   Action: string[];
   Resource: string | string[];
   Condition?: Record<string, Record<string, string | string[]>>;
@@ -84,7 +85,7 @@ export function operatorPolicy(
     Statement: [
       {
         Sid: "BedrockInvoke",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: [
           "bedrock:InvokeModel",
           "bedrock:InvokeModelWithResponseStream",
@@ -93,7 +94,7 @@ export function operatorPolicy(
       },
       {
         Sid: "CloudControlScopedToSupportedTypes",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: ccapiActions,
         Resource: "*",
         Condition: {
@@ -104,25 +105,25 @@ export function operatorPolicy(
       },
       {
         Sid: "ServiceSpecificActions",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: serviceActions,
         Resource: "*",
       },
       {
         Sid: "SdkFallbackActions",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: sdkFallbackActions,
         Resource: "*",
       },
       {
         Sid: "XRayTracing",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: ["xray:PutTraceSegments", "xray:PutTelemetryRecords"],
         Resource: "*",
       },
       {
         Sid: "ResourceTagging",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: ["tag:TagResources", "tag:GetResources"],
         Resource: "*",
       },
@@ -140,13 +141,13 @@ export function readerPolicy(): PolicyDocument {
     Statement: [
       {
         Sid: "CloudFormationSchemaRead",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: ["cloudformation:DescribeType", "cloudformation:ListTypes"],
         Resource: "*",
       },
       {
         Sid: "ResourceDiscoveryRead",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: [
           "ssm:GetParameter",
           "ec2:DescribeInstances",
@@ -162,7 +163,7 @@ export function readerPolicy(): PolicyDocument {
       },
       {
         Sid: "PricingRead",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: [
           "pricing:GetProducts",
           "pricing:DescribeServices",
@@ -172,7 +173,7 @@ export function readerPolicy(): PolicyDocument {
       },
       {
         Sid: "CostExplorerRead",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: ["ce:GetCostAndUsage", "ce:GetCostForecast"],
         Resource: "*",
       },
@@ -191,7 +192,7 @@ export function auditorPolicy(): PolicyDocument {
     Statement: [
       {
         Sid: "IAMSimulateAndRead",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: [
           "iam:SimulateCustomPolicy",
           "iam:SimulatePrincipalPolicy",
@@ -213,7 +214,7 @@ export function auditorPolicy(): PolicyDocument {
       },
       {
         Sid: "SecurityHubRead",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: [
           "securityhub:GetFindings",
           "securityhub:GetInsights",
@@ -229,7 +230,7 @@ export function auditorPolicy(): PolicyDocument {
       },
       {
         Sid: "GuardDutyRead",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: [
           "guardduty:GetDetector",
           "guardduty:GetFindings",
@@ -240,7 +241,7 @@ export function auditorPolicy(): PolicyDocument {
       },
       {
         Sid: "InspectorRead",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: [
           "inspector2:ListFindings",
           "inspector2:GetFindingsReportStatus",
@@ -250,7 +251,7 @@ export function auditorPolicy(): PolicyDocument {
       },
       {
         Sid: "IAMAccessAnalyzerRead",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Action: [
           "access-analyzer:GetAnalyzer",
           "access-analyzer:ListAnalyzers",

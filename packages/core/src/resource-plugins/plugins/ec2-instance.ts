@@ -1,7 +1,8 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
+import { CfnKey, ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
 import { QuestionTypeName, type ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * Instance type category groupings for two-step selection UX.
@@ -195,7 +196,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
         label: "Instance type",
         hint: "t3/t4g: burstable (dev/small prod). m5/m6i: general-purpose. c5/c6i: compute. r5/r6i: memory. t4g (ARM) is ~20% cheaper than t3.",
         categories: INSTANCE_CATEGORIES,
-        initialValue: "t3.micro",
+        initialValue: AwsDefault.INSTANCE_TYPE,
       },
     },
     {
@@ -208,14 +209,14 @@ export const ec2InstancePlugin: ResourcePlugin = {
         placeholder: "ami-0abcdef1234567890",
         options: [
           {
-            value: "amazon-linux-2023",
+            value: AwsDefault.EC2_AMI,
             label: "Amazon Linux 2023 (recommended, free tier eligible)",
           },
           { value: "ubuntu-24.04", label: "Ubuntu 24.04 LTS" },
           { value: "ubuntu-22.04", label: "Ubuntu 22.04 LTS" },
           { value: "windows-2022", label: "Windows Server 2022" },
         ],
-        initialValue: "amazon-linux-2023",
+        initialValue: AwsDefault.EC2_AMI,
         fetcher: "discover-amis",
       },
     },
@@ -254,7 +255,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
         validate: TAGS_VALIDATE,

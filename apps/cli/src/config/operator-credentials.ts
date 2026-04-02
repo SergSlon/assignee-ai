@@ -11,6 +11,7 @@
 
 import type { AwsConfig } from "../services/cloudcontrol-client.js";
 import { AWS_REGION } from "./constants.js";
+import { EnvVar } from "../constants/env-vars.js";
 
 /**
  * Reads ASSIGNEE_OPERATOR_ACCESS_KEY_ID, ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY,
@@ -20,8 +21,8 @@ import { AWS_REGION } from "./constants.js";
  */
 export function operatorCredentials(): AwsConfig {
   return {
-    accessKeyId: process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] ?? "",
-    secretAccessKey: process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] ?? "",
+    accessKeyId: process.env[EnvVar.OPERATOR_ACCESS_KEY] ?? "",
+    secretAccessKey: process.env[EnvVar.OPERATOR_SECRET_KEY] ?? "",
     region: AWS_REGION,
   };
 }

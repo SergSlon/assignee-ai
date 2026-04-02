@@ -17,6 +17,7 @@ import { join, relative, extname } from "node:path";
 import { ConfigurationError } from "@assignee/core";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
+import { IamEffect } from "@assignee/core";
 
 export interface UploadResult {
   uploaded: number;
@@ -136,7 +137,7 @@ export async function configureBucketPolicy(
     Statement: [
       {
         Sid: "PublicReadGetObject",
-        Effect: "Allow",
+        Effect: IamEffect.ALLOW,
         Principal: "*",
         Action: "s3:GetObject",
         Resource: `arn:aws:s3:::${bucketName}/*`,

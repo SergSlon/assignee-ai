@@ -32,6 +32,7 @@ import {
 } from "./recorder.js";
 import { runAutoCleanup } from "../services/cleanup.js";
 import { defaultMemoryService } from "../services/memory.js";
+import { EnvVar } from "../constants/env-vars.js";
 import { CHECKPOINT_DIR, MAX_PROVISION_LOOPS } from "../config/constants.js";
 
 export interface CommandContext {
@@ -63,7 +64,7 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
   if (!opts.silent) renderIntro();
 
   // Early credential check — fail fast before the wizard, not after
-  const hasOperatorKey = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+  const hasOperatorKey = process.env[EnvVar.OPERATOR_ACCESS_KEY];
   if (!hasOperatorKey) {
     throw new ConfigurationError(
       "No AWS credentials detected. Assignee.ai requires ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY.\n" +
@@ -106,15 +107,16 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
       // Story 9.7: Wrap LLM adapter with recorder when recording enabled
       const { LlmAdapter } = await import("../services/llm-adapter.js");
       const baseLlm = new LlmAdapter({
-        modelString: process.env["ASSIGNEE_MODEL"],
-        guardrailId: process.env["BEDROCK_GUARDRAIL_ID"],
-        guardrailVersion: process.env["BEDROCK_GUARDRAIL_VERSION"],
+        modelString: process.env[EnvVar.ASSIGNEE_MODEL],
+        guardrailId: process.env[EnvVar.BEDROCK_GUARDRAIL_ID],
+        guardrailVersion: process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION],
       });
       const llmClient = recorder
         ? new RecordingLlmAdapter(
             baseLlm,
             recorder,
-            process.env["ASSIGNEE_MODEL"] ?? "bedrock/amazon.nova-lite-v1:0",
+            process.env[EnvVar.ASSIGNEE_MODEL] ??
+              "bedrock/amazon.nova-lite-v1:0",
           )
         : undefined;
 

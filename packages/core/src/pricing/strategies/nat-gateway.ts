@@ -9,6 +9,7 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
 
 /**
  * Pricing strategy for AWS::EC2::NatGateway.
@@ -37,7 +38,7 @@ export const natGatewayPricingStrategy: PricingStrategy = {
           Type: M.TERM_MATCH,
         },
       ],
-      unit: "/hour",
+      unit: PriceUnit.PER_HOUR_LONG,
     };
   },
 };

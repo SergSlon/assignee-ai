@@ -1,11 +1,12 @@
 import { SUPPORTED_TYPES_ARRAY } from "@assignee/core";
+import { EnvVar } from "../constants/env-vars.js";
 
 export const BEDROCK_MODEL_ID =
-  process.env["BEDROCK_MODEL_ID"] ?? "us.amazon.nova-lite-v1:0";
+  process.env[EnvVar.BEDROCK_MODEL_ID] ?? "us.amazon.nova-lite-v1:0";
 
 import { DEFAULT_AWS_REGION } from "@assignee/core";
 
-export const AWS_REGION = process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
+export const AWS_REGION = process.env[EnvVar.AWS_REGION] ?? DEFAULT_AWS_REGION;
 
 // packages/core is the single source of truth for supported resource types (Story 9.1)
 export { SUPPORTED_TYPES_ARRAY as SUPPORTED_TYPES } from "@assignee/core";
@@ -42,11 +43,11 @@ export const CHECKPOINT_DIR = ".assignee";
 
 /** SaaS API base URL for org policy fetch (Story 7.2). */
 export const SAAS_API_URL =
-  process.env["ASSIGNEE_SAAS_URL"] ?? "https://app.assignee.ai";
+  process.env[EnvVar.ASSIGNEE_SAAS_URL] ?? "https://app.assignee.ai";
 
 /** TTL in milliseconds for cached org policy (default 5 minutes). */
 export const ORG_POLICY_TTL_MS = parseInt(
-  process.env["ASSIGNEE_ORG_POLICY_TTL_MS"] ?? "300000",
+  process.env[EnvVar.ASSIGNEE_ORG_POLICY_TTL_MS] ?? "300000",
   10,
 );
 
@@ -62,13 +63,27 @@ export const MEMORY_MAX_FAILURES = 100;
 /** Maximum number of pattern records to keep in memory rotation. */
 export const MEMORY_MAX_PATTERNS = 100;
 
-// ── Memory File Names ───────────────────────────────────────────────────────
+// ── File Name Constants ─────────────────────────────────────────────────────
 
-/** File name for the provision log in the memory directory. */
-export const PROVISIONS_FILE = "provisions.json";
+/**
+ * Named file constants — single source of truth for file names used in
+ * memory, config loaders, and path resolution.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const FileName = {
+  PROVISIONS: "provisions.json",
+  FAILURES: "failures.json",
+  PATTERNS: "patterns.json",
+  CONFIG: "config.yaml",
+  ORG_POLICY: "org-policy.yaml",
+} as const;
 
-/** File name for the failure log in the memory directory. */
-export const FAILURES_FILE = "failures.json";
+/** @deprecated Use FileName.PROVISIONS */
+export const PROVISIONS_FILE = FileName.PROVISIONS;
+
+/** @deprecated Use FileName.FAILURES */
+export const FAILURES_FILE = FileName.FAILURES;
 
 // ── Promise Status Constants ────────────────────────────────────────────────
 

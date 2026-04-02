@@ -9,15 +9,13 @@
  * profile-specific keywords to produce a relevance score.
  */
 
+import {
+  InstanceCategory,
+  type InstanceCategoryType,
+} from "../constants/instance-categories.js";
+
 /** Workload profile type — matches workload-classifier output (Story 21.1). */
-export type WorkloadProfile =
-  | "burstable"
-  | "general-purpose"
-  | "compute-heavy"
-  | "memory-intensive"
-  | "gpu-accelerated"
-  | "storage-heavy"
-  | "unknown";
+export type WorkloadProfile = InstanceCategoryType | "unknown";
 
 /** Result of ranking options for a given workload profile. */
 export interface RankedResult {
@@ -33,10 +31,16 @@ export interface RankedResult {
 
 /** Keywords that boost an option's score for each workload profile. */
 const PROFILE_KEYWORDS: Record<WorkloadProfile, string[]> = {
-  burstable: ["t3", "t4g", "burst", "micro", "small", "dev"],
-  "general-purpose": ["m5", "m6i", "m7i", "general", "balanced"],
-  "compute-heavy": ["c5", "c6i", "c7i", "compute", "batch"],
-  "memory-intensive": [
+  [InstanceCategory.BURSTABLE]: ["t3", "t4g", "burst", "micro", "small", "dev"],
+  [InstanceCategory.GENERAL_PURPOSE]: [
+    "m5",
+    "m6i",
+    "m7i",
+    "general",
+    "balanced",
+  ],
+  [InstanceCategory.COMPUTE_HEAVY]: ["c5", "c6i", "c7i", "compute", "batch"],
+  [InstanceCategory.MEMORY_INTENSIVE]: [
     "r5",
     "r6g",
     "r7g",
@@ -45,8 +49,19 @@ const PROFILE_KEYWORDS: Record<WorkloadProfile, string[]> = {
     "cache",
     "analytics",
   ],
-  "gpu-accelerated": ["p3", "p4", "p5", "g4", "g5", "g6", "inf", "gpu", "ml"],
-  "storage-heavy": ["d3", "i3", "i4", "h1", "storage"],
+  [InstanceCategory.GPU_ACCELERATED]: [
+    "p3",
+    "p4",
+    "p5",
+    "g4",
+    "g5",
+    "g6",
+    "inf",
+    "gpu",
+    "ml",
+  ],
+  [InstanceCategory.STORAGE_HEAVY]: ["d3", "i3", "i4", "h1", "storage"],
+  [InstanceCategory.HPC]: ["hpc6a", "hpc7a", "hpc7g", "hpc", "simulation"],
   unknown: [],
 };
 

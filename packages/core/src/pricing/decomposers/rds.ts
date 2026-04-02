@@ -5,7 +5,7 @@
  * @see Story 23.2
  */
 
-import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
+import { CfnKey, ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -19,6 +19,10 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingFilterValue as FV } from "../pricing-filter-values.js";
+import { PricingUnit } from "../units.js";
 
 export const rdsPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
@@ -27,16 +31,17 @@ export const rdsPricingDecomposer: PricingDecomposer = {
     const items: PricingLineItem[] = [];
     const instanceClass =
       (desiredState[CfnKey.DB_INSTANCE_CLASS] as string | undefined) ??
-      "db.t3.micro";
+      AwsDefault.DB_INSTANCE_CLASS;
     const engine =
-      (desiredState[CfnKey.ENGINE] as string | undefined) ?? "mysql";
+      (desiredState[CfnKey.ENGINE] as string | undefined) ??
+      AwsDefault.RDS_ENGINE_MYSQL;
     const multiAZ = desiredState[CfnKey.MULTI_AZ] === true;
 
     // 1. Compute (query the actual deployment option — Multi-AZ price includes standby)
     items.push({
-      label: "Compute",
+      label: LineItemLabel.COMPUTE,
       quantity: 1,
-      unit: "instance",
+      unit: PricingUnit.INSTANCE,
       serviceCode: SC.RDS,
       filters: [
         {
@@ -52,13 +57,13 @@ export const rdsPricingDecomposer: PricingDecomposer = {
         },
         {
           Field: F.DEPLOYMENT_OPTION,
-          Value: multiAZ ? "Multi-AZ" : "Single-AZ",
+          Value: multiAZ ? FV.MULTI_AZ : FV.SINGLE_AZ,
           Type: M.TERM_MATCH,
         },
       ],
       kind: K.FIXED,
       description: multiAZ ? `${instanceClass} (Multi-AZ)` : instanceClass,
-      priceUnit: "/hr",
+      priceUnit: PriceUnit.PER_HOUR,
       timeoutMs: EXTENDED_TIMEOUT_MS,
     });
 
@@ -71,9 +76,9 @@ export const rdsPricingDecomposer: PricingDecomposer = {
     );
 
     items.push({
-      label: "Storage",
+      label: LineItemLabel.STORAGE,
       quantity: allocatedStorage,
-      unit: "GB",
+      unit: PricingUnit.GB,
       serviceCode: SC.RDS,
       filters: [
         {
@@ -88,13 +93,13 @@ export const rdsPricingDecomposer: PricingDecomposer = {
         },
         {
           Field: F.DEPLOYMENT_OPTION,
-          Value: multiAZ ? "Multi-AZ" : "Single-AZ",
+          Value: multiAZ ? FV.MULTI_AZ : FV.SINGLE_AZ,
           Type: M.TERM_MATCH,
         },
       ],
       kind: K.FIXED,
       description: `${allocatedStorage} GB ${storageType}`,
-      priceUnit: "/GB-mo",
+      priceUnit: PriceUnit.PER_GB_MONTH,
     });
 
     // 3. Backup storage (usage-based, depends on retention period)
@@ -103,9 +108,9 @@ export const rdsPricingDecomposer: PricingDecomposer = {
     );
     if (backupRetention > 0) {
       items.push({
-        label: "Backup",
+        label: LineItemLabel.BACKUP,
         quantity: allocatedStorage,
-        unit: "GB",
+        unit: PricingUnit.GB,
         serviceCode: SC.RDS,
         filters: [
           {
@@ -116,7 +121,7 @@ export const rdsPricingDecomposer: PricingDecomposer = {
         ],
         kind: K.USAGE_BASED,
         description: `${backupRetention} days retention`,
-        priceUnit: "/GB-mo",
+        priceUnit: PriceUnit.PER_GB_MONTH,
       });
     }
 

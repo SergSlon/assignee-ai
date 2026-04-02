@@ -5,7 +5,7 @@
  * @see Story 23.x
  */
 
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -18,6 +18,9 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingUnit } from "../units.js";
 
 export const elbv2PricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
@@ -25,15 +28,15 @@ export const elbv2PricingDecomposer: PricingDecomposer = {
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
     const lbType = String(
-      desiredState[CfnKey.TYPE] ?? "application",
+      desiredState[CfnKey.TYPE] ?? AwsDefault.LB_TYPE_APPLICATION,
     ).toLowerCase();
 
     if (lbType === "network") {
       // NLB hourly rate
       items.push({
-        label: "Hourly",
+        label: LineItemLabel.HOURLY,
         quantity: 1,
-        unit: "NLB",
+        unit: PricingUnit.NLB,
         serviceCode: SC.ELB,
         filters: [
           {
@@ -44,14 +47,14 @@ export const elbv2PricingDecomposer: PricingDecomposer = {
         ],
         kind: K.FIXED,
         description: "Network Load Balancer",
-        priceUnit: "/hr",
+        priceUnit: PriceUnit.PER_HOUR,
       });
 
       // NLB NLCU-hours
       items.push({
-        label: "NLCU",
+        label: LineItemLabel.NLCU,
         quantity: 0,
-        unit: "NLCU-hr",
+        unit: PricingUnit.NLCU_HR,
         serviceCode: SC.ELB,
         filters: [
           {
@@ -62,14 +65,14 @@ export const elbv2PricingDecomposer: PricingDecomposer = {
         ],
         kind: K.USAGE_BASED,
         description: "NLCU-hours",
-        priceUnit: "/NLCU-hr",
+        priceUnit: PriceUnit.PER_NLCU_HOUR,
       });
     } else {
       // ALB hourly rate
       items.push({
-        label: "Hourly",
+        label: LineItemLabel.HOURLY,
         quantity: 1,
-        unit: "ALB",
+        unit: PricingUnit.ALB,
         serviceCode: SC.ELB,
         filters: [
           {
@@ -80,14 +83,14 @@ export const elbv2PricingDecomposer: PricingDecomposer = {
         ],
         kind: K.FIXED,
         description: "Application Load Balancer",
-        priceUnit: "/hr",
+        priceUnit: PriceUnit.PER_HOUR,
       });
 
       // ALB LCU-hours
       items.push({
-        label: "LCU",
+        label: LineItemLabel.LCU,
         quantity: 0,
-        unit: "LCU-hr",
+        unit: PricingUnit.LCU_HR,
         serviceCode: SC.ELB,
         filters: [
           {
@@ -98,7 +101,7 @@ export const elbv2PricingDecomposer: PricingDecomposer = {
         ],
         kind: K.USAGE_BASED,
         description: "LCU-hours",
-        priceUnit: "/LCU-hr",
+        priceUnit: PriceUnit.PER_LCU_HOUR,
       });
     }
 

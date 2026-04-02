@@ -37,6 +37,7 @@ import { renderError, startSpinner, stopSpinner } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand, runProvisioningLoop } from "../utils/command-runner.js";
 import { SUPPORTED_TYPES_HINT, CHECKPOINT_DIR } from "../config/constants.js";
+import { ErrorCode } from "../constants/errors.js";
 import {
   findNewestValidCheckpoint,
   loadCheckpointFromPath,
@@ -247,7 +248,7 @@ export const applyCommand = new Command(CommandName.APPLY)
           throw new AssigneeError(
             'Usage: assignee apply "Create an S3 bucket named my-bucket"\n' +
               "       assignee apply --checkpoint .assignee/checkpoint-<runId>.json",
-            "USAGE_ERROR",
+            ErrorCode.USAGE_ERROR,
           );
         }
       }
@@ -256,7 +257,7 @@ export const applyCommand = new Command(CommandName.APPLY)
       if (opts.source !== undefined && opts.source.trim() === "") {
         throw new AssigneeError(
           "--source requires a non-empty directory path",
-          "INVALID_SOURCE_DIR",
+          ErrorCode.INVALID_SOURCE_DIR,
         );
       }
       const resolvedSourceDir = opts.source
@@ -270,7 +271,7 @@ export const applyCommand = new Command(CommandName.APPLY)
         ) {
           throw new AssigneeError(
             `Source directory does not exist: ${resolvedSourceDir}`,
-            "INVALID_SOURCE_DIR",
+            ErrorCode.INVALID_SOURCE_DIR,
           );
         }
         const countFiles = (dir: string): number => {
@@ -288,7 +289,7 @@ export const applyCommand = new Command(CommandName.APPLY)
         if (sourceFileCount === 0) {
           throw new AssigneeError(
             `Source directory is empty: ${resolvedSourceDir}`,
-            "INVALID_SOURCE_DIR",
+            ErrorCode.INVALID_SOURCE_DIR,
           );
         }
       }

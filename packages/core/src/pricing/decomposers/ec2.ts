@@ -5,7 +5,7 @@
  * @see Story 23.1
  */
 
-import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
+import { CfnKey, ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,
@@ -19,6 +19,10 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingFilterValue as FV } from "../pricing-filter-values.js";
+import { PricingUnit } from "../units.js";
 
 export const ec2PricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.EC2_INSTANCE,
@@ -26,13 +30,14 @@ export const ec2PricingDecomposer: PricingDecomposer = {
   decompose(desiredState: Record<string, unknown>): PricingLineItem[] {
     const items: PricingLineItem[] = [];
     const instanceType =
-      (desiredState[CfnKey.INSTANCE_TYPE] as string | undefined) ?? "t3.micro";
+      (desiredState[CfnKey.INSTANCE_TYPE] as string | undefined) ??
+      AwsDefault.INSTANCE_TYPE;
 
     // 1. Compute (instance hourly rate)
     items.push({
-      label: "Compute",
+      label: LineItemLabel.COMPUTE,
       quantity: 1,
-      unit: "instance",
+      unit: PricingUnit.INSTANCE,
       serviceCode: SC.EC2,
       filters: [
         {
@@ -48,7 +53,7 @@ export const ec2PricingDecomposer: PricingDecomposer = {
       ],
       kind: K.FIXED,
       description: instanceType,
-      priceUnit: "/hr",
+      priceUnit: PriceUnit.PER_HOUR,
       timeoutMs: EXTENDED_TIMEOUT_MS,
     });
 
@@ -65,12 +70,12 @@ export const ec2PricingDecomposer: PricingDecomposer = {
           const volumeSize = Number(ebs[CfnKey.VOLUME_SIZE] ?? 8);
           const volumeApiName = mapVolumeType(volumeType);
           const volLabel =
-            bdm.length > 1 ? `Storage (vol ${idx + 1})` : "Storage";
+            bdm.length > 1 ? `Storage (vol ${idx + 1})` : LineItemLabel.STORAGE;
 
           items.push({
             label: volLabel,
             quantity: volumeSize,
-            unit: "GB",
+            unit: PricingUnit.GB,
             serviceCode: SC.EC2,
             filters: [
               {
@@ -86,7 +91,7 @@ export const ec2PricingDecomposer: PricingDecomposer = {
             ],
             kind: K.FIXED,
             description: `${volumeSize} GB ${volumeType}`,
-            priceUnit: "/GB-mo",
+            priceUnit: PriceUnit.PER_GB_MONTH,
           });
         }
       }
@@ -97,25 +102,25 @@ export const ec2PricingDecomposer: PricingDecomposer = {
 
     if (hasPublicIp) {
       items.push({
-        label: "Public IPv4",
+        label: LineItemLabel.PUBLIC_IPV4,
         quantity: 1,
-        unit: "address",
+        unit: PricingUnit.ADDRESS,
         serviceCode: SC.VPC,
         filters: [
           { Field: F.PRODUCT_FAMILY, Value: PF.IP_ADDRESS, Type: M.TERM_MATCH },
-          { Field: F.GROUP, Value: "ElasticIP:Address", Type: M.TERM_MATCH },
+          { Field: F.GROUP, Value: FV.ELASTIC_IP_ADDRESS, Type: M.TERM_MATCH },
         ],
         kind: K.FIXED,
         description: "1 address",
-        priceUnit: "/hr",
+        priceUnit: PriceUnit.PER_HOUR,
       });
     }
 
     // 4. Data transfer out (usage-based)
     items.push({
-      label: "Data transfer out",
+      label: LineItemLabel.DATA_TRANSFER_OUT,
       quantity: 0,
-      unit: "GB",
+      unit: PricingUnit.GB,
       serviceCode: SC.DATA_TRANSFER,
       filters: [
         {
@@ -125,15 +130,15 @@ export const ec2PricingDecomposer: PricingDecomposer = {
         },
         {
           Field: F.FROM_LOCATION_TYPE,
-          Value: "AWS Region",
+          Value: FV.AWS_REGION,
           Type: M.TERM_MATCH,
         },
-        { Field: F.TO_LOCATION_TYPE, Value: "External", Type: M.TERM_MATCH },
-        { Field: F.TRANSFER_TYPE, Value: "AWS Outbound", Type: M.TERM_MATCH },
+        { Field: F.TO_LOCATION_TYPE, Value: FV.EXTERNAL, Type: M.TERM_MATCH },
+        { Field: F.TRANSFER_TYPE, Value: FV.AWS_OUTBOUND, Type: M.TERM_MATCH },
       ],
       kind: K.USAGE_BASED,
       description: "per GB",
-      priceUnit: "/GB",
+      priceUnit: PriceUnit.PER_GB,
     });
 
     return items;

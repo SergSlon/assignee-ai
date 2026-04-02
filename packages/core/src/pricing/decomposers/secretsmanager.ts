@@ -17,6 +17,9 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingUnit } from "../units.js";
 
 export const secretsManagerPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.SECRETSMANAGER_SECRET,
@@ -26,30 +29,30 @@ export const secretsManagerPricingDecomposer: PricingDecomposer = {
 
     // 1. Secret storage
     items.push({
-      label: "Secret storage",
+      label: LineItemLabel.SECRET_STORAGE,
       quantity: 1,
-      unit: "secret",
+      unit: PricingUnit.SECRET,
       serviceCode: SC.SECRETS_MANAGER,
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.SECRET, Type: M.TERM_MATCH },
       ],
       kind: K.FIXED,
       description: "1 secret",
-      priceUnit: "/secret-mo",
+      priceUnit: PriceUnit.PER_SECRET_MONTH,
     });
 
     // 2. API calls
     items.push({
-      label: "API calls",
+      label: LineItemLabel.API_CALLS,
       quantity: 0,
-      unit: "requests",
+      unit: PricingUnit.REQUESTS,
       serviceCode: SC.SECRETS_MANAGER,
       filters: [
         { Field: F.PRODUCT_FAMILY, Value: PF.API_REQUEST, Type: M.TERM_MATCH },
       ],
       kind: K.USAGE_BASED,
       description: "per 10,000 API calls",
-      priceUnit: "/10K reqs",
+      priceUnit: PriceUnit.PER_10K_REQS,
     });
 
     return items;

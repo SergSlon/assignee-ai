@@ -13,6 +13,7 @@ import * as fs from "node:fs/promises";
 import { Command } from "commander";
 import chalk from "chalk";
 import { DriftStatus, AssigneeError, type DriftResult } from "@assignee/core";
+import { ErrorCode } from "../constants/errors.js";
 import { MemoryService } from "../services/memory.js";
 import {
   DriftDetectorService,
@@ -180,7 +181,7 @@ export const driftCommand = new Command("drift")
       if (isNaN(concNum) || concNum < 1) {
         throw new AssigneeError(
           "--concurrency must be a positive integer",
-          "USAGE_ERROR",
+          ErrorCode.USAGE_ERROR,
         );
       }
       const concurrency = Math.min(Math.max(concNum, 1), 50);

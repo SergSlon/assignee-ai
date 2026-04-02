@@ -1,5 +1,6 @@
 import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * Fallback plugin for any CloudFormation resource type not covered by a dedicated plugin.
@@ -23,7 +24,7 @@ export const genericPlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
         validate: (value: unknown) => {

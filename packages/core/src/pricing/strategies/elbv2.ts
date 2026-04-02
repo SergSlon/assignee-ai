@@ -9,6 +9,7 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
 
 export const elbv2PricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -24,7 +25,7 @@ export const elbv2PricingStrategy: PricingStrategy = {
           Type: M.TERM_MATCH,
         },
       ],
-      unit: "/hr",
+      unit: PriceUnit.PER_HOUR,
     };
   },
 };

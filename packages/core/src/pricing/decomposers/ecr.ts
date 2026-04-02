@@ -15,6 +15,9 @@ import {
   PricingProductFamily as PF,
   PricingServiceCode as SC,
 } from "../filter-constants.js";
+import { PriceUnit } from "../price-units.js";
+import { LineItemLabel } from "../line-item-labels.js";
+import { PricingUnit } from "../units.js";
 
 export const ecrPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.ECR_REPOSITORY,
@@ -24,9 +27,9 @@ export const ecrPricingDecomposer: PricingDecomposer = {
 
     // 1. Storage (per GB-month)
     items.push({
-      label: "Storage",
+      label: LineItemLabel.STORAGE,
       quantity: 0,
-      unit: "GB",
+      unit: PricingUnit.GB,
       serviceCode: SC.ECR,
       filters: [
         {
@@ -37,7 +40,7 @@ export const ecrPricingDecomposer: PricingDecomposer = {
       ],
       kind: K.USAGE_BASED,
       description: "image storage",
-      priceUnit: "/GB-mo",
+      priceUnit: PriceUnit.PER_GB_MONTH,
     });
 
     return items;

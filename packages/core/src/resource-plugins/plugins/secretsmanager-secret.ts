@@ -2,6 +2,7 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::SecretsManager::Secret.
@@ -40,7 +41,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
       name: CfnKey.DESCRIPTION,
       question: {
         type: "string",
-        label: "Description",
+        label: FieldLabel.DESCRIPTION,
         placeholder: "Database password for my-app production",
         hint: "Human-readable description of what this secret stores. Max 2048 characters.",
         validate: (value: unknown) => {
@@ -87,7 +88,7 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization.",
         validate: TAGS_VALIDATE,

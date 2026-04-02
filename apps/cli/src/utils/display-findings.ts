@@ -6,7 +6,11 @@
 import chalk from "chalk";
 import { Severity, type BPFinding } from "@assignee/best-practices";
 import type { FreeTierNote } from "./free-tier.js";
-import { resolveAction, countFixable } from "./fix-command-resolver.js";
+import {
+  resolveAction,
+  countFixable,
+  FixCategory,
+} from "./fix-command-resolver.js";
 
 /**
  * Formats all findings (blocking + non-blocking) for display in the plan box.
@@ -75,11 +79,11 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
 
         // Action hint line
         const hintPrefix =
-          action.category === "auto-fixable"
+          action.category === FixCategory.AUTO_FIXABLE
             ? "Fix"
-            : action.category === "wizard-fixable"
+            : action.category === FixCategory.WIZARD_FIXABLE
               ? "Fix"
-              : action.category === "manual"
+              : action.category === FixCategory.MANUAL
                 ? "Manual"
                 : "Info";
         const hintLine = chalk.dim(
@@ -112,10 +116,10 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
       else severityLine = `  [INFO] ${f.title}${suffix}`;
 
       const hintPrefix =
-        action.category === "auto-fixable" ||
-        action.category === "wizard-fixable"
+        action.category === FixCategory.AUTO_FIXABLE ||
+        action.category === FixCategory.WIZARD_FIXABLE
           ? "Fix"
-          : action.category === "manual"
+          : action.category === FixCategory.MANUAL
             ? "Manual"
             : "Info";
       const hintLine = `         -> ${hintPrefix}: ${action.hint}`;

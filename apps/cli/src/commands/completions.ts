@@ -16,6 +16,7 @@
 import { Command } from "commander";
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { AssigneeError } from "@assignee/core";
+import { ErrorCode } from "../constants/errors.js";
 import {
   generateCompletionScript,
   SUPPORTED_SHELLS,
@@ -31,7 +32,7 @@ export const completionsCommand = new Command(CommandName.COMPLETIONS)
     if (!SUPPORTED_SHELLS.includes(normalizedShell as SupportedShell)) {
       throw new AssigneeError(
         `Unsupported shell "${shell}". Valid options: ${SUPPORTED_SHELLS.join(", ")}`,
-        "USAGE_ERROR",
+        ErrorCode.USAGE_ERROR,
       );
     }
 

@@ -1,7 +1,8 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
+import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::ApiGatewayV2::Api (HTTP API / WebSocket API).
@@ -33,13 +34,16 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
         type: "enum",
         label: "Protocol type",
         options: [
-          { value: "HTTP", label: "HTTP (recommended — simpler, cheaper)" },
           {
-            value: "WEBSOCKET",
+            value: AwsDefault.PROTOCOL_HTTP,
+            label: "HTTP (recommended — simpler, cheaper)",
+          },
+          {
+            value: AwsDefault.PROTOCOL_WEBSOCKET,
             label: "WebSocket (bidirectional, real-time)",
           },
         ],
-        initialValue: "HTTP",
+        initialValue: AwsDefault.PROTOCOL_HTTP,
         hint: "HTTP API is simpler and cheaper than REST API (~70% lower cost). Choose WebSocket for real-time bidirectional communication (chat, live updates, gaming).",
       },
     },
@@ -47,7 +51,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       name: CfnKey.DESCRIPTION,
       question: {
         type: "string",
-        label: "Description",
+        label: FieldLabel.DESCRIPTION,
         placeholder: "Backend API for my application",
         hint: "Optional description of what this API does. Helps with documentation and team clarity.",
       },
@@ -127,7 +131,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
       name: CfnKey.TAGS,
       question: {
         type: "string",
-        label: "Tags",
+        label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
         hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
         validate: TAGS_VALIDATE,
@@ -167,7 +171,7 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
     },
   ],
   defaults: {
-    [CfnKey.PROTOCOL_TYPE]: "HTTP",
+    [CfnKey.PROTOCOL_TYPE]: AwsDefault.PROTOCOL_HTTP,
   },
   configHints: [
     "HTTP API is simpler and ~70% cheaper than REST API (API Gateway v1). Use HTTP API unless you need REST API features like request validation, caching, or usage plans.",
