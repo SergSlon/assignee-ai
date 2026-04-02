@@ -110,7 +110,7 @@ export const natGatewayPlugin: ResourcePlugin = {
       | undefined;
 
     const logicalPrefix =
-      (desiredState["_logicalId"] as string) ?? "NatGateway";
+      (desiredState[CfnKey._LOGICAL_ID] as string) ?? "NatGateway";
 
     const natGwProps: Record<string, unknown> = {
       [CfnKey.CONNECTIVITY_TYPE]: connectivityType,

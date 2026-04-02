@@ -291,7 +291,8 @@ export function formatValue(value: unknown): string {
     ) {
       return value
         .map(
-          (item: Record<string, unknown>) => `${item["Key"]}:${item["Value"]}`,
+          (item: Record<string, unknown>) =>
+            `${item[CfnKey.TAG_KEY]}:${item[CfnKey.TAG_VALUE]}`,
         )
         .join(", ");
     }

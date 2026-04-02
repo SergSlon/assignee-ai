@@ -306,10 +306,10 @@ export async function optionElicitorNode(
   const configDefaults: Record<string, unknown> = {};
   const resolvedConfig = projectConfig ?? userConfig;
   if (resolvedConfig?.defaults?.region) {
-    configDefaults["region"] = resolvedConfig.defaults.region;
+    configDefaults[CfnKey.REGION] = resolvedConfig.defaults.region;
   }
   if (resolvedConfig?.defaults?.tags) {
-    configDefaults["Tags"] = resolvedConfig.defaults.tags;
+    configDefaults[CfnKey.TAGS] = resolvedConfig.defaults.tags;
   }
 
   // Convert UserResourceConfig-shaped configs to the format mergeConfigs expects.

@@ -11,6 +11,9 @@
  * @see Story E2E.1 — MCP Pipeline Production Code Fixes
  */
 
+import { CfnKey } from "@assignee/core";
+import { CloudFormationKey } from "../constants/cfn-keys.js";
+
 export interface SanitizeResult {
   /** Sanitized desiredState with extraneous keys removed and types coerced. */
   sanitized: Record<string, unknown>;
@@ -53,8 +56,12 @@ export function sanitizeDesiredState(
   }
 
   const schemaProperties =
-    (schema["properties"] as Record<string, SchemaProperty> | undefined) ??
-    (schema["Properties"] as Record<string, SchemaProperty> | undefined) ??
+    (schema[CfnKey.CFN_PROPERTIES] as
+      | Record<string, SchemaProperty>
+      | undefined) ??
+    (schema[CloudFormationKey.PROPERTIES] as
+      | Record<string, SchemaProperty>
+      | undefined) ??
     {};
 
   if (Object.keys(schemaProperties).length === 0) {

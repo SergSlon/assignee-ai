@@ -9,7 +9,7 @@
  * @see Story 2-5, NFR-14
  */
 
-import { RESOURCE_TYPES } from "@assignee/core";
+import { RESOURCE_TYPES, CfnKey } from "@assignee/core";
 
 /** CloudFormation tag shape used by most resource types. */
 export interface CfnTag {
@@ -70,10 +70,10 @@ export function injectMandatoryTags(
   if (resourceType && FLAT_MAP_TAG_TYPES.has(resourceType)) {
     // Flat map format: { "key": "value" }
     const existingTags =
-      typeof desiredState["Tags"] === "object" &&
-      desiredState["Tags"] !== null &&
-      !Array.isArray(desiredState["Tags"])
-        ? (desiredState["Tags"] as Record<string, string>)
+      typeof desiredState[CfnKey.TAGS] === "object" &&
+      desiredState[CfnKey.TAGS] !== null &&
+      !Array.isArray(desiredState[CfnKey.TAGS])
+        ? (desiredState[CfnKey.TAGS] as Record<string, string>)
         : {};
     return { ...desiredState, Tags: { ...existingTags, ...mandatory } };
   }
@@ -83,8 +83,8 @@ export function injectMandatoryTags(
     ([Key, Value]) => ({ Key, Value }),
   );
 
-  const existingTags = Array.isArray(desiredState["Tags"])
-    ? (desiredState["Tags"] as CfnTag[])
+  const existingTags = Array.isArray(desiredState[CfnKey.TAGS])
+    ? (desiredState[CfnKey.TAGS] as CfnTag[])
     : [];
 
   // Map keyed by tag Key — mandatory tags OVERWRITE duplicates.

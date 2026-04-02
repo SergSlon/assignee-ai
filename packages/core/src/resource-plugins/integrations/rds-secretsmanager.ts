@@ -8,7 +8,11 @@
  * @see Story 26.5 — SecretsManager + RDS Integration
  */
 
-import { RESOURCE_TYPES, COMPANION_RESOURCE_TYPES } from "../../config/resource-types.js";
+import {
+  RESOURCE_TYPES,
+  COMPANION_RESOURCE_TYPES,
+} from "../../config/resource-types.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 
 /** Characters excluded from generated passwords for RDS compatibility. */
 export const RDS_SAFE_EXCLUDE_CHARACTERS = "/@\"\\'";
@@ -54,7 +58,7 @@ export function analyzeRdsSecretsIntegration(
   rdsDesiredState: Record<string, unknown>,
   rdsLogicalId: string = "DatabaseInstance",
 ): RdsSecretsIntegrationResult {
-  const masterPassword = rdsDesiredState["MasterUserPassword"];
+  const masterPassword = rdsDesiredState[CfnKey.MASTER_USER_PASSWORD];
 
   // If user explicitly provided a password, respect their choice
   if (
@@ -116,6 +120,6 @@ export function planNeedsRdsSecretsIntegration(
   return planResources.some(
     (r) =>
       r.resourceType === RESOURCE_TYPES.RDS_DB_INSTANCE &&
-      !r.desiredState["MasterUserPassword"],
+      !r.desiredState[CfnKey.MASTER_USER_PASSWORD],
   );
 }

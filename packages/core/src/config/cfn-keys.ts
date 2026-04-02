@@ -7,8 +7,11 @@
 export const CfnKey = {
   // ── Common / shared ─────────────────────────────────────────
   TAGS: "Tags",
+  TAG_KEY: "Key",
+  TAG_VALUE: "Value",
   NAME: "Name",
   DESCRIPTION: "Description",
+  STATUS: "Status",
 
   // ── S3 ──────────────────────────────────────────────────────
   BUCKET_NAME: "BucketName",
@@ -141,6 +144,8 @@ export const CfnKey = {
   VPC_ID: "VpcId",
   SG_INGRESS: "SecurityGroupIngress",
   SG_EGRESS: "SecurityGroupEgress",
+  FROM_PORT: "FromPort",
+  TO_PORT: "ToPort",
 
   // ── ELBv2 ───────────────────────────────────────────────────
   TYPE: "Type",
@@ -280,6 +285,23 @@ export const CfnKey = {
 
   // ── Generic plugin wizard-only ─────────────────────────────
   RESOURCE_NAME: "ResourceName",
+
+  // ── CloudFormation schema keys (lowercase in Registry SDK) ─
+  CFN_PROPERTIES: "properties",
+  CFN_REQUIRED: "required",
+  CFN_TYPE_NAME: "typeName",
+  CFN_DESCRIPTION: "description",
+  CFN_READ_ONLY_PROPERTIES: "readOnlyProperties",
+  CFN_PRIMARY_IDENTIFIER: "primaryIdentifier",
+  CFN_ADDITIONAL_PROPERTIES: "additionalProperties",
+  CFN_DEFINITIONS: "definitions",
+  CFN_CREATE_ONLY_PROPERTIES: "createOnlyProperties",
+  CFN_WRITE_ONLY_PROPERTIES: "writeOnlyProperties",
+
+  // ── Internal / plan-assembly keys ─────────────────────────
+  _LOGICAL_ID: "_logicalId",
+  LOGICAL_ID: "logicalId",
+  REGION: "region",
 } as const;
 
 export type CfnKeyType = (typeof CfnKey)[keyof typeof CfnKey];

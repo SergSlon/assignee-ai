@@ -9,6 +9,7 @@ import chalk from "chalk";
 import {
   DriftStatus,
   ChangeType,
+  CfnKey,
   type DriftResult,
   type DriftedField,
 } from "@assignee/core";
@@ -52,7 +53,7 @@ function detectProvenance(
   if (!actualState) return undefined;
 
   // Check for CloudFormation tags
-  const tags = actualState["Tags"] as
+  const tags = actualState[CfnKey.TAGS] as
     | Array<{ Key: string; Value: string }>
     | undefined;
   if (!Array.isArray(tags)) return undefined;

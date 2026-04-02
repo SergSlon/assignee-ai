@@ -25,11 +25,11 @@ function parseRuleString(
   if (protocol !== "all" && port !== "-1") {
     if (port!.includes("-")) {
       const [from, to] = port!.split("-");
-      result["FromPort"] = parseInt(from!, 10);
-      result["ToPort"] = parseInt(to!, 10);
+      result[CfnKey.FROM_PORT] = parseInt(from!, 10);
+      result[CfnKey.TO_PORT] = parseInt(to!, 10);
     } else {
-      result["FromPort"] = parseInt(port!, 10);
-      result["ToPort"] = parseInt(port!, 10);
+      result[CfnKey.FROM_PORT] = parseInt(port!, 10);
+      result[CfnKey.TO_PORT] = parseInt(port!, 10);
     }
   }
 
