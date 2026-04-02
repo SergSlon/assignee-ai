@@ -44,7 +44,11 @@ export {
 } from "./schema/drift.js";
 
 // Config — CloudFormation property key constants (Story 42.9)
-export { CfnKey, type CfnKeyType } from "./config/cfn-keys.js";
+export {
+  CfnKey,
+  type CfnKeyType,
+  EIP_AUTO_ALLOCATE,
+} from "./config/cfn-keys.js";
 
 // Config — AssigneeConfig schema and validation (Story 27.1)
 export type {

@@ -188,6 +188,36 @@ export const CfnKey = {
   ALLOCATION_ID: "AllocationId",
   MAX_DRAIN_DURATION: "MaxDrainDurationSeconds",
   DOMAIN: "Domain",
+
+  // ── EBS (nested under BlockDeviceMappings) ─────────────────
+  VOLUME_TYPE: "VolumeType",
+  VOLUME_SIZE: "VolumeSize",
+  ENCRYPTED: "Encrypted",
+
+  // ── Plugin-level keys (not direct CFN properties) ──────────
+  LOG_RETENTION_IN_DAYS: "LogRetentionInDays",
+
+  // ── Wizard-only fields (not real CFN properties) ────────────
+  // Used as plugin field names and cleaned up in plan-generator
+  // assembly functions before sending to CloudFormation.
+  KMS_MASTER_KEY_ID_S3: "KMSMasterKeyID",
+  ENABLE_LIFECYCLE: "EnableLifecycle",
+  LIFECYCLE_TRANSITION_DAYS: "LifecycleTransitionDays",
+  LIFECYCLE_EXPIRATION_DAYS: "LifecycleExpirationDays",
+  ENABLE_CORS: "EnableCors",
+  CORS_ALLOWED_ORIGINS: "CorsAllowedOrigins",
+  CORS_ALLOWED_METHODS: "CorsAllowedMethods",
+  ENABLE_REPLICATION: "EnableReplication",
+  REPLICATION_DESTINATION_BUCKET: "ReplicationDestinationBucket",
+  EBS_VOLUME_TYPE: "EbsVolumeType",
+  EBS_VOLUME_SIZE: "EbsVolumeSize",
+  EBS_ENCRYPTED: "EbsEncrypted",
 } as const;
 
 export type CfnKeyType = (typeof CfnKey)[keyof typeof CfnKey];
+
+/**
+ * Sentinel value used by plan_generator to defer EIP allocation to apply time.
+ * resource_provisioner replaces this with a real AllocationId at provision time.
+ */
+export const EIP_AUTO_ALLOCATE = "AUTO_ALLOCATE_EIP" as const;

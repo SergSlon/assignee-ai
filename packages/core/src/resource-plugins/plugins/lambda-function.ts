@@ -421,8 +421,8 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
     if (typeof functionName !== "string" || !functionName) return [];
 
     const retention =
-      typeof desiredState["LogRetentionInDays"] === "number"
-        ? desiredState["LogRetentionInDays"]
+      typeof desiredState[CfnKey.LOG_RETENTION_IN_DAYS] === "number"
+        ? desiredState[CfnKey.LOG_RETENTION_IN_DAYS]
         : 14;
 
     const sanitized = functionName.replace(/[^a-zA-Z0-9]/g, "");

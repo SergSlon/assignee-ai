@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ExecutionStatus } from "@assignee/core";
+import { ExecutionStatus, EIP_AUTO_ALLOCATE } from "@assignee/core";
 import { resourceProvisionerNode } from "./resource-provisioner.js";
 import {
   ProvisioningErrorKind,
@@ -753,7 +753,7 @@ describe("resourceProvisionerNode", () => {
         runId: "run-natgw-eip-001",
         desiredState: {
           SubnetId: "subnet-abc123",
-          AllocationId: "AUTO_ALLOCATE_EIP",
+          AllocationId: EIP_AUTO_ALLOCATE,
         },
         ...overrides,
       });

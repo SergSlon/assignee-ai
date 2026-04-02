@@ -10,6 +10,8 @@ import {
   ExecutionStatus,
   defaultPluginRegistry,
   RESOURCE_TYPES,
+  CfnKey,
+  EIP_AUTO_ALLOCATE,
   type ProvisionRecord,
   type FailureRecord,
 } from "@assignee/core";
@@ -87,10 +89,10 @@ function assembleS3Composites(
   options: Record<string, unknown>,
 ): void {
   // ── Encryption ──
-  if (options["BucketEncryption"] === true) {
-    const kmsKey = options["KMSMasterKeyID"];
+  if (options[CfnKey.BUCKET_ENCRYPTION] === true) {
+    const kmsKey = options[CfnKey.KMS_MASTER_KEY_ID_S3];
     const algorithm = kmsKey && String(kmsKey).trim() ? "aws:kms" : "AES256";
-    transformed["BucketEncryption"] = {
+    transformed[CfnKey.BUCKET_ENCRYPTION] = {
       ServerSideEncryptionConfiguration: [
         {
           ServerSideEncryptionByDefault: {
@@ -103,15 +105,16 @@ function assembleS3Composites(
       ],
     };
   } else {
-    delete transformed["BucketEncryption"];
+    delete transformed[CfnKey.BUCKET_ENCRYPTION];
   }
-  delete transformed["KMSMasterKeyID"];
+  delete transformed[CfnKey.KMS_MASTER_KEY_ID_S3];
 
   // ── Lifecycle ──
-  if (options["EnableLifecycle"] === true) {
+  if (options[CfnKey.ENABLE_LIFECYCLE] === true) {
     const transitionDays =
-      parseInt(String(options["LifecycleTransitionDays"] ?? "30"), 10) || 30;
-    const expirationDaysRaw = options["LifecycleExpirationDays"];
+      parseInt(String(options[CfnKey.LIFECYCLE_TRANSITION_DAYS] ?? "30"), 10) ||
+      30;
+    const expirationDaysRaw = options[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
     const expirationDays =
       expirationDaysRaw && String(expirationDaysRaw).trim()
         ? parseInt(String(expirationDaysRaw), 10)
@@ -133,23 +136,23 @@ function assembleS3Composites(
       }
       rule["ExpirationInDays"] = Math.max(expirationDays, transitionDays + 1);
     }
-    transformed["LifecycleConfiguration"] = { Rules: [rule] };
+    transformed[CfnKey.LIFECYCLE_CONFIGURATION] = { Rules: [rule] };
   }
-  delete transformed["EnableLifecycle"];
-  delete transformed["LifecycleTransitionDays"];
-  delete transformed["LifecycleExpirationDays"];
+  delete transformed[CfnKey.ENABLE_LIFECYCLE];
+  delete transformed[CfnKey.LIFECYCLE_TRANSITION_DAYS];
+  delete transformed[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
 
   // ── CORS ──
-  if (options["EnableCors"] === true) {
-    const origins = String(options["CorsAllowedOrigins"] ?? "*")
+  if (options[CfnKey.ENABLE_CORS] === true) {
+    const origins = String(options[CfnKey.CORS_ALLOWED_ORIGINS] ?? "*")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const methods = String(options["CorsAllowedMethods"] ?? "GET")
+    const methods = String(options[CfnKey.CORS_ALLOWED_METHODS] ?? "GET")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    transformed["CorsConfiguration"] = {
+    transformed[CfnKey.CORS_CONFIGURATION] = {
       CorsRules: [
         {
           AllowedHeaders: ["*"],
@@ -159,24 +162,24 @@ function assembleS3Composites(
       ],
     };
   }
-  delete transformed["EnableCors"];
-  delete transformed["CorsAllowedOrigins"];
-  delete transformed["CorsAllowedMethods"];
+  delete transformed[CfnKey.ENABLE_CORS];
+  delete transformed[CfnKey.CORS_ALLOWED_ORIGINS];
+  delete transformed[CfnKey.CORS_ALLOWED_METHODS];
 
   // ── Replication ──
   // Replication requires an IAM Role ARN. Since the wizard cannot auto-create
   // IAM roles, we skip ReplicationConfiguration entirely if no role is provided
   // and log a warning so the user knows why replication was not configured.
   if (
-    options["EnableReplication"] === true &&
-    options["ReplicationDestinationBucket"]
+    options[CfnKey.ENABLE_REPLICATION] === true &&
+    options[CfnKey.REPLICATION_DESTINATION_BUCKET]
   ) {
     process.stderr.write(
       "Warning: Cross-region replication requires an IAM Role ARN that cannot be auto-created in the wizard. Skipping ReplicationConfiguration. Create the role manually and add it to your template.\n",
     );
   }
-  delete transformed["EnableReplication"];
-  delete transformed["ReplicationDestinationBucket"];
+  delete transformed[CfnKey.ENABLE_REPLICATION];
+  delete transformed[CfnKey.REPLICATION_DESTINATION_BUCKET];
 }
 
 /**
@@ -189,9 +192,9 @@ export function assembleEc2Storage(
   transformed: Record<string, unknown>,
   options: Record<string, unknown>,
 ): void {
-  const volumeType = options["EbsVolumeType"];
-  const volumeSize = options["EbsVolumeSize"];
-  const encrypted = options["EbsEncrypted"];
+  const volumeType = options[CfnKey.EBS_VOLUME_TYPE];
+  const volumeSize = options[CfnKey.EBS_VOLUME_SIZE];
+  const encrypted = options[CfnKey.EBS_ENCRYPTED];
 
   // Only assemble if at least one EBS field was provided
   const hasAnyEbsField =
@@ -203,26 +206,26 @@ export function assembleEc2Storage(
     const ebs: Record<string, unknown> = {};
 
     if (volumeType && typeof volumeType === "string") {
-      ebs["VolumeType"] = volumeType;
+      ebs[CfnKey.VOLUME_TYPE] = volumeType;
     } else {
-      ebs["VolumeType"] = "gp3"; // default
+      ebs[CfnKey.VOLUME_TYPE] = "gp3"; // default
     }
 
     if (volumeSize && String(volumeSize).trim() !== "") {
       const size = parseInt(String(volumeSize), 10);
       if (!isNaN(size) && size >= 1) {
-        ebs["VolumeSize"] = size;
+        ebs[CfnKey.VOLUME_SIZE] = size;
       } else {
-        ebs["VolumeSize"] = 8; // default from plugin initialValue
+        ebs[CfnKey.VOLUME_SIZE] = 8; // default from plugin initialValue
       }
     } else {
-      ebs["VolumeSize"] = 8; // default when left blank
+      ebs[CfnKey.VOLUME_SIZE] = 8; // default when left blank
     }
 
     // Default to true (encrypted) unless explicitly set to false
-    ebs["Encrypted"] = encrypted !== false;
+    ebs[CfnKey.ENCRYPTED] = encrypted !== false;
 
-    transformed["BlockDeviceMappings"] = [
+    transformed[CfnKey.BLOCK_DEVICE_MAPPINGS] = [
       {
         DeviceName: "/dev/xvda",
         Ebs: ebs,
@@ -230,9 +233,9 @@ export function assembleEc2Storage(
     ];
   }
 
-  delete transformed["EbsVolumeType"];
-  delete transformed["EbsVolumeSize"];
-  delete transformed["EbsEncrypted"];
+  delete transformed[CfnKey.EBS_VOLUME_TYPE];
+  delete transformed[CfnKey.EBS_VOLUME_SIZE];
+  delete transformed[CfnKey.EBS_ENCRYPTED];
 }
 
 /**
@@ -322,12 +325,12 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       const shortId = state.runId.slice(0, 8);
       const resourceId = currentResource.resourceId;
       const NAME_FIELDS: Record<string, string> = {
-        [RESOURCE_TYPES.SQS_QUEUE]: "QueueName",
-        [RESOURCE_TYPES.DYNAMODB_TABLE]: "TableName",
-        [RESOURCE_TYPES.IAM_ROLE]: "RoleName",
-        [RESOURCE_TYPES.LAMBDA_FUNCTION]: "FunctionName",
-        [RESOURCE_TYPES.S3_BUCKET]: "BucketName",
-        [RESOURCE_TYPES.SNS_TOPIC]: "TopicName",
+        [RESOURCE_TYPES.SQS_QUEUE]: CfnKey.QUEUE_NAME,
+        [RESOURCE_TYPES.DYNAMODB_TABLE]: CfnKey.TABLE_NAME,
+        [RESOURCE_TYPES.IAM_ROLE]: CfnKey.ROLE_NAME,
+        [RESOURCE_TYPES.LAMBDA_FUNCTION]: CfnKey.FUNCTION_NAME,
+        [RESOURCE_TYPES.S3_BUCKET]: CfnKey.BUCKET_NAME,
+        [RESOURCE_TYPES.SNS_TOPIC]: CfnKey.TOPIC_NAME,
       };
       const nameField = NAME_FIELDS[currentResource.resourceType];
       if (nameField && !desiredState[nameField]) {
@@ -341,7 +344,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         const completed = state.completedResources;
         if (
           currentResource.resourceType === RESOURCE_TYPES.LAMBDA_FUNCTION &&
-          !desiredState["Role"]
+          !desiredState[CfnKey.ROLE]
         ) {
           const role = completed.find(
             (r) => r.resourceType === RESOURCE_TYPES.IAM_ROLE,
@@ -349,7 +352,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
           if (role?.resourceArn) {
             const roleName = String(role.resourceArn);
             if (roleName.startsWith("arn:")) {
-              desiredState["Role"] = roleName;
+              desiredState[CfnKey.ROLE] = roleName;
             } else {
               // CloudControl returns the role name — construct the full ARN
               try {
@@ -367,10 +370,10 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
                   : region.startsWith("cn-")
                     ? "aws-cn"
                     : "aws";
-                desiredState["Role"] =
+                desiredState[CfnKey.ROLE] =
                   `arn:${partition}:iam::${identity.Account}:role/${roleName}`;
               } catch {
-                desiredState["Role"] = roleName;
+                desiredState[CfnKey.ROLE] = roleName;
               }
             }
           }
@@ -664,13 +667,13 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     // Resolve OS name to real AMI ID for EC2 instances
     if (
       state.resourceType === RESOURCE_TYPES.EC2_INSTANCE &&
-      typeof desiredState["ImageId"] === "string" &&
-      !String(desiredState["ImageId"]).startsWith("ami-")
+      typeof desiredState[CfnKey.IMAGE_ID] === "string" &&
+      !String(desiredState[CfnKey.IMAGE_ID]).startsWith("ami-")
     ) {
-      const osName = String(desiredState["ImageId"]);
+      const osName = String(desiredState[CfnKey.IMAGE_ID]);
       const resolvedAmi = await resolveAmiFromOsName(osName);
       if (resolvedAmi) {
-        desiredState["ImageId"] = resolvedAmi;
+        desiredState[CfnKey.IMAGE_ID] = resolvedAmi;
       } else {
         // Cannot resolve OS name — fail the plan clearly
         return {
@@ -688,12 +691,12 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     // if the user runs `plan` but never `apply`, the EIP would leak ($3.60/month).
     if (
       state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
-      (desiredState["ConnectivityType"] === "public" ||
-        !desiredState["ConnectivityType"]) &&
-      (!desiredState["AllocationId"] ||
-        desiredState["AllocationId"] === "AUTO_ALLOCATE_EIP")
+      (desiredState[CfnKey.CONNECTIVITY_TYPE] === "public" ||
+        !desiredState[CfnKey.CONNECTIVITY_TYPE]) &&
+      (!desiredState[CfnKey.ALLOCATION_ID] ||
+        desiredState[CfnKey.ALLOCATION_ID] === EIP_AUTO_ALLOCATE)
     ) {
-      desiredState["AllocationId"] = "AUTO_ALLOCATE_EIP";
+      desiredState[CfnKey.ALLOCATION_ID] = EIP_AUTO_ALLOCATE;
     }
 
     // Story E2E.3: Generic required-field repairer — fills missing required fields
