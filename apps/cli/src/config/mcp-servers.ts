@@ -16,6 +16,7 @@
  * @see architecture.md — MCP Servers Catalog section
  */
 import { McpServerName, McpCommand } from "../constants/mcp.js";
+import { DEFAULT_AWS_REGION } from "@assignee/core";
 import { AWS_REGION } from "./constants.js";
 
 export interface McpServerConfig {
@@ -78,7 +79,7 @@ export function getMcpServerConfigs(): Record<string, McpServerConfig> {
         "botocore[crt]",
         "awslabs.aws-pricing-mcp-server@latest",
       ],
-      env: readerEnv("us-east-1"),
+      env: readerEnv(DEFAULT_AWS_REGION),
     },
     // Documentation server: targeted section-level access to AWS official docs via read_sections.
     // Complements the Knowledge server (which adds blogs/What's New/Builder Center/regional data).

@@ -6,9 +6,11 @@
  */
 
 import type { McpPricingFilter } from "./types.js";
+import type { PricingKind } from "./filter-constants.js";
 
 /** Classification of a pricing line item. */
-export type PricingLineItemKind = "fixed" | "usage_based";
+export type PricingLineItemKind =
+  (typeof PricingKind)[keyof typeof PricingKind];
 
 /**
  * A single billable component extracted from a resource's desiredState.

@@ -11,6 +11,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const logsPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.LOGS_LOG_GROUP,
@@ -27,22 +34,22 @@ export const logsPricingDecomposer: PricingDecomposer = {
       label: "Log ingestion",
       quantity: 0,
       unit: "GB",
-      serviceCode: "AmazonCloudWatch",
+      serviceCode: SC.CLOUDWATCH,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Data Payload",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.DATA_PAYLOAD,
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: isInfrequent
             ? "CW:LogInfrequentAccess-DataProcessing-Bytes"
             : "CW:DataProcessing-Bytes",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: isInfrequent ? "Infrequent Access class" : "Standard class",
       priceUnit: "/GB ingested",
     });
@@ -52,22 +59,22 @@ export const logsPricingDecomposer: PricingDecomposer = {
       label: "Log storage",
       quantity: 0,
       unit: "GB",
-      serviceCode: "AmazonCloudWatch",
+      serviceCode: SC.CLOUDWATCH,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Storage Snapshot",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.STORAGE_SNAPSHOT,
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: isInfrequent
             ? "CW:LogInfrequentAccess-DataStorage-Bytes"
             : "CW:DataStorage-Bytes",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "archived logs",
       priceUnit: "/GB-mo",
     });

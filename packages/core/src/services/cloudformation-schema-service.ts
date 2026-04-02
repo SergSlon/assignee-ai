@@ -15,6 +15,7 @@ import {
   DescribeTypeCommand,
 } from "@aws-sdk/client-cloudformation";
 import { AssigneeError } from "../errors.js";
+import { DEFAULT_AWS_REGION } from "../config/config-schema.js";
 
 /** Default cache directory under ~/.assignee */
 const DEFAULT_CACHE_DIR = path.join(
@@ -28,7 +29,7 @@ const DEFAULT_CACHE_DIR = path.join(
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Default AWS region */
-const DEFAULT_REGION = "us-east-1";
+const DEFAULT_REGION = DEFAULT_AWS_REGION;
 
 /** Configuration options for CloudFormationSchemaService */
 export interface CloudFormationSchemaServiceConfig {

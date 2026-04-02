@@ -11,6 +11,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const sqsPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.SQS_QUEUE,
@@ -27,15 +34,15 @@ export const sqsPricingDecomposer: PricingDecomposer = {
       label: "Requests",
       quantity: 0,
       unit: "requests",
-      serviceCode: "AmazonSQS",
+      serviceCode: SC.SQS,
       filters: [
         {
-          Field: "productFamily",
-          Value: isFifo ? "FIFO Queue" : "Queue",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: isFifo ? PF.FIFO_QUEUE : PF.QUEUE,
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: isFifo ? "FIFO queue" : "Standard queue",
       priceUnit: "/M reqs",
       scale: 1_000_000,

@@ -11,6 +11,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const snsPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.SNS_TOPIC,
@@ -27,15 +34,15 @@ export const snsPricingDecomposer: PricingDecomposer = {
       label: "Publishes",
       quantity: 0,
       unit: "requests",
-      serviceCode: "AmazonSNS",
+      serviceCode: SC.SNS,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Message Delivery",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.MESSAGE_DELIVERY,
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: isFifo ? "FIFO topic" : "Standard topic",
       priceUnit: "/M publishes",
       scale: 1_000_000,
@@ -46,20 +53,20 @@ export const snsPricingDecomposer: PricingDecomposer = {
       label: "HTTP notifications",
       quantity: 0,
       unit: "notifications",
-      serviceCode: "AmazonSNS",
+      serviceCode: SC.SNS,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Message Delivery",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.MESSAGE_DELIVERY,
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "DeliveryAttempts-HTTP",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "per 100K",
       priceUnit: "/100K notifs",
     });

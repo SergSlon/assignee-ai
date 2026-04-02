@@ -3,6 +3,12 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 /**
  * Pricing strategy for AWS::SecretsManager::Secret.
@@ -20,12 +26,12 @@ export const secretsManagerPricingStrategy: PricingStrategy = {
   },
   mcpConfig(): McpPricingConfig {
     return {
-      serviceCode: "AWSSecretsManager",
+      serviceCode: SC.SECRETS_MANAGER,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Secret",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.SECRET,
+          Type: M.TERM_MATCH,
         },
       ],
       unit: "/secret-month",

@@ -3,6 +3,12 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const ecrPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -10,12 +16,12 @@ export const ecrPricingStrategy: PricingStrategy = {
   },
   mcpConfig(): McpPricingConfig {
     return {
-      serviceCode: "AmazonECR",
+      serviceCode: SC.ECR,
       filters: [
         {
-          Field: "productFamily",
-          Value: "EC2 Container Registry",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.CONTAINER_REGISTRY,
+          Type: M.TERM_MATCH,
         },
       ],
       unit: "/GB-month",

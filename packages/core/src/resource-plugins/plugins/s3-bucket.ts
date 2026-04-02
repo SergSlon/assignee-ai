@@ -83,7 +83,8 @@ export const s3BucketPlugin: ResourcePlugin = {
         initialValue: true,
         hint: "Keeps all object versions. Increases storage cost. Best for data protection.",
       },
-      toCfn: (answer: unknown) => (answer ? { Status: "Enabled" } : undefined),
+      toCfn: (answer: unknown) =>
+        answer ? { Status: CfnKey.ENABLED } : undefined,
     },
     {
       name: CfnKey.TAGS,

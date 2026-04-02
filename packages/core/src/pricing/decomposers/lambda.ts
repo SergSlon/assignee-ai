@@ -11,6 +11,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const lambdaPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
@@ -24,12 +31,12 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
       label: "Requests",
       quantity: 0,
       unit: "requests",
-      serviceCode: "AWSLambda",
+      serviceCode: SC.LAMBDA,
       filters: [
-        { Field: "productFamily", Value: "Serverless", Type: "TERM_MATCH" },
-        { Field: "usagetype", Value: "Request", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.SERVERLESS, Type: M.TERM_MATCH },
+        { Field: F.USAGE_TYPE, Value: "Request", Type: M.TERM_MATCH },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "per million",
       priceUnit: "/M reqs",
       scale: 1_000_000,
@@ -40,12 +47,12 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
       label: "Duration",
       quantity: 0,
       unit: "GB-second",
-      serviceCode: "AWSLambda",
+      serviceCode: SC.LAMBDA,
       filters: [
-        { Field: "productFamily", Value: "Serverless", Type: "TERM_MATCH" },
-        { Field: "usagetype", Value: "Lambda-GB-Second", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.SERVERLESS, Type: M.TERM_MATCH },
+        { Field: F.USAGE_TYPE, Value: "Lambda-GB-Second", Type: M.TERM_MATCH },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: `${memoryMb} MB, 100ms avg`,
       priceUnit: "/GB-s",
     });
@@ -55,16 +62,16 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
       label: "CloudWatch Logs",
       quantity: 0,
       unit: "GB",
-      serviceCode: "AmazonCloudWatch",
+      serviceCode: SC.CLOUDWATCH,
       filters: [
-        { Field: "productFamily", Value: "Data Payload", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.DATA_PAYLOAD, Type: M.TERM_MATCH },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "DataProcessing-Bytes",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "ingested",
       priceUnit: "/GB ingested",
     });

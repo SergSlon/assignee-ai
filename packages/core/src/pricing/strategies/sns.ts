@@ -3,6 +3,12 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const snsPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
@@ -10,12 +16,12 @@ export const snsPricingStrategy: PricingStrategy = {
   },
   mcpConfig(): McpPricingConfig {
     return {
-      serviceCode: "AmazonSNS",
+      serviceCode: SC.SNS,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Message Delivery",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.MESSAGE_DELIVERY,
+          Type: M.TERM_MATCH,
         },
       ],
       unit: "/million publishes",

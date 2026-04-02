@@ -4,6 +4,12 @@ import type {
   McpPricingConfig,
 } from "../types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 /**
  * Pricing strategy for AWS::ApiGatewayV2::Api.
@@ -35,13 +41,13 @@ export const apiGatewayV2PricingStrategy: PricingStrategy = {
 
     if (protocol === "WEBSOCKET") {
       return {
-        serviceCode: "AmazonApiGateway",
+        serviceCode: SC.API_GATEWAY,
         filters: [
-          { Field: "productFamily", Value: "WebSocket", Type: "TERM_MATCH" },
+          { Field: F.PRODUCT_FAMILY, Value: PF.WEBSOCKET, Type: M.TERM_MATCH },
           {
-            Field: "usagetype",
+            Field: F.USAGE_TYPE,
             Value: "ApiGatewayMessage",
-            Type: "TERM_MATCH",
+            Type: M.TERM_MATCH,
           },
         ],
         unit: "/million messages",
@@ -51,13 +57,13 @@ export const apiGatewayV2PricingStrategy: PricingStrategy = {
 
     // HTTP API — per-request pricing
     return {
-      serviceCode: "AmazonApiGateway",
+      serviceCode: SC.API_GATEWAY,
       filters: [
-        { Field: "productFamily", Value: "API Calls", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.API_CALLS, Type: M.TERM_MATCH },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "ApiGatewayHttpRequest",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
       unit: "/million requests",

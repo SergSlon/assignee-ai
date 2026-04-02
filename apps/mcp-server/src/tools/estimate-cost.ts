@@ -14,6 +14,7 @@ import {
   classifyResourceType,
   estimateCostForResource,
 } from "../services/cost-estimator.js";
+import { DEFAULT_AWS_REGION } from "@assignee/core";
 
 export const estimateCostParams = {
   description: z
@@ -60,7 +61,7 @@ export function registerEstimateCost(server: McpServer): void {
                 resourceType: "unknown",
                 estimatedMonthlyCost: "N/A",
                 description,
-                region: region ?? "us-east-1",
+                region: region ?? DEFAULT_AWS_REGION,
                 note: "Resource type not recognized from description. Provide an explicit resourceType parameter for accurate estimates.",
               }),
             },
@@ -81,7 +82,7 @@ export function registerEstimateCost(server: McpServer): void {
             text: JSON.stringify({
               ...estimate,
               description,
-              region: region ?? "us-east-1",
+              region: region ?? DEFAULT_AWS_REGION,
               note: "This is a baseline estimate. Use plan_resource for more accurate cost quotes that consider full resource configuration.",
             }),
           },

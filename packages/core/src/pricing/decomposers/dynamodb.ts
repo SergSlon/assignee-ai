@@ -12,6 +12,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const dynamodbPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
@@ -35,16 +42,16 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
         label: "Read capacity",
         quantity: rcu,
         unit: "RCU",
-        serviceCode: "AmazonDynamoDB",
+        serviceCode: SC.DYNAMODB,
         filters: [
           {
-            Field: "productFamily",
-            Value: "Provisioned IOPS",
-            Type: "TERM_MATCH",
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.PROVISIONED_IOPS,
+            Type: M.TERM_MATCH,
           },
-          { Field: "group", Value: "DDB-ReadUnits", Type: "TERM_MATCH" },
+          { Field: F.GROUP, Value: "DDB-ReadUnits", Type: M.TERM_MATCH },
         ],
-        kind: "fixed",
+        kind: K.FIXED,
         description: `${rcu} RCUs`,
         priceUnit: "/RCU-hr",
       });
@@ -54,16 +61,16 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
         label: "Write capacity",
         quantity: wcu,
         unit: "WCU",
-        serviceCode: "AmazonDynamoDB",
+        serviceCode: SC.DYNAMODB,
         filters: [
           {
-            Field: "productFamily",
-            Value: "Provisioned IOPS",
-            Type: "TERM_MATCH",
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.PROVISIONED_IOPS,
+            Type: M.TERM_MATCH,
           },
-          { Field: "group", Value: "DDB-WriteUnits", Type: "TERM_MATCH" },
+          { Field: F.GROUP, Value: "DDB-WriteUnits", Type: M.TERM_MATCH },
         ],
-        kind: "fixed",
+        kind: K.FIXED,
         description: `${wcu} WCUs`,
         priceUnit: "/WCU-hr",
       });
@@ -73,16 +80,16 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
         label: "Read capacity",
         quantity: 0,
         unit: "requests",
-        serviceCode: "AmazonDynamoDB",
+        serviceCode: SC.DYNAMODB,
         filters: [
           {
-            Field: "productFamily",
-            Value: "Amazon DynamoDB PayPerRequest Throughput",
-            Type: "TERM_MATCH",
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.PAY_PER_REQUEST,
+            Type: M.TERM_MATCH,
           },
-          { Field: "group", Value: "DDB-ReadUnits", Type: "TERM_MATCH" },
+          { Field: F.GROUP, Value: "DDB-ReadUnits", Type: M.TERM_MATCH },
         ],
-        kind: "usage_based",
+        kind: K.USAGE_BASED,
         description: "per million read request units",
         priceUnit: "/M read reqs",
       });
@@ -92,16 +99,16 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
         label: "Write capacity",
         quantity: 0,
         unit: "requests",
-        serviceCode: "AmazonDynamoDB",
+        serviceCode: SC.DYNAMODB,
         filters: [
           {
-            Field: "productFamily",
-            Value: "Amazon DynamoDB PayPerRequest Throughput",
-            Type: "TERM_MATCH",
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.PAY_PER_REQUEST,
+            Type: M.TERM_MATCH,
           },
-          { Field: "group", Value: "DDB-WriteUnits", Type: "TERM_MATCH" },
+          { Field: F.GROUP, Value: "DDB-WriteUnits", Type: M.TERM_MATCH },
         ],
-        kind: "usage_based",
+        kind: K.USAGE_BASED,
         description: "per million write request units",
         priceUnit: "/M write reqs",
       });
@@ -112,20 +119,20 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
       label: "Storage",
       quantity: 0,
       unit: "GB",
-      serviceCode: "AmazonDynamoDB",
+      serviceCode: SC.DYNAMODB,
       filters: [
         {
-          Field: "productFamily",
-          Value: "Database Storage",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.DATABASE_STORAGE,
+          Type: M.TERM_MATCH,
         },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "TimedStorage-ByteHrs",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "per GB-month",
       priceUnit: "/GB-mo",
     });

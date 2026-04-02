@@ -55,6 +55,9 @@ export interface AssigneeConfig {
 
 // ── Default Values ───────────────────────────────────────────────────────
 
+/** Default AWS region when none is configured or provided via AWS_REGION env var. */
+export const DEFAULT_AWS_REGION = "us-east-1";
+
 /** Default values for all preference fields. */
 export const CONFIG_DEFAULTS: Required<ConfigPreferences> = {
   auto_fix: "ask",

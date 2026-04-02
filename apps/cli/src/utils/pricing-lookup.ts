@@ -9,6 +9,7 @@
 
 import type { StructuredTool } from "@langchain/core/tools";
 import type { AwsPricingResponse } from "@assignee/core";
+import { PricingMatchType } from "@assignee/core";
 import { ToolName } from "../constants/tools.js";
 import { AWS_REGION } from "../config/constants.js";
 import {
@@ -22,7 +23,11 @@ import { getCachedPrice, setCachedPrice } from "../services/price-cache.js";
 
 const LOOKUP_TIMEOUT_MS = 6000;
 
-type TermMatchFilter = { Field: string; Value: string; Type: "TERM_MATCH" };
+type TermMatchFilter = {
+  Field: string;
+  Value: string;
+  Type: typeof PricingMatchType.TERM_MATCH;
+};
 
 /** Extracts the lowest first-tier (beginRange=0) non-zero USD on-demand price. */
 function extractPrice(data: AwsPricingResponse): string | null {
@@ -94,32 +99,32 @@ export async function fetchEc2InstancePrices(
         {
           Field: PricingFilter.Field.PRODUCT_FAMILY,
           Value: PricingFilter.Value.EC2_PRODUCT_FAMILY,
-          Type: "TERM_MATCH",
+          Type: PricingMatchType.TERM_MATCH,
         },
         {
           Field: PricingFilter.Field.INSTANCE_TYPE,
           Value: instanceType,
-          Type: "TERM_MATCH",
+          Type: PricingMatchType.TERM_MATCH,
         },
         {
           Field: PricingFilter.Field.OPERATING_SYSTEM,
           Value: PricingFilter.Value.EC2_OS_LINUX,
-          Type: "TERM_MATCH",
+          Type: PricingMatchType.TERM_MATCH,
         },
         {
           Field: PricingFilter.Field.TENANCY,
           Value: PricingFilter.Value.EC2_TENANCY_SHARED,
-          Type: "TERM_MATCH",
+          Type: PricingMatchType.TERM_MATCH,
         },
         {
           Field: PricingFilter.Field.CAPACITY_STATUS,
           Value: PricingFilter.Value.EC2_CAPACITY_USED,
-          Type: "TERM_MATCH",
+          Type: PricingMatchType.TERM_MATCH,
         },
         {
           Field: PricingFilter.Field.PRE_INSTALLED_SW,
           Value: PricingFilter.Value.EC2_NO_PREINSTALL,
-          Type: "TERM_MATCH",
+          Type: PricingMatchType.TERM_MATCH,
         },
       ]);
       return [instanceType, price] as const;
@@ -169,17 +174,17 @@ export async function fetchRdsInstancePrices(
         {
           Field: PricingFilter.Field.PRODUCT_FAMILY,
           Value: PricingFilter.Value.RDS_PRODUCT_FAMILY,
-          Type: "TERM_MATCH",
+          Type: PricingMatchType.TERM_MATCH,
         },
         {
           Field: PricingFilter.Field.INSTANCE_TYPE,
           Value: instanceClass,
-          Type: "TERM_MATCH",
+          Type: PricingMatchType.TERM_MATCH,
         },
         {
           Field: PricingFilter.Field.DATABASE_ENGINE,
           Value: apiEngine,
-          Type: "TERM_MATCH",
+          Type: PricingMatchType.TERM_MATCH,
         },
       ];
 
@@ -187,7 +192,7 @@ export async function fetchRdsInstancePrices(
         filters.push({
           Field: PricingFilter.Field.DEPLOYMENT_OPTION,
           Value: PricingFilter.Value.RDS_SINGLE_AZ,
-          Type: "TERM_MATCH",
+          Type: PricingMatchType.TERM_MATCH,
         });
       }
 

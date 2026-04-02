@@ -8,4 +8,8 @@ export type {
   ConfigPreferences,
   ConfigNaming,
 } from "./config-schema.js";
-export { validateConfig, CONFIG_DEFAULTS } from "./config-schema.js";
+export {
+  validateConfig,
+  CONFIG_DEFAULTS,
+  DEFAULT_AWS_REGION,
+} from "./config-schema.js";

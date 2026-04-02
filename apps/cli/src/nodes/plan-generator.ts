@@ -122,7 +122,7 @@ function assembleS3Composites(
 
     const rule: Record<string, unknown> = {
       Id: "assignee-default-lifecycle",
-      Status: "Enabled",
+      Status: CfnKey.ENABLED,
       Transitions: [
         { StorageClass: "STANDARD_IA", TransitionInDays: transitionDays },
       ],

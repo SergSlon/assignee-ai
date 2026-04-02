@@ -13,6 +13,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const natGatewayPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
@@ -25,16 +32,16 @@ export const natGatewayPricingDecomposer: PricingDecomposer = {
       label: "Hourly rate",
       quantity: 1,
       unit: "gateway",
-      serviceCode: "AmazonEC2",
+      serviceCode: SC.EC2,
       filters: [
-        { Field: "productFamily", Value: "NAT Gateway", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.NAT_GATEWAY, Type: M.TERM_MATCH },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "NatGateway-Hours",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "fixed",
+      kind: K.FIXED,
       description:
         "NAT Gateway" +
         (_desiredState[CfnKey.CONNECTIVITY_TYPE]
@@ -48,16 +55,16 @@ export const natGatewayPricingDecomposer: PricingDecomposer = {
       label: "Data processing",
       quantity: 0,
       unit: "GB",
-      serviceCode: "AmazonEC2",
+      serviceCode: SC.EC2,
       filters: [
-        { Field: "productFamily", Value: "NAT Gateway", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.NAT_GATEWAY, Type: M.TERM_MATCH },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: "NatGateway-Bytes",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "per GB processed",
       priceUnit: "/GB",
     });

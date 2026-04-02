@@ -17,7 +17,11 @@ import { Command } from "commander";
 import * as clack from "@clack/prompts";
 import { stringify as yamlStringify } from "yaml";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { ConfigurationError, validateConfig } from "@assignee/core";
+import {
+  ConfigurationError,
+  DEFAULT_AWS_REGION,
+  validateConfig,
+} from "@assignee/core";
 import type { AssigneeConfig } from "@assignee/core";
 import {
   detectCredentials,
@@ -65,7 +69,7 @@ export async function promptGlobalConfig(): Promise<
   // ── Region ─────────────────────────────────────────────────────────
   const region = await clack.text({
     message: "Default AWS region",
-    placeholder: "us-east-1",
+    placeholder: DEFAULT_AWS_REGION,
   });
 
   if (clack.isCancel(region)) {
@@ -284,7 +288,7 @@ export const initCommand = new Command(CommandName.INIT)
     // ── Interactive prompts ───────────────────────────────────────────
     const region = await clack.text({
       message: "AWS Region",
-      initialValue: regionResult.region ?? "us-east-1",
+      initialValue: regionResult.region ?? DEFAULT_AWS_REGION,
     });
 
     if (clack.isCancel(region)) {

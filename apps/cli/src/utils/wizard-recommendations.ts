@@ -83,7 +83,8 @@ export const RECOMMENDATION_RULES: RecommendationRule[] = [
       if (versioning === undefined) return true;
       if (typeof versioning === "object" && versioning !== null) {
         return (
-          (versioning as Record<string, unknown>)[CfnKey.STATUS] !== "Enabled"
+          (versioning as Record<string, unknown>)[CfnKey.STATUS] !==
+          CfnKey.ENABLED
         );
       }
       return versioning !== true;

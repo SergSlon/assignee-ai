@@ -8,6 +8,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const ecrPricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.ECR_REPOSITORY,
@@ -20,15 +27,15 @@ export const ecrPricingDecomposer: PricingDecomposer = {
       label: "Storage",
       quantity: 0,
       unit: "GB",
-      serviceCode: "AmazonECR",
+      serviceCode: SC.ECR,
       filters: [
         {
-          Field: "productFamily",
-          Value: "EC2 Container Registry",
-          Type: "TERM_MATCH",
+          Field: F.PRODUCT_FAMILY,
+          Value: PF.CONTAINER_REGISTRY,
+          Type: M.TERM_MATCH,
         },
       ],
-      kind: "usage_based",
+      kind: K.USAGE_BASED,
       description: "image storage",
       priceUnit: "/GB-mo",
     });

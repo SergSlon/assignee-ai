@@ -11,6 +11,13 @@ import type {
   PricingDecomposer,
   PricingLineItem,
 } from "../decomposer-types.js";
+import {
+  PricingField as F,
+  PricingKind as K,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 export const elbv2PricingDecomposer: PricingDecomposer = {
   resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
@@ -27,15 +34,15 @@ export const elbv2PricingDecomposer: PricingDecomposer = {
         label: "Hourly",
         quantity: 1,
         unit: "NLB",
-        serviceCode: "ElasticLoadBalancing",
+        serviceCode: SC.ELB,
         filters: [
           {
-            Field: "productFamily",
-            Value: "Load Balancer-Network",
-            Type: "TERM_MATCH",
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.LOAD_BALANCER_NETWORK,
+            Type: M.TERM_MATCH,
           },
         ],
-        kind: "fixed",
+        kind: K.FIXED,
         description: "Network Load Balancer",
         priceUnit: "/hr",
       });
@@ -45,15 +52,15 @@ export const elbv2PricingDecomposer: PricingDecomposer = {
         label: "NLCU",
         quantity: 0,
         unit: "NLCU-hr",
-        serviceCode: "ElasticLoadBalancing",
+        serviceCode: SC.ELB,
         filters: [
           {
-            Field: "productFamily",
-            Value: "Load Balancer-Network",
-            Type: "TERM_MATCH",
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.LOAD_BALANCER_NETWORK,
+            Type: M.TERM_MATCH,
           },
         ],
-        kind: "usage_based",
+        kind: K.USAGE_BASED,
         description: "NLCU-hours",
         priceUnit: "/NLCU-hr",
       });
@@ -63,15 +70,15 @@ export const elbv2PricingDecomposer: PricingDecomposer = {
         label: "Hourly",
         quantity: 1,
         unit: "ALB",
-        serviceCode: "ElasticLoadBalancing",
+        serviceCode: SC.ELB,
         filters: [
           {
-            Field: "productFamily",
-            Value: "Load Balancer-Application",
-            Type: "TERM_MATCH",
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.LOAD_BALANCER_APPLICATION,
+            Type: M.TERM_MATCH,
           },
         ],
-        kind: "fixed",
+        kind: K.FIXED,
         description: "Application Load Balancer",
         priceUnit: "/hr",
       });
@@ -81,15 +88,15 @@ export const elbv2PricingDecomposer: PricingDecomposer = {
         label: "LCU",
         quantity: 0,
         unit: "LCU-hr",
-        serviceCode: "ElasticLoadBalancing",
+        serviceCode: SC.ELB,
         filters: [
           {
-            Field: "productFamily",
-            Value: "Load Balancer-Application",
-            Type: "TERM_MATCH",
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.LOAD_BALANCER_APPLICATION,
+            Type: M.TERM_MATCH,
           },
         ],
-        kind: "usage_based",
+        kind: K.USAGE_BASED,
         description: "LCU-hours",
         priceUnit: "/LCU-hr",
       });

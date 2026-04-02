@@ -3,7 +3,9 @@ import { SUPPORTED_TYPES_ARRAY } from "@assignee/core";
 export const BEDROCK_MODEL_ID =
   process.env["BEDROCK_MODEL_ID"] ?? "us.amazon.nova-lite-v1:0";
 
-export const AWS_REGION = process.env["AWS_REGION"] ?? "us-east-1";
+import { DEFAULT_AWS_REGION } from "@assignee/core";
+
+export const AWS_REGION = process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
 
 // packages/core is the single source of truth for supported resource types (Story 9.1)
 export { SUPPORTED_TYPES_ARRAY as SUPPORTED_TYPES } from "@assignee/core";

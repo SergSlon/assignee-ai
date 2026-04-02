@@ -3,6 +3,8 @@
  * Strategies are pure data — no I/O, no LangChain dependencies.
  */
 
+import type { PricingMatchType } from "./filter-constants.js";
+
 /** A single price dimension within an on-demand pricing term. */
 export interface AwsPriceDimension {
   beginRange?: string;
@@ -33,7 +35,7 @@ export interface AwsPricingResponse {
 export interface McpPricingFilter {
   Field: string;
   Value: string;
-  Type: "TERM_MATCH";
+  Type: typeof PricingMatchType.TERM_MATCH;
 }
 
 /**

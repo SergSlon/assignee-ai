@@ -4,6 +4,12 @@ import type {
   McpPricingConfig,
 } from "../types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
+import {
+  PricingField as F,
+  PricingMatchType as M,
+  PricingProductFamily as PF,
+  PricingServiceCode as SC,
+} from "../filter-constants.js";
 
 /**
  * Pricing strategy for AWS::Logs::LogGroup.
@@ -21,15 +27,15 @@ export const logsPricingStrategy: PricingStrategy = {
     const isInfrequentAccess = logGroupClass === "INFREQUENT_ACCESS";
 
     return {
-      serviceCode: "AmazonCloudWatch",
+      serviceCode: SC.CLOUDWATCH,
       filters: [
-        { Field: "productFamily", Value: "Logs", Type: "TERM_MATCH" },
+        { Field: F.PRODUCT_FAMILY, Value: PF.LOGS, Type: M.TERM_MATCH },
         {
-          Field: "usagetype",
+          Field: F.USAGE_TYPE,
           Value: isInfrequentAccess
             ? "CW:LogInfrequentAccess-DataProcessing-Bytes"
             : "CW:DataProcessing-Bytes",
-          Type: "TERM_MATCH",
+          Type: M.TERM_MATCH,
         },
       ],
       unit: "/GB ingested (5GB/mo free tier)",
