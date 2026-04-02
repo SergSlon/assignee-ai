@@ -24,6 +24,7 @@ import {
   DescribeOrderableDBInstanceOptionsCommand,
 } from "@aws-sdk/client-rds";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
+import { CfnKey } from "@assignee/core";
 import { withTimeout } from "./timeout.js";
 import { AWS_REGION } from "../config/constants.js";
 
@@ -500,7 +501,7 @@ export async function discoverKeyPairs(): Promise<DiscoveryOption[]> {
 export async function discoverRdsEngineVersions(
   context?: Record<string, unknown>,
 ): Promise<DiscoveryOption[]> {
-  const engine = (context?.["Engine"] as string) ?? "postgres";
+  const engine = (context?.[CfnKey.ENGINE] as string) ?? "postgres";
   const cacheKey = `discover-rds-engine-versions-${engine}`;
 
   return cachedDiscover(cacheKey, async () => {
@@ -556,7 +557,7 @@ export async function discoverRdsEngineVersions(
 export async function discoverRdsInstanceClasses(
   context?: Record<string, unknown>,
 ): Promise<DiscoveryOption[]> {
-  const engine = (context?.["Engine"] as string) ?? "postgres";
+  const engine = (context?.[CfnKey.ENGINE] as string) ?? "postgres";
   const cacheKey = `discover-rds-instance-classes-${engine}`;
 
   return cachedDiscover(cacheKey, async () => {

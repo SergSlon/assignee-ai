@@ -41,6 +41,8 @@
  * @see Story 31.2
  */
 
+import { CfnKey } from "../config/cfn-keys.js";
+
 /**
  * Fields that downstream pipeline nodes actually read from the schema.
  * Any field NOT in this list is either passed through for completeness
@@ -111,57 +113,66 @@ export function adaptDescribeTypeToMcpFormat(
 
   // --- Core fields (1:1 mapping with safe defaults) ---
 
-  const typeName = typeof raw["typeName"] === "string" ? raw["typeName"] : "";
+  const typeName =
+    typeof raw[CfnKey.CFN_TYPE_NAME] === "string"
+      ? (raw[CfnKey.CFN_TYPE_NAME] as string)
+      : "";
 
   const description =
-    typeof raw["description"] === "string" ? raw["description"] : "";
+    typeof raw[CfnKey.CFN_DESCRIPTION] === "string"
+      ? (raw[CfnKey.CFN_DESCRIPTION] as string)
+      : "";
 
   // `properties` — the heart of the schema; defaults to empty object
   const properties =
-    raw["properties"] != null &&
-    typeof raw["properties"] === "object" &&
-    !Array.isArray(raw["properties"])
-      ? (raw["properties"] as Record<string, unknown>)
+    raw[CfnKey.CFN_PROPERTIES] != null &&
+    typeof raw[CfnKey.CFN_PROPERTIES] === "object" &&
+    !Array.isArray(raw[CfnKey.CFN_PROPERTIES])
+      ? (raw[CfnKey.CFN_PROPERTIES] as Record<string, unknown>)
       : {};
 
   // `required` — array of required property names; absent in many resource types
-  const required = Array.isArray(raw["required"])
-    ? (raw["required"] as string[])
+  const required = Array.isArray(raw[CfnKey.CFN_REQUIRED])
+    ? (raw[CfnKey.CFN_REQUIRED] as string[])
     : [];
 
   // `readOnlyProperties` — JSONPointer paths (e.g. "/properties/Arn")
   // Both DescribeType and MCP use the same JSONPointer format; no conversion needed.
-  const readOnlyProperties = Array.isArray(raw["readOnlyProperties"])
-    ? (raw["readOnlyProperties"] as string[])
+  const readOnlyProperties = Array.isArray(raw[CfnKey.CFN_READ_ONLY_PROPERTIES])
+    ? (raw[CfnKey.CFN_READ_ONLY_PROPERTIES] as string[])
     : [];
 
   // `primaryIdentifier` — JSONPointer paths (e.g. "/properties/BucketName")
-  const primaryIdentifier = Array.isArray(raw["primaryIdentifier"])
-    ? (raw["primaryIdentifier"] as string[])
+  const primaryIdentifier = Array.isArray(raw[CfnKey.CFN_PRIMARY_IDENTIFIER])
+    ? (raw[CfnKey.CFN_PRIMARY_IDENTIFIER] as string[])
     : [];
 
   // `additionalProperties` — boolean, defaults to false (matches MCP behaviour)
   const additionalProperties =
-    typeof raw["additionalProperties"] === "boolean"
-      ? raw["additionalProperties"]
+    typeof raw[CfnKey.CFN_ADDITIONAL_PROPERTIES] === "boolean"
+      ? (raw[CfnKey.CFN_ADDITIONAL_PROPERTIES] as boolean)
       : false;
 
   // `definitions` — nested type definitions referenced via $ref
   const definitions =
-    raw["definitions"] != null &&
-    typeof raw["definitions"] === "object" &&
-    !Array.isArray(raw["definitions"])
-      ? (raw["definitions"] as Record<string, unknown>)
+    raw[CfnKey.CFN_DEFINITIONS] != null &&
+    typeof raw[CfnKey.CFN_DEFINITIONS] === "object" &&
+    !Array.isArray(raw[CfnKey.CFN_DEFINITIONS])
+      ? (raw[CfnKey.CFN_DEFINITIONS] as Record<string, unknown>)
       : undefined;
 
   // --- Optional fields passed through for completeness ---
 
-  const createOnlyProperties = Array.isArray(raw["createOnlyProperties"])
-    ? (raw["createOnlyProperties"] as string[])
+  const createOnlyProperties = Array.isArray(
+    raw[CfnKey.CFN_CREATE_ONLY_PROPERTIES],
+  )
+    ? (raw[CfnKey.CFN_CREATE_ONLY_PROPERTIES] as string[])
     : undefined;
 
-  const writeOnlyProperties = Array.isArray(raw["writeOnlyProperties"])
-    ? (raw["writeOnlyProperties"] as string[])
+  const writeOnlyProperties = Array.isArray(
+    raw[CfnKey.CFN_WRITE_ONLY_PROPERTIES],
+  )
+    ? (raw[CfnKey.CFN_WRITE_ONLY_PROPERTIES] as string[])
     : undefined;
 
   // Build the adapted schema, omitting undefined optional fields

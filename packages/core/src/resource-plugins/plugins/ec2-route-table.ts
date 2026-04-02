@@ -58,7 +58,8 @@ export const routeTablePlugin: ResourcePlugin = {
     "Public route tables need a 0.0.0.0/0 route targeting an InternetGateway; private route tables use a NatGateway",
   ],
   toCfn(desiredState: Record<string, unknown>): CfnOutput[] {
-    const logicalId = (desiredState["logicalId"] as string) ?? "RouteTable";
+    const logicalId =
+      (desiredState[CfnKey.LOGICAL_ID] as string) ?? "RouteTable";
     const subnetId = desiredState[CfnKey.SUBNET_ID] as string | undefined;
 
     const routeTableResource: CfnOutput = {

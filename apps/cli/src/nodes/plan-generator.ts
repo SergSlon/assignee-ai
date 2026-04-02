@@ -432,7 +432,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     const startedAt = Date.now();
     // CloudFormation Registry SDK returns lowercase "properties"; older MCP servers used "Properties"
     const schemaProperties =
-      (state.resourceSchema["properties"] as
+      (state.resourceSchema[CfnKey.CFN_PROPERTIES] as
         | Record<string, unknown>
         | undefined) ??
       (state.resourceSchema[CloudFormationKey.PROPERTIES] as
@@ -441,7 +441,7 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       {};
     const schemaKeys = Object.keys(schemaProperties);
     const requiredKeys: string[] =
-      (state.resourceSchema["required"] as string[] | undefined) ?? [];
+      (state.resourceSchema[CfnKey.CFN_REQUIRED] as string[] | undefined) ?? [];
 
     if (!process.env["BEDROCK_GUARDRAIL_ID"]) {
       log({

@@ -1,4 +1,5 @@
 import { RESOURCE_TYPES } from "../config/resource-types.js";
+import { CfnKey } from "../config/cfn-keys.js";
 import type { CfnOutput, ResourcePlugin } from "./types.js";
 
 /**
@@ -43,7 +44,7 @@ export function collectCompanionResources(
   const existingLogGroupNames = new Set<string>();
   for (const { plugin, desiredState } of planned) {
     if (plugin.resourceType === RESOURCE_TYPES.LOGS_LOG_GROUP) {
-      const name = desiredState["LogGroupName"];
+      const name = desiredState[CfnKey.LOG_GROUP_NAME];
       if (typeof name === "string") {
         existingLogGroupNames.add(name);
       }
@@ -60,7 +61,7 @@ export function collectCompanionResources(
     for (const companion of generated) {
       // Deduplicate LogGroups by LogGroupName.
       if (companion.type === RESOURCE_TYPES.LOGS_LOG_GROUP) {
-        const lgName = companion.properties["LogGroupName"];
+        const lgName = companion.properties[CfnKey.LOG_GROUP_NAME];
         if (typeof lgName === "string" && seenLogGroupNames.has(lgName)) {
           continue; // Already exists in plan or from another companion.
         }
