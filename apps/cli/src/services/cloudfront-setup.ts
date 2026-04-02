@@ -18,6 +18,7 @@ import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import {
+  ArnPrefix,
   IamAction,
   IamEffect,
   IamPolicy,
@@ -191,7 +192,7 @@ export function generateCloudFrontBucketPolicy(
           Service: AwsServicePrincipal.CLOUDFRONT,
         },
         Action: IamAction.S3_GET_OBJECT,
-        Resource: `arn:aws:s3:::${bucketName}/*`,
+        Resource: `${ArnPrefix.S3}::${bucketName}/*`,
         Condition: {
           StringEquals: {
             "aws:SourceArn": distributionArn,
