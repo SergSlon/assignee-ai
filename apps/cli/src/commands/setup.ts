@@ -221,8 +221,10 @@ export const setupCommand = new Command(CommandName.SETUP)
     // Always use fromIni() to read from the AWS credentials file/config.
     // Use --profile to specify a non-default profile.
     const { fromIni } = await import("@aws-sdk/credential-providers");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const clientConfig: Record<string, any> = {
+    const clientConfig: {
+      credentials: ReturnType<typeof fromIni>;
+      region?: string;
+    } = {
       credentials: fromIni({ profile: options.profile ?? "default" }),
     };
 

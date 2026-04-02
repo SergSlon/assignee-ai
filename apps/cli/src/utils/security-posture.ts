@@ -5,12 +5,14 @@
  */
 
 import type { StructuredTool } from "@langchain/core/tools";
+import { Severity } from "@assignee/best-practices";
 import { renderSecurityWarnings } from "./display.js";
 import { ToolName } from "../constants/tools.js";
 import { SECURITY_CHECK_TIMEOUT_MS } from "../config/constants.js";
 import { unwrapMcpText } from "./mcp.js";
 import { withTimeout } from "./timeout.js";
 import { log, LOG_ACTIONS } from "./logger.js";
+import type { SecurityFinding } from "../services/graph-state.js";
 
 export async function checkSecurityPosture(
   resourceArn: string,
@@ -31,8 +33,10 @@ export async function checkSecurityPosture(
     );
     if (result !== null) {
       const posture = JSON.parse(unwrapMcpText(result));
-      const criticalHighFindings = (posture.findings ?? []).filter(
-        (f: any) => f.severity === "CRITICAL" || f.severity === "HIGH",
+      const criticalHighFindings = (
+        (posture.findings ?? []) as SecurityFinding[]
+      ).filter(
+        (f) => f.severity === Severity.CRITICAL || f.severity === Severity.HIGH,
       );
       if (criticalHighFindings.length > 0) {
         renderSecurityWarnings(resourceArn, criticalHighFindings);
