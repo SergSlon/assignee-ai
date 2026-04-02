@@ -1,6 +1,14 @@
 export const BP_SEVERITY = ["CRITICAL", "HIGH", "MEDIUM", "INFO"] as const;
 export type BPSeverity = (typeof BP_SEVERITY)[number];
 
+/** Named severity level constants to eliminate magic strings in comparisons. */
+export const Severity = {
+  CRITICAL: "CRITICAL" as const,
+  HIGH: "HIGH" as const,
+  MEDIUM: "MEDIUM" as const,
+  INFO: "INFO" as const,
+};
+
 export const BP_CATEGORY = [
   "security",
   "cost",

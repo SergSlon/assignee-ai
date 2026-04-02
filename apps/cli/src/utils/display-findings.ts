@@ -4,12 +4,9 @@
  */
 
 import chalk from "chalk";
-import type { BPFinding } from "@assignee/best-practices";
+import { Severity, type BPFinding } from "@assignee/best-practices";
 import type { FreeTierNote } from "./free-tier.js";
-import {
-  resolveAction,
-  countFixable,
-} from "./fix-command-resolver.js";
+import { resolveAction, countFixable } from "./fix-command-resolver.js";
 
 /**
  * Formats all findings (blocking + non-blocking) for display in the plan box.
@@ -31,11 +28,13 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
 
   const blocking = items.filter((f) => f.blocking);
   const critical = items.filter(
-    (f) => !f.blocking && f.severity === "CRITICAL",
+    (f) => !f.blocking && f.severity === Severity.CRITICAL,
   );
-  const high = items.filter((f) => !f.blocking && f.severity === "HIGH");
-  const medium = items.filter((f) => !f.blocking && f.severity === "MEDIUM");
-  const info = items.filter((f) => !f.blocking && f.severity === "INFO");
+  const high = items.filter((f) => !f.blocking && f.severity === Severity.HIGH);
+  const medium = items.filter(
+    (f) => !f.blocking && f.severity === Severity.MEDIUM,
+  );
+  const info = items.filter((f) => !f.blocking && f.severity === Severity.INFO);
 
   const fixableCount = countFixable(items);
 
@@ -66,11 +65,11 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
         let severityLine: string;
         if (f.blocking)
           severityLine = chalk.red(`  BLOCK  ${f.title}${suffix}`);
-        else if (f.severity === "CRITICAL")
+        else if (f.severity === Severity.CRITICAL)
           severityLine = chalk.red.bold(`  CRIT   ${f.title}${suffix}`);
-        else if (f.severity === "HIGH")
+        else if (f.severity === Severity.HIGH)
           severityLine = chalk.red(`  HIGH   ${f.title}${suffix}`);
-        else if (f.severity === "MEDIUM")
+        else if (f.severity === Severity.MEDIUM)
           severityLine = chalk.yellow(`  WARN   ${f.title}${suffix}`);
         else severityLine = chalk.blue(`  INFO   ${f.title}${suffix}`);
 
@@ -104,16 +103,17 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
 
       let severityLine: string;
       if (f.blocking) severityLine = `  [BLOCK] ${f.title}${suffix}`;
-      else if (f.severity === "CRITICAL")
+      else if (f.severity === Severity.CRITICAL)
         severityLine = `  [CRITICAL] ${f.title}${suffix}`;
-      else if (f.severity === "HIGH")
+      else if (f.severity === Severity.HIGH)
         severityLine = `  [HIGH] ${f.title}${suffix}`;
-      else if (f.severity === "MEDIUM")
+      else if (f.severity === Severity.MEDIUM)
         severityLine = `  [MEDIUM] ${f.title}${suffix}`;
       else severityLine = `  [INFO] ${f.title}${suffix}`;
 
       const hintPrefix =
-        action.category === "auto-fixable" || action.category === "wizard-fixable"
+        action.category === "auto-fixable" ||
+        action.category === "wizard-fixable"
           ? "Fix"
           : action.category === "manual"
             ? "Manual"
@@ -130,7 +130,9 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
  * Formats a free tier note for display in the plan box.
  * Returns null if no note is present.
  */
-export function formatFreeTierNote(note: FreeTierNote | undefined): string | null {
+export function formatFreeTierNote(
+  note: FreeTierNote | undefined,
+): string | null {
   if (!note) return null;
   const icon = note.type === "always_free" ? "\u2713" : "\u2139";
   return `Free Tier:       ${icon} ${note.message}`;
@@ -150,7 +152,9 @@ export function formatMemoryHints(hints: string[] | undefined): string | null {
     const label = isWarning ? "Warning:         " : "Cost History:    ";
     const formatted = isWarning ? h.replace(/^\u26A0\uFE0F?\s*/, "") : h;
     return isTTY
-      ? (isWarning ? chalk.yellow(`${label}${formatted}`) : chalk.dim(`${label}${formatted}`))
+      ? isWarning
+        ? chalk.yellow(`${label}${formatted}`)
+        : chalk.dim(`${label}${formatted}`)
       : `${label}${formatted}`;
   });
   return lines.join("\n");

@@ -23,7 +23,7 @@ import {
   LIST_RESOURCE_TYPES,
   CCAPI_FALLBACK_TYPES,
 } from "@assignee/core";
-import { AWS_REGION } from "../config/constants.js";
+import { AWS_REGION, PROVISIONS_FILE } from "../config/constants.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import { fetchBillingData } from "./billing.js";
@@ -183,7 +183,7 @@ function loadProvisionData(): ProvisionLookup {
     os.homedir(),
     ".assignee",
     "memory",
-    "provisions.json",
+    PROVISIONS_FILE,
   );
 
   try {

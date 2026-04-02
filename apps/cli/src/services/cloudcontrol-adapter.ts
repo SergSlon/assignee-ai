@@ -24,6 +24,7 @@ import {
   type UpdateResourceResult,
   type GetRequestStatusResult,
 } from "./provisioning-port.js";
+import { AwsErrorName } from "../constants/aws-errors.js";
 
 function classifyError(err: unknown): ProvisioningPortError {
   if (err instanceof ResourceNotFoundException) {
@@ -50,7 +51,8 @@ function classifyError(err: unknown): ProvisioningPortError {
   // detect it via the error name property.
   if (
     err instanceof Error &&
-    (err.name === "AccessDeniedException" || err.name === "AccessDenied")
+    (err.name === AwsErrorName.ACCESS_DENIED ||
+      err.name === AwsErrorName.ACCESS_DENIED_SHORT)
   ) {
     return { kind: ProvisioningErrorKind.ACCESS_DENIED, message: err.message };
   }

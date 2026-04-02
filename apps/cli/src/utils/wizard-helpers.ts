@@ -13,8 +13,10 @@ import {
   UserCancelledError,
   CfnKey,
   ResourceDefault,
+  QuestionTypeName,
 } from "@assignee/core";
-import { PRICING_LOOKUP_TIMEOUT_MS } from "../config/constants.js";
+import { PRICING_LOOKUP_TIMEOUT_MS, UserMessage } from "../config/constants.js";
+import { DiscoveryCacheKey } from "./aws-resource-discovery.js";
 import type {
   ResourceField,
   ResourcePlugin,
@@ -141,7 +143,10 @@ export function populateDefaultOptions(
 export function enrichFieldLabels(fields: ResourceField[]): ResourceField[] {
   if (!process.stdout.isTTY) return fields;
   return fields.map((field) => {
-    if (field.question.type === "categorySelect" && field.question.categories) {
+    if (
+      field.question.type === QuestionTypeName.CATEGORY_SELECT &&
+      field.question.categories
+    ) {
       return {
         ...field,
         question: {
@@ -213,7 +218,7 @@ export function applyCategorySmartFilter(
 
   return fields.map((field) => {
     if (
-      field.question.type !== "categorySelect" ||
+      field.question.type !== QuestionTypeName.CATEGORY_SELECT ||
       !field.question.categories
     ) {
       return field;
@@ -324,23 +329,23 @@ const fetcherMap: Record<
     context?: Record<string, unknown>,
   ) => Promise<Array<{ value: string; label: string }>>
 > = {
-  "discover-amis": discoverAmis,
-  "discover-subnets": discoverSubnets,
-  "discover-security-groups": discoverSecurityGroups,
-  "discover-key-pairs": discoverKeyPairs,
-  "discover-rds-engine-versions": discoverRdsEngineVersions,
-  "discover-rds-instance-classes": discoverRdsInstanceClasses,
+  [DiscoveryCacheKey.AMIS]: discoverAmis,
+  [DiscoveryCacheKey.SUBNETS]: discoverSubnets,
+  [DiscoveryCacheKey.SECURITY_GROUPS]: discoverSecurityGroups,
+  [DiscoveryCacheKey.KEY_PAIRS]: discoverKeyPairs,
+  [DiscoveryCacheKey.RDS_ENGINE_VERSIONS]: discoverRdsEngineVersions,
+  [DiscoveryCacheKey.RDS_INSTANCE_CLASSES]: discoverRdsInstanceClasses,
 };
 
 /** Human-readable spinner messages per fetcher ID. */
 const fetcherSpinnerMessages: Record<string, string> = {
-  "discover-amis": "Discovering available AMIs...",
-  "discover-subnets": "Discovering available subnets...",
-  "discover-security-groups": "Discovering security groups...",
-  "discover-key-pairs": "Discovering key pairs...",
-  "discover-rds-engine-versions":
+  [DiscoveryCacheKey.AMIS]: "Discovering available AMIs...",
+  [DiscoveryCacheKey.SUBNETS]: "Discovering available subnets...",
+  [DiscoveryCacheKey.SECURITY_GROUPS]: "Discovering security groups...",
+  [DiscoveryCacheKey.KEY_PAIRS]: "Discovering key pairs...",
+  [DiscoveryCacheKey.RDS_ENGINE_VERSIONS]:
     "Fetching available database engine versions from AWS...",
-  "discover-rds-instance-classes":
+  [DiscoveryCacheKey.RDS_INSTANCE_CLASSES]:
     "Fetching available database instance classes from AWS...",
 };
 
@@ -484,13 +489,14 @@ export async function fetchPricesForResource(
     const field = plugin.commonFields.find(
       (f) =>
         f.name === ResourceFieldName.INSTANCE_TYPE &&
-        (f.question.type === "enum" || f.question.type === "categorySelect"),
+        (f.question.type === "enum" ||
+          f.question.type === QuestionTypeName.CATEGORY_SELECT),
     );
     if (field) {
       // Collect all instance type values from either flat options or category groups
       const allValues: string[] = [];
       if (
-        field.question.type === "categorySelect" &&
+        field.question.type === QuestionTypeName.CATEGORY_SELECT &&
         field.question.categories
       ) {
         for (const cat of field.question.categories) {
@@ -558,7 +564,10 @@ export function injectPriceLabels(
   return fields.map((field) => {
     if (field.name !== fieldName) return field;
 
-    if (field.question.type === "categorySelect" && field.question.categories) {
+    if (
+      field.question.type === QuestionTypeName.CATEGORY_SELECT &&
+      field.question.categories
+    ) {
       return {
         ...field,
         question: {
@@ -804,7 +813,8 @@ export async function promptWithHelp(
     if (isHelpRequest) {
       const isEnumOrMulti =
         field.question.type === "enum" || field.question.type === "multi";
-      const isCategorySelect = field.question.type === "categorySelect";
+      const isCategorySelect =
+        field.question.type === QuestionTypeName.CATEGORY_SELECT;
 
       if (isEnumOrMulti && field.question.options && llmClient) {
         cachedHint = await renderTradeoffHelp(
@@ -846,7 +856,7 @@ export async function promptWithHelp(
         placeholder: "e.g., 'GPU for ML training' or enter exact value",
       });
       if (clack.isCancel(description)) {
-        clack.cancel("Wizard cancelled.");
+        clack.cancel(UserMessage.WIZARD_CANCELLED);
         throw new UserCancelledError();
       }
       const userDesc =
@@ -890,7 +900,7 @@ export async function promptWithHelp(
             ],
           });
           if (clack.isCancel(amiChoice)) {
-            clack.cancel("Wizard cancelled.");
+            clack.cancel(UserMessage.WIZARD_CANCELLED);
             throw new UserCancelledError();
           }
           if (amiChoice !== "__none__") {
@@ -955,7 +965,7 @@ export async function promptWithHelp(
               initialValue: true,
             });
             if (clack.isCancel(confirm)) {
-              clack.cancel("Wizard cancelled.");
+              clack.cancel(UserMessage.WIZARD_CANCELLED);
               throw new UserCancelledError();
             }
             if (confirm) return suggested;
@@ -973,7 +983,7 @@ export async function promptWithHelp(
         placeholder: "e.g., t3.medium, p3.2xlarge",
       });
       if (clack.isCancel(manualValue)) {
-        clack.cancel("Wizard cancelled.");
+        clack.cancel(UserMessage.WIZARD_CANCELLED);
         throw new UserCancelledError();
       }
       const val = typeof manualValue === "string" ? manualValue.trim() : "";

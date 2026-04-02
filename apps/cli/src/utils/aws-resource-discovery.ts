@@ -26,7 +26,7 @@ import {
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { CfnKey, ResourceDefault } from "@assignee/core";
 import { withTimeout } from "./timeout.js";
-import { AWS_REGION } from "../config/constants.js";
+import { AWS_REGION, PromiseStatus } from "../config/constants.js";
 
 const DISCOVERY_TIMEOUT_MS = 6000;
 
@@ -48,15 +48,26 @@ interface CacheEntry {
 /** Default TTL: 5 minutes. */
 const DEFAULT_TTL_MS = 300_000;
 
+/** Named constants for discovery cache keys. */
+export const DiscoveryCacheKey = {
+  AMIS: "discover-amis",
+  SUBNETS: "discover-subnets",
+  KEY_PAIRS: "discover-key-pairs",
+  SECURITY_GROUPS: "discover-security-groups",
+  RDS_ENGINE_VERSIONS: "discover-rds-engine-versions",
+  RDS_INSTANCE_CLASSES: "discover-rds-instance-classes",
+  LAMBDA_RUNTIMES: "discover-lambda-runtimes",
+} as const;
+
 /** Per-fetcher TTL overrides (milliseconds). */
 const FETCHER_TTL: Record<string, number> = {
-  "discover-amis": 120_000, // 2 min
-  "discover-subnets": 120_000, // 2 min
-  "discover-key-pairs": 120_000, // 2 min
-  "discover-security-groups": 120_000, // 2 min
-  "discover-rds-engine-versions": 300_000, // 5 min
-  "discover-rds-instance-classes": 300_000, // 5 min
-  "discover-lambda-runtimes": 900_000, // 15 min
+  [DiscoveryCacheKey.AMIS]: 120_000, // 2 min
+  [DiscoveryCacheKey.SUBNETS]: 120_000, // 2 min
+  [DiscoveryCacheKey.KEY_PAIRS]: 120_000, // 2 min
+  [DiscoveryCacheKey.SECURITY_GROUPS]: 120_000, // 2 min
+  [DiscoveryCacheKey.RDS_ENGINE_VERSIONS]: 300_000, // 5 min
+  [DiscoveryCacheKey.RDS_INSTANCE_CLASSES]: 300_000, // 5 min
+  [DiscoveryCacheKey.LAMBDA_RUNTIMES]: 900_000, // 15 min
 };
 
 const discoveryCache = new Map<string, CacheEntry>();
@@ -330,7 +341,7 @@ export async function discoverInstanceTypes(): Promise<InstanceTypeCategory[]> {
  * Fetches Amazon Linux 2023, Ubuntu 22.04, Ubuntu 24.04, Windows Server 2022.
  */
 export async function discoverAmis(): Promise<DiscoveryOption[]> {
-  return cachedDiscover("discover-amis", async () => {
+  return cachedDiscover(DiscoveryCacheKey.AMIS, async () => {
     const ssm = createSsmClient();
     const params: Array<{ path: string; label: string }> = [
       {
@@ -365,7 +376,7 @@ export async function discoverAmis(): Promise<DiscoveryOption[]> {
 
     const options: DiscoveryOption[] = [];
     for (const r of results) {
-      if (r.status === "fulfilled" && r.value) {
+      if (r.status === PromiseStatus.FULFILLED && r.value) {
         options.push(r.value);
       }
     }
@@ -416,7 +427,7 @@ export async function resolveAmiFromOsName(
  * Shows Name tag, CIDR block, and availability zone.
  */
 export async function discoverSubnets(): Promise<DiscoveryOption[]> {
-  return cachedDiscover("discover-subnets", async () => {
+  return cachedDiscover(DiscoveryCacheKey.SUBNETS, async () => {
     const ec2 = createEc2Client();
     const result = await withTimeout(
       ec2.send(new DescribeSubnetsCommand({})),
@@ -439,7 +450,7 @@ export async function discoverSubnets(): Promise<DiscoveryOption[]> {
  * Shows group name and description.
  */
 export async function discoverSecurityGroups(): Promise<DiscoveryOption[]> {
-  return cachedDiscover("discover-security-groups", async () => {
+  return cachedDiscover(DiscoveryCacheKey.SECURITY_GROUPS, async () => {
     const ec2 = createEc2Client();
     const result = await withTimeout(
       ec2.send(new DescribeSecurityGroupsCommand({})),
@@ -467,7 +478,7 @@ export async function discoverSecurityGroups(): Promise<DiscoveryOption[]> {
  * Prepends a "None (SSM access only)" option.
  */
 export async function discoverKeyPairs(): Promise<DiscoveryOption[]> {
-  return cachedDiscover("discover-key-pairs", async () => {
+  return cachedDiscover(DiscoveryCacheKey.KEY_PAIRS, async () => {
     const ec2 = createEc2Client();
     const result = await withTimeout(
       ec2.send(new DescribeKeyPairsCommand({})),
@@ -503,7 +514,7 @@ export async function discoverRdsEngineVersions(
 ): Promise<DiscoveryOption[]> {
   const engine =
     (context?.[CfnKey.ENGINE] as string) ?? ResourceDefault.RDS_ENGINE_POSTGRES;
-  const cacheKey = `discover-rds-engine-versions-${engine}`;
+  const cacheKey = `${DiscoveryCacheKey.RDS_ENGINE_VERSIONS}-${engine}`;
 
   return cachedDiscover(cacheKey, async () => {
     const rds = createRdsClient();
@@ -560,7 +571,7 @@ export async function discoverRdsInstanceClasses(
 ): Promise<DiscoveryOption[]> {
   const engine =
     (context?.[CfnKey.ENGINE] as string) ?? ResourceDefault.RDS_ENGINE_POSTGRES;
-  const cacheKey = `discover-rds-instance-classes-${engine}`;
+  const cacheKey = `${DiscoveryCacheKey.RDS_INSTANCE_CLASSES}-${engine}`;
 
   return cachedDiscover(cacheKey, async () => {
     const rds = createRdsClient();

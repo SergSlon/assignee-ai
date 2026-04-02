@@ -126,6 +126,7 @@ export type {
   OptionMetadata,
   CfnOutput,
 } from "./resource-plugins/types.js";
+export { QuestionTypeName } from "./resource-plugins/types.js";
 export type {
   CollectCompanionOptions,
   PlannedResource,

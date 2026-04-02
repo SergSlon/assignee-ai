@@ -41,7 +41,8 @@ import {
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import { mergeEnvFile } from "../utils/env-writer.js";
-import { AWS_REGION } from "../config/constants.js";
+import { AWS_REGION, PromiseStatus } from "../config/constants.js";
+import { AwsErrorName } from "../constants/aws-errors.js";
 
 /** Maps role keys to their policy generators, user names, and env var prefixes. */
 const ROLES = [
@@ -105,7 +106,10 @@ async function ensurePolicy(
     );
     return result.Policy!.Arn!;
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === "EntityAlreadyExistsException") {
+    if (
+      err instanceof Error &&
+      err.name === AwsErrorName.ENTITY_ALREADY_EXISTS
+    ) {
       // Policy exists — create a new version (idempotent update)
       // First check version count (AWS limit: 5)
       const versions = await iam.send(
@@ -152,7 +156,7 @@ async function ensureUser(iam: IAMClient, userName: string): Promise<boolean> {
     await iam.send(new GetUserCommand({ UserName: userName }));
     return false; // User already exists
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === "NoSuchEntityException") {
+    if (err instanceof Error && err.name === AwsErrorName.NO_SUCH_ENTITY) {
       await iam.send(
         new CreateUserCommand({
           UserName: userName,
@@ -382,10 +386,10 @@ export const setupCommand = new Command(CommandName.SETUP)
         role: (typeof ROLES)[number];
         isNew: boolean;
         roleEnv: Record<string, string>;
-      }> => r.status === "fulfilled",
+      }> => r.status === PromiseStatus.FULFILLED,
     );
     const failed = settled.filter(
-      (r): r is PromiseRejectedResult => r.status === "rejected",
+      (r): r is PromiseRejectedResult => r.status === PromiseStatus.REJECTED,
     );
 
     sp.stop(
@@ -428,7 +432,7 @@ export const setupCommand = new Command(CommandName.SETUP)
         `Role ${BEDROCK_LOGGING_ROLE_NAME} — verified (already exists)`,
       );
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === "NoSuchEntityException") {
+      if (err instanceof Error && err.name === AwsErrorName.NO_SUCH_ENTITY) {
         await iam.send(
           new CreateRoleCommand({
             RoleName: BEDROCK_LOGGING_ROLE_NAME,
@@ -497,7 +501,7 @@ export const setupCommand = new Command(CommandName.SETUP)
       } catch (err: unknown) {
         if (
           err instanceof Error &&
-          err.name === "ResourceAlreadyExistsException"
+          err.name === AwsErrorName.RESOURCE_ALREADY_EXISTS
         ) {
           clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — verified`);
         } else {

@@ -14,6 +14,7 @@
 import { Command } from "commander";
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { AssigneeError } from "@assignee/core";
+import { AwsErrorName } from "../constants/aws-errors.js";
 import { fetchManagedResources } from "../services/list-resources.js";
 import {
   renderResourceTable,
@@ -44,7 +45,7 @@ export const listCommand = new Command(CommandName.LIST)
       const err = error instanceof Error ? error : new Error(String(error));
       const errName = (error as { name?: string }).name ?? "";
 
-      if (errName === "AccessDeniedException") {
+      if (errName === AwsErrorName.ACCESS_DENIED) {
         renderError(
           "Cannot list managed resources.",
           "Ask your admin to grant the `ResourceGroupsTaggingAPI:GetResources` action.",

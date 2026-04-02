@@ -39,6 +39,15 @@ vi.mock("../utils/aws-resource-discovery.js", () => ({
   discoverRdsInstanceClasses: vi.fn().mockResolvedValue([]),
   resolveAmiFromOsName: vi.fn().mockResolvedValue(null),
   clearDiscoveryCache: vi.fn(),
+  DiscoveryCacheKey: {
+    AMIS: "discover-amis",
+    SUBNETS: "discover-subnets",
+    KEY_PAIRS: "discover-key-pairs",
+    SECURITY_GROUPS: "discover-security-groups",
+    RDS_ENGINE_VERSIONS: "discover-rds-engine-versions",
+    RDS_INSTANCE_CLASSES: "discover-rds-instance-classes",
+    LAMBDA_RUNTIMES: "discover-lambda-runtimes",
+  },
 }));
 
 // Story 27.4: Mock config loaders — return undefined by default (no config)

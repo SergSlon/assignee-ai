@@ -10,4 +10,4 @@ export type {
   BPCheckType,
   Trigger,
 } from "./types.js";
-export { BP_SEVERITY, BP_CATEGORY, BP_CHECK_TYPE } from "./types.js";
+export { BP_SEVERITY, BP_CATEGORY, BP_CHECK_TYPE, Severity } from "./types.js";

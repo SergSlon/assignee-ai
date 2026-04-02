@@ -62,6 +62,29 @@ export const MEMORY_MAX_FAILURES = 100;
 /** Maximum number of pattern records to keep in memory rotation. */
 export const MEMORY_MAX_PATTERNS = 100;
 
+// ── Memory File Names ───────────────────────────────────────────────────────
+
+/** File name for the provision log in the memory directory. */
+export const PROVISIONS_FILE = "provisions.json";
+
+/** File name for the failure log in the memory directory. */
+export const FAILURES_FILE = "failures.json";
+
+// ── Promise Status Constants ────────────────────────────────────────────────
+
+/** Named constants for Promise.allSettled status values. */
+export const PromiseStatus = {
+  FULFILLED: "fulfilled",
+  REJECTED: "rejected",
+} as const;
+
+// ── User-Facing Cancellation Messages ───────────────────────────────────────
+
+export const UserMessage = {
+  INIT_CANCELLED: "Initialization cancelled.",
+  WIZARD_CANCELLED: "Wizard cancelled.",
+} as const;
+
 // ── Destroy Polling Constants ────────────────────────────────────────────────
 
 /** Maximum number of polls before giving up on delete status. */

@@ -11,6 +11,7 @@
 import {
   loadBestPractices,
   evaluateTriggers,
+  Severity,
   type BestPractice,
   type BPFinding,
   type EvalContext,
@@ -74,8 +75,9 @@ export async function bpEvaluatorNode(
       extras: {
         resourceType: state.resourceType,
         findingsCount: findings.length,
-        criticals: findings.filter((f) => f.severity === "CRITICAL").length,
-        highs: findings.filter((f) => f.severity === "HIGH").length,
+        criticals: findings.filter((f) => f.severity === Severity.CRITICAL)
+          .length,
+        highs: findings.filter((f) => f.severity === Severity.HIGH).length,
       },
     });
   }

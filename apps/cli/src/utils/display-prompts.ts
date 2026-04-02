@@ -5,7 +5,11 @@
  */
 
 import * as clack from "@clack/prompts";
-import { AssigneeError, UserCancelledError } from "@assignee/core";
+import {
+  AssigneeError,
+  UserCancelledError,
+  QuestionTypeName,
+} from "@assignee/core";
 import type {
   ResourceField,
   ResolvedFieldConfig,
@@ -13,6 +17,7 @@ import type {
 } from "@assignee/core";
 import type { RenderableState } from "./display.js";
 import { CostEstimate } from "../constants/pricing.js";
+import { UserMessage } from "../config/constants.js";
 
 /** Wizard prompt sentinel values — single source of truth. */
 export const BACK_SENTINEL = "__back__" as const;
@@ -254,7 +259,7 @@ export async function renderOptionPrompt(
           placeholder: "value1, value2",
         });
         if (clack.isCancel(customInput)) {
-          clack.cancel("Wizard cancelled.");
+          clack.cancel(UserMessage.WIZARD_CANCELLED);
           throw new UserCancelledError();
         }
         if (typeof customInput === "string" && customInput.trim()) {
@@ -268,7 +273,7 @@ export async function renderOptionPrompt(
       }
       break;
     }
-    case "categorySelect": {
+    case QuestionTypeName.CATEGORY_SELECT: {
       // Story 18.12: Two-step category → size selection for grouped options.
       const categories = question.categories;
       if (!categories || categories.length === 0) {
@@ -322,7 +327,7 @@ export async function renderOptionPrompt(
             })) as string | symbol;
 
             if (clack.isCancel(categoryResult)) {
-              clack.cancel("Wizard cancelled.");
+              clack.cancel(UserMessage.WIZARD_CANCELLED);
               throw new UserCancelledError();
             }
 
@@ -394,7 +399,7 @@ export async function renderOptionPrompt(
         });
 
         if (clack.isCancel(result)) {
-          clack.cancel("Wizard cancelled.");
+          clack.cancel(UserMessage.WIZARD_CANCELLED);
           throw new UserCancelledError();
         }
 
@@ -419,7 +424,7 @@ export async function renderOptionPrompt(
   }
 
   if (clack.isCancel(result)) {
-    clack.cancel("Wizard cancelled.");
+    clack.cancel(UserMessage.WIZARD_CANCELLED);
     throw new UserCancelledError();
   }
 

@@ -32,6 +32,7 @@ import { getFreeTierNote, loadAccountCreatedDate } from "../utils/free-tier.js";
 import { getRequiredIamActions } from "@assignee/core";
 import { getCachedPrice, setCachedPrice } from "../services/price-cache.js";
 import type { AgentState } from "../services/graph.js";
+import { PromiseStatus } from "../config/constants.js";
 
 export async function preflightGuardNode(
   state: AgentState,
@@ -216,12 +217,12 @@ export async function preflightGuardNode(
   ]);
 
   const costEstimate =
-    pricingSettled.status === "fulfilled"
+    pricingSettled.status === PromiseStatus.FULFILLED
       ? pricingSettled.value
       : localEstimate;
 
   const iamResult =
-    iamSettled.status === "fulfilled"
+    iamSettled.status === PromiseStatus.FULFILLED
       ? iamSettled.value
       : { passed: true, missing: [] as string[] }; // Graceful degradation
 

@@ -1,6 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
-import type { ResourcePlugin } from "../types.js";
+import { QuestionTypeName, type ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE } from "../shared-fields.js";
 
 /**
@@ -191,7 +191,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
       name: CfnKey.INSTANCE_TYPE,
       required: true,
       question: {
-        type: "categorySelect",
+        type: QuestionTypeName.CATEGORY_SELECT,
         label: "Instance type",
         hint: "t3/t4g: burstable (dev/small prod). m5/m6i: general-purpose. c5/c6i: compute. r5/r6i: memory. t4g (ARM) is ~20% cheaper than t3.",
         categories: INSTANCE_CATEGORIES,
