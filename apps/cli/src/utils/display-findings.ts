@@ -77,6 +77,11 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
           severityLine = chalk.yellow(`  WARN   ${f.title}${suffix}`);
         else severityLine = chalk.blue(`  INFO   ${f.title}${suffix}`);
 
+        // Story 43.1: Consequence/risk line
+        const riskLine = f.consequence
+          ? chalk.yellow(`         \u26A0 Risk: ${f.consequence}`)
+          : null;
+
         // Action hint line
         const hintPrefix =
           action.category === FixCategory.AUTO_FIXABLE
@@ -90,7 +95,9 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
           `         \u2192 ${hintPrefix}: ${action.hint}`,
         );
 
-        return [severityLine, hintLine];
+        return riskLine
+          ? [severityLine, riskLine, hintLine]
+          : [severityLine, hintLine];
       }),
     ];
     return lines.join("\n");
@@ -115,6 +122,11 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
         severityLine = `  [MEDIUM] ${f.title}${suffix}`;
       else severityLine = `  [INFO] ${f.title}${suffix}`;
 
+      // Story 43.1: Consequence/risk line (non-TTY)
+      const riskLine = f.consequence
+        ? `         ! Risk: ${f.consequence}`
+        : null;
+
       const hintPrefix =
         action.category === FixCategory.AUTO_FIXABLE ||
         action.category === FixCategory.WIZARD_FIXABLE
@@ -124,7 +136,9 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
             : "Info";
       const hintLine = `         -> ${hintPrefix}: ${action.hint}`;
 
-      return [severityLine, hintLine];
+      return riskLine
+        ? [severityLine, riskLine, hintLine]
+        : [severityLine, hintLine];
     }),
   ];
   return lines.join("\n");

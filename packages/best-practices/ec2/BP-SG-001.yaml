@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "EC2.18"
 description: "Security groups must not allow unrestricted inbound traffic (0.0.0.0/0) on ports other than 80 and 443. Wide-open ingress exposes services to the entire internet, dramatically increasing attack surface."
 remediation: "Restrict ingress CidrIp to specific IP ranges or security group references. Only ports 80 (HTTP) and 443 (HTTPS) should accept 0.0.0.0/0 traffic. All other ports must use restrictive CIDR blocks."
+consequence: "Every non-HTTP port open to the internet is a direct attack surface — databases, admin panels, and internal services become brute-force targets."
 category: security
 lastVerified: "2026-03-23"
 blocking: true

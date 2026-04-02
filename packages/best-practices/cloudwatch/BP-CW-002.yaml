@@ -9,5 +9,6 @@ source: "AWS Well-Architected (Reliability Pillar)"
 source_id: "REL-06"
 description: "Setting EvaluationPeriods to 1 causes single-point alarms that fire on transient spikes, leading to alert fatigue and flapping. Use at least 2 evaluation periods to confirm a sustained issue before triggering."
 remediation: "Set EvaluationPeriods to 2 or higher. A common pattern is 3 evaluation periods with a 5-minute period (15-minute evaluation window) for a good balance between responsiveness and noise reduction."
+consequence: "Alarm fires on every transient spike — alert fatigue causes your team to ignore or disable alarms, missing real incidents."
 category: reliability
 lastVerified: "2026-03-24"

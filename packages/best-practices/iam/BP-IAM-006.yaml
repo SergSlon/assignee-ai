@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "IAM.6"
 description: "IAM roles should have a permissions boundary attached to limit the maximum permissions the role can grant. Permissions boundaries provide a safety net against privilege escalation."
 remediation: "Attach a PermissionsBoundary managed policy that defines the maximum allowed permissions for this role."
+consequence: "Without a boundary, privilege escalation is uncapped — a role can create new roles or policies with broader access than intended."
 category: security
 lastVerified: "2026-03-24"

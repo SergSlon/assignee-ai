@@ -15,7 +15,7 @@ import {
   RdsEngineId,
 } from "@assignee/core";
 import { ToolName } from "../constants/tools.js";
-import { AWS_REGION } from "../config/constants.js";
+import { AWS_REGION, PricingCategory } from "../config/constants.js";
 import {
   PricingServiceCode,
   PricingFilter,
@@ -61,7 +61,7 @@ async function queryPrice(
   filters: TermMatchFilter[],
 ): Promise<string | null> {
   // Check cache first (Story 23.4 — avoid redundant MCP calls)
-  const cached = getCachedPrice(serviceCode, filters, "compute");
+  const cached = getCachedPrice(serviceCode, filters, PricingCategory.COMPUTE);
   if (cached) {
     const data = cached as AwsPricingResponse;
     return extractPrice(data);

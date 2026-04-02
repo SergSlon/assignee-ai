@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "S3.1"
 description: "S3 buckets should have public access blocked to prevent data exposure"
 remediation: "Enable all four PublicAccessBlockConfiguration settings: BlockPublicAcls, BlockPublicPolicy, IgnorePublicAcls, RestrictPublicBuckets"
+consequence: "Without public access blocks, anyone on the internet can read or write bucket contents via ACLs."
 category: security
 lastVerified: "2026-03-22"

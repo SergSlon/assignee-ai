@@ -7,6 +7,9 @@
 /** The `.assignee` directory name — single source of truth for project/home config paths. */
 export const ASSIGNEE_DIR = ".assignee";
 
+/** Cache subdirectory name under ASSIGNEE_DIR — single source of truth. */
+export const CACHE_DIR_NAME = "cache";
+
 export const CfnKey = {
   // ── Common / shared ─────────────────────────────────────────
   TAGS: "Tags",
@@ -470,3 +473,21 @@ export const AWS_SERVICE_EXECUTE_API = "execute-api" as const;
 
 /** Generic "unknown" fallback for missing metadata fields (ARN parts, resource type, etc.). */
 export const UNKNOWN_FALLBACK = "unknown" as const;
+
+/**
+ * Workload profile category keys for EC2 instance type grouping.
+ * Used in wizard option groups and workload classification.
+ * @see Story 43 — zero magic strings policy
+ */
+export const WorkloadProfileKey = {
+  UNKNOWN: "unknown" as const,
+  BURSTABLE: "burstable" as const,
+  GENERAL: "general" as const,
+  COMPUTE: "compute" as const,
+  MEMORY: "memory" as const,
+  ACCELERATED: "accelerated" as const,
+  STORAGE: "storage" as const,
+  HPC: "hpc" as const,
+  ARM: "arm" as const,
+  OTHER: "other" as const,
+} as const;

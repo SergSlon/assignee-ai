@@ -8,5 +8,6 @@ expected_value: true
 source: "AWS Systems Manager Best Practices"
 description: "SSM parameters should use hierarchical paths (e.g., /app/env/key) for organization, access control, and bulk operations. Flat names make parameter management difficult at scale."
 remediation: "Use forward-slash separated paths for parameter names (e.g., /myapp/production/db-host). This enables path-based IAM policies and GetParametersByPath API calls."
+consequence: "Flat names make IAM scoping impossible — you cannot restrict access by app or environment, leading to over-broad permissions."
 category: reliability
 lastVerified: "2026-03-24"

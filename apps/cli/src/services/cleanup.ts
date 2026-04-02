@@ -37,7 +37,7 @@ export type CleanupCategory =
 const LAST_CLEANUP_PATH = path.join(
   os.homedir(),
   ASSIGNEE_DIR,
-  "cache",
+  CleanupCategoryName.CACHE,
   ".last-cleanup",
 );
 

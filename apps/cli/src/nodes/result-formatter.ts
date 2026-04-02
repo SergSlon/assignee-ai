@@ -561,14 +561,13 @@ export async function resultFormatterNode(
           // Story 35.4: Interactive fix selection after plan display (TTY only)
           const fixResult = await promptFixSelection(state);
           if (fixResult) {
-            // Re-render plan box with updated state (clear stale cost)
+            // Re-render plan box with updated state — preserve cost estimate
+            // (fixes like encryption/versioning don't materially change the rate)
             const updatedState = {
               ...state,
               desiredState: fixResult.desiredState,
               bpFindings: fixResult.bpFindings,
               appliedFixes: fixResult.appliedFixes,
-              estimatedMonthlyCost: undefined,
-              pricingBreakdown: undefined,
             };
             renderPlanBox(updatedState);
             return {

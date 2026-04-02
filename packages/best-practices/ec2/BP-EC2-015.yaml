@@ -9,6 +9,7 @@ source: "FSBP"
 source_id: "EC2.24"
 description: "EC2 instances should use current-generation instance types (t3, m6i, c6i, etc.). Previous-generation types (t2, m4, c4) have lower performance-per-dollar and may lack Nitro system security features."
 remediation: "Migrate to a current-generation instance type. Current-gen types offer better performance, lower cost, and enhanced security via the Nitro hypervisor."
+consequence: "Previous-gen instances cost more per vCPU, lack Nitro security features, and will eventually lose AWS support and patch eligibility."
 fix_hint: "Switch to a current-gen instance type (better perf + cost)"
 category: performance
 lastVerified: "2026-03-24"

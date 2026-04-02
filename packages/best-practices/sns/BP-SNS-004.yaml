@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "SNS.2"
 description: "SNS topic access policies should not allow public access (Principal: '*' without conditions). Public topics can be subscribed to by any AWS account, causing data leakage."
 remediation: "Review the SNS topic policy and restrict Principal to specific AWS accounts or IAM entities. Add conditions to limit access by source account or VPC endpoint."
+consequence: "Any AWS account can subscribe and receive all messages — sensitive notification data leaks to unauthorized third parties."
 category: security
 lastVerified: "2026-03-24"

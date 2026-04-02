@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "S3.1"
 description: "S3 buckets must have BlockPublicAcls enabled to prevent public ACL grants. Public ACLs can expose bucket contents to the internet, leading to data breaches."
 remediation: "Set PublicAccessBlockConfiguration.BlockPublicAcls to true. Apply at both account and bucket level for defense in depth."
+consequence: "Anyone on the internet can grant themselves access to bucket contents via public ACLs — leading to full data exposure."
 category: security
 lastVerified: "2026-03-22"
 blocking: true

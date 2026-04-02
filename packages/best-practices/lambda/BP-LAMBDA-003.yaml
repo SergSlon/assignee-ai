@@ -8,5 +8,6 @@ expected_value: 128
 source: "AWS Lambda Best Practices"
 description: "Lambda functions should not use the 128 MB default memory. CPU is allocated proportionally to memory, so 128 MB severely throttles CPU-bound workloads and often increases total cost due to longer execution times."
 remediation: "Set MemorySize to at least 256 MB. Use AWS Lambda Power Tuning to find the optimal memory-to-cost ratio for your function."
+consequence: "CPU is starved at 128 MB — functions run 2-5x slower, increasing both latency and total cost per invocation."
 category: performance
 lastVerified: "2026-03-22"

@@ -73,6 +73,21 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
         placeholder: "https://example.com, https://app.example.com",
         hint: "Which domains can make cross-origin requests. Use specific domains in production — avoid '*' (wildcard) for security. Example: https://myapp.com",
         showIf: { field: CfnKey.ENABLE_CORS, value: true },
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value).trim();
+          if (!s) return undefined;
+          const parts = s
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean);
+          for (const part of parts) {
+            if (part === "*") continue;
+            if (!/^https?:\/\//.test(part))
+              return `Invalid origin "${part}" — must start with http:// or https:// (or use * for wildcard)`;
+          }
+          return undefined;
+        },
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;
@@ -91,6 +106,30 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
         initialValue: "GET, POST, OPTIONS",
         hint: "HTTP methods permitted for CORS requests. Common: GET, POST, PUT, DELETE, OPTIONS. OPTIONS is needed for preflight requests.",
         showIf: { field: CfnKey.ENABLE_CORS, value: true },
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value).trim();
+          if (!s) return undefined;
+          const valid = new Set([
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "PATCH",
+            "HEAD",
+            "OPTIONS",
+            "*",
+          ]);
+          const parts = s
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean);
+          for (const part of parts) {
+            if (!valid.has(part.toUpperCase()))
+              return `Invalid method "${part}" — must be one of GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, or *`;
+          }
+          return undefined;
+        },
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;
@@ -109,6 +148,21 @@ export const apiGatewayV2Plugin: ResourcePlugin = {
         initialValue: "Content-Type, Authorization",
         hint: "Request headers permitted for CORS requests. Common: Content-Type, Authorization, X-Api-Key.",
         showIf: { field: CfnKey.ENABLE_CORS, value: true },
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value).trim();
+          if (!s) return undefined;
+          const parts = s
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean);
+          for (const part of parts) {
+            if (part === "*") continue;
+            if (!/^[a-zA-Z0-9-]+$/.test(part))
+              return `Invalid header "${part}" — must contain only letters, numbers, and hyphens (or use * for wildcard)`;
+          }
+          return undefined;
+        },
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;

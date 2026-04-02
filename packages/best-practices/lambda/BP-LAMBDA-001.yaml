@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "Lambda.5"
 description: "Lambda functions should have reserved concurrency configured to prevent a single function from consuming all available account concurrency and starving other functions."
 remediation: "Set ReservedConcurrentExecutions to an appropriate value for the function's expected load. This guarantees capacity for the function while protecting other functions in the account."
+consequence: "One runaway function consumes all account concurrency — every other Lambda in the account starts throttling simultaneously."
 category: reliability
 lastVerified: "2026-03-22"

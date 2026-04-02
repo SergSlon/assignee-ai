@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "ECS.9"
 description: "ECS task definitions should configure a log driver for all containers. Without centralized logging, troubleshooting failures and detecting security incidents becomes significantly harder."
 remediation: "Configure LogConfiguration with awslogs, splunk, or another supported log driver. Route logs to CloudWatch Logs, Firehose, or a third-party log aggregation service."
+consequence: "Container output vanishes when the task stops — no way to debug crashes, investigate security incidents, or audit behavior."
 category: security
 lastVerified: "2026-03-22"

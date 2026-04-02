@@ -61,6 +61,8 @@ export {
   RDS_ENGINE_VERSION_HINT,
   AWS_SERVICE_EXECUTE_API,
   UNKNOWN_FALLBACK,
+  CACHE_DIR_NAME,
+  WorkloadProfileKey,
 } from "./config/cfn-keys.js";
 
 // Config — ARN-to-CloudFormation type mapping

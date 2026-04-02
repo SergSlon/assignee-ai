@@ -9,6 +9,7 @@ source: "OWASP API Security Top 10"
 source_id: "API7:2023"
 description: "CORS AllowOrigins must not be set to '*' (wildcard) in production. A wildcard origin allows any website to make cross-origin requests to your API, enabling potential CSRF attacks, data exfiltration, and abuse. Restrict origins to specific trusted domains."
 remediation: "Replace '*' with specific domain origins that need access (e.g., 'https://myapp.com', 'https://admin.myapp.com'). If the API is internal-only, consider disabling CORS entirely."
+consequence: "Any website can make authenticated cross-origin requests to your API — enables CSRF, data theft, and account takeover."
 category: security
 lastVerified: "2026-03-24"
 blocking: false

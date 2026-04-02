@@ -9,6 +9,7 @@ source: "AWS Well-Architected Framework"
 source_id: "REL-02"
 description: "Every subnet should have an explicit AWS::EC2::SubnetRouteTableAssociation rather than relying on the VPC main route table. The main route table is a shared default that applies to all unassociated subnets, making it easy to accidentally expose private subnets to the internet if the main route table is modified. Explicit associations make routing intent clear and auditable."
 remediation: "Create an AWS::EC2::SubnetRouteTableAssociation resource for each subnet, referencing the appropriate route table (public or private). Do not rely on the implicit main route table association."
+consequence: "Subnets on the main route table inherit any future changes to it — one IGW route added to main accidentally exposes all unassociated subnets."
 category: reliability
 lastVerified: "2026-03-24"
 blocking: false

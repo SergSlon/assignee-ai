@@ -9,8 +9,15 @@ source: "AWS Security Hub FSBP"
 source_id: "S3.11"
 description: "S3 buckets should have event notifications configured for security monitoring. Event notifications enable detection of unauthorized access patterns, unexpected deletions, and compliance-relevant operations."
 remediation: "Configure NotificationConfiguration with EventBridge, SNS, SQS, or Lambda destinations to capture S3 events. Enable EventBridge integration for richer event filtering."
-fix_hint: "Enable EventBridge or configure SNS/SQS notifications"
+consequence: "Unauthorized access, unexpected deletions, and suspicious activity in the bucket go completely undetected."
+fix_hint: "Enable EventBridge notifications"
 category: security
-lastVerified: "2026-03-22"
+lastVerified: "2026-04-02"
+fixType: "auto"
+autoFixable: true
+desiredStatePatch:
+  NotificationConfiguration:
+    EventBridgeConfiguration:
+      EventBridgeEnabled: true
 triggers:
   - excludePatterns: ["static-website"]

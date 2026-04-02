@@ -8,5 +8,6 @@ expected_value: "{{resolve:secretsmanager:"
 source: "AWS Well-Architected Framework — Security Pillar"
 description: "RDS database passwords should be managed by AWS Secrets Manager using dynamic references instead of plaintext values. Plaintext passwords appear in CloudFormation templates, stack events, and drift detection output — a significant security risk. Use {{resolve:secretsmanager:...}} dynamic references to keep credentials out of templates."
 remediation: "Create an AWS::SecretsManager::Secret with GenerateSecretString configured for RDS-safe characters (ExcludeCharacters: /@\"\\'), then reference it in MasterUserPassword using the dynamic reference format: {{resolve:secretsmanager:SECRET_NAME:SecretString:password}}. Add an AWS::SecretsManager::SecretTargetAttachment to enable automatic rotation."
+consequence: "Database password exposed in plaintext in CloudFormation template, console, and API responses — anyone with stack read access owns your DB."
 category: security
 lastVerified: "2026-03-24"

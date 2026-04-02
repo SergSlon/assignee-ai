@@ -8,6 +8,7 @@ expected_value: true
 source: "AWS Well-Architected Framework — Operational Excellence Pillar"
 description: "EC2 instances should have detailed monitoring enabled for 1-minute CloudWatch metrics. Basic monitoring only provides 5-minute intervals, which can miss short-lived performance issues."
 remediation: "Set Monitoring.Enabled to true. Detailed monitoring provides 1-minute metric granularity, enabling faster alerting and more accurate auto-scaling decisions."
+consequence: "5-minute metric intervals hide short CPU spikes and latency bursts — auto-scaling reacts too slowly and alerts fire minutes late."
 fix_hint: "Enable detailed monitoring for 1-minute CloudWatch metrics"
 category: performance
 lastVerified: "2026-03-22"

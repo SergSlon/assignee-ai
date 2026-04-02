@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "RDS.11"
 description: "RDS DB instances should have automated backups enabled with a retention period greater than zero. Automated backups enable point-in-time recovery, protecting against accidental data loss or corruption."
 remediation: "Set BackupRetentionPeriod to a value between 1 and 35 days. AWS recommends at least 7 days for production workloads."
+consequence: "Data corruption or accidental deletion is permanent — no point-in-time recovery, no automated snapshots, no rollback."
 category: reliability
 lastVerified: "2026-03-22"

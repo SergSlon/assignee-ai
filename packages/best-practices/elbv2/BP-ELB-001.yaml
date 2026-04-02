@@ -9,6 +9,7 @@ source: "AWS Well-Architected Framework"
 source_id: "REL-9"
 description: "ELBv2 load balancers should have deletion protection enabled to prevent accidental deletion of production load balancers. Deletion of a load balancer causes immediate traffic loss."
 remediation: "Set the deletion_protection.enabled load balancer attribute to true. Disable it explicitly before intentional deletion."
+consequence: "An accidental delete or rogue automation removes the load balancer — all traffic to your application drops instantly."
 category: reliability
 lastVerified: "2026-03-24"
 blocking: false

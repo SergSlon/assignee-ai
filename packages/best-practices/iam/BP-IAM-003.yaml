@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "IAM.3"
 description: "IAM user access keys should be rotated at least every 90 days. Long-lived credentials increase the window of exposure if they are leaked or compromised."
 remediation: "Rotate access keys regularly. Prefer IAM roles with temporary credentials via AWS STS instead of long-lived access keys. If keys are required, automate rotation and disable unused keys."
+consequence: "Stale access keys leaked in repos, logs, or backups remain valid indefinitely — attackers get persistent access with no expiration."
 category: security
 lastVerified: "2026-03-22"

@@ -159,6 +159,22 @@ export const secretsManagerSecretPlugin: ResourcePlugin = {
         label: "Replica regions (comma-separated)",
         placeholder: "us-west-2, eu-west-1",
         hint: "Replicate this secret to other AWS regions for disaster recovery or multi-region applications. Comma-separated region codes.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value).trim();
+          if (!s) return undefined;
+          const regionPattern =
+            /^[a-z]{2}(-gov)?-(north|south|east|west|central|northeast|northwest|southeast|southwest)-[0-9]+$/;
+          const parts = s
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean);
+          for (const part of parts) {
+            if (!regionPattern.test(part))
+              return `Invalid AWS region "${part}" — expected format like us-east-1, eu-west-2, us-gov-west-1`;
+          }
+          return undefined;
+        },
       },
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;

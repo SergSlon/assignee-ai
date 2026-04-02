@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "RDS.17"
 description: "RDS instances should have Performance Insights enabled for database performance monitoring. Performance Insights provides detailed wait analysis, top SQL queries, and resource utilization metrics."
 remediation: "Set EnablePerformanceInsights to true. Performance Insights is free for 7 days of data retention and available for most RDS engine types."
+consequence: "Slow queries and lock contention are invisible — performance degrades gradually until users report outages you cannot diagnose."
 category: performance
 lastVerified: "2026-03-24"

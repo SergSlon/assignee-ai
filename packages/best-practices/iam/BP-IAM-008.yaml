@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "IAM.21"
 description: "IAM roles should use managed policies instead of inline policies. Inline policies are harder to audit, version, and reuse across roles, and they cannot be centrally managed."
 remediation: "Convert inline policies to customer managed policies and attach them to the role. This enables policy reuse, version tracking, and centralized management."
+consequence: "Inline policies are invisible to centralized audits — hidden permissions drift undetected across roles, breaking compliance posture."
 category: security
 lastVerified: "2026-03-24"

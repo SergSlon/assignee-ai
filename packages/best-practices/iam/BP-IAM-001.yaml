@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "IAM.1"
 description: "IAM policies should not grant full administrative privileges (Action: *, Resource: *). Overly permissive policies violate least-privilege principles and increase blast radius if credentials are compromised."
 remediation: "Replace wildcard (*) actions and resources with specific permissions required for the workload. Use AWS managed policies or create scoped custom policies."
+consequence: "A compromised principal with admin privileges grants full account takeover — every resource, every service, every region exposed."
 category: security
 lastVerified: "2026-03-22"

@@ -17,17 +17,24 @@ import {
   ASSIGNEE_DIR,
   CLEANUP_MAX_AGE_MS,
   FileName,
+  CleanupCategoryName,
+  PricingCategory,
 } from "../config/constants.js";
 
-const CACHE_DIR = path.join(os.homedir(), ASSIGNEE_DIR, "cache", "pricing");
+const CACHE_DIR = path.join(
+  os.homedir(),
+  ASSIGNEE_DIR,
+  CleanupCategoryName.CACHE,
+  "pricing",
+);
 const PROJECT_CONFIG_DIR = ASSIGNEE_DIR;
 const PROJECT_CONFIG_FILE = FileName.CONFIG;
 
 /** Default TTL in minutes by pricing category. */
 const DEFAULT_TTL: Record<string, number> = {
-  compute: 60,
-  storage: 1440,
-  default: 60,
+  [PricingCategory.COMPUTE]: 60,
+  [PricingCategory.STORAGE]: 1440,
+  [PricingCategory.DEFAULT]: 60,
 };
 
 interface CacheEntry {

@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "DynamoDB.1"
 description: "DynamoDB tables using provisioned capacity should have auto-scaling configured to handle traffic fluctuations. Without auto-scaling, tables may throttle during traffic spikes or waste capacity during lulls."
 remediation: "Either switch to PAY_PER_REQUEST (on-demand) billing mode or configure Application Auto Scaling policies for read and write capacity."
+consequence: "Traffic spikes cause throttling and 400 errors for users; traffic drops waste provisioned capacity you still pay for."
 category: performance
 lastVerified: "2026-03-24"

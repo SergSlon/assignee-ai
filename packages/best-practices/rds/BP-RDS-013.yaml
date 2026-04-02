@@ -9,5 +9,6 @@ source: "TrustedAdvisor"
 source_id: "Ti39halfu8"
 description: "Trusted Advisor identifies RDS instances with very low connection count and CPU utilization over 14 days. Idle database instances are costly and should be stopped or terminated."
 remediation: "Stop or terminate idle RDS instances. For dev/test databases, use RDS stop/start scheduling. For rarely-used databases, consider Aurora Serverless."
+consequence: "You are paying full hourly cost for a database nobody is using — hundreds to thousands of dollars wasted per month."
 category: cost_optimization
 lastVerified: "2026-03-24"

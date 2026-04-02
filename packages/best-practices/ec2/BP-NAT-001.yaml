@@ -9,6 +9,7 @@ source: "AWS Well-Architected Framework"
 source_id: "REL-02"
 description: "A single NatGateway is a single point of failure. If the AZ hosting the NatGateway goes down, all private subnets lose outbound internet access. For production workloads, deploy at least one NatGateway per AZ used by private subnets to ensure high availability."
 remediation: "Add a NatGateway in each AZ that contains private subnets. Update each AZ's private route table to point 0.0.0.0/0 at its local NatGateway. Each NatGateway requires its own Elastic IP."
+consequence: "A single-AZ NAT gateway failure takes down outbound internet for ALL private subnets — API calls, package updates, and webhooks all stop."
 category: reliability
 lastVerified: "2026-03-24"
 blocking: false

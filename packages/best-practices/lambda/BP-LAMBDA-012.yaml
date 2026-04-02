@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "Lambda.7"
 description: "Lambda functions should have code signing configured to ensure only trusted code is deployed. Without code signing, compromised deployment pipelines could deploy malicious code."
 remediation: "Create a CodeSigningConfig and set CodeSigningConfigArn on the function. Sign deployment packages using AWS Signer."
+consequence: "A compromised CI/CD pipeline or developer account can deploy malicious code to production with no verification."
 category: security
 lastVerified: "2026-03-24"

@@ -9,5 +9,6 @@ source: "TrustedAdvisor"
 source_id: "TA-logs-metrics"
 description: "CloudWatch log groups receiving CloudTrail or application security logs should have metric filters configured for critical events like unauthorized API calls, root account usage, and IAM policy changes."
 remediation: "Create metric filters for key security events and attach CloudWatch alarms to trigger notifications. AWS provides reference patterns for common security event filters."
+consequence: "Unauthorized API calls, root logins, and IAM changes happen with no alerts — breaches go undetected for weeks or months."
 category: security
 lastVerified: "2026-03-24"

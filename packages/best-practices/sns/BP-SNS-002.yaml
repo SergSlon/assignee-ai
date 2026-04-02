@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "SNS.4"
 description: "SNS topics should have delivery status logging enabled for at least one protocol. Without delivery logging, failed notifications go undetected, causing silent data loss in event pipelines."
 remediation: "Configure delivery status logging for the topic's subscribed protocols (HTTP, SQS, Lambda, etc.). Set up a CloudWatch Logs IAM role and configure success/failure sample rates."
+consequence: "Failed message deliveries go undetected — critical notifications silently drop, causing downstream outages and silent data loss."
 category: reliability
 lastVerified: "2026-03-22"

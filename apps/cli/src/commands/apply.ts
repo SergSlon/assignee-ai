@@ -488,15 +488,71 @@ export const applyCommand = new Command(CommandName.APPLY)
             phase1State.executionStatus === ExecutionStatus.PENDING &&
             phase1State.preflightPassed === false
           ) {
-            log({
-              ts: new Date().toISOString(),
-              runId: ctx.runId,
-              level: "info",
-              action: LOG_ACTIONS.APPLY_COMPLETE,
-              durationMs: Date.now() - ctx.startTs,
-              result: "bp_blocked",
-            });
-            return { success: true }; // Plan box shown with findings — not an error
+            // Story 43.2: Fix-and-continue — if interactive fixes resolved all
+            // blocking findings, proceed to provisioning instead of exiting.
+            const residualFindings = phase1State.bpFindings ?? [];
+            const hasBlockingRemaining = residualFindings.some(
+              (f) => f.blocking,
+            );
+            const fixesApplied =
+              phase1State.appliedFixes && phase1State.appliedFixes.length > 0;
+
+            if (fixesApplied && !hasBlockingRemaining) {
+              log({
+                ts: new Date().toISOString(),
+                runId: ctx.runId,
+                level: "info",
+                action: LOG_ACTIONS.APPLY_COMPLETE,
+                durationMs: Date.now() - ctx.startTs,
+                result: "bp_fixed_continuing",
+                extras: {
+                  fixCount: phase1State.appliedFixes!.length,
+                  residualFindings: residualFindings.length,
+                },
+              });
+
+              // Re-invoke graph from checkpoint with fixed state → human_approval → provision
+              phase1State = await ctx.graph.invoke(
+                {
+                  checkpointResumed: true,
+                  userIntent: effectiveIntent,
+                  runId: ctx.runId,
+                  executionMode: ExecutionMode.APPLY,
+                  startedAt: Date.now(),
+                  projectDir: process.cwd(),
+                  resourceType: phase1State.resourceType,
+                  desiredState: phase1State.desiredState,
+                  estimatedMonthlyCost: phase1State.estimatedMonthlyCost,
+                  preflightPassed: true,
+                  bpFindings: residualFindings,
+                  appliedFixes: phase1State.appliedFixes,
+                  elicitedOptions: phase1State.elicitedOptions,
+                  resourceQueue: phase1State.resourceQueue,
+                  resourcePattern: phase1State.resourcePattern,
+                  bpEnforcementLevel:
+                    userConfig?.bestPractices?.enforcement ??
+                    BPEnforcementLevel.ENFORCE,
+                  ...(opts.yes ? { autoApprove: true } : {}),
+                  ...(userConfig ? { userConfig } : {}),
+                  ...(orgConfig ? { orgConfig } : {}),
+                  ...(resolvedSourceDir
+                    ? { sourceDir: resolvedSourceDir, sourceFileCount }
+                    : {}),
+                },
+                config,
+              );
+              // Fall through to Phase 2 provisioning below
+            } else {
+              log({
+                ts: new Date().toISOString(),
+                runId: ctx.runId,
+                level: "info",
+                action: LOG_ACTIONS.APPLY_COMPLETE,
+                durationMs: Date.now() - ctx.startTs,
+                result: "bp_blocked",
+              });
+              return { success: true }; // Plan box shown with findings — not an error
+            }
           }
 
           // Catch-all: unexpected status after phase 1 (not IN_PROGRESS, not approved)

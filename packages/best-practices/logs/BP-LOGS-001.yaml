@@ -9,6 +9,7 @@ source: "AWS Well-Architected Framework"
 source_id: "COST-04"
 description: "CloudWatch LogGroups must have RetentionInDays explicitly set. Without a retention policy, log data is retained indefinitely, leading to unbounded storage costs. Production workloads should never use 'never expire'."
 remediation: "Set RetentionInDays to an appropriate value (e.g., 14 for development, 90-365 for production). This controls how long log events are kept before automatic deletion."
+consequence: "Logs accumulate forever — storage costs grow unbounded month over month with no automatic cleanup."
 category: cost
 lastVerified: "2026-03-24"
 blocking: true

@@ -9,6 +9,7 @@ source: "AWS Well-Architected Framework"
 source_id: "REL-04"
 description: "VPCs should have DNS hostnames enabled so instances receive public DNS names. Many AWS services (ELB, RDS, ECS) require DNS hostnames to function correctly. Disabling this can cause service discovery and connectivity failures."
 remediation: "Set EnableDnsHostnames to true. This is free and has no performance impact."
+consequence: "Without DNS hostnames, ELB endpoints, RDS connections, and ECS service discovery silently fail — services cannot find each other by name."
 category: reliability
 lastVerified: "2026-03-23"
 blocking: false

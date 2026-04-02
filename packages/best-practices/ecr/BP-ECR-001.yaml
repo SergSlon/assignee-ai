@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "ECR.1"
 description: "ECR repositories should have image scanning enabled on push to detect OS-level vulnerabilities in container images before deployment. Unscanned images may contain known CVEs."
 remediation: "Set ImageScanningConfiguration.ScanOnPush to true. Basic scanning is free and runs automatically when images are pushed."
+consequence: "Container images with known CVEs deploy to production undetected — exploitable vulnerabilities run live in your workloads."
 category: security
 lastVerified: "2026-03-24"
 blocking: true

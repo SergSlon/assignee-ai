@@ -186,6 +186,21 @@ export const s3BucketPlugin: ResourcePlugin = {
         initialValue: "*",
         hint: "Which domains can make cross-origin requests. Use specific domains in production. '*' allows any domain (less secure).",
         showIf: { field: CfnKey.ENABLE_CORS, value: true },
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value).trim();
+          if (!s) return undefined;
+          const parts = s
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean);
+          for (const part of parts) {
+            if (part === "*") continue;
+            if (!/^https?:\/\//.test(part))
+              return `Invalid origin "${part}" — must start with http:// or https:// (or use * for wildcard)`;
+          }
+          return undefined;
+        },
       },
     },
     {

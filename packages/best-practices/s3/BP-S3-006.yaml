@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "S3.4"
 description: "S3 buckets must have server-side encryption configured. Encryption protects data at rest using AES-256 (SSE-S3) or AWS KMS (SSE-KMS)."
 remediation: "Configure BucketEncryption with at least SSE-S3 (AES256). For compliance workloads, use SSE-KMS with a customer-managed key."
+consequence: "Data stored at rest is unencrypted — physical media theft or unauthorized disk access exposes all objects in plaintext."
 category: security
 lastVerified: "2026-03-22"
 blocking: true

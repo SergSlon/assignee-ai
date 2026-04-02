@@ -6,21 +6,12 @@
  * the category-select UI and workload classifier — NOT the same as
  * InstanceCategory values which use longer forms like "general-purpose".
  *
- * Single source of truth — every workload profile string must reference these constants.
+ * Re-exports WorkloadProfileKey from @assignee/core as `WorkloadProfile`
+ * for backward compatibility. Core is the single source of truth.
  */
+import { WorkloadProfileKey } from "@assignee/core";
 
-export const WorkloadProfile = {
-  UNKNOWN: "unknown",
-  BURSTABLE: "burstable",
-  GENERAL: "general",
-  COMPUTE: "compute",
-  MEMORY: "memory",
-  ACCELERATED: "accelerated",
-  STORAGE: "storage",
-  HPC: "hpc",
-  ARM: "arm",
-  OTHER: "other",
-} as const;
+export const WorkloadProfile = WorkloadProfileKey;
 
-export type WorkloadProfileKey =
+export type WorkloadProfileValue =
   (typeof WorkloadProfile)[keyof typeof WorkloadProfile];

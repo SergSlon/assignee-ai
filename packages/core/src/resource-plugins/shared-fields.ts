@@ -18,6 +18,19 @@ export const KMS_ARN_VALIDATION_MSG = "Must be a KMS key ARN or alias";
 export const KMS_ARN_FULL_VALIDATION_MSG =
   "Must be a KMS key ARN (arn:aws:kms:...)";
 
+/**
+ * AWS tag character allowlist.
+ * AWS allows: Unicode letters, digits, whitespace, and: + - = . _ : / @
+ * Forbids: backslash, quotes, control characters, and other special chars.
+ */
+const TAG_CHAR_PATTERN = /^[\p{L}\p{N}\s+\-=._:/@]*$/u;
+
+/** Max key length per AWS spec. */
+const TAG_KEY_MAX_LENGTH = 128;
+
+/** Max value length per AWS spec. */
+const TAG_VALUE_MAX_LENGTH = 256;
+
 export const TAGS_VALIDATE = (value: unknown): string | undefined => {
   if (!value) return undefined;
   const s = String(value).trim();
@@ -34,5 +47,26 @@ export const TAGS_VALIDATE = (value: unknown): string | undefined => {
     const invalid = pairs.filter((p) => !p.includes(":"));
     return `Some tags missing colon separator and will be ignored: ${invalid.join(", ")}`;
   }
+
+  // Validate each tag key/value against AWS constraints
+  for (const pair of valid) {
+    const [key, ...rest] = pair.split(":");
+    const tagKey = key!.trim();
+    const tagValue = rest.join(":").trim();
+
+    if (tagKey.length > TAG_KEY_MAX_LENGTH) {
+      return `Tag key "${tagKey.slice(0, 20)}..." exceeds ${TAG_KEY_MAX_LENGTH} character limit`;
+    }
+    if (tagValue.length > TAG_VALUE_MAX_LENGTH) {
+      return `Tag value for "${tagKey}" exceeds ${TAG_VALUE_MAX_LENGTH} character limit`;
+    }
+    if (!TAG_CHAR_PATTERN.test(tagKey)) {
+      return `Tag key "${tagKey}" contains invalid characters. Allowed: letters, digits, spaces, + - = . _ : / @`;
+    }
+    if (!TAG_CHAR_PATTERN.test(tagValue)) {
+      return `Tag value "${tagValue}" contains invalid characters. Allowed: letters, digits, spaces, + - = . _ : / @`;
+    }
+  }
+
   return undefined;
 };

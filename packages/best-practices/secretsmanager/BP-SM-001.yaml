@@ -8,5 +8,6 @@ expected_value: true
 source: "AWS Well-Architected Framework — Security Pillar"
 description: "Secrets should use GenerateSecretString for auto-generated random passwords rather than plaintext SecretString. Plaintext values are visible in CloudFormation templates, stack events, and drift detection output, creating a security risk."
 remediation: "Remove the SecretString property and use GenerateSecretString instead. If you need a specific value, use a dynamic reference (e.g., {{resolve:ssm-secure:...}}) or populate the secret after creation via the AWS SDK."
+consequence: "Plaintext secrets visible in CloudFormation templates, stack events, and console — anyone with stack access reads your passwords."
 category: security
 lastVerified: "2026-03-24"

@@ -9,6 +9,7 @@ source: "AWS Security Hub FSBP"
 source_id: "EC2.19"
 description: "EC2 instances should use IAM instance profiles for AWS API access instead of hardcoded credentials. Instance profiles provide temporary, automatically rotated credentials via the instance metadata service."
 remediation: "Attach an IAM Instance Profile with a role that follows least privilege. Never use long-lived access keys on EC2 instances."
+consequence: "Without an instance profile, developers embed long-lived access keys in code or env vars — these never rotate and leak in git repos."
 category: security
 lastVerified: "2026-03-22"
 fixType: interactive

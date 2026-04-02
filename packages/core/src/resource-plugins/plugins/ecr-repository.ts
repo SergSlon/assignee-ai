@@ -134,6 +134,17 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
         label: "Lifecycle policy (JSON)",
         placeholder: '{"rules":[{"rulePriority":1,...}]}',
         hint: "JSON lifecycle policy to automatically clean up old/untagged images. Reduces storage costs. Leave blank for no lifecycle policy.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value).trim();
+          if (!s) return undefined;
+          try {
+            JSON.parse(s);
+          } catch {
+            return "Must be valid JSON";
+          }
+          return undefined;
+        },
       },
     },
   ],

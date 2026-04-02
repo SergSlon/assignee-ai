@@ -9,5 +9,6 @@ source: "AWS Security Hub FSBP"
 source_id: "ECS.1"
 description: "ECS task definitions should not run containers in privileged mode. Privileged containers have root-level access to the host, allowing container escape attacks and full host compromise."
 remediation: "Set Privileged to false in all container definitions. Use specific Linux capabilities (via LinuxParameters.Capabilities) instead of granting full privileges."
+consequence: "Privileged containers have root access to the host — a container escape gives the attacker full control of the underlying instance."
 category: security
 lastVerified: "2026-03-22"

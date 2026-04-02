@@ -9,6 +9,7 @@ source: "Assignee Guardrails (migrated)"
 source_id: "iam-wildcard-actions"
 description: "IAM policy contains Action: '*' or Resource: '*' — overly permissive. Note: this is a simplified check; deep policy document inspection is a known limitation."
 remediation: "Scope IAM actions and resources to least-privilege — avoid wildcards"
+consequence: "Wildcard permissions turn any compromised role into a full-access backdoor — lateral movement across all AWS services is trivial."
 category: security
 lastVerified: "2026-03-22"
 blocking: false

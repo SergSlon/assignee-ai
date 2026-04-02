@@ -9,5 +9,6 @@ source: "TrustedAdvisor"
 source_id: "TA-iam-external-id"
 description: "IAM roles that allow cross-account access should require an External ID in the trust policy to prevent confused deputy attacks. Without an External ID, any entity in the trusted account can assume the role."
 remediation: "Add a Condition with sts:ExternalId to the role's trust policy when granting cross-account access. Generate a unique External ID and share it securely with the trusted party."
+consequence: "Any entity in the trusted account can assume your role via confused deputy attack — unauthorized cross-account access to your resources."
 category: security
 lastVerified: "2026-03-24"

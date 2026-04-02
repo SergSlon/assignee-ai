@@ -9,5 +9,6 @@ source: "TrustedAdvisor"
 source_id: "H7IgTzjTYb"
 description: "Trusted Advisor identifies EBS volumes without recent snapshots. Without snapshots, data on the volume cannot be recovered if the volume is corrupted or accidentally deleted."
 remediation: "Create EBS snapshots regularly using AWS Backup or Amazon Data Lifecycle Manager (DLM). Configure automated snapshot policies with appropriate retention."
+consequence: "Without snapshots, a corrupted or deleted EBS volume means permanent data loss — there is no recovery path."
 category: reliability
 lastVerified: "2026-03-24"

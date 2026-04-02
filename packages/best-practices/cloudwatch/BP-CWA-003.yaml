@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "CloudWatch.3"
 description: "CloudWatch alarms should treat missing data as breaching or missing rather than notBreaching. Setting TreatMissingData to notBreaching causes the alarm to silently stay OK when the monitored resource stops reporting metrics."
 remediation: "Set TreatMissingData to 'breaching' for critical alarms or 'missing' for informational alarms."
+consequence: "A dead or terminated resource stops emitting metrics — the alarm silently returns to OK, hiding the failure completely."
 category: reliability
 lastVerified: "2026-03-24"

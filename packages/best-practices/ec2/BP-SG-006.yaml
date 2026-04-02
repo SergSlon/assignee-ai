@@ -9,5 +9,6 @@ source: "FSBP"
 source_id: "EC2.23"
 description: "Security groups should have meaningful descriptions to document their purpose and intended usage. Empty or default descriptions make security auditing and troubleshooting difficult."
 remediation: "Set GroupDescription to a meaningful description of the security group's purpose, such as 'Web server public traffic on ports 80/443'."
+consequence: "Undescribed security groups become mystery rules no one dares modify — auditors flag them and incident responders waste time identifying purpose."
 category: compliance
 lastVerified: "2026-03-24"
