@@ -9,9 +9,11 @@
 
 import {
   ExecutionStatus,
+  CostEstimateLabel,
   defaultPricingRegistry,
   defaultDecomposerRegistry,
   extractFirstTierPrice,
+  getRequiredIamActions,
   type AwsPricingResponse,
   type PricingLineItem,
   type PricingLineItemResult,
@@ -24,12 +26,11 @@ import {
   PRICING_TIMEOUT_MS,
   HOURS_PER_MONTH,
 } from "../config/constants.js";
-import { CostEstimate, PricingTerm } from "../constants/pricing.js";
+import { PricingTerm } from "../constants/pricing.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { unwrapMcpText } from "../utils/mcp.js";
 import { withTimeout } from "../utils/timeout.js";
 import { getFreeTierNote, loadAccountCreatedDate } from "../utils/free-tier.js";
-import { getRequiredIamActions } from "@assignee/core";
 import { getCachedPrice, setCachedPrice } from "../services/price-cache.js";
 import type { AgentState } from "../services/graph.js";
 import { PromiseStatus } from "../config/constants.js";
@@ -167,7 +168,7 @@ export async function preflightGuardNode(
         const data = JSON.parse(unwrapMcpText(result)) as AwsPricingResponse;
         return (
           extractFirstTierPrice(data, mcpConfig.unit, mcpConfig.scale) ??
-          CostEstimate.NA
+          CostEstimateLabel.NA
         );
       } catch {
         log({
@@ -292,7 +293,7 @@ export async function preflightGuardNode(
   // produced a valid fixedSubtotal, use the decomposer's total as the headline.
   let headlineCost = costEstimate;
   if (
-    headlineCost === CostEstimate.NA &&
+    headlineCost === CostEstimateLabel.NA &&
     pricingBreakdown &&
     pricingBreakdown.fixedSubtotal > 0
   ) {
@@ -306,7 +307,7 @@ export async function preflightGuardNode(
   // top-level pricing timed out, we keep "N/A" rather than showing a possibly
   // incomplete per-unit rate.
   if (
-    headlineCost === CostEstimate.NA &&
+    headlineCost === CostEstimateLabel.NA &&
     pricingBreakdown &&
     !pricingBreakdown.hasPartialFailure &&
     pricingBreakdown.usageBasedItems.length > 0

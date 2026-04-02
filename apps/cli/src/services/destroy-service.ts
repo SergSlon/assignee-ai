@@ -285,7 +285,7 @@ export async function destroySingleResource(
   }
 
   // S3: empty bucket before deleting (buckets with objects cannot be destroyed)
-  if (resourceType === "AWS::S3::Bucket") {
+  if (resourceType === RESOURCE_TYPES.S3_BUCKET) {
     try {
       const { S3Client, ListObjectVersionsCommand, DeleteObjectsCommand } =
         await import("@aws-sdk/client-s3");

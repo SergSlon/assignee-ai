@@ -34,6 +34,8 @@ import {
   SUPPORTED_TYPES_HINT,
   CHECKPOINT_DIR,
   UNKNOWN_FALLBACK,
+  PLAN_GENERATION_FAILED,
+  EXAMPLE_S3_INTENT,
 } from "../config/constants.js";
 import { ErrorCode } from "../constants/errors.js";
 import { serializeCheckpoint, saveCheckpoint } from "../services/checkpoint.js";
@@ -57,7 +59,7 @@ export const planCommand = new Command(CommandName.PLAN)
   )
   .addHelpText(
     "after",
-    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee plan "Create an S3 bucket named my-bucket"\n  assignee plan "Create an EC2 t3.micro instance"\n  assignee plan "Create a Lambda function for image processing"`,
+    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee plan "${EXAMPLE_S3_INTENT}"\n  assignee plan "Create an EC2 t3.micro instance"\n  assignee plan "Create a Lambda function for image processing"`,
   )
   .action(
     async (
@@ -122,7 +124,7 @@ export const planCommand = new Command(CommandName.PLAN)
 
       if (!intent) {
         throw new AssigneeError(
-          'Missing intent. Usage: assignee plan "Create an S3 bucket named my-bucket"',
+          `Missing intent. Usage: assignee plan "${EXAMPLE_S3_INTENT}"`,
           "MISSING_INTENT",
         );
       }
@@ -132,7 +134,7 @@ export const planCommand = new Command(CommandName.PLAN)
         commandName: "plan",
         startAction: LOG_ACTIONS.PLAN_STARTED,
         endAction: LOG_ACTIONS.PLAN_COMPLETE,
-        errorPrefix: "Plan generation failed",
+        errorPrefix: PLAN_GENERATION_FAILED,
         errorHint:
           "Check that AWS credentials are configured and Bedrock is accessible in your region.",
         silent: outputFormat === "json",
@@ -184,7 +186,7 @@ export const planCommand = new Command(CommandName.PLAN)
 
           if (failed) {
             renderError(
-              finalState.errorMessage ?? "Plan generation failed",
+              finalState.errorMessage ?? PLAN_GENERATION_FAILED,
               finalState.executionStatus ===
                 ExecutionStatus.UNSUPPORTED_RESOURCE
                 ? SUPPORTED_TYPES_HINT

@@ -36,7 +36,11 @@ import type { AgentState } from "../services/graph.js";
 import { renderError, startSpinner, stopSpinner } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand, runProvisioningLoop } from "../utils/command-runner.js";
-import { SUPPORTED_TYPES_HINT, CHECKPOINT_DIR } from "../config/constants.js";
+import {
+  SUPPORTED_TYPES_HINT,
+  CHECKPOINT_DIR,
+  EXAMPLE_S3_INTENT,
+} from "../config/constants.js";
 import { ErrorCode } from "../constants/errors.js";
 import {
   findNewestValidCheckpoint,
@@ -192,7 +196,7 @@ export const applyCommand = new Command(CommandName.APPLY)
   )
   .addHelpText(
     "after",
-    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee apply "Create an S3 bucket named my-bucket"\n  assignee apply --checkpoint .assignee/checkpoint-abc123.json\n  assignee apply --no-wizard "Create an S3 bucket named logs-prod"\n  assignee apply "Create an EC2 t3.micro instance"\n  assignee apply "Create a Lambda function for image processing"`,
+    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee apply "${EXAMPLE_S3_INTENT}"\n  assignee apply --checkpoint .assignee/checkpoint-abc123.json\n  assignee apply --no-wizard "Create an S3 bucket named logs-prod"\n  assignee apply "Create an EC2 t3.micro instance"\n  assignee apply "Create a Lambda function for image processing"`,
   )
   .action(
     async (
@@ -248,7 +252,7 @@ export const applyCommand = new Command(CommandName.APPLY)
         // No checkpoint resolved and no intent: usage error
         if (!resolvedCheckpoint) {
           throw new AssigneeError(
-            'Usage: assignee apply "Create an S3 bucket named my-bucket"\n' +
+            `Usage: assignee apply "${EXAMPLE_S3_INTENT}"\n` +
               "       assignee apply --checkpoint .assignee/checkpoint-<runId>.json",
             ErrorCode.USAGE_ERROR,
           );

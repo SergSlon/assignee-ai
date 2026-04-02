@@ -53,19 +53,17 @@ export const PricingScale = {
   MILLION: 1_000_000,
 } as const;
 
-export const PricingDefault = {
-  EC2_INSTANCE_TYPE: "t3.micro",
-  RDS_INSTANCE_CLASS: "db.t3.micro",
-  RDS_ENGINE: "mysql",
-  EBS_VOLUME_TYPE: "gp3",
-  RDS_ENGINE_POSTGRES: "postgres",
-} as const;
+/**
+ * @deprecated Use AwsDefault from @assignee/core instead.
+ * Re-exported for backward compatibility during migration.
+ */
+export { AwsDefault as PricingDefault } from "@assignee/core";
 
-/** Static cost estimate labels used when no pricing API query is needed. */
-export const CostEstimate = {
-  FREE: "Free",
-  NA: "N/A",
-} as const;
+/**
+ * @deprecated Use CostEstimateLabel from @assignee/core instead.
+ * Re-exported for backward compatibility during migration.
+ */
+export { CostEstimateLabel as CostEstimate } from "@assignee/core";
 
 /**
  * Lambda pricing rates — LOCAL FALLBACK ONLY (stable since 2014 — verified 2025).

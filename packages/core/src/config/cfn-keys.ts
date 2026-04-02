@@ -4,6 +4,9 @@
  *
  * @see Story 42.9
  */
+/** The `.assignee` directory name — single source of truth for project/home config paths. */
+export const ASSIGNEE_DIR = ".assignee";
+
 export const CfnKey = {
   // ── Common / shared ─────────────────────────────────────────
   TAGS: "Tags",
@@ -427,3 +430,43 @@ export const AmiOs = {
   UBUNTU_24: "ubuntu-24.04",
   UBUNTU_22: "ubuntu-22.04",
 } as const;
+
+/**
+ * RDS engine identifier strings used in wizard values and showIf conditions.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const RdsEngineId = {
+  AURORA_MYSQL: "aurora-mysql",
+  AURORA_POSTGRESQL: "aurora-postgresql",
+} as const;
+
+/**
+ * Instance/storage size fit-hint labels used in wizard option metadata.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const SizeLabel = {
+  SMALL_PRODUCTION: "Small production",
+  MEDIUM_PRODUCTION: "Medium production",
+  LATEST_GEN_COMPUTE: "Latest gen compute",
+  BEST_PRICE_PERFORMANCE: "Best price-performance",
+} as const;
+
+/**
+ * Hint string for RDS engine version fields.
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const RDS_ENGINE_VERSION_HINT =
+  "Newer versions offer better performance and security. Cannot be easily downgraded." as const;
+
+/**
+ * AWS service identifier for API Gateway V2 execute endpoints (as it appears in ARNs).
+ *
+ * @see Story 42.10 — zero magic strings policy
+ */
+export const AWS_SERVICE_EXECUTE_API = "execute-api" as const;
+
+/** Generic "unknown" fallback for missing metadata fields (ARN parts, resource type, etc.). */
+export const UNKNOWN_FALLBACK = "unknown" as const;

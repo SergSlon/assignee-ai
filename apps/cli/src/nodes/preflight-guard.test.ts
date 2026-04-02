@@ -1,11 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ExecutionStatus } from "@assignee/core";
+import { ExecutionStatus, CostEstimateLabel } from "@assignee/core";
 import { preflightGuardNode } from "./preflight-guard.js";
-import {
-  CostEstimate,
-  LambdaPricing,
-  PricingUnit,
-} from "../constants/pricing.js";
+import { LambdaPricing, PricingUnit } from "../constants/pricing.js";
 import { ToolName } from "../constants/tools.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
@@ -85,13 +81,13 @@ describe("preflightGuardNode", () => {
       makeState({ resourceType: "AWS::IAM::Role" }),
       [pricingTool],
     );
-    expect(result.estimatedMonthlyCost).toBe(CostEstimate.FREE);
+    expect(result.estimatedMonthlyCost).toBe(CostEstimateLabel.FREE);
     expect(pricingTool.invoke).not.toHaveBeenCalled();
   });
 
   it("returns N/A when no pricing tool is available", async () => {
     const result = await preflightGuardNode(makeState(), []);
-    expect(result.estimatedMonthlyCost).toBe(CostEstimate.NA);
+    expect(result.estimatedMonthlyCost).toBe(CostEstimateLabel.NA);
   });
 
   it("skips when executionStatus is already FAILED", async () => {
@@ -102,7 +98,7 @@ describe("preflightGuardNode", () => {
   });
 
   it("returns N/A on pricing timeout (non-blocking)", async () => {
-    // Uses CostEstimate.NA implicitly — verified via string equality
+    // Uses CostEstimateLabel.NA implicitly — verified via string equality
     const slowTool = {
       name: "get_pricing",
       invoke: vi.fn(
@@ -116,7 +112,7 @@ describe("preflightGuardNode", () => {
     const result = await preflightGuardNode(makeState(), [slowTool]);
     // Pricing timed out → N/A, preflightPassed still true
     expect(result.preflightPassed).toBe(true);
-    expect(result.estimatedMonthlyCost).toBe(CostEstimate.NA);
+    expect(result.estimatedMonthlyCost).toBe(CostEstimateLabel.NA);
   }, 5000);
 
   it("computes Lambda estimate from default memory without calling pricing API", async () => {

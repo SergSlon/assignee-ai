@@ -13,8 +13,8 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { FileName } from "../config/constants.js";
-import { RESOURCE_TYPES } from "@assignee/core";
+import { ASSIGNEE_DIR, FileName } from "../config/constants.js";
+import { RESOURCE_TYPES, FREE_TIER_MESSAGE } from "@assignee/core";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,8 +35,8 @@ export interface FreeTierNote {
 
 // ── Resource maps ────────────────────────────────────────────────────────────
 
-/** Standard free tier message used for resources with no usage limits. */
-export const FREE_TIER_MESSAGE = "Always free tier";
+// Re-export from core for backward compatibility
+export { FREE_TIER_MESSAGE } from "@assignee/core";
 
 /** Resources that are always free regardless of account age. */
 const ALWAYS_FREE_RESOURCES: Record<string, string> = {
@@ -90,7 +90,7 @@ export function loadAccountCreatedDate(): string | undefined {
   }
 
   try {
-    const configPath = join(homedir(), ".assignee", FileName.CONFIG);
+    const configPath = join(homedir(), ASSIGNEE_DIR, FileName.CONFIG);
     const content = readFileSync(configPath, "utf-8");
     const parsed = parseYaml(content) as Record<string, unknown> | undefined;
     const dateValue = parsed?.["aws_account_created"];

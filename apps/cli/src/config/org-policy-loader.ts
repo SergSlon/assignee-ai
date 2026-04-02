@@ -13,6 +13,7 @@ import * as fs from "node:fs";
 import * as fsPromises from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import { ASSIGNEE_DIR } from "./constants.js";
 import { parse as parseYaml } from "yaml";
 import {
   OrgPolicy,
@@ -31,7 +32,7 @@ export function findProjectPolicyPath(startDir: string): string | undefined {
   const root = path.parse(dir).root;
 
   while (dir !== root) {
-    const candidate = path.join(dir, ".assignee", "org-policy.yaml");
+    const candidate = path.join(dir, ASSIGNEE_DIR, "org-policy.yaml");
     try {
       fs.accessSync(candidate, fs.constants.R_OK);
       return candidate;
@@ -57,7 +58,7 @@ export function findProjectPolicyPath(startDir: string): string | undefined {
   }
 
   // Fallback: return cwd-based path (read will handle ENOENT gracefully)
-  return path.join(startDir, ".assignee", "org-policy.yaml");
+  return path.join(startDir, ASSIGNEE_DIR, "org-policy.yaml");
 }
 
 /**
@@ -221,7 +222,7 @@ export function mergeOrgPolicies(
 export async function loadLocalOrgPolicy(
   cwd: string = process.cwd(),
 ): Promise<OrgResourceConfig | undefined> {
-  const projectPath = path.join(cwd, ".assignee", "org-policy.yaml");
+  const projectPath = path.join(cwd, ASSIGNEE_DIR, "org-policy.yaml");
   const userPath = resolveUserPolicyPath();
 
   const [projectPolicy, userPolicy] = await Promise.all([

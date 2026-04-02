@@ -10,16 +10,14 @@ import {
   defaultErrorHintRegistry,
   AssigneeError,
   ProvisioningError,
+  CostEstimateLabel,
 } from "@assignee/core";
 import { defaultMemoryService } from "../services/memory.js";
 import { defaultErrorMessageRegistry } from "./error-messages.js";
-import { CostEstimate } from "../constants/pricing.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { ErrorCode } from "../constants/errors.js";
 import { log, LOG_ACTIONS } from "./logger.js";
-
-/** Fallback value for unknown/missing metadata fields. */
-const UNKNOWN_FALLBACK = "unknown" as const;
+import { UNKNOWN_FALLBACK } from "../config/constants.js";
 
 /**
  * Writes a provision record to the memory log (Story 19.3).
@@ -45,7 +43,7 @@ export async function writeProvisionRecord(
         .createHash("sha256")
         .update(JSON.stringify(desiredState ?? {}))
         .digest("hex"),
-      estimatedMonthlyCost: estimatedMonthlyCost ?? CostEstimate.NA,
+      estimatedMonthlyCost: estimatedMonthlyCost ?? CostEstimateLabel.NA,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {

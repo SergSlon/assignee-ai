@@ -126,6 +126,7 @@ const bestPracticeSchema = z
     { message: "fixType 'interactive' requires non-empty interactiveOptions" },
   );
 
+/** @see packages/best-practices/src/loader.ts SKIP_DIRS — keep in sync */
 const SKIP_DIRS = new Set(["src", "dist", "node_modules", "__tests__"]);
 
 interface ValidationError {

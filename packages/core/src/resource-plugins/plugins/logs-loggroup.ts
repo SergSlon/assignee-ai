@@ -1,7 +1,11 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
-import { TAGS_VALIDATE } from "../shared-fields.js";
+import {
+  TAGS_VALIDATE,
+  TAGS_HINT,
+  KMS_ARN_FULL_VALIDATION_MSG,
+} from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
 /**
@@ -77,8 +81,7 @@ export const logGroupPlugin: ResourcePlugin = {
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);
-          if (!s.startsWith("arn:aws:kms:"))
-            return "Must be a KMS key ARN (arn:aws:kms:...)";
+          if (!s.startsWith("arn:aws:kms:")) return KMS_ARN_FULL_VALIDATION_MSG;
           return undefined;
         },
       },
@@ -89,7 +92,7 @@ export const logGroupPlugin: ResourcePlugin = {
         type: "string",
         label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
-        hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+        hint: TAGS_HINT,
         validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {
@@ -113,17 +116,17 @@ export const logGroupPlugin: ResourcePlugin = {
         label: "Log group class",
         options: [
           {
-            value: "STANDARD",
+            value: AwsDefault.LOG_CLASS_STANDARD,
             label: "Standard (full features)",
             recommended: true,
           },
           {
-            value: "INFREQUENT_ACCESS",
+            value: AwsDefault.LOG_CLASS_INFREQUENT,
             label: "Infrequent Access (lower cost, limited features)",
             costHint: "~50% cheaper ingestion",
           },
         ],
-        initialValue: "STANDARD",
+        initialValue: AwsDefault.LOG_CLASS_STANDARD,
         hint: "STANDARD supports all CloudWatch Logs features. INFREQUENT_ACCESS has lower ingestion cost but does not support live tail, metric filters, or subscription filters. Cannot be changed after creation.",
       },
     },
@@ -139,7 +142,7 @@ export const logGroupPlugin: ResourcePlugin = {
   ],
   defaults: {
     [CfnKey.RETENTION_IN_DAYS]: 30,
-    [CfnKey.LOG_GROUP_CLASS]: "STANDARD",
+    [CfnKey.LOG_GROUP_CLASS]: AwsDefault.LOG_CLASS_STANDARD,
   },
   configHints: [
     "LogGroupName follows AWS naming conventions: /aws/lambda/<function-name> for Lambda, /aws/ecs/<cluster>/<service> for ECS.",

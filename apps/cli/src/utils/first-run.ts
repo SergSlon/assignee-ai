@@ -9,9 +9,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { ASSIGNEE_DIR } from "../config/constants.js";
 
 /** Path to the assignee state directory. */
-export const ASSIGNEE_HOME = path.join(os.homedir(), ".assignee");
+export const ASSIGNEE_HOME = path.join(os.homedir(), ASSIGNEE_DIR);
 
 /**
  * Check if this is a first run (no ~/.assignee/ directory).

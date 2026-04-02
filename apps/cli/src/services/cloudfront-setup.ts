@@ -18,6 +18,7 @@ import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { IamEffect } from "@assignee/core";
+import { CredentialError } from "../config/constants.js";
 
 export interface CloudFrontResult {
   distributionId: string;
@@ -30,14 +31,10 @@ export interface CloudFrontResult {
  */
 function createCloudFrontClient(config: AwsConfig): CloudFrontClient {
   if (!config.accessKeyId) {
-    throw new ConfigurationError(
-      "ASSIGNEE_OPERATOR_ACCESS_KEY_ID is missing or empty",
-    );
+    throw new ConfigurationError(CredentialError.MISSING_ACCESS_KEY);
   }
   if (!config.secretAccessKey) {
-    throw new ConfigurationError(
-      "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY is missing or empty",
-    );
+    throw new ConfigurationError(CredentialError.MISSING_SECRET_KEY);
   }
   if (!config.region) {
     throw new ConfigurationError("AWS_REGION is missing or empty");

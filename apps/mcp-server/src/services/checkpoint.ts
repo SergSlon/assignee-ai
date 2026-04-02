@@ -14,10 +14,12 @@ import {
   CHECKPOINT_VERSION,
   CheckpointError,
   CostEstimateLabel,
+  UNKNOWN_FALLBACK,
   type PlanCheckpoint,
 } from "@assignee/core";
 
-/** Default TTL for checkpoint expiry validation (72 hours). */
+/** Default TTL for checkpoint expiry validation (72 hours).
+ * @see apps/cli/src/config/constants.ts CHECKPOINT_DEFAULT_TTL_HOURS — keep in sync */
 const CHECKPOINT_DEFAULT_TTL_HOURS = 72;
 
 /** MCP checkpoint directory — uses /tmp to avoid assuming a project directory. */
@@ -60,7 +62,7 @@ export function serializeCheckpoint(
     ttl_hours: CHECKPOINT_DEFAULT_TTL_HOURS,
     runId: state.runId,
     userIntent: state.userIntent,
-    resourceType: state.resourceType ?? "unknown",
+    resourceType: state.resourceType ?? UNKNOWN_FALLBACK,
     resourcePatternId: state.resourcePattern?.patternId ?? undefined,
     resourceQueue: state.resourceQueue
       ? state.resourceQueue.map((r) => ({

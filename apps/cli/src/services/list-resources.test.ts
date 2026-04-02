@@ -22,8 +22,11 @@ vi.mock("node:fs", () => ({
 
 // Mock constants
 vi.mock("../config/constants.js", () => ({
+  ASSIGNEE_DIR: ".assignee",
   AWS_REGION: "us-east-1",
+  AWS_SERVICE_EXECUTE_API: "execute-api",
   PROVISIONS_FILE: "provisions.json",
+  UNKNOWN_FALLBACK: "unknown",
 }));
 
 vi.mock("../utils/tags.js", () => ({

@@ -24,7 +24,12 @@ import {
   DescribeOrderableDBInstanceOptionsCommand,
 } from "@aws-sdk/client-rds";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
-import { CfnKey, ResourceDefault, AmiOs } from "@assignee/core";
+import {
+  CfnKey,
+  ResourceDefault,
+  AmiOs,
+  DiscoveryCacheKey,
+} from "@assignee/core";
 import { withTimeout } from "./timeout.js";
 import { AWS_REGION, PromiseStatus } from "../config/constants.js";
 import { EnvVar } from "../constants/env-vars.js";
@@ -50,16 +55,8 @@ interface CacheEntry {
 /** Default TTL: 5 minutes. */
 const DEFAULT_TTL_MS = 300_000;
 
-/** Named constants for discovery cache keys. */
-export const DiscoveryCacheKey = {
-  AMIS: "discover-amis",
-  SUBNETS: "discover-subnets",
-  KEY_PAIRS: "discover-key-pairs",
-  SECURITY_GROUPS: "discover-security-groups",
-  RDS_ENGINE_VERSIONS: "discover-rds-engine-versions",
-  RDS_INSTANCE_CLASSES: "discover-rds-instance-classes",
-  LAMBDA_RUNTIMES: "discover-lambda-runtimes",
-} as const;
+// Re-export DiscoveryCacheKey from core for consumers that import from this module
+export { DiscoveryCacheKey } from "@assignee/core";
 
 /** Per-fetcher TTL overrides (milliseconds). */
 const FETCHER_TTL: Record<string, number> = {

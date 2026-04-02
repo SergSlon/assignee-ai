@@ -9,7 +9,11 @@
 
 import type { StructuredTool } from "@langchain/core/tools";
 import type { AwsPricingResponse } from "@assignee/core";
-import { PricingMatchType, RdsEngineDisplay } from "@assignee/core";
+import {
+  PricingMatchType,
+  RdsEngineDisplay,
+  RdsEngineId,
+} from "@assignee/core";
 import { ToolName } from "../constants/tools.js";
 import { AWS_REGION } from "../config/constants.js";
 import {
@@ -144,12 +148,15 @@ const RDS_ENGINE_API_NAME: Record<string, string> = {
   mysql: RdsEngineDisplay.MYSQL,
   postgres: RdsEngineDisplay.POSTGRESQL,
   mariadb: RdsEngineDisplay.MARIADB,
-  "aurora-mysql": RdsEngineDisplay.AURORA_MYSQL,
-  "aurora-postgresql": RdsEngineDisplay.AURORA_POSTGRESQL,
+  [RdsEngineId.AURORA_MYSQL]: RdsEngineDisplay.AURORA_MYSQL,
+  [RdsEngineId.AURORA_POSTGRESQL]: RdsEngineDisplay.AURORA_POSTGRESQL,
 };
 
 /** Aurora engines use a different pricing SKU structure — no deploymentOption filter. */
-const AURORA_ENGINES = new Set(["aurora-mysql", "aurora-postgresql"]);
+const AURORA_ENGINES: Set<string> = new Set([
+  RdsEngineId.AURORA_MYSQL,
+  RdsEngineId.AURORA_POSTGRESQL,
+]);
 
 /**
  * Fetches live on-demand prices for RDS DB instance classes in parallel.

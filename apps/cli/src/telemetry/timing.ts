@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { STARTUP_BUDGETS, checkBudget } from "../constants/time-budget.js";
 import { EnvVar } from "../constants/env-vars.js";
+import { ASSIGNEE_DIR } from "../config/constants.js";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -149,7 +150,7 @@ export function checkTimingsAgainstBudgets(): void {
 const MAX_ENTRIES = 100;
 
 function getTelemetryDir(home?: string): string {
-  return join(home ?? homedir(), ".assignee", "telemetry");
+  return join(home ?? homedir(), ASSIGNEE_DIR, "telemetry");
 }
 
 function getTelemetryFile(home?: string): string {

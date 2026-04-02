@@ -3,7 +3,7 @@ import type {
   PricingEstimate,
   McpPricingConfig,
 } from "../types.js";
-import { CfnKey } from "../../config/cfn-keys.js";
+import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import {
   PricingField as F,
   PricingMatchType as M,
@@ -24,8 +24,10 @@ export const logsPricingStrategy: PricingStrategy = {
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
     const logGroupClass =
-      (desiredState?.[CfnKey.LOG_GROUP_CLASS] as string) ?? "STANDARD";
-    const isInfrequentAccess = logGroupClass === "INFREQUENT_ACCESS";
+      (desiredState?.[CfnKey.LOG_GROUP_CLASS] as string) ??
+      AwsDefault.LOG_CLASS_STANDARD;
+    const isInfrequentAccess =
+      logGroupClass === AwsDefault.LOG_CLASS_INFREQUENT;
 
     return {
       serviceCode: SC.CLOUDWATCH,

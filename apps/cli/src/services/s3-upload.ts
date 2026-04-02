@@ -19,6 +19,7 @@ import type { AwsConfig } from "./cloudcontrol-client.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { IamEffect } from "@assignee/core";
 import { ContentType } from "../constants/errors.js";
+import { CredentialError } from "../config/constants.js";
 
 export interface UploadResult {
   uploaded: number;
@@ -93,14 +94,10 @@ export function collectFiles(dir: string, base?: string): string[] {
  */
 function createS3Client(config: AwsConfig): S3Client {
   if (!config.accessKeyId) {
-    throw new ConfigurationError(
-      "ASSIGNEE_OPERATOR_ACCESS_KEY_ID is missing or empty",
-    );
+    throw new ConfigurationError(CredentialError.MISSING_ACCESS_KEY);
   }
   if (!config.secretAccessKey) {
-    throw new ConfigurationError(
-      "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY is missing or empty",
-    );
+    throw new ConfigurationError(CredentialError.MISSING_SECRET_KEY);
   }
   if (!config.region) {
     throw new ConfigurationError("AWS_REGION is missing or empty");

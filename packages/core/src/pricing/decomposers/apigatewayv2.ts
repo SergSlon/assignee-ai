@@ -19,7 +19,7 @@ import {
   PricingServiceCode as SC,
 } from "../filter-constants.js";
 import { PriceUnit } from "../price-units.js";
-import { LineItemLabel } from "../line-item-labels.js";
+import { LineItemLabel, DecomposerDescription } from "../line-item-labels.js";
 import { PricingFilterValue as FV } from "../pricing-filter-values.js";
 import { PricingUnit } from "../units.js";
 
@@ -48,7 +48,7 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
           },
         ],
         kind: K.USAGE_BASED,
-        description: "per million",
+        description: DecomposerDescription.PER_MILLION,
         priceUnit: PriceUnit.PER_MILLION_MSGS,
         scale: 1_000_000,
       });
@@ -68,7 +68,7 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
           },
         ],
         kind: K.USAGE_BASED,
-        description: "per million",
+        description: DecomposerDescription.PER_MILLION,
         priceUnit: PriceUnit.PER_MILLION_MINS,
         scale: 1_000_000,
       });
@@ -90,7 +90,7 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
           },
         ],
         kind: K.USAGE_BASED,
-        description: "per million",
+        description: DecomposerDescription.PER_MILLION,
         priceUnit: PriceUnit.PER_MILLION_REQS,
         scale: 1_000_000,
       });
@@ -120,7 +120,7 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
           },
         ],
         kind: K.USAGE_BASED,
-        description: "per GB",
+        description: DecomposerDescription.PER_GB,
         priceUnit: PriceUnit.PER_GB,
       });
     }

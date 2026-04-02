@@ -16,6 +16,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import {
+  ASSIGNEE_DIR,
   MEMORY_DEDUP_THRESHOLD_MS,
   PROVISIONS_FILE,
   FAILURES_FILE,
@@ -31,7 +32,7 @@ import {
   safeTry,
 } from "@assignee/core";
 
-const MEMORY_DIR = path.join(os.homedir(), ".assignee", "memory");
+const MEMORY_DIR = path.join(os.homedir(), ASSIGNEE_DIR, "memory");
 
 export class MemoryService {
   constructor(private readonly dir: string = MEMORY_DIR) {}

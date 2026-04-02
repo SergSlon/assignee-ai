@@ -4,9 +4,10 @@ import {
   ResourceDefault,
   AwsDefault,
   AmiOs,
+  SizeLabel,
 } from "../../config/cfn-keys.js";
 import { QuestionTypeName, type ResourcePlugin } from "../types.js";
-import { TAGS_VALIDATE } from "../shared-fields.js";
+import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
 /**
@@ -35,12 +36,12 @@ export const INSTANCE_CATEGORIES = [
       {
         value: "t3.medium",
         label: "t3.medium (2 vCPU,  4 GiB) — ~$0.0416/hr",
-        fitHint: "Small production",
+        fitHint: SizeLabel.SMALL_PRODUCTION,
       },
       {
         value: "t3.large",
         label: "t3.large  (2 vCPU,  8 GiB) — ~$0.0832/hr",
-        fitHint: "Medium production",
+        fitHint: SizeLabel.MEDIUM_PRODUCTION,
       },
       {
         value: "t3.xlarge",
@@ -136,12 +137,12 @@ export const INSTANCE_CATEGORIES = [
       {
         value: "c6i.large",
         label: "c6i.large   (2 vCPU,  4 GiB) — ~$0.0850/hr",
-        fitHint: "Latest gen compute",
+        fitHint: SizeLabel.LATEST_GEN_COMPUTE,
       },
       {
         value: "c6i.xlarge",
         label: "c6i.xlarge  (4 vCPU,  8 GiB) — ~$0.1700/hr",
-        fitHint: "Latest gen compute",
+        fitHint: SizeLabel.LATEST_GEN_COMPUTE,
       },
       {
         value: "c6i.2xlarge",
@@ -262,7 +263,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
         type: "string",
         label: FieldLabel.TAGS,
         placeholder: "env:production, team:backend",
-        hint: "Comma-separated Key:Value pairs for cost tracking and organization. Example: Environment:production, Team:backend, Project:api. Tags are free and highly recommended.",
+        hint: TAGS_HINT,
         validate: TAGS_VALIDATE,
       },
       toCfn: (answer: unknown) => {

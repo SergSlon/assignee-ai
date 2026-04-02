@@ -92,8 +92,12 @@ export const PricingProductFamily = {
   SYSTEMS_MANAGER: "AWS Systems Manager",
 } as const;
 
+/** Standard free tier message used for resources with no usage limits. */
+export const FREE_TIER_MESSAGE = "Always free tier" as const;
+
 /** Static cost estimate labels used when no pricing API query is needed. */
 export const CostEstimateLabel = {
   FREE: "Free",
+  NO_CHARGE: "No charge",
   NA: "N/A",
 } as const;

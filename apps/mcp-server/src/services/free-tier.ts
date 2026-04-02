@@ -6,16 +6,13 @@
  * @see Story 7.8, Story 20.4
  */
 
-import { RESOURCE_TYPES } from "@assignee/core";
+import { RESOURCE_TYPES, FREE_TIER_MESSAGE } from "@assignee/core";
 
 /** Free tier info returned by getFreeTierNote. */
 export interface FreeTierInfo {
   type: "always_free" | "usage_limited" | "legacy_eligible";
   message: string;
 }
-
-/** Standard free tier message used for resources with no usage limits. */
-const FREE_TIER_MESSAGE = "Always free tier";
 
 /** Resources that are always free regardless of account age. */
 const ALWAYS_FREE: Record<string, string> = {

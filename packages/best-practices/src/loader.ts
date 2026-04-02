@@ -5,7 +5,8 @@ import { ZodError } from "zod";
 import { bestPracticeSchema } from "./schema.js";
 import type { BestPractice } from "./types.js";
 
-const SKIP_DIRS = new Set(["src", "dist", "node_modules", "__tests__"]);
+/** Directories to skip when walking best-practices service directories. */
+export const SKIP_DIRS = new Set(["src", "dist", "node_modules", "__tests__"]);
 
 export class BPSchemaError extends Error {
   public readonly filePath: string;

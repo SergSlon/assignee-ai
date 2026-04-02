@@ -20,7 +20,7 @@ import {
 } from "../filter-constants.js";
 import { PricingFilterValue as FV } from "../pricing-filter-values.js";
 import { PriceUnit } from "../price-units.js";
-import { LineItemLabel } from "../line-item-labels.js";
+import { LineItemLabel, DecomposerDescription } from "../line-item-labels.js";
 import { PricingUnit } from "../units.js";
 
 export const lambdaPricingDecomposer: PricingDecomposer = {
@@ -41,7 +41,7 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
         { Field: F.USAGE_TYPE, Value: FV.LAMBDA_REQUEST, Type: M.TERM_MATCH },
       ],
       kind: K.USAGE_BASED,
-      description: "per million",
+      description: DecomposerDescription.PER_MILLION,
       priceUnit: PriceUnit.PER_MILLION_REQS,
       scale: 1_000_000,
     });

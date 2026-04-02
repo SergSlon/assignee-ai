@@ -10,6 +10,7 @@ import {
   ResourceDefault,
   AwsDefault,
   RdsEngineDisplay,
+  RdsEngineId,
 } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
@@ -145,8 +146,8 @@ function mapEngine(engine: string): string {
     "sqlserver-se": RdsEngineDisplay.SQL_SERVER,
     "sqlserver-ex": RdsEngineDisplay.SQL_SERVER,
     "sqlserver-web": RdsEngineDisplay.SQL_SERVER,
-    "aurora-mysql": RdsEngineDisplay.AURORA_MYSQL,
-    "aurora-postgresql": RdsEngineDisplay.AURORA_POSTGRESQL,
+    [RdsEngineId.AURORA_MYSQL]: RdsEngineDisplay.AURORA_MYSQL,
+    [RdsEngineId.AURORA_POSTGRESQL]: RdsEngineDisplay.AURORA_POSTGRESQL,
   };
   return map[engine] ?? engine;
 }

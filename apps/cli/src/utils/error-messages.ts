@@ -11,6 +11,7 @@
 
 import { AwsErrorName } from "../constants/aws-errors.js";
 import { ErrorCode } from "../constants/errors.js";
+import { EXAMPLE_S3_INTENT } from "../config/constants.js";
 import {
   AssigneeError,
   ProvisioningError,
@@ -50,8 +51,7 @@ const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     code: PROVISIONING_ERROR_CODES.ALREADY_EXISTS,
     what: "A resource with this name already exists in your AWS account.",
     why: "AWS rejected the create request because an identical resource identifier is already in use.",
-    howToFix:
-      'Choose a different resource name in your intent, or run `assignee plan` with a unique name (e.g., "Create an S3 bucket named my-bucket-v2").',
+    howToFix: `Choose a different resource name in your intent, or run \`assignee plan\` with a unique name (e.g., "${EXAMPLE_S3_INTENT}-v2").`,
   },
   [PROVISIONING_ERROR_CODES.NOT_FOUND]: {
     code: PROVISIONING_ERROR_CODES.NOT_FOUND,
@@ -276,8 +276,7 @@ const GENERIC_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     code: ErrorCode.MISSING_INTENT,
     what: "No intent was provided.",
     why: "The command requires a natural language description of what you want to create.",
-    howToFix:
-      'Provide an intent in quotes: `assignee plan "Create an S3 bucket named my-bucket"`',
+    howToFix: `Provide an intent in quotes: \`assignee plan "${EXAMPLE_S3_INTENT}"\``,
   },
   [ErrorCode.UNSUPPORTED_RESOURCE]: {
     code: ErrorCode.UNSUPPORTED_RESOURCE,
