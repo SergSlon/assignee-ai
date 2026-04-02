@@ -8,8 +8,11 @@
 import { SUPPORTED_TYPES_ARRAY } from "./resource-types.js";
 import { getRequiredIamActions } from "./iam-actions.js";
 import { IamEffect, type IamEffectType } from "./iam-effects.js";
-import { IamPolicy } from "./aws-arns.js";
-import { BEDROCK_MODEL_ARN_WILDCARD } from "./aws-arns.js";
+import {
+  IamPolicy,
+  IamAction,
+  BEDROCK_MODEL_ARN_WILDCARD,
+} from "./aws-arns.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,11 +78,11 @@ export function operatorPolicy(
 
   // SDK fallback actions for types that bypass CloudControl
   const sdkFallbackActions = [
-    "lambda:CreateEventSourceMapping",
-    "lambda:GetEventSourceMapping",
-    "lambda:DeleteEventSourceMapping",
-    "sns:Subscribe",
-    "sns:Unsubscribe",
+    IamAction.LAMBDA_CREATE_ESM,
+    IamAction.LAMBDA_GET_ESM,
+    IamAction.LAMBDA_DELETE_ESM,
+    IamAction.SNS_SUBSCRIBE,
+    IamAction.SNS_UNSUBSCRIBE,
   ];
 
   return {
@@ -88,10 +91,7 @@ export function operatorPolicy(
       {
         Sid: "BedrockInvoke",
         Effect: IamEffect.ALLOW,
-        Action: [
-          "bedrock:InvokeModel",
-          "bedrock:InvokeModelWithResponseStream",
-        ],
+        Action: [IamAction.BEDROCK_INVOKE, IamAction.BEDROCK_INVOKE_STREAM],
         Resource: modelArn,
       },
       {
@@ -120,13 +120,16 @@ export function operatorPolicy(
       {
         Sid: "XRayTracing",
         Effect: IamEffect.ALLOW,
-        Action: ["xray:PutTraceSegments", "xray:PutTelemetryRecords"],
+        Action: [
+          IamAction.XRAY_PUT_TRACE_SEGMENTS,
+          IamAction.XRAY_PUT_TELEMETRY,
+        ],
         Resource: "*",
       },
       {
         Sid: "ResourceTagging",
         Effect: IamEffect.ALLOW,
-        Action: ["tag:TagResources", "tag:GetResources"],
+        Action: [IamAction.TAG_TAG_RESOURCES, IamAction.TAG_GET_RESOURCES],
         Resource: "*",
       },
     ],
@@ -144,22 +147,22 @@ export function readerPolicy(): PolicyDocument {
       {
         Sid: "CloudFormationSchemaRead",
         Effect: IamEffect.ALLOW,
-        Action: ["cloudformation:DescribeType", "cloudformation:ListTypes"],
+        Action: [IamAction.CFN_DESCRIBE_TYPE, IamAction.CFN_LIST_TYPES],
         Resource: "*",
       },
       {
         Sid: "ResourceDiscoveryRead",
         Effect: IamEffect.ALLOW,
         Action: [
-          "ssm:GetParameter",
-          "ec2:DescribeInstances",
-          "ec2:DescribeSubnets",
-          "ec2:DescribeSecurityGroups",
-          "ec2:DescribeKeyPairs",
-          "ec2:DescribeInstanceTypes",
-          "ec2:DescribeImages",
-          "rds:DescribeDBEngineVersions",
-          "rds:DescribeOrderableDBInstanceOptions",
+          IamAction.SSM_GET_PARAMETER,
+          IamAction.EC2_DESCRIBE_INSTANCES,
+          IamAction.EC2_DESCRIBE_SUBNETS,
+          IamAction.EC2_DESCRIBE_SECURITY_GROUPS,
+          IamAction.EC2_DESCRIBE_KEY_PAIRS,
+          IamAction.EC2_DESCRIBE_INSTANCE_TYPES,
+          IamAction.EC2_DESCRIBE_IMAGES,
+          IamAction.RDS_DESCRIBE_DB_ENGINE_VERSIONS,
+          IamAction.RDS_DESCRIBE_ORDERABLE_INSTANCES,
         ],
         Resource: "*",
       },
@@ -167,16 +170,19 @@ export function readerPolicy(): PolicyDocument {
         Sid: "PricingRead",
         Effect: IamEffect.ALLOW,
         Action: [
-          "pricing:GetProducts",
-          "pricing:DescribeServices",
-          "pricing:GetAttributeValues",
+          IamAction.PRICING_GET_PRODUCTS,
+          IamAction.PRICING_DESCRIBE_SERVICES,
+          IamAction.PRICING_GET_ATTRIBUTE_VALUES,
         ],
         Resource: "*",
       },
       {
         Sid: "CostExplorerRead",
         Effect: IamEffect.ALLOW,
-        Action: ["ce:GetCostAndUsage", "ce:GetCostForecast"],
+        Action: [
+          IamAction.CE_GET_COST_AND_USAGE,
+          IamAction.CE_GET_COST_FORECAST,
+        ],
         Resource: "*",
       },
     ],
@@ -196,21 +202,21 @@ export function auditorPolicy(): PolicyDocument {
         Sid: "IAMSimulateAndRead",
         Effect: IamEffect.ALLOW,
         Action: [
-          "iam:SimulateCustomPolicy",
-          "iam:SimulatePrincipalPolicy",
-          "iam:GetUser",
-          "iam:GetRole",
-          "iam:GetPolicy",
-          "iam:GetPolicyVersion",
-          "iam:GetUserPolicy",
-          "iam:GetRolePolicy",
-          "iam:ListUsers",
-          "iam:ListRoles",
-          "iam:ListPolicies",
-          "iam:ListUserPolicies",
-          "iam:ListRolePolicies",
-          "iam:ListAttachedUserPolicies",
-          "iam:ListAttachedRolePolicies",
+          IamAction.IAM_SIMULATE_CUSTOM_POLICY,
+          IamAction.IAM_SIMULATE_PRINCIPAL_POLICY,
+          IamAction.IAM_GET_USER,
+          IamAction.IAM_GET_ROLE,
+          IamAction.IAM_GET_POLICY,
+          IamAction.IAM_GET_POLICY_VERSION,
+          IamAction.IAM_GET_USER_POLICY,
+          IamAction.IAM_GET_ROLE_POLICY,
+          IamAction.IAM_LIST_USERS,
+          IamAction.IAM_LIST_ROLES,
+          IamAction.IAM_LIST_POLICIES,
+          IamAction.IAM_LIST_USER_POLICIES,
+          IamAction.IAM_LIST_ROLE_POLICIES,
+          IamAction.IAM_LIST_ATTACHED_USER_POLICIES,
+          IamAction.IAM_LIST_ATTACHED_ROLE_POLICIES,
         ],
         Resource: "*",
       },
@@ -218,15 +224,15 @@ export function auditorPolicy(): PolicyDocument {
         Sid: "SecurityHubRead",
         Effect: IamEffect.ALLOW,
         Action: [
-          "securityhub:GetFindings",
-          "securityhub:GetInsights",
-          "securityhub:GetEnabledStandards",
-          "securityhub:ListFindings",
-          "securityhub:ListEnabledProductsForImport",
-          "securityhub:DescribeHub",
-          "securityhub:DescribeStandards",
-          "securityhub:DescribeStandardsControls",
-          "securityhub:BatchGetFindings",
+          IamAction.SECURITYHUB_GET_FINDINGS,
+          IamAction.SECURITYHUB_GET_INSIGHTS,
+          IamAction.SECURITYHUB_GET_ENABLED_STANDARDS,
+          IamAction.SECURITYHUB_LIST_FINDINGS,
+          IamAction.SECURITYHUB_LIST_ENABLED_PRODUCTS,
+          IamAction.SECURITYHUB_DESCRIBE_HUB,
+          IamAction.SECURITYHUB_DESCRIBE_STANDARDS,
+          IamAction.SECURITYHUB_DESCRIBE_STANDARDS_CONTROLS,
+          IamAction.SECURITYHUB_BATCH_GET_FINDINGS,
         ],
         Resource: "*",
       },
@@ -234,10 +240,10 @@ export function auditorPolicy(): PolicyDocument {
         Sid: "GuardDutyRead",
         Effect: IamEffect.ALLOW,
         Action: [
-          "guardduty:GetDetector",
-          "guardduty:GetFindings",
-          "guardduty:ListDetectors",
-          "guardduty:ListFindings",
+          IamAction.GUARDDUTY_GET_DETECTOR,
+          IamAction.GUARDDUTY_GET_FINDINGS,
+          IamAction.GUARDDUTY_LIST_DETECTORS,
+          IamAction.GUARDDUTY_LIST_FINDINGS,
         ],
         Resource: "*",
       },
@@ -245,9 +251,9 @@ export function auditorPolicy(): PolicyDocument {
         Sid: "InspectorRead",
         Effect: IamEffect.ALLOW,
         Action: [
-          "inspector2:ListFindings",
-          "inspector2:GetFindingsReportStatus",
-          "inspector2:ListCoverage",
+          IamAction.INSPECTOR_LIST_FINDINGS,
+          IamAction.INSPECTOR_GET_FINDINGS_REPORT_STATUS,
+          IamAction.INSPECTOR_LIST_COVERAGE,
         ],
         Resource: "*",
       },
@@ -255,10 +261,10 @@ export function auditorPolicy(): PolicyDocument {
         Sid: "IAMAccessAnalyzerRead",
         Effect: IamEffect.ALLOW,
         Action: [
-          "access-analyzer:GetAnalyzer",
-          "access-analyzer:ListAnalyzers",
-          "access-analyzer:ListFindings",
-          "access-analyzer:GetFinding",
+          IamAction.ACCESS_ANALYZER_GET_ANALYZER,
+          IamAction.ACCESS_ANALYZER_LIST_ANALYZERS,
+          IamAction.ACCESS_ANALYZER_LIST_FINDINGS,
+          IamAction.ACCESS_ANALYZER_GET_FINDING,
         ],
         Resource: "*",
       },
