@@ -44,6 +44,7 @@ import { mergeEnvFile } from "../utils/env-writer.js";
 import { AWS_REGION, PromiseStatus, UserMessage } from "../config/constants.js";
 import { AwsErrorName } from "../constants/aws-errors.js";
 import {
+  ArnPrefix,
   IamAction,
   IamEffect,
   IamPolicy,
@@ -86,6 +87,7 @@ const MANAGED_TAG = { Key: AssigneeTag.KEY, Value: AssigneeTag.VALUE };
 
 /** Bedrock invocation logging constants. */
 const BEDROCK_LOGGING_ROLE_NAME = "AssigneeAiBedrockLoggingRole";
+const BEDROCK_LOGGING_POLICY_NAME = "BedrockLoggingPolicy";
 const BEDROCK_LOG_GROUP_NAME = "/assignee-ai/bedrock-invocations";
 
 /**
@@ -476,7 +478,7 @@ export const setupCommand = new Command(CommandName.SETUP)
     await iam.send(
       new PutRolePolicyCommand({
         RoleName: BEDROCK_LOGGING_ROLE_NAME,
-        PolicyName: "BedrockLoggingPolicy",
+        PolicyName: BEDROCK_LOGGING_POLICY_NAME,
         PolicyDocument: JSON.stringify({
           Version: IamPolicy.VERSION,
           Statement: [
@@ -488,7 +490,7 @@ export const setupCommand = new Command(CommandName.SETUP)
                 IamAction.LOGS_PUT_LOG_EVENTS,
                 IamAction.LOGS_DESCRIBE_LOG_GROUPS,
               ],
-              Resource: `arn:aws:logs:${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
+              Resource: `${ArnPrefix.LOGS}${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
             },
           ],
         }),
@@ -528,7 +530,7 @@ export const setupCommand = new Command(CommandName.SETUP)
           loggingConfig: {
             cloudWatchConfig: {
               logGroupName: BEDROCK_LOG_GROUP_NAME,
-              roleArn: `arn:aws:iam::${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
+              roleArn: `${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
             },
             textDataDeliveryEnabled: true,
             imageDataDeliveryEnabled: false,

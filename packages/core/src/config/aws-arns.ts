@@ -21,6 +21,8 @@ export const ArnPrefix = {
   LAMBDA: "arn:aws:lambda:",
   /** EC2 resource ARNs */
   EC2: "arn:aws:ec2:",
+  /** CloudWatch Logs ARNs */
+  LOGS: "arn:aws:logs:",
   /** Bedrock model ARNs */
   BEDROCK: "arn:aws:bedrock:",
 } as const;
