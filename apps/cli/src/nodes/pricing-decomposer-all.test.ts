@@ -33,12 +33,10 @@ import type { StructuredTool } from "@langchain/core/tools";
 const cacheStore = new Map<string, unknown>();
 
 vi.mock("../services/price-cache.js", () => ({
-  getCachedPrice: vi.fn(
-    (serviceCode: string, filters: unknown[]) => {
-      const key = JSON.stringify({ serviceCode, filters });
-      return cacheStore.get(key) ?? null;
-    },
-  ),
+  getCachedPrice: vi.fn((serviceCode: string, filters: unknown[]) => {
+    const key = JSON.stringify({ serviceCode, filters });
+    return cacheStore.get(key) ?? null;
+  }),
   setCachedPrice: vi.fn(
     (serviceCode: string, filters: unknown[], data: unknown) => {
       const key = JSON.stringify({ serviceCode, filters });
@@ -166,7 +164,7 @@ const dataTransferOutResponse = buildMcpResponse({
   productFamily: "Data Transfer",
   attributes: {
     fromLocationType: "AWS Region",
-    toLocationType: "External",
+    toLocationType: "Other",
     transferType: "AWS Outbound",
     usagetype: "DataTransfer-Out-Bytes",
     servicecode: "AWSDataTransfer",
@@ -339,8 +337,7 @@ function hasFilter(
   value: string,
 ): boolean {
   return filters.some(
-    (f) =>
-      f.Field.toLowerCase() === field.toLowerCase() && f.Value === value,
+    (f) => f.Field.toLowerCase() === field.toLowerCase() && f.Value === value,
   );
 }
 
@@ -348,36 +345,38 @@ function createEc2PricingTool(): StructuredTool {
   return {
     name: ToolName.GET_PRICING,
     description: "",
-    invoke: vi.fn().mockImplementation(
-      (args: { service_code: string; filters: McpPricingFilter[] }) => {
-        const { filters } = args;
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        (args: { service_code: string; filters: McpPricingFilter[] }) => {
+          const { filters } = args;
 
-        // Compute Instance
-        if (hasFilter(filters, "productFamily", "Compute Instance")) {
-          return Promise.resolve(ec2ComputeResponse);
-        }
-        // EBS Storage
-        if (
-          hasFilter(filters, "productFamily", "Storage") &&
-          hasFilter(filters, "volumeApiName", "gp3")
-        ) {
-          return Promise.resolve(ec2EbsGp3Response);
-        }
-        // Public IPv4
-        if (hasFilter(filters, "productFamily", "IP Address")) {
-          return Promise.resolve(ec2PublicIpv4Response);
-        }
-        // Data transfer out
-        if (hasFilter(filters, "productFamily", "Data Transfer")) {
-          return Promise.resolve(dataTransferOutResponse);
-        }
+          // Compute Instance
+          if (hasFilter(filters, "productFamily", "Compute Instance")) {
+            return Promise.resolve(ec2ComputeResponse);
+          }
+          // EBS Storage
+          if (
+            hasFilter(filters, "productFamily", "Storage") &&
+            hasFilter(filters, "volumeApiName", "gp3")
+          ) {
+            return Promise.resolve(ec2EbsGp3Response);
+          }
+          // Public IPv4
+          if (hasFilter(filters, "productFamily", "IP Address")) {
+            return Promise.resolve(ec2PublicIpv4Response);
+          }
+          // Data transfer out
+          if (hasFilter(filters, "productFamily", "Data Transfer")) {
+            return Promise.resolve(dataTransferOutResponse);
+          }
 
-        return Promise.resolve({
-          type: "text",
-          text: JSON.stringify({ status: "success", data: [] }),
-        });
-      },
-    ),
+          return Promise.resolve({
+            type: "text",
+            text: JSON.stringify({ status: "success", data: [] }),
+          });
+        },
+      ),
   } as unknown as StructuredTool;
 }
 
@@ -385,29 +384,31 @@ function createRdsPricingTool(): StructuredTool {
   return {
     name: ToolName.GET_PRICING,
     description: "",
-    invoke: vi.fn().mockImplementation(
-      (args: { service_code: string; filters: McpPricingFilter[] }) => {
-        const { filters } = args;
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        (args: { service_code: string; filters: McpPricingFilter[] }) => {
+          const { filters } = args;
 
-        // Database Instance (compute)
-        if (hasFilter(filters, "productFamily", "Database Instance")) {
-          return Promise.resolve(rdsComputeResponse);
-        }
-        // Database Storage
-        if (hasFilter(filters, "productFamily", "Database Storage")) {
-          return Promise.resolve(rdsStorageGp3Response);
-        }
-        // Backup (Storage Snapshot)
-        if (hasFilter(filters, "productFamily", "Storage Snapshot")) {
-          return Promise.resolve(rdsBackupResponse);
-        }
+          // Database Instance (compute)
+          if (hasFilter(filters, "productFamily", "Database Instance")) {
+            return Promise.resolve(rdsComputeResponse);
+          }
+          // Database Storage
+          if (hasFilter(filters, "productFamily", "Database Storage")) {
+            return Promise.resolve(rdsStorageGp3Response);
+          }
+          // Backup (Storage Snapshot)
+          if (hasFilter(filters, "productFamily", "Storage Snapshot")) {
+            return Promise.resolve(rdsBackupResponse);
+          }
 
-        return Promise.resolve({
-          type: "text",
-          text: JSON.stringify({ status: "success", data: [] }),
-        });
-      },
-    ),
+          return Promise.resolve({
+            type: "text",
+            text: JSON.stringify({ status: "success", data: [] }),
+          });
+        },
+      ),
   } as unknown as StructuredTool;
 }
 
@@ -415,35 +416,37 @@ function createLambdaPricingTool(): StructuredTool {
   return {
     name: ToolName.GET_PRICING,
     description: "",
-    invoke: vi.fn().mockImplementation(
-      (args: { service_code: string; filters: McpPricingFilter[] }) => {
-        const { filters } = args;
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        (args: { service_code: string; filters: McpPricingFilter[] }) => {
+          const { filters } = args;
 
-        // Requests
-        if (
-          hasFilter(filters, "productFamily", "Serverless") &&
-          hasFilter(filters, "usagetype", "Request")
-        ) {
-          return Promise.resolve(lambdaRequestsResponse);
-        }
-        // Duration (GB-seconds)
-        if (
-          hasFilter(filters, "productFamily", "Serverless") &&
-          hasFilter(filters, "usagetype", "Lambda-GB-Second")
-        ) {
-          return Promise.resolve(lambdaDurationResponse);
-        }
-        // CloudWatch Logs
-        if (hasFilter(filters, "productFamily", "Data Payload")) {
-          return Promise.resolve(lambdaCloudWatchResponse);
-        }
+          // Requests
+          if (
+            hasFilter(filters, "productFamily", "Serverless") &&
+            hasFilter(filters, "usagetype", "Request")
+          ) {
+            return Promise.resolve(lambdaRequestsResponse);
+          }
+          // Duration (GB-seconds)
+          if (
+            hasFilter(filters, "productFamily", "Serverless") &&
+            hasFilter(filters, "usagetype", "Lambda-GB-Second")
+          ) {
+            return Promise.resolve(lambdaDurationResponse);
+          }
+          // CloudWatch Logs
+          if (hasFilter(filters, "productFamily", "Data Payload")) {
+            return Promise.resolve(lambdaCloudWatchResponse);
+          }
 
-        return Promise.resolve({
-          type: "text",
-          text: JSON.stringify({ status: "success", data: [] }),
-        });
-      },
-    ),
+          return Promise.resolve({
+            type: "text",
+            text: JSON.stringify({ status: "success", data: [] }),
+          });
+        },
+      ),
   } as unknown as StructuredTool;
 }
 
@@ -451,43 +454,45 @@ function createDynamodbOnDemandPricingTool(): StructuredTool {
   return {
     name: ToolName.GET_PRICING,
     description: "",
-    invoke: vi.fn().mockImplementation(
-      (args: { service_code: string; filters: McpPricingFilter[] }) => {
-        const { filters } = args;
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        (args: { service_code: string; filters: McpPricingFilter[] }) => {
+          const { filters } = args;
 
-        // On-demand read
-        if (
-          hasFilter(
-            filters,
-            "productFamily",
-            "Amazon DynamoDB PayPerRequest Throughput",
-          ) &&
-          hasFilter(filters, "group", "DDB-ReadUnits")
-        ) {
-          return Promise.resolve(dynamodbReadOnDemandResponse);
-        }
-        // On-demand write
-        if (
-          hasFilter(
-            filters,
-            "productFamily",
-            "Amazon DynamoDB PayPerRequest Throughput",
-          ) &&
-          hasFilter(filters, "group", "DDB-WriteUnits")
-        ) {
-          return Promise.resolve(dynamodbWriteOnDemandResponse);
-        }
-        // Storage
-        if (hasFilter(filters, "productFamily", "Database Storage")) {
-          return Promise.resolve(dynamodbStorageResponse);
-        }
+          // On-demand read
+          if (
+            hasFilter(
+              filters,
+              "productFamily",
+              "Amazon DynamoDB PayPerRequest Throughput",
+            ) &&
+            hasFilter(filters, "group", "DDB-ReadUnits")
+          ) {
+            return Promise.resolve(dynamodbReadOnDemandResponse);
+          }
+          // On-demand write
+          if (
+            hasFilter(
+              filters,
+              "productFamily",
+              "Amazon DynamoDB PayPerRequest Throughput",
+            ) &&
+            hasFilter(filters, "group", "DDB-WriteUnits")
+          ) {
+            return Promise.resolve(dynamodbWriteOnDemandResponse);
+          }
+          // Storage
+          if (hasFilter(filters, "productFamily", "Database Storage")) {
+            return Promise.resolve(dynamodbStorageResponse);
+          }
 
-        return Promise.resolve({
-          type: "text",
-          text: JSON.stringify({ status: "success", data: [] }),
-        });
-      },
-    ),
+          return Promise.resolve({
+            type: "text",
+            text: JSON.stringify({ status: "success", data: [] }),
+          });
+        },
+      ),
   } as unknown as StructuredTool;
 }
 
@@ -495,35 +500,37 @@ function createDynamodbProvisionedPricingTool(): StructuredTool {
   return {
     name: ToolName.GET_PRICING,
     description: "",
-    invoke: vi.fn().mockImplementation(
-      (args: { service_code: string; filters: McpPricingFilter[] }) => {
-        const { filters } = args;
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        (args: { service_code: string; filters: McpPricingFilter[] }) => {
+          const { filters } = args;
 
-        // Provisioned read
-        if (
-          hasFilter(filters, "productFamily", "Provisioned IOPS") &&
-          hasFilter(filters, "group", "DDB-ReadUnits")
-        ) {
-          return Promise.resolve(dynamodbReadProvisionedResponse);
-        }
-        // Provisioned write
-        if (
-          hasFilter(filters, "productFamily", "Provisioned IOPS") &&
-          hasFilter(filters, "group", "DDB-WriteUnits")
-        ) {
-          return Promise.resolve(dynamodbWriteProvisionedResponse);
-        }
-        // Storage
-        if (hasFilter(filters, "productFamily", "Database Storage")) {
-          return Promise.resolve(dynamodbStorageResponse);
-        }
+          // Provisioned read
+          if (
+            hasFilter(filters, "productFamily", "Provisioned IOPS") &&
+            hasFilter(filters, "group", "DDB-ReadUnits")
+          ) {
+            return Promise.resolve(dynamodbReadProvisionedResponse);
+          }
+          // Provisioned write
+          if (
+            hasFilter(filters, "productFamily", "Provisioned IOPS") &&
+            hasFilter(filters, "group", "DDB-WriteUnits")
+          ) {
+            return Promise.resolve(dynamodbWriteProvisionedResponse);
+          }
+          // Storage
+          if (hasFilter(filters, "productFamily", "Database Storage")) {
+            return Promise.resolve(dynamodbStorageResponse);
+          }
 
-        return Promise.resolve({
-          type: "text",
-          text: JSON.stringify({ status: "success", data: [] }),
-        });
-      },
-    ),
+          return Promise.resolve({
+            type: "text",
+            text: JSON.stringify({ status: "success", data: [] }),
+          });
+        },
+      ),
   } as unknown as StructuredTool;
 }
 
@@ -568,10 +575,9 @@ describe("EC2 pricing decomposer — line item structure", () => {
   });
 
   it("produces correct line items for basic instance (compute + data transfer)", () => {
-    const items = defaultDecomposerRegistry.decompose(
-      "AWS::EC2::Instance",
-      { InstanceType: "t3.micro" },
-    );
+    const items = defaultDecomposerRegistry.decompose("AWS::EC2::Instance", {
+      InstanceType: "t3.micro",
+    });
     // No BlockDeviceMappings, no public IP => compute + data transfer
     expect(items).toHaveLength(2);
     expect(items.map((i) => i.label)).toEqual(["Compute", "Data transfer out"]);
@@ -811,10 +817,9 @@ describe("Lambda pricing decomposer — line item structure", () => {
   });
 
   it("produces 3 line items (Requests, Duration, CloudWatch Logs)", () => {
-    const items = defaultDecomposerRegistry.decompose(
-      "AWS::Lambda::Function",
-      { MemorySize: 256 },
-    );
+    const items = defaultDecomposerRegistry.decompose("AWS::Lambda::Function", {
+      MemorySize: 256,
+    });
     expect(items).toHaveLength(3);
     expect(items.map((i) => i.label)).toEqual([
       "Requests",
@@ -1143,9 +1148,7 @@ describe("DynamoDB provisioned pricing — filter-dispatched queryLineItemPrices
 
 describe("extractFirstTierPrice — filter validation across decomposers", () => {
   it("returns null when EC2 compute response is queried with Storage filters", () => {
-    const computeData: AwsPricingResponse = JSON.parse(
-      ec2ComputeResponse.text,
-    );
+    const computeData: AwsPricingResponse = JSON.parse(ec2ComputeResponse.text);
     const storageFilters: McpPricingFilter[] = [
       { Field: "productFamily", Value: "Storage", Type: "TERM_MATCH" },
       { Field: "volumeApiName", Value: "gp3", Type: "TERM_MATCH" },
@@ -1160,9 +1163,7 @@ describe("extractFirstTierPrice — filter validation across decomposers", () =>
   });
 
   it("returns null when RDS compute response is queried with Storage Snapshot filters", () => {
-    const computeData: AwsPricingResponse = JSON.parse(
-      rdsComputeResponse.text,
-    );
+    const computeData: AwsPricingResponse = JSON.parse(rdsComputeResponse.text);
     const backupFilters: McpPricingFilter[] = [
       { Field: "productFamily", Value: "Storage Snapshot", Type: "TERM_MATCH" },
     ];

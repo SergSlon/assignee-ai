@@ -32,12 +32,10 @@ import type { StructuredTool } from "@langchain/core/tools";
 const cacheStore = new Map<string, unknown>();
 
 vi.mock("../services/price-cache.js", () => ({
-  getCachedPrice: vi.fn(
-    (serviceCode: string, filters: unknown[]) => {
-      const key = JSON.stringify({ serviceCode, filters });
-      return cacheStore.get(key) ?? null;
-    },
-  ),
+  getCachedPrice: vi.fn((serviceCode: string, filters: unknown[]) => {
+    const key = JSON.stringify({ serviceCode, filters });
+    return cacheStore.get(key) ?? null;
+  }),
   setCachedPrice: vi.fn(
     (serviceCode: string, filters: unknown[], data: unknown) => {
       const key = JSON.stringify({ serviceCode, filters });
@@ -159,7 +157,7 @@ const s3DataTransferResponse = buildMcpPricingResponse({
   attributes: {
     usagetype: "DataTransfer-Out-Bytes",
     fromLocationType: "AWS Region",
-    toLocationType: "External",
+    toLocationType: "Other",
     transferType: "AWS Outbound",
     servicecode: "AWSDataTransfer",
     servicename: "AWS Data Transfer",
@@ -182,57 +180,55 @@ function createFilterDispatchedPricingTool(): StructuredTool {
   return {
     name: ToolName.GET_PRICING,
     description: "",
-    invoke: vi.fn().mockImplementation(
-      (args: { service_code: string; filters: McpPricingFilter[] }) => {
-        const filters = args.filters;
+    invoke: vi
+      .fn()
+      .mockImplementation(
+        (args: { service_code: string; filters: McpPricingFilter[] }) => {
+          const filters = args.filters;
 
-        // Storage: productFamily=Storage, usagetype=TimedStorage-ByteHrs
-        if (
-          filters.some(
-            (f) =>
-              f.Field === "productFamily" && f.Value === "Storage",
-          )
-        ) {
-          return Promise.resolve(s3StorageResponse);
-        }
+          // Storage: productFamily=Storage, usagetype=TimedStorage-ByteHrs
+          if (
+            filters.some(
+              (f) => f.Field === "productFamily" && f.Value === "Storage",
+            )
+          ) {
+            return Promise.resolve(s3StorageResponse);
+          }
 
-        // PUT requests: usagetype=Requests-Tier1
-        if (
-          filters.some(
-            (f) =>
-              f.Field === "usagetype" && f.Value === "Requests-Tier1",
-          )
-        ) {
-          return Promise.resolve(s3PutResponse);
-        }
+          // PUT requests: usagetype=Requests-Tier1
+          if (
+            filters.some(
+              (f) => f.Field === "usagetype" && f.Value === "Requests-Tier1",
+            )
+          ) {
+            return Promise.resolve(s3PutResponse);
+          }
 
-        // GET requests: usagetype=Requests-Tier2
-        if (
-          filters.some(
-            (f) =>
-              f.Field === "usagetype" && f.Value === "Requests-Tier2",
-          )
-        ) {
-          return Promise.resolve(s3GetResponse);
-        }
+          // GET requests: usagetype=Requests-Tier2
+          if (
+            filters.some(
+              (f) => f.Field === "usagetype" && f.Value === "Requests-Tier2",
+            )
+          ) {
+            return Promise.resolve(s3GetResponse);
+          }
 
-        // Data Transfer: productFamily=Data Transfer
-        if (
-          filters.some(
-            (f) =>
-              f.Field === "productFamily" && f.Value === "Data Transfer",
-          )
-        ) {
-          return Promise.resolve(s3DataTransferResponse);
-        }
+          // Data Transfer: productFamily=Data Transfer
+          if (
+            filters.some(
+              (f) => f.Field === "productFamily" && f.Value === "Data Transfer",
+            )
+          ) {
+            return Promise.resolve(s3DataTransferResponse);
+          }
 
-        // Fallback: empty response
-        return Promise.resolve({
-          type: "text",
-          text: JSON.stringify({ status: "success", data: [] }),
-        });
-      },
-    ),
+          // Fallback: empty response
+          return Promise.resolve({
+            type: "text",
+            text: JSON.stringify({ status: "success", data: [] }),
+          });
+        },
+      ),
   } as unknown as StructuredTool;
 }
 
@@ -338,7 +334,7 @@ describe("S3 pricing decomposer — line item structure", () => {
       expect.arrayContaining([
         { Field: "productFamily", Value: "Data Transfer", Type: "TERM_MATCH" },
         { Field: "fromLocationType", Value: "AWS Region", Type: "TERM_MATCH" },
-        { Field: "toLocationType", Value: "External", Type: "TERM_MATCH" },
+        { Field: "toLocationType", Value: "Other", Type: "TERM_MATCH" },
         { Field: "transferType", Value: "AWS Outbound", Type: "TERM_MATCH" },
       ]),
     );
@@ -408,8 +404,9 @@ describe("S3 pricing — filter-dispatched queryLineItemPrices via preflightGuar
     const pricingTool = {
       name: ToolName.GET_PRICING,
       description: "",
-      invoke: vi.fn().mockImplementation(
-        (args: { filters: McpPricingFilter[] }) => {
+      invoke: vi
+        .fn()
+        .mockImplementation((args: { filters: McpPricingFilter[] }) => {
           const filters = args.filters;
 
           if (
@@ -439,8 +436,7 @@ describe("S3 pricing — filter-dispatched queryLineItemPrices via preflightGuar
             type: "text",
             text: JSON.stringify({ status: "success", data: [] }),
           });
-        },
-      ),
+        }),
     } as unknown as StructuredTool;
 
     const result = await preflightGuardNode(makeState(), [pricingTool]);
@@ -640,9 +636,8 @@ describe("Price cache — filter-based key differentiation", () => {
     expect(setCalls.length).toBeGreaterThanOrEqual(4);
 
     // Extract the {serviceCode, filters} pairs to verify uniqueness
-    const cacheKeys = setCalls.map(
-      (call: unknown[]) =>
-        JSON.stringify({ serviceCode: call[0], filters: call[1] }),
+    const cacheKeys = setCalls.map((call: unknown[]) =>
+      JSON.stringify({ serviceCode: call[0], filters: call[1] }),
     );
     const uniqueKeys = new Set(cacheKeys);
 
@@ -655,18 +650,16 @@ describe("Price cache — filter-based key differentiation", () => {
 
     // First call: populates cache
     await preflightGuardNode(makeState(), [pricingTool]);
-    const firstCallCount = (
-      pricingTool.invoke as ReturnType<typeof vi.fn>
-    ).mock.calls.length;
+    const firstCallCount = (pricingTool.invoke as ReturnType<typeof vi.fn>).mock
+      .calls.length;
 
     // Second call: should use cache for decomposer items
     const pricingTool2 = createFilterDispatchedPricingTool();
     const result2 = await preflightGuardNode(makeState(), [pricingTool2]);
 
     // The second tool should have fewer invoke calls because cached items skip MCP
-    const secondCallCount = (
-      pricingTool2.invoke as ReturnType<typeof vi.fn>
-    ).mock.calls.length;
+    const secondCallCount = (pricingTool2.invoke as ReturnType<typeof vi.fn>)
+      .mock.calls.length;
 
     // The decomposer line items should be cached, so at most 1 call for the
     // top-level pricing query (which uses a different code path without caching)

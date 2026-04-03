@@ -55,6 +55,7 @@ function makeState(overrides: Partial<AgentState> = {}): AgentState {
     checkpointResumed: false,
     noWizard: false,
     autoApprove: false,
+    ...activeAutoFixOverride,
     ...overrides,
   } as AgentState;
 }
@@ -75,15 +76,17 @@ function makeFinding(overrides: Partial<BPFinding> = {}): BPFinding {
   };
 }
 
+/** Module-level auto-fix config applied by enableAutoFix/disableAutoFix. */
+let activeAutoFixOverride: Partial<AgentState> = {};
+
 function enableAutoFix(): void {
-  vi.mocked(readFileSync).mockReturnValue("autoFixBestPractices: true");
-  vi.mocked(parseYaml).mockReturnValue({ autoFixBestPractices: true });
+  activeAutoFixOverride = {
+    userConfig: { preferences: { auto_fix: "apply" } } as never,
+  };
 }
 
 function disableAutoFix(): void {
-  vi.mocked(readFileSync).mockImplementation(() => {
-    throw new Error("ENOENT: no such file or directory");
-  });
+  activeAutoFixOverride = {};
 }
 
 // ── Setup ────────────────────────────────────────────────────────────────────
@@ -331,9 +334,8 @@ describe("fixApplicatorNode", () => {
     expect(findingsCopy[0]).not.toHaveProperty("userSkipped");
   });
 
-  it('string "true" in config -> treated as enabled', async () => {
-    vi.mocked(readFileSync).mockReturnValue("autoFixBestPractices: 'true'");
-    vi.mocked(parseYaml).mockReturnValue({ autoFixBestPractices: "true" });
+  it('preferences.auto_fix: "apply" -> auto-fix enabled', async () => {
+    enableAutoFix();
 
     const finding = makeFinding();
     const state = makeState({
@@ -346,10 +348,8 @@ describe("fixApplicatorNode", () => {
     expect(result.appliedFixes).toHaveLength(1);
   });
 
-  it("missing config -> auto-fix disabled", async () => {
-    vi.mocked(readFileSync).mockImplementation(() => {
-      throw new Error("ENOENT: no such file or directory");
-    });
+  it("preferences.auto_fix: default (ask) -> auto-fix disabled", async () => {
+    disableAutoFix();
 
     const finding = makeFinding();
     const state = makeState({
@@ -359,7 +359,7 @@ describe("fixApplicatorNode", () => {
 
     const result = await fixApplicatorNode(state);
 
-    // Auto-fix is disabled when config is missing
+    // Auto-fix disabled when mode is "ask" (default) — findings go to interactive prompt
     expect(result).toEqual({ appliedFixes: [], autoFixEnabled: false });
   });
 
