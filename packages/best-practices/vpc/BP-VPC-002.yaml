@@ -1,6 +1,6 @@
 id: BP-VPC-002
 title: "VPC should have flow logs enabled"
-severity: MEDIUM
+severity: HIGH
 resource_type: "AWS::EC2::VPC"
 property_path: "FlowLogs"
 check_type: "exists"

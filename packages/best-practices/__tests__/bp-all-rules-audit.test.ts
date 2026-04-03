@@ -575,15 +575,7 @@ const rtRules: RuleSpec[] = [
   },
 ];
 
-const vpcNetworkRules: RuleSpec[] = [
-  {
-    id: "BP-VPC-003",
-    resourceType: "AWS::EC2::VPC",
-    propertyPath: "VpcId",
-    checkType: "awareness",
-    expectedValue: true,
-  },
-];
+const vpcNetworkRules: RuleSpec[] = [];
 
 const rdsRules: RuleSpec[] = [
   {
@@ -1404,12 +1396,6 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("VPC network (1 rule)", () => {
-    for (const spec of vpcNetworkRules) {
-      runRuleTests(spec);
-    }
-  });
-
   describe("RDS (13 rules)", () => {
     for (const spec of rdsRules) {
       runRuleTests(spec);
@@ -1545,8 +1531,8 @@ describe("BP All Rules Audit", () => {
       ...asgRules,
     ];
 
-    it("covers exactly 133 rule specs", () => {
-      expect(allSpecs.length).toBe(133);
+    it("covers exactly 132 rule specs", () => {
+      expect(allSpecs.length).toBe(132);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

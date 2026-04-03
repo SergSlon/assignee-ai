@@ -4,6 +4,10 @@ import { threeTierWebPattern } from "./patterns/three-tier-web.js";
 import { containerServicePattern } from "./patterns/container-service.js";
 import { messageProcessingPattern } from "./patterns/message-processing.js";
 import { staticWebsitePattern } from "./patterns/static-website.js";
+import {
+  vpcNetworkingPattern,
+  vpcPublicOnlyPattern,
+} from "./patterns/vpc-networking.js";
 
 export { PatternId } from "./pattern-ids.js";
 
@@ -22,6 +26,8 @@ defaultPatternRegistry.register(threeTierWebPattern);
 defaultPatternRegistry.register(containerServicePattern);
 defaultPatternRegistry.register(messageProcessingPattern);
 defaultPatternRegistry.register(staticWebsitePattern);
+defaultPatternRegistry.register(vpcNetworkingPattern);
+defaultPatternRegistry.register(vpcPublicOnlyPattern);
 
 export { PatternRegistry };
 export { serverlessApiPattern } from "./patterns/serverless-api.js";
@@ -29,6 +35,10 @@ export { threeTierWebPattern } from "./patterns/three-tier-web.js";
 export { containerServicePattern } from "./patterns/container-service.js";
 export { messageProcessingPattern } from "./patterns/message-processing.js";
 export { staticWebsitePattern } from "./patterns/static-website.js";
+export {
+  vpcNetworkingPattern,
+  vpcPublicOnlyPattern,
+} from "./patterns/vpc-networking.js";
 export type { ArchitecturePattern, ResourceSpec } from "./types.js";
 export {
   ServerlessApiResourceId,
