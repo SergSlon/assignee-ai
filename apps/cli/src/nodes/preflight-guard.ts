@@ -406,6 +406,17 @@ async function queryLineItemPrices(
         );
 
         if (!priceStr) {
+          log({
+            ts: new Date().toISOString(),
+            runId: "system",
+            level: "warn",
+            action: LOG_ACTIONS.PREFLIGHT_COMPLETED,
+            extras: {
+              priceUnavailable: item.label,
+              serviceCode: item.serviceCode,
+              responseItems: data.data?.length ?? 0,
+            },
+          });
           hasPartialFailure = true;
           return {
             lineItem: item,
