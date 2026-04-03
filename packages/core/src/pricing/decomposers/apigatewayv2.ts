@@ -112,7 +112,11 @@ export const apigatewayV2PricingDecomposer: PricingDecomposer = {
             Value: FV.AWS_REGION,
             Type: M.TERM_MATCH,
           },
-          { Field: F.TO_LOCATION_TYPE, Value: FV.EXTERNAL, Type: M.TERM_MATCH },
+          {
+            Field: F.TO_LOCATION_TYPE,
+            Value: FV.TO_LOCATION_OTHER,
+            Type: M.TERM_MATCH,
+          },
           {
             Field: F.TRANSFER_TYPE,
             Value: FV.AWS_OUTBOUND,

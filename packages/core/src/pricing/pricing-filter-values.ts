@@ -7,8 +7,8 @@
 export const PricingFilterValue = {
   // Location types (data transfer)
   AWS_REGION: "AWS Region",
-  /** toLocationType for internet-bound data transfer (NOT "External" — that's the toLocation value). */
-  EXTERNAL: "Other",
+  /** toLocationType value for internet-outbound data transfer in AWS Pricing API. */
+  TO_LOCATION_OTHER: "Other",
 
   // Transfer types
   AWS_OUTBOUND: "AWS Outbound",
