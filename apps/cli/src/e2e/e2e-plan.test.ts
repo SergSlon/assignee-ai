@@ -58,12 +58,57 @@ loadEnv();
 let tools: StructuredTool[];
 let mcpClient: Awaited<ReturnType<typeof createMcpClient>>;
 
+/** Pre-sweep: delete leftover resources from previous crashed runs. */
+async function sweepStaleResources(): Promise<void> {
+  const region = process.env["AWS_REGION"] ?? "us-east-1";
+  try {
+    const { SSMClient, GetParametersByPathCommand, DeleteParameterCommand } =
+      await import("@aws-sdk/client-ssm");
+    const ssm = new SSMClient({ region });
+    const params = await ssm.send(
+      new GetParametersByPathCommand({ Path: "/e2e-test/", Recursive: true }),
+    );
+    for (const p of params.Parameters ?? []) {
+      if (p.Name) {
+        await ssm.send(new DeleteParameterCommand({ Name: p.Name }));
+        console.log(`E2E pre-sweep: deleted stale SSM param ${p.Name}`);
+      }
+    }
+  } catch {
+    // path may not exist — fine
+  }
+  try {
+    const { S3Client, ListBucketsCommand, DeleteBucketCommand } =
+      await import("@aws-sdk/client-s3");
+    const s3 = new S3Client({ region });
+    const { Buckets } = await s3.send(new ListBucketsCommand({}));
+    for (const b of Buckets ?? []) {
+      if (
+        b.Name &&
+        (b.Name.startsWith("e2e-") || b.Name.startsWith("poc-apply-test-"))
+      ) {
+        try {
+          await s3.send(new DeleteBucketCommand({ Bucket: b.Name }));
+          console.log(`E2E pre-sweep: deleted stale bucket ${b.Name}`);
+        } catch {
+          // bucket may have objects — skip
+        }
+      }
+    }
+  } catch {
+    // S3 cleanup best-effort
+  }
+}
+
 beforeAll(async () => {
   // Skip if no credentials
   if (!process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"]) {
     console.warn("Skipping E2E tests: no AWS credentials configured");
     return;
   }
+
+  // Clean up leftovers from previous crashed runs before starting
+  await sweepStaleResources();
 
   mcpClient = await createMcpClient();
   tools = await getMcpTools(mcpClient);
