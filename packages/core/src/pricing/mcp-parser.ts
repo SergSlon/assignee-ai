@@ -83,15 +83,22 @@ export function extractFirstTierPrice(
       const onDemandTerms = Object.values(item.terms?.OnDemand ?? {});
       for (const term of onDemandTerms) {
         const dims = Object.values(term.priceDimensions ?? {});
-        for (const dim of dims) {
-          if (dim.beginRange === "0") {
-            const usd = parseFloat(dim.pricePerUnit?.USD ?? "0");
-            if (usd > 0) {
-              const scaled = usd * scale;
-              const decimals =
-                scaled >= 0.0001 ? 4 : Math.ceil(-Math.log10(scaled)) + 3;
-              return `$${scaled.toFixed(decimals)}${unit}`;
-            }
+        // Find the lowest-tier price. Accept beginRange "0" or "1" (some services
+        // like AWSDataTransfer start at "1" because the first unit is free tier).
+        // Reject high-tier-only responses (beginRange > 100) to avoid showing
+        // volume discount rates as the base price.
+        const sorted = [...dims].sort(
+          (a, b) =>
+            parseFloat(a.beginRange ?? "0") - parseFloat(b.beginRange ?? "0"),
+        );
+        const lowestDim = sorted[0];
+        if (lowestDim && parseFloat(lowestDim.beginRange ?? "0") <= 100) {
+          const usd = parseFloat(lowestDim.pricePerUnit?.USD ?? "0");
+          if (usd > 0) {
+            const scaled = usd * scale;
+            const decimals =
+              scaled >= 0.0001 ? 4 : Math.ceil(-Math.log10(scaled)) + 3;
+            return `$${scaled.toFixed(decimals)}${unit}`;
           }
         }
       }

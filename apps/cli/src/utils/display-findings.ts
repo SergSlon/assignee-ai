@@ -21,7 +21,8 @@ function truncateAtWord(text: string, maxLen: number): string {
   const truncated = text.slice(0, maxLen);
   const lastSpace = truncated.lastIndexOf(" ");
   const cutPoint = lastSpace > maxLen * 0.5 ? lastSpace : maxLen;
-  return text.slice(0, cutPoint).trimEnd() + "\u2026";
+  // Trim trailing punctuation (em-dash, colon, comma) before adding ellipsis
+  return text.slice(0, cutPoint).replace(/[\s\u2014:,;]+$/, "") + "\u2026";
 }
 
 /**
