@@ -326,13 +326,6 @@ exports[`Seed BP Library — Sprint A+B + guardrail migration (47 rules) > snaps
   },
   {
     "category": "security",
-    "check_type": "awareness",
-    "id": "BP-VPC-003",
-    "resource_type": "AWS::EC2::VPC",
-    "severity": "HIGH",
-  },
-  {
-    "category": "security",
     "check_type": "equals",
     "id": "BP-ECR-001",
     "resource_type": "AWS::ECR::Repository",
@@ -931,7 +924,7 @@ exports[`Seed BP Library — Sprint A+B + guardrail migration (47 rules) > snaps
     "check_type": "exists",
     "id": "BP-VPC-002",
     "resource_type": "AWS::EC2::VPC",
-    "severity": "MEDIUM",
+    "severity": "HIGH",
   },
 ]
 `;
