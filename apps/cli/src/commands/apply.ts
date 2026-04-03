@@ -510,7 +510,6 @@ export const applyCommand = new Command(CommandName.APPLY)
               });
 
               // Re-invoke graph from checkpoint with fixed state → human_approval → provision
-              startSpinner("Proceeding with fixes applied\u2026");
               phase1State = await ctx.graph.invoke(
                 {
                   checkpointResumed: true,
