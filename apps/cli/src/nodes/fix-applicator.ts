@@ -9,43 +9,27 @@
  * @see Story 22.2, Epic 22
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { parse as parseYaml } from "yaml";
 import * as clack from "@clack/prompts";
 import { FixType, FixAction, type BPFinding } from "@assignee/best-practices";
+import { AutoFixMode } from "@assignee/core";
 import type { AgentState } from "../services/graph.js";
 import type { AppliedFix } from "../services/graph-state.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { wizardKeyMap } from "../utils/wizard-key-map.js";
-import {
-  CHECKPOINT_DIR,
-  FileName,
-  PROTO_POLLUTION_KEYS,
-} from "../config/constants.js";
-
-/** Directory name for project-level config. */
-const CONFIG_DIR = CHECKPOINT_DIR;
-const CONFIG_FILE = FileName.CONFIG;
+import { PROTO_POLLUTION_KEYS } from "../config/constants.js";
 
 /**
- * Read the autoFixBestPractices preference from project config.
- * Returns false if config is missing or preference is unset.
+ * Resolve auto-fix mode from graph state.
+ * Priority: userConfig.preferences.auto_fix > CONFIG_DEFAULTS ("ask").
+ * "ask"   → auto-fixable findings are left for interactive fix-selection prompt
+ * "apply" → auto-fixable findings are applied silently (CI/CD)
+ * "skip"  → auto-fixes disabled entirely
  */
-function readAutoFixPreference(projectDir?: string): boolean {
-  try {
-    const configPath = path.resolve(
-      projectDir ?? process.cwd(),
-      CONFIG_DIR,
-      CONFIG_FILE,
-    );
-    const content = fs.readFileSync(configPath, "utf-8");
-    const parsed = parseYaml(content) as Record<string, unknown> | null;
-    const val = parsed?.["autoFixBestPractices"];
-    return val === true || val === "true";
-  } catch {
-    return false;
-  }
+function resolveAutoFixMode(state: AgentState): string {
+  const config = state.userConfig as
+    | { preferences?: { auto_fix?: string } }
+    | undefined;
+  return config?.preferences?.auto_fix ?? AutoFixMode.ASK;
 }
 
 /**
@@ -280,7 +264,8 @@ export async function fixApplicatorNode(
     return {};
   }
 
-  const autoFixEnabled = readAutoFixPreference(state.projectDir);
+  const autoFixMode = resolveAutoFixMode(state);
+  const autoFixEnabled = autoFixMode === AutoFixMode.APPLY;
 
   const autoFixable = autoFixEnabled
     ? findings.filter((f) => f.autoFixable && f.desiredStatePatch)

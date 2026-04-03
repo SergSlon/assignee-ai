@@ -15,6 +15,15 @@ import {
 /** Max consequence text length in plan box before truncation. */
 const MAX_RISK_LEN = 90;
 
+/** Truncate text at word boundary, appending ellipsis if shortened. */
+function truncateAtWord(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  const truncated = text.slice(0, maxLen);
+  const lastSpace = truncated.lastIndexOf(" ");
+  const cutPoint = lastSpace > maxLen * 0.5 ? lastSpace : maxLen;
+  return text.slice(0, cutPoint).trimEnd() + "\u2026";
+}
+
 /**
  * Formats all findings (blocking + non-blocking) for display in the plan box.
  * Each finding shows a second line with actionable fix hint from FixCommandResolver.
@@ -80,11 +89,10 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
           severityLine = chalk.yellow(`  WARN   ${f.title}${suffix}`);
         else severityLine = chalk.blue(`  INFO   ${f.title}${suffix}`);
 
-        // Story 43.1: Consequence/risk line (truncated for plan box layout)
-        const riskText =
-          f.consequence && f.consequence.length > MAX_RISK_LEN
-            ? f.consequence.slice(0, MAX_RISK_LEN) + "\u2026"
-            : f.consequence;
+        // Story 43.1: Consequence/risk line (truncated at word boundary)
+        const riskText = f.consequence
+          ? truncateAtWord(f.consequence, MAX_RISK_LEN)
+          : null;
         const riskLine = riskText
           ? chalk.yellow(`         \u26A0 Risk: ${riskText}`)
           : null;
@@ -129,11 +137,10 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
         severityLine = `  [MEDIUM] ${f.title}${suffix}`;
       else severityLine = `  [INFO] ${f.title}${suffix}`;
 
-      // Story 43.1: Consequence/risk line (non-TTY, truncated)
-      const riskTextNonTTY =
-        f.consequence && f.consequence.length > MAX_RISK_LEN
-          ? f.consequence.slice(0, MAX_RISK_LEN) + "..."
-          : f.consequence;
+      // Story 43.1: Consequence/risk line (non-TTY, truncated at word boundary)
+      const riskTextNonTTY = f.consequence
+        ? truncateAtWord(f.consequence, MAX_RISK_LEN)
+        : null;
       const riskLine = riskTextNonTTY
         ? `         ! Risk: ${riskTextNonTTY}`
         : null;
