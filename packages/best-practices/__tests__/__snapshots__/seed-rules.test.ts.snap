@@ -570,13 +570,6 @@ exports[`Seed BP Library — Sprint A+B + guardrail migration (47 rules) > snaps
     "severity": "MEDIUM",
   },
   {
-    "category": "performance",
-    "check_type": "greater_than",
-    "id": "BP-LAMBDA-013",
-    "resource_type": "AWS::Lambda::Function",
-    "severity": "MEDIUM",
-  },
-  {
     "category": "cost",
     "check_type": "exists",
     "id": "BP-LOGS-001",

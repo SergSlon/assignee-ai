@@ -742,13 +742,6 @@ const lambdaRules: RuleSpec[] = [
     checkType: "exists",
     expectedValue: true,
   },
-  {
-    id: "BP-LAMBDA-013",
-    resourceType: "AWS::Lambda::Function",
-    propertyPath: "MemorySize",
-    checkType: "greater_than",
-    expectedValue: 128,
-  },
 ];
 
 const iamRules: RuleSpec[] = [
@@ -1531,8 +1524,8 @@ describe("BP All Rules Audit", () => {
       ...asgRules,
     ];
 
-    it("covers exactly 132 rule specs", () => {
-      expect(allSpecs.length).toBe(132);
+    it("covers exactly 131 rule specs", () => {
+      expect(allSpecs.length).toBe(131);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {
