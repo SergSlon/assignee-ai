@@ -312,8 +312,6 @@ export const applyCommand = new Command(CommandName.APPLY)
         errorHint:
           "Check that AWS credentials are configured and all MCP servers are running.",
         run: async (ctx) => {
-          process.stderr.write(`[run:${ctx.runId}] Starting apply...\n`);
-
           // Story 7.2: load user config + org policy before graph invocation
           const [userConfig, authToken] = await Promise.all([
             loadUserConfig(),
@@ -512,6 +510,7 @@ export const applyCommand = new Command(CommandName.APPLY)
               });
 
               // Re-invoke graph from checkpoint with fixed state → human_approval → provision
+              startSpinner("Proceeding with fixes applied\u2026");
               phase1State = await ctx.graph.invoke(
                 {
                   checkpointResumed: true,

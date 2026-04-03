@@ -12,6 +12,9 @@ import {
   FixCategory,
 } from "./fix-command-resolver.js";
 
+/** Max consequence text length in plan box before truncation. */
+const MAX_RISK_LEN = 90;
+
 /**
  * Formats all findings (blocking + non-blocking) for display in the plan box.
  * Each finding shows a second line with actionable fix hint from FixCommandResolver.
@@ -77,9 +80,13 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
           severityLine = chalk.yellow(`  WARN   ${f.title}${suffix}`);
         else severityLine = chalk.blue(`  INFO   ${f.title}${suffix}`);
 
-        // Story 43.1: Consequence/risk line
-        const riskLine = f.consequence
-          ? chalk.yellow(`         \u26A0 Risk: ${f.consequence}`)
+        // Story 43.1: Consequence/risk line (truncated for plan box layout)
+        const riskText =
+          f.consequence && f.consequence.length > MAX_RISK_LEN
+            ? f.consequence.slice(0, MAX_RISK_LEN) + "\u2026"
+            : f.consequence;
+        const riskLine = riskText
+          ? chalk.yellow(`         \u26A0 Risk: ${riskText}`)
           : null;
 
         // Action hint line
@@ -122,9 +129,13 @@ export function formatFindings(findings: BPFinding[] | undefined): string {
         severityLine = `  [MEDIUM] ${f.title}${suffix}`;
       else severityLine = `  [INFO] ${f.title}${suffix}`;
 
-      // Story 43.1: Consequence/risk line (non-TTY)
-      const riskLine = f.consequence
-        ? `         ! Risk: ${f.consequence}`
+      // Story 43.1: Consequence/risk line (non-TTY, truncated)
+      const riskTextNonTTY =
+        f.consequence && f.consequence.length > MAX_RISK_LEN
+          ? f.consequence.slice(0, MAX_RISK_LEN) + "..."
+          : f.consequence;
+      const riskLine = riskTextNonTTY
+        ? `         ! Risk: ${riskTextNonTTY}`
         : null;
 
       const hintPrefix =

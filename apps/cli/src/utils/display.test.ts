@@ -2392,6 +2392,37 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
         const hintLine = lines[titleIdx + 1];
         expect(hintLine).toContain("\u2192");
       });
+
+      it("includes ⚠ Risk: line when finding has consequence (TTY)", async () => {
+        const { formatFindings } = await import("./display.js");
+        const findingWithConsequence: BPFinding = {
+          practiceId: "BP-S3-001",
+          title: "Block S3 Public Access",
+          severity: "CRITICAL",
+          category: "security",
+          message: "S3 bucket allows public access via ACLs",
+          remediation: "Enable PublicAccessBlockConfiguration on the bucket",
+          blocking: true,
+          autoFixable: true,
+          propertyPath: "PublicAccessBlockConfiguration.BlockPublicAcls",
+          consequence:
+            "Anyone on the internet can read bucket contents via ACLs.",
+          desiredStatePatch: {
+            PublicAccessBlockConfiguration: { BlockPublicAcls: true },
+          },
+        };
+        const result = formatFindings([findingWithConsequence]);
+        expect(result).toContain("Risk:");
+        expect(result.toLowerCase()).toContain(
+          "anyone on the internet can read bucket contents via acls",
+        );
+      });
+
+      it("omits Risk line when finding has no consequence (TTY)", async () => {
+        const { formatFindings } = await import("./display.js");
+        const result = formatFindings([s3PublicAccessFinding]);
+        expect(result).not.toContain("Risk:");
+      });
     });
 
     describe("non-TTY mode", () => {
@@ -2453,6 +2484,37 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
         expect(result).toContain("1 medium");
         // Should NOT have "1 critical" since the CRITICAL finding is blocking
         expect(result).not.toContain("1 critical");
+      });
+
+      it("includes ! Risk: line when finding has consequence (non-TTY)", async () => {
+        const { formatFindings } = await import("./display.js");
+        const findingWithConsequence: BPFinding = {
+          practiceId: "BP-S3-001",
+          title: "Block S3 Public Access",
+          severity: "CRITICAL",
+          category: "security",
+          message: "S3 bucket allows public access via ACLs",
+          remediation: "Enable PublicAccessBlockConfiguration on the bucket",
+          blocking: true,
+          autoFixable: true,
+          propertyPath: "PublicAccessBlockConfiguration.BlockPublicAcls",
+          consequence:
+            "Anyone on the internet can read bucket contents via ACLs.",
+          desiredStatePatch: {
+            PublicAccessBlockConfiguration: { BlockPublicAcls: true },
+          },
+        };
+        const result = formatFindings([findingWithConsequence]);
+        expect(result).toContain("! Risk:");
+        expect(result).toContain(
+          "Anyone on the internet can read bucket contents via ACLs.",
+        );
+      });
+
+      it("omits Risk line when finding has no consequence (non-TTY)", async () => {
+        const { formatFindings } = await import("./display.js");
+        const result = formatFindings([s3LifecycleFinding]);
+        expect(result).not.toContain("Risk:");
       });
 
       it("6. each hint line has exactly one of: Fix:, Manual:, Info: prefix", async () => {

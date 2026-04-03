@@ -992,6 +992,7 @@ describe("resultFormatterNode — P1-2 plan mode promptFixSelection integration"
       executionStatus: ExecutionStatus.PENDING,
       executionMode: ExecutionMode.PLAN,
       desiredState: { BucketName: "my-bucket" },
+      estimatedMonthlyCost: "$0.0230/GB-month",
       bpFindings: [
         {
           practiceId: "BP-S3-001",
@@ -1033,6 +1034,7 @@ describe("resultFormatterNode — P1-2 plan mode promptFixSelection integration"
         bpFindings: mockFixResult.bpFindings,
         appliedFixes: mockFixResult.appliedFixes,
         resourceType: state.resourceType,
+        estimatedMonthlyCost: "$0.0230/GB-month",
       }),
     );
 

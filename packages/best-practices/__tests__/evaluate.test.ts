@@ -950,6 +950,64 @@ describe("evaluateTriggers — excludePatterns", () => {
 });
 
 // ---------------------------------------------------------------------------
+// evaluateTriggers — resource_type always checked first
+// ---------------------------------------------------------------------------
+
+describe("evaluateTriggers — resource_type always checked first", () => {
+  it("returns 0 findings when resource type does not match, even with excludePatterns trigger", () => {
+    const bp = makeBP({
+      id: "BP-S3-009",
+      resource_type: "AWS::S3::Bucket",
+      property_path: "NotificationConfiguration",
+      check_type: "exists",
+      triggers: [{ excludePatterns: ["static-website"] }],
+    });
+    const ctx = makeCtx({
+      resourceType: "AWS::SSM::Parameter",
+      desiredState: {},
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("returns 1 finding when resource type matches and excludePattern is not matched", () => {
+    const bp = makeBP({
+      id: "BP-S3-009",
+      resource_type: "AWS::S3::Bucket",
+      property_path: "NotificationConfiguration",
+      check_type: "exists",
+      triggers: [{ excludePatterns: ["static-website"] }],
+    });
+    const ctx = makeCtx({
+      resourceType: "AWS::S3::Bucket",
+      desiredState: {},
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+  });
+
+  it("returns 0 findings when resource type matches but patternId is excluded", () => {
+    const bp = makeBP({
+      id: "BP-S3-009",
+      resource_type: "AWS::S3::Bucket",
+      property_path: "NotificationConfiguration",
+      check_type: "exists",
+      triggers: [{ excludePatterns: ["static-website"] }],
+    });
+    const ctx = makeCtx({
+      resourceType: "AWS::S3::Bucket",
+      patternId: "static-website",
+      desiredState: {},
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Performance test
 // ---------------------------------------------------------------------------
 
