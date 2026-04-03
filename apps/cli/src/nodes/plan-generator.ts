@@ -718,6 +718,29 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
     );
     desiredState = repairedState;
 
+    // EC2 post-processing: clean up LLM artifacts and handle SSH intent
+    if (state.resourceType === RESOURCE_TYPES.EC2_INSTANCE) {
+      // Strip empty/placeholder SecurityGroupIds that the LLM may generate
+      const sgIds = desiredState[CfnKey.SECURITY_GROUP_IDS];
+      if (Array.isArray(sgIds)) {
+        const valid = (sgIds as string[]).filter(
+          (id) => typeof id === "string" && id.startsWith("sg-"),
+        );
+        if (valid.length === 0) {
+          delete desiredState[CfnKey.SECURITY_GROUP_IDS];
+        } else {
+          desiredState[CfnKey.SECURITY_GROUP_IDS] = valid;
+        }
+      }
+
+      // SSH intent: inject key pair placeholder if user wants SSH but LLM omitted KeyName
+      if (state.userIntent && /\bssh\b/i.test(state.userIntent)) {
+        if (!desiredState[CfnKey.KEY_NAME]) {
+          desiredState[CfnKey.KEY_NAME] = ResourceDefault.SSH_KEY_PLACEHOLDER;
+        }
+      }
+    }
+
     const durationMs = Date.now() - startedAt;
     log({
       ts: new Date().toISOString(),
