@@ -54,6 +54,9 @@ export const TAGS_VALIDATE = (value: unknown): string | undefined => {
     const tagKey = key!.trim();
     const tagValue = rest.join(":").trim();
 
+    if (tagKey.length === 0) {
+      return "Tag key cannot be empty";
+    }
     if (tagKey.length > TAG_KEY_MAX_LENGTH) {
       return `Tag key "${tagKey.slice(0, 20)}..." exceeds ${TAG_KEY_MAX_LENGTH} character limit`;
     }

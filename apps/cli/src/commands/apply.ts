@@ -540,6 +540,18 @@ export const applyCommand = new Command(CommandName.APPLY)
                 },
                 config,
               );
+              // Handle user rejection during fix-and-continue re-invocation
+              if (phase1State.executionStatus === ExecutionStatus.CANCELLED) {
+                log({
+                  ts: new Date().toISOString(),
+                  runId: ctx.runId,
+                  level: "info",
+                  action: LOG_ACTIONS.APPLY_COMPLETE,
+                  durationMs: Date.now() - ctx.startTs,
+                  result: ExecutionStatus.CANCELLED,
+                });
+                return { success: true };
+              }
               // Fall through to Phase 2 provisioning below
             } else {
               log({
