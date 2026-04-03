@@ -329,6 +329,8 @@ export const EIP_AUTO_ALLOCATE = "AUTO_ALLOCATE_EIP" as const;
 export const ResourceDefault = {
   EBS_VOLUME_TYPE: "gp3",
   RDS_ENGINE_POSTGRES: "postgres",
+  /** Placeholder KeyName injected when user intent mentions SSH but no key pair is specified. */
+  SSH_KEY_PLACEHOLDER: "assignee-ssh-key",
 } as const;
 
 /**

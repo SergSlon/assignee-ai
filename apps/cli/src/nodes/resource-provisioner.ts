@@ -18,6 +18,7 @@ import {
   ProvisioningError,
   CfnKey,
   EIP_AUTO_ALLOCATE,
+  ResourceDefault,
 } from "@assignee/core";
 import type { ProvisioningPort } from "../services/provisioning-port.js";
 import { ProvisioningErrorKind } from "../services/provisioning-port.js";
@@ -313,6 +314,66 @@ export async function resourceProvisionerNode(
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: `EIP allocation failed for NatGateway: ${errMsg}`,
       };
+    }
+  }
+
+  // ── SSH key pair creation for EC2 (deferred from plan_generator) ─────────
+  // If the user requested SSH access and no key pair exists, create one and
+  // save the private key to ~/.assignee/keys/<name>.pem.
+  if (
+    state.resourceType === RESOURCE_TYPES.EC2_INSTANCE &&
+    typeof state.desiredState[CfnKey.KEY_NAME] === "string" &&
+    (state.desiredState[CfnKey.KEY_NAME] as string).length > 0
+  ) {
+    try {
+      const { EC2Client, CreateKeyPairCommand, DescribeKeyPairsCommand } =
+        await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({ region: AWS_REGION });
+      const keyName = state.desiredState[CfnKey.KEY_NAME] as string;
+
+      // Check if key pair already exists
+      let keyExists = false;
+      try {
+        await ec2.send(new DescribeKeyPairsCommand({ KeyNames: [keyName] }));
+        keyExists = true;
+      } catch {
+        // Key doesn't exist — create it
+      }
+
+      if (!keyExists) {
+        const keyResult = await ec2.send(
+          new CreateKeyPairCommand({ KeyName: keyName }),
+        );
+        // Save private key to ~/.assignee/keys/
+        const { mkdirSync, writeFileSync, chmodSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        const { homedir } = await import("node:os");
+        const keysDir = join(homedir(), ".assignee", "keys");
+        mkdirSync(keysDir, { recursive: true });
+        const keyPath = join(keysDir, `${keyName}.pem`);
+        writeFileSync(keyPath, keyResult.KeyMaterial ?? "", { mode: 0o400 });
+        chmodSync(keyPath, 0o400);
+        process.stderr.write(
+          `\u001B[33m🔑 SSH key pair created: ${keyPath}\u001B[0m\n`,
+        );
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+          extras: { sshKeyCreated: keyName, keyPath },
+        });
+      }
+    } catch (keyErr: unknown) {
+      const errMsg = keyErr instanceof Error ? keyErr.message : String(keyErr);
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "warn",
+        action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+        extras: { sshKeyError: errMsg },
+      });
+      // Non-blocking — continue with provision, user will get a CloudControl error
     }
   }
 

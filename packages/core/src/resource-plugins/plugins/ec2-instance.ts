@@ -410,9 +410,9 @@ export const ec2InstancePlugin: ResourcePlugin = {
   },
   configHints: [
     "EC2 ImageId (AMI): ImageId is REQUIRED. The user may provide an OS name like 'amazon-linux-2023' instead of a real AMI ID — keep it as-is, the system resolves it automatically. NEVER use placeholder IDs like ami-0abcdef1234567890.",
-    "EC2 KeyName: if the user did not provide a key pair, OMIT KeyName — SSM Session Manager will be used instead",
+    'EC2 KeyName: if the user mentions "SSH", "key pair", or "SSH access", KeyName is REQUIRED — use the value they provide, or if none given set KeyName to "assignee-ssh-key". If the user does NOT mention SSH, OMIT KeyName (SSM Session Manager will be used instead).',
     "EC2 SubnetId: if the user did not provide a subnet, OMIT SubnetId — the default VPC subnet will be used",
-    "EC2 SecurityGroupIds: if the user did not provide security groups, OMIT SecurityGroupIds — the default VPC security group will be used",
+    "EC2 SecurityGroupIds: OMIT SecurityGroupIds entirely unless the user provides a specific security group ID (sg-...). NEVER output an empty array or placeholder. The default VPC security group will be used automatically.",
     "EC2 IamInstanceProfile: if the user did not provide an instance profile, OMIT IamInstanceProfile",
     'EC2 IMDSv2: ALWAYS include MetadataOptions: { HttpTokens: "required" } to enforce IMDSv2. This is an AWS security best practice — never omit it.',
     'EC2 EBS Encryption: ALWAYS include BlockDeviceMappings with Ebs.Encrypted: true and VolumeType: "gp3". Example: BlockDeviceMappings: [{ DeviceName: "/dev/xvda", Ebs: { Encrypted: true, VolumeType: "gp3" } }]',
