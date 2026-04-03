@@ -198,6 +198,7 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
                     severity: f.severity,
                     message: f.message,
                     remediation: f.remediation,
+                    consequence: f.consequence,
                   })),
                   hint: "Run plan_resource again to generate a new plan that satisfies current best practices.",
                 }),
