@@ -14,7 +14,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { ASSIGNEE_DIR, FileName } from "../config/constants.js";
-import { RESOURCE_TYPES, FREE_TIER_MESSAGE } from "@assignee/core";
+import {
+  RESOURCE_TYPES,
+  LIST_RESOURCE_TYPES,
+  FREE_TIER_MESSAGE,
+  CostEstimateLabel,
+} from "@assignee/core";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +46,7 @@ export { FREE_TIER_MESSAGE } from "@assignee/core";
 /** Resources that are always free regardless of account age. */
 const ALWAYS_FREE_RESOURCES: Record<string, string> = {
   [RESOURCE_TYPES.IAM_ROLE]: FREE_TIER_MESSAGE,
+  [LIST_RESOURCE_TYPES.IAM_MANAGED_POLICY]: FREE_TIER_MESSAGE,
   [RESOURCE_TYPES.SSM_PARAMETER]: `${FREE_TIER_MESSAGE} (standard params, up to 10K)`,
   [RESOURCE_TYPES.EC2_VPC]: FREE_TIER_MESSAGE,
   [RESOURCE_TYPES.EC2_SUBNET]: FREE_TIER_MESSAGE,
@@ -190,4 +196,15 @@ function isWithin12Months(dateStr: string): boolean {
   );
 
   return created >= twelveMonthsAgo;
+}
+
+/**
+ * Returns "Free" for always-free resource types, or null if cost is unknown.
+ * Used by the list command as a fallback when the provision log has no cost entry.
+ */
+export function getFreeTierCostLabel(resourceType: string): string | null {
+  if (ALWAYS_FREE_RESOURCES[resourceType]) {
+    return CostEstimateLabel.FREE;
+  }
+  return null;
 }

@@ -32,6 +32,7 @@ import {
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import { fetchBillingData } from "./billing.js";
+import { getFreeTierCostLabel } from "../utils/free-tier.js";
 
 // Re-export for consumers that import from this module
 export { arnToCloudFormationType } from "@assignee/core";
@@ -192,7 +193,10 @@ export async function fetchManagedResources(
         region: parsed.region || resolvedRegion,
         createdDate,
         estimatedMonthlyCost:
-          costMap.get(arn) ?? costMap.get(arnName) ?? CostEstimateLabel.NA,
+          costMap.get(arn) ??
+          costMap.get(arnName) ??
+          getFreeTierCostLabel(parsed.resourceType) ??
+          CostEstimateLabel.NA,
       });
     }
 
