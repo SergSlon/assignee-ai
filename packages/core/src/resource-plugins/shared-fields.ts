@@ -20,10 +20,10 @@ export const KMS_ARN_FULL_VALIDATION_MSG =
 
 /**
  * AWS tag character allowlist.
- * AWS allows: Unicode letters, digits, whitespace, and: + - = . _ : / @
- * Forbids: backslash, quotes, control characters, and other special chars.
+ * AWS allows: Unicode letters, digits, spaces, and: + - = . _ : / @
+ * Forbids: backslash, quotes, control characters (tabs, newlines), and other special chars.
  */
-const TAG_CHAR_PATTERN = /^[\p{L}\p{N}\s+\-=._:/@]*$/u;
+const TAG_CHAR_PATTERN = /^[\p{L}\p{N} +\-=._:/@]*$/u;
 
 /** Max key length per AWS spec. */
 const TAG_KEY_MAX_LENGTH = 128;

@@ -15,6 +15,7 @@ import {
   defaultErrorMessageRegistry,
   type ErrorMessageEntry,
 } from "./error-messages.js";
+import { ErrorCode } from "../constants/errors.js";
 import {
   ProvisioningError,
   ConfigurationError,
@@ -470,5 +471,39 @@ describe("ErrorMessageRegistry — fresh instance", () => {
     const registry = new ErrorMessageRegistry();
     const entries = registry.allEntries();
     expect(entries.length).toBeGreaterThanOrEqual(20);
+  });
+});
+
+// ── Regression: non-checkpoint errors must not match CHECKPOINT_INVALID ──────
+
+describe("matchCheckpointError regression — non-checkpoint errors", () => {
+  it("resolves S3 TagValue invalid to InvalidParameterValue, NOT CHECKPOINT_INVALID", () => {
+    const entry = defaultErrorMessageRegistry.resolveMessage(
+      "The TagValue you have provided is invalid (Service: S3)",
+    );
+    expect(entry.code).not.toBe(ErrorCode.CHECKPOINT_INVALID);
+    expect(entry.code).toBe("InvalidParameterValue");
+  });
+
+  it("resolves InvalidParameterValue to AWS pattern, NOT CHECKPOINT_INVALID", () => {
+    const entry = defaultErrorMessageRegistry.resolveMessage(
+      "InvalidParameterValue: The parameter is not valid",
+    );
+    expect(entry.code).not.toBe(ErrorCode.CHECKPOINT_INVALID);
+    expect(entry.code).toBe("InvalidParameterValue");
+  });
+
+  it("still resolves checkpoint-specific invalid message to CHECKPOINT_INVALID", () => {
+    const entry = defaultErrorMessageRegistry.resolveMessage(
+      "Checkpoint file is invalid or corrupted",
+    );
+    expect(entry.code).toBe(ErrorCode.CHECKPOINT_INVALID);
+  });
+
+  it("still resolves checkpoint ENOENT to CHECKPOINT_NOT_FOUND", () => {
+    const entry = defaultErrorMessageRegistry.resolveMessage(
+      "Checkpoint not found: ENOENT",
+    );
+    expect(entry.code).toBe(ErrorCode.CHECKPOINT_NOT_FOUND);
   });
 });

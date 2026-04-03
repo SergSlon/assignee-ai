@@ -221,12 +221,12 @@ export async function promptFixSelection(
       for (const f of fixableFindings) {
         if (fixedIds.has(f.practiceId)) continue;
         const action = resolveAction(f);
-        // Story 43.3: Show consequence in fix selection prompt
-        const riskSuffix = f.consequence
-          ? `\n  \u26A0 Risk: ${f.consequence}`
-          : "";
+        // Story 43.3: Show consequence before fix selection prompt
+        if (f.consequence) {
+          clack.note(`\u26A0 Risk: ${f.consequence}`, f.title);
+        }
         const result = await clack.select({
-          message: `${f.title}${riskSuffix}`,
+          message: f.title,
           options: [
             { value: FixPromptAction.FIX, label: `[Y] Fix (${action.hint})` },
             {
