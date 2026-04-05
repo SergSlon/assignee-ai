@@ -445,6 +445,15 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
         return isNaN(n) ? undefined : n;
       },
     },
+    {
+      name: CfnKey.STORAGE_ENCRYPTED,
+      question: {
+        type: "boolean" as const,
+        label: "Encrypt storage at rest?",
+        initialValue: true,
+        hint: "Encrypts the database storage using AWS KMS. Strongly recommended. No significant performance impact. Uses the default AWS-managed key unless a custom KMS key is specified.",
+      },
+    },
   ],
   defaults: {
     [CfnKey.STORAGE_TYPE]: ResourceDefault.EBS_VOLUME_TYPE,
@@ -458,5 +467,6 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
     "PubliclyAccessible SHOULD be false for production. If a DBSubnetGroupName is provided, the instance is placed in that VPC subnet group.",
     "VpcSecurityGroupIds control network access — at least one security group allowing ingress on the database Port is required for connectivity.",
     "EnableCloudwatchLogsExports and PerformanceInsightsEnabled are strongly recommended for production observability. Available log types vary by engine.",
+    "StorageEncrypted SHOULD always be true. Encryption at rest is an AWS security best practice with no significant performance impact.",
   ],
 };

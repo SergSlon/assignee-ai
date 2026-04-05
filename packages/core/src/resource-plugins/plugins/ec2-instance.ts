@@ -398,9 +398,32 @@ export const ec2InstancePlugin: ResourcePlugin = {
         return { CpuCredits: answer };
       },
     },
+    {
+      name: CfnKey.DISABLE_API_TERMINATION,
+      question: {
+        type: "boolean" as const,
+        label: "Enable Termination Protection?",
+        initialValue: true,
+        hint: "Prevents accidental termination via API or console. Recommended for production. Must be disabled before the instance can be terminated.",
+      },
+    },
+    {
+      name: CfnKey.EBS_OPTIMIZED,
+      question: {
+        type: "boolean" as const,
+        label: "EBS-Optimized Instance?",
+        initialValue: true,
+        hint: "Provides dedicated throughput between EC2 and EBS. Enabled by default on most current-gen instance types at no extra cost.",
+      },
+    },
   ],
   defaults: {
-    [CfnKey.METADATA_OPTIONS]: { HttpTokens: "required" },
+    [CfnKey.METADATA_OPTIONS]: {
+      HttpTokens: "required",
+      HttpPutResponseHopLimit: 1,
+    },
+    [CfnKey.DISABLE_API_TERMINATION]: true,
+    [CfnKey.EBS_OPTIMIZED]: true,
     [CfnKey.BLOCK_DEVICE_MAPPINGS]: [
       {
         DeviceName: "/dev/xvda",
@@ -419,5 +442,7 @@ export const ec2InstancePlugin: ResourcePlugin = {
     "EC2 Monitoring: if Monitoring is true, include Monitoring: { Enabled: true }. If false or not set, OMIT the Monitoring property.",
     "EC2 AssociatePublicIpAddress: if true, set via NetworkInterfaces[0].AssociatePublicIpAddress. Only valid in public subnets. If false or not set, OMIT it.",
     "EC2 CreditSpecification: only applies to burstable instance types (t3/t4g). Set CreditSpecification: { CpuCredits: 'standard' | 'unlimited' }. OMIT for non-burstable types.",
+    "EC2 DisableApiTermination: ALWAYS set to true unless the user explicitly requests termination protection off. Prevents accidental instance deletion.",
+    "EC2 EbsOptimized: ALWAYS set to true. All current-gen instance types support EBS optimization at no extra cost.",
   ],
 };

@@ -14,9 +14,56 @@ import {
   CHECKPOINT_VERSION,
   CheckpointError,
   CostEstimateLabel,
+  CfnKey,
   UNKNOWN_FALLBACK,
   type PlanCheckpoint,
 } from "@assignee/core";
+
+/**
+ * Sensitive desiredState keys that must be redacted before writing to disk.
+ * @see SEC-02, apps/cli/src/services/checkpoint.ts — keep in sync
+ */
+const SENSITIVE_STATE_KEYS: Set<string> = new Set([
+  CfnKey.MASTER_USER_PASSWORD,
+  CfnKey.SECRET_STRING,
+  CfnKey.PASSWORD,
+  CfnKey.ACCESS_KEY,
+  CfnKey.SECRET_ACCESS_KEY,
+  CfnKey.SESSION_TOKEN,
+]);
+
+/** Recursively redact sensitive keys from a desiredState record. */
+function redactSensitiveFields(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(state)) {
+    if (SENSITIVE_STATE_KEYS.has(key)) {
+      result[key] = "[REDACTED]";
+    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = redactSensitiveFields(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/** Recursively remove fields with "[REDACTED]" values from a desiredState record. */
+function stripRedactedFields(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(state)) {
+    if (value === "[REDACTED]") continue;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = stripRedactedFields(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
 
 /** Default TTL for checkpoint expiry validation (72 hours).
  * @see apps/cli/src/config/constants.ts CHECKPOINT_DEFAULT_TTL_HOURS — keep in sync */
@@ -72,7 +119,9 @@ export function serializeCheckpoint(
           desiredState: {},
         }))
       : undefined,
-    desiredState: state.desiredState ?? {},
+    desiredState: state.desiredState
+      ? redactSensitiveFields(state.desiredState)
+      : {},
     estimatedMonthlyCost: state.estimatedMonthlyCost ?? CostEstimateLabel.NA,
     preflightPassed: state.preflightPassed ?? false,
     elicitedOptions: state.elicitedOptions,
@@ -156,6 +205,9 @@ export async function loadCheckpointFromPath(
       `Checkpoint has no desiredState. Run plan_resource to generate a new plan.`,
     );
   }
+
+  // Strip redacted fields so they are never sent to AWS on resume
+  cp.desiredState = stripRedactedFields(cp.desiredState);
 
   return cp;
 }

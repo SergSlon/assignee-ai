@@ -455,20 +455,24 @@ export async function discoverSecurityGroups(): Promise<DiscoveryOption[]> {
       ec2.send(new DescribeSecurityGroupsCommand({})),
       DISCOVERY_TIMEOUT_MS,
     );
-    if (!result?.SecurityGroups) return [];
+    // Prepend "None" option — VPC default SG is used when no SG is selected
+    const options: DiscoveryOption[] = [
+      { value: "", label: "None (use VPC default security group)" },
+    ];
+    if (!result?.SecurityGroups) return options;
 
-    return result.SecurityGroups.filter((sg) => sg.GroupName !== "default")
-      .map((sg) => {
-        const desc =
-          sg.Description && sg.Description !== sg.GroupName
-            ? ` — ${sg.Description}`
-            : "";
-        return {
-          value: sg.GroupId!,
-          label: `${sg.GroupName}${desc} (${sg.GroupId})`,
-        };
-      })
-      .filter((o) => o.value);
+    for (const sg of result.SecurityGroups) {
+      if (sg.GroupName === "default" || !sg.GroupId) continue;
+      const desc =
+        sg.Description && sg.Description !== sg.GroupName
+          ? ` — ${sg.Description}`
+          : "";
+      options.push({
+        value: sg.GroupId,
+        label: `${sg.GroupName}${desc} (${sg.GroupId})`,
+      });
+    }
+    return options;
   });
 }
 

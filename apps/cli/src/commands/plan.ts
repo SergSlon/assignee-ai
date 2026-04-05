@@ -47,6 +47,7 @@ export const planCommand = new Command(CommandName.PLAN)
   .argument(CommandArgs.INTENT.NAME, CommandArgs.INTENT.DESC)
   .option("-o, --output <format>", "Output format (json|text)", "text")
   .option("--no-apply", "Skip the apply prompt after plan display")
+  .option("--no-advice", "Skip inline contextual advice generation")
   .option(
     "-s, --source <path>",
     "Path to local files to upload after provisioning (e.g., static site)",
@@ -66,6 +67,7 @@ export const planCommand = new Command(CommandName.PLAN)
       intent: string | undefined,
       opts: {
         apply?: boolean;
+        advice?: boolean;
         source?: string;
         set?: string[];
         output?: string;
@@ -161,6 +163,7 @@ export const planCommand = new Command(CommandName.PLAN)
               bpEnforcementLevel:
                 userConfig?.bestPractices?.enforcement ??
                 BPEnforcementLevel.ENFORCE,
+              ...(opts.advice === false ? { noAdvice: true } : {}),
               ...(userConfig ? { userConfig } : {}),
               ...(orgConfig ? { orgConfig } : {}),
               ...(Object.keys(presetFields).length > 0 ? { presetFields } : {}),

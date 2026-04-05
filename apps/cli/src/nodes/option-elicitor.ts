@@ -49,6 +49,7 @@ import {
   evaluateWizardRecommendations,
   displayRecommendations,
 } from "../utils/wizard-recommendations.js";
+import { validateCoherence } from "../utils/coherence-validator.js";
 import {
   getIntentDefaults,
   applyIntentOverrides,
@@ -121,33 +122,38 @@ export async function optionElicitorNode(
     }
   }
 
-  // Story 11.1: --no-wizard bypasses all interactive prompts, uses plugin defaults.
-  // When called from MCP server (noWizard=true), missing required fields are allowed —
-  // the plan-generator LLM will extract them from the user intent, and preflight-guard
-  // performs the final required-field validation.
+  // Story 42.1: Expert mode (default) — auto-decide everything using plugin defaults + intent analysis.
+  // The wizard is opt-in via --wizard. Missing required fields are allowed —
+  // the plan-generator LLM will extract them from the user intent.
   if (state.noWizard) {
     const plugin =
       defaultPluginRegistry.get(state.resourceType) ??
       defaultPluginRegistry.get("generic")!;
-    try {
-      const elicitedOptions = populateDefaultOptions(plugin);
-      return { elicitedOptions: { ...elicitedOptions, ...presetElicited } };
-    } catch (err) {
-      if (err instanceof MissingRequiredFieldsError) {
-        // Populate only available defaults; let plan-generator handle the rest
-        const partial: Record<string, unknown> = {};
-        const allFields = [...plugin.commonFields, ...plugin.advancedFields];
-        for (const field of allFields) {
-          if (field.question.showIf) continue;
-          const iv = field.question.initialValue;
-          const pd = plugin.defaults[field.name];
-          if (iv !== undefined) partial[field.name] = iv;
-          else if (pd !== undefined) partial[field.name] = pd;
-        }
-        return { elicitedOptions: { ...partial, ...presetElicited } };
-      }
-      throw err;
+
+    // Story 42.3: Merge intent-derived overrides into defaults (SSH → KeyName + PublicIP, etc.)
+    const intentOverrides = getIntentDefaults(
+      state.userIntent,
+      state.resourceType,
+    );
+    const intentMap = new Map(
+      intentOverrides.map((o) => [o.fieldName, o.value]),
+    );
+
+    // Build options: plugin defaults + intent overrides + preset (--set) values
+    const elicitedOptions: Record<string, unknown> = {};
+    const allFields = [...plugin.commonFields, ...plugin.advancedFields];
+    for (const field of allFields) {
+      if (field.question.showIf) continue;
+      // Priority: intent override > initialValue > plugin defaults
+      const intentVal = intentMap.get(field.name);
+      const iv = field.question.initialValue;
+      const pd = plugin.defaults[field.name];
+      if (intentVal !== undefined) elicitedOptions[field.name] = intentVal;
+      else if (iv !== undefined) elicitedOptions[field.name] = iv;
+      else if (pd !== undefined) elicitedOptions[field.name] = pd;
     }
+
+    return { elicitedOptions: { ...elicitedOptions, ...presetElicited } };
   }
 
   // Non-TTY (CI/pipes): skip all prompts but include --set values
@@ -594,6 +600,20 @@ export async function optionElicitorNode(
   // ── Advanced tier gate ───────────────────────────────────────────────────────
   if (advancedFields.length > 0) {
     const showAdvanced = await renderAdvancedConfirm();
+    if (!showAdvanced) {
+      // Story 41.2: Apply secure defaults for all advanced fields when skipped
+      for (const field of advancedFields) {
+        if (
+          field.question.showIf &&
+          !evaluateShowIf(field.question.showIf, elicitedOptions)
+        )
+          continue;
+        const iv = field.question.initialValue;
+        if (iv !== undefined && elicitedOptions[field.name] === undefined) {
+          elicitedOptions[field.name] = iv;
+        }
+      }
+    }
     if (showAdvanced) {
       const hintedAdvanced = advancedFields.map(applyPatternHint);
       const advHistory: number[] = [];
@@ -689,6 +709,18 @@ export async function optionElicitorNode(
     state.resourceType,
   );
   displayRecommendations(recommendations);
+
+  // ── Coherence validation (Story 41.5) ────────────────────────────────────
+  const coherenceWarnings = validateCoherence(
+    elicitedOptions,
+    state.userIntent ?? "",
+    state.resourceType,
+  );
+  if (coherenceWarnings.length > 0) {
+    for (const w of coherenceWarnings) {
+      clack.log.warn(w.message);
+    }
+  }
 
   log({
     ts: new Date().toISOString(),

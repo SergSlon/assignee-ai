@@ -49,6 +49,27 @@ function redactSensitiveFields(
   for (const [key, value] of Object.entries(state)) {
     if (SENSITIVE_STATE_KEYS.has(key)) {
       result[key] = "[REDACTED]";
+    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = redactSensitiveFields(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * Remove fields with "[REDACTED]" values from a desiredState record.
+ * Recurses into nested objects. Prevents sending placeholder strings to AWS.
+ */
+function stripRedactedFields(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(state)) {
+    if (value === "[REDACTED]") continue;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = stripRedactedFields(value as Record<string, unknown>);
     } else {
       result[key] = value;
     }
@@ -203,6 +224,10 @@ export async function loadCheckpointFromPath(
     );
   }
 
+  // Strip redacted fields so they are never sent to AWS on resume.
+  // AWS will use defaults (e.g., auto-generated passwords) for omitted fields.
+  cp.desiredState = stripRedactedFields(cp.desiredState);
+
   return cp;
 }
 
@@ -341,6 +366,8 @@ export async function findNewestValidCheckpoint(
 
     const cp = parsed.data;
     if (isCheckpointExpired(cp)) continue; // expired
+    if (!cp.preflightPassed) continue; // failed preflight
+    if (!cp.desiredState || Object.keys(cp.desiredState).length === 0) continue; // empty plan
 
     const createdMs = new Date(cp.created_at).getTime();
     if (createdMs > newestTime) {

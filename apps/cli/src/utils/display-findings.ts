@@ -196,3 +196,19 @@ export function formatMemoryHints(hints: string[] | undefined): string | null {
   });
   return lines.join("\n");
 }
+
+/**
+ * Formats advice hints for display in the plan box (Story 40.3).
+ * Returns null if no hints are present.
+ */
+export function formatAdviceHints(hints: string[] | undefined): string | null {
+  if (!hints || hints.length === 0) return null;
+  const isTTY = process.stdout.isTTY;
+  const lines = hints.map((h, i) => {
+    const bullet = isTTY ? `\u2022 ${h}` : `* ${h}`;
+    return i === 0
+      ? `Advice:          ${isTTY ? chalk.yellow(bullet) : bullet}`
+      : `                 ${isTTY ? chalk.yellow(bullet) : bullet}`;
+  });
+  return lines.join("\n");
+}

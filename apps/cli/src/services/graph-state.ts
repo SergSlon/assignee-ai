@@ -124,10 +124,10 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
     default: () => undefined,
   }),
-  // Story 11.1: skip interactive option elicitor prompts, use plugin defaults
+  // Story 42.1: wizard is opt-in (--wizard), expert mode is default
   noWizard: Annotation<boolean>({
     reducer: (_, b) => b,
-    default: () => false,
+    default: () => true,
   }),
   // Story 12.3: best practice findings from bp_evaluator node
   bpFindings: Annotation<BPFinding[] | undefined>({
@@ -183,6 +183,16 @@ export const graphAnnotation = Annotation.Root({
   bpEnforcementLevel: Annotation<BPEnforcementLevelType>({
     reducer: (_, b) => b,
     default: () => BPEnforcementLevel.ENFORCE,
+  }),
+  // Story 40.1: contextual advice hints from advice_generator node (display-only, non-blocking)
+  adviceHints: Annotation<string[] | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
+  }),
+  // Story 40.1: skip advice generation (--no-advice flag)
+  noAdvice: Annotation<boolean>({
+    reducer: (_, b) => b,
+    default: () => false,
   }),
   // Story 37.1: path to local files to upload after provisioning (e.g., static site)
   sourceDir: Annotation<string | undefined>({

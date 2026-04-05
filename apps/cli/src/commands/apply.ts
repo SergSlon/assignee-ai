@@ -175,7 +175,11 @@ function buildCheckpointState(
 export const applyCommand = new Command(CommandName.APPLY)
   .description(CommandDescription.APPLY)
   .argument(CommandArgs.INTENT.NAME, CommandArgs.INTENT.DESC)
-  .option("--no-wizard", "Skip interactive option prompts, use defaults")
+  .option(
+    "--wizard",
+    "Run interactive configuration wizard (default: auto-decide)",
+  )
+  .option("--no-advice", "Skip inline contextual advice generation")
   .option(
     "-y, --yes",
     "Auto-confirm apply without interactive prompt (for CI/CD)",
@@ -203,6 +207,7 @@ export const applyCommand = new Command(CommandName.APPLY)
       intent: string | undefined,
       opts: {
         wizard?: boolean;
+        advice?: boolean;
         yes?: boolean;
         checkpoint?: string;
         source?: string;
@@ -419,7 +424,8 @@ export const applyCommand = new Command(CommandName.APPLY)
                   ...(resolvedSourceDir
                     ? { sourceDir: resolvedSourceDir, sourceFileCount }
                     : {}),
-                  ...(opts.wizard === false ? { noWizard: true } : {}),
+                  ...(opts.wizard ? { noWizard: false } : {}),
+                  ...(opts.advice === false ? { noAdvice: true } : {}),
                   ...(opts.yes ? { autoApprove: true } : {}),
                   ...(userConfig ? { userConfig } : {}),
                   ...(orgConfig ? { orgConfig } : {}),

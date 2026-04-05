@@ -8,7 +8,7 @@
  * @see Story 10.5
  */
 
-import { CfnKey, RESOURCE_TYPES } from "@assignee/core";
+import { CfnKey, RESOURCE_TYPES, ResourceDefault } from "@assignee/core";
 import type { ResourceField } from "@assignee/core";
 import { WorkloadProfile as WP } from "../constants/workload-profiles.js";
 
@@ -59,6 +59,23 @@ const INTENT_RULES: IntentRule[] = [
         value: "c5.xlarge",
         reason: "Selected for ML/compute — 4 vCPU, 8 GiB, compute-optimized",
         categoryHint: WP.COMPUTE,
+      },
+    ],
+  },
+  // EC2 — SSH access (intent bundle: key pair + public IP + SG hint)
+  {
+    resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+    keywords: ["ssh"],
+    overrides: [
+      {
+        fieldName: CfnKey.KEY_NAME,
+        value: ResourceDefault.SSH_KEY_PLACEHOLDER,
+        reason: "SSH bundle: key pair will be auto-created during provisioning",
+      },
+      {
+        fieldName: CfnKey.ASSOCIATE_PUBLIC_IP,
+        value: true,
+        reason: "SSH bundle: public IP enabled for SSH reachability",
       },
     ],
   },
@@ -259,13 +276,30 @@ export function applyIntentOverrides(
         ? `${combinedHint}\nWarning: Public access will be enabled. Ensure this bucket does not contain sensitive data.`
         : combinedHint;
 
-    return {
-      ...field,
-      question: {
-        ...field.question,
-        initialValue: override.value,
-        hint: finalHint,
-      },
+    const updatedQuestion = {
+      ...field.question,
+      initialValue: override.value,
+      hint: finalHint,
     };
+
+    // For enum fields, inject the override value as an option if not already listed
+    if (
+      updatedQuestion.type === "enum" &&
+      typeof override.value === "string" &&
+      override.value.length > 0 &&
+      !(updatedQuestion.options ?? []).some(
+        (o: { value: string }) => o.value === override.value,
+      )
+    ) {
+      updatedQuestion.options = [
+        {
+          value: override.value as string,
+          label: `${override.value} (auto-create)`,
+        },
+        ...(updatedQuestion.options ?? []),
+      ];
+    }
+
+    return { ...field, question: updatedQuestion };
   });
 }

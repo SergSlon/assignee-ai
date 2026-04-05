@@ -144,6 +144,54 @@ describe("drift command", () => {
     expect(output).toContain("resources checked");
   });
 
+  it("renders region column from provision data in drift table", async () => {
+    const provisions = [
+      {
+        runId: "00000000-0000-0000-0000-000000000001",
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "arn:aws:s3:::bucket-1",
+        region: "eu-west-1",
+        desiredStateHash: "abc",
+        estimatedMonthlyCost: "$0",
+        timestamp: "2026-03-20T14:30:00Z",
+      },
+    ];
+
+    const mockPort = {
+      getResource: vi
+        .fn()
+        .mockResolvedValue([
+          null,
+          { ResourceDescription: { Properties: JSON.stringify({}) } },
+        ]),
+      createResource: vi.fn(),
+      deleteResource: vi.fn(),
+      updateResource: vi.fn(),
+      getRequestStatus: vi.fn(),
+    };
+
+    const { DriftDetectorService } =
+      await import("../services/drift-detector.js");
+    const detector = new DriftDetectorService({ provisioningPort: mockPort });
+    mockCreateDriftDetectorFromEnv.mockReturnValue({
+      detector,
+      port: mockPort,
+    });
+
+    vi.mocked(MemoryService).mockImplementation(
+      () =>
+        ({
+          readProvisions: vi.fn().mockResolvedValue(provisions),
+        }) as any,
+    );
+
+    await driftCommand.parseAsync(["node", "drift"]);
+
+    const output = stdoutSpy.mock.calls.map((c) => c[0]).join("");
+    expect(output).toContain("eu-west-1");
+    expect(output).toContain("Region");
+  });
+
   it("exit code remains undefined when all resources are in-sync", async () => {
     const provisions = [
       {

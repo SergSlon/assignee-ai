@@ -408,6 +408,26 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         // Graceful degradation — pattern memory read failure is non-blocking
       }
 
+      // EC2 post-processing for compound mode (same as standalone path)
+      if (currentResource.resourceType === RESOURCE_TYPES.EC2_INSTANCE) {
+        const sgIds = desiredState[CfnKey.SECURITY_GROUP_IDS];
+        if (Array.isArray(sgIds)) {
+          const valid = (sgIds as string[]).filter(
+            (id) => typeof id === "string" && id.startsWith("sg-"),
+          );
+          if (valid.length === 0) {
+            delete desiredState[CfnKey.SECURITY_GROUP_IDS];
+          } else {
+            desiredState[CfnKey.SECURITY_GROUP_IDS] = valid;
+          }
+        }
+        if (state.userIntent && /\bssh\b/i.test(state.userIntent)) {
+          if (!desiredState[CfnKey.KEY_NAME]) {
+            desiredState[CfnKey.KEY_NAME] = ResourceDefault.SSH_KEY_PLACEHOLDER;
+          }
+        }
+      }
+
       log({
         ts: new Date().toISOString(),
         runId: state.runId,

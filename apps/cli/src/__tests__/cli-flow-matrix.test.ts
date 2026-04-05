@@ -829,9 +829,9 @@ describe("plan command definition", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe("apply command definition", () => {
-  it("has --no-wizard option", async () => {
+  it("has --wizard option (opt-in interactive mode)", async () => {
     const { applyCommand } = await import("../commands/apply.js");
-    const opt = applyCommand.options.find((o) => o.long === "--no-wizard");
+    const opt = applyCommand.options.find((o) => o.long === "--wizard");
     expect(opt).toBeDefined();
   });
 
@@ -853,7 +853,7 @@ describe("apply command definition", () => {
     const { applyCommand } = await import("../commands/apply.js");
     const helpInfo = applyCommand.helpInformation();
     expect(helpInfo).toContain("--checkpoint");
-    expect(helpInfo).toContain("--no-wizard");
+    expect(helpInfo).toContain("--wizard");
   });
 });
 

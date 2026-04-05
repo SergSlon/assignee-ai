@@ -1,6 +1,6 @@
 /**
  * Unit tests for MCP server tool registration.
- * Verifies all 4 tools are registered with correct names and input schemas.
+ * Verifies all 5 tools are registered with correct names and input schemas.
  */
 
 import { describe, it, expect } from "vitest";

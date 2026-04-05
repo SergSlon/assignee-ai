@@ -48,6 +48,8 @@ export const LOG_ACTIONS = {
   FIX_APPLIED: "fix_applied",
   PROVISION_LOOP_EXCEEDED: "provision_loop_exceeded",
   MCP_OPTIONAL_INIT_FAILED: "mcp_optional_init_failed",
+  ADVICE_GENERATED: "advice_generated",
+  ADVICE_SKIPPED: "advice_skipped",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

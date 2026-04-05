@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { ExecutionStatus, MockLlmAdapter } from "@assignee/core";
+import {
+  ExecutionStatus,
+  MockLlmAdapter,
+  RESOURCE_TYPES,
+  CfnKey,
+  ResourceDefault,
+} from "@assignee/core";
 import {
   createPlanGeneratorNode,
   applyToCfnTransforms,
@@ -688,7 +694,13 @@ describe("applyToCfnTransforms", () => {
       ],
     });
     expect(result["CorsConfiguration"]).toEqual({
-      CorsRules: [{ AllowedHeaders: ["*"], AllowedMethods: ["GET"], AllowedOrigins: ["*"] }],
+      CorsRules: [
+        {
+          AllowedHeaders: ["*"],
+          AllowedMethods: ["GET"],
+          AllowedOrigins: ["*"],
+        },
+      ],
     });
     // Intermediate keys must be removed
     expect(result["EnableLifecycle"]).toBeUndefined();
@@ -791,5 +803,298 @@ describe("planGeneratorNode — Story 18.9 toCfn integration", () => {
       RestrictPublicBuckets: true,
     });
     expect(ds["BucketName"]).toBe("site-bucket");
+  });
+});
+
+// ── EC2 post-processing: SG cleanup and SSH intent detection ───────────────
+
+describe("planGeneratorNode — EC2 post-processing", () => {
+  function makeEc2State(overrides: Record<string, unknown> = {}) {
+    return makeState({
+      resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+      userIntent: "Create an EC2 instance",
+      resourceSchema: {
+        properties: {
+          InstanceType: { type: "string" },
+          ImageId: { type: "string" },
+          KeyName: { type: "string" },
+          SecurityGroupIds: { type: "array" },
+          MetadataOptions: { type: "object" },
+          BlockDeviceMappings: { type: "array" },
+        },
+        required: ["ImageId"],
+      },
+      ...overrides,
+    });
+  }
+
+  describe("SecurityGroupIds cleanup", () => {
+    it("strips placeholder SG IDs that do not start with sg-", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          SecurityGroupIds: ["sg-0abc123def456", "placeholder-sg"],
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(makeEc2State());
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["SecurityGroupIds"]).toEqual(["sg-0abc123def456"]);
+    });
+
+    it("deletes SecurityGroupIds entirely when all IDs are invalid", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          SecurityGroupIds: ["placeholder", "sg-invalid-no-wait"],
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(makeEc2State());
+      const ds = result.desiredState as Record<string, unknown>;
+
+      // "sg-invalid-no-wait" starts with "sg-" so it should be kept
+      expect(ds["SecurityGroupIds"]).toEqual(["sg-invalid-no-wait"]);
+    });
+
+    it("deletes SecurityGroupIds when array is empty", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          SecurityGroupIds: [],
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(makeEc2State());
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["SecurityGroupIds"]).toBeUndefined();
+    });
+
+    it("preserves valid SecurityGroupIds unchanged", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          SecurityGroupIds: ["sg-0abc123", "sg-0def456"],
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(makeEc2State());
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["SecurityGroupIds"]).toEqual(["sg-0abc123", "sg-0def456"]);
+    });
+
+    it("removes all non-sg- IDs leaving none — deletes the field", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          SecurityGroupIds: ["fake-id", "not-a-sg"],
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(makeEc2State());
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["SecurityGroupIds"]).toBeUndefined();
+    });
+  });
+
+  describe("SSH intent detection", () => {
+    it("injects SSH_KEY_PLACEHOLDER when userIntent contains 'ssh'", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(
+        makeEc2State({ userIntent: "Create an EC2 instance I can SSH into" }),
+      );
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["KeyName"]).toBe(ResourceDefault.SSH_KEY_PLACEHOLDER);
+    });
+
+    it("injects placeholder for uppercase SSH", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(
+        makeEc2State({ userIntent: "Launch an instance with SSH access" }),
+      );
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["KeyName"]).toBe(ResourceDefault.SSH_KEY_PLACEHOLDER);
+    });
+
+    it("does NOT match 'sshd' due to word boundary", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(
+        makeEc2State({ userIntent: "Create an instance to run sshd proxy" }),
+      );
+      const ds = result.desiredState as Record<string, unknown>;
+
+      // "sshd" should NOT trigger SSH intent detection (word boundary)
+      expect(ds["KeyName"]).toBeUndefined();
+    });
+
+    it("does NOT override existing KeyName from LLM", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          KeyName: "my-existing-key",
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(
+        makeEc2State({ userIntent: "SSH into my EC2 instance" }),
+      );
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["KeyName"]).toBe("my-existing-key");
+    });
+
+    it("does NOT inject KeyName when intent has no SSH mention", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(
+        makeEc2State({ userIntent: "Create a web server" }),
+      );
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["KeyName"]).toBeUndefined();
+    });
+
+    it("does NOT inject KeyName when userIntent is undefined", async () => {
+      const mock = new MockLlmAdapter(
+        undefined,
+        JSON.stringify({
+          ImageId: "ami-0abcdef1234567890",
+          MetadataOptions: { HttpTokens: "required" },
+        }),
+      );
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(makeEc2State({ userIntent: undefined }));
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["KeyName"]).toBeUndefined();
+    });
+  });
+
+  describe("compound mode EC2 post-processing", () => {
+    it("strips invalid SG IDs in compound mode", async () => {
+      const mock = new MockLlmAdapter(undefined, "{}");
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(
+        makeState({
+          resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+          userIntent: "Create a VPC with EC2",
+          resourcePattern: {
+            patternId: "vpc-ec2",
+            displayName: "VPC + EC2",
+            resources: [],
+            defaultOptions: {
+              ec2: {
+                ImageId: "ami-0abcdef1234567890",
+                SecurityGroupIds: ["placeholder-sg"],
+              },
+            },
+          },
+          resourceQueue: [
+            {
+              resourceId: "ec2",
+              resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+            },
+          ],
+          currentResourceIndex: 0,
+        }),
+      );
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["SecurityGroupIds"]).toBeUndefined();
+    });
+
+    it("injects SSH key placeholder in compound mode when intent mentions SSH", async () => {
+      const mock = new MockLlmAdapter(undefined, "{}");
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(
+        makeState({
+          resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+          userIntent: "Create a VPC with an EC2 I can SSH into",
+          resourcePattern: {
+            patternId: "vpc-ec2",
+            displayName: "VPC + EC2",
+            resources: [],
+            defaultOptions: {
+              ec2: {
+                ImageId: "ami-0abcdef1234567890",
+              },
+            },
+          },
+          resourceQueue: [
+            {
+              resourceId: "ec2",
+              resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+            },
+          ],
+          currentResourceIndex: 0,
+        }),
+      );
+      const ds = result.desiredState as Record<string, unknown>;
+
+      expect(ds["KeyName"]).toBe(ResourceDefault.SSH_KEY_PLACEHOLDER);
+    });
   });
 });

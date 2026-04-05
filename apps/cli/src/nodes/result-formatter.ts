@@ -536,6 +536,7 @@ export async function resultFormatterNode(
             bpFindings: state.bpFindings ?? [],
             appliedFixes: state.appliedFixes ?? [],
             freeTierNote: state.freeTierNote ?? null,
+            adviceHints: state.adviceHints ?? [],
             // Compound pattern info (Epic 37)
             ...(state.resourcePattern
               ? {

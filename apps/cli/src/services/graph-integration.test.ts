@@ -320,10 +320,15 @@ describe("Graph integration — plan mode", () => {
       MetadataOptions: { HttpTokens: "required" },
       BlockDeviceMappings: [{ Ebs: { Encrypted: true, VolumeType: "gp3" } }],
     });
-    mockLlmForPlanFlow("AWS::EC2::Instance", bpCompliantEc2);
+    mockGenerateText
+      .mockResolvedValueOnce({
+        output: { resourceType: "AWS::EC2::Instance" },
+        text: "",
+      })
+      .mockResolvedValueOnce({ text: bpCompliantEc2, output: undefined })
+      .mockResolvedValueOnce({ text: "[]", output: undefined }); // advice-generator
 
-    // Use filter-dispatched EC2 pricing tool — returns DIFFERENT prices for
-    // compute vs EBS storage vs data transfer, catching filter-dispatch bugs
+    // Use filter-dispatched EC2 pricing tool
     const tools = [createEc2PricingDispatchTool()];
 
     const graph = createGraph(tools);
@@ -332,13 +337,13 @@ describe("Graph integration — plan mode", () => {
         userIntent:
           "Create a t3.micro EC2 instance with AMI ami-0123456789abcdef0",
         executionMode: ExecutionMode.PLAN,
+        noWizard: false,
       },
       { configurable: { thread_id: "integration-ec2-happy" } },
     );
 
     expect(result.resourceType).toBe("AWS::EC2::Instance");
     expect(result.desiredState).toHaveProperty("InstanceType", "t3.micro");
-    // BP may fire CRITICALs for array-path fields (BlockDeviceMappings[0]) — plan flow still completes
     expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
   });
 
@@ -726,7 +731,13 @@ describe("Graph integration — fix_applicator + pricing breakdown", () => {
       MetadataOptions: { HttpTokens: "required" },
       BlockDeviceMappings: [{ Ebs: { Encrypted: true, VolumeType: "gp3" } }],
     });
-    mockLlmForPlanFlow("AWS::EC2::Instance", ec2State);
+    mockGenerateText
+      .mockResolvedValueOnce({
+        output: { resourceType: "AWS::EC2::Instance" },
+        text: "",
+      })
+      .mockResolvedValueOnce({ text: ec2State, output: undefined })
+      .mockResolvedValueOnce({ text: "[]", output: undefined }); // advice-generator
 
     // Use filter-dispatched EC2 pricing tool — decomposer issues separate
     // MCP calls for compute, EBS storage, and data transfer.  A static mock
@@ -738,6 +749,7 @@ describe("Graph integration — fix_applicator + pricing breakdown", () => {
       {
         userIntent: "Create a t3.micro EC2 instance",
         executionMode: ExecutionMode.PLAN,
+        noWizard: false,
       },
       { configurable: { thread_id: "integration-pricing-breakdown" } },
     );
@@ -1038,5 +1050,122 @@ describe("Graph integration — apply flow", () => {
 
     const finalState = await graph.getState(config);
     expect(finalState.values.executionStatus).toBe(ExecutionStatus.SUCCESS);
+  });
+});
+
+// ── Story 40.1: Advice generator integration ────────────────────────────────
+
+describe("Advice generator integration", () => {
+  it("EC2 plan produces security and cost advice hints (Story 40.1)", async () => {
+    // EC2 plan WITHOUT IMDSv2 and WITHOUT encrypted EBS — security advisor should catch both
+    const ec2Plan = JSON.stringify({
+      InstanceType: "t3.micro",
+      ImageId: "ami-0c55b159cbfafe1f0",
+      BlockDeviceMappings: [
+        { DeviceName: "/dev/xvda", Ebs: { VolumeType: "gp3" } },
+      ],
+    });
+
+    mockGenerateText
+      .mockResolvedValueOnce({
+        output: { resourceType: "AWS::EC2::Instance" },
+        text: "",
+      })
+      .mockResolvedValueOnce({ text: ec2Plan, output: undefined })
+      // 3rd call: advice-generator LLM — return empty to test rule-based only
+      .mockResolvedValueOnce({ text: "[]", output: undefined });
+
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create an EC2 t3.micro for development",
+        executionMode: ExecutionMode.PLAN,
+        noWizard: false,
+      },
+      { configurable: { thread_id: "integration-ec2-advice" } },
+    );
+
+    // Advice hints should be populated by rule-based advisors
+    expect(result.adviceHints).toBeDefined();
+    expect(result.adviceHints!.length).toBeGreaterThan(0);
+    // Security advisor: IMDSv2 not enforced (no MetadataOptions)
+    expect(result.adviceHints!.some((h: string) => h.includes("IMDSv2"))).toBe(
+      true,
+    );
+    // Security advisor: EBS unencrypted
+    expect(result.adviceHints!.some((h: string) => h.includes("EBS"))).toBe(
+      true,
+    );
+    // Cost advisor: ARM alternative (t3 → t4g)
+    expect(result.adviceHints!.some((h: string) => h.includes("t4g"))).toBe(
+      true,
+    );
+  });
+
+  it("S3 plan with full security config produces positive security confirmations", async () => {
+    const s3Plan = JSON.stringify({
+      BucketName: "secure-bucket",
+      BucketEncryption: {
+        ServerSideEncryptionConfiguration: [
+          { ServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } },
+        ],
+      },
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: true,
+        BlockPublicPolicy: true,
+        IgnorePublicAcls: true,
+        RestrictPublicBuckets: true,
+      },
+    });
+
+    mockGenerateText
+      .mockResolvedValueOnce({
+        output: { resourceType: "AWS::S3::Bucket" },
+        text: "",
+      })
+      .mockResolvedValueOnce({ text: s3Plan, output: undefined })
+      .mockResolvedValueOnce({ text: "[]", output: undefined });
+
+    const tools = [createS3PricingDispatchTool()];
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create a secure S3 bucket",
+        executionMode: ExecutionMode.PLAN,
+      },
+      { configurable: { thread_id: "integration-s3-advice" } },
+    );
+
+    expect(result.adviceHints).toBeDefined();
+    // Security advisor: public access fully blocked (positive confirmation)
+    expect(
+      result.adviceHints!.some((h: string) =>
+        h.includes("Public access fully blocked"),
+      ),
+    ).toBe(true);
+    // Cost advisor: lifecycle suggestion (no lifecycle configured)
+    expect(
+      result.adviceHints!.some((h: string) => h.includes("lifecycle")),
+    ).toBe(true);
+  });
+
+  it("--no-advice flag produces empty adviceHints", async () => {
+    mockLlmForPlanFlow("AWS::S3::Bucket", '{"BucketName":"no-advice-bucket"}');
+
+    const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
+    const graph = createGraph(tools);
+    const result = await graph.invoke(
+      {
+        userIntent: "Create an S3 bucket",
+        executionMode: ExecutionMode.PLAN,
+        noAdvice: true,
+      },
+      { configurable: { thread_id: "integration-no-advice" } },
+    );
+
+    expect(result.adviceHints).toEqual([]);
+    // LLM should only be called twice (intent-parser + plan-generator), NOT for advice
+    expect(mockGenerateText).toHaveBeenCalledTimes(2);
   });
 });

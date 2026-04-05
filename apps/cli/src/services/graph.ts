@@ -24,6 +24,7 @@ import { schemaFetcherNode } from "../nodes/schema-fetcher.js";
 import { optionElicitorNode } from "../nodes/option-elicitor.js";
 import { compoundDispatcherNode } from "../nodes/compound-dispatcher.js";
 import { createPlanGeneratorNode } from "../nodes/plan-generator.js";
+import { createAdviceGeneratorNode } from "../nodes/advice-generator.js";
 import { preflightGuardNode } from "../nodes/preflight-guard.js";
 import { humanApprovalNode } from "../nodes/human-approval.js";
 import { resourceProvisionerNode } from "../nodes/resource-provisioner.js";
@@ -82,6 +83,9 @@ export function createGraph(
 
   const intentParserNode = createIntentParserNode({ llmClient: llmAdapter });
   const planGeneratorNode = createPlanGeneratorNode({ llmClient: llmAdapter });
+  const adviceGeneratorNode = createAdviceGeneratorNode({
+    llmClient: llmAdapter,
+  });
 
   const workflow = new StateGraph(graphAnnotation)
     .addNode(GraphNode.INTENT_PARSER, (state) => intentParserNode(state))
@@ -93,6 +97,9 @@ export function createGraph(
       compoundDispatcherNode(state),
     )
     .addNode(GraphNode.PLAN_GENERATOR, (state) => planGeneratorNode(state))
+    .addNode(GraphNode.ADVICE_GENERATOR, (state) =>
+      adviceGeneratorNode(state, tools),
+    )
     .addNode(GraphNode.PREFLIGHT_GUARD, (state) =>
       preflightGuardNode(state, tools),
     )
@@ -103,7 +110,7 @@ export function createGraph(
     .addNode(GraphNode.STATUS_POLLER, (state) =>
       statusPollerNode(state, provisioner),
     )
-    .addNode(GraphNode.BP_EVALUATOR, (state) => bpEvaluatorNode(state))
+    .addNode(GraphNode.BP_EVALUATOR, (state) => bpEvaluatorNode(state, tools))
     .addNode(GraphNode.FIX_APPLICATOR, (state) => fixApplicatorNode(state))
     .addNode(GraphNode.RESULT_FORMATTER, (state) =>
       resultFormatterNode(state, tools),
@@ -116,7 +123,8 @@ export function createGraph(
     .addEdge(GraphNode.SCHEMA_FETCHER, GraphNode.OPTION_ELICITOR)
     .addEdge(GraphNode.OPTION_ELICITOR, GraphNode.COMPOUND_DISPATCHER)
     .addEdge(GraphNode.COMPOUND_DISPATCHER, GraphNode.PLAN_GENERATOR)
-    .addEdge(GraphNode.PLAN_GENERATOR, GraphNode.BP_EVALUATOR)
+    .addEdge(GraphNode.PLAN_GENERATOR, GraphNode.ADVICE_GENERATOR)
+    .addEdge(GraphNode.ADVICE_GENERATOR, GraphNode.BP_EVALUATOR)
     .addEdge(GraphNode.BP_EVALUATOR, GraphNode.FIX_APPLICATOR)
     .addEdge(GraphNode.FIX_APPLICATOR, GraphNode.PREFLIGHT_GUARD)
     .addConditionalEdges(GraphNode.PREFLIGHT_GUARD, routePreflightGuard, {

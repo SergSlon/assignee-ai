@@ -452,14 +452,14 @@ describe("applyCommand — --yes flag", () => {
   });
 });
 
-describe("applyCommand — --no-wizard flag", () => {
-  it("T1.4: --no-wizard sets noWizard in graph state", async () => {
+describe("applyCommand — --wizard flag (opt-in)", () => {
+  it("T1.4: --wizard sets noWizard=false in graph state", async () => {
     capturedOpts = null;
     const { applyCommand } = await import("./apply.js");
     await applyCommand.parseAsync([
       "node",
       "apply",
-      "--no-wizard",
+      "--wizard",
       "Create an S3 bucket",
     ]);
     expect(capturedOpts).not.toBeNull();
@@ -474,7 +474,7 @@ describe("applyCommand — --no-wizard flag", () => {
 
     expect(ctx.graph.invoke).toHaveBeenCalledWith(
       expect.objectContaining({
-        noWizard: true,
+        noWizard: false,
       }),
       expect.anything(),
     );

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { RESOURCE_TYPES } from "@assignee/core";
-import { getIntentDefaults } from "./intent-defaults.js";
+import { RESOURCE_TYPES, ResourceDefault, CfnKey } from "@assignee/core";
+import type { IntentDefaultOverride } from "./intent-defaults.js";
+import { getIntentDefaults, applyIntentOverrides } from "./intent-defaults.js";
+import type { ResourceField } from "@assignee/core";
 
 describe("getIntentDefaults", () => {
   // ── Task 3.1 / AC #3: Lambda API handler defaults ─────────────────────
@@ -163,5 +165,119 @@ describe("getIntentDefaults", () => {
     for (const o of overrides) {
       expect(o.categoryHint).toBeUndefined();
     }
+  });
+
+  // ── EC2 SSH intent detection ──────────────────────────────────────────────
+
+  it('EC2 "SSH" intent returns KeyName + PublicIP overrides (SSH bundle)', () => {
+    const overrides = getIntentDefaults(
+      "Create an EC2 with SSH",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    const keyNameOverride = overrides.find(
+      (o) => o.fieldName === CfnKey.KEY_NAME,
+    );
+    const publicIpOverride = overrides.find(
+      (o) => o.fieldName === CfnKey.ASSOCIATE_PUBLIC_IP,
+    );
+    expect(keyNameOverride).toBeDefined();
+    expect(keyNameOverride!.value).toBe(ResourceDefault.SSH_KEY_PLACEHOLDER);
+    expect(publicIpOverride).toBeDefined();
+    expect(publicIpOverride!.value).toBe(true);
+    expect(publicIpOverride!.reason).toContain("SSH bundle");
+  });
+
+  it('EC2 "ssh into" intent returns SSH bundle overrides', () => {
+    const overrides = getIntentDefaults(
+      "Create an EC2 I can ssh into",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    expect(
+      overrides.find((o) => o.fieldName === CfnKey.KEY_NAME),
+    ).toBeDefined();
+    expect(
+      overrides.find((o) => o.fieldName === CfnKey.ASSOCIATE_PUBLIC_IP)!.value,
+    ).toBe(true);
+  });
+
+  it("EC2 intent without SSH does not return KeyName override", () => {
+    const overrides = getIntentDefaults(
+      "Create an EC2 web server",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    const keyNameOverride = overrides.find(
+      (o) => o.fieldName === CfnKey.KEY_NAME,
+    );
+    expect(keyNameOverride).toBeUndefined();
+  });
+});
+
+// ── applyIntentOverrides — enum option injection ──────────────────────────
+
+describe("applyIntentOverrides", () => {
+  it("injects override value into enum options when not already present", () => {
+    const fields: ResourceField[] = [
+      {
+        name: CfnKey.KEY_NAME,
+        question: {
+          type: "enum" as const,
+          label: "EC2 Key Pair",
+          hint: "Required for SSH access.",
+          options: [
+            { value: "", label: "None (SSM access only)" },
+            { value: "existing-key", label: "existing-key (rsa)" },
+          ],
+        },
+      },
+    ];
+    const overrides = getIntentDefaults(
+      "Create an EC2 with SSH",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+
+    const result = applyIntentOverrides(fields, overrides);
+    const keyField = result.find((f) => f.name === CfnKey.KEY_NAME)!;
+
+    // Should inject the placeholder as the first option
+    expect(keyField.question.options![0]).toEqual({
+      value: ResourceDefault.SSH_KEY_PLACEHOLDER,
+      label: `${ResourceDefault.SSH_KEY_PLACEHOLDER} (auto-create)`,
+    });
+    // Should set initialValue
+    expect(keyField.question.initialValue).toBe(
+      ResourceDefault.SSH_KEY_PLACEHOLDER,
+    );
+  });
+
+  it("does not duplicate option if override value already in options", () => {
+    const fields: ResourceField[] = [
+      {
+        name: CfnKey.KEY_NAME,
+        question: {
+          type: "enum" as const,
+          label: "EC2 Key Pair",
+          options: [
+            { value: "", label: "None (SSM access only)" },
+            {
+              value: ResourceDefault.SSH_KEY_PLACEHOLDER,
+              label: "assignee-ssh-key (rsa)",
+            },
+          ],
+        },
+      },
+    ];
+    const overrides = getIntentDefaults(
+      "Create an EC2 with SSH",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+
+    const result = applyIntentOverrides(fields, overrides);
+    const keyField = result.find((f) => f.name === CfnKey.KEY_NAME)!;
+
+    // Should not add duplicate — original 2 options remain
+    expect(keyField.question.options).toHaveLength(2);
+    expect(keyField.question.initialValue).toBe(
+      ResourceDefault.SSH_KEY_PLACEHOLDER,
+    );
   });
 });

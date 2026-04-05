@@ -46,6 +46,8 @@ export const CfnKey = {
   HTTP_TOKENS: "HttpTokens",
   MONITORING: "Monitoring",
   CREDIT_SPECIFICATION: "CreditSpecification",
+  DISABLE_API_TERMINATION: "DisableApiTermination",
+  EBS_OPTIMIZED: "EbsOptimized",
   USER_DATA: "UserData",
   IAM_INSTANCE_PROFILE: "IamInstanceProfile",
 
