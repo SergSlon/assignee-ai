@@ -27,6 +27,7 @@ import {
   renderApplyNowConfirm,
   startSpinner,
   stopSpinner,
+  resolveSetKey,
 } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand, runProvisioningLoop } from "../utils/command-runner.js";
@@ -54,7 +55,7 @@ export const planCommand = new Command(CommandName.PLAN)
   )
   .option(
     "--set <key=value...>",
-    "Pre-set wizard field values (repeatable)",
+    "Pre-set field values, supports human names (e.g., --set size=t3.medium)",
     (val: string, prev: string[]) => [...prev, val],
     [] as string[],
   )
@@ -75,12 +76,13 @@ export const planCommand = new Command(CommandName.PLAN)
     ) => {
       const noApply = opts.apply === false;
       const outputFormat = opts.output ?? "text";
-      // Parse --set key=value pairs into a pre-fill map
+      // Parse --set key=value pairs into a pre-fill map (supports human names)
       const presetFields: Record<string, string> = {};
       for (const kv of opts.set ?? []) {
         const eqIdx = kv.indexOf("=");
         if (eqIdx > 0) {
-          presetFields[kv.slice(0, eqIdx)] = kv.slice(eqIdx + 1);
+          const rawKey = kv.slice(0, eqIdx);
+          presetFields[resolveSetKey(rawKey)] = kv.slice(eqIdx + 1);
         }
       }
       // Story 37.1: validate --source directory

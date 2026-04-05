@@ -33,7 +33,12 @@ import {
   CommandArgs,
 } from "../constants/commands.js";
 import type { AgentState } from "../services/graph.js";
-import { renderError, startSpinner, stopSpinner } from "../utils/display.js";
+import {
+  renderError,
+  startSpinner,
+  stopSpinner,
+  resolveSetKey,
+} from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand, runProvisioningLoop } from "../utils/command-runner.js";
 import {
@@ -435,8 +440,11 @@ export const applyCommand = new Command(CommandName.APPLY)
                           opts.set.map((kv) => {
                             const eq = kv.indexOf("=");
                             return eq > 0
-                              ? [kv.slice(0, eq), kv.slice(eq + 1)]
-                              : [kv, "true"];
+                              ? [
+                                  resolveSetKey(kv.slice(0, eq)),
+                                  kv.slice(eq + 1),
+                                ]
+                              : [resolveSetKey(kv), "true"];
                           }),
                         ),
                       }
