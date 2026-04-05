@@ -8,7 +8,7 @@ import {
   SizeLabel,
   RDS_ENGINE_VERSION_HINT,
 } from "../../config/cfn-keys.js";
-import type { ResourcePlugin } from "../types.js";
+import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
@@ -459,6 +459,48 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
     [CfnKey.STORAGE_TYPE]: ResourceDefault.EBS_VOLUME_TYPE,
     [CfnKey.MULTI_AZ]: false,
     [CfnKey.STORAGE_ENCRYPTED]: true,
+  },
+  companionResources(desiredState: Record<string, unknown>): CfnOutput[] {
+    // Auto-create a SecurityGroup for DB access when none specified
+    const vpcSgIds = desiredState[CfnKey.VPC_SECURITY_GROUP_IDS];
+    if (Array.isArray(vpcSgIds) && vpcSgIds.length > 0) return [];
+
+    const engine = (desiredState[CfnKey.ENGINE] as string) ?? "postgres";
+    const port =
+      engine.includes("mysql") ||
+      engine.includes("mariadb") ||
+      engine.includes("aurora-mysql")
+        ? 3306
+        : 5432;
+    const dbClass =
+      (desiredState[CfnKey.DB_INSTANCE_CLASS] as string) ?? "db-instance";
+    const sanitized = dbClass.replace(/[^a-zA-Z0-9]/g, "-");
+
+    return [
+      {
+        logicalId: `${sanitized}SecurityGroup`,
+        type: RESOURCE_TYPES.EC2_SECURITY_GROUP,
+        properties: {
+          [CfnKey.GROUP_DESCRIPTION]: `Security group for RDS ${engine} (port ${port})`,
+          SecurityGroupIngress: [
+            {
+              IpProtocol: "tcp",
+              FromPort: port,
+              ToPort: port,
+              CidrIp: "10.0.0.0/8",
+              Description: `${engine} access from private network`,
+            },
+          ],
+          SecurityGroupEgress: [
+            {
+              IpProtocol: "-1",
+              CidrIp: "0.0.0.0/0",
+              Description: "Allow all outbound",
+            },
+          ],
+        },
+      },
+    ];
   },
   configHints: [
     "If the user did not provide a MasterUserPassword, OMIT it — AWS will auto-generate one via Secrets Manager",
