@@ -5,9 +5,18 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 import type { DriftResult, DriftStatusType } from "@assignee/core";
 import { DriftStatus } from "@assignee/core";
 import { AWS_REGION, UNKNOWN_FALLBACK } from "../config/constants.js";
+
+let CLI_VERSION = "unknown";
+try {
+  const require = createRequire(import.meta.url);
+  CLI_VERSION = (require("../../package.json") as { version: string }).version;
+} catch {
+  /* bundled or CJS context — fallback to "unknown" */
+}
 
 export interface DriftReportSummary {
   total: number;
@@ -64,7 +73,7 @@ export function buildDriftReport(
     region: opts.region ?? AWS_REGION,
     summary,
     metadata: {
-      assigneeVersion: opts.assigneeVersion ?? "0.0.0",
+      assigneeVersion: opts.assigneeVersion ?? CLI_VERSION,
       awsAccountId: opts.awsAccountId ?? UNKNOWN_FALLBACK,
       checkDurationMs: opts.checkDurationMs ?? 0,
     },

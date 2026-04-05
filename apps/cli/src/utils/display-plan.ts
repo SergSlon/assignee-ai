@@ -27,6 +27,7 @@ import {
   formatFindings,
   formatFreeTierNote,
   formatMemoryHints,
+  formatAdviceHints,
 } from "./display-findings.js";
 import { stopSpinner } from "./display-output.js";
 
@@ -67,6 +68,9 @@ export function renderPlanBox(state: RenderableState): void {
   // Story 19.3: Memory hints from provision history (optional)
   const memoryHintLines = formatMemoryHints(state.memoryHints);
 
+  // Story 40.3: Inline contextual advice hints (optional)
+  const adviceLines = formatAdviceHints(state.adviceHints);
+
   const configBlock = state.desiredState
     ? formatDesiredState(state.desiredState)
     : "(none)";
@@ -97,6 +101,7 @@ export function renderPlanBox(state: RenderableState): void {
     `Estimated Cost:  ${costLine}`,
     ...(sourceFilesLine ? [sourceFilesLine] : []),
     ...(breakdownLines ? [breakdownLines] : []),
+    ...(adviceLines ? [adviceLines] : []),
     ...(freeTierLine ? [freeTierLine] : []),
     ...(memoryHintLines ? [memoryHintLines] : []),
     ...(appliedFixesLine ? [appliedFixesLine] : []),

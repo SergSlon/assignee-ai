@@ -91,6 +91,7 @@ export interface RenderableState {
   verbose?: boolean;
   autoFixEnabled?: boolean;
   autoApprove?: boolean;
+  adviceHints?: string[];
   sourceDir?: string;
   sourceFileCount?: number;
 }

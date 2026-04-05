@@ -114,7 +114,7 @@ describe("aws-resource-discovery", () => {
   // ── discoverSecurityGroups ─────────────────────────────────────────────
 
   describe("discoverSecurityGroups", () => {
-    it("returns labelled options excluding default group", async () => {
+    it("prepends 'None' option and lists SGs excluding default group", async () => {
       mockEc2Send.mockResolvedValueOnce({
         SecurityGroups: [
           {
@@ -131,6 +131,7 @@ describe("aws-resource-discovery", () => {
       });
       const result = await discoverSecurityGroups();
       expect(result).toEqual([
+        { value: "", label: "None (use VPC default security group)" },
         {
           value: "sg-bbb",
           label: "web-servers — HTTP/HTTPS ingress (sg-bbb)",
@@ -149,13 +150,18 @@ describe("aws-resource-discovery", () => {
         ],
       });
       const result = await discoverSecurityGroups();
-      expect(result).toEqual([{ value: "sg-ccc", label: "my-sg (sg-ccc)" }]);
+      expect(result).toEqual([
+        { value: "", label: "None (use VPC default security group)" },
+        { value: "sg-ccc", label: "my-sg (sg-ccc)" },
+      ]);
     });
 
-    it("returns [] when API returns null", async () => {
+    it("returns 'None' option when API returns null", async () => {
       mockEc2Send.mockResolvedValueOnce(null);
       const result = await discoverSecurityGroups();
-      expect(result).toEqual([]);
+      expect(result).toEqual([
+        { value: "", label: "None (use VPC default security group)" },
+      ]);
     });
   });
 
@@ -253,17 +259,21 @@ describe("aws-resource-discovery", () => {
       expect(mockEc2Send).toHaveBeenCalledTimes(2);
     });
 
-    it("does not cache empty results", async () => {
+    it("does not cache empty results (uses subnets as example)", async () => {
       mockEc2Send
         .mockResolvedValueOnce(null) // first call returns nothing
         .mockResolvedValueOnce({
-          SecurityGroups: [
-            { GroupId: "sg-x", GroupName: "x", Description: "x" },
+          Subnets: [
+            {
+              SubnetId: "subnet-abc",
+              CidrBlock: "10.0.1.0/24",
+              AvailabilityZone: "us-east-1a",
+            },
           ],
         });
-      const first = await discoverSecurityGroups();
+      const first = await discoverSubnets();
       expect(first).toEqual([]);
-      const second = await discoverSecurityGroups();
+      const second = await discoverSubnets();
       expect(second).toHaveLength(1);
       expect(mockEc2Send).toHaveBeenCalledTimes(2);
     });
@@ -530,7 +540,7 @@ describe("aws-resource-discovery", () => {
   describe("shape invariants", () => {
     /**
      * Every discovery option must have:
-     * - `value` as a non-empty string (except key pairs "None" option which uses "")
+     * - `value` as a non-empty string (except key pairs and security groups "None" options which use "")
      * - `label` as a non-empty string
      * - `value` never equals "false" or "undefined"
      */
@@ -595,7 +605,7 @@ describe("aws-resource-discovery", () => {
       assertShapeInvariants(result);
     });
 
-    it("discoverSecurityGroups returns well-shaped options", async () => {
+    it("discoverSecurityGroups returns well-shaped options (allows empty value for None)", async () => {
       mockEc2Send.mockResolvedValueOnce({
         SecurityGroups: [
           {
@@ -606,7 +616,10 @@ describe("aws-resource-discovery", () => {
         ],
       });
       const result = await discoverSecurityGroups();
-      assertShapeInvariants(result);
+      assertShapeInvariants(
+        result,
+        true /* allowEmptyValue for "None" option */,
+      );
     });
 
     it("discoverKeyPairs returns well-shaped options (allows empty value for None)", async () => {

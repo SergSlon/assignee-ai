@@ -137,6 +137,7 @@ export const StateField = {
   COMPLETED_RESOURCES: "completedResources",
   BP_FINDINGS: "bpFindings",
   FREE_TIER_NOTE: "freeTierNote",
+  ADVICE_HINTS: "adviceHints",
   PREFLIGHT_PASSED: "preflightPassed",
   ELICITED_OPTIONS: "elicitedOptions",
   RESOURCE_PATTERN: "resourcePattern",

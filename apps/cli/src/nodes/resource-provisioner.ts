@@ -25,7 +25,7 @@ import { ProvisioningErrorKind } from "../services/provisioning-port.js";
 import type { SDKFallbackDispatcher } from "../services/sdk-fallback-dispatcher.js";
 import { injectMandatoryTags } from "../utils/tags.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
-import { AWS_REGION } from "../config/constants.js";
+import { AWS_REGION, ASSIGNEE_DIR } from "../config/constants.js";
 import type { AgentState } from "../services/graph-state.js";
 
 function isResourceType(s: string): s is ResourceType {
@@ -318,41 +318,55 @@ export async function resourceProvisionerNode(
   }
 
   // ── SSH key pair creation for EC2 (deferred from plan_generator) ─────────
-  // If the user requested SSH access and no key pair exists, create one and
-  // save the private key to ~/.assignee/keys/<name>.pem.
+  // Only auto-create when the placeholder was injected by plan_generator.
+  // User-supplied key names are assumed to already exist in AWS.
+  let sshKeyCreatedName: string | undefined;
   if (
     state.resourceType === RESOURCE_TYPES.EC2_INSTANCE &&
-    typeof state.desiredState[CfnKey.KEY_NAME] === "string" &&
-    (state.desiredState[CfnKey.KEY_NAME] as string).length > 0
+    state.desiredState[CfnKey.KEY_NAME] === ResourceDefault.SSH_KEY_PLACEHOLDER
   ) {
     try {
       const { EC2Client, CreateKeyPairCommand, DescribeKeyPairsCommand } =
         await import("@aws-sdk/client-ec2");
       const ec2 = new EC2Client({ region: AWS_REGION });
-      const keyName = state.desiredState[CfnKey.KEY_NAME] as string;
+      const keyName = ResourceDefault.SSH_KEY_PLACEHOLDER;
 
-      // Check if key pair already exists
+      // Check if key pair already exists — only catch "not found" errors
       let keyExists = false;
       try {
         await ec2.send(new DescribeKeyPairsCommand({ KeyNames: [keyName] }));
         keyExists = true;
-      } catch {
-        // Key doesn't exist — create it
+      } catch (descErr: unknown) {
+        const errName =
+          descErr instanceof Error ? (descErr as { name?: string }).name : "";
+        if (errName !== "InvalidKeyPair.NotFound") {
+          // Rethrow permission/throttle/network errors — don't assume key is missing
+          throw descErr;
+        }
       }
 
       if (!keyExists) {
         const keyResult = await ec2.send(
           new CreateKeyPairCommand({ KeyName: keyName }),
         );
+        if (!keyResult.KeyMaterial) {
+          throw new Error(
+            "AWS returned empty KeyMaterial — key pair may not have been created correctly",
+          );
+        }
         // Save private key to ~/.assignee/keys/
-        const { mkdirSync, writeFileSync, chmodSync } = await import("node:fs");
+        const { mkdirSync, writeFileSync } = await import("node:fs");
         const { join } = await import("node:path");
         const { homedir } = await import("node:os");
-        const keysDir = join(homedir(), ".assignee", "keys");
+        // Sanitize key name for filesystem safety (strip path separators)
+        const safeKeyName = keyName
+          .replace(/[/\\]/g, "_")
+          .replace(/\.\./g, "_");
+        const keysDir = join(homedir(), ASSIGNEE_DIR, "keys");
         mkdirSync(keysDir, { recursive: true });
-        const keyPath = join(keysDir, `${keyName}.pem`);
-        writeFileSync(keyPath, keyResult.KeyMaterial ?? "", { mode: 0o400 });
-        chmodSync(keyPath, 0o400);
+        const keyPath = join(keysDir, `${safeKeyName}.pem`);
+        sshKeyCreatedName = keyName; // Track before write so cleanup runs if write fails
+        writeFileSync(keyPath, keyResult.KeyMaterial, { mode: 0o400 });
         process.stderr.write(
           `\u001B[33m🔑 SSH key pair created: ${keyPath}\u001B[0m\n`,
         );
@@ -366,6 +380,9 @@ export async function resourceProvisionerNode(
       }
     } catch (keyErr: unknown) {
       const errMsg = keyErr instanceof Error ? keyErr.message : String(keyErr);
+      process.stderr.write(
+        `\u001B[33m⚠️  SSH key pair creation failed: ${errMsg}\u001B[0m\n`,
+      );
       log({
         ts: new Date().toISOString(),
         runId: state.runId,
@@ -373,7 +390,8 @@ export async function resourceProvisionerNode(
         action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
         extras: { sshKeyError: errMsg },
       });
-      // Non-blocking — continue with provision, user will get a CloudControl error
+      // Remove KeyName so CloudControl doesn't fail referencing a missing key
+      delete state.desiredState[CfnKey.KEY_NAME];
     }
   }
 
@@ -430,6 +448,19 @@ export async function resourceProvisionerNode(
           new ReleaseAddressCommand({
             AllocationId: state.desiredState[CfnKey.ALLOCATION_ID] as string,
           }),
+        );
+      } catch {
+        /* best-effort cleanup */
+      }
+    }
+    // Delete SSH key pair if we created one — best-effort cleanup
+    if (sshKeyCreatedName) {
+      try {
+        const { EC2Client, DeleteKeyPairCommand } =
+          await import("@aws-sdk/client-ec2");
+        const ec2 = new EC2Client({ region: AWS_REGION });
+        await ec2.send(
+          new DeleteKeyPairCommand({ KeyName: sshKeyCreatedName }),
         );
       } catch {
         /* best-effort cleanup */

@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
+import { createRequire } from "node:module";
 import { buildDriftReport, type DriftReport } from "./drift-report.js";
 import { DriftStatus, ChangeType, type DriftResult } from "@assignee/core";
+
+let CLI_VERSION = "unknown";
+try {
+  const require = createRequire(import.meta.url);
+  CLI_VERSION = (require("../../package.json") as { version: string }).version;
+} catch {
+  /* fallback */
+}
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -98,7 +107,7 @@ describe("drift-report", () => {
       const report = buildDriftReport([]);
 
       expect(report.region).toBe("us-east-1");
-      expect(report.metadata.assigneeVersion).toBe("0.0.0");
+      expect(report.metadata.assigneeVersion).toBe(CLI_VERSION);
       expect(report.metadata.awsAccountId).toBe("unknown");
       expect(report.metadata.checkDurationMs).toBe(0);
     });

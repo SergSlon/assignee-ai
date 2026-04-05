@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ExecutionStatus, EIP_AUTO_ALLOCATE } from "@assignee/core";
+import {
+  ExecutionStatus,
+  EIP_AUTO_ALLOCATE,
+  ResourceDefault,
+  CfnKey,
+  RESOURCE_TYPES,
+} from "@assignee/core";
 import { resourceProvisionerNode } from "./resource-provisioner.js";
 import {
   ProvisioningErrorKind,
@@ -30,7 +36,39 @@ vi.mock("@aws-sdk/client-ec2", () => ({
     _type: "ReleaseAddressCommand",
     input,
   })),
+  DescribeKeyPairsCommand: vi.fn().mockImplementation((input: unknown) => ({
+    _type: "DescribeKeyPairsCommand",
+    input,
+  })),
+  CreateKeyPairCommand: vi.fn().mockImplementation((input: unknown) => ({
+    _type: "CreateKeyPairCommand",
+    input,
+  })),
+  DeleteKeyPairCommand: vi.fn().mockImplementation((input: unknown) => ({
+    _type: "DeleteKeyPairCommand",
+    input,
+  })),
 }));
+
+// ── FS mocks for SSH key pair creation ───────────────────────────────────────
+const { mockMkdirSync, mockWriteFileSync } = vi.hoisted(() => ({
+  mockMkdirSync: vi.fn(),
+  mockWriteFileSync: vi.fn(),
+}));
+
+vi.mock("node:fs", () => ({
+  mkdirSync: mockMkdirSync,
+  writeFileSync: mockWriteFileSync,
+}));
+
+vi.mock("node:os", () => ({
+  homedir: vi.fn().mockReturnValue("/home/testuser"),
+}));
+
+vi.mock("node:path", async () => {
+  const actual = await vi.importActual("node:path");
+  return actual;
+});
 
 // ── Mock provisioning port ──────────────────────────────────────────────────
 
@@ -880,6 +918,218 @@ describe("resourceProvisionerNode", () => {
       };
       expect(releaseCall._type).toBe("ReleaseAddressCommand");
       expect(releaseCall.input.AllocationId).toBe("eipalloc-cleanup-001");
+    });
+  });
+
+  // ── SSH key pair creation for EC2 ────────────────────────────────────────────
+
+  describe("SSH key pair creation", () => {
+    function makeEc2State(overrides: Record<string, unknown> = {}) {
+      return makeState({
+        resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+        userIntent: "Create an EC2 instance I can SSH into",
+        desiredState: {
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          KeyName: ResourceDefault.SSH_KEY_PLACEHOLDER,
+          MetadataOptions: { HttpTokens: "required" },
+        },
+        ...overrides,
+      });
+    }
+
+    it("creates key pair and saves .pem when placeholder KeyName is set and key does not exist", async () => {
+      // DescribeKeyPairs throws "not found", CreateKeyPair succeeds
+      const notFoundErr = new Error("Key pair not found");
+      (notFoundErr as { name: string }).name = "InvalidKeyPair.NotFound";
+      mockEc2Send
+        .mockRejectedValueOnce(notFoundErr) // DescribeKeyPairsCommand
+        .mockResolvedValueOnce({
+          KeyMaterial:
+            "-----BEGIN RSA PRIVATE KEY-----\nMOCK_KEY\n-----END RSA PRIVATE KEY-----",
+        }); // CreateKeyPairCommand
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "ec2-ssh-token" },
+      ]);
+
+      const state = makeEc2State();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+
+      // Verify key was written
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        expect.stringContaining("assignee-ssh-key.pem"),
+        expect.stringContaining("BEGIN RSA PRIVATE KEY"),
+        { mode: 0o400 },
+      );
+      expect(mockMkdirSync).toHaveBeenCalledWith(
+        expect.stringContaining("keys"),
+        { recursive: true },
+      );
+    });
+
+    it("skips key creation when key pair already exists in AWS", async () => {
+      // DescribeKeyPairs succeeds — key exists
+      mockEc2Send.mockResolvedValueOnce({
+        KeyPairs: [{ KeyName: ResourceDefault.SSH_KEY_PLACEHOLDER }],
+      });
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "ec2-existing-key-token" },
+      ]);
+
+      const state = makeEc2State();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      // Only 1 call (DescribeKeyPairs), no CreateKeyPair
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
+    });
+
+    it("does NOT trigger key creation for user-supplied KeyName (not placeholder)", async () => {
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "ec2-user-key-token" },
+      ]);
+
+      const state = makeEc2State({
+        desiredState: {
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          KeyName: "my-personal-key",
+          MetadataOptions: { HttpTokens: "required" },
+        },
+      });
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      // No EC2 SDK calls for key pair
+      expect(mockEc2Send).not.toHaveBeenCalled();
+    });
+
+    it("removes KeyName from desiredState when key creation fails", async () => {
+      // DescribeKeyPairs throws "not found", CreateKeyPair also fails
+      const notFoundErr = new Error("Key pair not found");
+      (notFoundErr as { name: string }).name = "InvalidKeyPair.NotFound";
+      mockEc2Send
+        .mockRejectedValueOnce(notFoundErr) // DescribeKeyPairsCommand
+        .mockRejectedValueOnce(new Error("AccessDenied")); // CreateKeyPairCommand fails
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "ec2-no-key-token" },
+      ]);
+
+      const state = makeEc2State();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      // KeyName should be removed so CloudControl doesn't fail
+      expect(state.desiredState!["KeyName"]).toBeUndefined();
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+    });
+
+    it("rethrows permission errors from DescribeKeyPairs (not assumed as 'not found')", async () => {
+      // DescribeKeyPairs throws a permission error — should NOT assume key doesn't exist
+      const accessDenied = new Error("User not authorized");
+      (accessDenied as { name: string }).name = "UnauthorizedAccess";
+      mockEc2Send.mockRejectedValueOnce(accessDenied);
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "ec2-perm-err-token" },
+      ]);
+
+      const state = makeEc2State();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      // Should have caught the rethrown error — KeyName removed, provision continues
+      expect(state.desiredState!["KeyName"]).toBeUndefined();
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      // Should NOT have tried CreateKeyPair
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
+    });
+
+    it("throws when KeyMaterial is empty", async () => {
+      const notFoundErr = new Error("Key pair not found");
+      (notFoundErr as { name: string }).name = "InvalidKeyPair.NotFound";
+      mockEc2Send
+        .mockRejectedValueOnce(notFoundErr) // DescribeKeyPairsCommand
+        .mockResolvedValueOnce({ KeyMaterial: undefined }); // CreateKeyPairCommand — empty!
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "ec2-empty-key-token" },
+      ]);
+
+      const state = makeEc2State();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      // Empty KeyMaterial triggers an error — KeyName removed
+      expect(state.desiredState!["KeyName"]).toBeUndefined();
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+    });
+
+    it("cleans up SSH key pair on provision failure", async () => {
+      const notFoundErr = new Error("Key pair not found");
+      (notFoundErr as { name: string }).name = "InvalidKeyPair.NotFound";
+      mockEc2Send
+        .mockRejectedValueOnce(notFoundErr) // DescribeKeyPairsCommand
+        .mockResolvedValueOnce({
+          KeyMaterial:
+            "-----BEGIN RSA PRIVATE KEY-----\nMOCK\n-----END RSA PRIVATE KEY-----",
+        }) // CreateKeyPairCommand
+        .mockResolvedValueOnce({}); // DeleteKeyPairCommand (cleanup)
+
+      // Provision fails
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        {
+          kind: ProvisioningErrorKind.UNKNOWN,
+          message: "EC2 instance creation failed",
+        },
+        null,
+      ]);
+
+      const state = makeEc2State();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+
+      // Verify DeleteKeyPair was called for cleanup
+      expect(mockEc2Send).toHaveBeenCalledTimes(3);
+      const deleteCall = mockEc2Send.mock.calls[2]![0] as {
+        _type: string;
+        input: { KeyName: string };
+      };
+      expect(deleteCall._type).toBe("DeleteKeyPairCommand");
+      expect(deleteCall.input.KeyName).toBe(
+        ResourceDefault.SSH_KEY_PLACEHOLDER,
+      );
+    });
+
+    it("skips key pair block entirely when KeyName is empty string", async () => {
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "ec2-no-keyname-token" },
+      ]);
+
+      const state = makeEc2State({
+        desiredState: {
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          KeyName: "",
+          MetadataOptions: { HttpTokens: "required" },
+        },
+      });
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      expect(mockEc2Send).not.toHaveBeenCalled();
     });
   });
 });

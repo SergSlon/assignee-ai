@@ -20,6 +20,7 @@ describe("Pipeline contract — graph node enumeration", () => {
     "option_elicitor",
     "compound_dispatcher",
     "plan_generator",
+    "advice_generator",
     "preflight_guard",
     "human_approval",
     "resource_provisioner",
@@ -29,9 +30,9 @@ describe("Pipeline contract — graph node enumeration", () => {
     "result_formatter",
   ] as const;
 
-  it("GraphNode has exactly 12 nodes", () => {
+  it("GraphNode has exactly 13 nodes", () => {
     const nodeValues = Object.values(GraphNode);
-    expect(nodeValues).toHaveLength(12);
+    expect(nodeValues).toHaveLength(13);
   });
 
   it.each(expectedNodes)("GraphNode contains '%s'", (nodeName) => {

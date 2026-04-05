@@ -416,9 +416,15 @@ export async function resolveDynamicFields(
           : context;
         const options = await fetch(fieldContext);
         fetchResults.set(key, options);
-      } catch {
+      } catch (err: unknown) {
+        const reason =
+          err instanceof Error && err.message.includes("timed out")
+            ? " (timed out — your account may have many resources)"
+            : err instanceof Error && err.message.includes("not authorized")
+              ? " (missing IAM permission)"
+              : "";
         clack.log.warn(
-          `Could not discover ${field.question.label ?? field.name} from your account. Enter manually.`,
+          `Could not discover ${field.question.label ?? field.name} from your account${reason}. Enter manually or leave blank for defaults.`,
         );
         warnedKeys.add(key);
         fetchResults.set(key, []);

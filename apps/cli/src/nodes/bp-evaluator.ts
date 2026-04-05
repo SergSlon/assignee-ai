@@ -16,8 +16,10 @@ import {
   type BPFinding,
   type EvalContext,
 } from "@assignee/best-practices";
+import type { StructuredTool } from "@langchain/core/tools";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
+import { enrichBpWithMcp } from "./advice/bp-mcp-enricher.js";
 
 /** Module-level cache to avoid reloading YAML files on every invocation. */
 let cachedPractices: BestPractice[] | undefined;
@@ -54,6 +56,7 @@ export function resetBPCache(): void {
  */
 export async function bpEvaluatorNode(
   state: AgentState,
+  tools?: StructuredTool[],
 ): Promise<Partial<AgentState>> {
   const practices = loadCached();
 
@@ -64,7 +67,45 @@ export async function bpEvaluatorNode(
     patternId: state.resourcePattern?.patternId,
   };
 
-  const findings: BPFinding[] = evaluateTriggers(context, practices);
+  const findings: BPFinding[] = [];
+
+  // Phase 1: MCP live best practices (primary source — current AWS data)
+  let mcpAvailable = false;
+  if (tools && tools.length > 0) {
+    try {
+      const mcpFindings = await enrichBpWithMcp(
+        state.resourceType ?? "",
+        (state.desiredState as Record<string, unknown>) ?? {},
+        [], // no static findings yet — MCP is primary
+        tools,
+      );
+      if (mcpFindings.length > 0) {
+        findings.push(...mcpFindings);
+        mcpAvailable = true;
+      }
+    } catch {
+      // MCP unavailable — fall through to static rules
+    }
+  }
+
+  // Phase 2: Static YAML rules — serve as:
+  //   (a) Fallback when MCP is unavailable or returns nothing
+  //   (b) Company policy enforcement (org-locked rules always apply)
+  const staticFindings = evaluateTriggers(context, practices);
+  for (const sf of staticFindings) {
+    // Always add static findings that MCP didn't already cover.
+    // Match on propertyPath when both have one; fall back to ruleId match.
+    const alreadyCovered = findings.some(
+      (f) =>
+        (f.propertyPath &&
+          sf.propertyPath &&
+          f.propertyPath === sf.propertyPath) ||
+        (f.practiceId && sf.practiceId && f.practiceId === sf.practiceId),
+    );
+    if (!alreadyCovered) {
+      findings.push(sf);
+    }
+  }
 
   if (findings.length > 0) {
     log({

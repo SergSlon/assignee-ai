@@ -11,6 +11,8 @@ vi.mock("@clack/prompts", () => ({
   autocompleteMultiselect: vi.fn(),
   isCancel: vi.fn(() => false),
   spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+  log: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
+  note: vi.fn(),
 }));
 
 vi.mock("@assignee/best-practices", () => {

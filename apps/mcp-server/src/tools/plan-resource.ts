@@ -170,6 +170,8 @@ export function registerPlanResource(
                 bpFindings:
                   (finalState[StateField.BP_FINDINGS] as unknown[]) ?? [],
                 freeTierNote: finalState[StateField.FREE_TIER_NOTE],
+                adviceHints:
+                  (finalState[StateField.ADVICE_HINTS] as string[]) ?? [],
                 checkpointPath,
                 runId,
               }),

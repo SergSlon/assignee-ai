@@ -47,14 +47,18 @@ function statusLabel(status: string, noColor = false): string {
 /**
  * Render a drift results table.
  */
-function renderDriftTable(results: DriftResult[]): void {
+function renderDriftTable(
+  results: DriftResult[],
+  regionMap: Map<string, string>,
+): void {
   // Header
   const header = `${"Resource Type".padEnd(30)} ${"Resource ID".padEnd(40)} ${"Region".padEnd(15)} ${"Status".padEnd(20)} Drifted`;
   process.stdout.write(chalk.gray(header) + "\n");
   process.stdout.write(chalk.gray("─".repeat(header.length)) + "\n");
 
   for (const r of results) {
-    const line = `${r.resourceType.padEnd(30)} ${r.resourceId.padEnd(40)} ${"".padEnd(15)} ${statusLabel(r.status).padEnd(20 + 10)} ${r.driftedFields.length}`;
+    const region = regionMap.get(r.resourceId) ?? "";
+    const line = `${r.resourceType.padEnd(30)} ${r.resourceId.padEnd(40)} ${region.padEnd(15)} ${statusLabel(r.status).padEnd(20 + 10)} ${r.driftedFields.length}`;
     process.stdout.write(line + "\n");
   }
 }
@@ -260,7 +264,8 @@ export const driftCommand = new Command("drift")
         return;
       }
 
-      renderDriftTable(displayResults);
+      const regionMap = new Map(filtered.map((p) => [p.resourceArn, p.region]));
+      renderDriftTable(displayResults, regionMap);
       renderSummary(results);
 
       // Exit code 1 if any drifted

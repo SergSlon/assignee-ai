@@ -130,9 +130,11 @@ describe("ec2InstancePlugin", () => {
     expect(names).toContain("UserData");
   });
 
-  it("defaults includes IMDSv2 and encrypted EBS", () => {
+  it("defaults includes secure settings: IMDSv2 + hop limit, encrypted EBS, termination protection, EBS optimized", () => {
     expect(ec2InstancePlugin.defaults).toEqual({
-      MetadataOptions: { HttpTokens: "required" },
+      MetadataOptions: { HttpTokens: "required", HttpPutResponseHopLimit: 1 },
+      DisableApiTermination: true,
+      EbsOptimized: true,
       BlockDeviceMappings: [
         {
           DeviceName: "/dev/xvda",

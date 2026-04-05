@@ -837,16 +837,22 @@ describe("EC2 all fields skipped except InstanceType and ImageId", () => {
     expect(elicited["InstanceType"]).toBe("t3.micro");
     expect(elicited["ImageId"]).toBe("amazon-linux-2023");
 
-    // Blanks should be excluded
+    // Blanks should be excluded (common fields skipped by user)
     expect(elicited["KeyName"]).toBeUndefined();
     expect(elicited["SubnetId"]).toBeUndefined();
     expect(elicited["SecurityGroupIds"]).toBeUndefined();
     expect(elicited["Tags"]).toBeUndefined();
 
-    // No extra keys
+    // Story 41.2: When advanced is skipped, secure defaults are applied
+    // So elicited now includes InstanceType, ImageId + advanced field defaults
     const keys = Object.keys(elicited);
     expect(keys).toEqual(expect.arrayContaining(["InstanceType", "ImageId"]));
-    expect(keys.length).toBe(2);
+    expect(keys.length).toBeGreaterThanOrEqual(2);
+
+    // Secure advanced defaults should be present (Story 41.1)
+    expect(elicited["EbsEncrypted"]).toBe(true);
+    expect(elicited["EbsOptimized"]).toBe(true);
+    expect(elicited["DisableApiTermination"]).toBe(true);
   });
 });
 

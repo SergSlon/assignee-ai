@@ -31,8 +31,8 @@ export async function renderHitlConfirm(
   }
 
   const result = await clack.confirm({
-    message: `Apply this plan to create ${state.resourceType}? [y/N]`,
-    initialValue: false,
+    message: `Apply this plan to create ${state.resourceType}?`,
+    initialValue: true,
   });
 
   if (clack.isCancel(result)) {
@@ -59,8 +59,8 @@ export async function renderHitlCompoundConfirm(
   }
 
   const result = await clack.confirm({
-    message: `Apply this compound plan to provision ${resourceCount} resource${resourceCount === 1 ? "" : "s"} (${pattern.displayName})? [y/N]`,
-    initialValue: false,
+    message: `Apply this compound plan to provision ${resourceCount} resource${resourceCount === 1 ? "" : "s"} (${pattern.displayName})?`,
+    initialValue: true,
   });
 
   if (clack.isCancel(result)) {
@@ -77,7 +77,8 @@ export async function renderHitlCompoundConfirm(
 export async function renderAdvancedConfirm(): Promise<boolean> {
   if (!process.stdin.isTTY) return false;
   const result = await clack.confirm({
-    message: "Configure advanced options?",
+    message:
+      "Configure advanced options? (No = secure defaults applied automatically)",
     initialValue: false,
   });
   if (clack.isCancel(result)) {
@@ -99,8 +100,8 @@ export async function renderApplyNowConfirm(
   if (!process.stdin.isTTY) return false;
 
   const result = await clack.confirm({
-    message: `Apply now? (${state.resourceType}, est. ${state.estimatedMonthlyCost ?? CostEstimateLabel.NA}/mo) [y/N]`,
-    initialValue: false,
+    message: `Apply now? (${state.resourceType}, est. ${state.estimatedMonthlyCost ?? CostEstimateLabel.NA}/mo)`,
+    initialValue: true,
   });
 
   if (clack.isCancel(result)) {

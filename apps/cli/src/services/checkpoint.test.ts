@@ -201,6 +201,50 @@ describe("findNewestValidCheckpoint", () => {
     );
     expect(found).toBeNull();
   });
+
+  it("skips checkpoints with preflightPassed=false", async () => {
+    const failedPreflight = serializeCheckpoint({
+      ...baseGraphState,
+      preflightPassed: false,
+    } as AgentState);
+    failedPreflight.runId = "00000000-0000-0000-0000-000000000010";
+    await saveCheckpoint(failedPreflight, tmpDir);
+
+    const found = await findNewestValidCheckpoint(tmpDir);
+    expect(found).toBeNull();
+  });
+
+  it("skips checkpoints with empty desiredState", async () => {
+    const emptyState = serializeCheckpoint({
+      ...baseGraphState,
+      desiredState: {},
+    } as AgentState);
+    emptyState.runId = "00000000-0000-0000-0000-000000000011";
+    await saveCheckpoint(emptyState, tmpDir);
+
+    const found = await findNewestValidCheckpoint(tmpDir);
+    expect(found).toBeNull();
+  });
+
+  it("returns valid checkpoint when mixed with invalid ones", async () => {
+    // Invalid: preflight failed
+    const invalid = serializeCheckpoint({
+      ...baseGraphState,
+      preflightPassed: false,
+    } as AgentState);
+    invalid.runId = "00000000-0000-0000-0000-000000000012";
+    invalid.created_at = new Date(Date.now() + 1000).toISOString();
+    await saveCheckpoint(invalid, tmpDir);
+
+    // Valid
+    const valid = serializeCheckpoint(baseGraphState as AgentState);
+    valid.runId = "00000000-0000-0000-0000-000000000013";
+    await saveCheckpoint(valid, tmpDir);
+
+    const found = await findNewestValidCheckpoint(tmpDir);
+    expect(found).not.toBeNull();
+    expect(found!.runId).toBe("00000000-0000-0000-0000-000000000013");
+  });
 });
 
 describe("TTL validation", () => {
@@ -408,6 +452,25 @@ describe("loadCheckpointFromPath (Story 11.3)", () => {
     await expect(loadCheckpointFromPath(filePath)).rejects.toThrow(
       /no desiredState/,
     );
+  });
+
+  it("strips [REDACTED] fields from desiredState on load", async () => {
+    const checkpoint = serializeCheckpoint({
+      ...baseGraphState,
+      desiredState: {
+        BucketName: "logs-prod",
+        MasterUserPassword: "secret123",
+      },
+    } as AgentState);
+    // serializeCheckpoint redacts sensitive fields, so MasterUserPassword becomes "[REDACTED]"
+    expect(checkpoint.desiredState["MasterUserPassword"]).toBe("[REDACTED]");
+
+    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+    const loaded = await loadCheckpointFromPath(filePath);
+
+    // [REDACTED] fields should be stripped, not present in loaded state
+    expect(loaded.desiredState).toEqual({ BucketName: "logs-prod" });
+    expect(loaded.desiredState).not.toHaveProperty("MasterUserPassword");
   });
 });
 

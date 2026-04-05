@@ -41,17 +41,19 @@ All AI calls stay local — no AWS credentials ever leave your machine.
 
 ## Commands
 
-| Command                       | Description                                    | Key flags                                                             |
-| :---------------------------- | :--------------------------------------------- | :-------------------------------------------------------------------- |
-| `assignee plan <intent>`      | Generate infrastructure plan                   | `--source`, `--region`, `--json`                                      |
-| `assignee apply <intent>`     | Plan + provision with HITL approval            | `--source`, `--yes`, `--no-wizard`, `--checkpoint <path>`, `--region` |
-| `assignee init`               | Initialize `.assignee/` project directory      | —                                                                     |
-| `assignee list`               | Show managed resources with cost               | `--region`, `--json`                                                  |
-| `assignee destroy <resource>` | Safe teardown with confirmation                | `--yes`, `--all`, `--include-iam`, `--dry-run`                        |
-| `assignee clean`              | Remove stale checkpoints, cache, memory        | `--resources`, `--checkpoints`, `--cache`, `--confirm`                |
-| `assignee status`             | Intelligence summary (memory, findings, costs) | `--json`                                                              |
-| `assignee setup`              | Automate IAM role/policy creation              | —                                                                     |
-| `assignee completions`        | Generate shell completions (bash/zsh)          | —                                                                     |
+| Command                        | Description                                    | Key flags                                                          |
+| :----------------------------- | :--------------------------------------------- | :----------------------------------------------------------------- |
+| `assignee plan <intent>`       | Generate infrastructure plan                   | `--source`, `-o json\|text`, `--no-apply`, `--no-advice`           |
+| `assignee apply <intent>`      | Plan + provision with HITL approval            | `--source`, `--yes`, `--wizard`, `--checkpoint <path>`             |
+| `assignee init`                | Initialize `.assignee/` project directory      | `--global`                                                         |
+| `assignee list`                | Show managed resources with cost               | `--region`, `--json`                                               |
+| `assignee destroy <resource>`  | Safe teardown with confirmation                | `--yes`, `--all`, `--include-iam`, `--dry-run`                     |
+| `assignee drift [resource-id]` | Check resources for configuration drift        | `--resource`, `--region`, `--status`, `--json`, `--concurrency`    |
+| `assignee reconcile`           | Reconcile drifted resources to desired state   | `--resource`, `--dry-run`, `--auto-reconcile`                      |
+| `assignee clean`               | Remove stale checkpoints, cache, memory        | `--resources`, `--checkpoints`, `--cache`, `--memory`, `--confirm` |
+| `assignee status`              | Intelligence summary (memory, findings, costs) | `--json`, `--region`, `--bp-coverage`                              |
+| `assignee setup`               | Automate IAM role/policy creation              | `--profile`, `--yes`                                               |
+| `assignee completions <shell>` | Generate shell completions (bash/zsh/fish)     | —                                                                  |
 
 ---
 
@@ -228,7 +230,7 @@ Optional servers (IAM, Well-Architected Security, Billing) are spawned only when
 ## Development
 
 ```bash
-pnpm test          # 2040 tests across 187 files (105 CLI + 60 core + 9 BP + 13 MCP)
+pnpm test          # 4711 tests across 213 files (112 CLI + 75 core + 9 BP + 17 MCP)
 pnpm check-types   # TypeScript type check
 pnpm build         # compile all packages
 ```
