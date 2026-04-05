@@ -164,6 +164,16 @@ describe("assignee init command", () => {
         "managed-by": "assignee-ai",
         environment: "production",
       },
+      defaults: {
+        region: "us-west-2",
+        tags: {
+          "managed-by": "assignee-ai",
+          environment: "production",
+        },
+      },
+      preferences: {
+        auto_fix: "ask",
+      },
     });
   });
 

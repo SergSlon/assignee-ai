@@ -137,6 +137,77 @@ export const FRIENDLY_NAMES: Record<string, string> = {
   [CfnKey.ENABLE_REPLICATION]: "Cross-Region Replication",
   [CfnKey.METADATA_OPTIONS]: "Instance Metadata",
   [CfnKey.BLOCK_DEVICE_MAPPINGS]: "Storage",
+  [CfnKey.DISABLE_API_TERMINATION]: "Termination Protection",
+  [CfnKey.EBS_OPTIMIZED]: "EBS Optimized",
+  [CfnKey.ASSOCIATE_PUBLIC_IP]: "Public IP",
+  [CfnKey.CREDIT_SPECIFICATION]: "CPU Credits",
+  [CfnKey.MONITORING]: "Detailed Monitoring",
+  // VPC / Networking
+  [CfnKey.CIDR_BLOCK]: "CIDR Block",
+  [CfnKey.VPC_ID]: "VPC",
+  [CfnKey.ENABLE_DNS_SUPPORT]: "DNS Support",
+  [CfnKey.ENABLE_DNS_HOSTNAMES]: "DNS Hostnames",
+  [CfnKey.AVAILABILITY_ZONE]: "Availability Zone",
+  [CfnKey.MAP_PUBLIC_IP]: "Auto-Assign Public IP",
+  // Security Group
+  [CfnKey.GROUP_DESCRIPTION]: "Description",
+  [CfnKey.SG_INGRESS]: "Inbound Rules",
+  [CfnKey.SG_EGRESS]: "Outbound Rules",
+  // DynamoDB
+  [CfnKey.TABLE_NAME]: "Table Name",
+  [CfnKey.BILLING_MODE]: "Billing Mode",
+  [CfnKey.KEY_SCHEMA]: "Key Schema",
+  [CfnKey.ATTRIBUTE_DEFINITIONS]: "Attributes",
+  [CfnKey.PITR_ENABLED]: "Point-in-Time Recovery",
+  [CfnKey.DELETION_PROTECTION_ENABLED]: "Deletion Protection",
+  [CfnKey.SSE_SPECIFICATION]: "Encryption",
+  // SQS
+  [CfnKey.QUEUE_NAME]: "Queue Name",
+  [CfnKey.FIFO_QUEUE]: "FIFO Queue",
+  [CfnKey.VISIBILITY_TIMEOUT]: "Visibility Timeout (s)",
+  [CfnKey.MESSAGE_RETENTION]: "Message Retention (s)",
+  [CfnKey.DELAY_SECONDS]: "Delivery Delay (s)",
+  [CfnKey.REDRIVE_POLICY]: "Dead Letter Queue",
+  // SNS
+  [CfnKey.TOPIC_NAME]: "Topic Name",
+  [CfnKey.FIFO_TOPIC]: "FIFO Topic",
+  [CfnKey.DISPLAY_NAME]: "Display Name",
+  // CloudWatch
+  [CfnKey.ALARM_NAME]: "Alarm Name",
+  [CfnKey.METRIC_NAME]: "Metric Name",
+  [CfnKey.NAMESPACE]: "Namespace",
+  [CfnKey.THRESHOLD]: "Threshold",
+  [CfnKey.COMPARISON_OPERATOR]: "Comparison",
+  [CfnKey.STATISTIC]: "Statistic",
+  [CfnKey.PERIOD]: "Period (s)",
+  [CfnKey.EVALUATION_PERIODS]: "Evaluation Periods",
+  [CfnKey.TREAT_MISSING_DATA]: "Treat Missing Data",
+  [CfnKey.ALARM_ACTIONS]: "Alarm Actions",
+  // CloudWatch Logs
+  [CfnKey.LOG_GROUP_NAME]: "Log Group Name",
+  [CfnKey.RETENTION_IN_DAYS]: "Log Retention (days)",
+  [CfnKey.KMS_KEY_ID]: "KMS Key",
+  // IAM
+  [CfnKey.ROLE_NAME]: "Role Name",
+  [CfnKey.ASSUME_ROLE_POLICY]: "Trust Policy",
+  [CfnKey.MANAGED_POLICY_ARNS]: "Managed Policies",
+  [CfnKey.MAX_SESSION_DURATION]: "Max Session (s)",
+  // ELBv2
+  [CfnKey.TYPE]: "Load Balancer Type",
+  [CfnKey.SCHEME]: "Scheme",
+  [CfnKey.SUBNETS]: "Subnets",
+  // API Gateway
+  [CfnKey.PROTOCOL_TYPE]: "Protocol",
+  // Secrets Manager
+  [CfnKey.GENERATE_SECRET_STRING]: "Generate Secret String",
+  [CfnKey.KMS_MASTER_KEY_ID]: "KMS Key",
+  // SSM
+  [CfnKey.TIER]: "Tier",
+  // RDS additional
+  [CfnKey.STORAGE_ENCRYPTED]: "Storage Encryption",
+  [CfnKey.PUBLICLY_ACCESSIBLE]: "Publicly Accessible",
+  [CfnKey.DB_SUBNET_GROUP_NAME]: "DB Subnet Group",
+  [CfnKey.VPC_SECURITY_GROUP_IDS]: "VPC Security Groups",
 };
 
 /**
