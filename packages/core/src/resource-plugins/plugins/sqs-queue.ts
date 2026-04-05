@@ -195,4 +195,11 @@ export const sqsQueuePlugin: ResourcePlugin = {
   defaults: {
     [CfnKey.SQS_MANAGED_SSE]: true,
   },
+  configHints: [
+    "FifoQueue set to true requires QueueName to end with '.fifo' suffix — CloudFormation will fail without it. ContentBasedDeduplication is only valid on FIFO queues.",
+    "VisibilityTimeout should be set to at least 6x the consumer Lambda timeout (if Lambda-triggered) to avoid duplicate processing. Default is 30 seconds.",
+    "RedrivePolicy requires a deadLetterTargetArn (ARN of the DLQ) and maxReceiveCount (number of retries before sending to DLQ). The DLQ must be the same type (Standard or FIFO) as the source queue.",
+    "SqsManagedSseEnabled provides free server-side encryption. Use KmsMasterKeyId only if you need customer-managed key control — do not set both simultaneously.",
+    "ALWAYS set MessageRetentionPeriod explicitly — the default is 4 days (345600 seconds). For DLQs, set a longer retention (e.g., 14 days / 1209600 seconds) to allow time for investigation.",
+  ],
 };

@@ -290,7 +290,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
           {
             value: "io1",
             label:
-              "io1 (Provisioned IOPS SSD)   — ~$0.125/GB-month + $0.10/IOPS",
+              "io1 (Provisioned IOPS SSD)   — ~$0.125/GB-month + ~$0.10/IOPS",
             fitHint: "High-IOPS workloads",
           },
         ],

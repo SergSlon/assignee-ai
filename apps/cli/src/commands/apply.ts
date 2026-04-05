@@ -177,7 +177,7 @@ export const applyCommand = new Command(CommandName.APPLY)
   .argument(CommandArgs.INTENT.NAME, CommandArgs.INTENT.DESC)
   .option(
     "--wizard",
-    "Run interactive configuration wizard (default: auto-decide)",
+    "Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)",
   )
   .option("--no-advice", "Skip inline contextual advice generation")
   .option(

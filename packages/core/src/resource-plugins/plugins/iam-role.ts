@@ -201,5 +201,8 @@ export const iamRolePlugin: ResourcePlugin = {
   configHints: [
     "NEVER attach AdministratorAccess — all roles MUST have a permissions boundary.",
     "Use least-privilege: attach only the specific managed policies needed.",
+    "AssumeRolePolicyDocument is REQUIRED — it defines which AWS service (ec2, lambda, ecs) or account can assume the role. Without it the role is unusable.",
+    "ManagedPolicyArns is an array of strings — maximum 10 managed policies per role. Exceeding the limit causes a CloudFormation error.",
+    "RoleName is immutable — changing it triggers replacement of the role and all resources that reference it.",
   ],
 };

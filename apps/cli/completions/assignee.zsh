@@ -33,7 +33,7 @@ _assignee() {
           ;;
         apply)
           _arguments \
-            '--wizard[Run interactive configuration wizard (default\: auto-decide)]' \
+            '--wizard[Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)]' \
             '--no-advice[Skip inline contextual advice generation]' \
             '--yes[Auto-confirm apply without interactive prompt (for CI/CD)]' \
             '--checkpoint[Use a saved plan checkpoint instead of running Phase 1]:path:' \
