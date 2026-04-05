@@ -489,6 +489,155 @@ const INTENT_RULES: IntentRule[] = [
       },
     ],
   },
+  // SSM Parameter — Secret/password
+  {
+    resourceType: RESOURCE_TYPES.SSM_PARAMETER,
+    keywords: ["secret", "password", "credential", "token"],
+    overrides: [
+      {
+        fieldName: CfnKey.SSM_TYPE,
+        value: "SecureString",
+        reason:
+          "SecureString selected — encrypts value with KMS for sensitive data",
+      },
+    ],
+  },
+  // SNS Topic — FIFO
+  {
+    resourceType: RESOURCE_TYPES.SNS_TOPIC,
+    keywords: ["fifo", "ordered", "exactly-once"],
+    overrides: [
+      {
+        fieldName: CfnKey.FIFO_TOPIC,
+        value: true,
+        reason:
+          "FIFO topic selected — guarantees message ordering and deduplication",
+      },
+      {
+        fieldName: CfnKey.CONTENT_BASED_DEDUP,
+        value: true,
+        reason:
+          "Content-based deduplication enabled — prevents duplicate messages",
+      },
+    ],
+  },
+  // SNS Topic — Notifications/alerts
+  {
+    resourceType: RESOURCE_TYPES.SNS_TOPIC,
+    keywords: ["notification", "alert", "email", "sms"],
+    overrides: [
+      {
+        fieldName: CfnKey.DISPLAY_NAME,
+        value: "Assignee Notifications",
+        reason:
+          "Display name set for SMS/email notification sender identification",
+      },
+    ],
+  },
+  // CloudWatch LogGroup — Long retention
+  {
+    resourceType: RESOURCE_TYPES.LOGS_LOG_GROUP,
+    keywords: ["compliance", "audit", "long-term", "archive"],
+    overrides: [
+      {
+        fieldName: CfnKey.RETENTION_IN_DAYS,
+        value: "365",
+        reason: "365-day retention for compliance/audit log storage",
+      },
+    ],
+  },
+  // CloudWatch LogGroup — Short retention
+  {
+    resourceType: RESOURCE_TYPES.LOGS_LOG_GROUP,
+    keywords: ["dev", "debug", "test", "temporary"],
+    overrides: [
+      {
+        fieldName: CfnKey.RETENTION_IN_DAYS,
+        value: "7",
+        reason: "7-day retention for dev/test — reduces storage cost",
+      },
+    ],
+  },
+  // ECS Cluster — Fargate
+  {
+    resourceType: RESOURCE_TYPES.ECS_CLUSTER,
+    keywords: ["fargate", "serverless"],
+    overrides: [
+      {
+        fieldName: CfnKey.CLUSTER_SETTINGS,
+        value: [{ Name: "containerInsights", Value: "enabled" }],
+        reason: "Container Insights enabled for Fargate observability",
+      },
+    ],
+  },
+  // ECR Repository — Docker/container images
+  {
+    resourceType: RESOURCE_TYPES.ECR_REPOSITORY,
+    keywords: ["docker", "container", "image"],
+    overrides: [
+      {
+        fieldName: CfnKey.IMAGE_TAG_MUTABILITY,
+        value: "IMMUTABLE",
+        reason:
+          "Immutable tags prevent overwriting — safer for production deployments",
+      },
+      {
+        fieldName: CfnKey.SCAN_ON_PUSH,
+        value: true,
+        reason:
+          "Scan on push enabled — detect vulnerabilities in container images",
+      },
+    ],
+  },
+  // ELBv2 — Application Load Balancer
+  {
+    resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+    keywords: ["web", "http", "https", "api gateway", "application"],
+    overrides: [
+      {
+        fieldName: CfnKey.TYPE,
+        value: "application",
+        reason:
+          "Application Load Balancer for HTTP/HTTPS traffic with path-based routing",
+      },
+    ],
+  },
+  // ELBv2 — Network Load Balancer
+  {
+    resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+    keywords: ["tcp", "udp", "network", "high performance", "low latency"],
+    overrides: [
+      {
+        fieldName: CfnKey.TYPE,
+        value: "network",
+        reason: "Network Load Balancer for TCP/UDP with ultra-low latency",
+      },
+    ],
+  },
+  // API Gateway V2 — HTTP API
+  {
+    resourceType: RESOURCE_TYPES.APIGATEWAYV2_API,
+    keywords: ["http api", "rest api", "api endpoint"],
+    overrides: [
+      {
+        fieldName: CfnKey.PROTOCOL_TYPE,
+        value: "HTTP",
+        reason: "HTTP API selected — lower cost and latency than REST API",
+      },
+    ],
+  },
+  // API Gateway V2 — WebSocket
+  {
+    resourceType: RESOURCE_TYPES.APIGATEWAYV2_API,
+    keywords: ["websocket", "real-time", "chat", "streaming"],
+    overrides: [
+      {
+        fieldName: CfnKey.PROTOCOL_TYPE,
+        value: "WEBSOCKET",
+        reason: "WebSocket API for real-time bidirectional communication",
+      },
+    ],
+  },
 ];
 
 /**
