@@ -273,6 +273,21 @@ export function renderDependencyPlan(
  *
  * @see Story 18.4, AC #2
  */
+/** Shorten an ARN to fit terminal: keep account + resource id. */
+function truncateArn(arn: string, maxLen: number): string {
+  if (arn.length <= maxLen) return arn;
+  // arn:aws:service:region:account:resource/name → account:resource/name
+  const parts = arn.split(":");
+  if (parts.length >= 6) {
+    const account = parts[4] ?? "";
+    const resource = parts.slice(5).join(":");
+    const short = `${account}:${resource}`;
+    if (short.length <= maxLen) return short;
+    return short.slice(0, maxLen - 1) + "…";
+  }
+  return arn.slice(0, maxLen - 1) + "…";
+}
+
 export function renderResourceTable(resources: ManagedResource[]): void {
   if (process.stdout.isTTY) {
     // Dynamic column widths based on data
@@ -283,10 +298,11 @@ export function renderResourceTable(resources: ManagedResource[]): void {
       resources.map((r) => r.resourceType),
       25,
     );
+    const maxArn = 45;
     const cArn = col(
-      "ARN",
-      resources.map((r) => r.arn),
-      40,
+      "Resource",
+      resources.map((r) => truncateArn(r.arn, maxArn)),
+      30,
     );
     const cRegion = col(
       "Region",
@@ -307,7 +323,7 @@ export function renderResourceTable(resources: ManagedResource[]): void {
       d === CostEstimateLabel.NA ? CostEstimateLabel.NA : d.slice(0, 10);
     const header = chalk.bold(
       "Type".padEnd(cType) +
-        "ARN".padEnd(cArn) +
+        "Resource".padEnd(cArn) +
         "Region".padEnd(cRegion) +
         "Created".padEnd(cDate) +
         "Est. Cost",
@@ -315,15 +331,21 @@ export function renderResourceTable(resources: ManagedResource[]): void {
     const rows = resources.map(
       (r) =>
         r.resourceType.padEnd(cType) +
-        r.arn.padEnd(cArn) +
+        truncateArn(r.arn, maxArn).padEnd(cArn) +
         r.region.padEnd(cRegion) +
         fmtDate(r.createdDate).padEnd(cDate) +
         r.estimatedMonthlyCost,
     );
     const lineWidth = cType + cArn + cRegion + cDate + 20;
-    const content = [header, chalk.dim("-".repeat(lineWidth)), ...rows].join(
-      "\n",
+    const footer = chalk.dim(
+      `\n${resources.length} resource${resources.length === 1 ? "" : "s"} total`,
     );
+    const content = [
+      header,
+      chalk.dim("-".repeat(lineWidth)),
+      ...rows,
+      footer,
+    ].join("\n");
 
     process.stdout.write(
       boxen(content, {

@@ -57,6 +57,9 @@ export interface ProjectConfig {
     environment: string;
   };
   autoFixBestPractices?: boolean;
+  /** Nested AssigneeConfig shape consumed by project-config-loader */
+  defaults?: { region?: string; tags?: Record<string, string> };
+  preferences?: { auto_fix?: string };
   priceCacheTtlMinutes?: number;
 }
 
@@ -342,6 +345,17 @@ export const initCommand = new Command(CommandName.INIT)
         environment: environment as string,
       },
       autoFixBestPractices: autoFix as boolean,
+      // Nested AssigneeConfig shape consumed by project-config-loader
+      defaults: {
+        region: region as string,
+        tags: {
+          [AssigneeTag.KEY]: AssigneeTag.VALUE,
+          environment: environment as string,
+        },
+      },
+      preferences: {
+        auto_fix: (autoFix as boolean) ? "apply" : "ask",
+      },
     };
 
     await fs.mkdir(configDir, { recursive: true });
