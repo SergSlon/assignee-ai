@@ -181,7 +181,9 @@ function mockLlmForPlanFlow(resourceType: string, desiredStateJson: string) {
     // Call 1: intent-parser → generateStructured → uses output field
     .mockResolvedValueOnce({ output: { resourceType }, text: "" })
     // Call 2: plan-generator → generateText → uses text field
-    .mockResolvedValueOnce({ text: desiredStateJson, output: undefined });
+    .mockResolvedValueOnce({ text: desiredStateJson, output: undefined })
+    // Call 3: advice-generator → generateText → uses text field
+    .mockResolvedValueOnce({ text: "[]", output: undefined });
 }
 
 // ── Test setup ──────────────────────────────────────────────────────────────

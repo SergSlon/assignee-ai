@@ -209,6 +209,286 @@ const INTENT_RULES: IntentRule[] = [
       },
     ],
   },
+  // RDS — PostgreSQL
+  {
+    resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
+    keywords: ["postgres", "postgresql"],
+    overrides: [
+      {
+        fieldName: CfnKey.ENGINE,
+        value: "postgres",
+        reason: "PostgreSQL selected — most popular open-source relational DB",
+      },
+    ],
+  },
+  // RDS — MySQL
+  {
+    resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
+    keywords: ["mysql"],
+    overrides: [
+      {
+        fieldName: CfnKey.ENGINE,
+        value: "mysql",
+        reason: "MySQL selected — widely supported relational DB",
+      },
+    ],
+  },
+  // EC2 — Batch/compute-heavy
+  {
+    resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+    keywords: ["batch processing", "data processing", "etl"],
+    overrides: [
+      {
+        fieldName: CfnKey.INSTANCE_TYPE,
+        value: "c5.xlarge",
+        reason: "Selected for batch/ETL — compute-optimized with 4 vCPU",
+        categoryHint: WP.COMPUTE,
+      },
+    ],
+  },
+  // EC2 — Dev/test
+  {
+    resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+    keywords: ["dev", "test", "development", "testing", "sandbox"],
+    overrides: [
+      {
+        fieldName: CfnKey.INSTANCE_TYPE,
+        value: "t3.micro",
+        reason: "Selected for dev/test — burstable, free tier eligible",
+        categoryHint: WP.BURSTABLE,
+      },
+    ],
+  },
+  // EC2 — Docker/container host
+  {
+    resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+    keywords: ["docker", "container host", "containers"],
+    overrides: [
+      {
+        fieldName: CfnKey.INSTANCE_TYPE,
+        value: "t3.medium",
+        reason:
+          "Selected for container hosting — 4 GiB for Docker daemon + containers",
+        categoryHint: WP.BURSTABLE,
+      },
+    ],
+  },
+  // Lambda — Scheduled/cron task
+  {
+    resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+    keywords: ["scheduled", "cron", "periodic", "timer"],
+    overrides: [
+      {
+        fieldName: CfnKey.TIMEOUT,
+        value: "300",
+        reason: "Selected for scheduled tasks — 300s timeout for batch work",
+      },
+    ],
+  },
+  // Lambda — Event processor
+  {
+    resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+    keywords: ["event", "sqs trigger", "sns trigger", "s3 trigger"],
+    overrides: [
+      {
+        fieldName: CfnKey.MEMORY_SIZE,
+        value: "256",
+        reason:
+          "Selected for event processing — 256 MB suits most event payloads",
+      },
+      {
+        fieldName: CfnKey.TIMEOUT,
+        value: "60",
+        reason:
+          "Selected for event processing — 60s timeout for async event handling",
+      },
+    ],
+  },
+  // S3 — Backup/archive
+  {
+    resourceType: RESOURCE_TYPES.S3_BUCKET,
+    keywords: ["backup", "archive", "cold storage"],
+    overrides: [
+      {
+        fieldName: CfnKey.ENABLE_LIFECYCLE,
+        value: true,
+        reason:
+          "Pre-configured for backup — lifecycle transitions to reduce cost",
+      },
+      {
+        fieldName: CfnKey.LIFECYCLE_TRANSITION_DAYS,
+        value: "30",
+        reason:
+          "Pre-configured for backup — move to Infrequent Access after 30 days",
+      },
+    ],
+  },
+  // S3 — Data lake
+  {
+    resourceType: RESOURCE_TYPES.S3_BUCKET,
+    keywords: ["data lake", "analytics", "data warehouse"],
+    overrides: [
+      {
+        fieldName: CfnKey.ENABLE_LIFECYCLE,
+        value: true,
+        reason:
+          "Pre-configured for data lake — intelligent tiering for mixed access patterns",
+      },
+    ],
+  },
+  // DynamoDB — High throughput
+  {
+    resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
+    keywords: ["high throughput", "high performance"],
+    overrides: [
+      {
+        fieldName: CfnKey.BILLING_MODE,
+        value: "PROVISIONED",
+        reason:
+          "Provisioned capacity selected — predictable cost for sustained high throughput",
+      },
+    ],
+  },
+  // DynamoDB — Serverless / variable
+  {
+    resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
+    keywords: ["serverless", "variable", "unpredictable", "on demand"],
+    overrides: [
+      {
+        fieldName: CfnKey.BILLING_MODE,
+        value: "PAY_PER_REQUEST",
+        reason:
+          "On-demand selected — auto-scales with no capacity planning needed",
+      },
+    ],
+  },
+  // SQS — FIFO queue
+  {
+    resourceType: RESOURCE_TYPES.SQS_QUEUE,
+    keywords: ["fifo", "ordered", "exactly-once", "deduplication"],
+    overrides: [
+      {
+        fieldName: CfnKey.FIFO_QUEUE,
+        value: true,
+        reason:
+          "FIFO queue selected — guarantees message ordering and exactly-once delivery",
+      },
+    ],
+  },
+  // SQS — Dead letter queue
+  {
+    resourceType: RESOURCE_TYPES.SQS_QUEUE,
+    keywords: ["dead letter", "dlq", "failed messages"],
+    overrides: [
+      {
+        fieldName: CfnKey.FIFO_QUEUE,
+        value: false,
+        reason:
+          "Standard queue for DLQ — collects failed messages for retry/analysis",
+      },
+    ],
+  },
+  // CloudWatch — Monitoring alarm
+  {
+    resourceType: RESOURCE_TYPES.CLOUDWATCH_ALARM,
+    keywords: ["cpu", "cpu alarm", "cpu monitoring"],
+    overrides: [
+      {
+        fieldName: CfnKey.METRIC_NAME,
+        value: "CPUUtilization",
+        reason: "CPU monitoring selected — tracks EC2/ECS compute utilization",
+      },
+      {
+        fieldName: CfnKey.NAMESPACE,
+        value: "AWS/EC2",
+        reason: "EC2 namespace selected for CPU metric",
+      },
+    ],
+  },
+  // CloudWatch — Memory alarm
+  {
+    resourceType: RESOURCE_TYPES.CLOUDWATCH_ALARM,
+    keywords: ["memory", "memory alarm"],
+    overrides: [
+      {
+        fieldName: CfnKey.METRIC_NAME,
+        value: "MemoryUtilization",
+        reason: "Memory monitoring — requires CloudWatch Agent on EC2",
+      },
+    ],
+  },
+  // SecretsManager — API key
+  {
+    resourceType: RESOURCE_TYPES.SECRETSMANAGER_SECRET,
+    keywords: ["api key", "api secret", "token"],
+    overrides: [
+      {
+        fieldName: CfnKey.GENERATE_SECRET_STRING,
+        value: { PasswordLength: 64, ExcludePunctuation: true },
+        reason: "API key pattern — 64-char alphanumeric for URL-safe usage",
+      },
+    ],
+  },
+  // SecretsManager — Database password
+  {
+    resourceType: RESOURCE_TYPES.SECRETSMANAGER_SECRET,
+    keywords: ["database password", "db password", "rds password"],
+    overrides: [
+      {
+        fieldName: CfnKey.GENERATE_SECRET_STRING,
+        value: { PasswordLength: 32, ExcludePunctuation: false },
+        reason:
+          "Database password — 32-char with special characters for RDS compatibility",
+      },
+    ],
+  },
+  // IAM Role — Lambda execution
+  {
+    resourceType: RESOURCE_TYPES.IAM_ROLE,
+    keywords: [
+      "lambda execution role",
+      "lambda role",
+      "function execution role",
+    ],
+    overrides: [
+      {
+        fieldName: CfnKey.ASSUME_ROLE_POLICY,
+        value: JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Allow",
+              Principal: { Service: "lambda.amazonaws.com" },
+              Action: "sts:AssumeRole",
+            },
+          ],
+        }),
+        reason:
+          "Lambda execution role — allows Lambda service to assume this role",
+      },
+    ],
+  },
+  // IAM Role — EC2 instance profile
+  {
+    resourceType: RESOURCE_TYPES.IAM_ROLE,
+    keywords: ["ec2", "instance profile", "instance role"],
+    overrides: [
+      {
+        fieldName: CfnKey.ASSUME_ROLE_POLICY,
+        value: JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Allow",
+              Principal: { Service: "ec2.amazonaws.com" },
+              Action: "sts:AssumeRole",
+            },
+          ],
+        }),
+        reason: "EC2 instance role — allows EC2 service to assume this role",
+      },
+    ],
+  },
 ];
 
 /**
