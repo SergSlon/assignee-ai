@@ -17,8 +17,8 @@ import { McpServerName, type McpServerNameType } from "../constants/mcp.js";
  * - Optional servers (IAM, WELL_ARCHITECTED_SECURITY, BILLING) are listed
  *   where needed; the MCP client handles their graceful degradation.
  *
- * TODO: Drift command mapping (Epic 28) and optimize mapping (Epic 32) will be
- * added when those epics ship.
+ * Drift/reconcile commands use direct SDK (no MCP servers needed).
+ * Optimize command (Epic 32) is deferred to Phase 3.
  */
 export const COMMAND_SERVER_MAP: Record<string, McpServerNameType[]> = {
   // plan + apply need pricing, knowledge, and docs for schema/cost/documentation lookups
