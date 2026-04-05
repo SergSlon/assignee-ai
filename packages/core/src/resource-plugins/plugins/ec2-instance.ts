@@ -7,7 +7,11 @@ import {
   SizeLabel,
   WorkloadProfileKey,
 } from "../../config/cfn-keys.js";
-import { QuestionTypeName, type ResourcePlugin } from "../types.js";
+import {
+  QuestionTypeName,
+  type ResourcePlugin,
+  type CfnOutput,
+} from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
@@ -433,6 +437,73 @@ export const ec2InstancePlugin: ResourcePlugin = {
         Ebs: { Encrypted: true, VolumeType: ResourceDefault.EBS_VOLUME_TYPE },
       },
     ],
+  },
+  companionResources(desiredState: Record<string, unknown>): CfnOutput[] {
+    // Only create companion SG if no SecurityGroupIds are specified
+    const sgIds = desiredState[CfnKey.SECURITY_GROUP_IDS];
+    if (Array.isArray(sgIds) && sgIds.length > 0) return [];
+
+    const hasKeyName =
+      typeof desiredState[CfnKey.KEY_NAME] === "string" &&
+      desiredState[CfnKey.KEY_NAME] !== "";
+    const hasPublicIp = desiredState[CfnKey.ASSOCIATE_PUBLIC_IP] === true;
+
+    // Build ingress rules based on configuration signals
+    const ingressRules: Record<string, unknown>[] = [];
+
+    if (hasKeyName) {
+      // SSH access requested — open port 22
+      ingressRules.push({
+        IpProtocol: "tcp",
+        FromPort: 22,
+        ToPort: 22,
+        CidrIp: "0.0.0.0/0",
+        Description: "SSH access",
+      });
+    }
+
+    if (hasPublicIp || hasKeyName) {
+      // Web traffic — open 80/443
+      ingressRules.push(
+        {
+          IpProtocol: "tcp",
+          FromPort: 80,
+          ToPort: 80,
+          CidrIp: "0.0.0.0/0",
+          Description: "HTTP",
+        },
+        {
+          IpProtocol: "tcp",
+          FromPort: 443,
+          ToPort: 443,
+          CidrIp: "0.0.0.0/0",
+          Description: "HTTPS",
+        },
+      );
+    }
+
+    if (ingressRules.length === 0) return [];
+
+    const instanceType =
+      (desiredState[CfnKey.INSTANCE_TYPE] as string) ?? "instance";
+    const sanitized = instanceType.replace(/[^a-zA-Z0-9]/g, "-");
+    return [
+      {
+        logicalId: `${sanitized}SecurityGroup`,
+        type: RESOURCE_TYPES.EC2_SECURITY_GROUP,
+        properties: {
+          [CfnKey.GROUP_DESCRIPTION]: `Security group for EC2 ${instanceType}`,
+          SecurityGroupIngress: ingressRules,
+          SecurityGroupEgress: [
+            {
+              IpProtocol: "-1",
+              CidrIp: "0.0.0.0/0",
+              Description: "Allow all outbound",
+            },
+          ],
+        },
+      },
+    ];
   },
   configHints: [
     "EC2 ImageId (AMI): ImageId is REQUIRED. The user may provide an OS name like 'amazon-linux-2023' instead of a real AMI ID — keep it as-is, the system resolves it automatically. NEVER use placeholder IDs like ami-0abcdef1234567890.",
