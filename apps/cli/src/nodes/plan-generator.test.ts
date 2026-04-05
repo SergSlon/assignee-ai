@@ -213,7 +213,7 @@ describe("planGeneratorNode", () => {
     expect(capturedPrompt).toContain("OMIT the Role property");
   });
 
-  it("does not inject resource hints for non-Lambda resource types", async () => {
+  it("injects resource-specific hints for plugins with configHints", async () => {
     let capturedPrompt = "";
     const mock = new MockLlmAdapter(
       undefined,
@@ -227,9 +227,10 @@ describe("planGeneratorNode", () => {
     };
 
     const node = createPlanGeneratorNode({ llmClient: mock });
-    await node(makeState());
+    await node(makeState()); // S3 has configHints
 
-    expect(capturedPrompt).not.toContain("RESOURCE-SPECIFIC RULES");
+    // S3, EC2, RDS, Lambda, and other plugins now have configHints
+    expect(capturedPrompt).toContain("RESOURCE-SPECIFIC RULES");
   });
 
   it("reads schema from uppercase Properties key as fallback", async () => {

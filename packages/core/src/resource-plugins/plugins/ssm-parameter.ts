@@ -152,4 +152,11 @@ export const ssmParameterPlugin: ResourcePlugin = {
     [CfnKey.SSM_TYPE]: "String",
     [CfnKey.TIER]: AwsDefault.SSM_TIER_STANDARD,
   },
+  configHints: [
+    "Name MUST start with a forward slash (/) and use hierarchical paths (e.g., /app/env/key). This is enforced by AWS — omitting the leading slash causes a CloudFormation error.",
+    "Type is immutable — changing between String, StringList, and SecureString triggers resource replacement. SecureString values are encrypted at rest with KMS.",
+    "CloudFormation does NOT support creating SecureString parameters — use Type 'String' and store sensitive values in Secrets Manager instead, or manage SecureString parameters outside CloudFormation.",
+    "Tier defaults to 'Standard' (free, 4KB max, 10K parameter limit). Only use 'Advanced' if the value exceeds 4KB or you need parameter policies (expiration, notification).",
+    "Value is REQUIRED and appears in plaintext in CloudFormation templates and events for String/StringList types — never store secrets as plain String parameters.",
+  ],
 };

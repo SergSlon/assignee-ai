@@ -14,12 +14,15 @@ import { FieldLabel } from "../field-labels.js";
 /**
  * Instance type category groupings for two-step selection UX.
  * Each category maps a family key to its display metadata and member instance types.
+ *
+ * Approximate us-east-1 on-demand prices as of 2026-04. Updated via scripts/update-wizard-prices.ts
+ *
  * @see Story 18.12
  */
 export const INSTANCE_CATEGORIES = [
   {
     key: WorkloadProfileKey.BURSTABLE,
-    label: "Burstable (t3/t4g) — $0.008-0.17/hr",
+    label: "Burstable (t3/t4g) — ~$0.008-0.17/hr",
     description:
       "Variable CPU with burst credits. Best for dev/test and intermittent workloads. t4g (ARM) is ~20% cheaper.",
     options: [
@@ -78,7 +81,7 @@ export const INSTANCE_CATEGORIES = [
   },
   {
     key: WorkloadProfileKey.GENERAL,
-    label: "General Purpose (m5/m6i) — $0.096-0.38/hr",
+    label: "General Purpose (m5/m6i) — ~$0.096-0.38/hr",
     description:
       "Balanced CPU/memory ratio. Best for production app servers and mid-size databases.",
     options: [
@@ -116,7 +119,7 @@ export const INSTANCE_CATEGORIES = [
   },
   {
     key: WorkloadProfileKey.COMPUTE,
-    label: "Compute Optimized (c5/c6i) — $0.085-0.34/hr",
+    label: "Compute Optimized (c5/c6i) — ~$0.085-0.34/hr",
     description:
       "High-performance CPUs. Best for batch processing, ML inference, and compute-heavy workloads.",
     options: [
@@ -154,7 +157,7 @@ export const INSTANCE_CATEGORIES = [
   },
   {
     key: WorkloadProfileKey.MEMORY,
-    label: "Memory Optimized (r5/r6i) — $0.126-0.50/hr",
+    label: "Memory Optimized (r5/r6i) — ~$0.126-0.50/hr",
     description:
       "High memory-to-CPU ratio. Best for in-memory databases, caches, and real-time analytics.",
     options: [

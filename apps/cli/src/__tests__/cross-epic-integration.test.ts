@@ -277,7 +277,7 @@ describe("Cross-epic: schema fetch -> plan generation", () => {
   it("SUPPORTED_TYPES_ARRAY covers all expected resource types", async () => {
     const { SUPPORTED_TYPES_ARRAY } = await import("@assignee/core");
 
-    expect(SUPPORTED_TYPES_ARRAY.length).toBeGreaterThanOrEqual(22);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(23);
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::S3::Bucket");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EC2::Instance");

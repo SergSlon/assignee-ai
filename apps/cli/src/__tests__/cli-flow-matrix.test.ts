@@ -427,9 +427,9 @@ describe("config constants", () => {
 
     // Re-import to get fresh default
     const mod = await import("../config/constants.js");
-    // Note: may be cached, so check for reasonable value
+    // Module may be cached, but the default should be us-east-1 or env-overridden
     expect(typeof mod.AWS_REGION).toBe("string");
-    expect(mod.AWS_REGION.length).toBeGreaterThan(0);
+    expect(mod.AWS_REGION).toMatch(/^[a-z]{2}-[a-z]+-\d+$/);
 
     if (origRegion) process.env["AWS_REGION"] = origRegion;
   });
@@ -1051,8 +1051,8 @@ describe("supported resource types", () => {
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
   });
 
-  it("SUPPORTED_TYPES_ARRAY has at least 3 types", async () => {
+  it("SUPPORTED_TYPES_ARRAY has exactly 23 types", async () => {
     const { SUPPORTED_TYPES_ARRAY } = await import("@assignee/core");
-    expect(SUPPORTED_TYPES_ARRAY.length).toBeGreaterThanOrEqual(3);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(23);
   });
 });

@@ -18,7 +18,7 @@ complete -c assignee -n "__fish_seen_subcommand_from plan" -l source -s s -r -d 
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l set -r -d 'Pre-set wizard field values (repeatable)'
 
 # Options for 'apply'
-complete -c assignee -n "__fish_seen_subcommand_from apply" -l wizard -d 'Run interactive configuration wizard (default: auto-decide)'
+complete -c assignee -n "__fish_seen_subcommand_from apply" -l wizard -d 'Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l no-advice -d 'Skip inline contextual advice generation'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l yes -s y -d 'Auto-confirm apply without interactive prompt (for CI/CD)'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l checkpoint -s c -r -d 'Use a saved plan checkpoint instead of running Phase 1'

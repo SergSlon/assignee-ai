@@ -164,4 +164,11 @@ export const elbv2LoadBalancerPlugin: ResourcePlugin = {
     [CfnKey.SCHEME]: AwsDefault.LB_SCHEME_INTERNET_FACING,
     [CfnKey.IP_ADDRESS_TYPE]: "ipv4",
   },
+  configHints: [
+    "Subnets MUST span at least 2 Availability Zones — CloudFormation fails if fewer are provided. Internet-facing ALBs require public subnets; internal ALBs use private subnets.",
+    "SecurityGroups are REQUIRED for Application Load Balancers (ALB) but NOT supported for Network Load Balancers (NLB). Including SecurityGroups on an NLB causes a CloudFormation error.",
+    "Scheme is immutable — it cannot be changed between 'internet-facing' and 'internal' after creation. Changing it triggers resource replacement.",
+    "Type is immutable — 'application' vs 'network' cannot be changed after creation. Choose based on protocol needs: ALB for HTTP/HTTPS, NLB for TCP/UDP/TLS.",
+    "LoadBalancerAttributes should include 'deletion_protection.enabled' set to 'true' for production to prevent accidental deletion via API or Console.",
+  ],
 };

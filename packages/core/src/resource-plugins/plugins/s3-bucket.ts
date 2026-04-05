@@ -51,7 +51,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         type: "string",
         label: "KMS Key ID (leave blank for SSE-S3)",
         placeholder: "arn:aws:kms:...",
-        hint: "ARN of a KMS key for server-side encryption. Leave blank to use the free SSE-S3 (AES-256). KMS adds ~$1/month per key plus $0.03 per 10K requests. Use KMS when you need key rotation or audit trails.",
+        hint: "ARN of a KMS key for server-side encryption. Leave blank to use the free SSE-S3 (AES-256). KMS adds ~$1/month per key plus ~$0.03 per 10K requests. Use KMS when you need key rotation or audit trails.",
         showIf: { field: CfnKey.BUCKET_ENCRYPTION, value: true },
         validate: (value: unknown) => {
           if (!value) return undefined;
@@ -256,4 +256,11 @@ export const s3BucketPlugin: ResourcePlugin = {
       RestrictPublicBuckets: true,
     },
   },
+  configHints: [
+    "ALWAYS set PublicAccessBlockConfiguration with all four flags (BlockPublicAcls, BlockPublicPolicy, IgnorePublicAcls, RestrictPublicBuckets) to true unless the user explicitly needs public access (e.g., static website hosting).",
+    "BucketEncryption should default to SSE-S3 (AES-256, free). Only use SSE-KMS if the user needs customer-managed key rotation or audit trails — KMS adds per-request costs.",
+    "VersioningConfiguration.Status should be 'Enabled' for production buckets to protect against accidental deletions. Once enabled, versioning can only be suspended, never fully disabled.",
+    "BucketName is globally unique across ALL AWS accounts and immutable — changing it triggers replacement. Omit BucketName to let CloudFormation auto-generate a unique name.",
+    "CorsConfiguration is only needed when browsers access the bucket directly (e.g., S3 presigned URLs, static hosting). Server-to-server access does NOT need CORS.",
+  ],
 };

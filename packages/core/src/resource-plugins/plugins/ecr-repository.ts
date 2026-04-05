@@ -152,4 +152,11 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
     [CfnKey.IMAGE_TAG_MUTABILITY]: "IMMUTABLE",
     [CfnKey.IMAGE_SCANNING_CONFIGURATION]: { [CfnKey.SCAN_ON_PUSH]: true },
   },
+  configHints: [
+    "ALWAYS set ImageTagMutability to IMMUTABLE unless the user explicitly needs mutable tags (e.g., for 'latest' tag workflows). Immutable tags prevent accidental overwrites.",
+    "ImageScanningConfiguration.ScanOnPush should be true for security compliance — it scans for OS vulnerabilities at no extra cost (basic scanning).",
+    "EncryptionConfiguration.EncryptionType defaults to AES256 (free). Only use KMS if the user needs customer-managed key rotation or cross-account access control.",
+    "LifecyclePolicy is a JSON string (not an object) — it MUST be passed as the LifecyclePolicyText property. Common rule: expire untagged images after 14 days to control storage costs.",
+    "RepositoryName is immutable — changing it triggers resource replacement. Use lowercase letters, numbers, hyphens, underscores, and forward slashes only.",
+  ],
 };

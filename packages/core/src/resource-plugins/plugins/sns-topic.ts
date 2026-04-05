@@ -110,5 +110,9 @@ export const snsTopicPlugin: ResourcePlugin = {
   defaults: {},
   configHints: [
     "SNS KmsMasterKeyId: Consider setting to 'alias/aws/sns' for server-side encryption at rest using the AWS-managed SNS key.",
+    "FifoTopic MUST be set to true if the TopicName ends with .fifo. Standard and FIFO topics cannot be converted after creation.",
+    "ContentBasedDeduplication can only be enabled on FIFO topics — setting it on a standard topic causes a CloudFormation error.",
+    "Subscription configuration (protocol, endpoint) requires a separate AWS::SNS::Subscription resource — do NOT put subscription properties on the Topic itself.",
+    "DisplayName is used as the 'from' line in SMS messages and is limited to 100 characters for SMS delivery.",
   ],
 };

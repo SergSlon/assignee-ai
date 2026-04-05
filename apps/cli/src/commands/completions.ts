@@ -26,6 +26,14 @@ import {
 export const completionsCommand = new Command(CommandName.COMPLETIONS)
   .description(CommandDescription.COMPLETIONS)
   .argument("<shell>", `Shell type: ${SUPPORTED_SHELLS.join(", ")}`)
+  .addHelpText(
+    "after",
+    `
+Examples:
+  eval "$(assignee completions zsh)"    # Zsh — add to ~/.zshrc
+  eval "$(assignee completions bash)"   # Bash — add to ~/.bashrc
+  assignee completions fish | source    # Fish — or save to ~/.config/fish/completions/`,
+  )
   .action((shell: string) => {
     const normalizedShell = shell.toLowerCase();
 
