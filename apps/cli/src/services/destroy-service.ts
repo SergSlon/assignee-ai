@@ -23,6 +23,7 @@ import type { AwsConfig } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
+import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 import {
   AWS_REGION,
   DESTROY_MAX_POLL_ATTEMPTS,
@@ -272,6 +273,7 @@ export async function destroySingleResource(
         await import("@aws-sdk/client-dynamodb");
       const ddb = new DynamoDBClient({
         region: awsConfig.region ?? AWS_REGION,
+        credentials: requireAssigneeCredentials("operator"),
       });
       await ddb.send(
         new UpdateTableCommand({
@@ -289,19 +291,9 @@ export async function destroySingleResource(
     try {
       const { S3Client, ListObjectVersionsCommand, DeleteObjectsCommand } =
         await import("@aws-sdk/client-s3");
-      if (!awsConfig.accessKeyId || !awsConfig.secretAccessKey) {
-        return {
-          ...baseResult,
-          success: false,
-          error: "Missing AWS credentials for resource cleanup",
-        };
-      }
       const s3 = new S3Client({
         region: awsConfig.region ?? AWS_REGION,
-        credentials: {
-          accessKeyId: awsConfig.accessKeyId,
-          secretAccessKey: awsConfig.secretAccessKey,
-        },
+        credentials: requireAssigneeCredentials("operator"),
       });
 
       // Delete all object versions and delete markers (paginated)

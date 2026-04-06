@@ -26,6 +26,7 @@ import type { SDKFallbackDispatcher } from "../services/sdk-fallback-dispatcher.
 import { injectMandatoryTags } from "../utils/tags.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { AWS_REGION, ASSIGNEE_DIR } from "../config/constants.js";
+import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 import type { AgentState } from "../services/graph-state.js";
 
 function isResourceType(s: string): s is ResourceType {
@@ -251,6 +252,7 @@ export async function resourceProvisionerNode(
       } = await import("@aws-sdk/client-ec2");
       const ec2 = new EC2Client({
         region: AWS_REGION,
+        credentials: requireAssigneeCredentials("operator"),
       });
 
       // Check for an existing EIP allocated by a previous attempt for this runId
@@ -328,7 +330,10 @@ export async function resourceProvisionerNode(
     try {
       const { EC2Client, CreateKeyPairCommand, DescribeKeyPairsCommand } =
         await import("@aws-sdk/client-ec2");
-      const ec2 = new EC2Client({ region: AWS_REGION });
+      const ec2 = new EC2Client({
+        region: AWS_REGION,
+        credentials: requireAssigneeCredentials("operator"),
+      });
       const keyName = ResourceDefault.SSH_KEY_PLACEHOLDER;
 
       // Check if key pair already exists — only catch "not found" errors
@@ -443,6 +448,7 @@ export async function resourceProvisionerNode(
           await import("@aws-sdk/client-ec2");
         const ec2 = new EC2Client({
           region: AWS_REGION,
+          credentials: requireAssigneeCredentials("operator"),
         });
         await ec2.send(
           new ReleaseAddressCommand({
@@ -458,7 +464,10 @@ export async function resourceProvisionerNode(
       try {
         const { EC2Client, DeleteKeyPairCommand } =
           await import("@aws-sdk/client-ec2");
-        const ec2 = new EC2Client({ region: AWS_REGION });
+        const ec2 = new EC2Client({
+          region: AWS_REGION,
+          credentials: requireAssigneeCredentials("operator"),
+        });
         await ec2.send(
           new DeleteKeyPairCommand({ KeyName: sshKeyCreatedName }),
         );

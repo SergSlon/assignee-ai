@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   ExecutionStatus,
   MockLlmAdapter,
@@ -1096,6 +1096,81 @@ describe("planGeneratorNode — EC2 post-processing", () => {
       const ds = result.desiredState as Record<string, unknown>;
 
       expect(ds["KeyName"]).toBe(ResourceDefault.SSH_KEY_PLACEHOLDER);
+    });
+  });
+
+  // ── Fail-closed credential enforcement (Lambda role-ARN STS path) ──────────
+  // The plan-generator constructs an STSClient inside the compound Lambda
+  // role-ARN derivation path. That client must use
+  // requireAssigneeCredentials("operator") so it never falls through to the
+  // default AWS credential chain. The cross-reference path is wrapped in
+  // try/catch and falls back to the role NAME on any error — so when env
+  // vars are missing, we assert that the desired state contains the role
+  // name (not an ARN derived from a leaked AWS account).
+  describe("fail-closed STSClient credential enforcement", () => {
+    const ORIGINAL_ENV = { ...process.env };
+
+    beforeEach(() => {
+      delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+      // Belt-and-suspenders: shell AWS_* must NOT be honored
+      process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
+      process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
+    });
+
+    afterEach(() => {
+      process.env = { ...ORIGINAL_ENV };
+    });
+
+    it("Lambda role ARN derivation falls back to role name when operator creds missing", async () => {
+      // The compound-mode cross-reference path constructs an STSClient to
+      // derive the IAM role ARN from a name. With ASSIGNEE_OPERATOR_* unset,
+      // requireAssigneeCredentials("operator") throws, the inner try/catch
+      // catches it, and the fallback assigns the bare role name. Critical
+      // assertion: Role must NOT be an ARN derived from a leaked shell
+      // AWS account.
+      const mock = new MockLlmAdapter(undefined, "{}");
+      const node = createPlanGeneratorNode({ llmClient: mock });
+
+      const result = await node(
+        makeState({
+          resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+          userIntent: "Compound serverless API",
+          resourcePattern: {
+            patternId: "serverless-api",
+            displayName: "Serverless API",
+            resources: [],
+            defaultOptions: {
+              "lambda-fn": {
+                FunctionName: "compound-lambda",
+                Runtime: "nodejs20.x",
+                Handler: "index.handler",
+                Code: { ZipFile: "exports.handler = async () => {};" },
+              },
+            },
+          },
+          resourceQueue: [
+            {
+              resourceId: "lambda-fn",
+              resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+            },
+          ],
+          currentResourceIndex: 0,
+          completedResources: [
+            {
+              resourceType: RESOURCE_TYPES.IAM_ROLE,
+              resourceArn: "lambda-execution-role-name",
+              resourceId: "lambda-role",
+            },
+          ],
+        }),
+      );
+
+      const ds = result.desiredState as Record<string, unknown>;
+      // Critical: must be the bare role name — NOT an ARN derived from a
+      // leaked AWS account.
+      expect(ds["Role"]).toBe("lambda-execution-role-name");
+      expect(String(ds["Role"])).not.toMatch(/^arn:/);
     });
   });
 });

@@ -69,14 +69,11 @@ vi.mock("../services/cloudfront-setup.js", () => ({
   ),
 }));
 
-// Mock operator-credentials for CloudFront bucket policy update
-vi.mock("../config/operator-credentials.js", () => ({
-  operatorCredentials: vi.fn().mockReturnValue({
-    accessKeyId: "test-key",
-    secretAccessKey: "test-secret",
-    region: "us-east-1",
-  }),
-}));
+// result-formatter.ts now uses requireAssigneeCredentials("operator") from
+// the centralized helper instead of the legacy operator-credentials shim.
+// Provide realistic-shaped operator env vars in beforeEach so the dynamic
+// import in the CloudFront path can construct the S3Client. Tests verifying
+// fail-closed behavior delete the env vars within their own beforeEach.
 
 // Mock @aws-sdk/client-s3 PutBucketPolicyCommand (used in uploadStaticSiteFiles for OAC policy)
 vi.mock("@aws-sdk/client-s3", () => ({
@@ -182,8 +179,21 @@ function makeState(overrides: Partial<AgentState> = {}): AgentState {
   } as AgentState;
 }
 
+// Snapshot env so per-test credential mutations don't leak between cases
+const RESULT_FORMATTER_ORIGINAL_ENV = { ...process.env };
+
 beforeEach(() => {
   vi.clearAllMocks();
+  // Provide realistic-shaped operator env vars so the centralized helper
+  // (used by the result-formatter CloudFront S3Client) can construct an
+  // S3Client. Tests that exercise fail-closed behavior delete these.
+  process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+  process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+});
+
+afterEach(() => {
+  process.env = { ...RESULT_FORMATTER_ORIGINAL_ENV };
 });
 
 // ── Single-resource path (no change from existing behaviour) ─────────────────
@@ -1318,5 +1328,33 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
         delete process.env["AWS_REGION"];
       }
     }
+  });
+
+  // ── Fail-closed: missing operator env vars ────────────────────────────────
+  // The result-formatter dynamically imports `requireAssigneeCredentials`
+  // when constructing the S3Client used to apply the CloudFront OAC bucket
+  // policy. With env vars unset, that helper throws — and the upload flow
+  // catches the error and continues without leaking to the default chain.
+  it("fail-closed: upload still completes when ASSIGNEE_OPERATOR_* missing", async () => {
+    delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+    delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+    // Belt-and-suspenders: shell AWS_* must NOT be honored
+    process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
+    process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
+
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "arn:aws:s3:::my-static-site",
+      sourceDir: "/tmp/build",
+    });
+
+    // Single-resource S3 bucket path does NOT call CloudFront — and the
+    // public-read configureBucketPolicy is mocked above. Even with missing
+    // operator creds, the upload flow must NOT throw all the way out and
+    // must NOT mark provision as failed.
+    const result = await resultFormatterNode(state);
+    expect(result).toEqual({});
+    expect(uploadStaticSite).toHaveBeenCalled();
   });
 });

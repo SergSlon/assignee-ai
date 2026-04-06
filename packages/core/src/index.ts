@@ -107,6 +107,16 @@ export {
 } from "./config/resource-identifiers.js";
 export { DiscoveryCacheKey } from "./config/discovery-keys.js";
 
+// Config — centralized AWS credential resolution (Story 18.8 hardening)
+export {
+  requireAssigneeCredentials,
+  tryAssigneeCredentials,
+  hasAssigneeCredentials,
+  MissingAssigneeCredentialsError,
+  type AssigneeRole,
+  type ExplicitAwsCredentials,
+} from "./config/aws-credentials.js";
+
 // IAM — action map and policy generators
 export { getRequiredIamActions } from "./config/iam-actions.js";
 export {

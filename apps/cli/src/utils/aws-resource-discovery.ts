@@ -32,7 +32,10 @@ import {
 } from "@assignee/core";
 import { withTimeout } from "./timeout.js";
 import { AWS_REGION, PromiseStatus } from "../config/constants.js";
-import { EnvVar } from "../constants/env-vars.js";
+import {
+  tryAssigneeCredentials,
+  MissingAssigneeCredentialsError,
+} from "../config/aws-credentials.js";
 import { WorkloadProfile as WP } from "../constants/workload-profiles.js";
 
 const DISCOVERY_TIMEOUT_MS = 6000;
@@ -105,48 +108,47 @@ async function cachedDiscover(
 
 // ── Shared client factory ────────────────────────────────────────────────────
 
-function readerCredentials(): {
-  accessKeyId: string;
-  secretAccessKey: string;
-  region: string;
-} {
-  return {
-    accessKeyId: process.env[EnvVar.READER_ACCESS_KEY] ?? "",
-    secretAccessKey: process.env[EnvVar.READER_SECRET_KEY] ?? "",
-    region: AWS_REGION,
-  };
+/**
+ * Resolve reader credentials via the centralized helper.
+ *
+ * Discovery is a best-effort, read-only feature with a documented graceful
+ * no-op path: if reader credentials are not configured, every discover*()
+ * function returns []. We use `tryAssigneeCredentials` (not `require`) so
+ * missing env vars surface as a clean fallback rather than a thrown error.
+ *
+ * Throws `MissingAssigneeCredentialsError` from the catch in the caller's
+ * try/catch — never falls through to ~/.aws/credentials, SSO, or IMDS.
+ */
+function readerCreds() {
+  const creds = tryAssigneeCredentials("reader");
+  if (!creds) {
+    throw new MissingAssigneeCredentialsError(
+      "reader",
+      "ASSIGNEE_READER_ACCESS_KEY_ID",
+      "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+    );
+  }
+  return creds;
 }
 
 function createEc2Client(): EC2Client {
-  const creds = readerCredentials();
   return new EC2Client({
-    region: creds.region,
-    credentials: {
-      accessKeyId: creds.accessKeyId,
-      secretAccessKey: creds.secretAccessKey,
-    },
+    region: AWS_REGION,
+    credentials: readerCreds(),
   });
 }
 
 function createSsmClient(): SSMClient {
-  const creds = readerCredentials();
   return new SSMClient({
-    region: creds.region,
-    credentials: {
-      accessKeyId: creds.accessKeyId,
-      secretAccessKey: creds.secretAccessKey,
-    },
+    region: AWS_REGION,
+    credentials: readerCreds(),
   });
 }
 
 function createRdsClient(): RDSClient {
-  const creds = readerCredentials();
   return new RDSClient({
-    region: creds.region,
-    credentials: {
-      accessKeyId: creds.accessKeyId,
-      secretAccessKey: creds.secretAccessKey,
-    },
+    region: AWS_REGION,
+    credentials: readerCreds(),
   });
 }
 

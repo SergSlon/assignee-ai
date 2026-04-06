@@ -113,23 +113,21 @@ async function uploadStaticSiteFiles(
       await import("../services/cloudfront-setup.js");
     const { PutBucketPolicyCommand, S3Client } =
       await import("@aws-sdk/client-s3");
-    const { operatorCredentials: getOperatorCreds } =
-      await import("../config/operator-credentials.js");
+    const { requireAssigneeCredentials } =
+      await import("../config/aws-credentials.js");
 
     const cfSpinner = clack.spinner();
     cfSpinner.start("Creating CloudFront distribution...");
 
     const cfResult = await createCloudFrontDistribution(bucketName, region);
 
-    // 3. Update bucket policy to use OAC (replaces public-read)
-    const creds = getOperatorCreds();
-    creds.region = region;
+    // 3. Update bucket policy to use OAC (replaces public-read).
+    // Centralized helper throws MissingAssigneeCredentialsError if
+    // ASSIGNEE_OPERATOR_* env vars are not set — never falls through to
+    // ~/.aws/credentials, SSO, or instance metadata.
     const s3Client = new S3Client({
-      region: creds.region,
-      credentials: {
-        accessKeyId: creds.accessKeyId,
-        secretAccessKey: creds.secretAccessKey,
-      },
+      region,
+      credentials: requireAssigneeCredentials("operator"),
     });
     const oacPolicy = generateCloudFrontBucketPolicy(
       bucketName,

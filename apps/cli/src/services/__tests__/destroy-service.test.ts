@@ -4,7 +4,17 @@
  * @see Story 36.1
  */
 
-import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  afterAll,
+} from "vitest";
+import { MissingAssigneeCredentialsError } from "@assignee/core";
+import { requireAssigneeCredentials } from "../../config/aws-credentials.js";
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 const {
@@ -98,10 +108,20 @@ import { destroySingleResource } from "../destroy-service.js";
 // Stub global setTimeout to resolve immediately — avoids real timer waits in
 // pollDeleteStatus and the CloudFront disable-then-delete polling loop.
 const originalSetTimeout = globalThis.setTimeout;
+const ORIGINAL_ENV = { ...process.env };
 beforeEach(() => {
   vi.clearAllMocks();
   // @ts-expect-error — simplified stub for test purposes
   globalThis.setTimeout = (fn: () => void) => originalSetTimeout(fn, 0);
+  // destroy-service now uses requireAssigneeCredentials("operator") for the
+  // DynamoDB and S3 pre-delete hooks. Provide realistic-shaped credentials
+  // so the hooks construct their SDK clients and exercise the mocked send().
+  process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+  process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+});
+afterEach(() => {
+  process.env = { ...ORIGINAL_ENV };
 });
 afterAll(() => {
   globalThis.setTimeout = originalSetTimeout;
@@ -444,6 +464,82 @@ describe("destroySingleResource", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Missing credentials");
+    });
+  });
+
+  // ── Fail-closed credential enforcement for pre-delete hooks ───────────────
+  // When ASSIGNEE_OPERATOR_* env vars are missing, the DynamoDB and S3
+  // pre-delete hooks must NOT call the AWS SDK. They use the centralized
+  // requireAssigneeCredentials("operator") helper which throws
+  // MissingAssigneeCredentialsError; the wrapping try/catch silently
+  // skips the hook and lets the main CloudControl path proceed (which
+  // surfaces its own clean error).
+  describe("fail-closed pre-delete hooks (missing ASSIGNEE_OPERATOR_*)", () => {
+    beforeEach(() => {
+      delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+      // Belt-and-suspenders: shell AWS_* must NOT be honored
+      process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
+      process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
+    });
+
+    it("DynamoDB hook does NOT call SDK send when env vars are missing", async () => {
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      await destroySingleResource({
+        arn: "arn:aws:dynamodb:us-east-1:123456789012:table/orders",
+        resourceType: "AWS::DynamoDB::Table",
+        identifier: "orders",
+        region: "us-east-1",
+      });
+
+      // The pre-delete hook silently skipped — UpdateTable was never sent.
+      // Critical: we did NOT leak to ~/.aws/credentials despite shell vars
+      // being set.
+      expect(mockDdbSend).not.toHaveBeenCalled();
+    });
+
+    it("S3 hook does NOT empty bucket when env vars are missing", async () => {
+      // Mock the s3 client (separate from the destroy-service S3 path).
+      // We assert by virtue of mockDeleteResource still being called and
+      // the destroy completing without ever invoking S3 SDK methods.
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:s3:::production-assets",
+        resourceType: "AWS::S3::Bucket",
+        identifier: "production-assets",
+        region: "us-east-1",
+      });
+
+      // The CloudControl delete proceeds; the empty-bucket pre-delete hook
+      // is silently skipped (its catch swallows the credential error).
+      expect(mockDeleteResource).toHaveBeenCalledWith(
+        "AWS::S3::Bucket",
+        "production-assets",
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it("MissingAssigneeCredentialsError names the operator env vars", () => {
+      // Direct contract test of the helper used by the hooks.
+      try {
+        requireAssigneeCredentials("operator");
+        throw new Error("expected throw");
+      } catch (err) {
+        expect(err).toBeInstanceOf(MissingAssigneeCredentialsError);
+        const msg = (err as Error).message;
+        expect(msg).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
+        expect(msg).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
+      }
     });
   });
 });
