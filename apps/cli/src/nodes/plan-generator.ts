@@ -87,7 +87,7 @@ export function applyToCfnTransforms(
  *
  * Mutates `transformed` in place — removes intermediate keys, adds CFN keys.
  */
-function assembleS3Composites(
+export function assembleS3Composites(
   transformed: Record<string, unknown>,
   options: Record<string, unknown>,
 ): void {
