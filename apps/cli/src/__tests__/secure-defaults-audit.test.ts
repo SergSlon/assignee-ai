@@ -12,6 +12,10 @@ import { SUPPORTED_TYPES_ARRAY, defaultPluginRegistry } from "@assignee/core";
 import type { ResourcePlugin } from "@assignee/core";
 import { evaluateTriggers, loadBestPractices } from "@assignee/best-practices";
 import type { EvalContext } from "@assignee/best-practices";
+import {
+  assembleS3Composites,
+  assembleEc2Storage,
+} from "../nodes/plan-generator.js";
 
 // ---------------------------------------------------------------------------
 // Load all BP rules once
@@ -116,129 +120,8 @@ function applyTransforms(
   return transformed;
 }
 
-/**
- * Assemble S3 composite CFN properties (BucketEncryption, Lifecycle, CORS).
- * Mirrors assembleS3Composites from plan-generator.ts.
- */
-function assembleS3Composites(
-  transformed: Record<string, unknown>,
-  options: Record<string, unknown>,
-): void {
-  // Encryption
-  if (options["BucketEncryption"] === true) {
-    const kmsKey = options["KMSMasterKeyID"];
-    const algorithm = kmsKey && String(kmsKey).trim() ? "aws:kms" : "AES256";
-    transformed["BucketEncryption"] = {
-      ServerSideEncryptionConfiguration: [
-        {
-          ServerSideEncryptionByDefault: {
-            SSEAlgorithm: algorithm,
-            ...(algorithm === "aws:kms"
-              ? { KMSMasterKeyID: String(kmsKey) }
-              : {}),
-          },
-        },
-      ],
-    };
-  } else {
-    delete transformed["BucketEncryption"];
-  }
-  delete transformed["KMSMasterKeyID"];
-
-  // Lifecycle
-  if (options["EnableLifecycle"] === true) {
-    const transitionDays =
-      parseInt(String(options["LifecycleTransitionDays"] ?? "30"), 10) || 30;
-    const expirationDaysRaw = options["LifecycleExpirationDays"];
-    const expirationDays =
-      expirationDaysRaw && String(expirationDaysRaw).trim()
-        ? parseInt(String(expirationDaysRaw), 10)
-        : undefined;
-    const rule: Record<string, unknown> = {
-      Id: "assignee-default-lifecycle",
-      Status: "Enabled",
-      Transitions: [
-        { StorageClass: "STANDARD_IA", TransitionInDays: transitionDays },
-      ],
-    };
-    if (expirationDays && expirationDays > 0) {
-      rule["ExpirationInDays"] = Math.max(expirationDays, transitionDays + 1);
-    }
-    transformed["LifecycleConfiguration"] = { Rules: [rule] };
-  }
-  delete transformed["EnableLifecycle"];
-  delete transformed["LifecycleTransitionDays"];
-  delete transformed["LifecycleExpirationDays"];
-
-  // CORS
-  if (options["EnableCors"] === true) {
-    const origins = String(options["CorsAllowedOrigins"] ?? "*")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const methods = String(options["CorsAllowedMethods"] ?? "GET")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    transformed["CorsConfiguration"] = {
-      CorsRules: [
-        {
-          AllowedHeaders: ["*"],
-          AllowedMethods: methods,
-          AllowedOrigins: origins,
-        },
-      ],
-    };
-  }
-  delete transformed["EnableCors"];
-  delete transformed["CorsAllowedOrigins"];
-  delete transformed["CorsAllowedMethods"];
-
-  // Replication (not assembled without IAM role)
-  delete transformed["EnableReplication"];
-  delete transformed["ReplicationDestinationBucket"];
-}
-
-/**
- * Assemble EC2 BlockDeviceMappings from sub-fields.
- * Mirrors assembleEc2Storage from plan-generator.ts.
- */
-function assembleEc2Storage(
-  transformed: Record<string, unknown>,
-  options: Record<string, unknown>,
-): void {
-  const volumeType = options["EbsVolumeType"];
-  const volumeSize = options["EbsVolumeSize"];
-  const encrypted = options["EbsEncrypted"];
-
-  const hasAnyEbsField =
-    volumeType !== undefined ||
-    volumeSize !== undefined ||
-    encrypted !== undefined;
-
-  if (hasAnyEbsField) {
-    const ebs: Record<string, unknown> = {};
-    ebs["VolumeType"] =
-      volumeType && typeof volumeType === "string" ? volumeType : "gp3";
-
-    if (volumeSize && String(volumeSize).trim() !== "") {
-      const size = parseInt(String(volumeSize), 10);
-      ebs["VolumeSize"] = !isNaN(size) && size >= 1 ? size : 8;
-    } else {
-      ebs["VolumeSize"] = 8;
-    }
-
-    ebs["Encrypted"] = encrypted !== false;
-
-    transformed["BlockDeviceMappings"] = [
-      { DeviceName: "/dev/xvda", Ebs: ebs },
-    ];
-  }
-
-  delete transformed["EbsVolumeType"];
-  delete transformed["EbsVolumeSize"];
-  delete transformed["EbsEncrypted"];
-}
+// assembleS3Composites and assembleEc2Storage imported from plan-generator.ts
+// to avoid logic duplication that could silently diverge.
 
 /**
  * Build the full desiredState for a resource type by simulating "accept all
