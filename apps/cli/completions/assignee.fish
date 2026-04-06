@@ -15,7 +15,7 @@ complete -c assignee -n "__fish_seen_subcommand_from plan" -l output -s o -r -d 
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l no-apply -d 'Skip the apply prompt after plan display'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l no-advice -d 'Skip inline contextual advice generation'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l source -s s -r -d 'Path to local files to upload after provisioning (e.g., static site)'
-complete -c assignee -n "__fish_seen_subcommand_from plan" -l set -r -d 'Pre-set wizard field values (repeatable)'
+complete -c assignee -n "__fish_seen_subcommand_from plan" -l set -r -d 'Pre-set field values, supports human names (e.g., --set size=t3.medium)'
 
 # Options for 'apply'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l wizard -d 'Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)'

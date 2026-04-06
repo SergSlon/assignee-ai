@@ -340,7 +340,10 @@ export const planCommand = new Command(CommandName.PLAN)
             phase1State.executionStatus === ExecutionStatus.FAILED ||
             phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
           ) {
-            renderError(phase1State.errorMessage ?? "Apply failed");
+            renderError(
+              phase1State.errorMessage ?? "Apply failed",
+              "Check the error details above and try again. Run `assignee plan` to regenerate.",
+            );
             return { success: false };
           }
 

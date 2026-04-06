@@ -187,4 +187,56 @@ describe("rdsDbInstancePlugin", () => {
       expect(hints).toMatch(/PerformanceInsights/i);
     });
   });
+
+  describe("companionResources", () => {
+    it("returns SG with port 5432 for postgres engine", () => {
+      const companions = rdsDbInstancePlugin.companionResources!({
+        Engine: "postgres",
+        DBInstanceClass: "db.t3.micro",
+      });
+      expect(companions).toHaveLength(1);
+      expect(companions[0]!.type).toBe("AWS::EC2::SecurityGroup");
+      const ingress = companions[0]!.properties[
+        "SecurityGroupIngress"
+      ] as any[];
+      expect(ingress.some((r: any) => r.FromPort === 5432)).toBe(true);
+    });
+
+    it("returns SG with port 3306 for mysql engine", () => {
+      const companions = rdsDbInstancePlugin.companionResources!({
+        Engine: "mysql",
+        DBInstanceClass: "db.t3.micro",
+      });
+      expect(companions).toHaveLength(1);
+      const ingress = companions[0]!.properties[
+        "SecurityGroupIngress"
+      ] as any[];
+      expect(ingress.some((r: any) => r.FromPort === 3306)).toBe(true);
+    });
+
+    it("returns empty when VpcSecurityGroupIds already specified", () => {
+      const companions = rdsDbInstancePlugin.companionResources!({
+        VPCSecurityGroups: ["sg-abc123"],
+        Engine: "postgres",
+      });
+      // VPCSecurityGroups is not the right key; check with VpcSecurityGroupIds
+      const companions2 = rdsDbInstancePlugin.companionResources!({
+        VpcSecurityGroupIds: ["sg-abc123"],
+        Engine: "postgres",
+      });
+      expect(companions2).toHaveLength(0);
+    });
+
+    it("SG allows 10.0.0.0/8 (private network)", () => {
+      const companions = rdsDbInstancePlugin.companionResources!({
+        Engine: "postgres",
+        DBInstanceClass: "db.r5.large",
+      });
+      expect(companions).toHaveLength(1);
+      const ingress = companions[0]!.properties[
+        "SecurityGroupIngress"
+      ] as any[];
+      expect(ingress.some((r: any) => r.CidrIp === "10.0.0.0/8")).toBe(true);
+    });
+  });
 });

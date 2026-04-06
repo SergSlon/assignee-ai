@@ -209,4 +209,47 @@ describe("ec2InstancePlugin", () => {
       expect(hints).toMatch(/burstable/i);
     });
   });
+
+  describe("companionResources", () => {
+    it("returns SecurityGroup with SSH port when KeyName is set", () => {
+      const companions = ec2InstancePlugin.companionResources!({
+        KeyName: "my-key",
+        InstanceType: "t3.micro",
+      });
+      expect(companions).toHaveLength(1);
+      expect(companions[0]!.type).toBe("AWS::EC2::SecurityGroup");
+      const ingress = companions[0]!.properties[
+        "SecurityGroupIngress"
+      ] as any[];
+      expect(ingress.some((r: any) => r.FromPort === 22)).toBe(true);
+    });
+
+    it("returns SecurityGroup with HTTP/HTTPS when public IP set", () => {
+      const companions = ec2InstancePlugin.companionResources!({
+        AssociatePublicIpAddress: true,
+        InstanceType: "t3.small",
+      });
+      expect(companions).toHaveLength(1);
+      const ingress = companions[0]!.properties[
+        "SecurityGroupIngress"
+      ] as any[];
+      expect(ingress.some((r: any) => r.FromPort === 80)).toBe(true);
+      expect(ingress.some((r: any) => r.FromPort === 443)).toBe(true);
+    });
+
+    it("returns empty when SecurityGroupIds already specified", () => {
+      const companions = ec2InstancePlugin.companionResources!({
+        SecurityGroupIds: ["sg-123abc"],
+        KeyName: "my-key",
+      });
+      expect(companions).toHaveLength(0);
+    });
+
+    it("returns empty when no SSH or public IP signals", () => {
+      const companions = ec2InstancePlugin.companionResources!({
+        InstanceType: "t3.micro",
+      });
+      expect(companions).toHaveLength(0);
+    });
+  });
 });

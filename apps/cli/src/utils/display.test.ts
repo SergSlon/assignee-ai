@@ -3104,3 +3104,30 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
     });
   });
 });
+
+describe("resolveSetKey", () => {
+  it("resolves human alias 'size' to InstanceType", async () => {
+    const { resolveSetKey } = await import("./display.js");
+    expect(resolveSetKey("size")).toBe("InstanceType");
+  });
+
+  it("resolves human alias 'memory' to MemorySize", async () => {
+    const { resolveSetKey } = await import("./display.js");
+    expect(resolveSetKey("memory")).toBe("MemorySize");
+  });
+
+  it("resolves friendly name 'Instance Type' case-insensitively", async () => {
+    const { resolveSetKey } = await import("./display.js");
+    expect(resolveSetKey("instance type")).toBe("InstanceType");
+  });
+
+  it("passes through PascalCase CfnKeys unchanged", async () => {
+    const { resolveSetKey } = await import("./display.js");
+    expect(resolveSetKey("BucketName")).toBe("BucketName");
+  });
+
+  it("returns unknown keys unchanged", async () => {
+    const { resolveSetKey } = await import("./display.js");
+    expect(resolveSetKey("unknownField")).toBe("unknownField");
+  });
+});

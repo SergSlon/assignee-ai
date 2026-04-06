@@ -29,7 +29,7 @@ _assignee() {
             '--no-apply[Skip the apply prompt after plan display]' \
             '--no-advice[Skip inline contextual advice generation]' \
             '--source[Path to local files to upload after provisioning (e.g., static site)]:path:' \
-            '--set[Pre-set wizard field values (repeatable)]:key=value...:'
+            '--set[Pre-set field values, supports human names (e.g., --set size=t3.medium)]:key=value...:'
           ;;
         apply)
           _arguments \

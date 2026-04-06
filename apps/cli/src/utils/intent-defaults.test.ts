@@ -249,6 +249,103 @@ describe("applyIntentOverrides", () => {
     );
   });
 
+  // ── SSM Parameter: "secret" → SecureString ──────────────────────────────
+
+  it('SSM Parameter "secret" intent returns SecureString type', () => {
+    const overrides = getIntentDefaults(
+      "store a secret value",
+      RESOURCE_TYPES.SSM_PARAMETER,
+    );
+    const typeOverride = overrides.find((o) => o.fieldName === "Type");
+    expect(typeOverride).toBeDefined();
+    expect(typeOverride!.value).toBe("SecureString");
+  });
+
+  // ── SNS Topic: "fifo" → FifoTopic true ─────────────────────────────────
+
+  it('SNS Topic "fifo" intent returns FifoTopic true', () => {
+    const overrides = getIntentDefaults(
+      "create a fifo topic",
+      RESOURCE_TYPES.SNS_TOPIC,
+    );
+    const fifoOverride = overrides.find((o) => o.fieldName === "FifoTopic");
+    expect(fifoOverride).toBeDefined();
+    expect(fifoOverride!.value).toBe(true);
+  });
+
+  // ── CloudWatch LogGroup: "compliance" → 365 retention ──────────────────
+
+  it('LogGroup "compliance" intent returns 365-day retention', () => {
+    const overrides = getIntentDefaults(
+      "create a compliance log group",
+      RESOURCE_TYPES.LOGS_LOG_GROUP,
+    );
+    const retentionOverride = overrides.find(
+      (o) => o.fieldName === "RetentionInDays",
+    );
+    expect(retentionOverride).toBeDefined();
+    expect(retentionOverride!.value).toBe("365");
+  });
+
+  // ── ECS Cluster: "fargate" → containerInsights enabled ─────────────────
+
+  it('ECS Cluster "fargate" intent returns containerInsights enabled', () => {
+    const overrides = getIntentDefaults(
+      "create a fargate cluster",
+      RESOURCE_TYPES.ECS_CLUSTER,
+    );
+    const settingsOverride = overrides.find(
+      (o) => o.fieldName === "ClusterSettings",
+    );
+    expect(settingsOverride).toBeDefined();
+    expect(settingsOverride!.value).toEqual([
+      { Name: "containerInsights", Value: "enabled" },
+    ]);
+  });
+
+  // ── ECR Repository: "docker" → IMMUTABLE tags + scan on push ──────────
+
+  it('ECR Repository "docker" intent returns IMMUTABLE tags and scan on push', () => {
+    const overrides = getIntentDefaults(
+      "create a docker repository",
+      RESOURCE_TYPES.ECR_REPOSITORY,
+    );
+    const tagMutability = overrides.find(
+      (o) => o.fieldName === "ImageTagMutability",
+    );
+    const scanOnPush = overrides.find((o) => o.fieldName === "ScanOnPush");
+    expect(tagMutability).toBeDefined();
+    expect(tagMutability!.value).toBe("IMMUTABLE");
+    expect(scanOnPush).toBeDefined();
+    expect(scanOnPush!.value).toBe(true);
+  });
+
+  // ── ELBv2: "web" → application type ───────────────────────────────────
+
+  it('ELBv2 "web" intent returns application type', () => {
+    const overrides = getIntentDefaults(
+      "create a web load balancer",
+      RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+    );
+    const typeOverride = overrides.find((o) => o.fieldName === "Type");
+    expect(typeOverride).toBeDefined();
+    expect(typeOverride!.value).toBe("application");
+  });
+
+  // ── API Gateway V2: "websocket" → WEBSOCKET protocol ──────────────────
+
+  it('API Gateway V2 "websocket" intent returns WEBSOCKET protocol', () => {
+    const overrides = getIntentDefaults(
+      "create a websocket api",
+      RESOURCE_TYPES.APIGATEWAYV2_API,
+    );
+    const protocolOverride = overrides.find(
+      (o) => o.fieldName === "ProtocolType",
+    );
+    expect(protocolOverride).toBeDefined();
+    expect(protocolOverride!.value).toBe("WEBSOCKET");
+  });
+
   it("does not duplicate option if override value already in options", () => {
     const fields: ResourceField[] = [
       {
