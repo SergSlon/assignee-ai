@@ -27,33 +27,60 @@ import type { StructuredTool } from "@langchain/core/tools";
 import type { AgentState } from "../services/graph-state.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { EnvVar } from "../constants/env-vars.js";
 
-// Load .env from project root — try multiple paths for resilience
+/**
+ * Load credentials ONLY from assignee.ai/.env — never from the shell, SSO,
+ * or ~/.aws/credentials. This enforces the 3-user IAM model so tests run
+ * with the same least-privilege credentials production uses.
+ *
+ * If the file doesn't exist or lacks ASSIGNEE_OPERATOR_*, tests that need
+ * AWS will be skipped via skipIfNoCreds().
+ *
+ * Values in .env OVERRIDE any existing shell env vars to prevent leakage.
+ */
 function loadEnv() {
-  const candidates = [
-    path.resolve(import.meta.dirname, "../../../.env"), // from src/e2e/
-    path.resolve(import.meta.dirname, "../../../../.env"), // if deeper
-    path.resolve(process.cwd(), ".env"), // cwd fallback
-  ];
-  for (const envPath of candidates) {
-    try {
-      const content = fs.readFileSync(envPath, "utf-8");
-      for (const line of content.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) continue;
-        const eqIdx = trimmed.indexOf("=");
-        if (eqIdx === -1) continue;
-        const key = trimmed.slice(0, eqIdx);
-        const value = trimmed.slice(eqIdx + 1);
-        if (!process.env[key]) process.env[key] = value;
-      }
-      break; // loaded successfully
-    } catch {
-      // try next candidate
-    }
+  // src/e2e/ → cli/ → apps/ → assignee.ai/ (4 levels up from source)
+  const envPath = path.resolve(import.meta.dirname, "../../../../.env");
+  if (!fs.existsSync(envPath)) return;
+
+  const content = fs.readFileSync(envPath, "utf-8");
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx);
+    const value = trimmed.slice(eqIdx + 1);
+    // Override — .env is the source of truth for test credentials
+    process.env[key] = value;
   }
+
+  // Strip any shell-provided credentials that could leak through to AWS SDK
+  // default provider chain (belt-and-suspenders; client code also uses
+  // explicit credentials below).
+  delete process.env["AWS_ACCESS_KEY_ID"];
+  delete process.env["AWS_SECRET_ACCESS_KEY"];
+  delete process.env["AWS_SESSION_TOKEN"];
+  delete process.env["AWS_PROFILE"];
 }
 loadEnv();
+
+/**
+ * Returns explicit operator credentials from .env — never falls through
+ * to the default credential chain. Used by all AWS SDK clients in e2e tests.
+ */
+function operatorCreds(): { accessKeyId: string; secretAccessKey: string } {
+  const accessKeyId = process.env[EnvVar.OPERATOR_ACCESS_KEY];
+  const secretAccessKey = process.env[EnvVar.OPERATOR_SECRET_KEY];
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error(
+      `Missing operator credentials. Set ${EnvVar.OPERATOR_ACCESS_KEY} and ` +
+        `${EnvVar.OPERATOR_SECRET_KEY} in assignee.ai/.env.`,
+    );
+  }
+  return { accessKeyId, secretAccessKey };
+}
 
 let tools: StructuredTool[];
 let mcpClient: Awaited<ReturnType<typeof createMcpClient>>;
@@ -64,7 +91,7 @@ async function sweepStaleResources(): Promise<void> {
   try {
     const { SSMClient, GetParametersByPathCommand, DeleteParameterCommand } =
       await import("@aws-sdk/client-ssm");
-    const ssm = new SSMClient({ region });
+    const ssm = new SSMClient({ region, credentials: operatorCreds() });
     const params = await ssm.send(
       new GetParametersByPathCommand({ Path: "/e2e-test/", Recursive: true }),
     );
@@ -93,7 +120,7 @@ async function sweepStaleResources(): Promise<void> {
   try {
     const { S3Client, ListBucketsCommand, DeleteBucketCommand } =
       await import("@aws-sdk/client-s3");
-    const s3 = new S3Client({ region });
+    const s3 = new S3Client({ region, credentials: operatorCreds() });
     const { Buckets } = await s3.send(new ListBucketsCommand({}));
     for (const b of Buckets ?? []) {
       if (
@@ -115,8 +142,10 @@ async function sweepStaleResources(): Promise<void> {
 
 beforeAll(async () => {
   // Skip if no credentials
-  if (!process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"]) {
-    console.warn("Skipping E2E tests: no AWS credentials configured");
+  if (skipIfNoCreds()) {
+    console.warn(
+      "Skipping E2E tests: no operator credentials in assignee.ai/.env",
+    );
     return;
   }
 
@@ -132,7 +161,7 @@ afterAll(async () => {
 
   // Global sweeper: clean up any stale e2e test resources left by crashed runs.
   // Matches SSM parameters under /e2e-test/ prefix and ECS clusters with e2e names.
-  if (!process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"]) return;
+  if (skipIfNoCreds()) return;
 
   try {
     const region = process.env["AWS_REGION"] ?? "us-east-1";
@@ -140,7 +169,7 @@ afterAll(async () => {
     // Clean stale SSM params under /e2e-test/
     const { SSMClient, GetParametersByPathCommand, DeleteParameterCommand } =
       await import("@aws-sdk/client-ssm");
-    const ssm = new SSMClient({ region });
+    const ssm = new SSMClient({ region, credentials: operatorCreds() });
     try {
       const params = await ssm.send(
         new GetParametersByPathCommand({ Path: "/e2e-test/", Recursive: true }),
@@ -177,7 +206,10 @@ afterAll(async () => {
     // Clean stale ECS clusters with e2e/test names via tagging API
     const { ResourceGroupsTaggingAPIClient, GetResourcesCommand } =
       await import("@aws-sdk/client-resource-groups-tagging-api");
-    const tagging = new ResourceGroupsTaggingAPIClient({ region });
+    const tagging = new ResourceGroupsTaggingAPIClient({
+      region,
+      credentials: operatorCreds(),
+    });
     try {
       const tagged = await tagging.send(
         new GetResourcesCommand({
@@ -196,7 +228,10 @@ afterAll(async () => {
           // Use CloudControl to delete (available via existing SDK)
           const { CloudControlClient, DeleteResourceCommand } =
             await import("@aws-sdk/client-cloudcontrol");
-          const cc = new CloudControlClient({ region });
+          const cc = new CloudControlClient({
+            region,
+            credentials: operatorCreds(),
+          });
           try {
             await cc.send(
               new DeleteResourceCommand({
@@ -220,11 +255,11 @@ afterAll(async () => {
   }
 }, 30_000);
 
-function skipIfNoCreds() {
-  if (!process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"]) {
-    return true;
-  }
-  return false;
+function skipIfNoCreds(): boolean {
+  return (
+    !process.env[EnvVar.OPERATOR_ACCESS_KEY] ||
+    !process.env[EnvVar.OPERATOR_SECRET_KEY]
+  );
 }
 
 describe("E2E: S3 bucket plan", () => {
@@ -367,6 +402,7 @@ describe("E2E: SSM Parameter plan + apply + destroy", () => {
         await import("@aws-sdk/client-ssm");
       const ssm = new SSMClient({
         region: process.env["AWS_REGION"] ?? "us-east-1",
+        credentials: operatorCreds(),
       });
       await ssm.send(new DeleteParameterCommand({ Name: paramName }));
       console.log(`E2E cleanup: deleted SSM parameter ${paramName}`);
