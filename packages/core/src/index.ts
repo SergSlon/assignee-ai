@@ -77,6 +77,7 @@ export type {
   AssigneeConfig,
   ConfigDefaults,
   ConfigPreferences,
+  ConfigBudget,
   ConfigNaming,
   AutoFixModeType,
 } from "./config/index.js";

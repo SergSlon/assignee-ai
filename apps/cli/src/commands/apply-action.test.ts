@@ -244,7 +244,7 @@ describe("applyCommand — fresh intent flow (run callback)", () => {
 
     expect(renderError).toHaveBeenCalledWith(
       "Unsupported type",
-      expect.stringContaining("Supported types"),
+      expect.stringContaining("What you can create"),
     );
     expect(result.success).toBe(false);
   });
@@ -328,7 +328,7 @@ describe("applyCommand — phase 1 status combinations (gap coverage)", () => {
     expect(result.success).toBe(false);
   });
 
-  it("PENDING + preflightPassed=false (BP blocked) — returns success, no provisioning", async () => {
+  it("PENDING + preflightPassed=false (BP blocked) — returns failure (exit 1), no provisioning", async () => {
     const ctx = makeCtx(() =>
       Promise.resolve({
         executionStatus: ExecutionStatus.PENDING,
@@ -342,10 +342,10 @@ describe("applyCommand — phase 1 status combinations (gap coverage)", () => {
 
     const result = await capturedOpts!.run(ctx);
 
-    // BP-blocked apply shows plan box (handled by result_formatter), not an error
-    expect(result.success).toBe(true);
+    // BP-blocked apply returns failure so CI can detect it (plan box still rendered)
+    expect(result.success).toBe(false);
     expect(runProvisioningLoop).not.toHaveBeenCalled();
-    // Should NOT render an error — plan box with findings is the expected UX
+    // Should NOT render an error through renderError — plan box with findings is the expected UX
     expect(renderError).not.toHaveBeenCalled();
   });
 

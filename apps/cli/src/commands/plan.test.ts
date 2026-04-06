@@ -276,7 +276,8 @@ describe("planCommand — run callback (no --no-apply)", () => {
       expect.stringContaining("Cannot apply"),
     );
     expect(renderApplyNowConfirm).not.toHaveBeenCalled();
-    expect(result.success).toBe(true);
+    // Exit non-zero so CI can detect blocking findings
+    expect(result.success).toBe(false);
   });
 
   it("T2.6: TTY + preflightPassed=false but no blocking findings after fix → shows apply prompt", async () => {
@@ -425,7 +426,7 @@ describe("planCommand — run callback (no --no-apply)", () => {
 
     expect(renderError).toHaveBeenCalledWith(
       "Unsupported",
-      expect.stringContaining("Supported types"),
+      expect.stringContaining("What you can create"),
     );
     expect(result.success).toBe(false);
   });

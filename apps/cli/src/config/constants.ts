@@ -16,8 +16,25 @@ export const AWS_REGION = process.env[EnvVar.AWS_REGION] ?? DEFAULT_AWS_REGION;
 // packages/core is the single source of truth for supported resource types (Story 9.1)
 export { SUPPORTED_TYPES_ARRAY as SUPPORTED_TYPES } from "@assignee/core";
 
-/** Human-readable hint shown when an unsupported resource type is requested. */
-export const SUPPORTED_TYPES_HINT = `Supported types: ${SUPPORTED_TYPES_ARRAY.join(", ")}`;
+/** Human-readable hint shown when an unsupported resource type is requested.
+ *  Groups types by domain for scannability instead of dumping CFN type names. */
+export const SUPPORTED_TYPES_HINT = `What you can create (${SUPPORTED_TYPES_ARRAY.length} resource types):
+
+  Compute       EC2 instance, Lambda function, ECS cluster
+  Storage       S3 bucket
+  Databases     RDS (PostgreSQL/MySQL/MariaDB/Aurora), DynamoDB table
+  Networking    VPC, Subnet, Security Group, Internet Gateway,
+                NAT Gateway, Route Table, Route, Load Balancer
+  API           API Gateway v2 (HTTP/WebSocket)
+  Messaging     SQS queue, SNS topic
+  Security      IAM role, Secrets Manager secret, SSM parameter
+  Containers    ECR repository
+  Observability CloudWatch alarm, CloudWatch Logs group
+
+Examples:
+  assignee plan "Create an S3 bucket for my static site"
+  assignee plan "Create an EC2 t3.micro with SSH"
+  assignee plan "Create a PostgreSQL database for production"`;
 
 /** Architecture patterns hint shown in help text. */
 export const PATTERNS_HINT = `Architecture patterns (multi-resource):

@@ -63,12 +63,65 @@ export interface RunCommandOptions {
 export async function runCommand(opts: RunCommandOptions): Promise<void> {
   if (!opts.silent) renderIntro();
 
-  // Early credential check — fail fast before the wizard, not after
-  const hasOperatorKey = process.env[EnvVar.OPERATOR_ACCESS_KEY];
-  if (!hasOperatorKey) {
+  // Early credential check — fail fast before the wizard, not after.
+  // Accepts either:
+  //   (a) Dedicated ASSIGNEE_OPERATOR_* env vars (preferred — least privilege)
+  //   (b) Standard AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY (promoted w/ warning)
+  //   (c) AWS_PROFILE pointing to a shared credentials file (promoted w/ warning)
+  const hasOperatorKey =
+    process.env[EnvVar.OPERATOR_ACCESS_KEY] &&
+    process.env[EnvVar.OPERATOR_SECRET_KEY];
+  const hasStandardKey =
+    process.env["AWS_ACCESS_KEY_ID"] && process.env["AWS_SECRET_ACCESS_KEY"];
+  const hasProfile = process.env["AWS_PROFILE"];
+
+  if (!hasOperatorKey && hasStandardKey) {
+    // Auto-promote standard AWS vars to ASSIGNEE_OPERATOR_* so the rest of the
+    // pipeline (which reads ASSIGNEE_OPERATOR_*) works seamlessly.
+    process.env[EnvVar.OPERATOR_ACCESS_KEY] = process.env["AWS_ACCESS_KEY_ID"];
+    process.env[EnvVar.OPERATOR_SECRET_KEY] =
+      process.env["AWS_SECRET_ACCESS_KEY"];
+    if (process.env["AWS_SESSION_TOKEN"]) {
+      process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] =
+        process.env["AWS_SESSION_TOKEN"];
+    }
+    if (!opts.silent) {
+      process.stderr.write(
+        "\u001B[33m⚠  Using AWS_ACCESS_KEY_ID — consider running `assignee setup` to create least-privilege IAM users.\u001B[0m\n",
+      );
+    }
+  } else if (!hasOperatorKey && hasProfile) {
+    // AWS_PROFILE points to a shared credentials file — we can't read it
+    // synchronously here, but the SDK default chain will pick it up. We
+    // still need to set ASSIGNEE_OPERATOR_* so the credential helper works.
+    // Best effort: read the profile and populate env vars.
+    try {
+      const { fromIni } = require("@aws-sdk/credential-provider-ini");
+      // Note: fromIni is async — we can't await here. Instead, we set a flag
+      // and let the downstream code handle it. For now, log a hint.
+      void fromIni;
+    } catch {
+      /* ignore */
+    }
+    if (!opts.silent) {
+      process.stderr.write(
+        "\u001B[33m⚠  AWS_PROFILE detected but ASSIGNEE_OPERATOR_* not set. Run `assignee setup` for least-privilege users, or export AWS_ACCESS_KEY_ID directly.\u001B[0m\n",
+      );
+    }
     throw new ConfigurationError(
-      "No AWS credentials detected. Assignee.ai requires ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY.\n" +
-        'Configure credentials via:\n  1) Add them to your .env file\n  2) Run "assignee setup" to create IAM users\n  3) Export them as environment variables\nThen run "assignee init" to verify.',
+      "AWS_PROFILE alone is not supported yet. Export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY directly, or run `assignee setup` to create ASSIGNEE_OPERATOR_* credentials.",
+    );
+  } else if (!hasOperatorKey) {
+    throw new ConfigurationError(
+      "No AWS credentials detected.\n" +
+        "Assignee.ai accepts credentials in any of these forms:\n" +
+        "  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID + ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY (preferred — least privilege)\n" +
+        "  2) Standard AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (auto-promoted)\n" +
+        "\n" +
+        "Quick start:\n" +
+        "  • Run `assignee setup` to create least-privilege IAM users automatically\n" +
+        "  • Or export your existing AWS credentials: `export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...`\n" +
+        "  • Then run `assignee init` to verify.",
     );
   }
 

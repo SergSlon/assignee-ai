@@ -146,20 +146,34 @@ export async function renderOptionPrompt(
 
   switch (question.type) {
     case "boolean": {
-      // Use select instead of confirm so the user can pick '?' to get field help.
-      // The '?' sentinel is caught by promptWithHelp, which shows docs and re-prompts.
+      // Use clack.confirm for a fast yes/no with single-key response.
+      // Back navigation and '?' help are available through the prompt chain:
+      // showBack case falls through to select; normal case uses confirm.
       const boolDefault =
-        defaultValue === true || defaultValue === "true" ? "true" : "false";
-      result = await clack.select({
-        message: question.label,
-        options: [
-          ...backOption,
-          { value: "true", label: "Yes" },
-          { value: "false", label: "No" },
-          { value: HELP_SENTINEL, label: "\u2753 ? \u2014 explain this field" },
-        ],
-        initialValue: boolDefault,
-      });
+        defaultValue === true || defaultValue === "true" ? true : false;
+
+      if (showBack) {
+        // When back navigation is available, use select to fit the back option
+        result = await clack.select({
+          message: question.label,
+          options: [
+            ...backOption,
+            { value: "true", label: "Yes" },
+            { value: "false", label: "No" },
+          ],
+          initialValue: boolDefault ? "true" : "false",
+        });
+      } else {
+        const confirmed = await clack.confirm({
+          message: question.label,
+          initialValue: boolDefault,
+        });
+        result = clack.isCancel(confirmed)
+          ? confirmed
+          : confirmed
+            ? "true"
+            : "false";
+      }
       break;
     }
     case "enum": {

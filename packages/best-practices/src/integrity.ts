@@ -1,0 +1,214 @@
+/**
+ * BP manifest integrity + freshness tracking.
+ *
+ * M1 (Story 12.4 — Freshness): Report the oldest modification time across
+ * BP files so the CLI can warn users when rules are stale.
+ *
+ * M2 (Story 12.6 — Integrity): Compute a SHA-256 manifest of all BP files
+ * at load time. Compare against a reference manifest (if present) to detect
+ * tampering or corruption.
+ */
+
+import { createHash } from "node:crypto";
+import { readFileSync, statSync, readdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { SKIP_DIRS } from "./loader.js";
+
+/** Freshness status for the BP library. */
+export interface BPFreshness {
+  /** ISO string of the oldest file modification time in the library. */
+  oldestFileDate: string;
+  /** Age of the oldest file in days. */
+  oldestAgeDays: number;
+  /** Total count of BP YAML files. */
+  fileCount: number;
+  /** True when oldest file is > stale threshold (default 180 days). */
+  isStale: boolean;
+  /** Threshold in days that triggered `isStale`. */
+  staleThresholdDays: number;
+}
+
+/** SHA-256 integrity manifest for the BP library. */
+export interface BPManifest {
+  /** Version of the manifest format. */
+  version: 1;
+  /** Overall SHA-256 hash of the sorted per-file hashes. */
+  hash: string;
+  /** Per-file SHA-256 hashes, keyed by relative path. */
+  files: Record<string, string>;
+  /** Total count of files in the manifest. */
+  count: number;
+  /** ISO timestamp when the manifest was generated. */
+  generatedAt: string;
+}
+
+/** Default staleness threshold: 180 days (~6 months). */
+export const DEFAULT_STALE_THRESHOLD_DAYS = 180;
+
+/**
+ * Walk the BP directory and collect per-file metadata (mtime + sha256).
+ * Mirrors loader.ts walking logic.
+ */
+function walkBpFiles(
+  baseDir: string,
+): Array<{ relPath: string; mtime: number; sha256: string }> {
+  const files: Array<{ relPath: string; mtime: number; sha256: string }> = [];
+
+  for (const entry of readdirSync(baseDir)) {
+    if (entry.startsWith(".") || SKIP_DIRS.has(entry)) continue;
+
+    const entryPath = join(baseDir, entry);
+    let isDir: boolean;
+    try {
+      isDir = statSync(entryPath).isDirectory();
+    } catch {
+      continue;
+    }
+    if (!isDir) continue;
+
+    for (const file of readdirSync(entryPath)) {
+      if (!file.endsWith(".yaml") && !file.endsWith(".yml")) continue;
+      const filePath = join(entryPath, file);
+      const stat = statSync(filePath);
+      const content = readFileSync(filePath);
+      const sha256 = createHash("sha256").update(content).digest("hex");
+      files.push({
+        relPath: `${entry}/${file}`,
+        mtime: stat.mtimeMs,
+        sha256,
+      });
+    }
+  }
+
+  // Sort by relPath for deterministic manifest ordering
+  files.sort((a, b) => a.relPath.localeCompare(b.relPath));
+  return files;
+}
+
+/**
+ * Compute freshness stats for the BP library.
+ *
+ * @param baseDir - Base directory containing service subdirectories. Defaults to the loader's base.
+ * @param staleThresholdDays - Age in days after which the library is considered stale.
+ */
+export function computeFreshness(
+  baseDir?: string,
+  staleThresholdDays: number = DEFAULT_STALE_THRESHOLD_DAYS,
+): BPFreshness {
+  const dir = baseDir ?? join(import.meta.dirname, "..");
+  const files = walkBpFiles(dir);
+
+  if (files.length === 0) {
+    return {
+      oldestFileDate: new Date().toISOString(),
+      oldestAgeDays: 0,
+      fileCount: 0,
+      isStale: false,
+      staleThresholdDays,
+    };
+  }
+
+  const oldestMtime = Math.min(...files.map((f) => f.mtime));
+  const ageMs = Date.now() - oldestMtime;
+  const oldestAgeDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+
+  return {
+    oldestFileDate: new Date(oldestMtime).toISOString(),
+    oldestAgeDays,
+    fileCount: files.length,
+    isStale: oldestAgeDays > staleThresholdDays,
+    staleThresholdDays,
+  };
+}
+
+/**
+ * Compute a SHA-256 integrity manifest for the BP library at load time.
+ */
+export function computeManifest(baseDir?: string): BPManifest {
+  const dir = baseDir ?? join(import.meta.dirname, "..");
+  const files = walkBpFiles(dir);
+
+  const perFile: Record<string, string> = {};
+  for (const f of files) perFile[f.relPath] = f.sha256;
+
+  // Overall hash = SHA-256 of the sorted "relPath:sha256" lines
+  const lines = Object.entries(perFile)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([path, hash]) => `${path}:${hash}`)
+    .join("\n");
+  const overallHash = createHash("sha256").update(lines).digest("hex");
+
+  return {
+    version: 1,
+    hash: overallHash,
+    files: perFile,
+    count: files.length,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+/** Result of comparing a runtime manifest against a reference. */
+export interface ManifestVerifyResult {
+  valid: boolean;
+  reason?: string;
+  mismatchedFiles?: string[];
+}
+
+/**
+ * Verify a computed manifest against a reference manifest file on disk.
+ *
+ * If the reference doesn't exist, the manifest is considered "trust on first
+ * use" — valid but unverified. This allows the CLI to run without failing
+ * when no manifest has been generated yet.
+ */
+export function verifyManifest(
+  computed: BPManifest,
+  referencePath: string,
+): ManifestVerifyResult {
+  if (!existsSync(referencePath)) {
+    return {
+      valid: true,
+      reason: "No reference manifest (trust-on-first-use)",
+    };
+  }
+
+  let reference: BPManifest;
+  try {
+    const raw = readFileSync(referencePath, "utf-8");
+    reference = JSON.parse(raw) as BPManifest;
+  } catch (err) {
+    return {
+      valid: false,
+      reason: `Reference manifest is corrupt: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  if (reference.version !== 1) {
+    return {
+      valid: false,
+      reason: `Unsupported manifest version: ${reference.version}`,
+    };
+  }
+
+  if (reference.hash === computed.hash) {
+    return { valid: true };
+  }
+
+  // Hashes differ — find specific mismatched files for diagnostic output
+  const mismatched: string[] = [];
+  const allKeys = new Set([
+    ...Object.keys(reference.files),
+    ...Object.keys(computed.files),
+  ]);
+  for (const key of allKeys) {
+    if (reference.files[key] !== computed.files[key]) {
+      mismatched.push(key);
+    }
+  }
+
+  return {
+    valid: false,
+    reason: `BP library hash mismatch (expected ${reference.hash.slice(0, 12)}…, got ${computed.hash.slice(0, 12)}…). ${mismatched.length} file(s) differ.`,
+    mismatchedFiles: mismatched,
+  };
+}
