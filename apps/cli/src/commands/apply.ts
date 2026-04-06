@@ -52,6 +52,7 @@ import {
   loadCheckpointFromPath,
 } from "../services/checkpoint.js";
 import { checkBudget } from "../services/budget-guard.js";
+import { countSourceFiles } from "../utils/count-source-files.js";
 import {
   loadUserConfig,
   type UserConfig,
@@ -206,7 +207,7 @@ export const applyCommand = new Command(CommandName.APPLY)
   )
   .addHelpText(
     "after",
-    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee apply "${EXAMPLE_S3_INTENT}"\n  assignee apply --checkpoint .assignee/checkpoint-abc123.json\n  assignee apply --no-wizard "Create an S3 bucket named logs-prod"\n  assignee apply "Create an EC2 t3.micro instance"\n  assignee apply "Create a Lambda function for image processing"`,
+    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee apply "${EXAMPLE_S3_INTENT}"\n  assignee apply --checkpoint .assignee/checkpoint-abc123.json\n  assignee apply --wizard "Create an EC2 instance"   # interactive mode\n  assignee apply --yes "Create a Lambda function"    # CI / non-interactive\n  assignee apply --set size=t3.medium "Create an EC2 instance"`,
   )
   .action(
     async (
@@ -291,18 +292,13 @@ export const applyCommand = new Command(CommandName.APPLY)
             ErrorCode.INVALID_SOURCE_DIR,
           );
         }
-        const countFiles = (dir: string): number => {
-          let count = 0;
-          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            if (entry.isDirectory()) {
-              count += countFiles(path.join(dir, entry.name));
-            } else {
-              count++;
-            }
-          }
-          return count;
-        };
-        sourceFileCount = countFiles(resolvedSourceDir);
+        const { count, truncated } = countSourceFiles(resolvedSourceDir);
+        sourceFileCount = count;
+        if (truncated) {
+          process.stderr.write(
+            `⚠  Source directory contains > ${sourceFileCount} files or exceeds depth limit — upload may be partial.\n`,
+          );
+        }
         if (sourceFileCount === 0) {
           throw new AssigneeError(
             `Source directory is empty: ${resolvedSourceDir}`,
@@ -614,7 +610,10 @@ export const applyCommand = new Command(CommandName.APPLY)
             renderError(budgetCheck.message);
             return { success: false };
           }
-          if (budgetCheck.status === "warning") {
+          if (
+            budgetCheck.status === "warning" ||
+            budgetCheck.status === "unparseable"
+          ) {
             process.stderr.write(`\u001B[33m${budgetCheck.message}\u001B[0m\n`);
           }
 

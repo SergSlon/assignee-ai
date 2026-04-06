@@ -466,12 +466,16 @@ export async function destroyAction(
       );
     }
 
-    // Strict confirmation: require "yes"
+    // Strict confirmation: require "yes" (case-insensitive — accept Yes/YES/yes)
     const answer = await clack.text({
       message: 'Type "yes" to destroy this resource',
     });
 
-    if (clack.isCancel(answer) || answer !== "yes") {
+    if (
+      clack.isCancel(answer) ||
+      typeof answer !== "string" ||
+      answer.trim().toLowerCase() !== "yes"
+    ) {
       clack.outro(UserMessage.DESTROY_CANCELLED);
       throw new UserCancelledError(UserMessage.DESTROY_CANCELLED);
     }

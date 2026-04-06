@@ -88,5 +88,13 @@ export function mergeEnvFile(
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  fs.writeFileSync(envPath, output, "utf-8");
+  // Write with 0600 permissions — .env contains AWS credentials.
+  // Writing with mode only affects new files; existing files keep their mode,
+  // so we also chmod after write to harden any pre-existing .env.
+  fs.writeFileSync(envPath, output, { encoding: "utf-8", mode: 0o600 });
+  try {
+    fs.chmodSync(envPath, 0o600);
+  } catch {
+    // chmod may fail on Windows — non-fatal
+  }
 }

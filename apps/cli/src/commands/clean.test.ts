@@ -321,15 +321,21 @@ describe("assignee clean", () => {
       });
     });
 
-    it("calls planBulkDestroy with e2e|test pattern when --resources is passed", async () => {
+    it("calls planBulkDestroy with strict e2e/test prefix pattern when --resources is passed", async () => {
       await run("--resources", "--confirm");
 
       expect(mockPlanBulkDestroy).toHaveBeenCalledWith({
         pattern: expect.any(RegExp),
       });
       const regex = mockPlanBulkDestroy.mock.calls[0]![0].pattern as RegExp;
-      expect(regex.test("e2e-test")).toBe(true);
-      expect(regex.test("my-test-bucket")).toBe(true);
+      // Strict anchored prefixes: e2e-test/, e2e-, assignee-e2e-, poc-apply-test-
+      expect(regex.test("e2e-test-bucket")).toBe(true);
+      expect(regex.test("assignee-e2e-resource")).toBe(true);
+      expect(regex.test("poc-apply-test-abc")).toBe(true);
+      expect(regex.test("bucket/e2e-test/foo")).toBe(true);
+      // Must NOT match production resources whose name merely contains "test"
+      expect(regex.test("my-test-bucket")).toBe(false);
+      expect(regex.test("test-invoice-reports")).toBe(false);
       expect(regex.test("production-db")).toBe(false);
     });
 

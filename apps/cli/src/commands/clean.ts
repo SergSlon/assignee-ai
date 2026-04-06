@@ -92,7 +92,12 @@ function formatResourceTable(resources: ManagedResource[]): string {
 
 /**
  * Handles the --resources flag: discovers and destroys stale e2e/test
- * AWS resources matching the /e2e|test/i pattern.
+ * AWS resources matching a strict prefix pattern.
+ *
+ * Prior version used `/e2e|test/i` which matched any production resource
+ * whose name contained "test" (e.g., `my-test-logs`, `test-invoice-reports`).
+ * New pattern requires an explicit `e2e-test/` path prefix, `e2e-`/`assignee-e2e-`
+ * name prefix, or the `poc-apply-test-` legacy pattern.
  *
  * @returns true if any work was attempted, false if nothing to do
  */
@@ -100,8 +105,10 @@ async function cleanResources(opts: CleanOpts): Promise<void> {
   const dryRun = opts.dryRun === true;
   const autoConfirm = opts.confirm || opts.yes;
 
-  // Discover matching resources
-  const plan = await planBulkDestroy({ pattern: /e2e|test/i });
+  // Discover matching resources — strict prefixes only, anchored
+  const plan = await planBulkDestroy({
+    pattern: /(?:^|\/|:)(e2e-test\/|e2e-|assignee-e2e-|poc-apply-test-)/i,
+  });
 
   if (plan.resources.length === 0) {
     clack.log.info("No stale test resources found.");
