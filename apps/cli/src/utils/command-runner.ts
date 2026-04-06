@@ -91,25 +91,17 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
       );
     }
   } else if (!hasOperatorKey && hasProfile) {
-    // AWS_PROFILE points to a shared credentials file — we can't read it
-    // synchronously here, but the SDK default chain will pick it up. We
-    // still need to set ASSIGNEE_OPERATOR_* so the credential helper works.
-    // Best effort: read the profile and populate env vars.
-    try {
-      const { fromIni } = require("@aws-sdk/credential-provider-ini");
-      // Note: fromIni is async — we can't await here. Instead, we set a flag
-      // and let the downstream code handle it. For now, log a hint.
-      void fromIni;
-    } catch {
-      /* ignore */
-    }
+    // AWS_PROFILE alone is not supported — the SDK default provider chain
+    // (which would read ~/.aws/credentials) is intentionally bypassed by the
+    // aws-credentials.ts helper to enforce least-privilege ASSIGNEE_OPERATOR_*
+    // credentials. Users with AWS_PROFILE must either export keys or run setup.
     if (!opts.silent) {
       process.stderr.write(
         "\u001B[33m⚠  AWS_PROFILE detected but ASSIGNEE_OPERATOR_* not set. Run `assignee setup` for least-privilege users, or export AWS_ACCESS_KEY_ID directly.\u001B[0m\n",
       );
     }
     throw new ConfigurationError(
-      "AWS_PROFILE alone is not supported yet. Export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY directly, or run `assignee setup` to create ASSIGNEE_OPERATOR_* credentials.",
+      "AWS_PROFILE alone is not supported. Export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY directly, or run `assignee setup` to create ASSIGNEE_OPERATOR_* credentials.",
     );
   } else if (!hasOperatorKey) {
     throw new ConfigurationError(

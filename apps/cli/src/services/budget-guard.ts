@@ -29,52 +29,100 @@ export interface BudgetCheckOk {
   status: "ok";
 }
 
+/** Unparseable cost string — fail-closed variant. Returned when a budget
+ * limit is set but the cost string can't be interpreted. The caller must
+ * decide whether to block, prompt, or override. */
+export interface BudgetCheckUnparseable {
+  status: "unparseable";
+  limit: number;
+  rawCost: string;
+  message: string;
+}
+
 export type BudgetCheckResult =
   | BudgetCheckBlocked
   | BudgetCheckWarning
-  | BudgetCheckOk;
+  | BudgetCheckOk
+  | BudgetCheckUnparseable;
+
+/** Sentinel returned by parseMonthlyUsd when the cost is explicitly free/N/A. */
+export const FREE_OR_NA = Symbol("FREE_OR_NA");
+/** Sentinel returned by parseMonthlyUsd when the cost string is unparseable. */
+export const UNPARSEABLE = Symbol("UNPARSEABLE");
+export type ParseMonthlyResult =
+  | number
+  | typeof FREE_OR_NA
+  | typeof UNPARSEABLE;
 
 /**
- * Parse the estimatedMonthlyCost string and return a monthly USD amount.
- * Returns undefined if the string is "Free", "N/A", or unparseable.
+ * Parse the estimatedMonthlyCost string into a monthly USD total.
  *
- * Handles the common formats emitted by pricing strategies:
+ * Returns one of:
+ *   - `number` — total monthly USD (sum of all `$amount` terms, converted per unit)
+ *   - `FREE_OR_NA` — explicit "Free" / "N/A" cost (safe to proceed)
+ *   - `UNPARSEABLE` — string contains data but couldn't be interpreted (fail-closed)
+ *
+ * Handles:
  *   - "$0.0104/hour" → hourly × 730
  *   - "$7.59/mo" → direct
  *   - "$0.023/GB-month" → direct (approximation, per-GB is usage-based)
- *   - "Free" / "N/A" → undefined
- *   - Prefixed number: "$0.10"  → as monthly
+ *   - "$0.023/GB-month + $0.0004/request" → sums all terms
+ *   - "$1,200.50/mo" → handles thousands separators
+ *   - "Free" / "N/A" / "unavailable" → FREE_OR_NA
+ *   - "$0.10" (no unit) → treated as monthly
+ *   - "See pricing calculator" or any string without "$" → UNPARSEABLE
  */
-export function parseMonthlyUsd(cost: string | undefined): number | undefined {
-  if (!cost) return undefined;
+export function parseMonthlyUsd(cost: string | undefined): ParseMonthlyResult {
+  if (!cost) return FREE_OR_NA;
   const trimmed = cost.trim();
-  if (
-    !trimmed ||
-    trimmed === "Free" ||
-    trimmed === "N/A" ||
-    trimmed.includes("unavailable")
-  ) {
-    return undefined;
-  }
+  if (!trimmed) return FREE_OR_NA;
 
-  // Match first "$<number>" in the string
-  const match = trimmed.match(/\$([\d]+(?:\.\d+)?)/);
-  if (!match) return undefined;
-  const amount = parseFloat(match[1]!);
-  if (isNaN(amount)) return undefined;
-
+  // Explicit free/N/A sentinels — safe (no cost to limit)
   const lower = trimmed.toLowerCase();
-  if (lower.includes("/hour") || lower.includes("/hr")) {
-    return amount * 730; // ~730 hours per month
+  if (
+    lower === "free" ||
+    lower === "n/a" ||
+    lower === "na" ||
+    lower.includes("unavailable") ||
+    lower === "$0" ||
+    lower === "$0.00"
+  ) {
+    return FREE_OR_NA;
   }
-  if (lower.includes("/day")) {
-    return amount * 30;
+
+  // Find ALL "$<number>" occurrences (handles thousands separators like $1,200.50)
+  // Pattern: $ followed by digits with optional commas and optional decimal
+  const matches = Array.from(trimmed.matchAll(/\$\s*([\d,]+(?:\.\d+)?)/g));
+  if (matches.length === 0) return UNPARSEABLE;
+
+  // Helper: find the unit multiplier for a single $ amount by looking at
+  // the surrounding substring (from this match to the next, or end of string)
+  const findMultiplier = (segment: string): number => {
+    const s = segment.toLowerCase();
+    if (s.includes("/hour") || s.includes("/hr")) return 730;
+    if (s.includes("/day")) return 30;
+    if (s.includes("/minute") || s.includes("/min")) return 43200;
+    // /mo, /month, /gb-month, /gb-mo, or no unit → monthly direct
+    return 1;
+  };
+
+  let total = 0;
+  for (let i = 0; i < matches.length; i++) {
+    const match = matches[i]!;
+    const rawAmount = match[1]!.replace(/,/g, "");
+    const amount = parseFloat(rawAmount);
+    if (isNaN(amount)) return UNPARSEABLE;
+
+    // Segment from this match to the next match (or end of string)
+    const segmentStart = match.index ?? 0;
+    const nextStart = matches[i + 1]?.index ?? trimmed.length;
+    const segment = trimmed.slice(segmentStart, nextStart);
+    const multiplier = findMultiplier(segment);
+
+    total += amount * multiplier;
   }
-  if (lower.includes("/minute") || lower.includes("/min")) {
-    return amount * 43200;
-  }
-  // /mo, /month, /GB-month, /GB-mo → treat as monthly direct
-  return amount;
+
+  return total;
 }
 
 /**
@@ -93,13 +141,31 @@ export function checkBudget(
   }
 
   const limit = budget.monthly_limit_usd;
-  const estimated = parseMonthlyUsd(estimatedMonthlyCost);
+  const parsed = parseMonthlyUsd(estimatedMonthlyCost);
 
-  if (estimated === undefined) {
-    // Can't evaluate — don't block free/N/A resources
+  // Explicit free/N/A — safe
+  if (parsed === FREE_OR_NA) {
     return { status: "ok" };
   }
 
+  // Fail-closed: cost string is present but unparseable. The guard can't
+  // verify the limit, so return an "unparseable" result so the caller can
+  // decide (default behavior in plan/apply: warn but don't block, since
+  // unparseable strings are typically compound/tiered pricing descriptions
+  // the user should review manually).
+  if (parsed === UNPARSEABLE) {
+    const limitFormatted = `$${limit.toFixed(2)}/mo`;
+    return {
+      status: "unparseable",
+      limit,
+      rawCost: estimatedMonthlyCost ?? "",
+      message:
+        `⚠  Cost '${estimatedMonthlyCost}' cannot be parsed — budget limit ${limitFormatted} cannot be verified. ` +
+        `Review the cost breakdown manually before proceeding.`,
+    };
+  }
+
+  const estimated = parsed;
   if (estimated <= limit) {
     return { status: "ok" };
   }

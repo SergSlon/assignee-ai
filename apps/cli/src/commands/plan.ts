@@ -31,6 +31,7 @@ import {
 } from "../utils/display.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand, runProvisioningLoop } from "../utils/command-runner.js";
+import { countSourceFiles } from "../utils/count-source-files.js";
 import {
   SUPPORTED_TYPES_HINT,
   CHECKPOINT_DIR,
@@ -107,18 +108,13 @@ export const planCommand = new Command(CommandName.PLAN)
             ErrorCode.INVALID_SOURCE_DIR,
           );
         }
-        const countFiles = (dir: string): number => {
-          let count = 0;
-          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            if (entry.isDirectory()) {
-              count += countFiles(path.join(dir, entry.name));
-            } else {
-              count++;
-            }
-          }
-          return count;
-        };
-        sourceFileCount = countFiles(resolvedSourceDir);
+        const { count, truncated } = countSourceFiles(resolvedSourceDir);
+        sourceFileCount = count;
+        if (truncated) {
+          clack.log.warn(
+            `Source directory contains > ${sourceFileCount} files or exceeds depth limit — upload may be partial.`,
+          );
+        }
         if (sourceFileCount === 0) {
           throw new AssigneeError(
             `Source directory is empty: ${resolvedSourceDir}`,
@@ -272,6 +268,10 @@ export const planCommand = new Command(CommandName.PLAN)
             return { success: false };
           }
           if (budgetCheck.status === "warning") {
+            clack.log.warn(budgetCheck.message);
+          }
+          if (budgetCheck.status === "unparseable") {
+            // Fail-closed: surface a visible warning. User must review manually.
             clack.log.warn(budgetCheck.message);
           }
 

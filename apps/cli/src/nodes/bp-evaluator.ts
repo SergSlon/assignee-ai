@@ -20,7 +20,9 @@ import {
   type EvalContext,
 } from "@assignee/best-practices";
 import type { StructuredTool } from "@langchain/core/tools";
+import * as fs from "node:fs";
 import * as path from "node:path";
+import { createRequire } from "node:module";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 import { enrichBpWithMcp } from "./advice/bp-mcp-enricher.js";
@@ -46,31 +48,30 @@ function loadCached(): BestPractice[] {
     if (!integrityWarningEmitted) {
       integrityWarningEmitted = true;
       try {
-        // Freshness — warn if oldest BP YAML is > 180 days old
+        // Freshness — warn if oldest BP YAML is > 180 days old.
+        // Warning is emitted to stderr unconditionally (no TTY gate) so
+        // piped output and CI still see staleness warnings.
         const freshness = computeFreshness();
-        if (freshness.isStale && process.stderr.isTTY) {
+        if (freshness.isStale) {
           process.stderr.write(
-            `\u001B[33m⚠  Best-practice rules are stale (oldest file is ${freshness.oldestAgeDays} days old, threshold is ${freshness.staleThresholdDays}). ` +
-              `Consider updating assignee-ai.\u001B[0m\n`,
+            `⚠  Best-practice rules are stale (oldest file is ${freshness.oldestAgeDays} days old, threshold is ${freshness.staleThresholdDays}). ` +
+              `Consider updating assignee-ai.\n`,
           );
         }
 
-        // Integrity — verify against manifest if present
+        // Integrity — verify against manifest if present.
+        // Manifest path resolution: try multiple candidates so it works for
+        //   (a) monorepo dev: apps/cli/src/nodes/bp-evaluator.ts → ../../../../packages/best-practices/
+        //   (b) npm-installed CLI: node_modules/@assignee/cli/dist/nodes → ../../@assignee/best-practices/
+        //   (c) published tarball: next to cli via createRequire resolution
         const computed = computeManifest();
-        // Manifest lives at packages/best-practices/manifest.json relative to the loaded dir
-        // computeFreshness/computeManifest use the same baseDir logic
-        const manifestPath = path.join(
-          import.meta.dirname ?? process.cwd(),
-          "..",
-          "..",
-          "packages",
-          "best-practices",
-          "manifest.json",
-        );
+        const manifestPath = resolveBpManifestPath();
         const verification = verifyManifest(computed, manifestPath);
-        if (!verification.valid && process.stderr.isTTY) {
+        if (!verification.valid) {
+          // Integrity failures are emitted unconditionally to stderr (no TTY gate).
+          // CI and piped output must see integrity warnings or the feature is theater.
           process.stderr.write(
-            `\u001B[31m⚠  BP manifest integrity check failed: ${verification.reason}\u001B[0m\n`,
+            `⚠  BP manifest integrity check failed: ${verification.reason}\n`,
           );
           if (
             verification.mismatchedFiles &&
@@ -87,6 +88,68 @@ function loadCached(): BestPractice[] {
     }
   }
   return cachedPractices;
+}
+
+/**
+ * Resolve the BP manifest path across install layouts.
+ * Returns the first path that exists, or the first candidate if none do
+ * (which causes `verifyManifest` to enter trust-on-first-use mode).
+ */
+function resolveBpManifestPath(): string {
+  const dirname = import.meta.dirname ?? process.cwd();
+
+  const candidates: string[] = [
+    // Monorepo dev (apps/cli/src/nodes/)
+    path.join(
+      dirname,
+      "..",
+      "..",
+      "..",
+      "..",
+      "packages",
+      "best-practices",
+      "manifest.json",
+    ),
+    // Monorepo dist (apps/cli/dist/nodes/)
+    path.join(
+      dirname,
+      "..",
+      "..",
+      "..",
+      "packages",
+      "best-practices",
+      "manifest.json",
+    ),
+    // Installed layout: resolve via package name
+    path.join(
+      dirname,
+      "..",
+      "..",
+      "..",
+      "@assignee",
+      "best-practices",
+      "manifest.json",
+    ),
+  ];
+
+  // Prefer createRequire.resolve for installed layouts — most reliable
+  try {
+    const req = createRequire(import.meta.url);
+    const resolved = req.resolve("@assignee/best-practices/manifest.json");
+    candidates.unshift(resolved);
+  } catch {
+    // createRequire.resolve may fail if manifest.json isn't in the package exports
+  }
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      // continue
+    }
+  }
+  // Return the first candidate so verifyManifest returns trust-on-first-use
+  return candidates[0]!;
 }
 
 /**

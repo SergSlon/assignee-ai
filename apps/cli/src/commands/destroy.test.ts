@@ -324,14 +324,43 @@ describe("assignee destroy", () => {
       expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
     });
 
-    it('"YES" input aborts', async () => {
+    it('"YES" (uppercase) is accepted — confirmation is case-insensitive', async () => {
       mockResolveResource.mockResolvedValue(mockResource);
       mockText.mockResolvedValue("YES");
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        identifier: mockResource.identifier,
+        resourceType: mockResource.resourceType,
+      });
 
-      await expect(destroyAction("test-bucket", {})).rejects.toThrow(
-        "Destroy cancelled.",
-      );
-      expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
+      await destroyAction("test-bucket", {});
+      expect(mockDestroySingleResource).toHaveBeenCalled();
+    });
+
+    it('"Yes" (mixed case) is accepted', async () => {
+      mockResolveResource.mockResolvedValue(mockResource);
+      mockText.mockResolvedValue("Yes");
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        identifier: mockResource.identifier,
+        resourceType: mockResource.resourceType,
+      });
+
+      await destroyAction("test-bucket", {});
+      expect(mockDestroySingleResource).toHaveBeenCalled();
+    });
+
+    it('whitespace-padded "yes" is accepted (trimmed)', async () => {
+      mockResolveResource.mockResolvedValue(mockResource);
+      mockText.mockResolvedValue("  yes  ");
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        identifier: mockResource.identifier,
+        resourceType: mockResource.resourceType,
+      });
+
+      await destroyAction("test-bucket", {});
+      expect(mockDestroySingleResource).toHaveBeenCalled();
     });
 
     it('"no" input aborts', async () => {
