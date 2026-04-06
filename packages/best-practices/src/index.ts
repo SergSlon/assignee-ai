@@ -1,4 +1,15 @@
 export { loadBestPractices, BPSchemaError, SKIP_DIRS } from "./loader.js";
+export {
+  computeFreshness,
+  computeManifest,
+  verifyManifest,
+  DEFAULT_STALE_THRESHOLD_DAYS,
+} from "./integrity.js";
+export type {
+  BPFreshness,
+  BPManifest,
+  ManifestVerifyResult,
+} from "./integrity.js";
 export { bestPracticeSchema } from "./schema.js";
 export { evaluateTriggers } from "./evaluate.js";
 export type { EvalContext } from "./evaluate.js";

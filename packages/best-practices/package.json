@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "dev": "tsc --watch",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "generate-manifest": "tsx scripts/generate-manifest.ts"
   },
   "dependencies": {
     "yaml": "^2.7.0",

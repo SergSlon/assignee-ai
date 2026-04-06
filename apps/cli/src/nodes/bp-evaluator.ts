@@ -12,27 +12,79 @@ import {
   loadBestPractices,
   evaluateTriggers,
   Severity,
+  computeFreshness,
+  computeManifest,
+  verifyManifest,
   type BestPractice,
   type BPFinding,
   type EvalContext,
 } from "@assignee/best-practices";
 import type { StructuredTool } from "@langchain/core/tools";
+import * as path from "node:path";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 import { enrichBpWithMcp } from "./advice/bp-mcp-enricher.js";
 
 /** Module-level cache to avoid reloading YAML files on every invocation. */
 let cachedPractices: BestPractice[] | undefined;
+/** Track whether freshness/integrity warnings were already emitted this process. */
+let integrityWarningEmitted = false;
 
 /**
  * Loads best practices from YAML files, caching the result for the
- * lifetime of the process.
+ * lifetime of the process. Also runs freshness + integrity checks on first
+ * load and emits warnings to stderr (once per process).
  *
  * @returns Array of validated BestPractice entries
  */
 function loadCached(): BestPractice[] {
   if (cachedPractices === undefined) {
     cachedPractices = loadBestPractices();
+
+    // Run freshness + integrity checks on first load (Stories 12.4 + 12.6).
+    // Warnings only — never block. Failures are non-fatal.
+    if (!integrityWarningEmitted) {
+      integrityWarningEmitted = true;
+      try {
+        // Freshness — warn if oldest BP YAML is > 180 days old
+        const freshness = computeFreshness();
+        if (freshness.isStale && process.stderr.isTTY) {
+          process.stderr.write(
+            `\u001B[33m⚠  Best-practice rules are stale (oldest file is ${freshness.oldestAgeDays} days old, threshold is ${freshness.staleThresholdDays}). ` +
+              `Consider updating assignee-ai.\u001B[0m\n`,
+          );
+        }
+
+        // Integrity — verify against manifest if present
+        const computed = computeManifest();
+        // Manifest lives at packages/best-practices/manifest.json relative to the loaded dir
+        // computeFreshness/computeManifest use the same baseDir logic
+        const manifestPath = path.join(
+          import.meta.dirname ?? process.cwd(),
+          "..",
+          "..",
+          "packages",
+          "best-practices",
+          "manifest.json",
+        );
+        const verification = verifyManifest(computed, manifestPath);
+        if (!verification.valid && process.stderr.isTTY) {
+          process.stderr.write(
+            `\u001B[31m⚠  BP manifest integrity check failed: ${verification.reason}\u001B[0m\n`,
+          );
+          if (
+            verification.mismatchedFiles &&
+            verification.mismatchedFiles.length > 0
+          ) {
+            process.stderr.write(
+              `   Mismatched files: ${verification.mismatchedFiles.slice(0, 5).join(", ")}${verification.mismatchedFiles.length > 5 ? "…" : ""}\n`,
+            );
+          }
+        }
+      } catch {
+        // Integrity checks are best-effort — never break loading
+      }
+    }
   }
   return cachedPractices;
 }
@@ -42,6 +94,7 @@ function loadCached(): BestPractice[] {
  */
 export function resetBPCache(): void {
   cachedPractices = undefined;
+  integrityWarningEmitted = false;
 }
 
 /**

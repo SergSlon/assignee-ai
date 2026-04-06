@@ -415,10 +415,15 @@ describe("config constants", () => {
     expect(CHECKPOINT_DEFAULT_TTL_HOURS).toBe(72);
   });
 
-  it("SUPPORTED_TYPES_HINT includes supported types", async () => {
+  it("SUPPORTED_TYPES_HINT includes category groupings and examples", async () => {
     const { SUPPORTED_TYPES_HINT } = await import("../config/constants.js");
-    expect(SUPPORTED_TYPES_HINT).toContain("Supported types:");
-    expect(SUPPORTED_TYPES_HINT).toContain("AWS::S3::Bucket");
+    // New format groups by domain instead of dumping raw CFN type names
+    expect(SUPPORTED_TYPES_HINT).toContain("What you can create");
+    expect(SUPPORTED_TYPES_HINT).toContain("Compute");
+    expect(SUPPORTED_TYPES_HINT).toContain("Databases");
+    expect(SUPPORTED_TYPES_HINT).toContain("Networking");
+    expect(SUPPORTED_TYPES_HINT).toContain("S3 bucket");
+    expect(SUPPORTED_TYPES_HINT).toContain("Examples:");
   });
 
   it("AWS_REGION defaults to us-east-1", async () => {

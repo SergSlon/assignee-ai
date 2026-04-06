@@ -80,7 +80,7 @@ describe("first-run", () => {
   });
 
   describe("showFirstRunWelcome", () => {
-    it("writes welcome message to stderr when TTY", () => {
+    it("writes guided welcome to stderr when TTY (contains version and next steps)", () => {
       const origIsTTY = process.stderr.isTTY;
       Object.defineProperty(process.stderr, "isTTY", {
         value: true,
@@ -89,9 +89,11 @@ describe("first-run", () => {
 
       showFirstRunWelcome("0.1.0");
 
-      expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Assignee v0.1.0"),
-      );
+      const allOutput = stderrSpy.mock.calls.map((c) => String(c[0])).join("");
+      // Should contain the version
+      expect(allOutput).toContain("Assignee.ai v0.1.0");
+      // Should include credential detection or next-steps guidance
+      expect(allOutput).toMatch(/credentials|assignee plan|AWS_ACCESS_KEY_ID/);
 
       Object.defineProperty(process.stderr, "isTTY", {
         value: origIsTTY,
@@ -99,7 +101,7 @@ describe("first-run", () => {
       });
     });
 
-    it("does not write to stderr when not TTY", () => {
+    it("writes minimal message when not TTY (plain one-liner)", () => {
       const origIsTTY = process.stderr.isTTY;
       Object.defineProperty(process.stderr, "isTTY", {
         value: false,
@@ -108,13 +110,13 @@ describe("first-run", () => {
 
       showFirstRunWelcome("0.1.0");
 
-      // stderrSpy may have been called by logger during module import, check the specific message
-      const calls = stderrSpy.mock.calls.map((c) => c[0]);
-      const welcomeCalls = calls.filter(
-        (c: unknown) =>
-          typeof c === "string" && (c as string).includes("Assignee"),
-      );
-      expect(welcomeCalls).toHaveLength(0);
+      // Non-TTY path writes a simple one-liner with version, no ANSI codes
+      const calls = stderrSpy.mock.calls.map((c) => String(c[0]));
+      const welcomeCall = calls.find((c) => c.includes("Assignee v"));
+      expect(welcomeCall).toBeDefined();
+      expect(welcomeCall).toContain("0.1.0");
+      // Should NOT contain ANSI escape codes in non-TTY mode
+      expect(welcomeCall).not.toContain("\u001B[");
 
       Object.defineProperty(process.stderr, "isTTY", {
         value: origIsTTY,

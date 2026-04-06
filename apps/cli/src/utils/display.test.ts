@@ -507,14 +507,14 @@ describe("renderOptionPrompt — TTY mode", () => {
     expect(result).toBe("hello");
   });
 
-  it("calls clack.select for boolean type", async () => {
-    vi.mocked(select).mockResolvedValueOnce("true");
+  it("calls clack.confirm for boolean type", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(true);
     const { renderOptionPrompt } = await import("./display.js");
     const result = await renderOptionPrompt(
       makeField({ type: "boolean", label: "Enable?" }),
       resolved,
     );
-    expect(select).toHaveBeenCalledWith(
+    expect(confirm).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Enable?" }),
     );
     expect(result).toBe(true);
@@ -1961,24 +1961,24 @@ describe("renderOptionPrompt — edge cases", () => {
     });
   });
 
-  it("boolean field — '?' returns '?' (for help dispatch)", async () => {
-    vi.mocked(select).mockResolvedValueOnce("?");
-    const { renderOptionPrompt } = await import("./display.js");
-    const result = await renderOptionPrompt(
-      makeField({ type: "boolean", label: "Enable?" }),
-      resolved,
-    );
-    expect(result).toBe("?");
-  });
-
-  it("boolean field — false", async () => {
-    vi.mocked(select).mockResolvedValueOnce("false");
+  it("boolean field — false (via clack.confirm)", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(false);
     const { renderOptionPrompt } = await import("./display.js");
     const result = await renderOptionPrompt(
       makeField({ type: "boolean", label: "Enable?" }),
       resolved,
     );
     expect(result).toBe(false);
+  });
+
+  it("boolean field — true (via clack.confirm)", async () => {
+    vi.mocked(confirm).mockResolvedValueOnce(true);
+    const { renderOptionPrompt } = await import("./display.js");
+    const result = await renderOptionPrompt(
+      makeField({ type: "boolean", label: "Enable?" }),
+      resolved,
+    );
+    expect(result).toBe(true);
   });
 
   it("string field — empty string returns undefined (skipped)", async () => {

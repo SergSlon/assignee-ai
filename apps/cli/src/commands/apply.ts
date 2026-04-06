@@ -51,6 +51,7 @@ import {
   findNewestValidCheckpoint,
   loadCheckpointFromPath,
 } from "../services/checkpoint.js";
+import { checkBudget } from "../services/budget-guard.js";
 import {
   loadUserConfig,
   type UserConfig,
@@ -575,7 +576,9 @@ export const applyCommand = new Command(CommandName.APPLY)
                 durationMs: Date.now() - ctx.startTs,
                 result: "bp_blocked",
               });
-              return { success: true }; // Plan box shown with findings — not an error
+              // Exit non-zero so CI and scripts can detect blocked apply.
+              // Plan box with findings is already rendered — user sees why.
+              return { success: false };
             }
           }
 
@@ -598,6 +601,21 @@ export const applyCommand = new Command(CommandName.APPLY)
                 `Unexpected status after planning: ${phase1State.executionStatus}`,
             );
             return { success: false };
+          }
+
+          // ── Budget panic limit check (FR-09) ──────────────────────────────────
+          const budgetCheck = checkBudget(
+            phase1State.estimatedMonthlyCost as string | undefined,
+            userConfig?.["budget"] as
+              | import("@assignee/core").ConfigBudget
+              | undefined,
+          );
+          if (budgetCheck.status === "blocked") {
+            renderError(budgetCheck.message);
+            return { success: false };
+          }
+          if (budgetCheck.status === "warning") {
+            process.stderr.write(`\u001B[33m${budgetCheck.message}\u001B[0m\n`);
           }
 
           // ── Phase 2: provision all resources (single or compound loop) ────────

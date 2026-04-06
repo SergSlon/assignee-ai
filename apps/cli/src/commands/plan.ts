@@ -40,6 +40,7 @@ import {
 } from "../config/constants.js";
 import { ErrorCode } from "../constants/errors.js";
 import { serializeCheckpoint, saveCheckpoint } from "../services/checkpoint.js";
+import { checkBudget } from "../services/budget-guard.js";
 import { loadUserConfig } from "../config/user-config-loader.js";
 import { fetchOrgPolicy, readAuthToken } from "../config/org-policy-cache.js";
 
@@ -255,7 +256,23 @@ export const planCommand = new Command(CommandName.PLAN)
             clack.log.warn(
               "Cannot apply: blocking best-practice findings detected. Fix the issues above and re-run `assignee plan`.",
             );
-            return { success: true };
+            // Exit non-zero so CI/scripts can detect blocking findings
+            return { success: false };
+          }
+
+          // ── Budget panic limit check (FR-09) ─────────────────────────────
+          const budgetCheck = checkBudget(
+            (finalState as AgentState).estimatedMonthlyCost,
+            userConfig?.["budget"] as
+              | import("@assignee/core").ConfigBudget
+              | undefined,
+          );
+          if (budgetCheck.status === "blocked") {
+            clack.log.error(budgetCheck.message);
+            return { success: false };
+          }
+          if (budgetCheck.status === "warning") {
+            clack.log.warn(budgetCheck.message);
           }
 
           const applyNow = await renderApplyNowConfirm({

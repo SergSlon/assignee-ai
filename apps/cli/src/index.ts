@@ -54,6 +54,20 @@ program
     `\n${SUPPORTED_TYPES_HINT}\n\n${PATTERNS_HINT}\n\n${EXAMPLES_HINT}`,
   );
 
+// Dedicated version subcommand (in addition to --version flag) — shows
+// richer info including Node version and platform for bug reports.
+program
+  .command("version")
+  .description("Show version and environment info")
+  .action(() => {
+    const lines = [
+      `assignee ${pkg.version as string}`,
+      `node     ${process.version}`,
+      `platform ${process.platform} ${process.arch}`,
+    ];
+    process.stdout.write(lines.join("\n") + "\n");
+  });
+
 program.addCommand(completionsCommand);
 program.addCommand(destroyCommand);
 program.addCommand(driftCommand);

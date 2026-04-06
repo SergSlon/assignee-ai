@@ -39,6 +39,14 @@ export interface ConfigPreferences {
   verbosity?: "quiet" | "normal" | "verbose";
 }
 
+/** Budget / cost safety settings (FR-09 — panic limit). */
+export interface ConfigBudget {
+  /** Maximum allowed estimated monthly cost in USD. Apply is blocked if exceeded. */
+  monthly_limit_usd?: number;
+  /** When true, only warn — don't block. Default: false (block). */
+  warn_only?: boolean;
+}
+
 /**
  * Top-level AssigneeConfig schema.
  * Used by user config, project config, and org policy files.
@@ -49,6 +57,8 @@ export interface AssigneeConfig {
   defaults?: ConfigDefaults;
   /** User preferences (auto_fix, output_format, verbosity) */
   preferences?: ConfigPreferences;
+  /** Budget safety (monthly cost cap) */
+  budget?: ConfigBudget;
   /** Org policy section (for local-only org files) */
   org_policy?: Record<string, Record<string, unknown>>;
 }

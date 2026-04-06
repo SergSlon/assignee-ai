@@ -72,6 +72,7 @@ const { runAutoCleanup } = await import("../services/cleanup.js");
 let exitSpy: ReturnType<typeof vi.spyOn>;
 
 let origOperatorKey: string | undefined;
+let origOperatorSecret: string | undefined;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -79,7 +80,9 @@ beforeEach(() => {
     .spyOn(process, "exit")
     .mockImplementation((() => {}) as never) as any;
   origOperatorKey = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+  origOperatorSecret = process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
   process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "test-key";
+  process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] = "test-secret";
 });
 
 afterEach(() => {
@@ -88,6 +91,11 @@ afterEach(() => {
     delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
   } else {
     process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = origOperatorKey;
+  }
+  if (origOperatorSecret === undefined) {
+    delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+  } else {
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] = origOperatorSecret;
   }
 });
 
