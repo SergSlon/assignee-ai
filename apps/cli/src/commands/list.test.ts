@@ -18,15 +18,13 @@ vi.mock("../utils/display.js", () => ({
   renderError: vi.fn(),
 }));
 
-// Mock process.exit to prevent test from terminating
-const mockExit = vi
-  .spyOn(process, "exit")
-  .mockImplementation((() => {}) as never);
-
-// Capture stdout writes
-const stdoutWrite = vi
-  .spyOn(process.stdout, "write")
-  .mockImplementation(() => true);
+// Spies must be re-installed per test (vitest config has restoreMocks: true,
+// which restores originals between tests). Previously these were defined at
+// module top-level and silently relied on the leak.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockExit: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let stdoutWrite: any;
 
 import { fetchManagedResources } from "../services/list-resources.js";
 import {
@@ -61,6 +59,12 @@ async function runListCommand(args: string[] = []): Promise<void> {
 describe("assignee list command", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockExit = vi
+      .spyOn(process, "exit")
+      .mockImplementation((() => {}) as never);
+    stdoutWrite = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
   });
 
   it("calls renderResourceTable when resources are found", async () => {

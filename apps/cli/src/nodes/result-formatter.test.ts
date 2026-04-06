@@ -19,54 +19,33 @@ import {
   createSecurityMockTool,
 } from "../test-fixtures/mcp-mock-responses.js";
 
-// Mock @clack/prompts spinner (used by Story 37.4 upload flow)
+// Mock @clack/prompts spinner (used by Story 37.4 upload flow).
+// NOTE: Plain functions for spinner/isCancel survive mockReset:true.
 vi.mock("@clack/prompts", () => ({
   intro: vi.fn(),
   outro: vi.fn(),
-  spinner: vi.fn(() => ({
-    start: vi.fn(),
-    stop: vi.fn(),
-    message: vi.fn(),
-  })),
+  spinner: () => ({
+    start: () => undefined,
+    stop: () => undefined,
+    message: () => undefined,
+  }),
   select: vi.fn(),
   confirm: vi.fn(),
-  isCancel: vi.fn(() => false),
+  isCancel: () => false,
   multiselect: vi.fn(),
 }));
 
-// Mock s3-upload service (Story 37.4)
+// Mock s3-upload service (Story 37.4). Default impls re-installed in beforeEach.
 vi.mock("../services/s3-upload.js", () => ({
-  uploadStaticSite: vi.fn().mockResolvedValue({
-    uploaded: 3,
-    failed: 0,
-    totalBytes: 15360,
-    errors: [],
-  }),
-  configureBucketPolicy: vi.fn().mockResolvedValue(undefined),
+  uploadStaticSite: vi.fn(),
+  configureBucketPolicy: vi.fn(),
 }));
 
-// Mock cloudfront-setup service (Epic 37 — CloudFront distribution)
+// Mock cloudfront-setup service (Epic 37 — CloudFront distribution).
+// Default impls re-installed in beforeEach.
 vi.mock("../services/cloudfront-setup.js", () => ({
-  createCloudFrontDistribution: vi.fn().mockResolvedValue({
-    distributionId: "E1234EXAMPLE",
-    domainName: "d1234example.cloudfront.net",
-    distributionArn:
-      "arn:aws:cloudfront::123456789012:distribution/E1234EXAMPLE",
-  }),
-  generateCloudFrontBucketPolicy: vi.fn().mockReturnValue(
-    JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
-        {
-          Sid: "AllowCloudFrontServicePrincipalReadOnly",
-          Effect: "Allow",
-          Principal: { Service: "cloudfront.amazonaws.com" },
-          Action: "s3:GetObject",
-          Resource: "arn:aws:s3:::mock-bucket/*",
-        },
-      ],
-    }),
-  ),
+  createCloudFrontDistribution: vi.fn(),
+  generateCloudFrontBucketPolicy: vi.fn(),
 }));
 
 // result-formatter.ts now uses requireAssigneeCredentials("operator") from
@@ -75,22 +54,28 @@ vi.mock("../services/cloudfront-setup.js", () => ({
 // import in the CloudFront path can construct the S3Client. Tests verifying
 // fail-closed behavior delete the env vars within their own beforeEach.
 
-// Mock @aws-sdk/client-s3 PutBucketPolicyCommand (used in uploadStaticSiteFiles for OAC policy)
-vi.mock("@aws-sdk/client-s3", () => ({
-  S3Client: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({}),
-  })),
-  PutBucketPolicyCommand: vi.fn(),
-}));
+// Mock @aws-sdk/client-s3 PutBucketPolicyCommand (used for OAC policy).
+// Plain class survives mockReset:true.
+vi.mock("@aws-sdk/client-s3", () => {
+  class S3Client {
+    async send() {
+      return {};
+    }
+  }
+  return {
+    S3Client,
+    PutBucketPolicyCommand: vi.fn(),
+  };
+});
 
-// Suppress display output for all tests
+// Suppress display output for all tests. Default impls re-installed in beforeEach.
 vi.mock("../utils/display.js", () => ({
   renderApplySuccess: vi.fn(),
   renderCompoundSuccess: vi.fn(),
   renderError: vi.fn(),
   renderPlanBox: vi.fn(),
   renderSecurityWarnings: vi.fn(),
-  promptFixSelection: vi.fn().mockResolvedValue(null),
+  promptFixSelection: vi.fn(),
 }));
 
 // Suppress logger output
@@ -104,13 +89,14 @@ vi.mock("../utils/logger.js", () => ({
   },
 }));
 
-// Mock memory service (Story 19.3, 19.4, 20.13)
+// Mock memory service (Story 19.3, 19.4, 20.13). Default impls re-installed
+// in beforeEach because mockReset:true wipes vi.fn implementations.
 vi.mock("../services/memory.js", () => ({
   defaultMemoryService: {
-    appendProvision: vi.fn().mockResolvedValue(undefined),
-    appendFailure: vi.fn().mockResolvedValue(undefined),
-    upsertPattern: vi.fn().mockResolvedValue(undefined),
-    clearFailuresForType: vi.fn().mockResolvedValue(undefined),
+    appendProvision: vi.fn(),
+    appendFailure: vi.fn(),
+    upsertPattern: vi.fn(),
+    clearFailuresForType: vi.fn(),
   },
 }));
 
@@ -182,8 +168,57 @@ function makeState(overrides: Partial<AgentState> = {}): AgentState {
 // Snapshot env so per-test credential mutations don't leak between cases
 const RESULT_FORMATTER_ORIGINAL_ENV = { ...process.env };
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  // Re-install default mock impls (mockReset:true wipes them between tests).
+  const s3 = await import("../services/s3-upload.js");
+  vi.mocked(s3.uploadStaticSite).mockResolvedValue({
+    uploaded: 3,
+    failed: 0,
+    totalBytes: 15360,
+    errors: [],
+  });
+  vi.mocked(s3.configureBucketPolicy).mockResolvedValue(undefined);
+
+  const cf = await import("../services/cloudfront-setup.js");
+  vi.mocked(cf.createCloudFrontDistribution).mockResolvedValue({
+    distributionId: "E1234EXAMPLE",
+    domainName: "d1234example.cloudfront.net",
+    distributionArn:
+      "arn:aws:cloudfront::123456789012:distribution/E1234EXAMPLE",
+  });
+  vi.mocked(cf.generateCloudFrontBucketPolicy).mockReturnValue(
+    JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "AllowCloudFrontServicePrincipalReadOnly",
+          Effect: "Allow",
+          Principal: { Service: "cloudfront.amazonaws.com" },
+          Action: "s3:GetObject",
+          Resource: "arn:aws:s3:::mock-bucket/*",
+        },
+      ],
+    }),
+  );
+
+  const display = await import("../utils/display.js");
+  vi.mocked(display.promptFixSelection).mockResolvedValue(null);
+
+  const memory = await import("../services/memory.js");
+  vi.mocked(memory.defaultMemoryService.appendProvision).mockResolvedValue(
+    undefined,
+  );
+  vi.mocked(memory.defaultMemoryService.appendFailure).mockResolvedValue(
+    undefined,
+  );
+  vi.mocked(memory.defaultMemoryService.upsertPattern).mockResolvedValue(
+    undefined,
+  );
+  vi.mocked(memory.defaultMemoryService.clearFailuresForType).mockResolvedValue(
+    undefined,
+  );
+
   // Provide realistic-shaped operator env vars so the centralized helper
   // (used by the result-formatter CloudFront S3Client) can construct an
   // S3Client. Tests that exercise fail-closed behavior delete these.

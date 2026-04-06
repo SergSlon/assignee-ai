@@ -10,24 +10,42 @@ const { mockEc2Send, mockSsmSend, mockRdsSend, mockWithTimeout } = vi.hoisted(
   }),
 );
 
-vi.mock("@aws-sdk/client-ec2", () => ({
-  EC2Client: vi.fn().mockImplementation(() => ({ send: mockEc2Send })),
-  DescribeSubnetsCommand: vi.fn(),
-  DescribeSecurityGroupsCommand: vi.fn(),
-  DescribeKeyPairsCommand: vi.fn(),
-  DescribeImagesCommand: vi.fn(),
-}));
+// NOTE: Constructor implementations use plain classes (not vi.fn) so they
+// survive vitest's mockReset:true. The class instances close over the stable
+// hoisted send mocks above.
+vi.mock("@aws-sdk/client-ec2", () => {
+  class EC2Client {
+    send = mockEc2Send;
+  }
+  return {
+    EC2Client,
+    DescribeSubnetsCommand: vi.fn(),
+    DescribeSecurityGroupsCommand: vi.fn(),
+    DescribeKeyPairsCommand: vi.fn(),
+    DescribeImagesCommand: vi.fn(),
+  };
+});
 
-vi.mock("@aws-sdk/client-ssm", () => ({
-  SSMClient: vi.fn().mockImplementation(() => ({ send: mockSsmSend })),
-  GetParameterCommand: vi.fn(),
-}));
+vi.mock("@aws-sdk/client-ssm", () => {
+  class SSMClient {
+    send = mockSsmSend;
+  }
+  return {
+    SSMClient,
+    GetParameterCommand: vi.fn(),
+  };
+});
 
-vi.mock("@aws-sdk/client-rds", () => ({
-  RDSClient: vi.fn().mockImplementation(() => ({ send: mockRdsSend })),
-  DescribeDBEngineVersionsCommand: vi.fn(),
-  DescribeOrderableDBInstanceOptionsCommand: vi.fn(),
-}));
+vi.mock("@aws-sdk/client-rds", () => {
+  class RDSClient {
+    send = mockRdsSend;
+  }
+  return {
+    RDSClient,
+    DescribeDBEngineVersionsCommand: vi.fn(),
+    DescribeOrderableDBInstanceOptionsCommand: vi.fn(),
+  };
+});
 
 // Let withTimeout pass through (no real timer needed in tests).
 vi.mock("./timeout.js", () => ({

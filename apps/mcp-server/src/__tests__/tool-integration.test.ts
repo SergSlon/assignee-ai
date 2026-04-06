@@ -16,18 +16,22 @@ import { getFreeTierNote } from "../services/free-tier.js";
 
 // ── Mock AWS SDK for list_managed_resources ──────────────────────────────────
 
+// NOTE: Plain class constructors survive vitest's mockReset:true (which would
+// otherwise wipe vi.fn implementations between tests). Default fs.readFileSync
+// behavior is re-installed in beforeEach.
 const mockSend = vi.fn();
-vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => ({
-  ResourceGroupsTaggingAPIClient: vi.fn().mockImplementation(() => ({
-    send: mockSend,
-  })),
-  GetResourcesCommand: vi.fn(),
-}));
+vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
+  class ResourceGroupsTaggingAPIClient {
+    send = mockSend;
+  }
+  return {
+    ResourceGroupsTaggingAPIClient,
+    GetResourcesCommand: vi.fn(),
+  };
+});
 
 vi.mock("node:fs", () => ({
-  readFileSync: vi.fn().mockImplementation(() => {
-    throw new Error("File not found");
-  }),
+  readFileSync: vi.fn(),
 }));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -78,8 +82,13 @@ async function createEstimateCostClient() {
 // ── list_managed_resources tool-level tests ──────────────────────────────────
 
 describe("list_managed_resources tool (MCP client level)", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    // Re-install fs.readFileSync default (mockReset wipes it).
+    const fs = await import("node:fs");
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error("File not found");
+    });
   });
 
   it("should return formatted list with count and resources array", async () => {

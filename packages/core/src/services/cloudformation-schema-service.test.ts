@@ -14,15 +14,25 @@ import {
 } from "./cloudformation-schema-service.js";
 
 // ---------- Mock @aws-sdk/client-cloudformation ----------
+//
+// NOTE: Use plain class/function (not vi.fn) for the constructor mocks because
+// vitest's mockReset:true would otherwise wipe their implementations between
+// tests, leaving `new CloudFormationClient()` returning an object without a
+// `send` method. The hoisted `mockSend` vi.fn keeps stable identity so each
+// test can attach `mockResolvedValueOnce`/`mockRejectedValueOnce`.
 
 const mockSend = vi.fn();
 
 vi.mock("@aws-sdk/client-cloudformation", () => {
+  class CloudFormationClient {
+    send = mockSend;
+  }
+  function DescribeTypeCommand(input: unknown) {
+    return input;
+  }
   return {
-    CloudFormationClient: vi.fn().mockImplementation(() => ({
-      send: mockSend,
-    })),
-    DescribeTypeCommand: vi.fn().mockImplementation((input) => input),
+    CloudFormationClient,
+    DescribeTypeCommand,
   };
 });
 

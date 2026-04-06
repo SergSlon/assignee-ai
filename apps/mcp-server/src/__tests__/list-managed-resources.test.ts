@@ -6,37 +6,39 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock the AWS SDK before importing the module under test
-vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
-  const mockSend = vi.fn();
-  return {
-    ResourceGroupsTaggingAPIClient: vi.fn().mockImplementation(() => ({
-      send: mockSend,
-    })),
-    GetResourcesCommand: vi.fn(),
-    __mockSend: mockSend,
-  };
-});
-
-// Mock fs for provision log reading
-vi.mock("node:fs", () => ({
-  readFileSync: vi.fn().mockImplementation(() => {
-    throw new Error("File not found");
-  }),
+// NOTE: We use a vi.fn constructor (so tests can assert it was called with
+// region args) and re-install its implementation in beforeEach, because
+// vitest's mockReset:true wipes vi.fn implementations between tests. The
+// hoisted mockSend keeps stable identity across tests.
+const mockSend = vi.fn();
+vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => ({
+  ResourceGroupsTaggingAPIClient: vi.fn(),
+  GetResourcesCommand: vi.fn(),
 }));
 
-import {
-  ResourceGroupsTaggingAPIClient,
-  GetResourcesCommand,
-} from "@aws-sdk/client-resource-groups-tagging-api";
+// Mock fs for provision log reading. Default impl is re-installed in
+// beforeEach because mockReset wipes it.
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn(),
+}));
+
+import * as fs from "node:fs";
+import { ResourceGroupsTaggingAPIClient } from "@aws-sdk/client-resource-groups-tagging-api";
 import { fetchManagedResources } from "../services/list-resources.js";
 
 // Access the mock send function
-const getMockSend = () => {
-  const mockModule = vi.mocked(ResourceGroupsTaggingAPIClient);
-  const instance = new mockModule({});
-  return instance.send as ReturnType<typeof vi.fn>;
-};
+const getMockSend = () => mockSend;
+
+// Top-level beforeEach so constructor impl is re-installed for every describe
+// block (mockReset:true wipes it between tests).
+beforeEach(() => {
+  vi.mocked(ResourceGroupsTaggingAPIClient).mockImplementation(
+    () => ({ send: mockSend }) as unknown as ResourceGroupsTaggingAPIClient,
+  );
+  vi.mocked(fs.readFileSync).mockImplementation(() => {
+    throw new Error("File not found");
+  });
+});
 
 describe("list_managed_resources", () => {
   beforeEach(() => {

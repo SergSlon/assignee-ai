@@ -4,13 +4,22 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 // ── Mock AWS SDK ────────────────────────────────────────────────────────────
-vi.mock("@aws-sdk/client-s3", () => ({
-  S3Client: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({}),
-  })),
-  PutObjectCommand: vi.fn().mockImplementation((input) => input),
-  PutBucketPolicyCommand: vi.fn().mockImplementation((input) => input),
-}));
+// NOTE: S3Client kept as vi.fn so the per-suite beforeEach below can re-install
+// its implementation; the command constructors are plain functions because
+// they have no call assertions.
+vi.mock("@aws-sdk/client-s3", () => {
+  function PutObjectCommand(input: unknown) {
+    return input;
+  }
+  function PutBucketPolicyCommand(input: unknown) {
+    return input;
+  }
+  return {
+    S3Client: vi.fn(),
+    PutObjectCommand,
+    PutBucketPolicyCommand,
+  };
+});
 
 // Snapshot env so per-suite credential mutations don't leak between tests
 const ORIGINAL_ENV = { ...process.env };

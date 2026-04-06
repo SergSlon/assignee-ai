@@ -98,28 +98,40 @@ describe("preflightGuardNode", () => {
   });
 
   it("returns N/A on pricing timeout (non-blocking)", async () => {
-    // All pricing queries time out — both main query and decomposer line items
-    const slowTool = {
-      name: "get_pricing",
-      invoke: vi.fn(
-        () =>
-          new Promise((resolve) =>
-            setTimeout(() => resolve({ type: "text", text: "{}" }), 10000),
-          ),
-      ),
-    } as unknown as StructuredTool;
+    // Use fake timers so the SUT's PRICING_TIMEOUT_MS race resolves
+    // without waiting on real wall-clock.
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    try {
+      // All pricing queries time out — both main query and decomposer line items
+      const slowTool = {
+        name: "get_pricing",
+        invoke: vi.fn(
+          () =>
+            new Promise((resolve) =>
+              setTimeout(() => resolve({ type: "text", text: "{}" }), 10_000),
+            ),
+        ),
+      } as unknown as StructuredTool;
 
-    const result = await preflightGuardNode(makeState(), [slowTool]);
-    // Pricing timed out → preflightPassed still true (non-blocking)
-    expect(result.preflightPassed).toBe(true);
-    // With decomposer line items, partial failures may still yield a per-unit rate
-    // from items that succeed before timeout. If all timeout, cost is N/A.
-    // Either outcome is acceptable — the key invariant is preflight still passes.
-    expect(
-      result.estimatedMonthlyCost === CostEstimateLabel.NA ||
-        typeof result.estimatedMonthlyCost === "string",
-    ).toBe(true);
-  }, 8000);
+      const promise = preflightGuardNode(makeState(), [slowTool]);
+      // Advance well past the SUT's 3s PRICING_TIMEOUT_MS so withTimeout fires.
+      // Also advance past the slow tool's 10s timer so no leaked timers remain.
+      await vi.advanceTimersByTimeAsync(15_000);
+      const result = await promise;
+
+      // Pricing timed out → preflightPassed still true (non-blocking)
+      expect(result.preflightPassed).toBe(true);
+      // With decomposer line items, partial failures may still yield a per-unit rate
+      // from items that succeed before timeout. If all timeout, cost is N/A.
+      // Either outcome is acceptable — the key invariant is preflight still passes.
+      expect(
+        result.estimatedMonthlyCost === CostEstimateLabel.NA ||
+          typeof result.estimatedMonthlyCost === "string",
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("computes Lambda estimate from default memory without calling pricing API", async () => {
     const pricingTool = {
@@ -418,16 +430,24 @@ describe("preflightGuardNode — IAM permission check (Story 19.1)", () => {
   });
 
   it("skips check gracefully when IAM tool invocation times out", async () => {
-    const iamTool = {
-      name: ToolName.SIMULATE_PRINCIPAL_POLICY,
-      invoke: vi.fn().mockReturnValue(new Promise(() => {})), // never resolves
-    } as unknown as StructuredTool;
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    try {
+      const iamTool = {
+        name: ToolName.SIMULATE_PRINCIPAL_POLICY,
+        invoke: vi.fn().mockReturnValue(new Promise(() => {})), // never resolves
+      } as unknown as StructuredTool;
 
-    // withTimeout returns null on timeout, so IAM check is silently skipped
-    const result = await preflightGuardNode(makeState(), [iamTool]);
+      // withTimeout returns null on timeout, so IAM check is silently skipped
+      const promise = preflightGuardNode(makeState(), [iamTool]);
+      // Advance past the SUT's PRICING_TIMEOUT_MS (3s) used as the IAM timeout.
+      await vi.advanceTimersByTimeAsync(5_000);
+      const result = await promise;
 
-    expect(result.executionStatus).toBeUndefined();
-    expect(result.preflightPassed).toBe(true);
+      expect(result.executionStatus).toBeUndefined();
+      expect(result.preflightPassed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("skips check when no tools are provided", async () => {

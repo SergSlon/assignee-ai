@@ -20,37 +20,44 @@ const { mockEc2Send } = vi.hoisted(() => ({
   mockEc2Send: vi.fn(),
 }));
 
-vi.mock("@aws-sdk/client-ec2", () => ({
-  EC2Client: vi.fn().mockImplementation(() => ({ send: mockEc2Send })),
-  AllocateAddressCommand: vi.fn().mockImplementation((input: unknown) => ({
-    _type: "AllocateAddressCommand",
-    input,
-  })),
-  DescribeAddressesCommand: vi.fn().mockImplementation((input: unknown) => ({
-    _type: "DescribeAddressesCommand",
-    input,
-  })),
-  CreateTagsCommand: vi.fn().mockImplementation((input: unknown) => ({
-    _type: "CreateTagsCommand",
-    input,
-  })),
-  ReleaseAddressCommand: vi.fn().mockImplementation((input: unknown) => ({
-    _type: "ReleaseAddressCommand",
-    input,
-  })),
-  DescribeKeyPairsCommand: vi.fn().mockImplementation((input: unknown) => ({
-    _type: "DescribeKeyPairsCommand",
-    input,
-  })),
-  CreateKeyPairCommand: vi.fn().mockImplementation((input: unknown) => ({
-    _type: "CreateKeyPairCommand",
-    input,
-  })),
-  DeleteKeyPairCommand: vi.fn().mockImplementation((input: unknown) => ({
-    _type: "DeleteKeyPairCommand",
-    input,
-  })),
-}));
+// NOTE: Plain class/function definitions survive vitest's mockReset:true
+// (which would otherwise wipe vi.fn implementations between tests).
+vi.mock("@aws-sdk/client-ec2", () => {
+  class EC2Client {
+    send = mockEc2Send;
+  }
+  function AllocateAddressCommand(input: unknown) {
+    return { _type: "AllocateAddressCommand", input };
+  }
+  function DescribeAddressesCommand(input: unknown) {
+    return { _type: "DescribeAddressesCommand", input };
+  }
+  function CreateTagsCommand(input: unknown) {
+    return { _type: "CreateTagsCommand", input };
+  }
+  function ReleaseAddressCommand(input: unknown) {
+    return { _type: "ReleaseAddressCommand", input };
+  }
+  function DescribeKeyPairsCommand(input: unknown) {
+    return { _type: "DescribeKeyPairsCommand", input };
+  }
+  function CreateKeyPairCommand(input: unknown) {
+    return { _type: "CreateKeyPairCommand", input };
+  }
+  function DeleteKeyPairCommand(input: unknown) {
+    return { _type: "DeleteKeyPairCommand", input };
+  }
+  return {
+    EC2Client,
+    AllocateAddressCommand,
+    DescribeAddressesCommand,
+    CreateTagsCommand,
+    ReleaseAddressCommand,
+    DescribeKeyPairsCommand,
+    CreateKeyPairCommand,
+    DeleteKeyPairCommand,
+  };
+});
 
 // ── FS mocks for SSH key pair creation ───────────────────────────────────────
 const { mockMkdirSync, mockWriteFileSync } = vi.hoisted(() => ({
@@ -64,7 +71,7 @@ vi.mock("node:fs", () => ({
 }));
 
 vi.mock("node:os", () => ({
-  homedir: vi.fn().mockReturnValue("/home/testuser"),
+  homedir: () => "/home/testuser",
 }));
 
 vi.mock("node:path", async () => {

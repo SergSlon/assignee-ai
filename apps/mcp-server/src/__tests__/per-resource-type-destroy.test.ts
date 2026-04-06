@@ -16,20 +16,27 @@ import { registerDestroyResource } from "../tools/destroy-resource.js";
 const mockTaggingSend = vi.fn();
 const mockCCSend = vi.fn();
 
-vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => ({
-  ResourceGroupsTaggingAPIClient: vi.fn().mockImplementation(() => ({
-    send: mockTaggingSend,
-  })),
-  GetResourcesCommand: vi.fn(),
-}));
+// NOTE: Plain class constructors survive vitest's mockReset:true.
+vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
+  class ResourceGroupsTaggingAPIClient {
+    send = mockTaggingSend;
+  }
+  return {
+    ResourceGroupsTaggingAPIClient,
+    GetResourcesCommand: vi.fn(),
+  };
+});
 
-vi.mock("@aws-sdk/client-cloudcontrol", () => ({
-  CloudControlClient: vi.fn().mockImplementation(() => ({
-    send: mockCCSend,
-  })),
-  DeleteResourceCommand: vi.fn(),
-  GetResourceRequestStatusCommand: vi.fn(),
-}));
+vi.mock("@aws-sdk/client-cloudcontrol", () => {
+  class CloudControlClient {
+    send = mockCCSend;
+  }
+  return {
+    CloudControlClient,
+    DeleteResourceCommand: vi.fn(),
+    GetResourceRequestStatusCommand: vi.fn(),
+  };
+});
 
 vi.mock("@assignee/core", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();

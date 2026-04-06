@@ -6,13 +6,13 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock the AWS SDK
+// Mock the AWS SDK.
+// NOTE: Constructor implementations are re-installed in beforeEach because
+// vitest's mockReset:true wipes vi.fn implementations between tests.
 const mockSend = vi.fn();
 vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => ({
-  ResourceGroupsTaggingAPIClient: vi.fn().mockImplementation(() => ({
-    send: mockSend,
-  })),
-  GetResourcesCommand: vi.fn().mockImplementation((input) => input),
+  ResourceGroupsTaggingAPIClient: vi.fn(),
+  GetResourcesCommand: vi.fn(),
 }));
 
 // Mock node:fs for provision log reads
@@ -48,6 +48,13 @@ import {
 describe("list-resources service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-install mock impls (mockReset wipes them between tests).
+    (
+      ResourceGroupsTaggingAPIClient as unknown as ReturnType<typeof vi.fn>
+    ).mockImplementation(() => ({ send: mockSend }));
+    (
+      GetResourcesCommand as unknown as ReturnType<typeof vi.fn>
+    ).mockImplementation((input: unknown) => input);
     // Default: no provision log
     vi.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error("ENOENT");

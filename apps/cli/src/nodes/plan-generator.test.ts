@@ -12,15 +12,22 @@ import {
 } from "./plan-generator.js";
 import type { AgentState } from "../services/graph.js";
 
-// Mock memory service (Story 19.3, 19.4)
+// Mock memory service (Story 19.3, 19.4).
+// NOTE: Default impls are re-installed in beforeEach because vitest's
+// mockReset:true wipes vi.fn implementations between tests.
 vi.mock("../services/memory.js", () => ({
   defaultMemoryService: {
-    readProvisions: vi.fn().mockResolvedValue([]),
-    readFailures: vi.fn().mockResolvedValue([]),
+    readProvisions: vi.fn(),
+    readFailures: vi.fn(),
   },
 }));
 
 import { defaultMemoryService } from "../services/memory.js";
+
+beforeEach(() => {
+  vi.mocked(defaultMemoryService.readProvisions).mockResolvedValue([]);
+  vi.mocked(defaultMemoryService.readFailures).mockResolvedValue([]);
+});
 
 function makeState(overrides: Record<string, unknown> = {}) {
   return {

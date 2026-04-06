@@ -13,32 +13,43 @@ import { ProcessExitCode } from "../constants/errors.js";
 const mockInitializeConnections = vi.fn();
 const mockGetTools = vi.fn();
 const mockClose = vi.fn();
-const MockMultiServerMCPClient = vi.fn().mockImplementation(() => ({
-  initializeConnections: mockInitializeConnections,
-  getTools: mockGetTools,
-  close: mockClose,
-}));
+// MockMultiServerMCPClient uses a stable vi.fn whose implementation is
+// re-installed in beforeEach (mockReset:true wipes it between tests).
+const MockMultiServerMCPClient = vi.fn();
 
 vi.mock("@langchain/mcp-adapters", () => ({
   MultiServerMCPClient: MockMultiServerMCPClient,
 }));
 
 vi.mock("../config/mcp-servers.js", () => ({
-  getMcpServerConfigs: vi.fn(() => ({
-    "aws-pricing-mcp-server": {
-      command: "uvx",
-      args: ["awslabs.aws-pricing-mcp-server@latest"],
-      env: {},
-    },
-  })),
-  getOptionalMcpServerConfigs: vi.fn(() => ({})),
+  getMcpServerConfigs: vi.fn(),
+  getOptionalMcpServerConfigs: vi.fn(),
 }));
 
 let exitSpy: ReturnType<typeof vi.spyOn>;
 let stderrWriteSpy: any;
 
-beforeEach(() => {
+function installDefaultMocks() {
+  MockMultiServerMCPClient.mockImplementation(() => ({
+    initializeConnections: mockInitializeConnections,
+    getTools: mockGetTools,
+    close: mockClose,
+  }));
+}
+
+beforeEach(async () => {
   vi.clearAllMocks();
+  installDefaultMocks();
+  // Re-install factory mocks for config module
+  const configMod = await import("../config/mcp-servers.js");
+  vi.mocked(configMod.getMcpServerConfigs).mockReturnValue({
+    "aws-pricing-mcp-server": {
+      command: "uvx",
+      args: ["awslabs.aws-pricing-mcp-server@latest"],
+      env: {},
+    },
+  });
+  vi.mocked(configMod.getOptionalMcpServerConfigs).mockReturnValue({});
   exitSpy = vi
     .spyOn(process, "exit")
     .mockImplementation((() => {}) as never) as any;
@@ -222,10 +233,7 @@ describe("createMcpClient — lazy loading (Story 29.3)", () => {
     const { createMcpClient } = await freshImportMultiServer();
 
     // Request only pricing (core) + iam (optional)
-    await createMcpClient([
-      "aws-pricing-mcp-server",
-      "iam-mcp-server",
-    ] as any);
+    await createMcpClient(["aws-pricing-mcp-server", "iam-mcp-server"] as any);
 
     // Core: only pricing
     const coreConfig = MockMultiServerMCPClient.mock.calls[0]?.[0];
@@ -235,9 +243,7 @@ describe("createMcpClient — lazy loading (Story 29.3)", () => {
     // Optional: only iam
     expect(MockMultiServerMCPClient).toHaveBeenCalledTimes(2);
     const optionalConfig = MockMultiServerMCPClient.mock.calls[1]?.[0];
-    expect(Object.keys(optionalConfig.mcpServers)).toEqual([
-      "iam-mcp-server",
-    ]);
+    expect(Object.keys(optionalConfig.mcpServers)).toEqual(["iam-mcp-server"]);
   });
 
   it("empty requiredServers array starts zero optional servers", async () => {

@@ -12,12 +12,14 @@ const { mockCfSend } = vi.hoisted(() => ({
 }));
 
 // ── Mock operator credentials ─────────────────────────────────────────────────
+// NOTE: Plain function (not vi.fn) so the implementation survives
+// vitest's mockReset:true between tests.
 vi.mock("../../config/operator-credentials.js", () => ({
-  operatorCredentials: vi.fn(() => ({
+  operatorCredentials: () => ({
     accessKeyId: "AKIAIOSFODNN7EXAMPLE",
     secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     region: "us-east-1",
-  })),
+  }),
 }));
 
 // ── Mock @aws-sdk/client-cloudfront ───────────────────────────────────────────
@@ -25,17 +27,16 @@ vi.mock("@aws-sdk/client-cloudfront", () => {
   class MockCloudFrontClient {
     send = mockCfSend;
   }
+  function CreateOriginAccessControlCommand(input: Record<string, unknown>) {
+    return { _type: "CreateOAC", ...input };
+  }
+  function CreateDistributionWithTagsCommand(input: Record<string, unknown>) {
+    return { _type: "CreateDistWithTags", ...input };
+  }
   return {
     CloudFrontClient: MockCloudFrontClient,
-    CreateOriginAccessControlCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "CreateOAC", ...input })),
-    CreateDistributionWithTagsCommand: vi
-      .fn()
-      .mockImplementation((input) => ({
-        _type: "CreateDistWithTags",
-        ...input,
-      })),
+    CreateOriginAccessControlCommand,
+    CreateDistributionWithTagsCommand,
     TagResourceCommand: vi.fn(),
   };
 });

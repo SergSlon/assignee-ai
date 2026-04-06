@@ -22,29 +22,35 @@ const { mockDdbSend, mockEc2Send } = vi.hoisted(() => ({
   mockEc2Send: vi.fn(),
 }));
 
-vi.mock("@aws-sdk/client-dynamodb", () => ({
-  DynamoDBClient: vi.fn().mockImplementation(() => ({ send: mockDdbSend })),
-  UpdateTableCommand: vi.fn().mockImplementation((input: unknown) => ({
-    _type: "UpdateTable",
-    input,
-  })),
-}));
+// NOTE: Constructor & command mocks use plain class/function definitions
+// so they survive vitest's mockReset:true (which would otherwise wipe vi.fn
+// implementations between tests).
+vi.mock("@aws-sdk/client-dynamodb", () => {
+  class DynamoDBClient {
+    send = mockDdbSend;
+  }
+  function UpdateTableCommand(input: unknown) {
+    return { _type: "UpdateTable", input };
+  }
+  return { DynamoDBClient, UpdateTableCommand };
+});
 
-vi.mock("@aws-sdk/client-ec2", () => ({
-  EC2Client: vi.fn().mockImplementation(() => ({ send: mockEc2Send })),
-  DescribeInternetGatewaysCommand: vi
-    .fn()
-    .mockImplementation((input: unknown) => ({
-      _type: "DescribeInternetGateways",
-      input,
-    })),
-  DetachInternetGatewayCommand: vi
-    .fn()
-    .mockImplementation((input: unknown) => ({
-      _type: "DetachInternetGateway",
-      input,
-    })),
-}));
+vi.mock("@aws-sdk/client-ec2", () => {
+  class EC2Client {
+    send = mockEc2Send;
+  }
+  function DescribeInternetGatewaysCommand(input: unknown) {
+    return { _type: "DescribeInternetGateways", input };
+  }
+  function DetachInternetGatewayCommand(input: unknown) {
+    return { _type: "DetachInternetGateway", input };
+  }
+  return {
+    EC2Client,
+    DescribeInternetGatewaysCommand,
+    DetachInternetGatewayCommand,
+  };
+});
 
 import { dynamodbStrategy } from "../dynamodb-strategy.js";
 import { igwStrategy } from "../igw-strategy.js";
