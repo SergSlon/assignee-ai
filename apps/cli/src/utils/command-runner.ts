@@ -90,12 +90,17 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
 
   try {
     try {
-      if (!opts.silent) startSpinner("Connecting to AWS...");
       // Story 29.3: Only start MCP servers required by this command
       const requiredServers = opts.commandName
         ? getRequiredServers(opts.commandName)
         : null;
+      const serverCount = requiredServers?.length ?? 3;
+      if (!opts.silent)
+        startSpinner(
+          `Connecting to AWS${serverCount > 1 ? ` (${serverCount} services)` : ""}...`,
+        );
       const mcpClient = await createMcpClient(requiredServers);
+      if (!opts.silent) updateSpinner("Loading tools...");
       let tools = await getMcpTools(mcpClient);
       if (!opts.silent) stopSpinner("Connected");
 
