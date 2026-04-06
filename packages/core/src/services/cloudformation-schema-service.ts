@@ -75,16 +75,29 @@ export class CloudFormationSchemaService {
 
     const region = config?.region ?? DEFAULT_REGION;
 
+    // ONLY use ASSIGNEE_READER_* credentials from .env — never fall through to
+    // the default credential chain (which would leak to shell/SSO on dev machines
+    // and fail on CI with cryptic errors). If the env vars aren't set, the SDK
+    // will throw a clear "no credentials" error on first call.
     const accessKeyId = process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
     const secretAccessKey = process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
-    const credentials =
-      accessKeyId && secretAccessKey
-        ? { accessKeyId, secretAccessKey }
-        : undefined;
 
     this.client = new CloudFormationClient({
       region,
-      ...(credentials ? { credentials } : {}),
+      // Always pass credentialDefaultProvider that throws if env vars missing —
+      // this prevents fallback to ~/.aws/credentials or SSO.
+      credentialDefaultProvider: () => async () => {
+        if (!accessKeyId || !secretAccessKey) {
+          const err = new Error(
+            "Missing ASSIGNEE_READER_ACCESS_KEY_ID and ASSIGNEE_READER_SECRET_ACCESS_KEY. " +
+              "Set them in assignee.ai/.env or run 'assignee setup'. " +
+              "The default AWS credential chain is intentionally bypassed.",
+          );
+          err.name = "CredentialsProviderError";
+          throw err;
+        }
+        return { accessKeyId, secretAccessKey };
+      },
     });
   }
 

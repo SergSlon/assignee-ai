@@ -98,6 +98,8 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ssm:PutParameter",
       "ssm:GetParameter",
       "ssm:GetParameters",
+      "ssm:GetParametersByPath", // E2E sweeper + bulk list by prefix
+      "ssm:DescribeParameters", // E2E sweeper fallback
       "ssm:DeleteParameter",
       "ssm:AddTagsToResource",
       "ssm:ListTagsForResource",
