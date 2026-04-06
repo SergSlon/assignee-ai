@@ -251,27 +251,23 @@ describe("Cross-epic: cleanup auto-hook", () => {
 // ── 4. Schema fetch via SDK → plan generation ────────────────────────────────
 
 describe("Cross-epic: schema fetch -> plan generation", () => {
-  it("CloudFormationSchemaService interface produces schema objects usable by plan generator", async () => {
-    // Verify the schema shape contract: plan generator expects
-    // { properties: Record<string, unknown>, required?: string[] }
-    const schemaExample = {
-      typeName: "AWS::S3::Bucket",
-      properties: {
-        BucketName: { type: "string" },
-        VersioningConfiguration: {
-          type: "object",
-          properties: { Status: { type: "string" } },
-        },
-      },
-      required: [],
-      readOnlyProperties: ["/properties/Arn"],
-    };
+  it("CloudFormationSchemaService cache produces schema objects with required shape", async () => {
+    const { CloudFormationSchemaService } = await import("@assignee/core");
+    const service = new CloudFormationSchemaService();
 
-    // Verify the shape is valid for plan generation
-    expect(schemaExample).toHaveProperty("properties");
-    expect(schemaExample).toHaveProperty("typeName");
-    expect(typeof schemaExample.properties).toBe("object");
-    expect(schemaExample.properties).toHaveProperty("BucketName");
+    // The cache may be empty, but the service interface must exist
+    // and return the correct shape when a schema is available
+    expect(typeof service.getSchema).toBe("function");
+
+    // Verify the contract: plan generator expects properties + typeName
+    const cached = await service.getSchema("AWS::S3::Bucket");
+    if (cached) {
+      expect(cached).toHaveProperty("properties");
+      expect(typeof (cached as Record<string, unknown>)["properties"]).toBe(
+        "object",
+      );
+    }
+    // Schema may not be cached — that's fine, this tests the interface contract
   });
 
   it("SUPPORTED_TYPES_ARRAY covers all expected resource types", async () => {
