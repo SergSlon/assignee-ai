@@ -111,6 +111,8 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ec2:DescribeSubnets",
       "ec2:DescribeSecurityGroups",
       "ec2:DescribeKeyPairs",
+      "ec2:CreateKeyPair", // SSH intent bundle auto-create
+      "ec2:DeleteKeyPair", // SSH intent rollback on provision failure
       "ec2:DescribeInstanceTypes",
       "ssm:GetParameter",
       "iam:PassRole",

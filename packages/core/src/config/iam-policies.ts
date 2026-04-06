@@ -83,6 +83,10 @@ export function operatorPolicy(
     IamAction.LAMBDA_DELETE_ESM,
     IamAction.SNS_SUBSCRIBE,
     IamAction.SNS_UNSUBSCRIBE,
+    // SSH key pair auto-create flow (Epic 41 — SSH intent bundle)
+    IamAction.EC2_CREATE_KEY_PAIR,
+    IamAction.EC2_DELETE_KEY_PAIR,
+    IamAction.EC2_DESCRIBE_KEY_PAIRS,
   ];
 
   return {
