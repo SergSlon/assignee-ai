@@ -510,7 +510,10 @@ describe("planCommand — run callback (no --no-apply)", () => {
 
     const result = await capturedOpts!.run(ctx);
 
-    expect(renderError).toHaveBeenCalledWith("Apply failed");
+    expect(renderError).toHaveBeenCalledWith(
+      "Apply failed",
+      "Check the error details above and try again. Run `assignee plan` to regenerate.",
+    );
     expect(result.success).toBe(false);
   });
 });

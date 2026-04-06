@@ -12,6 +12,7 @@
 import * as fs from "node:fs/promises";
 import { Command } from "commander";
 import chalk from "chalk";
+import boxen from "boxen";
 import { DriftStatus, AssigneeError, type DriftResult } from "@assignee/core";
 import { ErrorCode } from "../constants/errors.js";
 import { MemoryService } from "../services/memory.js";
@@ -51,15 +52,33 @@ function renderDriftTable(
   results: DriftResult[],
   regionMap: Map<string, string>,
 ): void {
-  // Header
-  const header = `${"Resource Type".padEnd(30)} ${"Resource ID".padEnd(40)} ${"Region".padEnd(15)} ${"Status".padEnd(20)} Drifted`;
-  process.stdout.write(chalk.gray(header) + "\n");
-  process.stdout.write(chalk.gray("─".repeat(header.length)) + "\n");
-
-  for (const r of results) {
-    const region = regionMap.get(r.resourceId) ?? "";
-    const line = `${r.resourceType.padEnd(30)} ${r.resourceId.padEnd(40)} ${region.padEnd(15)} ${statusLabel(r.status).padEnd(20 + 10)} ${r.driftedFields.length}`;
-    process.stdout.write(line + "\n");
+  if (process.stdout.isTTY) {
+    const header = chalk.bold(
+      `${"Resource Type".padEnd(30)} ${"Resource ID".padEnd(40)} ${"Region".padEnd(15)} ${"Status".padEnd(20)} Drifted`,
+    );
+    const divider = chalk.dim("─".repeat(header.length));
+    const rows = results.map((r) => {
+      const region = regionMap.get(r.resourceId) ?? "";
+      return `${r.resourceType.padEnd(30)} ${r.resourceId.padEnd(40)} ${region.padEnd(15)} ${statusLabel(r.status).padEnd(20 + 10)} ${r.driftedFields.length}`;
+    });
+    const content = [header, divider, ...rows].join("\n");
+    process.stdout.write(
+      boxen(content, {
+        title: "Drift Check",
+        titleAlignment: "center" as const,
+        borderColor: "cyan",
+        padding: 1,
+      }) + "\n",
+    );
+  } else {
+    const header = `${"Resource Type".padEnd(30)} ${"Resource ID".padEnd(40)} ${"Region".padEnd(15)} ${"Status".padEnd(20)} Drifted`;
+    process.stdout.write(header + "\n");
+    process.stdout.write("─".repeat(header.length) + "\n");
+    for (const r of results) {
+      const region = regionMap.get(r.resourceId) ?? "";
+      const line = `${r.resourceType.padEnd(30)} ${r.resourceId.padEnd(40)} ${region.padEnd(15)} ${statusLabel(r.status, true).padEnd(20)} ${r.driftedFields.length}`;
+      process.stdout.write(line + "\n");
+    }
   }
 }
 
