@@ -2,95 +2,91 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { IAM_USER_NAMES, IAM_POLICY_NAMES } from "@assignee/core";
 
 // Mock @aws-sdk/client-iam
+//
+// NOTE: vitest config has `mockReset: true`, which wipes any
+// `vi.fn().mockImplementation(() => ...)` factory between tests. We use
+// plain `class` declarations for the SDK client constructors so that the
+// mockReset cannot strip the constructor body — only the hoisted send mock
+// gets reset (and we re-arm it in beforeEach). Command shapes are arrow
+// functions for the same reason.
 const mockSend = vi.fn();
+// SUT calls `new XCommand(input)` so commands must be constructable. We
+// use `class` declarations (rather than vi.fn().mockImplementation) so
+// vitest mockReset cannot strip the constructor body.
+function makeCommandClass(type: string) {
+  return class {
+    _type = type;
+    input: unknown;
+    constructor(input: unknown) {
+      this.input = input;
+    }
+  };
+}
+
 vi.mock("@aws-sdk/client-iam", () => {
+  class IAMClient {
+    send = mockSend;
+  }
   return {
-    IAMClient: vi.fn().mockImplementation(() => ({ send: mockSend })),
-    CreateUserCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "CreateUser", input })),
-    GetUserCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "GetUser", input })),
-    CreatePolicyCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "CreatePolicy", input })),
-    CreatePolicyVersionCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "CreatePolicyVersion", input })),
-    AttachUserPolicyCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "AttachUserPolicy", input })),
-    CreateAccessKeyCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "CreateAccessKey", input })),
-    ListAccessKeysCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "ListAccessKeys", input })),
-    ListPolicyVersionsCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "ListPolicyVersions", input })),
-    DeletePolicyVersionCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "DeletePolicyVersion", input })),
-    DeleteAccessKeyCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "DeleteAccessKey", input })),
-    GetRoleCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "GetRole", input })),
-    CreateRoleCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "CreateRole", input })),
-    PutRolePolicyCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "PutRolePolicy", input })),
-    TagUserCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "TagUser", input })),
-    TagRoleCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "TagRole", input })),
-    TagPolicyCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "TagPolicy", input })),
+    IAMClient,
+    CreateUserCommand: makeCommandClass("CreateUser"),
+    GetUserCommand: makeCommandClass("GetUser"),
+    CreatePolicyCommand: makeCommandClass("CreatePolicy"),
+    CreatePolicyVersionCommand: makeCommandClass("CreatePolicyVersion"),
+    AttachUserPolicyCommand: makeCommandClass("AttachUserPolicy"),
+    CreateAccessKeyCommand: makeCommandClass("CreateAccessKey"),
+    ListAccessKeysCommand: makeCommandClass("ListAccessKeys"),
+    ListPolicyVersionsCommand: makeCommandClass("ListPolicyVersions"),
+    DeletePolicyVersionCommand: makeCommandClass("DeletePolicyVersion"),
+    DeleteAccessKeyCommand: makeCommandClass("DeleteAccessKey"),
+    GetRoleCommand: makeCommandClass("GetRole"),
+    CreateRoleCommand: makeCommandClass("CreateRole"),
+    PutRolePolicyCommand: makeCommandClass("PutRolePolicy"),
+    TagUserCommand: makeCommandClass("TagUser"),
+    TagRoleCommand: makeCommandClass("TagRole"),
+    TagPolicyCommand: makeCommandClass("TagPolicy"),
   };
 });
 
 // Mock CloudWatch Logs and Bedrock clients (used by Bedrock logging setup)
-vi.mock("@aws-sdk/client-cloudwatch-logs", () => ({
-  CloudWatchLogsClient: vi
-    .fn()
-    .mockImplementation(() => ({ send: vi.fn().mockResolvedValue({}) })),
-  CreateLogGroupCommand: vi
-    .fn()
-    .mockImplementation((input) => ({ _type: "CreateLogGroup", input })),
-}));
+const mockCwlSend = vi.fn().mockResolvedValue({});
+vi.mock("@aws-sdk/client-cloudwatch-logs", () => {
+  class CloudWatchLogsClient {
+    send = mockCwlSend;
+  }
+  return {
+    CloudWatchLogsClient,
+    CreateLogGroupCommand: makeCommandClass("CreateLogGroup"),
+  };
+});
 
-vi.mock("@aws-sdk/client-bedrock", () => ({
-  BedrockClient: vi
-    .fn()
-    .mockImplementation(() => ({ send: vi.fn().mockResolvedValue({}) })),
-  PutModelInvocationLoggingConfigurationCommand: vi
-    .fn()
-    .mockImplementation((input) => ({
-      _type: "PutModelInvocationLogging",
-      input,
-    })),
-}));
+const mockBedrockSend = vi.fn().mockResolvedValue({});
+vi.mock("@aws-sdk/client-bedrock", () => {
+  class BedrockClient {
+    send = mockBedrockSend;
+  }
+  return {
+    BedrockClient,
+    PutModelInvocationLoggingConfigurationCommand: makeCommandClass(
+      "PutModelInvocationLogging",
+    ),
+  };
+});
 
 // Mock @aws-sdk/client-sts
 const mockStsSend = vi.fn();
 vi.mock("@aws-sdk/client-sts", () => {
+  class STSClient {
+    send = mockStsSend;
+  }
   return {
-    STSClient: vi.fn().mockImplementation(() => ({ send: mockStsSend })),
-    GetCallerIdentityCommand: vi
-      .fn()
-      .mockImplementation((input) => ({ _type: "GetCallerIdentity", input })),
+    STSClient,
+    GetCallerIdentityCommand: makeCommandClass("GetCallerIdentity"),
   };
 });
 
-// Mock @clack/prompts
+// Mock @clack/prompts. spinner/confirm/isCancel use plain arrow factories
+// so they survive vitest mockReset between tests.
 vi.mock("@clack/prompts", () => ({
   intro: vi.fn(),
   outro: vi.fn(),
@@ -99,13 +95,14 @@ vi.mock("@clack/prompts", () => ({
     success: vi.fn(),
     error: vi.fn(),
     step: vi.fn(),
+    warn: vi.fn(),
   },
-  spinner: vi.fn(() => ({
-    start: vi.fn(),
-    stop: vi.fn(),
-  })),
-  confirm: vi.fn(() => true),
-  isCancel: vi.fn(() => false),
+  spinner: () => ({
+    start: () => undefined,
+    stop: () => undefined,
+  }),
+  confirm: () => true,
+  isCancel: () => false,
   autocomplete: vi.fn(),
   autocompleteMultiselect: vi.fn(),
 }));
@@ -116,20 +113,42 @@ vi.mock("../utils/env-writer.js", () => ({
   mergeEnvFile: (...args: unknown[]) => mockMergeEnvFile(...args),
 }));
 
-// Mock process.exit
-const mockExit = vi
-  .spyOn(process, "exit")
-  .mockImplementation(() => undefined as never);
+// process.exit spy is installed in beforeEach so restoreMocks doesn't bring
+// the real exit back between tests.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockExit: any;
+
+/**
+ * Resets Commander option state between tests. Commander persists parsed
+ * option values on the Command instance, so flags from one test (e.g.
+ * --enable-llm-logging) would otherwise leak into the next.
+ */
+async function resetSetupCommandOptions(): Promise<void> {
+  const { setupCommand } = await import("./setup.js");
+  setupCommand.setOptionValue("enableLlmLogging", false);
+  setupCommand.setOptionValue("dryRun", false);
+}
 
 describe("setup command", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    mockExit = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
+
+    // Re-arm Bedrock and CWL default resolutions wiped by mockReset.
+    mockBedrockSend.mockResolvedValue({});
+    mockCwlSend.mockResolvedValue({});
 
     // Default: STS returns an account ID
     mockStsSend.mockResolvedValue({
       Account: "123456789012",
       Arn: "arn:aws:iam::123456789012:root",
     });
+
+    // Default: Bedrock client send resolves successfully (mockReset clears it)
+    mockBedrockSend.mockResolvedValue({});
 
     // Default IAM responses
     let accessKeyCounter = 0;
@@ -299,5 +318,113 @@ describe("setup command", () => {
     await expect(setupCommand.parseAsync(["node", "setup"])).rejects.toThrow(
       "Cannot reach AWS STS",
     );
+  });
+
+  // ── Privacy/safety: --enable-llm-logging default OFF ─────────────
+  it("by default does NOT enable Bedrock textDataDeliveryEnabled", async () => {
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await setupCommand.parseAsync(["node", "setup"]);
+
+    const putLogCalls = mockBedrockSend.mock.calls.filter(
+      (c) => c[0]?._type === "PutModelInvocationLogging",
+    );
+    expect(putLogCalls).toHaveLength(1);
+    const config = putLogCalls[0]![0].input.loggingConfig;
+    expect(config.textDataDeliveryEnabled).toBe(false);
+    expect(config.imageDataDeliveryEnabled).toBe(false);
+    expect(config.embeddingDataDeliveryEnabled).toBe(false);
+    // Real-shaped role ARN — account 123456789012 from STS mock above
+    expect(config.cloudWatchConfig.roleArn).toBe(
+      "arn:aws:iam::123456789012:role/AssigneeAiBedrockLoggingRole",
+    );
+    expect(config.cloudWatchConfig.logGroupName).toBe(
+      "/assignee-ai/bedrock-invocations",
+    );
+  });
+
+  it("--enable-llm-logging sets textDataDeliveryEnabled and prints a warning", async () => {
+    await resetSetupCommandOptions();
+    const clack = await import("@clack/prompts");
+    const { setupCommand } = await import("./setup.js");
+    await setupCommand.parseAsync(["node", "setup", "--enable-llm-logging"]);
+
+    const putLogCalls = mockBedrockSend.mock.calls.filter(
+      (c) => c[0]?._type === "PutModelInvocationLogging",
+    );
+    expect(putLogCalls).toHaveLength(1);
+    const config = putLogCalls[0]![0].input.loggingConfig;
+    expect(config.textDataDeliveryEnabled).toBe(true);
+
+    // Warning was emitted to the user
+    const warnMock = clack.log.warn as ReturnType<typeof vi.fn>;
+    expect(warnMock).toHaveBeenCalled();
+    const warnText = warnMock.mock.calls[0]![0] as string;
+    expect(warnText).toContain("LLM prompts/responses will be logged");
+    expect(warnText).toContain("disable later via");
+  });
+
+  // ── --dry-run safety: zero AWS mutations ─────────────────────────
+  it("--dry-run prints a plan and does not invoke any AWS API", async () => {
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await setupCommand.parseAsync(["node", "setup", "--dry-run"]);
+
+    // STS not called — no credential verification roundtrip
+    expect(mockStsSend).not.toHaveBeenCalled();
+    // No IAM calls of any kind
+    expect(mockSend).not.toHaveBeenCalled();
+    // No Bedrock invocation logging configuration call
+    expect(mockBedrockSend).not.toHaveBeenCalled();
+    // No .env file written
+    expect(mockMergeEnvFile).not.toHaveBeenCalled();
+
+    // The plan was printed via clack.log.step
+    const clack = await import("@clack/prompts");
+    const stepMock = clack.log.step as ReturnType<typeof vi.fn>;
+    const allText = stepMock.mock.calls.map((c) => c[0] as string).join("\n");
+    // Real IAM user names from @assignee/core
+    expect(allText).toContain(IAM_USER_NAMES.operator);
+    expect(allText).toContain(IAM_USER_NAMES.reader);
+    expect(allText).toContain(IAM_USER_NAMES.auditor);
+    expect(allText).toContain(IAM_POLICY_NAMES.operator);
+    expect(allText).toContain("AssigneeAiBedrockLoggingRole");
+    expect(allText).toContain("/assignee-ai/bedrock-invocations");
+    // Default dry-run shows textDataDeliveryEnabled=false
+    expect(allText).toContain("textDataDeliveryEnabled=false");
+  });
+
+  it("--dry-run with --enable-llm-logging shows planned text logging and warns", async () => {
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await setupCommand.parseAsync([
+      "node",
+      "setup",
+      "--dry-run",
+      "--enable-llm-logging",
+    ]);
+
+    // Still no AWS calls
+    expect(mockStsSend).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(mockBedrockSend).not.toHaveBeenCalled();
+
+    const clack = await import("@clack/prompts");
+    const stepMock = clack.log.step as ReturnType<typeof vi.fn>;
+    const allText = stepMock.mock.calls.map((c) => c[0] as string).join("\n");
+    expect(allText).toContain("textDataDeliveryEnabled=true");
+
+    const warnMock = clack.log.warn as ReturnType<typeof vi.fn>;
+    expect(warnMock).toHaveBeenCalled();
+    const warnText = warnMock.mock.calls[0]![0] as string;
+    expect(warnText).toContain("--enable-llm-logging");
+  });
+
+  it("--help text mentions --enable-llm-logging, --dry-run, and PRIVACY", async () => {
+    const { setupCommand } = await import("./setup.js");
+    const help = setupCommand.helpInformation();
+    expect(help).toContain("--enable-llm-logging");
+    expect(help).toContain("--dry-run");
+    expect(help).toContain("PRIVACY");
   });
 });

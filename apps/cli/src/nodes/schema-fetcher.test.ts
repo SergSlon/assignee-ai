@@ -1,19 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ExecutionStatus, SchemaFetchError } from "@assignee/core";
 
-// Mock CloudFormationSchemaService
+// Mock CloudFormationSchemaService.
+// NOTE: Constructor implementation is re-installed in beforeEach because
+// vitest's mockReset:true wipes vi.fn implementations between tests.
 const mockGetSchema = vi.fn();
 vi.mock("@assignee/core", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
-    CloudFormationSchemaService: vi.fn().mockImplementation(() => ({
-      getSchema: mockGetSchema,
-    })),
+    CloudFormationSchemaService: vi.fn(),
   };
 });
 
 import { schemaFetcherNode, _resetSchemaService } from "./schema-fetcher.js";
+import { CloudFormationSchemaService } from "@assignee/core";
 import type { AgentState } from "../services/graph.js";
 
 function makeState(overrides: Partial<AgentState> = {}): AgentState {
@@ -30,6 +31,12 @@ describe("schemaFetcherNode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     _resetSchemaService();
+    vi.mocked(CloudFormationSchemaService).mockImplementation(
+      () =>
+        ({
+          getSchema: mockGetSchema,
+        }) as unknown as CloudFormationSchemaService,
+    );
   });
 
   it("fetches schema via CloudFormationSchemaService and adapts it", async () => {
@@ -123,8 +130,6 @@ describe("schemaFetcherNode", () => {
 
     // getSchema called twice but CloudFormationSchemaService constructor only once
     expect(mockGetSchema).toHaveBeenCalledTimes(2);
-    const { CloudFormationSchemaService: MockCtor } =
-      await import("@assignee/core");
-    expect(MockCtor).toHaveBeenCalledTimes(1);
+    expect(CloudFormationSchemaService).toHaveBeenCalledTimes(1);
   });
 });

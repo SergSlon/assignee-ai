@@ -8,10 +8,12 @@ import { ExecutionStatus } from "@assignee/core";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
+// NOTE: Default impls for these mocks are re-installed in beforeEach because
+// mockReset:true wipes vi.fn implementations between tests.
 vi.mock("../services/mcp-client.js", () => ({
   createMcpClient: vi.fn(),
   getMcpTools: vi.fn(),
-  closeMcpClient: vi.fn().mockResolvedValue(undefined),
+  closeMcpClient: vi.fn(),
 }));
 
 vi.mock("../services/graph.js", () => ({
@@ -38,21 +40,18 @@ vi.mock("./logger.js", () => ({
 }));
 
 vi.mock("./recorder.js", () => ({
-  isRecordingEnabled: vi.fn(() => false),
+  isRecordingEnabled: vi.fn(),
   RecordingInterceptor: vi.fn(),
-  wrapToolWithRecorder: vi.fn((t: unknown) => t),
+  wrapToolWithRecorder: vi.fn(),
   RecordingLlmAdapter: vi.fn(),
 }));
 
 vi.mock("../services/llm-adapter.js", () => ({
-  LlmAdapter: vi.fn().mockImplementation(() => ({
-    generateText: vi.fn(),
-    generateStructured: vi.fn(),
-  })),
+  LlmAdapter: vi.fn(),
 }));
 
 vi.mock("../services/cleanup.js", () => ({
-  runAutoCleanup: vi.fn().mockResolvedValue(undefined),
+  runAutoCleanup: vi.fn(),
 }));
 
 vi.mock("../services/memory.js", () => ({
@@ -66,6 +65,12 @@ const { renderIntro, renderOutro, renderError, stopSpinner } =
   await import("./display.js");
 const { runCommand, runProvisioningLoop } = await import("./command-runner.js");
 const { runAutoCleanup } = await import("../services/cleanup.js");
+const {
+  isRecordingEnabled,
+  wrapToolWithRecorder,
+  RecordingInterceptor: _RI,
+} = await import("./recorder.js");
+const { LlmAdapter } = await import("../services/llm-adapter.js");
 
 // ── Test setup ──────────────────────────────────────────────────────────────
 
@@ -76,6 +81,18 @@ let origOperatorSecret: string | undefined;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Re-install default impls (mockReset wipes them between tests).
+  vi.mocked(closeMcpClient).mockResolvedValue(undefined);
+  vi.mocked(runAutoCleanup).mockResolvedValue(undefined);
+  vi.mocked(isRecordingEnabled).mockReturnValue(false);
+  vi.mocked(wrapToolWithRecorder).mockImplementation((t) => t as never);
+  vi.mocked(LlmAdapter).mockImplementation(
+    () =>
+      ({
+        generateText: vi.fn(),
+        generateStructured: vi.fn(),
+      }) as unknown as InstanceType<typeof LlmAdapter>,
+  );
   exitSpy = vi
     .spyOn(process, "exit")
     .mockImplementation((() => {}) as never) as any;

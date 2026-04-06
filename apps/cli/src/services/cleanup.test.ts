@@ -16,13 +16,15 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 
-// Mock the primitives before importing the module under test
+// Mock the primitives before importing the module under test.
+// NOTE: Default impls are re-applied in beforeEach because mockReset:true
+// wipes vi.fn implementations between tests.
 vi.mock("./checkpoint.js", () => ({
-  pruneExpiredCheckpoints: vi.fn().mockResolvedValue({ pruned: 5, kept: 3 }),
+  pruneExpiredCheckpoints: vi.fn(),
 }));
 
 vi.mock("./price-cache.js", () => ({
-  sweepExpiredPrices: vi.fn().mockReturnValue({ removed: 12, remaining: 8 }),
+  sweepExpiredPrices: vi.fn(),
 }));
 
 import {
@@ -51,6 +53,8 @@ let tmpDir: string;
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "assignee-cleanup-test-"));
   vi.clearAllMocks();
+  (pruneExpiredCheckpoints as Mock).mockResolvedValue({ pruned: 5, kept: 3 });
+  (sweepExpiredPrices as Mock).mockReturnValue({ removed: 12, remaining: 8 });
 });
 
 afterEach(async () => {

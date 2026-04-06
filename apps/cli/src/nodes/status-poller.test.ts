@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ExecutionStatus } from "@assignee/core";
 import { statusPollerNode } from "./status-poller.js";
 import {
@@ -53,7 +53,28 @@ function makeState(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockProvisioner = createMockProvisioner();
+  vi.useFakeTimers({ shouldAdvanceTime: false });
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+/**
+ * Helper: invoke the SUT (which contains an internal `await setTimeout(2000)`
+ * before the provisioner call) under fake timers. We kick off the call,
+ * advance the fake clock past the 2-second poll interval, and then await
+ * the original promise so the SUT continues past the sleep.
+ */
+async function runPoller(
+  state: Parameters<typeof statusPollerNode>[0],
+  provisioner: ProvisioningPort,
+): Promise<Awaited<ReturnType<typeof statusPollerNode>>> {
+  const promise = statusPollerNode(state, provisioner);
+  // Advance past the 2s POLL_INTERVAL_MS sleep.
+  await vi.advanceTimersByTimeAsync(2_000);
+  return promise;
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -89,7 +110,7 @@ describe("statusPollerNode", () => {
       },
     ]);
 
-    const result = await statusPollerNode(
+    const result = await runPoller(
       makeState({
         resourceType: "AWS::RDS::DBInstance",
         startedAt: Date.now() - 6 * 60 * 1000,
@@ -99,7 +120,7 @@ describe("statusPollerNode", () => {
 
     expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     expect(mockProvisioner.getRequestStatus).toHaveBeenCalled();
-  }, 5000);
+  });
 
   it("times out RDS after 15 minutes", async () => {
     const result = await statusPollerNode(
@@ -124,12 +145,12 @@ describe("statusPollerNode", () => {
       },
     ]);
 
-    const result = await statusPollerNode(makeState(), mockProvisioner);
+    const result = await runPoller(makeState(), mockProvisioner);
 
     expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     expect(result.resourceArn).toBeUndefined();
     expect(mockProvisioner.getRequestStatus).toHaveBeenCalledWith("tok-abc123");
-  }, 5000);
+  });
 
   it("returns SUCCESS with Identifier when OperationStatus is SUCCESS", async () => {
     mockProvisioner.getRequestStatus.mockResolvedValueOnce([
@@ -141,11 +162,11 @@ describe("statusPollerNode", () => {
       },
     ]);
 
-    const result = await statusPollerNode(makeState(), mockProvisioner);
+    const result = await runPoller(makeState(), mockProvisioner);
 
     expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
     expect(result.resourceArn).toBe("poc-smoke-test");
-  }, 5000);
+  });
 
   it("returns FAILED with StatusMessage when OperationStatus is FAILED", async () => {
     mockProvisioner.getRequestStatus.mockResolvedValueOnce([
@@ -158,11 +179,11 @@ describe("statusPollerNode", () => {
       },
     ]);
 
-    const result = await statusPollerNode(makeState(), mockProvisioner);
+    const result = await runPoller(makeState(), mockProvisioner);
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/BucketAlreadyExists/);
-  }, 5000);
+  });
 
   it("returns FAILED with fallback message when FAILED and no StatusMessage", async () => {
     mockProvisioner.getRequestStatus.mockResolvedValueOnce([
@@ -174,11 +195,11 @@ describe("statusPollerNode", () => {
       },
     ]);
 
-    const result = await statusPollerNode(makeState(), mockProvisioner);
+    const result = await runPoller(makeState(), mockProvisioner);
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/provisioning failed/);
-  }, 5000);
+  });
 
   it("returns FAILED when OperationStatus is CANCEL_COMPLETE", async () => {
     mockProvisioner.getRequestStatus.mockResolvedValueOnce([
@@ -190,14 +211,14 @@ describe("statusPollerNode", () => {
       },
     ]);
 
-    const result = await statusPollerNode(
+    const result = await runPoller(
       makeState({ resourceType: "AWS::IAM::Role" }),
       mockProvisioner,
     );
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/provisioning failed/);
-  }, 5000);
+  });
 
   it("returns FAILED with error message on polling error", async () => {
     mockProvisioner.getRequestStatus.mockResolvedValueOnce([
@@ -205,12 +226,12 @@ describe("statusPollerNode", () => {
       null,
     ]);
 
-    const result = await statusPollerNode(makeState(), mockProvisioner);
+    const result = await runPoller(makeState(), mockProvisioner);
 
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(result.errorMessage).toMatch(/CloudControl polling failed/);
     expect(result.errorMessage).toMatch(/Network timeout/);
-  }, 5000);
+  });
 
   it("works for AWS::SSM::Parameter — returns SUCCESS with Identifier", async () => {
     mockProvisioner.getRequestStatus.mockResolvedValueOnce([
@@ -222,7 +243,7 @@ describe("statusPollerNode", () => {
       },
     ]);
 
-    const result = await statusPollerNode(
+    const result = await runPoller(
       makeState({
         requestToken: "tok-ssm-999",
         resourceType: "AWS::SSM::Parameter",
@@ -232,5 +253,5 @@ describe("statusPollerNode", () => {
 
     expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
     expect(result.resourceArn).toBe("/app/config/env");
-  }, 5000);
+  });
 });

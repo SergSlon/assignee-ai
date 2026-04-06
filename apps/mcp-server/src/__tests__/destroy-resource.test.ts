@@ -47,53 +47,58 @@ async function createTestClient() {
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
+// NOTE: Constructor mocks use plain classes (not vi.fn) so they survive
+// vitest's mockReset:true. Command stubs are also plain functions for the
+// same reason — tests don't assert on command constructor calls, only on
+// the resulting send() arguments.
+
 // Mock the Resource Groups Tagging API
 const mockTaggingSend = vi.fn();
 vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
-  return {
-    ResourceGroupsTaggingAPIClient: vi.fn().mockImplementation(() => ({
-      send: mockTaggingSend,
-    })),
-    GetResourcesCommand: vi.fn().mockImplementation((input) => ({
-      ...input,
-      _type: "GetResourcesCommand",
-    })),
-  };
+  class ResourceGroupsTaggingAPIClient {
+    send = mockTaggingSend;
+  }
+  function GetResourcesCommand(input: Record<string, unknown>) {
+    return { ...input, _type: "GetResourcesCommand" };
+  }
+  return { ResourceGroupsTaggingAPIClient, GetResourcesCommand };
 });
 
 // Mock the CloudControl API
 const mockCloudControlSend = vi.fn();
 vi.mock("@aws-sdk/client-cloudcontrol", () => {
+  class CloudControlClient {
+    send = mockCloudControlSend;
+  }
+  function DeleteResourceCommand(input: Record<string, unknown>) {
+    return { ...input, _type: "DeleteResourceCommand" };
+  }
+  function GetResourceRequestStatusCommand(input: Record<string, unknown>) {
+    return { ...input, _type: "GetResourceRequestStatusCommand" };
+  }
   return {
-    CloudControlClient: vi.fn().mockImplementation(() => ({
-      send: mockCloudControlSend,
-    })),
-    DeleteResourceCommand: vi.fn().mockImplementation((input) => ({
-      ...input,
-      _type: "DeleteResourceCommand",
-    })),
-    GetResourceRequestStatusCommand: vi.fn().mockImplementation((input) => ({
-      ...input,
-      _type: "GetResourceRequestStatusCommand",
-    })),
+    CloudControlClient,
+    DeleteResourceCommand,
+    GetResourceRequestStatusCommand,
   };
 });
 
 // Mock the EC2 API (for IGW detach)
 const mockEc2Send = vi.fn();
 vi.mock("@aws-sdk/client-ec2", () => {
+  class EC2Client {
+    send = mockEc2Send;
+  }
+  function DescribeInternetGatewaysCommand(input: Record<string, unknown>) {
+    return { ...input, _type: "DescribeInternetGatewaysCommand" };
+  }
+  function DetachInternetGatewayCommand(input: Record<string, unknown>) {
+    return { ...input, _type: "DetachInternetGatewayCommand" };
+  }
   return {
-    EC2Client: vi.fn().mockImplementation(() => ({
-      send: mockEc2Send,
-    })),
-    DescribeInternetGatewaysCommand: vi.fn().mockImplementation((input) => ({
-      ...input,
-      _type: "DescribeInternetGatewaysCommand",
-    })),
-    DetachInternetGatewayCommand: vi.fn().mockImplementation((input) => ({
-      ...input,
-      _type: "DetachInternetGatewayCommand",
-    })),
+    EC2Client,
+    DescribeInternetGatewaysCommand,
+    DetachInternetGatewayCommand,
   };
 });
 

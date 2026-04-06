@@ -92,10 +92,12 @@ async function createTestClient(ctx?: GraphContext) {
 }
 
 // ── Mock BP loading so re-evaluation doesn't block on minimal test fixtures ──
+// NOTE: Default impls re-installed in beforeEach because mockReset:true wipes
+// vi.fn implementations between tests.
 
 vi.mock("@assignee/best-practices", () => ({
-  loadBestPractices: vi.fn().mockReturnValue([]),
-  evaluateTriggers: vi.fn().mockReturnValue([]),
+  loadBestPractices: vi.fn(),
+  evaluateTriggers: vi.fn(),
 }));
 
 // ── Mock fs for checkpoint loading ───────────────────────────────────────────
@@ -119,10 +121,13 @@ async function setCheckpointFileNotFound() {
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("apply_plan tool", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     _resetActiveApplies();
     _resetBPCache();
+    const bp = await import("@assignee/best-practices");
+    vi.mocked(bp.loadBestPractices).mockReturnValue([]);
+    vi.mocked(bp.evaluateTriggers).mockReturnValue([]);
   });
 
   describe("safety gate (confirmed parameter)", () => {

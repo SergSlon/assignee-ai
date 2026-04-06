@@ -35,56 +35,61 @@ const {
   mockDdbSend: vi.fn(),
 }));
 
+// NOTE: Plain functions/classes (not vi.fn) so impls survive vitest's
+// mockReset:true between tests.
+
 // ── Mock operator credentials ─────────────────────────────────────────────────
 vi.mock("../../config/operator-credentials.js", () => ({
-  operatorCredentials: vi.fn(() => ({
+  operatorCredentials: () => ({
     accessKeyId: "AKIAIOSFODNN7EXAMPLE",
     secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     region: "us-east-1",
-  })),
+  }),
 }));
 
 // ── Mock CloudControlAdapter ──────────────────────────────────────────────────
-vi.mock("../cloudcontrol-adapter.js", () => ({
-  CloudControlAdapter: vi.fn().mockImplementation(() => ({
-    deleteResource: mockDeleteResource,
-    getRequestStatus: mockGetRequestStatus,
-  })),
-}));
+vi.mock("../cloudcontrol-adapter.js", () => {
+  class CloudControlAdapter {
+    deleteResource = mockDeleteResource;
+    getRequestStatus = mockGetRequestStatus;
+  }
+  return { CloudControlAdapter };
+});
 
 // ── Mock createCloudControlClient ─────────────────────────────────────────────
 vi.mock("../cloudcontrol-client.js", () => ({
-  createCloudControlClient: vi.fn().mockReturnValue({}),
+  createCloudControlClient: () => ({}),
 }));
 
 // ── Mock SDKFallbackDispatcher ────────────────────────────────────────────────
-vi.mock("../sdk-fallback-dispatcher.js", () => ({
-  SDKFallbackDispatcher: vi.fn().mockImplementation(() => ({
-    deleteEventSourceMapping: mockDeleteEventSourceMapping,
-    unsubscribe: mockUnsubscribe,
-    deleteTopic: mockDeleteTopic,
-  })),
-}));
+vi.mock("../sdk-fallback-dispatcher.js", () => {
+  class SDKFallbackDispatcher {
+    deleteEventSourceMapping = mockDeleteEventSourceMapping;
+    unsubscribe = mockUnsubscribe;
+    deleteTopic = mockDeleteTopic;
+  }
+  return { SDKFallbackDispatcher };
+});
 
 // ── Mock @aws-sdk/client-cloudfront ───────────────────────────────────────────
 vi.mock("@aws-sdk/client-cloudfront", () => {
   class MockCloudFrontClient {
     send = mockCfSend;
   }
+  function GetDistributionCommand(input: Record<string, unknown>) {
+    return { _type: "GetDistribution", ...input };
+  }
+  function UpdateDistributionCommand(input: Record<string, unknown>) {
+    return { _type: "UpdateDistribution", ...input };
+  }
+  function DeleteDistributionCommand(input: Record<string, unknown>) {
+    return { _type: "DeleteDistribution", ...input };
+  }
   return {
     CloudFrontClient: MockCloudFrontClient,
-    GetDistributionCommand: vi.fn().mockImplementation((input) => ({
-      _type: "GetDistribution",
-      ...input,
-    })),
-    UpdateDistributionCommand: vi.fn().mockImplementation((input) => ({
-      _type: "UpdateDistribution",
-      ...input,
-    })),
-    DeleteDistributionCommand: vi.fn().mockImplementation((input) => ({
-      _type: "DeleteDistribution",
-      ...input,
-    })),
+    GetDistributionCommand,
+    UpdateDistributionCommand,
+    DeleteDistributionCommand,
   };
 });
 
@@ -93,12 +98,12 @@ vi.mock("@aws-sdk/client-dynamodb", () => {
   class MockDynamoDBClient {
     send = mockDdbSend;
   }
+  function UpdateTableCommand(input: Record<string, unknown>) {
+    return { _type: "UpdateTable", ...input };
+  }
   return {
     DynamoDBClient: MockDynamoDBClient,
-    UpdateTableCommand: vi.fn().mockImplementation((input) => ({
-      _type: "UpdateTable",
-      ...input,
-    })),
+    UpdateTableCommand,
   };
 });
 

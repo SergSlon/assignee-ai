@@ -2,26 +2,24 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { z } from "zod";
 import { LlmError } from "@assignee/core";
 
-// Mock all provider packages before importing the adapter
+// Mock all provider packages before importing the adapter.
+// NOTE: Plain functions (not vi.fn) for the provider factories so impls
+// survive vitest's mockReset:true. The `generateText` mock is re-installed
+// in beforeEach to keep call tracking + per-test return values.
 vi.mock("@ai-sdk/anthropic", () => ({
-  createAnthropic: vi.fn(() => vi.fn(() => ({ modelId: "mock-anthropic" }))),
+  createAnthropic: () => () => ({ modelId: "mock-anthropic" }),
 }));
 vi.mock("@ai-sdk/openai", () => ({
-  createOpenAI: vi.fn(() => vi.fn(() => ({ modelId: "mock-openai" }))),
+  createOpenAI: () => () => ({ modelId: "mock-openai" }),
 }));
 vi.mock("@ai-sdk/amazon-bedrock", () => ({
-  createAmazonBedrock: vi.fn(() => vi.fn(() => ({ modelId: "mock-bedrock" }))),
+  createAmazonBedrock: () => () => ({ modelId: "mock-bedrock" }),
 }));
 vi.mock("@ai-sdk/google", () => ({
-  createGoogleGenerativeAI: vi.fn(() =>
-    vi.fn(() => ({ modelId: "mock-google" })),
-  ),
+  createGoogleGenerativeAI: () => () => ({ modelId: "mock-google" }),
 }));
 vi.mock("ai", () => ({
-  generateText: vi.fn().mockResolvedValue({
-    text: "mock text",
-    output: { foo: "bar" },
-  }),
+  generateText: vi.fn(),
   Output: { object: vi.fn() },
 }));
 
@@ -105,6 +103,11 @@ describe("DEFAULT_MAX_TOKENS", () => {
 describe("LlmAdapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-install default impl (mockReset wipes it).
+    vi.mocked(generateText).mockResolvedValue({
+      text: "mock text",
+      output: { foo: "bar" },
+    } as never);
     // Set required API keys for tests
     process.env["ANTHROPIC_API_KEY"] = "test-key";
     process.env["OPENAI_API_KEY"] = "test-key";

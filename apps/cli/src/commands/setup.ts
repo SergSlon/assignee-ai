@@ -219,348 +219,429 @@ export const setupCommand = new Command(CommandName.SETUP)
     "AWS CLI profile with admin/root credentials (reads from ~/.aws/credentials)",
   )
   .option("-y, --yes", "Skip confirmation prompts")
-  .action(async (options: { profile?: string; yes?: boolean }) => {
-    clack.intro("Assignee.ai — IAM Setup");
+  .option(
+    "--enable-llm-logging",
+    "PRIVACY: Enable Bedrock invocation text logging to CloudWatch (logs every prompt and response). Default: OFF.",
+    false,
+  )
+  .option(
+    "--dry-run",
+    "Print the plan of resources that WOULD be created without invoking any AWS APIs",
+    false,
+  )
+  .action(
+    async (options: {
+      profile?: string;
+      yes?: boolean;
+      enableLlmLogging?: boolean;
+      dryRun?: boolean;
+    }) => {
+      clack.intro("Assignee.ai — IAM Setup");
 
-    // ── Build credential provider ────────────────────────────────────
-    // The setup command needs admin/root credentials which are typically in
-    // ~/.aws/credentials, not in .env (which has the operator user).
-    // Always use fromIni() to read from the AWS credentials file/config.
-    // Use --profile to specify a non-default profile.
-    const { fromIni } = await import("@aws-sdk/credential-providers");
-    const clientConfig: {
-      credentials: ReturnType<typeof fromIni>;
-      region?: string;
-    } = {
-      credentials: fromIni({ profile: options.profile ?? "default" }),
-    };
-
-    // ── Verify admin credentials ─────────────────────────────────────
-    const s = clack.spinner();
-    s.start("Verifying AWS credentials...");
-
-    let accountId: string;
-    try {
-      const sts = new STSClient(clientConfig);
-      const identity = await sts.send(new GetCallerIdentityCommand({}));
-      accountId = identity.Account!;
-      s.stop(`Authenticated as ${identity.Arn} (account: ${accountId})`);
-    } catch (err) {
-      s.stop("Failed to verify AWS credentials.");
-      throw new ConfigurationError(
-        "Cannot reach AWS STS. Ensure you have admin/root credentials configured.\n" +
-          "Tip: Use --profile <name> to specify an AWS CLI profile with admin access.\n" +
-          `Error: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-
-    // ── Display plan and confirm ─────────────────────────────────────
-    clack.log.info(
-      "This command will create/update the following IAM resources:",
-    );
-    for (const role of ROLES) {
-      clack.log.step(
-        `  User: ${role.userName}\n  Policy: ${role.policyName}\n  Purpose: ${role.description}`,
-      );
-    }
-
-    if (!options.yes) {
-      const confirmed = await clack.confirm({
-        message: "Proceed with IAM setup?",
-        initialValue: true,
-      });
-
-      if (clack.isCancel(confirmed) || !confirmed) {
-        clack.outro(UserMessage.SETUP_CANCELLED);
+      // ── Dry-run path: print plan and exit without any AWS calls ─────
+      if (options.dryRun) {
+        clack.log.info(
+          "DRY RUN — no AWS APIs will be called. The following resources WOULD be created/updated:",
+        );
+        clack.log.step("IAM Users:");
+        for (const role of ROLES) {
+          clack.log.step(
+            `  - ${role.userName} (managed policy: ${role.policyName}) — ${role.description}`,
+          );
+        }
+        clack.log.step("IAM Managed Policies:");
+        for (const role of ROLES) {
+          clack.log.step(
+            `  - ${role.policyName} (attached to user ${role.userName})`,
+          );
+        }
+        clack.log.step("IAM Access Keys:");
+        for (const role of ROLES) {
+          clack.log.step(
+            `  - 1 access key per user, written to .env as ${role.envKeyId} / ${role.envSecretKey}`,
+          );
+        }
+        clack.log.step("Bedrock invocation logging infrastructure:");
+        clack.log.step(`  - IAM role: ${BEDROCK_LOGGING_ROLE_NAME}`);
+        clack.log.step(
+          `  - Inline policy: ${BEDROCK_LOGGING_POLICY_NAME} (logs:CreateLogGroup, CreateLogStream, PutLogEvents, DescribeLogGroups)`,
+        );
+        clack.log.step(`  - CloudWatch log group: ${BEDROCK_LOG_GROUP_NAME}`);
+        clack.log.step(
+          `  - Bedrock model invocation logging configuration: textDataDeliveryEnabled=${
+            options.enableLlmLogging ? "true" : "false"
+          }, imageDataDeliveryEnabled=false, embeddingDataDeliveryEnabled=false`,
+        );
+        if (options.enableLlmLogging) {
+          clack.log.warn(
+            "WARNING: --enable-llm-logging is set. If applied, ALL Bedrock prompts and responses will be written to CloudWatch Logs in plaintext.",
+          );
+        } else {
+          clack.log.info(
+            "LLM prompt/response text logging is OFF (safe default). Re-run with --enable-llm-logging to opt in.",
+          );
+        }
+        clack.log.step(`Files written: .env (in ${process.cwd()})`);
+        clack.outro("Dry run complete — no changes made.");
         return;
       }
-    }
 
-    const iam = new IAMClient(clientConfig);
-    const envUpdates: Record<string, string> = {};
+      // ── Build credential provider ────────────────────────────────────
+      // The setup command needs admin/root credentials which are typically in
+      // ~/.aws/credentials, not in .env (which has the operator user).
+      // Always use fromIni() to read from the AWS credentials file/config.
+      // Use --profile to specify a non-default profile.
+      const { fromIni } = await import("@aws-sdk/credential-providers");
+      const clientConfig: {
+        credentials: ReturnType<typeof fromIni>;
+        region?: string;
+      } = {
+        credentials: fromIni({ profile: options.profile ?? "default" }),
+      };
 
-    // ── Pre-check existing users for key rotation prompts (sequential) ─
-    // Interactive prompts cannot run in parallel, so we gather rotation
-    // decisions before the parallel IAM work begins.
-    const rotationDecisions = new Map<string, boolean>();
-    if (!options.yes) {
-      for (const role of ROLES) {
-        try {
-          await iam.send(new GetUserCommand({ UserName: role.userName }));
-          // User exists — check for access keys
-          const existingKeys = await iam.send(
-            new ListAccessKeysCommand({ UserName: role.userName }),
-          );
-          const hasKeys = (existingKeys.AccessKeyMetadata ?? []).length > 0;
-          if (hasKeys) {
-            const rotate = await clack.confirm({
-              message: `User ${role.userName} already has access keys. Rotate them?`,
-              initialValue: false,
-            });
-            if (clack.isCancel(rotate)) {
-              clack.outro(UserMessage.SETUP_CANCELLED);
-              return;
-            }
-            rotationDecisions.set(role.userName, !!rotate);
-          }
-        } catch {
-          // User doesn't exist yet — will be created; no prompt needed
-        }
-      }
-    }
+      // ── Verify admin credentials ─────────────────────────────────────
+      const s = clack.spinner();
+      s.start("Verifying AWS credentials...");
 
-    // ── Create/update users, policies, and access keys (parallel) ────
-    const sp = clack.spinner();
-    const roleNames = ROLES.map((r) => r.userName).join(", ");
-    sp.start(
-      `Creating ${ROLES.length} IAM users in parallel (${roleNames})...`,
-    );
-
-    const settled = await Promise.allSettled(
-      ROLES.map(async (role) => {
-        const roleEnv: Record<string, string> = {};
-
-        // 1. Create or verify user
-        const isNew = await ensureUser(iam, role.userName);
-
-        // Tag user idempotently (covers pre-existing users missing the tag)
-        await iam.send(
-          new TagUserCommand({
-            UserName: role.userName,
-            Tags: [MANAGED_TAG],
-          }),
-        );
-
-        // 2. Create or update policy
-        const policyDoc = role.policyFn();
-        const policyArn = await ensurePolicy(
-          iam,
-          accountId,
-          role.policyName,
-          policyDoc,
-        );
-
-        // Tag policy idempotently
-        await iam.send(
-          new TagPolicyCommand({
-            PolicyArn: policyArn,
-            Tags: [MANAGED_TAG],
-          }),
-        );
-
-        // 3. Attach policy to user
-        await iam.send(
-          new AttachUserPolicyCommand({
-            UserName: role.userName,
-            PolicyArn: policyArn,
-          }),
-        );
-
-        // 4. Handle access keys
-        let shouldCreateKey = isNew;
-        if (!isNew) {
-          const existingKeys = await iam.send(
-            new ListAccessKeysCommand({ UserName: role.userName }),
-          );
-          const hasKeys = (existingKeys.AccessKeyMetadata ?? []).length > 0;
-
-          if (hasKeys) {
-            // Use pre-collected rotation decision; --yes skips rotation
-            const rotate = rotationDecisions.get(role.userName) ?? false;
-            shouldCreateKey = rotate;
-            if (rotate) {
-              const keys = await ensureAccessKey(iam, role.userName, true);
-              roleEnv[role.envKeyId] = keys.accessKeyId;
-              roleEnv[role.envSecretKey] = keys.secretAccessKey;
-            }
-          } else {
-            shouldCreateKey = true;
-          }
-        }
-
-        if (shouldCreateKey && !roleEnv[role.envKeyId]) {
-          const keys = await ensureAccessKey(iam, role.userName, false);
-          roleEnv[role.envKeyId] = keys.accessKeyId;
-          roleEnv[role.envSecretKey] = keys.secretAccessKey;
-        }
-
-        return { role, isNew, roleEnv };
-      }),
-    );
-
-    // Handle partial failures gracefully — save keys from successful roles
-    const succeeded = settled.filter(
-      (
-        r,
-      ): r is PromiseFulfilledResult<{
-        role: (typeof ROLES)[number];
-        isNew: boolean;
-        roleEnv: Record<string, string>;
-      }> => r.status === PromiseStatus.FULFILLED,
-    );
-    const failed = settled.filter(
-      (r): r is PromiseRejectedResult => r.status === PromiseStatus.REJECTED,
-    );
-
-    sp.stop(
-      failed.length === 0
-        ? `All ${ROLES.length} IAM users ready (${roleNames})`
-        : `${succeeded.length}/${ROLES.length} IAM users ready (${failed.length} failed)`,
-    );
-
-    if (failed.length > 0) {
-      for (const f of failed) {
-        clack.log.error(
-          `IAM setup failed for one role: ${f.reason instanceof Error ? f.reason.message : String(f.reason)}`,
-        );
-      }
-    }
-
-    // Merge per-role env updates from successful roles
-    for (const {
-      value: { role, isNew, roleEnv },
-    } of succeeded) {
-      Object.assign(envUpdates, roleEnv);
-      clack.log.step(
-        isNew
-          ? `Created user ${role.userName} with policy ${role.policyName}`
-          : `User ${role.userName} verified, policy ${role.policyName} updated`,
-      );
-    }
-
-    // ── Bedrock invocation logging (Tasks 1–3 from aws-bootstrap.md) ──
-    const region = AWS_REGION;
-    const logSp = clack.spinner();
-    logSp.start("Setting up Bedrock invocation logging...");
-
-    // Task 1: Create IAM role for Bedrock logging
-    try {
-      await iam.send(
-        new GetRoleCommand({ RoleName: BEDROCK_LOGGING_ROLE_NAME }),
-      );
-      clack.log.step(
-        `Role ${BEDROCK_LOGGING_ROLE_NAME} — verified (already exists)`,
-      );
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === AwsErrorName.NO_SUCH_ENTITY) {
-        await iam.send(
-          new CreateRoleCommand({
-            RoleName: BEDROCK_LOGGING_ROLE_NAME,
-            AssumeRolePolicyDocument: JSON.stringify({
-              Version: IamPolicy.VERSION,
-              Statement: [
-                {
-                  Effect: IamEffect.ALLOW,
-                  Principal: { Service: AwsServicePrincipal.BEDROCK },
-                  Action: IamPolicy.ACTION_ASSUME_ROLE,
-                },
-              ],
-            }),
-            Description:
-              "Allows Bedrock to write invocation logs to CloudWatch",
-          }),
-        );
-        clack.log.step(`Role ${BEDROCK_LOGGING_ROLE_NAME} — created`);
-      } else {
-        throw err;
-      }
-    }
-
-    // Tag Bedrock logging role idempotently
-    await iam.send(
-      new TagRoleCommand({
-        RoleName: BEDROCK_LOGGING_ROLE_NAME,
-        Tags: [MANAGED_TAG],
-      }),
-    );
-
-    // Task 2: Attach inline logging policy to the role (put-role-policy is idempotent)
-    await iam.send(
-      new PutRolePolicyCommand({
-        RoleName: BEDROCK_LOGGING_ROLE_NAME,
-        PolicyName: BEDROCK_LOGGING_POLICY_NAME,
-        PolicyDocument: JSON.stringify({
-          Version: IamPolicy.VERSION,
-          Statement: [
-            {
-              Effect: IamEffect.ALLOW,
-              Action: [
-                IamAction.LOGS_CREATE_LOG_GROUP,
-                IamAction.LOGS_CREATE_LOG_STREAM,
-                IamAction.LOGS_PUT_LOG_EVENTS,
-                IamAction.LOGS_DESCRIBE_LOG_GROUPS,
-              ],
-              Resource: `${ArnPrefix.LOGS}${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
-            },
-          ],
-        }),
-      }),
-    );
-    clack.log.step("Inline policy BedrockLoggingPolicy — applied");
-
-    // Task 3: Create CloudWatch log group
-    {
-      const { CloudWatchLogsClient, CreateLogGroupCommand } =
-        await import("@aws-sdk/client-cloudwatch-logs");
-      const cwl = new CloudWatchLogsClient({ ...clientConfig, region });
+      let accountId: string;
       try {
-        await cwl.send(
-          new CreateLogGroupCommand({ logGroupName: BEDROCK_LOG_GROUP_NAME }),
+        const sts = new STSClient(clientConfig);
+        const identity = await sts.send(new GetCallerIdentityCommand({}));
+        accountId = identity.Account!;
+        s.stop(`Authenticated as ${identity.Arn} (account: ${accountId})`);
+      } catch (err) {
+        s.stop("Failed to verify AWS credentials.");
+        throw new ConfigurationError(
+          "Cannot reach AWS STS. Ensure you have admin/root credentials configured.\n" +
+            "Tip: Use --profile <name> to specify an AWS CLI profile with admin access.\n" +
+            `Error: ${err instanceof Error ? err.message : String(err)}`,
         );
-        clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — created`);
+      }
+
+      // ── Display plan and confirm ─────────────────────────────────────
+      clack.log.info(
+        "This command will create/update the following IAM resources:",
+      );
+      for (const role of ROLES) {
+        clack.log.step(
+          `  User: ${role.userName}\n  Policy: ${role.policyName}\n  Purpose: ${role.description}`,
+        );
+      }
+
+      if (!options.yes) {
+        const confirmed = await clack.confirm({
+          message: "Proceed with IAM setup?",
+          initialValue: true,
+        });
+
+        if (clack.isCancel(confirmed) || !confirmed) {
+          clack.outro(UserMessage.SETUP_CANCELLED);
+          return;
+        }
+      }
+
+      const iam = new IAMClient(clientConfig);
+      const envUpdates: Record<string, string> = {};
+
+      // ── Pre-check existing users for key rotation prompts (sequential) ─
+      // Interactive prompts cannot run in parallel, so we gather rotation
+      // decisions before the parallel IAM work begins.
+      const rotationDecisions = new Map<string, boolean>();
+      if (!options.yes) {
+        for (const role of ROLES) {
+          try {
+            await iam.send(new GetUserCommand({ UserName: role.userName }));
+            // User exists — check for access keys
+            const existingKeys = await iam.send(
+              new ListAccessKeysCommand({ UserName: role.userName }),
+            );
+            const hasKeys = (existingKeys.AccessKeyMetadata ?? []).length > 0;
+            if (hasKeys) {
+              const rotate = await clack.confirm({
+                message: `User ${role.userName} already has access keys. Rotate them?`,
+                initialValue: false,
+              });
+              if (clack.isCancel(rotate)) {
+                clack.outro(UserMessage.SETUP_CANCELLED);
+                return;
+              }
+              rotationDecisions.set(role.userName, !!rotate);
+            }
+          } catch {
+            // User doesn't exist yet — will be created; no prompt needed
+          }
+        }
+      }
+
+      // ── Create/update users, policies, and access keys (parallel) ────
+      const sp = clack.spinner();
+      const roleNames = ROLES.map((r) => r.userName).join(", ");
+      sp.start(
+        `Creating ${ROLES.length} IAM users in parallel (${roleNames})...`,
+      );
+
+      const settled = await Promise.allSettled(
+        ROLES.map(async (role) => {
+          const roleEnv: Record<string, string> = {};
+
+          // 1. Create or verify user
+          const isNew = await ensureUser(iam, role.userName);
+
+          // Tag user idempotently (covers pre-existing users missing the tag)
+          await iam.send(
+            new TagUserCommand({
+              UserName: role.userName,
+              Tags: [MANAGED_TAG],
+            }),
+          );
+
+          // 2. Create or update policy
+          const policyDoc = role.policyFn();
+          const policyArn = await ensurePolicy(
+            iam,
+            accountId,
+            role.policyName,
+            policyDoc,
+          );
+
+          // Tag policy idempotently
+          await iam.send(
+            new TagPolicyCommand({
+              PolicyArn: policyArn,
+              Tags: [MANAGED_TAG],
+            }),
+          );
+
+          // 3. Attach policy to user
+          await iam.send(
+            new AttachUserPolicyCommand({
+              UserName: role.userName,
+              PolicyArn: policyArn,
+            }),
+          );
+
+          // 4. Handle access keys
+          let shouldCreateKey = isNew;
+          if (!isNew) {
+            const existingKeys = await iam.send(
+              new ListAccessKeysCommand({ UserName: role.userName }),
+            );
+            const hasKeys = (existingKeys.AccessKeyMetadata ?? []).length > 0;
+
+            if (hasKeys) {
+              // Use pre-collected rotation decision; --yes skips rotation
+              const rotate = rotationDecisions.get(role.userName) ?? false;
+              shouldCreateKey = rotate;
+              if (rotate) {
+                const keys = await ensureAccessKey(iam, role.userName, true);
+                roleEnv[role.envKeyId] = keys.accessKeyId;
+                roleEnv[role.envSecretKey] = keys.secretAccessKey;
+              }
+            } else {
+              shouldCreateKey = true;
+            }
+          }
+
+          if (shouldCreateKey && !roleEnv[role.envKeyId]) {
+            const keys = await ensureAccessKey(iam, role.userName, false);
+            roleEnv[role.envKeyId] = keys.accessKeyId;
+            roleEnv[role.envSecretKey] = keys.secretAccessKey;
+          }
+
+          return { role, isNew, roleEnv };
+        }),
+      );
+
+      // Handle partial failures gracefully — save keys from successful roles
+      const succeeded = settled.filter(
+        (
+          r,
+        ): r is PromiseFulfilledResult<{
+          role: (typeof ROLES)[number];
+          isNew: boolean;
+          roleEnv: Record<string, string>;
+        }> => r.status === PromiseStatus.FULFILLED,
+      );
+      const failed = settled.filter(
+        (r): r is PromiseRejectedResult => r.status === PromiseStatus.REJECTED,
+      );
+
+      sp.stop(
+        failed.length === 0
+          ? `All ${ROLES.length} IAM users ready (${roleNames})`
+          : `${succeeded.length}/${ROLES.length} IAM users ready (${failed.length} failed)`,
+      );
+
+      if (failed.length > 0) {
+        for (const f of failed) {
+          clack.log.error(
+            `IAM setup failed for one role: ${f.reason instanceof Error ? f.reason.message : String(f.reason)}`,
+          );
+        }
+      }
+
+      // Merge per-role env updates from successful roles
+      for (const {
+        value: { role, isNew, roleEnv },
+      } of succeeded) {
+        Object.assign(envUpdates, roleEnv);
+        clack.log.step(
+          isNew
+            ? `Created user ${role.userName} with policy ${role.policyName}`
+            : `User ${role.userName} verified, policy ${role.policyName} updated`,
+        );
+      }
+
+      // ── Bedrock invocation logging (Tasks 1–3 from aws-bootstrap.md) ──
+      const region = AWS_REGION;
+      const logSp = clack.spinner();
+      logSp.start("Setting up Bedrock invocation logging...");
+
+      // Task 1: Create IAM role for Bedrock logging
+      try {
+        await iam.send(
+          new GetRoleCommand({ RoleName: BEDROCK_LOGGING_ROLE_NAME }),
+        );
+        clack.log.step(
+          `Role ${BEDROCK_LOGGING_ROLE_NAME} — verified (already exists)`,
+        );
       } catch (err: unknown) {
-        if (
-          err instanceof Error &&
-          err.name === AwsErrorName.RESOURCE_ALREADY_EXISTS
-        ) {
-          clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — verified`);
+        if (err instanceof Error && err.name === AwsErrorName.NO_SUCH_ENTITY) {
+          await iam.send(
+            new CreateRoleCommand({
+              RoleName: BEDROCK_LOGGING_ROLE_NAME,
+              AssumeRolePolicyDocument: JSON.stringify({
+                Version: IamPolicy.VERSION,
+                Statement: [
+                  {
+                    Effect: IamEffect.ALLOW,
+                    Principal: { Service: AwsServicePrincipal.BEDROCK },
+                    Action: IamPolicy.ACTION_ASSUME_ROLE,
+                  },
+                ],
+              }),
+              Description:
+                "Allows Bedrock to write invocation logs to CloudWatch",
+            }),
+          );
+          clack.log.step(`Role ${BEDROCK_LOGGING_ROLE_NAME} — created`);
         } else {
           throw err;
         }
       }
-    }
 
-    // Task 4: Enable Bedrock invocation logging
-    {
-      const { BedrockClient, PutModelInvocationLoggingConfigurationCommand } =
-        await import("@aws-sdk/client-bedrock");
-      const bedrock = new BedrockClient({ ...clientConfig, region });
-      await bedrock.send(
-        new PutModelInvocationLoggingConfigurationCommand({
-          loggingConfig: {
-            cloudWatchConfig: {
-              logGroupName: BEDROCK_LOG_GROUP_NAME,
-              roleArn: `${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
-            },
-            textDataDeliveryEnabled: true,
-            imageDataDeliveryEnabled: false,
-            embeddingDataDeliveryEnabled: false,
-          },
+      // Tag Bedrock logging role idempotently
+      await iam.send(
+        new TagRoleCommand({
+          RoleName: BEDROCK_LOGGING_ROLE_NAME,
+          Tags: [MANAGED_TAG],
         }),
       );
-      clack.log.step("Bedrock invocation logging — enabled");
-    }
 
-    logSp.stop("Bedrock logging IAM role and policy ready");
-
-    // ── Write .env file ──────────────────────────────────────────────
-    if (Object.keys(envUpdates).length > 0) {
-      const envPath = path.resolve(process.cwd(), ".env");
-      const sp = clack.spinner();
-      sp.start("Writing credentials to .env...");
-      mergeEnvFile(envPath, envUpdates);
-      sp.stop("Credentials written to .env");
-    } else {
-      clack.log.info("No new access keys created — .env file unchanged.");
-    }
-
-    // ── Summary ──────────────────────────────────────────────────────
-    clack.log.success("IAM setup complete! Users and policies:");
-    for (const role of ROLES) {
-      clack.log.step(
-        `  ${role.userName} → ${role.policyName} (env: ${role.envKeyId})`,
+      // Task 2: Attach inline logging policy to the role (put-role-policy is idempotent)
+      await iam.send(
+        new PutRolePolicyCommand({
+          RoleName: BEDROCK_LOGGING_ROLE_NAME,
+          PolicyName: BEDROCK_LOGGING_POLICY_NAME,
+          PolicyDocument: JSON.stringify({
+            Version: IamPolicy.VERSION,
+            Statement: [
+              {
+                Effect: IamEffect.ALLOW,
+                Action: [
+                  IamAction.LOGS_CREATE_LOG_GROUP,
+                  IamAction.LOGS_CREATE_LOG_STREAM,
+                  IamAction.LOGS_PUT_LOG_EVENTS,
+                  IamAction.LOGS_DESCRIBE_LOG_GROUPS,
+                ],
+                Resource: `${ArnPrefix.LOGS}${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
+              },
+            ],
+          }),
+        }),
       );
-    }
+      clack.log.step("Inline policy BedrockLoggingPolicy — applied");
 
-    clack.outro("Run `assignee plan` to verify the new credentials work.");
-  });
+      // Task 3: Create CloudWatch log group
+      {
+        const { CloudWatchLogsClient, CreateLogGroupCommand } =
+          await import("@aws-sdk/client-cloudwatch-logs");
+        const cwl = new CloudWatchLogsClient({ ...clientConfig, region });
+        try {
+          await cwl.send(
+            new CreateLogGroupCommand({ logGroupName: BEDROCK_LOG_GROUP_NAME }),
+          );
+          clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — created`);
+        } catch (err: unknown) {
+          if (
+            err instanceof Error &&
+            err.name === AwsErrorName.RESOURCE_ALREADY_EXISTS
+          ) {
+            clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — verified`);
+          } else {
+            throw err;
+          }
+        }
+      }
+
+      // Task 4: Enable Bedrock invocation logging
+      // PRIVACY: textDataDeliveryEnabled defaults to FALSE. Only when the user
+      // explicitly passes --enable-llm-logging do we send prompt/response text
+      // to CloudWatch Logs. Metadata logging still flows so callers retain
+      // invocation telemetry without bodies.
+      {
+        const { BedrockClient, PutModelInvocationLoggingConfigurationCommand } =
+          await import("@aws-sdk/client-bedrock");
+        const bedrock = new BedrockClient({ ...clientConfig, region });
+        const textLogging = options.enableLlmLogging === true;
+        if (textLogging) {
+          clack.log.warn(
+            "⚠ All LLM prompts/responses will be logged to CloudWatch — " +
+              `disable later via: aws bedrock put-model-invocation-logging-configuration ` +
+              `--logging-config '{"cloudWatchConfig":{"logGroupName":"${BEDROCK_LOG_GROUP_NAME}","roleArn":"${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}"},"textDataDeliveryEnabled":false}'`,
+          );
+        }
+        await bedrock.send(
+          new PutModelInvocationLoggingConfigurationCommand({
+            loggingConfig: {
+              cloudWatchConfig: {
+                logGroupName: BEDROCK_LOG_GROUP_NAME,
+                roleArn: `${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
+              },
+              textDataDeliveryEnabled: textLogging,
+              imageDataDeliveryEnabled: false,
+              embeddingDataDeliveryEnabled: false,
+            },
+          }),
+        );
+        clack.log.step(
+          textLogging
+            ? "Bedrock invocation logging — enabled (text bodies INCLUDED)"
+            : "Bedrock invocation logging — enabled (metadata only, text bodies excluded)",
+        );
+      }
+
+      logSp.stop("Bedrock logging IAM role and policy ready");
+
+      // ── Write .env file ──────────────────────────────────────────────
+      if (Object.keys(envUpdates).length > 0) {
+        const envPath = path.resolve(process.cwd(), ".env");
+        const sp = clack.spinner();
+        sp.start("Writing credentials to .env...");
+        mergeEnvFile(envPath, envUpdates);
+        sp.stop("Credentials written to .env");
+      } else {
+        clack.log.info("No new access keys created — .env file unchanged.");
+      }
+
+      // ── Summary ──────────────────────────────────────────────────────
+      clack.log.success("IAM setup complete! Users and policies:");
+      for (const role of ROLES) {
+        clack.log.step(
+          `  ${role.userName} → ${role.policyName} (env: ${role.envKeyId})`,
+        );
+      }
+
+      clack.outro("Run `assignee plan` to verify the new credentials work.");
+    },
+  );

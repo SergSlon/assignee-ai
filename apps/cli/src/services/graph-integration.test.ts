@@ -36,21 +36,25 @@ import { ToolName } from "../constants/tools.js";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
-// Mock CloudFormationSchemaService — schema fetching now uses direct SDK, not MCP
+// Mock CloudFormationSchemaService — schema fetching now uses direct SDK,
+// not MCP. NOTE: Constructor uses a plain class so it survives vitest's
+// mockReset:true between tests.
 const mockGetSchema = vi.fn();
 vi.mock("@assignee/core", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
+  class CloudFormationSchemaService {
+    getSchema = mockGetSchema;
+  }
   return {
     ...actual,
-    CloudFormationSchemaService: vi.fn().mockImplementation(() => ({
-      getSchema: mockGetSchema,
-    })),
+    CloudFormationSchemaService,
   };
 });
 
-// Mock CloudControl client — prevents real AWS API calls
+// Mock CloudControl client — prevents real AWS API calls. Plain function
+// so impl survives mockReset:true.
 vi.mock("../services/cloudcontrol-client.js", () => ({
-  createCloudControlClient: vi.fn(() => ({ send: vi.fn() })),
+  createCloudControlClient: () => ({ send: () => undefined }),
 }));
 
 // Mock the AI SDK — intercepts all LLM calls made by BedrockLlmAdapter
@@ -61,55 +65,52 @@ vi.mock("ai", () => ({
 }));
 
 vi.mock("@ai-sdk/amazon-bedrock", () => ({
-  createAmazonBedrock: vi.fn(() => vi.fn()),
+  createAmazonBedrock: () => () => undefined,
 }));
 
-// Mock LlmAdapter — delegates to the same ai mock so existing test fixtures work.
+// Mock LlmAdapter — delegates to the same ai mock so existing test fixtures
+// work. Plain class survives vitest's mockReset:true between tests.
 vi.mock("./llm-adapter.js", async () => {
   const { LlmError, safeTry } = await import("@assignee/core");
   const ai = await import("ai");
-  return {
-    LlmAdapter: vi.fn().mockImplementation(() => ({
-      generateStructured: async (
-        prompt: string,
-        schema: unknown,
-        options?: { maxTokens?: number },
-      ) => {
-        const [err, result] = await safeTry(
-          ai.generateText({
-            model: {} as never,
-            output: ai.Output.object({ schema: schema as never }),
-            maxOutputTokens: options?.maxTokens ?? 1024,
-            messages: [{ role: "user", content: prompt }],
-          }),
-        );
-        if (err)
-          return [
-            new LlmError(`Structured LLM call failed: ${String(err)}`),
-            null,
-          ] as const;
-        return [null, (result as { output: unknown }).output] as const;
-      },
-      generateText: async (
-        prompt: string,
-        options?: { maxTokens?: number },
-      ) => {
-        const [err, result] = await safeTry(
-          ai.generateText({
-            model: {} as never,
-            maxOutputTokens: options?.maxTokens ?? 1024,
-            messages: [{ role: "user", content: prompt }],
-          }),
-        );
-        if (err)
-          return [
-            new LlmError(`Text LLM call failed: ${String(err)}`),
-            null,
-          ] as const;
-        return [null, (result as { text: string }).text] as const;
-      },
-    })),
-  };
+  class LlmAdapter {
+    async generateStructured(
+      prompt: string,
+      schema: unknown,
+      options?: { maxTokens?: number },
+    ) {
+      const [err, result] = await safeTry(
+        ai.generateText({
+          model: {} as never,
+          output: ai.Output.object({ schema: schema as never }),
+          maxOutputTokens: options?.maxTokens ?? 1024,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      );
+      if (err)
+        return [
+          new LlmError(`Structured LLM call failed: ${String(err)}`),
+          null,
+        ] as const;
+      return [null, (result as { output: unknown }).output] as const;
+    }
+    async generateText(prompt: string, options?: { maxTokens?: number }) {
+      const [err, result] = await safeTry(
+        ai.generateText({
+          model: {} as never,
+          maxOutputTokens: options?.maxTokens ?? 1024,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      );
+      if (err)
+        return [
+          new LlmError(`Text LLM call failed: ${String(err)}`),
+          null,
+        ] as const;
+      return [null, (result as { text: string }).text] as const;
+    }
+  }
+  return { LlmAdapter };
 });
 
 // Mock display utilities — capture output without writing to terminal
@@ -135,7 +136,8 @@ vi.mock("../utils/display.js", async (importOriginal) => {
   };
 });
 
-// Mock clack prompts (used by option-elicitor for spinners)
+// Mock clack prompts (used by option-elicitor for spinners). Plain functions
+// where we don't need call assertions so impls survive mockReset:true.
 vi.mock("@clack/prompts", () => ({
   confirm: vi.fn(),
   select: vi.fn(),
@@ -143,27 +145,30 @@ vi.mock("@clack/prompts", () => ({
   multiselect: vi.fn(),
   autocomplete: vi.fn(),
   autocompleteMultiselect: vi.fn(),
-  isCancel: vi.fn(() => false),
+  isCancel: () => false,
   note: vi.fn(),
   log: { info: vi.fn(), warn: vi.fn() },
-  spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), message: vi.fn() })),
+  spinner: () => ({
+    start: () => undefined,
+    stop: () => undefined,
+    message: () => undefined,
+  }),
 }));
 
-// Story 27.4: Mock config loaders — return undefined by default (no config)
+// Story 27.4: Mock config loaders — return undefined by default (no config).
+// Plain functions for the static stubs so impls survive mockReset:true.
 vi.mock("../config/user-config-loader.js", () => ({
-  loadUserConfig: vi.fn().mockResolvedValue(undefined),
-  resolveConfigPath: vi
-    .fn()
-    .mockReturnValue("/tmp/.config/assignee/config.yaml"),
+  loadUserConfig: async () => undefined,
+  resolveConfigPath: () => "/tmp/.config/assignee/config.yaml",
 }));
 
 vi.mock("../config/project-config-loader.js", () => ({
-  loadProjectConfig: vi.fn().mockResolvedValue(undefined),
+  loadProjectConfig: async () => undefined,
 }));
 
 vi.mock("../config/org-policy-cache.js", () => ({
-  readAuthToken: vi.fn().mockResolvedValue(undefined),
-  fetchOrgPolicy: vi.fn().mockResolvedValue(undefined),
+  readAuthToken: async () => undefined,
+  fetchOrgPolicy: async () => undefined,
 }));
 
 import { createGraph } from "./graph.js";
@@ -188,8 +193,14 @@ function mockLlmForPlanFlow(resourceType: string, desiredStateJson: string) {
 
 // ── Test setup ──────────────────────────────────────────────────────────────
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  // Re-install display mock impls (mockReset:true wipes them between tests).
+  const display = await import("../utils/display.js");
+  vi.mocked(display.renderHitlConfirm).mockResolvedValue(false);
+  vi.mocked(display.renderHitlCompoundConfirm).mockResolvedValue(false);
+  vi.mocked(display.renderDocHelp).mockResolvedValue(null);
+  vi.mocked(display.renderAdvancedConfirm).mockResolvedValue(false);
   // mockReset is required to clear mockResolvedValueOnce queues
   // (vi.clearAllMocks only calls mockClear which may not flush them)
   mockGenerateText.mockReset();

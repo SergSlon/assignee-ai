@@ -3,20 +3,35 @@ import { ProvisioningErrorKind } from "../provisioning-port.js";
 
 // ── Mock AWS SDK clients ────────────────────────────────────────────────────
 
+// NOTE: Plain class for client constructors (so they survive mockReset),
+// vi.fn for command constructors (tests assert on .toHaveBeenCalledWith).
+// Command vi.fn implementations are re-installed in beforeEach.
 const mockLambdaSend = vi.fn();
-vi.mock("@aws-sdk/client-lambda", () => ({
-  LambdaClient: vi.fn().mockImplementation(() => ({ send: mockLambdaSend })),
-  CreateEventSourceMappingCommand: vi.fn().mockImplementation((input) => input),
-}));
+vi.mock("@aws-sdk/client-lambda", () => {
+  class LambdaClient {
+    send = mockLambdaSend;
+  }
+  return {
+    LambdaClient,
+    CreateEventSourceMappingCommand: vi.fn(),
+  };
+});
 
 const mockSnsSend = vi.fn();
-vi.mock("@aws-sdk/client-sns", () => ({
-  SNSClient: vi.fn().mockImplementation(() => ({ send: mockSnsSend })),
-  SubscribeCommand: vi.fn().mockImplementation((input) => input),
-}));
+vi.mock("@aws-sdk/client-sns", () => {
+  class SNSClient {
+    send = mockSnsSend;
+  }
+  return {
+    SNSClient,
+    SubscribeCommand: vi.fn(),
+  };
+});
 
 // Import AFTER mocks are set up
 import { SDKFallbackDispatcher } from "../sdk-fallback-dispatcher.js";
+import { CreateEventSourceMappingCommand } from "@aws-sdk/client-lambda";
+import { SubscribeCommand } from "@aws-sdk/client-sns";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +45,13 @@ let dispatcher: SDKFallbackDispatcher;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Re-install command impls (mockReset wipes them).
+  vi.mocked(CreateEventSourceMappingCommand).mockImplementation(
+    (input) => input as unknown as CreateEventSourceMappingCommand,
+  );
+  vi.mocked(SubscribeCommand).mockImplementation(
+    (input) => input as unknown as SubscribeCommand,
+  );
   dispatcher = new SDKFallbackDispatcher(TEST_CONFIG);
 });
 
