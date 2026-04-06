@@ -54,6 +54,10 @@ describe("IAM Policy Generators", () => {
       );
       expect(fallbackStatement!.Action).toContain("sns:Subscribe");
       expect(fallbackStatement!.Action).toContain("sns:Unsubscribe");
+      // SSH key pair auto-create flow (Epic 41 — SSH intent bundle)
+      expect(fallbackStatement!.Action).toContain("ec2:CreateKeyPair");
+      expect(fallbackStatement!.Action).toContain("ec2:DeleteKeyPair");
+      expect(fallbackStatement!.Action).toContain("ec2:DescribeKeyPairs");
     });
 
     it("includes Bedrock invoke actions", () => {

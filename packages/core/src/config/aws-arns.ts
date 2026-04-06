@@ -62,6 +62,8 @@ export const IamAction = {
   EC2_DESCRIBE_SUBNETS: "ec2:DescribeSubnets",
   EC2_DESCRIBE_SECURITY_GROUPS: "ec2:DescribeSecurityGroups",
   EC2_DESCRIBE_KEY_PAIRS: "ec2:DescribeKeyPairs",
+  EC2_CREATE_KEY_PAIR: "ec2:CreateKeyPair",
+  EC2_DELETE_KEY_PAIR: "ec2:DeleteKeyPair",
   EC2_DESCRIBE_INSTANCE_TYPES: "ec2:DescribeInstanceTypes",
   EC2_DESCRIBE_IMAGES: "ec2:DescribeImages",
   // RDS Discovery
