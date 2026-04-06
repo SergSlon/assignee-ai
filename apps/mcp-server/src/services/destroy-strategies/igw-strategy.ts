@@ -4,6 +4,9 @@
  * InternetGateways must be detached from their VPC before CloudControl
  * can delete them. The preDestroy hook finds all VPC attachments and
  * detaches the IGW.
+ *
+ * Uses the centralized `requireAssigneeCredentials("operator")` helper from
+ * @assignee/core — never falls through to the default AWS credential chain.
  */
 
 import {
@@ -11,6 +14,7 @@ import {
   DescribeInternetGatewaysCommand,
   DetachInternetGatewayCommand,
 } from "@aws-sdk/client-ec2";
+import { requireAssigneeCredentials } from "@assignee/core";
 import type { DestroyStrategy } from "./types.js";
 
 export const igwStrategy: DestroyStrategy = {
@@ -18,7 +22,10 @@ export const igwStrategy: DestroyStrategy = {
   isSlow: true, // detach + delete can exceed 2min
 
   async preDestroy(identifier: string, region: string): Promise<void> {
-    const ec2 = new EC2Client({ region });
+    const ec2 = new EC2Client({
+      region,
+      credentials: requireAssigneeCredentials("operator"),
+    });
     const desc = await ec2.send(
       new DescribeInternetGatewaysCommand({
         InternetGatewayIds: [identifier],

@@ -14,12 +14,10 @@ import {
 } from "@aws-sdk/client-s3";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, extname } from "node:path";
-import { ConfigurationError } from "@assignee/core";
-import type { AwsConfig } from "./cloudcontrol-client.js";
-import { operatorCredentials } from "../config/operator-credentials.js";
 import { IamEffect } from "@assignee/core";
+import { requireAssigneeCredentials } from "../config/aws-credentials.js";
+import { AWS_REGION } from "../config/constants.js";
 import { ContentType } from "../constants/errors.js";
-import { CredentialError } from "../config/constants.js";
 
 export interface UploadResult {
   uploaded: number;
@@ -89,25 +87,17 @@ export function collectFiles(dir: string, base?: string): string[] {
 }
 
 /**
- * Create an S3Client using the same credential pattern as the rest of the CLI.
- * Validates credentials eagerly and throws ConfigurationError on missing fields.
+ * Create an S3Client using the centralized credential helper.
+ *
+ * Throws `MissingAssigneeCredentialsError` (from @assignee/core) when
+ * `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY`
+ * are not set in the environment. Never falls through to the default AWS
+ * credential chain (~/.aws/credentials, SSO, IMDS).
  */
-function createS3Client(config: AwsConfig): S3Client {
-  if (!config.accessKeyId) {
-    throw new ConfigurationError(CredentialError.MISSING_ACCESS_KEY);
-  }
-  if (!config.secretAccessKey) {
-    throw new ConfigurationError(CredentialError.MISSING_SECRET_KEY);
-  }
-  if (!config.region) {
-    throw new ConfigurationError("AWS_REGION is missing or empty");
-  }
+function createS3Client(region?: string): S3Client {
   return new S3Client({
-    region: config.region,
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
+    region: region ?? AWS_REGION,
+    credentials: requireAssigneeCredentials("operator"),
   });
 }
 
@@ -124,11 +114,7 @@ export async function configureBucketPolicy(
   bucketName: string,
   options?: { region?: string },
 ): Promise<void> {
-  const creds = operatorCredentials();
-  if (options?.region) {
-    creds.region = options.region;
-  }
-  const client = createS3Client(creds);
+  const client = createS3Client(options?.region);
 
   const policy = {
     Version: "2012-10-17",
@@ -172,12 +158,7 @@ export async function uploadStaticSite(
     onProgress?: (progress: UploadProgress) => void;
   },
 ): Promise<UploadResult> {
-  const creds = operatorCredentials();
-  if (options?.region) {
-    creds.region = options.region;
-  }
-
-  const client = createS3Client(creds);
+  const client = createS3Client(options?.region);
 
   const allFiles = collectFiles(sourceDir);
   const result: UploadResult = {

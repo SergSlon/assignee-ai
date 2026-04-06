@@ -31,6 +31,7 @@ import type { AgentState } from "../services/graph.js";
 import { sanitizeDesiredState } from "../services/desired-state-sanitizer.js";
 import { repairRequiredFields } from "../services/required-field-repairer.js";
 import { EnvVar } from "../constants/env-vars.js";
+import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 
 /**
  * Transforms elicited options using plugin toCfn mappers.
@@ -368,7 +369,10 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
                 const { STSClient, GetCallerIdentityCommand } =
                   await import("@aws-sdk/client-sts");
                 const region = AWS_REGION;
-                const sts = new STSClient({ region });
+                const sts = new STSClient({
+                  region,
+                  credentials: requireAssigneeCredentials("operator"),
+                });
                 const identity = await sts.send(
                   new GetCallerIdentityCommand({}),
                 );

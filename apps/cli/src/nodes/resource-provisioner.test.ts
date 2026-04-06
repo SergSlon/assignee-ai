@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { MissingAssigneeCredentialsError } from "@assignee/core";
+import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 import {
   ExecutionStatus,
   EIP_AUTO_ALLOCATE,
@@ -114,9 +116,23 @@ function makeState(overrides: Record<string, unknown> = {}) {
   } as unknown as Parameters<typeof resourceProvisionerNode>[0];
 }
 
+// Snapshot env so per-test credential mutations don't leak between cases
+const ORIGINAL_ENV = { ...process.env };
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockProvisioner = createMockProvisioner();
+  // resource-provisioner now uses requireAssigneeCredentials("operator") for
+  // every EC2Client it constructs (EIP allocation, EIP release, SSH key
+  // create, SSH key delete). Provide realistic-shaped operator credentials
+  // so the constructor succeeds and the mocked send() receives the call.
+  process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+  process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+});
+
+afterEach(() => {
+  process.env = { ...ORIGINAL_ENV };
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1130,6 +1146,91 @@ describe("resourceProvisionerNode", () => {
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(mockEc2Send).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Fail-closed credential enforcement ─────────────────────────────────────
+  // The provisioner constructs EC2Clients in four places — EIP allocate, EIP
+  // release, SSH key create, SSH key delete. Each one uses
+  // requireAssigneeCredentials("operator"). When the operator env vars are
+  // unset, the constructor must throw MissingAssigneeCredentialsError and the
+  // SDK send() must NEVER be called — even if shell AWS_* vars are populated.
+  describe("fail-closed when ASSIGNEE_OPERATOR_* env vars are missing", () => {
+    beforeEach(() => {
+      delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+      // Belt-and-suspenders: shell AWS_* must NOT be honored
+      process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
+      process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
+    });
+
+    it("NatGateway EIP allocation fails with MissingAssigneeCredentialsError and never calls SDK", async () => {
+      mockProvisioner.createResource.mockResolvedValue([
+        null,
+        { requestToken: "x" },
+      ]);
+
+      const state = makeState({
+        resourceType: "AWS::EC2::NatGateway",
+        runId: "run-natgw-failclosed",
+        desiredState: {
+          SubnetId: "subnet-abc123",
+          AllocationId: EIP_AUTO_ALLOCATE,
+        },
+      });
+
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      // The EC2Client constructor threw inside the try-block; the outer catch
+      // converts it to a FAILED execution. Verify the SDK was never called.
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(/EIP allocation failed/);
+      expect(result.errorMessage).toMatch(/ASSIGNEE_OPERATOR_ACCESS_KEY_ID/);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+      expect(mockProvisioner.createResource).not.toHaveBeenCalled();
+    });
+
+    it("EC2 SSH key creation surfaces missing creds and never calls SDK", async () => {
+      mockProvisioner.createResource.mockResolvedValue([
+        null,
+        { requestToken: "ssh-failclosed" },
+      ]);
+
+      const state = makeState({
+        resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+        userIntent: "Create an EC2 instance I can SSH into",
+        desiredState: {
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          KeyName: ResourceDefault.SSH_KEY_PLACEHOLDER,
+          MetadataOptions: { HttpTokens: "required" },
+        },
+      });
+
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      // The SSH-key try-block catches the error and removes KeyName,
+      // letting CloudControl proceed. Critical assertion: the SDK send()
+      // was never invoked, so the helper successfully prevented a leak
+      // to the default credential chain.
+      expect(mockEc2Send).not.toHaveBeenCalled();
+      expect(state.desiredState!["KeyName"]).toBeUndefined();
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
+      // CloudControl create should still proceed since this hook is non-fatal
+      expect(mockProvisioner.createResource).toHaveBeenCalled();
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+    });
+
+    it("requireAssigneeCredentials throws MissingAssigneeCredentialsError naming both env vars", () => {
+      try {
+        requireAssigneeCredentials("operator");
+        throw new Error("expected throw");
+      } catch (err) {
+        expect(err).toBeInstanceOf(MissingAssigneeCredentialsError);
+        const msg = (err as Error).message;
+        expect(msg).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
+        expect(msg).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
+      }
     });
   });
 });

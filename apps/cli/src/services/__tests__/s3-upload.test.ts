@@ -12,13 +12,21 @@ vi.mock("@aws-sdk/client-s3", () => ({
   PutBucketPolicyCommand: vi.fn().mockImplementation((input) => input),
 }));
 
-vi.mock("../../config/operator-credentials.js", () => ({
-  operatorCredentials: vi.fn(() => ({
-    accessKeyId: "AKIAIOSFODNN7EXAMPLE",
-    secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-    region: "us-east-1",
-  })),
-}));
+// Snapshot env so per-suite credential mutations don't leak between tests
+const ORIGINAL_ENV = { ...process.env };
+
+beforeEach(() => {
+  // s3-upload now uses requireAssigneeCredentials("operator") from
+  // @assignee/core. Tests must set the operator env vars or expect a
+  // MissingAssigneeCredentialsError. Use realistic-shaped IAM-like values.
+  process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+  process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+});
+
+afterEach(() => {
+  process.env = { ...ORIGINAL_ENV };
+});
 
 import {
   getMimeType,
@@ -27,6 +35,7 @@ import {
   configureBucketPolicy,
 } from "../s3-upload.js";
 import type { UploadProgress } from "../s3-upload.js";
+import { MissingAssigneeCredentialsError } from "@assignee/core";
 
 // ── collectFiles ────────────────────────────────────────────────────────────
 describe("collectFiles", () => {
@@ -261,5 +270,58 @@ describe("configureBucketPolicy", () => {
     expect(stmt.Action).toBe("s3:GetObject");
     expect(stmt.Resource).toBe("arn:aws:s3:::test-static-site/*");
     expect(stmt.Effect).toBe("Allow");
+  });
+});
+
+// ── Fail-closed credential enforcement ─────────────────────────────────────
+// Both s3-upload entrypoints must throw MissingAssigneeCredentialsError when
+// the operator env vars are unset, and must NEVER fall through to
+// ~/.aws/credentials, SSO sessions, or instance metadata even if shell
+// AWS_* vars are populated.
+describe("s3-upload fail-closed credential enforcement", () => {
+  let mockSend: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+    delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+    // Belt-and-suspenders: shell AWS_* must NOT be honored
+    process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
+    process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
+
+    const { S3Client } = await import("@aws-sdk/client-s3");
+    mockSend = vi.fn().mockResolvedValue({});
+    vi.mocked(S3Client).mockImplementation(() => ({ send: mockSend }) as any);
+  });
+
+  it("configureBucketPolicy throws MissingAssigneeCredentialsError", async () => {
+    await expect(
+      configureBucketPolicy("my-website-bucket"),
+    ).rejects.toBeInstanceOf(MissingAssigneeCredentialsError);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it("uploadStaticSite throws MissingAssigneeCredentialsError before any upload", async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "s3-upload-failclosed-"));
+    try {
+      writeFileSync(join(tmpDir, "index.html"), "<h1>hi</h1>");
+      await expect(
+        uploadStaticSite("my-bucket", tmpDir),
+      ).rejects.toBeInstanceOf(MissingAssigneeCredentialsError);
+      expect(mockSend).not.toHaveBeenCalled();
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("error message names the exact missing env vars", async () => {
+    try {
+      await configureBucketPolicy("any-bucket");
+      throw new Error("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(MissingAssigneeCredentialsError);
+      const msg = (err as Error).message;
+      expect(msg).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
+      expect(msg).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
+    }
   });
 });

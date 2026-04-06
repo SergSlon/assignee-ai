@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 // Mock AWS SDK clients before importing the module under test.
 const { mockEc2Send, mockSsmSend, mockRdsSend, mockWithTimeout } = vi.hoisted(
@@ -46,6 +46,9 @@ import {
 } from "./aws-resource-discovery.js";
 
 describe("aws-resource-discovery", () => {
+  // Snapshot env so per-test mutations don't leak between cases
+  const ORIGINAL_ENV = { ...process.env };
+
   beforeEach(() => {
     vi.clearAllMocks();
     clearDiscoveryCache();
@@ -53,6 +56,76 @@ describe("aws-resource-discovery", () => {
     mockWithTimeout.mockImplementation(
       async (promise: Promise<unknown>) => promise,
     );
+    // Provide reader credentials for the centralized helper. The discovery
+    // module now hard-fails (gracefully — caught by cachedDiscover) when
+    // ASSIGNEE_READER_* env vars are missing instead of silently sending
+    // empty-string credentials to AWS.
+    process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+  });
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  // ── Fail-closed credential enforcement ───────────────────────────────────
+  // When reader credentials are missing, all discover*() helpers must
+  // gracefully return [] (best-effort no-op) — never fall through to the
+  // default AWS credential chain or send empty-string credentials.
+
+  describe("fail-closed when ASSIGNEE_READER_* env vars are missing", () => {
+    beforeEach(() => {
+      delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      // Belt-and-suspenders: shell AWS_* must NOT be honored either
+      process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
+      process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
+    });
+
+    it("discoverSubnets returns [] without invoking the SDK", async () => {
+      const result = await discoverSubnets();
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+    });
+
+    it("discoverSecurityGroups returns [] without invoking the SDK", async () => {
+      const result = await discoverSecurityGroups();
+      // discoverSecurityGroups would otherwise return at least the "None"
+      // option — fail-closed must short-circuit before that.
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+    });
+
+    it("discoverKeyPairs returns [] without invoking the SDK", async () => {
+      const result = await discoverKeyPairs();
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+    });
+
+    it("discoverAmis returns [] without invoking the SDK", async () => {
+      const result = await discoverAmis();
+      expect(result).toEqual([]);
+      expect(mockSsmSend).not.toHaveBeenCalled();
+    });
+
+    it("discoverRdsEngineVersions returns [] without invoking the SDK", async () => {
+      const result = await discoverRdsEngineVersions({ Engine: "postgres" });
+      expect(result).toEqual([]);
+      expect(mockRdsSend).not.toHaveBeenCalled();
+    });
+
+    it("discoverRdsInstanceClasses returns [] without invoking the SDK", async () => {
+      const result = await discoverRdsInstanceClasses({ Engine: "postgres" });
+      expect(result).toEqual([]);
+      expect(mockRdsSend).not.toHaveBeenCalled();
+    });
+
+    it("searchAmis returns [] without invoking the SDK", async () => {
+      const result = await searchAmis("deep learning");
+      expect(result).toEqual([]);
+      expect(mockEc2Send).not.toHaveBeenCalled();
+    });
   });
 
   // ── discoverSubnets ──────────────────────────────────────────────────────

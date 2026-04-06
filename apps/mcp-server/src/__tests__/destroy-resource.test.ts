@@ -4,7 +4,15 @@
  * @see Story 18.5 (CLI destroy), Epic 20 (MCP tools)
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  afterAll,
+} from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -118,9 +126,47 @@ function makeEmptyTaggingResponse() {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
+// Stub global setTimeout to resolve the SUT's delays immediately — avoids real
+// timer waits in pollDeleteStatus (POLL_INTERVAL_MS = 2000) and the resolve
+// retry loop (RESOLVE_RETRY_DELAY_MS = 5000) which would otherwise make this
+// suite take ~132s of CI time. Only short-circuits the exact SUT delay values
+// so the MCP SDK's own request-timeout timers (60_000 ms) keep working.
+const originalSetTimeout = globalThis.setTimeout;
+const SUT_DELAYS = new Set([2_000, 5_000]);
+
+// Snapshot env so per-test credential mutations don't leak between cases
+const DESTROY_RES_ORIG_ENV = { ...process.env };
+
 describe("destroy_resource tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The IGW and DynamoDB destroy strategies now use
+    // requireAssigneeCredentials("operator") from @assignee/core. Provide
+    // realistic-shaped operator env vars so the strategy preDestroy hooks
+    // can construct their AWS SDK clients and invoke the mocked send().
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+    // Simplified stub: forwards through to original unless the delay matches
+    // one of the SUT's polling/retry constants (which we collapse to 0 ms).
+    globalThis.setTimeout = ((
+      fn: (...args: unknown[]) => void,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      if (typeof delay === "number" && SUT_DELAYS.has(delay)) {
+        return originalSetTimeout(fn, 0, ...args);
+      }
+      return originalSetTimeout(fn, delay, ...args);
+    }) as typeof globalThis.setTimeout;
+  });
+
+  afterEach(() => {
+    process.env = { ...DESTROY_RES_ORIG_ENV };
+  });
+
+  afterAll(() => {
+    globalThis.setTimeout = originalSetTimeout;
   });
 
   describe("safety gate (confirmed parameter)", () => {
