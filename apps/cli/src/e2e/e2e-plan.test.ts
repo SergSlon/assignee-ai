@@ -74,8 +74,21 @@ async function sweepStaleResources(): Promise<void> {
         console.log(`E2E pre-sweep: deleted stale SSM param ${p.Name}`);
       }
     }
-  } catch {
-    // path may not exist — fine
+  } catch (err: unknown) {
+    // Credential errors are actionable — log loudly. ParameterNotFound is fine.
+    const errName = (err as { name?: string })?.name ?? "";
+    if (
+      errName === "CredentialsProviderError" ||
+      errName === "ExpiredTokenException" ||
+      errName === "UnrecognizedClientException"
+    ) {
+      console.error(
+        `❌ E2E pre-sweep FAILED: AWS credentials expired or invalid (${errName}). ` +
+          `Run 'aws sso login' and retry. Existing /e2e-test/* params will accumulate.`,
+      );
+    } else if (errName !== "ParameterNotFound") {
+      console.warn(`E2E pre-sweep SSM error: ${errName || String(err)}`);
+    }
   }
   try {
     const { S3Client, ListBucketsCommand, DeleteBucketCommand } =
@@ -134,12 +147,31 @@ afterAll(async () => {
       );
       for (const p of params.Parameters ?? []) {
         if (p.Name) {
-          await ssm.send(new DeleteParameterCommand({ Name: p.Name }));
-          console.log(`E2E sweeper: deleted stale SSM param ${p.Name}`);
+          try {
+            await ssm.send(new DeleteParameterCommand({ Name: p.Name }));
+            console.log(`E2E sweeper: deleted stale SSM param ${p.Name}`);
+          } catch (delErr: unknown) {
+            const name = (delErr as { name?: string })?.name ?? "";
+            console.warn(
+              `E2E sweeper: failed to delete ${p.Name}: ${name || String(delErr)}`,
+            );
+          }
         }
       }
-    } catch {
-      // path may not exist
+    } catch (err: unknown) {
+      const errName = (err as { name?: string })?.name ?? "";
+      if (
+        errName === "CredentialsProviderError" ||
+        errName === "ExpiredTokenException" ||
+        errName === "UnrecognizedClientException"
+      ) {
+        console.error(
+          `❌ E2E post-sweep FAILED: AWS credentials expired (${errName}). ` +
+            `Run 'aws sso login' to avoid accumulating /e2e-test/* resources.`,
+        );
+      } else if (errName !== "ParameterNotFound") {
+        console.warn(`E2E post-sweep SSM error: ${errName || String(err)}`);
+      }
     }
 
     // Clean stale ECS clusters with e2e/test names via tagging API
@@ -333,13 +365,26 @@ describe("E2E: SSM Parameter plan + apply + destroy", () => {
     try {
       const { SSMClient, DeleteParameterCommand } =
         await import("@aws-sdk/client-ssm");
-      const ssm = new SSMClient({ region: process.env["AWS_REGION"] });
+      const ssm = new SSMClient({
+        region: process.env["AWS_REGION"] ?? "us-east-1",
+      });
       await ssm.send(new DeleteParameterCommand({ Name: paramName }));
       console.log(`E2E cleanup: deleted SSM parameter ${paramName}`);
-    } catch (err: any) {
-      // ParameterNotFound is fine — means it was never created or already deleted
-      if (err?.name !== "ParameterNotFound") {
-        console.warn(`E2E cleanup failed for ${paramName}:`, err);
+    } catch (err: unknown) {
+      const errName = (err as { name?: string })?.name ?? "";
+      if (errName === "ParameterNotFound") return;
+      if (
+        errName === "CredentialsProviderError" ||
+        errName === "ExpiredTokenException"
+      ) {
+        console.error(
+          `❌ E2E cleanup CRITICAL: AWS credentials expired — leaked ${paramName}. ` +
+            `Run 'assignee clean --resources --yes' to remove.`,
+        );
+      } else {
+        console.warn(
+          `E2E cleanup failed for ${paramName}: ${errName || String(err)}`,
+        );
       }
     }
   }, 15_000);
