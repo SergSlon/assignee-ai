@@ -43,8 +43,8 @@ All AI calls stay local — no AWS credentials ever leave your machine.
 
 | Command                        | Description                                    | Key flags                                                          |
 | :----------------------------- | :--------------------------------------------- | :----------------------------------------------------------------- |
-| `assignee plan <intent>`       | Generate infrastructure plan                   | `--source`, `-o json\|text`, `--no-apply`, `--no-advice`           |
-| `assignee apply <intent>`      | Plan + provision with HITL approval            | `--source`, `--yes`, `--wizard`, `--checkpoint <path>`             |
+| `assignee plan <intent>`       | Generate infrastructure plan                   | `--source`, `-o json\|text`, `--no-apply`, `--no-advice`, `--set`  |
+| `assignee apply <intent>`      | Plan + provision with HITL approval            | `--source`, `--yes`, `--wizard`, `--checkpoint`, `--set`           |
 | `assignee init`                | Initialize `.assignee/` project directory      | `--global`                                                         |
 | `assignee list`                | Show managed resources with cost               | `--region`, `--json`                                               |
 | `assignee destroy <resource>`  | Safe teardown with confirmation                | `--yes`, `--all`, `--include-iam`, `--dry-run`                     |
@@ -230,7 +230,7 @@ Optional servers (IAM, Well-Architected Security, Billing) are spawned only when
 ## Development
 
 ```bash
-pnpm test          # 4711 tests across 213 files (112 CLI + 75 core + 9 BP + 17 MCP)
+pnpm test          # 4731 tests across 213 files (112 CLI + 75 core + 9 BP + 17 MCP)
 pnpm check-types   # TypeScript type check
 pnpm build         # compile all packages
 ```
