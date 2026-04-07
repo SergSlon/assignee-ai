@@ -79,6 +79,70 @@ describe("buildResourceArn", () => {
     });
   });
 
+  // Wave 11 P2-5: ELBv2/ECS/SNS branches assume CCAPI returned a full
+  // ARN as the primary identifier (it always has, historically). If
+  // CCAPI's response shape ever changes, the previous code silently
+  // returned the bare identifier — corrupting billing MCP records and
+  // user-visible apply success lines. The new behavior throws so the
+  // failure surfaces immediately rather than leaking malformed values
+  // downstream.
+  describe("CCAPI-returns-ARN types fail loudly on bare identifiers", () => {
+    it("throws when ELBv2 LoadBalancer is given a bare identifier", () => {
+      expect(() =>
+        buildResourceArn({
+          resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+          identifier: "my-alb",
+          region: REGION,
+          accountId: ACCOUNT,
+        }),
+      ).toThrow(/expected a full ARN as identifier/);
+    });
+
+    it("throws when ECS Cluster is given a bare identifier", () => {
+      expect(() =>
+        buildResourceArn({
+          resourceType: RESOURCE_TYPES.ECS_CLUSTER,
+          identifier: "my-cluster",
+          region: REGION,
+          accountId: ACCOUNT,
+        }),
+      ).toThrow(/expected a full ARN as identifier/);
+    });
+
+    it("throws when SNS Topic is given a bare identifier", () => {
+      expect(() =>
+        buildResourceArn({
+          resourceType: RESOURCE_TYPES.SNS_TOPIC,
+          identifier: "my-topic",
+          region: REGION,
+          accountId: ACCOUNT,
+        }),
+      ).toThrow(/expected a full ARN as identifier/);
+    });
+
+    it("ECS Cluster ARN passes through unchanged (existing CCAPI shape)", () => {
+      const arn = "arn:aws:ecs:us-east-1:112233445566:cluster/my-cluster";
+      const result = buildResourceArn({
+        resourceType: RESOURCE_TYPES.ECS_CLUSTER,
+        identifier: arn,
+        region: REGION,
+        accountId: ACCOUNT,
+      });
+      expect(result).toBe(arn);
+    });
+
+    it("SNS Topic ARN passes through unchanged (existing CCAPI shape)", () => {
+      const arn = "arn:aws:sns:us-east-1:112233445566:my-topic";
+      const result = buildResourceArn({
+        resourceType: RESOURCE_TYPES.SNS_TOPIC,
+        identifier: arn,
+        region: REGION,
+        accountId: ACCOUNT,
+      });
+      expect(result).toBe(arn);
+    });
+  });
+
   describe("global services", () => {
     it("S3 bucket — no region, no account", () => {
       expect(

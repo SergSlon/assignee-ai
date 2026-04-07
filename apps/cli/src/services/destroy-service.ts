@@ -94,6 +94,63 @@ const CCAPIStatus = {
 /** CloudControl HandlerErrorCode for "resource does not exist". */
 const CCAPI_NOT_FOUND_ERROR_CODE = "NotFound";
 
+/**
+ * Wave 11 P2-2: extracts the AWS account ID segment from an ARN, or
+ * returns undefined when the ARN has no account segment (S3 buckets,
+ * for example: `arn:aws:s3:::my-bucket`). Used by the cross-account
+ * sanity check on CCAPI NotFound short-circuits.
+ *
+ * ARN structure: `arn:partition:service:region:account-id:resource`
+ * — account-id is the 5th colon-separated segment (index 4).
+ */
+function extractAccountIdFromArn(arn: string): string | undefined {
+  const parts = arn.split(":");
+  if (parts.length < 5) return undefined;
+  const account = parts[4];
+  return account && /^\d{12}$/.test(account) ? account : undefined;
+}
+
+/**
+ * Wave 11 P2-2: cross-account sanity check before treating a CCAPI
+ * NotFound as success.
+ *
+ * Threat: a misconfigured operator credential set could legitimately
+ * point at a different AWS account than the resource ARN's account.
+ * In that case CCAPI returns NotFound for resources that genuinely
+ * exist in the user's intended account but don't exist in the wrongly-
+ * assumed one. The original short-circuit treated this as "destroy
+ * success" — silently failing to delete the actual resources while
+ * reporting OK.
+ *
+ * Returns:
+ *   - `"safe-shortcircuit"` when the ARN's account matches the
+ *     operator's account (the legitimate "already gone" case)
+ *   - `"safe-shortcircuit"` when account info is unavailable on either
+ *     side (S3 bucket ARN with no account segment, or STS lookup failed
+ *     — preserve the original Wave 5 behavior in those edge cases since
+ *     blocking the short-circuit there would regress the bulk-destroy
+ *     tag-ghost cleanup that Wave 5 was designed to handle)
+ *   - `"cross-account"` when the accounts differ — the caller should
+ *     surface a real error explaining the mismatch instead of treating
+ *     NotFound as success
+ */
+async function classifyNotFoundShortCircuit(
+  resourceArn: string,
+): Promise<"safe-shortcircuit" | "cross-account"> {
+  const arnAccount = extractAccountIdFromArn(resourceArn);
+  if (!arnAccount) return "safe-shortcircuit";
+
+  // Lazy import to avoid pulling resolve-arn (and STS client) into
+  // every code path that imports destroy-service. The cached
+  // getOperatorAccountId helper amortizes the STS call across the
+  // whole CLI process.
+  const { getOperatorAccountId } = await import("../utils/resolve-arn.js");
+  const operatorAccount = await getOperatorAccountId();
+  if (!operatorAccount) return "safe-shortcircuit";
+
+  return arnAccount === operatorAccount ? "safe-shortcircuit" : "cross-account";
+}
+
 export interface DestroyResult {
   success: boolean;
   resourceType: string;
@@ -121,6 +178,7 @@ export interface DestroyOptions {
 async function pollDeleteStatus(
   adapter: CloudControlAdapter,
   requestToken: string,
+  resourceArn?: string,
 ): Promise<{ success: boolean; message?: string }> {
   for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
     const [err, status] = await adapter.getRequestStatus(requestToken);
@@ -135,7 +193,23 @@ async function pollDeleteStatus(
       // Treat NotFound as success — the resource is already in the desired
       // (deleted) end state. CloudControl reports this via the structured
       // ErrorCode field rather than a fragile string match on statusMessage.
+      //
+      // Wave 11 P2-2: cross-account sanity check. If the operator's
+      // account differs from the resource ARN's account, this NotFound
+      // is almost certainly the user pointing at the wrong account by
+      // accident — surface it as a real error so they don't think the
+      // destroy succeeded.
       if (status.errorCode === CCAPI_NOT_FOUND_ERROR_CODE) {
+        if (resourceArn) {
+          const classification =
+            await classifyNotFoundShortCircuit(resourceArn);
+          if (classification === "cross-account") {
+            return {
+              success: false,
+              message: `CloudControl reported NotFound for ${resourceArn}, but the operator credentials are configured for a different AWS account. The resource may exist in your intended account — verify ASSIGNEE_OPERATOR_ACCESS_KEY_ID points at the correct account before retrying.`,
+            };
+          }
+        }
         return { success: true };
       }
       return {
@@ -575,6 +649,25 @@ export async function destroySingleResource(
   // a CloudFormation-only construct with no taggable AWS resource, so it
   // never appears in the bulk-destroy plan and cannot be torn down through
   // the normal tier path. Mirrors the MCP server's igw-strategy.
+  //
+  // Wave 11 P2-3: half-state recovery. The previous loop ran detaches
+  // sequentially with no per-attachment error handling — if attachment
+  // N+1 failed after N had already been detached, the IGW was left in
+  // a half-detached state with no recovery. The fix:
+  //   1. Each per-attachment detach is wrapped in its own try/catch.
+  //   2. Per-attachment failures are logged but don't abort the loop —
+  //      we maximize forward progress so any subsequent attempt has
+  //      less work to do.
+  //   3. The structured warn log records `partial_detach_state` with
+  //      success/failure counts so `assignee reconcile` (and debugging)
+  //      can see exactly what happened.
+  //   4. We DO NOT roll back successful detaches. Re-attaching is
+  //      technically possible via AttachInternetGateway, but the user's
+  //      intent was to destroy — re-attaching only delays the inevitable.
+  //   5. CloudControl's subsequent DeleteResource will produce an
+  //      authoritative DependencyViolation if any residual attachment
+  //      blocks the delete. The user can re-run destroy and it will pick
+  //      up where this one left off.
   if (resourceType === RESOURCE_TYPES.EC2_INTERNET_GATEWAY) {
     try {
       const {
@@ -592,15 +685,43 @@ export async function destroySingleResource(
         }),
       );
       const attachments = desc.InternetGateways?.[0]?.Attachments ?? [];
+      let detachOk = 0;
+      let detachFail = 0;
+      const detachErrors: string[] = [];
       for (const att of attachments) {
         if (att.VpcId && att.State !== "detached") {
-          await ec2.send(
-            new DetachInternetGatewayCommand({
-              InternetGatewayId: resource.identifier,
-              VpcId: att.VpcId,
-            }),
-          );
+          try {
+            await ec2.send(
+              new DetachInternetGatewayCommand({
+                InternetGatewayId: resource.identifier,
+                VpcId: att.VpcId,
+              }),
+            );
+            detachOk++;
+          } catch (perAttErr) {
+            detachFail++;
+            const message =
+              perAttErr instanceof Error
+                ? perAttErr.message
+                : String(perAttErr);
+            detachErrors.push(`${att.VpcId}: ${message}`);
+            // Continue the loop — maximize forward progress so the next
+            // destroy attempt (or the upcoming CCAPI delete) has less
+            // residual work.
+          }
         }
+      }
+      // Surface partial state explicitly so reconcile/debugging can see
+      // exactly which attachments were detached and which weren't. Only
+      // emit when there's actual partial state to report.
+      if (detachFail > 0) {
+        warnDestroy("igw_partial_detach_state", {
+          identifier: resource.identifier,
+          detachedCount: detachOk,
+          remainingCount: detachFail,
+          errors: detachErrors,
+          note: "CloudControl delete will produce DependencyViolation if any residual attachment matters. Re-run 'assignee destroy' to retry remaining attachments.",
+        });
       }
     } catch (err) {
       if (err instanceof MissingAssigneeCredentialsError) {
@@ -691,7 +812,21 @@ export async function destroySingleResource(
       // actually deleted, which causes destroy --all to repeatedly emit
       // confusing "not found" errors for resources that the bulk-destroy
       // plan included from a stale tag listing.
+      //
+      // Wave 11 P2-2: cross-account sanity check. Same threat as in
+      // pollDeleteStatus — a misconfigured operator credential could
+      // legitimately point at the wrong account, where the resource
+      // doesn't exist. Surface that as a real error instead of silently
+      // succeeding.
       if (deleteErr.kind === ProvisioningErrorKind.NOT_FOUND) {
+        const classification = await classifyNotFoundShortCircuit(resource.arn);
+        if (classification === "cross-account") {
+          return {
+            ...baseResult,
+            success: false,
+            error: `CloudControl reported NotFound for ${resource.arn}, but the operator credentials are configured for a different AWS account. The resource may exist in your intended account — verify ASSIGNEE_OPERATOR_ACCESS_KEY_ID points at the correct account before retrying.`,
+          };
+        }
         return { ...baseResult, success: true };
       }
       return {
@@ -701,10 +836,12 @@ export async function destroySingleResource(
       };
     }
 
-    // Poll for delete completion
+    // Poll for delete completion (pass resource.arn so the cross-account
+    // sanity check can fire on FAILED+NotFound poll results too).
     const pollResult = await pollDeleteStatus(
       adapter,
       deleteResult.requestToken,
+      resource.arn,
     );
 
     if (!pollResult.success) {

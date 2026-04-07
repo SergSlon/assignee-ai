@@ -43,16 +43,43 @@ import { PromiseStatus } from "../config/constants.js";
  * the user gets a clear actionable message instead of an opaque "Cross-
  * account pass role is not allowed" error from CloudControl/IAM.
  *
- * The list is intentionally short and AWS-canonical — `123456789012` is
- * the universal AWS docs example, `111122223333` and `444455556666` show
- * up in cross-account walkthroughs, `000000000000` in unit-test fixtures.
+ * The list is intentionally AWS-canonical:
+ *   - `123456789012` — the universal AWS docs example
+ *   - `111122223333`, `444455556666` — cross-account walkthroughs
+ *   - `222222222222`, `333333333333`, `555555555555` — multi-account IAM examples
+ *   - `999999999999` — appears in IAM policy reference docs as the
+ *     "alternative account" example
+ *   - `000000000000` — unit-test fixtures
+ *
+ * Wave 11 P2-7 added `222222222222`, `333333333333`, `555555555555`,
+ * `999999999999` per the Wave 5-9 review's edge-finding #7 ("placeholder
+ * regex blind spots"). Adding more requires the value to be (a) demonstrably
+ * an AWS docs placeholder and (b) implausible as a real account ID — we
+ * deliberately do NOT block all-same-digit IDs that AWS could legitimately
+ * issue (4xxxx, 6xxxx, 7xxxx, 8xxxx) since the LLM-hallucination rate on
+ * those is much lower than on the canonical ones above.
  */
 const PLACEHOLDER_AWS_ACCOUNT_IDS = new Set([
   "123456789012",
   "111122223333",
+  "222222222222",
+  "333333333333",
   "444455556666",
+  "555555555555",
+  "999999999999",
   "000000000000",
 ]);
+
+/**
+ * Maximum recursion depth for the placeholder-ARN walker. CCAPI desired
+ * state is at most a handful of layers deep in practice (resource ->
+ * properties -> nested config like Tags / SecurityGroupIds / IamPolicy
+ * documents), so 32 is generous. The cap exists to defend against
+ * pathological input — a circular structure or hostile deeply-nested
+ * JSON would otherwise blow the stack. Wave 11 P2-7 / edge finding #7
+ * ("no cycle guard on the recursive walker").
+ */
+const PLACEHOLDER_WALK_MAX_DEPTH = 32;
 
 /**
  * Walks a desiredState object recursively and returns a friendly error
@@ -72,7 +99,9 @@ function detectPlaceholderArn(
   function walk(
     value: unknown,
     path: string,
+    depth: number,
   ): { field: string; arn: string; account: string } | undefined {
+    if (depth > PLACEHOLDER_WALK_MAX_DEPTH) return undefined;
     if (typeof value === "string") {
       const match = arnAccountRegex.exec(value);
       if (match && PLACEHOLDER_AWS_ACCOUNT_IDS.has(match[1]!)) {
@@ -82,21 +111,21 @@ function detectPlaceholderArn(
     }
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i++) {
-        const found = walk(value[i], `${path}[${i}]`);
+        const found = walk(value[i], `${path}[${i}]`, depth + 1);
         if (found) return found;
       }
       return undefined;
     }
     if (value && typeof value === "object") {
       for (const [k, v] of Object.entries(value)) {
-        const found = walk(v, path ? `${path}.${k}` : k);
+        const found = walk(v, path ? `${path}.${k}` : k, depth + 1);
         if (found) return found;
       }
     }
     return undefined;
   }
 
-  const hit = walk(desiredState, "");
+  const hit = walk(desiredState, "", 0);
   if (!hit) return undefined;
   return (
     `Field "${hit.field}" contains a placeholder ARN ` +

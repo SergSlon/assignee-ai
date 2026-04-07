@@ -470,36 +470,59 @@ describe("BulkDestroyService — buildPlanFromResources", () => {
   });
 
   describe("DESTROY_TIER map completeness", () => {
-    it("has entries for all core supported resource types", () => {
-      const expectedTypes = [
-        "AWS::EC2::Route",
-        "AWS::CloudWatch::Alarm",
-        "AWS::SecretsManager::Secret",
-        "AWS::Logs::LogGroup",
-        "AWS::SSM::Parameter",
-        "AWS::Lambda::Function",
-        "AWS::SQS::Queue",
-        "AWS::SNS::Topic",
-        "AWS::DynamoDB::Table",
-        "AWS::ApiGatewayV2::Api",
-        "AWS::EC2::Instance",
-        "AWS::RDS::DBInstance",
-        "AWS::ElasticLoadBalancingV2::LoadBalancer",
-        "AWS::EC2::NatGateway",
-        "AWS::ECR::Repository",
-        "AWS::ECS::Cluster",
-        "AWS::EC2::SecurityGroup",
-        "AWS::EC2::Subnet",
-        "AWS::EC2::InternetGateway",
-        "AWS::EC2::RouteTable",
-        "AWS::S3::Bucket",
-        "AWS::EC2::VPC",
-        "AWS::IAM::Role",
-        "AWS::IAM::ManagedPolicy",
-      ];
+    // Wave 11 P2-8: replaced the previous `expect(DESTROY_TIER[type])
+    // .toBeDefined()` weak-assertion loop with a per-type tier equality
+    // map. The previous version would have passed even if a type was
+    // present with the wrong tier — e.g. if S3_BUCKET (tier 5) silently
+    // got reordered to tier 1, the foundation-before-dependents
+    // invariant would break and `assignee destroy --all` could try to
+    // delete a bucket while a CloudFront distribution still pointed at
+    // it. Pinning each type to its exact tier catches that immediately.
+    //
+    // Tier semantics (from DESTROY_TIER comment block in bulk-destroy.ts):
+    //   1 = leaf / CDN — destroyed FIRST
+    //   2 = service resources
+    //   3 = compute / DB / network services
+    //   4 = network infrastructure
+    //   5 = foundations
+    //   6 = identity (opt-in only) — destroyed LAST
+    it("maps every core supported resource type to its expected destruction tier", () => {
+      const expectedTiers: Record<string, number> = {
+        // Tier 1 — leaf / CDN
+        "AWS::EC2::Route": 1,
+        "AWS::CloudWatch::Alarm": 1,
+        "AWS::SecretsManager::Secret": 1,
+        "AWS::Logs::LogGroup": 1,
+        "AWS::SSM::Parameter": 1,
+        "AWS::CloudFront::Distribution": 1,
+        // Tier 2 — service resources
+        "AWS::Lambda::Function": 2,
+        "AWS::SQS::Queue": 2,
+        "AWS::SNS::Topic": 2,
+        "AWS::DynamoDB::Table": 2,
+        "AWS::ApiGatewayV2::Api": 2,
+        // Tier 3 — compute / DB / network services
+        "AWS::EC2::Instance": 3,
+        "AWS::RDS::DBInstance": 3,
+        "AWS::ElasticLoadBalancingV2::LoadBalancer": 3,
+        "AWS::EC2::NatGateway": 3,
+        "AWS::ECR::Repository": 3,
+        "AWS::ECS::Cluster": 3,
+        // Tier 4 — network infrastructure
+        "AWS::EC2::SecurityGroup": 4,
+        "AWS::EC2::Subnet": 4,
+        "AWS::EC2::InternetGateway": 4,
+        "AWS::EC2::RouteTable": 4,
+        // Tier 5 — foundations
+        "AWS::S3::Bucket": 5,
+        "AWS::EC2::VPC": 5,
+        // Tier 6 — identity (opt-in only)
+        "AWS::IAM::Role": 6,
+        "AWS::IAM::ManagedPolicy": 6,
+      };
 
-      for (const type of expectedTypes) {
-        expect(DESTROY_TIER[type]).toBeDefined();
+      for (const [type, tier] of Object.entries(expectedTiers)) {
+        expect(DESTROY_TIER[type]).toBe(tier);
       }
     });
   });

@@ -158,6 +158,56 @@ describe("display.ts — non-TTY (CI) mode", () => {
     expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
   });
 
+  // Wave 11 P2-6 / test-arch F5: renderApplySuccess(state, displayArn?)
+  // gained an explicit displayArn parameter in Wave 8 (BUG-5 / V6 P0
+  // fix). Existing tests still call the legacy 1-arg form, so the new
+  // explicit-takes-precedence branch was uncovered. Pin the contract:
+  // when displayArn is passed, it MUST be shown instead of
+  // state.resourceArn — that's how result-formatter.ts surfaces the
+  // resolved full ARN while keeping state.resourceArn as the bare
+  // CCAPI primary identifier (the V6 P0 invariant).
+  it("renderApplySuccess prefers the explicit displayArn over state.resourceArn", async () => {
+    const { renderApplySuccess } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderApplySuccess(
+      {
+        ...mockState,
+        // BARE CCAPI primary identifier (the V6 P0 invariant — never mutate this)
+        resourceArn: "my-test-bucket",
+      },
+      // Explicit full ARN passed by result-formatter.ts after STS lookup
+      "arn:aws:s3:::my-test-bucket",
+    );
+    restore();
+
+    const output = chunks.join("");
+    // Explicit displayArn appears
+    expect(output).toContain("arn:aws:s3:::my-test-bucket");
+    // The bare identifier from state.resourceArn must NOT appear as the
+    // ARN line — it would be misleading and the whole point of the
+    // displayArn parameter is to suppress this exact case.
+    expect(output).toMatch(/ARN:\s*arn:aws:s3:::my-test-bucket/);
+  });
+
+  it("renderApplySuccess falls back to state.resourceArn when displayArn is undefined", async () => {
+    // The legacy 1-arg form still works (the helper is backwards
+    // compatible). When STS lookup fails and result-formatter falls
+    // back to passing only state, the bare identifier is what the
+    // user sees.
+    const { renderApplySuccess } = await import("./display.js");
+    const { chunks, restore } = captureStream(process.stdout);
+
+    renderApplySuccess({
+      ...mockState,
+      resourceArn: "fallback-bucket-name",
+    });
+    restore();
+
+    const output = chunks.join("");
+    expect(output).toContain("fallback-bucket-name");
+  });
+
   it("renderOutro writes success message in plain text", async () => {
     const { renderOutro } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);
@@ -219,6 +269,102 @@ it("renderCompoundSuccess writes all resource types and pattern name in plain te
   expect(output).toContain("AWS::Lambda::Function");
   expect(output).toContain("arn:aws:iam::123:role/exec-role");
   expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
+});
+
+// Wave 11 P2-6 / test-arch F6: renderCompoundSuccess gained an
+// optional `displayArns` parameter (Map<resourceId, fullArn>) in
+// Wave 8 so the compound apply success line shows full ARNs without
+// mutating state.resourceArn (the V6 P0 invariant). Pin the contract.
+it("renderCompoundSuccess prefers explicit displayArns map over each resource's bare resourceArn", async () => {
+  const { renderCompoundSuccess } = await import("./display.js");
+  const { chunks, restore } = captureStream(process.stdout);
+
+  renderCompoundSuccess(
+    [
+      {
+        // BARE CCAPI identifiers (V6 P0 invariant — these are what the
+        // marker resolver substitutes into child fields)
+        resourceId: "vpc-1",
+        resourceType: "AWS::EC2::VPC",
+        resourceArn: "vpc-0123456789abcdef0",
+        executionStatus: "SUCCESS",
+      },
+      {
+        resourceId: "subnet-1",
+        resourceType: "AWS::EC2::Subnet",
+        resourceArn: "subnet-0123456789abcdef0",
+        executionStatus: "SUCCESS",
+      },
+    ],
+    {
+      patternId: "minimal-vpc",
+      displayName: "Minimal VPC",
+      keywords: [],
+      resourceList: [],
+      dependencyOrder: [],
+      defaultOptions: {},
+    },
+    // Explicit display map keyed by resourceId — what result-formatter
+    // builds after STS lookup
+    {
+      "vpc-1": "arn:aws:ec2:us-east-1:112233445566:vpc/vpc-0123456789abcdef0",
+      "subnet-1":
+        "arn:aws:ec2:us-east-1:112233445566:subnet/subnet-0123456789abcdef0",
+    },
+  );
+  restore();
+
+  const output = chunks.join("");
+  // The full ARNs from displayArns appear, not the bare identifiers
+  expect(output).toContain(
+    "arn:aws:ec2:us-east-1:112233445566:vpc/vpc-0123456789abcdef0",
+  );
+  expect(output).toContain(
+    "arn:aws:ec2:us-east-1:112233445566:subnet/subnet-0123456789abcdef0",
+  );
+});
+
+it("renderCompoundSuccess falls back to resource.resourceArn when displayArns map lacks the entry", async () => {
+  // Partial coverage: STS may have resolved the first resource but
+  // not the second (rare, but possible when CCAPI returns mixed
+  // identifier shapes). Each resource falls back independently.
+  const { renderCompoundSuccess } = await import("./display.js");
+  const { chunks, restore } = captureStream(process.stdout);
+
+  renderCompoundSuccess(
+    [
+      {
+        resourceId: "resolved",
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "my-bucket",
+        executionStatus: "SUCCESS",
+      },
+      {
+        resourceId: "unresolved",
+        resourceType: "AWS::Lambda::Function",
+        resourceArn: "my-fn-bare-fallback",
+        executionStatus: "SUCCESS",
+      },
+    ],
+    {
+      patternId: "p",
+      displayName: "Test",
+      keywords: [],
+      resourceList: [],
+      dependencyOrder: [],
+      defaultOptions: {},
+    },
+    {
+      // Only `resolved` got a full ARN — `unresolved` is missing
+      resolved: "arn:aws:s3:::my-bucket",
+    },
+  );
+  restore();
+
+  const output = chunks.join("");
+  expect(output).toContain("arn:aws:s3:::my-bucket");
+  // The unresolved one falls back to its bare identifier
+  expect(output).toContain("my-fn-bare-fallback");
 });
 
 // ── renderDependencyPlan tests ────────────────────────────────────────────────

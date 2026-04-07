@@ -236,9 +236,29 @@ export async function getManagedIamRoleByArn(
         : "N/A",
       tags: tagsToRecord(tagResponse.Tags),
     };
-  } catch {
-    // NoSuchEntity / AccessDenied / network failure all collapse to
-    // "not found" — the caller falls through to the next resolver.
+  } catch (err) {
+    // Wave 11 P2-1: surface AccessDenied as a real error instead of
+    // collapsing it to null. The previous bare `catch {}` made
+    // "iam:GetRole denied on the operator policy" look identical to
+    // "the role doesn't exist" — users with a hand-edited operator
+    // policy missing iam:GetRole would see "role not found" and waste
+    // time hunting a non-existent inventory bug. NoSuchEntity (the
+    // expected "not found" path) and other errors still collapse to
+    // null so the byArn fallback chain keeps working.
+    const errName =
+      err && typeof err === "object" && "name" in err
+        ? String((err as { name: unknown }).name)
+        : "";
+    if (
+      errName === "AccessDeniedException" ||
+      errName === "AccessDenied" ||
+      errName === "UnauthorizedOperation"
+    ) {
+      throw new Error(
+        `Cannot look up IAM role ${roleName}: the operator policy is missing iam:GetRole or iam:ListRoleTags. Run 'assignee setup' to refresh operator permissions.`,
+        { cause: err },
+      );
+    }
     return null;
   }
 }

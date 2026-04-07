@@ -400,8 +400,8 @@ describe("getManagedIamRoleByArn", () => {
   });
 
   // Wave 10 P0-2: byArn path collapses MissingAssigneeCredentialsError
-  // to null (matches the existing AccessDenied / NoSuchEntity / network
-  // swallow). Critical: NO SDK call must happen.
+  // to null (matches the existing NoSuchEntity / network swallow).
+  // Critical: NO SDK call must happen.
   it("returns null when operator env vars are unset (no SDK call)", async () => {
     delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
     delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
@@ -411,5 +411,36 @@ describe("getManagedIamRoleByArn", () => {
     );
     expect(result).toBeNull();
     expect(mockIamSend).not.toHaveBeenCalled();
+  });
+
+  // Wave 11 P2-1: AccessDenied must surface as a friendly error, not
+  // collapse to null. A user with a hand-edited operator policy missing
+  // iam:GetRole would otherwise see "role not found" for a role that
+  // exists, and waste time chasing a non-existent inventory bug.
+  it("throws a friendly error when GetRole returns AccessDeniedException", async () => {
+    mockIamSend.mockRejectedValueOnce(
+      Object.assign(new Error("not authorized"), {
+        name: "AccessDeniedException",
+      }),
+    );
+
+    await expect(
+      getManagedIamRoleByArn(`arn:aws:iam::${ACCOUNT}:role/some-role`),
+    ).rejects.toThrow(/iam:GetRole or iam:ListRoleTags/);
+  });
+
+  it("still returns null on NoSuchEntityException (the legitimate not-found path)", async () => {
+    mockIamSend
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Role does not exist"), {
+          name: "NoSuchEntityException",
+        }),
+      )
+      .mockResolvedValueOnce({ Tags: [] });
+
+    const result = await getManagedIamRoleByArn(
+      `arn:aws:iam::${ACCOUNT}:role/genuinely-missing-role`,
+    );
+    expect(result).toBeNull();
   });
 });

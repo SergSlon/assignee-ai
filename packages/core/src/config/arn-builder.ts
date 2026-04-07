@@ -125,10 +125,26 @@ export function buildResourceArn(args: BuildResourceArnArgs): string {
     // so the switch is exhaustive over RESOURCE_TYPES and adding a
     // new type that CCAPI-identifies-by-ARN won't silently fall
     // through to the default bare-identifier return.
+    //
+    // Wave 11 P2-5: if we reach this branch with a non-ARN identifier,
+    // CCAPI's response shape has changed — historically these types
+    // always return a full ARN as the primary identifier. Throwing is
+    // the right response: silently passing a bare identifier downstream
+    // would corrupt billing MCP records and break `assignee destroy
+    // <identifier>` because the bare value isn't a valid CloudControl
+    // identifier for these types either. Better to fail loudly here
+    // than to leak a malformed ARN into provision logs and the user-
+    // visible apply success line.
     case RESOURCE_TYPES.ELBV2_LOAD_BALANCER:
     case RESOURCE_TYPES.ECS_CLUSTER:
     case RESOURCE_TYPES.SNS_TOPIC:
-      return identifier;
+      throw new Error(
+        `buildResourceArn: ${resourceType} expected a full ARN as identifier ` +
+          `but got "${identifier}". CloudControl's response shape may have ` +
+          `changed for this type. Update arn-builder.ts to synthesize the ARN ` +
+          `from bare identifier components, or check the CloudControl client ` +
+          `version.`,
+      );
 
     // ── SQS queue uses a special URL/ARN split ────────────────────
     // CloudControl identifier for SQS is the queue URL
