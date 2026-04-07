@@ -171,13 +171,19 @@ export class CloudFormationSchemaService {
    */
   private async readCache(typeName: string): Promise<object | null> {
     const filePath = this.cacheFilePath(typeName);
+    let content: string;
     try {
       const stat = await fs.stat(filePath);
       const age = Date.now() - stat.mtimeMs;
       if (age > this.cacheTtlMs) {
         return null; // Expired
       }
-      const content = await fs.readFile(filePath, "utf-8");
+      content = await fs.readFile(filePath, "utf-8");
+    } catch {
+      return null; // File doesn't exist or is unreadable
+    }
+
+    try {
       const entry = JSON.parse(content) as {
         schema: object;
         cachedAt: number;
@@ -185,7 +191,17 @@ export class CloudFormationSchemaService {
       };
       return entry.schema;
     } catch {
-      return null; // File doesn't exist or is unreadable
+      // Corrupt JSON (e.g. truncated mid-write). Without unlinking, every
+      // subsequent getSchema() call would re-read the same broken file,
+      // see a fresh-enough mtime, fail to parse, and re-fetch from the API
+      // forever. Delete the corrupt entry so the next call falls through
+      // to a clean cache miss + write.
+      try {
+        await fs.unlink(filePath);
+      } catch {
+        // Best effort — concurrent unlink or permission error is non-fatal.
+      }
+      return null;
     }
   }
 

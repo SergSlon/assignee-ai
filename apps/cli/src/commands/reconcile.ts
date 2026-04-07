@@ -14,6 +14,7 @@ import {
   ChangeType,
   CloudFormationSchemaService,
   adaptDescribeTypeToMcpFormat,
+  UserCancelledError,
   type DriftResult,
   type DriftedField,
 } from "@assignee/core";
@@ -375,6 +376,17 @@ export const reconcileCommand = new Command(CommandName.RECONCILE)
               break;
           }
         } catch (err) {
+          // Cancellation aborts the loop cleanly instead of being silently
+          // counted as an error and continuing.
+          // @see SECURITY-AUDIT.md — M-S9
+          if (err instanceof UserCancelledError) {
+            process.stdout.write(
+              chalk.yellow(
+                `\nReconcile cancelled by user — aborting remaining resources.\n`,
+              ),
+            );
+            break;
+          }
           const message = err instanceof Error ? err.message : String(err);
           process.stdout.write(
             chalk.red(`  Error reconciling ${result.resourceId}: ${message}\n`),

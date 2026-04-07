@@ -25,16 +25,26 @@ import {
   type GetRequestStatusResult,
 } from "./provisioning-port.js";
 import { AwsErrorName } from "../constants/aws-errors.js";
+import { redactSensitive } from "../utils/error-messages.js";
 
 function classifyError(err: unknown): ProvisioningPortError {
   if (err instanceof ResourceNotFoundException) {
-    return { kind: ProvisioningErrorKind.NOT_FOUND, message: err.message };
+    return {
+      kind: ProvisioningErrorKind.NOT_FOUND,
+      message: redactSensitive(err.message),
+    };
   }
   if (err instanceof AlreadyExistsException) {
-    return { kind: ProvisioningErrorKind.ALREADY_EXISTS, message: err.message };
+    return {
+      kind: ProvisioningErrorKind.ALREADY_EXISTS,
+      message: redactSensitive(err.message),
+    };
   }
   if (err instanceof ThrottlingException) {
-    return { kind: ProvisioningErrorKind.THROTTLED, message: err.message };
+    return {
+      kind: ProvisioningErrorKind.THROTTLED,
+      message: redactSensitive(err.message),
+    };
   }
   if (err instanceof GeneralServiceException) {
     // S3 "bucket name is not available" comes as GeneralServiceException
@@ -42,10 +52,13 @@ function classifyError(err: unknown): ProvisioningPortError {
     if (err.message.includes("bucket name is not available")) {
       return {
         kind: ProvisioningErrorKind.ALREADY_EXISTS,
-        message: err.message,
+        message: redactSensitive(err.message),
       };
     }
-    return { kind: ProvisioningErrorKind.SERVICE_ERROR, message: err.message };
+    return {
+      kind: ProvisioningErrorKind.SERVICE_ERROR,
+      message: redactSensitive(err.message),
+    };
   }
   // AccessDeniedException is not exported as a class by the CloudControl SDK;
   // detect it via the error name property.
@@ -54,10 +67,16 @@ function classifyError(err: unknown): ProvisioningPortError {
     (err.name === AwsErrorName.ACCESS_DENIED ||
       err.name === AwsErrorName.ACCESS_DENIED_SHORT)
   ) {
-    return { kind: ProvisioningErrorKind.ACCESS_DENIED, message: err.message };
+    return {
+      kind: ProvisioningErrorKind.ACCESS_DENIED,
+      message: redactSensitive(err.message),
+    };
   }
-  const message = err instanceof Error ? err.message : String(err);
-  return { kind: ProvisioningErrorKind.UNKNOWN, message };
+  const rawMessage = err instanceof Error ? err.message : String(err);
+  return {
+    kind: ProvisioningErrorKind.UNKNOWN,
+    message: redactSensitive(rawMessage),
+  };
 }
 
 export class CloudControlAdapter implements ProvisioningPort {

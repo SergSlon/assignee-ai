@@ -22,6 +22,9 @@ import {
   validateConfig,
   AssigneeTag,
   AutoFixMode,
+  ASSIGNEE_ROLES,
+  envVarsForRole,
+  type AssigneeRole,
 } from "@assignee/core";
 import type { AssigneeConfig } from "@assignee/core";
 import {
@@ -30,29 +33,27 @@ import {
 } from "../services/credential-detector.js";
 import { resolveConfigPath } from "../config/user-config-loader.js";
 import { UserMessage, CHECKPOINT_DIR, FileName } from "../config/constants.js";
-import { EnvVar } from "../constants/env-vars.js";
-
-/** Assignee IAM role names detected from environment variables. */
-type AssigneeRole = "operator" | "reader" | "auditor";
 
 /**
  * Detect which Assignee IAM roles have credentials configured via environment.
+ *
+ * Delegates to `@assignee/core` (envVarsForRole) for the role → env var
+ * mapping so there is exactly one source of truth across the monorepo.
+ *
  * Each role pair must have BOTH access key id AND secret access key set
- * (and non-empty) to be considered available.
+ * (non-empty after trim) to be considered available.
+ *
+ * @see SECURITY-AUDIT.md — M-S8
  */
 export function detectAvailableRoles(
   env: NodeJS.ProcessEnv = process.env,
 ): AssigneeRole[] {
   const available: AssigneeRole[] = [];
-  const pairs: ReadonlyArray<readonly [AssigneeRole, string, string]> = [
-    ["operator", EnvVar.OPERATOR_ACCESS_KEY, EnvVar.OPERATOR_SECRET_KEY],
-    ["reader", EnvVar.READER_ACCESS_KEY, EnvVar.READER_SECRET_KEY],
-    ["auditor", EnvVar.AUDITOR_ACCESS_KEY, EnvVar.AUDITOR_SECRET_KEY],
-  ];
-  for (const [role, keyVar, secretVar] of pairs) {
-    const id = env[keyVar];
-    const secret = env[secretVar];
-    if (id && secret && id.length > 0 && secret.length > 0) {
+  for (const role of ASSIGNEE_ROLES) {
+    const { accessKey, secretKey } = envVarsForRole(role);
+    const id = env[accessKey]?.trim();
+    const secret = env[secretKey]?.trim();
+    if (id && secret) {
       available.push(role);
     }
   }

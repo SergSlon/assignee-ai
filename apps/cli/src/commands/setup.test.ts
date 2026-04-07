@@ -427,4 +427,241 @@ describe("setup command", () => {
     expect(help).toContain("--dry-run");
     expect(help).toContain("PRIVACY");
   });
+
+  // ── M-S11: operator role is REQUIRED — partial failure aborts ─────
+
+  it("aborts with exit(1) and does NOT write .env when operator role fails", async () => {
+    // Override IAM mock so the operator user creation throws but reader/auditor succeed.
+    let accessKeyCounter = 0;
+    mockSend.mockImplementation(
+      (cmd: { _type: string; input: Record<string, unknown> }) => {
+        switch (cmd._type) {
+          case "GetUser":
+            // User does not exist anywhere → triggers CreateUser
+            throw Object.assign(new Error("User not found"), {
+              name: "NoSuchEntityException",
+            });
+          case "CreateUser":
+            if (cmd.input["UserName"] === IAM_USER_NAMES.operator) {
+              throw new Error("AccessDenied: cannot create operator");
+            }
+            return { User: { UserName: cmd.input["UserName"] } };
+          case "CreatePolicy":
+            return {
+              Policy: {
+                Arn: `arn:aws:iam::123456789012:policy/${cmd.input["PolicyName"]}`,
+              },
+            };
+          case "AttachUserPolicy":
+            return {};
+          case "CreateAccessKey":
+            accessKeyCounter++;
+            return {
+              AccessKey: {
+                AccessKeyId: `AKIA_TEST_${accessKeyCounter}`,
+                SecretAccessKey: `secret_${accessKeyCounter}`,
+              },
+            };
+          case "ListAccessKeys":
+            return { AccessKeyMetadata: [] };
+          default:
+            return {};
+        }
+      },
+    );
+
+    // Make process.exit actually halt execution (throw) so code after the
+    // exit call cannot run and accidentally write .env.
+    mockExit.mockImplementation((code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    });
+
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await expect(setupCommand.parseAsync(["node", "setup"])).rejects.toThrow(
+      /process\.exit\(1\)/,
+    );
+
+    // process.exit(1) was called
+    expect(mockExit).toHaveBeenCalledWith(1);
+    // .env was NOT written — operator missing
+    expect(mockMergeEnvFile).not.toHaveBeenCalled();
+
+    // Error message mentions operator REQUIRED
+    const clack = await import("@clack/prompts");
+    const errorMock = clack.log.error as ReturnType<typeof vi.fn>;
+    const allErrors = errorMock.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(allErrors).toContain("Operator role failed");
+    expect(allErrors).toMatch(/REQUIRED/i);
+  });
+
+  // ── M-S12: ListPolicyVersions defensive — all 5 are default ───────
+
+  it("skips policy update when all 5 policy versions are marked default", async () => {
+    // This is impossible per AWS spec but the code must defend against it
+    // and avoid the cryptic LimitExceeded that would come from CreatePolicyVersion.
+    let createPolicyVersionCalled = 0;
+    mockSend.mockImplementation(
+      (cmd: { _type: string; input: Record<string, unknown> }) => {
+        switch (cmd._type) {
+          case "GetUser":
+            return { User: { UserName: cmd.input["UserName"] } };
+          case "CreatePolicy":
+            throw Object.assign(new Error("Already exists"), {
+              name: "EntityAlreadyExistsException",
+            });
+          case "ListPolicyVersions":
+            return {
+              Versions: [
+                {
+                  VersionId: "v1",
+                  IsDefaultVersion: true,
+                  CreateDate: new Date(),
+                },
+                {
+                  VersionId: "v2",
+                  IsDefaultVersion: true,
+                  CreateDate: new Date(),
+                },
+                {
+                  VersionId: "v3",
+                  IsDefaultVersion: true,
+                  CreateDate: new Date(),
+                },
+                {
+                  VersionId: "v4",
+                  IsDefaultVersion: true,
+                  CreateDate: new Date(),
+                },
+                {
+                  VersionId: "v5",
+                  IsDefaultVersion: true,
+                  CreateDate: new Date(),
+                },
+              ],
+            };
+          case "CreatePolicyVersion":
+            createPolicyVersionCalled++;
+            // If reached, simulate the LimitExceeded the code is supposed to avoid
+            throw Object.assign(new Error("LimitExceeded: too many versions"), {
+              name: "LimitExceededException",
+            });
+          case "DeletePolicyVersion":
+            return {};
+          case "AttachUserPolicy":
+            return {};
+          case "ListAccessKeys":
+            return { AccessKeyMetadata: [] };
+          case "CreateAccessKey":
+            return {
+              AccessKey: {
+                AccessKeyId: "AKIA_TEST",
+                SecretAccessKey: "secret",
+              },
+            };
+          default:
+            return {};
+        }
+      },
+    );
+
+    // Spy on stderr.write to verify the warning is emitted
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await setupCommand.parseAsync(["node", "setup"]);
+
+    // CreatePolicyVersion must NEVER have been called → no LimitExceeded
+    expect(createPolicyVersionCalled).toBe(0);
+
+    // The defensive warning was written to stderr
+    const allWrites = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(allWrites).toContain("none are non-default");
+    expect(allWrites).toContain("Skipping policy update");
+
+    stderrSpy.mockRestore();
+  });
+
+  // ── M-S10: spinner stops when Bedrock setup throws ────────────────
+
+  it("Bedrock setup error stops the spinner via finally (no leak)", async () => {
+    // Make TagRoleCommand throw — this is inside the Bedrock-logging block
+    // and after the spinner.start(). Without try/finally the spinner would
+    // be left running.
+    mockSend.mockImplementation(
+      (cmd: { _type: string; input: Record<string, unknown> }) => {
+        switch (cmd._type) {
+          case "GetUser":
+            throw Object.assign(new Error("User not found"), {
+              name: "NoSuchEntityException",
+            });
+          case "CreateUser":
+            return { User: { UserName: cmd.input["UserName"] } };
+          case "CreatePolicy":
+            return {
+              Policy: {
+                Arn: `arn:aws:iam::123456789012:policy/${cmd.input["PolicyName"]}`,
+              },
+            };
+          case "AttachUserPolicy":
+            return {};
+          case "CreateAccessKey":
+            return {
+              AccessKey: {
+                AccessKeyId: "AKIA_TEST",
+                SecretAccessKey: "secret",
+              },
+            };
+          case "ListAccessKeys":
+            return { AccessKeyMetadata: [] };
+          case "GetRole":
+            // Role does not exist → CreateRole next
+            throw Object.assign(new Error("Role not found"), {
+              name: "NoSuchEntityException",
+            });
+          case "CreateRole":
+            return { Role: { RoleName: cmd.input["RoleName"] } };
+          case "TagRole":
+            // The throw point — happens AFTER logSp.start() but BEFORE logSp.stop()
+            throw new Error("AccessDenied: cannot tag bedrock role");
+          default:
+            return {};
+        }
+      },
+    );
+
+    // Track spinner lifecycle. Replace the spinner factory used by setup.ts
+    // so we can observe start/stop calls. Re-mock @clack/prompts piece.
+    const startCalls: string[] = [];
+    const stopCalls: string[] = [];
+    const clack = await import("@clack/prompts");
+    (clack as unknown as { spinner: () => unknown }).spinner = () => ({
+      start: (msg?: string) => {
+        startCalls.push(msg ?? "");
+      },
+      stop: (msg?: string) => {
+        stopCalls.push(msg ?? "");
+      },
+    });
+
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+
+    await expect(setupCommand.parseAsync(["node", "setup"])).rejects.toThrow(
+      /cannot tag bedrock role/,
+    );
+
+    // Both spinner.start AND spinner.stop must have run for the Bedrock block
+    const bedrockStarts = startCalls.filter((m) =>
+      m.includes("Bedrock invocation logging"),
+    );
+    expect(bedrockStarts.length).toBeGreaterThanOrEqual(1);
+    // The finally block must have stopped it with the failure label
+    const bedrockStops = stopCalls.filter((m) => m.includes("Bedrock logging"));
+    expect(bedrockStops.length).toBeGreaterThanOrEqual(1);
+    expect(bedrockStops.some((m) => m.includes("failed"))).toBe(true);
+  });
 });

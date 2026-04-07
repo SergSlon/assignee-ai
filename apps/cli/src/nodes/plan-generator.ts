@@ -118,9 +118,18 @@ export function assembleS3Composites(
 
   // ── Lifecycle ──
   if (options[CfnKey.ENABLE_LIFECYCLE] === true) {
+    // M-R9: `parseInt(...) || 30` swallows a deliberate `0` from the user.
+    // Validate the parsed integer is finite AND non-negative; otherwise fall
+    // back to the 30-day default. `0` for transition days is meaningful
+    // (immediate transition) and must not be silently rewritten.
+    const parsedTransition = parseInt(
+      String(options[CfnKey.LIFECYCLE_TRANSITION_DAYS] ?? "30"),
+      10,
+    );
     const transitionDays =
-      parseInt(String(options[CfnKey.LIFECYCLE_TRANSITION_DAYS] ?? "30"), 10) ||
-      30;
+      Number.isFinite(parsedTransition) && parsedTransition >= 0
+        ? parsedTransition
+        : 30;
     const expirationDaysRaw = options[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
     const expirationDays =
       expirationDaysRaw && String(expirationDaysRaw).trim()

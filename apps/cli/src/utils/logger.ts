@@ -33,6 +33,8 @@ export const LOG_ACTIONS = {
   APPLY_COMPLETE: "apply_complete",
   STATE_GUARD_ABORT: "state_guard_abort",
   STATE_GUARD_SKIPPED: "state_guard_skipped",
+  STATE_GUARD_SKIPPED_UNRESOLVED_IDENTIFIER:
+    "state_guard_skipped_unresolved_identifier",
   RESOURCE_PROVISION_STARTED: "resource_provision_started",
   PROVISIONING_STATUS_CHECKED: "provisioning_status_checked",
   RESULT_FORMATTED: "result_formatted",

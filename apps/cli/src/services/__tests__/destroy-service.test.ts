@@ -25,6 +25,7 @@ const {
   mockDeleteTopic,
   mockCfSend,
   mockDdbSend,
+  mockS3Send,
 } = vi.hoisted(() => ({
   mockDeleteResource: vi.fn(),
   mockGetRequestStatus: vi.fn(),
@@ -33,6 +34,7 @@ const {
   mockDeleteTopic: vi.fn(),
   mockCfSend: vi.fn(),
   mockDdbSend: vi.fn(),
+  mockS3Send: vi.fn(),
 }));
 
 // NOTE: Plain functions/classes (not vi.fn) so impls survive vitest's
@@ -101,9 +103,31 @@ vi.mock("@aws-sdk/client-dynamodb", () => {
   function UpdateTableCommand(input: Record<string, unknown>) {
     return { _type: "UpdateTable", ...input };
   }
+  function DescribeTableCommand(input: Record<string, unknown>) {
+    return { _type: "DescribeTable", ...input };
+  }
   return {
     DynamoDBClient: MockDynamoDBClient,
     UpdateTableCommand,
+    DescribeTableCommand,
+  };
+});
+
+// ── Mock @aws-sdk/client-s3 ───────────────────────────────────────────────────
+vi.mock("@aws-sdk/client-s3", () => {
+  class MockS3Client {
+    send = mockS3Send;
+  }
+  function ListObjectVersionsCommand(input: Record<string, unknown>) {
+    return { _type: "ListObjectVersions", ...input };
+  }
+  function DeleteObjectsCommand(input: Record<string, unknown>) {
+    return { _type: "DeleteObjects", ...input };
+  }
+  return {
+    S3Client: MockS3Client,
+    ListObjectVersionsCommand,
+    DeleteObjectsCommand,
   };
 });
 
@@ -617,6 +641,172 @@ describe("destroySingleResource", () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain("CloudFront poll failed");
       expect(result.error).toContain("Throttling");
+    });
+  });
+
+  // ── M-R1: DynamoDB UpdateTable race vs delete ─────────────────────────────
+  // UpdateTable(DeletionProtectionEnabled: false) returns immediately while
+  // the disable propagates asynchronously. Without polling, the subsequent
+  // CloudControl DeleteResource call races and fails with
+  // ResourceInUseException. Verify we poll DescribeTable until the change is
+  // visible BEFORE running the CloudControl delete.
+  describe("DynamoDB pre-delete protection propagation (M-R1)", () => {
+    it("polls DescribeTable until DeletionProtectionEnabled is false before deleting", async () => {
+      // 1) UpdateTable — succeeds (returns no protection field)
+      mockDdbSend.mockResolvedValueOnce({});
+      // 2) DescribeTable — first poll: still propagating (true)
+      mockDdbSend.mockResolvedValueOnce({
+        Table: {
+          TableName: "orders",
+          DeletionProtectionEnabled: true,
+        },
+      });
+      // 3) DescribeTable — second poll: still true
+      mockDdbSend.mockResolvedValueOnce({
+        Table: {
+          TableName: "orders",
+          DeletionProtectionEnabled: true,
+        },
+      });
+      // 4) DescribeTable — third poll: now false, exit loop
+      mockDdbSend.mockResolvedValueOnce({
+        Table: {
+          TableName: "orders",
+          DeletionProtectionEnabled: false,
+        },
+      });
+
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-mr1" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:dynamodb:us-east-1:123456789012:table/orders",
+        resourceType: "AWS::DynamoDB::Table",
+        identifier: "orders",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      // Exactly 4 ddb calls: 1 UpdateTable + 3 DescribeTable polls.
+      expect(mockDdbSend).toHaveBeenCalledTimes(4);
+      const updateCall = mockDdbSend.mock.calls[0]![0];
+      expect(updateCall._type).toBe("UpdateTable");
+      expect(updateCall.DeletionProtectionEnabled).toBe(false);
+      // All subsequent calls must be DescribeTable for the same table.
+      for (let i = 1; i <= 3; i++) {
+        const call = mockDdbSend.mock.calls[i]![0];
+        expect(call._type).toBe("DescribeTable");
+        expect(call.TableName).toBe("orders");
+      }
+      // CloudControl delete must run AFTER the polling exits — never racing
+      // an in-flight protection disable.
+      expect(mockDeleteResource).toHaveBeenCalledTimes(1);
+    });
+
+    it("gives up cleanly after the propagation poll budget is exhausted", async () => {
+      // UpdateTable — ok
+      mockDdbSend.mockResolvedValueOnce({});
+      // All subsequent polls report still-protected. The implementation
+      // is bounded to DDB_DISABLE_PROTECTION_MAX_POLLS=6 polls before
+      // moving on to the CloudControl delete (which will surface its own
+      // error if the table is genuinely still protected).
+      mockDdbSend.mockResolvedValue({
+        Table: {
+          TableName: "orders",
+          DeletionProtectionEnabled: true,
+        },
+      });
+
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-bdg" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:dynamodb:us-east-1:123456789012:table/orders",
+        resourceType: "AWS::DynamoDB::Table",
+        identifier: "orders",
+        region: "us-east-1",
+      });
+
+      // 1 UpdateTable + 6 DescribeTable polls = 7 total ddb calls.
+      expect(mockDdbSend).toHaveBeenCalledTimes(7);
+      // Delete still proceeds (CloudControl will surface a clean error if
+      // the table is truly protected) — the test result therefore reflects
+      // the SUCCESS we mocked from CloudControl.
+      expect(result.success).toBe(true);
+      expect(mockDeleteResource).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── M-R2: S3 DeleteObjects 1000-key chunking ─────────────────────────────
+  // ListObjectVersions can return up to 1000 Versions PLUS up to 1000
+  // DeleteMarkers per page (2000 combined). DeleteObjects accepts at most
+  // 1000 keys per request, so the merged array MUST be chunked.
+  describe("S3 pre-delete object chunking (M-R2)", () => {
+    it("splits 1500 mixed Versions+DeleteMarkers into exactly 2 DeleteObjects calls", async () => {
+      // Realistic shape: 900 Versions + 600 DeleteMarkers = 1500 total
+      const Versions = Array.from({ length: 900 }, (_, i) => ({
+        Key: `logs/2026/03/event-${i.toString().padStart(4, "0")}.json`,
+        VersionId: `v${i.toString().padStart(8, "0")}`,
+      }));
+      const DeleteMarkers = Array.from({ length: 600 }, (_, i) => ({
+        Key: `logs/2026/03/event-deleted-${i.toString().padStart(4, "0")}.json`,
+        VersionId: `dm${i.toString().padStart(7, "0")}`,
+      }));
+
+      // ListObjectVersions — single page (IsTruncated false)
+      mockS3Send.mockResolvedValueOnce({
+        Versions,
+        DeleteMarkers,
+        IsTruncated: false,
+      });
+      // DeleteObjects — first chunk (1000 keys)
+      mockS3Send.mockResolvedValueOnce({});
+      // DeleteObjects — second chunk (500 keys)
+      mockS3Send.mockResolvedValueOnce({});
+
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-s3c" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:s3:::production-logs",
+        resourceType: "AWS::S3::Bucket",
+        identifier: "production-logs",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+
+      // Calls: 1 ListObjectVersions + 2 DeleteObjects (chunked) = 3.
+      expect(mockS3Send).toHaveBeenCalledTimes(3);
+
+      const listCall = mockS3Send.mock.calls[0]![0];
+      expect(listCall._type).toBe("ListObjectVersions");
+
+      const firstDelete = mockS3Send.mock.calls[1]![0];
+      expect(firstDelete._type).toBe("DeleteObjects");
+      expect(firstDelete.Delete.Objects).toHaveLength(1000);
+
+      const secondDelete = mockS3Send.mock.calls[2]![0];
+      expect(secondDelete._type).toBe("DeleteObjects");
+      expect(secondDelete.Delete.Objects).toHaveLength(500);
+
+      // Sanity: every key in the chunks comes from the original lists, no
+      // duplication or loss.
+      const allKeys = [
+        ...firstDelete.Delete.Objects.map((o: { Key: string }) => o.Key),
+        ...secondDelete.Delete.Objects.map((o: { Key: string }) => o.Key),
+      ];
+      expect(allKeys).toHaveLength(1500);
+      expect(new Set(allKeys).size).toBe(1500);
     });
   });
 });

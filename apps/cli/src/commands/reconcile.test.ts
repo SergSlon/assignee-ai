@@ -10,12 +10,27 @@ import {
 import { DriftStatus, ChangeType, type DriftResult } from "@assignee/core";
 
 // Mock memory service
-vi.mock("../services/memory.js", () => ({
-  MemoryService: vi.fn().mockImplementation(() => ({
-    readProvisions: vi.fn().mockResolvedValue([]),
-    appendProvision: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+//
+// vitest config has `mockReset: true`, so `vi.fn().mockImplementation(...)`
+// constructor stubs get wiped between tests. We use a `class` declaration
+// that delegates to module-level hoisted mocks; tests re-arm the mocks
+// via the exported `mockMemoryReadProvisions` / `mockMemoryAppendProvision`
+// helpers (mirrors setup.test.ts pattern).
+const { mockMemoryReadProvisions, mockMemoryAppendProvision } = vi.hoisted(
+  () => ({
+    mockMemoryReadProvisions: vi.fn().mockResolvedValue([]),
+    mockMemoryAppendProvision: vi.fn().mockResolvedValue(undefined),
+  }),
+);
+
+vi.mock("../services/memory.js", () => {
+  class MemoryService {
+    readProvisions = (...args: unknown[]) => mockMemoryReadProvisions(...args);
+    appendProvision = (...args: unknown[]) =>
+      mockMemoryAppendProvision(...args);
+  }
+  return { MemoryService };
+});
 
 // Mock drift-detail view
 vi.mock("../views/drift-detail.js", () => ({
@@ -96,6 +111,9 @@ describe("reconcile command", () => {
     // Default factory implementations — individual tests override as needed.
     mockGetReconcilePromptFn.mockReturnValue(vi.fn().mockResolvedValue("Skip"));
     mockGetReconcileConfirmFn.mockReturnValue(vi.fn().mockResolvedValue(false));
+    // Re-arm MemoryService method mocks (vitest mockReset wipes them).
+    mockMemoryReadProvisions.mockResolvedValue([]);
+    mockMemoryAppendProvision.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -107,12 +125,7 @@ describe("reconcile command", () => {
   });
 
   it("displays empty state message when no provisions exist", async () => {
-    vi.mocked(MemoryService).mockImplementation(
-      () =>
-        ({
-          readProvisions: vi.fn().mockResolvedValue([]),
-        }) as any,
-    );
+    mockMemoryReadProvisions.mockResolvedValue([]);
 
     await reconcileCommand.parseAsync(["node", "reconcile"]);
 
@@ -121,22 +134,17 @@ describe("reconcile command", () => {
   });
 
   it("reports that credentials are needed when no drift port is set", async () => {
-    vi.mocked(MemoryService).mockImplementation(
-      () =>
-        ({
-          readProvisions: vi.fn().mockResolvedValue([
-            {
-              runId: "run-1",
-              resourceType: "AWS::S3::Bucket",
-              resourceArn: "my-bucket",
-              region: "us-east-1",
-              desiredStateHash: "abc",
-              estimatedMonthlyCost: "$0",
-              timestamp: "2026-03-20T14:30:00Z",
-            },
-          ]),
-        }) as any,
-    );
+    mockMemoryReadProvisions.mockResolvedValue([
+      {
+        runId: "run-1",
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "my-bucket",
+        region: "us-east-1",
+        desiredStateHash: "abc",
+        estimatedMonthlyCost: "$0",
+        timestamp: "2026-03-20T14:30:00Z",
+      },
+    ]);
 
     mockCreateDriftDetectorFromEnv.mockReturnValue(undefined);
     await reconcileCommand.parseAsync(["node", "reconcile"]);
@@ -164,22 +172,17 @@ describe("reconcile command", () => {
       port: mockPort,
     });
 
-    vi.mocked(MemoryService).mockImplementation(
-      () =>
-        ({
-          readProvisions: vi.fn().mockResolvedValue([
-            {
-              runId: "run-1",
-              resourceType: "AWS::S3::Bucket",
-              resourceArn: "my-bucket",
-              region: "us-east-1",
-              desiredStateHash: "abc",
-              estimatedMonthlyCost: "$0",
-              timestamp: "2026-03-20T14:30:00Z",
-            },
-          ]),
-        }) as any,
-    );
+    mockMemoryReadProvisions.mockResolvedValue([
+      {
+        runId: "run-1",
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "my-bucket",
+        region: "us-east-1",
+        desiredStateHash: "abc",
+        estimatedMonthlyCost: "$0",
+        timestamp: "2026-03-20T14:30:00Z",
+      },
+    ]);
 
     await reconcileCommand.parseAsync(["node", "reconcile"]);
 
@@ -246,13 +249,8 @@ describe("reconcile command", () => {
       const mockPort = createMockPort();
       const result = makeDriftResult();
 
-      vi.mocked(MemoryService).mockImplementation(
-        () =>
-          ({
-            readProvisions: vi.fn().mockResolvedValue([]),
-            appendProvision: vi.fn().mockResolvedValue(undefined),
-          }) as any,
-      );
+      mockMemoryReadProvisions.mockResolvedValue([]);
+      mockMemoryAppendProvision.mockResolvedValue(undefined);
       const memory = new MemoryService();
 
       const action = await reconcileResource(result, mockPort, memory, {
@@ -364,22 +362,17 @@ describe("reconcile command", () => {
       mockGetReconcilePromptFn.mockReturnValue(promptSpy);
       mockGetReconcileConfirmFn.mockReturnValue(confirmSpy);
 
-      vi.mocked(MemoryService).mockImplementation(
-        () =>
-          ({
-            readProvisions: vi.fn().mockResolvedValue([
-              {
-                runId: "run-1",
-                resourceType: "AWS::S3::Bucket",
-                resourceArn: "bucket-1",
-                region: "us-east-1",
-                desiredStateHash: "abc",
-                estimatedMonthlyCost: "$0",
-                timestamp: "2026-03-20T14:30:00Z",
-              },
-            ]),
-          }) as any,
-      );
+      mockMemoryReadProvisions.mockResolvedValue([
+        {
+          runId: "run-1",
+          resourceType: "AWS::S3::Bucket",
+          resourceArn: "bucket-1",
+          region: "us-east-1",
+          desiredStateHash: "abc",
+          estimatedMonthlyCost: "$0",
+          timestamp: "2026-03-20T14:30:00Z",
+        },
+      ]);
 
       await reconcileCommand.parseAsync(["node", "reconcile"]);
 

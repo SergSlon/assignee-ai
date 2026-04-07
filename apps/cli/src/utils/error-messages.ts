@@ -677,6 +677,27 @@ export class ErrorMessageRegistry {
 /** Singleton default registry instance. */
 export const defaultErrorMessageRegistry = new ErrorMessageRegistry();
 
+// ── Sensitive-data redaction (M-S5) ─────────────────────────────────────────
+
+const ARN_PATTERN = /arn:aws:[a-z0-9-]+:[a-z0-9-]*:\d{12}:[^\s]*/g;
+const ACCOUNT_ID_PATTERN = /\b\d{12}\b/g;
+
+/**
+ * Redacts sensitive identifiers (12-digit account IDs and full ARNs) from
+ * an error message before displaying it to the user or forwarding to logs.
+ *
+ * Order matters: ARNs are redacted first (because they CONTAIN account IDs)
+ * and the remaining bare account IDs are scrubbed afterwards.
+ *
+ * @see SECURITY-AUDIT.md — M-S5
+ */
+export function redactSensitive(message: string): string {
+  if (!message) return message;
+  return message
+    .replace(ARN_PATTERN, "[ARN]")
+    .replace(ACCOUNT_ID_PATTERN, "[ACCOUNT]");
+}
+
 // ── Formatting Helpers ───────────────────────────────────────────────────────
 
 /**

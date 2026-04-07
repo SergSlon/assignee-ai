@@ -17,6 +17,8 @@ import {
   rmSync,
   writeFileSync,
   utimesSync,
+  unlinkSync,
+  symlinkSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -405,5 +407,65 @@ describe("verifyManifest", () => {
     const result = verifyManifest(computed, join(dir, "does-not-exist.json"));
     expect(result.valid).toBe(true);
     expect(result.trustOnFirstUse).toBe(true);
+  });
+});
+
+// ── M-R5: TOCTOU race in walkBpFiles ────────────────────────────────────────
+// readdirSync lists files but a concurrent rule reload / atomic rewrite can
+// remove (or break) a file before statSync/readFileSync runs. The previous
+// implementation let the ENOENT throw out of the walk, aborting the entire
+// integrity computation and the BP library load. The fix wraps the inner
+// stat+read in try/catch and skips silently on ENOENT, logging on others.
+describe("walkBpFiles TOCTOU race resilience (M-R5)", () => {
+  it("skips files that disappear between readdir and stat without aborting the walk", () => {
+    const dir = makeTempBpDir();
+    // Two real files plus one broken symlink. statSync follows the
+    // symlink → ENOENT → previously aborted the entire walk.
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    writeBp(dir, "s3", "BP-S3-002.yaml", BP_S3_002);
+
+    const svcDir = join(dir, "s3");
+    const broken = join(svcDir, "BP-S3-999-disappeared.yaml");
+    // Symlink target intentionally does not exist.
+    symlinkSync(join(svcDir, "this-target-does-not-exist.yaml"), broken);
+
+    // Must NOT throw — the walker tolerates the missing target.
+    const manifest = computeManifest(dir);
+    // The two real files are still hashed.
+    expect(manifest.count).toBe(2);
+    expect(manifest.files["s3/BP-S3-001.yaml"]).toBeDefined();
+    expect(manifest.files["s3/BP-S3-002.yaml"]).toBeDefined();
+    // The broken file is silently absent — never half-recorded.
+    expect(manifest.files["s3/BP-S3-999-disappeared.yaml"]).toBeUndefined();
+  });
+
+  it("computeFreshness also tolerates a vanishing file", () => {
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const broken = join(dir, "s3", "vanished.yaml");
+    symlinkSync(join(dir, "s3", "no-such-target.yaml"), broken);
+
+    const result = computeFreshness(dir, 180);
+    expect(result.fileCount).toBe(1);
+    expect(result.isStale).toBe(false);
+  });
+
+  it("simulates a true delete-between-readdir-and-stat race", () => {
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const racing = writeBp(dir, "s3", "BP-S3-002.yaml", BP_S3_002);
+    // Delete the file BEFORE the walk reads it. readdirSync (called inside
+    // computeManifest) will list it (because we delete after writing); we
+    // can't guarantee the deletion happens between readdir and stat in a
+    // pure synchronous test, so instead we delete it before the walk
+    // starts and rely on a sibling broken symlink with the same name to
+    // ensure ENOENT is hit during stat.
+    unlinkSync(racing);
+    symlinkSync(join(dir, "s3", "no-such.yaml"), racing);
+
+    expect(() => computeManifest(dir)).not.toThrow();
+    const m = computeManifest(dir);
+    expect(m.count).toBe(1);
+    expect(m.files["s3/BP-S3-001.yaml"]).toBeDefined();
   });
 });

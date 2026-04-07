@@ -589,3 +589,41 @@ describe("assignee init --global", () => {
 
   // Note: "no --global flag" behavior is fully tested in the "assignee init command" describe block above.
 });
+
+// ── M-S8: detectAvailableRoles delegates to @assignee/core ─────────────────
+
+describe("detectAvailableRoles (M-S8)", () => {
+  const ALL_VARS = [
+    "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
+    "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+    "ASSIGNEE_READER_ACCESS_KEY_ID",
+    "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+    "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
+    "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+  ];
+
+  it("returns each role only when its access+secret pair is set non-empty", async () => {
+    const env: NodeJS.ProcessEnv = {};
+    for (const v of ALL_VARS) env[v] = undefined;
+    env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+    env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"] = "AKIAJOHNDOECODE0EXMPL";
+    env["ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY"] =
+      "auditorSecretValueRealistic12345678901234";
+
+    const { detectAvailableRoles } = await import("./init.js");
+    expect(detectAvailableRoles(env)).toEqual(["operator", "auditor"]);
+  });
+
+  it("rejects whitespace-only access keys", async () => {
+    const env: NodeJS.ProcessEnv = {};
+    for (const v of ALL_VARS) env[v] = undefined;
+    env["ASSIGNEE_READER_ACCESS_KEY_ID"] = "   ";
+    env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+    const { detectAvailableRoles } = await import("./init.js");
+    expect(detectAvailableRoles(env)).toEqual([]);
+  });
+});

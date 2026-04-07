@@ -13,6 +13,7 @@ import { describe, it, expect } from "vitest";
 import {
   ErrorMessageRegistry,
   defaultErrorMessageRegistry,
+  redactSensitive,
   type ErrorMessageEntry,
 } from "./error-messages.js";
 import { ErrorCode } from "../constants/errors.js";
@@ -471,6 +472,60 @@ describe("ErrorMessageRegistry — fresh instance", () => {
     const registry = new ErrorMessageRegistry();
     const entries = registry.allEntries();
     expect(entries.length).toBeGreaterThanOrEqual(20);
+  });
+});
+
+// ── M-S5: redactSensitive helper ─────────────────────────────────────────────
+
+describe("redactSensitive", () => {
+  it("replaces 12-digit AWS account IDs with [ACCOUNT]", () => {
+    expect(redactSensitive("Failed for account 123456789012")).toBe(
+      "Failed for account [ACCOUNT]",
+    );
+  });
+
+  it("replaces a full IAM ARN with [ARN]", () => {
+    expect(
+      redactSensitive("User arn:aws:iam::123456789012:user/operator denied"),
+    ).toBe("User [ARN] denied");
+  });
+
+  it("replaces a CloudControl-style resource ARN with [ARN]", () => {
+    expect(
+      redactSensitive(
+        "Cannot delete arn:aws:s3:::my-bucket-123456789012-name from arn:aws:iam::123456789012:role/foo",
+      ),
+    ).toContain("[ARN]");
+  });
+
+  it("does not over-redact: leaves shorter numbers untouched", () => {
+    expect(redactSensitive("port 8080 connection refused")).toBe(
+      "port 8080 connection refused",
+    );
+  });
+
+  it("does not over-redact: leaves a longer 13-digit number untouched", () => {
+    // Word boundary protection: 1234567890123 is NOT exactly 12 digits
+    expect(redactSensitive("id 1234567890123")).toBe("id 1234567890123");
+  });
+
+  it("redacts multiple account IDs in one message", () => {
+    expect(redactSensitive("source 111111111111 dest 222222222222")).toBe(
+      "source [ACCOUNT] dest [ACCOUNT]",
+    );
+  });
+
+  it("returns empty string unchanged", () => {
+    expect(redactSensitive("")).toBe("");
+  });
+
+  it("redacts an ARN that contains the account ID once (not twice)", () => {
+    // ARN regex consumes the account, so the trailing ACCOUNT regex must
+    // not double-replace the segment.
+    const result = redactSensitive(
+      "arn:aws:lambda:us-east-1:123456789012:function:foo",
+    );
+    expect(result).toBe("[ARN]");
   });
 });
 

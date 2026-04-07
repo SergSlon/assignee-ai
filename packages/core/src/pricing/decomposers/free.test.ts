@@ -64,12 +64,12 @@ describe("free pricing decomposers", () => {
         expect(decomposer.decompose({})).toEqual([]);
       });
 
-      it("returns empty array for desiredState with random properties", () => {
+      it("returns empty array for desiredState with realistic AWS properties", () => {
         expect(
           decomposer.decompose({
-            Foo: "bar",
-            Count: 42,
-            Enabled: true,
+            BucketName: "my-app-prod-data",
+            VersioningConfiguration: { Status: "Enabled" },
+            Tags: [{ Key: "Environment", Value: "production" }],
           }),
         ).toEqual([]);
       });

@@ -43,8 +43,8 @@ export class MissingAssigneeCredentialsError extends Error {
     secretKeyVar: string,
   ) {
     super(
-      `Missing ${role} credentials. Set ${accessKeyVar} and ${secretKeyVar} in ` +
-        `${process.cwd().includes("assignee.ai") ? ".env" : "assignee.ai/.env"}, ` +
+      `Missing ${role} credentials. Set ${accessKeyVar} and ${secretKeyVar} ` +
+        `in your environment (or in the .env file at the project root), ` +
         `or run 'assignee setup' to create the IAM users. ` +
         `The default AWS credential chain is intentionally bypassed.`,
     );
@@ -71,6 +71,48 @@ const ROLE_TO_VARS: Record<
 };
 
 /**
+ * Long-term IAM access key prefix (`AKIA[0-9A-Z]{16}`). Short-term STS
+ * sessions use `ASIA` — both are accepted, only the shape is asserted.
+ *
+ * @see SECURITY-AUDIT.md — M-S7
+ */
+const ACCESS_KEY_SHAPE = /^(AKIA|ASIA)[0-9A-Z]{16}$/;
+
+/** All Assignee roles, in declaration order. */
+export const ASSIGNEE_ROLES: readonly AssigneeRole[] = [
+  "operator",
+  "reader",
+  "auditor",
+] as const;
+
+/**
+ * Returns the access key / secret key environment variable names for a role.
+ * Single source of truth — init.ts and other consumers MUST use this rather
+ * than re-declaring the mapping.
+ *
+ * @see SECURITY-AUDIT.md — M-S8
+ */
+export function envVarsForRole(role: AssigneeRole): {
+  accessKey: string;
+  secretKey: string;
+} {
+  return ROLE_TO_VARS[role];
+}
+
+/**
+ * Returns the list of Assignee roles that have credentials configured in
+ * the current process environment. Single source of truth used by
+ * `assignee init` and other detection callers.
+ *
+ * @see SECURITY-AUDIT.md — M-S8
+ */
+export function availableRoles(): AssigneeRole[] {
+  return ASSIGNEE_ROLES.filter(
+    (role) => tryAssigneeCredentials(role) !== undefined,
+  );
+}
+
+/**
  * Returns the credentials for a given role, or throws a clear error if
  * the required env vars are not set.
  *
@@ -80,8 +122,8 @@ export function requireAssigneeCredentials(
   role: AssigneeRole,
 ): ExplicitAwsCredentials {
   const vars = ROLE_TO_VARS[role];
-  const accessKeyId = process.env[vars.accessKey];
-  const secretAccessKey = process.env[vars.secretKey];
+  const accessKeyId = process.env[vars.accessKey]?.trim();
+  const secretAccessKey = process.env[vars.secretKey]?.trim();
 
   if (!accessKeyId || !secretAccessKey) {
     throw new MissingAssigneeCredentialsError(
@@ -91,11 +133,24 @@ export function requireAssigneeCredentials(
     );
   }
 
+  // Best-effort shape warning. We do NOT reject because IAM users may
+  // legitimately use ASIA-prefixed STS session keys.
+  if (
+    !ACCESS_KEY_SHAPE.test(accessKeyId) &&
+    process.env["ASSIGNEE_LOG_LEVEL"] === "debug"
+  ) {
+    process.stderr.write(
+      `[assignee] warning: ${vars.accessKey} does not match the expected ` +
+        `AWS access key shape (AKIA/ASIA + 16 alphanumerics). Continuing anyway.\n`,
+    );
+  }
+
   return { accessKeyId, secretAccessKey };
 }
 
 /**
- * Non-throwing variant: returns undefined if credentials are not set.
+ * Non-throwing variant: returns undefined if credentials are not set
+ * (or are whitespace-only).
  * Use only when a feature has a documented graceful no-op path
  * (e.g., best-effort discovery in plan mode).
  */
@@ -103,8 +158,8 @@ export function tryAssigneeCredentials(
   role: AssigneeRole,
 ): ExplicitAwsCredentials | undefined {
   const vars = ROLE_TO_VARS[role];
-  const accessKeyId = process.env[vars.accessKey];
-  const secretAccessKey = process.env[vars.secretKey];
+  const accessKeyId = process.env[vars.accessKey]?.trim();
+  const secretAccessKey = process.env[vars.secretKey]?.trim();
   if (!accessKeyId || !secretAccessKey) return undefined;
   return { accessKeyId, secretAccessKey };
 }

@@ -12,13 +12,12 @@ describe("getIntentDefaults", () => {
       "I need an api handler for my REST service",
       RESOURCE_TYPES.LAMBDA_FUNCTION,
     );
-    const memOverride = overrides.find((o) => o.fieldName === "MemorySize");
-    const timeoutOverride = overrides.find((o) => o.fieldName === "Timeout");
-
-    expect(memOverride).toBeDefined();
-    expect(memOverride!.value).toBe("512");
-    expect(timeoutOverride).toBeDefined();
-    expect(timeoutOverride!.value).toBe("30");
+    expect(overrides).toContainEqual(
+      expect.objectContaining({ fieldName: "MemorySize", value: "512" }),
+    );
+    expect(overrides).toContainEqual(
+      expect.objectContaining({ fieldName: "Timeout", value: "30" }),
+    );
   });
 
   it('returns MemorySize=512 and Timeout=30 for "api endpoint" intent', () => {
@@ -39,9 +38,9 @@ describe("getIntentDefaults", () => {
       "set up a background job processor",
       RESOURCE_TYPES.LAMBDA_FUNCTION,
     );
-    const timeoutOverride = overrides.find((o) => o.fieldName === "Timeout");
-    expect(timeoutOverride).toBeDefined();
-    expect(timeoutOverride!.value).toBe("300");
+    expect(overrides).toContainEqual(
+      expect.objectContaining({ fieldName: "Timeout", value: "300" }),
+    );
   });
 
   it('returns Timeout=300 for "worker" intent', () => {
@@ -49,9 +48,9 @@ describe("getIntentDefaults", () => {
       "create a worker function",
       RESOURCE_TYPES.LAMBDA_FUNCTION,
     );
-    const timeoutOverride = overrides.find((o) => o.fieldName === "Timeout");
-    expect(timeoutOverride).toBeDefined();
-    expect(timeoutOverride!.value).toBe("300");
+    expect(overrides).toContainEqual(
+      expect.objectContaining({ fieldName: "Timeout", value: "300" }),
+    );
   });
 
   it("does not return MemorySize override for worker intent", () => {
@@ -97,9 +96,9 @@ describe("getIntentDefaults", () => {
       "create a dev database",
       RESOURCE_TYPES.RDS_DB_INSTANCE,
     );
-    const multiAz = overrides.find((o) => o.fieldName === "MultiAZ");
-    expect(multiAz).toBeDefined();
-    expect(multiAz!.value).toBe(false);
+    expect(overrides).toContainEqual(
+      expect.objectContaining({ fieldName: "MultiAZ", value: false }),
+    );
   });
 
   it('returns MultiAZ=false for "dev db"', () => {
@@ -107,9 +106,9 @@ describe("getIntentDefaults", () => {
       "I need a dev db",
       RESOURCE_TYPES.RDS_DB_INSTANCE,
     );
-    const multiAz = overrides.find((o) => o.fieldName === "MultiAZ");
-    expect(multiAz).toBeDefined();
-    expect(multiAz!.value).toBe(false);
+    expect(overrides).toContainEqual(
+      expect.objectContaining({ fieldName: "MultiAZ", value: false }),
+    );
   });
 
   // ── Edge cases ─────────────────────────────────────────────────────────
@@ -192,12 +191,18 @@ describe("getIntentDefaults", () => {
       "Create an EC2 I can ssh into",
       RESOURCE_TYPES.EC2_INSTANCE,
     );
-    expect(
-      overrides.find((o) => o.fieldName === CfnKey.KEY_NAME),
-    ).toBeDefined();
-    expect(
-      overrides.find((o) => o.fieldName === CfnKey.ASSOCIATE_PUBLIC_IP)!.value,
-    ).toBe(true);
+    expect(overrides).toContainEqual(
+      expect.objectContaining({
+        fieldName: CfnKey.KEY_NAME,
+        value: ResourceDefault.SSH_KEY_PLACEHOLDER,
+      }),
+    );
+    expect(overrides).toContainEqual(
+      expect.objectContaining({
+        fieldName: CfnKey.ASSOCIATE_PUBLIC_IP,
+        value: true,
+      }),
+    );
   });
 
   it("EC2 intent without SSH does not return KeyName override", () => {
@@ -256,9 +261,9 @@ describe("applyIntentOverrides", () => {
       "store a secret value",
       RESOURCE_TYPES.SSM_PARAMETER,
     );
-    const typeOverride = overrides.find((o) => o.fieldName === "Type");
-    expect(typeOverride).toBeDefined();
-    expect(typeOverride!.value).toBe("SecureString");
+    expect(overrides).toContainEqual(
+      expect.objectContaining({ fieldName: "Type", value: "SecureString" }),
+    );
   });
 
   // ── SNS Topic: "fifo" → FifoTopic true ─────────────────────────────────
@@ -268,9 +273,9 @@ describe("applyIntentOverrides", () => {
       "create a fifo topic",
       RESOURCE_TYPES.SNS_TOPIC,
     );
-    const fifoOverride = overrides.find((o) => o.fieldName === "FifoTopic");
-    expect(fifoOverride).toBeDefined();
-    expect(fifoOverride!.value).toBe(true);
+    expect(overrides).toContainEqual(
+      expect.objectContaining({ fieldName: "FifoTopic", value: true }),
+    );
   });
 
   // ── CloudWatch LogGroup: "compliance" → 365 retention ──────────────────
@@ -280,11 +285,12 @@ describe("applyIntentOverrides", () => {
       "create a compliance log group",
       RESOURCE_TYPES.LOGS_LOG_GROUP,
     );
-    const retentionOverride = overrides.find(
-      (o) => o.fieldName === "RetentionInDays",
+    expect(overrides).toContainEqual(
+      expect.objectContaining({
+        fieldName: "RetentionInDays",
+        value: "365",
+      }),
     );
-    expect(retentionOverride).toBeDefined();
-    expect(retentionOverride!.value).toBe("365");
   });
 
   // ── ECS Cluster: "fargate" → containerInsights enabled ─────────────────
@@ -294,13 +300,12 @@ describe("applyIntentOverrides", () => {
       "create a fargate cluster",
       RESOURCE_TYPES.ECS_CLUSTER,
     );
-    const settingsOverride = overrides.find(
-      (o) => o.fieldName === "ClusterSettings",
+    expect(overrides).toContainEqual(
+      expect.objectContaining({
+        fieldName: "ClusterSettings",
+        value: [{ Name: "containerInsights", Value: "enabled" }],
+      }),
     );
-    expect(settingsOverride).toBeDefined();
-    expect(settingsOverride!.value).toEqual([
-      { Name: "containerInsights", Value: "enabled" },
-    ]);
   });
 
   // ── ECR Repository: "docker" → IMMUTABLE tags + scan on push ──────────
@@ -310,14 +315,15 @@ describe("applyIntentOverrides", () => {
       "create a docker repository",
       RESOURCE_TYPES.ECR_REPOSITORY,
     );
-    const tagMutability = overrides.find(
-      (o) => o.fieldName === "ImageTagMutability",
+    expect(overrides).toContainEqual(
+      expect.objectContaining({
+        fieldName: "ImageTagMutability",
+        value: "IMMUTABLE",
+      }),
     );
-    const scanOnPush = overrides.find((o) => o.fieldName === "ScanOnPush");
-    expect(tagMutability).toBeDefined();
-    expect(tagMutability!.value).toBe("IMMUTABLE");
-    expect(scanOnPush).toBeDefined();
-    expect(scanOnPush!.value).toBe(true);
+    expect(overrides).toContainEqual(
+      expect.objectContaining({ fieldName: "ScanOnPush", value: true }),
+    );
   });
 
   // ── ELBv2: "web" → application type ───────────────────────────────────
@@ -327,9 +333,9 @@ describe("applyIntentOverrides", () => {
       "create a web load balancer",
       RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
     );
-    const typeOverride = overrides.find((o) => o.fieldName === "Type");
-    expect(typeOverride).toBeDefined();
-    expect(typeOverride!.value).toBe("application");
+    expect(overrides).toContainEqual(
+      expect.objectContaining({ fieldName: "Type", value: "application" }),
+    );
   });
 
   // ── API Gateway V2: "websocket" → WEBSOCKET protocol ──────────────────
@@ -339,11 +345,12 @@ describe("applyIntentOverrides", () => {
       "create a websocket api",
       RESOURCE_TYPES.APIGATEWAYV2_API,
     );
-    const protocolOverride = overrides.find(
-      (o) => o.fieldName === "ProtocolType",
+    expect(overrides).toContainEqual(
+      expect.objectContaining({
+        fieldName: "ProtocolType",
+        value: "WEBSOCKET",
+      }),
     );
-    expect(protocolOverride).toBeDefined();
-    expect(protocolOverride!.value).toBe("WEBSOCKET");
   });
 
   it("does not duplicate option if override value already in options", () => {

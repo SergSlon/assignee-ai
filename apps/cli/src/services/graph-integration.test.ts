@@ -54,7 +54,10 @@ vi.mock("@assignee/core", async (importOriginal) => {
 // Mock CloudControl client — prevents real AWS API calls. Plain function
 // so impl survives mockReset:true.
 vi.mock("../services/cloudcontrol-client.js", () => ({
-  createCloudControlClient: () => ({ send: () => undefined }),
+  // Use vi.fn() so individual tests can call
+  // `vi.mocked(createCloudControlClient).mockReturnValueOnce(...)` to plug
+  // in a per-test fake send (e.g. apply autoApprove flow).
+  createCloudControlClient: vi.fn(() => ({ send: () => undefined })),
 }));
 
 // Mock the AI SDK — intercepts all LLM calls made by BedrockLlmAdapter
@@ -997,11 +1000,10 @@ describe("Graph integration — new resource types", () => {
 });
 
 describe("Graph integration — apply flow", () => {
-  // DEFERRED: Apply flow requires full HITL interrupt/resume cycle with CloudControl mock.
-  // Current LangGraph interruptBefore pattern needs graph.invoke(null, config) resume
-  // which requires proper checkpoint state.
-  // Tracked: Epic 34 — Apply Flow E2E Integration (post-Sprint K)
-  it.skip("SSM Parameter: apply with autoApprove completes successfully", async () => {
+  // Apply autoApprove path is the hottest path in the product, so this test
+  // exercises a full plan → human_approval (auto) → resource_provisioner →
+  // status_poller → result_formatter cycle with a mocked CloudControl client.
+  it("SSM Parameter: apply with autoApprove completes successfully", async () => {
     const state = JSON.stringify({
       Name: "/test/param",
       Type: "String",

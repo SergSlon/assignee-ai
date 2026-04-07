@@ -65,6 +65,22 @@ const CLOUDFRONT_POLL_INTERVAL_MS = 5000;
 /** Max consecutive transient errors from cf.send(GetDistribution) before aborting. */
 const CLOUDFRONT_MAX_TRANSIENT_ERRORS = 5;
 
+/**
+ * DynamoDB UpdateTable(DeletionProtectionEnabled=false) returns immediately,
+ * but the disable propagates asynchronously. Polling DescribeTable until
+ * the change is visible avoids racing the subsequent CloudControl
+ * DeleteResource call (which would fail with ResourceInUseException).
+ */
+const DDB_DISABLE_PROTECTION_MAX_POLLS = 6;
+const DDB_DISABLE_PROTECTION_POLL_INTERVAL_MS = 5000;
+
+/**
+ * S3 DeleteObjects accepts at most 1000 keys per request. ListObjectVersions
+ * can return up to 1000 Versions plus 1000 DeleteMarkers in a single page —
+ * 2000 combined — so the merged array must be chunked before deletion.
+ */
+const S3_DELETE_OBJECTS_CHUNK_SIZE = 1000;
+
 const MAX_POLL_ATTEMPTS = DESTROY_MAX_POLL_ATTEMPTS;
 const POLL_INTERVAL_MS = DESTROY_POLL_INTERVAL_MS;
 
@@ -337,7 +353,7 @@ export async function destroySingleResource(
   // DynamoDB: disable deletion protection before deleting
   if (resourceType === RESOURCE_TYPES.DYNAMODB_TABLE) {
     try {
-      const { DynamoDBClient, UpdateTableCommand } =
+      const { DynamoDBClient, UpdateTableCommand, DescribeTableCommand } =
         await import("@aws-sdk/client-dynamodb");
       const ddb = new DynamoDBClient({
         region: awsConfig.region ?? AWS_REGION,
@@ -349,6 +365,41 @@ export async function destroySingleResource(
           DeletionProtectionEnabled: false,
         }),
       );
+
+      // Poll DescribeTable until DeletionProtectionEnabled propagates to false.
+      // UpdateTable returns immediately while the change is still in flight,
+      // and a racing CloudControl DeleteResource will fail with
+      // ResourceInUseException. We poll up to ~30s before giving up — at
+      // which point the downstream delete will surface its own error.
+      for (let i = 0; i < DDB_DISABLE_PROTECTION_MAX_POLLS; i++) {
+        let described;
+        try {
+          described = await ddb.send(
+            new DescribeTableCommand({ TableName: resource.identifier }),
+          );
+        } catch (descErr) {
+          // Non-fatal: lacking dynamodb:DescribeTable shouldn't block delete.
+          warnDestroy("dynamodb_describe_after_disable_failed", {
+            identifier: resource.identifier,
+            attempt: i + 1,
+            error: descErr instanceof Error ? descErr.message : String(descErr),
+          });
+          break;
+        }
+        const stillProtected =
+          described.Table?.DeletionProtectionEnabled === true;
+        if (!stillProtected) break;
+        if (i === DDB_DISABLE_PROTECTION_MAX_POLLS - 1) {
+          warnDestroy("dynamodb_disable_protection_propagation_timeout", {
+            identifier: resource.identifier,
+            polls: DDB_DISABLE_PROTECTION_MAX_POLLS,
+          });
+          break;
+        }
+        await new Promise((r) =>
+          setTimeout(r, DDB_DISABLE_PROTECTION_POLL_INTERVAL_MS),
+        );
+      }
     } catch (err) {
       // Surface missing-credentials errors clearly — never let them be
       // silently swallowed, or the subsequent CloudControl DeleteResource
@@ -407,11 +458,19 @@ export async function destroySingleResource(
           })),
         ].filter((o) => o.Key);
 
-        if (objects.length > 0) {
+        // ListObjectVersions can return up to 1000 Versions PLUS up to 1000
+        // DeleteMarkers in a single page (2000 combined). DeleteObjects
+        // accepts at most 1000 keys per request, so we must chunk.
+        for (
+          let off = 0;
+          off < objects.length;
+          off += S3_DELETE_OBJECTS_CHUNK_SIZE
+        ) {
+          const chunk = objects.slice(off, off + S3_DELETE_OBJECTS_CHUNK_SIZE);
           await s3.send(
             new DeleteObjectsCommand({
               Bucket: resource.identifier,
-              Delete: { Objects: objects },
+              Delete: { Objects: chunk },
             }),
           );
         }

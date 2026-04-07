@@ -10,11 +10,20 @@ import {
 import { DriftStatus, type DriftResult } from "@assignee/core";
 
 // Mock memory service
-vi.mock("../services/memory.js", () => ({
-  MemoryService: vi.fn().mockImplementation(() => ({
-    readProvisions: vi.fn().mockResolvedValue([]),
-  })),
+//
+// vitest config has `mockReset: true`, so `vi.fn().mockImplementation(...)`
+// constructor stubs get wiped between tests. Use a `class` declaration that
+// delegates to module-level hoisted mocks (matches setup.test.ts pattern).
+const { mockMemoryReadProvisions } = vi.hoisted(() => ({
+  mockMemoryReadProvisions: vi.fn().mockResolvedValue([]),
 }));
+
+vi.mock("../services/memory.js", () => {
+  class MemoryService {
+    readProvisions = (...args: unknown[]) => mockMemoryReadProvisions(...args);
+  }
+  return { MemoryService };
+});
 
 // Mock drift-detail view
 vi.mock("../views/drift-detail.js", () => ({
@@ -29,7 +38,6 @@ vi.mock("../services/drift-detector-factory.js", () => ({
 }));
 
 import { driftCommand } from "./drift.js";
-import { MemoryService } from "../services/memory.js";
 
 describe("drift command", () => {
   let stdoutSpy: MockInstance;
@@ -39,6 +47,8 @@ describe("drift command", () => {
       .spyOn(process.stdout, "write")
       .mockImplementation(() => true);
     process.exitCode = undefined;
+    // Re-arm MemoryService method mock (vitest mockReset wipes it).
+    mockMemoryReadProvisions.mockResolvedValue([]);
     // Reset commander state
     driftCommand.setOptionValue("resource", undefined);
     driftCommand.setOptionValue("region", undefined);
@@ -54,12 +64,7 @@ describe("drift command", () => {
   });
 
   it("displays empty state message when no provisions exist", async () => {
-    vi.mocked(MemoryService).mockImplementation(
-      () =>
-        ({
-          readProvisions: vi.fn().mockResolvedValue([]),
-        }) as any,
-    );
+    mockMemoryReadProvisions.mockResolvedValue([]);
 
     await driftCommand.parseAsync(["node", "drift"]);
 
@@ -69,22 +74,17 @@ describe("drift command", () => {
   });
 
   it("reports that credentials are needed when no drift port is set", async () => {
-    vi.mocked(MemoryService).mockImplementation(
-      () =>
-        ({
-          readProvisions: vi.fn().mockResolvedValue([
-            {
-              runId: "00000000-0000-0000-0000-000000000001",
-              resourceType: "AWS::S3::Bucket",
-              resourceArn: "arn:aws:s3:::my-bucket",
-              region: "us-east-1",
-              desiredStateHash: "abc123",
-              estimatedMonthlyCost: "$0.00",
-              timestamp: "2026-03-20T14:30:00Z",
-            },
-          ]),
-        }) as any,
-    );
+    mockMemoryReadProvisions.mockResolvedValue([
+      {
+        runId: "00000000-0000-0000-0000-000000000001",
+        resourceType: "AWS::S3::Bucket",
+        resourceArn: "arn:aws:s3:::my-bucket",
+        region: "us-east-1",
+        desiredStateHash: "abc123",
+        estimatedMonthlyCost: "$0.00",
+        timestamp: "2026-03-20T14:30:00Z",
+      },
+    ]);
 
     mockCreateDriftDetectorFromEnv.mockReturnValue(undefined);
 
@@ -130,12 +130,7 @@ describe("drift command", () => {
       port: mockPort,
     });
 
-    vi.mocked(MemoryService).mockImplementation(
-      () =>
-        ({
-          readProvisions: vi.fn().mockResolvedValue(provisions),
-        }) as any,
-    );
+    mockMemoryReadProvisions.mockResolvedValue(provisions);
 
     await driftCommand.parseAsync(["node", "drift"]);
 
@@ -178,12 +173,7 @@ describe("drift command", () => {
       port: mockPort,
     });
 
-    vi.mocked(MemoryService).mockImplementation(
-      () =>
-        ({
-          readProvisions: vi.fn().mockResolvedValue(provisions),
-        }) as any,
-    );
+    mockMemoryReadProvisions.mockResolvedValue(provisions);
 
     await driftCommand.parseAsync(["node", "drift"]);
 
@@ -226,12 +216,7 @@ describe("drift command", () => {
       port: mockPort,
     });
 
-    vi.mocked(MemoryService).mockImplementation(
-      () =>
-        ({
-          readProvisions: vi.fn().mockResolvedValue(provisions),
-        }) as any,
-    );
+    mockMemoryReadProvisions.mockResolvedValue(provisions);
 
     await driftCommand.parseAsync(["node", "drift"]);
 

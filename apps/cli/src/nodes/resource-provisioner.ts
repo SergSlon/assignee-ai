@@ -33,6 +33,33 @@ function isResourceType(s: string): s is ResourceType {
   return (SUPPORTED_TYPES_ARRAY as readonly string[]).includes(s);
 }
 
+/**
+ * Whitelist-based filename sanitizer for SSH key file names. Only
+ * `[A-Za-z0-9._-]` survives — every other character (path separators, null
+ * bytes, newlines, control chars, shell metacharacters, Unicode) is replaced
+ * with `_`. A leading dot is also rejected so the resulting file is never
+ * a hidden dotfile and never resolves to `.` or `..`. Empty results fall
+ * back to a deterministic placeholder so we never write to `/.pem`.
+ *
+ * Exported for unit testing.
+ */
+export function sanitizeKeyName(name: string): string {
+  let cleaned = name.replace(/[^A-Za-z0-9._-]/g, "_");
+  // Strip leading dots and underscores so the result is never a hidden
+  // dotfile, never resolves to "." or "..", and never starts with the
+  // sanitization placeholder. We strip dots first (to handle ".." and
+  // ".hidden") and underscores second (to handle the residue from path
+  // separators that the regex above replaced — e.g. "../etc/passwd" →
+  // "_etc_passwd" → "etc_passwd").
+  while (cleaned.length > 0 && (cleaned[0] === "." || cleaned[0] === "_")) {
+    cleaned = cleaned.slice(1);
+  }
+  if (cleaned.length === 0) {
+    cleaned = "assignee_key";
+  }
+  return cleaned;
+}
+
 export async function resourceProvisionerNode(
   state: AgentState,
   provisioner: ProvisioningPort,
@@ -187,6 +214,28 @@ export async function resourceProvisionerNode(
   const identifier = skipStateGuard
     ? undefined
     : getPrimaryIdentifier(state.resourceType, desiredState);
+
+  // M-R4: For non-S3 types the state guard relies on a resolved primary
+  // identifier. Compound resources whose identifier interpolates a parent
+  // ARN (e.g. IAM RolePolicy = Role+PolicyName, EC2 Route = RouteTable+CIDR)
+  // can produce `undefined` here when the parent isn't yet resolved at LLM
+  // generation time. Silently skipping the guard lets a duplicate resource
+  // sneak through. We log a warn-level audit event so operators can detect
+  // it; provisioning still proceeds (the create call will surface
+  // ALREADY_EXISTS if the resource genuinely exists).
+  if (!skipStateGuard && !identifier) {
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "warn",
+      action: LOG_ACTIONS.STATE_GUARD_SKIPPED_UNRESOLVED_IDENTIFIER,
+      extras: {
+        resourceType: state.resourceType,
+        reason:
+          "primary_identifier_unresolved (compound/composite identifier or unresolved parent ref)",
+      },
+    });
+  }
 
   if (identifier) {
     const [stateGuardErr] = await provisioner.getResource(
@@ -405,15 +454,27 @@ export async function resourceProvisionerNode(
           );
         }
         // Save private key to ~/.assignee/keys/
-        const { mkdirSync, writeFileSync } = await import("node:fs");
+        const { mkdirSync, writeFileSync, chmodSync } = await import("node:fs");
         const { join } = await import("node:path");
         const { homedir } = await import("node:os");
-        // Sanitize key name for filesystem safety (strip path separators)
-        const safeKeyName = keyName
-          .replace(/[/\\]/g, "_")
-          .replace(/\.\./g, "_");
+        // Sanitize key name for filesystem safety. Whitelist [A-Za-z0-9._-]
+        // and reject leading dots — blocks null bytes, path separators,
+        // control chars, newlines, leading-dot dotfiles, Windows reserved
+        // names like CON/PRN (which contain only safe chars but get rejected
+        // by the leading-letter heuristic when paired with the .pem suffix
+        // on case-insensitive filesystems — handled by sanitizeKeyName).
+        const safeKeyName = sanitizeKeyName(keyName);
         const keysDir = join(homedir(), ASSIGNEE_DIR, "keys");
-        mkdirSync(keysDir, { recursive: true });
+        // Mode 0o700 — keys directory must NOT be world-readable. The
+        // .pem files inside are 0o400 but a 0o755 directory leaks the
+        // listing of provisioned key names to other local users.
+        mkdirSync(keysDir, { recursive: true, mode: 0o700 });
+        // Re-chmod in case the directory already existed with a wider mode.
+        try {
+          chmodSync(keysDir, 0o700);
+        } catch {
+          // Best effort — Windows or unusual filesystems may reject chmod.
+        }
         const keyPath = join(keysDir, `${safeKeyName}.pem`);
         sshKeyCreatedName = keyName; // Track before write so cleanup runs if write fails
         writeFileSync(keyPath, keyResult.KeyMaterial, { mode: 0o400 });

@@ -269,7 +269,7 @@ const EVIL_INPUTS: Record<string, Record<string, unknown>> = {
   "completely empty object": {},
 
   "Symbol and function values": {
-    InstanceType: Symbol("foo"),
+    InstanceType: Symbol("t3.micro"),
     Period: () => 42,
     Type: Symbol.iterator,
   },

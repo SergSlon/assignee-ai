@@ -16,17 +16,21 @@ vi.mock("./cloudcontrol-client.js", () => ({
   createCloudControlClient: vi.fn(),
 }));
 
-vi.mock("./cloudcontrol-adapter.js", () => ({
-  CloudControlAdapter: vi.fn().mockImplementation(() => ({
-    getResource: vi.fn(),
-  })),
-}));
+vi.mock("./cloudcontrol-adapter.js", () => {
+  // Class declaration so vitest mockReset cannot strip the constructor
+  // body (matches setup.test.ts pattern).
+  class CloudControlAdapter {
+    getResource = vi.fn();
+  }
+  return { CloudControlAdapter };
+});
 
-vi.mock("./drift-detector.js", () => ({
-  DriftDetectorService: vi.fn().mockImplementation(() => ({
-    detectDrift: vi.fn(),
-  })),
-}));
+vi.mock("./drift-detector.js", () => {
+  class DriftDetectorService {
+    detectDrift = vi.fn();
+  }
+  return { DriftDetectorService };
+});
 
 describe("createDriftDetectorFromEnv", () => {
   beforeEach(() => {

@@ -380,4 +380,68 @@ describe("CloudFormationSchemaService", () => {
       expect(creds.accessKeyId).toBe("AKIA1111EXAMPLE");
     });
   });
+
+  // ── M-R6: corrupt cache file must be unlinked, not infinitely re-fetched ─
+  // A truncated/partial JSON file in the cache directory previously caused
+  // every subsequent getSchema() to (a) read the corrupt file, (b) fail to
+  // parse, (c) treat as cache miss and re-fetch from the API, (d) overwrite
+  // the cache with the SAME corrupt content if write fails halfway again.
+  // This is an unbounded re-fetch loop that hammers DescribeType every call.
+  // The fix unlinks the corrupt file inside readCache so the next call sees
+  // a clean cache miss + write.
+  describe("getSchema — corrupt cache (M-R6)", () => {
+    it("unlinks a corrupt cache file and refetches successfully", async () => {
+      // Pre-populate cache with truncated JSON (mid-write crash simulation).
+      const cacheFile = path.join(tmpDir, "AWS__S3__Bucket.json");
+      // Realistic shape — header but truncated body, fresh mtime so it's
+      // not pruned for being expired.
+      await fs.writeFile(
+        cacheFile,
+        '{"schema":{"typeName":"AWS::S3::Bucket","prope',
+        "utf-8",
+      );
+
+      mockSend.mockResolvedValueOnce({
+        Schema: JSON.stringify(S3_BUCKET_SCHEMA),
+      });
+
+      const service = await createService();
+      const schema = await service.getSchema("AWS::S3::Bucket");
+
+      // Re-fetched from the API.
+      expect(schema).toEqual(S3_BUCKET_SCHEMA);
+      expect(mockSend).toHaveBeenCalledOnce();
+
+      // Cache file MUST exist again (overwritten with valid content) — and
+      // critically the new content must parse cleanly. Without the unlink
+      // fix, a subsequent read could find the original truncated bytes if
+      // the writeCache step failed mid-flight in some edge.
+      const newContent = await fs.readFile(cacheFile, "utf-8");
+      const parsed = JSON.parse(newContent) as { schema: unknown };
+      expect(parsed.schema).toEqual(S3_BUCKET_SCHEMA);
+    });
+
+    it("does not re-fetch on every call when the corrupt file is unlinked", async () => {
+      // Same scenario, but call getSchema TWICE. After the first call
+      // unlinks + rewrites, the second call must hit the cache and NOT
+      // call the API again. Without the M-R6 fix, every call would
+      // re-fetch indefinitely.
+      const cacheFile = path.join(tmpDir, "AWS__S3__Bucket.json");
+      await fs.writeFile(cacheFile, "{not json", "utf-8");
+
+      mockSend.mockResolvedValueOnce({
+        Schema: JSON.stringify(S3_BUCKET_SCHEMA),
+      });
+
+      const service = await createService();
+      const first = await service.getSchema("AWS::S3::Bucket");
+      const second = await service.getSchema("AWS::S3::Bucket");
+
+      expect(first).toEqual(S3_BUCKET_SCHEMA);
+      expect(second).toEqual(S3_BUCKET_SCHEMA);
+      // Exactly ONE API call across the two getSchema calls — second was
+      // served from the rewritten cache.
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+  });
 });
