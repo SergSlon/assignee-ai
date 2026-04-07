@@ -692,7 +692,11 @@ describe("compound queue iteration (result-formatter loop)", () => {
     // No more resources to advance to — should NOT set executionStatus to PENDING
     expect(result.executionStatus).toBeUndefined();
     expect(result.currentResourceIndex).toBeUndefined();
-    // Should have rendered compound success
+    // Should have rendered compound success. Wave 8/9: a third
+    // displayArns parameter is passed (a Record<resourceId, fullArn>)
+    // so renderCompoundSuccess can show resolved ARNs while
+    // completedResources[].resourceArn keeps the bare CCAPI identifier
+    // for downstream compound marker resolution.
     expect(renderCompoundSuccess).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({ resourceId: "role" }),
@@ -700,6 +704,7 @@ describe("compound queue iteration (result-formatter loop)", () => {
         expect.objectContaining({ resourceId: "bucket" }),
       ]),
       iterPattern,
+      expect.any(Object),
     );
   });
 

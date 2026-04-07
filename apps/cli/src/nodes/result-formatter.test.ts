@@ -231,16 +231,51 @@ afterEach(() => {
 // ── Single-resource path (no change from existing behaviour) ─────────────────
 
 describe("resultFormatterNode — single-resource SUCCESS", () => {
-  it("calls renderApplySuccess and returns {}", async () => {
+  it("calls renderApplySuccess with the state and a resolved displayArn", async () => {
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
+      // Already-an-ARN value short-circuits resolveResourceArn → both
+      // arguments to renderApplySuccess are the same string. Real
+      // CCAPI bare identifiers are exercised by the regression test
+      // below and by the live verification in the commit message.
       resourceArn: "arn:aws:iam::123456789012:role/my-role",
     });
     const result = await resultFormatterNode(state);
 
-    expect(renderApplySuccess).toHaveBeenCalledWith(state);
+    expect(renderApplySuccess).toHaveBeenCalledWith(
+      state,
+      "arn:aws:iam::123456789012:role/my-role",
+    );
     expect(renderCompoundSuccess).not.toHaveBeenCalled();
     expect(result).toEqual({});
+  });
+
+  // Adversarial Hunter v6 P0 regression: Wave 8 originally mutated
+  // state.resourceArn from the bare CCAPI identifier (vpc-0xxx) into
+  // a full ARN (arn:aws:ec2:...:vpc/vpc-0xxx). The compound marker
+  // resolver in plan-generator.ts substitutes resourceArn verbatim
+  // into child VpcId/SubnetId/InternetGatewayId fields where AWS
+  // requires the BARE identifier — the mutation broke every VPC
+  // compound apply at step 2/17. This regression test pins the
+  // invariant: result-formatter must NEVER mutate state.resourceArn.
+  it("does NOT mutate state.resourceArn when resolving the display ARN", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceType: "AWS::S3::Bucket",
+      // Bare CCAPI identifier — what status-poller actually returns.
+      resourceArn: "my-smoke-bucket-1775000000",
+    });
+    const before = state.resourceArn;
+    await resultFormatterNode(state);
+
+    // Even though resolveResourceArn would synthesize
+    // "arn:aws:s3:::my-smoke-bucket-1775000000" (or fall back to the
+    // bare value when STS is unavailable), state.resourceArn must
+    // remain the bare identifier. Anything else corrupts compound
+    // marker substitution downstream.
+    expect(state.resourceArn).toBe(before);
+    expect(state.resourceArn).toBe("my-smoke-bucket-1775000000");
+    expect(state.resourceArn).not.toMatch(/^arn:/);
   });
 });
 
@@ -519,7 +554,9 @@ describe("resultFormatterNode — Story 19.2 security posture check (single-reso
 
     const result = await resultFormatterNode(state, [tool]);
 
-    expect(renderApplySuccess).toHaveBeenCalledWith(state);
+    // resolveResourceArn short-circuits when state.resourceArn is
+    // already an ARN, so the displayArn second arg equals state.resourceArn.
+    expect(renderApplySuccess).toHaveBeenCalledWith(state, state.resourceArn);
     // s3BucketPosture has CRITICAL + HIGH + MEDIUM; only CRITICAL & HIGH are surfaced
     expect(renderSecurityWarnings).toHaveBeenCalledWith(
       "arn:aws:s3:::my-bucket-12345",
@@ -676,7 +713,9 @@ describe("resultFormatterNode — Story 19.3 provision memory write", () => {
     const result = await resultFormatterNode(state);
 
     // Should still render success
-    expect(renderApplySuccess).toHaveBeenCalledWith(state);
+    // resolveResourceArn short-circuits when state.resourceArn is
+    // already an ARN, so the displayArn second arg equals state.resourceArn.
+    expect(renderApplySuccess).toHaveBeenCalledWith(state, state.resourceArn);
     // Result should be empty (no error propagation)
     expect(result).toEqual({});
   });
@@ -982,7 +1021,9 @@ describe("resultFormatterNode — Story 20.13 clear failure history on success",
 
     const result = await resultFormatterNode(state);
 
-    expect(renderApplySuccess).toHaveBeenCalledWith(state);
+    // resolveResourceArn short-circuits when state.resourceArn is
+    // already an ARN, so the displayArn second arg equals state.resourceArn.
+    expect(renderApplySuccess).toHaveBeenCalledWith(state, state.resourceArn);
     expect(result).toEqual({});
   });
 });
@@ -1268,7 +1309,9 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
     const result = await resultFormatterNode(state);
 
     // renderApplySuccess should still have been called
-    expect(renderApplySuccess).toHaveBeenCalledWith(state);
+    // resolveResourceArn short-circuits when state.resourceArn is
+    // already an ARN, so the displayArn second arg equals state.resourceArn.
+    expect(renderApplySuccess).toHaveBeenCalledWith(state, state.resourceArn);
 
     // Should show warning about upload failure
     const allStderr = stderrSpy.mock.calls
