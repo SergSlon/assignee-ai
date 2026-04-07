@@ -256,38 +256,41 @@ export const setupCommand = new Command(CommandName.SETUP)
       clack.intro("Assignee.ai — IAM Setup");
 
       // ── Dry-run path: print plan and exit without any AWS calls ─────
+      // UX (M-T1): Each section is rendered as ONE multi-line clack.log.step
+      // call so clack inserts only one `│` connector per section instead of
+      // one between every line. A 14-line plan collapses from ~28 visible
+      // rows to ~12.
       if (options.dryRun) {
         clack.log.info(
           "DRY RUN — no AWS APIs will be called. The following resources WOULD be created/updated:",
         );
-        clack.log.step("IAM Users:");
-        for (const role of ROLES) {
-          clack.log.step(
-            `  - ${role.userName} (managed policy: ${role.policyName}) — ${role.description}`,
-          );
-        }
-        clack.log.step("IAM Managed Policies:");
-        for (const role of ROLES) {
-          clack.log.step(
-            `  - ${role.policyName} (attached to user ${role.userName})`,
-          );
-        }
-        clack.log.step("IAM Access Keys:");
-        for (const role of ROLES) {
-          clack.log.step(
-            `  - 1 access key per user, written to .env as ${role.envKeyId} / ${role.envSecretKey}`,
-          );
-        }
-        clack.log.step("Bedrock invocation logging infrastructure:");
-        clack.log.step(`  - IAM role: ${BEDROCK_LOGGING_ROLE_NAME}`);
         clack.log.step(
-          `  - Inline policy: ${BEDROCK_LOGGING_POLICY_NAME} (logs:CreateLogGroup, CreateLogStream, PutLogEvents, DescribeLogGroups)`,
+          "IAM Users:\n" +
+            ROLES.map(
+              (r) =>
+                `  - ${r.userName} (managed policy: ${r.policyName}) — ${r.description}`,
+            ).join("\n"),
         );
-        clack.log.step(`  - CloudWatch log group: ${BEDROCK_LOG_GROUP_NAME}`);
         clack.log.step(
-          `  - Bedrock model invocation logging configuration: textDataDeliveryEnabled=${
-            options.enableLlmLogging ? "true" : "false"
-          }, imageDataDeliveryEnabled=false, embeddingDataDeliveryEnabled=false`,
+          "IAM Managed Policies:\n" +
+            ROLES.map(
+              (r) => `  - ${r.policyName} (attached to user ${r.userName})`,
+            ).join("\n"),
+        );
+        clack.log.step(
+          "IAM Access Keys:\n" +
+            ROLES.map(
+              (r) =>
+                `  - 1 access key per user, written to .env as ${r.envKeyId} / ${r.envSecretKey}`,
+            ).join("\n"),
+        );
+        const textLogging = options.enableLlmLogging ? "true" : "false";
+        clack.log.step(
+          "Bedrock invocation logging infrastructure:\n" +
+            `  - IAM role: ${BEDROCK_LOGGING_ROLE_NAME}\n` +
+            `  - Inline policy: ${BEDROCK_LOGGING_POLICY_NAME} (logs:CreateLogGroup, CreateLogStream, PutLogEvents, DescribeLogGroups)\n` +
+            `  - CloudWatch log group: ${BEDROCK_LOG_GROUP_NAME}\n` +
+            `  - Bedrock model invocation logging configuration: textDataDeliveryEnabled=${textLogging}, imageDataDeliveryEnabled=false, embeddingDataDeliveryEnabled=false`,
         );
         if (options.enableLlmLogging) {
           clack.log.warn(

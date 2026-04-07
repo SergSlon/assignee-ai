@@ -312,23 +312,35 @@ export const initCommand = new Command(CommandName.INIT)
       clack.log.success(
         `AWS credentials detected (source: ${credentialResult.source})`,
       );
+      // Only print the roles-available info line when creds were detected,
+      // as a positive confirmation. When no creds are detected, the warn
+      // block below already conveys "no roles" — printing both stacks 3
+      // info blocks with `│` connectors and reads like committee output.
+      if (availableRoles.length > 0) {
+        clack.log.info(
+          `Assignee roles available: ${availableRoles.join(", ")}`,
+        );
+      } else {
+        clack.log.info(
+          "Assignee roles available: none (operator, reader, auditor all unset)",
+        );
+      }
     } else {
+      // UX (M-T2): Merge the no-creds warn + next-steps + roles-available
+      // lines into ONE warn block. Three stacked clack blocks with `│`
+      // connectors between them read poorly; one multi-line warn is scan-
+      // friendly.
+      const rolesLine =
+        availableRoles.length > 0
+          ? `Assignee roles available: ${availableRoles.join(", ")}`
+          : "Assignee roles available: none (operator, reader, auditor all unset)";
       clack.log.warn(
-        "No AWS credentials detected. The project config will still be created.",
-      );
-      clack.log.info(
-        "Next: run `assignee setup` to create least-privilege IAM users (recommended), " +
-          "OR export `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` before running `assignee plan`. " +
+        "No AWS credentials detected. The project config will still be created.\n" +
+          "Next steps: run `assignee setup` to create least-privilege IAM users (recommended), " +
+          "OR export `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` before running `assignee plan`.\n" +
           "Note: `AWS_PROFILE` alone is not currently supported — use explicit env vars or run " +
-          "`assignee setup` to create role-specific credentials.",
-      );
-    }
-
-    if (availableRoles.length > 0) {
-      clack.log.info(`Assignee roles available: ${availableRoles.join(", ")}`);
-    } else {
-      clack.log.info(
-        "Assignee roles available: none (operator, reader, auditor all unset)",
+          "`assignee setup` to create role-specific credentials.\n" +
+          rolesLine,
       );
     }
 

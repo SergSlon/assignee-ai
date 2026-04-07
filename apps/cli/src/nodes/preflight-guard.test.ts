@@ -90,6 +90,53 @@ describe("preflightGuardNode", () => {
     expect(result.estimatedMonthlyCost).toBe(CostEstimateLabel.NA);
   });
 
+  // ── P0-2: free-tier headline cost regression ──────────────────────────
+  // SSM Standard-tier parameters are always free, but the headline used
+  // to display "N/A" because:
+  //   1. ssmPricingStrategy.estimateLocal() returned N/A unconditionally,
+  //      and
+  //   2. when the SSM decomposer returned an empty line-item list (its
+  //      signal for "Standard tier has no billable components"),
+  //      preflight-guard left the headline as N/A instead of "Free".
+  // Fix #1 lives in packages/core/src/pricing/strategies/ssm.ts; fix #2
+  // is the safety net below in preflight-guard.ts. This test asserts the
+  // user-visible behaviour: SSM Standard parameters show "Free".
+  it("returns FREE for SSM Standard-tier parameters (P0-2)", async () => {
+    const pricingTool = {
+      name: "get_pricing",
+      invoke: vi.fn(),
+    } as unknown as StructuredTool;
+    const result = await preflightGuardNode(
+      makeState({
+        resourceType: "AWS::SSM::Parameter",
+        desiredState: {
+          Name: "/app/db/host",
+          Type: "String",
+          Value: "db.internal.example.com",
+        },
+      }),
+      [pricingTool],
+    );
+    expect(result.estimatedMonthlyCost).toBe(CostEstimateLabel.FREE);
+    // Standard tier must NOT call the pricing API.
+    expect(pricingTool.invoke).not.toHaveBeenCalled();
+  });
+
+  it("returns FREE when SSM tier is omitted (defaults to Standard)", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        resourceType: "AWS::SSM::Parameter",
+        desiredState: {
+          Name: "/app/feature-flag",
+          Type: "String",
+          Value: "on",
+        },
+      }),
+      [],
+    );
+    expect(result.estimatedMonthlyCost).toBe(CostEstimateLabel.FREE);
+  });
+
   it("skips when executionStatus is already FAILED", async () => {
     const result = await preflightGuardNode(
       makeState({ executionStatus: ExecutionStatus.FAILED }),
