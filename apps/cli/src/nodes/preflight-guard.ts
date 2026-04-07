@@ -265,12 +265,19 @@ export async function preflightGuardNode(
 
   // Story 23.6: Pricing breakdown from decomposers
   let pricingBreakdown: PricingBreakdown | undefined;
-  if (defaultDecomposerRegistry.has(state.resourceType) && tools) {
+  // Tracks decomposers that returned an empty line-item list — a deliberate
+  // signal that the resource has no billable components for the given config
+  // (e.g. SSM Standard-tier params, ECS clusters with default capacity).
+  // Used below as a safety net so the headline shows "Free" instead of "N/A".
+  let decomposerReportedFree = false;
+  if (defaultDecomposerRegistry.has(state.resourceType)) {
     const lineItems = defaultDecomposerRegistry.decompose(
       state.resourceType,
       desiredState,
     );
-    if (lineItems.length > 0) {
+    if (lineItems.length === 0) {
+      decomposerReportedFree = true;
+    } else if (tools) {
       pricingBreakdown = await queryLineItemPrices(
         lineItems,
         tools,
@@ -335,6 +342,15 @@ export async function preflightGuardNode(
     if (firstPriced) {
       headlineCost = firstPriced.displayPrice;
     }
+  }
+
+  // Safety net: a decomposer that returns an empty line-item list is
+  // explicitly declaring "no billable components for this configuration"
+  // (e.g. SSM Standard-tier parameters). Without this branch the headline
+  // would fall through as N/A — which means "no pricing data available",
+  // a different state and a misleading display. Show "Free" instead.
+  if (headlineCost === CostEstimateLabel.NA && decomposerReportedFree) {
+    headlineCost = CostEstimateLabel.FREE;
   }
 
   return {

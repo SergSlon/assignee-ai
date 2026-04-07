@@ -24,6 +24,8 @@ import { statusCommand } from "./commands/status.js";
 import { cleanCommand } from "./commands/clean.js";
 import { reconcileCommand } from "./commands/reconcile.js";
 import { cacheCommand } from "./commands/cache.js";
+import { doctorCommand } from "./commands/doctor.js";
+import { whoamiCommand } from "./commands/whoami.js";
 import { ProcessExitCode } from "./constants/errors.js";
 import {
   SUPPORTED_TYPES_HINT,
@@ -97,6 +99,8 @@ program.addCommand(applyCommand);
 program.addCommand(cleanCommand);
 program.addCommand(reconcileCommand);
 program.addCommand(cacheCommand);
+program.addCommand(doctorCommand);
+program.addCommand(whoamiCommand);
 
 // Propagate `showGlobalOptions: true` to every subcommand so the root-level
 // `--verbose` (and any future global options) appear in `<subcommand> --help`

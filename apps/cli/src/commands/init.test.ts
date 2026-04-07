@@ -283,33 +283,39 @@ describe("assignee init command", () => {
 
       await runInitAction();
 
-      // Non-fatal: warn + next-step info hint emitted.
-      expect(clack.log.warn).toHaveBeenCalledWith(
-        expect.stringContaining("No AWS credentials detected"),
+      // UX (M-T2): All no-creds messaging is consolidated into ONE warn
+      // block — not 3 stacked info lines. The single warn must cover all
+      // four pieces of information that used to be split:
+      //   1. "No AWS credentials detected"
+      //   2. The `assignee setup` next-step
+      //   3. The AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY fallback
+      //   4. The AWS_PROFILE-alone-unsupported note
+      //   5. The "Assignee roles available: none" line
+      const warnCalls = vi
+        .mocked(clack.log.warn)
+        .mock.calls.map((c) => String(c[0]));
+      // Exactly one warn call in the no-creds path.
+      expect(warnCalls).toHaveLength(1);
+      const warnText = warnCalls[0]!;
+      expect(warnText).toContain("No AWS credentials detected");
+      expect(warnText).toContain("assignee setup");
+      expect(warnText).toContain("AWS_ACCESS_KEY_ID");
+      expect(warnText).toContain("AWS_SECRET_ACCESS_KEY");
+      expect(warnText).toContain("AWS_PROFILE");
+      expect(warnText).toContain("not currently supported");
+      expect(warnText).toContain(
+        "Assignee roles available: none (operator, reader, auditor all unset)",
       );
+
+      // The redundant info-line stack must be GONE. None of the no-creds
+      // messages should appear as separate clack.log.info calls.
       const infoCalls = vi
         .mocked(clack.log.info)
         .mock.calls.map((c) => String(c[0]));
-      expect(infoCalls.some((m) => m.includes("assignee setup"))).toBe(true);
-      // The hint must mention the AWS_ACCESS_KEY_ID fallback (auto-promoted by
-      // command-runner) AND clarify that AWS_PROFILE alone is unsupported, so
-      // the init story stays coherent with command-runner's actual behavior.
       expect(
-        infoCalls.some(
-          (m) =>
-            m.includes("AWS_ACCESS_KEY_ID") &&
-            m.includes("AWS_SECRET_ACCESS_KEY"),
-        ),
-      ).toBe(true);
-      expect(
-        infoCalls.some(
-          (m) =>
-            m.includes("AWS_PROFILE") && m.includes("not currently supported"),
-        ),
-      ).toBe(true);
-      expect(
-        infoCalls.some((m) => m.includes("Assignee roles available: none")),
-      ).toBe(true);
+        infoCalls.some((m) => m.includes("Assignee roles available")),
+      ).toBe(false);
+      expect(infoCalls.some((m) => m.includes("assignee setup"))).toBe(false);
 
       // Config file is still written.
       const configPath = path.join(tmpDir, ".assignee", "config.yaml");
@@ -362,12 +368,21 @@ describe("assignee init command", () => {
 
       await runInitAction();
 
+      // UX (M-T2): When creds are not detected, the roles-available info
+      // is folded into the single warn block (not a separate info line).
+      // Reader-only env vars must still be reported, but inside the warn.
+      const warnCalls = vi
+        .mocked(clack.log.warn)
+        .mock.calls.map((c) => String(c[0]));
+      expect(warnCalls).toHaveLength(1);
+      expect(warnCalls[0]).toContain("Assignee roles available: reader");
+      // Must NOT also emit a duplicate info line.
       const infoCalls = vi
         .mocked(clack.log.info)
         .mock.calls.map((c) => String(c[0]));
       expect(
-        infoCalls.some((m) => m === "Assignee roles available: reader"),
-      ).toBe(true);
+        infoCalls.some((m) => m.includes("Assignee roles available")),
+      ).toBe(false);
 
       const configPath = path.join(tmpDir, ".assignee", "config.yaml");
       const content = await fs.readFile(configPath, "utf-8");

@@ -411,6 +411,10 @@ describeE2E("E2E: SSM Parameter plan + apply + destroy", () => {
     expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
     expect(finalState.resourceArn).toBeDefined();
 
+    // P0-2: Standard-tier SSM parameters are always free. The headline
+    // cost MUST display "Free", never "N/A".
+    expect(finalState.estimatedMonthlyCost).toBe("Free");
+
     resourceArn = finalState.resourceArn;
   }, 90_000);
 
@@ -879,11 +883,9 @@ describeE2E("E2E: IAM Role plan", () => {
     expect(s.desiredState?.["RoleName"]).toBe("e2e-role-test");
     expect(s.desiredState?.["AssumeRolePolicyDocument"]).toBeDefined();
 
-    // IAM Role is free — verify cost estimate reflects that
-    if (s.estimatedMonthlyCost) {
-      const costLower = s.estimatedMonthlyCost.toLowerCase();
-      expect(costLower).toMatch(/free|\$0|0\.00/);
-    }
+    // P0-2: IAM Roles are always free — headline MUST display "Free",
+    // never "N/A". Soft `if` removed: a missing cost is itself a regression.
+    expect(s.estimatedMonthlyCost).toBe("Free");
   }, 60_000);
 });
 
@@ -935,6 +937,9 @@ describeE2E("E2E: VPC plan", () => {
     expect(s.resourceType).toBe("AWS::EC2::VPC");
     expect(s.desiredState).toBeDefined();
     expect(s.desiredState?.["CidrBlock"]).toBe("10.0.0.0/16");
+
+    // P0-2: VPCs are always free — headline must reflect that.
+    expect(s.estimatedMonthlyCost).toBe("Free");
   }, 60_000);
 });
 

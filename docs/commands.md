@@ -448,6 +448,94 @@ assignee cache clear
 assignee cache refresh
 ```
 
+### whoami
+
+A fast, single-purpose pre-flight check: prints the operator-role STS identity, AWS region, and whether a project config file is loaded in the cwd. Designed to answer the most common debugging question: "which AWS identity am I about to use?" before running `plan`/`apply`.
+
+```
+assignee whoami
+```
+
+**Behavior:**
+
+- Reads `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` and calls `sts:GetCallerIdentity` (5 s timeout).
+- Resolves the active region from `AWS_REGION` → `AWS_DEFAULT_REGION` → SDK default (`us-east-1`).
+- Checks for `./assignee.yaml`, `./assignee.yml`, or `./.assignee/config.yaml` and reports whether one was loaded.
+- **Exits non-zero** when credentials are missing or STS fails — safe to chain in shell pipelines (`assignee whoami && assignee plan ...`).
+- For deeper diagnostics, use `assignee doctor`.
+
+**Examples:**
+
+```bash
+assignee whoami
+# Account:  123456789012
+# User ARN: arn:aws:iam::123456789012:user/assignee-operator
+# Region:   us-east-1
+# Role:     operator (ASSIGNEE_OPERATOR_ACCESS_KEY_ID)
+# Config:   ./assignee.yaml (loaded)
+#
+# For full diagnostics, run `assignee doctor`.
+```
+
+### doctor
+
+A non-destructive end-to-end health check (think `flutter doctor` / `brew doctor`). Runs every check, prints results in column form, and exits non-zero if anything failed. Doctor never mutates state — every check is read-only.
+
+```
+assignee doctor [options]
+```
+
+**Options:**
+
+| Flag             | Description                                              | Default |
+| ---------------- | -------------------------------------------------------- | ------- |
+| `--json`         | Emit the report as JSON instead of formatted text        | false   |
+| `--skip-bedrock` | Skip the LLM invoke check (offline / hermetic CI)        | false   |
+| `--skip-mcp`     | Skip the MCP server launch probe (offline / hermetic CI) | false   |
+
+**Checks (each capped at 5 s):**
+
+1. **Credentials** — for each of `operator` / `reader` / `auditor`: env-var presence, access-key shape (`AKIA…` or `ASIA…`), live `sts:GetCallerIdentity`. Reports the resolved Account + ARN per role.
+2. **Bedrock / LLM** — invokes the configured LLM (`ASSIGNEE_MODEL`, defaults to `bedrock/amazon.nova-lite-v1:0`) with the prompt `"hello"`. If `BEDROCK_GUARDRAIL_ID` is set, the guardrail is reported in the section header.
+3. **MCP servers** — launches each pinned MCP server with `--help` to confirm `uvx` can resolve it: pricing, documentation, IAM, well-architected-security, cost-management. Servers whose role credentials are unavailable are reported as warnings (skipped) rather than failures.
+4. **Cache** — inspects `~/.assignee/`: total size, oldest checkpoint age, stale checkpoint count (>72 h), log file count.
+5. **Config** — looks for `assignee.yaml` / `assignee.yml` / `.assignee/config.yaml` in the cwd and confirms it parses as YAML.
+6. **Best practices** — verifies the BP library against `packages/best-practices/manifest.json` (SHA-256 hash match), counts rules, and surfaces freshness.
+
+**Exit codes:**
+
+| Code | Meaning                                      |
+| ---- | -------------------------------------------- |
+| 0    | All sections green                           |
+| 1    | At least one section reported a hard failure |
+| 2    | At least one section reported only warnings  |
+
+**Example output:**
+
+```text
+Doctor summary (assignee.ai 0.1.0):
+[✓] Credentials
+    • ✓ operator → AKIA…MPLE → arn:aws:iam::123456789012:user/assignee-operator
+    • ✓ reader   → AKIA…E001 → arn:aws:iam::123456789012:user/assignee-reader
+    • ✓ auditor  → AKIA…E002 → arn:aws:iam::123456789012:user/assignee-auditor
+[✓] Bedrock (us-east-1, model us.amazon.nova-lite-v1:0)
+    • ✓ LLM (bedrock/amazon.nova-lite-v1:0) → responded (Hello! How can I help…)
+[!] MCP servers (4/5 ok)
+    • ✓ awslabs.aws-pricing-mcp-server@1.0.6     → launched (uvx)
+    • ✓ awslabs.aws-documentation-mcp-server@1.1.1 → launched (uvx)
+    • ✓ awslabs.iam-mcp-server@1.0.2             → launched (uvx)
+    • ✗ awslabs.well-architected-security-mcp-server@1.0.2 → uvx exited with code 127
+    • ✓ awslabs.cost-management-mcp-server@1.0.2 → launched (uvx)
+[✓] Cache
+    • ✓ /home/u/.assignee → 3.4 MB, 0 stale checkpoints, 14 log files
+[✓] Config
+    • ✓ ./assignee.yaml → valid YAML
+[✓] Best practices
+    • ✓ manifest → 131 rules, hash 3662a3cb766e… matches
+
+! 1 failures found.
+```
+
 ### completions
 
 Output shell completion scripts.

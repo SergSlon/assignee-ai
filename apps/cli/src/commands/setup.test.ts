@@ -400,7 +400,8 @@ describe("setup command", () => {
     // The plan was printed via clack.log.step
     const clack = await import("@clack/prompts");
     const stepMock = clack.log.step as ReturnType<typeof vi.fn>;
-    const allText = stepMock.mock.calls.map((c) => c[0] as string).join("\n");
+    const stepTexts = stepMock.mock.calls.map((c) => c[0] as string);
+    const allText = stepTexts.join("\n");
     // Real IAM user names from @assignee/core
     expect(allText).toContain(IAM_USER_NAMES.operator);
     expect(allText).toContain(IAM_USER_NAMES.reader);
@@ -410,6 +411,55 @@ describe("setup command", () => {
     expect(allText).toContain("/assignee-ai/bedrock-invocations");
     // Default dry-run shows textDataDeliveryEnabled=false
     expect(allText).toContain("textDataDeliveryEnabled=false");
+
+    // UX (M-T1): The dry-run plan must be rendered as 5 multi-line
+    // step calls (one per section) — NOT one step per IAM resource. The
+    // previous implementation called clack.log.step ~14 times which
+    // doubled the visible row count thanks to clack's `│` connectors.
+    //
+    // Sections: IAM Users, IAM Managed Policies, IAM Access Keys,
+    // Bedrock infrastructure, Files written. = 5 steps total.
+    expect(stepTexts).toHaveLength(5);
+
+    // The "IAM Users" section must be a single multi-line string
+    // containing all 3 user names — proves it was emitted as one block.
+    const usersSection = stepTexts.find((s) => s.startsWith("IAM Users:"));
+    expect(usersSection).toBeDefined();
+    expect(usersSection).toContain(IAM_USER_NAMES.operator);
+    expect(usersSection).toContain(IAM_USER_NAMES.reader);
+    expect(usersSection).toContain(IAM_USER_NAMES.auditor);
+    // Must contain 3 newlines (header + 3 users = 4 lines, 3 newlines)
+    expect((usersSection!.match(/\n/g) ?? []).length).toBe(3);
+
+    // Similar for the policies section.
+    const policiesSection = stepTexts.find((s) =>
+      s.startsWith("IAM Managed Policies:"),
+    );
+    expect(policiesSection).toBeDefined();
+    expect(policiesSection).toContain(IAM_POLICY_NAMES.operator);
+    expect(policiesSection).toContain(IAM_POLICY_NAMES.reader);
+    expect(policiesSection).toContain(IAM_POLICY_NAMES.auditor);
+    expect((policiesSection!.match(/\n/g) ?? []).length).toBe(3);
+
+    // Access keys section must be one block listing all 3 env var pairs.
+    const keysSection = stepTexts.find((s) => s.startsWith("IAM Access Keys:"));
+    expect(keysSection).toBeDefined();
+    expect(keysSection).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
+    expect(keysSection).toContain("ASSIGNEE_READER_ACCESS_KEY_ID");
+    expect(keysSection).toContain("ASSIGNEE_AUDITOR_ACCESS_KEY_ID");
+    expect((keysSection!.match(/\n/g) ?? []).length).toBe(3);
+
+    // Bedrock infrastructure must be ONE block with role + policy + log
+    // group + logging-config sub-lines (4 sub-lines = 4 newlines).
+    const bedrockSection = stepTexts.find((s) =>
+      s.startsWith("Bedrock invocation logging infrastructure:"),
+    );
+    expect(bedrockSection).toBeDefined();
+    expect(bedrockSection).toContain("AssigneeAiBedrockLoggingRole");
+    expect(bedrockSection).toContain("BedrockLoggingPolicy");
+    expect(bedrockSection).toContain("/assignee-ai/bedrock-invocations");
+    expect(bedrockSection).toContain("textDataDeliveryEnabled=false");
+    expect((bedrockSection!.match(/\n/g) ?? []).length).toBe(4);
   });
 
   it("--dry-run with --enable-llm-logging shows planned text logging and warns", async () => {

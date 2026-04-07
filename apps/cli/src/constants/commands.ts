@@ -2,6 +2,7 @@ export const CommandName = {
   APPLY: "apply",
   COMPLETIONS: "completions",
   DESTROY: "destroy",
+  DOCTOR: "doctor",
   DRIFT: "drift",
   INIT: "init",
   LIST: "list",
@@ -9,6 +10,7 @@ export const CommandName = {
   RECONCILE: "reconcile",
   SETUP: "setup",
   STATUS: "status",
+  WHOAMI: "whoami",
 } as const;
 
 export type CommandNameType = (typeof CommandName)[keyof typeof CommandName];
@@ -17,6 +19,8 @@ export const CommandDescription = {
   APPLY: "Execute an approved infrastructure plan",
   COMPLETIONS: "Output shell completion script",
   DESTROY: "Safely destroy a managed AWS resource",
+  DOCTOR:
+    "Run a non-destructive health check of credentials, Bedrock, MCP servers, cache, config and best-practices",
   DRIFT: "Check managed resources for configuration drift",
   INIT: "Initialize assignee.ai project configuration",
   LIST: "List all resources managed by assignee.ai",
@@ -25,6 +29,8 @@ export const CommandDescription = {
   SETUP:
     "Create IAM users and policies for least-privilege credential separation",
   STATUS: "Show summary of managed infrastructure",
+  WHOAMI:
+    "Print the operator AWS identity, region and active config — fast pre-flight check",
 } as const;
 
 export const CommandArgs = {
