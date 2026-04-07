@@ -48,6 +48,13 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "s3:PutObject",
       "s3:GetObject",
       "s3:DeleteObject",
+      // Required by destroy-service.ts to enumerate and delete versioned
+      // objects and delete markers before bulk-deleting a versioned bucket.
+      // Without these, ListObjectVersions/DeleteObjects(VersionId=...) emit
+      // a scary "not authorized" warning even though the operation appears
+      // to succeed against unversioned buckets.
+      "s3:ListBucketVersions",
+      "s3:DeleteObjectVersion",
       // CloudFront for static websites (Epic 37)
       "cloudfront:CreateDistribution",
       "cloudfront:CreateOriginAccessControl",

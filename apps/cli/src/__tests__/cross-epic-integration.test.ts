@@ -273,7 +273,7 @@ describe("Cross-epic: schema fetch -> plan generation", () => {
   it("SUPPORTED_TYPES_ARRAY covers all expected resource types", async () => {
     const { SUPPORTED_TYPES_ARRAY } = await import("@assignee/core");
 
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(23);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(25);
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::S3::Bucket");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EC2::Instance");
@@ -284,5 +284,10 @@ describe("Cross-epic: schema fetch -> plan generation", () => {
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::ApiGatewayV2::Api");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::CloudWatch::Alarm");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::SecretsManager::Secret");
+    // WV4-A: VPC compound cross-reference resources
+    expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EC2::VPCGatewayAttachment");
+    expect(SUPPORTED_TYPES_ARRAY).toContain(
+      "AWS::EC2::SubnetRouteTableAssociation",
+    );
   });
 });

@@ -25,6 +25,12 @@ describe("getRequiredIamActions", () => {
     expect(actions).toContain("s3:CreateBucket");
     expect(actions).toContain("s3:DeleteBucket");
     expect(actions).toContain("s3:PutBucket*");
+    // destroy-service.ts uses ListObjectVersions + DeleteObjects(VersionId)
+    // to empty versioned buckets before CloudControl DeleteResource runs.
+    // Without these two actions, destroy emits a scary "not authorized"
+    // warning even though the operation succeeds against unversioned buckets.
+    expect(actions).toContain("s3:ListBucketVersions");
+    expect(actions).toContain("s3:DeleteObjectVersion");
   });
 
   it("returns CloudControl base actions + Lambda-specific actions for AWS::Lambda::Function", () => {

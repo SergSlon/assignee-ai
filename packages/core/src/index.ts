@@ -65,6 +65,19 @@ export {
   WorkloadProfileKey,
 } from "./config/cfn-keys.js";
 
+// Config — marker tokens for compound-pattern cross-references (Story VPC-fix)
+export {
+  MARKER_PREFIX,
+  MARKER_SUFFIX,
+  MARKER_PATTERN,
+  markerRef,
+  markerGetAtt,
+  markerAz,
+  parseMarker,
+  isMarker,
+  type ParsedMarker,
+} from "./config/marker-tokens.js";
+
 // Config — ARN-to-CloudFormation type mapping
 export {
   SERVICE_TYPE_MAP,

@@ -34,6 +34,10 @@ export const SUPPORTED_TYPES_ARRAY = [
   "AWS::ApiGatewayV2::Api",
   "AWS::CloudWatch::Alarm",
   "AWS::SecretsManager::Secret",
+  // WV4-A: VPC compound provisioning support (was provisionable: false
+  // before the marker resolver landed in plan-generator.ts)
+  "AWS::EC2::VPCGatewayAttachment",
+  "AWS::EC2::SubnetRouteTableAssociation",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -67,6 +71,9 @@ export const RESOURCE_TYPES = {
   APIGATEWAYV2_API: "AWS::ApiGatewayV2::Api",
   CLOUDWATCH_ALARM: "AWS::CloudWatch::Alarm",
   SECRETSMANAGER_SECRET: "AWS::SecretsManager::Secret",
+  // WV4-A: VPC compound provisioning support
+  EC2_VPC_GATEWAY_ATTACHMENT: "AWS::EC2::VPCGatewayAttachment",
+  EC2_SUBNET_ROUTE_TABLE_ASSOCIATION: "AWS::EC2::SubnetRouteTableAssociation",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */
@@ -93,8 +100,7 @@ export const COMPANION_RESOURCE_TYPES = {
   EC2_VPC_GATEWAY_ATTACHMENT: "AWS::EC2::VPCGatewayAttachment",
   SECRETSMANAGER_SECRET_TARGET_ATTACHMENT:
     "AWS::SecretsManager::SecretTargetAttachment",
-  EC2_SUBNET_ROUTE_TABLE_ASSOCIATION:
-    "AWS::EC2::SubnetRouteTableAssociation",
+  EC2_SUBNET_ROUTE_TABLE_ASSOCIATION: "AWS::EC2::SubnetRouteTableAssociation",
   APIGATEWAYV2_INTEGRATION: "AWS::ApiGatewayV2::Integration",
   APIGATEWAYV2_ROUTE: "AWS::ApiGatewayV2::Route",
   APIGATEWAYV2_STAGE: "AWS::ApiGatewayV2::Stage",

@@ -80,7 +80,15 @@ export function routeStatusPoller(
 }
 
 /** Routes after result_formatter: compound pending → plan_generator loop, else → END.
- *  Plan mode shows only the first resource — no loop. */
+ *  Plan mode shows only the first resource — no loop.
+ *
+ *  SAFETY: when a compound resource is blocked by a preflight / BP failure
+ *  in APPLY mode, the preflight guard keeps executionStatus = PENDING but
+ *  sets preflightPassed = false. Without this guard, the graph would loop
+ *  plan_generator → preflight_guard → result_formatter → plan_generator
+ *  forever on the same resource until LangGraph's recursionLimit trips,
+ *  producing a confusing "Recursion limit of 500 reached" error. Treat a
+ *  failed preflight as a terminal state for the compound loop. */
 export function routeResultFormatter(
   state: AgentState,
 ): typeof GraphNode.PLAN_GENERATOR | typeof END {
@@ -90,7 +98,8 @@ export function routeResultFormatter(
     state.currentResourceIndex !== undefined &&
     state.executionStatus === ExecutionStatus.PENDING &&
     state.currentResourceIndex < state.resourceQueue.length &&
-    state.executionMode !== ExecutionMode.PLAN
+    state.executionMode !== ExecutionMode.PLAN &&
+    state.preflightPassed !== false
   ) {
     return GraphNode.PLAN_GENERATOR;
   }

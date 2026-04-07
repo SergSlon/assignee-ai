@@ -3,6 +3,7 @@ import {
   COMPANION_RESOURCE_TYPES,
 } from "../../config/resource-types.js";
 import { AwsDefault } from "../../config/cfn-keys.js";
+import { markerGetAtt, markerRef } from "../../config/marker-tokens.js";
 import { IamEffect } from "../../config/iam-effects.js";
 import {
   AwsManagedPolicy,
@@ -33,12 +34,15 @@ const LAMBDA_PERMISSION = COMPANION_RESOURCE_TYPES.LAMBDA_PERMISSION;
  * 7. API Gateway V2 Stage — $default stage with access logging to LogGroup
  * 8. Lambda Permission — grants API Gateway invoke permission on Lambda
  *
- * Cross-references:
- * - Lambda -> IAM Role ARN (via Fn::GetAtt)
- * - Integration -> Lambda ARN (via Fn::GetAtt) + API ID (via Ref)
- * - Route -> Integration ID (via Fn::GetAtt) + API ID (via Ref)
- * - Stage -> LogGroup ARN (via Fn::GetAtt) + API ID (via Ref)
- * - Permission -> API ID (via Ref) + Lambda ARN (via Fn::GetAtt)
+ * Cross-references (expressed via marker tokens — CloudControl does not
+ * process CloudFormation intrinsics, so `defaultOptions` never contains
+ * Fn::GetAtt / Ref objects; the plan-generator substitutes markers with
+ * physical identifiers from `completedResources` at apply time):
+ * - Lambda -> IAM Role ARN (via markerGetAtt)
+ * - Integration -> Lambda ARN (markerGetAtt) + API ID (markerRef)
+ * - Route -> Integration ID (markerRef) + API ID (markerRef)
+ * - Stage -> LogGroup ARN (markerGetAtt) + API ID (markerRef)
+ * - Permission -> API ID (markerRef) + Lambda ARN (markerGetAtt)
  *
  * @see Story 26.4 — Serverless API Compound Pattern
  */
@@ -142,7 +146,11 @@ export const serverlessApiPattern: ArchitecturePattern = {
       MemorySize: 512,
       Timeout: 30,
       Architectures: [AwsDefault.ARCH_ARM],
-      Role: { "Fn::GetAtt": [R.IAM_EXECUTION_ROLE, "Arn"] },
+      // Use a marker token instead of a CloudFormation intrinsic — CloudControl
+      // does not process Fn::GetAtt. The compound plan-generator substitutes
+      // this with the real IAM Role name/ARN from completedResources before
+      // sending the desiredState to CloudControl.
+      Role: markerGetAtt(R.IAM_EXECUTION_ROLE, "Arn"),
     },
     [R.ACCESS_LOG_GROUP]: {
       LogGroupName: "/aws/apigateway/serverless-api",
@@ -158,34 +166,38 @@ export const serverlessApiPattern: ArchitecturePattern = {
         AllowHeaders: ["Content-Type", "Authorization"],
       },
     },
+    // NOTE: Integration/Route/Stage/Permission are all `provisionable: false`
+    // (see resourceList above). They're kept here as plan-only configuration
+    // for display/cost/documentation; the runtime provisioner skips them.
+    // They still use marker tokens (not CFN intrinsics) to keep compound
+    // patterns self-consistent.
     [R.LAMBDA_INTEGRATION]: {
-      ApiId: { Ref: R.HTTP_API },
+      ApiId: markerRef(R.HTTP_API),
       IntegrationType: "AWS_PROXY",
-      IntegrationUri: { "Fn::GetAtt": [R.LAMBDA_FN, "Arn"] },
+      IntegrationUri: markerGetAtt(R.LAMBDA_FN, "Arn"),
       PayloadFormatVersion: "2.0",
     },
     [R.DEFAULT_ROUTE]: {
-      ApiId: { Ref: R.HTTP_API },
+      ApiId: markerRef(R.HTTP_API),
       RouteKey: "$default",
-      Target: {
-        "Fn::Join": ["/", ["integrations", { Ref: R.LAMBDA_INTEGRATION }]],
-      },
+      Target: `integrations/${markerRef(R.LAMBDA_INTEGRATION)}`,
     },
     [R.DEFAULT_STAGE]: {
-      ApiId: { Ref: R.HTTP_API },
+      ApiId: markerRef(R.HTTP_API),
       StageName: "$default",
       AutoDeploy: true,
       AccessLogSettings: {
-        DestinationArn: { "Fn::GetAtt": [R.ACCESS_LOG_GROUP, "Arn"] },
+        DestinationArn: markerGetAtt(R.ACCESS_LOG_GROUP, "Arn"),
       },
     },
     [R.API_INVOKE_PERMISSION]: {
       Action: "lambda:InvokeFunction",
-      FunctionName: { "Fn::GetAtt": [R.LAMBDA_FN, "Arn"] },
+      FunctionName: markerGetAtt(R.LAMBDA_FN, "Arn"),
       Principal: "apigateway.amazonaws.com",
-      SourceArn: {
-        "Fn::Sub": `arn:aws:execute-api:\${AWS::Region}:\${AWS::AccountId}:\${${R.HTTP_API}}/*`,
-      },
+      // SourceArn for API Gateway→Lambda permission traditionally uses
+      // Fn::Sub with execute-api stub; for plan-only display we leave a
+      // marker that references the HTTP API by resource ID.
+      SourceArn: markerRef(R.HTTP_API),
     },
   },
 };

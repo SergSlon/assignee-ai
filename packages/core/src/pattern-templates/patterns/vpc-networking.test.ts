@@ -5,6 +5,12 @@ import {
 } from "./vpc-networking.js";
 import { PatternRegistry } from "../registry.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import {
+  markerRef,
+  markerAz,
+  parseMarker,
+} from "../../config/marker-tokens.js";
+import { EIP_AUTO_ALLOCATE } from "../../config/cfn-keys.js";
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -119,14 +125,21 @@ describe("vpcNetworkingPattern — resource reference wiring", () => {
     });
   });
 
-  it("public subnets reference VpcId via Ref", () => {
-    expect(opts["public-subnet-1"]?.["VpcId"]).toEqual({ Ref: "vpc" });
-    expect(opts["public-subnet-2"]?.["VpcId"]).toEqual({ Ref: "vpc" });
+  it("public subnets reference VpcId via marker token", () => {
+    expect(opts["public-subnet-1"]?.["VpcId"]).toBe(markerRef("vpc"));
+    expect(opts["public-subnet-2"]?.["VpcId"]).toBe(markerRef("vpc"));
   });
 
-  it("private subnets reference VpcId via Ref", () => {
-    expect(opts["private-subnet-1"]?.["VpcId"]).toEqual({ Ref: "vpc" });
-    expect(opts["private-subnet-2"]?.["VpcId"]).toEqual({ Ref: "vpc" });
+  it("private subnets reference VpcId via marker token", () => {
+    expect(opts["private-subnet-1"]?.["VpcId"]).toBe(markerRef("vpc"));
+    expect(opts["private-subnet-2"]?.["VpcId"]).toBe(markerRef("vpc"));
+  });
+
+  it("subnets use AZ markers (not CFN intrinsics) for AvailabilityZone", () => {
+    expect(opts["public-subnet-1"]?.["AvailabilityZone"]).toBe(markerAz(0));
+    expect(opts["public-subnet-2"]?.["AvailabilityZone"]).toBe(markerAz(1));
+    expect(opts["private-subnet-1"]?.["AvailabilityZone"]).toBe(markerAz(0));
+    expect(opts["private-subnet-2"]?.["AvailabilityZone"]).toBe(markerAz(1));
   });
 
   it("public subnets have MapPublicIpOnLaunch = true", () => {
@@ -139,39 +152,39 @@ describe("vpcNetworkingPattern — resource reference wiring", () => {
     expect(opts["private-subnet-2"]?.["MapPublicIpOnLaunch"]).toBe(false);
   });
 
-  it("IGW attachment references VpcId and InternetGatewayId", () => {
+  it("IGW attachment references VpcId and InternetGatewayId via markers", () => {
     expect(opts["igw-attachment"]).toMatchObject({
-      VpcId: { Ref: "vpc" },
-      InternetGatewayId: { Ref: "igw" },
+      VpcId: markerRef("vpc"),
+      InternetGatewayId: markerRef("igw"),
     });
   });
 
-  it("route tables reference VpcId", () => {
-    expect(opts["public-route-table"]?.["VpcId"]).toEqual({ Ref: "vpc" });
-    expect(opts["private-route-table"]?.["VpcId"]).toEqual({ Ref: "vpc" });
+  it("route tables reference VpcId via marker tokens", () => {
+    expect(opts["public-route-table"]?.["VpcId"]).toBe(markerRef("vpc"));
+    expect(opts["private-route-table"]?.["VpcId"]).toBe(markerRef("vpc"));
   });
 
-  it("public route targets IGW via GatewayId", () => {
+  it("public route targets IGW via marker tokens", () => {
     expect(opts["public-route"]).toMatchObject({
-      RouteTableId: { Ref: "public-route-table" },
+      RouteTableId: markerRef("public-route-table"),
       DestinationCidrBlock: "0.0.0.0/0",
-      GatewayId: { Ref: "igw" },
+      GatewayId: markerRef("igw"),
     });
   });
 
-  it("private route targets NatGateway via NatGatewayId", () => {
+  it("private route targets NatGateway via marker tokens", () => {
     expect(opts["private-route"]).toMatchObject({
-      RouteTableId: { Ref: "private-route-table" },
+      RouteTableId: markerRef("private-route-table"),
       DestinationCidrBlock: "0.0.0.0/0",
-      NatGatewayId: { Ref: "nat-gateway" },
+      NatGatewayId: markerRef("nat-gateway"),
     });
   });
 
-  it("NatGateway references public subnet and EIP AllocationId", () => {
+  it("NatGateway uses EIP_AUTO_ALLOCATE sentinel and marker subnet ref", () => {
     expect(opts["nat-gateway"]).toMatchObject({
-      SubnetId: { Ref: "public-subnet-1" },
+      SubnetId: markerRef("public-subnet-1"),
       ConnectivityType: "public",
-      AllocationId: { "Fn::GetAtt": ["nat-eip", "AllocationId"] },
+      AllocationId: EIP_AUTO_ALLOCATE,
     });
   });
 
@@ -179,23 +192,32 @@ describe("vpcNetworkingPattern — resource reference wiring", () => {
     expect(opts["nat-eip"]).toMatchObject({ Domain: "vpc" });
   });
 
-  it("subnet-RT associations wire SubnetId and RouteTableId correctly", () => {
+  it("subnet-RT associations wire SubnetId and RouteTableId via markers", () => {
     expect(opts["public-subnet-1-rt-assoc"]).toMatchObject({
-      SubnetId: { Ref: "public-subnet-1" },
-      RouteTableId: { Ref: "public-route-table" },
+      SubnetId: markerRef("public-subnet-1"),
+      RouteTableId: markerRef("public-route-table"),
     });
     expect(opts["public-subnet-2-rt-assoc"]).toMatchObject({
-      SubnetId: { Ref: "public-subnet-2" },
-      RouteTableId: { Ref: "public-route-table" },
+      SubnetId: markerRef("public-subnet-2"),
+      RouteTableId: markerRef("public-route-table"),
     });
     expect(opts["private-subnet-1-rt-assoc"]).toMatchObject({
-      SubnetId: { Ref: "private-subnet-1" },
-      RouteTableId: { Ref: "private-route-table" },
+      SubnetId: markerRef("private-subnet-1"),
+      RouteTableId: markerRef("private-route-table"),
     });
     expect(opts["private-subnet-2-rt-assoc"]).toMatchObject({
-      SubnetId: { Ref: "private-subnet-2" },
-      RouteTableId: { Ref: "private-route-table" },
+      SubnetId: markerRef("private-subnet-2"),
+      RouteTableId: markerRef("private-route-table"),
     });
+  });
+
+  it("emits zero CloudFormation intrinsics (Fn::*, Ref objects)", () => {
+    // CRITICAL: CloudControl API does NOT process CFN intrinsics. If any
+    // { "Fn::..." } or { Ref: ... } object leaks into defaultOptions, the
+    // CreateResource call will fail with a malformed-property error.
+    const serialized = JSON.stringify(vpcNetworkingPattern.defaultOptions);
+    expect(serialized).not.toMatch(/"Fn::/);
+    expect(serialized).not.toMatch(/"Ref":/);
   });
 });
 
@@ -257,17 +279,31 @@ describe("vpcNetworkingPattern — DependsOn ordering", () => {
     expect(privateAssocGroup).toBeGreaterThan(groupOf("private-route-table"));
   });
 
-  it("no forward references — every Ref target appears in an earlier or same group", () => {
+  it("no forward references — every marker target appears in an earlier or same group", () => {
     const opts = vpcNetworkingPattern.defaultOptions;
+
+    /** Recursively collect every string value from a nested object tree. */
+    function collectStrings(value: unknown, out: string[]): void {
+      if (typeof value === "string") {
+        out.push(value);
+      } else if (Array.isArray(value)) {
+        for (const item of value) collectStrings(item, out);
+      } else if (value && typeof value === "object") {
+        for (const v of Object.values(value)) collectStrings(v, out);
+      }
+    }
 
     for (let groupIdx = 0; groupIdx < depOrder.length; groupIdx++) {
       for (const resourceId of depOrder[groupIdx]!) {
         const resourceOpts = opts[resourceId] ?? {};
-        // Find all { Ref: "xxx" } values
-        const refs =
-          JSON.stringify(resourceOpts).match(/"Ref":"([^"]+)"/g) ?? [];
-        for (const refMatch of refs) {
-          const targetId = refMatch.replace(/"Ref":"/, "").replace(/"$/, "");
+        const strings: string[] = [];
+        collectStrings(resourceOpts, strings);
+        for (const s of strings) {
+          const parsed = parseMarker(s);
+          if (!parsed) continue;
+          if (parsed.kind === "az") continue; // AZ markers are region-wide, no dependency
+          const targetId =
+            parsed.kind === "ref" ? parsed.resourceId : parsed.resourceId;
           const targetGroup = depOrder.findIndex((g) => g.includes(targetId));
           expect(
             targetGroup,
@@ -276,23 +312,6 @@ describe("vpcNetworkingPattern — DependsOn ordering", () => {
           expect(
             targetGroup,
             `${resourceId} (group ${groupIdx}) references "${targetId}" (group ${targetGroup}) — forward reference`,
-          ).toBeLessThanOrEqual(groupIdx);
-        }
-        // Find all { "Fn::GetAtt": ["xxx", ...] } values
-        const getAtts =
-          JSON.stringify(resourceOpts).match(/"Fn::GetAtt":\["([^"]+)"/g) ?? [];
-        for (const gaMatch of getAtts) {
-          const targetId = gaMatch
-            .replace(/"Fn::GetAtt":\["/, "")
-            .replace(/"$/, "");
-          const targetGroup = depOrder.findIndex((g) => g.includes(targetId));
-          expect(
-            targetGroup,
-            `${resourceId} Fn::GetAtt references "${targetId}" which is not in dependencyOrder`,
-          ).toBeGreaterThanOrEqual(0);
-          expect(
-            targetGroup,
-            `${resourceId} (group ${groupIdx}) Fn::GetAtt "${targetId}" (group ${targetGroup}) — forward reference`,
           ).toBeLessThanOrEqual(groupIdx);
         }
       }
@@ -390,10 +409,16 @@ describe("vpcPublicOnlyPattern — public-only variant", () => {
     }
   });
 
-  it("public route targets IGW (not NatGateway)", () => {
+  it("public route targets IGW (not NatGateway) via marker token", () => {
     const routeOpts = pattern.defaultOptions["public-route"];
-    expect(routeOpts?.["GatewayId"]).toEqual({ Ref: "igw" });
+    expect(routeOpts?.["GatewayId"]).toBe(markerRef("igw"));
     expect(routeOpts?.["NatGatewayId"]).toBeUndefined();
+  });
+
+  it("public-only variant emits zero CFN intrinsics", () => {
+    const serialized = JSON.stringify(vpcPublicOnlyPattern.defaultOptions);
+    expect(serialized).not.toMatch(/"Fn::/);
+    expect(serialized).not.toMatch(/"Ref":/);
   });
 });
 
@@ -450,37 +475,44 @@ describe("VPC pattern keyword detection", () => {
 // ── Auxiliary resources marked provisionable: false ───────────────────────────
 
 describe("VPC pattern provisionable flags", () => {
-  it("full pattern: VPCGatewayAttachment is provisionable: false", () => {
+  // After WV4-A: IGW attachment + SubnetRouteTableAssociations are now
+  // PROVISIONABLE because the marker resolver in plan-generator.ts
+  // substitutes __ASSIGNEE_REF_<id>__ tokens with real CloudControl IDs
+  // before handing the desiredState to CloudControl. The EIP remains
+  // provisionable: false because it is allocated by the NAT Gateway
+  // provisioner directly (resource-provisioner.ts), not via CloudControl.
+  it("full pattern: VPCGatewayAttachment is provisionable (marker resolver supports cross-refs)", () => {
     const r = vpcNetworkingPattern.resourceList.find(
       (r) => r.resourceId === "igw-attachment",
     );
-    expect(r?.provisionable).toBe(false);
+    // provisionable defaults to true when undefined
+    expect(r?.provisionable === false).toBe(false);
   });
 
-  it("full pattern: EIP is provisionable: false", () => {
+  it("full pattern: EIP remains provisionable: false (allocated by NAT GW provisioner, not CloudControl)", () => {
     const r = vpcNetworkingPattern.resourceList.find(
       (r) => r.resourceId === "nat-eip",
     );
     expect(r?.provisionable).toBe(false);
   });
 
-  it("full pattern: SubnetRouteTableAssociations are provisionable: false", () => {
+  it("full pattern: SubnetRouteTableAssociations are provisionable (marker resolver supports cross-refs)", () => {
     const assocs = vpcNetworkingPattern.resourceList.filter((r) =>
       r.resourceId.endsWith("-rt-assoc"),
     );
     expect(assocs).toHaveLength(4);
     for (const a of assocs) {
-      expect(a.provisionable).toBe(false);
+      expect(a.provisionable === false).toBe(false);
     }
   });
 
-  it("public-only: SubnetRouteTableAssociations are provisionable: false", () => {
+  it("public-only: SubnetRouteTableAssociations are provisionable (marker resolver supports cross-refs)", () => {
     const assocs = vpcPublicOnlyPattern.resourceList.filter((r) =>
       r.resourceId.endsWith("-rt-assoc"),
     );
     expect(assocs).toHaveLength(2);
     for (const a of assocs) {
-      expect(a.provisionable).toBe(false);
+      expect(a.provisionable === false).toBe(false);
     }
   });
 });

@@ -44,3 +44,11 @@ export const routePricingDecomposer = createFreeDecomposer(
 export const ecsClusterPricingDecomposer = createFreeDecomposer(
   RESOURCE_TYPES.ECS_CLUSTER,
 );
+// WV4-A: VPC compound cross-references — pure CFN linkage with no
+// billable cost (the underlying VPC/IGW/Subnet/RouteTable carry any
+// charges; the attachment/association resources themselves are free).
+export const vpcGatewayAttachmentPricingDecomposer = createFreeDecomposer(
+  RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
+);
+export const subnetRouteTableAssociationPricingDecomposer =
+  createFreeDecomposer(RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION);

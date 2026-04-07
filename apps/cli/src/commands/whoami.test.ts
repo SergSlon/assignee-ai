@@ -216,6 +216,64 @@ describe("runWhoami", () => {
     expect(out).toContain("STS GetCallerIdentity returned an empty response");
   });
 
+  it("does not leak the STS timeout timer after a successful call (EX-7 regression)", async () => {
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+    vi.useFakeTimers();
+    try {
+      const code = await runWhoami({
+        stsClientFactory: () => ({
+          send: vi.fn().mockResolvedValue({
+            Account: "123456789012",
+            Arn: "arn:aws:iam::123456789012:user/assignee-operator",
+          }),
+        }),
+        cwd: () => tmpdir(),
+        stdout: vi.fn(),
+        stderr: vi.fn(),
+      });
+      expect(code).toBe(0);
+      // Regression: before the fix, the STS_TIMEOUT_MS setTimeout stayed
+      // registered on the event loop and kept the process alive for 5s.
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not leak the STS timeout timer when STS rejects (EX-7 regression)", async () => {
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+    vi.useFakeTimers();
+    try {
+      const code = await runWhoami({
+        stsClientFactory: () => ({
+          send: vi
+            .fn()
+            .mockRejectedValue(
+              Object.assign(
+                new Error(
+                  "The security token included in the request is invalid.",
+                ),
+                { name: "UnrecognizedClientException" },
+              ),
+            ),
+        }),
+        cwd: () => tmpdir(),
+        stdout: vi.fn(),
+        stderr: vi.fn(),
+      });
+      expect(code).toBe(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("falls back to AWS_DEFAULT_REGION then to the SDK default", async () => {
     process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
     process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =

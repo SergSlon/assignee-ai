@@ -2,7 +2,12 @@ import {
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
 } from "../../config/resource-types.js";
-import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
+import {
+  CfnKey,
+  AwsDefault,
+  EIP_AUTO_ALLOCATE,
+} from "../../config/cfn-keys.js";
+import { markerRef, markerAz } from "../../config/marker-tokens.js";
 import type { ArchitecturePattern } from "../types.js";
 
 /** Shorthand aliases for companion resource type constants used in this pattern. */
@@ -100,10 +105,13 @@ export const vpcNetworkingPattern: ArchitecturePattern = {
       displayName: "Internet Gateway",
     },
     {
+      // CloudControl DOES support AWS::EC2::VPCGatewayAttachment — it must
+      // be provisioned for public subnets to have internet access. Without
+      // this attachment, the downstream public Route creation fails with
+      // "route table and internet gateway belong to different networks".
       resourceType: EC2_VPC_GATEWAY_ATTACHMENT,
       resourceId: VpcResourceId.IGW_ATTACHMENT,
       displayName: "VPC Gateway Attachment (IGW)",
-      provisionable: false,
     },
     // Route Tables
     {
@@ -139,30 +147,28 @@ export const vpcNetworkingPattern: ArchitecturePattern = {
       resourceId: VpcResourceId.NAT_GATEWAY,
       displayName: "NAT Gateway",
     },
-    // Subnet ↔ RouteTable associations
+    // Subnet ↔ RouteTable associations — CloudControl supports
+    // AWS::EC2::SubnetRouteTableAssociation, and explicit associations are
+    // required so traffic from each subnet uses the intended route table.
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
       resourceId: VpcResourceId.PUBLIC_SUBNET_1_RT_ASSOC,
       displayName: "Public Subnet 1 ↔ Public RT",
-      provisionable: false,
     },
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
       resourceId: VpcResourceId.PUBLIC_SUBNET_2_RT_ASSOC,
       displayName: "Public Subnet 2 ↔ Public RT",
-      provisionable: false,
     },
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
       resourceId: VpcResourceId.PRIVATE_SUBNET_1_RT_ASSOC,
       displayName: "Private Subnet 1 ↔ Private RT",
-      provisionable: false,
     },
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
       resourceId: VpcResourceId.PRIVATE_SUBNET_2_RT_ASSOC,
       displayName: "Private Subnet 2 ↔ Private RT",
-      provisionable: false,
     },
   ],
   dependencyOrder: [
@@ -203,74 +209,78 @@ export const vpcNetworkingPattern: ArchitecturePattern = {
     },
     [VpcResourceId.PUBLIC_SUBNET_1]: {
       CidrBlock: "10.0.1.0/24",
-      AvailabilityZone: { "Fn::Select": [0, { "Fn::GetAZs": "" }] },
+      AvailabilityZone: markerAz(0),
       MapPublicIpOnLaunch: true,
-      VpcId: { Ref: VpcResourceId.VPC },
+      VpcId: markerRef(VpcResourceId.VPC),
     },
     [VpcResourceId.PUBLIC_SUBNET_2]: {
       CidrBlock: "10.0.2.0/24",
-      AvailabilityZone: { "Fn::Select": [1, { "Fn::GetAZs": "" }] },
+      AvailabilityZone: markerAz(1),
       MapPublicIpOnLaunch: true,
-      VpcId: { Ref: VpcResourceId.VPC },
+      VpcId: markerRef(VpcResourceId.VPC),
     },
     [VpcResourceId.PRIVATE_SUBNET_1]: {
       CidrBlock: "10.0.3.0/24",
-      AvailabilityZone: { "Fn::Select": [0, { "Fn::GetAZs": "" }] },
+      AvailabilityZone: markerAz(0),
       MapPublicIpOnLaunch: false,
-      VpcId: { Ref: VpcResourceId.VPC },
+      VpcId: markerRef(VpcResourceId.VPC),
     },
     [VpcResourceId.PRIVATE_SUBNET_2]: {
       CidrBlock: "10.0.4.0/24",
-      AvailabilityZone: { "Fn::Select": [1, { "Fn::GetAZs": "" }] },
+      AvailabilityZone: markerAz(1),
       MapPublicIpOnLaunch: false,
-      VpcId: { Ref: VpcResourceId.VPC },
+      VpcId: markerRef(VpcResourceId.VPC),
     },
     [VpcResourceId.IGW]: {},
     [VpcResourceId.IGW_ATTACHMENT]: {
-      VpcId: { Ref: VpcResourceId.VPC },
-      InternetGatewayId: { Ref: VpcResourceId.IGW },
+      VpcId: markerRef(VpcResourceId.VPC),
+      InternetGatewayId: markerRef(VpcResourceId.IGW),
     },
     [VpcResourceId.PUBLIC_ROUTE_TABLE]: {
-      VpcId: { Ref: VpcResourceId.VPC },
+      VpcId: markerRef(VpcResourceId.VPC),
     },
     [VpcResourceId.PRIVATE_ROUTE_TABLE]: {
-      VpcId: { Ref: VpcResourceId.VPC },
+      VpcId: markerRef(VpcResourceId.VPC),
     },
     [VpcResourceId.PUBLIC_ROUTE]: {
-      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
+      RouteTableId: markerRef(VpcResourceId.PUBLIC_ROUTE_TABLE),
       DestinationCidrBlock: "0.0.0.0/0",
-      GatewayId: { Ref: VpcResourceId.IGW },
+      GatewayId: markerRef(VpcResourceId.IGW),
     },
     [VpcResourceId.PRIVATE_ROUTE]: {
-      RouteTableId: { Ref: VpcResourceId.PRIVATE_ROUTE_TABLE },
+      RouteTableId: markerRef(VpcResourceId.PRIVATE_ROUTE_TABLE),
       DestinationCidrBlock: "0.0.0.0/0",
-      NatGatewayId: { Ref: VpcResourceId.NAT_GATEWAY },
+      NatGatewayId: markerRef(VpcResourceId.NAT_GATEWAY),
     },
     [VpcResourceId.NAT_EIP]: {
+      // NAT_EIP is provisionable:false — the EIP is allocated by the
+      // resource-provisioner's auto-allocate path (see EIP_AUTO_ALLOCATE
+      // handling) when the NAT gateway is created.
       Domain: "vpc",
     },
     [VpcResourceId.NAT_GATEWAY]: {
-      SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_1 },
+      SubnetId: markerRef(VpcResourceId.PUBLIC_SUBNET_1),
       ConnectivityType: AwsDefault.CONNECTIVITY_PUBLIC,
-      [CfnKey.ALLOCATION_ID]: {
-        "Fn::GetAtt": [VpcResourceId.NAT_EIP, CfnKey.ALLOCATION_ID],
-      },
+      // EIP_AUTO_ALLOCATE is a concrete sentinel string (not a CFN intrinsic)
+      // that the resource-provisioner replaces at apply time with a real
+      // AllocationId after calling EC2:AllocateAddress.
+      [CfnKey.ALLOCATION_ID]: EIP_AUTO_ALLOCATE,
     },
     [VpcResourceId.PUBLIC_SUBNET_1_RT_ASSOC]: {
-      SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_1 },
-      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
+      SubnetId: markerRef(VpcResourceId.PUBLIC_SUBNET_1),
+      RouteTableId: markerRef(VpcResourceId.PUBLIC_ROUTE_TABLE),
     },
     [VpcResourceId.PUBLIC_SUBNET_2_RT_ASSOC]: {
-      SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_2 },
-      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
+      SubnetId: markerRef(VpcResourceId.PUBLIC_SUBNET_2),
+      RouteTableId: markerRef(VpcResourceId.PUBLIC_ROUTE_TABLE),
     },
     [VpcResourceId.PRIVATE_SUBNET_1_RT_ASSOC]: {
-      SubnetId: { Ref: VpcResourceId.PRIVATE_SUBNET_1 },
-      RouteTableId: { Ref: VpcResourceId.PRIVATE_ROUTE_TABLE },
+      SubnetId: markerRef(VpcResourceId.PRIVATE_SUBNET_1),
+      RouteTableId: markerRef(VpcResourceId.PRIVATE_ROUTE_TABLE),
     },
     [VpcResourceId.PRIVATE_SUBNET_2_RT_ASSOC]: {
-      SubnetId: { Ref: VpcResourceId.PRIVATE_SUBNET_2 },
-      RouteTableId: { Ref: VpcResourceId.PRIVATE_ROUTE_TABLE },
+      SubnetId: markerRef(VpcResourceId.PRIVATE_SUBNET_2),
+      RouteTableId: markerRef(VpcResourceId.PRIVATE_ROUTE_TABLE),
     },
   },
 };
@@ -323,10 +333,13 @@ export const vpcPublicOnlyPattern: ArchitecturePattern = {
       displayName: "Internet Gateway",
     },
     {
+      // CloudControl DOES support AWS::EC2::VPCGatewayAttachment — it must
+      // be provisioned for public subnets to have internet access. Without
+      // this attachment, the downstream public Route creation fails with
+      // "route table and internet gateway belong to different networks".
       resourceType: EC2_VPC_GATEWAY_ATTACHMENT,
       resourceId: VpcResourceId.IGW_ATTACHMENT,
       displayName: "VPC Gateway Attachment (IGW)",
-      provisionable: false,
     },
     {
       resourceType: RESOURCE_TYPES.EC2_ROUTE_TABLE,
@@ -342,13 +355,11 @@ export const vpcPublicOnlyPattern: ArchitecturePattern = {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
       resourceId: VpcResourceId.PUBLIC_SUBNET_1_RT_ASSOC,
       displayName: "Public Subnet 1 ↔ Public RT",
-      provisionable: false,
     },
     {
       resourceType: EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
       resourceId: VpcResourceId.PUBLIC_SUBNET_2_RT_ASSOC,
       displayName: "Public Subnet 2 ↔ Public RT",
-      provisionable: false,
     },
   ],
   dependencyOrder: [
@@ -373,36 +384,36 @@ export const vpcPublicOnlyPattern: ArchitecturePattern = {
     },
     [VpcResourceId.PUBLIC_SUBNET_1]: {
       CidrBlock: "10.0.1.0/24",
-      AvailabilityZone: { "Fn::Select": [0, { "Fn::GetAZs": "" }] },
+      AvailabilityZone: markerAz(0),
       MapPublicIpOnLaunch: true,
-      VpcId: { Ref: VpcResourceId.VPC },
+      VpcId: markerRef(VpcResourceId.VPC),
     },
     [VpcResourceId.PUBLIC_SUBNET_2]: {
       CidrBlock: "10.0.2.0/24",
-      AvailabilityZone: { "Fn::Select": [1, { "Fn::GetAZs": "" }] },
+      AvailabilityZone: markerAz(1),
       MapPublicIpOnLaunch: true,
-      VpcId: { Ref: VpcResourceId.VPC },
+      VpcId: markerRef(VpcResourceId.VPC),
     },
     [VpcResourceId.IGW]: {},
     [VpcResourceId.IGW_ATTACHMENT]: {
-      VpcId: { Ref: VpcResourceId.VPC },
-      InternetGatewayId: { Ref: VpcResourceId.IGW },
+      VpcId: markerRef(VpcResourceId.VPC),
+      InternetGatewayId: markerRef(VpcResourceId.IGW),
     },
     [VpcResourceId.PUBLIC_ROUTE_TABLE]: {
-      VpcId: { Ref: VpcResourceId.VPC },
+      VpcId: markerRef(VpcResourceId.VPC),
     },
     [VpcResourceId.PUBLIC_ROUTE]: {
-      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
+      RouteTableId: markerRef(VpcResourceId.PUBLIC_ROUTE_TABLE),
       DestinationCidrBlock: "0.0.0.0/0",
-      GatewayId: { Ref: VpcResourceId.IGW },
+      GatewayId: markerRef(VpcResourceId.IGW),
     },
     [VpcResourceId.PUBLIC_SUBNET_1_RT_ASSOC]: {
-      SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_1 },
-      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
+      SubnetId: markerRef(VpcResourceId.PUBLIC_SUBNET_1),
+      RouteTableId: markerRef(VpcResourceId.PUBLIC_ROUTE_TABLE),
     },
     [VpcResourceId.PUBLIC_SUBNET_2_RT_ASSOC]: {
-      SubnetId: { Ref: VpcResourceId.PUBLIC_SUBNET_2 },
-      RouteTableId: { Ref: VpcResourceId.PUBLIC_ROUTE_TABLE },
+      SubnetId: markerRef(VpcResourceId.PUBLIC_SUBNET_2),
+      RouteTableId: markerRef(VpcResourceId.PUBLIC_ROUTE_TABLE),
     },
   },
 };

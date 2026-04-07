@@ -26,6 +26,9 @@ import { natGatewayPricingStrategy } from "./strategies/nat-gateway.js";
 import { apiGatewayV2PricingStrategy } from "./strategies/apigatewayv2.js";
 import { cloudWatchAlarmPricingStrategy } from "./strategies/cloudwatch-alarm.js";
 import { secretsManagerPricingStrategy } from "./strategies/secretsmanager.js";
+// WV4-A: VPC compound cross-reference free-tier strategies
+import { vpcGatewayAttachmentPricingStrategy } from "./strategies/vpc-gateway-attachment.js";
+import { subnetRouteTableAssociationPricingStrategy } from "./strategies/subnet-route-table-association.js";
 import { ec2PricingDecomposer } from "./decomposers/ec2.js";
 import { rdsPricingDecomposer } from "./decomposers/rds.js";
 import { s3PricingDecomposer } from "./decomposers/s3.js";
@@ -51,6 +54,9 @@ import {
   routeTablePricingDecomposer,
   routePricingDecomposer,
   ecsClusterPricingDecomposer,
+  // WV4-A
+  vpcGatewayAttachmentPricingDecomposer,
+  subnetRouteTableAssociationPricingDecomposer,
 } from "./decomposers/free.js";
 
 /**
@@ -142,6 +148,15 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.SECRETSMANAGER_SECRET,
   secretsManagerPricingStrategy,
 );
+// WV4-A: VPC compound cross-references — free
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
+  vpcGatewayAttachmentPricingStrategy,
+);
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
+  subnetRouteTableAssociationPricingStrategy,
+);
 
 /**
  * The default pre-populated pricing decomposer registry (Story 23.1).
@@ -172,6 +187,11 @@ defaultDecomposerRegistry.register(internetGatewayPricingDecomposer);
 defaultDecomposerRegistry.register(routeTablePricingDecomposer);
 defaultDecomposerRegistry.register(routePricingDecomposer);
 defaultDecomposerRegistry.register(ecsClusterPricingDecomposer);
+// WV4-A: VPC compound cross-references
+defaultDecomposerRegistry.register(vpcGatewayAttachmentPricingDecomposer);
+defaultDecomposerRegistry.register(
+  subnetRouteTableAssociationPricingDecomposer,
+);
 
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";

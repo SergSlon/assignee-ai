@@ -1126,8 +1126,8 @@ describe("supported resource types", () => {
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
   });
 
-  it("SUPPORTED_TYPES_ARRAY has exactly 23 types", async () => {
+  it("SUPPORTED_TYPES_ARRAY has exactly 25 types", async () => {
     const { SUPPORTED_TYPES_ARRAY } = await import("@assignee/core");
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(23);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(25);
   });
 });

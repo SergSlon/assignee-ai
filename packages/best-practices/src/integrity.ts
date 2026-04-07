@@ -12,7 +12,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, statSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { SKIP_DIRS } from "./loader.js";
 
 /** Freshness status for the BP library. */
@@ -282,56 +282,39 @@ export function verifyManifestSignature(
     };
   }
 
-  // `gpg --verify` writes everything relevant to stderr. We also ask for
-  // --status-fd so we can parse machine-readable VALIDSIG / GOODSIG lines
-  // and extract the signing key fingerprint without scraping localized
-  // human text.
-  let stderr = "";
-  try {
-    const result = execFileSync(
-      "gpg",
-      ["--verify", "--status-fd=2", "--batch", sigPath, manifestPath],
-      { stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
-    );
-    // execFileSync returns stdout; the status lines we care about are on
-    // stderr. Node captures the combined streams via the `pipe` stdio
-    // above, exposed through the thrown error on failure OR via the
-    // returned value on success (empty here — gpg writes nothing to stdout).
-    stderr = String(result ?? "");
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException & {
-      stderr?: Buffer | string;
-      stdout?: Buffer | string;
-    };
-    stderr = String(e.stderr ?? "") + String(e.stdout ?? "");
-    return {
-      verified: false,
-      signedByKey: extractKeyFromGpgStatus(stderr),
-      signaturePresent: true,
-      reason: "signature invalid",
-    };
-  }
-
-  // Success path: parse the key id from the status-fd output.
-  // --status-fd writes [GNUPG:] VALIDSIG <fingerprint> <date> ...
-  // Capture either VALIDSIG or GOODSIG.
+  // Single gpg invocation that both verifies the signature AND emits the
+  // machine-readable status lines we need to extract the signing key id.
+  // Using `--status-fd=1` routes VALIDSIG/GOODSIG to stdout, leaving stderr
+  // for the human-readable verify output. spawnSync never throws on non-zero
+  // exit, so we can decide success purely from `result.status`.
   //
-  // Note: execFileSync on success puts stderr in the thrown error path
-  // only; on success it's not returned. We re-run with a second channel
-  // to capture stderr explicitly.
-  try {
-    stderr = String(
-      execFileSync(
-        "gpg",
-        ["--verify", "--status-fd=1", "--batch", sigPath, manifestPath],
-        { stdio: ["ignore", "pipe", "ignore"], encoding: "utf-8" },
-      ),
-    );
-  } catch {
-    // Should not happen — we just passed verification above.
+  // History: an earlier implementation called gpg twice (once for verify,
+  // once for status capture), paying 2x fork/exec cost and opening a tiny
+  // TOCTOU window between runs. One call closes both holes.
+  const result = spawnSync(
+    "gpg",
+    ["--verify", "--status-fd=1", "--batch", sigPath, manifestPath],
+    { stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
+  );
+
+  if (result.error) {
+    // ENOENT etc. — the earlier --version probe should have caught this,
+    // but surface it defensively rather than claiming "signature invalid".
     return {
       verified: false,
       signedByKey: null,
+      signaturePresent: true,
+      reason: "gpg not available",
+    };
+  }
+
+  const statusOutput = String(result.stdout ?? "");
+  const signedByKey = extractKeyFromGpgStatus(statusOutput);
+
+  if (result.status !== 0) {
+    return {
+      verified: false,
+      signedByKey,
       signaturePresent: true,
       reason: "signature invalid",
     };
@@ -339,7 +322,7 @@ export function verifyManifestSignature(
 
   return {
     verified: true,
-    signedByKey: extractKeyFromGpgStatus(stderr),
+    signedByKey,
     signaturePresent: true,
   };
 }

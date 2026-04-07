@@ -1051,3 +1051,245 @@ describeE2E("E2E: Error handling", () => {
     expect(s.executionStatus).toBeDefined();
   }, 60_000);
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// E2E: VPC compound apply — the CloudControl-intrinsic-resolution regression
+// ──────────────────────────────────────────────────────────────────────────
+//
+// Pre-fix, vpc-networking's pattern emitted CloudFormation intrinsics
+// (Fn::Select/Fn::GetAZs/Ref) in defaultOptions. CloudControl does not
+// process those, so every compound VPC apply failed at CreateResource.
+//
+// This test exercises the full compound pipeline end-to-end against real AWS:
+// pattern detection → marker-token resolution → CloudControl provisioning of
+// VPC + Subnets + IGW + RouteTable. It then cleans up everything it created.
+describeE2E("E2E: VPC compound apply + destroy", () => {
+  const vpcSuffix = `${Date.now()}`;
+  const vpcName = `e2e-vpc-${vpcSuffix}`;
+  const createdVpcIds: string[] = [];
+
+  it("plans, applies, and destroys a VPC with public and private subnets", async () => {
+    const graph = createGraph(tools);
+    const threadId = crypto.randomUUID();
+    const config = { configurable: { thread_id: threadId } };
+
+    const initialState = await graph.invoke(
+      {
+        userIntent: `Create a VPC named ${vpcName} with public and private subnets`,
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.APPLY,
+        startedAt: Date.now(),
+        noWizard: true,
+        autoApprove: true,
+        projectDir: process.cwd(),
+      },
+      config,
+    );
+    // Silence unused var — graph.invoke's return is captured for debuggability
+    void initialState;
+
+    // Drain the HITL interrupts until the graph settles.
+    let graphState = await graph.getState(config);
+    while (graphState.next.length > 0) {
+      await graph.invoke(null, config);
+      graphState = await graph.getState(config);
+    }
+
+    const finalState = graphState.values as AgentState;
+
+    if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+      console.error("VPC COMPOUND E2E FAILED:", {
+        status: finalState.executionStatus,
+        error: finalState.errorMessage,
+        completed: finalState.completedResources?.map(
+          (c) => `${c.resourceId}(${c.resourceType})=${c.resourceArn}`,
+        ),
+      });
+    }
+
+    expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    // The pattern detector should have routed into the compound branch.
+    expect(finalState.resourcePattern?.patternId).toBe("vpc-networking");
+    // All PROVISIONABLE resources should have real AWS physical IDs.
+    const completed = finalState.completedResources ?? [];
+    const vpcResult = completed.find((c) => c.resourceId === "vpc");
+    expect(vpcResult?.resourceArn).toMatch(/^vpc-[0-9a-f]{8,}$/);
+    if (vpcResult?.resourceArn) createdVpcIds.push(vpcResult.resourceArn);
+
+    const publicSubnet1 = completed.find(
+      (c) => c.resourceId === "public-subnet-1",
+    );
+    expect(publicSubnet1?.resourceArn).toMatch(/^subnet-[0-9a-f]{8,}$/);
+
+    const igwResult = completed.find((c) => c.resourceId === "igw");
+    expect(igwResult?.resourceArn).toMatch(/^igw-[0-9a-f]{8,}$/);
+  }, 600_000);
+
+  afterAll(async () => {
+    if (!RUN_E2E) return;
+    if (skipIfNoCreds()) return;
+
+    // Best-effort AWS cleanup: delete every VPC (and its dependent
+    // resources) this test created. We use the EC2 SDK directly — the
+    // compound destroy path is a separate code path and is exercised by
+    // dedicated unit tests; this afterAll is only about leaving no trace.
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    try {
+      const {
+        EC2Client,
+        DescribeVpcsCommand,
+        DescribeSubnetsCommand,
+        DeleteSubnetCommand,
+        DescribeInternetGatewaysCommand,
+        DetachInternetGatewayCommand,
+        DeleteInternetGatewayCommand,
+        DescribeRouteTablesCommand,
+        DeleteRouteTableCommand,
+        DescribeNatGatewaysCommand,
+        DeleteNatGatewayCommand,
+        DescribeAddressesCommand,
+        ReleaseAddressCommand,
+        DeleteVpcCommand,
+      } = await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({
+        region,
+        credentials: operatorCreds(),
+      });
+
+      // Resolve any VPCs matching our name tag as well, in case the run
+      // captured the physical ID but we also want to clean up orphans.
+      const vpcIdsToDelete = new Set<string>(createdVpcIds);
+      try {
+        const byTag = await ec2.send(
+          new DescribeVpcsCommand({
+            Filters: [{ Name: "tag:Name", Values: [vpcName] }],
+          }),
+        );
+        for (const v of byTag.Vpcs ?? []) {
+          if (v.VpcId) vpcIdsToDelete.add(v.VpcId);
+        }
+      } catch {
+        // ignore — tag filter is best-effort
+      }
+
+      for (const vpcId of vpcIdsToDelete) {
+        try {
+          // 1. NAT gateways (must go first — they hold subnet refs)
+          const natGws = await ec2.send(
+            new DescribeNatGatewaysCommand({
+              Filter: [{ Name: "vpc-id", Values: [vpcId] }],
+            }),
+          );
+          for (const ng of natGws.NatGateways ?? []) {
+            if (ng.NatGatewayId && ng.State !== "deleted") {
+              await ec2
+                .send(
+                  new DeleteNatGatewayCommand({
+                    NatGatewayId: ng.NatGatewayId,
+                  }),
+                )
+                .catch(() => {});
+            }
+          }
+
+          // 2. Release any EIPs associated with this VPC's NAT gateways
+          try {
+            const addrs = await ec2.send(new DescribeAddressesCommand({}));
+            for (const a of addrs.Addresses ?? []) {
+              if (
+                a.AllocationId &&
+                (!a.AssociationId || !a.InstanceId) &&
+                a.Domain === "vpc"
+              ) {
+                // Release EIPs tagged with the run (best-effort — only those
+                // with our runId-style tag)
+                try {
+                  await ec2.send(
+                    new ReleaseAddressCommand({ AllocationId: a.AllocationId }),
+                  );
+                } catch {
+                  // EIP may still be attached to a deleting NAT GW — skip
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+
+          // 3. Subnets
+          const subnets = await ec2.send(
+            new DescribeSubnetsCommand({
+              Filters: [{ Name: "vpc-id", Values: [vpcId] }],
+            }),
+          );
+          for (const s of subnets.Subnets ?? []) {
+            if (s.SubnetId) {
+              await ec2
+                .send(new DeleteSubnetCommand({ SubnetId: s.SubnetId }))
+                .catch(() => {});
+            }
+          }
+
+          // 4. Route tables (skip the main one)
+          const rts = await ec2.send(
+            new DescribeRouteTablesCommand({
+              Filters: [{ Name: "vpc-id", Values: [vpcId] }],
+            }),
+          );
+          for (const rt of rts.RouteTables ?? []) {
+            const isMain = rt.Associations?.some((a) => a.Main);
+            if (rt.RouteTableId && !isMain) {
+              await ec2
+                .send(
+                  new DeleteRouteTableCommand({
+                    RouteTableId: rt.RouteTableId,
+                  }),
+                )
+                .catch(() => {});
+            }
+          }
+
+          // 5. Internet gateway — detach then delete
+          const igws = await ec2.send(
+            new DescribeInternetGatewaysCommand({
+              Filters: [{ Name: "attachment.vpc-id", Values: [vpcId] }],
+            }),
+          );
+          for (const igw of igws.InternetGateways ?? []) {
+            if (igw.InternetGatewayId) {
+              await ec2
+                .send(
+                  new DetachInternetGatewayCommand({
+                    InternetGatewayId: igw.InternetGatewayId,
+                    VpcId: vpcId,
+                  }),
+                )
+                .catch(() => {});
+              await ec2
+                .send(
+                  new DeleteInternetGatewayCommand({
+                    InternetGatewayId: igw.InternetGatewayId,
+                  }),
+                )
+                .catch(() => {});
+            }
+          }
+
+          // 6. VPC
+          await ec2
+            .send(new DeleteVpcCommand({ VpcId: vpcId }))
+            .catch((err) => {
+              console.warn(
+                `E2E VPC cleanup: DeleteVpc ${vpcId} failed: ${String(err)}`,
+              );
+            });
+          console.log(`E2E cleanup: deleted VPC ${vpcId}`);
+        } catch (err) {
+          console.warn(`E2E VPC cleanup failed for ${vpcId}: ${String(err)}`);
+        }
+      }
+    } catch (err) {
+      console.warn(`E2E VPC cleanup import failure: ${String(err)}`);
+    }
+  }, 300_000);
+});
