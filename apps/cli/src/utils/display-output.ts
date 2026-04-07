@@ -106,34 +106,64 @@ export function renderError(
 
 import type { RenderableState } from "./display.js";
 
-export function renderApplySuccess(state: RenderableState): void {
+/**
+ * Renders the apply success line.
+ *
+ * `displayArn` is the resolved full ARN (e.g. arn:aws:s3:::my-bucket)
+ * derived from the bare CCAPI primary identifier in `state.resourceArn`
+ * (e.g. "my-bucket") via resolveResourceArn. The two are decoupled
+ * because LangGraph state must keep the BARE identifier so the compound
+ * marker resolver in plan-generator.ts can substitute it into child
+ * resource fields like VpcId, SubnetId, InternetGatewayId, etc. — those
+ * EC2 APIs reject full ARNs and require the bare ID. Display only needs
+ * the user-facing ARN, so it stays out-of-band as a separate parameter.
+ *
+ * Falls back to state.resourceArn when displayArn is not provided —
+ * preserves the legacy non-resolved behavior for any caller that
+ * hasn't been updated to pass the resolved value.
+ */
+export function renderApplySuccess(
+  state: RenderableState,
+  displayArn?: string,
+): void {
   stopSpinner();
+  const arnForDisplay = displayArn ?? state.resourceArn;
   if (process.stdout.isTTY) {
     process.stdout.write(chalk.green("✅ Resource created successfully!\n"));
-    if (state.resourceArn) {
-      process.stdout.write(chalk.green(`   ARN: ${state.resourceArn}\n`));
+    if (arnForDisplay) {
+      process.stdout.write(chalk.green(`   ARN: ${arnForDisplay}\n`));
     }
     process.stdout.write(chalk.dim(`   Run ID: ${state.runId}\n`));
   } else {
     process.stdout.write(
-      `SUCCESS\nARN: ${state.resourceArn ?? CostEstimateLabel.NA}\nRun ID: ${state.runId}\n`,
+      `SUCCESS\nARN: ${arnForDisplay ?? CostEstimateLabel.NA}\nRun ID: ${state.runId}\n`,
     );
   }
 }
 
 /**
  * Renders a success summary after all compound provisioning resources complete.
+ *
+ * `displayArns` is an optional map keyed by `ResourceResult.resourceId`
+ * holding the resolved full ARN for each entry. When supplied, the
+ * renderer prefers the display ARN over the bare CCAPI identifier
+ * stored on `result.resourceArn`. The bare identifier is preserved on
+ * the entry itself so the LangGraph state continues to feed the
+ * compound marker resolver in plan-generator.ts with the bare values
+ * the EC2 APIs expect (VpcId, SubnetId, InternetGatewayId, etc.).
  */
 export function renderCompoundSuccess(
   results: ResourceResult[],
   pattern: ArchitecturePattern,
+  displayArns?: Record<string, string>,
 ): void {
   stopSpinner();
 
-  const resultLines = results.map(
-    (r, i) =>
-      `  ${i + 1}. ${r.resourceType}${r.resourceArn ? ` → ${r.resourceArn}` : ""}`,
-  );
+  const resultLines = results.map((r, i) => {
+    const arnForDisplay =
+      (r.resourceId && displayArns?.[r.resourceId]) || r.resourceArn;
+    return `  ${i + 1}. ${r.resourceType}${arnForDisplay ? ` → ${arnForDisplay}` : ""}`;
+  });
 
   if (process.stdout.isTTY) {
     const lines = [

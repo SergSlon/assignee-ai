@@ -202,26 +202,26 @@ export async function resultFormatterNode(
 
   switch (state.executionStatus) {
     case ExecutionStatus.SUCCESS: {
-      // BUG-5: CloudControl returns the bare primary identifier
-      // (BucketName, RoleName, FunctionName, ...) — not the ARN. Resolve
-      // it into a full ARN here once per resource so every downstream
-      // consumer (display, log lines, provision record, security
-      // posture check) sees a real, copy-pasteable ARN.
+      // BUG-5 + V6 P0 regression fix: resolve the bare CCAPI primary
+      // identifier to a full ARN for DISPLAY/LOG/BILLING ONLY. Do NOT
+      // mutate state.resourceArn — the compound marker resolver in
+      // plan-generator.ts (`resolveCompoundMarkers` → line 423) reads
+      // `match.resourceArn` and substitutes it verbatim into child
+      // EC2 fields like VpcId, SubnetId, InternetGatewayId. Those APIs
+      // require BARE identifiers (vpc-0xxx, subnet-0xxx, igw-0xxx) and
+      // reject full ARNs. Wave 8 originally mutated state.resourceArn
+      // and broke every VPC compound apply at step 2/17 — caught by
+      // Adversarial Hunter v6.
       //
       // resolveResourceArn is a no-op when state.resourceArn is already
-      // an ARN (compound resources whose CCAPI returns full ARNs) or
-      // when STS lookup fails (returns bare identifier — best-effort).
-      const resolvedArn = state.resourceType
-        ? await resolveResourceArn({
+      // an ARN (CCAPI returns full ARNs for ELBv2/ECS Cluster/SNS Topic)
+      // or when STS lookup fails (returns bare identifier — best-effort).
+      const displayArn = state.resourceType
+        ? ((await resolveResourceArn({
             resourceType: state.resourceType,
             identifier: state.resourceArn,
-          })
+          })) ?? state.resourceArn)
         : state.resourceArn;
-      // Mutate state in place so the rest of this node + the parent
-      // graph state both see the resolved value.
-      if (resolvedArn !== state.resourceArn) {
-        state.resourceArn = resolvedArn;
-      }
 
       // Compound mode: accumulate result and signal loop to continue
       if (
@@ -238,6 +238,9 @@ export async function resultFormatterNode(
         const completedEntry: ResourceResult = {
           resourceId: currentResource.resourceId,
           resourceType: currentResource.resourceType,
+          // BARE CCAPI identifier — must NOT be the full ARN. The next
+          // iteration's compound marker resolver substitutes this value
+          // into VpcId/SubnetId/IgwId fields where AWS rejects ARNs.
           resourceArn: state.resourceArn,
           executionStatus: ExecutionStatus.SUCCESS,
         };
@@ -263,7 +266,10 @@ export async function resultFormatterNode(
             level: "info",
             action: LOG_ACTIONS.APPLY_SUCCEEDED,
             extras: {
-              resourceArn: state.resourceArn,
+              // Log the resolved ARN for observability; the graph
+              // state still carries the bare identifier for the
+              // marker resolver on the next iteration.
+              resourceArn: displayArn,
               resourceType: currentResource.resourceType,
               compound: true,
             },
@@ -279,8 +285,28 @@ export async function resultFormatterNode(
           };
         }
 
-        // All resources provisioned — render compound summary
-        renderCompoundSuccess(updatedCompleted, state.resourcePattern);
+        // All resources provisioned — build a displayArns map keyed by
+        // resourceId so renderCompoundSuccess / provision record /
+        // security posture check all show the resolved full ARN, while
+        // completedResources[].resourceArn stays as the bare CCAPI
+        // identifier expected by any downstream drift/reconcile path.
+        const displayArns: Record<string, string> = {};
+        for (const completed of updatedCompleted) {
+          if (completed.resourceId && completed.resourceArn) {
+            const resolved =
+              (await resolveResourceArn({
+                resourceType: completed.resourceType,
+                identifier: completed.resourceArn,
+              })) ?? completed.resourceArn;
+            displayArns[completed.resourceId] = resolved;
+          }
+        }
+
+        renderCompoundSuccess(
+          updatedCompleted,
+          state.resourcePattern,
+          displayArns,
+        );
         log({
           ts: new Date().toISOString(),
           runId: state.runId,
@@ -290,11 +316,16 @@ export async function resultFormatterNode(
         });
 
         // Story 19.3: write provision record for each completed resource
+        // — use the resolved full ARN so the provision log records a
+        // usable value (billing MCP rejects bare CCAPI identifiers).
         for (const completed of updatedCompleted) {
+          const arnForRecord =
+            (completed.resourceId && displayArns[completed.resourceId]) ||
+            completed.resourceArn;
           await writeProvisionRecord(
             state.runId,
             completed.resourceType,
-            completed.resourceArn,
+            arnForRecord,
             undefined,
             state.perResourceCosts?.[completed.resourceId ?? ""],
           );
@@ -320,14 +351,14 @@ export async function resultFormatterNode(
         }
 
         // Story 19.2: Post-provision security posture check for each compound resource (non-blocking)
+        // — use the resolved full ARN; SecurityHub findings are keyed by ARN.
         if (tools) {
           for (const resource of updatedCompleted) {
-            if (resource.resourceArn) {
-              await checkSecurityPosture(
-                resource.resourceArn,
-                tools,
-                state.runId,
-              );
+            const arnForCheck =
+              (resource.resourceId && displayArns[resource.resourceId]) ||
+              resource.resourceArn;
+            if (arnForCheck) {
+              await checkSecurityPosture(arnForCheck, tools, state.runId);
             }
           }
         }
@@ -338,8 +369,14 @@ export async function resultFormatterNode(
             (r) => r.resourceType === RESOURCE_TYPES.S3_BUCKET && r.resourceArn,
           );
           if (s3Resource?.resourceArn) {
-            const parts = s3Resource.resourceArn.split(":::");
-            const bucketName = parts[1];
+            // CCAPI primary identifier for S3 IS the bucket name. The
+            // entry's resourceArn now stores that bare identifier (V6
+            // P0 fix), so prefer it directly. Fall back to parsing the
+            // arn:aws:s3::: prefix in case a future code path stores a
+            // full ARN here instead.
+            const bucketName = s3Resource.resourceArn.startsWith("arn:")
+              ? (s3Resource.resourceArn.split(":::")[1] ?? "")
+              : s3Resource.resourceArn;
             if (!bucketName) {
               process.stderr.write(
                 chalk.yellow(
@@ -386,14 +423,17 @@ export async function resultFormatterNode(
         return { completedResources: updatedCompleted };
       }
 
-      // Single-resource path — unchanged
-      renderApplySuccess(state);
+      // Single-resource path — display/log/billing use the resolved
+      // full ARN; graph state.resourceArn stays as the bare CCAPI
+      // identifier (terminal node, but keeping it consistent with
+      // the compound branch for any future refactor).
+      renderApplySuccess(state, displayArn);
       log({
         ts: new Date().toISOString(),
         runId: state.runId,
         level: "info",
         action: LOG_ACTIONS.APPLY_SUCCEEDED,
-        extras: { resourceArn: state.resourceArn },
+        extras: { resourceArn: displayArn },
       });
 
       // Story 37.4: Post-provision upload of static site files
@@ -402,8 +442,11 @@ export async function resultFormatterNode(
         state.resourceType === RESOURCE_TYPES.S3_BUCKET &&
         state.resourceArn
       ) {
-        const parts = state.resourceArn.split(":::");
-        const bucketName = parts[1];
+        // state.resourceArn is the bare bucket name post-V6 P0 fix.
+        // Defensive parsing in case a future path stores a full ARN.
+        const bucketName = state.resourceArn.startsWith("arn:")
+          ? (state.resourceArn.split(":::")[1] ?? "")
+          : state.resourceArn;
         if (!bucketName) {
           process.stderr.write(
             chalk.yellow(
@@ -439,10 +482,11 @@ export async function resultFormatterNode(
       }
 
       // Story 19.3: write provision record for single-resource success
+      // — use the resolved full ARN so billing lookups succeed.
       await writeProvisionRecord(
         state.runId,
         state.resourceType,
-        state.resourceArn,
+        displayArn,
         state.desiredState,
         state.estimatedMonthlyCost,
       );
@@ -451,8 +495,9 @@ export async function resultFormatterNode(
       await clearFailureHistory(state.runId, state.resourceType);
 
       // Story 19.2: Post-provision security posture check (non-blocking)
-      if (state.resourceArn && tools) {
-        await checkSecurityPosture(state.resourceArn, tools, state.runId);
+      // — use the full ARN; SecurityHub findings are keyed by ARN.
+      if (displayArn && tools) {
+        await checkSecurityPosture(displayArn, tools, state.runId);
       }
 
       break;

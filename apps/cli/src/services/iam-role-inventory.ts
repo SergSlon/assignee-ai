@@ -160,10 +160,20 @@ export async function getManagedIamRoleByArn(
   arn: string,
   client?: IAMClient,
 ): Promise<ManagedIamRole | null> {
-  // ARN format: arn:aws:iam::<account>:role/<roleName>
+  // ARN format: arn:aws:iam::<account>:role/[<path>/]<roleName>
+  // IAM roles can live under a path like /service-role/MyRole or
+  // /aws-service-role/foo.amazonaws.com/MyRole. The IAM API requires
+  // the BARE role name (no path) for GetRole and ListRoleTags — passing
+  // a path-prefixed value fails with ValidationError "must satisfy
+  // regular expression pattern: [\w+=,.@-]+" (no slash allowed).
+  // Strip every leading path segment by taking the last "/"-delimited
+  // chunk. assignee.ai itself never creates path-prefixed roles, but
+  // users running `assignee destroy` against pre-existing tagged roles
+  // may pass a path-prefixed ARN.
   const match = arn.match(/^arn:aws:iam::\d+:role\/(.+)$/);
   if (!match) return null;
-  const roleName = match[1]!;
+  const captured = match[1]!;
+  const roleName = captured.split("/").pop() ?? captured;
 
   const iam = client ?? createIamClient();
 
