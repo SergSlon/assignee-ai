@@ -8,7 +8,11 @@
  * @see Story 7-6, Story 9-2
  */
 
-import { ExecutionStatus, RESOURCE_TYPES, LIST_RESOURCE_TYPES } from "@assignee/core";
+import {
+  ExecutionStatus,
+  RESOURCE_TYPES,
+  LIST_RESOURCE_TYPES,
+} from "@assignee/core";
 import type { ProvisioningPort } from "../services/provisioning-port.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph-state.js";
@@ -25,8 +29,18 @@ const EXTENDED_TIMEOUT_TYPES: Set<string> = new Set([
 ]);
 const EXTENDED_POLL_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
-/** Maximum number of poll iterations as a safety guard (450 = 15min at 2s intervals). */
-const MAX_POLL_ITERATIONS = 450;
+// NOTE (H10 fix): A previous "MAX_POLL_ITERATIONS" guard divided wall-clock by
+// POLL_INTERVAL_MS to estimate iterations, but each iteration actually waits
+// POLL_INTERVAL_MS + AWS RTT, so the counter always under-counted real loops
+// and the guard never fired before the wall-clock timeout — it was dead code.
+// It has been removed in favor of:
+//   1. The resource-type-aware wall-clock timeout below (authoritative).
+//   2. The startedAt-required invariant: if startedAt is missing on entry we
+//      now FAIL fast (was: silently reset to Date.now(), which made the
+//      wall-clock timeout impossible to ever trigger on a corrupted self-loop).
+// We deliberately did NOT add an `iterationCount` to AgentState because the
+// wall-clock guard combined with the startedAt invariant fully covers the
+// runaway-loop class without expanding the shared state schema.
 
 function getPollTimeout(resourceType: string): number {
   return EXTENDED_TIMEOUT_TYPES.has(resourceType)
@@ -52,33 +66,40 @@ export async function statusPollerNode(
     };
   }
 
+  // H10 fix: startedAt MUST be set by resource_provisioner before this node is
+  // ever invoked. If it is missing on entry, the graph state is corrupt
+  // (bad reducer, partial state, deserialization quirk, etc.) and we MUST
+  // fail fast. Previously this fell back to `Date.now()` on every iteration,
+  // which made the wall-clock timeout reset every poll and produced an
+  // unkillable infinite poll loop on a self-looping LangGraph node.
+  if (state.startedAt === undefined) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage:
+        "status_poller invoked without startedAt — graph state is corrupt",
+    };
+  }
+  const startedAt: number = state.startedAt;
+
   log({
     ts: new Date().toISOString(),
     runId: state.runId,
     level: "info",
     action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
-    extras: { phase: "poll_start", requestToken: state.requestToken, resourceType: state.resourceType },
+    extras: {
+      phase: "poll_start",
+      requestToken: state.requestToken,
+      resourceType: state.resourceType,
+    },
   });
 
-  // Timeout guard (resource-type-aware)
-  const startedAt = state.startedAt ?? Date.now();
+  // Timeout guard (resource-type-aware) — authoritative runaway-loop guard.
   const timeoutMs = getPollTimeout(state.resourceType ?? "");
   const timeoutMin = Math.round(timeoutMs / 60_000);
   if (Date.now() - startedAt > timeoutMs) {
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: `Resource provisioning timed out after ${timeoutMin} minutes. Hint: check the AWS CloudFormation console for resource status.`,
-    };
-  }
-
-  // Iteration guard: fail if we exceed MAX_POLL_ITERATIONS regardless of wall-clock time.
-  // This catches edge cases where the wall-clock timeout is not reached but the poller
-  // has looped excessively (e.g., due to clock skew or mismatched timeout configuration).
-  const elapsedIterations = Math.floor((Date.now() - startedAt) / POLL_INTERVAL_MS);
-  if (elapsedIterations >= MAX_POLL_ITERATIONS) {
-    return {
-      executionStatus: ExecutionStatus.FAILED,
-      errorMessage: `Resource provisioning timed out after ${MAX_POLL_ITERATIONS} poll iterations (~${Math.round((MAX_POLL_ITERATIONS * POLL_INTERVAL_MS) / 60_000)} minutes). Hint: check the AWS CloudFormation console for resource status.`,
     };
   }
 

@@ -191,14 +191,16 @@ Two registries:
 
 ### 6-Level Precedence (`utils/merge-configs.ts`)
 
-Highest to lowest priority: 0. **Org locked** -- Overrides everything, including CLI flags 0. **Org always_ask** -- Forces interactive prompt regardless
+Highest to lowest priority:
 
-1. **CLI flags** -- `--set key=value`
-2. **Env overrides** -- `ASSIGNEE_*` environment variables
-3. **Project config** -- `.assignee/config.yaml`
-4. **User config** -- `~/.config/assignee/config.yaml`
-5. **Org default** -- Remote org policy
-6. **Plugin default** -- `ResourceField.question.initialValue`
+1. **Org locked** -- Overrides everything, including CLI flags
+2. **Org always_ask** -- Forces interactive prompt regardless
+3. **CLI flags** -- `--set key=value`
+4. **Env overrides** -- `ASSIGNEE_*` environment variables
+5. **Project config** -- `.assignee/config.yaml`
+6. **User config** -- `~/.config/assignee/config.yaml`
+7. **Org default** -- Remote org policy
+8. **Plugin default** -- `ResourceField.question.initialValue`
 
 ### Config Loaders
 

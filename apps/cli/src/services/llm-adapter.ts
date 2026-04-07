@@ -195,6 +195,7 @@ export class LlmAdapter implements LlmPort {
         model,
         output: Output.object({ schema }),
         maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
+        ...this.guardrailOpts,
         messages: [{ role: "user", content: prompt }],
       }),
     );

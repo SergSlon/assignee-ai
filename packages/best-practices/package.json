@@ -18,6 +18,7 @@
     "test:coverage": "vitest run --coverage",
     "dev": "tsc --watch",
     "check-types": "tsc --noEmit",
+    "lint": "eslint src --max-warnings 0",
     "generate-manifest": "tsx scripts/generate-manifest.ts"
   },
   "dependencies": {
@@ -25,8 +26,10 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@assignee/eslint-config": "workspace:*",
     "@assignee/tsconfig": "workspace:*",
     "@types/node": "^25.5.0",
+    "eslint": "^9.39.1",
     "typescript": "^5.9.2",
     "vitest": "^3.1.0"
   }

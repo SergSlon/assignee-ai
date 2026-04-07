@@ -16,6 +16,16 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+
+/**
+ * E2E suite gate — these tests hit real AWS via the CLI graph.
+ *
+ * Opt-in only via `RUN_E2E=1` so plain `pnpm test` (and CI without the
+ * env-var) NEVER trigger real provisioning. Use `pnpm test:e2e` or
+ * `RUN_E2E=1 pnpm vitest run src/e2e/e2e-plan.test.ts` to execute.
+ */
+const RUN_E2E = process.env["RUN_E2E"] === "1";
+const describeE2E = RUN_E2E ? describe : describe.skip;
 import { createGraph } from "../services/graph.js";
 import {
   createMcpClient,
@@ -141,6 +151,8 @@ async function sweepStaleResources(): Promise<void> {
 }
 
 beforeAll(async () => {
+  // Hard gate — never execute setup unless RUN_E2E=1
+  if (!RUN_E2E) return;
   // Skip if no credentials
   if (skipIfNoCreds()) {
     console.warn(
@@ -157,6 +169,7 @@ beforeAll(async () => {
 }, 30_000);
 
 afterAll(async () => {
+  if (!RUN_E2E) return;
   await closeMcpClient().catch(() => {});
 
   // Global sweeper: clean up any stale e2e test resources left by crashed runs.
@@ -262,10 +275,8 @@ function skipIfNoCreds(): boolean {
   );
 }
 
-describe("E2E: S3 bucket plan", () => {
+describeE2E("E2E: S3 bucket plan", () => {
   it("generates a plan with pricing and BP findings", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
     const bucketName = `e2e-test-${Date.now()}`;
 
@@ -304,10 +315,8 @@ describe("E2E: S3 bucket plan", () => {
   }, 60_000);
 });
 
-describe("E2E: EC2 instance plan", () => {
+describeE2E("E2E: EC2 instance plan", () => {
   it("generates a plan with compute pricing decomposition", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -341,13 +350,11 @@ describe("E2E: EC2 instance plan", () => {
   }, 60_000);
 });
 
-describe("E2E: SSM Parameter plan + apply + destroy", () => {
+describeE2E("E2E: SSM Parameter plan + apply + destroy", () => {
   const paramName = `/e2e-test/assignee-${Date.now()}`;
   let resourceArn: string | undefined;
 
   it("plans, applies, and destroys an SSM parameter", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
     const threadId = crypto.randomUUID();
     const config = { configurable: { thread_id: threadId } };
@@ -395,7 +402,6 @@ describe("E2E: SSM Parameter plan + apply + destroy", () => {
 
   afterAll(async () => {
     // Always attempt cleanup by name — works even if test crashed before resourceArn was set
-    if (skipIfNoCreds()) return;
 
     try {
       const { SSMClient, DeleteParameterCommand } =
@@ -426,10 +432,8 @@ describe("E2E: SSM Parameter plan + apply + destroy", () => {
   }, 15_000);
 });
 
-describe("E2E: Epic 35 — Actionable Findings", () => {
+describeE2E("E2E: Epic 35 — Actionable Findings", () => {
   it("all findings have propertyPath set (Story 35.5)", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -457,8 +461,6 @@ describe("E2E: Epic 35 — Actionable Findings", () => {
   }, 60_000);
 
   it("fix_hint propagates from YAML to BPFinding (Story 35.7)", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -485,8 +487,6 @@ describe("E2E: Epic 35 — Actionable Findings", () => {
   }, 60_000);
 
   it("FixCommandResolver categories match real findings (Story 35.2)", async () => {
-    if (skipIfNoCreds()) return;
-
     const { resolveAction } = await import("../utils/fix-command-resolver.js");
 
     const graph = createGraph(tools);
@@ -498,7 +498,9 @@ describe("E2E: Epic 35 — Actionable Findings", () => {
     let existingConfig: string | undefined;
     try {
       existingConfig = fsModule.readFileSync(configPath, "utf-8");
-    } catch {}
+    } catch {
+      // No existing config — will create fresh one below.
+    }
     fsModule.mkdirSync(configDir, { recursive: true });
     fsModule.writeFileSync(
       configPath,
@@ -558,8 +560,6 @@ describe("E2E: Epic 35 — Actionable Findings", () => {
   }, 60_000);
 
   it("formatFindings produces correct output with real data (Story 35.3)", async () => {
-    if (skipIfNoCreds()) return;
-
     const { formatFindings } = await import("../utils/display.js");
 
     const graph = createGraph(tools);
@@ -599,8 +599,6 @@ describe("E2E: Epic 35 — Actionable Findings", () => {
   }, 60_000);
 
   it("autoFixEnabled flows through graph state (Story 35.6)", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -649,10 +647,8 @@ describe("E2E: Epic 35 — Actionable Findings", () => {
   });
 });
 
-describe("E2E: Auto-fix verification", () => {
+describeE2E("E2E: Auto-fix verification", () => {
   it("fix_applicator applies patches when autoFixBestPractices is enabled", async () => {
-    if (skipIfNoCreds()) return;
-
     // Create a temporary config with autoFixBestPractices: true
     const fs = await import("node:fs");
     const configDir = path.resolve(process.cwd(), ".assignee");
@@ -718,10 +714,8 @@ describe("E2E: Auto-fix verification", () => {
   }, 60_000);
 });
 
-describe("E2E: Lambda Function plan", () => {
+describeE2E("E2E: Lambda Function plan", () => {
   it("generates a plan with runtime and memory configuration", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -749,10 +743,8 @@ describe("E2E: Lambda Function plan", () => {
   }, 60_000);
 });
 
-describe("E2E: DynamoDB Table plan", () => {
+describeE2E("E2E: DynamoDB Table plan", () => {
   it("generates a plan with key schema and billing mode", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -780,10 +772,8 @@ describe("E2E: DynamoDB Table plan", () => {
   }, 60_000);
 });
 
-describe("E2E: IAM Role plan", () => {
+describeE2E("E2E: IAM Role plan", () => {
   it("generates a plan with assume role policy", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -814,10 +804,8 @@ describe("E2E: IAM Role plan", () => {
   }, 60_000);
 });
 
-describe("E2E: SQS Queue plan", () => {
+describeE2E("E2E: SQS Queue plan", () => {
   it("generates a plan with queue configuration", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -843,10 +831,8 @@ describe("E2E: SQS Queue plan", () => {
   }, 60_000);
 });
 
-describe("E2E: VPC plan", () => {
+describeE2E("E2E: VPC plan", () => {
   it("generates a plan with CIDR block and DNS settings", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -869,10 +855,8 @@ describe("E2E: VPC plan", () => {
   }, 60_000);
 });
 
-describe("E2E: CloudWatch Alarm plan", () => {
+describeE2E("E2E: CloudWatch Alarm plan", () => {
   it("generates a plan with metric and threshold", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -904,10 +888,8 @@ describe("E2E: CloudWatch Alarm plan", () => {
   }, 60_000);
 });
 
-describe("E2E: SecretsManager Secret plan", () => {
+describeE2E("E2E: SecretsManager Secret plan", () => {
   it("generates a plan with secret configuration", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -933,10 +915,8 @@ describe("E2E: SecretsManager Secret plan", () => {
   }, 60_000);
 });
 
-describe("E2E: Error handling", () => {
+describeE2E("E2E: Error handling", () => {
   it("rejects unsupported resource type with clear error", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(
@@ -963,8 +943,6 @@ describe("E2E: Error handling", () => {
   }, 60_000);
 
   it("handles malformed intent gracefully", async () => {
-    if (skipIfNoCreds()) return;
-
     const graph = createGraph(tools);
 
     const state = await graph.invoke(

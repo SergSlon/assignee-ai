@@ -233,6 +233,65 @@ describe("statusPollerNode", () => {
     expect(result.errorMessage).toMatch(/Network timeout/);
   });
 
+  // ── H10 regression: startedAt-undefined must FAIL fast ────────────────────
+  it("H10: fails fast when startedAt is undefined (no silent Date.now() fallback)", async () => {
+    // This is the bug that produced an infinite poll loop: on a self-looping
+    // LangGraph node, if startedAt was ever missing on re-entry the previous
+    // implementation would `?? Date.now()`, which reset the wall-clock budget
+    // every iteration and made the timeout guard impossible to hit.
+    const result = await statusPollerNode(
+      makeState({ startedAt: undefined }),
+      mockProvisioner,
+    );
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toBe(
+      "status_poller invoked without startedAt — graph state is corrupt",
+    );
+    // Crucially: we must NOT have called the AWS provisioner — the corrupt
+    // state is detected before any I/O.
+    expect(mockProvisioner.getRequestStatus).not.toHaveBeenCalled();
+  });
+
+  // ── H10 adjacent: dead MAX_POLL_ITERATIONS guard removed ──────────────────
+  it("H10: wall-clock timeout is the sole runaway-loop guard (dead iteration guard removed)", async () => {
+    // Previously a MAX_POLL_ITERATIONS=450 guard divided wall-clock by
+    // POLL_INTERVAL_MS (2s) to estimate iterations. Because each real
+    // iteration waits POLL_INTERVAL_MS + AWS RTT, the counter always
+    // under-counted reality and the wall-clock guard fired first — the
+    // iteration guard was dead code. We removed it; this test pins the
+    // contract that the wall-clock guard alone catches a runaway loop:
+    //
+    //   - Just under default timeout (5min - 1s): poll proceeds normally.
+    //   - Just over default timeout (5min + 1s): FAILED with the wall-clock
+    //     timeout message (NOT an iteration-count message).
+    mockProvisioner.getRequestStatus.mockResolvedValueOnce([
+      null,
+      {
+        operationStatus: "IN_PROGRESS",
+        identifier: undefined,
+        statusMessage: undefined,
+      },
+    ]);
+    const justUnder = await runPoller(
+      makeState({ startedAt: Date.now() - (5 * 60 * 1000 - 1_000) }),
+      mockProvisioner,
+    );
+    expect(justUnder.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+    expect(mockProvisioner.getRequestStatus).toHaveBeenCalledTimes(1);
+
+    const justOver = await statusPollerNode(
+      makeState({ startedAt: Date.now() - (5 * 60 * 1000 + 1_000) }),
+      mockProvisioner,
+    );
+    expect(justOver.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(justOver.errorMessage).toMatch(/timed out after 5 minutes/);
+    // The old dead guard's error string mentioned "poll iterations" — make
+    // sure no such message can ever come back.
+    expect(justOver.errorMessage).not.toMatch(/poll iterations/);
+    // No additional provisioner call from the over-timeout invocation.
+    expect(mockProvisioner.getRequestStatus).toHaveBeenCalledTimes(1);
+  });
+
   it("works for AWS::SSM::Parameter — returns SUCCESS with Identifier", async () => {
     mockProvisioner.getRequestStatus.mockResolvedValueOnce([
       null,

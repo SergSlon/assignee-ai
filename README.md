@@ -311,14 +311,11 @@ See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the full IAM policy setup
 
 ## Documentation
 
-| Document                 | Scope               | Location                                                                             |
-| ------------------------ | ------------------- | ------------------------------------------------------------------------------------ |
-| Architecture Flows       | CLI (current)       | [docs/architecture-flows.md](docs/architecture-flows.md)                             |
-| Commands Reference       | CLI (current)       | [docs/commands.md](docs/commands.md)                                                 |
-| Resource Types           | CLI (current)       | [docs/resource-types.md](docs/resource-types.md)                                     |
-| Best Practices Engine    | CLI (current)       | [docs/best-practices.md](docs/best-practices.md)                                     |
-| AWS Setup Guide          | CLI (current)       | [docs/aws-bootstrap.md](docs/aws-bootstrap.md)                                       |
-| CLI Architecture         | CLI (authoritative) | [planning: cli-architecture.md](_bmad-output/planning-artifacts/cli-architecture.md) |
-| Full Vision Architecture | SaaS (deferred)     | [planning: architecture.md](_bmad-output/planning-artifacts/architecture.md)         |
-| Product Requirements     | Both                | [planning: prd.md](_bmad-output/planning-artifacts/prd.md)                           |
-| Epics & Stories          | Both                | [planning: epics.md](_bmad-output/planning-artifacts/epics.md)                       |
+| Document              | Scope         | Location                                                 |
+| --------------------- | ------------- | -------------------------------------------------------- |
+| Documentation Index   | CLI (current) | [docs/index.md](docs/index.md)                           |
+| Architecture Flows    | CLI (current) | [docs/architecture-flows.md](docs/architecture-flows.md) |
+| Commands Reference    | CLI (current) | [docs/commands.md](docs/commands.md)                     |
+| Resource Types        | CLI (current) | [docs/resource-types.md](docs/resource-types.md)         |
+| Best Practices Engine | CLI (current) | [docs/best-practices.md](docs/best-practices.md)         |
+| AWS Setup Guide       | CLI (current) | [docs/aws-bootstrap.md](docs/aws-bootstrap.md)           |

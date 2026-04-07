@@ -1163,9 +1163,8 @@ describe("resultFormatterNode — P1-3 plan mode JSON skips promptFixSelection",
 // ── Story 37.4: Post-provision static site upload ───────────────────────────
 
 describe("resultFormatterNode — Story 37.4 static site upload", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let stdoutSpy: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let stderrSpy: any;
 
   beforeEach(() => {

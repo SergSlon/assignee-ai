@@ -5,9 +5,14 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
       BEDROCK_LOGGING_VERIFIED: ${{ secrets.BEDROCK_LOGGING_VERIFIED }}
     steps:
@@ -23,6 +28,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type-check
+        run: pnpm check-types
+
       - name: Build all packages
         run: npx turbo build
 
@@ -36,14 +47,19 @@ jobs:
             const fs = require('fs');
             const dirs = ['apps/cli', 'apps/mcp-server', 'packages/core', 'packages/best-practices'];
             let tS=0,cS=0,tB=0,cB=0,tF=0,cF=0,tL=0,cL=0;
+            const missing = [];
             for (const d of dirs) {
-              try {
-                const s = JSON.parse(fs.readFileSync(d+'/coverage/coverage-summary.json','utf-8')).total;
-                tS+=s.statements.total; cS+=s.statements.covered;
-                tB+=s.branches.total; cB+=s.branches.covered;
-                tF+=s.functions.total; cF+=s.functions.covered;
-                tL+=s.lines.total; cL+=s.lines.covered;
-              } catch {}
+              const p = d + '/coverage/coverage-summary.json';
+              if (!fs.existsSync(p)) { missing.push(p); continue; }
+              const s = JSON.parse(fs.readFileSync(p, 'utf-8')).total;
+              tS+=s.statements.total; cS+=s.statements.covered;
+              tB+=s.branches.total;   cB+=s.branches.covered;
+              tF+=s.functions.total;  cF+=s.functions.covered;
+              tL+=s.lines.total;      cL+=s.lines.covered;
+            }
+            if (missing.length) {
+              console.error('Missing coverage summaries:', missing.join(', '));
+              process.exit(1);
             }
             const pct = tL>0?((cL/tL)*100).toFixed(1):'0';
             console.log('Lines: '+pct+'%');

@@ -115,7 +115,7 @@ vi.mock("../utils/env-writer.js", () => ({
 
 // process.exit spy is installed in beforeEach so restoreMocks doesn't bring
 // the real exit back between tests.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 let mockExit: any;
 
 /**
