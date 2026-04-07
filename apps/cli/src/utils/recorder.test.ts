@@ -69,7 +69,7 @@ function createTestRecorder(
   // We override the internal dir by subclassing
   const recorder = new RecordingInterceptor(runId, command);
   // Access private dir via prototype trick — set it to our tmpDir
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   (recorder as any).dir = tmpDir;
   return { recorder, tmpDir };
 }
@@ -245,9 +245,9 @@ describe("RecordingInterceptor", () => {
   it("swallows write errors silently (never crashes CLI)", () => {
     const recorder = new RecordingInterceptor("run-err");
     // Point to an impossible path
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (recorder as any).dir = "/nonexistent/impossible/path/XXXX";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (recorder as any).dirCreated = true; // skip mkdirSync, force writeFileSync to fail
 
     expect(() =>

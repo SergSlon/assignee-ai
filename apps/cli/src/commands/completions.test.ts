@@ -35,11 +35,10 @@ async function buildTestCli() {
 }
 
 describe("completions command", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let stdoutSpy: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let stderrSpy: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let exitSpy: any;
 
   beforeEach(() => {

@@ -50,11 +50,10 @@ vi.mock("./status-bp-coverage.js", () => ({
 }));
 
 describe("status command", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let stdoutSpy: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let stderrSpy: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let exitSpy: any;
 
   beforeEach(() => {

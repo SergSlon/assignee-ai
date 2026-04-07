@@ -88,14 +88,15 @@ Add to your Windsurf MCP configuration:
 
 ## Available Tools
 
-| Tool                     | Description                           | Input                                                    |
-| :----------------------- | :------------------------------------ | :------------------------------------------------------- |
-| `plan_resource`          | Generate an infrastructure plan       | `{ description: string, region?: string, env?: string }` |
-| `apply_plan`             | Apply a previously generated plan     | `{ checkpointPath: string, confirmed: boolean }`         |
-| `list_managed_resources` | List resources managed by assignee.ai | `{ region?: string }`                                    |
-| `estimate_cost`          | Estimate monthly cost of a resource   | `{ description: string, region?: string }`               |
+| Tool                     | Description                                     | Input                                                         |
+| :----------------------- | :---------------------------------------------- | :------------------------------------------------------------ |
+| `plan_resource`          | Generate an infrastructure plan                 | `{ description: string, region?: string, env?: string }`      |
+| `apply_plan`             | Apply a previously generated plan               | `{ checkpointPath: string, confirmed: boolean }`              |
+| `list_managed_resources` | List resources managed by assignee.ai           | `{ region?: string }`                                         |
+| `estimate_cost`          | Estimate monthly cost of a resource             | `{ description: string, region?: string }`                    |
+| `destroy_resource`       | Safely tear down a managed resource by ARN/name | `{ identifier: string, region?: string, confirmed: boolean }` |
 
-> **Note:** A `destroy` tool for tearing down managed resources is not yet implemented. To remove resources, use the AWS Console or AWS CLI directly for now.
+> **Note:** `destroy_resource` requires `confirmed: true` to proceed — the calling agent must present resource details to the user and obtain explicit approval first. Resources are resolved via the Resource Groups Tagging API, deleted via CloudControl, and polled until completion. See [docs/mcp-server.md](../../docs/mcp-server.md) for the full reference.
 
 ## Environment Variables
 

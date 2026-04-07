@@ -141,12 +141,18 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
+      '@assignee/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
       '@assignee/tsconfig':
         specifier: workspace:*
         version: link:../../packages/typescript-config
       '@types/node':
         specifier: ^25.5.0
         version: 25.5.0
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
       typescript:
         specifier: ^5.9.2
         version: 5.9.2
@@ -184,12 +190,18 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
+      '@assignee/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
       '@assignee/tsconfig':
         specifier: workspace:*
         version: link:../../packages/typescript-config
       '@types/node':
         specifier: ^25.5.0
         version: 25.5.0
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
       typescript:
         specifier: ^5.9.2
         version: 5.9.2
@@ -206,12 +218,18 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@assignee/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
       '@assignee/tsconfig':
         specifier: workspace:*
         version: link:../typescript-config
       '@types/node':
         specifier: ^25.5.0
         version: 25.5.0
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
       typescript:
         specifier: ^5.9.2
         version: 5.9.2
@@ -228,12 +246,18 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@assignee/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
       '@assignee/tsconfig':
         specifier: workspace:*
         version: link:../typescript-config
       '@types/node':
         specifier: ^25.5.0
         version: 25.5.0
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
       typescript:
         specifier: ^5.9.2
         version: 5.9.2

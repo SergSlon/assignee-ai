@@ -293,7 +293,6 @@ type SdkMiddlewareFn = (
 /** AWS SDK v3 client with a middleware stack we can hook into. */
 interface SdkClientWithMiddleware {
   middlewareStack: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AWS SDK v3 middleware stack has complex overloaded signatures not worth replicating
     add: (...args: any[]) => void;
   };
 }

@@ -191,6 +191,24 @@ describe("LlmAdapter", () => {
       );
     });
 
+    // Companion to the H6 regression: ensures generateText also forwards
+    // realistic-shaped guardrail identifiers (12-char id, "DRAFT" version).
+    it("forwards realistic guardrail identifier and version for bedrock", async () => {
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+        guardrailId: "abcd1234efgh",
+        guardrailVersion: "DRAFT",
+      });
+      await adapter.generateText("Hello");
+
+      expect(generateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          guardrailIdentifier: "abcd1234efgh",
+          guardrailVersion: "DRAFT",
+        }),
+      );
+    });
+
     it("does not include guardrail opts for non-bedrock providers", async () => {
       const adapter = new LlmAdapter({
         modelString: "anthropic/claude-sonnet-4-5",
@@ -234,6 +252,39 @@ describe("LlmAdapter", () => {
       expect(err).toBeInstanceOf(LlmError);
       expect(err?.message).toContain("Structured LLM call failed");
       expect(result).toBeNull();
+    });
+
+    // Regression for H6: generateStructured was bypassing the configured
+    // Bedrock guardrail because it omitted the `...this.guardrailOpts` spread.
+    // Any node calling generateStructured (intent-parser, workload-classifier)
+    // would skip the only runtime defense against prompt-injected outputs.
+    it("includes guardrail opts for bedrock provider (H6 regression)", async () => {
+      const schema = z.object({ foo: z.string() });
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+        guardrailId: "abcd1234efgh",
+        guardrailVersion: "DRAFT",
+      });
+      await adapter.generateStructured("Parse this", schema);
+
+      expect(generateText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          guardrailIdentifier: "abcd1234efgh",
+          guardrailVersion: "DRAFT",
+        }),
+      );
+    });
+
+    it("does not include guardrail opts for non-bedrock providers", async () => {
+      const schema = z.object({ foo: z.string() });
+      const adapter = new LlmAdapter({
+        modelString: "anthropic/claude-sonnet-4-5",
+        guardrailId: "abcd1234efgh",
+      });
+      await adapter.generateStructured("Parse this", schema);
+
+      const callArgs = vi.mocked(generateText).mock.calls[0]?.[0];
+      expect(callArgs).not.toHaveProperty("guardrailIdentifier");
     });
   });
 

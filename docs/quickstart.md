@@ -4,13 +4,25 @@ Get from zero to a provisioned AWS resource in under 60 seconds.
 
 ## Install
 
-```bash
-# Global install
-npm i -g assignee
+Both `@assignee/cli` and `@assignee/mcp-server` are currently `private` and not published to npm. Build from source locally:
 
-# Or run directly without installing
-npx assignee plan "create an S3 bucket named my-app-logs"
+```bash
+git clone https://github.com/SergSlon/assignee-ai.git
+cd assignee-ai
+pnpm install
+pnpm build
+
+# Run the CLI directly from the built output
+node apps/cli/dist/index.js plan "create an S3 bucket named my-app-logs"
 ```
+
+> **Tip:** For convenience, alias the built entrypoint in your shell:
+>
+> ```bash
+> alias assignee="node $(pwd)/apps/cli/dist/index.js"
+> ```
+>
+> The remaining examples in this guide use the bare `assignee` command — substitute `node apps/cli/dist/index.js` if you skip the alias.
 
 ## Prerequisites
 

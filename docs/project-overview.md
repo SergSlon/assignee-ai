@@ -160,14 +160,15 @@ Prices are fetched at runtime from the AWS Pricing API via MCP server. Price cac
 
 ### 9. Configuration System (6-Level Precedence)
 
-From highest to lowest: 0. Org locked / Org always_ask (overrides everything)
+From highest to lowest:
 
-1. CLI flags (`--set key=value`)
-2. Env var overrides (`ASSIGNEE_*`)
-3. Project config (`.assignee/config.yaml`)
-4. User config (`~/.config/assignee/config.yaml`)
-5. Org default
-6. Plugin default
+1. Org locked / Org always_ask (overrides everything)
+2. CLI flags (`--set key=value`)
+3. Env var overrides (`ASSIGNEE_*`)
+4. Project config (`.assignee/config.yaml`)
+5. User config (`~/.config/assignee/config.yaml`)
+6. Org default
+7. Plugin default
 
 ### 10. Memory System
 
