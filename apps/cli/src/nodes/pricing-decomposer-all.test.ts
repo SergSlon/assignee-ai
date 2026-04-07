@@ -893,7 +893,9 @@ describe("Lambda pricing — filter-dispatched queryLineItemPrices (regression t
           Runtime: "nodejs20.x",
           MemorySize: 128,
           Handler: "index.handler",
-          Role: "arn:aws:iam::123456789012:role/lambda-role",
+          // Real-shaped account ID — preflight rejects 123456789012 as
+          // a docs placeholder (Phase 2 Lambda passrole bug fix).
+          Role: "arn:aws:iam::054125018476:role/lambda-role",
           Code: { ZipFile: "exports.handler = async () => {}" },
         },
       }),

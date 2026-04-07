@@ -59,7 +59,12 @@ describe("preflightGuardNode", () => {
         desiredState: {
           FunctionName: "my-fn",
           Runtime: "nodejs22.x",
-          Role: "arn:aws:iam::123456789012:role/my-role",
+          // Real-shaped account ID — 054125018476 is the test user's account.
+          // Must NOT use 123456789012 here: that's an AWS docs placeholder
+          // account and the new detectPlaceholderArn guard will (correctly)
+          // reject any desiredState containing it. See the placeholder ARN
+          // rejection test further down.
+          Role: "arn:aws:iam::054125018476:role/my-role",
         },
       }),
     );
@@ -70,6 +75,147 @@ describe("preflightGuardNode", () => {
   it("sets preflightPassed: true", async () => {
     const result = await preflightGuardNode(makeState());
     expect(result.preflightPassed).toBe(true);
+  });
+
+  // ── Placeholder ARN rejection ─────────────────────────────────────────
+  // Closes Phase 2 Lambda compound passrole bug. The LLM sometimes
+  // hallucinates `arn:aws:iam::123456789012:role/...` from AWS docs
+  // examples despite the schema-prompt warning. Previously this was
+  // only caught by AWS itself with a confusing "Cross-account pass role
+  // is not allowed" at provisioning time. Now preflight rejects it
+  // with an actionable message BEFORE CloudControl sees the value.
+  describe("placeholder ARN rejection", () => {
+    it("rejects Lambda Role with the canonical 123456789012 placeholder account", async () => {
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Role: "arn:aws:iam::123456789012:role/my-role",
+          },
+        }),
+      );
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toContain("placeholder ARN");
+      expect(result.errorMessage).toContain("123456789012");
+      expect(result.errorMessage).toContain("Role");
+      expect(result.errorMessage).toContain("AWS docs example");
+    });
+
+    it("rejects 111122223333 and 444455556666 (cross-account walkthrough placeholders)", async () => {
+      for (const account of ["111122223333", "444455556666"]) {
+        const result = await preflightGuardNode(
+          makeState({
+            resourceType: "AWS::Lambda::Function",
+            resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+            desiredState: {
+              FunctionName: "my-fn",
+              Runtime: "nodejs22.x",
+              Role: `arn:aws:iam::${account}:role/my-role`,
+            },
+          }),
+        );
+        expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+        expect(result.errorMessage).toContain(account);
+      }
+    });
+
+    it("rejects 000000000000 (unit-test fixture placeholder)", async () => {
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Role: "arn:aws:iam::000000000000:role/my-role",
+          },
+        }),
+      );
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toContain("000000000000");
+    });
+
+    it("rejects placeholder ARNs buried deep in nested desiredState objects", async () => {
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Environment: {
+              Variables: {
+                FALLBACK_ROLE: "arn:aws:iam::123456789012:role/fallback",
+              },
+            },
+          },
+        }),
+      );
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toContain(
+        "Environment.Variables.FALLBACK_ROLE",
+      );
+      expect(result.errorMessage).toContain("123456789012");
+    });
+
+    it("rejects placeholder ARNs inside an array field", async () => {
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Layers: [
+              "arn:aws:lambda:us-east-1:054125018476:layer:ok:1",
+              "arn:aws:lambda:us-east-1:123456789012:layer:bad:1",
+            ],
+          },
+        }),
+      );
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toContain("Layers[1]");
+    });
+
+    it("does NOT reject real account IDs that happen to look similar", async () => {
+      // 123456789013 is not in the placeholder set — only the canonical
+      // 123456789012 is. This guards against overly-aggressive matching.
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Role: "arn:aws:iam::123456789013:role/my-role",
+          },
+        }),
+      );
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    });
+
+    it("does NOT reject free-text fields that happen to contain 123456789012 substring", async () => {
+      // Description field is not an ARN, so the regex anchored on ^arn:
+      // must not match. Guards against false positives on user-supplied
+      // descriptions that reference the docs example account.
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Role: "arn:aws:iam::054125018476:role/my-role",
+            Description:
+              "This function handles events from account 123456789012 (see docs).",
+          },
+        }),
+      );
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    });
   });
 
   it("returns Free for IAM::Role without calling pricing tool", async () => {

@@ -35,6 +35,77 @@ import { getCachedPrice, setCachedPrice } from "../services/price-cache.js";
 import type { AgentState } from "../services/graph.js";
 import { PromiseStatus } from "../config/constants.js";
 
+/**
+ * Placeholder AWS account IDs that show up in AWS documentation examples.
+ * Any ARN containing one of these is almost certainly a hallucination from
+ * the LLM (which has seen them thousands of times in training data) rather
+ * than a real cross-account ARN the user intended. Reject at preflight so
+ * the user gets a clear actionable message instead of an opaque "Cross-
+ * account pass role is not allowed" error from CloudControl/IAM.
+ *
+ * The list is intentionally short and AWS-canonical — `123456789012` is
+ * the universal AWS docs example, `111122223333` and `444455556666` show
+ * up in cross-account walkthroughs, `000000000000` in unit-test fixtures.
+ */
+const PLACEHOLDER_AWS_ACCOUNT_IDS = new Set([
+  "123456789012",
+  "111122223333",
+  "444455556666",
+  "000000000000",
+]);
+
+/**
+ * Walks a desiredState object recursively and returns a friendly error
+ * message if any string value is an ARN containing one of the placeholder
+ * account IDs above. Returns undefined when the state is clean.
+ *
+ * Strict ARN regex (`^arn:aws[\w-]*:[\w-]*:[\w-]*:(\d{12}):`) anchors on
+ * the canonical 5-colon prefix and captures the account-ID segment to
+ * avoid false positives on free-text fields that happen to contain "123
+ * 456789012" inside a longer string.
+ */
+function detectPlaceholderArn(
+  desiredState: Record<string, unknown>,
+): string | undefined {
+  const arnAccountRegex = /^arn:aws[\w-]*:[\w-]*:[\w-]*:(\d{12}):/;
+
+  function walk(
+    value: unknown,
+    path: string,
+  ): { field: string; arn: string; account: string } | undefined {
+    if (typeof value === "string") {
+      const match = arnAccountRegex.exec(value);
+      if (match && PLACEHOLDER_AWS_ACCOUNT_IDS.has(match[1]!)) {
+        return { field: path, arn: value, account: match[1]! };
+      }
+      return undefined;
+    }
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        const found = walk(value[i], `${path}[${i}]`);
+        if (found) return found;
+      }
+      return undefined;
+    }
+    if (value && typeof value === "object") {
+      for (const [k, v] of Object.entries(value)) {
+        const found = walk(v, path ? `${path}.${k}` : k);
+        if (found) return found;
+      }
+    }
+    return undefined;
+  }
+
+  const hit = walk(desiredState, "");
+  if (!hit) return undefined;
+  return (
+    `Field "${hit.field}" contains a placeholder ARN ` +
+    `(${hit.arn}). The account ID ${hit.account} is an AWS docs example, ` +
+    `not a real account. Provide a real ARN with --set ${hit.field}=arn:aws:... ` +
+    `or omit the field entirely if the resource type allows it.`
+  );
+}
+
 export async function preflightGuardNode(
   state: AgentState,
   tools?: StructuredTool[],
@@ -51,6 +122,25 @@ export async function preflightGuardNode(
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: `Missing required fields for ${state.resourceType}: ${missingFields.join(", ")}. Include them in your intent, e.g. "Create a lambda with role arn:aws:iam::ACCOUNT_ID:role/my-role".`,
+    };
+  }
+
+  // Reject placeholder ARNs that the LLM may have hallucinated despite the
+  // explicit schema-prompt warning. The most common offender is account
+  // 123456789012 which appears in every AWS docs example. Submitting these
+  // to AWS triggers a confusing "Cross-account pass role is not allowed"
+  // (Lambda) or "User is not authorized to perform: ... on resource: arn:
+  // aws:iam::123456789012:..." (any other resource) at provisioning time,
+  // far away from where the value was generated.
+  //
+  // Closes Phase 2 Lambda compound passrole bug — surfaces the placeholder
+  // at preflight with an actionable message instead of letting it reach
+  // CloudControl.
+  const placeholderArnError = detectPlaceholderArn(desiredState);
+  if (placeholderArnError) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: placeholderArnError,
     };
   }
 
