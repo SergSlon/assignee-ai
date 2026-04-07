@@ -164,6 +164,24 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "iam:DeleteRolePolicy",
       "iam:TagRole",
       "iam:PassRole",
+      // Required by list-resources and destroy-service to enumerate
+      // managed IAM roles. AWS Resource Groups Tagging API does NOT
+      // return IAM::Role resources (it covers IAM users, groups,
+      // managed policies, server certificates, and SAML providers but
+      // not roles), so assignee falls back to a parallel iam:ListRoles
+      // + iam:ListRoleTags scan filtered by managed-by=assignee-ai.
+      // Without these permissions, freshly-created roles are invisible
+      // to `assignee list` and `assignee destroy --all`.
+      "iam:ListRoles",
+      "iam:ListRoleTags",
+      // Required by CloudControl DeleteResource(AWS::IAM::Role) to
+      // enumerate and detach all attached/inline policies before
+      // deleting the role itself. Without these the destroy path
+      // fails with "is not authorized to perform: iam:ListRolePolicies
+      // on resource: role X" even though the role has no policies.
+      "iam:ListRolePolicies",
+      "iam:ListAttachedRolePolicies",
+      "iam:GetRolePolicy",
     ],
     [RESOURCE_TYPES.EC2_SUBNET]: [
       "ec2:CreateSubnet",

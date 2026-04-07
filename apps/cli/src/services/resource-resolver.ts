@@ -11,6 +11,10 @@ import {
   type ResourceTagMapping,
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
+import {
+  fetchManagedIamRoles,
+  getManagedIamRoleByArn,
+} from "./iam-role-inventory.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import {
   ArnPrefix,
@@ -307,6 +311,23 @@ async function resolveByArn(
   taggingClient: ResourceGroupsTaggingAPIClient,
   defaultRegion: string,
 ): Promise<ResolvedResource | null> {
+  // IAM::Role: Resource Groups Tagging API does NOT return roles, so
+  // fall through to a direct iam:GetRole + iam:ListRoleTags lookup
+  // before scanning RGTA. See iam-role-inventory.ts.
+  if (/^arn:aws:iam::\d+:role\//.test(arn)) {
+    const role = await getManagedIamRoleByArn(arn);
+    if (role) {
+      return {
+        arn: role.arn,
+        resourceType: RESOURCE_TYPES.IAM_ROLE,
+        region: defaultRegion,
+        tags: role.tags,
+        identifier: role.roleName,
+      };
+    }
+    return null;
+  }
+
   // Query tagging API for this specific ARN with managed-by filter
   let paginationToken: string | undefined;
   do {
@@ -428,6 +449,31 @@ async function resolveByName(
   taggingClient: ResourceGroupsTaggingAPIClient,
   defaultRegion: string,
 ): Promise<ResolvedResource | null> {
+  // IAM::Role byName fallback: RGTA does not return IAM roles, so
+  // also walk iam:ListRoles + iam:ListRoleTags. We do this BEFORE
+  // the RGTA scan so that an IAM role and a non-IAM resource with
+  // the same name resolve to the IAM role first only when the user
+  // typed an IAM-shaped name (e.g. underscore-only naming wouldn't
+  // collide with S3 bucket DNS rules). The simplest correct path
+  // is to scan IAM, then fall through to RGTA if nothing matches.
+  try {
+    const iamRoles = await fetchManagedIamRoles();
+    for (const role of iamRoles) {
+      if (role.roleName === name || role.arn === name) {
+        return {
+          arn: role.arn,
+          resourceType: RESOURCE_TYPES.IAM_ROLE,
+          region: defaultRegion,
+          tags: role.tags,
+          identifier: role.roleName,
+        };
+      }
+    }
+  } catch {
+    // Non-fatal: fall through to RGTA scan. The list command emits
+    // a clearer warning when iam:ListRoles is missing.
+  }
+
   let paginationToken: string | undefined;
   do {
     const response = await taggingClient.send(

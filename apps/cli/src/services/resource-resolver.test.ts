@@ -19,6 +19,23 @@ vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
   };
 });
 
+// Mock the IAM role inventory helper so RGTA-only tests don't try to
+// construct a real IAMClient and hit real AWS during test runs.
+// vi.hoisted is required because vi.mock is hoisted above const decls
+// — naked top-level consts would not be initialized when the factory
+// runs.
+const { mockFetchManagedIamRoles, mockGetManagedIamRoleByArn } = vi.hoisted(
+  () => ({
+    mockFetchManagedIamRoles: vi.fn(),
+    mockGetManagedIamRoleByArn: vi.fn(),
+  }),
+);
+vi.mock("./iam-role-inventory.js", () => ({
+  fetchManagedIamRoles: mockFetchManagedIamRoles,
+  getManagedIamRoleByArn: mockGetManagedIamRoleByArn,
+  IAM_ROLE_RESOURCE_TYPE: "AWS::IAM::Role",
+}));
+
 import { resolveResource } from "./resource-resolver.js";
 
 // Create a mock tagging client (the constructor is mocked, so it uses mockSend)
@@ -28,6 +45,9 @@ const taggingClient = new (
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: empty IAM inventory. Specific IAM tests override.
+  mockFetchManagedIamRoles.mockResolvedValue([]);
+  mockGetManagedIamRoleByArn.mockResolvedValue(null);
 });
 
 describe("resolveResource", () => {

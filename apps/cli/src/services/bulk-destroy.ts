@@ -82,6 +82,34 @@ const DEFAULT_TIER = 3;
 const IAM_TYPE_PREFIX = "AWS::IAM::";
 
 /**
+ * IAM resources that belong to assignee.ai's own operator infrastructure
+ * and must NEVER be destroyed by `destroy --all --include-iam`. These are
+ * created by `assignee setup` and removing them locks the user out of
+ * their own AWS account / breaks every subsequent assignee command.
+ *
+ * Anchored regex on the ARN's resource name (the segment after the last
+ * `/`). The leading `^` and trailing `$` are mandatory — a substring
+ * match would over-protect roles like `MyAssigneeOperatorPolicyClone`.
+ */
+const ASSIGNEE_INFRA_NAME_PATTERN =
+  /^Assignee(Ai)?(Operator|Reader|Auditor|Bedrock\w*)?(Policy|Role|User|Group)?$/;
+
+/**
+ * Returns true when the given ARN points at one of assignee.ai's own
+ * setup-created IAM resources. Used as a safety filter in
+ * planBulkDestroy so an `--include-iam` sweep cannot self-destruct
+ * the operator/reader/auditor policies the CLI itself depends on.
+ */
+export function isAssigneeInfraResource(arn: string): boolean {
+  // ARN format examples:
+  //   arn:aws:iam::123:policy/AssigneeOperatorPolicy
+  //   arn:aws:iam::123:role/AssigneeAiBedrockLoggingRole
+  if (!arn.startsWith("arn:aws:iam::")) return false;
+  const lastSegment = arn.split("/").pop() ?? "";
+  return ASSIGNEE_INFRA_NAME_PATTERN.test(lastSegment);
+}
+
+/**
  * Extracts a human-readable identifier from an ARN.
  *
  * Examples:
@@ -186,14 +214,29 @@ export function buildPlanFromResources(
       iamCount++;
     }
 
+    // Safety allowlist: never destroy assignee.ai's own setup-created
+    // operator infrastructure, even when --include-iam is set. These
+    // resources (AssigneeOperatorPolicy, AssigneeReaderPolicy, etc.)
+    // are created by `assignee setup` and removing them locks the
+    // user out of their own AWS account.
+    if (isAssigneeInfraResource(arn)) {
+      excludedCount++;
+      continue;
+    }
+
     // Filter: IAM exclusion (unless opted-in)
     if (iam && !includeIam) {
       excludedCount++;
       continue;
     }
 
-    // Filter: region
-    if (regionFilter && region !== regionFilter) {
+    // Filter: region. IAM is a global service — its resources carry
+    // region="global" in the inventory, which would otherwise be
+    // filtered out by any region scope. Skip the region check for
+    // global resources so `destroy --all --include-iam` actually
+    // includes user IAM roles regardless of operator region.
+    const isGlobalService = region === "global";
+    if (regionFilter && !isGlobalService && region !== regionFilter) {
       excludedCount++;
       continue;
     }
