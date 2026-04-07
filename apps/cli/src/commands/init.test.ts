@@ -293,6 +293,22 @@ describe("assignee init command", () => {
         .mocked(clack.log.info)
         .mock.calls.map((c) => String(c[0]));
       expect(infoCalls.some((m) => m.includes("assignee setup"))).toBe(true);
+      // The hint must mention the AWS_ACCESS_KEY_ID fallback (auto-promoted by
+      // command-runner) AND clarify that AWS_PROFILE alone is unsupported, so
+      // the init story stays coherent with command-runner's actual behavior.
+      expect(
+        infoCalls.some(
+          (m) =>
+            m.includes("AWS_ACCESS_KEY_ID") &&
+            m.includes("AWS_SECRET_ACCESS_KEY"),
+        ),
+      ).toBe(true);
+      expect(
+        infoCalls.some(
+          (m) =>
+            m.includes("AWS_PROFILE") && m.includes("not currently supported"),
+        ),
+      ).toBe(true);
       expect(
         infoCalls.some((m) => m.includes("Assignee roles available: none")),
       ).toBe(true);

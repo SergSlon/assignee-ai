@@ -159,21 +159,30 @@ function resolveActiveLogFile(dir: string, day: string): string {
 /**
  * Returns true when the user has opted-in to verbose / structured log output.
  *
- * Checked (in priority order):
- *   1. `--verbose` CLI flag
- *   2. `ASSIGNEE_VERBOSITY=verbose` environment variable
- *   3. `ASSIGNEE_LOG_LEVEL=debug` environment variable
+ * Precedence (highest-priority first):
+ *   1. `--verbose` CLI flag (registered as a global option on the root
+ *      `assignee` program in apps/cli/src/index.ts). The flag is also
+ *      propagated into `ASSIGNEE_LOG_LEVEL=debug` via a `preSubcommand` hook
+ *      so child processes and MCP servers inherit the verbose setting.
+ *   2. `ASSIGNEE_LOG_LEVEL=debug` environment variable
+ *   3. `ASSIGNEE_VERBOSITY=verbose` environment variable
+ *
+ * The CLI flag always wins: setting `--verbose` enables verbose mode even
+ * when the env vars are unset or set to a non-verbose value.
  *
  * Without an explicit opt-in, info-level structured logs are suppressed so
  * they never leak into stdout/stderr and pollute user-facing output.
  * error/warn events are persisted regardless — see `appendPersistent`.
  */
 function isVerbose(): boolean {
+  // CLI flag wins — scan process.argv directly so the check works even when
+  // called before commander has finished parsing (e.g. from module-level
+  // bootstrap code that runs before `program.parseAsync`).
   if (process.argv.includes("--verbose")) return true;
-  const verbosity = process.env[EnvVar.ASSIGNEE_VERBOSITY];
-  if (verbosity === "verbose") return true;
   const logLevel = process.env[EnvVar.ASSIGNEE_LOG_LEVEL];
   if (logLevel === "debug") return true;
+  const verbosity = process.env[EnvVar.ASSIGNEE_VERBOSITY];
+  if (verbosity === "verbose") return true;
   return false;
 }
 

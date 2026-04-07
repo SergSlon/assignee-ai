@@ -481,6 +481,67 @@ describe("logger", () => {
     expect(fsSync.readFileSync(r1, "utf-8")).toBe("y".repeat(200));
   });
 
+  it("REGRESSION: --verbose CLI flag enables verbose mode when all env vars are unset", () => {
+    // Simulate `assignee --verbose plan ...` with no verbose env vars set.
+    // The CLI flag alone must enable verbose output — this guards the
+    // documented precedence rule (CLI flag > ASSIGNEE_LOG_LEVEL > ASSIGNEE_VERBOSITY).
+    delete process.env["ASSIGNEE_VERBOSITY"];
+    delete process.env["ASSIGNEE_LOG_LEVEL"];
+    process.argv = [
+      "/usr/local/bin/node",
+      "/usr/local/bin/assignee",
+      "--verbose",
+      "plan",
+      "Create an SSM parameter named app-api-key",
+    ];
+
+    const event: LogEvent = {
+      ts: "2026-04-06T12:00:00.000Z",
+      runId: "7f4e9c1a-2d4b-4c8a-9f1e-3b2d5e8a1f09",
+      level: "info",
+      action: LOG_ACTIONS.PLAN_STARTED,
+      extras: { intent: "Create an SSM parameter named app-api-key" },
+    };
+
+    log(event);
+
+    expect(stderrSpy).toHaveBeenCalledOnce();
+    const written = stderrSpy.mock.calls[0]?.[0] as string;
+    const parsed = JSON.parse(written) as LogEvent;
+    expect(parsed.action).toBe("plan_started");
+    expect(parsed.runId).toBe("7f4e9c1a-2d4b-4c8a-9f1e-3b2d5e8a1f09");
+    expect((parsed.extras as Record<string, unknown>)["intent"]).toBe(
+      "Create an SSM parameter named app-api-key",
+    );
+  });
+
+  it("REGRESSION: CLI flag beats ASSIGNEE_VERBOSITY=normal (flag takes precedence)", () => {
+    // Operator set ASSIGNEE_VERBOSITY=normal in their shell profile, but
+    // passes --verbose on the command line to debug a single run. The CLI
+    // flag must win.
+    process.env["ASSIGNEE_VERBOSITY"] = "normal";
+    delete process.env["ASSIGNEE_LOG_LEVEL"];
+    process.argv = [
+      "/usr/local/bin/node",
+      "/usr/local/bin/assignee",
+      "--verbose",
+      "apply",
+      "--yes",
+      "Create an S3 bucket named audit-logs-2026",
+    ];
+
+    const event: LogEvent = {
+      ts: "2026-04-06T12:00:00.000Z",
+      runId: "c3d2f8a1-9e4b-4d6c-b7a8-1e0f9d3c5b6a",
+      level: "info",
+      action: LOG_ACTIONS.APPLY_STARTED,
+    };
+
+    log(event);
+
+    expect(stderrSpy).toHaveBeenCalledOnce();
+  });
+
   it("LOG_ACTIONS contains expected action names", () => {
     expect(LOG_ACTIONS.PLAN_STARTED).toBe("plan_started");
     expect(LOG_ACTIONS.APPLY_SUCCEEDED).toBe("apply_succeeded");

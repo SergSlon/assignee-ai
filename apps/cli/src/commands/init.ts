@@ -317,8 +317,10 @@ export const initCommand = new Command(CommandName.INIT)
         "No AWS credentials detected. The project config will still be created.",
       );
       clack.log.info(
-        "Next steps: run `assignee setup` to create IAM users, " +
-          "or export AWS_PROFILE / ASSIGNEE_OPERATOR_ACCESS_KEY_ID before running `assignee plan`.",
+        "Next: run `assignee setup` to create least-privilege IAM users (recommended), " +
+          "OR export `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` before running `assignee plan`. " +
+          "Note: `AWS_PROFILE` alone is not currently supported — use explicit env vars or run " +
+          "`assignee setup` to create role-specific credentials.",
       );
     }
 

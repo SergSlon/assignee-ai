@@ -74,7 +74,10 @@ When this rule fires, the fix is applied by merging `desiredStatePatch` into the
 | BP-S3-008 | Ownership controls enforced         | HIGH     | security    | Sets `OwnershipControls.Rules[0].ObjectOwnership` to `BucketOwnerEnforced` (disables ACLs)               |
 | BP-S3-010 | Lifecycle configuration recommended | HIGH     | cost        | Adds lifecycle rules (Id: `assignee-default-lifecycle`, STANDARD_IA at 30d, GLACIER at 90d, expire 365d) |
 
-**Lifecycle expiration validation:** At prompt time, expiration values <= 30 days are rejected. In `assembleS3Composites`, `ExpirationInDays` is clamped to be greater than the highest `TransitionInDays` value (AWS requires expiration > transition days), with a warning emitted to stderr when clamping occurs.
+**Lifecycle expiration validation runs at two stages:**
+
+1. **At prompt time** — values ≤ 30 days are rejected with an error.
+2. **At assembly time** (in `assembleS3Composites`) — `ExpirationInDays` is clamped above the highest `TransitionInDays` value, since AWS requires expiration to exceed all transitions. A warning prints to stderr when this clamp fires.
 
 **CORS defaults:** When CORS is enabled, `AllowedHeaders` defaults to `["*"]`.
 

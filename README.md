@@ -23,7 +23,7 @@ Also available as an [MCP server](#mcp-server) for AI coding agents (Claude Code
 
 ## How it works
 
-1. **Plan** — describe intent in plain English; the LLM parses it, fetches the CloudFormation schema, evaluates best practices, and interactively elicits resource options before generating a validated `desiredState` JSON with a cost estimate
+1. **Plan** — Describe your intent in plain English. The LLM parses the intent, fetches the CloudFormation schema, and elicits resource options through an interactive wizard. It then generates a validated `desiredState` JSON, evaluates best-practice rules, and produces a cost estimate.
 2. **Approve** — review the plan in the terminal and confirm (HITL)
 3. **Apply** — Cloud Control API (or SDK fallback) provisions the resource; tags are injected, State Guard prevents stale-plan overwrites, status is polled until terminal state, and results are written to memory
 
@@ -61,7 +61,7 @@ All AI calls stay local — no AWS credentials ever leave your machine.
 
 ### Prerequisites
 
-- Node.js 22+
+- Node.js 20.11+
 - pnpm 10+
 - Python 3.10+ with `uvx` (`pip install uv`)
 - Three IAM users with the policies below (full setup: [docs/aws-bootstrap.md](docs/aws-bootstrap.md))

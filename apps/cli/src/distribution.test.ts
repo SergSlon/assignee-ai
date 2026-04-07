@@ -42,9 +42,9 @@ describe("Distribution package configuration", () => {
     }
   });
 
-  it("has engines.node >= 20", () => {
+  it("has engines.node >= 20.11", () => {
     expect(pkg.engines).toBeDefined();
-    expect(pkg.engines.node).toBe(">=20.0.0");
+    expect(pkg.engines.node).toBe(">=20.11");
   });
 
   it("has repository field", () => {

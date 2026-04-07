@@ -4,7 +4,16 @@ All commands follow the pattern: `assignee <command> [args] [options]`
 
 Global options: `--version`, `--help`, `--verbose`
 
-The `--verbose` flag can be passed to any command. When set, structured JSON logs are written to stderr. Without it, logs are suppressed so they never pollute terminal output. You can also enable verbose output via `ASSIGNEE_VERBOSITY=verbose` or `ASSIGNEE_LOG_LEVEL=debug` environment variables.
+The `--verbose` flag is registered on the root program and must appear **before** the subcommand name (the same rule as `--version` and `--help`):
+
+```bash
+assignee --verbose plan "Create an SSM parameter named test"
+assignee --verbose apply --yes "Create an S3 bucket named audit-logs"
+```
+
+When set, structured JSON diagnostic logs are written to stderr. Without it, info-level logs are suppressed so they never pollute terminal output (`warn`/`error` events are still persisted to `~/.assignee/logs/cli-YYYY-MM-DD.jsonl` regardless). You can also enable verbose output via `ASSIGNEE_LOG_LEVEL=debug` or `ASSIGNEE_VERBOSITY=verbose` environment variables — the CLI flag has the highest priority. See [configuration.md](./configuration.md#--verbose-flag) for the full precedence rules.
+
+> **Note:** `assignee drift` has a local `--verbose` option that controls drift-table verbosity (showing all fields including matching ones). To get JSON diagnostic logs during a drift run, pass the global flag first: `assignee --verbose drift`. Both can be combined: `assignee --verbose drift --verbose`.
 
 ## Exit Codes
 

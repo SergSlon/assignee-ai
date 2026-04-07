@@ -2,7 +2,7 @@
 
 AI-native AWS infrastructure provisioning via MCP (Model Context Protocol). Plan, estimate, and deploy AWS resources using natural language from any AI coding agent.
 
-> **Status:** This package is currently `private` and not published to npm. All instructions below use local paths. Once the package is published, `npx @assignee/mcp-server` will also work — see the [After Publish](#after-publish-coming-soon) section.
+> **Status:** Not yet published to npm. The instructions below use local paths from a cloned repo; an npm-based install will replace them once the package is published.
 
 ## Prerequisites
 
@@ -128,26 +128,33 @@ The MCP sub-servers (CloudFormation, pricing, knowledge base) may not have initi
 - Restart your AI agent after modifying MCP configuration
 - Check agent logs for MCP connection errors
 
-## After Publish (Coming Soon)
+## After publish (coming soon)
 
-Once the package is published to npm, you will be able to use `npx` instead of a local path:
+Once `@assignee/mcp-server` is published to npm, the local-path `args` shown above can be replaced with an `npx` invocation, no clone required:
 
-```bash
-# Claude Code
-claude mcp add assignee-ai -- npx @assignee/mcp-server
-
-# Or in any agent's MCP config:
+```json
 {
-  "command": "npx",
-  "args": ["@assignee/mcp-server"]
+  "mcpServers": {
+    "assignee-ai": {
+      "command": "npx",
+      "args": ["-y", "@assignee/mcp-server"],
+      "env": {
+        "AWS_REGION": "us-east-1",
+        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID": "your-key",
+        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY": "your-secret"
+      }
+    }
+  }
 }
 ```
 
-A global install option will also be available:
+Equivalently, from a shell:
 
 ```bash
-npm install -g @assignee/mcp-server
+npx @assignee/mcp-server
 ```
+
+The package stays `private` until the CLI is approved for release — see the project's [no-public-artifacts policy](../../CLAUDE.md).
 
 ## Links
 
