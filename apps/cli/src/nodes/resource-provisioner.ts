@@ -70,6 +70,11 @@ export async function resourceProvisionerNode(
     };
   }
 
+  // Item F: LangGraph nodes must not mutate input state in place. Work on a
+  // shallow clone of state.desiredState and return it via the reducer below.
+  // The original state.desiredState reference is preserved unchanged.
+  const desiredState: Record<string, unknown> = { ...state.desiredState };
+
   // ── SDK Fallback Dispatch (Story 7.7) ────────────────────────────────────
   // Check for CCAPI gap types BEFORE the CloudControl path.
   if (state.resourceType && fallbackDispatcher) {
@@ -114,12 +119,8 @@ export async function resourceProvisionerNode(
       // SNS Subscriptions do NOT support tags at creation time
       const desiredStateForSdk =
         state.resourceType === CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING
-          ? injectMandatoryTags(
-              state.desiredState,
-              state.runId,
-              state.resourceType,
-            )
-          : state.desiredState;
+          ? injectMandatoryTags(desiredState, state.runId, state.resourceType)
+          : desiredState;
 
       if (
         state.resourceType === CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING
@@ -143,9 +144,7 @@ export async function resourceProvisionerNode(
       }
 
       if (state.resourceType === CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION) {
-        const [err, result] = await fallbackDispatcher.subscribe(
-          state.desiredState,
-        );
+        const [err, result] = await fallbackDispatcher.subscribe(desiredState);
         if (err) {
           return {
             executionStatus: ExecutionStatus.FAILED,
@@ -181,7 +180,7 @@ export async function resourceProvisionerNode(
 
   const identifier = skipStateGuard
     ? undefined
-    : getPrimaryIdentifier(state.resourceType, state.desiredState);
+    : getPrimaryIdentifier(state.resourceType, desiredState);
 
   if (identifier) {
     const [stateGuardErr] = await provisioner.getResource(
@@ -241,7 +240,7 @@ export async function resourceProvisionerNode(
   // previously-allocated EIP tagged with this runId instead of leaking a new one.
   if (
     state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
-    state.desiredState[CfnKey.ALLOCATION_ID] === EIP_AUTO_ALLOCATE
+    desiredState[CfnKey.ALLOCATION_ID] === EIP_AUTO_ALLOCATE
   ) {
     try {
       const {
@@ -280,8 +279,18 @@ export async function resourceProvisionerNode(
             },
           });
         }
-      } catch {
+      } catch (err) {
         // DescribeAddresses failure is non-fatal — fall through to allocate a new EIP
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
+          extras: {
+            phase: "describe_addresses_eip_reuse",
+            error: String(err),
+          },
+        });
       }
 
       if (!allocationId) {
@@ -304,12 +313,23 @@ export async function resourceProvisionerNode(
               Tags: [{ Key: "assignee:runId", Value: state.runId }],
             }),
           );
-        } catch {
+        } catch (err) {
           // Tagging failure is non-fatal — EIP is still usable
+          log({
+            ts: new Date().toISOString(),
+            runId: state.runId,
+            level: "info",
+            action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+            extras: {
+              phase: "tag_eip",
+              allocationId,
+              error: String(err),
+            },
+          });
         }
       }
 
-      state.desiredState[CfnKey.ALLOCATION_ID] = allocationId;
+      desiredState[CfnKey.ALLOCATION_ID] = allocationId;
     } catch (eipErr: unknown) {
       const errMsg = eipErr instanceof Error ? eipErr.message : String(eipErr);
       return {
@@ -325,7 +345,7 @@ export async function resourceProvisionerNode(
   let sshKeyCreatedName: string | undefined;
   if (
     state.resourceType === RESOURCE_TYPES.EC2_INSTANCE &&
-    state.desiredState[CfnKey.KEY_NAME] === ResourceDefault.SSH_KEY_PLACEHOLDER
+    desiredState[CfnKey.KEY_NAME] === ResourceDefault.SSH_KEY_PLACEHOLDER
   ) {
     try {
       const { EC2Client, CreateKeyPairCommand, DescribeKeyPairsCommand } =
@@ -396,13 +416,13 @@ export async function resourceProvisionerNode(
         extras: { sshKeyError: errMsg },
       });
       // Remove KeyName so CloudControl doesn't fail referencing a missing key
-      delete state.desiredState[CfnKey.KEY_NAME];
+      delete desiredState[CfnKey.KEY_NAME];
     }
   }
 
   // ── Inject mandatory tags (NFR-14) ───────────────────────────────────────
   const propertiesWithTags = injectMandatoryTags(
-    state.desiredState,
+    desiredState,
     state.runId,
     state.resourceType,
   );
@@ -440,8 +460,8 @@ export async function resourceProvisionerNode(
     // Release EIP if we allocated one for NatGateway — best-effort cleanup
     if (
       state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
-      state.desiredState[CfnKey.ALLOCATION_ID] &&
-      state.desiredState[CfnKey.ALLOCATION_ID] !== EIP_AUTO_ALLOCATE
+      desiredState[CfnKey.ALLOCATION_ID] &&
+      desiredState[CfnKey.ALLOCATION_ID] !== EIP_AUTO_ALLOCATE
     ) {
       try {
         const { EC2Client, ReleaseAddressCommand } =
@@ -452,11 +472,22 @@ export async function resourceProvisionerNode(
         });
         await ec2.send(
           new ReleaseAddressCommand({
-            AllocationId: state.desiredState[CfnKey.ALLOCATION_ID] as string,
+            AllocationId: desiredState[CfnKey.ALLOCATION_ID] as string,
           }),
         );
-      } catch {
-        /* best-effort cleanup */
+      } catch (err) {
+        // best-effort cleanup — surface as info so operators can diagnose EIP leaks
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+          extras: {
+            phase: "release_eip_after_failure",
+            allocationId: desiredState[CfnKey.ALLOCATION_ID],
+            error: String(err),
+          },
+        });
       }
     }
     // Delete SSH key pair if we created one — best-effort cleanup
@@ -471,8 +502,19 @@ export async function resourceProvisionerNode(
         await ec2.send(
           new DeleteKeyPairCommand({ KeyName: sshKeyCreatedName }),
         );
-      } catch {
-        /* best-effort cleanup */
+      } catch (err) {
+        // best-effort cleanup — surface as info so operators can diagnose key leaks
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+          extras: {
+            phase: "delete_ssh_key_after_failure",
+            sshKeyName: sshKeyCreatedName,
+            error: String(err),
+          },
+        });
       }
     }
 
@@ -505,5 +547,8 @@ export async function resourceProvisionerNode(
     requestToken: createResult.requestToken,
     executionStatus: ExecutionStatus.IN_PROGRESS,
     startedAt: Date.now(),
+    // Item F: surface the (possibly mutated) clone via the reducer instead
+    // of in-place mutation of state.desiredState.
+    desiredState,
   };
 }

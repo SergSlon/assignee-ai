@@ -130,9 +130,20 @@ export async function preflightGuardNode(
         },
       });
     }
-  } catch {
+  } catch (err) {
     // Non-blocking: free tier detection failure must never prevent plan/apply
     freeTierNote = undefined;
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.FREE_TIER_DETECTED,
+      extras: {
+        result: "skipped_on_error",
+        resourceType: state.resourceType,
+        error: String(err),
+      },
+    });
   }
 
   // Story 9.10: Parallel fan-out — pricing query and IAM pre-check run concurrently.

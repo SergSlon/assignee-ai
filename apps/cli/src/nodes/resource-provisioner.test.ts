@@ -843,7 +843,7 @@ describe("resourceProvisionerNode", () => {
 
       // Verify EIP was allocated
       expect(mockEc2Send).toHaveBeenCalledTimes(3); // Describe + Allocate + CreateTags
-      expect(state.desiredState!["AllocationId"]).toBe("eipalloc-new-001");
+      expect(result.desiredState!["AllocationId"]).toBe("eipalloc-new-001");
 
       // Verify CreateTags was called to tag the EIP for retry tracking
       const createTagsCall = mockEc2Send.mock.calls[2]![0] as {
@@ -875,7 +875,9 @@ describe("resourceProvisionerNode", () => {
 
       // Should NOT have called AllocateAddress — only DescribeAddresses
       expect(mockEc2Send).toHaveBeenCalledTimes(1);
-      expect(state.desiredState!["AllocationId"]).toBe("eipalloc-existing-999");
+      expect(result.desiredState!["AllocationId"]).toBe(
+        "eipalloc-existing-999",
+      );
 
       // Verify DescribeAddresses filter used the runId tag
       const describeCall = mockEc2Send.mock.calls[0]![0] as {
@@ -908,7 +910,9 @@ describe("resourceProvisionerNode", () => {
       const result = await resourceProvisionerNode(state, mockProvisioner);
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
-      expect(state.desiredState!["AllocationId"]).toBe("eipalloc-fallback-001");
+      expect(result.desiredState!["AllocationId"]).toBe(
+        "eipalloc-fallback-001",
+      );
     });
 
     it("releases EIP on CloudControl failure (best-effort cleanup)", async () => {
@@ -1052,7 +1056,7 @@ describe("resourceProvisionerNode", () => {
       const result = await resourceProvisionerNode(state, mockProvisioner);
 
       // KeyName should be removed so CloudControl doesn't fail
-      expect(state.desiredState!["KeyName"]).toBeUndefined();
+      expect(result.desiredState!["KeyName"]).toBeUndefined();
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     });
 
@@ -1071,7 +1075,7 @@ describe("resourceProvisionerNode", () => {
       const result = await resourceProvisionerNode(state, mockProvisioner);
 
       // Should have caught the rethrown error — KeyName removed, provision continues
-      expect(state.desiredState!["KeyName"]).toBeUndefined();
+      expect(result.desiredState!["KeyName"]).toBeUndefined();
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       // Should NOT have tried CreateKeyPair
       expect(mockEc2Send).toHaveBeenCalledTimes(1);
@@ -1093,7 +1097,7 @@ describe("resourceProvisionerNode", () => {
       const result = await resourceProvisionerNode(state, mockProvisioner);
 
       // Empty KeyMaterial triggers an error — KeyName removed
-      expect(state.desiredState!["KeyName"]).toBeUndefined();
+      expect(result.desiredState!["KeyName"]).toBeUndefined();
       expect(mockWriteFileSync).not.toHaveBeenCalled();
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     });
@@ -1153,6 +1157,122 @@ describe("resourceProvisionerNode", () => {
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(mockEc2Send).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── LangGraph state immutability contract (Item F) ──────────────────────────
+  // LangGraph nodes MUST return new state objects via the reducer and never
+  // mutate the input state in place. resource-provisioner.ts currently violates
+  // this in two places:
+  //   1. EIP allocation path: `state.desiredState[CfnKey.ALLOCATION_ID] = ...`
+  //   2. SSH key failure path: `delete state.desiredState[CfnKey.KEY_NAME]`
+  //
+  // These tests are SKIPPED until Item F lands the code fix. Once the
+  // resource-provisioner returns a cloned desiredState (via the partial
+  // update returned to the reducer) instead of mutating the input, unskip
+  // these tests by changing `it.skip` to `it`.
+  describe("LangGraph state immutability (Item F)", () => {
+    it("EIP allocation must NOT mutate the input state.desiredState in place", async () => {
+      // DescribeAddresses returns no existing EIPs, then AllocateAddress + CreateTags succeed
+      mockEc2Send
+        .mockResolvedValueOnce({ Addresses: [] })
+        .mockResolvedValueOnce({ AllocationId: "eipalloc-immut-001" })
+        .mockResolvedValueOnce({});
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "natgw-immut-token" },
+      ]);
+
+      const state = makeState({
+        resourceType: "AWS::EC2::NatGateway",
+        runId: "run-natgw-immut-001",
+        desiredState: {
+          SubnetId: "subnet-abc123",
+          AllocationId: EIP_AUTO_ALLOCATE,
+        },
+      });
+
+      // Capture references and a deep clone BEFORE invoking the node
+      const originalDesiredStateRef = state.desiredState;
+      const originalDesiredStateClone = structuredClone(state.desiredState);
+
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      // Sanity: provisioning succeeded
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+
+      // Identity check: the input desiredState reference must be untouched
+      expect(state.desiredState).toBe(originalDesiredStateRef);
+
+      // Deep equality: the input desiredState contents must be unchanged —
+      // AllocationId must STILL be the placeholder, NOT the resolved id
+      expect(state.desiredState).toEqual(originalDesiredStateClone);
+      expect(state.desiredState![CfnKey.ALLOCATION_ID]).toBe(EIP_AUTO_ALLOCATE);
+
+      // Once the code fix lands, the node should expose the resolved
+      // AllocationId via a returned `desiredState` partial (or equivalent
+      // mechanism) — assert it is a NEW object, not the same reference.
+      const returnedDesired = (
+        result as { desiredState?: Record<string, unknown> }
+      ).desiredState;
+      expect(returnedDesired).toBeDefined();
+      expect(returnedDesired).not.toBe(originalDesiredStateRef);
+      expect(returnedDesired![CfnKey.ALLOCATION_ID]).toBe("eipalloc-immut-001");
+    });
+
+    it("SSH key failure path must NOT delete KeyName from input state.desiredState in place", async () => {
+      // DescribeKeyPairs returns "not found", CreateKeyPair fails — triggers
+      // the `delete state.desiredState[CfnKey.KEY_NAME]` mutation.
+      const notFoundErr = new Error("Key pair not found");
+      (notFoundErr as { name: string }).name = "InvalidKeyPair.NotFound";
+      mockEc2Send
+        .mockRejectedValueOnce(notFoundErr)
+        .mockRejectedValueOnce(new Error("AccessDenied"));
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "ec2-immut-token" },
+      ]);
+
+      const state = makeState({
+        resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+        userIntent: "Create an EC2 instance I can SSH into",
+        desiredState: {
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          KeyName: ResourceDefault.SSH_KEY_PLACEHOLDER,
+          MetadataOptions: { HttpTokens: "required" },
+        },
+      });
+
+      // Capture references BEFORE invoking the node
+      const originalDesiredStateRef = state.desiredState;
+      const originalDesiredStateClone = structuredClone(state.desiredState);
+
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      // Sanity: provisioning continued past the SSH key failure
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+
+      // Identity check: the input desiredState reference must be untouched
+      expect(state.desiredState).toBe(originalDesiredStateRef);
+
+      // Deep equality: KeyName must STILL be present on the input — the
+      // delete operation must NOT have propagated to the original state.
+      expect(state.desiredState).toEqual(originalDesiredStateClone);
+      expect(state.desiredState![CfnKey.KEY_NAME]).toBe(
+        ResourceDefault.SSH_KEY_PLACEHOLDER,
+      );
+
+      // Once the code fix lands, the node should expose the cleaned
+      // desiredState (without KeyName) via the returned partial.
+      const returnedDesired = (
+        result as { desiredState?: Record<string, unknown> }
+      ).desiredState;
+      expect(returnedDesired).toBeDefined();
+      expect(returnedDesired).not.toBe(originalDesiredStateRef);
+      expect(returnedDesired![CfnKey.KEY_NAME]).toBeUndefined();
     });
   });
 
@@ -1221,7 +1341,7 @@ describe("resourceProvisionerNode", () => {
       // was never invoked, so the helper successfully prevented a leak
       // to the default credential chain.
       expect(mockEc2Send).not.toHaveBeenCalled();
-      expect(state.desiredState!["KeyName"]).toBeUndefined();
+      expect(result.desiredState!["KeyName"]).toBeUndefined();
       expect(mockWriteFileSync).not.toHaveBeenCalled();
       // CloudControl create should still proceed since this hook is non-fatal
       expect(mockProvisioner.createResource).toHaveBeenCalled();

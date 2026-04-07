@@ -18,7 +18,6 @@ import * as clack from "@clack/prompts";
 import { stringify as yamlStringify } from "yaml";
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import {
-  ConfigurationError,
   DEFAULT_AWS_REGION,
   validateConfig,
   AssigneeTag,
@@ -31,6 +30,34 @@ import {
 } from "../services/credential-detector.js";
 import { resolveConfigPath } from "../config/user-config-loader.js";
 import { UserMessage, CHECKPOINT_DIR, FileName } from "../config/constants.js";
+import { EnvVar } from "../constants/env-vars.js";
+
+/** Assignee IAM role names detected from environment variables. */
+type AssigneeRole = "operator" | "reader" | "auditor";
+
+/**
+ * Detect which Assignee IAM roles have credentials configured via environment.
+ * Each role pair must have BOTH access key id AND secret access key set
+ * (and non-empty) to be considered available.
+ */
+export function detectAvailableRoles(
+  env: NodeJS.ProcessEnv = process.env,
+): AssigneeRole[] {
+  const available: AssigneeRole[] = [];
+  const pairs: ReadonlyArray<readonly [AssigneeRole, string, string]> = [
+    ["operator", EnvVar.OPERATOR_ACCESS_KEY, EnvVar.OPERATOR_SECRET_KEY],
+    ["reader", EnvVar.READER_ACCESS_KEY, EnvVar.READER_SECRET_KEY],
+    ["auditor", EnvVar.AUDITOR_ACCESS_KEY, EnvVar.AUDITOR_SECRET_KEY],
+  ];
+  for (const [role, keyVar, secretVar] of pairs) {
+    const id = env[keyVar];
+    const secret = env[secretVar];
+    if (id && secret && id.length > 0 && secret.length > 0) {
+      available.push(role);
+    }
+  }
+  return available;
+}
 
 /** Directory name for assignee project config. */
 const CONFIG_DIR = CHECKPOINT_DIR;
@@ -254,22 +281,34 @@ export const initCommand = new Command(CommandName.INIT)
 
     // ── Project-level init (original behavior, unchanged) ───────────
 
-    // ── Credential detection ──────────────────────────────────────────
+    // ── Credential detection (non-fatal) ──────────────────────────────
+    // `assignee init` is supposed to work without credentials so users can
+    // create the project config first, then run `assignee setup` (or export
+    // AWS keys) afterwards. We only *report* credential state here.
     const credentialResult = await detectCredentials();
+    const availableRoles = detectAvailableRoles();
 
-    if (!credentialResult.detected) {
-      throw new ConfigurationError(
-        credentialResult.reason ??
-          "No AWS credentials found. Configure credentials via:\n" +
-            "  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n" +
-            "  2) ~/.aws/credentials file\n" +
-            "  3) AWS SSO login (aws sso login)",
+    if (credentialResult.detected) {
+      clack.log.success(
+        `AWS credentials detected (source: ${credentialResult.source})`,
+      );
+    } else {
+      clack.log.warn(
+        "No AWS credentials detected. The project config will still be created.",
+      );
+      clack.log.info(
+        "Next steps: run `assignee setup` to create IAM users, " +
+          "or export AWS_PROFILE / ASSIGNEE_OPERATOR_ACCESS_KEY_ID before running `assignee plan`.",
       );
     }
 
-    clack.log.success(
-      `AWS credentials detected (source: ${credentialResult.source})`,
-    );
+    if (availableRoles.length > 0) {
+      clack.log.info(`Assignee roles available: ${availableRoles.join(", ")}`);
+    } else {
+      clack.log.info(
+        "Assignee roles available: none (operator, reader, auditor all unset)",
+      );
+    }
 
     // ── Region detection ──────────────────────────────────────────────
     const regionResult = await detectRegion();

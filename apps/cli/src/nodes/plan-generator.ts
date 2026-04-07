@@ -385,8 +385,19 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
                     : "aws";
                 desiredState[CfnKey.ROLE] =
                   `arn:${partition}:iam::${identity.Account}:role/${roleName}`;
-              } catch {
+              } catch (err) {
                 desiredState[CfnKey.ROLE] = roleName;
+                log({
+                  ts: new Date().toISOString(),
+                  runId: state.runId,
+                  level: "info",
+                  action: LOG_ACTIONS.PLAN_GENERATED,
+                  extras: {
+                    note: "sts_caller_identity_unavailable_using_role_name",
+                    roleName,
+                    error: String(err),
+                  },
+                });
               }
             }
           }
@@ -408,8 +419,18 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
             `Using your usual ${previousPattern.pattern} defaults (used ${previousPattern.count} times, last ${dateStr})`,
           );
         }
-      } catch {
+      } catch (err) {
         // Graceful degradation — pattern memory read failure is non-blocking
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+          extras: {
+            phase: "read_patterns_compound",
+            error: String(err),
+          },
+        });
       }
 
       // EC2 post-processing for compound mode (same as standalone path)
@@ -504,8 +525,15 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         provisionHintLine = `Previous provision of this type: ${prev.estimatedMonthlyCost}/month (run ${prev.runId}, ${dateStr}).`;
         memoryHints.push(provisionHintLine);
       }
-    } catch {
+    } catch (err) {
       // Graceful degradation — memory read failure is non-blocking
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+        extras: { phase: "read_provisions", error: String(err) },
+      });
     }
 
     // Story 19.4: Read failure history for warning hints
@@ -549,8 +577,15 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
           );
         }
       }
-    } catch {
+    } catch (err) {
       // Graceful degradation — memory read failure is non-blocking
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+        extras: { phase: "read_failures", error: String(err) },
+      });
     }
 
     const prompt = [
@@ -602,7 +637,17 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
         .replace(/^```(?:json)?\n?/, "")
         .replace(/\n?```$/, "");
       desiredState = JSON.parse(cleaned) as Record<string, unknown>;
-    } catch {
+    } catch (err) {
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "warn",
+        action: LOG_ACTIONS.PLAN_GENERATED,
+        extras: {
+          result: "invalid_json",
+          error: String(err),
+        },
+      });
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage:
