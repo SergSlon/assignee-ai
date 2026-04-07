@@ -85,6 +85,13 @@ export {
   arnToCloudFormationType,
 } from "./config/arn-type-map.js";
 
+export {
+  buildResourceArn,
+  partitionForRegion,
+  isArn,
+  type BuildResourceArnArgs,
+} from "./config/arn-builder.js";
+
 // Config — AssigneeConfig schema and validation (Story 27.1)
 export type {
   AssigneeConfig,
