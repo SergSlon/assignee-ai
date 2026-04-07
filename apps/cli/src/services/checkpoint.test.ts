@@ -575,6 +575,127 @@ describe("pruneExpiredCheckpoints (Story 33.2)", () => {
   });
 });
 
+describe("checkpoint file permissions and redaction (H17)", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await makeTempDir();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("writes the checkpoint file with mode 0o600 (owner-only)", async () => {
+    const checkpoint = serializeCheckpoint(baseGraphState as AgentState);
+    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+
+    const stat = await fs.stat(filePath);
+    // Only the permission bits — mask out file-type bits.
+    const mode = stat.mode & 0o777;
+    expect(mode).toBe(0o600);
+  });
+
+  it("redacts AdminPassword, Token, PrivateKey, KeyMaterial, UserData via regex denylist", async () => {
+    const state = {
+      ...baseGraphState,
+      desiredState: {
+        BucketName: "logs-prod",
+        // Real CFN shapes: IAM User LoginProfile.Password,
+        // RDS AdminPassword, Lambda Environment variables with tokens,
+        // EC2 KeyPair KeyMaterial, EC2 Instance UserData.
+        AdminPassword: "Correct-Horse-Battery-Staple",
+        Token: "ghp_1234567890abcdef1234567890abcdef1234",
+        ApiKey: "xoxb-123-456-abc",
+        PrivateKey: "-----BEGIN RSA PRIVATE KEY-----MIIE...",
+        KeyMaterial: "ssh-rsa AAAAB3NzaC1yc2E...",
+        UserData: "#!/bin/bash\nexport DB_PASSWORD=hunter2",
+        LoginProfile: {
+          Password: "TempPass123!",
+          // Sibling field name also matches /password/i — denylist is
+          // intentionally aggressive, so this is also redacted.
+          PasswordResetRequired: true,
+        },
+        // Neutral fields must be preserved
+        Region: "us-east-1",
+        BackupRetentionPeriod: 7,
+      },
+    } as AgentState;
+
+    const checkpoint = serializeCheckpoint(state);
+    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+    const raw = await fs.readFile(filePath, "utf-8");
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.desiredState.AdminPassword).toBe("[REDACTED]");
+    expect(parsed.desiredState.Token).toBe("[REDACTED]");
+    expect(parsed.desiredState.ApiKey).toBe("[REDACTED]");
+    expect(parsed.desiredState.PrivateKey).toBe("[REDACTED]");
+    expect(parsed.desiredState.KeyMaterial).toBe("[REDACTED]");
+    expect(parsed.desiredState.UserData).toBe("[REDACTED]");
+    // Nested LoginProfile.Password
+    expect(parsed.desiredState.LoginProfile.Password).toBe("[REDACTED]");
+    // Aggressive denylist also masks sibling /password/i matches
+    expect(parsed.desiredState.LoginProfile.PasswordResetRequired).toBe(
+      "[REDACTED]",
+    );
+    // Truly neutral fields preserved
+    expect(parsed.desiredState.Region).toBe("us-east-1");
+    expect(parsed.desiredState.BackupRetentionPeriod).toBe(7);
+    expect(parsed.desiredState.BucketName).toBe("logs-prod");
+  });
+
+  it("redacts AKIA-pattern strings inside arbitrary values", async () => {
+    const state = {
+      ...baseGraphState,
+      desiredState: {
+        BucketName: "logs-prod",
+        // Real AWS access-key format embedded in a neutral field
+        Description: "Migrated from AKIAIOSFODNN7EXAMPLE account",
+        Tags: [
+          { Key: "Owner", Value: "platform-team" },
+          { Key: "MigratedFrom", Value: "AKIAIOSFODNN7EXAMPLE" },
+        ],
+        Metadata: {
+          // Nested neutral-named field with a leaked access key id
+          LastOperator: "AKIA1234567890ABCDEF",
+        },
+      },
+    } as AgentState;
+
+    const checkpoint = serializeCheckpoint(state);
+    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+    const raw = await fs.readFile(filePath, "utf-8");
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.desiredState.Description).toBe("[REDACTED]");
+    expect(parsed.desiredState.Tags[1].Value).toBe("[REDACTED]");
+    expect(parsed.desiredState.Tags[0].Value).toBe("platform-team");
+    expect(parsed.desiredState.Metadata.LastOperator).toBe("[REDACTED]");
+  });
+
+  it("still redacts the legacy keys covered by the previous allowlist", async () => {
+    const state = {
+      ...baseGraphState,
+      desiredState: {
+        BucketName: "logs-prod",
+        MasterUserPassword: "legacy",
+        SecretString: "legacy",
+        SessionToken: "legacy",
+      },
+    } as AgentState;
+
+    const checkpoint = serializeCheckpoint(state);
+    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+    const raw = await fs.readFile(filePath, "utf-8");
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.desiredState.MasterUserPassword).toBe("[REDACTED]");
+    expect(parsed.desiredState.SecretString).toBe("[REDACTED]");
+    expect(parsed.desiredState.SessionToken).toBe("[REDACTED]");
+  });
+});
+
 describe("policyApprovalStatus", () => {
   it("is written when preflight ran with policy validation", () => {
     const stateWithPolicy = {

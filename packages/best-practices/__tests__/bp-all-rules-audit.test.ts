@@ -1257,23 +1257,46 @@ function runRuleTests(spec: RuleSpec): void {
 
 function runElbRuleTests(spec: RuleSpec): void {
   // ELBv2 uses LoadBalancerAttributes[key] notation where key is a string key
-  // containing dots (e.g. "deletion_protection.enabled"). The getField function
-  // splits on dots first, which breaks bracket paths with dots in the key.
-  // As a result, these rules ALWAYS fire (getField returns undefined).
-  // We test only the "fires" case here. The "does NOT fire" case would require
-  // fixing getField to handle dots inside bracket keys.
+  // containing dots (e.g. "deletion_protection.enabled"). getField must split
+  // on dots that are OUTSIDE bracket pairs so bracket keys with embedded dots
+  // resolve correctly.
 
-  it(`${spec.id} fires (${spec.checkType}, path=${spec.propertyPath})`, () => {
-    // Even with correct attributes, getField cannot resolve dot-containing bracket keys
-    const state: Record<string, unknown> = { LoadBalancerAttributes: [] };
+  // Extract the bracket key from a path like "LoadBalancerAttributes[foo.bar.baz]"
+  const bracketMatch = spec.propertyPath.match(/^([^[]+)\[(.+)\]$/);
+  expect(bracketMatch).not.toBeNull();
+  const [, containerField, bracketKey] = bracketMatch!;
+
+  it(`${spec.id} fires when attribute is missing (${spec.checkType}, path=${spec.propertyPath})`, () => {
+    // No attributes entry — getField returns undefined → rule fires
+    const state: Record<string, unknown> = { [containerField!]: [] };
     const findings = findingsFor(spec.id, spec.resourceType, state);
     expect(findings.length, `${spec.id} should fire`).toBeGreaterThanOrEqual(1);
     expect(findings.some((f) => f.practiceId === spec.id)).toBe(true);
   });
 
-  it.skip(`${spec.id} does NOT fire when satisfied — BLOCKED: getField cannot resolve dots in bracket keys`, () => {
-    // Once getField is fixed to handle paths like "Attrs[key.with.dots]",
-    // this test should pass with: { LoadBalancerAttributes: [{ Key: "...", Value: "true" }] }
+  it(`${spec.id} fires when attribute has wrong value (${spec.checkType}, path=${spec.propertyPath})`, () => {
+    const state: Record<string, unknown> = {
+      [containerField!]: [{ Key: bracketKey, Value: "false" }],
+    };
+    const findings = findingsFor(spec.id, spec.resourceType, state);
+    expect(findings.length).toBeGreaterThanOrEqual(1);
+    expect(findings.some((f) => f.practiceId === spec.id)).toBe(true);
+  });
+
+  it(`${spec.id} does NOT fire when satisfied (${spec.checkType}, path=${spec.propertyPath})`, () => {
+    // Attribute list contains the expected Key/Value pair — getField must
+    // resolve the dotted bracket key to "true" so the rule passes.
+    const state: Record<string, unknown> = {
+      [containerField!]: [
+        { Key: bracketKey, Value: String(spec.expectedValue) },
+      ],
+    };
+    const findings = findingsFor(spec.id, spec.resourceType, state);
+    const matching = findings.filter((f) => f.practiceId === spec.id);
+    expect(
+      matching.length,
+      `${spec.id} should NOT fire but got ${matching.length} findings. State: ${JSON.stringify(state)}`,
+    ).toBe(0);
   });
 }
 

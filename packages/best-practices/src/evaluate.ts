@@ -32,8 +32,28 @@ export interface EvalContext {
  * @returns The value at the path, or undefined if not found
  */
 export function getField(obj: Record<string, unknown>, path: string): unknown {
-  // Split on dots, then handle array indices within each segment
-  const segments = path.split(".");
+  // Split on dots that are OUTSIDE bracket pairs so that bracket keys
+  // containing dots (e.g. "LoadBalancerAttributes[deletion_protection.enabled]")
+  // are preserved as a single segment.
+  const segments: string[] = [];
+  let buf = "";
+  let depth = 0;
+  for (let i = 0; i < path.length; i++) {
+    const ch = path[i]!;
+    if (ch === "[") {
+      depth++;
+      buf += ch;
+    } else if (ch === "]") {
+      if (depth > 0) depth--;
+      buf += ch;
+    } else if (ch === "." && depth === 0) {
+      segments.push(buf);
+      buf = "";
+    } else {
+      buf += ch;
+    }
+  }
+  if (buf.length > 0) segments.push(buf);
   let current: unknown = obj;
 
   for (const segment of segments) {

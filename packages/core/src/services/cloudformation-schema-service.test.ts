@@ -12,6 +12,7 @@ import {
   CloudFormationSchemaService,
   SchemaFetchError,
 } from "./cloudformation-schema-service.js";
+import { MissingAssigneeCredentialsError } from "../config/aws-credentials.js";
 
 // ---------- Mock @aws-sdk/client-cloudformation ----------
 //
@@ -22,10 +23,22 @@ import {
 // test can attach `mockResolvedValueOnce`/`mockRejectedValueOnce`.
 
 const mockSend = vi.fn();
+// Capture the most recent CloudFormationClient config so the test can
+// invoke its credentialDefaultProvider and verify credential resolution.
+let lastClientConfig: {
+  region?: string;
+  credentialDefaultProvider?: () => () => Promise<unknown>;
+} | null = null;
 
 vi.mock("@aws-sdk/client-cloudformation", () => {
   class CloudFormationClient {
     send = mockSend;
+    constructor(config: {
+      region?: string;
+      credentialDefaultProvider?: () => () => Promise<unknown>;
+    }) {
+      lastClientConfig = config;
+    }
   }
   function DescribeTypeCommand(input: unknown) {
     return input;
@@ -276,6 +289,95 @@ describe("CloudFormationSchemaService", () => {
         cacheDir: path.join(tmpDir, "nonexistent"),
       });
       await expect(service.invalidateCache()).resolves.not.toThrow();
+    });
+  });
+
+  // ── H7 regression: credentials resolved via the centralized helper ───────
+  // The service must NEVER read process.env for ASSIGNEE_READER_* directly
+  // and must NEVER fall through to ~/.aws/credentials / SSO / IMDS. The
+  // credential provider closure must call `requireAssigneeCredentials("reader")`
+  // at request time (not at constructor time), so .env changes during a
+  // process lifetime are honored.
+  describe("credential resolution (H7 — centralized helper)", () => {
+    const ORIGINAL_ENV = { ...process.env };
+
+    beforeEach(() => {
+      delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+      // Belt-and-suspenders: shell AWS_* must NOT be honored.
+      process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
+      process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
+      lastClientConfig = null;
+    });
+
+    afterEach(() => {
+      process.env = { ...ORIGINAL_ENV };
+    });
+
+    it("does NOT resolve credentials at constructor time", async () => {
+      // Construct the service with reader env unset — this must succeed
+      // because credential resolution is deferred to request time.
+      const service = await createService();
+      expect(service).toBeInstanceOf(CloudFormationSchemaService);
+      expect(lastClientConfig).not.toBeNull();
+      expect(lastClientConfig!.credentialDefaultProvider).toBeDefined();
+    });
+
+    it("credentialDefaultProvider throws MissingAssigneeCredentialsError when reader env unset", async () => {
+      await createService();
+      const provider = lastClientConfig!.credentialDefaultProvider!();
+      await expect(provider()).rejects.toBeInstanceOf(
+        MissingAssigneeCredentialsError,
+      );
+      // Belt-and-suspenders: the error message must name the exact env
+      // vars the user needs to set — not a generic SDK error.
+      await expect(provider()).rejects.toThrow(/ASSIGNEE_READER_ACCESS_KEY_ID/);
+      await expect(provider()).rejects.toThrow(
+        /ASSIGNEE_READER_SECRET_ACCESS_KEY/,
+      );
+    });
+
+    it("credentialDefaultProvider returns real reader creds when env vars are set", async () => {
+      await createService();
+      const provider = lastClientConfig!.credentialDefaultProvider!();
+
+      // Set reader creds AFTER construction to prove per-request resolution.
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] =
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+      const creds = (await provider()) as {
+        accessKeyId: string;
+        secretAccessKey: string;
+      };
+      expect(creds.accessKeyId).toBe("AKIAIOSFODNN7EXAMPLE");
+      expect(creds.secretAccessKey).toBe(
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      );
+      // Critical: the shell AWS_* values must never be returned.
+      expect(creds.accessKeyId).not.toBe("shell-leak-key");
+    });
+
+    it("read-at-request-time: constructor → unset reader → set reader → provider returns new values", async () => {
+      await createService();
+      const provider = lastClientConfig!.credentialDefaultProvider!();
+
+      // First call — reader unset, must throw.
+      await expect(provider()).rejects.toBeInstanceOf(
+        MissingAssigneeCredentialsError,
+      );
+
+      // Now set reader creds.
+      process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = "AKIA1111EXAMPLE";
+      process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] =
+        "secret-abc-DEF-123456789012345678901234567890";
+
+      // Second call through the SAME provider closure returns the new values.
+      const creds = (await provider()) as {
+        accessKeyId: string;
+        secretAccessKey: string;
+      };
+      expect(creds.accessKeyId).toBe("AKIA1111EXAMPLE");
     });
   });
 });

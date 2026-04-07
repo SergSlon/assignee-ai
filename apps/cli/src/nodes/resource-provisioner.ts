@@ -71,9 +71,15 @@ export async function resourceProvisionerNode(
   }
 
   // Item F: LangGraph nodes must not mutate input state in place. Work on a
-  // shallow clone of state.desiredState and return it via the reducer below.
+  // DEEP clone of state.desiredState and return it via the reducer below.
   // The original state.desiredState reference is preserved unchanged.
-  const desiredState: Record<string, unknown> = { ...state.desiredState };
+  // H8: shallow clone (`{...state.desiredState}`) leaves nested objects like
+  // Properties.Tags / Properties.PolicyDocument / Properties.UserData shared
+  // with the original state, so `injectMandatoryTags` would mutate the
+  // caller's nested arrays. Use `structuredClone` to fully isolate.
+  const desiredState: Record<string, unknown> = structuredClone(
+    state.desiredState,
+  ) as Record<string, unknown>;
 
   // ── SDK Fallback Dispatch (Story 7.7) ────────────────────────────────────
   // Check for CCAPI gap types BEFORE the CloudControl path.
@@ -238,6 +244,11 @@ export async function resourceProvisionerNode(
   //
   // P0 FIX: On retry after a failed NAT Gateway provisioning, reuse any
   // previously-allocated EIP tagged with this runId instead of leaking a new one.
+  //
+  // C1: Track whether the EIP was allocated fresh in THIS invocation. The
+  // failure-path cleanup must only release EIPs we just allocated — never
+  // EIPs reused from a prior attempt, or the retry-reuse design is defeated.
+  let eipAllocatedThisInvocation = false;
   if (
     state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
     desiredState[CfnKey.ALLOCATION_ID] === EIP_AUTO_ALLOCATE
@@ -303,8 +314,13 @@ export async function resourceProvisionerNode(
             executionStatus: ExecutionStatus.FAILED,
             errorMessage:
               "EIP allocation succeeded but returned no AllocationId.",
+            desiredState,
           };
         }
+        // C1: Mark this EIP as fresh-allocated so cleanup releases it on
+        // failure. Reused EIPs (found via DescribeAddresses above) must NOT
+        // be released on failure — they belong to a previous attempt.
+        eipAllocatedThisInvocation = true;
         // Tag the EIP with runId so it can be found on retry
         try {
           await ec2.send(
@@ -335,6 +351,9 @@ export async function resourceProvisionerNode(
       return {
         executionStatus: ExecutionStatus.FAILED,
         errorMessage: `EIP allocation failed for NatGateway: ${errMsg}`,
+        // H9: surface cloned desiredState even on failure so retries can
+        // see any mutations (e.g. partially-resolved AllocationId).
+        desiredState,
       };
     }
   }
@@ -343,6 +362,11 @@ export async function resourceProvisionerNode(
   // Only auto-create when the placeholder was injected by plan_generator.
   // User-supplied key names are assumed to already exist in AWS.
   let sshKeyCreatedName: string | undefined;
+  // C2: distinguish "verify failed (can't tell if key exists)" from "create
+  // actually failed". Transient verify errors must NOT silently strip KeyName
+  // — that would permanently SSH-lock the user out of a successfully
+  // provisioned EC2 instance. Only strip KeyName when the create itself fails.
+  let sshKeyCreateAttempted = false;
   if (
     state.resourceType === RESOURCE_TYPES.EC2_INSTANCE &&
     desiredState[CfnKey.KEY_NAME] === ResourceDefault.SSH_KEY_PLACEHOLDER
@@ -371,6 +395,7 @@ export async function resourceProvisionerNode(
       }
 
       if (!keyExists) {
+        sshKeyCreateAttempted = true;
         const keyResult = await ec2.send(
           new CreateKeyPairCommand({ KeyName: keyName }),
         );
@@ -405,6 +430,31 @@ export async function resourceProvisionerNode(
       }
     } catch (keyErr: unknown) {
       const errMsg = keyErr instanceof Error ? keyErr.message : String(keyErr);
+      if (!sshKeyCreateAttempted) {
+        // C2: Couldn't even verify whether the key exists (transient error,
+        // throttle, AccessDenied, missing creds, network). Fail the resource
+        // with a clear error — DO NOT silently strip KeyName, because if the
+        // key actually exists in AWS the instance would be provisioned with
+        // no keypair and the user would be permanently SSH-locked-out.
+        process.stderr.write(
+          `\u001B[33m⚠️  SSH key pair verification failed: ${errMsg}\u001B[0m\n`,
+        );
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "error",
+          action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+          extras: { sshKeyVerifyError: errMsg },
+        });
+        return {
+          executionStatus: ExecutionStatus.FAILED,
+          errorMessage: `SSH key pair verification failed (cannot confirm whether key exists — refusing to provision EC2 instance without keypair): ${errMsg}`,
+          // H9: surface the cloned desiredState even on failure.
+          desiredState,
+        };
+      }
+      // Create itself failed — safe to strip KeyName and proceed so the
+      // instance can still be provisioned (just without SSH access).
       process.stderr.write(
         `\u001B[33m⚠️  SSH key pair creation failed: ${errMsg}\u001B[0m\n`,
       );
@@ -428,11 +478,18 @@ export async function resourceProvisionerNode(
   );
 
   // ── CloudControl async create ─────────────────────────────────────────────
-  // Compound patterns reuse runId across resources — append index for unique ClientToken
-  const clientToken =
+  // Compound patterns reuse runId across resources — append index for unique
+  // ClientToken. H11: ALSO append a random per-attempt suffix so retrying the
+  // same (runId, currentResourceIndex) pair produces a NEW ClientToken.
+  // Without this, CloudControl returns the cached prior failure record
+  // forever and the user cannot retry without abandoning the runId.
+  const { randomUUID } = await import("node:crypto");
+  const attemptSuffix = randomUUID().slice(0, 8);
+  const indexSuffix =
     state.currentResourceIndex != null && state.currentResourceIndex > 0
-      ? `${state.runId}-${state.currentResourceIndex}`
-      : state.runId;
+      ? `-${state.currentResourceIndex}`
+      : "";
+  const clientToken = `${state.runId}${indexSuffix}-${attemptSuffix}`;
 
   const [createErr, createResult] = await provisioner.createResource(
     state.resourceType,
@@ -457,9 +514,14 @@ export async function resourceProvisionerNode(
         : createErr.kind === ProvisioningErrorKind.THROTTLED
           ? "Request throttled by AWS. Please wait and retry."
           : createErr.message;
-    // Release EIP if we allocated one for NatGateway — best-effort cleanup
+    // Release EIP if we allocated one for NatGateway — best-effort cleanup.
+    // C1: ONLY release EIPs that were freshly allocated in this invocation.
+    // Reused EIPs (found via DescribeAddresses from a prior attempt) must
+    // survive so the NEXT retry can also reuse them — otherwise the retry
+    // loop defeats the reuse design and we leak one EIP per failure.
     if (
       state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
+      eipAllocatedThisInvocation &&
       desiredState[CfnKey.ALLOCATION_ID] &&
       desiredState[CfnKey.ALLOCATION_ID] !== EIP_AUTO_ALLOCATE
     ) {
@@ -529,6 +591,11 @@ export async function resourceProvisionerNode(
             : createErr.message,
         errorCategory,
       ),
+      // H9: ALWAYS surface the cloned desiredState back to the reducer —
+      // even on failure. A retry node downstream must see any allocated
+      // EIPs / resolved identifiers so they can be reused on the next
+      // attempt instead of leaking a fresh resource per retry.
+      desiredState,
     };
   }
 

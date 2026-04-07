@@ -152,23 +152,46 @@ export interface ManifestVerifyResult {
   valid: boolean;
   reason?: string;
   mismatchedFiles?: string[];
+  /** True when verification succeeded only because no reference was present. */
+  trustOnFirstUse?: boolean;
+}
+
+/** Options controlling verifyManifest behaviour. */
+export interface VerifyManifestOptions {
+  /**
+   * When true, a missing reference manifest is treated as an integrity
+   * failure (valid: false) rather than trust-on-first-use. Used by
+   * enforce-mode callers that require a signed manifest to exist.
+   */
+  strictNoReference?: boolean;
 }
 
 /**
  * Verify a computed manifest against a reference manifest file on disk.
  *
- * If the reference doesn't exist, the manifest is considered "trust on first
- * use" — valid but unverified. This allows the CLI to run without failing
- * when no manifest has been generated yet.
+ * If the reference doesn't exist and `strictNoReference` is false (default),
+ * the manifest is considered "trust on first use" — valid but unverified.
+ * When `strictNoReference` is true, a missing reference is an integrity
+ * failure: callers in enforce mode must reject the BP library rather than
+ * trust it blindly.
  */
 export function verifyManifest(
   computed: BPManifest,
   referencePath: string,
+  options: VerifyManifestOptions = {},
 ): ManifestVerifyResult {
   if (!existsSync(referencePath)) {
+    if (options.strictNoReference) {
+      return {
+        valid: false,
+        reason: `No reference manifest found at ${referencePath}. Refusing to trust BP library in strict mode.`,
+        trustOnFirstUse: true,
+      };
+    }
     return {
       valid: true,
       reason: "No reference manifest (trust-on-first-use)",
+      trustOnFirstUse: true,
     };
   }
 

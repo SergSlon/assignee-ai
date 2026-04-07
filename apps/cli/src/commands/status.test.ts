@@ -49,6 +49,11 @@ vi.mock("./status-bp-coverage.js", () => ({
   renderBPCoverage: vi.fn(),
 }));
 
+// Mock status-factory so the --bp-coverage branch never touches the real filesystem
+vi.mock("./status-factory.js", () => ({
+  getBpDir: vi.fn(() => "/tmp/fixture-bp-dir"),
+}));
+
 describe("status command", () => {
   let stdoutSpy: any;
 
@@ -210,5 +215,78 @@ describe("status command options registration", () => {
     const { statusCommand } = await import("./status.js");
     statusCommand.parseOptions(["--bp-coverage"]);
     expect(statusCommand.opts()["bpCoverage"]).toBe(true);
+  });
+});
+
+describe("status --bp-coverage uses status-factory for DI", () => {
+  let stdoutSpy: any;
+
+  beforeEach(async () => {
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    // Re-prime module mocks because prior describes call restoreAllMocks,
+    // which clears vi.fn() implementations created in vi.mock factories.
+    const { getBpDir } = await import("./status-factory.js");
+    const { computeBPCoverage, renderBPCoverage } =
+      await import("./status-bp-coverage.js");
+    vi.mocked(getBpDir).mockReset();
+    vi.mocked(computeBPCoverage).mockReset();
+    vi.mocked(renderBPCoverage).mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("calls getBpDir() from status-factory and forwards the injected dir to computeBPCoverage", async () => {
+    const { getBpDir } = await import("./status-factory.js");
+    const { computeBPCoverage } = await import("./status-bp-coverage.js");
+    const { statusCommand } = await import("./status.js");
+
+    vi.mocked(getBpDir).mockReturnValue("/virtual/bp-fixture");
+    const payload = {
+      totalRules: 42,
+      byCategory: [],
+      bySeverity: [],
+      byResourceType: [],
+    };
+    vi.mocked(computeBPCoverage).mockReturnValue(payload as never);
+
+    // --json forces a deterministic output path (commander option state from
+    // prior describes leaks through the shared statusCommand singleton).
+    await statusCommand.parseAsync(
+      ["node", "status", "--bp-coverage", "--json"],
+      { from: "user" },
+    );
+
+    // Factory was consulted and its value flowed into the consumer
+    expect(getBpDir).toHaveBeenCalledTimes(1);
+    expect(computeBPCoverage).toHaveBeenCalledWith("/virtual/bp-fixture");
+    expect(computeBPCoverage).toHaveBeenCalledTimes(1);
+  });
+
+  it("--bp-coverage --json writes JSON to stdout without hitting the real filesystem", async () => {
+    const { getBpDir } = await import("./status-factory.js");
+    const { computeBPCoverage } = await import("./status-bp-coverage.js");
+    const { statusCommand } = await import("./status.js");
+
+    vi.mocked(getBpDir).mockReturnValue("/virtual/bp-fixture-json");
+    const payload = {
+      totalRules: 7,
+      byCategory: [{ category: "security", count: 7 }],
+      bySeverity: [],
+      byResourceType: [],
+    };
+    vi.mocked(computeBPCoverage).mockReturnValue(payload as never);
+
+    await statusCommand.parseAsync(
+      ["node", "status", "--bp-coverage", "--json"],
+      { from: "user" },
+    );
+
+    expect(getBpDir).toHaveBeenCalled();
+    expect(computeBPCoverage).toHaveBeenCalledWith("/virtual/bp-fixture-json");
+    const output = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("");
+    expect(JSON.parse(output)).toEqual(payload);
   });
 });

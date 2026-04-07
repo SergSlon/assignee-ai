@@ -144,6 +144,36 @@ describe("aws-resource-discovery", () => {
       expect(result).toEqual([]);
       expect(mockEc2Send).not.toHaveBeenCalled();
     });
+
+    // ── H4 regression: graceful degradation contract ───────────────────────
+    // This test formalizes the "operator-only" use case: a user who has
+    // configured ASSIGNEE_OPERATOR_* but NOT ASSIGNEE_READER_* must still
+    // be able to run `assignee plan` — the wizard falls back to manual
+    // entry instead of hard-failing. Discovery functions must return []
+    // without throwing.
+    it("operator-only config (reader unset) — discovery degrades to [] without throwing", async () => {
+      process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+      process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+      // Reader explicitly unset from the outer beforeEach.
+      delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+
+      // None of these should throw.
+      await expect(discoverSubnets()).resolves.toEqual([]);
+      await expect(discoverSecurityGroups()).resolves.toEqual([]);
+      await expect(discoverKeyPairs()).resolves.toEqual([]);
+      await expect(discoverAmis()).resolves.toEqual([]);
+      await expect(searchAmis("ml")).resolves.toEqual([]);
+      await expect(discoverRdsEngineVersions()).resolves.toEqual([]);
+      await expect(discoverRdsInstanceClasses()).resolves.toEqual([]);
+
+      // Critical: not a single AWS SDK call was attempted — we never even
+      // constructed a client, let alone sent a request.
+      expect(mockEc2Send).not.toHaveBeenCalled();
+      expect(mockSsmSend).not.toHaveBeenCalled();
+      expect(mockRdsSend).not.toHaveBeenCalled();
+    });
   });
 
   // ── discoverSubnets ──────────────────────────────────────────────────────

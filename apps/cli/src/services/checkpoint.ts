@@ -8,7 +8,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {
-  CfnKey,
   PlanCheckpointSchema,
   CHECKPOINT_VERSION,
   CheckpointError,
@@ -25,37 +24,59 @@ import {
 } from "../config/constants.js";
 
 /**
- * Fields that must be redacted before writing to disk.
- * These may contain passwords, secrets, or tokens that should never persist in checkpoint files.
- * @see SECURITY-AUDIT.md — SEC-02
+ * Regex denylist for sensitive field names.
+ * Any key whose name matches this pattern is redacted to "[REDACTED]" before
+ * the checkpoint is written to disk. This replaces the previous shallow
+ * allowlist which missed AdminPassword, Token, ApiKey, PrivateKey, KeyMaterial,
+ * UserData, LoginProfile.Password, etc.
+ * @see SECURITY-AUDIT.md — SEC-02 / H17
  */
-const SENSITIVE_STATE_KEYS: Set<string> = new Set([
-  CfnKey.MASTER_USER_PASSWORD,
-  CfnKey.SECRET_STRING,
-  CfnKey.PASSWORD,
-  CfnKey.ACCESS_KEY,
-  CfnKey.SECRET_ACCESS_KEY,
-  CfnKey.SESSION_TOKEN,
-]);
+const SENSITIVE_KEY_PATTERN =
+  /password|secret|token|credential|userdata|privatekey|apikey|keymaterial/i;
 
 /**
- * Shallow-redact sensitive keys from a desiredState record.
- * Returns a new object with sensitive values replaced by "[REDACTED]".
+ * Pattern for AWS access key identifiers. Any string value matching this
+ * pattern is redacted regardless of its key name.
+ */
+const AKIA_PATTERN = /AKIA[0-9A-Z]{16}/;
+
+/** Value used to mask redacted fields. */
+const REDACTED_VALUE = "[REDACTED]";
+
+/**
+ * Recursively redact sensitive keys and AKIA-pattern values from a
+ * desiredState record. Walks arrays and nested objects. Pure — returns a new
+ * object rather than mutating the input.
  */
 function redactSensitiveFields(
   state: Record<string, unknown>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(state)) {
-    if (SENSITIVE_STATE_KEYS.has(key)) {
-      result[key] = "[REDACTED]";
-    } else if (value && typeof value === "object" && !Array.isArray(value)) {
-      result[key] = redactSensitiveFields(value as Record<string, unknown>);
-    } else {
-      result[key] = value;
+    if (SENSITIVE_KEY_PATTERN.test(key)) {
+      result[key] = REDACTED_VALUE;
+      continue;
     }
+    result[key] = redactValue(value);
   }
   return result;
+}
+
+/**
+ * Recursively redact a value. Scalars that match the AKIA pattern are masked.
+ * Objects and arrays are walked element-by-element.
+ */
+function redactValue(value: unknown): unknown {
+  if (typeof value === "string") {
+    return AKIA_PATTERN.test(value) ? REDACTED_VALUE : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((v) => redactValue(v));
+  }
+  if (value && typeof value === "object") {
+    return redactSensitiveFields(value as Record<string, unknown>);
+  }
+  return value;
 }
 
 /**
@@ -67,7 +88,7 @@ function stripRedactedFields(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(state)) {
-    if (value === "[REDACTED]") continue;
+    if (value === REDACTED_VALUE) continue;
     if (value && typeof value === "object" && !Array.isArray(value)) {
       result[key] = stripRedactedFields(value as Record<string, unknown>);
     } else {
@@ -116,11 +137,23 @@ export async function saveCheckpoint(
   checkpoint: PlanCheckpoint,
   dir: string,
 ): Promise<string> {
-  await fs.mkdir(dir, { recursive: true });
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   const filePath = path.join(dir, `checkpoint-${checkpoint.runId}.json`);
   const tmpPath = `${filePath}.tmp.${process.pid}`;
-  await fs.writeFile(tmpPath, JSON.stringify(checkpoint, null, 2), "utf-8");
+  // Write with 0o600 so the checkpoint is never world-readable. rename() on
+  // POSIX inherits the source file's mode, so we also chmod the final path as
+  // defence-in-depth against umask or pre-existing-file edge cases.
+  await fs.writeFile(tmpPath, JSON.stringify(checkpoint, null, 2), {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
   await fs.rename(tmpPath, filePath);
+  try {
+    await fs.chmod(filePath, 0o600);
+  } catch {
+    // Best-effort on filesystems that don't support chmod (e.g. some Windows
+    // configurations). The writeFile mode is authoritative on POSIX.
+  }
   return filePath;
 }
 

@@ -357,10 +357,13 @@ describe("resourceProvisionerNode", () => {
         "AWS::IAM::Role",
         "poc-role-test",
       );
+      // H11: ClientToken now carries a per-attempt random suffix so retries
+      // of the same runId produce different tokens. Assert the runId prefix
+      // instead of exact equality.
       expect(mockProvisioner.createResource).toHaveBeenCalledWith(
         "AWS::IAM::Role",
         expect.stringContaining("poc-role-test"),
-        "run-prov-test-001",
+        expect.stringMatching(/^run-prov-test-001-[0-9a-f]{8}$/),
       );
     });
 
@@ -1060,25 +1063,32 @@ describe("resourceProvisionerNode", () => {
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     });
 
-    it("rethrows permission errors from DescribeKeyPairs (not assumed as 'not found')", async () => {
-      // DescribeKeyPairs throws a permission error — should NOT assume key doesn't exist
+    it("FAILS the resource on transient DescribeKeyPairs error — does NOT silently strip KeyName (C2)", async () => {
+      // C2: DescribeKeyPairs failing with a non-NotFound error means we
+      // cannot confirm whether the key exists. If the key DOES exist in AWS
+      // and we silently stripped KeyName, the instance would be provisioned
+      // with no keypair and the user would be permanently SSH-locked-out.
+      // The correct behavior is to FAIL with a clear error instead.
       const accessDenied = new Error("User not authorized");
-      (accessDenied as { name: string }).name = "UnauthorizedAccess";
+      (accessDenied as { name: string }).name = "UnauthorizedOperation";
       mockEc2Send.mockRejectedValueOnce(accessDenied);
-
-      mockProvisioner.createResource.mockResolvedValueOnce([
-        null,
-        { requestToken: "ec2-perm-err-token" },
-      ]);
 
       const state = makeEc2State();
       const result = await resourceProvisionerNode(state, mockProvisioner);
 
-      // Should have caught the rethrown error — KeyName removed, provision continues
-      expect(result.desiredState!["KeyName"]).toBeUndefined();
-      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
-      // Should NOT have tried CreateKeyPair
+      // Must FAIL, not silently strip KeyName
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(/SSH key pair verification failed/);
+      expect(result.errorMessage).toMatch(/User not authorized/);
+      // KeyName must NOT be stripped — surface the original placeholder
+      // so a retry can attempt verification again with the same intent.
+      expect(result.desiredState!["KeyName"]).toBe(
+        ResourceDefault.SSH_KEY_PLACEHOLDER,
+      );
+      // Should NOT have tried CreateKeyPair — we never got past verify
       expect(mockEc2Send).toHaveBeenCalledTimes(1);
+      // CloudControl should NOT have been called — we failed before create
+      expect(mockProvisioner.createResource).not.toHaveBeenCalled();
     });
 
     it("throws when KeyMaterial is empty", async () => {
@@ -1317,11 +1327,113 @@ describe("resourceProvisionerNode", () => {
       expect(mockProvisioner.createResource).not.toHaveBeenCalled();
     });
 
-    it("EC2 SSH key creation surfaces missing creds and never calls SDK", async () => {
-      mockProvisioner.createResource.mockResolvedValue([
+    it("EC2 SSH key creation surfaces missing creds and FAILS the resource (C2)", async () => {
+      // C2: Missing operator credentials means we cannot verify whether
+      // the key exists. We must FAIL loudly rather than silently strip
+      // KeyName, which would permanently SSH-lock-out the user if the
+      // key actually already exists in AWS.
+      const state = makeState({
+        resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+        userIntent: "Create an EC2 instance I can SSH into",
+        desiredState: {
+          ImageId: "ami-0abcdef1234567890",
+          InstanceType: "t3.micro",
+          KeyName: ResourceDefault.SSH_KEY_PLACEHOLDER,
+          MetadataOptions: { HttpTokens: "required" },
+        },
+      });
+
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      // The EC2Client constructor threw; the outer catch now FAILS the
+      // resource instead of silently stripping KeyName. Critical
+      // assertion: the SDK send() was never invoked, so the helper
+      // successfully prevented a leak to the default credential chain.
+      expect(mockEc2Send).not.toHaveBeenCalled();
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
+      // CloudControl create must NOT be called — we failed the resource
+      expect(mockProvisioner.createResource).not.toHaveBeenCalled();
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(/SSH key pair verification failed/);
+      expect(result.errorMessage).toMatch(/ASSIGNEE_OPERATOR_ACCESS_KEY_ID/);
+      // KeyName must still be present in the returned clone (not stripped)
+      expect(result.desiredState!["KeyName"]).toBe(
+        ResourceDefault.SSH_KEY_PLACEHOLDER,
+      );
+    });
+
+    it("requireAssigneeCredentials throws MissingAssigneeCredentialsError naming both env vars", () => {
+      try {
+        requireAssigneeCredentials("operator");
+        throw new Error("expected throw");
+      } catch (err) {
+        expect(err).toBeInstanceOf(MissingAssigneeCredentialsError);
+        const msg = (err as Error).message;
+        expect(msg).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
+        expect(msg).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
+      }
+    });
+  });
+
+  // ─── Reliability regressions (C1, C2, H8, H9, H11) ─────────────────────────
+  describe("reliability regressions", () => {
+    // C1: EIP reuse leak — retry that REUSES an EIP and then fails must
+    // NOT release the reused EIP, otherwise the entire reuse design is
+    // defeated and every retry leaks a fresh EIP.
+    it("C1: does NOT release a reused EIP when CloudControl create fails on retry", async () => {
+      mockEc2Send.mockReset();
+      // DescribeAddresses returns an EIP already tagged with this runId
+      // from a previous attempt.
+      mockEc2Send.mockResolvedValueOnce({
+        Addresses: [{ AllocationId: "eipalloc-reused-0abc1234def567890" }],
+      });
+
+      // CloudControl fails again on the retry.
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        {
+          kind: ProvisioningErrorKind.UNKNOWN,
+          message: "NAT Gateway creation failed again",
+        },
         null,
-        { requestToken: "ssh-failclosed" },
       ]);
+
+      const state = makeState({
+        resourceType: "AWS::EC2::NatGateway",
+        runId: "run-natgw-retry-reuse-001",
+        desiredState: {
+          SubnetId: "subnet-0abc123def4567890",
+          AllocationId: EIP_AUTO_ALLOCATE,
+        },
+      });
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+
+      // Only DescribeAddresses should have been called — NOT ReleaseAddress,
+      // because the EIP was reused (not fresh-allocated).
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
+      const calls = mockEc2Send.mock.calls.map(
+        (c) => (c[0] as { _type: string })._type,
+      );
+      expect(calls).toEqual(["DescribeAddressesCommand"]);
+      expect(calls).not.toContain("ReleaseAddressCommand");
+
+      // H9 regression: failure path must carry the cloned desiredState back
+      // through the reducer so downstream retries can see the reused EIP.
+      expect(result.desiredState).toBeDefined();
+      expect(result.desiredState!["AllocationId"]).toBe(
+        "eipalloc-reused-0abc1234def567890",
+      );
+    });
+
+    // C2: Transient DescribeKeyPairs throttle must FAIL the resource — never
+    // silently strip KeyName, which would SSH-lock-out the user if the key
+    // actually exists in AWS.
+    it("C2: FAILS on transient DescribeKeyPairs throttle (does not strip KeyName)", async () => {
+      mockEc2Send.mockReset();
+      const throttle = new Error("Rate exceeded");
+      (throttle as { name: string }).name = "Throttling";
+      mockEc2Send.mockRejectedValueOnce(throttle);
 
       const state = makeState({
         resourceType: RESOURCE_TYPES.EC2_INSTANCE,
@@ -1336,28 +1448,186 @@ describe("resourceProvisionerNode", () => {
 
       const result = await resourceProvisionerNode(state, mockProvisioner);
 
-      // The SSH-key try-block catches the error and removes KeyName,
-      // letting CloudControl proceed. Critical assertion: the SDK send()
-      // was never invoked, so the helper successfully prevented a leak
-      // to the default credential chain.
-      expect(mockEc2Send).not.toHaveBeenCalled();
-      expect(result.desiredState!["KeyName"]).toBeUndefined();
-      expect(mockWriteFileSync).not.toHaveBeenCalled();
-      // CloudControl create should still proceed since this hook is non-fatal
-      expect(mockProvisioner.createResource).toHaveBeenCalled();
-      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(/SSH key pair verification failed/);
+      expect(result.errorMessage).toMatch(/Rate exceeded/);
+      // KeyName must NOT be stripped
+      expect(result.desiredState!["KeyName"]).toBe(
+        ResourceDefault.SSH_KEY_PLACEHOLDER,
+      );
+      // CloudControl must NOT be called
+      expect(mockProvisioner.createResource).not.toHaveBeenCalled();
+      // Only the DescribeKeyPairs attempt happened
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
     });
 
-    it("requireAssigneeCredentials throws MissingAssigneeCredentialsError naming both env vars", () => {
-      try {
-        requireAssigneeCredentials("operator");
-        throw new Error("expected throw");
-      } catch (err) {
-        expect(err).toBeInstanceOf(MissingAssigneeCredentialsError);
-        const msg = (err as Error).message;
-        expect(msg).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
-        expect(msg).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
-      }
+    // H8: structuredClone must deep-clone nested CFN properties. A shallow
+    // spread would leave nested Tags / PolicyDocument arrays shared with the
+    // caller's state.desiredState and injectMandatoryTags would mutate them.
+    it("H8: deep-clones nested CFN properties (original nested Tags unchanged)", async () => {
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "h8-deep-clone-token" },
+      ]);
+
+      const originalNestedTags = [
+        { Key: "env", Value: "prod" },
+        { Key: "team", Value: "platform" },
+      ];
+      const originalPolicyDocument = {
+        Version: "2012-10-17",
+        Statement: [
+          { Effect: "Allow", Action: ["s3:GetObject"], Resource: "*" },
+        ],
+      };
+
+      const state = makeState({
+        resourceType: "AWS::IAM::Role",
+        desiredState: {
+          RoleName: "h8-deep-clone-role",
+          AssumeRolePolicyDocument: originalPolicyDocument,
+          Tags: originalNestedTags,
+        },
+      });
+
+      const originalDesiredStateRef = state.desiredState;
+      const originalDeepClone = structuredClone(state.desiredState);
+
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+
+      // Identity: top-level reference must be unchanged
+      expect(state.desiredState).toBe(originalDesiredStateRef);
+
+      // Nested arrays/objects on the ORIGINAL must be identity-stable AND
+      // deep-equal to their pre-invocation snapshot. If we shallow-cloned,
+      // injectMandatoryTags would have pushed assignee-run-id into this
+      // same array reference.
+      expect(state.desiredState!["Tags"]).toBe(originalNestedTags);
+      expect(originalNestedTags).toHaveLength(2);
+      expect(originalNestedTags).toEqual([
+        { Key: "env", Value: "prod" },
+        { Key: "team", Value: "platform" },
+      ]);
+      expect(state.desiredState!["AssumeRolePolicyDocument"]).toBe(
+        originalPolicyDocument,
+      );
+      expect(state.desiredState).toEqual(originalDeepClone);
+
+      // The mandatory tags SHOULD be present on the JSON that went to
+      // CloudControl — proving we mutated the clone, not the original.
+      const sentJson = mockProvisioner.createResource.mock.calls[0]![1] as
+        | string
+        | undefined;
+      expect(sentJson).toBeDefined();
+      const sent = JSON.parse(sentJson as string) as Record<string, unknown>;
+      const sentTags = sent["Tags"] as { Key: string; Value: string }[];
+      expect(sentTags.length).toBeGreaterThan(originalNestedTags.length);
+      expect(sentTags).toEqual(
+        expect.arrayContaining([
+          { Key: "env", Value: "prod" },
+          { Key: "team", Value: "platform" },
+          expect.objectContaining({
+            Key: "assignee-run-id",
+            Value: "run-prov-test-001",
+          }),
+        ]),
+      );
+    });
+
+    // H9: every failure return must carry the cloned desiredState back
+    // through the reducer. Without this, allocated EIPs / resolved IDs are
+    // dropped and the next retry leaks a fresh resource.
+    it("H9: CloudControl failure return includes cloned desiredState", async () => {
+      mockEc2Send.mockReset();
+      // Fresh EIP allocation succeeds
+      mockEc2Send
+        .mockResolvedValueOnce({ Addresses: [] })
+        .mockResolvedValueOnce({
+          AllocationId: "eipalloc-h9-fresh-00112233",
+        })
+        .mockResolvedValueOnce({}) // CreateTags
+        .mockResolvedValueOnce({}); // ReleaseAddress cleanup
+
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.UNKNOWN, message: "boom" },
+        null,
+      ]);
+
+      const state = makeState({
+        resourceType: "AWS::EC2::NatGateway",
+        runId: "run-natgw-h9-001",
+        desiredState: {
+          SubnetId: "subnet-0abc123def4567890",
+          AllocationId: EIP_AUTO_ALLOCATE,
+        },
+      });
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      // Must surface the cloned desiredState even on failure
+      expect(result.desiredState).toBeDefined();
+      expect(result.desiredState).not.toBe(state.desiredState);
+      expect(result.desiredState!["SubnetId"]).toBe("subnet-0abc123def4567890");
+    });
+
+    // H11: Two consecutive invocations with the same (runId,
+    // currentResourceIndex) pair must produce DIFFERENT ClientTokens so
+    // CloudControl treats retries as new requests rather than returning the
+    // cached prior failure record.
+    it("H11: consecutive retries produce different ClientTokens for same runId+index", async () => {
+      mockProvisioner.createResource
+        .mockResolvedValueOnce([null, { requestToken: "h11-req-1" }])
+        .mockResolvedValueOnce([null, { requestToken: "h11-req-2" }]);
+
+      const baseState = () =>
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          runId: "run-h11-retry-token-001",
+          currentResourceIndex: 3,
+          desiredState: {
+            RoleName: "h11-role",
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "lambda.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            },
+          },
+        });
+
+      mockProvisioner.getResource.mockResolvedValue([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+
+      await resourceProvisionerNode(baseState(), mockProvisioner);
+      await resourceProvisionerNode(baseState(), mockProvisioner);
+
+      expect(mockProvisioner.createResource).toHaveBeenCalledTimes(2);
+      const token1 = mockProvisioner.createResource.mock.calls[0]![2] as
+        | string
+        | undefined;
+      const token2 = mockProvisioner.createResource.mock.calls[1]![2] as
+        | string
+        | undefined;
+
+      expect(token1).toBeDefined();
+      expect(token2).toBeDefined();
+      // Both must contain the runId and index as a prefix
+      expect(token1).toMatch(/^run-h11-retry-token-001-3-/);
+      expect(token2).toMatch(/^run-h11-retry-token-001-3-/);
+      // But must be DIFFERENT — this is the whole point of H11
+      expect(token1).not.toBe(token2);
     });
   });
 });

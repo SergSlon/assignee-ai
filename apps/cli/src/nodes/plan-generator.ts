@@ -31,7 +31,7 @@ import type { AgentState } from "../services/graph.js";
 import { sanitizeDesiredState } from "../services/desired-state-sanitizer.js";
 import { repairRequiredFields } from "../services/required-field-repairer.js";
 import { EnvVar } from "../constants/env-vars.js";
-import { requireAssigneeCredentials } from "../config/aws-credentials.js";
+import { tryAssigneeCredentials } from "../config/aws-credentials.js";
 
 /**
  * Transforms elicited options using plugin toCfn mappers.
@@ -364,40 +364,65 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
             if (roleName.startsWith("arn:")) {
               desiredState[CfnKey.ROLE] = roleName;
             } else {
-              // CloudControl returns the role name — construct the full ARN
-              try {
-                const { STSClient, GetCallerIdentityCommand } =
-                  await import("@aws-sdk/client-sts");
-                const region = AWS_REGION;
-                const sts = new STSClient({
-                  region,
-                  credentials: requireAssigneeCredentials("operator"),
-                });
-                const identity = await sts.send(
-                  new GetCallerIdentityCommand({}),
-                );
-                // Detect partition from region: aws-us-gov for GovCloud,
-                // aws-cn for China, aws for everything else.
-                const partition = region.startsWith("us-gov-")
-                  ? "aws-us-gov"
-                  : region.startsWith("cn-")
-                    ? "aws-cn"
-                    : "aws";
-                desiredState[CfnKey.ROLE] =
-                  `arn:${partition}:iam::${identity.Account}:role/${roleName}`;
-              } catch (err) {
+              // CloudControl returns the role name — construct the full ARN.
+              // Precondition: only call STS when operator credentials are
+              // configured. Previously the try/catch also swallowed a
+              // MissingAssigneeCredentialsError thrown by the credential
+              // helper — so the plan would silently proceed with a bare
+              // role NAME instead of an ARN, and CloudControl would later
+              // fail downstream with a non-obvious error. Now we explicitly
+              // check first, emit a clear warn log, and fall back to the
+              // bare name. Real STS errors (throttling, network, IAM) still
+              // fall through the inner try/catch below.
+              const operatorCreds = tryAssigneeCredentials("operator");
+              if (!operatorCreds) {
                 desiredState[CfnKey.ROLE] = roleName;
                 log({
                   ts: new Date().toISOString(),
                   runId: state.runId,
-                  level: "info",
+                  level: "warn",
                   action: LOG_ACTIONS.PLAN_GENERATED,
                   extras: {
-                    note: "sts_caller_identity_unavailable_using_role_name",
+                    note: "sts_skipped_missing_operator_credentials",
                     roleName,
-                    error: String(err),
+                    hint: "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY to derive the full IAM role ARN.",
                   },
                 });
+              } else {
+                try {
+                  const { STSClient, GetCallerIdentityCommand } =
+                    await import("@aws-sdk/client-sts");
+                  const region = AWS_REGION;
+                  const sts = new STSClient({
+                    region,
+                    credentials: operatorCreds,
+                  });
+                  const identity = await sts.send(
+                    new GetCallerIdentityCommand({}),
+                  );
+                  // Detect partition from region: aws-us-gov for GovCloud,
+                  // aws-cn for China, aws for everything else.
+                  const partition = region.startsWith("us-gov-")
+                    ? "aws-us-gov"
+                    : region.startsWith("cn-")
+                      ? "aws-cn"
+                      : "aws";
+                  desiredState[CfnKey.ROLE] =
+                    `arn:${partition}:iam::${identity.Account}:role/${roleName}`;
+                } catch (err) {
+                  desiredState[CfnKey.ROLE] = roleName;
+                  log({
+                    ts: new Date().toISOString(),
+                    runId: state.runId,
+                    level: "info",
+                    action: LOG_ACTIONS.PLAN_GENERATED,
+                    extras: {
+                      note: "sts_caller_identity_unavailable_using_role_name",
+                      roleName,
+                      error: String(err),
+                    },
+                  });
+                }
               }
             }
           }
