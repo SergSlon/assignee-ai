@@ -173,6 +173,15 @@ describe("aws-credentials helpers", () => {
         expect(message).toContain(".env");
         // M-S6: must NOT branch on cwd, so neither path-segment is mentioned
         expect(message).not.toContain("assignee.ai/.env");
+        // D5 (UX coherence): the helper error must surface the AWS_*
+        // fallback that command-runner actually honors, otherwise the
+        // user sees three contradictory credential stories.
+        expect(message).toContain("AWS_ACCESS_KEY_ID");
+        expect(message).toContain("AWS_SECRET_ACCESS_KEY");
+        expect(message).toContain("auto-promoted");
+        // D5: the old "intentionally bypassed" wording was misleading
+        // because command-runner DOES auto-promote AWS_* env vars.
+        expect(message).not.toContain("intentionally bypassed");
       }
     });
 

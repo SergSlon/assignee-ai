@@ -46,7 +46,8 @@ export class MissingAssigneeCredentialsError extends Error {
       `Missing ${role} credentials. Set ${accessKeyVar} and ${secretKeyVar} ` +
         `in your environment (or in the .env file at the project root), ` +
         `or run 'assignee setup' to create the IAM users. ` +
-        `The default AWS credential chain is intentionally bypassed.`,
+        `(CLI commands also accept AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY ` +
+        `as a fallback — they are auto-promoted to the operator role.)`,
     );
     this.name = "MissingAssigneeCredentialsError";
   }

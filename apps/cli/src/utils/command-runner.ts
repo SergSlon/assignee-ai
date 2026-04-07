@@ -1,6 +1,23 @@
 /**
  * Shared command execution skeleton for plan and apply commands.
  * Handles MCP client lifecycle, graph creation, intro/outro, error logging.
+ *
+ * Credential resolution for CLI commands.
+ *
+ * Resolution order (highest to lowest priority):
+ * 1. ASSIGNEE_OPERATOR_ACCESS_KEY_ID + ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY
+ * 2. AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (auto-promoted to operator role at process start)
+ * 3. None — fail with a clear ConfigurationError
+ *
+ * AWS_PROFILE alone is NOT supported because we need to mint long-lived
+ * credentials for the operator role; profile-based STS sessions don't
+ * provide that lifetime guarantee. Run `assignee setup` to create the
+ * 3 IAM users with explicit access keys.
+ *
+ * The auto-promotion at sequence 2 is the intentional fallback for
+ * developer-experience reasons. Production deployments should use
+ * sequence 1 with separate operator/reader/auditor users created
+ * by `assignee setup`.
  */
 
 import type { StructuredTool } from "@langchain/core/tools";
@@ -106,14 +123,10 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
   } else if (!hasOperatorKey) {
     throw new ConfigurationError(
       "No AWS credentials detected.\n" +
-        "Assignee.ai accepts credentials in any of these forms:\n" +
-        "  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID + ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY (preferred — least privilege)\n" +
-        "  2) Standard AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (auto-promoted)\n" +
-        "\n" +
-        "Quick start:\n" +
-        "  • Run `assignee setup` to create least-privilege IAM users automatically\n" +
-        "  • Or export your existing AWS credentials: `export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...`\n" +
-        "  • Then run `assignee init` to verify.",
+        "Assignee.ai requires either:\n" +
+        "  • ASSIGNEE_OPERATOR_ACCESS_KEY_ID + ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY (preferred — least privilege)\n" +
+        "  • AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (will be auto-promoted to operator role)\n" +
+        "Note: AWS_PROFILE alone is not currently supported. Run `assignee setup` to create least-privilege IAM users.",
     );
   }
 

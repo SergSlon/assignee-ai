@@ -6,7 +6,6 @@ These documents were generated from a deep scan of the source code to provide a 
 
 | Document                                                   | Description                                                                                                                                                    |
 | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [project-overview.md](project-overview.md)                 | Comprehensive overview: features, commands, pipeline, resource types, patterns, pricing, config, memory                                                        |
 | [architecture.md](architecture.md)                         | Technical architecture: monorepo structure, LangGraph graph, plugin system, hexagonal ports/adapters, AWS SDK, MCP, error handling                             |
 | [source-tree-analysis.md](source-tree-analysis.md)         | Annotated directory tree showing what every critical file and directory does                                                                                   |
 | [component-inventory.md](component-inventory.md)           | Complete inventory of all plugins (24), nodes (12), services (28), utilities (30+), pricing strategies (23), decomposers (23), best practices (136 YAML rules) |

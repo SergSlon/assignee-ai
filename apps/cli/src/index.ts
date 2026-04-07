@@ -49,10 +49,27 @@ program
   .name("assignee")
   .description("Assignee.ai — AI-Native Cloud Operator")
   .version(pkg.version as string)
+  .option(
+    "--verbose",
+    "Enable structured JSON diagnostic logs to stderr (also: ASSIGNEE_LOG_LEVEL=debug, ASSIGNEE_VERBOSITY=verbose)",
+  )
+  .configureHelp({ showGlobalOptions: true })
   .addHelpText(
     "after",
     `\n${SUPPORTED_TYPES_HINT}\n\n${PATTERNS_HINT}\n\n${EXAMPLES_HINT}`,
   );
+
+// Propagate the global --verbose flag into ASSIGNEE_LOG_LEVEL so downstream
+// code (logger, child processes, MCP servers) picks it up uniformly. The CLI
+// flag takes precedence over the env vars — we set the env var here only when
+// the flag is present, so an unset flag never clobbers an operator-set
+// ASSIGNEE_LOG_LEVEL / ASSIGNEE_VERBOSITY.
+program.hook("preSubcommand", (thisCommand) => {
+  const opts = thisCommand.opts<{ verbose?: boolean }>();
+  if (opts.verbose) {
+    process.env["ASSIGNEE_LOG_LEVEL"] = "debug";
+  }
+});
 
 // Dedicated version subcommand (in addition to --version flag) — shows
 // richer info including Node version and platform for bug reports.
@@ -80,6 +97,14 @@ program.addCommand(applyCommand);
 program.addCommand(cleanCommand);
 program.addCommand(reconcileCommand);
 program.addCommand(cacheCommand);
+
+// Propagate `showGlobalOptions: true` to every subcommand so the root-level
+// `--verbose` (and any future global options) appear in `<subcommand> --help`
+// output. Commander's configureHelp on the root program does not auto-cascade
+// to subcommands, so we explicitly walk the command tree once.
+for (const sub of program.commands) {
+  sub.configureHelp({ showGlobalOptions: true });
+}
 
 // EPIPE: stdout pipe closed (e.g. piped to grep/head that exits early).
 // Node.js throws by default; suppress and exit cleanly instead.

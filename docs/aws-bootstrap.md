@@ -2,7 +2,7 @@
 
 > Stories covered: **0.5** (account bootstrap) · **2.5** (IAM tightening) · **18.8** (IAM security overhaul)
 >
-> Account: `054125018476` · Region: `us-east-1`
+> Account: `123456789012` (example — replace with your account ID) · Region: `us-east-1`
 
 ---
 
@@ -74,7 +74,7 @@ aws --region us-east-1 iam put-role-policy \
       "logs:PutLogEvents",
       "logs:DescribeLogGroups"
     ],
-    "Resource": "arn:aws:logs:us-east-1:054125018476:log-group:/assignee-ai/bedrock-invocations:*"
+    "Resource": "arn:aws:logs:us-east-1:123456789012:log-group:/assignee-ai/bedrock-invocations:*"
   }]
 }'
 ```
@@ -101,7 +101,7 @@ aws --region us-east-1 bedrock put-model-invocation-logging-configuration \
   --logging-config '{
   "cloudWatchConfig": {
     "logGroupName": "/assignee-ai/bedrock-invocations",
-    "roleArn": "arn:aws:iam::054125018476:role/AssigneeAiBedrockLoggingRole"
+    "roleArn": "arn:aws:iam::123456789012:role/AssigneeAiBedrockLoggingRole"
   },
   "textDataDeliveryEnabled": true,
   "imageDataDeliveryEnabled": false,

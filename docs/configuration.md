@@ -28,11 +28,24 @@ assignee apply --set InstanceType=t3.small "Create an EC2 instance"
 
 ### `--verbose` Flag
 
-The `--verbose` flag controls structured JSON log output to stderr. Logs are suppressed by default so they never pollute terminal output. Enable via:
+The `--verbose` flag is a global option on the root `assignee` program. It controls structured JSON log output to stderr. Logs are suppressed by default so they never pollute terminal output. Enable via any of the following — the CLI flag has the highest priority:
 
-- `--verbose` CLI flag (any command)
-- `ASSIGNEE_VERBOSITY=verbose` environment variable
-- `ASSIGNEE_LOG_LEVEL=debug` environment variable
+| Priority | Source                               | Example                                    |
+| -------- | ------------------------------------ | ------------------------------------------ |
+| 1        | `--verbose` CLI flag                 | `assignee --verbose plan "..."`            |
+| 2        | `ASSIGNEE_LOG_LEVEL=debug` env var   | `ASSIGNEE_LOG_LEVEL=debug assignee plan`   |
+| 3        | `ASSIGNEE_VERBOSITY=verbose` env var | `ASSIGNEE_VERBOSITY=verbose assignee plan` |
+
+The CLI flag wins: passing `--verbose` enables verbose output even when `ASSIGNEE_VERBOSITY=normal` or the env vars are unset. When the flag is present, the CLI also sets `ASSIGNEE_LOG_LEVEL=debug` in the process environment so child processes and MCP servers inherit the verbose setting.
+
+As a global option, `--verbose` is registered on the root program. It must appear **before** the subcommand name (mirroring `--version` and `--help`):
+
+```bash
+assignee --verbose plan "Create an SSM parameter named test"
+assignee --verbose apply --yes "Create an S3 bucket named logs-prod"
+```
+
+> **Note:** The `drift` subcommand has a local `--verbose` option with different semantics (shows all fields including matching ones in the drift diff table). To get JSON diagnostic logs during a drift run, pass `--verbose` before the subcommand: `assignee --verbose drift`. Both can be combined: `assignee --verbose drift --verbose`.
 
 ## Config File Locations
 
@@ -215,6 +228,25 @@ These constants control system behavior and are not user-configurable:
 | `.assignee/`                  | Project-level checkpoint and config directory                                                                          |
 | `.assignee/config.yaml`       | Project configuration                                                                                                  |
 | `.assignee/checkpoint-*.json` | Saved plan checkpoints                                                                                                 |
+
+## Credentials
+
+Assignee.ai uses an explicit, least-privilege credential model and **intentionally bypasses** the AWS SDK default credential provider chain. Plan, apply, destroy, and setup commands resolve credentials in the following order:
+
+1. **`ASSIGNEE_OPERATOR_ACCESS_KEY_ID` + `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY`** (preferred) — the dedicated operator IAM user created by `assignee setup`. This is the production path; reader and auditor roles use the matching `ASSIGNEE_READER_*` / `ASSIGNEE_AUDITOR_*` variables.
+2. **`AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`** (developer fallback) — auto-promoted to the operator role at process start. The CLI prints a one-line warning encouraging you to switch to dedicated operator credentials. If `AWS_SESSION_TOKEN` is set it is also promoted to `ASSIGNEE_OPERATOR_SESSION_TOKEN`.
+3. **None** — the command fails fast with a `ConfigurationError` listing both supported forms and pointing at `assignee setup`.
+
+### `AWS_PROFILE` is not supported on its own
+
+`AWS_PROFILE` alone (without `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` exported) is **not** accepted, even though many AWS tools honor it. The reason: Assignee mints long-lived credentials for the operator role and validates them at process start; profile-based STS sessions don't provide that lifetime guarantee, and silently falling through to `~/.aws/credentials` would leak operations onto the developer's personal/root identity.
+
+If you currently use `AWS_PROFILE`, you have two options:
+
+- **Recommended:** run `assignee setup` once to create the three least-privilege IAM users (`assignee-operator`, `assignee-reader`, `assignee-auditor`) and export their access keys.
+- **Quick fallback:** export `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` directly in your shell — the CLI will auto-promote them to the operator role for the duration of the process.
+
+The same resolution sequence is documented in the `command-runner.ts` JSDoc and is the single source of truth for credential behavior.
 
 ## Setup Wizard
 

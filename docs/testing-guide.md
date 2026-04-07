@@ -253,7 +253,7 @@ All 23 resource types have pricing decomposers registered in `packages/core/src/
 
 ## End-to-end smoke tests
 
-> All smoke tests run against real AWS (us-east-1, account 054125018476).
+> All smoke tests run against real AWS (us-east-1, account `123456789012` — example, replace with your account ID).
 
 ## Prerequisites
 
@@ -409,7 +409,7 @@ aws logs filter-log-events \
   --output json | jq '.events[0].message // "No log events found" | fromjson? // .'
 ```
 
-> Bedrock runs in `us-east-1` (`AWS_REGION` in `.env`) — logs are written there, not in `us-east-1`. `--output text --query 'events[0].message'` returns the literal string `None` when no events match (breaking `jq`); use `--output json` and extract via jq instead.
+> Bedrock runs in the region set by `AWS_REGION` in `.env` (currently `us-east-1`). Bedrock invocation logs are written to CloudWatch in the SAME region — if you query CloudWatch in a different region, you will see no events. `--output text --query 'events[0].message'` returns the literal string `None` when no events match (breaking `jq`); use `--output json` and extract via jq instead.
 
 **Check:**
 
