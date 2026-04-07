@@ -14,8 +14,10 @@ import {
   EIP_AUTO_ALLOCATE,
   ResourceDefault,
   AwsDefault,
+  parseMarker,
   type ProvisionRecord,
   type FailureRecord,
+  type ResourceResult,
 } from "@assignee/core";
 import { TWENTY_FOUR_HOURS_MS } from "../config/constants.js";
 import { defaultMemoryService } from "../services/memory.js";
@@ -315,10 +317,167 @@ function stripEmpty(
 }
 
 /**
+ * Lookup function returning the sorted list of AvailabilityZone names for a
+ * region. Abstracted so unit tests can substitute a deterministic fixture in
+ * place of a real EC2 DescribeAvailabilityZones call.
+ */
+export type AzLookup = (region: string) => Promise<string[]>;
+
+/**
+ * Default AZ lookup — dynamically imports the EC2 SDK and calls
+ * DescribeAvailabilityZones with operator credentials. Results are cached per
+ * region for the lifetime of the process; compound plan generation may need
+ * multiple AZs within a single run and we don't want to pay for the SDK
+ * round-trip more than once.
+ */
+const AZ_CACHE: Map<string, string[]> = new Map();
+export async function defaultAzLookup(region: string): Promise<string[]> {
+  const cached = AZ_CACHE.get(region);
+  if (cached) return cached;
+  const operatorCreds = tryAssigneeCredentials("operator");
+  if (!operatorCreds) {
+    throw new Error(
+      `Cannot resolve AvailabilityZone markers: operator credentials missing. ` +
+        `Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY.`,
+    );
+  }
+  const { EC2Client, DescribeAvailabilityZonesCommand } =
+    await import("@aws-sdk/client-ec2");
+  const ec2 = new EC2Client({ region, credentials: operatorCreds });
+  const result = await ec2.send(
+    new DescribeAvailabilityZonesCommand({
+      Filters: [{ Name: "state", Values: ["available"] }],
+    }),
+  );
+  const zones = (result.AvailabilityZones ?? [])
+    .map((z) => z.ZoneName)
+    .filter((z): z is string => typeof z === "string" && z.length > 0)
+    .sort();
+  if (zones.length === 0) {
+    throw new Error(
+      `DescribeAvailabilityZones returned no zones for region "${region}".`,
+    );
+  }
+  AZ_CACHE.set(region, zones);
+  return zones;
+}
+
+/** Test-only hook: clears the region→AZ cache so fixtures don't leak between tests. */
+export function __resetAzCacheForTests(): void {
+  AZ_CACHE.clear();
+}
+
+/**
+ * Walks `desiredState` recursively and substitutes every marker-token string
+ * with the concrete value it represents:
+ *
+ * - `__ASSIGNEE_REF_<id>__`    → physical ID from `completedResources` (resourceArn)
+ * - `__ASSIGNEE_GETATT_<id>_<attr>__` → physical ID from `completedResources`
+ *                                   (CloudControl only returns the primary
+ *                                   identifier, which is what downstream
+ *                                   resources actually need)
+ * - `__ASSIGNEE_AZ_<n>__`      → Nth AvailabilityZone name in `region`
+ *
+ * Fails fast with a descriptive error when a REF target is missing, so
+ * dependency-order bugs surface at plan time instead of producing a malformed
+ * CloudControl request.
+ *
+ * Mutates `desiredState` in place (and returns it) for ergonomic chaining.
+ */
+export async function resolveCompoundMarkers(
+  desiredState: Record<string, unknown>,
+  options: {
+    completedResources: readonly ResourceResult[];
+    region: string;
+    currentResourceId: string;
+    azLookup?: AzLookup;
+  },
+): Promise<Record<string, unknown>> {
+  const lookup = options.azLookup ?? defaultAzLookup;
+  let azCache: string[] | undefined;
+
+  async function resolveString(value: string, path: string): Promise<string> {
+    const parsed = parseMarker(value);
+    if (!parsed) return value;
+    if (parsed.kind === "ref" || parsed.kind === "getatt") {
+      const match = options.completedResources.find(
+        (r) => r.resourceId === parsed.resourceId,
+      );
+      if (!match) {
+        throw new Error(
+          `Compound marker resolution failed at "${path}" for resource ` +
+            `"${options.currentResourceId}": no completed resource with ` +
+            `resourceId "${parsed.resourceId}" found. ` +
+            `Check the pattern's dependencyOrder — the referenced resource ` +
+            `must be provisioned before "${options.currentResourceId}".`,
+        );
+      }
+      if (!match.resourceArn) {
+        throw new Error(
+          `Compound marker resolution failed at "${path}" for resource ` +
+            `"${options.currentResourceId}": dependency "${parsed.resourceId}" ` +
+            `completed without a physical identifier (resourceArn undefined). ` +
+            `This is a CloudControl adapter bug — please file an issue.`,
+        );
+      }
+      return String(match.resourceArn);
+    }
+    // AZ marker
+    if (!azCache) {
+      azCache = await lookup(options.region);
+    }
+    const zone = azCache[parsed.index];
+    if (!zone) {
+      throw new Error(
+        `Compound marker resolution failed at "${path}" for resource ` +
+          `"${options.currentResourceId}": AZ index ${parsed.index} is out ` +
+          `of range — region "${options.region}" only has ${azCache.length} ` +
+          `availability zones (${azCache.join(", ")}).`,
+      );
+    }
+    return zone;
+  }
+
+  async function walk(value: unknown, path: string): Promise<unknown> {
+    if (typeof value === "string") {
+      return resolveString(value, path);
+    }
+    if (Array.isArray(value)) {
+      const out: unknown[] = [];
+      for (let i = 0; i < value.length; i++) {
+        out.push(await walk(value[i], `${path}[${i}]`));
+      }
+      return out;
+    }
+    if (value && typeof value === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        out[k] = await walk(v, path ? `${path}.${k}` : k);
+      }
+      return out;
+    }
+    return value;
+  }
+
+  const resolved = (await walk(desiredState, "")) as Record<string, unknown>;
+  // Mutate in place for the caller's convenience — keep reference stability.
+  for (const k of Object.keys(desiredState)) delete desiredState[k];
+  Object.assign(desiredState, resolved);
+  return desiredState;
+}
+
+/**
  * Factory for the plan_generator LangGraph node.
  * Accepts llmClient via injection — no direct @ai-sdk imports.
  */
-export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
+export function createPlanGeneratorNode({
+  llmClient,
+  azLookup,
+}: {
+  llmClient: LlmPort;
+  /** Optional AZ lookup override — used in tests to avoid real EC2 calls. */
+  azLookup?: AzLookup;
+}) {
   return async function planGeneratorNode(
     state: AgentState,
   ): Promise<Partial<AgentState>> {
@@ -367,7 +526,22 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
       }
 
       // Compound cross-reference: inject ARNs from previously completed resources
-      // e.g., Lambda needs the IAM Role ARN from a prior step
+      // e.g., Lambda needs the IAM Role ARN from a prior step.
+      //
+      // A pattern may also seed `desiredState.Role` with a marker token like
+      // `__ASSIGNEE_GETATT_iam-execution-role_Arn__`. The generic marker
+      // resolver further down would replace it with the bare role NAME
+      // (CloudControl only returns the primary identifier for IAM roles),
+      // but Lambda requires the full role ARN. So we detect the marker here
+      // and treat it like a missing Role so the existing STS-based ARN
+      // construction path runs.
+      const existingRoleValue = desiredState[CfnKey.ROLE];
+      const roleIsMarker =
+        typeof existingRoleValue === "string" &&
+        parseMarker(existingRoleValue) !== undefined;
+      if (roleIsMarker) {
+        delete desiredState[CfnKey.ROLE];
+      }
       if (state.completedResources && state.completedResources.length > 0) {
         const completed = state.completedResources;
         if (
@@ -445,6 +619,28 @@ export function createPlanGeneratorNode({ llmClient }: { llmClient: LlmPort }) {
             }
           }
         }
+      }
+
+      // Compound marker resolution — substitute __ASSIGNEE_REF_*__ /
+      // __ASSIGNEE_GETATT_*__ / __ASSIGNEE_AZ_*__ tokens with concrete values
+      // from `completedResources` and the target region's AZ list. This MUST
+      // run before CloudControl sees the desiredState, because CloudControl
+      // does NOT process CloudFormation intrinsics or marker tokens.
+      try {
+        await resolveCompoundMarkers(desiredState, {
+          completedResources: state.completedResources ?? [],
+          region: AWS_REGION,
+          currentResourceId: currentResource.resourceId,
+          azLookup,
+        });
+      } catch (resolveErr) {
+        return {
+          executionStatus: ExecutionStatus.FAILED,
+          errorMessage:
+            resolveErr instanceof Error
+              ? resolveErr.message
+              : String(resolveErr),
+        };
       }
 
       // Story 19.5: Read pattern memory for compound mode hints

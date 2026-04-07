@@ -37,6 +37,13 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   [RESOURCE_TYPES.APIGATEWAYV2_API]: "ApiId",
   [RESOURCE_TYPES.CLOUDWATCH_ALARM]: "AlarmName",
   [RESOURCE_TYPES.SECRETSMANAGER_SECRET]: "Name",
+  // WV4-A: VPC compound provisioning support. Both types use composite
+  // CloudControl identifiers (VPCGatewayAttachment uses
+  // "VpcId|InternetGatewayId", SubnetRouteTableAssociation uses "AssociationId")
+  // — getPrimaryIdentifier returns undefined for these and the state guard
+  // skips Read-Before-Write, which is correct for cross-reference resources.
+  [RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT]: "AttachmentId",
+  [RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION]: "Id",
 } as const;
 
 /**

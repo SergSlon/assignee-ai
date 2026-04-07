@@ -107,16 +107,21 @@ export async function runWhoami(deps: WhoamiDeps = {}): Promise<number> {
 
   let account: string | undefined;
   let arn: string | undefined;
+  // EX-7 regression fix: capture the timer handle so we can clear it on
+  // success. Without the clearTimeout the Node event loop stays alive for
+  // the full STS_TIMEOUT_MS window after the call resolves, making whoami
+  // feel like the slowest command in the CLI instead of the fastest.
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
+        () => reject(new Error(`STS call timed out after ${STS_TIMEOUT_MS}ms`)),
+        STS_TIMEOUT_MS,
+      );
+    });
     const result = await Promise.race([
       client.send(new GetCallerIdentityCommand({})),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () =>
-            reject(new Error(`STS call timed out after ${STS_TIMEOUT_MS}ms`)),
-          STS_TIMEOUT_MS,
-        ),
-      ),
+      timeoutPromise,
     ]);
     account = result.Account;
     arn = result.Arn;
@@ -131,6 +136,8 @@ export async function runWhoami(deps: WhoamiDeps = {}): Promise<number> {
         "Check your credentials, network connection, and IAM permissions (sts:GetCallerIdentity).\n",
     );
     return ProcessExitCode.GENERIC_ERROR;
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
   }
 
   if (!account || !arn) {

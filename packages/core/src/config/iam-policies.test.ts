@@ -43,6 +43,20 @@ describe("IAM Policy Generators", () => {
       expect(actions.length).toBe(unique.size);
     });
 
+    it("includes S3 versioned-object cleanup actions used by destroy-service", () => {
+      // destroy-service.ts calls ListObjectVersions + DeleteObjects(VersionId)
+      // to empty versioned buckets before CloudControl DeleteResource runs.
+      // Without these, destroy still succeeds against unversioned buckets,
+      // but emits a noisy "not authorized" warning that scares operators.
+      const policy = operatorPolicy();
+      const serviceStatement = policy.Statement.find(
+        (s) => s.Sid === "ServiceSpecificActions",
+      );
+      expect(serviceStatement).toBeDefined();
+      expect(serviceStatement!.Action).toContain("s3:ListBucketVersions");
+      expect(serviceStatement!.Action).toContain("s3:DeleteObjectVersion");
+    });
+
     it("includes SDK fallback actions for CCAPI bypass types", () => {
       const policy = operatorPolicy();
       const fallbackStatement = policy.Statement.find(

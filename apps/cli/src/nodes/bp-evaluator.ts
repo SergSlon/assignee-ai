@@ -507,7 +507,47 @@ export async function bpEvaluatorNode(
     }
   }
 
-  if (findings.length > 0) {
+  // Compound-pattern BP suppression:
+  //
+  // Several "structural" best-practices (IGW must be attached to a VPC,
+  // NatGateway must be in a public subnet, etc.) fire on individual
+  // resources because they have no visibility into sibling resources. When
+  // the resource is part of an assignee.ai compound pattern that already
+  // provides the sibling (e.g. vpc-networking bundles IGW + VPCGatewayAttachment
+  // + public RouteTable + Route + SubnetRouteTableAssociation), the BP's
+  // concern is structurally satisfied by the pattern itself and must be
+  // suppressed — otherwise apply-mode hits a blocking finding on every
+  // single companion resource and the compound loop can never make progress.
+  //
+  // Keep this allowlist narrow and explicit: only patterns that GUARANTEE
+  // the structural requirement should suppress the BP.
+  const COMPOUND_SUPPRESSIONS: Record<string, Set<string>> = {
+    "vpc-networking": new Set([
+      "BP-IGW-001", // IGW attached to a VPC — pattern includes VPCGatewayAttachment
+      "BP-IGW-002", // Route to IGW for public subnets — pattern includes public Route
+      "BP-RT-001", // Private RT must not route 0/0 via IGW — pattern uses NatGateway
+      "BP-RT-002", // Explicit subnet-RT association — pattern includes associations
+      "BP-NAT-003", // NatGateway in public subnet — pattern places NAT in public subnet
+    ]),
+    "vpc-public-only": new Set(["BP-IGW-001", "BP-IGW-002", "BP-RT-002"]),
+  };
+
+  const patternId = state.resourcePattern?.patternId;
+  let suppressedCount = 0;
+  if (patternId && COMPOUND_SUPPRESSIONS[patternId]) {
+    const suppressed = COMPOUND_SUPPRESSIONS[patternId]!;
+    const filtered = findings.filter((f) => {
+      if (suppressed.has(f.practiceId)) {
+        suppressedCount += 1;
+        return false;
+      }
+      return true;
+    });
+    findings.length = 0;
+    findings.push(...filtered);
+  }
+
+  if (findings.length > 0 || suppressedCount > 0) {
     log({
       ts: new Date().toISOString(),
       runId: state.runId,
@@ -519,6 +559,9 @@ export async function bpEvaluatorNode(
         criticals: findings.filter((f) => f.severity === Severity.CRITICAL)
           .length,
         highs: findings.filter((f) => f.severity === Severity.HIGH).length,
+        ...(suppressedCount > 0
+          ? { compoundSuppressed: suppressedCount, patternId }
+          : {}),
       },
     });
   }

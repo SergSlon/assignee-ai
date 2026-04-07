@@ -91,21 +91,33 @@ const STATUS_GLYPH: Record<CheckStatus, string> = {
   fail: "✗",
 };
 
-/** Best-effort wrapper that resolves a promise or rejects after `ms`. */
+/**
+ * Best-effort wrapper that resolves a promise or rejects after `ms`.
+ *
+ * EX-7 regression fix: we MUST clear the underlying setTimeout handle once
+ * the wrapped promise settles. Without this, the Node event loop stays
+ * alive for the full `ms` window after every successful check, making the
+ * whole `doctor` command block for ~ms × checks even when every call was
+ * fast. The 5-second-per-check budget is still enforced — we just don't
+ * hold the process hostage when the call was actually quick.
+ */
 async function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
   label: string,
 ): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timeoutHandle = setTimeout(
         () => reject(new Error(`${label} timed out after ${ms}ms`)),
         ms,
-      ),
-    ),
-  ]);
+      );
+    });
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+  }
 }
 
 /** Worst-of two statuses (fail > warn > ok). */

@@ -1,5 +1,5 @@
 /**
- * Coverage integration test — verifies all 23 resource types have
+ * Coverage integration test — verifies all 25 resource types have
  * pricing strategies and decomposers registered.
  *
  * This test will catch regressions when new types are added to
@@ -17,9 +17,9 @@ import { defaultPricingRegistry, defaultDecomposerRegistry } from "../index.js";
 // We call estimate() with undefined desiredState and check it returns a non-empty label.
 // The PricingDecomposerRegistry has `has()`.
 
-describe("pricing coverage — all 23 resource types", () => {
-  it("SUPPORTED_TYPES_ARRAY has exactly 23 types", () => {
-    expect(SUPPORTED_TYPES_ARRAY).toHaveLength(23);
+describe("pricing coverage — all 25 resource types", () => {
+  it("SUPPORTED_TYPES_ARRAY has exactly 25 types", () => {
+    expect(SUPPORTED_TYPES_ARRAY).toHaveLength(25);
   });
 
   describe("pricing strategy registered for every type", () => {

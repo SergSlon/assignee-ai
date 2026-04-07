@@ -245,6 +245,8 @@ describe("routeResultFormatter", () => {
         currentResourceIndex: 1,
         executionStatus: ExecutionStatus.PENDING,
         executionMode: ExecutionMode.APPLY,
+        // Pattern-loop only runs when preflight passed on the previous iteration
+        preflightPassed: true,
       }),
     );
     expect(result).toBe(GraphNode.PLAN_GENERATOR);
@@ -327,5 +329,44 @@ describe("routeResultFormatter", () => {
       }),
     );
     expect(result).toBe(END);
+  });
+
+  // Regression: VPC compound apply hit the LangGraph recursionLimit because
+  // a blocking BP finding on a companion resource (e.g. IGW "must be attached
+  // to a VPC") left preflightPassed=false but executionStatus=PENDING, so the
+  // compound loop kept re-planning the same resource forever. The router now
+  // treats a failed preflight as terminal for the compound loop.
+  it("compound PENDING with preflightPassed=false → END (do not infinite loop)", () => {
+    const result = routeResultFormatter(
+      makeState({
+        resourcePattern: { patternId: "vpc-networking" } as never,
+        resourceQueue: [
+          { resourceId: "vpc" } as never,
+          { resourceId: "igw" } as never,
+        ],
+        currentResourceIndex: 1,
+        executionStatus: ExecutionStatus.PENDING,
+        executionMode: ExecutionMode.APPLY,
+        preflightPassed: false,
+      }),
+    );
+    expect(result).toBe(END);
+  });
+
+  it("compound PENDING with preflightPassed=true still loops to PLAN_GENERATOR", () => {
+    const result = routeResultFormatter(
+      makeState({
+        resourcePattern: { patternId: "vpc-networking" } as never,
+        resourceQueue: [
+          { resourceId: "vpc" } as never,
+          { resourceId: "igw" } as never,
+        ],
+        currentResourceIndex: 1,
+        executionStatus: ExecutionStatus.PENDING,
+        executionMode: ExecutionMode.APPLY,
+        preflightPassed: true,
+      }),
+    );
+    expect(result).toBe(GraphNode.PLAN_GENERATOR);
   });
 });

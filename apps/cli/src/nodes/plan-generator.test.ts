@@ -8,7 +8,15 @@ import {
 import {
   createPlanGeneratorNode,
   applyToCfnTransforms,
+  resolveCompoundMarkers,
+  __resetAzCacheForTests,
 } from "./plan-generator.js";
+import {
+  markerRef,
+  markerAz,
+  markerGetAtt,
+  EIP_AUTO_ALLOCATE,
+} from "@assignee/core";
 
 // Mock memory service (Story 19.3, 19.4).
 // NOTE: Default impls are re-installed in beforeEach because vitest's
@@ -1384,5 +1392,377 @@ describe("planGeneratorNode — EC2 post-processing", () => {
       // a network timeout.
       expect(durationMs).toBeLessThan(10_000);
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// resolveCompoundMarkers — the VPC-compound apply fix
+// ─────────────────────────────────────────────────────────────────────────
+//
+// CloudControl API does NOT process CloudFormation intrinsics, so compound
+// patterns cannot emit { Fn::Select, Fn::GetAZs }, { Ref: ... }, or
+// { Fn::GetAtt: ... } objects directly in defaultOptions. Instead, patterns
+// emit marker-token STRINGS that this resolver substitutes with concrete
+// values before the plan reaches CloudControl.
+describe("resolveCompoundMarkers — VPC compound apply fix", () => {
+  beforeEach(() => {
+    __resetAzCacheForTests();
+  });
+
+  // Real-shaped AZ fixture — exactly what DescribeAvailabilityZones returns
+  // for us-east-1. We pin to real AZ names so a regression that quietly
+  // passes a placeholder through would be immediately visible.
+  const realUsEast1Azs = [
+    "us-east-1a",
+    "us-east-1b",
+    "us-east-1c",
+    "us-east-1d",
+    "us-east-1e",
+    "us-east-1f",
+  ];
+
+  it("substitutes __ASSIGNEE_REF_<id>__ with the completed resource's physical ID", async () => {
+    const desiredState: Record<string, unknown> = {
+      VpcId: markerRef("vpc"),
+      CidrBlock: "10.0.1.0/24",
+    };
+
+    await resolveCompoundMarkers(desiredState, {
+      completedResources: [
+        {
+          resourceId: "vpc",
+          resourceType: RESOURCE_TYPES.EC2_VPC,
+          resourceArn: "vpc-0abc123def456789",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+      region: "us-east-1",
+      currentResourceId: "public-subnet-1",
+      azLookup: async () => realUsEast1Azs,
+    });
+
+    expect(desiredState).toEqual({
+      VpcId: "vpc-0abc123def456789",
+      CidrBlock: "10.0.1.0/24",
+    });
+  });
+
+  it("substitutes __ASSIGNEE_AZ_<n>__ with the Nth availability zone name", async () => {
+    const desiredState: Record<string, unknown> = {
+      AvailabilityZone: markerAz(0),
+      CidrBlock: "10.0.1.0/24",
+    };
+
+    await resolveCompoundMarkers(desiredState, {
+      completedResources: [],
+      region: "us-east-1",
+      currentResourceId: "public-subnet-1",
+      azLookup: async () => realUsEast1Azs,
+    });
+
+    expect(desiredState["AvailabilityZone"]).toBe("us-east-1a");
+  });
+
+  it("resolves different AZ indices in a single state to different zones", async () => {
+    const desiredState: Record<string, unknown> = {
+      first: markerAz(0),
+      second: markerAz(1),
+      third: markerAz(2),
+    };
+
+    await resolveCompoundMarkers(desiredState, {
+      completedResources: [],
+      region: "us-east-1",
+      currentResourceId: "public-subnet-2",
+      azLookup: async () => realUsEast1Azs,
+    });
+
+    expect(desiredState).toEqual({
+      first: "us-east-1a",
+      second: "us-east-1b",
+      third: "us-east-1c",
+    });
+  });
+
+  it("caches AZ lookup — only one call per resolver invocation regardless of marker count", async () => {
+    const desiredState: Record<string, unknown> = {
+      az1: markerAz(0),
+      az2: markerAz(1),
+      az3: markerAz(0), // duplicate
+      nested: { az4: markerAz(1) },
+    };
+    let lookupCalls = 0;
+    await resolveCompoundMarkers(desiredState, {
+      completedResources: [],
+      region: "us-east-1",
+      currentResourceId: "public-subnet-1",
+      azLookup: async () => {
+        lookupCalls += 1;
+        return realUsEast1Azs;
+      },
+    });
+    expect(lookupCalls).toBe(1);
+  });
+
+  it("substitutes __ASSIGNEE_GETATT_<id>_<attr>__ with the resource's primary identifier", async () => {
+    const desiredState: Record<string, unknown> = {
+      Role: markerGetAtt("iam-execution-role", "Arn"),
+    };
+
+    await resolveCompoundMarkers(desiredState, {
+      completedResources: [
+        {
+          resourceId: "iam-execution-role",
+          resourceType: RESOURCE_TYPES.IAM_ROLE,
+          resourceArn:
+            "arn:aws:iam::123456789012:role/assignee-iam-execution-role-run1234",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+      region: "us-east-1",
+      currentResourceId: "lambda-fn",
+      azLookup: async () => realUsEast1Azs,
+    });
+
+    expect(desiredState["Role"]).toBe(
+      "arn:aws:iam::123456789012:role/assignee-iam-execution-role-run1234",
+    );
+  });
+
+  it("walks nested objects and arrays — VPC subnet+tag structure", async () => {
+    // Real-shaped: a subnet with a Tag array containing a marker value.
+    const desiredState: Record<string, unknown> = {
+      VpcId: markerRef("vpc"),
+      AvailabilityZone: markerAz(0),
+      CidrBlock: "10.0.1.0/24",
+      Tags: [
+        { Key: "Name", Value: "public-subnet-1" },
+        { Key: "VpcRef", Value: markerRef("vpc") },
+      ],
+    };
+
+    await resolveCompoundMarkers(desiredState, {
+      completedResources: [
+        {
+          resourceId: "vpc",
+          resourceType: RESOURCE_TYPES.EC2_VPC,
+          resourceArn: "vpc-0abc123def456789",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+      region: "us-east-1",
+      currentResourceId: "public-subnet-1",
+      azLookup: async () => realUsEast1Azs,
+    });
+
+    expect(desiredState).toEqual({
+      VpcId: "vpc-0abc123def456789",
+      AvailabilityZone: "us-east-1a",
+      CidrBlock: "10.0.1.0/24",
+      Tags: [
+        { Key: "Name", Value: "public-subnet-1" },
+        { Key: "VpcRef", Value: "vpc-0abc123def456789" },
+      ],
+    });
+  });
+
+  it("leaves non-marker strings untouched", async () => {
+    const desiredState: Record<string, unknown> = {
+      CidrBlock: "10.0.1.0/24",
+      Name: "my-vpc",
+      AllocationId: EIP_AUTO_ALLOCATE, // a sentinel the provisioner handles, not a marker
+    };
+    await resolveCompoundMarkers(desiredState, {
+      completedResources: [],
+      region: "us-east-1",
+      currentResourceId: "nat-gateway",
+      azLookup: async () => realUsEast1Azs,
+    });
+    expect(desiredState).toEqual({
+      CidrBlock: "10.0.1.0/24",
+      Name: "my-vpc",
+      AllocationId: EIP_AUTO_ALLOCATE,
+    });
+  });
+
+  it("fails with a descriptive error when REF target is not in completedResources", async () => {
+    const desiredState: Record<string, unknown> = {
+      VpcId: markerRef("vpc"),
+    };
+    await expect(
+      resolveCompoundMarkers(desiredState, {
+        completedResources: [], // empty — vpc missing
+        region: "us-east-1",
+        currentResourceId: "public-subnet-1",
+        azLookup: async () => realUsEast1Azs,
+      }),
+    ).rejects.toThrow(/no completed resource with resourceId "vpc"/);
+  });
+
+  it("fails with a descriptive error when REF target has undefined resourceArn", async () => {
+    const desiredState: Record<string, unknown> = {
+      VpcId: markerRef("vpc"),
+    };
+    await expect(
+      resolveCompoundMarkers(desiredState, {
+        completedResources: [
+          {
+            resourceId: "vpc",
+            resourceType: RESOURCE_TYPES.EC2_VPC,
+            resourceArn: undefined,
+            executionStatus: ExecutionStatus.SUCCESS,
+          },
+        ],
+        region: "us-east-1",
+        currentResourceId: "public-subnet-1",
+        azLookup: async () => realUsEast1Azs,
+      }),
+    ).rejects.toThrow(/completed without a physical identifier/);
+  });
+
+  it("fails with a descriptive error when AZ index exceeds available zones", async () => {
+    const desiredState: Record<string, unknown> = {
+      AvailabilityZone: markerAz(10),
+    };
+    await expect(
+      resolveCompoundMarkers(desiredState, {
+        completedResources: [],
+        region: "us-east-1",
+        currentResourceId: "public-subnet-1",
+        azLookup: async () => ["us-east-1a", "us-east-1b"], // only 2 zones
+      }),
+    ).rejects.toThrow(/AZ index 10 is out of range/);
+  });
+
+  it("resolves a realistic full VPC-pattern subnet state end-to-end", async () => {
+    // This mirrors exactly what vpc-networking.ts emits for public-subnet-1
+    // after applyToCfnTransforms in the compound plan-generator branch.
+    const desiredState: Record<string, unknown> = {
+      CidrBlock: "10.0.1.0/24",
+      AvailabilityZone: markerAz(0),
+      MapPublicIpOnLaunch: true,
+      VpcId: markerRef("vpc"),
+    };
+
+    await resolveCompoundMarkers(desiredState, {
+      completedResources: [
+        {
+          resourceId: "vpc",
+          resourceType: RESOURCE_TYPES.EC2_VPC,
+          resourceArn: "vpc-0abc123def456789",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+      region: "us-east-1",
+      currentResourceId: "public-subnet-1",
+      azLookup: async () => realUsEast1Azs,
+    });
+
+    expect(desiredState).toEqual({
+      CidrBlock: "10.0.1.0/24",
+      AvailabilityZone: "us-east-1a",
+      MapPublicIpOnLaunch: true,
+      VpcId: "vpc-0abc123def456789",
+    });
+    // Final check: no marker tokens remain anywhere in the state.
+    expect(JSON.stringify(desiredState)).not.toMatch(/__ASSIGNEE_/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Compound plan-generator branch: marker resolution integration
+// ─────────────────────────────────────────────────────────────────────────
+describe("compound plan-generator branch — marker resolution integration", () => {
+  beforeEach(() => {
+    __resetAzCacheForTests();
+  });
+
+  it("resolves markers in VPC subnet desiredState before returning", async () => {
+    const mock = new MockLlmAdapter(undefined, "{}");
+    const node = createPlanGeneratorNode({
+      llmClient: mock,
+      azLookup: async () => ["us-east-1a", "us-east-1b", "us-east-1c"],
+    });
+
+    const result = await node(
+      makeState({
+        resourceType: RESOURCE_TYPES.EC2_SUBNET,
+        userIntent: "Create a VPC with public subnets",
+        resourcePattern: {
+          patternId: "vpc-networking",
+          displayName: "VPC with Public and Private Subnets",
+          resources: [],
+          defaultOptions: {
+            "public-subnet-1": {
+              CidrBlock: "10.0.1.0/24",
+              AvailabilityZone: markerAz(0),
+              MapPublicIpOnLaunch: true,
+              VpcId: markerRef("vpc"),
+            },
+          },
+        },
+        resourceQueue: [
+          {
+            resourceId: "public-subnet-1",
+            resourceType: RESOURCE_TYPES.EC2_SUBNET,
+          },
+        ],
+        currentResourceIndex: 0,
+        completedResources: [
+          {
+            resourceId: "vpc",
+            resourceType: RESOURCE_TYPES.EC2_VPC,
+            resourceArn: "vpc-0abc123def456789",
+            executionStatus: ExecutionStatus.SUCCESS,
+          },
+        ],
+      }),
+    );
+
+    const ds = result.desiredState as Record<string, unknown>;
+    expect(ds["VpcId"]).toBe("vpc-0abc123def456789");
+    expect(ds["AvailabilityZone"]).toBe("us-east-1a");
+    expect(JSON.stringify(ds)).not.toMatch(/__ASSIGNEE_/);
+    expect(JSON.stringify(ds)).not.toMatch(/Fn::/);
+    expect(result.executionStatus).toBeUndefined(); // no failure
+  });
+
+  it("returns FAILED when marker target is missing from completedResources", async () => {
+    const mock = new MockLlmAdapter(undefined, "{}");
+    const node = createPlanGeneratorNode({
+      llmClient: mock,
+      azLookup: async () => ["us-east-1a", "us-east-1b"],
+    });
+
+    const result = await node(
+      makeState({
+        resourceType: RESOURCE_TYPES.EC2_SUBNET,
+        userIntent: "Create a VPC with public subnets",
+        resourcePattern: {
+          patternId: "vpc-networking",
+          displayName: "VPC",
+          resources: [],
+          defaultOptions: {
+            "public-subnet-1": {
+              CidrBlock: "10.0.1.0/24",
+              VpcId: markerRef("vpc"),
+            },
+          },
+        },
+        resourceQueue: [
+          {
+            resourceId: "public-subnet-1",
+            resourceType: RESOURCE_TYPES.EC2_SUBNET,
+          },
+        ],
+        currentResourceIndex: 0,
+        completedResources: [], // vpc not yet provisioned — ERROR
+      }),
+    );
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toMatch(
+      /no completed resource with resourceId "vpc"/,
+    );
   });
 });

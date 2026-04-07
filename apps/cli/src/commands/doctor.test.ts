@@ -165,6 +165,54 @@ describe("checkCredentials", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("does not leak the per-check timeout timer after a successful STS call (EX-7 regression)", async () => {
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+    process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = "AKIAREADEREXAMPLE001";
+    process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+    process.env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"] = "AKIAAUDITOREXAMPL002";
+    process.env["ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn().mockResolvedValue({
+        Account: "111111111111",
+        Arn: "arn:aws:iam::111111111111:user/assignee-x",
+      });
+      const section = await checkCredentials({
+        stsClientFactory: () => ({ send }),
+      });
+      expect(section.status).toBe("ok");
+      // Regression: before the fix, withTimeout left three live timers
+      // (one per role) pinned to the event loop for DEFAULT_CHECK_TIMEOUT_MS.
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not leak the per-check timeout timer when STS rejects (EX-7 regression)", async () => {
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+    vi.useFakeTimers();
+    try {
+      const section = await checkCredentials({
+        stsClientFactory: () => ({
+          send: vi.fn().mockRejectedValue(new Error("InvalidClientTokenId")),
+        }),
+      });
+      expect(section.status).toBe("fail");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("times out STS calls that exceed the per-check budget", async () => {
     process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
     process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =

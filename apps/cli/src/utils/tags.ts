@@ -37,7 +37,12 @@ const FLAT_MAP_TAG_TYPES: Set<string> = new Set([RESOURCE_TYPES.SSM_PARAMETER]);
  * Tag injection is skipped entirely for these types.
  * @see AWS::EC2::Route — CloudControl rejects Tags property.
  */
-const NO_TAG_TYPES: Set<string> = new Set([RESOURCE_TYPES.EC2_ROUTE]);
+const NO_TAG_TYPES: Set<string> = new Set([
+  RESOURCE_TYPES.EC2_ROUTE,
+  // WV4-A: Cross-reference resources don't accept Tags in CloudFormation
+  RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
+  RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
+]);
 
 /**
  * Merges mandatory Assignee.ai tags into a desiredState object.

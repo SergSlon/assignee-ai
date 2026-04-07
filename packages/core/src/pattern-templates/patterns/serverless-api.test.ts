@@ -172,48 +172,56 @@ describe("Serverless API pattern (Story 26.4)", () => {
     ]);
   });
 
-  it("Lambda references IAM Role ARN", () => {
+  it("Lambda references IAM Role ARN via marker token", () => {
     const lambdaOpts = serverlessApiPattern.defaultOptions["lambda-fn"];
-    expect(lambdaOpts?.["Role"]).toEqual({
-      "Fn::GetAtt": ["iam-execution-role", "Arn"],
-    });
+    expect(lambdaOpts?.["Role"]).toBe(
+      "__ASSIGNEE_GETATT_iam-execution-role_Arn__",
+    );
   });
 
-  it("Integration references Lambda ARN and API ID", () => {
+  it("Integration references Lambda ARN and API ID via marker tokens", () => {
     const integrationOpts =
       serverlessApiPattern.defaultOptions["lambda-integration"];
-    expect(integrationOpts?.["IntegrationUri"]).toEqual({
-      "Fn::GetAtt": ["lambda-fn", "Arn"],
-    });
-    expect(integrationOpts?.["ApiId"]).toEqual({ Ref: "http-api" });
+    expect(integrationOpts?.["IntegrationUri"]).toBe(
+      "__ASSIGNEE_GETATT_lambda-fn_Arn__",
+    );
+    expect(integrationOpts?.["ApiId"]).toBe("__ASSIGNEE_REF_http-api__");
   });
 
   it("Route references API ID and Integration ID", () => {
     const routeOpts = serverlessApiPattern.defaultOptions["default-route"];
-    expect(routeOpts?.["ApiId"]).toEqual({ Ref: "http-api" });
+    expect(routeOpts?.["ApiId"]).toBe("__ASSIGNEE_REF_http-api__");
     expect(routeOpts?.["Target"]).toBeDefined();
   });
 
-  it("Stage references LogGroup ARN and API ID", () => {
+  it("Stage references LogGroup ARN and API ID via marker tokens", () => {
     const stageOpts = serverlessApiPattern.defaultOptions["default-stage"];
-    expect(stageOpts?.["ApiId"]).toEqual({ Ref: "http-api" });
+    expect(stageOpts?.["ApiId"]).toBe("__ASSIGNEE_REF_http-api__");
     const accessLog = stageOpts?.["AccessLogSettings"] as Record<
       string,
       unknown
     >;
-    expect(accessLog?.["DestinationArn"]).toEqual({
-      "Fn::GetAtt": ["access-log-group", "Arn"],
-    });
+    expect(accessLog?.["DestinationArn"]).toBe(
+      "__ASSIGNEE_GETATT_access-log-group_Arn__",
+    );
   });
 
   it("Permission references Lambda ARN and API Gateway source", () => {
     const permOpts =
       serverlessApiPattern.defaultOptions["api-invoke-permission"];
-    expect(permOpts?.["FunctionName"]).toEqual({
-      "Fn::GetAtt": ["lambda-fn", "Arn"],
-    });
+    expect(permOpts?.["FunctionName"]).toBe(
+      "__ASSIGNEE_GETATT_lambda-fn_Arn__",
+    );
     expect(permOpts?.["Principal"]).toBe("apigateway.amazonaws.com");
     expect(permOpts?.["SourceArn"]).toBeDefined();
+  });
+
+  it("emits no CloudFormation intrinsics in defaultOptions", () => {
+    // CloudControl API does not process Fn::* or { Ref } — compound patterns
+    // must use marker tokens that the plan-generator resolves at runtime.
+    const serialized = JSON.stringify(serverlessApiPattern.defaultOptions);
+    expect(serialized).not.toMatch(/"Fn::/);
+    expect(serialized).not.toMatch(/"Ref":/);
   });
 
   it("IAM Role has permission boundary enforced", () => {

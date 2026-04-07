@@ -20,7 +20,7 @@ import type { PricingLineItem } from "../decomposer-types.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-/** The 9 resource types that are free (decompose returns []) */
+/** The free resource types — decompose returns [] (no billable line items) */
 const FREE_TYPES: readonly string[] = [
   RESOURCE_TYPES.EC2_VPC,
   RESOURCE_TYPES.EC2_SUBNET,
@@ -30,6 +30,9 @@ const FREE_TYPES: readonly string[] = [
   RESOURCE_TYPES.EC2_ROUTE_TABLE,
   RESOURCE_TYPES.EC2_ROUTE,
   RESOURCE_TYPES.ECS_CLUSTER,
+  // WV4-A: VPC compound cross-references — pure CFN linkage, no cost
+  RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
+  RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
   // SSM Standard tier is also free, but the decomposer is registered for
   // Advanced tier too — it is NOT in the "always free" list.
 ] as const;

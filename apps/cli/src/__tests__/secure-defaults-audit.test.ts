@@ -159,9 +159,9 @@ function buildDefaultDesiredState(
 // ---------------------------------------------------------------------------
 
 describe("Secure defaults audit — all wizard defaults pass blocking BP rules", () => {
-  // Verify we cover all 23 types
+  // Verify we cover all 25 types (+2 from WV4-A: VPCGatewayAttachment + SubnetRouteTableAssociation)
   it(`covers all ${SUPPORTED_TYPES_ARRAY.length} supported resource types`, () => {
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(23);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(25);
   });
 
   for (const resourceType of SUPPORTED_TYPES_ARRAY) {
