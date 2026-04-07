@@ -35,6 +35,7 @@ import { EnvVar } from "../constants/env-vars.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
 import { checkSecurityPosture } from "../utils/security-posture.js";
+import { resolveResourceArn } from "../utils/resolve-arn.js";
 import {
   writeProvisionRecord,
   writeFailureRecord,
@@ -201,6 +202,27 @@ export async function resultFormatterNode(
 
   switch (state.executionStatus) {
     case ExecutionStatus.SUCCESS: {
+      // BUG-5: CloudControl returns the bare primary identifier
+      // (BucketName, RoleName, FunctionName, ...) — not the ARN. Resolve
+      // it into a full ARN here once per resource so every downstream
+      // consumer (display, log lines, provision record, security
+      // posture check) sees a real, copy-pasteable ARN.
+      //
+      // resolveResourceArn is a no-op when state.resourceArn is already
+      // an ARN (compound resources whose CCAPI returns full ARNs) or
+      // when STS lookup fails (returns bare identifier — best-effort).
+      const resolvedArn = state.resourceType
+        ? await resolveResourceArn({
+            resourceType: state.resourceType,
+            identifier: state.resourceArn,
+          })
+        : state.resourceArn;
+      // Mutate state in place so the rest of this node + the parent
+      // graph state both see the resolved value.
+      if (resolvedArn !== state.resourceArn) {
+        state.resourceArn = resolvedArn;
+      }
+
       // Compound mode: accumulate result and signal loop to continue
       if (
         state.resourcePattern &&
