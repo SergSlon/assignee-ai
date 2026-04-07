@@ -49,6 +49,8 @@ vi.mock("../utils/logger.js", () => ({
   log: vi.fn(),
   LOG_ACTIONS: {
     BP_EVALUATED: "bp_evaluated",
+    BP_EVALUATION_SKIPPED: "bp_evaluation_skipped",
+    MCP_OPTIONAL_INIT_FAILED: "mcp_optional_init_failed",
   },
 }));
 
@@ -342,5 +344,111 @@ describe("BP integrity enforcement (H18)", () => {
 
     const result = await bpEvaluatorNode(makeState());
     expect(result.bpFindings).toBeDefined();
+  });
+});
+
+// L-A7 regression: success-path evaluations log with BP_EVALUATED, while
+// failure-path/skipped logging uses the new BP_EVALUATION_SKIPPED action so
+// log scrapers and metrics can distinguish the two cases.
+describe("BP log action separation (L-A7)", () => {
+  let logMock: ReturnType<typeof vi.fn>;
+  let stderrSpy: MockInstance;
+
+  beforeEach(async () => {
+    process.env = { ...process.env };
+    delete process.env["ASSIGNEE_BP_INTEGRITY"];
+    process.env["NODE_ENV"] = "test"; // → WARN mode default
+    vi.clearAllMocks();
+    resetBPCache();
+    vi.mocked(loadBestPractices).mockReturnValue([S3_VERSIONING_BP]);
+    const loggerModule = await import("../utils/logger.js");
+    logMock = vi.mocked(loggerModule.log);
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+  });
+
+  it("uses BP_EVALUATED for the successful evaluation summary log", async () => {
+    vi.mocked(verifyManifest).mockReturnValue({ valid: true });
+    const result = await bpEvaluatorNode(
+      makeState({
+        resourceType: "AWS::S3::Bucket",
+        desiredState: {
+          BucketName: "my-bucket",
+          // versioning missing → triggers a finding so the summary log fires
+        },
+      }),
+    );
+    expect(result.bpFindings).toBeDefined();
+
+    const evaluatedCalls = logMock.mock.calls.filter((args) => {
+      const event = args[0] as { action?: string };
+      return event.action === "bp_evaluated";
+    });
+    expect(evaluatedCalls.length).toBeGreaterThan(0);
+  });
+
+  it("uses BP_EVALUATION_SKIPPED for warn-mode integrity-check failure log", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "warn";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: false,
+      reason: "BP library hash mismatch",
+      mismatchedFiles: ["s3/BP-S3-001.yaml"],
+    });
+
+    await bpEvaluatorNode(makeState());
+
+    const skippedCalls = logMock.mock.calls.filter((args) => {
+      const event = args[0] as {
+        action?: string;
+        extras?: Record<string, unknown>;
+      };
+      return (
+        event.action === "bp_evaluation_skipped" &&
+        event.extras?.["phase"] === "integrity_check"
+      );
+    });
+    expect(skippedCalls.length).toBeGreaterThan(0);
+    // Crucially: this failure-path log must NOT use the BP_EVALUATED action.
+    const wrongAction = logMock.mock.calls.filter((args) => {
+      const event = args[0] as {
+        action?: string;
+        extras?: Record<string, unknown>;
+      };
+      return (
+        event.action === "bp_evaluated" &&
+        event.extras?.["phase"] === "integrity_check"
+      );
+    });
+    expect(wrongAction).toHaveLength(0);
+  });
+
+  it("uses BP_EVALUATION_SKIPPED for enforce-mode integrity-check error log", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: false,
+      reason: "BP library hash mismatch",
+      mismatchedFiles: ["s3/BP-S3-001.yaml"],
+    });
+
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      BpIntegrityError,
+    );
+
+    const skippedCalls = logMock.mock.calls.filter((args) => {
+      const event = args[0] as {
+        action?: string;
+        extras?: Record<string, unknown>;
+      };
+      return (
+        event.action === "bp_evaluation_skipped" &&
+        event.extras?.["phase"] === "integrity_check"
+      );
+    });
+    expect(skippedCalls.length).toBeGreaterThan(0);
   });
 });

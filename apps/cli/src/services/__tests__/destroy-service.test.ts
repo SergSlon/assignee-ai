@@ -475,6 +475,33 @@ describe("destroySingleResource", () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain("CloudFront destroy failed");
     });
+
+    // L-A12 regression: the CloudFront branch must use the same
+    // requireAssigneeCredentials("operator") helper as the rest of
+    // destroy-service. Previously it inspected awsConfig.accessKeyId from
+    // operatorCredentials() and emitted a generic "Missing AWS credentials"
+    // error, drifting from the central helper that names the exact env vars.
+    it("surfaces requireAssigneeCredentials error when ASSIGNEE_OPERATOR vars are unset", async () => {
+      delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:cloudfront::123456:distribution/EDFDVBD6EXAMPLE",
+        resourceType: "AWS::CloudFront::Distribution",
+        identifier: "EDFDVBD6EXAMPLE",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(false);
+      // The friendly error must name the same env vars as the central
+      // helper, NOT the legacy "Missing AWS credentials for resource cleanup"
+      // string with no actionable detail.
+      expect(result.error).toContain("Missing AWS credentials");
+      expect(result.error).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
+      // No CloudFront SDK calls must have been issued — the credential
+      // check fires BEFORE the first cf.send().
+      expect(mockCfSend).not.toHaveBeenCalled();
+    });
   });
 
   // ── Missing credentials ───────────────────────────────────────────────────

@@ -1,0 +1,70 @@
+# Defense-in-depth ignore list for npm publish.
+# Publishing is currently disabled — see project rule "no public artifacts".
+# Only `dist/`, README, LICENSE, and package.json should be published.
+# IMPORTANT: do NOT list `dist/` here — it must remain INCLUDED in the tarball.
+
+# Source — never publish raw TypeScript
+src
+**/src
+
+# Tests and test fixtures
+test
+tests
+__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+**/test-fixtures
+e2e
+**/e2e
+
+# Test framework configs
+vitest.config.ts
+vitest.config.js
+vitest.config.mts
+jest.config.ts
+jest.config.js
+
+# Lint and type configs
+eslint.config.js
+eslint.config.mjs
+eslint.config.cjs
+.eslintrc
+.eslintrc.*
+tsconfig.json
+tsconfig.*.json
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Coverage and turbo cache
+coverage
+**/coverage
+.turbo
+**/.turbo
+
+# CI / repo internals
+.github
+.husky
+.git
+.gitignore
+.dockerignore
+.npmignore
+scripts
+
+# Project planning artifacts
+_bmad
+_bmad-output
+.agents
+.claude
+.bmad
+
+# Environment files
+.env
+.env.*
+
+# OS / editor junk
+.DS_Store
+*.log
+.vscode
+.idea

@@ -230,7 +230,7 @@ Optional servers (IAM, Well-Architected Security, Billing) are spawned only when
 ## Development
 
 ```bash
-pnpm test          # 4731 tests across 213 files (112 CLI + 75 core + 9 BP + 17 MCP)
+pnpm test          # ~5025 tests across 223 files (116 CLI + 76 core + 10 BP + 21 MCP)
 pnpm check-types   # TypeScript type check
 pnpm build         # compile all packages
 ```

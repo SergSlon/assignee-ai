@@ -11,6 +11,7 @@ import {
 import {
   resourceProvisionerNode,
   sanitizeKeyName,
+  formatErrorForLog,
 } from "./resource-provisioner.js";
 import {
   ProvisioningErrorKind,
@@ -1738,6 +1739,180 @@ describe("resourceProvisionerNode", () => {
       // → placeholder.
       expect(sanitizeKeyName("////")).toBe("assignee_key");
       expect(sanitizeKeyName(".....")).toBe("assignee_key");
+    });
+  });
+
+  // L-A5 regression: catch-block extras must include the FULL stack trace
+  // (not just String(err) which discards it). Operators diagnosing EIP/SSH
+  // leaks need the stack to find the exact AWS SDK call that failed.
+  describe("formatErrorForLog (L-A5)", () => {
+    it("returns the stack trace when err is an Error with a stack", () => {
+      const err = new Error("DescribeAddresses failed");
+      // Node sets err.stack on construction; sanity check before asserting.
+      expect(err.stack).toBeDefined();
+      const formatted = formatErrorForLog(err);
+      expect(formatted).toBe(err.stack);
+      expect(formatted).toContain("DescribeAddresses failed");
+      // The stack must mention this test file (proves it's a real stack).
+      expect(formatted).toContain("resource-provisioner.test");
+    });
+
+    it("falls back to err.message when stack is undefined", () => {
+      const err = new Error("no stack");
+      // Force-clear stack to simulate the (rare) Error subclass that omits it.
+      Object.defineProperty(err, "stack", { value: undefined });
+      expect(formatErrorForLog(err)).toBe("no stack");
+    });
+
+    it("stringifies non-Error throws", () => {
+      expect(formatErrorForLog("oops")).toBe("oops");
+      expect(formatErrorForLog(42)).toBe("42");
+      expect(formatErrorForLog({ kind: "weird" })).toBe("[object Object]");
+    });
+
+    it("preserves AWS SDK error subclass stack traces", () => {
+      class ThrottlingException extends Error {
+        constructor() {
+          super("Rate exceeded");
+          this.name = "ThrottlingException";
+        }
+      }
+      const err = new ThrottlingException();
+      const formatted = formatErrorForLog(err);
+      expect(formatted).toContain("Rate exceeded");
+      expect(formatted).toContain("ThrottlingException");
+    });
+  });
+
+  // L-A6 regression: when DescribeAddresses returns more than one EIP tagged
+  // with the runId (from prior leaked attempts), we must reuse the first one
+  // AND emit a warn-level log so operators can manually clean up the rest.
+  describe("EIP multi-address leak warning (L-A6)", () => {
+    let loggerModule: typeof import("../utils/logger.js");
+    let logSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(async () => {
+      loggerModule = await import("../utils/logger.js");
+      logSpy = vi.spyOn(loggerModule, "log").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      logSpy.mockRestore();
+    });
+
+    it("emits a warn log when DescribeAddresses returns multiple EIPs", async () => {
+      mockEc2Send.mockImplementation((cmd: { _type?: string }) => {
+        if (cmd._type === "DescribeAddressesCommand") {
+          return Promise.resolve({
+            Addresses: [
+              {
+                AllocationId: "eipalloc-aaaaaaaa",
+                PublicIp: "203.0.113.10",
+              },
+              {
+                AllocationId: "eipalloc-bbbbbbbb",
+                PublicIp: "203.0.113.11",
+              },
+              {
+                AllocationId: "eipalloc-cccccccc",
+                PublicIp: "203.0.113.12",
+              },
+            ],
+          });
+        }
+        // CreateResource path will be reached after the EIP reuse — return
+        // a benign success so the node returns IN_PROGRESS.
+        return Promise.resolve({});
+      });
+
+      mockProvisioner.getResource.mockResolvedValue([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "not found" },
+        undefined,
+      ]);
+      mockProvisioner.createResource.mockResolvedValue([
+        undefined,
+        { requestToken: "tok-001" },
+      ]);
+
+      const state = makeState({
+        resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
+        desiredState: {
+          [CfnKey.ALLOCATION_ID]: EIP_AUTO_ALLOCATE,
+          SubnetId: "subnet-12345678",
+        },
+      });
+
+      await resourceProvisionerNode(state, mockProvisioner);
+
+      // Find the warn-level call describing the leak.
+      const leakWarn = logSpy.mock.calls.find((args) => {
+        const event = args[0] as {
+          level?: string;
+          extras?: Record<string, unknown>;
+        };
+        return (
+          event.level === "warn" &&
+          event.extras?.["reason"] === "eip_leak_detected"
+        );
+      });
+      expect(leakWarn).toBeDefined();
+      const event = leakWarn![0] as {
+        extras: Record<string, unknown>;
+      };
+      expect(event.extras["count"]).toBe(3);
+      expect(event.extras["reusedAllocationId"]).toBe("eipalloc-aaaaaaaa");
+      expect(event.extras["allAllocationIds"]).toEqual([
+        "eipalloc-aaaaaaaa",
+        "eipalloc-bbbbbbbb",
+        "eipalloc-cccccccc",
+      ]);
+    });
+
+    it("does NOT emit a leak warn when DescribeAddresses returns exactly one EIP", async () => {
+      mockEc2Send.mockImplementation((cmd: { _type?: string }) => {
+        if (cmd._type === "DescribeAddressesCommand") {
+          return Promise.resolve({
+            Addresses: [
+              {
+                AllocationId: "eipalloc-aaaaaaaa",
+                PublicIp: "203.0.113.10",
+              },
+            ],
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      mockProvisioner.getResource.mockResolvedValue([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "not found" },
+        undefined,
+      ]);
+      mockProvisioner.createResource.mockResolvedValue([
+        undefined,
+        { requestToken: "tok-002" },
+      ]);
+
+      const state = makeState({
+        resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
+        desiredState: {
+          [CfnKey.ALLOCATION_ID]: EIP_AUTO_ALLOCATE,
+          SubnetId: "subnet-12345678",
+        },
+      });
+
+      await resourceProvisionerNode(state, mockProvisioner);
+
+      const leakWarn = logSpy.mock.calls.find((args) => {
+        const event = args[0] as {
+          level?: string;
+          extras?: Record<string, unknown>;
+        };
+        return (
+          event.level === "warn" &&
+          event.extras?.["reason"] === "eip_leak_detected"
+        );
+      });
+      expect(leakWarn).toBeUndefined();
     });
   });
 });

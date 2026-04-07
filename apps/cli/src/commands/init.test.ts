@@ -588,6 +588,100 @@ describe("assignee init --global", () => {
   });
 
   // Note: "no --global flag" behavior is fully tested in the "assignee init command" describe block above.
+
+  // L-A9 regression: malformed tag entries (`=value`, `key=`, no `=`) used to
+  // be silently dropped. Users had no way to know their input was rejected.
+  // The fix surfaces a clack.log.warn for each malformed entry.
+  it("warns when tag entry has no '=' separator", async () => {
+    vi.mocked(clack.text)
+      .mockResolvedValueOnce("us-east-1") // region
+      .mockResolvedValueOnce("environmentdev") // malformed: no `=`
+      .mockResolvedValueOnce("") // done with tags
+      .mockResolvedValueOnce(""); // no prefix
+    vi.mocked(clack.select)
+      .mockResolvedValueOnce("ask")
+      .mockResolvedValueOnce("table")
+      .mockResolvedValueOnce("normal");
+
+    await runInitGlobal();
+
+    expect(clack.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Ignored tag "environmentdev"'),
+    );
+
+    // The config still wrote successfully without the bad tag.
+    const content = await fs.readFile(
+      path.join(globalConfigDir, "config.yaml"),
+      "utf-8",
+    );
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    const defaults = parsed["defaults"] as Record<string, unknown> | undefined;
+    expect(defaults?.["tags"]).toBeUndefined();
+  });
+
+  it("warns when tag entry starts with '=' (empty key)", async () => {
+    vi.mocked(clack.text)
+      .mockResolvedValueOnce("us-east-1")
+      .mockResolvedValueOnce("=lonely-value")
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce("");
+    vi.mocked(clack.select)
+      .mockResolvedValueOnce("ask")
+      .mockResolvedValueOnce("table")
+      .mockResolvedValueOnce("normal");
+
+    await runInitGlobal();
+
+    expect(clack.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Ignored tag "=lonely-value"'),
+    );
+  });
+
+  it("warns when tag entry has empty value (`key=`)", async () => {
+    vi.mocked(clack.text)
+      .mockResolvedValueOnce("us-east-1")
+      .mockResolvedValueOnce("environment=") // empty value
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce("");
+    vi.mocked(clack.select)
+      .mockResolvedValueOnce("ask")
+      .mockResolvedValueOnce("table")
+      .mockResolvedValueOnce("normal");
+
+    await runInitGlobal();
+
+    expect(clack.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Ignored tag "environment="'),
+    );
+  });
+
+  it("accepts a valid tag and does NOT warn", async () => {
+    vi.mocked(clack.text)
+      .mockResolvedValueOnce("us-east-1")
+      .mockResolvedValueOnce("environment=production")
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce("");
+    vi.mocked(clack.select)
+      .mockResolvedValueOnce("ask")
+      .mockResolvedValueOnce("table")
+      .mockResolvedValueOnce("normal");
+
+    await runInitGlobal();
+
+    // No "Ignored tag" warnings — only valid entry was supplied.
+    const ignoredWarnings = vi
+      .mocked(clack.log.warn)
+      .mock.calls.filter((c) => String(c[0] ?? "").includes("Ignored tag"));
+    expect(ignoredWarnings).toHaveLength(0);
+
+    const content = await fs.readFile(
+      path.join(globalConfigDir, "config.yaml"),
+      "utf-8",
+    );
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    const defaults = parsed["defaults"] as Record<string, unknown>;
+    expect(defaults["tags"]).toEqual({ environment: "production" });
+  });
 });
 
 // ── M-S8: detectAvailableRoles delegates to @assignee/core ─────────────────

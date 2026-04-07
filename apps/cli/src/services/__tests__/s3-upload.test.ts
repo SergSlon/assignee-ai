@@ -31,6 +31,9 @@ beforeEach(() => {
   process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
   process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
     "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+  // L-A10: createS3Client now requires an explicit region (no us-east-1
+  // silent fallback). Default tests run in us-east-1 unless overridden.
+  process.env["AWS_REGION"] = "us-east-1";
 });
 
 afterEach(() => {
@@ -243,6 +246,45 @@ describe("uploadStaticSite", () => {
 
     expect(S3Client).toHaveBeenCalledWith(
       expect.objectContaining({ region: "eu-west-1" }),
+    );
+  });
+
+  // L-A10 regression: a previous refactor removed the AWS_REGION validation,
+  // so when neither an override nor process.env.AWS_REGION was set the SDK
+  // silently defaulted to us-east-1. createS3Client now throws
+  // ConfigurationError so misconfiguration fails fast.
+  it("throws ConfigurationError when AWS_REGION is missing and no override given", async () => {
+    delete process.env["AWS_REGION"];
+    writeFileSync(join(tmpDir, "index.html"), "hi");
+
+    const { ConfigurationError } = await import("@assignee/core");
+    await expect(uploadStaticSite("my-bucket", tmpDir)).rejects.toThrow(
+      ConfigurationError,
+    );
+    await expect(uploadStaticSite("my-bucket", tmpDir)).rejects.toThrow(
+      /AWS_REGION is missing or empty/,
+    );
+  });
+
+  it("throws ConfigurationError when AWS_REGION is empty string and no override given", async () => {
+    process.env["AWS_REGION"] = "";
+    writeFileSync(join(tmpDir, "index.html"), "hi");
+
+    const { ConfigurationError } = await import("@assignee/core");
+    await expect(uploadStaticSite("my-bucket", tmpDir)).rejects.toThrow(
+      ConfigurationError,
+    );
+  });
+
+  it("uses process.env.AWS_REGION when no override is given", async () => {
+    process.env["AWS_REGION"] = "ap-southeast-2";
+    writeFileSync(join(tmpDir, "index.html"), "hi");
+    const { S3Client } = await import("@aws-sdk/client-s3");
+
+    await uploadStaticSite("my-bucket", tmpDir);
+
+    expect(S3Client).toHaveBeenCalledWith(
+      expect.objectContaining({ region: "ap-southeast-2" }),
     );
   });
 });

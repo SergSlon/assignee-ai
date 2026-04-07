@@ -142,20 +142,42 @@ Pass-through section for organization-wide policies. Keys are domain-specific (e
 
 ## Environment Variables
 
-| Variable                              | Description                                          | Default                    |
-| ------------------------------------- | ---------------------------------------------------- | -------------------------- |
-| `AWS_REGION`                          | AWS region for API calls                             | `us-east-1`                |
-| `BEDROCK_MODEL_ID`                    | Bedrock model for intent parsing and plan generation | `us.amazon.nova-lite-v1:0` |
-| `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | Access key for the operator IAM user                 | -                          |
-| `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | Secret key for the operator IAM user                 | -                          |
-| `ASSIGNEE_READER_ACCESS_KEY_ID`       | Access key for the reader IAM user (MCP)             | -                          |
-| `ASSIGNEE_READER_SECRET_ACCESS_KEY`   | Secret key for the reader IAM user (MCP)             | -                          |
-| `ASSIGNEE_AUDITOR_ACCESS_KEY_ID`      | Access key for the auditor IAM user (MCP)            | -                          |
-| `ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY`  | Secret key for the auditor IAM user (MCP)            | -                          |
-| `ASSIGNEE_VERBOSITY`                  | Set to `verbose` to enable structured log output     | -                          |
-| `ASSIGNEE_LOG_LEVEL`                  | Set to `debug` to enable structured log output       | -                          |
-| `ASSIGNEE_SAAS_URL`                   | SaaS API base URL for org policy fetch               | `https://app.assignee.ai`  |
-| `ASSIGNEE_ORG_POLICY_TTL_MS`          | TTL for cached org policy (milliseconds)             | `300000` (5 min)           |
+| Variable                              | Description                                                                             | Default                          |
+| ------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------- |
+| `AWS_REGION`                          | AWS region for API calls                                                                | `us-east-1`                      |
+| `BEDROCK_MODEL_ID`                    | Bedrock model for intent parsing and plan generation                                    | `us.amazon.nova-lite-v1:0`       |
+| `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | Access key for the operator IAM user                                                    | -                                |
+| `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | Secret key for the operator IAM user                                                    | -                                |
+| `ASSIGNEE_READER_ACCESS_KEY_ID`       | Access key for the reader IAM user (MCP)                                                | -                                |
+| `ASSIGNEE_READER_SECRET_ACCESS_KEY`   | Secret key for the reader IAM user (MCP)                                                | -                                |
+| `ASSIGNEE_AUDITOR_ACCESS_KEY_ID`      | Access key for the auditor IAM user (MCP)                                               | -                                |
+| `ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY`  | Secret key for the auditor IAM user (MCP)                                               | -                                |
+| `ASSIGNEE_VERBOSITY`                  | Set to `verbose` to enable structured log output                                        | -                                |
+| `ASSIGNEE_LOG_LEVEL`                  | Set to `debug` to enable structured log output                                          | -                                |
+| `ASSIGNEE_SAAS_URL`                   | SaaS API base URL for org policy fetch                                                  | `https://app.assignee.ai`        |
+| `ASSIGNEE_ORG_POLICY_TTL_MS`          | TTL for cached org policy (milliseconds)                                                | `300000` (5 min)                 |
+| `ASSIGNEE_BP_INTEGRITY`               | Best-practices manifest integrity mode (see below)                                      | `enforce` (prod) / `warn` (test) |
+| `ASSIGNEE_LOG_DIR`                    | Override directory for always-on warn/error log file                                    | `~/.assignee/logs`               |
+| `ASSIGNEE_ENABLE_REMOTE_MCP`          | Set to `1` to enable the optional remote knowledge MCP server (see security note below) | unset (disabled)                 |
+| `RUN_E2E`                             | Set to `1` to enable the E2E test suite (otherwise skipped)                             | unset (skipped)                  |
+
+### `ASSIGNEE_BP_INTEGRITY` modes
+
+The best-practices library ships with a signed manifest. This variable controls how the loader reacts when the manifest is missing, malformed, or fails verification.
+
+| Mode       | Behavior                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------ |
+| `enforce`  | Manifest must validate. On failure the CLI aborts before running any rules. **Default in production.** |
+| `warn`     | Manifest is verified, but failures only emit a warning and the CLI continues. **Default in tests.**    |
+| `disabled` | Manifest verification is skipped entirely. Use only for local development against unreleased rules.    |
+
+### `ASSIGNEE_LOG_DIR`
+
+The CLI keeps an always-on `warn`/`error` log on disk so post-mortem debugging is possible even with no `--verbose` flag. By default the file lives under `~/.assignee/logs/`. Set `ASSIGNEE_LOG_DIR` to redirect it (used by tests to avoid polluting the user's home directory).
+
+### `ASSIGNEE_ENABLE_REMOTE_MCP`
+
+Set to exactly `1` to enable the optional remote knowledge MCP server. **Security note:** when enabled, the CLI fetches and executes a remote MCP server over the network at runtime. Only enable this in trusted environments and only after reviewing the upstream server. Any other value (including `true`, `yes`, `on`) leaves the server disabled.
 
 ## Org Policy Semantics
 

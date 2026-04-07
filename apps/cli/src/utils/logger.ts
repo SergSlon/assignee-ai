@@ -50,6 +50,7 @@ export const LOG_ACTIONS = {
   SDK_FALLBACK_DISPATCHED: "sdk_fallback_dispatched",
   FREE_TIER_DETECTED: "free_tier_detected",
   BP_EVALUATED: "bp_evaluated",
+  BP_EVALUATION_SKIPPED: "bp_evaluation_skipped",
   APPLY_AUTO_APPROVED: "apply_auto_approved",
   IAM_CHECK_SKIPPED: "iam_check_skipped",
   SECURITY_CHECK_SKIPPED: "security_check_skipped",

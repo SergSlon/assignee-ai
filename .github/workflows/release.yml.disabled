@@ -18,6 +18,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
 
       - uses: actions/setup-node@v4
         with:
@@ -54,6 +56,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
 
       - uses: actions/setup-node@v4
         with:
@@ -96,14 +100,16 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           TARBALL="assignee-${VERSION}-${{ matrix.platform }}.tar.gz"
-          cd staging
-          tar -czf "../${TARBALL}" .
+          tar -czf "${TARBALL}" -C staging .
           echo "TARBALL=${TARBALL}" >> "$GITHUB_ENV"
+          echo "TARBALL_NAME=${TARBALL}" >> "$GITHUB_ENV"
 
       - name: Upload platform tarball
         uses: actions/upload-artifact@v4
         with:
-          name: tarball-${{ matrix.platform }}
+          # Use the canonical filename (assignee-${VERSION}-${platform}.tar.gz)
+          # as the artifact name so downstream jobs can locate it deterministically.
+          name: assignee-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz
           path: ${{ env.TARBALL }}
 
   # --------------------------------------------------------------------------
@@ -120,7 +126,7 @@ jobs:
       - name: Download all tarballs
         uses: actions/download-artifact@v4
         with:
-          pattern: tarball-*
+          pattern: assignee-${{ github.ref_name }}-*.tar.gz
           merge-multiple: true
           path: release-assets/
 
@@ -158,13 +164,19 @@ jobs:
       - name: Download darwin-arm64 tarball for sha256
         uses: actions/download-artifact@v4
         with:
-          name: tarball-darwin-arm64
+          name: assignee-${{ github.ref_name }}-darwin-arm64.tar.gz
           path: release-assets/
 
       - name: Compute sha256
         id: sha
         run: |
-          TARBALL=$(ls release-assets/*.tar.gz | head -1)
+          VERSION="${GITHUB_REF_NAME}"
+          TARBALL="release-assets/assignee-${VERSION}-darwin-arm64.tar.gz"
+          if [ ! -f "$TARBALL" ]; then
+            echo "Expected tarball not found: $TARBALL" >&2
+            ls -la release-assets/ >&2
+            exit 1
+          fi
           SHA=$(shasum -a 256 "$TARBALL" | awk '{print $1}')
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
 
@@ -178,9 +190,12 @@ jobs:
           # Clone the tap repo
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/assignee-ai/homebrew-assignee.git" tap
 
-          # Update formula
-          sed -i "s|url \".*\"|url \"https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}.tar.gz\"|" tap/Formula/assignee.rb
-          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" tap/Formula/assignee.rb
+          # Update formula. Use `sed -i.bak` so the same command works on both
+          # GNU sed (Linux runners) and BSD sed (macOS runners) — BSD sed
+          # requires an explicit backup suffix after -i. Delete the .bak after.
+          sed -i.bak "s|url \".*\"|url \"https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}-darwin-arm64.tar.gz\"|" tap/Formula/assignee.rb
+          sed -i.bak "s|sha256 \".*\"|sha256 \"${SHA}\"|" tap/Formula/assignee.rb
+          rm -f tap/Formula/assignee.rb.bak
 
           # Commit and push
           cd tap

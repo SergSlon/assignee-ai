@@ -224,19 +224,27 @@ export async function destroySingleResource(
         UpdateDistributionCommand,
         DeleteDistributionCommand,
       } = await import("@aws-sdk/client-cloudfront");
-      if (!awsConfig.accessKeyId || !awsConfig.secretAccessKey) {
-        return {
-          ...baseResult,
-          success: false,
-          error: "Missing AWS credentials for resource cleanup",
-        };
+      // L-A12: Migrate from the legacy `awsConfig.accessKeyId` check (which
+      // would only fire for the CloudFront branch) to the same
+      // `requireAssigneeCredentials("operator")` helper used by the rest of
+      // destroy-service. This guarantees a consistent friendly error if
+      // operatorCredentials() ever returns an object missing keys.
+      let cfCreds;
+      try {
+        cfCreds = requireAssigneeCredentials("operator");
+      } catch (credErr) {
+        if (credErr instanceof MissingAssigneeCredentialsError) {
+          return {
+            ...baseResult,
+            success: false,
+            error: `Missing AWS credentials for resource cleanup: ${credErr.message}`,
+          };
+        }
+        throw credErr;
       }
       const cf = new CloudFrontClient({
         region: awsConfig.region ?? AWS_REGION,
-        credentials: {
-          accessKeyId: awsConfig.accessKeyId,
-          secretAccessKey: awsConfig.secretAccessKey,
-        },
+        credentials: cfCreds,
       });
 
       // Step 1: Get current config + ETag

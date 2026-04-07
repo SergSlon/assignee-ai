@@ -329,7 +329,7 @@ assignee init [options]
 - Output format (table/json)
 - Verbosity (quiet/normal/verbose)
 
-Both modes prompt before overwriting existing config files.
+Both modes prompt before overwriting existing config files. `assignee init` does **not** require AWS credentials — it only writes a local config file. Provision credentials separately with `assignee setup` (or by editing `.env`) before running `plan`/`apply`.
 
 **Examples:**
 
@@ -348,10 +348,12 @@ assignee setup [options]
 
 **Options:**
 
-| Flag                  | Description                                 | Default |
-| --------------------- | ------------------------------------------- | ------- |
-| `--profile <profile>` | AWS CLI profile with admin/root credentials | default |
-| `-y, --yes`           | Skip confirmation prompts                   | false   |
+| Flag                   | Description                                                                                                                       | Default |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `--profile <profile>`  | AWS CLI profile with admin/root credentials                                                                                       | default |
+| `-y, --yes`            | Skip confirmation prompts                                                                                                         | false   |
+| `--enable-llm-logging` | PRIVACY: enable Bedrock invocation text logging to CloudWatch (every prompt and response is captured in plaintext). Default OFF.  | false   |
+| `--dry-run`            | Print the plan of IAM users, policies, access keys, and Bedrock logging resources that would be created without calling AWS APIs. | false   |
 
 **Behavior:**
 
@@ -373,6 +375,8 @@ Access keys are written to `.env` in the current directory. Idempotent -- safe t
 assignee setup
 assignee setup --profile admin-user
 assignee setup --yes
+assignee setup --dry-run                # preview the IAM plan, no AWS calls
+assignee setup --enable-llm-logging     # opt in to plaintext Bedrock logs
 ```
 
 ### clean

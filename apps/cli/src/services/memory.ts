@@ -15,6 +15,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import { randomBytes } from "node:crypto";
 import {
   ASSIGNEE_DIR,
   MEMORY_DEDUP_THRESHOLD_MS,
@@ -42,7 +43,9 @@ export class MemoryService {
   }
 
   private async ensureDir(): Promise<void> {
-    await fs.mkdir(this.dir, { recursive: true });
+    // 0o700 — provision/failure/pattern logs may include resource ARNs and
+    // user intents that should not be world-readable on shared systems.
+    await fs.mkdir(this.dir, { recursive: true, mode: 0o700 });
   }
 
   /**
@@ -75,9 +78,20 @@ export class MemoryService {
    * Prevents corruption from partial writes / crashes.
    */
   private async atomicWrite(filePath: string, data: string): Promise<void> {
-    const tmpPath = filePath + ".tmp." + process.pid;
-    await fs.writeFile(tmpPath, data, "utf-8");
+    // Random suffix avoids PID collisions when two concurrent writers
+    // (or two processes with recycled PIDs) target the same file.
+    const tmpPath = filePath + ".tmp." + randomBytes(8).toString("hex");
+    // 0o600 — these JSON files (provisions / failures / patterns) may
+    // contain user intents and resource ARNs and should not be readable
+    // by other local users. chmod the final path as defence-in-depth in
+    // case rename() inherits a wider mode from a pre-existing file.
+    await fs.writeFile(tmpPath, data, { encoding: "utf-8", mode: 0o600 });
     await fs.rename(tmpPath, filePath);
+    try {
+      await fs.chmod(filePath, 0o600);
+    } catch {
+      // Best-effort on filesystems that don't support chmod (Windows etc.)
+    }
   }
 
   /**
