@@ -1,9 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { ConfigurationError } from "@assignee/core";
 
-vi.mock("@aws-sdk/client-cloudcontrol", () => ({
-  CloudControlClient: vi.fn().mockImplementation(() => ({})),
-}));
+vi.mock("@aws-sdk/client-cloudcontrol", () => {
+  // Use class declaration so vitest mockReset cannot strip the
+  // constructor body (matches setup.test.ts pattern).
+  class CloudControlClient {}
+  return { CloudControlClient };
+});
 
 import { createCloudControlClient } from "./cloudcontrol-client.js";
 

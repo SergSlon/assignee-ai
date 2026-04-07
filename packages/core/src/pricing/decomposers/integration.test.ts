@@ -315,11 +315,11 @@ describe("free resource consistency — always return empty array", () => {
       expect(items).toHaveLength(0);
     });
 
-    it(`${resourceType} returns [] for arbitrary desiredState`, () => {
+    it(`${resourceType} returns [] for realistic AWS desiredState`, () => {
       const items = defaultDecomposerRegistry.decompose(resourceType, {
-        SomeField: "some-value",
-        AnotherField: 42,
-        Nested: { Foo: "bar" },
+        BucketName: "my-app-prod-data",
+        VersioningConfiguration: { Status: "Enabled" },
+        Tags: [{ Key: "Environment", Value: "production" }],
       });
       expect(items).toHaveLength(0);
     });

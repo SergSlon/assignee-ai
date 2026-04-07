@@ -57,6 +57,10 @@ function makeMockGraphContext(
   // Default: first getState returns next=[], meaning provisioning done in one step
   const defaultSequence = stateSequence ?? [{ next: [] }];
 
+  // Each test constructs a fresh ctx via this helper, so the vi.fn()s
+  // are not subject to inter-test mockReset wiping. Tests that need to
+  // assert against `.mock.calls` or re-arm via `.mockRejectedValue` rely
+  // on these being real `vi.fn()`s.
   return {
     graph: {
       invoke: vi.fn().mockResolvedValue(defaultFinalState),
@@ -787,23 +791,25 @@ describe("apply_plan tool", () => {
       );
 
       let invokeCount = 0;
+      // Plain functions instead of vi.fn().mockImplementation — survives
+      // `mockReset: true` if this ctx is ever reused across resets.
       const ctx: GraphContext = {
         graph: {
-          invoke: vi.fn().mockImplementation(() => {
+          invoke: async () => {
             invokeCount++;
             // After the phase-1 invoke (call 1) and the first loop invoke (call 2),
             // jump time forward past 10 minutes so the next while-check triggers timeout
             if (invokeCount >= 2) {
               timeOffset = 10 * 60 * 1000 + 1;
             }
-            return Promise.resolve({});
-          }),
-          getState: vi.fn().mockResolvedValue({
+            return {};
+          },
+          getState: async () => ({
             values: { executionStatus: ExecutionStatus.SUCCESS },
             next: ["resource_provisioner"], // Always has more work
           }),
         },
-        cleanup: vi.fn().mockResolvedValue(undefined),
+        cleanup: async () => {},
       };
 
       try {
@@ -855,15 +861,17 @@ describe("apply_plan tool", () => {
         }),
       );
 
-      // Simulate: 2 resources succeed, then graph invoke throws on the 3rd
+      // Simulate: 2 resources succeed, then graph invoke throws on the 3rd.
+      // Plain functions instead of vi.fn().mockImplementation — survives
+      // `mockReset: true`.
       let invokeCallCount = 0;
       const ctx: GraphContext = {
         graph: {
-          invoke: vi.fn().mockImplementation(() => {
+          invoke: async () => {
             invokeCallCount++;
             // Phase 1 invoke + 2 successful loop invokes, then fail on 3rd loop invoke
             if (invokeCallCount <= 3) {
-              return Promise.resolve({
+              return {
                 executionStatus: ExecutionStatus.SUCCESS,
                 completedResources: [
                   {
@@ -877,37 +885,33 @@ describe("apply_plan tool", () => {
                     arn: "arn:aws:lambda:us-east-1:123:function:fn-1",
                   },
                 ],
-              });
+              };
             }
-            return Promise.reject(
-              new Error(
-                "CloudControl API error: DynamoDB table creation failed — limit exceeded",
-              ),
+            throw new Error(
+              "CloudControl API error: DynamoDB table creation failed — limit exceeded",
             );
-          }),
-          getState: vi.fn().mockImplementation(() => {
+          },
+          getState: async () => ({
             // First two getState calls: more work to do. Third: would continue but invoke fails.
-            return Promise.resolve({
-              values: {
-                executionStatus: ExecutionStatus.SUCCESS,
-                completedResources: [
-                  {
-                    resourceId: "res-1",
-                    resourceType: "AWS::S3::Bucket",
-                    arn: "arn:aws:s3:::bucket-1",
-                  },
-                  {
-                    resourceId: "res-2",
-                    resourceType: "AWS::Lambda::Function",
-                    arn: "arn:aws:lambda:us-east-1:123:function:fn-1",
-                  },
-                ],
-              },
-              next: ["resource_provisioner"],
-            });
+            values: {
+              executionStatus: ExecutionStatus.SUCCESS,
+              completedResources: [
+                {
+                  resourceId: "res-1",
+                  resourceType: "AWS::S3::Bucket",
+                  arn: "arn:aws:s3:::bucket-1",
+                },
+                {
+                  resourceId: "res-2",
+                  resourceType: "AWS::Lambda::Function",
+                  arn: "arn:aws:lambda:us-east-1:123:function:fn-1",
+                },
+              ],
+            },
+            next: ["resource_provisioner"],
           }),
         },
-        cleanup: vi.fn().mockResolvedValue(undefined),
+        cleanup: async () => {},
       };
 
       const { client } = await createTestClient(ctx);

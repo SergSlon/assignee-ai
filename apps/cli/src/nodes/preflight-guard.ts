@@ -281,6 +281,7 @@ export async function preflightGuardNode(
     state.resourcePattern &&
     state.resourceQueue &&
     state.currentResourceIndex !== undefined &&
+    state.currentResourceIndex >= 0 &&
     state.currentResourceIndex < state.resourceQueue.length
   ) {
     const currentResource = state.resourceQueue[state.currentResourceIndex]!; // bounds-checked above

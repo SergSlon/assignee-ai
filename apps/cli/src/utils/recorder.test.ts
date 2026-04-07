@@ -13,6 +13,8 @@ import {
   RecordingInterceptor,
   wrapToolWithRecorder,
   RecordingLlmAdapter,
+  sanitizeFilenameSegment,
+  redactStringValue,
 } from "./recorder.js";
 
 // ── isRecordingEnabled ──────────────────────────────────────────────────────
@@ -400,6 +402,215 @@ describe("RecordingLlmAdapter", () => {
     const parsed = readRecordedFile(tmpDir, 0);
     expect(parsed["error"]).toContain("LLM timeout");
     expect(parsed["response"]).toBeUndefined();
+  });
+});
+
+// ── Filename sanitization (M-S1: path traversal hardening) ─────────────────
+
+describe("sanitizeFilenameSegment", () => {
+  it("replaces path traversal sequences with underscores", () => {
+    expect(sanitizeFilenameSegment("../etc/passwd")).toBe("___etc_passwd");
+  });
+
+  it("replaces forward slashes with underscores", () => {
+    expect(sanitizeFilenameSegment("aws/s3/bucket")).toBe("aws_s3_bucket");
+  });
+
+  it("replaces backslashes with underscores", () => {
+    expect(sanitizeFilenameSegment("aws\\s3\\bucket")).toBe("aws_s3_bucket");
+  });
+
+  it("replaces dots with underscores", () => {
+    expect(sanitizeFilenameSegment("file.name.json")).toBe("file_name_json");
+  });
+
+  it("strips other unsafe characters", () => {
+    expect(sanitizeFilenameSegment("aws$s3;bucket|prod")).toBe(
+      "aws_s3_bucket_prod",
+    );
+  });
+
+  it("preserves alphanumerics, underscores, and hyphens", () => {
+    expect(sanitizeFilenameSegment("Get-Pricing_v1")).toBe("Get-Pricing_v1");
+  });
+
+  it("caps length at 64 characters", () => {
+    const long = "a".repeat(200);
+    const result = sanitizeFilenameSegment(long);
+    expect(result.length).toBe(64);
+    expect(result).toBe("a".repeat(64));
+  });
+
+  it("returns 'unknown' for an empty input", () => {
+    expect(sanitizeFilenameSegment("")).toBe("unknown");
+  });
+
+  it("flattens '...' to underscores (not stripped — replaced)", () => {
+    expect(sanitizeFilenameSegment("...")).toBe("___");
+  });
+});
+
+describe("RecordingInterceptor — path traversal protection (M-S1)", () => {
+  let tmpDir: string;
+
+  afterEach(() => {
+    if (tmpDir) cleanup(tmpDir);
+  });
+
+  it("sanitizes a malicious tool name containing ../etc/passwd", () => {
+    const t = createTestRecorder("run-traversal");
+    tmpDir = t.tmpDir;
+
+    t.recorder.recordCall({
+      type: "mcp",
+      tool: "../etc/passwd",
+      input: { service_code: "AmazonS3" },
+      output: { type: "text", text: "{}" },
+      durationMs: 10,
+      timestamp: "2026-03-22T10:00:00.000Z",
+    });
+
+    const files = fs.readdirSync(tmpDir).filter((f) => f.endsWith(".json"));
+    expect(files).toHaveLength(1);
+    // The dangerous "../etc/passwd" must be flattened to "___etc_passwd"
+    expect(files[0]).toContain("___etc_passwd");
+    expect(files[0]).not.toContain("..");
+    expect(files[0]).not.toContain("/");
+  });
+
+  it("sanitizes malicious sdk service/operation names", () => {
+    const t = createTestRecorder("run-traversal-sdk");
+    tmpDir = t.tmpDir;
+
+    t.recorder.recordCall({
+      type: "sdk",
+      service: "../../usr/bin",
+      operation: "..\\..\\Windows",
+      input: {},
+      output: {},
+      durationMs: 1,
+      timestamp: "2026-03-22T10:00:00.000Z",
+    });
+
+    const files = fs.readdirSync(tmpDir).filter((f) => f.endsWith(".json"));
+    expect(files).toHaveLength(1);
+    expect(files[0]).not.toContain("..");
+    expect(files[0]).not.toContain("/");
+    expect(files[0]).not.toContain("\\");
+  });
+});
+
+// ── String-value redaction (M-S2: AKIA / ARN scrubbing) ────────────────────
+
+describe("redactStringValue", () => {
+  it("redacts AKIA-prefixed access keys embedded in a string", () => {
+    const result = redactStringValue("Found key AKIAIOSFODNN7EXAMPLE in env");
+    expect(result).toBe("Found key [REDACTED-AKIA] in env");
+  });
+
+  it("redacts ASIA-prefixed STS session keys embedded in a string", () => {
+    const result = redactStringValue("Session key ASIAIOSFODNN7EXAMPLE active");
+    expect(result).toBe("Session key [REDACTED-AKIA] active");
+  });
+
+  it("redacts multiple access keys in a single string", () => {
+    // Each AKIA key is exactly 20 chars (AKIA + 16 alphanumerics).
+    const result = redactStringValue(
+      "AKIAIOSFODNN7EXAMPLE and AKIAJOHNDOECODE0EXMP",
+    );
+    expect(result).toBe("[REDACTED-AKIA] and [REDACTED-AKIA]");
+  });
+
+  it("redacts the account ID from an IAM ARN", () => {
+    const result = redactStringValue("arn:aws:iam::123456789012:user/operator");
+    expect(result).toBe("arn:aws:iam::[REDACTED]:user/operator");
+  });
+
+  it("leaves unrelated strings untouched", () => {
+    expect(redactStringValue("plain text without secrets")).toBe(
+      "plain text without secrets",
+    );
+  });
+});
+
+describe("RecordingInterceptor — value-level redaction (M-S2)", () => {
+  let tmpDir: string;
+
+  afterEach(() => {
+    if (tmpDir) cleanup(tmpDir);
+  });
+
+  it("redacts AKIA keys nested deep inside the input payload", () => {
+    const t = createTestRecorder("run-akia-nested");
+    tmpDir = t.tmpDir;
+
+    t.recorder.recordCall({
+      type: "mcp",
+      tool: "get_pricing",
+      input: {
+        nested: {
+          deep: {
+            errorMessage: "user AKIAIOSFODNN7EXAMPLE was rejected",
+          },
+        },
+      },
+      output: {},
+      durationMs: 1,
+      timestamp: "2026-03-22T10:00:00.000Z",
+    });
+
+    const parsed = readRecordedFile(tmpDir, 0) as Record<string, unknown>;
+    const inputObj = parsed["input"] as Record<string, unknown>;
+    const nested = inputObj["nested"] as Record<string, unknown>;
+    const deep = nested["deep"] as Record<string, unknown>;
+    expect(deep["errorMessage"]).toBe("user [REDACTED-AKIA] was rejected");
+  });
+
+  it("redacts IAM ARN account IDs nested in the output payload", () => {
+    const t = createTestRecorder("run-arn-nested");
+    tmpDir = t.tmpDir;
+
+    t.recorder.recordCall({
+      type: "sdk",
+      service: "iam",
+      operation: "GetUser",
+      input: {},
+      output: {
+        User: {
+          Arn: "arn:aws:iam::123456789012:user/assignee-operator",
+        },
+      },
+      durationMs: 1,
+      timestamp: "2026-03-22T10:00:00.000Z",
+    });
+
+    const parsed = readRecordedFile(tmpDir, 0) as Record<string, unknown>;
+    const outputObj = parsed["output"] as Record<string, unknown>;
+    const userObj = outputObj["User"] as Record<string, unknown>;
+    expect(userObj["Arn"]).toBe(
+      "arn:aws:iam::[REDACTED]:user/assignee-operator",
+    );
+  });
+
+  it("redacts AKIA keys appearing inside an LLM prompt string", () => {
+    const t = createTestRecorder("run-llm-akia");
+    tmpDir = t.tmpDir;
+
+    t.recorder.recordCall({
+      type: "llm",
+      method: "generateText",
+      prompt:
+        "User said: please use AKIAIOSFODNN7EXAMPLE for the bucket policy",
+      response: "ok",
+      model: "claude",
+      durationMs: 1,
+      timestamp: "2026-03-22T10:00:00.000Z",
+    });
+
+    const parsed = readRecordedFile(tmpDir, 0) as Record<string, unknown>;
+    expect(parsed["prompt"]).toBe(
+      "User said: please use [REDACTED-AKIA] for the bucket policy",
+    );
   });
 });
 

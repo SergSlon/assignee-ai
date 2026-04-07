@@ -97,36 +97,37 @@ describe("preflightGuardNode", () => {
     expect(result).toEqual({});
   });
 
-  it("returns N/A on pricing timeout (non-blocking)", async () => {
+  it("returns a fallback estimate on pricing timeout (non-blocking)", async () => {
     // Use fake timers so the SUT's PRICING_TIMEOUT_MS race resolves
     // without waiting on real wall-clock.
     vi.useFakeTimers({ shouldAdvanceTime: false });
     try {
-      // All pricing queries time out — both main query and decomposer line items
+      // Pin the pricing tool to NEVER resolve so the main pricing query
+      // (and every decomposer line item that doesn't already hit a disk
+      // cache) flows through the SUT's withTimeout path.
+      // Plain function (not vi.fn) so vitest mockReset can't strip the body.
       const slowTool = {
         name: "get_pricing",
-        invoke: vi.fn(
-          () =>
-            new Promise((resolve) =>
-              setTimeout(() => resolve({ type: "text", text: "{}" }), 10_000),
-            ),
-        ),
+        invoke: () => new Promise<never>(() => {}),
       } as unknown as StructuredTool;
 
       const promise = preflightGuardNode(makeState(), [slowTool]);
       // Advance well past the SUT's 3s PRICING_TIMEOUT_MS so withTimeout fires.
-      // Also advance past the slow tool's 10s timer so no leaked timers remain.
       await vi.advanceTimersByTimeAsync(15_000);
       const result = await promise;
 
-      // Pricing timed out → preflightPassed still true (non-blocking)
+      // Key invariant: pricing timeout MUST be non-blocking — preflight
+      // still passes regardless of which fallback path the cost takes.
       expect(result.preflightPassed).toBe(true);
-      // With decomposer line items, partial failures may still yield a per-unit rate
-      // from items that succeed before timeout. If all timeout, cost is N/A.
-      // Either outcome is acceptable — the key invariant is preflight still passes.
+      // The cost MUST be a defined string — either CostEstimateLabel.NA when
+      // every line item hangs, or a per-unit local estimate (e.g.
+      // "$0.0230/GB-mo" for S3) drawn from the local estimator. We accept
+      // both because the price-cache may legitimately serve a fresh entry
+      // from a prior plan.
+      expect(typeof result.estimatedMonthlyCost).toBe("string");
       expect(
         result.estimatedMonthlyCost === CostEstimateLabel.NA ||
-          typeof result.estimatedMonthlyCost === "string",
+          (result.estimatedMonthlyCost as string).length > 0,
       ).toBe(true);
     } finally {
       vi.useRealTimers();
@@ -651,5 +652,38 @@ describe("preflightGuardNode — parallel pricing + IAM fan-out (Story 9.10)", (
     expect(result.preflightPassed).toBe(true);
     expect(result.estimatedMonthlyCost).toBeDefined();
     expect(result.executionStatus).toBeUndefined();
+  });
+
+  // ── M-R3: bounds check must reject negative currentResourceIndex ──────────
+  // Previously the guard was `currentResourceIndex !== undefined &&
+  // currentResourceIndex < state.resourceQueue.length`, which permitted
+  // negative indices to slip through. `state.resourceQueue[-1]!` returns
+  // undefined → NPE on `currentResource.resourceId` aborting preflight for
+  // the entire compound resource.
+  it("does not NPE when currentResourceIndex is -1 (M-R3 bounds check)", async () => {
+    const result = await preflightGuardNode(
+      makeState({
+        resourceType: "AWS::S3::Bucket",
+        resourceSchema: { required: ["BucketName"] },
+        desiredState: { BucketName: "my-bucket" },
+        // Realistic compound-resource shape, but the index has somehow
+        // become -1 (e.g. from a failed dispatcher transition).
+        resourcePattern: {
+          name: "static-website",
+          description: "S3 + CloudFront",
+        },
+        resourceQueue: [
+          {
+            resourceId: "bucket-1",
+            resourceType: "AWS::S3::Bucket",
+            displayName: "Static site bucket",
+          },
+        ],
+        currentResourceIndex: -1,
+      }),
+    );
+    // Must not throw, must not record per-resource cost for invalid index.
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.perResourceCosts).toBeUndefined();
   });
 });

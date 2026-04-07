@@ -717,6 +717,58 @@ describe("applyToCfnTransforms", () => {
     expect(result["CorsAllowedOrigins"]).toBeUndefined();
     expect(result["CorsAllowedMethods"]).toBeUndefined();
   });
+
+  // ── M-R9: parseInt() || default swallows user-entered "0" ────────────────
+  // Previously `parseInt(...) || 30` returned 30 when the user typed "0",
+  // silently ignoring the user's deliberate immediate-transition request.
+  // The fix uses `Number.isFinite(n) && n >= 0` to honor a 0 input.
+  it("honors LifecycleTransitionDays = '0' (M-R9 — does not silently default to 30)", () => {
+    const result = applyToCfnTransforms(
+      {
+        EnableLifecycle: true,
+        LifecycleTransitionDays: "0",
+      },
+      "AWS::S3::Bucket",
+    );
+
+    const lifecycle = result["LifecycleConfiguration"] as {
+      Rules: Array<{
+        Transitions: Array<{ TransitionInDays: number; StorageClass: string }>;
+      }>;
+    };
+    expect(lifecycle.Rules[0]!.Transitions[0]!.TransitionInDays).toBe(0);
+  });
+
+  it("falls back to 30 days when LifecycleTransitionDays is non-numeric", () => {
+    const result = applyToCfnTransforms(
+      {
+        EnableLifecycle: true,
+        LifecycleTransitionDays: "not-a-number",
+      },
+      "AWS::S3::Bucket",
+    );
+    const lifecycle = result["LifecycleConfiguration"] as {
+      Rules: Array<{
+        Transitions: Array<{ TransitionInDays: number }>;
+      }>;
+    };
+    expect(lifecycle.Rules[0]!.Transitions[0]!.TransitionInDays).toBe(30);
+  });
+
+  it("falls back to 30 days when LifecycleTransitionDays is omitted entirely", () => {
+    const result = applyToCfnTransforms(
+      {
+        EnableLifecycle: true,
+      },
+      "AWS::S3::Bucket",
+    );
+    const lifecycle = result["LifecycleConfiguration"] as {
+      Rules: Array<{
+        Transitions: Array<{ TransitionInDays: number }>;
+      }>;
+    };
+    expect(lifecycle.Rules[0]!.Transitions[0]!.TransitionInDays).toBe(30);
+  });
 });
 
 describe("planGeneratorNode — Story 18.9 toCfn integration", () => {

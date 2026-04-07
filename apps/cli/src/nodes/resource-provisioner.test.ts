@@ -8,7 +8,10 @@ import {
   CfnKey,
   RESOURCE_TYPES,
 } from "@assignee/core";
-import { resourceProvisionerNode } from "./resource-provisioner.js";
+import {
+  resourceProvisionerNode,
+  sanitizeKeyName,
+} from "./resource-provisioner.js";
 import {
   ProvisioningErrorKind,
   type ProvisioningPort,
@@ -60,14 +63,16 @@ vi.mock("@aws-sdk/client-ec2", () => {
 });
 
 // ── FS mocks for SSH key pair creation ───────────────────────────────────────
-const { mockMkdirSync, mockWriteFileSync } = vi.hoisted(() => ({
+const { mockMkdirSync, mockWriteFileSync, mockChmodSync } = vi.hoisted(() => ({
   mockMkdirSync: vi.fn(),
   mockWriteFileSync: vi.fn(),
+  mockChmodSync: vi.fn(),
 }));
 
 vi.mock("node:fs", () => ({
   mkdirSync: mockMkdirSync,
   writeFileSync: mockWriteFileSync,
+  chmodSync: mockChmodSync,
 }));
 
 vi.mock("node:os", () => ({
@@ -995,9 +1000,17 @@ describe("resourceProvisionerNode", () => {
         expect.stringContaining("BEGIN RSA PRIVATE KEY"),
         { mode: 0o400 },
       );
+      // M-R7: keys directory must be created with mode 0o700 — never the
+      // default 0o755 which would leak the listing of provisioned key
+      // names to other local users via world-readable directory bits.
       expect(mockMkdirSync).toHaveBeenCalledWith(
         expect.stringContaining("keys"),
-        { recursive: true },
+        { recursive: true, mode: 0o700 },
+      );
+      // Belt-and-suspenders chmod for pre-existing directories.
+      expect(mockChmodSync).toHaveBeenCalledWith(
+        expect.stringContaining("keys"),
+        0o700,
       );
     });
 
@@ -1628,6 +1641,103 @@ describe("resourceProvisionerNode", () => {
       expect(token2).toMatch(/^run-h11-retry-token-001-3-/);
       // But must be DIFFERENT — this is the whole point of H11
       expect(token1).not.toBe(token2);
+    });
+  });
+
+  // ── M-R4: state guard with unresolved compound identifier ────────────────
+  // For compound resources whose primary identifier interpolates an unknown
+  // parent ARN, getPrimaryIdentifier returns undefined and the state guard
+  // is skipped. We MUST log a warn-level audit event so operators can detect
+  // duplicate-resource sneak-throughs. The provisioning still proceeds.
+  describe("state guard skipped on unresolved identifier (M-R4)", () => {
+    it("logs STATE_GUARD_SKIPPED_UNRESOLVED_IDENTIFIER and proceeds when getPrimaryIdentifier returns undefined", async () => {
+      // EC2 Route — composite identifier (RouteTableId + DestinationCidrBlock)
+      // that getPrimaryIdentifier may return undefined for, depending on
+      // the shape of desiredState. We use the absence of RouteTableId so
+      // the helper cannot resolve a primary identifier.
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "route-mr4-token" },
+      ]);
+
+      const stderrSpy = vi.spyOn(process.stderr, "write");
+
+      const result = await resourceProvisionerNode(
+        makeState({
+          resourceType: "AWS::EC2::Route",
+          desiredState: {
+            // Intentionally omit RouteTableId so the primary identifier
+            // cannot be resolved.
+            DestinationCidrBlock: "0.0.0.0/0",
+            GatewayId: "igw-0123456789abcdef0",
+          },
+        }),
+        mockProvisioner,
+      );
+
+      // The state guard must NOT have been called (no identifier).
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
+      // Provisioning still proceeds.
+      expect(mockProvisioner.createResource).toHaveBeenCalledTimes(1);
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      // Warn-level audit log must have been emitted with the new action.
+      const allWrites = stderrSpy.mock.calls
+        .map((c) => String(c[0] ?? ""))
+        .join("\n");
+      expect(allWrites).toContain("state_guard_skipped_unresolved_identifier");
+      stderrSpy.mockRestore();
+    });
+  });
+
+  // ── M-R8: safeKeyName whitelist ──────────────────────────────────────────
+  // The previous sanitizer only stripped `/`, `\`, and `..`, leaving
+  // null bytes, leading dots, control chars, and other shell-unsafe
+  // characters intact. The whitelist `[A-Za-z0-9._-]` blocks all of those.
+  describe("sanitizeKeyName (M-R8)", () => {
+    it("preserves safe characters", () => {
+      expect(sanitizeKeyName("assignee-ssh-key")).toBe("assignee-ssh-key");
+      expect(sanitizeKeyName("my_key.v2")).toBe("my_key.v2");
+      expect(sanitizeKeyName("Key-2026-04")).toBe("Key-2026-04");
+    });
+
+    it("replaces path separators", () => {
+      expect(sanitizeKeyName("foo/bar")).toBe("foo_bar");
+      expect(sanitizeKeyName("foo\\bar")).toBe("foo_bar");
+      expect(sanitizeKeyName("../etc/passwd")).toBe("etc_passwd");
+    });
+
+    it("rejects null bytes", () => {
+      expect(sanitizeKeyName("good\u0000bad")).toBe("good_bad");
+    });
+
+    it("strips leading dots so the result is never a dotfile", () => {
+      expect(sanitizeKeyName(".hidden")).toBe("hidden");
+      expect(sanitizeKeyName("..bad")).toBe("bad");
+      expect(sanitizeKeyName("...")).toBe("assignee_key");
+    });
+
+    it("replaces control characters and newlines", () => {
+      expect(sanitizeKeyName("foo\nbar")).toBe("foo_bar");
+      expect(sanitizeKeyName("foo\tbar")).toBe("foo_bar");
+      expect(sanitizeKeyName("foo\rbar")).toBe("foo_bar");
+    });
+
+    it("replaces shell metacharacters", () => {
+      expect(sanitizeKeyName("foo;rm -rf /")).toBe("foo_rm_-rf__");
+      expect(sanitizeKeyName("foo$(whoami)")).toBe("foo__whoami_");
+      expect(sanitizeKeyName("foo`id`")).toBe("foo_id_");
+    });
+
+    it("replaces non-ASCII Unicode", () => {
+      expect(sanitizeKeyName("résumé")).toBe("r_sum_");
+    });
+
+    it("returns a deterministic placeholder for empty/all-stripped input", () => {
+      expect(sanitizeKeyName("")).toBe("assignee_key");
+      // 4 forward slashes → 4 underscores → leading-strip leaves empty
+      // → placeholder.
+      expect(sanitizeKeyName("////")).toBe("assignee_key");
+      expect(sanitizeKeyName(".....")).toBe("assignee_key");
     });
   });
 });

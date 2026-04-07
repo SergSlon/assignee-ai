@@ -615,10 +615,14 @@ function makeTool(
   name: string,
   invokeFn: () => Promise<unknown>,
 ): StructuredTool {
+  // Each test creates a fresh tool via this helper, and some tests assert
+  // on `.toHaveBeenCalledOnce()`, so we need a real `vi.fn()`. Pass the
+  // implementation directly to the constructor (vi.fn(impl)) — this binds
+  // the implementation as the default that survives intra-test usage.
   return {
     name,
     description: "",
-    invoke: vi.fn().mockImplementation(invokeFn),
+    invoke: vi.fn(invokeFn),
   } as unknown as StructuredTool;
 }
 
@@ -1310,9 +1314,10 @@ describe("renderTradeoffHelp", () => {
   });
 
   it("falls back to renderDocHelp when LLM times out (returns null)", async () => {
-    // Simulate timeout: generateText never resolves within the timeout
+    // Simulate timeout: generateText never resolves within the timeout.
+    // Plain function so vitest mockReset cannot strip the never-resolving body.
     const llmClient = {
-      generateText: vi.fn().mockImplementation(() => new Promise(() => {})),
+      generateText: () => new Promise<never>(() => {}),
       generateStructured: vi.fn(),
     };
 

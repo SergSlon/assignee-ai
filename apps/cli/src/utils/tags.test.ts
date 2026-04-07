@@ -82,11 +82,11 @@ describe("injectMandatoryTags", () => {
   it("does not mutate the input desiredState", () => {
     const input = {
       BucketName: "immutable",
-      Tags: [{ Key: "foo", Value: "bar" }],
+      Tags: [{ Key: "Environment", Value: "production" }],
     };
     injectMandatoryTags(input, runId);
     expect((input.Tags as CfnTag[]).length).toBe(1);
-    expect(input.Tags[0]).toEqual({ Key: "foo", Value: "bar" });
+    expect(input.Tags[0]).toEqual({ Key: "Environment", Value: "production" });
   });
 
   it("preserves non-Tags fields in desiredState", () => {

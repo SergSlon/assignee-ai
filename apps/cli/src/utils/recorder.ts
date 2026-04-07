@@ -91,12 +91,36 @@ const REDACTED_KEYS = new Set([
 ]);
 
 /**
- * Recursively redact sensitive keys from an object before writing to disk.
- * Returns a new object (does not mutate the original).
+ * Patterns matched against any string value (key-blind) to catch credentials
+ * embedded inside larger payloads (e.g. error messages, LLM prompts, ARNs).
+ *
+ * - AKIA-prefixed access keys (long-term IAM users)
+ * - ASIA-prefixed access keys (short-term STS sessions)
+ * - IAM ARNs containing 12-digit account IDs
+ *
+ * @see SECURITY-AUDIT.md — M-S2
+ */
+const ACCESS_KEY_PATTERN = /(AKIA|ASIA)[0-9A-Z]{16}/g;
+const IAM_ARN_ACCOUNT_PATTERN = /arn:aws:iam::\d{12}:/g;
+
+/**
+ * Scrub credential-shaped substrings from a single string value.
+ * Exported only for testing — production code should use redactSensitive().
+ */
+export function redactStringValue(value: string): string {
+  return value
+    .replace(ACCESS_KEY_PATTERN, "[REDACTED-AKIA]")
+    .replace(IAM_ARN_ACCOUNT_PATTERN, "arn:aws:iam::[REDACTED]:");
+}
+
+/**
+ * Recursively redact sensitive keys AND credential-shaped substrings from
+ * any value before writing to disk. Returns a new object (does not mutate
+ * the original).
  */
 function redactSensitive(value: unknown): unknown {
   if (value === null || value === undefined) return value;
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return redactStringValue(value);
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (Array.isArray(value)) return value.map(redactSensitive);
   if (typeof value === "object") {
@@ -121,6 +145,28 @@ function redactSensitive(value: unknown): unknown {
  */
 export function isRecordingEnabled(): boolean {
   return process.env[EnvVar.ASSIGNEE_RECORD] === "1";
+}
+
+// ── Filename sanitization ────────────────────────────────────────────────────
+
+/** Maximum length per filename segment to keep paths bounded. */
+const MAX_FILENAME_SEGMENT_LENGTH = 64;
+
+/**
+ * Sanitize a single filename segment by stripping path separators, dots, and
+ * any other characters that could escape the parent directory or break the
+ * filesystem. Empty results fall back to "unknown".
+ *
+ * Exported only for testing.
+ *
+ * @see SECURITY-AUDIT.md — M-S1
+ */
+export function sanitizeFilenameSegment(segment: string): string {
+  const cleaned = segment
+    .replace(/[/\\.]/g, "_")
+    .replace(/[^A-Za-z0-9_-]/g, "_")
+    .slice(0, MAX_FILENAME_SEGMENT_LENGTH);
+  return cleaned.length > 0 ? cleaned : "unknown";
 }
 
 // ── Recording directory ──────────────────────────────────────────────────────
@@ -170,16 +216,22 @@ export class RecordingInterceptor {
 
   /**
    * Generates a safe filename from call metadata.
+   *
+   * Sanitizes each metadata segment so a malicious upstream (e.g. an MCP
+   * server returning a tool name like `../../etc/passwd`) cannot escape
+   * the per-runId recording directory.
+   *
+   * @see SECURITY-AUDIT.md — M-S1 (path traversal hardening)
    */
   private makeFilename(call: RecordedCall): string {
-    const ts = call.timestamp.replace(/[:.]/g, "-");
+    const ts = sanitizeFilenameSegment(call.timestamp.replace(/[:.]/g, "-"));
     switch (call.type) {
       case "mcp":
-        return `mcp-${call.tool}-${ts}.json`;
+        return `mcp-${sanitizeFilenameSegment(call.tool)}-${ts}.json`;
       case "sdk":
-        return `sdk-${call.service}-${call.operation}-${ts}.json`;
+        return `sdk-${sanitizeFilenameSegment(call.service)}-${sanitizeFilenameSegment(call.operation)}-${ts}.json`;
       case "llm":
-        return `llm-${call.method}-${ts}.json`;
+        return `llm-${sanitizeFilenameSegment(call.method)}-${ts}.json`;
     }
   }
 

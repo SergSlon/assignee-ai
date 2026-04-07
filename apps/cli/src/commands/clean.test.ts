@@ -40,9 +40,12 @@ vi.mock("../services/cleanup.js", () => ({
   formatCleanupReport: vi.fn(),
 }));
 
-vi.mock("../services/memory.js", () => ({
-  MemoryService: vi.fn().mockImplementation(() => ({})),
-}));
+vi.mock("../services/memory.js", () => {
+  // Use class declaration so vitest mockReset cannot strip the
+  // constructor body (matches setup.test.ts pattern).
+  class MemoryService {}
+  return { MemoryService };
+});
 
 vi.mock("@clack/prompts", () => ({
   intro: vi.fn(),
@@ -332,7 +335,7 @@ describe("assignee clean", () => {
       expect(regex.test("e2e-test-bucket")).toBe(true);
       expect(regex.test("assignee-e2e-resource")).toBe(true);
       expect(regex.test("poc-apply-test-abc")).toBe(true);
-      expect(regex.test("bucket/e2e-test/foo")).toBe(true);
+      expect(regex.test("bucket/e2e-test/object.txt")).toBe(true);
       // Must NOT match production resources whose name merely contains "test"
       expect(regex.test("my-test-bucket")).toBe(false);
       expect(regex.test("test-invoice-reports")).toBe(false);

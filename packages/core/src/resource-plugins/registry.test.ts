@@ -24,10 +24,13 @@ describe("PluginRegistry", () => {
   it("overwrites plugin when re-registered", () => {
     const registry = new PluginRegistry();
     registry.register(mockPlugin);
-    const updated = { ...mockPlugin, defaults: { foo: "bar" } };
+    const updated = {
+      ...mockPlugin,
+      defaults: { Encryption: "AES256" },
+    };
     registry.register(updated);
     expect(registry.get("AWS::Test::Resource")?.defaults).toEqual({
-      foo: "bar",
+      Encryption: "AES256",
     });
   });
 

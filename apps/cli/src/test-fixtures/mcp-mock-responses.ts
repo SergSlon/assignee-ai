@@ -4109,7 +4109,9 @@ export function createHangingMockTool(name: string): StructuredTool {
   return {
     name,
     description: "",
-    invoke: vi.fn().mockImplementation(() => new Promise(() => {})),
+    // vi.fn(impl) keeps spy semantics for assertions; impl bound at
+    // construction so the hang survives within a test.
+    invoke: vi.fn(() => new Promise<never>(() => {})),
   } as unknown as StructuredTool;
 }
 
@@ -4127,14 +4129,12 @@ export function createDelayedMockTool(
   return {
     name,
     description: "",
-    invoke: vi
-      .fn()
-      .mockImplementation(
-        () =>
-          new Promise((resolve) =>
-            setTimeout(() => resolve(response), delayMs),
-          ),
-      ),
+    // vi.fn(impl) preserves spy semantics for assertions; impl bound at
+    // construction so it survives within a test.
+    invoke: vi.fn(
+      () =>
+        new Promise((resolve) => setTimeout(() => resolve(response), delayMs)),
+    ),
   } as unknown as StructuredTool;
 }
 
@@ -4311,19 +4311,20 @@ export function createPricingLookupTool(
   return {
     name: ToolName.GET_PRICING,
     description: "",
-    invoke: vi
-      .fn()
-      .mockImplementation(
-        async (args: { filters?: Array<{ Field: string; Value: string }> }) => {
-          const instanceFilter = args.filters?.find(
-            (f) => f.Field === "instanceType",
-          );
-          if (instanceFilter && instanceFilter.Value in priceMap) {
-            return priceMap[instanceFilter.Value];
-          }
-          return McpMocks.pricing.emptyData.success;
-        },
-      ),
+    // vi.fn(impl) preserves spy semantics for tests that assert on
+    // .toHaveBeenCalledWith. Implementation is bound at construction time;
+    // each test creates a fresh tool so mockReset between tests is fine.
+    invoke: vi.fn(
+      async (args: { filters?: Array<{ Field: string; Value: string }> }) => {
+        const instanceFilter = args.filters?.find(
+          (f) => f.Field === "instanceType",
+        );
+        if (instanceFilter && instanceFilter.Value in priceMap) {
+          return priceMap[instanceFilter.Value];
+        }
+        return McpMocks.pricing.emptyData.success;
+      },
+    ),
   } as unknown as StructuredTool;
 }
 
@@ -4363,29 +4364,31 @@ export function createServicePricingDispatchTool(
   return {
     name: ToolName.GET_PRICING,
     description: "",
-    invoke: vi
-      .fn()
-      .mockImplementation(
-        async (args: {
-          filters?: Array<{ Field: string; Value: string }>;
-          service_code?: string;
-        }) => {
-          const filters = args.filters ?? [];
+    // vi.fn(impl): the implementation is bound at construction time so the
+    // tool keeps spy semantics (.toHaveBeenCalledWith etc.). Each test
+    // creates a fresh tool via this factory, so vitest mockReset only
+    // wipes between tests — within a test the implementation persists.
+    invoke: vi.fn(
+      async (args: {
+        filters?: Array<{ Field: string; Value: string }>;
+        service_code?: string;
+      }) => {
+        const filters = args.filters ?? [];
 
-          for (const entry of parsedEntries) {
-            const allMatch = entry.conditions.every((cond) =>
-              filters.some(
-                (f) => f.Field === cond.Field && f.Value === cond.Value,
-              ),
-            );
-            if (allMatch) {
-              return entry.response;
-            }
+        for (const entry of parsedEntries) {
+          const allMatch = entry.conditions.every((cond) =>
+            filters.some(
+              (f) => f.Field === cond.Field && f.Value === cond.Value,
+            ),
+          );
+          if (allMatch) {
+            return entry.response;
           }
+        }
 
-          return McpMocks.pricing.emptyData.success;
-        },
-      ),
+        return McpMocks.pricing.emptyData.success;
+      },
+    ),
   } as unknown as StructuredTool;
 }
 
@@ -4418,8 +4421,7 @@ export function createS3PricingDispatchTool(): StructuredTool {
       McpMocks.pricing.s3PutRequests.success,
     "productFamily=API Request+usagetype=Requests-Tier2":
       McpMocks.pricing.s3GetRequests.success,
-    "productFamily=Data Transfer":
-      McpMocks.pricing.s3DataTransfer.success,
+    "productFamily=Data Transfer": McpMocks.pricing.s3DataTransfer.success,
   });
 }
 
@@ -4439,13 +4441,12 @@ export function createEc2PricingDispatchTool(
   instanceMock = McpMocks.pricing.ec2T3Micro.success,
 ): StructuredTool {
   return createServicePricingDispatchTool({
-    [`productFamily=Compute Instance+instanceType=${instanceType}`]: instanceMock,
+    [`productFamily=Compute Instance+instanceType=${instanceType}`]:
+      instanceMock,
     "productFamily=Storage+volumeApiName=gp3":
       McpMocks.pricing.ebsGp3Storage.success,
-    "productFamily=IP Address":
-      McpMocks.pricing.publicIpv4.success,
-    "productFamily=Data Transfer":
-      McpMocks.pricing.dataTransferOut.success,
+    "productFamily=IP Address": McpMocks.pricing.publicIpv4.success,
+    "productFamily=Data Transfer": McpMocks.pricing.dataTransferOut.success,
   });
 }
 
@@ -4464,10 +4465,8 @@ export function createRdsPricingDispatchTool(
 ): StructuredTool {
   return createServicePricingDispatchTool({
     "productFamily=Database Instance": computeMock,
-    "productFamily=Database Storage":
-      McpMocks.pricing.rdsStorageGp3.success,
-    "productFamily=Storage Snapshot":
-      McpMocks.pricing.rdsBackupStorage.success,
+    "productFamily=Database Storage": McpMocks.pricing.rdsStorageGp3.success,
+    "productFamily=Storage Snapshot": McpMocks.pricing.rdsBackupStorage.success,
   });
 }
 

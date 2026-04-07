@@ -40,7 +40,9 @@ function makeCtx(overrides: Partial<EvalContext> = {}): EvalContext {
 
 describe("getField", () => {
   it("returns top-level field value", () => {
-    expect(getField({ foo: 42 }, "foo")).toBe(42);
+    expect(getField({ BucketName: "my-app-prod-data" }, "BucketName")).toBe(
+      "my-app-prod-data",
+    );
   });
 
   it("returns nested field value", () => {
@@ -460,7 +462,9 @@ describe("evaluateTriggers — triggers array", () => {
 
 describe("evaluateTriggers — edge cases", () => {
   it("returns empty array for empty practices list", () => {
-    const ctx = makeCtx({ desiredState: { foo: "bar" } });
+    const ctx = makeCtx({
+      desiredState: { BucketName: "my-app-prod-data" },
+    });
     const findings = evaluateTriggers(ctx, []);
     expect(findings).toHaveLength(0);
   });

@@ -106,7 +106,7 @@ describe("LlmAdapter", () => {
     // Re-install default impl (mockReset wipes it).
     vi.mocked(generateText).mockResolvedValue({
       text: "mock text",
-      output: { foo: "bar" },
+      output: { resourceType: "AWS::S3::Bucket" },
     } as never);
     // Set required API keys for tests
     process.env["ANTHROPIC_API_KEY"] = "test-key";
@@ -223,7 +223,7 @@ describe("LlmAdapter", () => {
 
   describe("generateStructured", () => {
     it("returns validated structured output", async () => {
-      const schema = z.object({ foo: z.string() });
+      const schema = z.object({ resourceType: z.string() });
       const adapter = new LlmAdapter({
         modelString: "bedrock/amazon.nova-lite-v1:0",
       });
@@ -234,13 +234,13 @@ describe("LlmAdapter", () => {
       );
 
       expect(err).toBeNull();
-      expect(result).toEqual({ foo: "bar" });
+      expect(result).toEqual({ resourceType: "AWS::S3::Bucket" });
     });
 
     it("returns LlmError on failure", async () => {
       vi.mocked(generateText).mockRejectedValueOnce(new Error("schema fail"));
 
-      const schema = z.object({ foo: z.string() });
+      const schema = z.object({ resourceType: z.string() });
       const adapter = new LlmAdapter({
         modelString: "bedrock/amazon.nova-lite-v1:0",
       });
@@ -259,7 +259,7 @@ describe("LlmAdapter", () => {
     // Any node calling generateStructured (intent-parser, workload-classifier)
     // would skip the only runtime defense against prompt-injected outputs.
     it("includes guardrail opts for bedrock provider (H6 regression)", async () => {
-      const schema = z.object({ foo: z.string() });
+      const schema = z.object({ resourceType: z.string() });
       const adapter = new LlmAdapter({
         modelString: "bedrock/amazon.nova-lite-v1:0",
         guardrailId: "abcd1234efgh",
@@ -276,7 +276,7 @@ describe("LlmAdapter", () => {
     });
 
     it("does not include guardrail opts for non-bedrock providers", async () => {
-      const schema = z.object({ foo: z.string() });
+      const schema = z.object({ resourceType: z.string() });
       const adapter = new LlmAdapter({
         modelString: "anthropic/claude-sonnet-4-5",
         guardrailId: "abcd1234efgh",

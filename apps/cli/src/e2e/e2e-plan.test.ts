@@ -74,7 +74,12 @@ function loadEnv() {
   delete process.env["AWS_SESSION_TOKEN"];
   delete process.env["AWS_PROFILE"];
 }
-loadEnv();
+// NOTE: loadEnv() is intentionally NOT called at module load time anymore.
+// It now runs inside the gated beforeAll() below so that:
+//  1. Importing this file (e.g. when RUN_E2E is unset) does not mutate
+//     process.env or strip AWS credentials from the parent shell.
+//  2. The mutations are paired with a snapshot/restore in afterAll().
+let savedEnv: NodeJS.ProcessEnv | undefined;
 
 /**
  * Returns explicit operator credentials from .env — never falls through
@@ -153,6 +158,9 @@ async function sweepStaleResources(): Promise<void> {
 beforeAll(async () => {
   // Hard gate — never execute setup unless RUN_E2E=1
   if (!RUN_E2E) return;
+  // Snapshot env BEFORE loadEnv mutates it so afterAll can restore.
+  savedEnv = { ...process.env };
+  loadEnv();
   // Skip if no credentials
   if (skipIfNoCreds()) {
     console.warn(
@@ -265,6 +273,12 @@ afterAll(async () => {
     }
   } catch (err) {
     console.warn("E2E sweeper error (non-fatal):", err);
+  }
+
+  // Restore the env snapshot taken before loadEnv() ran in beforeAll.
+  if (savedEnv !== undefined) {
+    process.env = savedEnv;
+    savedEnv = undefined;
   }
 }, 30_000);
 

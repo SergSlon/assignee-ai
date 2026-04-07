@@ -132,7 +132,21 @@ async function ensurePolicy(
             (a, b) =>
               (a.CreateDate?.getTime() ?? 0) - (b.CreateDate?.getTime() ?? 0),
           );
-        if (nonDefault.length > 0 && nonDefault[0]!.VersionId) {
+        // Defensive: AWS guarantees at most one default version, so there
+        // should always be a non-default candidate when we hit the limit.
+        // If not (e.g. an unexpected API state), warn loudly and skip the
+        // update so the caller sees a clear message instead of a cryptic
+        // LimitExceeded from CreatePolicyVersion below.
+        // @see SECURITY-AUDIT.md — M-S12
+        if (nonDefault.length === 0) {
+          process.stderr.write(
+            `[assignee setup] WARNING: policy ${policyName} has 5 versions ` +
+              `but none are non-default. Skipping policy update to avoid a ` +
+              `LimitExceeded error. Inspect the policy in the AWS console.\n`,
+          );
+          return policyArn;
+        }
+        if (nonDefault[0]!.VersionId) {
           await iam.send(
             new DeletePolicyVersionCommand({
               PolicyArn: policyArn,
@@ -213,7 +227,10 @@ async function ensureAccessKey(
 }
 
 export const setupCommand = new Command(CommandName.SETUP)
-  .description(CommandDescription.SETUP)
+  .description(
+    CommandDescription.SETUP +
+      " The operator role is REQUIRED — setup aborts if it fails.",
+  )
   .option(
     "--profile <profile>",
     "AWS CLI profile with admin/root credentials (reads from ~/.aws/credentials)",
@@ -492,136 +509,174 @@ export const setupCommand = new Command(CommandName.SETUP)
         );
       }
 
+      // ── Operator role is REQUIRED — abort on failure ────────────────
+      // All CLI commands need operator credentials. If the operator role
+      // failed but reader/auditor succeeded, the .env file would be missing
+      // the operator keys and every subsequent command would fail with an
+      // opaque error. Fail loudly here instead.
+      // @see SECURITY-AUDIT.md — M-S11
+      const operatorSucceeded = succeeded.some(
+        (s) => s.value.role.key === "operator",
+      );
+      if (!operatorSucceeded) {
+        clack.log.error(
+          "Operator role failed to provision. The operator user is REQUIRED " +
+            "for every assignee command. Aborting setup without writing .env. " +
+            "Inspect the IAM error above and re-run `assignee setup`.",
+        );
+        clack.outro("Setup aborted: operator role is required.");
+        process.exit(1);
+        return; // defensive: in tests, process.exit is mocked
+      }
+
       // ── Bedrock invocation logging (Tasks 1–3 from aws-bootstrap.md) ──
+      // Wrapped in try/finally so any throw during the setup block stops the
+      // spinner cleanly instead of leaving the terminal stuck.
+      // @see SECURITY-AUDIT.md — M-S10
       const region = AWS_REGION;
       const logSp = clack.spinner();
       logSp.start("Setting up Bedrock invocation logging...");
-
-      // Task 1: Create IAM role for Bedrock logging
+      let bedrockLoggingOk = false;
       try {
-        await iam.send(
-          new GetRoleCommand({ RoleName: BEDROCK_LOGGING_ROLE_NAME }),
-        );
-        clack.log.step(
-          `Role ${BEDROCK_LOGGING_ROLE_NAME} — verified (already exists)`,
-        );
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name === AwsErrorName.NO_SUCH_ENTITY) {
-          await iam.send(
-            new CreateRoleCommand({
-              RoleName: BEDROCK_LOGGING_ROLE_NAME,
-              AssumeRolePolicyDocument: JSON.stringify({
-                Version: IamPolicy.VERSION,
-                Statement: [
-                  {
-                    Effect: IamEffect.ALLOW,
-                    Principal: { Service: AwsServicePrincipal.BEDROCK },
-                    Action: IamPolicy.ACTION_ASSUME_ROLE,
-                  },
-                ],
-              }),
-              Description:
-                "Allows Bedrock to write invocation logs to CloudWatch",
-            }),
-          );
-          clack.log.step(`Role ${BEDROCK_LOGGING_ROLE_NAME} — created`);
-        } else {
-          throw err;
-        }
-      }
-
-      // Tag Bedrock logging role idempotently
-      await iam.send(
-        new TagRoleCommand({
-          RoleName: BEDROCK_LOGGING_ROLE_NAME,
-          Tags: [MANAGED_TAG],
-        }),
-      );
-
-      // Task 2: Attach inline logging policy to the role (put-role-policy is idempotent)
-      await iam.send(
-        new PutRolePolicyCommand({
-          RoleName: BEDROCK_LOGGING_ROLE_NAME,
-          PolicyName: BEDROCK_LOGGING_POLICY_NAME,
-          PolicyDocument: JSON.stringify({
-            Version: IamPolicy.VERSION,
-            Statement: [
-              {
-                Effect: IamEffect.ALLOW,
-                Action: [
-                  IamAction.LOGS_CREATE_LOG_GROUP,
-                  IamAction.LOGS_CREATE_LOG_STREAM,
-                  IamAction.LOGS_PUT_LOG_EVENTS,
-                  IamAction.LOGS_DESCRIBE_LOG_GROUPS,
-                ],
-                Resource: `${ArnPrefix.LOGS}${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
-              },
-            ],
-          }),
-        }),
-      );
-      clack.log.step("Inline policy BedrockLoggingPolicy — applied");
-
-      // Task 3: Create CloudWatch log group
-      {
-        const { CloudWatchLogsClient, CreateLogGroupCommand } =
-          await import("@aws-sdk/client-cloudwatch-logs");
-        const cwl = new CloudWatchLogsClient({ ...clientConfig, region });
+        // Task 1: Create IAM role for Bedrock logging
         try {
-          await cwl.send(
-            new CreateLogGroupCommand({ logGroupName: BEDROCK_LOG_GROUP_NAME }),
+          await iam.send(
+            new GetRoleCommand({ RoleName: BEDROCK_LOGGING_ROLE_NAME }),
           );
-          clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — created`);
+          clack.log.step(
+            `Role ${BEDROCK_LOGGING_ROLE_NAME} — verified (already exists)`,
+          );
         } catch (err: unknown) {
           if (
             err instanceof Error &&
-            err.name === AwsErrorName.RESOURCE_ALREADY_EXISTS
+            err.name === AwsErrorName.NO_SUCH_ENTITY
           ) {
-            clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — verified`);
+            await iam.send(
+              new CreateRoleCommand({
+                RoleName: BEDROCK_LOGGING_ROLE_NAME,
+                AssumeRolePolicyDocument: JSON.stringify({
+                  Version: IamPolicy.VERSION,
+                  Statement: [
+                    {
+                      Effect: IamEffect.ALLOW,
+                      Principal: { Service: AwsServicePrincipal.BEDROCK },
+                      Action: IamPolicy.ACTION_ASSUME_ROLE,
+                    },
+                  ],
+                }),
+                Description:
+                  "Allows Bedrock to write invocation logs to CloudWatch",
+              }),
+            );
+            clack.log.step(`Role ${BEDROCK_LOGGING_ROLE_NAME} — created`);
           } else {
             throw err;
           }
         }
-      }
 
-      // Task 4: Enable Bedrock invocation logging
-      // PRIVACY: textDataDeliveryEnabled defaults to FALSE. Only when the user
-      // explicitly passes --enable-llm-logging do we send prompt/response text
-      // to CloudWatch Logs. Metadata logging still flows so callers retain
-      // invocation telemetry without bodies.
-      {
-        const { BedrockClient, PutModelInvocationLoggingConfigurationCommand } =
-          await import("@aws-sdk/client-bedrock");
-        const bedrock = new BedrockClient({ ...clientConfig, region });
-        const textLogging = options.enableLlmLogging === true;
-        if (textLogging) {
-          clack.log.warn(
-            "⚠ All LLM prompts/responses will be logged to CloudWatch — " +
-              `disable later via: aws bedrock put-model-invocation-logging-configuration ` +
-              `--logging-config '{"cloudWatchConfig":{"logGroupName":"${BEDROCK_LOG_GROUP_NAME}","roleArn":"${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}"},"textDataDeliveryEnabled":false}'`,
-          );
-        }
-        await bedrock.send(
-          new PutModelInvocationLoggingConfigurationCommand({
-            loggingConfig: {
-              cloudWatchConfig: {
-                logGroupName: BEDROCK_LOG_GROUP_NAME,
-                roleArn: `${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
-              },
-              textDataDeliveryEnabled: textLogging,
-              imageDataDeliveryEnabled: false,
-              embeddingDataDeliveryEnabled: false,
-            },
+        // Tag Bedrock logging role idempotently
+        await iam.send(
+          new TagRoleCommand({
+            RoleName: BEDROCK_LOGGING_ROLE_NAME,
+            Tags: [MANAGED_TAG],
           }),
         );
-        clack.log.step(
-          textLogging
-            ? "Bedrock invocation logging — enabled (text bodies INCLUDED)"
-            : "Bedrock invocation logging — enabled (metadata only, text bodies excluded)",
+
+        // Task 2: Attach inline logging policy to the role (put-role-policy is idempotent)
+        await iam.send(
+          new PutRolePolicyCommand({
+            RoleName: BEDROCK_LOGGING_ROLE_NAME,
+            PolicyName: BEDROCK_LOGGING_POLICY_NAME,
+            PolicyDocument: JSON.stringify({
+              Version: IamPolicy.VERSION,
+              Statement: [
+                {
+                  Effect: IamEffect.ALLOW,
+                  Action: [
+                    IamAction.LOGS_CREATE_LOG_GROUP,
+                    IamAction.LOGS_CREATE_LOG_STREAM,
+                    IamAction.LOGS_PUT_LOG_EVENTS,
+                    IamAction.LOGS_DESCRIBE_LOG_GROUPS,
+                  ],
+                  Resource: `${ArnPrefix.LOGS}${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
+                },
+              ],
+            }),
+          }),
+        );
+        clack.log.step("Inline policy BedrockLoggingPolicy — applied");
+
+        // Task 3: Create CloudWatch log group
+        {
+          const { CloudWatchLogsClient, CreateLogGroupCommand } =
+            await import("@aws-sdk/client-cloudwatch-logs");
+          const cwl = new CloudWatchLogsClient({ ...clientConfig, region });
+          try {
+            await cwl.send(
+              new CreateLogGroupCommand({
+                logGroupName: BEDROCK_LOG_GROUP_NAME,
+              }),
+            );
+            clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — created`);
+          } catch (err: unknown) {
+            if (
+              err instanceof Error &&
+              err.name === AwsErrorName.RESOURCE_ALREADY_EXISTS
+            ) {
+              clack.log.step(`Log group ${BEDROCK_LOG_GROUP_NAME} — verified`);
+            } else {
+              throw err;
+            }
+          }
+        }
+
+        // Task 4: Enable Bedrock invocation logging
+        // PRIVACY: textDataDeliveryEnabled defaults to FALSE. Only when the user
+        // explicitly passes --enable-llm-logging do we send prompt/response text
+        // to CloudWatch Logs. Metadata logging still flows so callers retain
+        // invocation telemetry without bodies.
+        {
+          const {
+            BedrockClient,
+            PutModelInvocationLoggingConfigurationCommand,
+          } = await import("@aws-sdk/client-bedrock");
+          const bedrock = new BedrockClient({ ...clientConfig, region });
+          const textLogging = options.enableLlmLogging === true;
+          if (textLogging) {
+            clack.log.warn(
+              "⚠ All LLM prompts/responses will be logged to CloudWatch — " +
+                `disable later via: aws bedrock put-model-invocation-logging-configuration ` +
+                `--logging-config '{"cloudWatchConfig":{"logGroupName":"${BEDROCK_LOG_GROUP_NAME}","roleArn":"${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}"},"textDataDeliveryEnabled":false}'`,
+            );
+          }
+          await bedrock.send(
+            new PutModelInvocationLoggingConfigurationCommand({
+              loggingConfig: {
+                cloudWatchConfig: {
+                  logGroupName: BEDROCK_LOG_GROUP_NAME,
+                  roleArn: `${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
+                },
+                textDataDeliveryEnabled: textLogging,
+                imageDataDeliveryEnabled: false,
+                embeddingDataDeliveryEnabled: false,
+              },
+            }),
+          );
+          clack.log.step(
+            textLogging
+              ? "Bedrock invocation logging — enabled (text bodies INCLUDED)"
+              : "Bedrock invocation logging — enabled (metadata only, text bodies excluded)",
+          );
+        }
+
+        bedrockLoggingOk = true;
+      } finally {
+        logSp.stop(
+          bedrockLoggingOk
+            ? "Bedrock logging IAM role and policy ready"
+            : "Bedrock logging setup failed — see error above",
         );
       }
-
-      logSp.stop("Bedrock logging IAM role and policy ready");
 
       // ── Write .env file ──────────────────────────────────────────────
       if (Object.keys(envUpdates).length > 0) {

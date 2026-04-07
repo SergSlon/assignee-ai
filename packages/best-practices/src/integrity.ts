@@ -69,14 +69,32 @@ function walkBpFiles(
     for (const file of readdirSync(entryPath)) {
       if (!file.endsWith(".yaml") && !file.endsWith(".yml")) continue;
       const filePath = join(entryPath, file);
-      const stat = statSync(filePath);
-      const content = readFileSync(filePath);
-      const sha256 = createHash("sha256").update(content).digest("hex");
-      files.push({
-        relPath: `${entry}/${file}`,
-        mtime: stat.mtimeMs,
-        sha256,
-      });
+      // TOCTOU-safe: a file listed by readdirSync can be removed before we
+      // stat/read it (e.g. concurrent rule reload, atomic rewrite). On
+      // ENOENT skip silently — the next walk will pick it up. On any
+      // other error log a warning and continue rather than aborting the
+      // entire walk and tearing down BP integrity.
+      try {
+        const stat = statSync(filePath);
+        const content = readFileSync(filePath);
+        const sha256 = createHash("sha256").update(content).digest("hex");
+        files.push({
+          relPath: `${entry}/${file}`,
+          mtime: stat.mtimeMs,
+          sha256,
+        });
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "ENOENT") {
+          // Race with concurrent delete — silently skip.
+          continue;
+        }
+        process.stderr.write(
+          `[bp-integrity] warn: failed to read ${filePath}: ${
+            err instanceof Error ? err.message : String(err)
+          }\n`,
+        );
+      }
     }
   }
 
@@ -108,7 +126,13 @@ export function computeFreshness(
     };
   }
 
-  const oldestMtime = Math.min(...files.map((f) => f.mtime));
+  // Reduce instead of Math.min(...spread) — spreading large arrays risks
+  // hitting the V8 stack-arg limit (~125k elements). reduce is unconditionally
+  // safe regardless of file count.
+  const oldestMtime = files.reduce(
+    (min, f) => (f.mtime < min ? f.mtime : min),
+    Infinity,
+  );
   const ageMs = Date.now() - oldestMtime;
   const oldestAgeDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
 

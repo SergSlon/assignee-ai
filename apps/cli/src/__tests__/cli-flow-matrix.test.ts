@@ -311,7 +311,11 @@ describe("checkpoint serialization", () => {
     expect(cp.desiredState).toEqual({ BucketName: "my-bucket" });
     expect(cp.preflightPassed).toBe(true);
     expect(cp.ttl_hours).toBe(72);
-    expect(cp.checkpoint_version).toBeDefined();
+    // Pin checkpoint_version to the canonical CHECKPOINT_VERSION constant
+    // rather than just toBeDefined — guards against accidental shape
+    // regressions and forces a deliberate change to the schema constant.
+    const { CHECKPOINT_VERSION } = await import("@assignee/core");
+    expect(cp.checkpoint_version).toBe(CHECKPOINT_VERSION);
   });
 
   it("serializeCheckpoint handles compound resources with queue", async () => {
@@ -717,7 +721,11 @@ describe("MemoryService", () => {
       "../services/memory.js",
     );
     const svc = new mod.MemoryService("/tmp/test-memory");
-    expect(svc).toBeDefined();
+    // Stronger than toBeDefined: assert the constructed object exposes
+    // the documented MemoryService API surface.
+    expect(svc).toBeInstanceOf(mod.MemoryService);
+    expect(typeof svc.readProvisions).toBe("function");
+    expect(typeof svc.appendProvision).toBe("function");
   });
 });
 
@@ -800,14 +808,20 @@ describe("plan command definition", () => {
   it("has -o / --output option", async () => {
     const { planCommand } = await import("../commands/plan.js");
     const opt = planCommand.options.find((o) => o.long === "--output");
-    expect(opt).toBeDefined();
-    expect(opt!.short).toBe("-o");
+    expect(opt).toMatchObject({
+      long: "--output",
+      short: "-o",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has --no-apply option", async () => {
     const { planCommand } = await import("../commands/plan.js");
     const opt = planCommand.options.find((o) => o.long === "--no-apply");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--no-apply",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("accepts [intent] as optional argument", async () => {
@@ -837,21 +851,30 @@ describe("apply command definition", () => {
   it("has --wizard option (opt-in interactive mode)", async () => {
     const { applyCommand } = await import("../commands/apply.js");
     const opt = applyCommand.options.find((o) => o.long === "--wizard");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--wizard",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has -y / --yes option", async () => {
     const { applyCommand } = await import("../commands/apply.js");
     const opt = applyCommand.options.find((o) => o.long === "--yes");
-    expect(opt).toBeDefined();
-    expect(opt!.short).toBe("-y");
+    expect(opt).toMatchObject({
+      long: "--yes",
+      short: "-y",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has -c / --checkpoint option", async () => {
     const { applyCommand } = await import("../commands/apply.js");
     const opt = applyCommand.options.find((o) => o.long === "--checkpoint");
-    expect(opt).toBeDefined();
-    expect(opt!.short).toBe("-c");
+    expect(opt).toMatchObject({
+      long: "--checkpoint",
+      short: "-c",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("help text includes checkpoint examples", async () => {
@@ -870,7 +893,10 @@ describe("init command definition", () => {
   it("has --global option", async () => {
     const { initCommand } = await import("../commands/init.js");
     const opt = initCommand.options.find((o) => o.long === "--global");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--global",
+      description: expect.stringMatching(/.+/),
+    });
   });
 });
 
@@ -882,13 +908,19 @@ describe("list command definition", () => {
   it("has --json option", async () => {
     const { listCommand } = await import("../commands/list.js");
     const opt = listCommand.options.find((o) => o.long === "--json");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--json",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has --region option", async () => {
     const { listCommand } = await import("../commands/list.js");
     const opt = listCommand.options.find((o) => o.long === "--region");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--region",
+      description: expect.stringMatching(/.+/),
+    });
   });
 });
 
@@ -900,8 +932,11 @@ describe("destroy command definition", () => {
   it("has -y / --yes option", async () => {
     const { destroyCommand } = await import("../commands/destroy.js");
     const opt = destroyCommand.options.find((o) => o.long === "--yes");
-    expect(opt).toBeDefined();
-    expect(opt!.short).toBe("-y");
+    expect(opt).toMatchObject({
+      long: "--yes",
+      short: "-y",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has optional [resource] argument (optional for --all mode)", async () => {
@@ -914,19 +949,28 @@ describe("destroy command definition", () => {
   it("has --all option", async () => {
     const { destroyCommand } = await import("../commands/destroy.js");
     const opt = destroyCommand.options.find((o) => o.long === "--all");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--all",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has --include-iam option", async () => {
     const { destroyCommand } = await import("../commands/destroy.js");
     const opt = destroyCommand.options.find((o) => o.long === "--include-iam");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--include-iam",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has --dry-run option", async () => {
     const { destroyCommand } = await import("../commands/destroy.js");
     const opt = destroyCommand.options.find((o) => o.long === "--dry-run");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--dry-run",
+      description: expect.stringMatching(/.+/),
+    });
   });
 });
 
@@ -938,19 +982,28 @@ describe("status command definition", () => {
   it("has --json option", async () => {
     const { statusCommand } = await import("../commands/status.js");
     const opt = statusCommand.options.find((o) => o.long === "--json");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--json",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has --region option", async () => {
     const { statusCommand } = await import("../commands/status.js");
     const opt = statusCommand.options.find((o) => o.long === "--region");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--region",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has --bp-coverage option", async () => {
     const { statusCommand } = await import("../commands/status.js");
     const opt = statusCommand.options.find((o) => o.long === "--bp-coverage");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--bp-coverage",
+      description: expect.stringMatching(/.+/),
+    });
   });
 });
 
@@ -987,13 +1040,19 @@ describe("reconcile command definition", () => {
   it("has --resource option", async () => {
     const { reconcileCommand } = await import("../commands/reconcile.js");
     const opt = reconcileCommand.options.find((o) => o.long === "--resource");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--resource",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has --dry-run option", async () => {
     const { reconcileCommand } = await import("../commands/reconcile.js");
     const opt = reconcileCommand.options.find((o) => o.long === "--dry-run");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--dry-run",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has --auto-reconcile option", async () => {
@@ -1001,7 +1060,10 @@ describe("reconcile command definition", () => {
     const opt = reconcileCommand.options.find(
       (o) => o.long === "--auto-reconcile",
     );
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--auto-reconcile",
+      description: expect.stringMatching(/.+/),
+    });
   });
 });
 
@@ -1013,14 +1075,20 @@ describe("setup command definition", () => {
   it("has --profile option", async () => {
     const { setupCommand } = await import("../commands/setup.js");
     const opt = setupCommand.options.find((o) => o.long === "--profile");
-    expect(opt).toBeDefined();
+    expect(opt).toMatchObject({
+      long: "--profile",
+      description: expect.stringMatching(/.+/),
+    });
   });
 
   it("has -y / --yes option", async () => {
     const { setupCommand } = await import("../commands/setup.js");
     const opt = setupCommand.options.find((o) => o.long === "--yes");
-    expect(opt).toBeDefined();
-    expect(opt!.short).toBe("-y");
+    expect(opt).toMatchObject({
+      long: "--yes",
+      short: "-y",
+      description: expect.stringMatching(/.+/),
+    });
   });
 });
 
@@ -1032,14 +1100,16 @@ describe("cache command definition", () => {
   it("has clear subcommand", async () => {
     const { cacheCommand } = await import("../commands/cache.js");
     const sub = cacheCommand.commands.find((c) => c.name() === "clear");
-    expect(sub).toBeDefined();
+    expect(sub, "clear subcommand must exist on cache").not.toBeUndefined();
+    expect(sub!.name()).toBe("clear");
     expect(sub!.description()).toContain("Delete");
   });
 
   it("has refresh subcommand", async () => {
     const { cacheCommand } = await import("../commands/cache.js");
     const sub = cacheCommand.commands.find((c) => c.name() === "refresh");
-    expect(sub).toBeDefined();
+    expect(sub, "refresh subcommand must exist on cache").not.toBeUndefined();
+    expect(sub!.name()).toBe("refresh");
     expect(sub!.description()).toContain("re-fetch");
   });
 });
