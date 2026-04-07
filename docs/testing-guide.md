@@ -10,7 +10,96 @@
 pnpm test                                    # ~4591 unit tests across 207 files, ~37s, no AWS needed
 pnpm check-types                             # TypeScript type check
 pnpm --filter @assignee/mcp-server test:e2e  # MCP E2E against real AWS (~43 min)
+RUN_E2E=1 pnpm --filter assignee test        # CLI graph E2E against real AWS (opt-in gate)
 ```
+
+---
+
+## CLI E2E gate — `RUN_E2E=1` and turbo cache keys
+
+The CLI graph E2E suite (`apps/cli/src/e2e/e2e-plan.test.ts`) hits real AWS via the
+full LangGraph pipeline with real MCP servers and operator credentials. It is
+**opt-in only**. The gate is implemented at the top of the file:
+
+```ts
+const RUN_E2E = process.env["RUN_E2E"] === "1";
+const describeE2E = RUN_E2E ? describe : describe.skip;
+```
+
+Plain `pnpm test` (and any CI job without `RUN_E2E=1`) will always skip the
+19 E2E cases — no real provisioning happens. To opt in:
+
+```bash
+# Make sure .env contains ASSIGNEE_OPERATOR_ACCESS_KEY_ID / SECRET and AWS_REGION
+RUN_E2E=1 pnpm --filter assignee test
+# or for just the e2e file:
+RUN_E2E=1 pnpm --filter assignee test:e2e
+```
+
+### Why the gate needs turbo env passthrough (don't remove this!)
+
+Turbo caches task results by a hash of inputs + env vars. **Env vars that flip
+test behavior MUST be declared in the task's `env` array in `turbo.json`**, or
+turbo will silently replay the old cached result even when you set the var.
+
+Historically, `RUN_E2E` was **not** declared — which meant `RUN_E2E=1 pnpm test`
+would return from turbo cache in ~40ms with the old "skipped" result still in
+place. Developers who explicitly opted in got a lie. The gate was effectively
+broken for anyone relying on `pnpm test` / `pnpm turbo run test`.
+
+Fix: `turbo.json` declares the full set of test-affecting env vars under
+`tasks.test.env` and `tasks.test:coverage.env`:
+
+- `RUN_E2E` — CLI E2E suite gate (this file)
+- `CI` — `skipIf(!!process.env["CI"])` in `mcp-client.test.ts`
+- `NODE_ENV` — BP evaluator default mode (`bp-evaluator.test.ts`)
+- `ASSIGNEE_BP_INTEGRITY` — BP enforcement mode (`bp-evaluator.test.ts`)
+- `ASSIGNEE_LOG_LEVEL`, `ASSIGNEE_VERBOSITY` — logger output
+- `ASSIGNEE_OPERATOR_*`, `ASSIGNEE_READER_*`, `ASSIGNEE_AUDITOR_*` —
+  presence/absence flips `skipIfNoCreds()` in E2E tests
+- `AWS_REGION`, `AWS_DEFAULT_REGION` — region selection inside E2E tests
+
+Each of these is part of the turbo cache key. Change any one of them and
+turbo will miss the cache and re-run the tests.
+
+### How to verify cache invalidation works
+
+If you suspect the gate is being bypassed by cache replay, compare task hashes:
+
+```bash
+# Without RUN_E2E — baseline hash
+pnpm turbo run test --filter=assignee --dry=json | jq -r '.tasks[].hash'
+
+# With RUN_E2E=1 — MUST be a different hash
+RUN_E2E=1 pnpm turbo run test --filter=assignee --dry=json | jq -r '.tasks[].hash'
+```
+
+If the two hashes are identical, `RUN_E2E` is missing from the task `env`
+array in `turbo.json`. Fix that, don't work around it.
+
+End-to-end check (cache hit/miss timings):
+
+```bash
+pnpm test --force                    # cache bypass, runs everything
+pnpm test                            # FULL TURBO cache hit, <50ms per task
+RUN_E2E=1 pnpm test                  # cache MISS, re-runs (different env hash)
+RUN_E2E=1 pnpm test                  # FULL TURBO cache hit with E2E path cached
+pnpm test                            # FULL TURBO cache hit on the original hash
+```
+
+The third run must be a cache miss. If it is a hit, the env passthrough is broken.
+
+### Rules for adding new test-affecting env vars
+
+Any time you add `process.env["FOO"]`-based branching to a `*.test.ts` or
+anything that runs during vitest, you **must**:
+
+1. Add `FOO` to `tasks.test.env` AND `tasks.test:coverage.env` in `turbo.json`.
+2. Document it in the list above.
+3. Verify with the `--dry=json` hash comparison above.
+
+Without step 1, turbo will cache the wrong result and the gate/flag becomes
+silently ineffective.
 
 ---
 

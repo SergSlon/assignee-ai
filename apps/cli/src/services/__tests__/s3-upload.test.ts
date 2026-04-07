@@ -157,6 +157,7 @@ describe("uploadStaticSite", () => {
     // Reset mock to get a fresh send function
     const { S3Client } = await import("@aws-sdk/client-s3");
     mockSend = vi.fn().mockResolvedValue({});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Partial mock of S3Client for test isolation (only `send` is exercised; full client shape has dozens of internal fields irrelevant to the unit under test)
     vi.mocked(S3Client).mockImplementation(() => ({ send: mockSend }) as any);
   });
 
@@ -178,15 +179,22 @@ describe("uploadStaticSite", () => {
     expect(mockSend).toHaveBeenCalledTimes(2);
 
     // Verify PutObjectCommand inputs
-    const calls = mockSend.mock.calls.map((c: any[]) => c[0]);
-    const keys = calls.map((c: any) => c.Key).sort();
+    type PutObjectInput = {
+      Bucket?: string;
+      Key?: string;
+      ContentType?: string;
+    };
+    const calls = mockSend.mock.calls.map(
+      (c: unknown[]) => c[0] as PutObjectInput,
+    );
+    const keys = calls.map((c) => c.Key).sort();
     expect(keys).toEqual(["css/styles.css", "index.html"]);
 
-    const htmlCall = calls.find((c: any) => c.Key === "index.html");
+    const htmlCall = calls.find((c) => c.Key === "index.html")!;
     expect(htmlCall.Bucket).toBe("my-bucket");
     expect(htmlCall.ContentType).toBe("text/html");
 
-    const cssCall = calls.find((c: any) => c.Key === "css/styles.css");
+    const cssCall = calls.find((c) => c.Key === "css/styles.css")!;
     expect(cssCall.ContentType).toBe("text/css");
   });
 
@@ -296,6 +304,7 @@ describe("configureBucketPolicy", () => {
   beforeEach(async () => {
     const { S3Client } = await import("@aws-sdk/client-s3");
     mockSend = vi.fn().mockResolvedValue({});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Partial mock of S3Client for test isolation (only `send` is exercised; full client shape has dozens of internal fields irrelevant to the unit under test)
     vi.mocked(S3Client).mockImplementation(() => ({ send: mockSend }) as any);
   });
 
@@ -341,6 +350,7 @@ describe("s3-upload fail-closed credential enforcement", () => {
 
     const { S3Client } = await import("@aws-sdk/client-s3");
     mockSend = vi.fn().mockResolvedValue({});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Partial mock of S3Client for test isolation (only `send` is exercised; full client shape has dozens of internal fields irrelevant to the unit under test)
     vi.mocked(S3Client).mockImplementation(() => ({ send: mockSend }) as any);
   });
 

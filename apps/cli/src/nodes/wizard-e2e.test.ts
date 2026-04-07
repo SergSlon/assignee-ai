@@ -86,7 +86,7 @@ vi.mock("../services/memory.js", () => ({
 
 // ── Dynamic imports (after mocks) ────────────────────────────────────────────
 
-const { confirm, select, text, multiselect } = await import("@clack/prompts");
+const { confirm, select, text } = await import("@clack/prompts");
 const { optionElicitorNode } = await import("./option-elicitor.js");
 const { createPlanGeneratorNode, applyToCfnTransforms } =
   await import("./plan-generator.js");

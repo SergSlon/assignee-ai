@@ -2082,6 +2082,209 @@ describe("formatDesiredState", () => {
   });
 });
 
+// ── P0-1 regression: resource-type-scoped label resolution ─────────────────
+//
+// Bug: FRIENDLY_NAMES was a flat Record<string, string>, so
+// `[CfnKey.TYPE]: "Load Balancer Type"` (intended for ELBv2) was applied to
+// EVERY resource whose CFN schema has a top-level `Type` property — SSM
+// Parameter, CloudWatch Alarm, DynamoDB (free-form) — producing "Load Balancer
+// Type   String" in SSM plans. Fix: per-resource overrides via
+// FRIENDLY_NAMES_BY_TYPE + resourceType arg to formatDesiredState.
+describe("formatDesiredState — per-resource-type label resolution (P0-1)", () => {
+  let formatDesiredState: typeof import("./display.js").formatDesiredState;
+  let RESOURCE_TYPES: typeof import("@assignee/core").RESOURCE_TYPES;
+
+  beforeEach(async () => {
+    const display = await import("./display.js");
+    formatDesiredState = display.formatDesiredState;
+    const core = await import("@assignee/core");
+    RESOURCE_TYPES = core.RESOURCE_TYPES;
+  });
+
+  it("SSM Parameter: Type renders as 'Parameter Type', not 'Load Balancer Type'", () => {
+    // Real CFN shape for AWS::SSM::Parameter
+    const result = formatDesiredState(
+      {
+        Name: "/my-app/config/db-host",
+        Type: "String",
+        Value: "db.example.com",
+        Description: "Database host",
+      },
+      RESOURCE_TYPES.SSM_PARAMETER,
+    );
+    expect(result).toContain("Parameter Type");
+    expect(result).toContain("String");
+    expect(result).not.toContain("Load Balancer Type");
+  });
+
+  it("SSM Parameter: SecureString Type renders as 'Parameter Type'", () => {
+    const result = formatDesiredState(
+      {
+        Name: "/prod/db/password",
+        Type: "SecureString",
+        Value: "s3cr3t",
+      },
+      RESOURCE_TYPES.SSM_PARAMETER,
+    );
+    expect(result).toContain("Parameter Type");
+    expect(result).toContain("SecureString");
+    expect(result).not.toContain("Load Balancer Type");
+  });
+
+  it("SSM Parameter: StringList Type renders as 'Parameter Type'", () => {
+    const result = formatDesiredState(
+      {
+        Name: "/app/allowed-origins",
+        Type: "StringList",
+        Value: "https://a.com,https://b.com",
+      },
+      RESOURCE_TYPES.SSM_PARAMETER,
+    );
+    expect(result).toContain("Parameter Type");
+    expect(result).toContain("StringList");
+    expect(result).not.toContain("Load Balancer Type");
+  });
+
+  it("ELBv2 LoadBalancer: Type renders as 'Load Balancer Type'", () => {
+    // Real CFN shape for AWS::ElasticLoadBalancingV2::LoadBalancer
+    const result = formatDesiredState(
+      {
+        Name: "my-alb",
+        Type: "application",
+        Scheme: "internet-facing",
+        Subnets: ["subnet-abc", "subnet-def"],
+      },
+      RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+    );
+    expect(result).toContain("Load Balancer Type");
+    expect(result).toContain("application");
+  });
+
+  it("ELBv2 LoadBalancer: network type renders as 'Load Balancer Type'", () => {
+    const result = formatDesiredState(
+      {
+        Name: "my-nlb",
+        Type: "network",
+        Scheme: "internal",
+      },
+      RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+    );
+    expect(result).toContain("Load Balancer Type");
+    expect(result).toContain("network");
+  });
+
+  it("DynamoDB Table: KeySchema renders without 'Load Balancer Type' for nested KeyType", () => {
+    // Real CFN shape for AWS::DynamoDB::Table — KeySchema is nested, the
+    // nested KeyType field must NOT be relabeled globally.
+    const result = formatDesiredState(
+      {
+        TableName: "my-table",
+        BillingMode: "PAY_PER_REQUEST",
+        KeySchema: [
+          { AttributeName: "pk", KeyType: "HASH" },
+          { AttributeName: "sk", KeyType: "RANGE" },
+        ],
+        AttributeDefinitions: [
+          { AttributeName: "pk", AttributeType: "S" },
+          { AttributeName: "sk", AttributeType: "S" },
+        ],
+      },
+      RESOURCE_TYPES.DYNAMODB_TABLE,
+    );
+    expect(result).toContain("Table Name");
+    expect(result).toContain("my-table");
+    expect(result).not.toContain("Load Balancer Type");
+  });
+
+  it("DynamoDB Table: free-form top-level Type never leaks 'Load Balancer Type'", () => {
+    // Defensive — if anything ever places a top-level Type on DynamoDB, we
+    // must NOT reuse the ELBv2 label.
+    const result = formatDesiredState(
+      {
+        TableName: "my-table",
+        Type: "GlobalTable",
+      },
+      RESOURCE_TYPES.DYNAMODB_TABLE,
+    );
+    expect(result).not.toContain("Load Balancer Type");
+    expect(result).toContain("Type");
+    expect(result).toContain("GlobalTable");
+  });
+
+  it("CloudWatch Alarm: top-level Type renders as 'Alarm Type', not 'Load Balancer Type'", () => {
+    // Real CFN shape for AWS::CloudWatch::Alarm (plus synthetic Type field —
+    // some composite alarm forms surface Type, and we must never mislabel it)
+    const result = formatDesiredState(
+      {
+        AlarmName: "high-cpu",
+        MetricName: "CPUUtilization",
+        Namespace: "AWS/EC2",
+        Type: "MetricAlarm",
+        Threshold: 80,
+        ComparisonOperator: "GreaterThanThreshold",
+      },
+      RESOURCE_TYPES.CLOUDWATCH_ALARM,
+    );
+    expect(result).toContain("Alarm Type");
+    expect(result).toContain("MetricAlarm");
+    expect(result).not.toContain("Load Balancer Type");
+  });
+
+  it("ELBv2 TargetGroup: no plugin override defined — Type falls back to spacePascalCase, NOT 'Load Balancer Type'", () => {
+    // AWS::ElasticLoadBalancingV2::TargetGroup has no plugin yet, but may be
+    // surfaced via generic plan rendering. The fix removes the global
+    // [CfnKey.TYPE] entry so unknown resource types fall back safely.
+    const result = formatDesiredState(
+      {
+        Name: "my-tg",
+        Port: 443,
+        Protocol: "HTTPS",
+        TargetType: "instance",
+        VpcId: "vpc-abc",
+      },
+      "AWS::ElasticLoadBalancingV2::TargetGroup",
+    );
+    // Port/Protocol/VpcId still resolve via the global map
+    expect(result).toContain("VPC");
+    // TargetType is not in the global map — falls back to spacePascalCase
+    expect(result).toContain("Target Type");
+    expect(result).toContain("instance");
+    expect(result).not.toContain("Load Balancer Type");
+  });
+
+  it("unknown resource type: top-level Type falls back to spacePascalCase, never 'Load Balancer Type'", () => {
+    // Defensive fallback — passing an unknown resourceType must never resurface the old bug.
+    const result = formatDesiredState(
+      { Type: "SomeValue", Name: "x" },
+      "AWS::Some::NewResource",
+    );
+    expect(result).not.toContain("Load Balancer Type");
+    expect(result).toContain("Type");
+    expect(result).toContain("SomeValue");
+  });
+
+  it("no resource type passed: preserves legacy behavior for global-only labels", () => {
+    // Backward compatibility — callers that don't pass a resourceType still
+    // get sensible labels for unambiguous fields.
+    const result = formatDesiredState({
+      InstanceType: "t3.micro",
+      BucketName: "my-bucket",
+    });
+    expect(result).toContain("Instance Type");
+    expect(result).toContain("Bucket Name");
+  });
+
+  it("no resource type passed: top-level Type no longer mislabels as 'Load Balancer Type'", () => {
+    // This is the raw reproduction from the bug report — no resourceType
+    // supplied, just a desiredState with a Type field. It must fall back to
+    // spacePascalCase, never the old ELBv2 label.
+    const result = formatDesiredState({ Name: "/test", Type: "String" });
+    expect(result).not.toContain("Load Balancer Type");
+    expect(result).toContain("Type");
+    expect(result).toContain("String");
+  });
+});
+
 // ── renderOptionPrompt — categorySelect tests (Story 18.12) ─────────────────
 
 describe("renderOptionPrompt — categorySelect", () => {

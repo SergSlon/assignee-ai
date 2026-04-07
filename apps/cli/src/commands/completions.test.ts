@@ -10,7 +10,15 @@
  * @see Story 18.2, AC #1, #2, #6
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from "vitest";
 import { Command } from "commander";
 
 /**
@@ -35,11 +43,11 @@ async function buildTestCli() {
 }
 
 describe("completions command", () => {
-  let stdoutSpy: any;
+  let stdoutSpy: MockInstance<typeof process.stdout.write>;
 
-  let stderrSpy: any;
+  let stderrSpy: MockInstance<typeof process.stderr.write>;
 
-  let exitSpy: any;
+  let exitSpy: MockInstance<typeof process.exit>;
 
   beforeEach(() => {
     stdoutSpy = vi.spyOn(process.stdout, "write").mockReturnValue(true);

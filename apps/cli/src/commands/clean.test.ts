@@ -6,7 +6,11 @@
  * Also tests the --resources flag for AWS resource cleanup.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 
 // ─── Hoisted mocks ─────────────────────────────────────────────────
 const {
@@ -126,11 +130,29 @@ function captureStdout(): { output: () => string; restore: () => void } {
 
 // ─── Tests ──────────────────────────────────────────────────────────
 
-beforeEach(() => {
+// Isolated log dir so clean's log-prune path never touches the developer's
+// real ~/.assignee/logs. The dir is created fresh per test and removed in
+// afterEach to satisfy the temp-dir cleanup rule.
+let tmpLogDir: string;
+const originalEnv = { ...process.env };
+
+beforeEach(async () => {
   vi.clearAllMocks();
   mockRunFullCleanup.mockResolvedValue(sampleReport);
   mockFormatCleanupReport.mockReturnValue("formatted-report");
   process.exitCode = undefined;
+  tmpLogDir = await fs.mkdtemp(path.join(os.tmpdir(), "assignee-clean-test-"));
+  process.env["ASSIGNEE_LOG_DIR"] = tmpLogDir;
+  delete process.env["ASSIGNEE_LOG_RETENTION_DAYS"];
+});
+
+afterEach(async () => {
+  process.env = { ...originalEnv };
+  try {
+    await fs.rm(tmpLogDir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
 });
 
 describe("assignee clean", () => {
@@ -185,7 +207,18 @@ describe("assignee clean", () => {
       await run("--json");
       const raw = capture.output();
       const parsed = JSON.parse(raw);
-      expect(parsed).toEqual(sampleReport);
+      // Default run also includes the logs prune section; assert the
+      // cleanup fields match and the logs section is present and well-formed.
+      expect(parsed).toMatchObject(sampleReport);
+      expect(parsed.logs).toEqual(
+        expect.objectContaining({
+          deleted: expect.any(Number),
+          kept: expect.any(Number),
+          skipped: expect.any(Number),
+          retentionDays: expect.any(Number),
+          dir: tmpLogDir,
+        }),
+      );
       // No clack prompts should be used
       expect(intro).not.toHaveBeenCalled();
       expect(outro).not.toHaveBeenCalled();
@@ -201,7 +234,8 @@ describe("assignee clean", () => {
       await run("--json", "--confirm");
       const raw = capture.output();
       const parsed = JSON.parse(raw);
-      expect(parsed).toEqual(sampleReport);
+      expect(parsed).toMatchObject(sampleReport);
+      expect(parsed.logs).toBeDefined();
     } finally {
       capture.restore();
     }
@@ -441,6 +475,130 @@ describe("assignee clean", () => {
       expect(mockDestroySingleResource).toHaveBeenCalledWith(
         expect.objectContaining({ region: "us-east-1" }),
         expect.objectContaining({ region: "us-east-1", silent: true }),
+      );
+    });
+  });
+
+  // ── --logs flag (retention prune) ───────────────────────────────────
+  describe("--logs flag", () => {
+    /**
+     * Write a fake log file for `day` (offset from the current fake system
+     * time by `daysAgo` days) and return the filename. Uses real content
+     * shape so tests exercise the same parsing path an operator would see.
+     */
+    function seedLog(daysAgo: number): string {
+      const now = new Date();
+      const dt = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+      const day = dt.toISOString().slice(0, 10);
+      const name = `cli-${day}.jsonl`;
+      fsSync.writeFileSync(
+        path.join(tmpLogDir, name),
+        JSON.stringify({
+          ts: dt.toISOString(),
+          runId: "550e8400-e29b-41d4-a716-446655440000",
+          level: "error",
+          action: "apply_failed",
+        }) + "\n",
+        { mode: 0o600 },
+      );
+      return name;
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-04-06T12:00:00.000Z"));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("--logs alone skips runFullCleanup and prunes the log dir", async () => {
+      const old = seedLog(30);
+      const fresh = seedLog(1);
+
+      await run("--logs", "--confirm");
+
+      expect(mockRunFullCleanup).not.toHaveBeenCalled();
+      expect(fsSync.existsSync(path.join(tmpLogDir, old))).toBe(false);
+      expect(fsSync.existsSync(path.join(tmpLogDir, fresh))).toBe(true);
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        expect.stringContaining("Deleted 1 file(s) older than 14 day(s)"),
+      );
+    });
+
+    it("--logs dry-run reports what WOULD be deleted but keeps the file", async () => {
+      const old = seedLog(30);
+
+      await run("--logs");
+
+      expect(fsSync.existsSync(path.join(tmpLogDir, old))).toBe(true);
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        expect.stringContaining("Would delete 1 file(s) older than 14 day(s)"),
+      );
+      expect(outro).toHaveBeenCalledWith("Run with --confirm to execute.");
+    });
+
+    it("--logs honors ASSIGNEE_LOG_RETENTION_DAYS override", async () => {
+      process.env["ASSIGNEE_LOG_RETENTION_DAYS"] = "3";
+      const old5d = seedLog(5);
+      const fresh2d = seedLog(2);
+
+      await run("--logs", "--confirm");
+
+      expect(fsSync.existsSync(path.join(tmpLogDir, old5d))).toBe(false);
+      expect(fsSync.existsSync(path.join(tmpLogDir, fresh2d))).toBe(true);
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        expect.stringContaining("older than 3 day(s)"),
+      );
+    });
+
+    it("--logs combined with --cache runs both local cleanup and log prune", async () => {
+      const old = seedLog(30);
+
+      await run("--logs", "--cache", "--confirm");
+
+      expect(mockRunFullCleanup).toHaveBeenCalledWith(
+        expect.objectContaining({ categories: ["cache"] }),
+      );
+      expect(fsSync.existsSync(path.join(tmpLogDir, old))).toBe(false);
+    });
+
+    it("default run (no flags) prunes logs as part of 'everything' mode", async () => {
+      const old = seedLog(30);
+
+      await run("--confirm");
+
+      expect(fsSync.existsSync(path.join(tmpLogDir, old))).toBe(false);
+    });
+
+    it("emits JSON logs section when --logs --json is passed", async () => {
+      seedLog(30);
+      seedLog(2);
+      const capture = captureStdout();
+      try {
+        await run("--logs", "--json", "--confirm");
+        const parsed = JSON.parse(capture.output());
+        expect(parsed).toEqual({
+          logs: {
+            deleted: 1,
+            kept: 1,
+            skipped: 0,
+            retentionDays: 14,
+            dir: tmpLogDir,
+          },
+        });
+      } finally {
+        capture.restore();
+      }
+    });
+
+    it("tolerates missing log directory", async () => {
+      fsSync.rmSync(tmpLogDir, { recursive: true, force: true });
+
+      await expect(run("--logs", "--confirm")).resolves.not.toThrow();
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        expect.stringContaining("Deleted 0 file(s)"),
       );
     });
   });

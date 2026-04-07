@@ -259,7 +259,6 @@ describe("vpcNetworkingPattern — DependsOn ordering", () => {
 
   it("no forward references — every Ref target appears in an earlier or same group", () => {
     const opts = vpcNetworkingPattern.defaultOptions;
-    const flatOrder = depOrder.flat();
 
     for (let groupIdx = 0; groupIdx < depOrder.length; groupIdx++) {
       for (const resourceId of depOrder[groupIdx]!) {

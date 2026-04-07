@@ -378,7 +378,6 @@ export async function bpEvaluatorNode(
   const findings: BPFinding[] = [];
 
   // Phase 1: MCP live best practices (primary source — current AWS data)
-  let mcpAvailable = false;
   if (tools && tools.length > 0) {
     try {
       const mcpFindings = await enrichBpWithMcp(
@@ -389,7 +388,6 @@ export async function bpEvaluatorNode(
       );
       if (mcpFindings.length > 0) {
         findings.push(...mcpFindings);
-        mcpAvailable = true;
       }
     } catch (err) {
       // MCP unavailable — fall through to static rules

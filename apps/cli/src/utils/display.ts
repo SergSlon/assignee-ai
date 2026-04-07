@@ -72,7 +72,7 @@ export {
 import type { FreeTierNote } from "./free-tier.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { AppliedFix } from "../services/graph-state.js";
-import { CfnKey, AwsDefault } from "@assignee/core";
+import { CfnKey, AwsDefault, RESOURCE_TYPES } from "@assignee/core";
 import type { PricingBreakdown } from "@assignee/core";
 
 /** Minimal state shape needed for rendering — avoids circular imports with graph.ts */
@@ -193,7 +193,10 @@ export const FRIENDLY_NAMES: Record<string, string> = {
   [CfnKey.MANAGED_POLICY_ARNS]: "Managed Policies",
   [CfnKey.MAX_SESSION_DURATION]: "Max Session (s)",
   // ELBv2
-  [CfnKey.TYPE]: "Load Balancer Type",
+  // NOTE: CfnKey.TYPE ("Type") is ambiguous — it collides with SSM Parameter
+  // Type (String/StringList/SecureString), DynamoDB KeySchema KeyType, and any
+  // other resource that has a top-level "Type" property. Type-specific labels
+  // live in FRIENDLY_NAMES_BY_TYPE (below) so each resource renders correctly.
   [CfnKey.SCHEME]: "Scheme",
   [CfnKey.SUBNETS]: "Subnets",
   // API Gateway
@@ -209,6 +212,63 @@ export const FRIENDLY_NAMES: Record<string, string> = {
   [CfnKey.DB_SUBNET_GROUP_NAME]: "DB Subnet Group",
   [CfnKey.VPC_SECURITY_GROUP_IDS]: "VPC Security Groups",
 };
+
+/**
+ * Per-resource-type label overrides for ambiguous CFN property names.
+ *
+ * This exists because `FRIENDLY_NAMES` is keyed by raw CFN property name
+ * (e.g., "Type"), and many resources share the same property name with
+ * different semantics:
+ *   - AWS::ElasticLoadBalancingV2::LoadBalancer.Type = application | network
+ *   - AWS::ElasticLoadBalancingV2::TargetGroup.TargetType = instance | ip | lambda
+ *   - AWS::SSM::Parameter.Type = String | StringList | SecureString
+ *   - AWS::DynamoDB::Table.KeySchema[].KeyType = HASH | RANGE
+ *
+ * When a resource-type-scoped label exists, it wins over the global
+ * `FRIENDLY_NAMES` lookup. Nested structures (e.g., DynamoDB KeySchema) keep
+ * their raw CFN property names since they render as one-line summaries rather
+ * than top-level rows.
+ *
+ * Resource-type keys are the full CloudFormation type names from
+ * `RESOURCE_TYPES` so callers always pass a canonical string.
+ */
+export const FRIENDLY_NAMES_BY_TYPE: Record<string, Record<string, string>> = {
+  [RESOURCE_TYPES.ELBV2_LOAD_BALANCER]: {
+    [CfnKey.TYPE]: "Load Balancer Type",
+  },
+  [RESOURCE_TYPES.SSM_PARAMETER]: {
+    // CfnKey.SSM_TYPE === CfnKey.TYPE === "Type" but we use the SSM-specific
+    // constant here to document intent at the call site.
+    [CfnKey.SSM_TYPE]: "Parameter Type",
+    [CfnKey.SSM_VALUE]: "Parameter Value",
+  },
+  [RESOURCE_TYPES.DYNAMODB_TABLE]: {
+    // DynamoDB tables don't have a top-level "Type" field but may surface one
+    // via free-form desiredState — make sure we never accidentally label it as
+    // "Load Balancer Type".
+    [CfnKey.TYPE]: "Type",
+  },
+  [RESOURCE_TYPES.CLOUDWATCH_ALARM]: {
+    [CfnKey.TYPE]: "Alarm Type",
+  },
+};
+
+/**
+ * Resolves the display label for a CFN property key, respecting the
+ * per-resource-type override map when a resource type is supplied.
+ *
+ * Lookup order:
+ *   1. `FRIENDLY_NAMES_BY_TYPE[resourceType][key]` (per-resource override)
+ *   2. `FRIENDLY_NAMES[key]` (unambiguous global label)
+ *   3. `spacePascalCase(key)` (fallback — "FooBar" → "Foo Bar")
+ */
+export function resolveFieldLabel(key: string, resourceType?: string): string {
+  if (resourceType) {
+    const scoped = FRIENDLY_NAMES_BY_TYPE[resourceType]?.[key];
+    if (scoped) return scoped;
+  }
+  return FRIENDLY_NAMES[key] ?? spacePascalCase(key);
+}
 
 /**
  * Fields whose values must NEVER be displayed in plaintext.
@@ -273,18 +333,27 @@ export function spacePascalCase(key: string): string {
  * Formats a desiredState record as a human-readable key-value table.
  * Arrays are joined with commas. Objects render as nested key-value pairs.
  * Booleans render as "Yes"/"No". Strings and numbers render as-is.
+ *
+ * When `resourceType` is provided, per-resource label overrides from
+ * `FRIENDLY_NAMES_BY_TYPE` take precedence over the global `FRIENDLY_NAMES`
+ * map. This is required so ambiguous CFN property names like `Type` render
+ * correctly per resource (e.g. SSM Parameter "Parameter Type" vs ELBv2
+ * "Load Balancer Type").
  */
-export function formatDesiredState(state: Record<string, unknown>): string {
+export function formatDesiredState(
+  state: Record<string, unknown>,
+  resourceType?: string,
+): string {
   const entries = Object.entries(state);
   if (entries.length === 0) return "(none)";
 
   const lines: string[] = [];
   const maxKeyLen = Math.max(
-    ...entries.map(([k]) => (FRIENDLY_NAMES[k] ?? spacePascalCase(k)).length),
+    ...entries.map(([k]) => resolveFieldLabel(k, resourceType).length),
   );
 
   for (const [key, value] of entries) {
-    const friendlyKey = FRIENDLY_NAMES[key] ?? spacePascalCase(key);
+    const friendlyKey = resolveFieldLabel(key, resourceType);
     const padded = friendlyKey.padEnd(maxKeyLen);
     // Mask sensitive fields — never display passwords/secrets in plaintext
     if (SENSITIVE_FIELDS.has(key) && value !== undefined && value !== null) {

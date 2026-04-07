@@ -17,15 +17,10 @@ import type { StructuredTool } from "@langchain/core/tools";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import {
-  CCAPI_FALLBACK_TYPES,
-  CostEstimateLabel,
-  arnToCloudFormationType,
-} from "@assignee/core";
+import { CostEstimateLabel, arnToCloudFormationType } from "@assignee/core";
 import {
   ASSIGNEE_DIR,
   AWS_REGION,
-  AWS_SERVICE_EXECUTE_API,
   PROVISIONS_FILE,
   UNKNOWN_FALLBACK,
 } from "../config/constants.js";

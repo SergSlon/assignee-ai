@@ -6,7 +6,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ProcessExitCode } from "../constants/errors.js";
 import { MCP_PINS } from "../config/mcp-servers.js";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────

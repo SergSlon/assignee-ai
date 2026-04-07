@@ -220,8 +220,8 @@ describe("ec2InstancePlugin", () => {
       expect(companions[0]!.type).toBe("AWS::EC2::SecurityGroup");
       const ingress = companions[0]!.properties[
         "SecurityGroupIngress"
-      ] as any[];
-      expect(ingress.some((r: any) => r.FromPort === 22)).toBe(true);
+      ] as Array<{ FromPort?: number }>;
+      expect(ingress.some((r) => r.FromPort === 22)).toBe(true);
     });
 
     it("returns SecurityGroup with HTTP/HTTPS when public IP set", () => {
@@ -232,9 +232,9 @@ describe("ec2InstancePlugin", () => {
       expect(companions).toHaveLength(1);
       const ingress = companions[0]!.properties[
         "SecurityGroupIngress"
-      ] as any[];
-      expect(ingress.some((r: any) => r.FromPort === 80)).toBe(true);
-      expect(ingress.some((r: any) => r.FromPort === 443)).toBe(true);
+      ] as Array<{ FromPort?: number }>;
+      expect(ingress.some((r) => r.FromPort === 80)).toBe(true);
+      expect(ingress.some((r) => r.FromPort === 443)).toBe(true);
     });
 
     it("returns empty when SecurityGroupIds already specified", () => {

@@ -215,7 +215,7 @@ describe("deleteResource", () => {
   it("delete no RequestToken — returns UNKNOWN error", async () => {
     mockClient.send.mockResolvedValue({ ProgressEvent: {} });
 
-    const [err, result] = await adapter.deleteResource(
+    const [err, _result] = await adapter.deleteResource(
       "AWS::S3::Bucket",
       "bucket",
     );

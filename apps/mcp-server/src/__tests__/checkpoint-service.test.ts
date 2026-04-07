@@ -4,7 +4,7 @@
  * @see Story 20.2, Story 20.3
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import * as path from "node:path";
 import * as os from "node:os";
 import * as crypto from "node:crypto";

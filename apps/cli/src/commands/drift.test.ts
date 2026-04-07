@@ -7,8 +7,6 @@ import {
   afterEach,
   type MockInstance,
 } from "vitest";
-import { DriftStatus, type DriftResult } from "@assignee/core";
-
 // Mock memory service
 //
 // vitest config has `mockReset: true`, so `vi.fn().mockImplementation(...)`

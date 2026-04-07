@@ -34,8 +34,6 @@ vi.mock("../utils/logger.js", () => ({
 }));
 
 import { fixApplicatorNode } from "./fix-applicator.js";
-import { readFileSync } from "node:fs";
-import { parse as parseYaml } from "yaml";
 import * as clack from "@clack/prompts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

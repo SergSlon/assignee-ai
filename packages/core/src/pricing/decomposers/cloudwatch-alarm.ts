@@ -5,7 +5,7 @@
  * @see Story 23.3
  */
 
-import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
+import { CfnKey } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import type {
   PricingDecomposer,

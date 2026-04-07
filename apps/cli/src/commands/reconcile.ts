@@ -20,14 +20,7 @@ import {
 } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { MemoryService } from "../services/memory.js";
-import {
-  DriftDetectorService,
-  type DriftDetectorOptions,
-} from "../services/drift-detector.js";
-import type {
-  ProvisioningPort,
-  ProvisioningPortError,
-} from "../services/provisioning-port.js";
+import type { ProvisioningPort } from "../services/provisioning-port.js";
 import { createDriftDetectorFromEnv } from "../services/drift-detector-factory.js";
 import {
   getReconcilePromptFn,

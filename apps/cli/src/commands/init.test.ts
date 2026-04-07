@@ -40,9 +40,7 @@ vi.mock("../config/user-config-loader.js", () => ({
 }));
 
 // Mock process.exit to prevent test from terminating
-const mockExit = vi
-  .spyOn(process, "exit")
-  .mockImplementation((() => {}) as never);
+vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
 
 import * as clack from "@clack/prompts";
 import {

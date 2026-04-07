@@ -276,7 +276,7 @@ describe("resourceProvisionerNode", () => {
         { requestToken: "token-unknown-skip" },
       ]);
 
-      const result = await resourceProvisionerNode(
+      await resourceProvisionerNode(
         makeState({
           resourceType: "AWS::IAM::Role",
           desiredState: {

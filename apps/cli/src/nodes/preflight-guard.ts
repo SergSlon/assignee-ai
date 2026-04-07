@@ -210,10 +210,15 @@ export async function preflightGuardNode(
           PRICING_TIMEOUT_MS,
         );
         if (result === null) return { passed: true, missing: [] };
-        const simResult = JSON.parse(unwrapMcpText(result));
+        const simResult = JSON.parse(unwrapMcpText(result)) as {
+          EvaluationResults?: Array<{
+            EvalDecision?: string;
+            EvalActionName?: string;
+          }>;
+        };
         const missing = (simResult.EvaluationResults ?? [])
-          .filter((r: any) => r.EvalDecision !== "allowed")
-          .map((r: any) => r.EvalActionName as string);
+          .filter((r) => r.EvalDecision !== "allowed")
+          .map((r) => r.EvalActionName as string);
         return { passed: missing.length === 0, missing };
       } catch {
         log({

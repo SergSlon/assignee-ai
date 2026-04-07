@@ -15,7 +15,6 @@ import { z } from "zod";
 import {
   ResourceGroupsTaggingAPIClient,
   GetResourcesCommand,
-  type ResourceTagMapping,
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import {
   CloudControlClient,
@@ -28,7 +27,6 @@ import {
   CCAPI_REDIRECT_TYPES,
   DEFAULT_AWS_REGION,
   AssigneeTag,
-  RESOURCE_TYPES,
   SERVICE_TYPE_MAP,
   SERVICE_SUBTYPE_MAP,
 } from "@assignee/core";
@@ -198,18 +196,6 @@ interface ResolvedResource {
   resourceType: string;
   region: string;
   identifier: string;
-}
-
-// ── Tag helpers ──────────────────────────────────────────────────────────────
-
-function tagsToRecord(mapping: ResourceTagMapping): Record<string, string> {
-  const tags: Record<string, string> = {};
-  for (const tag of mapping.Tags ?? []) {
-    if (tag.Key && tag.Value !== undefined) {
-      tags[tag.Key] = tag.Value;
-    }
-  }
-  return tags;
 }
 
 // ── Composite identifier detection ──────────────────────────────────────────

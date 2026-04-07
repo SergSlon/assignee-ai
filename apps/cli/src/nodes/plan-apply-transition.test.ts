@@ -39,14 +39,8 @@ vi.mock("../utils/logger.js", () => ({
 import { humanApprovalNode } from "./human-approval.js";
 import { renderPlanBox, renderHitlConfirm } from "../utils/display.js";
 import { log } from "../utils/logger.js";
-import {
-  defaultErrorMessageRegistry,
-  ErrorMessageRegistry,
-} from "../utils/error-messages.js";
-import {
-  ProvisioningErrorKind,
-  type ProvisioningPort,
-} from "../services/provisioning-port.js";
+import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
+import { type ProvisioningPort } from "../services/provisioning-port.js";
 import { resourceProvisionerNode } from "./resource-provisioner.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

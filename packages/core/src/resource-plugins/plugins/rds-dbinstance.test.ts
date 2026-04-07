@@ -198,8 +198,8 @@ describe("rdsDbInstancePlugin", () => {
       expect(companions[0]!.type).toBe("AWS::EC2::SecurityGroup");
       const ingress = companions[0]!.properties[
         "SecurityGroupIngress"
-      ] as any[];
-      expect(ingress.some((r: any) => r.FromPort === 5432)).toBe(true);
+      ] as Array<{ FromPort?: number; CidrIp?: string }>;
+      expect(ingress.some((r) => r.FromPort === 5432)).toBe(true);
     });
 
     it("returns SG with port 3306 for mysql engine", () => {
@@ -210,12 +210,12 @@ describe("rdsDbInstancePlugin", () => {
       expect(companions).toHaveLength(1);
       const ingress = companions[0]!.properties[
         "SecurityGroupIngress"
-      ] as any[];
-      expect(ingress.some((r: any) => r.FromPort === 3306)).toBe(true);
+      ] as Array<{ FromPort?: number; CidrIp?: string }>;
+      expect(ingress.some((r) => r.FromPort === 3306)).toBe(true);
     });
 
     it("returns empty when VpcSecurityGroupIds already specified", () => {
-      const companions = rdsDbInstancePlugin.companionResources!({
+      rdsDbInstancePlugin.companionResources!({
         VPCSecurityGroups: ["sg-abc123"],
         Engine: "postgres",
       });
@@ -235,8 +235,8 @@ describe("rdsDbInstancePlugin", () => {
       expect(companions).toHaveLength(1);
       const ingress = companions[0]!.properties[
         "SecurityGroupIngress"
-      ] as any[];
-      expect(ingress.some((r: any) => r.CidrIp === "10.0.0.0/8")).toBe(true);
+      ] as Array<{ FromPort?: number; CidrIp?: string }>;
+      expect(ingress.some((r) => r.CidrIp === "10.0.0.0/8")).toBe(true);
     });
   });
 });

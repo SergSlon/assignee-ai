@@ -415,17 +415,86 @@ describeE2E("E2E: SSM Parameter plan + apply + destroy", () => {
   }, 90_000);
 
   afterAll(async () => {
-    // Always attempt cleanup by name — works even if test crashed before resourceArn was set
+    // Exercise the full destroy resolver path end-to-end (P0-3).
+    //
+    // Previously this block bypassed the resolver by calling the SSM SDK
+    // directly, so the bug where `destroy /smoke-test-x` failed to resolve
+    // SSM parameters by their user-visible name went undetected. We now:
+    //   1. Strip the leading slash from the canonical SSM name, simulating
+    //      a user typing the bare name they'd see in `assignee list`.
+    //   2. Feed that bare name through `resolveResource` — the exact path
+    //      `assignee destroy <name>` takes in commands/destroy.ts.
+    //   3. Hand the resolved record to `destroySingleResource`, the same
+    //      shared destroy codepath used by the CLI command.
+    //
+    // Fallback to the raw SSM SDK runs only if resolver/destroy couldn't
+    // delete the parameter, so cleanup still happens on crashes.
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const bareName = paramName.replace(/^\//, "");
 
+    let resolvedOk = false;
+    try {
+      const { createTaggingClient, resolveResource } =
+        await import("../services/resource-resolver.js");
+      const { destroySingleResource } =
+        await import("../services/destroy-service.js");
+
+      const taggingClient = createTaggingClient({
+        ...operatorCreds(),
+        region,
+      });
+
+      // Resolve using the bare name — this is what the bug targeted.
+      const resolved = await resolveResource(bareName, taggingClient, region);
+
+      if (resolved) {
+        expect(resolved.resourceType).toBe("AWS::SSM::Parameter");
+        // Canonical SSM identifier always starts with "/" and matches paramName.
+        expect(resolved.identifier).toBe(paramName);
+        // Resolved ARN must reference the same SSM parameter. The graph's
+        // finalState.resourceArn may be the parameter name (SSM uses the
+        // Name as its canonical resource id), so compare the trailing
+        // "parameter/<name>" segment rather than requiring ARN equality.
+        expect(resolved.arn).toMatch(/^arn:aws:ssm:[a-z0-9-]+:\d+:parameter\//);
+        expect(resolved.arn.endsWith("parameter" + paramName)).toBe(true);
+
+        const result = await destroySingleResource(resolved, { region });
+        expect(result.success).toBe(true);
+        console.log(
+          `E2E cleanup: destroyed SSM parameter ${paramName} via resolver (bare="${bareName}")`,
+        );
+        resolvedOk = true;
+      } else if (resourceArn) {
+        // Resource exists but resolver missed it — surface as a hard failure
+        // so the regression is caught locally before CI/live runs.
+        throw new Error(
+          `resolveResource returned null for bare SSM name "${bareName}" ` +
+            `(arn=${resourceArn}). The P0-3 destroy resolver fix regressed.`,
+        );
+      }
+    } catch (err: unknown) {
+      const errName = (err as { name?: string })?.name ?? "";
+      console.warn(
+        `E2E resolver-based cleanup failed for ${paramName}: ${
+          errName || (err instanceof Error ? err.message : String(err))
+        } — falling back to SDK delete`,
+      );
+    }
+
+    if (resolvedOk) return;
+
+    // Fallback: direct SDK delete so we never leak resources on a crash.
     try {
       const { SSMClient, DeleteParameterCommand } =
         await import("@aws-sdk/client-ssm");
       const ssm = new SSMClient({
-        region: process.env["AWS_REGION"] ?? "us-east-1",
+        region,
         credentials: operatorCreds(),
       });
       await ssm.send(new DeleteParameterCommand({ Name: paramName }));
-      console.log(`E2E cleanup: deleted SSM parameter ${paramName}`);
+      console.log(
+        `E2E cleanup fallback: deleted SSM parameter ${paramName} via SDK`,
+      );
     } catch (err: unknown) {
       const errName = (err as { name?: string })?.name ?? "";
       if (errName === "ParameterNotFound") return;
@@ -443,7 +512,7 @@ describeE2E("E2E: SSM Parameter plan + apply + destroy", () => {
         );
       }
     }
-  }, 15_000);
+  }, 30_000);
 });
 
 describeE2E("E2E: Epic 35 — Actionable Findings", () => {

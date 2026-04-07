@@ -72,7 +72,7 @@ export function renderPlanBox(state: RenderableState): void {
   const adviceLines = formatAdviceHints(state.adviceHints);
 
   const configBlock = state.desiredState
-    ? formatDesiredState(state.desiredState)
+    ? formatDesiredState(state.desiredState, state.resourceType)
     : "(none)";
 
   // Story 23.5: Cost from Pricing MCP (no hardcoded rates)

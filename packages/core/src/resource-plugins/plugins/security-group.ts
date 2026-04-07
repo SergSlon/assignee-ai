@@ -11,7 +11,7 @@ import { FieldLabel } from "../field-labels.js";
  */
 function parseRuleString(
   rule: string,
-  direction: "ingress" | "egress",
+  _direction: "ingress" | "egress",
 ): Record<string, unknown> | undefined {
   const parts = rule.trim().split(":");
   if (parts.length < 3) return undefined;

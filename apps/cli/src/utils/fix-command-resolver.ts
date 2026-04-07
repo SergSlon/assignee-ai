@@ -14,11 +14,7 @@
  */
 
 import { FixType, type BPFinding } from "@assignee/best-practices";
-import {
-  wizardKeyMap,
-  toSetFlag,
-  toSetFlagFromPatch,
-} from "./wizard-key-map.js";
+import { toSetFlag, toSetFlagFromPatch } from "./wizard-key-map.js";
 
 /**
  * Named constants for fix categories — eliminates magic strings in comparisons.

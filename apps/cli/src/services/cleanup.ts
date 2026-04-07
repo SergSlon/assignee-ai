@@ -284,7 +284,7 @@ export async function runFullCleanup(opts: {
  */
 export async function runAutoCleanup(
   checkpointDir: string,
-  memoryService: MemoryService,
+  _memoryService: MemoryService,
 ): Promise<void> {
   try {
     // Check throttle

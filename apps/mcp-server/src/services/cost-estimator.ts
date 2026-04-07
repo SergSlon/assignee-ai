@@ -14,7 +14,7 @@ import {
   RESOURCE_TYPES,
   type PricingEstimate,
 } from "@assignee/core";
-import { getFreeTierNote, type FreeTierInfo } from "./free-tier.js";
+import { getFreeTierNote } from "./free-tier.js";
 
 /** Result shape for the estimate_cost tool. */
 export interface CostEstimateResult {

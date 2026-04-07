@@ -115,10 +115,7 @@ import {
   uploadStaticSite,
   configureBucketPolicy,
 } from "../services/s3-upload.js";
-import {
-  createCloudFrontDistribution,
-  generateCloudFrontBucketPolicy,
-} from "../services/cloudfront-setup.js";
+import { createCloudFrontDistribution } from "../services/cloudfront-setup.js";
 
 /** 3-resource pattern for compound tests */
 const mockPattern: ArchitecturePattern = {

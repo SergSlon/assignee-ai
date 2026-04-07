@@ -123,10 +123,192 @@ export function clearEnsuredDirCacheForTests(): void {
 }
 
 /**
+ * Default retention window for persistent log files, in days. Files whose
+ * date (parsed from the `cli-YYYY-MM-DD[.n].jsonl` filename) is older than
+ * `now - retentionDays` are deleted by `pruneOldLogs`. Override via the
+ * `ASSIGNEE_LOG_RETENTION_DAYS` env var.
+ */
+export const DEFAULT_LOG_RETENTION_DAYS = 14;
+
+/**
+ * Marker file written inside the log dir after a successful prune so we can
+ * throttle the auto-prune path to at most once per 24 hours. File stores an
+ * ISO timestamp; mtime is the actual source of truth (cheap to read).
+ */
+export const LOG_PRUNE_MARKER = ".last-prune";
+
+/** Minimum interval between auto-prunes (24h in ms). */
+const AUTO_PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Resolve the retention window in days. Honors
+ * `ASSIGNEE_LOG_RETENTION_DAYS`; falls back to `DEFAULT_LOG_RETENTION_DAYS`
+ * for any non-finite / non-positive value (including 0, negatives, NaN,
+ * non-numeric strings). A value of e.g. `"7"` means "keep the last 7 days".
+ */
+export function resolveLogRetentionDays(): number {
+  const raw = process.env[EnvVar.ASSIGNEE_LOG_RETENTION_DAYS];
+  if (raw === undefined || raw.length === 0) return DEFAULT_LOG_RETENTION_DAYS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_LOG_RETENTION_DAYS;
+  }
+  return Math.floor(parsed);
+}
+
+/**
+ * Parse a persistent log filename into its calendar date. Accepts both
+ * `cli-YYYY-MM-DD.jsonl` and the numbered rotation form
+ * `cli-YYYY-MM-DD.<n>.jsonl`. Returns `null` for anything that doesn't
+ * match (including garbage dates that `Date.parse` rejects).
+ */
+function parseLogFileDate(fileName: string): Date | null {
+  const match = /^cli-(\d{4})-(\d{2})-(\d{2})(?:\.\d+)?\.jsonl$/.exec(fileName);
+  if (!match) return null;
+  const [, y, m, d] = match;
+  // Treat the filename day as a UTC midnight instant — matches `formatDay`
+  // which slices `Date.toISOString()` and is therefore UTC-based.
+  const iso = `${y}-${m}-${d}T00:00:00.000Z`;
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return null;
+  const parsed = new Date(ts);
+  // Guard against impossible dates like 2026-02-30 that Date.parse silently
+  // rolls over — require a round-trip match.
+  if (parsed.toISOString().slice(0, 10) !== `${y}-${m}-${d}`) return null;
+  return parsed;
+}
+
+/**
+ * Result of a `pruneOldLogs` call. `deleted` counts files successfully
+ * removed; `kept` counts files within the retention window; `skipped`
+ * counts non-log files in the directory (e.g. the marker file).
+ */
+export interface PruneResult {
+  deleted: number;
+  kept: number;
+  skipped: number;
+}
+
+/**
+ * Delete persistent log files older than `retentionDays`. Walks `dir`
+ * synchronously, parses each `cli-YYYY-MM-DD[.n].jsonl` filename, and
+ * removes any whose date is strictly older than the cutoff
+ * (`now - retentionDays * 24h`). ENOENT on the directory itself is a no-op
+ * (returns zeroed counts). Per-file unlink failures are swallowed so a
+ * single locked file cannot poison a whole prune run.
+ *
+ * Uses real Date arithmetic, NOT string comparison — retention boundaries
+ * across month/year rollovers must be correct.
+ */
+export function pruneOldLogs(
+  dir: string,
+  retentionDays: number = resolveLogRetentionDays(),
+  now: Date = new Date(),
+  options: { dryRun?: boolean } = {},
+): PruneResult {
+  const result: PruneResult = { deleted: 0, kept: 0, skipped: 0 };
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch (err) {
+    // ENOENT / ENOTDIR → prune is a no-op. Anything else: rethrow so the
+    // operator sees the permission/IO problem at the `clean` layer.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return result;
+    throw err;
+  }
+
+  const cutoff = now.getTime() - retentionDays * AUTO_PRUNE_INTERVAL_MS;
+
+  for (const name of entries) {
+    const fileDate = parseLogFileDate(name);
+    if (fileDate === null) {
+      result.skipped++;
+      continue;
+    }
+    if (fileDate.getTime() < cutoff) {
+      if (options.dryRun === true) {
+        result.deleted++;
+        continue;
+      }
+      try {
+        fs.unlinkSync(path.join(dir, name));
+        result.deleted++;
+      } catch {
+        // Best-effort: a single unlink failure (EBUSY, EPERM, race with
+        // another process) must not abort the rest of the prune.
+        result.skipped++;
+      }
+    } else {
+      result.kept++;
+    }
+  }
+  return result;
+}
+
+/**
+ * Read the marker file's mtime. Returns `null` if the marker is absent or
+ * unreadable — callers treat a missing marker as "never pruned before".
+ */
+function readMarkerTime(dir: string): number | null {
+  try {
+    const stat = fs.statSync(path.join(dir, LOG_PRUNE_MARKER));
+    return stat.mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/** Touch the marker file so the next auto-prune waits 24h. Best-effort. */
+function touchMarker(dir: string, now: Date): void {
+  try {
+    fs.writeFileSync(path.join(dir, LOG_PRUNE_MARKER), now.toISOString(), {
+      mode: 0o600,
+    });
+  } catch {
+    // Marker write failed — next run will simply re-prune. Non-fatal.
+  }
+}
+
+/**
+ * Auto-prune throttled to at most once per 24h, gated by the marker file.
+ * Intended for callers on warm paths (e.g. the CLI bootstrap) that want the
+ * retention guarantee without paying the readdir cost on every invocation.
+ *
+ * Returns the `PruneResult` if a prune actually ran, or `null` if the
+ * marker indicates a prune happened within the interval. ENOENT on the dir
+ * is a no-op (returns `null`).
+ */
+export function autoPruneLogsIfDue(
+  dir: string,
+  retentionDays: number = resolveLogRetentionDays(),
+  now: Date = new Date(),
+): PruneResult | null {
+  // Dir missing → nothing to do.
+  try {
+    fs.statSync(dir);
+  } catch {
+    return null;
+  }
+  const last = readMarkerTime(dir);
+  if (last !== null && now.getTime() - last < AUTO_PRUNE_INTERVAL_MS) {
+    return null;
+  }
+  const result = pruneOldLogs(dir, retentionDays, now);
+  touchMarker(dir, now);
+  return result;
+}
+
+/** Exposed for tests and for the `clean` command. */
+export function getLogDir(): string {
+  return resolveLogDir();
+}
+
+/**
  * Resolve the active log file path for `day`, rotating to a numbered suffix
  * if the base file exceeds the size limit. Walks counters until it finds a
  * file under the cap (or one that doesn't exist yet). Never deletes old files
- * — that's a separate operator concern.
+ * during rotation — retention is handled by `pruneOldLogs` / `clean --logs`.
  */
 function resolveActiveLogFile(dir: string, day: string): string {
   const baseName = `cli-${day}.jsonl`;
