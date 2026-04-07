@@ -260,7 +260,7 @@ export {
 } from "./errors/hint-registry.js";
 
 // Ports (hexagonal architecture — Story 9.5)
-export type { LlmPort } from "./ports/llm-port.js";
+export type { LlmPort, LlmCallOptions } from "./ports/llm-port.js";
 export { MockLlmAdapter } from "./ports/mock-llm-adapter.js";
 
 // Services — CloudFormation schema fetching (Story 31.1, 31.2)

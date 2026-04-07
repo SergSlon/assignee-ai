@@ -61,6 +61,21 @@ export const LOG_ACTIONS = {
   MCP_OPTIONAL_INIT_FAILED: "mcp_optional_init_failed",
   ADVICE_GENERATED: "advice_generated",
   ADVICE_SKIPPED: "advice_skipped",
+  /**
+   * Wave 12 P0: emitted by LlmAdapter after every successful generateText
+   * or generateStructured call. Carries the per-call token usage tagged
+   * with the calling node's name (callsite). Used to answer "which node
+   * is the token hog" — the question that gates SaaS unit economics.
+   * Also accumulated process-wide and summarized at end-of-command via
+   * TOKEN_USAGE_SUMMARY.
+   */
+  TOKEN_USAGE: "token_usage",
+  /**
+   * Wave 12 P0: emitted once at the end of an apply/plan command with
+   * the per-callsite breakdown and command total. Look for this entry
+   * to answer "what does ONE assignee command cost in tokens".
+   */
+  TOKEN_USAGE_SUMMARY: "token_usage_summary",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

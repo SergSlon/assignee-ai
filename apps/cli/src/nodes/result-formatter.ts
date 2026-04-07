@@ -33,6 +33,7 @@ import {
 import { AWS_REGION } from "../config/constants.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { emitTokenUsageSummary } from "../utils/token-usage.js";
 import type { AgentState } from "../services/graph.js";
 import { checkSecurityPosture } from "../utils/security-posture.js";
 import { resolveResourceArn } from "../utils/resolve-arn.js";
@@ -199,6 +200,13 @@ export async function resultFormatterNode(
     action: LOG_ACTIONS.RESULT_FORMATTED,
     extras: { executionStatus: state.executionStatus },
   });
+
+  // Wave 12 P0: emit one TOKEN_USAGE_SUMMARY entry per command, regardless
+  // of execution outcome (SUCCESS / FAILED / CANCELLED / plan-mode preview).
+  // This way every command produces exactly one summary row that downstream
+  // analysis can grep with `action=token_usage_summary`. Failures still
+  // accumulated tokens before they failed — those costs are real.
+  emitTokenUsageSummary(state.runId);
 
   switch (state.executionStatus) {
     case ExecutionStatus.SUCCESS: {

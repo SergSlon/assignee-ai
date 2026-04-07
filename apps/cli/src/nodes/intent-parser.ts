@@ -47,6 +47,7 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
     const [err, output] = await llmClient.generateStructured(
       prompt,
       intentParserSchema,
+      { callsite: "intent_parser", runId: state.runId },
     );
 
     if (err) {
