@@ -100,8 +100,22 @@ export class CloudFormationSchemaService {
   /**
    * Convert a CloudFormation type name to a filesystem-safe cache filename.
    * Replaces `::` with `__` per the story spec.
+   *
+   * Defence-in-depth: although every current caller passes a value from a
+   * constrained allowlist (SUPPORTED_TYPES_ARRAY), validate the shape here so
+   * a future caller bug cannot turn an arbitrary string into a path-traversal
+   * primitive (e.g. `../../etc/passwd`). CloudFormation type names are
+   * restricted to `AWS::Service::Resource` style identifiers, so a strict
+   * `[A-Za-z0-9:]+` allowlist is sufficient.
    */
   private cacheFileName(typeName: string): string {
+    if (!/^[A-Za-z0-9:]+$/.test(typeName)) {
+      throw new AssigneeError(
+        `Invalid CloudFormation type name for cache key: "${typeName}". ` +
+          `Type names must match /^[A-Za-z0-9:]+$/.`,
+        "INVALID_TYPE_NAME",
+      );
+    }
     return `${typeName.replaceAll("::", "__")}.json`;
   }
 

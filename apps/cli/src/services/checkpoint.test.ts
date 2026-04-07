@@ -11,6 +11,7 @@ import {
   pruneExpiredCheckpoints,
 } from "./checkpoint.js";
 import { routeCheckpointEntry } from "./graph-routing.js";
+import type { PlanCheckpoint } from "@assignee/core";
 import type { AgentState } from "./graph-state.js";
 
 function makeTempDir(): Promise<string> {
@@ -132,6 +133,41 @@ describe("saveCheckpoint / loadCheckpoint round-trip", () => {
     await expect(loadCheckpoint("corrupt", tmpDir)).rejects.toThrow(
       "Corrupt checkpoint file",
     );
+  });
+
+  // L-A1 regression: concurrent saveCheckpoint() calls must NOT collide on
+  // the temp filename. Previously the suffix was process.pid, so two
+  // concurrent saves from the same process used the same .tmp.<pid> path
+  // and could clobber each other mid-rename. The fix uses a 16-hex-char
+  // crypto random suffix per call.
+  it("does not collide on temp file name across concurrent saves", async () => {
+    const make = (id: string): PlanCheckpoint =>
+      serializeCheckpoint({
+        ...baseGraphState,
+        runId: id,
+      } as AgentState);
+
+    // Run 25 concurrent saves and assert all 25 final files exist.
+    const ids = Array.from(
+      { length: 25 },
+      (_, i) =>
+        `00000000-0000-0000-0000-${(100000000000 + i).toString().padStart(12, "0")}`,
+    );
+    const results = await Promise.all(
+      ids.map((id) => saveCheckpoint(make(id), tmpDir)),
+    );
+    expect(new Set(results).size).toBe(25);
+
+    // Inspect the directory: only the 25 final files should remain — no
+    // leftover .tmp.* artifacts (random suffix means each tmp path is
+    // unique and rename succeeds atomically).
+    const entries = await fs.readdir(tmpDir);
+    const finalFiles = entries.filter(
+      (e) => e.startsWith("checkpoint-") && e.endsWith(".json"),
+    );
+    expect(finalFiles).toHaveLength(25);
+    const tmpLeftovers = entries.filter((e) => e.includes(".tmp."));
+    expect(tmpLeftovers).toEqual([]);
   });
 });
 

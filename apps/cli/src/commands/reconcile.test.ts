@@ -56,6 +56,8 @@ import {
   reconcileCommand,
   buildPatchDocument,
   reconcileResource,
+  fieldPathToSchemaPointer,
+  escapeJsonPointerSegment,
 } from "./reconcile.js";
 import { MemoryService } from "../services/memory.js";
 import type { ProvisioningPort } from "../services/provisioning-port.js";
@@ -488,5 +490,79 @@ describe("buildPatchDocument", () => {
     expect(ops[0]).toHaveProperty("path", "/VersioningConfiguration/Status");
     expect(skippedCreateOnly).toHaveLength(1);
     expect(skippedCreateOnly[0]!.path).toBe("BucketName");
+  });
+
+  // L-A8 regression: JSON Pointer property names containing `/` or `~` MUST
+  // be encoded per RFC 6901 (`/` → `~1`, `~` → `~0`). CloudFormation property
+  // names with these characters are rare but legal — without escaping the
+  // resulting patch and schema-pointer paths would be malformed.
+  describe("JSON pointer escaping (L-A8)", () => {
+    it("escapes `/` in property names to `~1` in patch ops", () => {
+      const { ops } = buildPatchDocument([
+        {
+          // A real-world example: SNS topic attributes can use slash-separated
+          // keys; an HTTP header tag with `Cache-Control/no-cache` is also legal.
+          path: "Headers.Cache-Control/no-cache",
+          desiredValue: "true",
+          actualValue: "false",
+          changeType: ChangeType.MODIFIED,
+        },
+      ]);
+
+      expect(ops).toEqual([
+        {
+          op: "replace",
+          path: "/Headers/Cache-Control~1no-cache",
+          value: "true",
+        },
+      ]);
+    });
+
+    it("escapes `~` in property names to `~0` in patch ops", () => {
+      const { ops } = buildPatchDocument([
+        {
+          path: "Tags.weird~name",
+          desiredValue: "v",
+          actualValue: "u",
+          changeType: ChangeType.MODIFIED,
+        },
+      ]);
+      expect(ops).toEqual([
+        { op: "replace", path: "/Tags/weird~0name", value: "v" },
+      ]);
+    });
+
+    it("escapes both `~` and `/` (order matters: ~ first)", () => {
+      // If `/` were escaped before `~`, the resulting `~1` would be re-encoded
+      // to `~01` and the pointer would no longer round-trip.
+      const { ops } = buildPatchDocument([
+        {
+          path: "Foo.a~b/c",
+          desiredValue: 1,
+          actualValue: 2,
+          changeType: ChangeType.MODIFIED,
+        },
+      ]);
+      expect(ops).toEqual([{ op: "replace", path: "/Foo/a~0b~1c", value: 1 }]);
+    });
+
+    it("fieldPathToSchemaPointer escapes `/` and `~` under /properties", () => {
+      expect(fieldPathToSchemaPointer("Headers.Cache-Control/no-cache")).toBe(
+        "/properties/Headers/Cache-Control~1no-cache",
+      );
+      expect(fieldPathToSchemaPointer("Tags.weird~name")).toBe(
+        "/properties/Tags/weird~0name",
+      );
+    });
+
+    it("escapeJsonPointerSegment is the RFC 6901 reference token escape", () => {
+      expect(escapeJsonPointerSegment("normal")).toBe("normal");
+      expect(escapeJsonPointerSegment("a/b")).toBe("a~1b");
+      expect(escapeJsonPointerSegment("a~b")).toBe("a~0b");
+      expect(escapeJsonPointerSegment("a~b/c")).toBe("a~0b~1c");
+      // Critical: pre-existing `~1` in the source must NOT be left alone
+      // (it must be encoded as `~01`).
+      expect(escapeJsonPointerSegment("a~1b")).toBe("a~01b");
+    });
   });
 });

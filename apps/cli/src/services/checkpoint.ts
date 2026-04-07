@@ -7,6 +7,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { randomBytes } from "node:crypto";
 import {
   PlanCheckpointSchema,
   CHECKPOINT_VERSION,
@@ -139,7 +140,10 @@ export async function saveCheckpoint(
 ): Promise<string> {
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   const filePath = path.join(dir, `checkpoint-${checkpoint.runId}.json`);
-  const tmpPath = `${filePath}.tmp.${process.pid}`;
+  // Use a per-call random suffix instead of process.pid so two concurrent
+  // saveCheckpoint() invocations from the same process (or two processes that
+  // happened to share a recycled PID) cannot collide on the temp filename.
+  const tmpPath = `${filePath}.tmp.${randomBytes(8).toString("hex")}`;
   // Write with 0o600 so the checkpoint is never world-readable. rename() on
   // POSIX inherits the source file's mode, so we also chmod the final path as
   // defence-in-depth against umask or pre-existing-file edge cases.

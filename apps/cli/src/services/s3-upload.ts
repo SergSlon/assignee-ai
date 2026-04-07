@@ -14,9 +14,9 @@ import {
 } from "@aws-sdk/client-s3";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, extname } from "node:path";
-import { IamEffect } from "@assignee/core";
+import { ConfigurationError, IamEffect } from "@assignee/core";
 import { requireAssigneeCredentials } from "../config/aws-credentials.js";
-import { AWS_REGION } from "../config/constants.js";
+import { EnvVar } from "../constants/env-vars.js";
 import { ContentType } from "../constants/errors.js";
 
 export interface UploadResult {
@@ -95,8 +95,18 @@ export function collectFiles(dir: string, base?: string): string[] {
  * credential chain (~/.aws/credentials, SSO, IMDS).
  */
 function createS3Client(region?: string): S3Client {
+  // L-A10: A previous refactor removed AWS_REGION validation, so when neither
+  // an explicit override nor process.env.AWS_REGION was set, the SDK silently
+  // defaulted to us-east-1 — uploading to the wrong region with no warning.
+  // Restore the explicit error so misconfiguration fails fast.
+  const resolvedRegion = region ?? process.env[EnvVar.AWS_REGION]?.trim() ?? "";
+  if (!resolvedRegion) {
+    throw new ConfigurationError(
+      "AWS_REGION is missing or empty — set it in .env (or pass an explicit region) before running setup.",
+    );
+  }
   return new S3Client({
-    region: region ?? AWS_REGION,
+    region: resolvedRegion,
     credentials: requireAssigneeCredentials("operator"),
   });
 }

@@ -444,4 +444,45 @@ describe("CloudFormationSchemaService", () => {
       expect(mockSend).toHaveBeenCalledTimes(1);
     });
   });
+
+  // L-A4 regression: cacheFileName must reject type names that don't match
+  // /^[A-Za-z0-9:]+$/. Without the guard, a future caller bug (or a malicious
+  // upstream config) could pass a value containing path separators or `..`
+  // and cause path traversal under the cache directory.
+  describe("cacheFileName allowlist guard (L-A4)", () => {
+    it("throws on a type name containing path separators", async () => {
+      const service = await createService();
+      await expect(service.getSchema("../../etc/passwd")).rejects.toThrow(
+        /Invalid CloudFormation type name/,
+      );
+      // No API call must have happened — the validation must fire BEFORE
+      // any network or filesystem activity.
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("throws on a type name containing a null byte", async () => {
+      const service = await createService();
+      await expect(service.getSchema("AWS::S3::Bucket\u0000")).rejects.toThrow(
+        /Invalid CloudFormation type name/,
+      );
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("throws on an empty type name", async () => {
+      const service = await createService();
+      await expect(service.getSchema("")).rejects.toThrow(
+        /Invalid CloudFormation type name/,
+      );
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it("accepts valid AWS::Service::Resource type names", async () => {
+      mockSend.mockResolvedValueOnce({
+        Schema: JSON.stringify(S3_BUCKET_SCHEMA),
+      });
+      const service = await createService();
+      const schema = await service.getSchema("AWS::S3::Bucket");
+      expect(schema).toEqual(S3_BUCKET_SCHEMA);
+    });
+  });
 });

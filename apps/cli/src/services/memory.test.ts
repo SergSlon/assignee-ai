@@ -616,3 +616,55 @@ describe("MemoryService — corrupt file backup (EC-29)", () => {
     expect(backupFile).toBeTruthy();
   });
 });
+
+// L-A2 regression: memory directory and JSON files must be created with
+// 0o700 / 0o600 modes so other local users cannot read provision logs
+// (which contain resource ARNs and intent strings).
+describe("MemoryService — file permissions (L-A2)", () => {
+  it("creates the memory directory with mode 0o700", async () => {
+    // Use a fresh nested dir so ensureDir() actually has to mkdir.
+    const nestedDir = path.join(tmpDir, "perm-dir-test");
+    const nestedService = new MemoryService(nestedDir);
+    await nestedService.appendProvision(makeProvision());
+
+    const stat = await fs.stat(nestedDir);
+    // Mask off file-type bits and compare permission bits only.
+    const mode = stat.mode & 0o777;
+    if (process.platform === "win32") {
+      // Windows does not enforce POSIX permission bits — skip.
+      expect(mode).toBeGreaterThanOrEqual(0);
+    } else {
+      expect(mode).toBe(0o700);
+    }
+  });
+
+  it("writes provisions.json with mode 0o600", async () => {
+    await service.appendProvision(makeProvision());
+    const stat = await fs.stat(path.join(tmpDir, "provisions.json"));
+    const mode = stat.mode & 0o777;
+    if (process.platform === "win32") {
+      expect(mode).toBeGreaterThanOrEqual(0);
+    } else {
+      expect(mode).toBe(0o600);
+    }
+  });
+
+  it("writes failures.json with mode 0o600", async () => {
+    const failure: FailureRecord = {
+      runId: "550e8400-e29b-41d4-a716-446655440000",
+      resourceType: "AWS::S3::Bucket",
+      errorMessage: "BucketAlreadyExists",
+      errorCode: "ALREADY_EXISTS",
+      suggestedFix: "Choose a different bucket name",
+      timestamp: "2026-03-22T10:00:00.000Z",
+    };
+    await service.appendFailure(failure);
+    const stat = await fs.stat(path.join(tmpDir, "failures.json"));
+    const mode = stat.mode & 0o777;
+    if (process.platform === "win32") {
+      expect(mode).toBeGreaterThanOrEqual(0);
+    } else {
+      expect(mode).toBe(0o600);
+    }
+  });
+});

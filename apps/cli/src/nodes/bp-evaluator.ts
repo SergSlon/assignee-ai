@@ -104,7 +104,7 @@ function loadCached(): BestPractice[] {
           ts: new Date().toISOString(),
           runId: "system",
           level: "warn",
-          action: LOG_ACTIONS.BP_EVALUATED,
+          action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
           extras: { phase: "freshness_check", error: String(err) },
         });
       }
@@ -144,7 +144,7 @@ function loadCached(): BestPractice[] {
               ts: new Date().toISOString(),
               runId: "system",
               level: "error",
-              action: LOG_ACTIONS.BP_EVALUATED,
+              action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
               extras: {
                 phase: "integrity_check",
                 mode,
@@ -165,7 +165,7 @@ function loadCached(): BestPractice[] {
             ts: new Date().toISOString(),
             runId: "system",
             level: "warn",
-            action: LOG_ACTIONS.BP_EVALUATED,
+            action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
             extras: {
               phase: "integrity_check",
               mode,
@@ -187,7 +187,7 @@ function loadCached(): BestPractice[] {
           ts: new Date().toISOString(),
           runId: "system",
           level: "warn",
-          action: LOG_ACTIONS.BP_EVALUATED,
+          action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
           extras: { phase: "integrity_check", error: String(err) },
         });
       }
@@ -249,7 +249,7 @@ function resolveBpManifestPath(): string {
       ts: new Date().toISOString(),
       runId: "system",
       level: "info",
-      action: LOG_ACTIONS.BP_EVALUATED,
+      action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
       extras: {
         phase: "manifest_resolve_via_require",
         error: String(err),
@@ -266,7 +266,7 @@ function resolveBpManifestPath(): string {
         ts: new Date().toISOString(),
         runId: "system",
         level: "info",
-        action: LOG_ACTIONS.BP_EVALUATED,
+        action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
         extras: {
           phase: "manifest_candidate_stat",
           candidate,

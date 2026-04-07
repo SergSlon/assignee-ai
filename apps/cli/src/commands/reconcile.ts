@@ -72,13 +72,39 @@ async function fetchCreateOnlyProperties(
 }
 
 /**
+ * RFC 6901 escape rules for a JSON Pointer reference token: `~` must be
+ * encoded as `~0` and `/` as `~1`. The order matters — `~` must be encoded
+ * BEFORE `/` so the resulting `~1` is not double-escaped to `~01`.
+ *
+ * Exported for unit testing.
+ */
+export function escapeJsonPointerSegment(segment: string): string {
+  return segment.replaceAll("~", "~0").replaceAll("/", "~1");
+}
+
+/**
  * Normalise a drifted-field path to the JSON-pointer format used by
  * CloudFormation's createOnlyProperties (e.g. "/properties/FunctionName").
+ *
+ * Property names containing `/` or `~` (rare but legal in CloudFormation
+ * resource schemas) are escaped per RFC 6901 so the resulting pointer is
+ * round-trippable.
+ *
+ * Exported for unit testing.
  */
-function fieldPathToSchemaPointer(fieldPath: string): string {
-  const jsonPath =
-    "/" + fieldPath.replace(/\./g, "/").replace(/\[(\d+)\]/g, "/$1");
-  return "/properties" + jsonPath;
+export function fieldPathToJsonPointer(fieldPath: string): string {
+  // Split into segments on `.` (object navigation) and `[index]` (array
+  // navigation), escape each segment per RFC 6901, then re-join.
+  // Replace bracketed array indices with a leading `.` so a single split
+  // pass yields all segments.
+  const normalized = fieldPath.replace(/\[(\d+)\]/g, ".$1");
+  const segments = normalized.split(".").filter((s) => s.length > 0);
+  const escaped = segments.map(escapeJsonPointerSegment);
+  return "/" + escaped.join("/");
+}
+
+export function fieldPathToSchemaPointer(fieldPath: string): string {
+  return "/properties" + fieldPathToJsonPointer(fieldPath);
 }
 
 /**
@@ -94,8 +120,7 @@ export function buildPatchDocument(
   const skippedCreateOnly: DriftedField[] = [];
 
   for (const field of driftedFields) {
-    const jsonPath =
-      "/" + field.path.replace(/\./g, "/").replace(/\[(\d+)\]/g, "/$1");
+    const jsonPath = fieldPathToJsonPointer(field.path);
 
     // Check if this field is a create-only (immutable) property
     const schemaPointer = fieldPathToSchemaPointer(field.path);

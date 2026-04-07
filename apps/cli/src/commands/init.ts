@@ -128,11 +128,30 @@ export async function promptGlobalConfig(): Promise<
 
     const entryStr = String(entry);
     const eqIndex = entryStr.indexOf("=");
-    if (eqIndex > 0) {
-      const key = entryStr.slice(0, eqIndex).trim();
-      const val = entryStr.slice(eqIndex + 1).trim();
-      if (key && val) tags[key] = val;
+    // L-A9: Surface malformed entries instead of swallowing them silently.
+    // Without a warning, users can't tell why their tag wasn't recorded.
+    if (eqIndex <= 0) {
+      // No `=` (eqIndex === -1) or leading `=` (eqIndex === 0 ⇒ empty key).
+      clack.log.warn(
+        `Ignored tag "${entryStr}" — must be in key=value format with a non-empty key.`,
+      );
+      continue;
     }
+    const key = entryStr.slice(0, eqIndex).trim();
+    const val = entryStr.slice(eqIndex + 1).trim();
+    if (!key) {
+      clack.log.warn(
+        `Ignored tag "${entryStr}" — key is empty after trimming whitespace.`,
+      );
+      continue;
+    }
+    if (!val) {
+      clack.log.warn(
+        `Ignored tag "${entryStr}" — value is empty after trimming whitespace.`,
+      );
+      continue;
+    }
+    tags[key] = val;
   }
 
   // ── Naming prefix ──────────────────────────────────────────────────

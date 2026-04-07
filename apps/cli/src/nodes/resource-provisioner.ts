@@ -34,6 +34,20 @@ function isResourceType(s: string): s is ResourceType {
 }
 
 /**
+ * Format an unknown caught error for logging. Prefer the full stack trace
+ * (for diagnosing EIP/SSH leaks and other transient AWS failures), fall back
+ * to the message, and only stringify non-Error throws as a last resort.
+ *
+ * Exported for unit testing.
+ */
+export function formatErrorForLog(err: unknown): string {
+  if (err instanceof Error) {
+    return err.stack ?? err.message;
+  }
+  return String(err);
+}
+
+/**
  * Whitelist-based filename sanitizer for SSH key file names. Only
  * `[A-Za-z0-9._-]` survives — every other character (path separators, null
  * bytes, newlines, control chars, shell metacharacters, Unicode) is replaced
@@ -338,6 +352,30 @@ export async function resourceProvisionerNode(
               message: `Reusing existing EIP ${allocationId} from previous attempt`,
             },
           });
+          // L-A6: DescribeAddresses may return multiple EIPs tagged with the
+          // same runId from prior leaked attempts. We reuse the first one but
+          // emit a warn-level log so operators can manually clean up the rest.
+          if (existing.Addresses.length > 1) {
+            const allAllocationIds = existing.Addresses.map(
+              (a) => a.AllocationId,
+            ).filter((id): id is string => typeof id === "string");
+            log({
+              ts: new Date().toISOString(),
+              runId: state.runId,
+              level: "warn",
+              action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
+              extras: {
+                reason: "eip_leak_detected",
+                count: existing.Addresses.length,
+                reusedAllocationId: allocationId,
+                allAllocationIds,
+                message:
+                  `Found ${existing.Addresses.length} EIPs tagged with runId ${state.runId} ` +
+                  `from previous attempts. Reusing ${allocationId}; the rest are leaked and ` +
+                  `require manual cleanup via 'aws ec2 release-address'.`,
+              },
+            });
+          }
         }
       } catch (err) {
         // DescribeAddresses failure is non-fatal — fall through to allocate a new EIP
@@ -348,7 +386,7 @@ export async function resourceProvisionerNode(
           action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
           extras: {
             phase: "describe_addresses_eip_reuse",
-            error: String(err),
+            error: formatErrorForLog(err),
           },
         });
       }
@@ -388,7 +426,7 @@ export async function resourceProvisionerNode(
             extras: {
               phase: "tag_eip",
               allocationId,
-              error: String(err),
+              error: formatErrorForLog(err),
             },
           });
         }
@@ -608,7 +646,7 @@ export async function resourceProvisionerNode(
           extras: {
             phase: "release_eip_after_failure",
             allocationId: desiredState[CfnKey.ALLOCATION_ID],
-            error: String(err),
+            error: formatErrorForLog(err),
           },
         });
       }
@@ -635,7 +673,7 @@ export async function resourceProvisionerNode(
           extras: {
             phase: "delete_ssh_key_after_failure",
             sshKeyName: sshKeyCreatedName,
-            error: String(err),
+            error: formatErrorForLog(err),
           },
         });
       }
