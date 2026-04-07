@@ -22,12 +22,26 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import {
   computeFreshness,
   computeManifest,
   verifyManifest,
+  verifyManifestSignature,
   type BPManifest,
 } from "../src/integrity.js";
+
+/** Returns true if gpg is installed on PATH; used to skip gpg-dependent tests. */
+function isGpgAvailable(): boolean {
+  try {
+    execFileSync("gpg", ["--version"], {
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // Realistic BP YAML content — matches fsbp-entries style so mocks use real data.
 const BP_S3_001 = `id: BP-S3-001
@@ -474,5 +488,206 @@ describe("walkBpFiles TOCTOU race resilience (M-R5)", () => {
     const m = computeManifest(dir);
     expect(m.count).toBe(1);
     expect(m.files["s3/BP-S3-001.yaml"]).toBeDefined();
+  });
+});
+
+// ── GPG signature verification (Part 1: manifest signing) ──────────────────
+// The BP manifest can optionally ship with a detached GPG signature
+// (`manifest.json.sig`). Verification is OPT-IN: missing sig files, missing
+// gpg binary, or invalid sigs never make `valid: false` on their own; they
+// surface on the `signature` result so the CLI can enforce policy.
+describe("verifyManifestSignature (opt-in GPG signing)", () => {
+  it("returns signaturePresent:false, verified:false when no .sig file exists", () => {
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const computed = computeManifest(dir);
+    // Write a manifest file but no .sig alongside it.
+    const manifestPath = join(dir, "manifest.json");
+    writeFileSync(manifestPath, JSON.stringify(computed));
+
+    const sig = verifyManifestSignature(manifestPath);
+    expect(sig.verified).toBe(false);
+    expect(sig.signaturePresent).toBe(false);
+    expect(sig.signedByKey).toBeNull();
+    expect(sig.reason).toBe("signature file missing");
+  });
+
+  // We cannot rely on a test-only signing key being in the caller's
+  // keyring in CI, so the "verified: true" path is covered by generating a
+  // one-shot key inside a temporary GNUPGHOME. Skips on hosts without gpg.
+  it("returns verified:true and signedByKey when .sig matches manifest", () => {
+    if (!isGpgAvailable()) return; // CI sim without gpg — skip gracefully
+
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const computed = computeManifest(dir);
+    const manifestPath = join(dir, "manifest.json");
+    writeFileSync(manifestPath, JSON.stringify(computed));
+
+    // Create an isolated GNUPGHOME and a one-shot signing key.
+    const gnupgHome = mkdtempSync(join(tmpdir(), "bp-gpg-home-"));
+    tmpDirs.push(gnupgHome);
+    const origGnupgHome = process.env["GNUPGHOME"];
+    process.env["GNUPGHOME"] = gnupgHome;
+    try {
+      // Generate an ephemeral RSA key with no passphrase for signing only.
+      const batch = [
+        "%no-protection",
+        "Key-Type: RSA",
+        "Key-Length: 2048",
+        "Subkey-Type: RSA",
+        "Subkey-Length: 2048",
+        "Name-Real: BP Test Signer",
+        "Name-Email: bp-test@assignee.ai",
+        "Expire-Date: 0",
+        "%commit",
+      ].join("\n");
+      const batchFile = join(gnupgHome, "gen-key.batch");
+      writeFileSync(batchFile, batch);
+      try {
+        execFileSync("gpg", ["--batch", "--gen-key", batchFile], {
+          stdio: ["ignore", "ignore", "ignore"],
+        });
+      } catch {
+        // Key generation can be slow or entropy-starved in CI; skip rather
+        // than fail the suite.
+        return;
+      }
+
+      execFileSync(
+        "gpg",
+        [
+          "--batch",
+          "--yes",
+          "--detach-sign",
+          "--armor",
+          "--local-user",
+          "bp-test@assignee.ai",
+          "--output",
+          `${manifestPath}.sig`,
+          manifestPath,
+        ],
+        { stdio: ["ignore", "ignore", "ignore"] },
+      );
+
+      const sig = verifyManifestSignature(manifestPath);
+      expect(sig.verified).toBe(true);
+      expect(sig.signaturePresent).toBe(true);
+      expect(sig.signedByKey).toBeTruthy();
+      // Fingerprint is hex only, length 16..40.
+      expect(sig.signedByKey).toMatch(/^[A-F0-9]{16,40}$/);
+      expect(sig.reason).toBeUndefined();
+    } finally {
+      if (origGnupgHome === undefined) {
+        delete process.env["GNUPGHOME"];
+      } else {
+        process.env["GNUPGHOME"] = origGnupgHome;
+      }
+    }
+  });
+
+  it("returns verified:false with 'signature invalid' when .sig does not match manifest", () => {
+    if (!isGpgAvailable()) return;
+
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const computed = computeManifest(dir);
+    const manifestPath = join(dir, "manifest.json");
+    writeFileSync(manifestPath, JSON.stringify(computed));
+
+    // Write a bogus .sig file — valid ASCII-armor shape but not a real
+    // signature over the manifest. GPG will reject it.
+    const bogusSig = `-----BEGIN PGP SIGNATURE-----
+
+iHUEABYKAB0WIQQ${"A".repeat(40)}BQJk${"A".repeat(8)}AAoJEA${"A".repeat(20)}
+${"B".repeat(60)}
+=AAAA
+-----END PGP SIGNATURE-----
+`;
+    writeFileSync(`${manifestPath}.sig`, bogusSig);
+
+    const sig = verifyManifestSignature(manifestPath);
+    expect(sig.verified).toBe(false);
+    expect(sig.signaturePresent).toBe(true);
+    expect(sig.reason).toBe("signature invalid");
+  });
+
+  it("returns verified:false with 'gpg not available' when gpg binary is missing", () => {
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const computed = computeManifest(dir);
+    const manifestPath = join(dir, "manifest.json");
+    writeFileSync(manifestPath, JSON.stringify(computed));
+    // Write any non-empty content to the sig file so signaturePresent=true.
+    writeFileSync(`${manifestPath}.sig`, "-----BEGIN PGP SIGNATURE-----\n");
+
+    // Clobber PATH to an empty dir so `gpg` cannot be found. node:child_process
+    // respects the process env when spawning, so this reliably simulates
+    // the "gpg not installed" branch without requiring system changes.
+    const emptyDir = mkdtempSync(join(tmpdir(), "bp-no-path-"));
+    tmpDirs.push(emptyDir);
+    const origPath = process.env["PATH"];
+    process.env["PATH"] = emptyDir;
+    try {
+      const sig = verifyManifestSignature(manifestPath);
+      expect(sig.verified).toBe(false);
+      expect(sig.signaturePresent).toBe(true);
+      expect(sig.reason).toBe("gpg not available");
+      expect(sig.signedByKey).toBeNull();
+    } finally {
+      process.env["PATH"] = origPath;
+    }
+  });
+});
+
+// verifyManifest() should carry the signature result through every return
+// path so enforce-mode callers can make a single decision.
+describe("verifyManifest signature propagation", () => {
+  it("attaches signaturePresent:false when manifest is unsigned and hash matches", () => {
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const computed = computeManifest(dir);
+    const refPath = join(dir, "reference.json");
+    writeFileSync(refPath, JSON.stringify(computed));
+
+    const result = verifyManifest(computed, refPath);
+    expect(result.valid).toBe(true);
+    expect(result.signature).toBeDefined();
+    expect(result.signature!.verified).toBe(false);
+    expect(result.signature!.signaturePresent).toBe(false);
+    expect(result.signature!.reason).toBe("signature file missing");
+  });
+
+  it("attaches signature result on hash-mismatch failures too", () => {
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const computed = computeManifest(dir);
+    const tampered: BPManifest = {
+      ...computed,
+      hash: "0".repeat(64),
+      files: { "s3/BP-S3-001.yaml": "0".repeat(64) },
+    };
+    const refPath = join(dir, "tampered.json");
+    writeFileSync(refPath, JSON.stringify(tampered));
+
+    const result = verifyManifest(computed, refPath);
+    expect(result.valid).toBe(false);
+    expect(result.signature).toBeDefined();
+    expect(result.signature!.signaturePresent).toBe(false);
+  });
+
+  it("omits signature when reference is missing (no file to verify against)", () => {
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const computed = computeManifest(dir);
+
+    const result = verifyManifest(
+      computed,
+      join(dir, "nonexistent-manifest.json"),
+    );
+    expect(result.valid).toBe(true);
+    expect(result.referenceMissing).toBe(true);
+    // No signature attempt — nothing to verify.
+    expect(result.signature).toBeUndefined();
   });
 });

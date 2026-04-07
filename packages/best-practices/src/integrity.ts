@@ -12,6 +12,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, statSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { SKIP_DIRS } from "./loader.js";
 
 /** Freshness status for the BP library. */
@@ -171,6 +172,34 @@ export function computeManifest(baseDir?: string): BPManifest {
   };
 }
 
+/** Signature verification result, additive to the hash check. */
+export interface ManifestSignatureResult {
+  /**
+   * True only when a `.sig` file exists, GPG is installed, and the signature
+   * verified successfully against the manifest. False in every other case
+   * (missing sig, missing gpg binary, bad signature).
+   */
+  verified: boolean;
+  /**
+   * Key ID or fingerprint that signed the manifest, when GPG reported one.
+   * Null when no signature was present or GPG could not extract a key id.
+   */
+  signedByKey: string | null;
+  /**
+   * Human-readable reason for a non-verified result. Populated for
+   * "signature file missing", "gpg not available", and "signature invalid"
+   * states. Unset when `verified: true`.
+   */
+  reason?: string;
+  /**
+   * True when the `.sig` file was present on disk regardless of whether
+   * the verification ultimately succeeded. Callers in enforce mode use
+   * this to distinguish "unsigned manifest (TOFU)" from "signed manifest
+   * with invalid signature (hard fail)".
+   */
+  signaturePresent: boolean;
+}
+
 /** Result of comparing a runtime manifest against a reference. */
 export interface ManifestVerifyResult {
   valid: boolean;
@@ -188,6 +217,14 @@ export interface ManifestVerifyResult {
    * from "hash mismatch" / "corrupt reference".
    */
   referenceMissing?: boolean;
+  /**
+   * Additive GPG signature-verification result. Always populated (never
+   * undefined) so callers can make enforcement decisions without having to
+   * null-check. A missing `.sig` file yields `{ verified: false,
+   * signedByKey: null, signaturePresent: false }` — NOT an error — which
+   * preserves the pre-signing "trust the manifest on disk" behaviour.
+   */
+  signature?: ManifestSignatureResult;
 }
 
 /** Options controlling verifyManifest behaviour. */
@@ -201,6 +238,125 @@ export interface VerifyManifestOptions {
 }
 
 /**
+ * Verify a detached GPG signature for a manifest file.
+ *
+ * Design: signing is OPT-IN. A missing `.sig` file is NOT an error — it
+ * simply means the manifest shipped unsigned (current behaviour). GPG not
+ * being installed is also not an error here: we downgrade to
+ * `verified: false, reason: "gpg not available"` and let the caller decide
+ * whether that is acceptable (warn-mode tolerates it, enforce mode with
+ * ASSIGNEE_BP_REQUIRE_SIGNATURE rejects it).
+ *
+ * The verification uses `gpg --verify manifest.json.sig manifest.json`.
+ * GPG exits 0 only when the signature is valid AND the signing key is
+ * trusted by the current keyring. When GPG exits non-zero we return
+ * `verified: false` with a reason string extracted from stderr.
+ */
+export function verifyManifestSignature(
+  manifestPath: string,
+): ManifestSignatureResult {
+  const sigPath = `${manifestPath}.sig`;
+
+  if (!existsSync(sigPath)) {
+    return {
+      verified: false,
+      signedByKey: null,
+      signaturePresent: false,
+      reason: "signature file missing",
+    };
+  }
+
+  // GPG is optional — if the binary is not on PATH we degrade gracefully.
+  // Probe with `gpg --version`; any error (ENOENT, non-zero exit) means
+  // we cannot verify signatures in this environment.
+  try {
+    execFileSync("gpg", ["--version"], {
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+  } catch {
+    return {
+      verified: false,
+      signedByKey: null,
+      signaturePresent: true,
+      reason: "gpg not available",
+    };
+  }
+
+  // `gpg --verify` writes everything relevant to stderr. We also ask for
+  // --status-fd so we can parse machine-readable VALIDSIG / GOODSIG lines
+  // and extract the signing key fingerprint without scraping localized
+  // human text.
+  let stderr = "";
+  try {
+    const result = execFileSync(
+      "gpg",
+      ["--verify", "--status-fd=2", "--batch", sigPath, manifestPath],
+      { stdio: ["ignore", "pipe", "pipe"], encoding: "utf-8" },
+    );
+    // execFileSync returns stdout; the status lines we care about are on
+    // stderr. Node captures the combined streams via the `pipe` stdio
+    // above, exposed through the thrown error on failure OR via the
+    // returned value on success (empty here — gpg writes nothing to stdout).
+    stderr = String(result ?? "");
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException & {
+      stderr?: Buffer | string;
+      stdout?: Buffer | string;
+    };
+    stderr = String(e.stderr ?? "") + String(e.stdout ?? "");
+    return {
+      verified: false,
+      signedByKey: extractKeyFromGpgStatus(stderr),
+      signaturePresent: true,
+      reason: "signature invalid",
+    };
+  }
+
+  // Success path: parse the key id from the status-fd output.
+  // --status-fd writes [GNUPG:] VALIDSIG <fingerprint> <date> ...
+  // Capture either VALIDSIG or GOODSIG.
+  //
+  // Note: execFileSync on success puts stderr in the thrown error path
+  // only; on success it's not returned. We re-run with a second channel
+  // to capture stderr explicitly.
+  try {
+    stderr = String(
+      execFileSync(
+        "gpg",
+        ["--verify", "--status-fd=1", "--batch", sigPath, manifestPath],
+        { stdio: ["ignore", "pipe", "ignore"], encoding: "utf-8" },
+      ),
+    );
+  } catch {
+    // Should not happen — we just passed verification above.
+    return {
+      verified: false,
+      signedByKey: null,
+      signaturePresent: true,
+      reason: "signature invalid",
+    };
+  }
+
+  return {
+    verified: true,
+    signedByKey: extractKeyFromGpgStatus(stderr),
+    signaturePresent: true,
+  };
+}
+
+/**
+ * Extract the signing key fingerprint or long key id from GPG --status-fd
+ * output. Returns null when no VALIDSIG/GOODSIG line is present.
+ */
+function extractKeyFromGpgStatus(status: string): string | null {
+  const validSig = /\[GNUPG:\]\s+VALIDSIG\s+([A-F0-9]{16,40})/i.exec(status);
+  if (validSig && validSig[1]) return validSig[1];
+  const goodSig = /\[GNUPG:\]\s+GOODSIG\s+([A-F0-9]{16,40})/i.exec(status);
+  if (goodSig && goodSig[1]) return goodSig[1];
+  return null;
+}
+
+/**
  * Verify a computed manifest against a reference manifest file on disk.
  *
  * If the reference doesn't exist and `strictNoReference` is false (default),
@@ -208,6 +364,13 @@ export interface VerifyManifestOptions {
  * When `strictNoReference` is true, a missing reference is an integrity
  * failure: callers in enforce mode must reject the BP library rather than
  * trust it blindly.
+ *
+ * When a reference manifest IS present, an additional GPG signature
+ * verification is performed against `${referencePath}.sig`. The result is
+ * attached to `signature` on the returned object and is additive — a
+ * missing or invalid signature does NOT make `valid: false` here. Callers
+ * enforce signature presence via their own policy (see
+ * bp-evaluator's ASSIGNEE_BP_REQUIRE_SIGNATURE env var).
  */
 export function verifyManifest(
   computed: BPManifest,
@@ -235,6 +398,11 @@ export function verifyManifest(
     };
   }
 
+  // Verify the detached signature (if any). Result is additive: a missing
+  // or invalid signature is reported on `signature` but does not by itself
+  // invalidate the manifest — callers decide enforcement.
+  const signature = verifyManifestSignature(referencePath);
+
   let reference: BPManifest;
   try {
     const raw = readFileSync(referencePath, "utf-8");
@@ -243,6 +411,7 @@ export function verifyManifest(
     return {
       valid: false,
       reason: `Reference manifest is corrupt: ${err instanceof Error ? err.message : String(err)}`,
+      signature,
     };
   }
 
@@ -250,11 +419,12 @@ export function verifyManifest(
     return {
       valid: false,
       reason: `Unsupported manifest version: ${reference.version}`,
+      signature,
     };
   }
 
   if (reference.hash === computed.hash) {
-    return { valid: true };
+    return { valid: true, signature };
   }
 
   // Hashes differ — find specific mismatched files for diagnostic output
@@ -273,5 +443,6 @@ export function verifyManifest(
     valid: false,
     reason: `BP library hash mismatch (expected ${reference.hash.slice(0, 12)}…, got ${computed.hash.slice(0, 12)}…). ${mismatched.length} file(s) differ.`,
     mismatchedFiles: mismatched,
+    signature,
   };
 }

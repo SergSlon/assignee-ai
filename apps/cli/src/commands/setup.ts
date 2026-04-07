@@ -242,6 +242,11 @@ export const setupCommand = new Command(CommandName.SETUP)
     false,
   )
   .option(
+    "--disable-llm-logging",
+    "PRIVACY: Explicitly DISABLE Bedrock invocation text logging (idempotent). Runs only the PutModelInvocationLoggingConfiguration call with textDataDeliveryEnabled=false; does NOT re-run the full IAM wizard. Mutually exclusive with --enable-llm-logging.",
+    false,
+  )
+  .option(
     "--dry-run",
     "Print the plan of resources that WOULD be created without invoking any AWS APIs",
     false,
@@ -251,9 +256,108 @@ export const setupCommand = new Command(CommandName.SETUP)
       profile?: string;
       yes?: boolean;
       enableLlmLogging?: boolean;
+      disableLlmLogging?: boolean;
       dryRun?: boolean;
     }) => {
+      // UX (Sally): --enable and --disable are mutually exclusive. Pass both
+      // by mistake and we fail fast with a clear message rather than silently
+      // picking one of the two.
+      if (options.enableLlmLogging && options.disableLlmLogging) {
+        throw new ConfigurationError(
+          "Flags --enable-llm-logging and --disable-llm-logging are mutually exclusive. " +
+            "Pass one or the other, not both.",
+        );
+      }
+
       clack.intro("Assignee.ai — IAM Setup");
+
+      // ── Disable-only fast path ───────────────────────────────────────
+      // Sally UX fix: the CLI previously exposed --enable-llm-logging but no
+      // symmetric --disable flag, forcing users to run raw AWS CLI commands
+      // to turn logging back off. This path only touches Bedrock's
+      // PutModelInvocationLoggingConfiguration — no IAM, no .env, no users.
+      if (options.disableLlmLogging) {
+        if (options.dryRun) {
+          clack.log.info(
+            "DRY RUN — no AWS APIs will be called. The following Bedrock configuration WOULD be applied:",
+          );
+          clack.log.step(
+            "Bedrock invocation logging — DISABLE:\n" +
+              `  - Target log group: ${BEDROCK_LOG_GROUP_NAME}\n` +
+              `  - Target role: ${BEDROCK_LOGGING_ROLE_NAME}\n` +
+              `  - textDataDeliveryEnabled: false\n` +
+              `  - imageDataDeliveryEnabled: false\n` +
+              `  - embeddingDataDeliveryEnabled: false`,
+          );
+          clack.outro(
+            "Dry run complete — no changes made. Re-run without --dry-run to apply.",
+          );
+          return;
+        }
+
+        // Build the same credential provider as the main path so the user
+        // can pass --profile / AWS_PROFILE to target a specific account.
+        const { fromIni } = await import("@aws-sdk/credential-providers");
+        const resolvedProfile =
+          options.profile ?? process.env["AWS_PROFILE"] ?? "default";
+        const clientConfig: {
+          credentials: ReturnType<typeof fromIni>;
+          region?: string;
+        } = {
+          credentials: fromIni({ profile: resolvedProfile }),
+        };
+
+        // Resolve the account id so the role ARN we pass to Bedrock points
+        // at the caller's account — NOT hard-coded.
+        const s = clack.spinner();
+        s.start("Verifying AWS credentials...");
+        let accountId: string;
+        try {
+          const sts = new STSClient(clientConfig);
+          const identity = await sts.send(new GetCallerIdentityCommand({}));
+          accountId = identity.Account!;
+          s.stop(`Authenticated as ${identity.Arn} (account: ${accountId})`);
+        } catch (err) {
+          s.stop("Failed to verify AWS credentials.");
+          throw new ConfigurationError(
+            "Cannot reach AWS STS. Ensure you have admin credentials configured.\n" +
+              `Error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
+        const region = AWS_REGION;
+        const { BedrockClient, PutModelInvocationLoggingConfigurationCommand } =
+          await import("@aws-sdk/client-bedrock");
+        const bedrock = new BedrockClient({ ...clientConfig, region });
+        const disableSp = clack.spinner();
+        disableSp.start("Disabling Bedrock invocation text logging...");
+        try {
+          await bedrock.send(
+            new PutModelInvocationLoggingConfigurationCommand({
+              loggingConfig: {
+                cloudWatchConfig: {
+                  logGroupName: BEDROCK_LOG_GROUP_NAME,
+                  roleArn: `${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
+                },
+                textDataDeliveryEnabled: false,
+                imageDataDeliveryEnabled: false,
+                embeddingDataDeliveryEnabled: false,
+              },
+            }),
+          );
+          disableSp.stop(
+            "Bedrock invocation text logging — DISABLED (metadata still flows; bodies no longer captured)",
+          );
+        } catch (err) {
+          disableSp.stop("Failed to disable Bedrock invocation logging.");
+          throw err;
+        }
+
+        clack.outro(
+          "LLM prompt/response text logging is OFF. Re-run with --enable-llm-logging to opt back in.",
+        );
+        return;
+      }
 
       // ── Dry-run path: print plan and exit without any AWS calls ─────
       // UX (M-T1): Each section is rendered as ONE multi-line clack.log.step

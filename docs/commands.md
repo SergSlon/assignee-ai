@@ -357,12 +357,13 @@ assignee setup [options]
 
 **Options:**
 
-| Flag                   | Description                                                                                                                       | Default |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `--profile <profile>`  | AWS CLI profile with admin/root credentials                                                                                       | default |
-| `-y, --yes`            | Skip confirmation prompts                                                                                                         | false   |
-| `--enable-llm-logging` | PRIVACY: enable Bedrock invocation text logging to CloudWatch (every prompt and response is captured in plaintext). Default OFF.  | false   |
-| `--dry-run`            | Print the plan of IAM users, policies, access keys, and Bedrock logging resources that would be created without calling AWS APIs. | false   |
+| Flag                    | Description                                                                                                                                                                                                                          | Default |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| `--profile <profile>`   | AWS CLI profile with admin/root credentials                                                                                                                                                                                          | default |
+| `-y, --yes`             | Skip confirmation prompts                                                                                                                                                                                                            | false   |
+| `--enable-llm-logging`  | PRIVACY: enable Bedrock invocation text logging to CloudWatch (every prompt and response is captured in plaintext). Default OFF.                                                                                                     | false   |
+| `--disable-llm-logging` | PRIVACY: explicitly DISABLE Bedrock invocation text logging. Idempotent fast path — only touches Bedrock's `PutModelInvocationLoggingConfiguration`, does NOT re-run the IAM wizard. Mutually exclusive with `--enable-llm-logging`. | false   |
+| `--dry-run`             | Print the plan of IAM users, policies, access keys, and Bedrock logging resources that would be created without calling AWS APIs. Also supported in combination with `--disable-llm-logging` to preview the disable action.          | false   |
 
 **Behavior:**
 
@@ -386,7 +387,11 @@ assignee setup --profile admin-user
 assignee setup --yes
 assignee setup --dry-run                # preview the IAM plan, no AWS calls
 assignee setup --enable-llm-logging     # opt in to plaintext Bedrock logs
+assignee setup --disable-llm-logging    # turn plaintext Bedrock logs back off (idempotent fast path)
+assignee setup --disable-llm-logging --dry-run  # preview the disable action, no AWS calls
 ```
+
+> NOTE: `--disable-llm-logging` only calls Bedrock's `PutModelInvocationLoggingConfiguration` with `textDataDeliveryEnabled=false`. It does NOT re-create IAM users, policies, access keys, or the CloudWatch log group, and it never writes `.env`. Use it whenever you want to turn LLM body capture off after a previous `assignee setup --enable-llm-logging` run.
 
 ### clean
 

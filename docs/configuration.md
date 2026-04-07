@@ -155,35 +155,60 @@ Pass-through section for organization-wide policies. Keys are domain-specific (e
 
 ## Environment Variables
 
-| Variable                              | Description                                                                                | Default                          |
-| ------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------- |
-| `AWS_REGION`                          | AWS region for API calls                                                                   | `us-east-1`                      |
-| `BEDROCK_MODEL_ID`                    | Bedrock model for intent parsing and plan generation                                       | `us.amazon.nova-lite-v1:0`       |
-| `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | Access key for the operator IAM user                                                       | -                                |
-| `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | Secret key for the operator IAM user                                                       | -                                |
-| `ASSIGNEE_READER_ACCESS_KEY_ID`       | Access key for the reader IAM user (MCP)                                                   | -                                |
-| `ASSIGNEE_READER_SECRET_ACCESS_KEY`   | Secret key for the reader IAM user (MCP)                                                   | -                                |
-| `ASSIGNEE_AUDITOR_ACCESS_KEY_ID`      | Access key for the auditor IAM user (MCP)                                                  | -                                |
-| `ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY`  | Secret key for the auditor IAM user (MCP)                                                  | -                                |
-| `ASSIGNEE_VERBOSITY`                  | Set to `verbose` to enable structured log output                                           | -                                |
-| `ASSIGNEE_LOG_LEVEL`                  | Set to `debug` to enable structured log output                                             | -                                |
-| `ASSIGNEE_SAAS_URL`                   | SaaS API base URL for org policy fetch                                                     | `https://app.assignee.ai`        |
-| `ASSIGNEE_ORG_POLICY_TTL_MS`          | TTL for cached org policy (milliseconds)                                                   | `300000` (5 min)                 |
-| `ASSIGNEE_BP_INTEGRITY`               | Best-practices manifest integrity mode (see below)                                         | `enforce` (prod) / `warn` (test) |
-| `ASSIGNEE_LOG_DIR`                    | Override directory for always-on warn/error log file                                       | `~/.assignee/logs`               |
-| `ASSIGNEE_LOG_RETENTION_DAYS`         | Days to retain persistent warn/error log files before `assignee clean --logs` deletes them | `14`                             |
-| `ASSIGNEE_ENABLE_REMOTE_MCP`          | Set to `1` to enable the optional remote knowledge MCP server (see security note below)    | unset (disabled)                 |
-| `RUN_E2E`                             | Set to `1` to enable the E2E test suite (otherwise skipped)                                | unset (skipped)                  |
+| Variable                              | Description                                                                                                                                                                                                                                                      | Default                          |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `AWS_REGION`                          | AWS region for API calls                                                                                                                                                                                                                                         | `us-east-1`                      |
+| `BEDROCK_MODEL_ID`                    | Bedrock model for intent parsing and plan generation                                                                                                                                                                                                             | `us.amazon.nova-lite-v1:0`       |
+| `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | Access key for the operator IAM user                                                                                                                                                                                                                             | -                                |
+| `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | Secret key for the operator IAM user                                                                                                                                                                                                                             | -                                |
+| `ASSIGNEE_READER_ACCESS_KEY_ID`       | Access key for the reader IAM user (MCP)                                                                                                                                                                                                                         | -                                |
+| `ASSIGNEE_READER_SECRET_ACCESS_KEY`   | Secret key for the reader IAM user (MCP)                                                                                                                                                                                                                         | -                                |
+| `ASSIGNEE_AUDITOR_ACCESS_KEY_ID`      | Access key for the auditor IAM user (MCP)                                                                                                                                                                                                                        | -                                |
+| `ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY`  | Secret key for the auditor IAM user (MCP)                                                                                                                                                                                                                        | -                                |
+| `ASSIGNEE_VERBOSITY`                  | Set to `verbose` to enable structured log output                                                                                                                                                                                                                 | -                                |
+| `ASSIGNEE_LOG_LEVEL`                  | Set to `debug` to enable structured log output                                                                                                                                                                                                                   | -                                |
+| `ASSIGNEE_SAAS_URL`                   | SaaS API base URL for org policy fetch                                                                                                                                                                                                                           | `https://app.assignee.ai`        |
+| `ASSIGNEE_ORG_POLICY_TTL_MS`          | TTL for cached org policy (milliseconds)                                                                                                                                                                                                                         | `300000` (5 min)                 |
+| `ASSIGNEE_BP_INTEGRITY`               | Best-practices manifest integrity mode (see below)                                                                                                                                                                                                               | `enforce` (prod) / `warn` (test) |
+| `ASSIGNEE_BP_SIGNING_KEY`             | Release-only: when set, `pnpm --filter=@assignee/best-practices run generate-manifest` also emits a detached GPG signature (`manifest.json.sig`) using this local-user identity (key id, fingerprint, or email). Absent = unsigned manifest (current behaviour). | unset                            |
+| `ASSIGNEE_BP_REQUIRE_SIGNATURE`       | When set to any non-empty value, the CLI refuses to load BP rules in enforce mode unless a valid GPG signature is present alongside the manifest. Defense-in-depth beyond the hash check. Absent = unsigned manifests accepted in enforce mode (warns once).     | unset                            |
+| `ASSIGNEE_LOG_DIR`                    | Override directory for always-on warn/error log file                                                                                                                                                                                                             | `~/.assignee/logs`               |
+| `ASSIGNEE_LOG_RETENTION_DAYS`         | Days to retain persistent warn/error log files before `assignee clean --logs` deletes them                                                                                                                                                                       | `14`                             |
+| `ASSIGNEE_ENABLE_REMOTE_MCP`          | Set to `1` to enable the optional remote knowledge MCP server (see security note below)                                                                                                                                                                          | unset (disabled)                 |
+| `RUN_E2E`                             | Set to `1` to enable the E2E test suite (otherwise skipped)                                                                                                                                                                                                      | unset (skipped)                  |
 
 ### `ASSIGNEE_BP_INTEGRITY` modes
 
-The best-practices library ships with a signed manifest. This variable controls how the loader reacts when the manifest is missing, malformed, or fails verification.
+The best-practices library ships with a manifest (`manifest.json`) and, optionally, a detached GPG signature (`manifest.json.sig`). This variable controls how the loader reacts when the manifest is missing, malformed, or fails verification.
 
 | Mode       | Behavior                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------ |
 | `enforce`  | Manifest must validate. On failure the CLI aborts before running any rules. **Default in production.** |
 | `warn`     | Manifest is verified, but failures only emit a warning and the CLI continues. **Default in tests.**    |
 | `disabled` | Manifest verification is skipped entirely. Use only for local development against unreleased rules.    |
+
+### BP manifest signing (`ASSIGNEE_BP_SIGNING_KEY` / `ASSIGNEE_BP_REQUIRE_SIGNATURE`)
+
+Signing is an **opt-in** release hardening step. It protects against the "attacker commits a tampered YAML + regenerated manifest in the same commit" scenario that a plain SHA-256 manifest cannot detect.
+
+**Generation side (release infrastructure):**
+
+```bash
+# Sign manifest.json with your GPG key during release
+ASSIGNEE_BP_SIGNING_KEY="release@assignee.ai" \
+  pnpm --filter=@assignee/best-practices run generate-manifest
+```
+
+This writes a detached ASCII-armored signature to `packages/best-practices/manifest.json.sig`. If `gpg` is not installed the script logs a warning and skips signing — signing is not a dev prerequisite. Absence of `ASSIGNEE_BP_SIGNING_KEY` keeps the current unsigned-manifest behaviour.
+
+**Verification side (CLI runtime):**
+
+- If `manifest.json.sig` exists alongside `manifest.json`, the CLI runs `gpg --verify` on load. The result is attached to the integrity result as `signature.{verified, signedByKey, reason}`.
+- If the signature is present but invalid, enforce mode throws `BpIntegrityError` regardless of `ASSIGNEE_BP_REQUIRE_SIGNATURE` — an invalid signature always fails.
+- If no signature file is present, enforce mode accepts the manifest (with a one-time stderr warning: "BP manifest is unsigned — accepting on trust") UNLESS `ASSIGNEE_BP_REQUIRE_SIGNATURE` is set, in which case enforce mode refuses to load BP rules.
+- If `gpg` is not installed, the CLI skips signature verification with a warning. Enforce mode + `ASSIGNEE_BP_REQUIRE_SIGNATURE` refuses to load in that case.
+
+`ASSIGNEE_BP_REQUIRE_SIGNATURE=1` is recommended for organizations that can guarantee signed BP releases in their supply chain (private registry, curated build).
 
 ### `ASSIGNEE_LOG_DIR`
 
