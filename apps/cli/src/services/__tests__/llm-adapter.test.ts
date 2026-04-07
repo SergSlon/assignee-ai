@@ -28,6 +28,8 @@ import {
   LlmAdapter,
   DEFAULT_MODEL,
   DEFAULT_MAX_TOKENS,
+  detectBedrockRegionError,
+  KNOWN_BEDROCK_REGIONS,
 } from "../llm-adapter.js";
 import { generateText } from "ai";
 
@@ -337,6 +339,172 @@ describe("LlmAdapter", () => {
       });
       const [err] = await adapter.generateText("Hello");
       expect(err).toBeNull();
+    });
+  });
+
+  // ── Wave 12 P2: Bedrock cross-region detection ──────────────────────────
+  describe("detectBedrockRegionError (Wave 12 P2)", () => {
+    it("returns null for non-bedrock providers (no false positives)", () => {
+      const hint = detectBedrockRegionError(
+        new Error("AccessDeniedException: foo"),
+        "us-east-1",
+        "anthropic/claude-sonnet-4-5",
+      );
+      expect(hint).toBeNull();
+    });
+
+    it("returns null for unrelated errors on bedrock provider", () => {
+      const hint = detectBedrockRegionError(
+        new Error("Network timeout"),
+        "us-east-1",
+        "bedrock/amazon.nova-lite-v1:0",
+      );
+      expect(hint).toBeNull();
+    });
+
+    it("detects AccessDeniedException on bedrock provider", () => {
+      const hint = detectBedrockRegionError(
+        new Error(
+          "AccessDeniedException: You don't have access to the model with the specified model ID.",
+        ),
+        "us-east-1",
+        "bedrock/amazon.nova-lite-v1:0",
+      );
+      expect(hint).not.toBeNull();
+      expect(hint).toContain("not available");
+      expect(hint).toContain("us-east-1");
+      expect(hint).toContain("bedrock/amazon.nova-lite-v1:0");
+    });
+
+    it("detects ValidationException model identifier errors", () => {
+      const hint = detectBedrockRegionError(
+        new Error(
+          "ValidationException: The provided model identifier is invalid.",
+        ),
+        "eu-west-2",
+        "bedrock/anthropic.claude-3-haiku-20240307-v1:0",
+      );
+      expect(hint).not.toBeNull();
+      expect(hint).toContain("eu-west-2");
+    });
+
+    it("detects ResourceNotFoundException", () => {
+      const hint = detectBedrockRegionError(
+        new Error(
+          "ResourceNotFoundException: Could not resolve the foundation model from the provided model identifier",
+        ),
+        "ap-south-1",
+        "bedrock/amazon.nova-lite-v1:0",
+      );
+      expect(hint).not.toBeNull();
+    });
+
+    it("recommends switching AWS_REGION when caller is on a non-canonical region", () => {
+      const hint = detectBedrockRegionError(
+        new Error("AccessDeniedException"),
+        "ap-south-1",
+        "bedrock/amazon.nova-lite-v1:0",
+      );
+      expect(hint).toContain("Set AWS_REGION");
+      expect(hint).toContain("us-east-1");
+    });
+
+    it("recommends model-access enrollment when caller is on a canonical region", () => {
+      const hint = detectBedrockRegionError(
+        new Error("AccessDeniedException"),
+        "us-east-1",
+        "bedrock/amazon.nova-lite-v1:0",
+      );
+      expect(hint).toContain("Bedrock console");
+      expect(hint).toContain("Model access");
+    });
+
+    it("includes the original AWS error message for debuggability", () => {
+      const original = "AccessDeniedException: account 999 lacks model access";
+      const hint = detectBedrockRegionError(
+        new Error(original),
+        "us-east-1",
+        "bedrock/amazon.nova-lite-v1:0",
+      );
+      expect(hint).toContain(original);
+    });
+
+    it("KNOWN_BEDROCK_REGIONS contains the canonical big-three", () => {
+      expect(KNOWN_BEDROCK_REGIONS).toContain("us-east-1");
+      expect(KNOWN_BEDROCK_REGIONS).toContain("us-west-2");
+      expect(KNOWN_BEDROCK_REGIONS).toContain("eu-central-1");
+    });
+  });
+
+  // ── Wave 12 P2: end-to-end propagation through generateText ──────────────
+  describe("region error propagation through generateText (Wave 12 P2)", () => {
+    it("wraps Bedrock AccessDeniedException with the actionable hint", async () => {
+      vi.mocked(generateText).mockRejectedValueOnce(
+        new Error(
+          "AccessDeniedException: You don't have access to the model with the specified model ID.",
+        ),
+      );
+
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+      });
+      const [err, text] = await adapter.generateText("Hello");
+
+      expect(text).toBeNull();
+      expect(err).toBeInstanceOf(LlmError);
+      expect(err!.message).toContain("not available");
+      expect(err!.message).toContain("bedrock/amazon.nova-lite-v1:0");
+      expect(err!.message).toMatch(/AWS_REGION=[a-z0-9-]+/);
+    });
+
+    it("wraps Bedrock errors via generateStructured too", async () => {
+      vi.mocked(generateText).mockRejectedValueOnce(
+        new Error(
+          "ResourceNotFoundException: Could not resolve the foundation model",
+        ),
+      );
+
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+      });
+      const [err] = await adapter.generateStructured(
+        "Classify this",
+        z.object({ resourceType: z.string() }),
+      );
+
+      expect(err).toBeInstanceOf(LlmError);
+      expect(err!.message).toContain("not available");
+    });
+
+    it("does NOT wrap unrelated errors (preserves original message)", async () => {
+      vi.mocked(generateText).mockRejectedValueOnce(
+        new Error("ECONNRESET: socket hang up"),
+      );
+
+      const adapter = new LlmAdapter({
+        modelString: "bedrock/amazon.nova-lite-v1:0",
+      });
+      const [err] = await adapter.generateText("Hello");
+
+      expect(err).toBeInstanceOf(LlmError);
+      expect(err!.message).toContain("Text LLM call failed");
+      expect(err!.message).toContain("ECONNRESET");
+      expect(err!.message).not.toContain("not available");
+    });
+
+    it("does NOT wrap non-bedrock provider errors with the bedrock hint", async () => {
+      vi.mocked(generateText).mockRejectedValueOnce(
+        new Error("AccessDeniedException: anthropic key revoked"),
+      );
+
+      const adapter = new LlmAdapter({
+        modelString: "anthropic/claude-sonnet-4-5",
+      });
+      const [err] = await adapter.generateText("Hello");
+
+      expect(err).toBeInstanceOf(LlmError);
+      expect(err!.message).toContain("Text LLM call failed");
+      expect(err!.message).not.toContain("AWS_REGION");
     });
   });
 });

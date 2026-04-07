@@ -860,7 +860,10 @@ export function createPlanGeneratorNode({
       "Output the flat properties JSON object now:",
     ].join("\n");
 
-    const [genErr, text] = await llmClient.generateText(prompt);
+    const [genErr, text] = await llmClient.generateText(prompt, {
+      callsite: "plan_generator",
+      runId: state.runId,
+    });
 
     if (genErr || !text) {
       return {

@@ -4,6 +4,7 @@ import {
   DESTROY_TIER,
   isAssigneeInfraResource,
   type BulkDestroyOptions,
+  type ManagedResource,
 } from "../bulk-destroy.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -524,6 +525,137 @@ describe("BulkDestroyService — buildPlanFromResources", () => {
       for (const [type, tier] of Object.entries(expectedTiers)) {
         expect(DESTROY_TIER[type]).toBe(tier);
       }
+    });
+  });
+
+  // ── Wave 12 P1: concurrent-invocation safety ──────────────────────────
+  // Threat (raised by the post-Wave-11 conflict-mode party): two parallel
+  // `assignee bulk-destroy --all` processes (or two parallel callers within
+  // a future SDK) hit the same RGTA-tagged inventory. The plan builder
+  // must be safe to invoke concurrently — no shared mutable state in the
+  // accumulator, no double-counting, no order-dependent results. Today
+  // the destroy *execution* loop is sequential within a single command,
+  // but `buildPlanFromResources` is a pure function and `planBulkDestroy`
+  // creates a new client per call, so the safety boundary is the plan
+  // builder. These tests pin the invariant.
+  describe("concurrent-invocation safety (Wave 12 P1)", () => {
+    // Reuse the existing tier fixtures so the test exercises real ARN
+    // shapes / real tier mapping.
+    const SHARED_INVENTORY = [
+      TIER1_ALARM,
+      TIER2_LAMBDA,
+      TIER2_SQS,
+      TIER3_EC2,
+      TIER3_RDS,
+      TIER4_SG,
+      TIER4_SUBNET,
+      TIER5_S3,
+      TIER5_VPC,
+    ];
+
+    const sortByArn = (resources: ManagedResource[]): ManagedResource[] =>
+      [...resources].sort((a, b) => a.arn.localeCompare(b.arn));
+
+    it("two parallel buildPlanFromResources calls produce identical plans", async () => {
+      // Simulate two concurrent processes that each fetched the same
+      // RGTA snapshot and called the plan builder in parallel. The
+      // result must be deterministic across both invocations.
+      const [planA, planB] = await Promise.all([
+        Promise.resolve(buildPlanFromResources(SHARED_INVENTORY)),
+        Promise.resolve(buildPlanFromResources(SHARED_INVENTORY)),
+      ]);
+
+      expect(planA.totalCount).toBe(planB.totalCount);
+      expect(planA.iamCount).toBe(planB.iamCount);
+      expect(planA.excludedCount).toBe(planB.excludedCount);
+      expect(planA.resources.length).toBe(planB.resources.length);
+      // ARN-sorted comparison so the test isn't sensitive to within-tier
+      // ordering (the plan sorts by tier ascending; sibling order within
+      // a tier is implementation-defined).
+      expect(sortByArn(planA.resources)).toEqual(sortByArn(planB.resources));
+    });
+
+    it("ten parallel calls all produce identical plans (no shared mutable state)", async () => {
+      // Stress test for shared-state pollution. If the plan builder were
+      // accidentally accumulating into a module-level array, the 10th
+      // call would have 10x the resources. This test pins that it doesn't.
+      const plans = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          Promise.resolve(buildPlanFromResources(SHARED_INVENTORY)),
+        ),
+      );
+
+      const baseline = plans[0]!;
+      for (const plan of plans) {
+        expect(plan.totalCount).toBe(baseline.totalCount);
+        expect(plan.iamCount).toBe(baseline.iamCount);
+        expect(plan.excludedCount).toBe(baseline.excludedCount);
+        expect(plan.resources.length).toBe(baseline.resources.length);
+        expect(sortByArn(plan.resources)).toEqual(
+          sortByArn(baseline.resources),
+        );
+      }
+    });
+
+    it("parallel plans with DIFFERENT options do not cross-contaminate", async () => {
+      // Add an IAM resource so includeIam vs default has a measurable
+      // difference. The two parallel plans must reflect their own
+      // options exactly — no leakage from one filter to the other.
+      const IAM_USER_ROLE = res(
+        "arn:aws:iam::112233445566:role/my-app-execution-role",
+        "AWS::IAM::Role",
+      );
+      const inventory = [...SHARED_INVENTORY, IAM_USER_ROLE];
+
+      const [withoutIam, withIam] = await Promise.all([
+        Promise.resolve(buildPlanFromResources(inventory)),
+        Promise.resolve(
+          buildPlanFromResources(inventory, { includeIam: true }),
+        ),
+      ]);
+
+      // Default excludes IAM; includeIam includes it
+      expect(
+        withoutIam.resources.find((r) => r.arn === IAM_USER_ROLE.arn),
+      ).toBeUndefined();
+      expect(
+        withIam.resources.find((r) => r.arn === IAM_USER_ROLE.arn),
+      ).toBeDefined();
+      // Total count is the same (it counts pre-filter resources)
+      expect(withoutIam.totalCount).toBe(withIam.totalCount);
+      // Resource arrays differ by exactly one entry (the IAM role)
+      expect(withIam.resources.length).toBe(withoutIam.resources.length + 1);
+    });
+
+    it("parallel plans with DIFFERENT region filters do not cross-contaminate", async () => {
+      // Build inventory with resources across two regions
+      const us = res(
+        "arn:aws:lambda:us-east-1:123456789012:function:us-fn",
+        "AWS::Lambda::Function",
+        "us-east-1",
+      );
+      const eu = res(
+        "arn:aws:lambda:eu-west-1:123456789012:function:eu-fn",
+        "AWS::Lambda::Function",
+        "eu-west-1",
+      );
+      const inventory = [us, eu];
+
+      const [usPlan, euPlan] = await Promise.all([
+        Promise.resolve(
+          buildPlanFromResources(inventory, { region: "us-east-1" }),
+        ),
+        Promise.resolve(
+          buildPlanFromResources(inventory, { region: "eu-west-1" }),
+        ),
+      ]);
+
+      // Each plan must only contain its own region's resource
+      expect(usPlan.resources.map((r) => r.arn)).toEqual([us.arn]);
+      expect(euPlan.resources.map((r) => r.arn)).toEqual([eu.arn]);
+      // The other region's resource shows up as excluded (not included)
+      expect(usPlan.excludedCount).toBe(1);
+      expect(euPlan.excludedCount).toBe(1);
     });
   });
 });

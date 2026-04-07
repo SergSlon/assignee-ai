@@ -100,6 +100,8 @@ export function createAdviceGeneratorNode({
         const prompt = buildAdvicePrompt(state, mcpContext);
         const [err, text] = await llmClient.generateText(prompt, {
           maxTokens: ADVICE_LLM_MAX_TOKENS,
+          callsite: "advice_generator",
+          runId: state.runId,
         });
 
         if (!err && text) {

@@ -18,10 +18,11 @@ import { generateText, Output } from "ai";
 import type { LanguageModel } from "ai";
 import type { ZodSchema } from "zod";
 import { LlmError, safeTry } from "@assignee/core";
-import type { LlmPort, Result } from "@assignee/core";
+import type { LlmPort, LlmCallOptions, Result } from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { LlmProvider, type LlmProviderType } from "../constants/errors.js";
+import { recordTokenUsage, type RawLlmUsage } from "../utils/token-usage.js";
 
 /** Supported provider prefixes. */
 export type ProviderPrefix = LlmProviderType;
@@ -36,6 +37,93 @@ export const DEFAULT_MODEL = `${LlmProvider.BEDROCK}/amazon.nova-lite-v1:0`;
 
 /** Default maxOutputTokens per NFR-15. */
 export const DEFAULT_MAX_TOKENS = 1024;
+
+/**
+ * Wave 12 P2: AWS regions where Bedrock + the canonical Anthropic
+ * Claude / Amazon Nova models are confirmed enabled and available
+ * (snapshot 2026-04). When a user runs `assignee` from a region NOT
+ * on this list, the wrap-friendly error in `wrapBedrockRegionError`
+ * suggests setting AWS_REGION to one of these.
+ *
+ * This is intentionally a SHORT list (the canonical "everyone uses these"
+ * regions) rather than the exhaustive AWS region availability matrix —
+ * the goal is "give the user a working AWS_REGION value", not "document
+ * AWS service availability".
+ */
+export const KNOWN_BEDROCK_REGIONS: readonly string[] = [
+  "us-east-1",
+  "us-east-2",
+  "us-west-2",
+  "eu-central-1",
+  "eu-west-1",
+  "eu-west-3",
+  "ap-northeast-1",
+  "ap-northeast-2",
+  "ap-southeast-1",
+  "ap-southeast-2",
+] as const;
+
+/**
+ * Wave 12 P2: detect a Bedrock region/availability error and return
+ * an actionable hint, or `null` for any other error shape.
+ *
+ * AWS Bedrock raises several error patterns when the model isn't
+ * available in the configured region:
+ *   - `AccessDeniedException`: model exists in some regions but not
+ *     enabled in the caller's region or for the caller's account
+ *   - `ValidationException` w/ "model identifier is invalid": the
+ *     model ID is not recognized in this region
+ *   - `ResourceNotFoundException`: model not present in this region
+ *   - `Could not resolve the foundation model from the provided model
+ *     identifier`: same root cause, different message format
+ *
+ * The user-visible failure has historically been opaque ("LLM invoke
+ * failed: AccessDeniedException"), forcing a docs hunt. This helper
+ * recognizes the pattern and returns a hint that names the current
+ * region, the model, and the suggested fix (set AWS_REGION to a
+ * supported one). Returns null when the error is something else
+ * (network failure, throttling, missing creds, generic 5xx) so the
+ * caller falls back to the original error message.
+ */
+export function detectBedrockRegionError(
+  err: unknown,
+  region: string,
+  modelString: string,
+): string | null {
+  if (!modelString.startsWith(`${LlmProvider.BEDROCK}/`)) {
+    return null;
+  }
+
+  const message =
+    err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  if (!message) return null;
+
+  // Patterns observed across Bedrock provider error variants
+  const REGION_ERROR_PATTERNS = [
+    /AccessDeniedException/i,
+    /ValidationException/i,
+    /ResourceNotFoundException/i,
+    /could not resolve the foundation model/i,
+    /the provided model identifier is invalid/i,
+    /you don't have access to the model/i,
+    /not authorized to invoke/i,
+  ];
+
+  if (!REGION_ERROR_PATTERNS.some((p) => p.test(message))) {
+    return null;
+  }
+
+  const onKnownRegion = KNOWN_BEDROCK_REGIONS.includes(region);
+  const suggestion = onKnownRegion
+    ? `Your account may not be enrolled in this model in ${region}. Open the Bedrock console → Model access → request access to the model, OR set ASSIGNEE_MODEL to a different model that IS enabled in ${region}.`
+    : `${region} is not on the canonical Bedrock-enabled list. Set AWS_REGION to one of: ${KNOWN_BEDROCK_REGIONS.join(", ")}, OR set ASSIGNEE_MODEL to a non-Bedrock provider (e.g. anthropic/claude-sonnet-4-5 with ANTHROPIC_API_KEY).`;
+
+  return (
+    `Bedrock model "${modelString}" is not available in AWS_REGION=${region}. ` +
+    `${suggestion} ` +
+    `Original AWS error: ${message}`
+  );
+}
 
 const VALID_PROVIDERS: ReadonlySet<string> = new Set(
   Object.values(LlmProvider),
@@ -178,7 +266,7 @@ export class LlmAdapter implements LlmPort {
   async generateStructured<T>(
     prompt: string,
     schema: ZodSchema<T>,
-    options?: { maxTokens?: number },
+    options?: LlmCallOptions,
   ): Promise<Result<T, LlmError>> {
     const [err, model] = await safeTry(this.getModel());
     if (err) {
@@ -201,20 +289,40 @@ export class LlmAdapter implements LlmPort {
     );
 
     if (callErr) {
+      // Wave 12 P2: surface region/availability errors with an actionable
+      // hint instead of the opaque AccessDeniedException string. The hint
+      // names the current AWS_REGION, the model, and the recommended fix.
+      const regionHint = detectBedrockRegionError(
+        callErr,
+        AWS_REGION,
+        this.config.modelString ?? DEFAULT_MODEL,
+      );
+      const baseMessage =
+        callErr instanceof Error ? callErr.message : String(callErr);
       return [
         new LlmError(
-          `Structured LLM call failed: ${callErr instanceof Error ? callErr.message : String(callErr)}`,
+          regionHint ?? `Structured LLM call failed: ${baseMessage}`,
         ),
         null,
       ] as const;
     }
+
+    // Wave 12 P0: token usage instrumentation. Record per-call usage
+    // tagged with the calling node's callsite so we can answer "which
+    // node is the token hog" — gates SaaS unit economics. Defensive
+    // against missing usage field (mocked SDKs, partial response).
+    recordTokenUsage(
+      options?.callsite ?? "unknown:generateStructured",
+      result.usage as RawLlmUsage | undefined,
+      options?.runId,
+    );
 
     return [null, result.output as T] as const;
   }
 
   async generateText(
     prompt: string,
-    options?: { maxTokens?: number },
+    options?: LlmCallOptions,
   ): Promise<Result<string, LlmError>> {
     const [err, model] = await safeTry(this.getModel());
     if (err) {
@@ -236,13 +344,26 @@ export class LlmAdapter implements LlmPort {
     );
 
     if (callErr) {
+      // Wave 12 P2: same Bedrock-region hint as generateStructured.
+      const regionHint = detectBedrockRegionError(
+        callErr,
+        AWS_REGION,
+        this.config.modelString ?? DEFAULT_MODEL,
+      );
+      const baseMessage =
+        callErr instanceof Error ? callErr.message : String(callErr);
       return [
-        new LlmError(
-          `Text LLM call failed: ${callErr instanceof Error ? callErr.message : String(callErr)}`,
-        ),
+        new LlmError(regionHint ?? `Text LLM call failed: ${baseMessage}`),
         null,
       ] as const;
     }
+
+    // Wave 12 P0: token usage instrumentation — see generateStructured above.
+    recordTokenUsage(
+      options?.callsite ?? "unknown:generateText",
+      result.usage as RawLlmUsage | undefined,
+      options?.runId,
+    );
 
     return [null, result.text] as const;
   }
