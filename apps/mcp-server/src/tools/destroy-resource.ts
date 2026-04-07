@@ -22,7 +22,6 @@ import {
   GetResourceRequestStatusCommand,
 } from "@aws-sdk/client-cloudcontrol";
 import {
-  ArnPrefix,
   CCAPI_FALLBACK_TYPES,
   CCAPI_REDIRECT_TYPES,
   DEFAULT_AWS_REGION,
@@ -60,8 +59,15 @@ export const destroyResourceParams = {
 
 // ── ARN helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Wave 10 P0-1: partition-aware ARN check. The previous
+ * `input.startsWith(ArnPrefix.AWS)` (= "arn:aws:") rejected GovCloud
+ * (`arn:aws-us-gov:`) and China (`arn:aws-cn:`) ARNs and routed them
+ * down the byName path, where they would never resolve. Mirrors the
+ * canonical pattern in `packages/core/src/config/arn-builder.ts`.
+ */
 function isArn(input: string): boolean {
-  return input.startsWith(ArnPrefix.AWS);
+  return /^arn:aws[\w-]*:/.test(input);
 }
 
 /**

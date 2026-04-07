@@ -116,6 +116,93 @@ describe("resolveResource", () => {
 
       expect(result).toBeNull();
     });
+
+    // Wave 10 P1-1 / test-arch F2: closes the "no test exercises
+    // resolveByArn against an IAM role ARN" gap. Wave 6 added the IAM
+    // short-circuit branch but no test had ever invoked it via the
+    // public resolveResource entrypoint. The IAM helper itself is
+    // mocked — these tests pin the routing decision (does an IAM ARN
+    // hit the IAM helper instead of falling through to RGTA?).
+    it("resolves an IAM role by ARN via the IAM helper short-circuit", async () => {
+      const iamArn = "arn:aws:iam::112233445566:role/my-app-role";
+      mockGetManagedIamRoleByArn.mockResolvedValueOnce({
+        arn: iamArn,
+        roleName: "my-app-role",
+        createdDate: "2026-04-07T18:00:00.000Z",
+        tags: { "managed-by": "assignee-ai" },
+      });
+
+      const result = await resolveResource(iamArn, taggingClient, "us-east-1");
+
+      expect(mockGetManagedIamRoleByArn).toHaveBeenCalledWith(iamArn);
+      // IAM short-circuit must NOT fall through to RGTA scan.
+      expect(mockSend).not.toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result!.resourceType).toBe("AWS::IAM::Role");
+      expect(result!.identifier).toBe("my-app-role");
+      expect(result!.arn).toBe(iamArn);
+    });
+
+    it("returns null when IAM role ARN does not resolve to a managed role", async () => {
+      mockGetManagedIamRoleByArn.mockResolvedValueOnce(null);
+
+      const result = await resolveResource(
+        "arn:aws:iam::112233445566:role/external-app-role",
+        taggingClient,
+        "us-east-1",
+      );
+
+      expect(mockGetManagedIamRoleByArn).toHaveBeenCalled();
+      // Must NOT fall through to RGTA — IAM ARNs are short-circuited
+      // either way (RGTA does not return IAM roles, so the fallback
+      // would only burn an API call for a guaranteed-empty result).
+      expect(mockSend).not.toHaveBeenCalled();
+      expect(result).toBeNull();
+    });
+
+    // Wave 10 P0-1: GovCloud / China IAM role ARNs must take the same
+    // short-circuit. The previous regex was `/^arn:aws:iam::\d+:role\//`
+    // which silently rejected aws-us-gov / aws-cn ARNs as "not an IAM
+    // role" and fell through to the RGTA scan (which also doesn't
+    // return IAM roles), giving a guaranteed null even when the role
+    // existed. Pin both partitions.
+    it("routes a GovCloud (aws-us-gov) IAM role ARN to the IAM helper", async () => {
+      const govArn = "arn:aws-us-gov:iam::112233445566:role/my-gov-role";
+      mockGetManagedIamRoleByArn.mockResolvedValueOnce({
+        arn: govArn,
+        roleName: "my-gov-role",
+        createdDate: "2026-04-07T18:00:00.000Z",
+        tags: { "managed-by": "assignee-ai" },
+      });
+
+      const result = await resolveResource(
+        govArn,
+        taggingClient,
+        "us-gov-west-1",
+      );
+
+      expect(mockGetManagedIamRoleByArn).toHaveBeenCalledWith(govArn);
+      expect(mockSend).not.toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result!.resourceType).toBe("AWS::IAM::Role");
+    });
+
+    it("routes a China (aws-cn) IAM role ARN to the IAM helper", async () => {
+      const cnArn = "arn:aws-cn:iam::112233445566:role/my-china-role";
+      mockGetManagedIamRoleByArn.mockResolvedValueOnce({
+        arn: cnArn,
+        roleName: "my-china-role",
+        createdDate: "2026-04-07T18:00:00.000Z",
+        tags: { "managed-by": "assignee-ai" },
+      });
+
+      const result = await resolveResource(cnArn, taggingClient, "cn-north-1");
+
+      expect(mockGetManagedIamRoleByArn).toHaveBeenCalledWith(cnArn);
+      expect(mockSend).not.toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result!.resourceType).toBe("AWS::IAM::Role");
+    });
   });
 
   describe("name input", () => {

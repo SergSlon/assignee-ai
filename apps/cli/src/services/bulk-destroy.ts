@@ -101,10 +101,17 @@ const ASSIGNEE_INFRA_NAME_PATTERN =
  * the operator/reader/auditor policies the CLI itself depends on.
  */
 export function isAssigneeInfraResource(arn: string): boolean {
-  // ARN format examples:
+  // ARN format examples (partition-aware to cover GovCloud + China):
   //   arn:aws:iam::123:policy/AssigneeOperatorPolicy
-  //   arn:aws:iam::123:role/AssigneeAiBedrockLoggingRole
-  if (!arn.startsWith("arn:aws:iam::")) return false;
+  //   arn:aws-us-gov:iam::123:role/AssigneeAiBedrockLoggingRole
+  //   arn:aws-cn:iam::123:role/AssigneeReaderPolicy
+  // The literal commercial-only check that lived here through Wave 9 let
+  // GovCloud / China users self-lockout via `--include-iam` because the
+  // safety allowlist silently dropped through. The `[\w-]*` partition
+  // segment matches `aws`, `aws-us-gov`, `aws-cn`, and any future
+  // partitions AWS introduces — same convention as `isArn()` in
+  // packages/core/src/config/arn-builder.ts.
+  if (!/^arn:aws[\w-]*:iam::/.test(arn)) return false;
   const lastSegment = arn.split("/").pop() ?? "";
   return ASSIGNEE_INFRA_NAME_PATTERN.test(lastSegment);
 }

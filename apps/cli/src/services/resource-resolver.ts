@@ -41,9 +41,18 @@ export interface ResolvedResource {
 
 /**
  * Checks if a string looks like an ARN.
+ *
+ * Wave 10 P0-1: this used to call `input.startsWith(ArnPrefix.AWS)`
+ * where `ArnPrefix.AWS === "arn:aws:"` — commercial-only. GovCloud
+ * (`arn:aws-us-gov:`) and China (`arn:aws-cn:`) ARNs returned false
+ * here and fell through to `resolveByName`, which then attempted to
+ * scan RGTA for a literal name match against an ARN string and
+ * silently failed to resolve any IAM role / S3 bucket / etc on those
+ * partitions. The same partition-aware regex pattern as
+ * `isArn()` in `packages/core/src/config/arn-builder.ts`.
  */
 function isArn(input: string): boolean {
-  return input.startsWith(ArnPrefix.AWS);
+  return /^arn:aws[\w-]*:/.test(input);
 }
 
 /**
@@ -313,8 +322,10 @@ async function resolveByArn(
 ): Promise<ResolvedResource | null> {
   // IAM::Role: Resource Groups Tagging API does NOT return roles, so
   // fall through to a direct iam:GetRole + iam:ListRoleTags lookup
-  // before scanning RGTA. See iam-role-inventory.ts.
-  if (/^arn:aws:iam::\d+:role\//.test(arn)) {
+  // before scanning RGTA. See iam-role-inventory.ts. Partition-aware
+  // pattern (matches aws / aws-us-gov / aws-cn) so GovCloud and China
+  // users can resolve IAM role ARNs the same way commercial users can.
+  if (/^arn:aws[\w-]*:iam::\d+:role\//.test(arn)) {
     const role = await getManagedIamRoleByArn(arn);
     if (role) {
       return {
@@ -443,37 +454,22 @@ function matchesName(arn: string, name: string): boolean {
 
 /**
  * Resolves a resource by name — searches all managed resources for a matching identifier.
+ *
+ * Wave 10 P1-5: previously walked iam:ListRoles + iam:ListRoleTags
+ * UNCONDITIONALLY before scanning RGTA, which added ~200 AWS API
+ * calls to every `assignee destroy <name>` even when the user named
+ * a non-IAM resource. RGTA is scanned first now; the IAM fallback
+ * only fires when RGTA produced no match, eliminating the perf
+ * regression for the common case while still supporting IAM-by-name
+ * resolution (RGTA does not return IAM roles, so the fallback is
+ * the only path for IAM byName destroys).
  */
 async function resolveByName(
   name: string,
   taggingClient: ResourceGroupsTaggingAPIClient,
   defaultRegion: string,
 ): Promise<ResolvedResource | null> {
-  // IAM::Role byName fallback: RGTA does not return IAM roles, so
-  // also walk iam:ListRoles + iam:ListRoleTags. We do this BEFORE
-  // the RGTA scan so that an IAM role and a non-IAM resource with
-  // the same name resolve to the IAM role first only when the user
-  // typed an IAM-shaped name (e.g. underscore-only naming wouldn't
-  // collide with S3 bucket DNS rules). The simplest correct path
-  // is to scan IAM, then fall through to RGTA if nothing matches.
-  try {
-    const iamRoles = await fetchManagedIamRoles();
-    for (const role of iamRoles) {
-      if (role.roleName === name || role.arn === name) {
-        return {
-          arn: role.arn,
-          resourceType: RESOURCE_TYPES.IAM_ROLE,
-          region: defaultRegion,
-          tags: role.tags,
-          identifier: role.roleName,
-        };
-      }
-    }
-  } catch {
-    // Non-fatal: fall through to RGTA scan. The list command emits
-    // a clearer warning when iam:ListRoles is missing.
-  }
-
+  // ── Phase 1: scan RGTA first (covers every non-IAM-Role type) ────
   let paginationToken: string | undefined;
   do {
     const response = await taggingClient.send(
@@ -503,6 +499,28 @@ async function resolveByName(
 
     paginationToken = response.PaginationToken;
   } while (paginationToken);
+
+  // ── Phase 2: IAM::Role fallback (RGTA doesn't return IAM roles) ──
+  // Only walk iam:ListRoles when RGTA found nothing — this preserves
+  // IAM byName resolution while removing the perf regression for the
+  // 99% of byName destroys that target non-IAM resources.
+  try {
+    const iamRoles = await fetchManagedIamRoles();
+    for (const role of iamRoles) {
+      if (role.roleName === name || role.arn === name) {
+        return {
+          arn: role.arn,
+          resourceType: RESOURCE_TYPES.IAM_ROLE,
+          region: defaultRegion,
+          tags: role.tags,
+          identifier: role.roleName,
+        };
+      }
+    }
+  } catch {
+    // Non-fatal: caller treats null as "not found". The list command
+    // emits a clearer warning when iam:ListRoles is missing.
+  }
 
   return null;
 }

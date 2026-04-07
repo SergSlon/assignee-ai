@@ -34,18 +34,19 @@ vi.mock("@aws-sdk/client-iam", () => {
   };
 });
 
-vi.mock("../../config/operator-credentials.js", () => ({
-  operatorCredentials: () => ({
-    accessKeyId: "AKIAIOSFODNN7EXAMPLE",
-    secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-    region: "us-east-1",
-  }),
-}));
-
+// Wave 10 P0-2: production code now reads credentials via
+// `requireAssigneeCredentials("operator")` from @assignee/core (which
+// throws MissingAssigneeCredentialsError when env vars are unset)
+// rather than `operatorCredentials()` (which silently returned empty
+// strings and let IAMClient fall through to the default AWS credential
+// chain). The tests configure the env vars in beforeEach so the real
+// credential helper succeeds; one test below explicitly clears the
+// env vars to verify the throw-and-catch path.
 import {
   fetchManagedIamRoles,
   getManagedIamRoleByArn,
 } from "../iam-role-inventory.js";
+import { MissingAssigneeCredentialsError } from "@assignee/core";
 
 const ACCOUNT = "112233445566";
 const MANAGED_TAG = { Key: "managed-by", Value: "assignee-ai" };
@@ -192,6 +193,20 @@ describe("fetchManagedIamRoles", () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.roleName).toBe(managedRole.RoleName);
   });
+
+  // Wave 10 P0-2: when ASSIGNEE_OPERATOR_* env vars are unset the
+  // production code MUST throw MissingAssigneeCredentialsError instead
+  // of silently constructing an IAMClient that falls through to the
+  // default credential chain. Critical: NO IAM SDK call must happen.
+  it("throws MissingAssigneeCredentialsError when operator env vars are unset (no SDK call)", async () => {
+    delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+    delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+
+    await expect(fetchManagedIamRoles()).rejects.toBeInstanceOf(
+      MissingAssigneeCredentialsError,
+    );
+    expect(mockIamSend).not.toHaveBeenCalled();
+  });
 });
 
 describe("getManagedIamRoleByArn", () => {
@@ -241,12 +256,7 @@ describe("getManagedIamRoleByArn", () => {
     expect(mockIamSend).not.toHaveBeenCalled();
   });
 
-  it("extracts the role name from a path-prefixed ARN", async () => {
-    // IAM roles can live under a path like /service-role/ or /aws-service-role/.
-    // Our regex captures everything after the first /role/ — that includes
-    // the path. The downstream GetRole(RoleName=…) call requires the bare
-    // role name, but assignee never creates path-prefixed roles, so it's
-    // sufficient that the captured value matches what assignee uses.
+  it("extracts the role name from a non-path-prefixed ARN", async () => {
     const arn = `arn:aws:iam::${ACCOUNT}:role/cli-ex-smoke-iam-1775585360`;
     mockIamSend
       .mockResolvedValueOnce({ Role: managedRole })
@@ -254,10 +264,152 @@ describe("getManagedIamRoleByArn", () => {
 
     const result = await getManagedIamRoleByArn(arn);
     expect(result).not.toBeNull();
-    // The first SDK call's RoleName matches the captured group.
     const getCall = mockIamSend.mock.calls[0]![0] as {
       input: { RoleName: string };
     };
     expect(getCall.input.RoleName).toBe("cli-ex-smoke-iam-1775585360");
+  });
+
+  // Wave 10 P1-1: the previous test claimed to cover the path-prefix
+  // strip but actually used a NON-path-prefixed ARN. Removing the
+  // `.split('/').pop()` block would not have failed it. These tests
+  // pin the actual Wave 9 fix: a /service-role/ prefixed role passed
+  // from the user must have its bare name extracted before being sent
+  // to GetRole / ListRoleTags (the IAM API rejects slashes in
+  // RoleName parameters).
+  it("extracts the bare role name from a path-prefixed ARN (Wave 9 strip)", async () => {
+    const pathPrefixedRole = {
+      RoleName: "MyServiceRole",
+      Arn: `arn:aws:iam::${ACCOUNT}:role/service-role/MyServiceRole`,
+      CreateDate: new Date("2026-04-07T18:00:00Z"),
+    };
+    mockIamSend
+      .mockResolvedValueOnce({ Role: pathPrefixedRole })
+      .mockResolvedValueOnce({ Tags: [MANAGED_TAG] });
+
+    const result = await getManagedIamRoleByArn(pathPrefixedRole.Arn);
+    expect(result).not.toBeNull();
+    expect(result?.roleName).toBe("MyServiceRole");
+
+    // Both API calls must receive the BARE name, not the path-prefixed value.
+    const getCall = mockIamSend.mock.calls[0]![0] as {
+      input: { RoleName: string };
+    };
+    const tagsCall = mockIamSend.mock.calls[1]![0] as {
+      input: { RoleName: string };
+    };
+    expect(getCall.input.RoleName).toBe("MyServiceRole");
+    expect(tagsCall.input.RoleName).toBe("MyServiceRole");
+  });
+
+  it("extracts the bare role name from a deeply path-prefixed ARN", async () => {
+    const deepRole = {
+      RoleName: "MyRole",
+      Arn: `arn:aws:iam::${ACCOUNT}:role/aws-service-role/foo.amazonaws.com/MyRole`,
+      CreateDate: new Date("2026-04-07T18:00:00Z"),
+    };
+    mockIamSend
+      .mockResolvedValueOnce({ Role: deepRole })
+      .mockResolvedValueOnce({ Tags: [MANAGED_TAG] });
+
+    const result = await getManagedIamRoleByArn(deepRole.Arn);
+    expect(result).not.toBeNull();
+    const getCall = mockIamSend.mock.calls[0]![0] as {
+      input: { RoleName: string };
+    };
+    expect(getCall.input.RoleName).toBe("MyRole");
+  });
+
+  it("strips a trailing slash and uses the last non-empty path segment as RoleName", async () => {
+    // Edge case from Wave 10 review: previously
+    // `'service-role/'.split('/').pop()` returned the empty string,
+    // which would have been forwarded to GetRole as an empty RoleName
+    // and triggered IAM ValidationError. The fix uses
+    // `.filter(s => s.length > 0)` so the trailing slash is dropped
+    // and `service-role` becomes the extracted name. That value is a
+    // legitimate IAM role name (uncommon, but valid per AWS regex
+    // `[\w+=,.@-]+`) — if no role with that name exists, the
+    // existing NoSuchEntity path returns null.
+    mockIamSend
+      .mockResolvedValueOnce({
+        Role: {
+          RoleName: "service-role",
+          Arn: `arn:aws:iam::${ACCOUNT}:role/service-role`,
+          CreateDate: new Date("2026-04-07T18:00:00Z"),
+        },
+      })
+      .mockResolvedValueOnce({ Tags: [MANAGED_TAG] });
+
+    const result = await getManagedIamRoleByArn(
+      `arn:aws:iam::${ACCOUNT}:role/service-role/`,
+    );
+    expect(result).not.toBeNull();
+    expect(result?.roleName).toBe("service-role");
+
+    // Critical: the bare name (no slash) was sent to GetRole.
+    const getCall = mockIamSend.mock.calls[0]![0] as {
+      input: { RoleName: string };
+    };
+    expect(getCall.input.RoleName).toBe("service-role");
+    // NOT an empty string (which would have triggered IAM ValidationError).
+    expect(getCall.input.RoleName).not.toBe("");
+  });
+
+  it("returns null for an all-slash path ARN that strips to nothing", async () => {
+    // The other edge: ARN like `.../role///` strips to zero non-empty
+    // segments and we return null without making an SDK call.
+    const result = await getManagedIamRoleByArn(
+      `arn:aws:iam::${ACCOUNT}:role////`,
+    );
+    expect(result).toBeNull();
+    expect(mockIamSend).not.toHaveBeenCalled();
+  });
+
+  // Wave 10 P0-1: partition-blind regex would have rejected GovCloud /
+  // China role ARNs as "not an IAM role ARN" and returned null even
+  // when the role exists. Pin both partitions so a regression to the
+  // commercial-only `arn:aws:iam::` regex fails CI.
+  it("looks up a GovCloud (aws-us-gov) IAM role by ARN", async () => {
+    const govRole = {
+      RoleName: "MyGovRole",
+      Arn: `arn:aws-us-gov:iam::${ACCOUNT}:role/MyGovRole`,
+      CreateDate: new Date("2026-04-07T18:00:00Z"),
+    };
+    mockIamSend
+      .mockResolvedValueOnce({ Role: govRole })
+      .mockResolvedValueOnce({ Tags: [MANAGED_TAG] });
+
+    const result = await getManagedIamRoleByArn(govRole.Arn);
+    expect(result).not.toBeNull();
+    expect(result?.roleName).toBe("MyGovRole");
+  });
+
+  it("looks up a China (aws-cn) IAM role by ARN", async () => {
+    const cnRole = {
+      RoleName: "MyChinaRole",
+      Arn: `arn:aws-cn:iam::${ACCOUNT}:role/MyChinaRole`,
+      CreateDate: new Date("2026-04-07T18:00:00Z"),
+    };
+    mockIamSend
+      .mockResolvedValueOnce({ Role: cnRole })
+      .mockResolvedValueOnce({ Tags: [MANAGED_TAG] });
+
+    const result = await getManagedIamRoleByArn(cnRole.Arn);
+    expect(result).not.toBeNull();
+    expect(result?.roleName).toBe("MyChinaRole");
+  });
+
+  // Wave 10 P0-2: byArn path collapses MissingAssigneeCredentialsError
+  // to null (matches the existing AccessDenied / NoSuchEntity / network
+  // swallow). Critical: NO SDK call must happen.
+  it("returns null when operator env vars are unset (no SDK call)", async () => {
+    delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+    delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+
+    const result = await getManagedIamRoleByArn(
+      `arn:aws:iam::${ACCOUNT}:role/cli-ex-smoke-iam-1775585360`,
+    );
+    expect(result).toBeNull();
+    expect(mockIamSend).not.toHaveBeenCalled();
   });
 });

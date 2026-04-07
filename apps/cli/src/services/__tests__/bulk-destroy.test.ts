@@ -205,6 +205,70 @@ describe("BulkDestroyService — buildPlanFromResources", () => {
       ).toBe(false);
     });
 
+    // Wave 10 P0-1: partition-blind allowlist let GovCloud / China users
+    // self-lockout via `--include-iam` because the literal commercial-only
+    // `arn:aws:iam::` prefix dropped through every non-commercial ARN.
+    // The fix uses the `arn:aws[\w-]*:iam::` pattern that mirrors
+    // arn-builder.ts isArn() — these tests pin the partition coverage so
+    // a regression to the literal-prefix form fails CI.
+    it("isAssigneeInfraResource matches GovCloud (aws-us-gov) infra ARNs", () => {
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws-us-gov:iam::112233445566:policy/AssigneeOperatorPolicy",
+        ),
+      ).toBe(true);
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws-us-gov:iam::112233445566:role/AssigneeAiBedrockLoggingRole",
+        ),
+      ).toBe(true);
+    });
+
+    it("isAssigneeInfraResource matches China (aws-cn) infra ARNs", () => {
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws-cn:iam::112233445566:policy/AssigneeReaderPolicy",
+        ),
+      ).toBe(true);
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws-cn:iam::112233445566:policy/AssigneeAuditorPolicy",
+        ),
+      ).toBe(true);
+    });
+
+    it("isAssigneeInfraResource still excludes user IAM roles in GovCloud / China", () => {
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws-us-gov:iam::112233445566:role/my-app-execution-role",
+        ),
+      ).toBe(false);
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws-cn:iam::112233445566:role/MyAssigneeOperatorPolicyClone",
+        ),
+      ).toBe(false);
+    });
+
+    it("excludes GovCloud assignee infra from --include-iam plan", () => {
+      const govOperatorPolicy = res(
+        "arn:aws-us-gov:iam::112233445566:policy/AssigneeOperatorPolicy",
+        "AWS::IAM::ManagedPolicy",
+      );
+      const govUserRole = res(
+        "arn:aws-us-gov:iam::112233445566:role/my-app-execution-role",
+        "AWS::IAM::Role",
+      );
+      const plan = buildPlanFromResources([govOperatorPolicy, govUserRole], {
+        includeIam: true,
+      });
+
+      const arns = plan.resources.map((r) => r.arn);
+      expect(arns).not.toContain(govOperatorPolicy.arn);
+      expect(arns).toContain(govUserRole.arn);
+      expect(plan.excludedCount).toBe(1);
+    });
+
     it("excludes AssigneeOperatorPolicy from --include-iam plan", () => {
       const input = [
         TIER2_LAMBDA,
