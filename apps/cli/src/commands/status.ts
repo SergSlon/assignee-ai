@@ -13,7 +13,6 @@
  * @see Story 19.6, Story 30.7
  */
 
-import * as path from "node:path";
 import { Command } from "commander";
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { AssigneeError } from "@assignee/core";
@@ -25,6 +24,7 @@ import {
 } from "../utils/display.js";
 import { buildStatusData } from "../services/status-aggregator.js";
 import { computeBPCoverage, renderBPCoverage } from "./status-bp-coverage.js";
+import { getBpDir } from "./status-factory.js";
 
 export const statusCommand = new Command(CommandName.STATUS)
   .description(CommandDescription.STATUS)
@@ -36,13 +36,8 @@ export const statusCommand = new Command(CommandName.STATUS)
       // BP Coverage mode (Story 30.7)
       if (opts.bpCoverage) {
         try {
-          // Resolve the best-practices package directory
-          const bpDir =
-            ((globalThis as Record<string, unknown>)["__bpDir"] as string) ??
-            path.resolve(
-              import.meta.dirname,
-              "../../../../packages/best-practices",
-            );
+          // Resolve the best-practices package directory via factory
+          const bpDir = getBpDir();
 
           const data = computeBPCoverage(bpDir);
 

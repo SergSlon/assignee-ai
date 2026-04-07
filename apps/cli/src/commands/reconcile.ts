@@ -9,7 +9,6 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
-import * as clack from "@clack/prompts";
 import {
   DriftStatus,
   ChangeType,
@@ -29,6 +28,10 @@ import type {
   ProvisioningPortError,
 } from "../services/provisioning-port.js";
 import { createDriftDetectorFromEnv } from "../services/drift-detector-factory.js";
+import {
+  getReconcilePromptFn,
+  getReconcileConfirmFn,
+} from "./reconcile-factory.js";
 import { resolveDesiredState } from "../utils/resolve-desired-state.js";
 import {
   ReconcileAction,
@@ -287,7 +290,7 @@ export const reconcileCommand = new Command(CommandName.RECONCILE)
         filtered = filtered.filter((p) => p.resourceType === opts.resource);
       }
 
-      // Build drift detector from environment credentials (no globalThis DI)
+      // Build drift detector from environment credentials via factory
       const detectorResult = createDriftDetectorFromEnv();
 
       if (!detectorResult) {
@@ -342,24 +345,9 @@ export const reconcileCommand = new Command(CommandName.RECONCILE)
         errors: 0,
       };
 
-      // Default prompt/confirm functions using @clack/prompts (tests inject their own)
-      const promptFn: PromptFn = async (msg, choices) => {
-        const answer = await clack.select({
-          message: msg,
-          options: choices.map((c) => ({ value: c, label: c })),
-        });
-        if (clack.isCancel(answer)) {
-          return "Skip";
-        }
-        return answer as string;
-      };
-      const confirmFn: ConfirmFn = async (msg) => {
-        const answer = await clack.confirm({ message: msg });
-        if (clack.isCancel(answer)) {
-          return false;
-        }
-        return answer;
-      };
+      // Resolve prompt/confirm via factory module (tests vi.mock the factory)
+      const promptFn = getReconcilePromptFn();
+      const confirmFn = getReconcileConfirmFn();
 
       for (const result of drifted) {
         try {
@@ -370,14 +358,8 @@ export const reconcileCommand = new Command(CommandName.RECONCILE)
             {
               dryRun: opts.dryRun ?? false,
               autoReconcile: opts.autoReconcile ?? false,
-              promptFn:
-                ((globalThis as Record<string, unknown>)[
-                  "__reconcilePromptFn"
-                ] as PromptFn) ?? promptFn,
-              confirmFn:
-                ((globalThis as Record<string, unknown>)[
-                  "__reconcileConfirmFn"
-                ] as ConfirmFn) ?? confirmFn,
+              promptFn,
+              confirmFn,
             },
           );
 

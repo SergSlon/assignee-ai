@@ -251,17 +251,187 @@ describe("assignee init command", () => {
     expect(content).not.toContain("old-region");
   });
 
-  it("produces actionable error when no credentials are found", async () => {
-    mockCredentials({
-      detected: false,
-      reason:
-        "No AWS credentials found. Configure credentials via:\n" +
-        "  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n" +
-        "  2) ~/.aws/credentials file\n" +
-        "  3) AWS SSO login (aws sso login)",
-    });
+  it("succeeds without AWS credentials and prints a next-step hint", async () => {
+    // Scrub all credential env vars so detectAvailableRoles sees nothing.
+    const scrubbed = [
+      "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
+      "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+      "ASSIGNEE_READER_ACCESS_KEY_ID",
+      "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+      "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
+      "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+    ];
+    const saved: Record<string, string | undefined> = {};
+    for (const key of scrubbed) {
+      saved[key] = process.env[key];
+      delete process.env[key];
+    }
 
-    await expect(runInitAction()).rejects.toThrow("No AWS credentials found");
+    try {
+      mockCredentials({
+        detected: false,
+        reason:
+          "No AWS credentials found. Configure credentials via:\n" +
+          "  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n" +
+          "  2) ~/.aws/credentials file\n" +
+          "  3) AWS SSO login (aws sso login)",
+      });
+      mockRegion({ region: "us-east-1" });
+      mockPrompts({
+        region: "us-east-1",
+        profile: "default",
+        environment: "development",
+      });
+
+      await runInitAction();
+
+      // Non-fatal: warn + next-step info hint emitted.
+      expect(clack.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining("No AWS credentials detected"),
+      );
+      const infoCalls = vi
+        .mocked(clack.log.info)
+        .mock.calls.map((c) => String(c[0]));
+      expect(infoCalls.some((m) => m.includes("assignee setup"))).toBe(true);
+      expect(
+        infoCalls.some((m) => m.includes("Assignee roles available: none")),
+      ).toBe(true);
+
+      // Config file is still written.
+      const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+      const content = await fs.readFile(configPath, "utf-8");
+      expect(content).toContain("us-east-1");
+      expect(clack.outro).toHaveBeenCalledWith(
+        expect.stringContaining("Initialized assignee.ai for region us-east-1"),
+      );
+    } finally {
+      for (const key of scrubbed) {
+        if (saved[key] === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = saved[key];
+        }
+      }
+    }
+  });
+
+  it("succeeds with reader-only env credentials and reports reader available", async () => {
+    const scrubbed = [
+      "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
+      "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+      "ASSIGNEE_READER_ACCESS_KEY_ID",
+      "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+      "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
+      "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+    ];
+    const saved: Record<string, string | undefined> = {};
+    for (const key of scrubbed) {
+      saved[key] = process.env[key];
+      delete process.env[key];
+    }
+    // Real-shaped AWS access key id (AKIA + 16 alphanumerics) and secret.
+    process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+    try {
+      mockCredentials({
+        detected: false,
+        reason: "No operator credentials found",
+      });
+      mockRegion({ region: "us-west-2" });
+      mockPrompts({
+        region: "us-west-2",
+        profile: "default",
+        environment: "development",
+      });
+
+      await runInitAction();
+
+      const infoCalls = vi
+        .mocked(clack.log.info)
+        .mock.calls.map((c) => String(c[0]));
+      expect(
+        infoCalls.some((m) => m === "Assignee roles available: reader"),
+      ).toBe(true);
+
+      const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+      const content = await fs.readFile(configPath, "utf-8");
+      expect(content).toContain("us-west-2");
+    } finally {
+      for (const key of scrubbed) {
+        if (saved[key] === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = saved[key];
+        }
+      }
+    }
+  });
+
+  it("reports all 3 roles available when operator, reader, and auditor envs are set", async () => {
+    const scrubbed = [
+      "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
+      "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+      "ASSIGNEE_READER_ACCESS_KEY_ID",
+      "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+      "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
+      "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+    ];
+    const saved: Record<string, string | undefined> = {};
+    for (const key of scrubbed) {
+      saved[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7OPERATOR";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYOPERATORKEY";
+    process.env["ASSIGNEE_READER_ACCESS_KEY_ID"] = "AKIAIOSFODNN7READER00";
+    process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYREADERKEY00";
+    process.env["ASSIGNEE_AUDITOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7AUDITOR0";
+    process.env["ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYAUDITORKEY";
+
+    try {
+      mockCredentials({
+        detected: true,
+        source: "env",
+        profile: "default",
+      });
+      mockRegion({ region: "us-east-1" });
+      mockPrompts({
+        region: "us-east-1",
+        profile: "default",
+        environment: "production",
+      });
+
+      await runInitAction();
+
+      expect(clack.log.success).toHaveBeenCalledWith(
+        expect.stringContaining("AWS credentials detected"),
+      );
+      const infoCalls = vi
+        .mocked(clack.log.info)
+        .mock.calls.map((c) => String(c[0]));
+      expect(
+        infoCalls.some(
+          (m) => m === "Assignee roles available: operator, reader, auditor",
+        ),
+      ).toBe(true);
+
+      const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+      const content = await fs.readFile(configPath, "utf-8");
+      expect(content).toContain("us-east-1");
+    } finally {
+      for (const key of scrubbed) {
+        if (saved[key] === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = saved[key];
+        }
+      }
+    }
   });
 
   it("shows success summary with region and profile", async () => {

@@ -29,6 +29,14 @@ vi.mock("../services/drift-detector-factory.js", () => ({
     mockCreateDriftDetectorFromEnv(...args),
 }));
 
+// Mock reconcile command factory (replaces former globalThis injection)
+const mockGetReconcilePromptFn = vi.fn();
+const mockGetReconcileConfirmFn = vi.fn();
+vi.mock("./reconcile-factory.js", () => ({
+  getReconcilePromptFn: () => mockGetReconcilePromptFn(),
+  getReconcileConfirmFn: () => mockGetReconcileConfirmFn(),
+}));
+
 import {
   reconcileCommand,
   buildPatchDocument,
@@ -85,14 +93,17 @@ describe("reconcile command", () => {
       .spyOn(process.stdout, "write")
       .mockImplementation(() => true);
     process.exitCode = undefined;
+    // Default factory implementations — individual tests override as needed.
+    mockGetReconcilePromptFn.mockReturnValue(vi.fn().mockResolvedValue("Skip"));
+    mockGetReconcileConfirmFn.mockReturnValue(vi.fn().mockResolvedValue(false));
   });
 
   afterEach(() => {
     stdoutSpy.mockRestore();
     vi.restoreAllMocks();
     mockCreateDriftDetectorFromEnv.mockReset();
-    delete (globalThis as Record<string, unknown>)["__reconcilePromptFn"];
-    delete (globalThis as Record<string, unknown>)["__reconcileConfirmFn"];
+    mockGetReconcilePromptFn.mockReset();
+    mockGetReconcileConfirmFn.mockReset();
   });
 
   it("displays empty state message when no provisions exist", async () => {
@@ -345,13 +356,13 @@ describe("reconcile command", () => {
         detector,
         port: mockPort,
       });
-      (globalThis as Record<string, unknown>)["__reconcilePromptFn"] = vi
+      const promptSpy = vi
         .fn()
         .mockResolvedValueOnce("Skip")
         .mockResolvedValueOnce("Skip");
-      (globalThis as Record<string, unknown>)["__reconcileConfirmFn"] = vi
-        .fn()
-        .mockResolvedValue(true);
+      const confirmSpy = vi.fn().mockResolvedValue(true);
+      mockGetReconcilePromptFn.mockReturnValue(promptSpy);
+      mockGetReconcileConfirmFn.mockReturnValue(confirmSpy);
 
       vi.mocked(MemoryService).mockImplementation(
         () =>

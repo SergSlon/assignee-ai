@@ -82,8 +82,18 @@ function loadCached(): BestPractice[] {
             );
           }
         }
-      } catch {
+      } catch (err) {
         // Integrity checks are best-effort — never break loading
+        log({
+          ts: new Date().toISOString(),
+          runId: "system",
+          level: "info",
+          action: LOG_ACTIONS.BP_EVALUATED,
+          extras: {
+            phase: "freshness_or_integrity_check",
+            error: String(err),
+          },
+        });
       }
     }
   }
@@ -137,15 +147,36 @@ function resolveBpManifestPath(): string {
     const req = createRequire(import.meta.url);
     const resolved = req.resolve("@assignee/best-practices/manifest.json");
     candidates.unshift(resolved);
-  } catch {
+  } catch (err) {
     // createRequire.resolve may fail if manifest.json isn't in the package exports
+    log({
+      ts: new Date().toISOString(),
+      runId: "system",
+      level: "info",
+      action: LOG_ACTIONS.BP_EVALUATED,
+      extras: {
+        phase: "manifest_resolve_via_require",
+        error: String(err),
+      },
+    });
   }
 
   for (const candidate of candidates) {
     try {
       if (fs.existsSync(candidate)) return candidate;
-    } catch {
-      // continue
+    } catch (err) {
+      // continue — fs.existsSync threw on this candidate path
+      log({
+        ts: new Date().toISOString(),
+        runId: "system",
+        level: "info",
+        action: LOG_ACTIONS.BP_EVALUATED,
+        extras: {
+          phase: "manifest_candidate_stat",
+          candidate,
+          error: String(err),
+        },
+      });
     }
   }
   // Return the first candidate so verifyManifest returns trust-on-first-use
@@ -199,8 +230,19 @@ export async function bpEvaluatorNode(
         findings.push(...mcpFindings);
         mcpAvailable = true;
       }
-    } catch {
+    } catch (err) {
       // MCP unavailable — fall through to static rules
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "warn",
+        action: LOG_ACTIONS.MCP_OPTIONAL_INIT_FAILED,
+        extras: {
+          phase: "bp_mcp_enricher",
+          resourceType: state.resourceType,
+          error: String(err),
+        },
+      });
     }
   }
 
