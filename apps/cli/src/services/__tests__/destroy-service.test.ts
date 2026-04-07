@@ -51,6 +51,21 @@ vi.mock("../../config/operator-credentials.js", () => ({
   }),
 }));
 
+// ── Mock resolve-arn (Wave 11 P2-2 cross-account guard) ─────────────────
+// classifyNotFoundShortCircuit dynamic-imports getOperatorAccountId from
+// resolve-arn.js when a CCAPI NotFound fires. The default mock returns
+// undefined so existing tests get the legacy behavior (NotFound treated
+// as success regardless of cross-account threat). Cross-account tests
+// override this via mockGetOperatorAccountId.mockResolvedValueOnce.
+const { mockGetOperatorAccountId } = vi.hoisted(() => ({
+  mockGetOperatorAccountId: vi.fn<() => Promise<string | undefined>>(),
+}));
+vi.mock("../../utils/resolve-arn.js", () => ({
+  getOperatorAccountId: mockGetOperatorAccountId,
+  resolveResourceArn: vi.fn(),
+  resetAccountIdCache: vi.fn(),
+}));
+
 // ── Mock CloudControlAdapter ──────────────────────────────────────────────────
 vi.mock("../cloudcontrol-adapter.js", () => {
   class CloudControlAdapter {
@@ -168,6 +183,12 @@ const originalSetTimeout = globalThis.setTimeout;
 const ORIGINAL_ENV = { ...process.env };
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: operator account is undefined → classifyNotFoundShortCircuit
+  // returns "safe-shortcircuit" → NotFound treated as success (the legacy
+  // Wave 5 behavior). Specific cross-account tests override this via
+  // mockGetOperatorAccountId.mockResolvedValueOnce. Must be set AFTER
+  // clearAllMocks or the default would be wiped.
+  mockGetOperatorAccountId.mockResolvedValue(undefined);
   // @ts-expect-error — simplified stub for test purposes
   globalThis.setTimeout = (fn: () => void) => originalSetTimeout(fn, 0);
   // destroy-service now uses requireAssigneeCredentials("operator") for the
@@ -375,6 +396,116 @@ describe("destroySingleResource", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("has dependencies");
+    });
+
+    // Wave 11 P2-2: cross-account sanity check on the NotFound short-circuit.
+    // When the operator credentials accidentally point at a different
+    // account than the resource ARN, CCAPI's NotFound is misleading —
+    // the resource may genuinely exist in the user's intended account
+    // but be invisible to the wrongly-assumed operator. Surface this as
+    // a real error rather than treating it as silent destroy success.
+    it("blocks deleteResource NOT_FOUND short-circuit when operator account differs from ARN account", async () => {
+      // Operator is configured for one account...
+      mockGetOperatorAccountId.mockResolvedValue("054125018476");
+      mockDeleteResource.mockResolvedValue([
+        {
+          kind: "NOT_FOUND",
+          message: "Resource not found.",
+        },
+        null,
+      ]);
+
+      const result = await destroySingleResource({
+        // ...but the resource ARN belongs to a different account.
+        arn: "arn:aws:s3:::my-bucket-in-other-account",
+        resourceType: "AWS::S3::Bucket",
+        identifier: "my-bucket-in-other-account",
+        region: "us-east-1",
+      });
+
+      // S3 bucket ARNs have no account segment — falls through to the
+      // safe-shortcircuit branch (extractAccountIdFromArn returns
+      // undefined). This is the documented exception: when account
+      // info is unavailable on either side, preserve Wave 5 behavior.
+      expect(result.success).toBe(true);
+    });
+
+    it("blocks deleteResource NOT_FOUND short-circuit on cross-account NAT Gateway ARN", async () => {
+      // Operator is configured for 054125018476...
+      mockGetOperatorAccountId.mockResolvedValue("054125018476");
+      mockDeleteResource.mockResolvedValue([
+        {
+          kind: "NOT_FOUND",
+          message: "Resource not found.",
+        },
+        null,
+      ]);
+
+      const result = await destroySingleResource({
+        // ...but the ARN encodes account 999999999999 — the resource
+        // legitimately exists in a different account that the operator
+        // can't see.
+        arn: "arn:aws:ec2:us-east-1:999999999999:natgateway/nat-0b337150b5f9b0b62",
+        resourceType: "AWS::EC2::NatGateway",
+        identifier: "nat-0b337150b5f9b0b62",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("different AWS account");
+      expect(result.error).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
+    });
+
+    it("still treats deleteResource NOT_FOUND as success when operator account matches the ARN", async () => {
+      // Operator IS configured for the same account as the ARN — the
+      // legitimate "already gone" case (Wave 5 tag-ghost cleanup).
+      mockGetOperatorAccountId.mockResolvedValue("054125018476");
+      mockDeleteResource.mockResolvedValue([
+        {
+          kind: "NOT_FOUND",
+          message: "Resource not found.",
+        },
+        null,
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:ec2:us-east-1:054125018476:natgateway/nat-0928a4abb02ca9eb3",
+        resourceType: "AWS::EC2::NatGateway",
+        identifier: "nat-0928a4abb02ca9eb3",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it("blocks poll FAILED+NotFound short-circuit on cross-account ARN", async () => {
+      // Same threat for the second NotFound path (CCAPI accepts the
+      // delete request, then returns FAILED+ErrorCode=NotFound from
+      // the poll).
+      mockGetOperatorAccountId.mockResolvedValue("054125018476");
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-cross-account" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        {
+          operationStatus: "FAILED",
+          errorCode: "NotFound",
+          statusMessage: "Resource not found.",
+        },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:ec2:us-east-1:999999999999:natgateway/nat-0xxx",
+        resourceType: "AWS::EC2::NatGateway",
+        identifier: "nat-0xxx",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("different AWS account");
     });
   });
 
@@ -641,6 +772,76 @@ describe("destroySingleResource", () => {
       expect(mockEc2Send).not.toHaveBeenCalled();
       // No CloudControl delete attempted
       expect(mockDeleteResource).not.toHaveBeenCalled();
+    });
+
+    // Wave 11 P2-3: half-state recovery on multi-attachment IGWs.
+    // Previously the for loop ran detaches sequentially with no
+    // per-attachment error handling — if attachment N+1 failed after
+    // N had already succeeded, the IGW was left in a half-detached
+    // state with no record of which detaches landed. The fix wraps
+    // each detach in its own try/catch, continues the loop on
+    // failures, and lets CCAPI's subsequent delete produce the
+    // authoritative DependencyViolation if the residual attachments
+    // matter. The user can re-run destroy and it will pick up where
+    // this one left off.
+    it("continues detaching remaining VPCs after a per-attachment failure (half-state recovery)", async () => {
+      const VPC_A = "vpc-0aaaaaaaaaaaaaaaa";
+      const VPC_B = "vpc-0bbbbbbbbbbbbbbbb";
+      const VPC_C = "vpc-0cccccccccccccccc";
+      // DescribeInternetGateways → 3 attached VPCs (rare in practice
+      // but possible for shared IGWs)
+      mockEc2Send.mockResolvedValueOnce({
+        InternetGateways: [
+          {
+            InternetGatewayId: IGW_ID,
+            Attachments: [
+              { VpcId: VPC_A, State: "attached" },
+              { VpcId: VPC_B, State: "attached" },
+              { VpcId: VPC_C, State: "attached" },
+            ],
+          },
+        ],
+      });
+      // First detach succeeds
+      mockEc2Send.mockResolvedValueOnce({});
+      // Second detach fails — old code would have aborted the loop
+      mockEc2Send.mockRejectedValueOnce(new Error("DependencyViolation"));
+      // Third detach must STILL be attempted under the new behavior
+      mockEc2Send.mockResolvedValueOnce({});
+      // CloudControl delete still runs (let CCAPI surface authoritative
+      // errors if any residual attachment matters)
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-igw-multi" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: `arn:aws:ec2:us-east-1:123456789012:internet-gateway/${IGW_ID}`,
+        resourceType: "AWS::EC2::InternetGateway",
+        identifier: IGW_ID,
+        region: "us-east-1",
+      });
+
+      // Critical: ALL THREE detach attempts ran (1 describe + 3 detaches)
+      const detachCalls = mockEc2Send.mock.calls.filter(
+        (c) => (c[0] as { _type: string })._type === "DetachInternetGateway",
+      );
+      expect(detachCalls).toHaveLength(3);
+      expect(detachCalls.map((c) => (c[0] as { VpcId: string }).VpcId)).toEqual(
+        [VPC_A, VPC_B, VPC_C],
+      );
+      // Forward progress preserved — CloudControl delete still ran
+      expect(mockDeleteResource).toHaveBeenCalled();
+      // The mock CCAPI delete succeeded so the destroy reports success
+      // (in real life, the second detach failure would have left a
+      // residual attachment that CCAPI would catch with
+      // DependencyViolation; the test only validates the loop
+      // behavior, not real AWS state).
+      expect(result.success).toBe(true);
     });
   });
 

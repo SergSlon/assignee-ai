@@ -122,6 +122,39 @@ describe("preflightGuardNode", () => {
       }
     });
 
+    // Wave 11 P2-7: edge-finding #7 from the Wave 5-9 review noted that
+    // the placeholder set omitted 222222222222, 333333333333, 555555555555,
+    // and 999999999999 — all canonical AWS multi-account IAM walkthrough
+    // examples that the LLM hallucinates. Pin every entry in the new
+    // expanded set so removing one in a future refactor fails CI.
+    it("rejects all canonical AWS docs placeholder account IDs", async () => {
+      const placeholders = [
+        "123456789012",
+        "111122223333",
+        "222222222222",
+        "333333333333",
+        "444455556666",
+        "555555555555",
+        "999999999999",
+        "000000000000",
+      ];
+      for (const account of placeholders) {
+        const result = await preflightGuardNode(
+          makeState({
+            resourceType: "AWS::Lambda::Function",
+            resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+            desiredState: {
+              FunctionName: "my-fn",
+              Runtime: "nodejs22.x",
+              Role: `arn:aws:iam::${account}:role/my-role`,
+            },
+          }),
+        );
+        expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+        expect(result.errorMessage).toContain(account);
+      }
+    });
+
     it("rejects 000000000000 (unit-test fixture placeholder)", async () => {
       const result = await preflightGuardNode(
         makeState({
@@ -215,6 +248,39 @@ describe("preflightGuardNode", () => {
         }),
       );
       expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    });
+
+    // Wave 11 P2-7: edge-finding #7 also called out "no cycle guard on
+    // the recursive walker". CCAPI desired state shouldn't contain
+    // cyclic structures, but a pathological / hostile input could blow
+    // the stack. The walker now caps at 32 levels and returns undefined
+    // (= no placeholder found, fall through to normal preflight) when
+    // depth exceeds the cap. This test builds a 50-level nested
+    // structure and verifies the walker doesn't throw.
+    it("does NOT throw on pathologically deep desiredState (depth guard)", async () => {
+      // Build a 50-level deep object: { a: { a: { a: ... { Role: "real-arn" } } } }
+      let nested: Record<string, unknown> = {
+        Role: "arn:aws:iam::054125018476:role/leaf",
+      };
+      for (let i = 0; i < 50; i++) {
+        nested = { a: nested };
+      }
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Deeply: nested,
+          },
+        }),
+      );
+      // Walker bails at depth 32 — leaf is unreachable but no exception.
+      // Preflight may fail for OTHER reasons (no Role at top level), but
+      // it must NOT throw. Anything other than an unhandled exception
+      // is an acceptable outcome.
+      expect(result).toBeDefined();
     });
   });
 
