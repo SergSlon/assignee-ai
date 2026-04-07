@@ -10,6 +10,7 @@ export { DestroyStrategyRegistry } from "./registry.js";
 
 import { DestroyStrategyRegistry } from "./registry.js";
 import { igwStrategy } from "./igw-strategy.js";
+import { routeTableStrategy } from "./route-table-strategy.js";
 import { sqsStrategy } from "./sqs-strategy.js";
 import { dynamodbStrategy } from "./dynamodb-strategy.js";
 import {
@@ -23,6 +24,7 @@ export function createDestroyRegistry(): DestroyStrategyRegistry {
 
   // Custom logic strategies
   registry.register(igwStrategy);
+  registry.register(routeTableStrategy);
   registry.register(sqsStrategy);
   registry.register(dynamodbStrategy);
 
