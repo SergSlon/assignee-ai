@@ -10,11 +10,10 @@ import {
 import { markerRef, markerAz } from "../../config/marker-tokens.js";
 import type { ArchitecturePattern } from "../types.js";
 
-/** Shorthand aliases for companion resource type constants used in this pattern. */
-const EC2_VPC_GATEWAY_ATTACHMENT =
-  COMPANION_RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT;
+/** Shorthand aliases for resource type constants used in this pattern. */
+const EC2_VPC_GATEWAY_ATTACHMENT = RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT;
 const EC2_SUBNET_ROUTE_TABLE_ASSOCIATION =
-  COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION;
+  RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION;
 const EC2_EIP = COMPANION_RESOURCE_TYPES.EC2_EIP;
 
 /** Logical resource IDs used in VPC patterns — single source of truth. */
