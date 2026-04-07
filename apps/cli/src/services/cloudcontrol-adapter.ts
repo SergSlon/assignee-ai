@@ -210,6 +210,7 @@ export class CloudControlAdapter implements ProvisioningPort {
           operationStatus: event?.OperationStatus,
           identifier: event?.Identifier,
           statusMessage: event?.StatusMessage,
+          errorCode: event?.ErrorCode,
         },
       ];
     } catch (err) {

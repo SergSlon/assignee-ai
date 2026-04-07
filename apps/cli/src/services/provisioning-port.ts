@@ -34,6 +34,8 @@ export interface GetRequestStatusResult {
   operationStatus: string | undefined;
   identifier: string | undefined;
   statusMessage: string | undefined;
+  /** CloudControl HandlerErrorCode (e.g. "NotFound", "AlreadyExists"). */
+  errorCode: string | undefined;
 }
 
 export interface UpdateResourceResult {

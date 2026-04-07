@@ -21,6 +21,7 @@ import {
 import { createCloudControlClient } from "./cloudcontrol-client.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
+import { ProvisioningErrorKind } from "./provisioning-port.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import {
@@ -90,6 +91,9 @@ const CCAPIStatus = {
   FAILED: "FAILED",
 } as const;
 
+/** CloudControl HandlerErrorCode for "resource does not exist". */
+const CCAPI_NOT_FOUND_ERROR_CODE = "NotFound";
+
 export interface DestroyResult {
   success: boolean;
   resourceType: string;
@@ -106,6 +110,13 @@ export interface DestroyOptions {
 
 /**
  * Polls for delete completion using the CloudControlAdapter's getRequestStatus method.
+ *
+ * Returns `success: true` for both genuine SUCCESS and the FAILED+NotFound
+ * combination. The latter happens when the bulk-destroy plan picks up a
+ * resource from the Resource Groups Tagging API that has already been
+ * deleted in AWS (the API continues to return tags for ~1 hour after
+ * NAT Gateway/EIP deletion). The user's destroy intent is satisfied
+ * either way — the resource is gone.
  */
 async function pollDeleteStatus(
   adapter: CloudControlAdapter,
@@ -121,6 +132,12 @@ async function pollDeleteStatus(
       return { success: true };
     }
     if (status.operationStatus === CCAPIStatus.FAILED) {
+      // Treat NotFound as success — the resource is already in the desired
+      // (deleted) end state. CloudControl reports this via the structured
+      // ErrorCode field rather than a fragile string match on statusMessage.
+      if (status.errorCode === CCAPI_NOT_FOUND_ERROR_CODE) {
+        return { success: true };
+      }
       return {
         success: false,
         message: status.statusMessage ?? "Delete operation failed",
@@ -552,6 +569,110 @@ export async function destroySingleResource(
     }
   }
 
+  // InternetGateway: detach from VPCs before deleting (CloudControl
+  // delegates to DeleteInternetGateway which fails with DependencyViolation
+  // when the gateway is still attached). AWS::EC2::VPCGatewayAttachment is
+  // a CloudFormation-only construct with no taggable AWS resource, so it
+  // never appears in the bulk-destroy plan and cannot be torn down through
+  // the normal tier path. Mirrors the MCP server's igw-strategy.
+  if (resourceType === RESOURCE_TYPES.EC2_INTERNET_GATEWAY) {
+    try {
+      const {
+        EC2Client,
+        DescribeInternetGatewaysCommand,
+        DetachInternetGatewayCommand,
+      } = await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({
+        region: awsConfig.region ?? AWS_REGION,
+        credentials: requireAssigneeCredentials("operator"),
+      });
+      const desc = await ec2.send(
+        new DescribeInternetGatewaysCommand({
+          InternetGatewayIds: [resource.identifier],
+        }),
+      );
+      const attachments = desc.InternetGateways?.[0]?.Attachments ?? [];
+      for (const att of attachments) {
+        if (att.VpcId && att.State !== "detached") {
+          await ec2.send(
+            new DetachInternetGatewayCommand({
+              InternetGatewayId: resource.identifier,
+              VpcId: att.VpcId,
+            }),
+          );
+        }
+      }
+    } catch (err) {
+      if (err instanceof MissingAssigneeCredentialsError) {
+        return {
+          ...baseResult,
+          success: false,
+          error: `Cannot detach InternetGateway before delete: ${err.message}`,
+        };
+      }
+      // Non-fatal: gateway may already be detached, or the lookup may have
+      // raced a concurrent destroy. Log and continue — the downstream
+      // CloudControl delete will surface a clean error if it really is
+      // still attached.
+      warnDestroy("igw_detach_failed", {
+        identifier: resource.identifier,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // RouteTable: disassociate any non-main subnet associations before
+  // deleting (DeleteRouteTable fails with DependencyViolation while
+  // associations exist). AWS::EC2::SubnetRouteTableAssociation is a
+  // CloudFormation-only construct with no taggable AWS resource, so it
+  // never appears in the bulk-destroy plan. Skip Main=true associations
+  // — the VPC's main route table cannot be disassociated and will be
+  // cleaned up automatically when the VPC is deleted.
+  if (resourceType === RESOURCE_TYPES.EC2_ROUTE_TABLE) {
+    try {
+      const {
+        EC2Client,
+        DescribeRouteTablesCommand,
+        DisassociateRouteTableCommand,
+      } = await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({
+        region: awsConfig.region ?? AWS_REGION,
+        credentials: requireAssigneeCredentials("operator"),
+      });
+      const desc = await ec2.send(
+        new DescribeRouteTablesCommand({
+          RouteTableIds: [resource.identifier],
+        }),
+      );
+      const associations = desc.RouteTables?.[0]?.Associations ?? [];
+      for (const assoc of associations) {
+        if (
+          assoc.RouteTableAssociationId &&
+          assoc.Main !== true &&
+          assoc.AssociationState?.State !== "disassociated"
+        ) {
+          await ec2.send(
+            new DisassociateRouteTableCommand({
+              AssociationId: assoc.RouteTableAssociationId,
+            }),
+          );
+        }
+      }
+    } catch (err) {
+      if (err instanceof MissingAssigneeCredentialsError) {
+        return {
+          ...baseResult,
+          success: false,
+          error: `Cannot disassociate RouteTable before delete: ${err.message}`,
+        };
+      }
+      warnDestroy("route_table_disassociate_failed", {
+        identifier: resource.identifier,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // ── Default: CloudControl API ────────────────────────────────────────
   try {
     const ccClient = createCloudControlClient(awsConfig);
@@ -563,6 +684,16 @@ export async function destroySingleResource(
     );
 
     if (deleteErr) {
+      // NOT_FOUND means the resource is already gone — that is the user's
+      // intended end-state for a destroy operation, so report success rather
+      // than a noisy failure. Common cause: the Resource Groups Tagging API
+      // continues to return tags for ~1 hour after a NAT Gateway/EIP is
+      // actually deleted, which causes destroy --all to repeatedly emit
+      // confusing "not found" errors for resources that the bulk-destroy
+      // plan included from a stale tag listing.
+      if (deleteErr.kind === ProvisioningErrorKind.NOT_FOUND) {
+        return { ...baseResult, success: true };
+      }
       return {
         ...baseResult,
         success: false,

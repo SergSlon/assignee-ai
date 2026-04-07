@@ -26,6 +26,7 @@ const {
   mockCfSend,
   mockDdbSend,
   mockS3Send,
+  mockEc2Send,
 } = vi.hoisted(() => ({
   mockDeleteResource: vi.fn(),
   mockGetRequestStatus: vi.fn(),
@@ -35,6 +36,7 @@ const {
   mockCfSend: vi.fn(),
   mockDdbSend: vi.fn(),
   mockS3Send: vi.fn(),
+  mockEc2Send: vi.fn(),
 }));
 
 // NOTE: Plain functions/classes (not vi.fn) so impls survive vitest's
@@ -128,6 +130,32 @@ vi.mock("@aws-sdk/client-s3", () => {
     S3Client: MockS3Client,
     ListObjectVersionsCommand,
     DeleteObjectsCommand,
+  };
+});
+
+// ── Mock @aws-sdk/client-ec2 ──────────────────────────────────────────────────
+vi.mock("@aws-sdk/client-ec2", () => {
+  class MockEC2Client {
+    send = mockEc2Send;
+  }
+  function DescribeInternetGatewaysCommand(input: Record<string, unknown>) {
+    return { _type: "DescribeInternetGateways", ...input };
+  }
+  function DetachInternetGatewayCommand(input: Record<string, unknown>) {
+    return { _type: "DetachInternetGateway", ...input };
+  }
+  function DescribeRouteTablesCommand(input: Record<string, unknown>) {
+    return { _type: "DescribeRouteTables", ...input };
+  }
+  function DisassociateRouteTableCommand(input: Record<string, unknown>) {
+    return { _type: "DisassociateRouteTable", ...input };
+  }
+  return {
+    EC2Client: MockEC2Client,
+    DescribeInternetGatewaysCommand,
+    DetachInternetGatewayCommand,
+    DescribeRouteTablesCommand,
+    DisassociateRouteTableCommand,
   };
 });
 
@@ -231,21 +259,122 @@ describe("destroySingleResource", () => {
       expect(result.error).toContain("BucketNotEmpty");
     });
 
-    it("returns failure when deleteResource returns error", async () => {
+    it("returns failure when deleteResource returns a non-NOT_FOUND error", async () => {
       mockDeleteResource.mockResolvedValue([
-        { kind: "NOT_FOUND", message: "Resource not found" },
+        { kind: "UNKNOWN", message: "Internal service error" },
         null,
       ]);
 
       const result = await destroySingleResource({
-        arn: "arn:aws:s3:::missing-bucket",
+        arn: "arn:aws:s3:::broken-bucket",
         resourceType: "AWS::S3::Bucket",
-        identifier: "missing-bucket",
+        identifier: "broken-bucket",
         region: "us-east-1",
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain("Resource not found");
+      expect(result.error).toContain("Internal service error");
+    });
+
+    // Closes the destroy --all noise from the brief: the Resource Groups
+    // Tagging API continues to return tags for ~1 hour after a NAT Gateway
+    // or EIP is deleted, so the bulk-destroy plan picks up resources that
+    // are already gone in AWS. Reporting NOT_FOUND as failure produced
+    // confusing "Failed: ... was not found" lines for resources the user
+    // intentionally deleted in a previous run. The user's destroy intent
+    // is satisfied either way — return success.
+    //
+    // CloudControl reports the "already gone" condition in TWO different
+    // ways depending on whether AWS catches the missing resource at the
+    // initial DeleteResource call or at the subsequent poll:
+    //   1. deleteResource → NOT_FOUND error (covered by the next test)
+    //   2. deleteResource → success token, then GetResourceRequestStatus
+    //      returns FAILED with ErrorCode="NotFound" (covered by the test
+    //      after that — this is what NAT Gateway hit in the live verify run)
+    it("treats deleteResource NOT_FOUND as success — resource already gone", async () => {
+      mockDeleteResource.mockResolvedValue([
+        {
+          kind: "NOT_FOUND",
+          message:
+            "Resource of type 'AWS::EC2::NatGateway' with identifier 'nat-0b337150b5f9b0b62' was not found.",
+        },
+        null,
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:ec2:us-east-1:123456789012:natgateway/nat-0b337150b5f9b0b62",
+        resourceType: "AWS::EC2::NatGateway",
+        identifier: "nat-0b337150b5f9b0b62",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+      // Poll must NOT have been called — the delete short-circuited.
+      expect(mockGetRequestStatus).not.toHaveBeenCalled();
+    });
+
+    it("treats poll FAILED with ErrorCode=NotFound as success", async () => {
+      // Real-world signal observed during the destroy --all live verify
+      // for already-deleted NAT Gateways: CloudControl accepts the delete
+      // request, returns a token, and the subsequent GetResourceRequest
+      // Status returns FAILED with ErrorCode="NotFound" and a status
+      // message of "Resource of type ... was not found." The structured
+      // ErrorCode is the reliable signal — string-matching the message
+      // would be fragile.
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-natgw-already-gone" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        {
+          operationStatus: "FAILED",
+          errorCode: "NotFound",
+          statusMessage:
+            "Resource of type 'AWS::EC2::NatGateway' with identifier 'nat-0928a4abb02ca9eb3' was not found.",
+        },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:ec2:us-east-1:123456789012:natgateway/nat-0928a4abb02ca9eb3",
+        resourceType: "AWS::EC2::NatGateway",
+        identifier: "nat-0928a4abb02ca9eb3",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+      expect(mockGetRequestStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns failure for poll FAILED with non-NotFound errorCode", async () => {
+      // Genuine FAILED responses (e.g. DependencyViolation) must still
+      // surface as errors — the NotFound short-circuit is narrowly
+      // scoped to the "already gone" case.
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-stuck" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        {
+          operationStatus: "FAILED",
+          errorCode: "GeneralServiceException",
+          statusMessage:
+            "The vpc 'vpc-0712644090346eb2b' has dependencies and cannot be deleted.",
+        },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0712644090346eb2b",
+        resourceType: "AWS::EC2::VPC",
+        identifier: "vpc-0712644090346eb2b",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("has dependencies");
     });
   });
 
@@ -385,6 +514,267 @@ describe("destroySingleResource", () => {
 
       // Should still succeed — protection disable is non-fatal
       expect(result.success).toBe(true);
+    });
+  });
+
+  // ── InternetGateway pre-delete hook ───────────────────────────────────────
+  // Closes the destroy --all DependencyViolation bug: AWS::EC2::VPCGateway
+  // Attachment is a CloudFormation-only construct (non-taggable) so it never
+  // appears in the bulk-destroy plan; the IGW must be detached from each
+  // attached VPC before CloudControl's DeleteResource path can succeed.
+  describe("InternetGateway pre-delete hook", () => {
+    const IGW_ID = "igw-0231e9c9af6a9f7cc";
+    const VPC_ID = "vpc-0712644090346eb2b";
+
+    it("detaches the IGW from each attached VPC before deleting", async () => {
+      // DescribeInternetGateways → 1 attached VPC
+      mockEc2Send.mockResolvedValueOnce({
+        InternetGateways: [
+          {
+            InternetGatewayId: IGW_ID,
+            Attachments: [{ VpcId: VPC_ID, State: "attached" }],
+          },
+        ],
+      });
+      // DetachInternetGateway
+      mockEc2Send.mockResolvedValueOnce({});
+      // CloudControl DeleteResource
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-igw" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: `arn:aws:ec2:us-east-1:123456789012:internet-gateway/${IGW_ID}`,
+        resourceType: "AWS::EC2::InternetGateway",
+        identifier: IGW_ID,
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      // Describe + detach must run BEFORE the CloudControl delete.
+      expect(mockEc2Send).toHaveBeenCalledTimes(2);
+      const describeCmd = mockEc2Send.mock.calls[0]![0];
+      expect(describeCmd._type).toBe("DescribeInternetGateways");
+      expect(describeCmd.InternetGatewayIds).toEqual([IGW_ID]);
+      const detachCmd = mockEc2Send.mock.calls[1]![0];
+      expect(detachCmd._type).toBe("DetachInternetGateway");
+      expect(detachCmd.InternetGatewayId).toBe(IGW_ID);
+      expect(detachCmd.VpcId).toBe(VPC_ID);
+      expect(mockDeleteResource).toHaveBeenCalledWith(
+        "AWS::EC2::InternetGateway",
+        IGW_ID,
+      );
+    });
+
+    it("skips already-detached attachments and unattached IGWs", async () => {
+      // IGW returned with State=detached — must NOT trigger detach
+      mockEc2Send.mockResolvedValueOnce({
+        InternetGateways: [
+          {
+            InternetGatewayId: IGW_ID,
+            Attachments: [{ VpcId: VPC_ID, State: "detached" }],
+          },
+        ],
+      });
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-igw2" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: `arn:aws:ec2:us-east-1:123456789012:internet-gateway/${IGW_ID}`,
+        resourceType: "AWS::EC2::InternetGateway",
+        identifier: IGW_ID,
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      // Only the describe — no detach attempts
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
+    });
+
+    it("continues to CloudControl delete even if EC2 describe fails (non-fatal hook)", async () => {
+      // Hook failure must NOT short-circuit the destroy — CloudControl gets
+      // the chance to surface its own clean error if the IGW is really stuck.
+      mockEc2Send.mockRejectedValueOnce(new Error("RequestLimitExceeded"));
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-igw3" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: `arn:aws:ec2:us-east-1:123456789012:internet-gateway/${IGW_ID}`,
+        resourceType: "AWS::EC2::InternetGateway",
+        identifier: IGW_ID,
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockDeleteResource).toHaveBeenCalled();
+    });
+
+    it("returns missing-credentials error when ASSIGNEE_OPERATOR vars unset", async () => {
+      delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+
+      const result = await destroySingleResource({
+        arn: `arn:aws:ec2:us-east-1:123456789012:internet-gateway/${IGW_ID}`,
+        resourceType: "AWS::EC2::InternetGateway",
+        identifier: IGW_ID,
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Cannot detach InternetGateway");
+      expect(result.error).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
+      // No EC2 SDK calls — credential check fires before the first send
+      expect(mockEc2Send).not.toHaveBeenCalled();
+      // No CloudControl delete attempted
+      expect(mockDeleteResource).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── RouteTable pre-delete hook ────────────────────────────────────────────
+  // Closes the destroy --all DependencyViolation bug for non-default route
+  // tables: AWS::EC2::SubnetRouteTableAssociation is a CloudFormation-only
+  // construct (non-taggable) so it never appears in the bulk-destroy plan;
+  // each non-Main association must be removed before CloudControl's
+  // DeleteResource path can succeed.
+  describe("RouteTable pre-delete hook", () => {
+    const RT_ID = "rtb-0577c1b03ff7f0473";
+    const ASSOC_MAIN = "rtbassoc-main12345";
+    const ASSOC_SUBNET = "rtbassoc-05e417426782224a8";
+
+    it("disassociates non-Main associations and skips the Main association", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        RouteTables: [
+          {
+            RouteTableId: RT_ID,
+            Associations: [
+              {
+                RouteTableAssociationId: ASSOC_MAIN,
+                Main: true,
+                AssociationState: { State: "associated" },
+              },
+              {
+                RouteTableAssociationId: ASSOC_SUBNET,
+                Main: false,
+                AssociationState: { State: "associated" },
+              },
+            ],
+          },
+        ],
+      });
+      // DisassociateRouteTable for the non-Main association
+      mockEc2Send.mockResolvedValueOnce({});
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-rt" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: `arn:aws:ec2:us-east-1:123456789012:route-table/${RT_ID}`,
+        resourceType: "AWS::EC2::RouteTable",
+        identifier: RT_ID,
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      // Describe + exactly one disassociate (the non-Main one)
+      expect(mockEc2Send).toHaveBeenCalledTimes(2);
+      const disassocCmd = mockEc2Send.mock.calls[1]![0];
+      expect(disassocCmd._type).toBe("DisassociateRouteTable");
+      expect(disassocCmd.AssociationId).toBe(ASSOC_SUBNET);
+      // Main association must NOT have been disassociated
+      const allAssocIds = mockEc2Send.mock.calls
+        .filter((call) => call[0]._type === "DisassociateRouteTable")
+        .map((call) => call[0].AssociationId);
+      expect(allAssocIds).not.toContain(ASSOC_MAIN);
+    });
+
+    it("is a no-op when the route table has no associations", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        RouteTables: [{ RouteTableId: RT_ID, Associations: [] }],
+      });
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-rt2" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: `arn:aws:ec2:us-east-1:123456789012:route-table/${RT_ID}`,
+        resourceType: "AWS::EC2::RouteTable",
+        identifier: RT_ID,
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      // Only describe — no disassociate calls
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
+    });
+
+    it("skips already-disassociated entries", async () => {
+      mockEc2Send.mockResolvedValueOnce({
+        RouteTables: [
+          {
+            RouteTableId: RT_ID,
+            Associations: [
+              {
+                RouteTableAssociationId: ASSOC_SUBNET,
+                Main: false,
+                AssociationState: { State: "disassociated" },
+              },
+            ],
+          },
+        ],
+      });
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-rt3" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: `arn:aws:ec2:us-east-1:123456789012:route-table/${RT_ID}`,
+        resourceType: "AWS::EC2::RouteTable",
+        identifier: RT_ID,
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      // Only describe — disassociated entries are skipped
+      expect(mockEc2Send).toHaveBeenCalledTimes(1);
+    });
+
+    it("continues to CloudControl delete when EC2 describe fails (non-fatal)", async () => {
+      mockEc2Send.mockRejectedValueOnce(new Error("RequestLimitExceeded"));
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-rt4" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: `arn:aws:ec2:us-east-1:123456789012:route-table/${RT_ID}`,
+        resourceType: "AWS::EC2::RouteTable",
+        identifier: RT_ID,
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockDeleteResource).toHaveBeenCalled();
     });
   });
 
