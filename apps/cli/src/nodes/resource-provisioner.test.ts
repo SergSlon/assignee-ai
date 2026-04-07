@@ -369,7 +369,7 @@ describe("resourceProvisionerNode", () => {
       expect(mockProvisioner.createResource).toHaveBeenCalledWith(
         "AWS::IAM::Role",
         expect.stringContaining("poc-role-test"),
-        expect.stringMatching(/^run-prov-test-001-[0-9a-f]{8}$/),
+        expect.stringMatching(/^run-prov-test-001-[0-9a-f]{12}$/),
       );
     });
 
@@ -1126,6 +1126,63 @@ describe("resourceProvisionerNode", () => {
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     });
 
+    // ── V1 N3 audit (2026-04-06): tracker ordering ─────────────────────
+    it("cleans up SSH key pair when mkdirSync throws after CreateKeyPair", async () => {
+      // Reproduces the original race: AWS confirms the key was created,
+      // then mkdirSync (or any fs op before writeFileSync) throws. The
+      // pre-fix code only set sshKeyCreatedName immediately before
+      // writeFileSync, so this throw left the tracker undefined and the
+      // cleanup hook never deleted the key from AWS — leaking it.
+      const notFoundErr = new Error("Key pair not found");
+      (notFoundErr as { name: string }).name = "InvalidKeyPair.NotFound";
+      mockEc2Send
+        .mockRejectedValueOnce(notFoundErr) // DescribeKeyPairsCommand
+        .mockResolvedValueOnce({
+          KeyMaterial:
+            "-----BEGIN RSA PRIVATE KEY-----\nMOCK\n-----END RSA PRIVATE KEY-----",
+        }) // CreateKeyPairCommand — succeeds
+        .mockResolvedValueOnce({}); // DeleteKeyPairCommand — cleanup must run
+
+      // mkdirSync throws BEFORE writeFileSync runs (e.g. EACCES on
+      // ~/.assignee/keys/ when the home directory is read-only).
+      mockMkdirSync.mockImplementationOnce(() => {
+        throw Object.assign(new Error("EACCES: permission denied"), {
+          code: "EACCES",
+        });
+      });
+
+      // CloudControl shouldn't be called since we'll fail before that, but
+      // arm the mock just in case the failure flow tries to invoke it.
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        {
+          kind: ProvisioningErrorKind.UNKNOWN,
+          message: "should not be reached",
+        },
+        null,
+      ]);
+
+      const state = makeEc2State();
+      const result = await resourceProvisionerNode(state, mockProvisioner);
+
+      // Cleanup MUST have run — DeleteKeyPairCommand was sent for the
+      // placeholder key name even though writeFileSync never executed.
+      const deleteCalls = mockEc2Send.mock.calls.filter((c) => {
+        const cmd = c[0] as { _type?: string };
+        return cmd._type === "DeleteKeyPairCommand";
+      });
+      expect(deleteCalls).toHaveLength(1);
+      const deleteCmd = deleteCalls[0]![0] as {
+        input: { KeyName: string };
+      };
+      expect(deleteCmd.input.KeyName).toBe(ResourceDefault.SSH_KEY_PLACEHOLDER);
+
+      // The .pem must NEVER have been written
+      expect(mockWriteFileSync).not.toHaveBeenCalled();
+
+      // Provision result should be a failure (the fs error propagated)
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    });
+
     it("cleans up SSH key pair on provision failure", async () => {
       const notFoundErr = new Error("Key pair not found");
       (notFoundErr as { name: string }).name = "InvalidKeyPair.NotFound";
@@ -1642,6 +1699,93 @@ describe("resourceProvisionerNode", () => {
       expect(token2).toMatch(/^run-h11-retry-token-001-3-/);
       // But must be DIFFERENT — this is the whole point of H11
       expect(token1).not.toBe(token2);
+    });
+
+    // V1 N1: The attempt suffix must be 12 hex chars (48 bits of entropy).
+    // The previous 8-char slice gave only 32 bits, with a birthday-paradox
+    // collision boundary at ~65k retries. 12 chars pushes that boundary to
+    // ~16.7M retries, well outside any realistic loop.
+    it("V1 N1: attempt suffix is 12 hex characters (48 bits of entropy)", async () => {
+      mockProvisioner.createResource.mockResolvedValue([
+        null,
+        { requestToken: "v1n1-req" },
+      ]);
+      mockProvisioner.getResource.mockResolvedValue([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+
+      await resourceProvisionerNode(
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          runId: "run-v1n1-entropy",
+          currentResourceIndex: 0,
+          desiredState: {
+            RoleName: "v1n1-role",
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "lambda.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            },
+          },
+        }),
+        mockProvisioner,
+      );
+
+      const token = mockProvisioner.createResource.mock.calls[0]![2] as string;
+      // No index suffix when currentResourceIndex === 0; format is
+      // `${runId}-${attemptSuffix}` where attemptSuffix is 12 lowercase hex.
+      const match = token.match(/^run-v1n1-entropy-([0-9a-f]+)$/);
+      expect(match).not.toBeNull();
+      expect(match![1]!.length).toBe(12);
+    });
+
+    it("V1 N1: 1000 sequential attempt suffixes are all unique (collision-resistance smoke test)", async () => {
+      mockProvisioner.createResource.mockResolvedValue([
+        null,
+        { requestToken: "v1n1-uniq" },
+      ]);
+      mockProvisioner.getResource.mockResolvedValue([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+
+      const seen = new Set<string>();
+      for (let i = 0; i < 1000; i++) {
+        await resourceProvisionerNode(
+          makeState({
+            resourceType: "AWS::IAM::Role",
+            runId: "run-v1n1-uniq",
+            currentResourceIndex: 0,
+            desiredState: {
+              RoleName: `v1n1-role-${i}`,
+              AssumeRolePolicyDocument: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: { Service: "lambda.amazonaws.com" },
+                    Action: "sts:AssumeRole",
+                  },
+                ],
+              },
+            },
+          }),
+          mockProvisioner,
+        );
+      }
+
+      for (const call of mockProvisioner.createResource.mock.calls) {
+        const t = call[2] as string;
+        const suffix = t.split("-").pop()!;
+        seen.add(suffix);
+      }
+      expect(seen.size).toBe(1000);
     });
   });
 

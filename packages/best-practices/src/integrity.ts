@@ -176,8 +176,18 @@ export interface ManifestVerifyResult {
   valid: boolean;
   reason?: string;
   mismatchedFiles?: string[];
-  /** True when verification succeeded only because no reference was present. */
+  /**
+   * True when verification succeeded only because no reference was present
+   * AND the caller did not request strict mode. Mutually exclusive with
+   * `valid: false` — strict-mode failures use `referenceMissing` instead.
+   */
   trustOnFirstUse?: boolean;
+  /**
+   * True when the reference manifest file did not exist on disk. Set
+   * regardless of strict mode so callers can distinguish "no reference"
+   * from "hash mismatch" / "corrupt reference".
+   */
+  referenceMissing?: boolean;
 }
 
 /** Options controlling verifyManifest behaviour. */
@@ -209,13 +219,19 @@ export function verifyManifest(
       return {
         valid: false,
         reason: `No reference manifest found at ${referencePath}. Refusing to trust BP library in strict mode.`,
-        trustOnFirstUse: true,
+        // REG-N7: Strict-fail must NOT also signal trustOnFirstUse —
+        // callers gate WARN-mode banners on trustOnFirstUse and would
+        // otherwise show a contradictory "trusting on first use" message
+        // alongside a hard failure. Use referenceMissing instead.
+        trustOnFirstUse: false,
+        referenceMissing: true,
       };
     }
     return {
       valid: true,
       reason: "No reference manifest (trust-on-first-use)",
       trustOnFirstUse: true,
+      referenceMissing: true,
     };
   }
 

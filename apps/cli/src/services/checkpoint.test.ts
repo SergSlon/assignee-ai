@@ -632,24 +632,103 @@ describe("checkpoint file permissions and redaction (H17)", () => {
     expect(mode).toBe(0o600);
   });
 
-  it("redacts AdminPassword, Token, PrivateKey, KeyMaterial, UserData via regex denylist", async () => {
+  // REG-N1 regression: real CFN property names that contain a sensitive
+  // substring but are NOT secrets must be preserved verbatim. The previous
+  // regex-based denylist over-matched and silently stripped these on resume,
+  // re-creating Cognito UserPools with no PasswordPolicy and EC2 instances
+  // with no UserData bootstrap script.
+  it("does NOT redact legitimate CFN property names that share secret substrings", async () => {
+    const state = {
+      ...baseGraphState,
+      resourceType: "AWS::Cognito::UserPool" as AgentState["resourceType"],
+      desiredState: {
+        UserPoolName: "prod-pool",
+        // Cognito UserPool: PasswordPolicy is the password complexity rules
+        // object, NOT the password itself. Must be preserved verbatim.
+        Policies: {
+          PasswordPolicy: {
+            MinimumLength: 14,
+            RequireUppercase: true,
+            RequireLowercase: true,
+            RequireNumbers: true,
+            RequireSymbols: true,
+            TemporaryPasswordValidityDays: 7,
+          },
+        },
+        // Cognito client TokenValidityUnits — JWT lifetime descriptors,
+        // not credentials.
+        TokenValidityUnits: {
+          AccessToken: "minutes",
+          IdToken: "minutes",
+          RefreshToken: "days",
+        },
+        // EC2 Instance UserData: a 20KB bootstrap shell script. Must NOT
+        // be redacted — losing it on checkpoint resume would launch the
+        // instance unbootstrapped.
+        UserData: "#!/bin/bash\nyum install -y nginx\nsystemctl enable nginx\n",
+        // EC2 KeyPair PublicKeyMaterial — the public half of the key pair,
+        // not secret. (KeyMaterial in CreateKeyPair RESPONSE is private,
+        // but that lives in API responses, never in CFN templates.)
+        // IAM LoginProfile flag — boolean, not the password
+        LoginProfile: {
+          PasswordResetRequired: true,
+        },
+      },
+    } as AgentState;
+
+    const checkpoint = serializeCheckpoint(state);
+    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+    const raw = await fs.readFile(filePath, "utf-8");
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.desiredState.Policies.PasswordPolicy).toEqual({
+      MinimumLength: 14,
+      RequireUppercase: true,
+      RequireLowercase: true,
+      RequireNumbers: true,
+      RequireSymbols: true,
+      TemporaryPasswordValidityDays: 7,
+    });
+    expect(parsed.desiredState.TokenValidityUnits).toEqual({
+      AccessToken: "minutes",
+      IdToken: "minutes",
+      RefreshToken: "days",
+    });
+    expect(parsed.desiredState.UserData).toBe(
+      "#!/bin/bash\nyum install -y nginx\nsystemctl enable nginx\n",
+    );
+    expect(parsed.desiredState.LoginProfile.PasswordResetRequired).toBe(true);
+  });
+
+  // REG-N1 regression: actually-secret CFN properties (the explicit
+  // allowlist) must still be redacted, including the nested LoginProfile
+  // Password case which is the canonical IAM User secret.
+  it("redacts the secret-bearing CFN properties from the explicit allowlist", async () => {
     const state = {
       ...baseGraphState,
       desiredState: {
         BucketName: "logs-prod",
-        // Real CFN shapes: IAM User LoginProfile.Password,
-        // RDS AdminPassword, Lambda Environment variables with tokens,
-        // EC2 KeyPair KeyMaterial, EC2 Instance UserData.
-        AdminPassword: "Correct-Horse-Battery-Staple",
-        Token: "ghp_1234567890abcdef1234567890abcdef1234",
-        ApiKey: "xoxb-123-456-abc",
+        // RDS DBInstance master credentials
+        MasterUserPassword: "Correct-Horse-Battery-Staple",
+        // Secrets Manager secret payload
+        SecretString: '{"username":"admin","password":"hunter2"}',
+        // STS / IAM AccessKey response shapes
+        SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        SessionToken: "FwoGZXIvYXdzEJr...",
+        // Certificate Manager / EC2 KeyPair private material
         PrivateKey: "-----BEGIN RSA PRIVATE KEY-----MIIE...",
-        KeyMaterial: "ssh-rsa AAAAB3NzaC1yc2E...",
-        UserData: "#!/bin/bash\nexport DB_PASSWORD=hunter2",
+        PrivateKeyPassphrase: "phrase",
+        RSAPrivateKey: "-----BEGIN RSA PRIVATE KEY-----...",
+        // EKS bootstrap token
+        BootstrapToken: "abcdef.0123456789abcdef",
+        // DocDB / DAX
+        MasterPassword: "docdb-master",
+        // Workspaces
+        AdminPassword: "ws-admin",
+        // Nested IAM User LoginProfile.Password — the canonical IAM User
+        // secret. Must be redacted even though the parent key isn't.
         LoginProfile: {
           Password: "TempPass123!",
-          // Sibling field name also matches /password/i — denylist is
-          // intentionally aggressive, so this is also redacted.
           PasswordResetRequired: true,
         },
         // Neutral fields must be preserved
@@ -663,38 +742,43 @@ describe("checkpoint file permissions and redaction (H17)", () => {
     const raw = await fs.readFile(filePath, "utf-8");
     const parsed = JSON.parse(raw);
 
-    expect(parsed.desiredState.AdminPassword).toBe("[REDACTED]");
-    expect(parsed.desiredState.Token).toBe("[REDACTED]");
-    expect(parsed.desiredState.ApiKey).toBe("[REDACTED]");
+    expect(parsed.desiredState.MasterUserPassword).toBe("[REDACTED]");
+    expect(parsed.desiredState.SecretString).toBe("[REDACTED]");
+    expect(parsed.desiredState.SecretAccessKey).toBe("[REDACTED]");
+    expect(parsed.desiredState.SessionToken).toBe("[REDACTED]");
     expect(parsed.desiredState.PrivateKey).toBe("[REDACTED]");
-    expect(parsed.desiredState.KeyMaterial).toBe("[REDACTED]");
-    expect(parsed.desiredState.UserData).toBe("[REDACTED]");
-    // Nested LoginProfile.Password
+    expect(parsed.desiredState.PrivateKeyPassphrase).toBe("[REDACTED]");
+    expect(parsed.desiredState.RSAPrivateKey).toBe("[REDACTED]");
+    expect(parsed.desiredState.BootstrapToken).toBe("[REDACTED]");
+    expect(parsed.desiredState.MasterPassword).toBe("[REDACTED]");
+    expect(parsed.desiredState.AdminPassword).toBe("[REDACTED]");
+    // Nested LoginProfile.Password redacted; sibling flag preserved.
     expect(parsed.desiredState.LoginProfile.Password).toBe("[REDACTED]");
-    // Aggressive denylist also masks sibling /password/i matches
-    expect(parsed.desiredState.LoginProfile.PasswordResetRequired).toBe(
-      "[REDACTED]",
-    );
-    // Truly neutral fields preserved
+    expect(parsed.desiredState.LoginProfile.PasswordResetRequired).toBe(true);
+    // Neutral fields preserved
     expect(parsed.desiredState.Region).toBe("us-east-1");
     expect(parsed.desiredState.BackupRetentionPeriod).toBe(7);
     expect(parsed.desiredState.BucketName).toBe("logs-prod");
   });
 
-  it("redacts AKIA-pattern strings inside arbitrary values", async () => {
+  it("redacts AKIA- and ASIA-pattern strings inside arbitrary values", async () => {
     const state = {
       ...baseGraphState,
       desiredState: {
         BucketName: "logs-prod",
-        // Real AWS access-key format embedded in a neutral field
+        // Real AWS long-term access-key format embedded in a neutral field
         Description: "Migrated from AKIAIOSFODNN7EXAMPLE account",
         Tags: [
           { Key: "Owner", Value: "platform-team" },
           { Key: "MigratedFrom", Value: "AKIAIOSFODNN7EXAMPLE" },
+          // REG-N4: STS short-term session credential id (ASIA prefix)
+          { Key: "AssumedBy", Value: "ASIA1234567890ABCDEF" },
         ],
         Metadata: {
           // Nested neutral-named field with a leaked access key id
           LastOperator: "AKIA1234567890ABCDEF",
+          // ASIA in a nested string field
+          LastSession: "session=ASIAQQQQWWWWEEEERRRR rest of audit log",
         },
       },
     } as AgentState;
@@ -706,8 +790,10 @@ describe("checkpoint file permissions and redaction (H17)", () => {
 
     expect(parsed.desiredState.Description).toBe("[REDACTED]");
     expect(parsed.desiredState.Tags[1].Value).toBe("[REDACTED]");
+    expect(parsed.desiredState.Tags[2].Value).toBe("[REDACTED]");
     expect(parsed.desiredState.Tags[0].Value).toBe("platform-team");
     expect(parsed.desiredState.Metadata.LastOperator).toBe("[REDACTED]");
+    expect(parsed.desiredState.Metadata.LastSession).toBe("[REDACTED]");
   });
 
   it("still redacts the legacy keys covered by the previous allowlist", async () => {

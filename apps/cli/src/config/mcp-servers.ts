@@ -40,7 +40,9 @@ import { AWS_REGION } from "./constants.js";
 
 // ── Pinned MCP server versions ──────────────────────────────────────────────
 // Bump deliberately after reviewing upstream release notes. Never use @latest.
-const MCP_PINS = {
+// Exported so tests can reference the same pins instead of hardcoding @latest
+// fixtures (V3 audit finding — fixtures must drift-detect when prod pins move).
+export const MCP_PINS = {
   AWS_PRICING: "awslabs.aws-pricing-mcp-server@1.0.6",
   AWS_DOCUMENTATION: "awslabs.aws-documentation-mcp-server@1.1.1",
   AWS_IAM: "awslabs.iam-mcp-server@1.0.2",
@@ -98,33 +100,55 @@ function auditorEnv(region = AWS_REGION): Record<string, string> {
 }
 
 /**
- * Factory that returns the 2 core MCP server process configurations.
+ * Factory that returns the core MCP server process configurations.
  * Called at runtime (not module load) so credential env vars are available.
  *
  * Region notes:
  *   - Pricing: us-east-1 — AWS Pricing API only available in us-east-1
  *   - Docs:    no AWS creds — public documentation API via uvx subprocess
  *
- * Note: Schema fetching is handled
- * by CloudFormationSchemaService (direct SDK) — see Story 31.3.
+ * Graceful degradation (REG-N2): the Pricing server requires reader creds,
+ * but operator-only environments (e.g. `assignee plan` in dry-run, `assignee
+ * setup`, `assignee init`) must still be able to spawn the rest of the MCP
+ * stack and fall back to local pricing estimates. We therefore catch
+ * MissingAssigneeCredentialsError per-server and OMIT the entry rather than
+ * throwing — mirroring the contract enshrined in
+ * aws-resource-discovery.ts:115-128 and matching how
+ * getOptionalMcpServerConfigs() already handles auditor/billing servers.
+ *
+ * Other unexpected errors are re-thrown.
+ *
+ * Note: Schema fetching is handled by CloudFormationSchemaService (direct
+ * SDK) — see Story 31.3.
  */
 export function getMcpServerConfigs(): Record<string, McpServerConfig> {
-  return {
-    // Pricing API is only available in us-east-1
-    // --with "botocore[crt]" is required for the pricing server's AWS credential chain
-    [McpServerName.PRICING]: {
+  const configs: Record<string, McpServerConfig> = {};
+
+  // Pricing API is only available in us-east-1.
+  // --with "botocore[crt]" is required for the pricing server's AWS
+  // credential chain. Reader-scoped — gracefully omitted on operator-only
+  // environments so non-pricing commands can still spawn the MCP stack.
+  try {
+    configs[McpServerName.PRICING] = {
       command: McpCommand.UVX,
       args: ["--with", "botocore[crt]", MCP_PINS.AWS_PRICING],
       env: readerEnv(DEFAULT_AWS_REGION),
-    },
-    // Documentation server: targeted section-level access to AWS official docs via read_sections.
-    // Complements the Knowledge server (which adds blogs/What's New/Builder Center/regional data).
-    // No AWS credentials needed — public documentation API.
-    [McpServerName.DOCS]: {
-      command: McpCommand.UVX,
-      args: [MCP_PINS.AWS_DOCUMENTATION],
-    },
+    };
+  } catch (err) {
+    if (!(err instanceof MissingAssigneeCredentialsError)) throw err;
+    // Reader creds unset — fall back to local pricing estimates.
+  }
+
+  // Documentation server: targeted section-level access to AWS official
+  // docs via read_sections. Complements the Knowledge server (which adds
+  // blogs/What's New/Builder Center/regional data). No AWS credentials
+  // needed — public documentation API.
+  configs[McpServerName.DOCS] = {
+    command: McpCommand.UVX,
+    args: [MCP_PINS.AWS_DOCUMENTATION],
   };
+
+  return configs;
 }
 
 /**

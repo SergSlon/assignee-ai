@@ -37,6 +37,28 @@ const MCP_ENV = {
   FASTMCP_LOG_LEVEL: "ERROR",
 };
 
+// ── Pinned MCP server versions ──────────────────────────────────────────────
+// V3 audit finding (2026-04-06): never use @latest in fixture-capture scripts.
+// Unpinned upstream creates a fixture-supply-chain risk — a compromised package
+// would silently land in our captured-responses/ corpus on the next refresh.
+//
+// MUST be kept in sync with apps/cli/src/config/mcp-servers.ts MCP_PINS.
+// CI guard: apps/cli/src/services/mcp-client.unit.test.ts asserts MCP_PINS
+// never contains @latest. When bumping a pin in mcp-servers.ts, also bump
+// the matching value here.
+const MCP_PINS = {
+  AWS_PRICING: "awslabs.aws-pricing-mcp-server@1.0.6",
+  AWS_DOCUMENTATION: "awslabs.aws-documentation-mcp-server@1.1.1",
+  AWS_IAM: "awslabs.iam-mcp-server@1.0.2",
+  AWS_WA_SECURITY: "awslabs.well-architected-security-mcp-server@1.0.2",
+  AWS_COST_MANAGEMENT: "awslabs.cost-management-mcp-server@1.0.2",
+  // CFN server isn't part of the runtime CLI MCP_PINS (it's only used to
+  // refresh fixtures here) but we still pin it for the same supply-chain
+  // reason. Bump deliberately after reviewing upstream release notes.
+  // Pinned 2026-04-06 to whatever was the latest stable at the time.
+  AWS_CFN: "awslabs.cfn-mcp-server@1.0.19",
+};
+
 // ─── JSON-RPC over stdio (newline-delimited) ───────────────────────────────
 
 let nextId = 1;
@@ -184,7 +206,7 @@ async function captureCfnSchemas() {
   return await callMcpServer(
     "cfn-mcp-server",
     "uvx",
-    ["awslabs.cfn-mcp-server@latest"],
+    [MCP_PINS.AWS_CFN],
     MCP_ENV,
     resourceTypes.map((r) => ({
       tool: "get_resource_schema_information",
@@ -365,7 +387,7 @@ async function capturePricing() {
   return await callMcpServer(
     "aws-pricing-mcp-server",
     "uvx",
-    ["--with", "botocore[crt]", "awslabs.aws-pricing-mcp-server@latest"],
+    ["--with", "botocore[crt]", MCP_PINS.AWS_PRICING],
     MCP_ENV,
     calls,
   );
@@ -466,7 +488,7 @@ async function captureDocumentation() {
   return await callMcpServer(
     "aws-documentation-mcp-server",
     "uvx",
-    ["awslabs.aws-documentation-mcp-server@latest"],
+    [MCP_PINS.AWS_DOCUMENTATION],
     {}, // No AWS creds needed
     calls,
   );
@@ -506,7 +528,7 @@ async function captureIamPolicy() {
   return await callMcpServer(
     "iam-mcp-server",
     "uvx",
-    ["awslabs.iam-mcp-server@latest", "--readonly"],
+    [MCP_PINS.AWS_IAM, "--readonly"],
     MCP_ENV,
     calls,
   );
@@ -532,7 +554,7 @@ async function captureWellArchitectedSecurity() {
   return await callMcpServer(
     "well-architected-security-mcp-server",
     "uvx",
-    ["awslabs.well-architected-security-mcp-server@latest"],
+    [MCP_PINS.AWS_WA_SECURITY],
     MCP_ENV,
     calls,
   );

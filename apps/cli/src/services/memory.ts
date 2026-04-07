@@ -303,37 +303,10 @@ export class MemoryService {
     maxRecords = 200,
     preserveFilter?: (record: ProvisionRecord) => boolean,
   ): Promise<number> {
-    const existing = await this.readProvisions();
-    if (existing.length <= maxRecords) return 0;
-
-    let trimmed: ProvisionRecord[];
-    if (preserveFilter) {
-      // Split into preserved (must keep) and candidates (can trim)
-      const preserved: ProvisionRecord[] = [];
-      const candidates: ProvisionRecord[] = [];
-      for (const record of existing) {
-        if (preserveFilter(record)) {
-          preserved.push(record);
-        } else {
-          candidates.push(record);
-        }
-      }
-      // Keep the most recent candidates up to the remaining budget
-      const budget = Math.max(0, maxRecords - preserved.length);
-      const keptCandidates = candidates.slice(-budget);
-      trimmed = [...keptCandidates, ...preserved].sort(
-        (a, b) =>
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-      );
-    } else {
-      trimmed = existing.slice(-maxRecords);
-    }
-
-    const removed = existing.length - trimmed.length;
-    if (removed === 0) return 0;
-
     await this.ensureDir();
     const target = this.filePath(PROVISIONS_FILE);
+    // Acquire lock BEFORE reading so a concurrent appendProvision can't slip
+    // a record between read and write and have it clobbered. (REG-N5)
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -342,11 +315,40 @@ export class MemoryService {
       return 0;
     }
     try {
+      const existing = await this.readProvisions();
+      if (existing.length <= maxRecords) return 0;
+
+      let trimmed: ProvisionRecord[];
+      if (preserveFilter) {
+        // Split into preserved (must keep) and candidates (can trim)
+        const preserved: ProvisionRecord[] = [];
+        const candidates: ProvisionRecord[] = [];
+        for (const record of existing) {
+          if (preserveFilter(record)) {
+            preserved.push(record);
+          } else {
+            candidates.push(record);
+          }
+        }
+        // Keep the most recent candidates up to the remaining budget
+        const budget = Math.max(0, maxRecords - preserved.length);
+        const keptCandidates = candidates.slice(-budget);
+        trimmed = [...keptCandidates, ...preserved].sort(
+          (a, b) =>
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+        );
+      } else {
+        trimmed = existing.slice(-maxRecords);
+      }
+
+      const removed = existing.length - trimmed.length;
+      if (removed === 0) return 0;
+
       await this.atomicWrite(target, JSON.stringify(trimmed, null, 2));
+      return removed;
     } finally {
       await this.releaseLock(target);
     }
-    return removed;
   }
 
   /**
@@ -354,12 +356,10 @@ export class MemoryService {
    * @returns Number of records removed.
    */
   async rotateFailures(maxRecords = 100): Promise<number> {
-    const existing = await this.readFailures();
-    if (existing.length <= maxRecords) return 0;
-    const removed = existing.length - maxRecords;
-    const trimmed = existing.slice(-maxRecords);
     await this.ensureDir();
     const target = this.filePath(FAILURES_FILE);
+    // Acquire lock BEFORE reading to prevent TOCTOU loss on concurrent
+    // appendFailure. (REG-N5)
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -368,11 +368,15 @@ export class MemoryService {
       return 0;
     }
     try {
+      const existing = await this.readFailures();
+      if (existing.length <= maxRecords) return 0;
+      const removed = existing.length - maxRecords;
+      const trimmed = existing.slice(-maxRecords);
       await this.atomicWrite(target, JSON.stringify(trimmed, null, 2));
+      return removed;
     } finally {
       await this.releaseLock(target);
     }
-    return removed;
   }
 
   /**
@@ -380,12 +384,10 @@ export class MemoryService {
    * @returns Number of records removed.
    */
   async rotatePatterns(maxRecords = 100): Promise<number> {
-    const existing = await this.readPatterns();
-    if (existing.length <= maxRecords) return 0;
-    const removed = existing.length - maxRecords;
-    const trimmed = existing.slice(-maxRecords);
     await this.ensureDir();
     const target = this.filePath(FileName.PATTERNS);
+    // Acquire lock BEFORE reading to prevent TOCTOU loss on concurrent
+    // upsertPattern. (REG-N5)
     const acquired = await this.acquireLock(target);
     if (!acquired) {
       process.stderr.write(
@@ -394,11 +396,15 @@ export class MemoryService {
       return 0;
     }
     try {
+      const existing = await this.readPatterns();
+      if (existing.length <= maxRecords) return 0;
+      const removed = existing.length - maxRecords;
+      const trimmed = existing.slice(-maxRecords);
       await this.atomicWrite(target, JSON.stringify(trimmed, null, 2));
+      return removed;
     } finally {
       await this.releaseLock(target);
     }
-    return removed;
   }
 }
 

@@ -25,21 +25,57 @@ import {
 } from "../config/constants.js";
 
 /**
- * Regex denylist for sensitive field names.
- * Any key whose name matches this pattern is redacted to "[REDACTED]" before
- * the checkpoint is written to disk. This replaces the previous shallow
- * allowlist which missed AdminPassword, Token, ApiKey, PrivateKey, KeyMaterial,
- * UserData, LoginProfile.Password, etc.
- * @see SECURITY-AUDIT.md — SEC-02 / H17
+ * Explicit allowlist of fully-qualified CloudFormation property names that
+ * carry secret material. We use an exact-match allowlist (NOT a substring
+ * regex) because real CFN schemas contain many legitimate property names
+ * that share substrings with sensitive words but are NOT secrets:
+ *
+ *   - PasswordPolicy            (Cognito UserPool — password complexity rules)
+ *   - UserData                  (EC2 instance bootstrap script)
+ *   - TokenValidityUnits        (Cognito JWT lifetime descriptor)
+ *   - PasswordResetRequired     (IAM LoginProfile flag, NOT the password)
+ *   - CredentialReportExpiration (IAM credential report metadata)
+ *
+ * Redacting these would silently strip critical infrastructure config on
+ * checkpoint resume (a Cognito UserPool re-created without password policy,
+ * an EC2 instance launched without its bootstrap script, etc.).
+ *
+ * @see SECURITY-AUDIT.md — SEC-02 / H17 (W2-B regression REG-N1)
  */
-const SENSITIVE_KEY_PATTERN =
-  /password|secret|token|credential|userdata|privatekey|apikey|keymaterial/i;
+const SENSITIVE_KEY_NAMES: ReadonlySet<string> = new Set([
+  // RDS / DocDB / DAX / Workspaces master credentials
+  "MasterUserPassword",
+  "MasterPassword",
+  "AdminPassword",
+  "DefaultPassword",
+  "DefaultUserPassword",
+  // Generic top-level password (IAM LoginProfile, SecretsManager, etc.)
+  "Password",
+  // Secrets Manager secret payload
+  "SecretString",
+  // IAM AccessKey / STS session credentials
+  "SecretAccessKey",
+  "SessionToken",
+  // Certificate Manager / Key Pair private key material
+  "PrivateKey",
+  "PrivateKeyPassphrase",
+  "RSAPrivateKey",
+  // EKS / cluster bootstrap tokens
+  "BootstrapToken",
+]);
 
 /**
- * Pattern for AWS access key identifiers. Any string value matching this
- * pattern is redacted regardless of its key name.
+ * Pattern for AWS access key identifiers (AKIA = long-term IAM access keys,
+ * ASIA = STS short-term session credentials). Any string value matching this
+ * pattern is redacted regardless of its key name. This is defense-in-depth
+ * over the key allowlist — it walks values, so it has no false-positive risk
+ * on innocuously-named properties.
+ *
+ * We deliberately do NOT try to match the 40-char base64 secret-access-key
+ * shape: it is too generic and would false-positive on bucket names, ARNs,
+ * and other long opaque identifiers.
  */
-const AKIA_PATTERN = /AKIA[0-9A-Z]{16}/;
+const AKIA_PATTERN = /A[KS]IA[0-9A-Z]{16}/;
 
 /** Value used to mask redacted fields. */
 const REDACTED_VALUE = "[REDACTED]";
@@ -54,7 +90,7 @@ function redactSensitiveFields(
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(state)) {
-    if (SENSITIVE_KEY_PATTERN.test(key)) {
+    if (SENSITIVE_KEY_NAMES.has(key)) {
       result[key] = REDACTED_VALUE;
       continue;
     }

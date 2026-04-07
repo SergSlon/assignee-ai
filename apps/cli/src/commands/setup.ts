@@ -309,11 +309,17 @@ export const setupCommand = new Command(CommandName.SETUP)
       // Always use fromIni() to read from the AWS credentials file/config.
       // Use --profile to specify a non-default profile.
       const { fromIni } = await import("@aws-sdk/credential-providers");
+      // L1 V1 audit (2026-04-06): honor process.env.AWS_PROFILE so users who
+      // export AWS_PROFILE in their shell don't silently get the "default"
+      // profile when they run `assignee setup` without --profile. Mirrors
+      // standard AWS CLI behavior.
+      const resolvedProfile =
+        options.profile ?? process.env["AWS_PROFILE"] ?? "default";
       const clientConfig: {
         credentials: ReturnType<typeof fromIni>;
         region?: string;
       } = {
-        credentials: fromIni({ profile: options.profile ?? "default" }),
+        credentials: fromIni({ profile: resolvedProfile }),
       };
 
       // ── Verify admin credentials ─────────────────────────────────────

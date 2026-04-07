@@ -11,7 +11,13 @@ import * as fs from "node:fs/promises";
 import * as fsSync from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { log, LOG_ACTIONS } from "./logger.js";
+import {
+  log,
+  LOG_ACTIONS,
+  clearEnsuredDirCacheForTests,
+  setLogFileSizeLimitForTests,
+  resetLogFileSizeLimitForTests,
+} from "./logger.js";
 import type { LogEvent } from "./logger.js";
 
 describe("logger", () => {
@@ -28,12 +34,19 @@ describe("logger", () => {
       path.join(os.tmpdir(), "assignee-logger-test-"),
     );
     process.env["ASSIGNEE_LOG_DIR"] = tmpLogDir;
+    // Each test gets a fresh tmp dir, so the module-level "ensured dirs"
+    // cache must be cleared too — otherwise tests that change ASSIGNEE_LOG_DIR
+    // mid-suite would skip mkdir on a never-created path. (REG-N9)
+    clearEnsuredDirCacheForTests();
+    resetLogFileSizeLimitForTests();
   });
 
   afterEach(async () => {
     stderrSpy.mockRestore();
     process.argv = originalArgv;
     process.env = { ...originalEnv };
+    clearEnsuredDirCacheForTests();
+    resetLogFileSizeLimitForTests();
     try {
       await fs.rm(tmpLogDir, { recursive: true, force: true });
     } catch {
@@ -340,6 +353,132 @@ describe("logger", () => {
     ]?.[0] as string;
     expect(written).toContain("apply_failed");
     expect(written).toContain("persistentLogFallback");
+  });
+
+  // ── REG-N9: hot-path optimisation tests ─────────────────────────────────
+  // ESM forbids spying on `node:fs` exports, so we verify the directory cache
+  // behaviorally: after the first persisted call creates the dir, externally
+  // delete the dir and call log() again. With the cache, the second call
+  // skips mkdirSync → appendFileSync fails (ENOENT) → fallback to stderr.
+  // Without the cache, mkdirSync would silently recreate the dir and the
+  // second call would succeed (no fallback). The presence of the fallback
+  // marker in stderr is therefore the contract under test.
+  it("REG-N9: caches the directory mkdir so the second persisted call skips the syscall", () => {
+    delete process.env["ASSIGNEE_VERBOSITY"];
+
+    // First call: creates the directory and writes the file.
+    log({
+      ts: "2026-04-06T12:00:00.000Z",
+      runId: "550e8400-e29b-41d4-a716-446655440010",
+      level: "warn",
+      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+    });
+    expect(fsSync.existsSync(tmpLogDir)).toBe(true);
+    // First call writes the file successfully — no fallback marker yet.
+    const writesAfterFirst = stderrSpy.mock.calls
+      .map((c) => String(c[0] ?? ""))
+      .filter((s) => s.includes("persistentLogFallback"));
+    expect(writesAfterFirst).toHaveLength(0);
+
+    // Externally remove the log directory between calls. With the dir cache
+    // the next log() will NOT mkdirSync — appendFileSync will hit ENOENT and
+    // fall back to stderr.
+    fsSync.rmSync(tmpLogDir, { recursive: true, force: true });
+
+    log({
+      ts: "2026-04-06T12:00:00.000Z",
+      runId: "550e8400-e29b-41d4-a716-446655440011",
+      level: "warn",
+      action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+    });
+
+    // Cache hit means the second call did NOT recreate the directory.
+    expect(fsSync.existsSync(tmpLogDir)).toBe(false);
+    // The fallback path was taken — proof that mkdirSync was NOT re-invoked.
+    const fallbackWrites = stderrSpy.mock.calls
+      .map((c) => String(c[0] ?? ""))
+      .filter((s) => s.includes("persistentLogFallback"));
+    expect(fallbackWrites.length).toBeGreaterThan(0);
+    expect(fallbackWrites[0]).toContain("memory_write_failed");
+  });
+
+  it("REG-N9: rotates to cli-YYYY-MM-DD.<n>.jsonl when active file exceeds the size limit", () => {
+    delete process.env["ASSIGNEE_VERBOSITY"];
+    // Tiny cap so a single big event triggers rotation on the next write.
+    setLogFileSizeLimitForTests(200);
+
+    log({
+      ts: "2026-04-06T12:00:00.000Z",
+      runId: "550e8400-e29b-41d4-a716-446655440020",
+      level: "error",
+      action: LOG_ACTIONS.APPLY_FAILED,
+      extras: { padding: "x".repeat(300) },
+    });
+    log({
+      ts: "2026-04-06T12:00:00.000Z",
+      runId: "550e8400-e29b-41d4-a716-446655440021",
+      level: "error",
+      action: LOG_ACTIONS.APPLY_FAILED,
+      extras: { padding: "y".repeat(300) },
+    });
+    log({
+      ts: "2026-04-06T12:00:00.000Z",
+      runId: "550e8400-e29b-41d4-a716-446655440022",
+      level: "error",
+      action: LOG_ACTIONS.APPLY_FAILED,
+      extras: { padding: "z".repeat(300) },
+    });
+
+    const entries = fsSync
+      .readdirSync(tmpLogDir)
+      .filter((e) => e.startsWith("cli-") && e.endsWith(".jsonl"));
+    // Base file + at least one rotated file.
+    expect(entries.length).toBeGreaterThanOrEqual(2);
+    const hasBase = entries.some((e) =>
+      /^cli-\d{4}-\d{2}-\d{2}\.jsonl$/.test(e),
+    );
+    const hasRotated = entries.some((e) =>
+      /^cli-\d{4}-\d{2}-\d{2}\.\d+\.jsonl$/.test(e),
+    );
+    expect(hasBase).toBe(true);
+    expect(hasRotated).toBe(true);
+
+    // No event is dropped during rotation — concatenate everything and assert
+    // every runId is present.
+    const allContent = entries
+      .map((e) => fsSync.readFileSync(path.join(tmpLogDir, e), "utf-8"))
+      .join("");
+    expect(allContent).toContain("446655440020");
+    expect(allContent).toContain("446655440021");
+    expect(allContent).toContain("446655440022");
+  });
+
+  it("REG-N9: rotation walks counters when intermediate rotated files are also full", () => {
+    delete process.env["ASSIGNEE_VERBOSITY"];
+    setLogFileSizeLimitForTests(150);
+
+    // Pre-create base + .1 already over the cap so the walker has to advance
+    // to .2.
+    const day = new Date().toISOString().slice(0, 10);
+    const base = path.join(tmpLogDir, `cli-${day}.jsonl`);
+    const r1 = path.join(tmpLogDir, `cli-${day}.1.jsonl`);
+    fsSync.writeFileSync(base, "x".repeat(200));
+    fsSync.writeFileSync(r1, "y".repeat(200));
+
+    log({
+      ts: "2026-04-06T12:00:00.000Z",
+      runId: "550e8400-e29b-41d4-a716-446655440030",
+      level: "error",
+      action: LOG_ACTIONS.APPLY_FAILED,
+    });
+
+    const r2 = path.join(tmpLogDir, `cli-${day}.2.jsonl`);
+    expect(fsSync.existsSync(r2)).toBe(true);
+    const content = fsSync.readFileSync(r2, "utf-8");
+    expect(content).toContain("446655440030");
+    // Sanity: pre-existing files were NOT modified (no auto-delete).
+    expect(fsSync.readFileSync(base, "utf-8")).toBe("x".repeat(200));
+    expect(fsSync.readFileSync(r1, "utf-8")).toBe("y".repeat(200));
   });
 
   it("LOG_ACTIONS contains expected action names", () => {

@@ -18,9 +18,15 @@ export default [
       reportUnusedDisableDirectives: false,
     },
     rules: {
-      // Tracked debt — to be fixed incrementally; see CI hardening story.
-      "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-unused-vars": "off",
+      // N6 audit finding (2026-04-06): these were previously "off" which
+      // gave a false signal that lint enforces strict types. They are now
+      // "warn" so the lint pipeline can catch NEW violations via the
+      // package's `lint` script (`--max-warnings <ceiling>`). The ceiling
+      // is set just above the current debt count so CI fails on regressions
+      // while we burn down the existing list. To clear remaining debt, fix
+      // the warnings reported by `pnpm lint` and lower the ceiling.
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-unused-vars": "warn",
       "no-useless-escape": "off",
       // Codebase intentionally uses control chars in sanitization regexes.
       "no-control-regex": "off",

@@ -392,7 +392,7 @@ describe("resourceProvisionerNode — compound context", () => {
       expect(mockProvisioner.createResource).toHaveBeenCalledWith(
         "AWS::S3::Bucket",
         expect.any(String),
-        expect.stringMatching(/^test-compound-run-001-[0-9a-f]{8}$/),
+        expect.stringMatching(/^test-compound-run-001-[0-9a-f]{12}$/),
       );
     });
 
@@ -425,7 +425,7 @@ describe("resourceProvisionerNode — compound context", () => {
       expect(mockProvisioner.createResource).toHaveBeenCalledWith(
         "AWS::IAM::Role",
         expect.any(String),
-        expect.stringMatching(/^test-compound-run-001-2-[0-9a-f]{8}$/),
+        expect.stringMatching(/^test-compound-run-001-2-[0-9a-f]{12}$/),
       );
     });
 
@@ -458,7 +458,7 @@ describe("resourceProvisionerNode — compound context", () => {
       expect(mockProvisioner.createResource).toHaveBeenCalledWith(
         "AWS::IAM::Role",
         expect.any(String),
-        expect.stringMatching(/^test-compound-run-001-5-[0-9a-f]{8}$/),
+        expect.stringMatching(/^test-compound-run-001-5-[0-9a-f]{12}$/),
       );
     });
   });
@@ -1065,7 +1065,7 @@ describe("full compound dispatcher -> provisioner integration", () => {
     expect(mockProvisioner.createResource).toHaveBeenCalledWith(
       "AWS::IAM::Role",
       expect.any(String),
-      expect.stringMatching(/^test-compound-run-001-[0-9a-f]{8}$/),
+      expect.stringMatching(/^test-compound-run-001-[0-9a-f]{12}$/),
     );
   });
 

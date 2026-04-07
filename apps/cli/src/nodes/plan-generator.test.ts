@@ -769,6 +769,93 @@ describe("applyToCfnTransforms", () => {
     };
     expect(lifecycle.Rules[0]!.Transitions[0]!.TransitionInDays).toBe(30);
   });
+
+  // ── V1 PARTIAL: LifecycleExpirationDays sister-bug ─────────────────────
+  // The transition-days fix used Number.isFinite, but the expiration-days
+  // parser still used the `parseInt(...) ?` antipattern. Non-numeric input
+  // silently became `undefined`. After the fix non-numeric input is still
+  // dropped (no expiration emitted) but the *path* is explicit and a future
+  // change can branch on it.
+  it("emits ExpirationInDays when LifecycleExpirationDays > transition", () => {
+    const result = applyToCfnTransforms(
+      {
+        EnableLifecycle: true,
+        LifecycleTransitionDays: "30",
+        LifecycleExpirationDays: "365",
+      },
+      "AWS::S3::Bucket",
+    );
+    const lifecycle = result["LifecycleConfiguration"] as {
+      Rules: Array<{
+        ExpirationInDays?: number;
+        Transitions: Array<{ TransitionInDays: number }>;
+      }>;
+    };
+    expect(lifecycle.Rules[0]!.ExpirationInDays).toBe(365);
+  });
+
+  it("clamps ExpirationInDays to transition+1 when input is too small", () => {
+    const result = applyToCfnTransforms(
+      {
+        EnableLifecycle: true,
+        LifecycleTransitionDays: "30",
+        LifecycleExpirationDays: "10",
+      },
+      "AWS::S3::Bucket",
+    );
+    const lifecycle = result["LifecycleConfiguration"] as {
+      Rules: Array<{ ExpirationInDays?: number }>;
+    };
+    expect(lifecycle.Rules[0]!.ExpirationInDays).toBe(31);
+  });
+
+  it("treats non-numeric LifecycleExpirationDays as 'no expiration' (V1 sister-bug)", () => {
+    const result = applyToCfnTransforms(
+      {
+        EnableLifecycle: true,
+        LifecycleTransitionDays: "30",
+        LifecycleExpirationDays: "not-a-number",
+      },
+      "AWS::S3::Bucket",
+    );
+    const lifecycle = result["LifecycleConfiguration"] as {
+      Rules: Array<{ ExpirationInDays?: number }>;
+    };
+    // Parser yields undefined → no ExpirationInDays key emitted.
+    expect(lifecycle.Rules[0]!.ExpirationInDays).toBeUndefined();
+  });
+
+  it("treats LifecycleExpirationDays = '0' as no expiration (AWS rejects 0-day)", () => {
+    const result = applyToCfnTransforms(
+      {
+        EnableLifecycle: true,
+        LifecycleTransitionDays: "30",
+        LifecycleExpirationDays: "0",
+      },
+      "AWS::S3::Bucket",
+    );
+    const lifecycle = result["LifecycleConfiguration"] as {
+      Rules: Array<{ ExpirationInDays?: number }>;
+    };
+    // 0 is parsed (Number.isFinite passes), but the downstream `> 0` guard
+    // skips the ExpirationInDays emission.
+    expect(lifecycle.Rules[0]!.ExpirationInDays).toBeUndefined();
+  });
+
+  it("treats LifecycleExpirationDays = '   ' (whitespace only) as undefined", () => {
+    const result = applyToCfnTransforms(
+      {
+        EnableLifecycle: true,
+        LifecycleTransitionDays: "30",
+        LifecycleExpirationDays: "   ",
+      },
+      "AWS::S3::Bucket",
+    );
+    const lifecycle = result["LifecycleConfiguration"] as {
+      Rules: Array<{ ExpirationInDays?: number }>;
+    };
+    expect(lifecycle.Rules[0]!.ExpirationInDays).toBeUndefined();
+  });
 });
 
 describe("planGeneratorNode — Story 18.9 toCfn integration", () => {

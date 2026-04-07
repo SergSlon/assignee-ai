@@ -72,128 +72,221 @@ export function resolveBpIntegrityMode(): BpIntegrityModeType {
 let cachedPractices: BestPractice[] | undefined;
 /** Track whether freshness/integrity warnings were already emitted this process. */
 let integrityWarningEmitted = false;
+/**
+ * REG-N3: separate flag tracking whether the integrity check has actually
+ * succeeded. This MUST be reset to `false` on every thrown
+ * BpIntegrityError, otherwise a tampered manifest would only block the
+ * first call in a process and silently allow every subsequent invocation
+ * to use the unverified rules.
+ */
+let integrityChecked = false;
 
 /**
  * Loads best practices from YAML files, caching the result for the
  * lifetime of the process. Also runs freshness + integrity checks on first
  * load and emits warnings to stderr (once per process).
  *
+ * REG-N3: practices are only cached AFTER the integrity check passes.
+ * If the integrity check throws, the cache stays empty so the next call
+ * re-runs the check (and re-throws), instead of returning unverified
+ * rules from a populated cache.
+ *
  * @returns Array of validated BestPractice entries
  */
 function loadCached(): BestPractice[] {
-  if (cachedPractices === undefined) {
-    cachedPractices = loadBestPractices();
+  // Fast path: cache only used once integrity check has actually succeeded.
+  if (cachedPractices !== undefined && integrityChecked) {
+    return cachedPractices;
+  }
 
-    // Run freshness + integrity checks on first load (Stories 12.4 + 12.6, H18).
-    if (!integrityWarningEmitted) {
-      integrityWarningEmitted = true;
-      const mode = resolveBpIntegrityMode();
+  // Load fresh rules into a local — do NOT populate the module cache until
+  // the integrity check passes. (REG-N3: a previous version assigned to
+  // cachedPractices BEFORE the check, so a tampered manifest only blocked
+  // the first call and silently allowed every subsequent call to use the
+  // cached, unverified rules.)
+  const loaded = loadBestPractices();
+  const mode = resolveBpIntegrityMode();
 
-      // Freshness — warn if oldest BP YAML is > 180 days old.
-      // Always evaluated, regardless of integrity mode. Best-effort.
-      try {
-        const freshness = computeFreshness();
-        if (freshness.isStale) {
-          process.stderr.write(
-            `⚠  Best-practice rules are stale (oldest file is ${freshness.oldestAgeDays} days old, threshold is ${freshness.staleThresholdDays}). ` +
-              `Consider updating assignee-ai.\n`,
-          );
-        }
-      } catch (err) {
-        log({
-          ts: new Date().toISOString(),
-          runId: "system",
-          level: "warn",
-          action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
-          extras: { phase: "freshness_check", error: String(err) },
-        });
+  // Freshness — warn if oldest BP YAML is > 180 days old. Best-effort,
+  // emitted at most once per process.
+  if (!integrityWarningEmitted) {
+    try {
+      const freshness = computeFreshness();
+      if (freshness.isStale) {
+        process.stderr.write(
+          `⚠  Best-practice rules are stale (oldest file is ${freshness.oldestAgeDays} days old, threshold is ${freshness.staleThresholdDays}). ` +
+            `Consider updating assignee-ai.\n`,
+        );
       }
-
-      if (mode === BpIntegrityMode.DISABLED) {
-        return cachedPractices;
-      }
-
-      // Integrity — verify against manifest.
-      // In enforce mode a missing manifest is a failure (strictNoReference).
-      // In warn mode TOFU still emits a loud warning but does not block.
-      try {
-        const computed = computeManifest();
-        const manifestPath = resolveBpManifestPath();
-        const verification = verifyManifest(computed, manifestPath, {
-          strictNoReference: mode === BpIntegrityMode.ENFORCE,
-        });
-
-        if (verification.trustOnFirstUse && mode === BpIntegrityMode.WARN) {
-          // Always warn loudly on TOFU, even outside enforce mode.
-          process.stderr.write(
-            `⚠  BP manifest trust-on-first-use: no reference manifest at ${manifestPath}. ` +
-              `Running with unverified best-practices. Set ASSIGNEE_BP_INTEGRITY=enforce to block.\n`,
-          );
-        }
-
-        if (!verification.valid) {
-          const detail =
-            verification.mismatchedFiles &&
-            verification.mismatchedFiles.length > 0
-              ? ` Mismatched files: ${verification.mismatchedFiles.slice(0, 5).join(", ")}${verification.mismatchedFiles.length > 5 ? "…" : ""}`
-              : "";
-          const message = `BP manifest integrity check failed: ${verification.reason}${detail}`;
-
-          if (mode === BpIntegrityMode.ENFORCE) {
-            log({
-              ts: new Date().toISOString(),
-              runId: "system",
-              level: "error",
-              action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
-              extras: {
-                phase: "integrity_check",
-                mode,
-                reason: verification.reason,
-                mismatchedFiles: verification.mismatchedFiles,
-              },
-            });
-            throw new BpIntegrityError(
-              message,
-              verification.reason ?? "unknown",
-              verification.mismatchedFiles ?? [],
-            );
-          }
-
-          // Warn mode — print to stderr, do not block.
-          process.stderr.write(`⚠  ${message}\n`);
-          log({
-            ts: new Date().toISOString(),
-            runId: "system",
-            level: "warn",
-            action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
-            extras: {
-              phase: "integrity_check",
-              mode,
-              reason: verification.reason,
-            },
-          });
-        }
-      } catch (err) {
-        if (err instanceof BpIntegrityError) throw err;
-        // Unexpected failure during verification (e.g. fs error reading
-        // manifest). In enforce mode this is still a blocking condition.
-        if (mode === BpIntegrityMode.ENFORCE) {
-          throw new BpIntegrityError(
-            `BP integrity check failed unexpectedly: ${String(err)}`,
-            String(err),
-          );
-        }
-        log({
-          ts: new Date().toISOString(),
-          runId: "system",
-          level: "warn",
-          action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
-          extras: { phase: "integrity_check", error: String(err) },
-        });
-      }
+    } catch (err) {
+      log({
+        ts: new Date().toISOString(),
+        runId: "system",
+        level: "warn",
+        action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
+        extras: { phase: "freshness_check", error: String(err) },
+      });
     }
   }
+
+  if (mode === BpIntegrityMode.DISABLED) {
+    cachedPractices = loaded;
+    integrityChecked = true;
+    integrityWarningEmitted = true;
+    return cachedPractices;
+  }
+
+  // Integrity — verify against manifest.
+  // In enforce mode a missing manifest is a failure (strictNoReference).
+  // In warn mode TOFU still emits a loud warning but does not block.
+  try {
+    const computed = computeManifest();
+    const manifestPath = resolveBpManifestPath();
+    const verification = verifyManifest(computed, manifestPath, {
+      strictNoReference: mode === BpIntegrityMode.ENFORCE,
+    });
+
+    if (
+      verification.trustOnFirstUse &&
+      mode === BpIntegrityMode.WARN &&
+      !integrityWarningEmitted
+    ) {
+      // Always warn loudly on TOFU, even outside enforce mode.
+      process.stderr.write(
+        `⚠  BP manifest trust-on-first-use: no reference manifest at ${manifestPath}. ` +
+          `Running with unverified best-practices. Set ASSIGNEE_BP_INTEGRITY=enforce to block.\n`,
+      );
+    }
+
+    if (!verification.valid) {
+      const detail =
+        verification.mismatchedFiles && verification.mismatchedFiles.length > 0
+          ? ` Mismatched files: ${verification.mismatchedFiles.slice(0, 5).join(", ")}${verification.mismatchedFiles.length > 5 ? "…" : ""}`
+          : "";
+      const message = `BP manifest integrity check failed: ${verification.reason}${detail}`;
+
+      if (mode === BpIntegrityMode.ENFORCE) {
+        log({
+          ts: new Date().toISOString(),
+          runId: "system",
+          level: "error",
+          action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
+          extras: {
+            phase: "integrity_check",
+            mode,
+            reason: verification.reason,
+            mismatchedFiles: verification.mismatchedFiles,
+          },
+        });
+        // REG-N3: ensure cache + integrityChecked are NOT populated on
+        // throw, so the next call re-runs the check and re-throws.
+        cachedPractices = undefined;
+        integrityChecked = false;
+        throw new BpIntegrityError(
+          message,
+          verification.reason ?? "unknown",
+          verification.mismatchedFiles ?? [],
+        );
+      }
+
+      // Warn mode — print to stderr at most once per process, log every time.
+      if (!integrityWarningEmitted) {
+        process.stderr.write(`⚠  ${message}\n`);
+      }
+      log({
+        ts: new Date().toISOString(),
+        runId: "system",
+        level: "warn",
+        action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
+        extras: {
+          phase: "integrity_check",
+          mode,
+          reason: verification.reason,
+        },
+      });
+    }
+  } catch (err) {
+    if (err instanceof BpIntegrityError) {
+      // Already cleared the cache + flag above; just propagate.
+      throw err;
+    }
+    // Unexpected failure during verification (e.g. fs error reading
+    // manifest). In enforce mode this is still a blocking condition and
+    // must NOT poison the cache.
+    if (mode === BpIntegrityMode.ENFORCE) {
+      cachedPractices = undefined;
+      integrityChecked = false;
+      throw new BpIntegrityError(
+        `BP integrity check failed unexpectedly: ${String(err)}`,
+        String(err),
+      );
+    }
+    log({
+      ts: new Date().toISOString(),
+      runId: "system",
+      level: "warn",
+      action: LOG_ACTIONS.BP_EVALUATION_SKIPPED,
+      extras: { phase: "integrity_check", error: String(err) },
+    });
+  }
+
+  // Integrity check completed (or warn-mode tolerated a failure) — safe
+  // to cache the loaded rules now.
+  cachedPractices = loaded;
+  integrityChecked = true;
+  integrityWarningEmitted = true;
   return cachedPractices;
+}
+
+/**
+ * Build the list of normalized candidate paths for the BP manifest.
+ * Exported so the L5 audit regression test can assert every entry collapses
+ * through `path.normalize` and stays within a sane filesystem boundary.
+ *
+ * L5 V1 audit (2026-04-06): every candidate is normalized so `..` segments
+ * collapse predictably across platforms. Currently the candidates are
+ * static (no user input) but defense-in-depth is cheap.
+ */
+export function _listBpManifestCandidates(dirname: string): string[] {
+  return [
+    // Monorepo dev (apps/cli/src/nodes/)
+    path.normalize(
+      path.join(
+        dirname,
+        "..",
+        "..",
+        "..",
+        "..",
+        "packages",
+        "best-practices",
+        "manifest.json",
+      ),
+    ),
+    // Monorepo dist (apps/cli/dist/nodes/)
+    path.normalize(
+      path.join(
+        dirname,
+        "..",
+        "..",
+        "..",
+        "packages",
+        "best-practices",
+        "manifest.json",
+      ),
+    ),
+    // Installed layout: resolve via package name
+    path.normalize(
+      path.join(
+        dirname,
+        "..",
+        "..",
+        "..",
+        "@assignee",
+        "best-practices",
+        "manifest.json",
+      ),
+    ),
+  ];
 }
 
 /**
@@ -203,45 +296,16 @@ function loadCached(): BestPractice[] {
  */
 function resolveBpManifestPath(): string {
   const dirname = import.meta.dirname ?? process.cwd();
+  const candidates: string[] = _listBpManifestCandidates(dirname);
 
-  const candidates: string[] = [
-    // Monorepo dev (apps/cli/src/nodes/)
-    path.join(
-      dirname,
-      "..",
-      "..",
-      "..",
-      "..",
-      "packages",
-      "best-practices",
-      "manifest.json",
-    ),
-    // Monorepo dist (apps/cli/dist/nodes/)
-    path.join(
-      dirname,
-      "..",
-      "..",
-      "..",
-      "packages",
-      "best-practices",
-      "manifest.json",
-    ),
-    // Installed layout: resolve via package name
-    path.join(
-      dirname,
-      "..",
-      "..",
-      "..",
-      "@assignee",
-      "best-practices",
-      "manifest.json",
-    ),
-  ];
-
-  // Prefer createRequire.resolve for installed layouts — most reliable
+  // Prefer createRequire.resolve for installed layouts — most reliable.
+  // The resolved path is also normalized so the boundary invariant holds
+  // for every entry the loop below will iterate over.
   try {
     const req = createRequire(import.meta.url);
-    const resolved = req.resolve("@assignee/best-practices/manifest.json");
+    const resolved = path.normalize(
+      req.resolve("@assignee/best-practices/manifest.json"),
+    );
     candidates.unshift(resolved);
   } catch (err) {
     // createRequire.resolve may fail if manifest.json isn't in the package exports
@@ -285,6 +349,7 @@ function resolveBpManifestPath(): string {
 export function resetBPCache(): void {
   cachedPractices = undefined;
   integrityWarningEmitted = false;
+  integrityChecked = false;
 }
 
 /**

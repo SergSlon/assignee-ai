@@ -15,6 +15,7 @@ import {
   RecordingLlmAdapter,
   sanitizeFilenameSegment,
   redactStringValue,
+  addRecordingMiddleware,
 } from "./recorder.js";
 
 // ── isRecordingEnabled ──────────────────────────────────────────────────────
@@ -611,6 +612,129 @@ describe("RecordingInterceptor — value-level redaction (M-S2)", () => {
     expect(parsed["prompt"]).toBe(
       "User said: please use [REDACTED-AKIA] for the bucket policy",
     );
+  });
+});
+
+// ── REG-N8: addRecordingMiddleware type-safety regression ──────────────────
+// The middlewareStack.add signature was previously typed `(...args: any[])`
+// which silently accepted anything. Tighten to a real signature so future
+// callers get a compile error if they pass the wrong shape, AND verify the
+// middleware actually records SDK call success/failure at runtime.
+describe("addRecordingMiddleware (REG-N8)", () => {
+  function makeFakeClient() {
+    const added: Array<{
+      middleware: unknown;
+      options: Record<string, unknown> | undefined;
+    }> = [];
+    return {
+      added,
+      middlewareStack: {
+        add(middleware: unknown, options?: Record<string, unknown>): void {
+          added.push({ middleware, options });
+        },
+      },
+    };
+  }
+
+  it("registers a middleware function with deserialize step + name + priority", () => {
+    const t = createTestRecorder("run-mw-register");
+    try {
+      const client = makeFakeClient();
+      addRecordingMiddleware(client, t.recorder, "S3");
+
+      expect(client.added).toHaveLength(1);
+      expect(typeof client.added[0]!.middleware).toBe("function");
+      expect(client.added[0]!.options).toEqual({
+        step: "deserialize",
+        name: "recordingMiddleware",
+        priority: "low",
+      });
+    } finally {
+      cleanup(t.tmpDir);
+    }
+  });
+
+  it("middleware records successful SDK calls with input/output/duration", async () => {
+    const t = createTestRecorder("run-mw-success");
+    try {
+      const client = makeFakeClient();
+      addRecordingMiddleware(client, t.recorder, "CloudControl");
+
+      // Pull the registered middleware out, hand it a fake `next` and context.
+      const middleware = client.added[0]!.middleware as (
+        next: (a: { input?: unknown }) => Promise<{ output?: unknown }>,
+        ctx: { commandName?: string },
+      ) => (a: { input?: unknown }) => Promise<{ output?: unknown }>;
+
+      const handler = middleware(
+        async () =>
+          ({
+            output: { ProgressEvent: { OperationStatus: "SUCCESS" } },
+          }) as Record<string, unknown>,
+        { commandName: "CreateResourceCommand" },
+      );
+
+      await handler({
+        input: {
+          TypeName: "AWS::S3::Bucket",
+          DesiredState: '{"BucketName":"my-real-bucket-name"}',
+        },
+      });
+
+      // RecordingInterceptor writes one .json file per call (not jsonl).
+      const files = fs
+        .readdirSync(t.tmpDir)
+        .filter((f) => f.startsWith("sdk-") && f.endsWith(".json"));
+      expect(files.length).toBeGreaterThan(0);
+      const content = fs.readFileSync(path.join(t.tmpDir, files[0]!), "utf-8");
+      const last = JSON.parse(content);
+      expect(last.type).toBe("sdk");
+      expect(last.service).toBe("CloudControl");
+      expect(last.operation).toBe("CreateResourceCommand");
+      expect(last.input.TypeName).toBe("AWS::S3::Bucket");
+      expect(last.output.ProgressEvent.OperationStatus).toBe("SUCCESS");
+      expect(typeof last.durationMs).toBe("number");
+    } finally {
+      cleanup(t.tmpDir);
+    }
+  });
+
+  it("middleware records failed SDK calls and re-throws the error", async () => {
+    const t = createTestRecorder("run-mw-fail");
+    try {
+      const client = makeFakeClient();
+      addRecordingMiddleware(client, t.recorder, "EC2");
+
+      const middleware = client.added[0]!.middleware as (
+        next: (a: { input?: unknown }) => Promise<{ output?: unknown }>,
+        ctx: { commandName?: string },
+      ) => (a: { input?: unknown }) => Promise<{ output?: unknown }>;
+
+      const handler = middleware(
+        async () => {
+          throw new Error("AccessDenied: not authorized to RunInstances");
+        },
+        { commandName: "RunInstancesCommand" },
+      );
+
+      await expect(
+        handler({ input: { InstanceType: "t3.micro" } }),
+      ).rejects.toThrow("AccessDenied");
+
+      const files = fs
+        .readdirSync(t.tmpDir)
+        .filter((f) => f.startsWith("sdk-") && f.endsWith(".json"));
+      expect(files.length).toBeGreaterThan(0);
+      const content = fs.readFileSync(path.join(t.tmpDir, files[0]!), "utf-8");
+      const last = JSON.parse(content);
+      expect(last.type).toBe("sdk");
+      expect(last.service).toBe("EC2");
+      expect(last.operation).toBe("RunInstancesCommand");
+      expect(last.error).toContain("AccessDenied");
+      expect(last.output).toBeUndefined();
+    } finally {
+      cleanup(t.tmpDir);
+    }
   });
 });
 

@@ -55,16 +55,21 @@ vi.mock("@aws-sdk/client-ec2", () => {
 import { dynamodbStrategy } from "../dynamodb-strategy.js";
 import { igwStrategy } from "../igw-strategy.js";
 
-// ── Env-var snapshot ────────────────────────────────────────────────────────
-
-const ORIGINAL_ENV = { ...process.env };
+// ── Env-var isolation ───────────────────────────────────────────────────────
+// REG-N11: Use vi.stubEnv / vi.unstubAllEnvs instead of mutating process.env
+// directly. The previous snapshot+restore pattern leaked AWS_* keys when a
+// test threw before reaching afterEach (the snapshot was restored, but
+// vi.clearAllMocks ran first and left a partial state behind). vi.stubEnv
+// is auto-cleaned by `restoreMocks: true` and survives synchronous throws.
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 afterEach(() => {
-  process.env = { ...ORIGINAL_ENV };
+  // Belt-and-suspenders: even though restoreMocks:true unstubs envs, do it
+  // explicitly here so a missing config in the runner can't cause leakage.
+  vi.unstubAllEnvs();
 });
 
 // ── DynamoDB strategy ───────────────────────────────────────────────────────
@@ -72,9 +77,11 @@ afterEach(() => {
 describe("dynamodbStrategy.preDestroy", () => {
   describe("with operator credentials present", () => {
     beforeEach(() => {
-      process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
-      process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
-        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+      vi.stubEnv("ASSIGNEE_OPERATOR_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+      vi.stubEnv(
+        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      );
     });
 
     it("constructs the SDK client and sends UpdateTable to disable deletion protection", async () => {
@@ -95,11 +102,14 @@ describe("dynamodbStrategy.preDestroy", () => {
 
   describe("fail-closed when ASSIGNEE_OPERATOR_* missing", () => {
     beforeEach(() => {
-      delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
-      delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+      // REG-N11: stubEnv("KEY", undefined) deletes the variable, and the
+      // unstub on afterEach restores the original — guaranteed even if the
+      // test throws synchronously.
+      vi.stubEnv("ASSIGNEE_OPERATOR_ACCESS_KEY_ID", undefined as never);
+      vi.stubEnv("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY", undefined as never);
       // Belt-and-suspenders: shell AWS_* must NOT be honored
-      process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
-      process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
+      vi.stubEnv("AWS_ACCESS_KEY_ID", "shell-leak-key");
+      vi.stubEnv("AWS_SECRET_ACCESS_KEY", "shell-leak-secret");
     });
 
     it("throws MissingAssigneeCredentialsError and never calls the SDK", async () => {
@@ -128,9 +138,11 @@ describe("dynamodbStrategy.preDestroy", () => {
 describe("igwStrategy.preDestroy", () => {
   describe("with operator credentials present", () => {
     beforeEach(() => {
-      process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
-      process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
-        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+      vi.stubEnv("ASSIGNEE_OPERATOR_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+      vi.stubEnv(
+        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      );
     });
 
     it("describes the IGW and detaches every attached VPC", async () => {
@@ -181,11 +193,10 @@ describe("igwStrategy.preDestroy", () => {
 
   describe("fail-closed when ASSIGNEE_OPERATOR_* missing", () => {
     beforeEach(() => {
-      delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
-      delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
-      // Belt-and-suspenders: shell AWS_* must NOT be honored
-      process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
-      process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
+      vi.stubEnv("ASSIGNEE_OPERATOR_ACCESS_KEY_ID", undefined as never);
+      vi.stubEnv("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY", undefined as never);
+      vi.stubEnv("AWS_ACCESS_KEY_ID", "shell-leak-key");
+      vi.stubEnv("AWS_SECRET_ACCESS_KEY", "shell-leak-secret");
     });
 
     it("throws MissingAssigneeCredentialsError and never calls the SDK", async () => {
@@ -194,5 +205,31 @@ describe("igwStrategy.preDestroy", () => {
       ).rejects.toBeInstanceOf(MissingAssigneeCredentialsError);
       expect(mockEc2Send).not.toHaveBeenCalled();
     });
+  });
+});
+
+// REG-N11 regression: an env var stubbed in one test must NOT survive into
+// the next test, even if the previous test threw or did weird things to
+// process.env. We rely on `vi.unstubAllEnvs()` in afterEach.
+describe("REG-N11: env-var leakage between tests", () => {
+  it("stubbed AWS_ACCESS_KEY_ID is restored before this test runs", () => {
+    // Either it's truly undefined OR it's whatever the host runtime had
+    // BEFORE the suite started — what we must NOT see is the leaked value
+    // "shell-leak-key" from the fail-closed beforeEach blocks above.
+    expect(process.env["AWS_ACCESS_KEY_ID"]).not.toBe("shell-leak-key");
+    expect(process.env["AWS_SECRET_ACCESS_KEY"]).not.toBe("shell-leak-secret");
+  });
+
+  it("stubEnv with a real value is unstubbed by afterEach (sanity check)", () => {
+    vi.stubEnv("ASSIGNEE_OPERATOR_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE");
+    expect(process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"]).toBe(
+      "AKIAIOSFODNN7EXAMPLE",
+    );
+    // Manual unstub to prove the mechanism works mid-test.
+    vi.unstubAllEnvs();
+    // After unstub, the value is restored to whatever it was at suite start.
+    expect(process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"]).not.toBe(
+      "AKIAIOSFODNN7EXAMPLE",
+    );
   });
 });

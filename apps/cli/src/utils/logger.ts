@@ -87,6 +87,76 @@ export interface LogEvent {
 const LOG_DIR_ENV = "ASSIGNEE_LOG_DIR";
 
 /**
+ * Soft size cap for the daily log file. When the active file exceeds this
+ * size, subsequent writes go to a numbered rotation (cli-YYYY-MM-DD.<n>.jsonl)
+ * so a single hot run can't grow one file unboundedly.
+ *
+ * Default: 10 MiB. Override for tests via setLogFileSizeLimitForTests().
+ */
+export const LOG_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
+let logFileSizeLimitBytes = LOG_FILE_SIZE_LIMIT_BYTES;
+
+/**
+ * Module-level cache of directories we've already created via mkdirSync, so
+ * the persistent-log hot path skips the syscall after the first event in any
+ * given directory. (REG-N9)
+ *
+ * The cache is intentionally process-scoped: a long compound apply emits
+ * thousands of events to the same dir and the mkdirSync overhead is wasted
+ * I/O. The first call still mkdirs (recursive: true) so a deleted-mid-run
+ * directory will recreate on the next event after the cache is cleared.
+ */
+const ensuredDirs = new Set<string>();
+
+/**
+ * Test-only helpers — override the size limit and clear the dir cache so
+ * tests can simulate rotation without writing 10 MiB.
+ */
+export function setLogFileSizeLimitForTests(limitBytes: number): void {
+  logFileSizeLimitBytes = limitBytes;
+}
+export function resetLogFileSizeLimitForTests(): void {
+  logFileSizeLimitBytes = LOG_FILE_SIZE_LIMIT_BYTES;
+}
+export function clearEnsuredDirCacheForTests(): void {
+  ensuredDirs.clear();
+}
+
+/**
+ * Resolve the active log file path for `day`, rotating to a numbered suffix
+ * if the base file exceeds the size limit. Walks counters until it finds a
+ * file under the cap (or one that doesn't exist yet). Never deletes old files
+ * — that's a separate operator concern.
+ */
+function resolveActiveLogFile(dir: string, day: string): string {
+  const baseName = `cli-${day}.jsonl`;
+  const basePath = path.join(dir, baseName);
+  let stat: fs.Stats | undefined;
+  try {
+    stat = fs.statSync(basePath);
+  } catch {
+    return basePath;
+  }
+  if (stat.size < logFileSizeLimitBytes) return basePath;
+
+  // Base file is at/over cap — find the next available numbered slot.
+  for (let n = 1; n < 10_000; n++) {
+    const rotated = path.join(dir, `cli-${day}.${n}.jsonl`);
+    let rotStat: fs.Stats | undefined;
+    try {
+      rotStat = fs.statSync(rotated);
+    } catch {
+      // Doesn't exist — this is our slot.
+      return rotated;
+    }
+    if (rotStat.size < logFileSizeLimitBytes) return rotated;
+  }
+  // Pathological: 10 000 rotations all full. Fall back to the last one;
+  // operator-level cleanup is required at that point.
+  return path.join(dir, `cli-${day}.9999.jsonl`);
+}
+
+/**
  * Returns true when the user has opted-in to verbose / structured log output.
  *
  * Checked (in priority order):
@@ -132,8 +202,15 @@ function appendPersistent(event: LogEvent): void {
   const dir = resolveLogDir();
   const line = JSON.stringify(event) + "\n";
   try {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const filePath = path.join(dir, `cli-${formatDay(new Date())}.jsonl`);
+    // REG-N9: Skip the mkdirSync syscall once we've already created `dir`
+    // in this process. Long compound applies emit thousands of warn/error
+    // events to the same directory; the first call still mkdirs (recursive)
+    // so missing parents are created.
+    if (!ensuredDirs.has(dir)) {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      ensuredDirs.add(dir);
+    }
+    const filePath = resolveActiveLogFile(dir, formatDay(new Date()));
     fs.appendFileSync(filePath, line, { flag: "a", mode: 0o600 });
   } catch (err) {
     // Fall back to stderr so the event is not silently dropped. Include the

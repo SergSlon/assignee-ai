@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ProcessExitCode } from "../constants/errors.js";
+import { MCP_PINS } from "../config/mcp-servers.js";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
@@ -21,10 +22,18 @@ vi.mock("@langchain/mcp-adapters", () => ({
   MultiServerMCPClient: MockMultiServerMCPClient,
 }));
 
-vi.mock("../config/mcp-servers.js", () => ({
-  getMcpServerConfigs: vi.fn(),
-  getOptionalMcpServerConfigs: vi.fn(),
-}));
+vi.mock("../config/mcp-servers.js", async (importOriginal) => {
+  // Preserve the real MCP_PINS export so test fixtures can reference the
+  // pinned versions instead of hardcoding @latest (V3 audit). Only the
+  // factory functions are mocked.
+  const actual =
+    (await importOriginal()) as typeof import("../config/mcp-servers.js");
+  return {
+    MCP_PINS: actual.MCP_PINS,
+    getMcpServerConfigs: vi.fn(),
+    getOptionalMcpServerConfigs: vi.fn(),
+  };
+});
 
 let exitSpy: ReturnType<typeof vi.spyOn>;
 let stderrWriteSpy: any;
@@ -45,7 +54,7 @@ beforeEach(async () => {
   vi.mocked(configMod.getMcpServerConfigs).mockReturnValue({
     "aws-pricing-mcp-server": {
       command: "uvx",
-      args: ["awslabs.aws-pricing-mcp-server@latest"],
+      args: [MCP_PINS.AWS_PRICING],
       env: {},
     },
   });
@@ -71,10 +80,11 @@ async function freshImport() {
     MultiServerMCPClient: MockMultiServerMCPClient,
   }));
   vi.doMock("../config/mcp-servers.js", () => ({
+    MCP_PINS,
     getMcpServerConfigs: vi.fn(() => ({
       "aws-pricing-mcp-server": {
         command: "uvx",
-        args: ["awslabs.aws-pricing-mcp-server@latest"],
+        args: [MCP_PINS.AWS_PRICING],
         env: {},
       },
     })),
@@ -82,6 +92,20 @@ async function freshImport() {
   }));
   return import("./mcp-client.js");
 }
+
+describe("MCP_PINS supply-chain pinning (V3 audit)", () => {
+  it("never references @latest in any pin", () => {
+    for (const [name, pin] of Object.entries(MCP_PINS)) {
+      expect(pin, `${name} must be a pinned version, not @latest`).not.toMatch(
+        /@latest$/,
+      );
+      // Sanity: every pin must contain a semver-ish suffix.
+      expect(pin, `${name} must include an explicit @version`).toMatch(
+        /@\d+\.\d+\.\d+/,
+      );
+    }
+  });
+});
 
 describe("createMcpClient", () => {
   it("T7.12: creates and initializes client on first call", async () => {
@@ -156,15 +180,16 @@ describe("createMcpClient — lazy loading (Story 29.3)", () => {
       MultiServerMCPClient: MockMultiServerMCPClient,
     }));
     vi.doMock("../config/mcp-servers.js", () => ({
+      MCP_PINS,
       getMcpServerConfigs: vi.fn(() => ({
         "aws-pricing-mcp-server": {
           command: "uvx",
-          args: ["awslabs.aws-pricing-mcp-server@latest"],
+          args: [MCP_PINS.AWS_PRICING],
           env: {},
         },
         "aws-documentation-mcp-server": {
           command: "uvx",
-          args: ["awslabs.aws-documentation-mcp-server@latest"],
+          args: [MCP_PINS.AWS_DOCUMENTATION],
         },
       })),
       getOptionalMcpServerConfigs: vi.fn(() => ({
@@ -174,7 +199,7 @@ describe("createMcpClient — lazy loading (Story 29.3)", () => {
         },
         "iam-mcp-server": {
           command: "uvx",
-          args: ["awslabs.iam-mcp-server@latest", "--readonly"],
+          args: [MCP_PINS.AWS_IAM, "--readonly"],
           env: {},
         },
       })),
@@ -340,17 +365,18 @@ describe("optional server failure isolation", () => {
     });
 
     vi.doMock("../config/mcp-servers.js", () => ({
+      MCP_PINS,
       getMcpServerConfigs: vi.fn(() => ({
         "aws-pricing-mcp-server": {
           command: "uvx",
-          args: ["awslabs.aws-pricing-mcp-server@latest"],
+          args: [MCP_PINS.AWS_PRICING],
           env: {},
         },
       })),
       getOptionalMcpServerConfigs: vi.fn(() => ({
         "iam-mcp-server": {
           command: "uvx",
-          args: ["iam-mcp-server"],
+          args: [MCP_PINS.AWS_IAM],
           env: {},
         },
       })),

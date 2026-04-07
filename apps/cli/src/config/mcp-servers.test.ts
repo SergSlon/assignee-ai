@@ -14,7 +14,6 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { McpServerName, McpCommand } from "../constants/mcp.js";
-import { MissingAssigneeCredentialsError } from "@assignee/core";
 import {
   getMcpServerConfigs,
   getOptionalMcpServerConfigs,
@@ -64,7 +63,7 @@ describe("McpServerName", () => {
 describe("getMcpServerConfigs", () => {
   beforeEach(() => setReaderEnv());
 
-  it("returns exactly 2 core servers (Pricing, Docs)", () => {
+  it("returns exactly 2 core servers (Pricing, Docs) when reader creds set", () => {
     const configs = getMcpServerConfigs();
     expect(Object.keys(configs)).toHaveLength(2);
   });
@@ -110,18 +109,50 @@ describe("getMcpServerConfigs", () => {
     expect(joined).not.toContain("@latest");
   });
 
-  // ── Fail-closed credential enforcement (H1) ─────────────────────────────
-  it("THROWS MissingAssigneeCredentialsError when ASSIGNEE_READER_* unset", () => {
-    // beforeEach already cleared reader env vars.
+  // ── Graceful degradation for operator-only environments (REG-N2) ────────
+  // The Pricing server requires reader creds, but commands like
+  // `assignee plan` (dry-run), `assignee setup`, and `assignee init` must
+  // still work in operator-only environments. We OMIT the Pricing entry
+  // rather than throw — falling back to local pricing estimates — and
+  // continue spawning the rest of the MCP stack.
+  it("does NOT throw when ASSIGNEE_READER_* unset; omits Pricing instead", () => {
     delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
     delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
     // Belt-and-suspenders: shell AWS_* must NOT be used as a fallback.
     process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
     process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
 
-    expect(() => getMcpServerConfigs()).toThrow(
-      MissingAssigneeCredentialsError,
-    );
+    let configs: Record<string, unknown> = {};
+    expect(() => {
+      configs = getMcpServerConfigs();
+    }).not.toThrow();
+
+    expect(configs[McpServerName.PRICING]).toBeUndefined();
+    // Docs server is credential-free and must still be present so the CLI
+    // can still spawn its core MCP stack.
+    expect(configs[McpServerName.DOCS]).toBeDefined();
+  });
+
+  // Symmetric: operator-only env returns successfully, with the same
+  // omission semantics, even when ALL standard AWS_* shell vars are unset.
+  it("returns successfully on operator-only environments (no reader creds)", () => {
+    delete process.env["ASSIGNEE_READER_ACCESS_KEY_ID"];
+    delete process.env["ASSIGNEE_READER_SECRET_ACCESS_KEY"];
+    delete process.env["AWS_ACCESS_KEY_ID"];
+    delete process.env["AWS_SECRET_ACCESS_KEY"];
+    delete process.env["AWS_SESSION_TOKEN"];
+
+    const configs = getMcpServerConfigs();
+    expect(configs[McpServerName.PRICING]).toBeUndefined();
+    expect(configs[McpServerName.DOCS]).toBeDefined();
+  });
+
+  // With reader creds set, Pricing IS present (round-trip from previous case).
+  it("includes Pricing when reader creds present (post-omission round-trip)", () => {
+    setReaderEnv();
+    const configs = getMcpServerConfigs();
+    expect(configs[McpServerName.PRICING]).toBeDefined();
+    expect(configs[McpServerName.DOCS]).toBeDefined();
   });
 
   it("never emits empty-string AWS_ACCESS_KEY_ID for the Pricing subprocess", () => {

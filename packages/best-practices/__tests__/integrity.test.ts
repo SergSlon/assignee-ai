@@ -385,7 +385,7 @@ describe("verifyManifest", () => {
     expect(result.mismatchedFiles).toContain("ec2/BP-EC2-001.yaml");
   });
 
-  it("returns invalid with strictNoReference when reference is missing (H18)", () => {
+  it("returns invalid with strictNoReference when reference is missing (H18, REG-N7)", () => {
     const dir = makeTempBpDir();
     writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
     const computed = computeManifest(dir);
@@ -394,7 +394,12 @@ describe("verifyManifest", () => {
       strictNoReference: true,
     });
     expect(result.valid).toBe(false);
-    expect(result.trustOnFirstUse).toBe(true);
+    // REG-N7: Strict-fail must NOT also signal trust-on-first-use — that
+    // contradicts the hard failure and confuses WARN-banner callers.
+    expect(result.trustOnFirstUse).toBe(false);
+    // The new referenceMissing flag distinguishes "no reference" from
+    // "hash mismatch" / "corrupt reference" failures.
+    expect(result.referenceMissing).toBe(true);
     expect(result.reason).toContain("No reference manifest");
     expect(result.reason).toContain("strict mode");
   });
@@ -407,6 +412,8 @@ describe("verifyManifest", () => {
     const result = verifyManifest(computed, join(dir, "does-not-exist.json"));
     expect(result.valid).toBe(true);
     expect(result.trustOnFirstUse).toBe(true);
+    // referenceMissing is set in both strict and non-strict missing-ref paths.
+    expect(result.referenceMissing).toBe(true);
   });
 });
 

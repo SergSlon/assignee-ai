@@ -460,6 +460,198 @@ describe("MemoryService — rotatePatterns", () => {
   });
 });
 
+// REG-N5: Rotation must acquire the lock BEFORE reading the file. Otherwise
+// a concurrent appendProvision/appendFailure/upsertPattern can slip a new
+// record in between (read, lock-acquire), and the rotation's atomicWrite
+// will clobber it.
+describe("MemoryService — rotation TOCTOU (REG-N5)", () => {
+  it("rotateProvisions acquires lock BEFORE reading the file", async () => {
+    // Seed enough records to trigger rotation.
+    for (let i = 0; i < 5; i++) {
+      await service.appendProvision(
+        makeProvision({
+          runId: `550e8400-e29b-41d4-a716-44665544000${i}`,
+          timestamp: `2026-03-${20 + i}T10:00:00.000Z`,
+        }),
+      );
+    }
+
+    const callOrder: string[] = [];
+    const acquireSpy = vi
+      // @ts-expect-error -- private method, accessed for ordering verification
+      .spyOn(service as unknown as Record<string, unknown>, "acquireLock")
+      .mockImplementation(async function (this: unknown, ...args: unknown[]) {
+        callOrder.push("acquireLock");
+        // Call through to real implementation.
+        // @ts-expect-error -- prototype access
+        return MemoryService.prototype["acquireLock"].apply(service, args);
+      });
+    const readSpy = vi
+      .spyOn(service, "readProvisions")
+      .mockImplementation(async function (this: MemoryService) {
+        callOrder.push("readProvisions");
+        // Call through to real implementation via prototype.
+        return MemoryService.prototype.readProvisions.call(service);
+      });
+
+    try {
+      await service.rotateProvisions(3);
+    } finally {
+      acquireSpy.mockRestore();
+      readSpy.mockRestore();
+    }
+
+    const acquireIdx = callOrder.indexOf("acquireLock");
+    const readIdx = callOrder.indexOf("readProvisions");
+    expect(acquireIdx).toBeGreaterThanOrEqual(0);
+    expect(readIdx).toBeGreaterThanOrEqual(0);
+    expect(acquireIdx).toBeLessThan(readIdx);
+  });
+
+  it("rotateFailures acquires lock BEFORE reading the file", async () => {
+    for (let i = 0; i < 5; i++) {
+      await service.appendFailure(
+        makeFailure({
+          runId: `550e8400-e29b-41d4-a716-44665544000${i}`,
+        }),
+      );
+    }
+
+    const callOrder: string[] = [];
+    const acquireSpy = vi
+      // @ts-expect-error -- private method
+      .spyOn(service as unknown as Record<string, unknown>, "acquireLock")
+      .mockImplementation(async function (this: unknown, ...args: unknown[]) {
+        callOrder.push("acquireLock");
+        // @ts-expect-error -- prototype access
+        return MemoryService.prototype["acquireLock"].apply(service, args);
+      });
+    const readSpy = vi
+      .spyOn(service, "readFailures")
+      .mockImplementation(async function (this: MemoryService) {
+        callOrder.push("readFailures");
+        return MemoryService.prototype.readFailures.call(service);
+      });
+
+    try {
+      await service.rotateFailures(2);
+    } finally {
+      acquireSpy.mockRestore();
+      readSpy.mockRestore();
+    }
+
+    expect(callOrder.indexOf("acquireLock")).toBeLessThan(
+      callOrder.indexOf("readFailures"),
+    );
+  });
+
+  it("rotatePatterns acquires lock BEFORE reading the file", async () => {
+    for (let i = 0; i < 5; i++) {
+      await service.upsertPattern(makePattern({ pattern: `pattern-${i}` }));
+    }
+
+    const callOrder: string[] = [];
+    const acquireSpy = vi
+      // @ts-expect-error -- private method
+      .spyOn(service as unknown as Record<string, unknown>, "acquireLock")
+      .mockImplementation(async function (this: unknown, ...args: unknown[]) {
+        callOrder.push("acquireLock");
+        // @ts-expect-error -- prototype access
+        return MemoryService.prototype["acquireLock"].apply(service, args);
+      });
+    const readSpy = vi
+      .spyOn(service, "readPatterns")
+      .mockImplementation(async function (this: MemoryService) {
+        callOrder.push("readPatterns");
+        return MemoryService.prototype.readPatterns.call(service);
+      });
+
+    try {
+      await service.rotatePatterns(2);
+    } finally {
+      acquireSpy.mockRestore();
+      readSpy.mockRestore();
+    }
+
+    expect(callOrder.indexOf("acquireLock")).toBeLessThan(
+      callOrder.indexOf("readPatterns"),
+    );
+  });
+
+  it("concurrent rotateProvisions+appendProvision: no records are lost", async () => {
+    // Real-shaped concurrency test. Pre-seed 5 records, then race a rotation
+    // (cap=3) against an appendProvision. With the fix the rotation holds the
+    // lock for the entire read-trim-write cycle, so either:
+    //   (a) rotation wins → 3 trimmed records, append's lock acquire fails
+    //       and the new record is dropped (existing acquireLock returns false
+    //       which appendProvision logs+skips), OR
+    //   (b) append wins → 6 records present, rotation skips lock acquire
+    //       and trims none (returns 0).
+    // Under the bug (read-before-lock) you could see 4 records (rotation
+    // clobbered the appended one). The assertion asserts "no clobbering": we
+    // never see a state where the appended record is missing from a 4-record
+    // file.
+    for (let i = 0; i < 5; i++) {
+      await service.appendProvision(
+        makeProvision({
+          runId: `550e8400-e29b-41d4-a716-44665544000${i}`,
+          timestamp: `2026-03-${20 + i}T10:00:00.000Z`,
+        }),
+      );
+    }
+
+    // Slow the rotation's read step so an interleaving append window exists
+    // — but with the fix, the lock is already held when the slow read fires,
+    // so the append's acquireLock will fail-fast and skip rather than clobber.
+    const realRead = MemoryService.prototype.readProvisions;
+    const readSpy = vi
+      .spyOn(service, "readProvisions")
+      .mockImplementation(async function (this: MemoryService) {
+        await new Promise((r) => setTimeout(r, 25));
+        return realRead.call(this);
+      });
+
+    // Silence the "could not acquire lock" warning the appendProvision will
+    // print when the rotation holds the lock.
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((() => true) as any);
+
+    const newRecord = makeProvision({
+      runId: "550e8400-e29b-41d4-a716-446655440099",
+      resourceType: "AWS::Lambda::Function",
+      timestamp: "2026-03-30T10:00:00.000Z",
+    });
+
+    try {
+      await Promise.all([
+        service.rotateProvisions(3),
+        // Stagger by a microtask so rotation grabs the lock first.
+        Promise.resolve().then(() => service.appendProvision(newRecord)),
+      ]);
+    } finally {
+      readSpy.mockRestore();
+      stderrSpy.mockRestore();
+    }
+
+    const final = await service.readProvisions();
+    // Either rotation won (3 records, no Lambda) OR append won (6 records,
+    // contains Lambda). The buggy "clobber" path produced ~4 records with no
+    // Lambda — assert that never happens.
+    const hasLambda = final.some(
+      (r) => r.resourceType === "AWS::Lambda::Function",
+    );
+    if (hasLambda) {
+      // Append slipped in BEFORE rotation's lock — rotation must have skipped
+      // (lock contention) so file should still have all 6 records.
+      expect(final).toHaveLength(6);
+    } else {
+      // Rotation won — exactly 3 records, no clobbering of an append.
+      expect(final).toHaveLength(3);
+    }
+  });
+});
+
 // ── EC-29: Corrupt file backup tests ─────────────────────────────────────────
 
 describe("MemoryService — corrupt file backup (EC-29)", () => {

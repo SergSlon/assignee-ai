@@ -733,6 +733,84 @@ describe("destroySingleResource", () => {
       expect(mockDeleteResource).toHaveBeenCalledTimes(1);
     });
 
+    // V1 N2 regression: AccessDenied on the FIRST DescribeTable poll must
+    // FAIL the operation with a clear permission-denied message instead of
+    // silently `break`ing the poll and racing the downstream CloudControl
+    // delete (which would surface a confusing ResourceInUseException).
+    it("V1 N2: fails fast with permission-denied message when DescribeTable raises AccessDenied", async () => {
+      // 1) UpdateTable — succeeds
+      mockDdbSend.mockResolvedValueOnce({});
+      // 2) DescribeTable — AccessDenied on the very first poll
+      const denied = Object.assign(
+        new Error(
+          "User: arn:aws:iam::123456789012:user/operator is not authorized to perform: dynamodb:DescribeTable on resource: arn:aws:dynamodb:us-east-1:123456789012:table/orders",
+        ),
+        { name: "AccessDeniedException" },
+      );
+      mockDdbSend.mockRejectedValueOnce(denied);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:dynamodb:us-east-1:123456789012:table/orders",
+        resourceType: "AWS::DynamoDB::Table",
+        identifier: "orders",
+        region: "us-east-1",
+      });
+
+      // Operation must fail and the CloudControl delete must NOT have been
+      // dispatched — that's the whole point of failing fast.
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("DescribeTable");
+      expect(result.error).toContain("orders");
+      expect(result.error).toContain("permission");
+      expect(mockDeleteResource).not.toHaveBeenCalled();
+      // Exactly 2 ddb calls: UpdateTable + the failing DescribeTable.
+      expect(mockDdbSend).toHaveBeenCalledTimes(2);
+    });
+
+    it("V1 N2: also recognises AccessDenied via the error name 'AccessDenied'", async () => {
+      mockDdbSend.mockResolvedValueOnce({});
+      const denied = Object.assign(new Error("AccessDenied: nope"), {
+        name: "AccessDenied",
+      });
+      mockDdbSend.mockRejectedValueOnce(denied);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:dynamodb:us-east-1:123456789012:table/orders",
+        resourceType: "AWS::DynamoDB::Table",
+        identifier: "orders",
+        region: "us-east-1",
+      });
+      expect(result.success).toBe(false);
+      expect(mockDeleteResource).not.toHaveBeenCalled();
+    });
+
+    it("V1 N2: non-permission DescribeTable errors still break (do not fail the operation)", async () => {
+      // UpdateTable ok
+      mockDdbSend.mockResolvedValueOnce({});
+      // DescribeTable transient throttle — this MUST NOT fail the destroy.
+      const throttled = Object.assign(new Error("Rate exceeded"), {
+        name: "ThrottlingException",
+      });
+      mockDdbSend.mockRejectedValueOnce(throttled);
+
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-vn2" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:dynamodb:us-east-1:123456789012:table/orders",
+        resourceType: "AWS::DynamoDB::Table",
+        identifier: "orders",
+        region: "us-east-1",
+      });
+
+      // Throttle on DescribeTable: fall through to CloudControl delete.
+      expect(result.success).toBe(true);
+      expect(mockDeleteResource).toHaveBeenCalledTimes(1);
+    });
+
     it("gives up cleanly after the propagation poll budget is exhausted", async () => {
       // UpdateTable — ok
       mockDdbSend.mockResolvedValueOnce({});
@@ -834,6 +912,52 @@ describe("destroySingleResource", () => {
       ];
       expect(allKeys).toHaveLength(1500);
       expect(new Set(allKeys).size).toBe(1500);
+    });
+
+    // ── V1 N5 audit (2026-04-06): infinite-loop guard ────────────────────
+    it("breaks out of pagination loop when IsTruncated=true but next markers are missing", async () => {
+      // Realistic edge case: AWS responds with IsTruncated=true but omits
+      // both NextKeyMarker and NextVersionIdMarker. Without the paranoid
+      // guard the while-loop would call ListObjectVersions forever with the
+      // same (undefined, undefined) markers and never make progress.
+      mockS3Send.mockResolvedValue({
+        Versions: [{ Key: "stuck.txt", VersionId: "v1" }],
+        DeleteMarkers: [],
+        IsTruncated: true,
+        // NextKeyMarker, NextVersionIdMarker intentionally absent
+      });
+
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-stuck" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:s3:::stuck-bucket",
+        resourceType: "AWS::S3::Bucket",
+        identifier: "stuck-bucket",
+        region: "us-east-1",
+      });
+
+      // The guard must terminate the loop, allowing the destroy attempt to
+      // proceed to CloudControl. We assert the loop ran a bounded number of
+      // S3 calls (1 List + 1 DeleteObjects = 2) instead of unbounded.
+      expect(result.success).toBe(true);
+      // Bounded: 1 List + at most 1 DeleteObjects in this single iteration.
+      // The exact upper bound is 2; assert ≤ a small constant rather than
+      // pinning the number so future inner refactors don't break the test.
+      expect(mockS3Send.mock.calls.length).toBeLessThanOrEqual(3);
+
+      // Verify ListObjectVersions was called at most once — the loop did
+      // not spin attempting subsequent pages with missing markers.
+      const listCalls = mockS3Send.mock.calls.filter(
+        (c) => (c[0] as { _type: string })._type === "ListObjectVersions",
+      );
+      expect(listCalls).toHaveLength(1);
     });
   });
 });
