@@ -97,10 +97,12 @@ export const CCAPI_FALLBACK_TYPES = {
 /** Named constants for companion-only resource types that are not independently provisioned. */
 export const COMPANION_RESOURCE_TYPES = {
   EC2_EIP: "AWS::EC2::EIP",
-  EC2_VPC_GATEWAY_ATTACHMENT: "AWS::EC2::VPCGatewayAttachment",
+  // EC2_VPC_GATEWAY_ATTACHMENT and EC2_SUBNET_ROUTE_TABLE_ASSOCIATION were
+  // promoted to RESOURCE_TYPES in WV4-A (marker-token resolver landed in
+  // plan-generator.ts) — they are now independently provisionable and
+  // should be referenced via RESOURCE_TYPES instead.
   SECRETSMANAGER_SECRET_TARGET_ATTACHMENT:
     "AWS::SecretsManager::SecretTargetAttachment",
-  EC2_SUBNET_ROUTE_TABLE_ASSOCIATION: "AWS::EC2::SubnetRouteTableAssociation",
   APIGATEWAYV2_INTEGRATION: "AWS::ApiGatewayV2::Integration",
   APIGATEWAYV2_ROUTE: "AWS::ApiGatewayV2::Route",
   APIGATEWAYV2_STAGE: "AWS::ApiGatewayV2::Stage",

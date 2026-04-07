@@ -147,7 +147,7 @@ const vpcNetworkingPattern: ArchitecturePattern = {
       displayName: "Internet Gateway",
     },
     {
-      resourceType: COMPANION_RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
+      resourceType: RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
       resourceId: "igw-attachment",
       displayName: "VPC Gateway Attachment (IGW)",
       provisionable: false,
@@ -184,25 +184,25 @@ const vpcNetworkingPattern: ArchitecturePattern = {
       displayName: "NAT Gateway",
     },
     {
-      resourceType: COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
+      resourceType: RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
       resourceId: "public-subnet-1-rt-assoc",
       displayName: "Public Subnet 1 <-> Public RT",
       provisionable: false,
     },
     {
-      resourceType: COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
+      resourceType: RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
       resourceId: "public-subnet-2-rt-assoc",
       displayName: "Public Subnet 2 <-> Public RT",
       provisionable: false,
     },
     {
-      resourceType: COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
+      resourceType: RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
       resourceId: "private-subnet-1-rt-assoc",
       displayName: "Private Subnet 1 <-> Private RT",
       provisionable: false,
     },
     {
-      resourceType: COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
+      resourceType: RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
       resourceId: "private-subnet-2-rt-assoc",
       displayName: "Private Subnet 2 <-> Private RT",
       provisionable: false,

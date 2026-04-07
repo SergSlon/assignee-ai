@@ -1,7 +1,4 @@
-import {
-  RESOURCE_TYPES,
-  COMPANION_RESOURCE_TYPES,
-} from "../../config/resource-types.js";
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
 import type { ResourcePlugin, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
@@ -54,7 +51,7 @@ export const routeTablePlugin: ResourcePlugin = {
   defaults: {},
   configHints: [
     "VpcId MUST reference a valid VPC in the plan",
-    `${COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION} is IMMUTABLE — any change triggers resource replacement (no in-place update supported by CloudFormation)`,
+    `${RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION} is IMMUTABLE — any change triggers resource replacement (no in-place update supported by CloudFormation)`,
     "Every route table should be explicitly associated with at least one subnet; avoid relying on the VPC main route table",
     "Public route tables need a 0.0.0.0/0 route targeting an InternetGateway; private route tables use a NatGateway",
   ],
@@ -79,7 +76,7 @@ export const routeTablePlugin: ResourcePlugin = {
     if (subnetId) {
       resources.push({
         logicalId: `${logicalId}SubnetAssociation`,
-        type: COMPANION_RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
+        type: RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
         properties: {
           [CfnKey.ROUTE_TABLE_ID]: { Ref: logicalId },
           [CfnKey.SUBNET_ID]: subnetId,

@@ -1071,7 +1071,14 @@ describeE2E("E2E: VPC compound apply + destroy", () => {
   it("plans, applies, and destroys a VPC with public and private subnets", async () => {
     const graph = createGraph(tools);
     const threadId = crypto.randomUUID();
-    const config = { configurable: { thread_id: threadId } };
+    // Mirror production apply.ts recursionLimit — the VPC compound pattern
+    // has 17 resources × ~4 node transitions each, far exceeding LangGraph's
+    // default limit of 25. Without this override the test cannot exercise
+    // the marker-resolver fix it was written to verify.
+    const config = {
+      configurable: { thread_id: threadId },
+      recursionLimit: 500,
+    };
 
     const initialState = await graph.invoke(
       {
