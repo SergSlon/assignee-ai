@@ -158,6 +158,89 @@ function loadCached(): BestPractice[] {
       );
     }
 
+    // ── GPG signature enforcement (additive to hash check) ──────────────
+    // `verification.signature` is populated whenever a reference manifest
+    // exists. It has four relevant states:
+    //   - verified: true  → signature matches, key captured
+    //   - verified: false, signaturePresent: false → unsigned (TOFU path)
+    //   - verified: false, signaturePresent: true, reason: "gpg not available"
+    //   - verified: false, signaturePresent: true, reason: "signature invalid"
+    //
+    // Policy in ENFORCE mode:
+    //   1. If signature exists but is invalid → HARD FAIL (throw). An
+    //      attacker who tampers with the YAML and regenerates the hash
+    //      cannot also forge the signature.
+    //   2. If signature is missing and ASSIGNEE_BP_REQUIRE_SIGNATURE is
+    //      set → HARD FAIL.
+    //   3. If signature is missing and the env var is NOT set → WARN loudly
+    //      but accept (preserves the unsigned-manifest install path).
+    //   4. If GPG is not installed → WARN, treat like missing signature
+    //      (accept unless ASSIGNEE_BP_REQUIRE_SIGNATURE is set).
+    const sig = verification.signature;
+    const requireSignature =
+      (process.env[EnvVar.ASSIGNEE_BP_REQUIRE_SIGNATURE] ?? "").trim().length >
+      0;
+    if (sig && mode === BpIntegrityMode.ENFORCE) {
+      if (sig.signaturePresent && sig.reason === "signature invalid") {
+        // Hard fail regardless of ASSIGNEE_BP_REQUIRE_SIGNATURE — an
+        // invalid signature is always worse than an absent one.
+        cachedPractices = undefined;
+        integrityChecked = false;
+        const keyLabel = sig.signedByKey ?? "unknown key";
+        throw new BpIntegrityError(
+          `BP manifest signature is INVALID (key: ${keyLabel}). ` +
+            `The manifest may have been tampered with after signing, or the ` +
+            `signing key was rotated without re-signing. Refusing to load BP rules.`,
+          "signature invalid",
+        );
+      }
+      if (!sig.verified && !sig.signaturePresent && requireSignature) {
+        cachedPractices = undefined;
+        integrityChecked = false;
+        throw new BpIntegrityError(
+          `BP manifest is unsigned but ASSIGNEE_BP_REQUIRE_SIGNATURE is set. ` +
+            `Refusing to load BP rules without a valid GPG signature.`,
+          "signature required but missing",
+        );
+      }
+      if (
+        !sig.verified &&
+        sig.signaturePresent &&
+        sig.reason === "gpg not available" &&
+        requireSignature
+      ) {
+        cachedPractices = undefined;
+        integrityChecked = false;
+        throw new BpIntegrityError(
+          `BP manifest signature present but GPG is not installed, and ` +
+            `ASSIGNEE_BP_REQUIRE_SIGNATURE is set. Install gpg or unset the ` +
+            `env var to proceed.`,
+          "gpg not available",
+        );
+      }
+      if (
+        !sig.verified &&
+        !sig.signaturePresent &&
+        !requireSignature &&
+        !integrityWarningEmitted
+      ) {
+        process.stderr.write(
+          `⚠  BP manifest is unsigned — accepting on trust. ` +
+            `Set ASSIGNEE_BP_REQUIRE_SIGNATURE=1 to require a valid GPG signature.\n`,
+        );
+      }
+      if (
+        !sig.verified &&
+        sig.signaturePresent &&
+        sig.reason === "gpg not available" &&
+        !integrityWarningEmitted
+      ) {
+        process.stderr.write(
+          `⚠  BP manifest signature present but GPG is not installed — skipping signature check.\n`,
+        );
+      }
+    }
+
     if (!verification.valid) {
       const detail =
         verification.mismatchedFiles && verification.mismatchedFiles.length > 0

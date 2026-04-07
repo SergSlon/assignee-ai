@@ -3,12 +3,14 @@ export {
   computeFreshness,
   computeManifest,
   verifyManifest,
+  verifyManifestSignature,
   DEFAULT_STALE_THRESHOLD_DAYS,
 } from "./integrity.js";
 export type {
   BPFreshness,
   BPManifest,
   ManifestVerifyResult,
+  ManifestSignatureResult,
 } from "./integrity.js";
 export { bestPracticeSchema } from "./schema.js";
 export { evaluateTriggers } from "./evaluate.js";

@@ -141,6 +141,7 @@ let mockExit: any;
 async function resetSetupCommandOptions(): Promise<void> {
   const { setupCommand } = await import("./setup.js");
   setupCommand.setOptionValue("enableLlmLogging", false);
+  setupCommand.setOptionValue("disableLlmLogging", false);
   setupCommand.setOptionValue("dryRun", false);
   // L1 V1 audit: --profile must also be reset between tests so the
   // AWS_PROFILE-fallback regression test sees a clean slate.
@@ -555,6 +556,102 @@ describe("setup command", () => {
     expect(help).toContain("--enable-llm-logging");
     expect(help).toContain("--dry-run");
     expect(help).toContain("PRIVACY");
+  });
+
+  // ── Sally UX: --disable-llm-logging symmetric to --enable ─────────
+  //
+  // The CLI previously only exposed --enable-llm-logging, forcing users to
+  // drop back to raw `aws bedrock put-model-invocation-logging-configuration`
+  // calls to turn logging back off. These tests cover the new
+  // --disable-llm-logging flag which flips textDataDeliveryEnabled=false
+  // without re-running the IAM wizard.
+
+  it("--disable-llm-logging calls Bedrock with the disable config and no IAM mutations", async () => {
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await setupCommand.parseAsync(["node", "setup", "--disable-llm-logging"]);
+
+    // STS is still called (we need the account id for the role ARN)
+    expect(mockStsSend).toHaveBeenCalled();
+
+    // IAM is NOT touched — no users, no policies, no access keys
+    const iamTypes = mockSend.mock.calls.map(
+      (c) => (c[0] as { _type: string })._type,
+    );
+    expect(iamTypes).not.toContain("CreateUser");
+    expect(iamTypes).not.toContain("CreatePolicy");
+    expect(iamTypes).not.toContain("AttachUserPolicy");
+    expect(iamTypes).not.toContain("CreateAccessKey");
+
+    // Bedrock PutModelInvocationLoggingConfiguration IS called, with
+    // textDataDeliveryEnabled=false
+    const putLogCalls = mockBedrockSend.mock.calls.filter(
+      (c) => c[0]?._type === "PutModelInvocationLogging",
+    );
+    expect(putLogCalls).toHaveLength(1);
+    const config = putLogCalls[0]![0].input.loggingConfig;
+    expect(config.textDataDeliveryEnabled).toBe(false);
+    expect(config.imageDataDeliveryEnabled).toBe(false);
+    expect(config.embeddingDataDeliveryEnabled).toBe(false);
+    // Real-shaped role ARN using the mocked account id 123456789012
+    expect(config.cloudWatchConfig.roleArn).toBe(
+      "arn:aws:iam::123456789012:role/AssigneeAiBedrockLoggingRole",
+    );
+    expect(config.cloudWatchConfig.logGroupName).toBe(
+      "/assignee-ai/bedrock-invocations",
+    );
+
+    // No .env writes in the disable path
+    expect(mockMergeEnvFile).not.toHaveBeenCalled();
+  });
+
+  it("--disable-llm-logging --dry-run prints a plan and makes ZERO AWS calls", async () => {
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await setupCommand.parseAsync([
+      "node",
+      "setup",
+      "--disable-llm-logging",
+      "--dry-run",
+    ]);
+
+    // Absolutely no AWS calls: STS, IAM, Bedrock, CWL, env writes.
+    expect(mockStsSend).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(mockBedrockSend).not.toHaveBeenCalled();
+    expect(mockCwlSend).not.toHaveBeenCalled();
+    expect(mockMergeEnvFile).not.toHaveBeenCalled();
+
+    // The plan was printed through clack.log.step, and explicitly names the
+    // disable target.
+    const clack = await import("@clack/prompts");
+    const stepMock = clack.log.step as ReturnType<typeof vi.fn>;
+    const stepTexts = stepMock.mock.calls.map((c) => c[0] as string);
+    const allText = stepTexts.join("\n");
+    expect(allText).toContain("DISABLE");
+    expect(allText).toContain("textDataDeliveryEnabled: false");
+    expect(allText).toContain("/assignee-ai/bedrock-invocations");
+    expect(allText).toContain("AssigneeAiBedrockLoggingRole");
+  });
+
+  it("--enable-llm-logging combined with --disable-llm-logging fails with a mutually-exclusive error", async () => {
+    await resetSetupCommandOptions();
+    const { setupCommand } = await import("./setup.js");
+    await expect(
+      setupCommand.parseAsync([
+        "node",
+        "setup",
+        "--enable-llm-logging",
+        "--disable-llm-logging",
+      ]),
+    ).rejects.toThrow(/mutually exclusive/i);
+
+    // No AWS calls of any kind happened — the guard fires before the
+    // intro/spinner/credentials path.
+    expect(mockStsSend).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(mockBedrockSend).not.toHaveBeenCalled();
+    expect(mockMergeEnvFile).not.toHaveBeenCalled();
   });
 
   // ── M-S11: operator role is REQUIRED — partial failure aborts ─────

@@ -37,6 +37,20 @@ export const EnvVar = {
   ASSIGNEE_SAAS_URL: "ASSIGNEE_SAAS_URL",
   ASSIGNEE_ORG_POLICY_TTL_MS: "ASSIGNEE_ORG_POLICY_TTL_MS",
   ASSIGNEE_BP_INTEGRITY: "ASSIGNEE_BP_INTEGRITY",
+  /**
+   * When set (any non-empty value), the BP manifest generation script
+   * emits a detached GPG signature alongside manifest.json using this
+   * local-user identity (key ID, fingerprint, or email). Release-only
+   * opt-in — absence keeps the current unsigned-manifest behaviour.
+   */
+  ASSIGNEE_BP_SIGNING_KEY: "ASSIGNEE_BP_SIGNING_KEY",
+  /**
+   * When set (any non-empty value), the CLI refuses to load BP rules in
+   * enforce mode unless a valid GPG signature is present alongside the
+   * manifest. Defense-in-depth beyond on-disk hash verification for users
+   * who can guarantee signed releases in their supply chain.
+   */
+  ASSIGNEE_BP_REQUIRE_SIGNATURE: "ASSIGNEE_BP_REQUIRE_SIGNATURE",
   ASSIGNEE_LOG_DIR: "ASSIGNEE_LOG_DIR",
   ASSIGNEE_LOG_RETENTION_DAYS: "ASSIGNEE_LOG_RETENTION_DAYS",
 } as const;

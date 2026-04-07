@@ -379,6 +379,126 @@ describe("BP integrity enforcement (H18)", () => {
     );
   });
 
+  // ── Part 1: GPG signature enforcement (additive to hash check) ─────
+  //
+  // These tests verify the new ASSIGNEE_BP_REQUIRE_SIGNATURE env var +
+  // signature result wiring in bp-evaluator. They use the existing mocked
+  // verifyManifest to synthesize signature states.
+
+  it("ENFORCE mode: warns once when manifest is unsigned (no REQUIRE_SIGNATURE)", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    delete process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"];
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: true,
+      signature: {
+        verified: false,
+        signedByKey: null,
+        signaturePresent: false,
+        reason: "signature file missing",
+      },
+    });
+
+    const result = await bpEvaluatorNode(makeState());
+    expect(result.bpFindings).toBeDefined();
+    const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(messages).toContain("BP manifest is unsigned");
+    expect(messages).toContain("ASSIGNEE_BP_REQUIRE_SIGNATURE");
+  });
+
+  it("ENFORCE mode + REQUIRE_SIGNATURE: throws when manifest is unsigned", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"] = "1";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: true,
+      signature: {
+        verified: false,
+        signedByKey: null,
+        signaturePresent: false,
+        reason: "signature file missing",
+      },
+    });
+
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      /unsigned but ASSIGNEE_BP_REQUIRE_SIGNATURE/,
+    );
+  });
+
+  it("ENFORCE mode: throws BpIntegrityError when signature is INVALID (always fatal)", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    // Even WITHOUT REQUIRE_SIGNATURE, an invalid signature is always fatal:
+    // it means someone tampered with the manifest after signing.
+    delete process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"];
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: true, // hash matches — attacker also updated manifest.json
+      signature: {
+        verified: false,
+        signedByKey: "AABBCCDDEEFF0011", // real-shaped key id
+        signaturePresent: true,
+        reason: "signature invalid",
+      },
+    });
+
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      /signature is INVALID/,
+    );
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      /AABBCCDDEEFF0011/,
+    );
+  });
+
+  it("ENFORCE mode: accepts a valid signature cleanly", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"] = "1";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: true,
+      signature: {
+        verified: true,
+        signedByKey: "A1B2C3D4E5F60718", // 16-char long key id
+        signaturePresent: true,
+      },
+    });
+
+    const result = await bpEvaluatorNode(makeState());
+    expect(result.bpFindings).toBeDefined();
+  });
+
+  it("ENFORCE mode + REQUIRE_SIGNATURE: throws when gpg is not available", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"] = "1";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: true,
+      signature: {
+        verified: false,
+        signedByKey: null,
+        signaturePresent: true,
+        reason: "gpg not available",
+      },
+    });
+
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      /GPG is not installed/,
+    );
+  });
+
+  it("ENFORCE mode without REQUIRE_SIGNATURE: tolerates missing gpg binary with a warning", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    delete process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"];
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: true,
+      signature: {
+        verified: false,
+        signedByKey: null,
+        signaturePresent: true,
+        reason: "gpg not available",
+      },
+    });
+
+    const result = await bpEvaluatorNode(makeState());
+    expect(result.bpFindings).toBeDefined();
+    const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(messages).toContain("GPG is not installed");
+  });
+
   // REG-N3 regression: once a tampered manifest is "fixed" (verifier
   // returns valid), the cache should THEN populate and the rules become
   // available. Verifies the recovery path.
