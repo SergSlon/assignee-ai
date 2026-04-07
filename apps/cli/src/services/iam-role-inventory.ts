@@ -26,9 +26,12 @@ import {
   GetRoleCommand,
 } from "@aws-sdk/client-iam";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
-import { operatorCredentials } from "../config/operator-credentials.js";
 import { AWS_REGION } from "../config/constants.js";
-import { RESOURCE_TYPES } from "@assignee/core";
+import {
+  RESOURCE_TYPES,
+  requireAssigneeCredentials,
+  MissingAssigneeCredentialsError,
+} from "@assignee/core";
 
 /** Minimal shape returned to callers — matches the fields list-resources needs. */
 export interface ManagedIamRole {
@@ -42,19 +45,30 @@ export interface ManagedIamRole {
  * Builds a configured IAMClient using operator credentials. IAM is a
  * global service so the region is mostly cosmetic, but we honor the
  * configured AWS_REGION for consistency with other clients.
+ *
+ * Wave 10 P0-2: this used to spread `operatorCredentials()` only when
+ * non-empty, which let the IAMClient silently fall through to the
+ * default AWS credential chain (`~/.aws/credentials`, EC2 instance
+ * role, SSO) when ASSIGNEE_OPERATOR_* env vars were unset. On a dev
+ * laptop with personal credentials configured, `assignee list` would
+ * silently enumerate IAM in THE WRONG ACCOUNT. Now uses the canonical
+ * `requireAssigneeCredentials("operator")` helper from @assignee/core
+ * which throws `MissingAssigneeCredentialsError` rather than fall
+ * through. The throw is caught at the call sites
+ * (`fetchManagedIamRoles` and `getManagedIamRoleByArn`) and converted
+ * into the same friendly warning path used by `list-resources.ts`.
+ *
+ * @throws MissingAssigneeCredentialsError when operator env vars unset
  */
 function createIamClient(): IAMClient {
-  const opCreds = operatorCredentials();
+  const creds = requireAssigneeCredentials("operator");
   return new IAMClient({
-    region: opCreds.region ?? AWS_REGION,
-    ...(opCreds.accessKeyId && opCreds.secretAccessKey
-      ? {
-          credentials: {
-            accessKeyId: opCreds.accessKeyId,
-            secretAccessKey: opCreds.secretAccessKey,
-          },
-        }
-      : {}),
+    region: AWS_REGION,
+    credentials: {
+      accessKeyId: creds.accessKeyId,
+      secretAccessKey: creds.secretAccessKey,
+      ...(creds.sessionToken ? { sessionToken: creds.sessionToken } : {}),
+    },
   });
 }
 
@@ -104,6 +118,13 @@ function tagsToRecord(
 export async function fetchManagedIamRoles(
   client?: IAMClient,
 ): Promise<ManagedIamRole[]> {
+  // Wave 10 P0-2: when no client is injected (production path) the
+  // helper constructs one via createIamClient(), which now throws
+  // MissingAssigneeCredentialsError instead of silently falling
+  // through to the default AWS credential chain. Callers
+  // (`list-resources.ts`, `resource-resolver.ts`) already handle a
+  // thrown error from this function with a friendly warning — letting
+  // it propagate keeps the existing surface contract intact.
   const iam = client ?? createIamClient();
   const managed: ManagedIamRole[] = [];
 
@@ -160,22 +181,42 @@ export async function getManagedIamRoleByArn(
   arn: string,
   client?: IAMClient,
 ): Promise<ManagedIamRole | null> {
-  // ARN format: arn:aws:iam::<account>:role/[<path>/]<roleName>
+  // ARN format: arn:aws[-partition]:iam::<account>:role/[<path>/]<roleName>
+  // The partition segment must match `aws`, `aws-us-gov`, or `aws-cn`
+  // so GovCloud / China role lookups don't silently fail with "not
+  // found" — same convention as `isArn()` in arn-builder.ts.
+  //
   // IAM roles can live under a path like /service-role/MyRole or
   // /aws-service-role/foo.amazonaws.com/MyRole. The IAM API requires
   // the BARE role name (no path) for GetRole and ListRoleTags — passing
   // a path-prefixed value fails with ValidationError "must satisfy
   // regular expression pattern: [\w+=,.@-]+" (no slash allowed).
-  // Strip every leading path segment by taking the last "/"-delimited
-  // chunk. assignee.ai itself never creates path-prefixed roles, but
-  // users running `assignee destroy` against pre-existing tagged roles
-  // may pass a path-prefixed ARN.
-  const match = arn.match(/^arn:aws:iam::\d+:role\/(.+)$/);
+  // Strip every leading path segment by taking the last non-empty
+  // "/"-delimited chunk. A trailing "/" (e.g. ".../service-role/")
+  // would otherwise produce an empty string from `split('/').pop()`
+  // and trip the same ValidationError. assignee.ai itself never creates
+  // path-prefixed roles, but users running `assignee destroy` against
+  // pre-existing tagged roles may pass a path-prefixed ARN.
+  const match = arn.match(/^arn:aws[\w-]*:iam::\d+:role\/(.+)$/);
   if (!match) return null;
   const captured = match[1]!;
-  const roleName = captured.split("/").pop() ?? captured;
+  const segments = captured.split("/").filter((s) => s.length > 0);
+  if (segments.length === 0) return null;
+  const roleName = segments[segments.length - 1]!;
 
-  const iam = client ?? createIamClient();
+  // Wave 10 P0-2: same credential guard as fetchManagedIamRoles. When
+  // no client is injected, we construct one via the now-strict
+  // createIamClient(). MissingAssigneeCredentialsError collapses to
+  // null here (the byArn path treats "can't enumerate" the same as
+  // "not found") rather than throwing — this matches the existing
+  // try/catch swallow on AccessDenied / NoSuchEntity / network below.
+  let iam: IAMClient;
+  try {
+    iam = client ?? createIamClient();
+  } catch (err) {
+    if (err instanceof MissingAssigneeCredentialsError) return null;
+    throw err;
+  }
 
   try {
     const [getResponse, tagResponse] = await Promise.all([
