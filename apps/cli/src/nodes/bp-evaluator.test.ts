@@ -345,6 +345,59 @@ describe("BP integrity enforcement (H18)", () => {
     const result = await bpEvaluatorNode(makeState());
     expect(result.bpFindings).toBeDefined();
   });
+
+  // REG-N3 regression: cache MUST NOT be populated when the integrity check
+  // throws. The previous version assigned `cachedPractices = loadBestPractices()`
+  // BEFORE the integrity check, so a tampered manifest blocked only the FIRST
+  // call in a process — every subsequent call returned the cached, unverified
+  // rules. Defeats enforce mode after the first failure.
+  it("ENFORCE mode: re-throws on every call with a tampered manifest (no cache poisoning)", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: false,
+      reason: "BP library hash mismatch",
+      mismatchedFiles: ["s3/BP-S3-001.yaml"],
+    });
+
+    // Call #1 — must throw
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      BpIntegrityError,
+    );
+    // Call #2 — MUST also throw. If cache was poisoned, the next call would
+    // silently succeed and return unverified rules.
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      BpIntegrityError,
+    );
+    // Call #3 — even after multiple failures, still throws.
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      BpIntegrityError,
+    );
+    // verifyManifest must have been called every time (i.e. the check
+    // actually re-ran rather than being short-circuited by a stale cache).
+    expect(vi.mocked(verifyManifest).mock.calls.length).toBeGreaterThanOrEqual(
+      3,
+    );
+  });
+
+  // REG-N3 regression: once a tampered manifest is "fixed" (verifier
+  // returns valid), the cache should THEN populate and the rules become
+  // available. Verifies the recovery path.
+  it("ENFORCE mode: recovers when manifest is repaired between calls", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: false,
+      reason: "BP library hash mismatch",
+      mismatchedFiles: ["s3/BP-S3-001.yaml"],
+    });
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      BpIntegrityError,
+    );
+
+    // Repair the manifest.
+    vi.mocked(verifyManifest).mockReturnValue({ valid: true });
+    const result = await bpEvaluatorNode(makeState());
+    expect(result.bpFindings).toBeDefined();
+  });
 });
 
 // L-A7 regression: success-path evaluations log with BP_EVALUATED, while
@@ -450,5 +503,48 @@ describe("BP log action separation (L-A7)", () => {
       );
     });
     expect(skippedCalls.length).toBeGreaterThan(0);
+  });
+});
+
+// ── L5 V1 audit (2026-04-06): manifest path normalization ──────────────────
+describe("_listBpManifestCandidates", () => {
+  it("returns candidates that are all path-normalized (no '..' segments)", async () => {
+    const path = await import("node:path");
+    const { _listBpManifestCandidates } = await import("./bp-evaluator.js");
+
+    // Use a real-shaped dirname mirroring the apps/cli/src/nodes layout
+    const fakeDirname = "/repo/assignee.ai/apps/cli/src/nodes";
+    const candidates = _listBpManifestCandidates(fakeDirname);
+
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const candidate of candidates) {
+      expect(candidate).toBe(path.normalize(candidate));
+      // No literal '..' segments should survive normalization for these
+      // candidates because the fake dirname has more than enough depth.
+      const parts = candidate.split(path.sep);
+      expect(parts).not.toContain("..");
+      // Each candidate must end at manifest.json
+      expect(candidate.endsWith("manifest.json")).toBe(true);
+    }
+  });
+
+  it("dist layout candidate stays inside the workspace boundary", async () => {
+    const path = await import("node:path");
+    const { _listBpManifestCandidates } = await import("./bp-evaluator.js");
+
+    // dist layout: apps/cli/dist/nodes
+    const distDirname = "/repo/assignee.ai/apps/cli/dist/nodes";
+    const candidates = _listBpManifestCandidates(distDirname);
+
+    // Workspace root we expect every candidate to live under
+    const workspaceRoot = "/repo/assignee.ai";
+    for (const candidate of candidates) {
+      const rel = path.relative(workspaceRoot, candidate);
+      // path.relative starts with '..' iff the candidate escapes workspaceRoot
+      expect(
+        rel.startsWith(".."),
+        `candidate ${candidate} escaped workspace ${workspaceRoot}`,
+      ).toBe(false);
+    }
   });
 });

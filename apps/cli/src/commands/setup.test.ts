@@ -73,6 +73,21 @@ vi.mock("@aws-sdk/client-bedrock", () => {
   };
 });
 
+// Mock @aws-sdk/credential-providers — capture which profile fromIni() was
+// called with so the AWS_PROFILE-honoring regression test (L1) can assert it.
+const mockFromIni = vi.fn((opts: { profile: string }) => {
+  // Return a real-shaped credentials provider function that resolves to a
+  // synthetic credential set. STS calls are intercepted at the SDK layer so
+  // these never hit the network.
+  return async () => ({
+    accessKeyId: `AKIA_${opts.profile.toUpperCase()}`,
+    secretAccessKey: `secret_${opts.profile}`,
+  });
+});
+vi.mock("@aws-sdk/credential-providers", () => ({
+  fromIni: (opts: { profile: string }) => mockFromIni(opts),
+}));
+
 // Mock @aws-sdk/client-sts
 const mockStsSend = vi.fn();
 vi.mock("@aws-sdk/client-sts", () => {
@@ -127,6 +142,9 @@ async function resetSetupCommandOptions(): Promise<void> {
   const { setupCommand } = await import("./setup.js");
   setupCommand.setOptionValue("enableLlmLogging", false);
   setupCommand.setOptionValue("dryRun", false);
+  // L1 V1 audit: --profile must also be reset between tests so the
+  // AWS_PROFILE-fallback regression test sees a clean slate.
+  setupCommand.setOptionValue("profile", undefined);
 }
 
 describe("setup command", () => {
@@ -418,6 +436,67 @@ describe("setup command", () => {
     expect(warnMock).toHaveBeenCalled();
     const warnText = warnMock.mock.calls[0]![0] as string;
     expect(warnText).toContain("--enable-llm-logging");
+  });
+
+  // ── L1 V1 audit (2026-04-06): AWS_PROFILE env fallback ─────────────
+  it("honors process.env.AWS_PROFILE when --profile is not provided", async () => {
+    vi.stubEnv("AWS_PROFILE", "myprofile");
+    try {
+      await resetSetupCommandOptions();
+      const { setupCommand } = await import("./setup.js");
+      await setupCommand.parseAsync(["node", "setup"]);
+
+      // fromIni() must have been called at least once with the AWS_PROFILE
+      // value, NOT silently with "default".
+      expect(mockFromIni).toHaveBeenCalled();
+      const profilesUsed = mockFromIni.mock.calls.map(
+        (c) => (c[0] as { profile: string }).profile,
+      );
+      expect(profilesUsed).toContain("myprofile");
+      expect(profilesUsed).not.toContain("default");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("--profile flag overrides process.env.AWS_PROFILE", async () => {
+    vi.stubEnv("AWS_PROFILE", "envprofile");
+    try {
+      await resetSetupCommandOptions();
+      const { setupCommand } = await import("./setup.js");
+      await setupCommand.parseAsync([
+        "node",
+        "setup",
+        "--profile",
+        "flagprofile",
+      ]);
+
+      const profilesUsed = mockFromIni.mock.calls.map(
+        (c) => (c[0] as { profile: string }).profile,
+      );
+      expect(profilesUsed).toContain("flagprofile");
+      expect(profilesUsed).not.toContain("envprofile");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("falls back to 'default' profile when neither --profile nor AWS_PROFILE set", async () => {
+    // Ensure AWS_PROFILE is not set in test env
+    const prev = process.env["AWS_PROFILE"];
+    delete process.env["AWS_PROFILE"];
+    try {
+      await resetSetupCommandOptions();
+      const { setupCommand } = await import("./setup.js");
+      await setupCommand.parseAsync(["node", "setup"]);
+
+      const profilesUsed = mockFromIni.mock.calls.map(
+        (c) => (c[0] as { profile: string }).profile,
+      );
+      expect(profilesUsed).toContain("default");
+    } finally {
+      if (prev !== undefined) process.env["AWS_PROFILE"] = prev;
+    }
   });
 
   it("--help text mentions --enable-llm-logging, --dry-run, and PRIVACY", async () => {

@@ -130,11 +130,20 @@ export function assembleS3Composites(
       Number.isFinite(parsedTransition) && parsedTransition >= 0
         ? parsedTransition
         : 30;
+    // V1 PARTIAL: same Number.isFinite-based parse as transitionDays above.
+    // The previous `parseInt(...) ?` antipattern silently swallowed
+    // non-numeric input. 0 is still treated as "no expiration" because the
+    // downstream `expirationDays && expirationDays > 0` check requires a
+    // strictly positive value (AWS rejects 0-day expirations).
     const expirationDaysRaw = options[CfnKey.LIFECYCLE_EXPIRATION_DAYS];
-    const expirationDays =
-      expirationDaysRaw && String(expirationDaysRaw).trim()
-        ? parseInt(String(expirationDaysRaw), 10)
-        : undefined;
+    let expirationDays: number | undefined;
+    if (expirationDaysRaw !== undefined && expirationDaysRaw !== null) {
+      const trimmed = String(expirationDaysRaw).trim();
+      if (trimmed.length > 0) {
+        const parsed = parseInt(trimmed, 10);
+        expirationDays = Number.isFinite(parsed) ? parsed : undefined;
+      }
+    }
 
     const rule: Record<string, unknown> = {
       Id: "assignee-default-lifecycle",

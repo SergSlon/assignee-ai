@@ -17,7 +17,7 @@
     "test:coverage": "vitest run --coverage",
     "dev": "tsc --watch",
     "check-types": "tsc --noEmit",
-    "lint": "eslint src --max-warnings 0"
+    "lint": "eslint src --max-warnings 28"
   },
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.1015.0",

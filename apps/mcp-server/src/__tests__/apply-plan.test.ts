@@ -791,11 +791,13 @@ describe("apply_plan tool", () => {
       );
 
       let invokeCount = 0;
-      // Plain functions instead of vi.fn().mockImplementation — survives
-      // `mockReset: true` if this ctx is ever reused across resets.
+      // REG-N10: wrap impls in vi.fn so future authors can call
+      // `expect(ctx.graph.invoke).toHaveBeenCalled()` without TypeError. The
+      // ctx is constructed fresh per test, so `mockReset: true` cannot wipe
+      // these impls (they live on a brand-new vi.fn instance each call).
       const ctx: GraphContext = {
         graph: {
-          invoke: async () => {
+          invoke: vi.fn(async () => {
             invokeCount++;
             // After the phase-1 invoke (call 1) and the first loop invoke (call 2),
             // jump time forward past 10 minutes so the next while-check triggers timeout
@@ -803,13 +805,13 @@ describe("apply_plan tool", () => {
               timeOffset = 10 * 60 * 1000 + 1;
             }
             return {};
-          },
-          getState: async () => ({
+          }),
+          getState: vi.fn(async () => ({
             values: { executionStatus: ExecutionStatus.SUCCESS },
             next: ["resource_provisioner"], // Always has more work
-          }),
+          })),
         },
-        cleanup: async () => {},
+        cleanup: vi.fn(async () => {}),
       };
 
       try {
@@ -862,12 +864,13 @@ describe("apply_plan tool", () => {
       );
 
       // Simulate: 2 resources succeed, then graph invoke throws on the 3rd.
-      // Plain functions instead of vi.fn().mockImplementation — survives
-      // `mockReset: true`.
+      // REG-N10: wrap impls in vi.fn so they remain real spies (so tests can
+      // call .toHaveBeenCalled() etc). Per-test fresh ctx insulates the impls
+      // from `mockReset: true`.
       let invokeCallCount = 0;
       const ctx: GraphContext = {
         graph: {
-          invoke: async () => {
+          invoke: vi.fn(async () => {
             invokeCallCount++;
             // Phase 1 invoke + 2 successful loop invokes, then fail on 3rd loop invoke
             if (invokeCallCount <= 3) {
@@ -890,8 +893,8 @@ describe("apply_plan tool", () => {
             throw new Error(
               "CloudControl API error: DynamoDB table creation failed — limit exceeded",
             );
-          },
-          getState: async () => ({
+          }),
+          getState: vi.fn(async () => ({
             // First two getState calls: more work to do. Third: would continue but invoke fails.
             values: {
               executionStatus: ExecutionStatus.SUCCESS,
@@ -909,9 +912,9 @@ describe("apply_plan tool", () => {
               ],
             },
             next: ["resource_provisioner"],
-          }),
+          })),
         },
-        cleanup: async () => {},
+        cleanup: vi.fn(async () => {}),
       };
 
       const { client } = await createTestClient(ctx);

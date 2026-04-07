@@ -386,11 +386,45 @@ export async function destroySingleResource(
             new DescribeTableCommand({ TableName: resource.identifier }),
           );
         } catch (descErr) {
-          // Non-fatal: lacking dynamodb:DescribeTable shouldn't block delete.
+          // V1 N2: Distinguish "permission denied" from "transient" failures.
+          // Previously we always `break` on any DescribeTable error and let
+          // the downstream CloudControl delete race the unfinished
+          // UpdateTable, which produced a confusing ResourceInUseException.
+          // If the operator role lacks dynamodb:DescribeTable we can NEVER
+          // verify propagation — that is an operational misconfiguration,
+          // not a transient state, so surface it loudly.
+          const errName =
+            (descErr as { name?: string; Code?: string })?.name ??
+            (descErr as { Code?: string })?.Code ??
+            "";
+          const errMessage =
+            descErr instanceof Error ? descErr.message : String(descErr);
+          const isPermissionError =
+            errName === "AccessDeniedException" ||
+            errName === "AccessDenied" ||
+            errName === "UnauthorizedOperation" ||
+            errName === "NotAuthorizedException" ||
+            /\b(?:AccessDenied|not authorized|UnauthorizedOperation)\b/i.test(
+              errMessage,
+            );
+          if (isPermissionError) {
+            return {
+              ...baseResult,
+              success: false,
+              error:
+                `Cannot verify DynamoDB deletion-protection propagation for ` +
+                `${resource.identifier}: missing dynamodb:DescribeTable ` +
+                `permission. Grant the operator role dynamodb:DescribeTable on ` +
+                `this table and retry. Underlying error: ${errMessage}`,
+            };
+          }
+          // Non-permission failure (e.g. transient throttle) — log and bail
+          // out of the poll loop, letting the downstream delete surface its
+          // own error.
           warnDestroy("dynamodb_describe_after_disable_failed", {
             identifier: resource.identifier,
             attempt: i + 1,
-            error: descErr instanceof Error ? descErr.message : String(descErr),
+            error: errMessage,
           });
           break;
         }
@@ -485,6 +519,18 @@ export async function destroySingleResource(
         isTruncated = versions.IsTruncated ?? false;
         keyMarker = versions.NextKeyMarker;
         versionIdMarker = versions.NextVersionIdMarker;
+        // V1 N5 audit (2026-04-06): paranoid guard against an infinite loop
+        // if the AWS response sets IsTruncated=true but omits BOTH next
+        // markers. The AWS spec says this can't happen, but a malformed/
+        // mocked response previously caused destroy to spin forever. Break
+        // out so the destroy attempt fails fast and the caller can retry.
+        if (isTruncated && !keyMarker && !versionIdMarker) {
+          warnDestroy("s3_list_versions_truncated_without_marker", {
+            identifier: resource.identifier,
+            batch,
+          });
+          break;
+        }
       }
     } catch (err) {
       // Surface missing-credentials errors clearly — swallowing them here

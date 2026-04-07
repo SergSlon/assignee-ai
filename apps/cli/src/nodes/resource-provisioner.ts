@@ -491,6 +491,12 @@ export async function resourceProvisionerNode(
             "AWS returned empty KeyMaterial — key pair may not have been created correctly",
           );
         }
+        // V1 N3 audit (2026-04-06): set the cleanup tracker IMMEDIATELY after
+        // AWS confirms the key was created — BEFORE any local filesystem work
+        // can throw. mkdirSync (or any subsequent fs error) used to leave the
+        // tracker undefined, leaking a key in AWS without a corresponding
+        // local .pem file and no cleanup record.
+        sshKeyCreatedName = keyName;
         // Save private key to ~/.assignee/keys/
         const { mkdirSync, writeFileSync, chmodSync } = await import("node:fs");
         const { join } = await import("node:path");
@@ -514,7 +520,6 @@ export async function resourceProvisionerNode(
           // Best effort — Windows or unusual filesystems may reject chmod.
         }
         const keyPath = join(keysDir, `${safeKeyName}.pem`);
-        sshKeyCreatedName = keyName; // Track before write so cleanup runs if write fails
         writeFileSync(keyPath, keyResult.KeyMaterial, { mode: 0o400 });
         process.stderr.write(
           `\u001B[33m🔑 SSH key pair created: ${keyPath}\u001B[0m\n`,
@@ -582,8 +587,13 @@ export async function resourceProvisionerNode(
   // same (runId, currentResourceIndex) pair produces a NEW ClientToken.
   // Without this, CloudControl returns the cached prior failure record
   // forever and the user cannot retry without abandoning the runId.
+  //
+  // V1 N1: Slice to 12 hex chars (48 bits of entropy). The previous 8-char
+  // slice gave only 32 bits, with a birthday-paradox collision boundary at
+  // ~65k retries — feasible inside a long-running loop. 48 bits pushes the
+  // boundary to ~16.7M retries, well outside any realistic usage.
   const { randomUUID } = await import("node:crypto");
-  const attemptSuffix = randomUUID().slice(0, 8);
+  const attemptSuffix = randomUUID().replace(/-/g, "").slice(0, 12);
   const indexSuffix =
     state.currentResourceIndex != null && state.currentResourceIndex > 0
       ? `-${state.currentResourceIndex}`
