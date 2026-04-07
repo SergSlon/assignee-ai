@@ -18,7 +18,6 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   defaultPluginRegistry,
-  MissingRequiredFieldsError,
   CfnKey,
   QuestionTypeName,
 } from "@assignee/core";
@@ -89,7 +88,6 @@ export { resolveFieldConfigs } from "../utils/field-resolver.js";
 import {
   fieldFetchKey,
   evaluateShowIf,
-  populateDefaultOptions,
   enrichFieldLabels,
   applyCategorySmartFilter,
   applyOptionRanking,

@@ -410,7 +410,7 @@ describe("DriftDetectorService", () => {
         ],
         {
           concurrency: 1,
-          onProgress: (completed, total) => {
+          onProgress: (completed, _total) => {
             progressCalls.push(completed);
           },
         },

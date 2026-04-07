@@ -3,14 +3,12 @@ import {
   ExecutionStatus,
   MockLlmAdapter,
   RESOURCE_TYPES,
-  CfnKey,
   ResourceDefault,
 } from "@assignee/core";
 import {
   createPlanGeneratorNode,
   applyToCfnTransforms,
 } from "./plan-generator.js";
-import type { AgentState } from "../services/graph.js";
 
 // Mock memory service (Story 19.3, 19.4).
 // NOTE: Default impls are re-installed in beforeEach because vitest's

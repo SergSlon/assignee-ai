@@ -103,15 +103,12 @@ function makeCtx(graphInvokeFn?: (...args: unknown[]) => unknown) {
   };
 }
 
-let exitSpy: ReturnType<typeof vi.spyOn>;
 let stdoutWriteSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
   capturedOpts = null;
-  exitSpy = vi
-    .spyOn(process, "exit")
-    .mockImplementation((() => {}) as never) as any;
+  vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
   stdoutWriteSpy = vi
     .spyOn(process.stdout, "write")
     .mockImplementation(() => true) as any;

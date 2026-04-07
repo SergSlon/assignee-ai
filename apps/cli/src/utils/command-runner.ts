@@ -22,7 +22,6 @@
 
 import type { StructuredTool } from "@langchain/core/tools";
 import { ConfigurationError, AssigneeError } from "@assignee/core";
-import { ProcessExitCode } from "../constants/errors.js";
 import {
   createMcpClient,
   getMcpTools,

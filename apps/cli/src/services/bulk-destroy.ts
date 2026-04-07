@@ -105,6 +105,13 @@ function extractIdentifier(arn: string): string {
     }
   }
 
+  // SSM parameter: "parameter/<name>" — preserve canonical leading slash
+  // since SSM parameter names (and the CloudControl identifier) always begin
+  // with "/". e.g. "parameter/e2e-test/param1" -> "/e2e-test/param1"
+  if (resourceSection.startsWith("parameter/")) {
+    return "/" + resourceSection.slice("parameter/".length);
+  }
+
   // Slash-separated: "type/identifier"
   const slashIdx = resourceSection.indexOf("/");
   if (slashIdx !== -1) {

@@ -4,7 +4,14 @@
  * @see Story 18.4
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  type MockInstance,
+} from "vitest";
 
 // Mock the list-resources service
 vi.mock("../services/list-resources.js", () => ({
@@ -22,9 +29,9 @@ vi.mock("../utils/display.js", () => ({
 // which restores originals between tests). Previously these were defined at
 // module top-level and silently relied on the leak.
 
-let mockExit: any;
-
-let stdoutWrite: any;
+// process.stdout.write is an overloaded function; use the exact signature
+// so TS accepts the spy return type on assignment.
+let stdoutWrite: MockInstance<typeof process.stdout.write>;
 
 import { fetchManagedResources } from "../services/list-resources.js";
 import {
@@ -59,9 +66,7 @@ async function runListCommand(args: string[] = []): Promise<void> {
 describe("assignee list command", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockExit = vi
-      .spyOn(process, "exit")
-      .mockImplementation((() => {}) as never);
+    vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
     stdoutWrite = vi
       .spyOn(process.stdout, "write")
       .mockImplementation(() => true);

@@ -8,11 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import {
-  wizardKeyMap,
-  toSetFlag,
-  toSetFlagFromPatch,
-} from "./wizard-key-map.js";
+import { toSetFlag, toSetFlagFromPatch } from "./wizard-key-map.js";
 
 // ---------------------------------------------------------------------------
 // toSetFlag
@@ -22,7 +18,9 @@ describe("toSetFlag", () => {
   it("returns first wizard field for a known patch key", () => {
     expect(toSetFlag("BlockDeviceMappings")).toBe("EbsEncrypted");
     expect(toSetFlag("PublicAccessBlockConfiguration")).toBe("BlockPublicAcls");
-    expect(toSetFlag("VersioningConfiguration")).toBe("VersioningConfiguration");
+    expect(toSetFlag("VersioningConfiguration")).toBe(
+      "VersioningConfiguration",
+    );
   });
 
   it("returns null for an unknown patch key", () => {

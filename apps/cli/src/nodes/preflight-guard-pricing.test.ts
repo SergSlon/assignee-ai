@@ -18,7 +18,6 @@ import {
   defaultDecomposerRegistry,
   extractFirstTierPrice,
   type AwsPricingResponse,
-  type PricingLineItem,
   type McpPricingFilter,
 } from "@assignee/core";
 import { preflightGuardNode } from "./preflight-guard.js";

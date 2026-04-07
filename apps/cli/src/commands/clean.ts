@@ -36,6 +36,12 @@ import {
   type ManagedResource,
 } from "../services/bulk-destroy.js";
 import { destroySingleResource } from "../services/destroy-service.js";
+import {
+  pruneOldLogs,
+  resolveLogRetentionDays,
+  getLogDir,
+  type PruneResult,
+} from "../utils/logger.js";
 
 /** Return true when every numeric value in the report is zero. */
 function isEmptyReport(report: CleanupReport): boolean {
@@ -58,7 +64,26 @@ interface CleanOpts {
   cache?: boolean;
   memory?: boolean;
   resources?: boolean;
+  logs?: boolean;
   json?: boolean;
+}
+
+/**
+ * Prune old persistent log files under `~/.assignee/logs` (or
+ * `ASSIGNEE_LOG_DIR`). Honors `ASSIGNEE_LOG_RETENTION_DAYS` (default 14).
+ *
+ * In dry-run mode this reports counts without deleting. Because
+ * `pruneOldLogs` is destructive by design, dry-run is implemented by
+ * re-implementing the walk here without the `unlink` call — keeping the
+ * production path single-responsibility.
+ */
+function runLogPrune(
+  dryRun: boolean,
+): PruneResult & { retentionDays: number; dir: string } {
+  const retentionDays = resolveLogRetentionDays();
+  const dir = getLogDir();
+  const result = pruneOldLogs(dir, retentionDays, new Date(), { dryRun });
+  return { ...result, retentionDays, dir };
 }
 
 /**
@@ -182,9 +207,15 @@ async function cleanAction(opts: CleanOpts): Promise<void> {
   const dryRun = !(opts.confirm || opts.yes);
   const hasLocalFlags = opts.checkpoints || opts.cache || opts.memory;
   const hasResources = opts.resources === true;
+  const hasLogs = opts.logs === true;
+  const hasAnyScopedFlag = hasLocalFlags || hasResources || hasLogs;
 
-  // When --resources is the only flag, skip local cleanup
-  const doLocalCleanup = hasLocalFlags || !hasResources;
+  // Local (checkpoints/cache/memory) cleanup runs when:
+  //  - explicit local flags are set, OR
+  //  - no scoped flag is set at all (default "everything" behaviour)
+  const doLocalCleanup = hasLocalFlags || !hasAnyScopedFlag;
+  // Log pruning runs when --logs is explicit OR no scoped flag at all.
+  const doLogPrune = hasLogs || !hasAnyScopedFlag;
 
   try {
     // ── Local cleanup (checkpoints, cache, memory) ────────────────────
@@ -204,13 +235,21 @@ async function cleanAction(opts: CleanOpts): Promise<void> {
         categories: catParam,
       });
 
+      // Pre-compute the log prune result so the "nothing to clean" short
+      // circuit can take it into account. Running it twice (once here, once
+      // for display) would be wasteful and — in non-dry-run mode — would
+      // delete the files the second call would try to report on.
+      const pruneResult = doLogPrune ? runLogPrune(dryRun) : null;
+
       // JSON output — no human-readable decorations
       if (opts.json) {
-        process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+        const payload = pruneResult ? { ...report, logs: pruneResult } : report;
+        process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
         // If --resources is also set, continue; otherwise return
         if (!hasResources) return;
       } else if (isEmptyReport(report)) {
-        if (!hasResources) {
+        const logsEmpty = pruneResult === null || pruneResult.deleted === 0;
+        if (!hasResources && logsEmpty) {
           clack.intro("assignee clean");
           clack.outro("Nothing to clean.");
           return;
@@ -221,15 +260,32 @@ async function cleanAction(opts: CleanOpts): Promise<void> {
         clack.intro("assignee clean");
         const formatted = formatCleanupReport(report, dryRun);
         clack.note(formatted);
+      }
 
-        if (dryRun && !hasResources) {
-          clack.outro("Run with --confirm to execute.");
-          return;
-        }
+      // ── Log retention prune display (non-JSON) ─────────────────────
+      if (pruneResult && !opts.json) {
+        const verb = dryRun ? "Would delete" : "Deleted";
+        clack.log.info(
+          `Logs: ${verb} ${pruneResult.deleted} file(s) older than ${pruneResult.retentionDays} day(s); kept ${pruneResult.kept} (${pruneResult.dir})`,
+        );
       }
     } else {
-      // --resources only, no local cleanup
+      // --resources / --logs only, no local cleanup
       clack.intro("assignee clean");
+
+      if (doLogPrune) {
+        const pruneResult = runLogPrune(dryRun);
+        if (opts.json) {
+          process.stdout.write(
+            JSON.stringify({ logs: pruneResult }, null, 2) + "\n",
+          );
+        } else {
+          const verb = dryRun ? "Would delete" : "Deleted";
+          clack.log.info(
+            `Logs: ${verb} ${pruneResult.deleted} file(s) older than ${pruneResult.retentionDays} day(s); kept ${pruneResult.kept} (${pruneResult.dir})`,
+          );
+        }
+      }
     }
 
     // ── AWS resource cleanup ──────────────────────────────────────────
@@ -270,6 +326,10 @@ export function createCleanCommand(): Command {
     .option("--cache", "Only clean price cache")
     .option("--memory", "Only rotate memory files")
     .option("--resources", "Destroy stale e2e/test AWS resources")
+    .option(
+      "--logs",
+      "Prune persistent warn/error log files older than the retention window (ASSIGNEE_LOG_RETENTION_DAYS, default 14 days)",
+    )
     .option("--json", "Output results as JSON")
     .action(cleanAction);
 }

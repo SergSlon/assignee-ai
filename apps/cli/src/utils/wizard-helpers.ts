@@ -52,7 +52,6 @@ import {
   discoverRdsInstanceClasses,
   searchAmis,
 } from "../utils/aws-resource-discovery.js";
-import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
 import { ResourceFieldName } from "../constants/resource-fields.js";
 import { rankOptions } from "../utils/option-ranker.js";
 import type { WorkloadProfile } from "../utils/workload-classifier.js";

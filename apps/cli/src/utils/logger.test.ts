@@ -17,6 +17,11 @@ import {
   clearEnsuredDirCacheForTests,
   setLogFileSizeLimitForTests,
   resetLogFileSizeLimitForTests,
+  pruneOldLogs,
+  autoPruneLogsIfDue,
+  resolveLogRetentionDays,
+  DEFAULT_LOG_RETENTION_DAYS,
+  LOG_PRUNE_MARKER,
 } from "./logger.js";
 import type { LogEvent } from "./logger.js";
 
@@ -540,6 +545,242 @@ describe("logger", () => {
     log(event);
 
     expect(stderrSpy).toHaveBeenCalledOnce();
+  });
+
+  // ── pruneOldLogs / retention ────────────────────────────────────────
+  describe("pruneOldLogs", () => {
+    /**
+     * Seed a real-looking log file `daysAgo` days before `now`. Written
+     * with the same schema the logger emits so tests exercise the real
+     * filename parser. (Mocks-use-real-data rule.)
+     */
+    function seed(
+      dir: string,
+      daysAgo: number,
+      now: Date,
+      suffix?: number,
+    ): string {
+      const dt = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
+      const day = dt.toISOString().slice(0, 10);
+      const name =
+        suffix === undefined
+          ? `cli-${day}.jsonl`
+          : `cli-${day}.${suffix}.jsonl`;
+      fsSync.writeFileSync(
+        path.join(dir, name),
+        JSON.stringify({
+          ts: dt.toISOString(),
+          runId: "550e8400-e29b-41d4-a716-446655440000",
+          level: "error",
+          action: "apply_failed",
+        }) + "\n",
+      );
+      return name;
+    }
+
+    it("removes files strictly older than retentionDays", () => {
+      const now = new Date("2026-04-06T12:00:00.000Z");
+      const stale = seed(tmpLogDir, 20, now);
+      const edge = seed(tmpLogDir, 13, now);
+      const fresh = seed(tmpLogDir, 1, now);
+
+      const result = pruneOldLogs(tmpLogDir, 14, now);
+
+      expect(result.deleted).toBe(1);
+      expect(result.kept).toBe(2);
+      expect(fsSync.existsSync(path.join(tmpLogDir, stale))).toBe(false);
+      expect(fsSync.existsSync(path.join(tmpLogDir, edge))).toBe(true);
+      expect(fsSync.existsSync(path.join(tmpLogDir, fresh))).toBe(true);
+    });
+
+    it("keeps files inside the retention window (boundary test)", () => {
+      // File exactly at now - retentionDays days is NOT deleted (strict <).
+      const now = new Date("2026-04-06T12:00:00.000Z");
+      const boundary = seed(tmpLogDir, 14, now);
+
+      const result = pruneOldLogs(tmpLogDir, 14, now);
+
+      // 14 days ago at UTC midnight is earlier than now (12:00) minus
+      // 14*24h ⇒ filename date (midnight) is older than cutoff ⇒ deleted.
+      // Boundary check: 13 days ago must always survive.
+      const inner = seed(tmpLogDir, 13, now);
+      const r2 = pruneOldLogs(tmpLogDir, 14, now);
+
+      expect(result.deleted + r2.deleted).toBeGreaterThanOrEqual(1);
+      expect(fsSync.existsSync(path.join(tmpLogDir, inner))).toBe(true);
+      // Confirm the 14d file was removed on the first prune.
+      expect(fsSync.existsSync(path.join(tmpLogDir, boundary))).toBe(false);
+    });
+
+    it("parses numbered rotation suffixes", () => {
+      const now = new Date("2026-04-06T12:00:00.000Z");
+      const stale = seed(tmpLogDir, 30, now, 3);
+      const fresh = seed(tmpLogDir, 1, now, 7);
+
+      const result = pruneOldLogs(tmpLogDir, 14, now);
+
+      expect(result.deleted).toBe(1);
+      expect(fsSync.existsSync(path.join(tmpLogDir, stale))).toBe(false);
+      expect(fsSync.existsSync(path.join(tmpLogDir, fresh))).toBe(true);
+    });
+
+    it("counts non-log files as skipped without touching them", () => {
+      const now = new Date("2026-04-06T12:00:00.000Z");
+      seed(tmpLogDir, 30, now);
+      fsSync.writeFileSync(path.join(tmpLogDir, "README.txt"), "hello");
+      fsSync.writeFileSync(path.join(tmpLogDir, LOG_PRUNE_MARKER), "x");
+      fsSync.writeFileSync(
+        path.join(tmpLogDir, "cli-not-a-date.jsonl"),
+        "garbage",
+      );
+
+      const result = pruneOldLogs(tmpLogDir, 14, now);
+
+      expect(result.deleted).toBe(1);
+      expect(result.skipped).toBe(3);
+      expect(
+        fsSync.existsSync(path.join(tmpLogDir, "cli-not-a-date.jsonl")),
+      ).toBe(true);
+    });
+
+    it("rejects impossible dates like 2026-02-30", () => {
+      const now = new Date("2026-04-06T12:00:00.000Z");
+      fsSync.writeFileSync(
+        path.join(tmpLogDir, "cli-2026-02-30.jsonl"),
+        "garbage",
+      );
+      const result = pruneOldLogs(tmpLogDir, 14, now);
+      expect(result.skipped).toBe(1);
+      expect(result.deleted).toBe(0);
+    });
+
+    it("crosses month/year boundaries using real Date arithmetic", () => {
+      // Jan 5, 2026 - retention 14 days ⇒ cutoff Dec 22, 2025. A file from
+      // Dec 21, 2025 must be deleted; a file from Dec 23, 2025 must survive.
+      // String comparison would mis-order these across the year rollover.
+      const now = new Date("2026-01-05T12:00:00.000Z");
+      fsSync.writeFileSync(path.join(tmpLogDir, "cli-2025-12-21.jsonl"), "x");
+      fsSync.writeFileSync(path.join(tmpLogDir, "cli-2025-12-23.jsonl"), "y");
+
+      const result = pruneOldLogs(tmpLogDir, 14, now);
+
+      expect(result.deleted).toBe(1);
+      expect(result.kept).toBe(1);
+      expect(
+        fsSync.existsSync(path.join(tmpLogDir, "cli-2025-12-21.jsonl")),
+      ).toBe(false);
+      expect(
+        fsSync.existsSync(path.join(tmpLogDir, "cli-2025-12-23.jsonl")),
+      ).toBe(true);
+    });
+
+    it("is a no-op when the directory is missing (ENOENT tolerant)", () => {
+      const missing = path.join(tmpLogDir, "does-not-exist");
+      const result = pruneOldLogs(missing, 14, new Date());
+      expect(result).toEqual({ deleted: 0, kept: 0, skipped: 0 });
+    });
+
+    it("dryRun=true reports counts without deleting", () => {
+      const now = new Date("2026-04-06T12:00:00.000Z");
+      const stale = seed(tmpLogDir, 30, now);
+
+      const result = pruneOldLogs(tmpLogDir, 14, now, { dryRun: true });
+
+      expect(result.deleted).toBe(1);
+      expect(fsSync.existsSync(path.join(tmpLogDir, stale))).toBe(true);
+    });
+  });
+
+  describe("resolveLogRetentionDays", () => {
+    it("defaults to DEFAULT_LOG_RETENTION_DAYS when env var is unset", () => {
+      delete process.env["ASSIGNEE_LOG_RETENTION_DAYS"];
+      expect(resolveLogRetentionDays()).toBe(DEFAULT_LOG_RETENTION_DAYS);
+    });
+
+    it("honors a valid positive integer env var", () => {
+      process.env["ASSIGNEE_LOG_RETENTION_DAYS"] = "7";
+      expect(resolveLogRetentionDays()).toBe(7);
+    });
+
+    it("falls back to default for zero, negative, or non-numeric values", () => {
+      process.env["ASSIGNEE_LOG_RETENTION_DAYS"] = "0";
+      expect(resolveLogRetentionDays()).toBe(DEFAULT_LOG_RETENTION_DAYS);
+      process.env["ASSIGNEE_LOG_RETENTION_DAYS"] = "-5";
+      expect(resolveLogRetentionDays()).toBe(DEFAULT_LOG_RETENTION_DAYS);
+      process.env["ASSIGNEE_LOG_RETENTION_DAYS"] = "abc";
+      expect(resolveLogRetentionDays()).toBe(DEFAULT_LOG_RETENTION_DAYS);
+    });
+
+    it("floors fractional values", () => {
+      process.env["ASSIGNEE_LOG_RETENTION_DAYS"] = "7.9";
+      expect(resolveLogRetentionDays()).toBe(7);
+    });
+  });
+
+  describe("autoPruneLogsIfDue", () => {
+    it("prunes on the first call and writes the marker file", () => {
+      const now = new Date("2026-04-06T12:00:00.000Z");
+      // Seed one stale file so we can assert prune actually ran.
+      const stale = "cli-2026-03-01.jsonl";
+      fsSync.writeFileSync(path.join(tmpLogDir, stale), "x");
+
+      const result = autoPruneLogsIfDue(tmpLogDir, 14, now);
+
+      expect(result).not.toBeNull();
+      expect(result!.deleted).toBe(1);
+      expect(fsSync.existsSync(path.join(tmpLogDir, LOG_PRUNE_MARKER))).toBe(
+        true,
+      );
+    });
+
+    it("skips subsequent calls within 24h (marker throttle)", () => {
+      const now = new Date("2026-04-06T12:00:00.000Z");
+      fsSync.writeFileSync(path.join(tmpLogDir, "cli-2026-03-01.jsonl"), "x");
+
+      const first = autoPruneLogsIfDue(tmpLogDir, 14, now);
+      expect(first).not.toBeNull();
+
+      // Seed a new stale file AFTER the first prune; the throttle must
+      // prevent the second call from touching it.
+      fsSync.writeFileSync(path.join(tmpLogDir, "cli-2026-03-02.jsonl"), "y");
+      // Only 23 hours later — still inside the 24h window.
+      const soon = new Date(now.getTime() + 23 * 60 * 60 * 1000);
+      const second = autoPruneLogsIfDue(tmpLogDir, 14, soon);
+
+      expect(second).toBeNull();
+      expect(
+        fsSync.existsSync(path.join(tmpLogDir, "cli-2026-03-02.jsonl")),
+      ).toBe(true);
+    });
+
+    it("prunes again once 24h has passed since the marker mtime", () => {
+      const now = new Date("2026-04-06T12:00:00.000Z");
+      fsSync.writeFileSync(path.join(tmpLogDir, "cli-2026-03-01.jsonl"), "x");
+
+      autoPruneLogsIfDue(tmpLogDir, 14, now);
+      // Stale file seeded AFTER first prune (25h later ⇒ window expired).
+      fsSync.writeFileSync(path.join(tmpLogDir, "cli-2026-03-02.jsonl"), "y");
+
+      const later = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+      // We must push the marker mtime back to the first call's time so
+      // the throttle sees a 25h gap. Overwrite it with fs.utimesSync.
+      const markerPath = path.join(tmpLogDir, LOG_PRUNE_MARKER);
+      const past = now.getTime() / 1000;
+      fsSync.utimesSync(markerPath, past, past);
+
+      const result = autoPruneLogsIfDue(tmpLogDir, 14, later);
+
+      expect(result).not.toBeNull();
+      expect(
+        fsSync.existsSync(path.join(tmpLogDir, "cli-2026-03-02.jsonl")),
+      ).toBe(false);
+    });
+
+    it("returns null when directory does not exist", () => {
+      const missing = path.join(tmpLogDir, "nope");
+      const result = autoPruneLogsIfDue(missing, 14, new Date());
+      expect(result).toBeNull();
+    });
   });
 
   it("LOG_ACTIONS contains expected action names", () => {

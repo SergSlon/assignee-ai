@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { RESOURCE_TYPES, ResourceDefault, CfnKey } from "@assignee/core";
-import type { IntentDefaultOverride } from "./intent-defaults.js";
 import { getIntentDefaults, applyIntentOverrides } from "./intent-defaults.js";
 import type { ResourceField } from "@assignee/core";
 

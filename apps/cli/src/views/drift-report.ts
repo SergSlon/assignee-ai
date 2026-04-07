@@ -6,7 +6,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
-import type { DriftResult, DriftStatusType } from "@assignee/core";
+import type { DriftResult } from "@assignee/core";
 import { DriftStatus } from "@assignee/core";
 import { AWS_REGION, UNKNOWN_FALLBACK } from "../config/constants.js";
 

@@ -24,7 +24,6 @@ import {
   DEFAULT_AWS_REGION,
   AssigneeTag,
   CostEstimateLabel,
-  AWS_SERVICE_EXECUTE_API,
   UNKNOWN_FALLBACK,
   arnToCloudFormationType,
 } from "@assignee/core";

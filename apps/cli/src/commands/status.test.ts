@@ -7,7 +7,15 @@
  * @see Story 19.6, AC #5
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from "vitest";
 import type { ManagedResource } from "../services/list-resources.js";
 import type { StatusData } from "../services/status-aggregator.js";
 
@@ -55,11 +63,11 @@ vi.mock("./status-factory.js", () => ({
 }));
 
 describe("status command", () => {
-  let stdoutSpy: any;
+  let stdoutSpy: MockInstance<typeof process.stdout.write>;
 
-  let stderrSpy: any;
+  let stderrSpy: MockInstance<typeof process.stderr.write>;
 
-  let exitSpy: any;
+  let exitSpy: MockInstance<typeof process.exit>;
 
   beforeEach(() => {
     stdoutSpy = vi.spyOn(process.stdout, "write").mockReturnValue(true);
@@ -219,7 +227,7 @@ describe("status command options registration", () => {
 });
 
 describe("status --bp-coverage uses status-factory for DI", () => {
-  let stdoutSpy: any;
+  let stdoutSpy: MockInstance<typeof process.stdout.write>;
 
   beforeEach(async () => {
     stdoutSpy = vi.spyOn(process.stdout, "write").mockReturnValue(true);

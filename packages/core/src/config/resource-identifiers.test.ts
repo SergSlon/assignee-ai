@@ -48,6 +48,7 @@ describe("getPrimaryIdentifier", () => {
   });
 
   it("returns undefined for an unknown resource type", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- intentional invalid resource type for negative-path test
     const result = getPrimaryIdentifier("AWS::Unknown::Type" as any, {
       Name: "test",
     });

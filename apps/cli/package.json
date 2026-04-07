@@ -54,7 +54,7 @@
     "test:e2e": "RUN_E2E=1 vitest run src/e2e/e2e-plan.test.ts",
     "start": "node ./dist/index.js",
     "check-types": "tsc --noEmit",
-    "lint": "eslint src --max-warnings 170"
+    "lint": "eslint src --max-warnings 100"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^4.0.77",

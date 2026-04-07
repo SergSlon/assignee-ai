@@ -97,14 +97,10 @@ function makeCtx(
   };
 }
 
-let exitSpy: ReturnType<typeof vi.spyOn>;
-
 beforeEach(() => {
   vi.clearAllMocks();
   capturedOpts = null;
-  exitSpy = vi
-    .spyOn(process, "exit")
-    .mockImplementation((() => {}) as never) as any;
+  vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
   vi.spyOn(process.stderr, "write").mockImplementation(() => true);
   vi.spyOn(process.stdout, "write").mockImplementation(() => true);
   vi.spyOn(console, "error").mockImplementation(() => {});

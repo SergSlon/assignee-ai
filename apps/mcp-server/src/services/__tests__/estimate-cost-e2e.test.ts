@@ -12,7 +12,6 @@ import { describe, it, expect } from "vitest";
 import {
   classifyResourceType,
   estimateCostForResource,
-  type CostEstimateResult,
 } from "../cost-estimator.js";
 import { getFreeTierNote } from "../free-tier.js";
 

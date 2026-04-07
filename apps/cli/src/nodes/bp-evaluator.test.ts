@@ -13,7 +13,7 @@ import {
   afterEach,
   type MockInstance,
 } from "vitest";
-import type { BPFinding, BestPractice } from "@assignee/best-practices";
+import type { BestPractice } from "@assignee/best-practices";
 import type { AgentState } from "../services/graph.js";
 
 // Mock loadBestPractices to return controlled fixtures. verifyManifest and

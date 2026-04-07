@@ -9,6 +9,22 @@
     },
     "test": {
       "dependsOn": [],
+      "env": [
+        "RUN_E2E",
+        "CI",
+        "NODE_ENV",
+        "ASSIGNEE_BP_INTEGRITY",
+        "ASSIGNEE_LOG_LEVEL",
+        "ASSIGNEE_VERBOSITY",
+        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
+        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+        "ASSIGNEE_READER_ACCESS_KEY_ID",
+        "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+        "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
+        "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION"
+      ],
       "inputs": [
         "src/**/*.ts",
         "src/**/*.tsx",
@@ -25,6 +41,22 @@
     },
     "test:coverage": {
       "dependsOn": [],
+      "env": [
+        "RUN_E2E",
+        "CI",
+        "NODE_ENV",
+        "ASSIGNEE_BP_INTEGRITY",
+        "ASSIGNEE_LOG_LEVEL",
+        "ASSIGNEE_VERBOSITY",
+        "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
+        "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+        "ASSIGNEE_READER_ACCESS_KEY_ID",
+        "ASSIGNEE_READER_SECRET_ACCESS_KEY",
+        "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
+        "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION"
+      ],
       "inputs": [
         "src/**/*.ts",
         "src/**/*.tsx",

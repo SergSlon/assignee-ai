@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  validateConfig,
-  CONFIG_DEFAULTS,
-  type AssigneeConfig,
-} from "./config-schema.js";
+import { validateConfig, CONFIG_DEFAULTS } from "./config-schema.js";
 import { ConfigurationError } from "../errors.js";
 
 describe("validateConfig", () => {

@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-import { ExecutionStatus, MissingRequiredFieldsError } from "@assignee/core";
+import { ExecutionStatus } from "@assignee/core";
 import type { ResourcePlugin } from "@assignee/core";
 
 vi.mock("@clack/prompts", () => ({
@@ -211,8 +211,7 @@ vi.mock("@assignee/core", async (importOriginal) => {
   };
 });
 
-const { confirm, select, text, multiselect, isCancel } =
-  await import("@clack/prompts");
+const { confirm, select, text, multiselect } = await import("@clack/prompts");
 const {
   optionElicitorNode,
   populateDefaultOptions,

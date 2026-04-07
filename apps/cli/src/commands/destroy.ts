@@ -45,7 +45,6 @@ import { destroySingleResource } from "../services/destroy-service.js";
 import {
   planBulkDestroy,
   type BulkDestroyPlan,
-  type ManagedResource,
 } from "../services/bulk-destroy.js";
 
 /**

@@ -12,7 +12,7 @@ import {
   PutObjectCommand,
   PutBucketPolicyCommand,
 } from "@aws-sdk/client-s3";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, extname } from "node:path";
 import { ConfigurationError, IamEffect } from "@assignee/core";
 import { requireAssigneeCredentials } from "../config/aws-credentials.js";

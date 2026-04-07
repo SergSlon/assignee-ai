@@ -71,7 +71,7 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       },
       toCfn: (answer: unknown) => {
         if (!answer) return undefined;
-        const [name, type] = String(answer).split(":");
+        const [name, _type] = String(answer).split(":");
         return [{ AttributeName: name, KeyType: "HASH" }];
       },
     },

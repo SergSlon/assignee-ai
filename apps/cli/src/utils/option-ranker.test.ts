@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { rankOptions } from "./option-ranker.js";
-import type { WorkloadProfile } from "./option-ranker.js";
 
 /** Helper: generates a set of EC2-like instance type options. */
 function ec2Options() {

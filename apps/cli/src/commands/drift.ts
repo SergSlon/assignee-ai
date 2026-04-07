@@ -16,10 +16,6 @@ import boxen from "boxen";
 import { DriftStatus, AssigneeError, type DriftResult } from "@assignee/core";
 import { ErrorCode } from "../constants/errors.js";
 import { MemoryService } from "../services/memory.js";
-import {
-  DriftDetectorService,
-  type DriftDetectorOptions,
-} from "../services/drift-detector.js";
 import { createDriftDetectorFromEnv } from "../services/drift-detector-factory.js";
 import { renderDriftDetail } from "../views/drift-detail.js";
 import { buildDriftReport } from "../views/drift-report.js";

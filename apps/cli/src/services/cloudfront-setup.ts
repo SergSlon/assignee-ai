@@ -12,7 +12,6 @@ import {
   CloudFrontClient,
   CreateDistributionWithTagsCommand,
   CreateOriginAccessControlCommand,
-  TagResourceCommand,
 } from "@aws-sdk/client-cloudfront";
 import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import type { AwsConfig } from "./cloudcontrol-client.js";
@@ -73,7 +72,6 @@ export async function createCloudFrontDistribution(
   const client = createCloudFrontClient(creds);
 
   // 1. Create Origin Access Control
-  const callerReference = `assignee-oac-${bucketName}-${Date.now()}`;
   const oacResp = await client.send(
     new CreateOriginAccessControlCommand({
       OriginAccessControlConfig: {

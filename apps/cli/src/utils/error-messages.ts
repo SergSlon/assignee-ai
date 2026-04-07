@@ -24,7 +24,6 @@ import {
   StateGuardError,
   MissingRequiredFieldsError,
   PROVISIONING_ERROR_CODES,
-  type ProvisioningErrorCode,
 } from "@assignee/core";
 
 /* Error codes are now imported from ../constants/errors.js */
