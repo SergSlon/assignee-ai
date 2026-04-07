@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildPlanFromResources,
   DESTROY_TIER,
+  isAssigneeInfraResource,
   type BulkDestroyOptions,
 } from "../bulk-destroy.js";
 
@@ -141,6 +142,110 @@ describe("BulkDestroyService — buildPlanFromResources", () => {
       const lastResource = plan.resources[plan.resources.length - 1]!;
       expect(lastResource.tier).toBe(6);
       expect(lastResource.resourceType).toBe("AWS::IAM::Role");
+    });
+  });
+
+  // Closes Phase 2 BUG-3: `destroy --all --include-iam` would have swept
+  // the AssigneeOperatorPolicy / AssigneeReaderPolicy / AssigneeAuditor
+  // Policy resources created by `assignee setup`, locking the user out
+  // of every subsequent assignee command. The safety allowlist filters
+  // these out unconditionally, even when --include-iam is passed.
+  describe("assignee infrastructure safety allowlist", () => {
+    const ASSIGNEE_OPERATOR_POLICY = res(
+      "arn:aws:iam::112233445566:policy/AssigneeOperatorPolicy",
+      "AWS::IAM::ManagedPolicy",
+    );
+    const ASSIGNEE_READER_POLICY = res(
+      "arn:aws:iam::112233445566:policy/AssigneeReaderPolicy",
+      "AWS::IAM::ManagedPolicy",
+    );
+    const ASSIGNEE_AUDITOR_POLICY = res(
+      "arn:aws:iam::112233445566:policy/AssigneeAuditorPolicy",
+      "AWS::IAM::ManagedPolicy",
+    );
+    const ASSIGNEE_BEDROCK_ROLE = res(
+      "arn:aws:iam::112233445566:role/AssigneeAiBedrockLoggingRole",
+      "AWS::IAM::Role",
+    );
+    const USER_IAM_ROLE = res(
+      "arn:aws:iam::112233445566:role/my-app-execution-role",
+      "AWS::IAM::Role",
+    );
+
+    it("isAssigneeInfraResource matches all 3 setup-created policies", () => {
+      expect(isAssigneeInfraResource(ASSIGNEE_OPERATOR_POLICY.arn)).toBe(true);
+      expect(isAssigneeInfraResource(ASSIGNEE_READER_POLICY.arn)).toBe(true);
+      expect(isAssigneeInfraResource(ASSIGNEE_AUDITOR_POLICY.arn)).toBe(true);
+    });
+
+    it("isAssigneeInfraResource matches the AssigneeAi* role created by setup", () => {
+      expect(isAssigneeInfraResource(ASSIGNEE_BEDROCK_ROLE.arn)).toBe(true);
+    });
+
+    it("isAssigneeInfraResource does NOT match user IAM resources", () => {
+      expect(isAssigneeInfraResource(USER_IAM_ROLE.arn)).toBe(false);
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws:iam::112233445566:role/MyAssigneeOperatorPolicyClone",
+        ),
+      ).toBe(false);
+      expect(
+        isAssigneeInfraResource("arn:aws:iam::112233445566:role/lambda-exec"),
+      ).toBe(false);
+    });
+
+    it("isAssigneeInfraResource does NOT match non-IAM ARNs", () => {
+      expect(
+        isAssigneeInfraResource("arn:aws:s3:::AssigneeOperatorPolicy"),
+      ).toBe(false);
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws:lambda:us-east-1:112233445566:function:AssigneeReaderPolicy",
+        ),
+      ).toBe(false);
+    });
+
+    it("excludes AssigneeOperatorPolicy from --include-iam plan", () => {
+      const input = [
+        TIER2_LAMBDA,
+        ASSIGNEE_OPERATOR_POLICY,
+        ASSIGNEE_READER_POLICY,
+        ASSIGNEE_AUDITOR_POLICY,
+        USER_IAM_ROLE,
+      ];
+      const plan = buildPlanFromResources(input, { includeIam: true });
+
+      const arns = plan.resources.map((r) => r.arn);
+      expect(arns).not.toContain(ASSIGNEE_OPERATOR_POLICY.arn);
+      expect(arns).not.toContain(ASSIGNEE_READER_POLICY.arn);
+      expect(arns).not.toContain(ASSIGNEE_AUDITOR_POLICY.arn);
+      // The user's own IAM role IS included.
+      expect(arns).toContain(USER_IAM_ROLE.arn);
+      // Lambda is included.
+      expect(arns).toContain(TIER2_LAMBDA.arn);
+      // 3 assignee infra policies excluded.
+      expect(plan.excludedCount).toBe(3);
+    });
+
+    it("excludes AssigneeAi* role from --include-iam plan", () => {
+      const input = [ASSIGNEE_BEDROCK_ROLE, USER_IAM_ROLE];
+      const plan = buildPlanFromResources(input, { includeIam: true });
+
+      const arns = plan.resources.map((r) => r.arn);
+      expect(arns).not.toContain(ASSIGNEE_BEDROCK_ROLE.arn);
+      expect(arns).toContain(USER_IAM_ROLE.arn);
+    });
+
+    it("excludes assignee infra policies even WITHOUT --include-iam", () => {
+      // The IAM exclusion already filters them, but the safety allowlist
+      // must take precedence so the order of filters does not matter
+      // and a future refactor can't accidentally let them through.
+      const input = [TIER5_S3, ASSIGNEE_OPERATOR_POLICY];
+      const plan = buildPlanFromResources(input);
+
+      expect(plan.resources.map((r) => r.arn)).not.toContain(
+        ASSIGNEE_OPERATOR_POLICY.arn,
+      );
     });
   });
 

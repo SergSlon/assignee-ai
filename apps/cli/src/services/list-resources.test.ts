@@ -34,6 +34,18 @@ vi.mock("../utils/tags.js", () => ({
   TAG_VALUE_MANAGED_BY: "assignee-ai",
 }));
 
+// Mock the IAM role inventory helper so RGTA-only tests don't try to
+// construct a real IAMClient. Per-test overrides can stub this further
+// to exercise the IAM merge path. vi.hoisted is required because
+// vi.mock is hoisted above const decls.
+const { mockFetchManagedIamRoles } = vi.hoisted(() => ({
+  mockFetchManagedIamRoles: vi.fn(),
+}));
+vi.mock("./iam-role-inventory.js", () => ({
+  fetchManagedIamRoles: mockFetchManagedIamRoles,
+  IAM_ROLE_RESOURCE_TYPE: "AWS::IAM::Role",
+}));
+
 import * as fs from "node:fs";
 import {
   ResourceGroupsTaggingAPIClient,
@@ -59,6 +71,9 @@ describe("list-resources service", () => {
     vi.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error("ENOENT");
     });
+    // Default: empty IAM role inventory — RGTA-only tests don't care
+    // about the IAM merge path. Specific IAM tests below override this.
+    mockFetchManagedIamRoles.mockResolvedValue([]);
   });
 
   describe("fetchManagedResources", () => {
