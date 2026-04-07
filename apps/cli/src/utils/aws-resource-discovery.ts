@@ -34,7 +34,7 @@ import { withTimeout } from "./timeout.js";
 import { AWS_REGION, PromiseStatus } from "../config/constants.js";
 import {
   tryAssigneeCredentials,
-  MissingAssigneeCredentialsError,
+  type ExplicitAwsCredentials,
 } from "../config/aws-credentials.js";
 import { WorkloadProfile as WP } from "../constants/workload-profiles.js";
 
@@ -111,44 +111,50 @@ async function cachedDiscover(
 /**
  * Resolve reader credentials via the centralized helper.
  *
- * Discovery is a best-effort, read-only feature with a documented graceful
- * no-op path: if reader credentials are not configured, every discover*()
- * function returns []. We use `tryAssigneeCredentials` (not `require`) so
- * missing env vars surface as a clean fallback rather than a thrown error.
+ * ──────────────────────────────────────────────────────────────────────────
+ * GRACEFUL DEGRADATION CONTRACT
+ * ──────────────────────────────────────────────────────────────────────────
+ * Discovery is a best-effort, read-only feature used by the option-elicitor
+ * to populate dropdowns (subnets, AMIs, key pairs, RDS classes, etc.). A user
+ * running `assignee plan` with only operator credentials configured — but no
+ * reader credentials — must still be able to run the wizard with manual-entry
+ * fallbacks. We therefore use `tryAssigneeCredentials` (non-throwing) and
+ * return `undefined` so each discover*() function can short-circuit to `[]`
+ * before ever constructing an SDK client.
  *
- * Throws `MissingAssigneeCredentialsError` from the catch in the caller's
- * try/catch — never falls through to ~/.aws/credentials, SSO, or IMDS.
+ * SECURITY: never falls through to `~/.aws/credentials`, SSO, or IMDS. When
+ * reader env vars are unset, the SDK client is simply not built — no empty
+ * credentials are ever sent to AWS, and no ambient AWS_* shell vars are
+ * honored.
  */
-function readerCreds() {
-  const creds = tryAssigneeCredentials("reader");
-  if (!creds) {
-    throw new MissingAssigneeCredentialsError(
-      "reader",
-      "ASSIGNEE_READER_ACCESS_KEY_ID",
-      "ASSIGNEE_READER_SECRET_ACCESS_KEY",
-    );
-  }
-  return creds;
+function readerCredsOrUndefined(): ExplicitAwsCredentials | undefined {
+  return tryAssigneeCredentials("reader");
 }
 
-function createEc2Client(): EC2Client {
+function createEc2Client(): EC2Client | undefined {
+  const creds = readerCredsOrUndefined();
+  if (!creds) return undefined;
   return new EC2Client({
     region: AWS_REGION,
-    credentials: readerCreds(),
+    credentials: creds,
   });
 }
 
-function createSsmClient(): SSMClient {
+function createSsmClient(): SSMClient | undefined {
+  const creds = readerCredsOrUndefined();
+  if (!creds) return undefined;
   return new SSMClient({
     region: AWS_REGION,
-    credentials: readerCreds(),
+    credentials: creds,
   });
 }
 
-function createRdsClient(): RDSClient {
+function createRdsClient(): RDSClient | undefined {
+  const creds = readerCredsOrUndefined();
+  if (!creds) return undefined;
   return new RDSClient({
     region: AWS_REGION,
-    credentials: readerCreds(),
+    credentials: creds,
   });
 }
 
@@ -240,6 +246,7 @@ export async function discoverInstanceTypes(): Promise<InstanceTypeCategory[]> {
   try {
     const categories = await (async () => {
       const ec2 = createEc2Client();
+      if (!ec2) return []; // Graceful no-op: reader creds not configured
 
       // Fetch common instance types (filter to current-gen to keep list manageable)
       const result = await withTimeout(
@@ -344,6 +351,7 @@ export async function discoverInstanceTypes(): Promise<InstanceTypeCategory[]> {
 export async function discoverAmis(): Promise<DiscoveryOption[]> {
   return cachedDiscover(DiscoveryCacheKey.AMIS, async () => {
     const ssm = createSsmClient();
+    if (!ssm) return []; // Graceful no-op: reader creds not configured
     const params: Array<{ path: string; label: string }> = [
       {
         path: "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64",
@@ -413,6 +421,7 @@ export async function resolveAmiFromOsName(
 
   try {
     const ssm = createSsmClient();
+    if (!ssm) return null; // Graceful no-op: reader creds not configured
     const result = await withTimeout(
       ssm.send(new GetParameterCommand({ Name: ssmPath })),
       DISCOVERY_TIMEOUT_MS,
@@ -430,6 +439,7 @@ export async function resolveAmiFromOsName(
 export async function discoverSubnets(): Promise<DiscoveryOption[]> {
   return cachedDiscover(DiscoveryCacheKey.SUBNETS, async () => {
     const ec2 = createEc2Client();
+    if (!ec2) return []; // Graceful no-op: reader creds not configured
     const result = await withTimeout(
       ec2.send(new DescribeSubnetsCommand({})),
       DISCOVERY_TIMEOUT_MS,
@@ -453,6 +463,7 @@ export async function discoverSubnets(): Promise<DiscoveryOption[]> {
 export async function discoverSecurityGroups(): Promise<DiscoveryOption[]> {
   return cachedDiscover(DiscoveryCacheKey.SECURITY_GROUPS, async () => {
     const ec2 = createEc2Client();
+    if (!ec2) return []; // Graceful no-op: reader creds not configured
     const result = await withTimeout(
       ec2.send(new DescribeSecurityGroupsCommand({})),
       DISCOVERY_TIMEOUT_MS,
@@ -485,6 +496,7 @@ export async function discoverSecurityGroups(): Promise<DiscoveryOption[]> {
 export async function discoverKeyPairs(): Promise<DiscoveryOption[]> {
   return cachedDiscover(DiscoveryCacheKey.KEY_PAIRS, async () => {
     const ec2 = createEc2Client();
+    if (!ec2) return []; // Graceful no-op: reader creds not configured
     const result = await withTimeout(
       ec2.send(new DescribeKeyPairsCommand({})),
       DISCOVERY_TIMEOUT_MS,
@@ -523,6 +535,7 @@ export async function discoverRdsEngineVersions(
 
   return cachedDiscover(cacheKey, async () => {
     const rds = createRdsClient();
+    if (!rds) return []; // Graceful no-op: reader creds not configured
     const result = await withTimeout(
       rds.send(
         new DescribeDBEngineVersionsCommand({
@@ -580,6 +593,7 @@ export async function discoverRdsInstanceClasses(
 
   return cachedDiscover(cacheKey, async () => {
     const rds = createRdsClient();
+    if (!rds) return []; // Graceful no-op: reader creds not configured
 
     // The API paginates — collect all pages
     const allClasses = new Set<string>();
@@ -653,6 +667,7 @@ export async function searchAmis(query: string): Promise<DiscoveryOption[]> {
   const cacheKey = `search-amis-${normalizedQuery}`;
   return cachedDiscover(cacheKey, async () => {
     const ec2 = createEc2Client();
+    if (!ec2) return []; // Graceful no-op: reader creds not configured
 
     // Build wildcard pattern from query words: "ML training" → "*ml*training*"
     const words = normalizedQuery.split(/\s+/).filter(Boolean);

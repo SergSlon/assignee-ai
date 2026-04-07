@@ -23,12 +23,47 @@ import type { AwsConfig } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
-import { requireAssigneeCredentials } from "../config/aws-credentials.js";
+import {
+  requireAssigneeCredentials,
+  MissingAssigneeCredentialsError,
+} from "../config/aws-credentials.js";
 import {
   AWS_REGION,
   DESTROY_MAX_POLL_ATTEMPTS,
   DESTROY_POLL_INTERVAL_MS,
 } from "../config/constants.js";
+
+/**
+ * Structured warn-level log line for non-fatal failures inside the destroy
+ * pipeline. destroy-service has no LangGraph runId plumbed in, so we emit a
+ * plain JSON object on stderr (matching the shape of the main logger) rather
+ * than depending on ../utils/logger.ts which requires an action enum value.
+ */
+function warnDestroy(action: string, extras: Record<string, unknown>): void {
+  try {
+    process.stderr.write(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        level: "warn",
+        source: "destroy-service",
+        action,
+        extras,
+      }) + "\n",
+    );
+  } catch {
+    // stderr write failures are swallowed — never let logging break destroy.
+  }
+}
+
+/**
+ * CloudFront distribution disable polling parameters.
+ * CloudFront "in-progress" transitions routinely take 15+ minutes; we allow
+ * up to 30 minutes before giving up. Each poll sleeps POLL_INTERVAL_MS.
+ */
+const CLOUDFRONT_DISABLE_MAX_ATTEMPTS = 360; // 360 * 5s = 30 min
+const CLOUDFRONT_POLL_INTERVAL_MS = 5000;
+/** Max consecutive transient errors from cf.send(GetDistribution) before aborting. */
+const CLOUDFRONT_MAX_TRANSIENT_ERRORS = 5;
 
 const MAX_POLL_ATTEMPTS = DESTROY_MAX_POLL_ATTEMPTS;
 const POLL_INTERVAL_MS = DESTROY_POLL_INTERVAL_MS;
@@ -212,15 +247,48 @@ export async function destroySingleResource(
             IfMatch: etag,
           }),
         );
-        // Wait for deployment (poll up to 10 minutes)
-        for (let i = 0; i < 120; i++) {
-          await new Promise((r) => setTimeout(r, 5000));
+        // Wait for deployment. CloudFront Deployed transitions routinely
+        // take 15+ minutes; we allow up to 30 minutes. Transient errors
+        // from GetDistribution (throttling, 5xx) are retried up to
+        // CLOUDFRONT_MAX_TRANSIENT_ERRORS consecutive times before aborting.
+        const maxSec =
+          (CLOUDFRONT_DISABLE_MAX_ATTEMPTS * CLOUDFRONT_POLL_INTERVAL_MS) /
+          1000;
+        let consecutiveTransientErrors = 0;
+        for (let i = 0; i < CLOUDFRONT_DISABLE_MAX_ATTEMPTS; i++) {
+          await new Promise((r) => setTimeout(r, CLOUDFRONT_POLL_INTERVAL_MS));
           options?.onProgress?.(
-            `Disabling CloudFront distribution (${(i + 1) * 5}s / ~600s max)...`,
+            `Disabling CloudFront distribution (${
+              ((i + 1) * CLOUDFRONT_POLL_INTERVAL_MS) / 1000
+            }s / ~${maxSec}s max)...`,
           );
-          const status = await cf.send(
-            new GetDistributionCommand({ Id: resource.identifier }),
-          );
+          let status;
+          try {
+            status = await cf.send(
+              new GetDistributionCommand({ Id: resource.identifier }),
+            );
+            consecutiveTransientErrors = 0;
+          } catch (pollErr) {
+            consecutiveTransientErrors++;
+            warnDestroy("cloudfront_poll_transient_error", {
+              identifier: resource.identifier,
+              attempt: i + 1,
+              consecutive: consecutiveTransientErrors,
+              error:
+                pollErr instanceof Error ? pollErr.message : String(pollErr),
+            });
+            if (consecutiveTransientErrors >= CLOUDFRONT_MAX_TRANSIENT_ERRORS) {
+              return {
+                ...baseResult,
+                success: false,
+                error: `CloudFront poll failed after ${consecutiveTransientErrors} consecutive transient errors: ${
+                  pollErr instanceof Error ? pollErr.message : String(pollErr)
+                }`,
+              };
+            }
+            // Retry on next iteration
+            continue;
+          }
           const distStatus = status.Distribution?.Status;
           if (distStatus === "Deployed") {
             // Step 3: Delete with latest ETag
@@ -243,7 +311,7 @@ export async function destroySingleResource(
         return {
           ...baseResult,
           success: false,
-          error: "CloudFront disable timed out after 10 minutes",
+          error: `CloudFront disable timed out after ${maxSec / 60} minutes`,
         };
       }
 
@@ -281,8 +349,25 @@ export async function destroySingleResource(
           DeletionProtectionEnabled: false,
         }),
       );
-    } catch {
-      // Non-fatal — table may not have protection enabled
+    } catch (err) {
+      // Surface missing-credentials errors clearly — never let them be
+      // silently swallowed, or the subsequent CloudControl DeleteResource
+      // fails with a confusing ResourceInUseException.
+      if (err instanceof MissingAssigneeCredentialsError) {
+        return {
+          ...baseResult,
+          success: false,
+          error: `Cannot disable DynamoDB deletion protection: ${err.message}`,
+        };
+      }
+      // Non-fatal: table may not have deletion protection enabled, or the
+      // role may lack dynamodb:UpdateTable. Log and continue — the main
+      // CloudControl delete path below will surface a clean error if the
+      // table actually *is* protected.
+      warnDestroy("dynamodb_disable_protection_failed", {
+        identifier: resource.identifier,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -334,8 +419,23 @@ export async function destroySingleResource(
         keyMarker = versions.NextKeyMarker;
         versionIdMarker = versions.NextVersionIdMarker;
       }
-    } catch {
-      // Non-fatal — bucket may already be empty
+    } catch (err) {
+      // Surface missing-credentials errors clearly — swallowing them here
+      // causes the downstream CloudControl DeleteResource to fail with an
+      // opaque BucketNotEmpty-style error.
+      if (err instanceof MissingAssigneeCredentialsError) {
+        return {
+          ...baseResult,
+          success: false,
+          error: `Cannot empty S3 bucket before delete: ${err.message}`,
+        };
+      }
+      // Non-fatal: bucket may already be empty, or the role may lack
+      // s3:ListBucketVersions / s3:DeleteObject on it. Log and continue.
+      warnDestroy("s3_empty_bucket_failed", {
+        identifier: resource.identifier,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

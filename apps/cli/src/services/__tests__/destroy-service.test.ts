@@ -474,11 +474,10 @@ describe("destroySingleResource", () => {
 
   // ── Fail-closed credential enforcement for pre-delete hooks ───────────────
   // When ASSIGNEE_OPERATOR_* env vars are missing, the DynamoDB and S3
-  // pre-delete hooks must NOT call the AWS SDK. They use the centralized
-  // requireAssigneeCredentials("operator") helper which throws
-  // MissingAssigneeCredentialsError; the wrapping try/catch silently
-  // skips the hook and lets the main CloudControl path proceed (which
-  // surfaces its own clean error).
+  // pre-delete hooks must NOT call the AWS SDK and MUST surface the
+  // credential error as a clean DestroyResult.error rather than silently
+  // swallowing it (which would cause CloudControl DeleteResource to fail
+  // later with a confusing ResourceInUseException / BucketNotEmpty error).
   describe("fail-closed pre-delete hooks (missing ASSIGNEE_OPERATOR_*)", () => {
     beforeEach(() => {
       delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
@@ -488,30 +487,35 @@ describe("destroySingleResource", () => {
       process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
     });
 
-    it("DynamoDB hook does NOT call SDK send when env vars are missing", async () => {
+    it("DynamoDB hook surfaces MissingAssigneeCredentialsError instead of silently skipping", async () => {
+      // The main CloudControl path must NOT be called — we fail early with
+      // a clear credential error.
       mockDeleteResource.mockResolvedValue([null, { requestToken: "tok" }]);
       mockGetRequestStatus.mockResolvedValue([
         null,
         { operationStatus: "SUCCESS" },
       ]);
 
-      await destroySingleResource({
+      const result = await destroySingleResource({
         arn: "arn:aws:dynamodb:us-east-1:123456789012:table/orders",
         resourceType: "AWS::DynamoDB::Table",
         identifier: "orders",
         region: "us-east-1",
       });
 
-      // The pre-delete hook silently skipped — UpdateTable was never sent.
-      // Critical: we did NOT leak to ~/.aws/credentials despite shell vars
-      // being set.
+      // Critical: no AWS SDK call happened — we did NOT leak to
+      // ~/.aws/credentials despite shell AWS_* vars being set.
       expect(mockDdbSend).not.toHaveBeenCalled();
+      // Critical: we also short-circuit the CloudControl delete so the user
+      // sees the credential error, not a confusing ResourceInUseException.
+      expect(mockDeleteResource).not.toHaveBeenCalled();
+      // The error is surfaced as a clean DestroyResult rather than thrown.
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("DynamoDB deletion protection");
+      expect(result.error).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
     });
 
-    it("S3 hook does NOT empty bucket when env vars are missing", async () => {
-      // Mock the s3 client (separate from the destroy-service S3 path).
-      // We assert by virtue of mockDeleteResource still being called and
-      // the destroy completing without ever invoking S3 SDK methods.
+    it("S3 hook surfaces MissingAssigneeCredentialsError instead of silently skipping", async () => {
       mockDeleteResource.mockResolvedValue([null, { requestToken: "tok" }]);
       mockGetRequestStatus.mockResolvedValue([
         null,
@@ -525,13 +529,13 @@ describe("destroySingleResource", () => {
         region: "us-east-1",
       });
 
-      // The CloudControl delete proceeds; the empty-bucket pre-delete hook
-      // is silently skipped (its catch swallows the credential error).
-      expect(mockDeleteResource).toHaveBeenCalledWith(
-        "AWS::S3::Bucket",
-        "production-assets",
-      );
-      expect(result.success).toBe(true);
+      // Must short-circuit: do not proceed to CloudControl delete with an
+      // un-emptied bucket. The user must see the credential error, not a
+      // downstream BucketNotEmpty error.
+      expect(mockDeleteResource).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("empty S3 bucket");
+      expect(result.error).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
     });
 
     it("MissingAssigneeCredentialsError names the operator env vars", () => {
@@ -545,6 +549,74 @@ describe("destroySingleResource", () => {
         expect(msg).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
         expect(msg).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
       }
+    });
+  });
+
+  // ── CloudFront disable polling — H20 ─────────────────────────────────────
+  // The CloudFront disable-wait loop must tolerate transient errors from
+  // GetDistribution (throttling, 5xx) and retry them rather than aborting
+  // the entire destroy on the first failure. Previously a single throw
+  // aborted the disable/delete with no retry.
+  describe("CloudFront disable polling resilience", () => {
+    it("retries transient GetDistribution errors during the disable wait", async () => {
+      // Step 1: GetDistribution (initial) — Enabled=true
+      mockCfSend.mockResolvedValueOnce({
+        Distribution: {
+          DistributionConfig: { Enabled: true },
+          Status: "InProgress",
+        },
+        ETag: "etag-1",
+      });
+      // Step 2: UpdateDistribution — disable ok
+      mockCfSend.mockResolvedValueOnce({});
+      // Step 3: Polling GetDistribution — first 2 calls throw transient
+      // errors, third call returns Deployed.
+      mockCfSend.mockRejectedValueOnce(new Error("ThrottlingException"));
+      mockCfSend.mockRejectedValueOnce(new Error("503 ServiceUnavailable"));
+      mockCfSend.mockResolvedValueOnce({
+        Distribution: { Status: "Deployed" },
+        ETag: "etag-2",
+      });
+      // Step 4: DeleteDistribution — final
+      mockCfSend.mockResolvedValueOnce({});
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:cloudfront::123456:distribution/EDFDVBD6EXAMPLE",
+        resourceType: "AWS::CloudFront::Distribution",
+        identifier: "EDFDVBD6EXAMPLE",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      // 6 calls: get, update, 2x transient poll, successful poll, delete
+      expect(mockCfSend).toHaveBeenCalledTimes(6);
+    });
+
+    it("aborts cleanly after too many consecutive transient poll errors", async () => {
+      // Step 1: GetDistribution — Enabled=true
+      mockCfSend.mockResolvedValueOnce({
+        Distribution: {
+          DistributionConfig: { Enabled: true },
+          Status: "InProgress",
+        },
+        ETag: "etag-1",
+      });
+      // Step 2: UpdateDistribution — disable ok
+      mockCfSend.mockResolvedValueOnce({});
+      // All subsequent polls throw transient errors until the retry budget
+      // (CLOUDFRONT_MAX_TRANSIENT_ERRORS = 5 consecutive) is exhausted.
+      mockCfSend.mockRejectedValue(new Error("Throttling"));
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:cloudfront::123456:distribution/EDFDVBD6EXAMPLE",
+        resourceType: "AWS::CloudFront::Distribution",
+        identifier: "EDFDVBD6EXAMPLE",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("CloudFront poll failed");
+      expect(result.error).toContain("Throttling");
     });
   });
 });

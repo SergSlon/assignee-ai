@@ -4,17 +4,43 @@
  * and stores findings in graph state.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from "vitest";
 import type { BPFinding, BestPractice } from "@assignee/best-practices";
 import type { AgentState } from "../services/graph.js";
 
-// Mock loadBestPractices to return controlled fixtures
+// Mock loadBestPractices to return controlled fixtures. verifyManifest and
+// computeManifest are also mocked so integrity-mode tests can simulate
+// tampering / TOFU / missing reference scenarios without touching the real
+// packaged manifest.
 vi.mock("@assignee/best-practices", async (importOriginal) => {
   const actual =
     (await importOriginal()) as typeof import("@assignee/best-practices");
   return {
     ...actual,
     loadBestPractices: vi.fn(),
+    computeFreshness: vi.fn(() => ({
+      oldestFileDate: new Date().toISOString(),
+      oldestAgeDays: 1,
+      fileCount: 10,
+      isStale: false,
+      staleThresholdDays: 180,
+    })),
+    computeManifest: vi.fn(() => ({
+      version: 1 as const,
+      hash: "a".repeat(64),
+      files: { "s3/BP-S3-001.yaml": "a".repeat(64) },
+      count: 1,
+      generatedAt: new Date().toISOString(),
+    })),
+    verifyManifest: vi.fn(() => ({ valid: true })),
   };
 });
 
@@ -26,8 +52,14 @@ vi.mock("../utils/logger.js", () => ({
   },
 }));
 
-import { bpEvaluatorNode, resetBPCache } from "./bp-evaluator.js";
-import { loadBestPractices } from "@assignee/best-practices";
+import {
+  bpEvaluatorNode,
+  resetBPCache,
+  BpIntegrityError,
+  BpIntegrityMode,
+  resolveBpIntegrityMode,
+} from "./bp-evaluator.js";
+import { loadBestPractices, verifyManifest } from "@assignee/best-practices";
 
 const S3_VERSIONING_BP: BestPractice = {
   id: "BP-S3-001",
@@ -178,5 +210,137 @@ describe("bpEvaluatorNode", () => {
 
     // Should only load once due to caching
     expect(loadBestPractices).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("BP integrity mode resolution (H18)", () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    resetBPCache();
+  });
+
+  it("returns 'enforce' when ASSIGNEE_BP_INTEGRITY=enforce", () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    expect(resolveBpIntegrityMode()).toBe(BpIntegrityMode.ENFORCE);
+  });
+
+  it("returns 'warn' when ASSIGNEE_BP_INTEGRITY=warn", () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "warn";
+    expect(resolveBpIntegrityMode()).toBe(BpIntegrityMode.WARN);
+  });
+
+  it("returns 'disabled' when ASSIGNEE_BP_INTEGRITY=disabled", () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "disabled";
+    expect(resolveBpIntegrityMode()).toBe(BpIntegrityMode.DISABLED);
+  });
+
+  it("defaults to 'warn' when NODE_ENV=test and no explicit override", () => {
+    delete process.env["ASSIGNEE_BP_INTEGRITY"];
+    process.env["NODE_ENV"] = "test";
+    expect(resolveBpIntegrityMode()).toBe(BpIntegrityMode.WARN);
+  });
+
+  it("defaults to 'enforce' when NODE_ENV is production-like", () => {
+    delete process.env["ASSIGNEE_BP_INTEGRITY"];
+    process.env["NODE_ENV"] = "production";
+    expect(resolveBpIntegrityMode()).toBe(BpIntegrityMode.ENFORCE);
+  });
+});
+
+describe("BP integrity enforcement (H18)", () => {
+  const originalEnv = { ...process.env };
+  let stderrSpy: MockInstance;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    vi.clearAllMocks();
+    resetBPCache();
+    vi.mocked(loadBestPractices).mockReturnValue([S3_VERSIONING_BP]);
+    stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    process.env = { ...originalEnv };
+  });
+
+  it("ENFORCE mode: throws BpIntegrityError on hash mismatch", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: false,
+      reason:
+        "BP library hash mismatch (expected abc…, got def…). 1 file(s) differ.",
+      mismatchedFiles: ["s3/BP-S3-001.yaml"],
+    });
+
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      BpIntegrityError,
+    );
+  });
+
+  it("ENFORCE mode: throws when reference manifest is missing (TOFU)", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: false,
+      reason:
+        "No reference manifest found at /tmp/fake/manifest.json. Refusing to trust BP library in strict mode.",
+      trustOnFirstUse: true,
+    });
+
+    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
+      /No reference manifest/,
+    );
+  });
+
+  it("WARN mode: does NOT throw on hash mismatch, writes stderr warning", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "warn";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: false,
+      reason: "BP library hash mismatch",
+      mismatchedFiles: ["s3/BP-S3-001.yaml"],
+    });
+
+    const result = await bpEvaluatorNode(makeState());
+    expect(result.bpFindings).toBeDefined();
+    expect(stderrSpy).toHaveBeenCalled();
+    const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(messages).toContain("BP manifest integrity check failed");
+  });
+
+  it("WARN mode: emits loud TOFU warning when manifest missing", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "warn";
+    vi.mocked(verifyManifest).mockReturnValue({
+      valid: true,
+      reason: "No reference manifest (trust-on-first-use)",
+      trustOnFirstUse: true,
+    });
+
+    await bpEvaluatorNode(makeState());
+    const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(messages).toContain("trust-on-first-use");
+    expect(messages).toContain("ASSIGNEE_BP_INTEGRITY=enforce");
+  });
+
+  it("DISABLED mode: never calls verifyManifest and never throws", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "disabled";
+    vi.mocked(verifyManifest).mockImplementation(() => {
+      throw new Error("should not be called");
+    });
+
+    const result = await bpEvaluatorNode(makeState());
+    expect(result.bpFindings).toBeDefined();
+    expect(verifyManifest).not.toHaveBeenCalled();
+  });
+
+  it("ENFORCE mode: passes through cleanly when manifest matches", async () => {
+    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
+    vi.mocked(verifyManifest).mockReturnValue({ valid: true });
+
+    const result = await bpEvaluatorNode(makeState());
+    expect(result.bpFindings).toBeDefined();
   });
 });

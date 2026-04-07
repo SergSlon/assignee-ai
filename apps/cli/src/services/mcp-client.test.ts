@@ -31,10 +31,18 @@ describe.skipIf(!!process.env["CI"])("MCP integration", () => {
         // Verify basic tools loaded from core servers
         expect(tools.length).toBeGreaterThan(0);
       } catch (err: unknown) {
-        // McpError thrown when MCP server fails to start — skip gracefully
+        // McpError thrown when MCP server fails to start — skip gracefully.
+        // Also skip when Assignee credentials are not configured: the
+        // MCP server factories now fail-closed via requireAssigneeCredentials
+        // (Wave-2 H1) so a developer running this test locally without
+        // ASSIGNEE_READER_* / ASSIGNEE_AUDITOR_* set would otherwise see
+        // a hard failure instead of a graceful skip.
         if (
           err instanceof Error &&
           (err.message.includes("MCP server") ||
+            err.message.includes("Missing reader credentials") ||
+            err.message.includes("Missing auditor credentials") ||
+            err.name === "MissingAssigneeCredentialsError" ||
             err.message === "process.exit called")
         ) {
           process.stderr.write(

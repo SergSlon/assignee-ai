@@ -387,11 +387,12 @@ describe("resourceProvisionerNode — compound context", () => {
         mockProvisioner,
       );
 
-      // index 0 uses plain runId (not appended)
+      // H11: index 0 uses runId with a per-attempt random suffix so retries
+      // produce different ClientTokens.
       expect(mockProvisioner.createResource).toHaveBeenCalledWith(
         "AWS::S3::Bucket",
         expect.any(String),
-        "test-compound-run-001",
+        expect.stringMatching(/^test-compound-run-001-[0-9a-f]{8}$/),
       );
     });
 
@@ -420,10 +421,11 @@ describe("resourceProvisionerNode — compound context", () => {
         mockProvisioner,
       );
 
+      // H11: ClientToken = runId-index-<per-attempt random>
       expect(mockProvisioner.createResource).toHaveBeenCalledWith(
         "AWS::IAM::Role",
         expect.any(String),
-        "test-compound-run-001-2",
+        expect.stringMatching(/^test-compound-run-001-2-[0-9a-f]{8}$/),
       );
     });
 
@@ -452,10 +454,11 @@ describe("resourceProvisionerNode — compound context", () => {
         mockProvisioner,
       );
 
+      // H11: ClientToken = runId-index-<per-attempt random>
       expect(mockProvisioner.createResource).toHaveBeenCalledWith(
         "AWS::IAM::Role",
         expect.any(String),
-        "test-compound-run-001-5",
+        expect.stringMatching(/^test-compound-run-001-5-[0-9a-f]{8}$/),
       );
     });
   });
@@ -1058,11 +1061,11 @@ describe("full compound dispatcher -> provisioner integration", () => {
 
     expect(provisionResult.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
     expect(provisionResult.requestToken).toBe("iam-role-token-001");
-    // Index 0 uses plain runId
+    // H11: Index 0 uses runId with a per-attempt random suffix
     expect(mockProvisioner.createResource).toHaveBeenCalledWith(
       "AWS::IAM::Role",
       expect.any(String),
-      "test-compound-run-001",
+      expect.stringMatching(/^test-compound-run-001-[0-9a-f]{8}$/),
     );
   });
 

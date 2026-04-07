@@ -24,8 +24,49 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { createRequire } from "node:module";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { EnvVar } from "../constants/env-vars.js";
 import type { AgentState } from "../services/graph.js";
 import { enrichBpWithMcp } from "./advice/bp-mcp-enricher.js";
+
+/** BP integrity enforcement mode for the current process. */
+export const BpIntegrityMode = {
+  ENFORCE: "enforce",
+  WARN: "warn",
+  DISABLED: "disabled",
+} as const;
+
+export type BpIntegrityModeType =
+  (typeof BpIntegrityMode)[keyof typeof BpIntegrityMode];
+
+/**
+ * Thrown when BP integrity verification fails in enforce mode. Preflight
+ * should catch this at the top of the pipeline and block the plan.
+ */
+export class BpIntegrityError extends Error {
+  constructor(
+    message: string,
+    public readonly reason: string,
+    public readonly mismatchedFiles: string[] = [],
+  ) {
+    super(message);
+    this.name = "BpIntegrityError";
+  }
+}
+
+/**
+ * Resolve the integrity enforcement mode from env var + NODE_ENV.
+ *   - ASSIGNEE_BP_INTEGRITY=enforce|warn|disabled → explicit override
+ *   - NODE_ENV=test → "warn" default (so tests don't fail on TOFU)
+ *   - otherwise → "enforce" default (production-safe)
+ */
+export function resolveBpIntegrityMode(): BpIntegrityModeType {
+  const raw = (process.env[EnvVar.ASSIGNEE_BP_INTEGRITY] ?? "").toLowerCase();
+  if (raw === BpIntegrityMode.ENFORCE) return BpIntegrityMode.ENFORCE;
+  if (raw === BpIntegrityMode.WARN) return BpIntegrityMode.WARN;
+  if (raw === BpIntegrityMode.DISABLED) return BpIntegrityMode.DISABLED;
+  if (process.env["NODE_ENV"] === "test") return BpIntegrityMode.WARN;
+  return BpIntegrityMode.ENFORCE;
+}
 
 /** Module-level cache to avoid reloading YAML files on every invocation. */
 let cachedPractices: BestPractice[] | undefined;
@@ -43,14 +84,14 @@ function loadCached(): BestPractice[] {
   if (cachedPractices === undefined) {
     cachedPractices = loadBestPractices();
 
-    // Run freshness + integrity checks on first load (Stories 12.4 + 12.6).
-    // Warnings only — never block. Failures are non-fatal.
+    // Run freshness + integrity checks on first load (Stories 12.4 + 12.6, H18).
     if (!integrityWarningEmitted) {
       integrityWarningEmitted = true;
+      const mode = resolveBpIntegrityMode();
+
+      // Freshness — warn if oldest BP YAML is > 180 days old.
+      // Always evaluated, regardless of integrity mode. Best-effort.
       try {
-        // Freshness — warn if oldest BP YAML is > 180 days old.
-        // Warning is emitted to stderr unconditionally (no TTY gate) so
-        // piped output and CI still see staleness warnings.
         const freshness = computeFreshness();
         if (freshness.isStale) {
           process.stderr.write(
@@ -58,41 +99,96 @@ function loadCached(): BestPractice[] {
               `Consider updating assignee-ai.\n`,
           );
         }
-
-        // Integrity — verify against manifest if present.
-        // Manifest path resolution: try multiple candidates so it works for
-        //   (a) monorepo dev: apps/cli/src/nodes/bp-evaluator.ts → ../../../../packages/best-practices/
-        //   (b) npm-installed CLI: node_modules/@assignee/cli/dist/nodes → ../../@assignee/best-practices/
-        //   (c) published tarball: next to cli via createRequire resolution
-        const computed = computeManifest();
-        const manifestPath = resolveBpManifestPath();
-        const verification = verifyManifest(computed, manifestPath);
-        if (!verification.valid) {
-          // Integrity failures are emitted unconditionally to stderr (no TTY gate).
-          // CI and piped output must see integrity warnings or the feature is theater.
-          process.stderr.write(
-            `⚠  BP manifest integrity check failed: ${verification.reason}\n`,
-          );
-          if (
-            verification.mismatchedFiles &&
-            verification.mismatchedFiles.length > 0
-          ) {
-            process.stderr.write(
-              `   Mismatched files: ${verification.mismatchedFiles.slice(0, 5).join(", ")}${verification.mismatchedFiles.length > 5 ? "…" : ""}\n`,
-            );
-          }
-        }
       } catch (err) {
-        // Integrity checks are best-effort — never break loading
         log({
           ts: new Date().toISOString(),
           runId: "system",
-          level: "info",
+          level: "warn",
           action: LOG_ACTIONS.BP_EVALUATED,
-          extras: {
-            phase: "freshness_or_integrity_check",
-            error: String(err),
-          },
+          extras: { phase: "freshness_check", error: String(err) },
+        });
+      }
+
+      if (mode === BpIntegrityMode.DISABLED) {
+        return cachedPractices;
+      }
+
+      // Integrity — verify against manifest.
+      // In enforce mode a missing manifest is a failure (strictNoReference).
+      // In warn mode TOFU still emits a loud warning but does not block.
+      try {
+        const computed = computeManifest();
+        const manifestPath = resolveBpManifestPath();
+        const verification = verifyManifest(computed, manifestPath, {
+          strictNoReference: mode === BpIntegrityMode.ENFORCE,
+        });
+
+        if (verification.trustOnFirstUse && mode === BpIntegrityMode.WARN) {
+          // Always warn loudly on TOFU, even outside enforce mode.
+          process.stderr.write(
+            `⚠  BP manifest trust-on-first-use: no reference manifest at ${manifestPath}. ` +
+              `Running with unverified best-practices. Set ASSIGNEE_BP_INTEGRITY=enforce to block.\n`,
+          );
+        }
+
+        if (!verification.valid) {
+          const detail =
+            verification.mismatchedFiles &&
+            verification.mismatchedFiles.length > 0
+              ? ` Mismatched files: ${verification.mismatchedFiles.slice(0, 5).join(", ")}${verification.mismatchedFiles.length > 5 ? "…" : ""}`
+              : "";
+          const message = `BP manifest integrity check failed: ${verification.reason}${detail}`;
+
+          if (mode === BpIntegrityMode.ENFORCE) {
+            log({
+              ts: new Date().toISOString(),
+              runId: "system",
+              level: "error",
+              action: LOG_ACTIONS.BP_EVALUATED,
+              extras: {
+                phase: "integrity_check",
+                mode,
+                reason: verification.reason,
+                mismatchedFiles: verification.mismatchedFiles,
+              },
+            });
+            throw new BpIntegrityError(
+              message,
+              verification.reason ?? "unknown",
+              verification.mismatchedFiles ?? [],
+            );
+          }
+
+          // Warn mode — print to stderr, do not block.
+          process.stderr.write(`⚠  ${message}\n`);
+          log({
+            ts: new Date().toISOString(),
+            runId: "system",
+            level: "warn",
+            action: LOG_ACTIONS.BP_EVALUATED,
+            extras: {
+              phase: "integrity_check",
+              mode,
+              reason: verification.reason,
+            },
+          });
+        }
+      } catch (err) {
+        if (err instanceof BpIntegrityError) throw err;
+        // Unexpected failure during verification (e.g. fs error reading
+        // manifest). In enforce mode this is still a blocking condition.
+        if (mode === BpIntegrityMode.ENFORCE) {
+          throw new BpIntegrityError(
+            `BP integrity check failed unexpectedly: ${String(err)}`,
+            String(err),
+          );
+        }
+        log({
+          ts: new Date().toISOString(),
+          runId: "system",
+          level: "warn",
+          action: LOG_ACTIONS.BP_EVALUATED,
+          extras: { phase: "integrity_check", error: String(err) },
         });
       }
     }

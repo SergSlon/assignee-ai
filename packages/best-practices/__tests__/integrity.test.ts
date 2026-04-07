@@ -382,4 +382,28 @@ describe("verifyManifest", () => {
     expect(result.valid).toBe(false);
     expect(result.mismatchedFiles).toContain("ec2/BP-EC2-001.yaml");
   });
+
+  it("returns invalid with strictNoReference when reference is missing (H18)", () => {
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const computed = computeManifest(dir);
+
+    const result = verifyManifest(computed, join(dir, "does-not-exist.json"), {
+      strictNoReference: true,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.trustOnFirstUse).toBe(true);
+    expect(result.reason).toContain("No reference manifest");
+    expect(result.reason).toContain("strict mode");
+  });
+
+  it("flags trustOnFirstUse: true when reference missing and strict=false", () => {
+    const dir = makeTempBpDir();
+    writeBp(dir, "s3", "BP-S3-001.yaml", BP_S3_001);
+    const computed = computeManifest(dir);
+
+    const result = verifyManifest(computed, join(dir, "does-not-exist.json"));
+    expect(result.valid).toBe(true);
+    expect(result.trustOnFirstUse).toBe(true);
+  });
 });
