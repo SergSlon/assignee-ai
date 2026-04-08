@@ -328,7 +328,13 @@ describe("optionElicitorNode", () => {
       makeState({ resourceType: "AWS::Unknown::Type" }),
     );
 
-    expect(result.elicitedOptions).toBeDefined();
+    // Wave 17: strengthened — assert the ResourceName from the generic
+    // plugin's first prompt actually flowed through. The previous
+    // `toBeDefined()` would have passed for an empty `{}` even if the
+    // generic plugin path silently dropped both prompts.
+    expect(result.elicitedOptions).toMatchObject({
+      ResourceName: "my-resource",
+    });
   });
 });
 
@@ -422,10 +428,16 @@ describe("optionElicitorNode — --no-wizard bypass (Story 11.1)", () => {
   it("noWizard: true → returns defaults without interactive prompts", async () => {
     const result = await optionElicitorNode(makeState({ noWizard: true }));
 
-    // Should return elicitedOptions populated from plugin defaults
-    expect(result.elicitedOptions).toBeDefined();
-    expect(result.elicitedOptions?.["Name"]).toBe("default-name");
-    expect(result.elicitedOptions?.["Encrypt"]).toBe(true);
+    // Wave 17: strengthened — replaced bare `toBeDefined()` with
+    // `toMatchObject` so an undefined elicitedOptions fails here
+    // instead of silently passing the `?.["Name"]` chain below
+    // (optional chaining returns undefined which `.toBe(...)` catches,
+    // but the diagnostic message is much clearer when the assertion
+    // fails at the top-level shape check).
+    expect(result.elicitedOptions).toMatchObject({
+      Name: "default-name",
+      Encrypt: true,
+    });
 
     // No interactive prompts should have been called
     expect(text).not.toHaveBeenCalled();
@@ -457,10 +469,12 @@ describe("optionElicitorNode — --no-wizard bypass (Story 11.1)", () => {
   it("noWizard: true with all defaults available → returns complete elicitedOptions", async () => {
     const result = await optionElicitorNode(makeState({ noWizard: true }));
 
-    expect(result.elicitedOptions).toBeDefined();
-    // Name and Encrypt have initialValue — should be populated
-    expect(result.elicitedOptions?.["Name"]).toBe("default-name");
-    expect(result.elicitedOptions?.["Encrypt"]).toBe(true);
+    // Wave 17: strengthened — see "noWizard: true → returns defaults"
+    // test above. Same shape contract.
+    expect(result.elicitedOptions).toMatchObject({
+      Name: "default-name",
+      Encrypt: true,
+    });
   });
 });
 
@@ -507,7 +521,8 @@ describe("populateDefaultOptions — missing required fields (Story 11.1 AC#5)",
       caughtError = err;
     }
 
-    expect(caughtError).toBeDefined();
+    // Wave 17: dropped redundant `toBeDefined()` — `toBeInstanceOf`
+    // already throws on undefined.
     expect(caughtError).toBeInstanceOf(Error);
     const error = caughtError as Error & {
       missingFields?: string[];
@@ -624,8 +639,11 @@ describe("optionElicitorNode — intent-aware smart defaults (Story 10.5)", () =
       }),
     );
 
-    expect(result.elicitedOptions).toBeDefined();
-    expect(result.elicitedOptions?.["InstanceType"]).toBe("t3.small");
+    // Wave 17: strengthened — toMatchObject catches both undefined
+    // elicitedOptions and missing InstanceType in one assertion.
+    expect(result.elicitedOptions).toMatchObject({
+      InstanceType: "t3.small",
+    });
   });
 
   // Task 4.2: S3 no keywords → plugin defaults unchanged
@@ -644,8 +662,10 @@ describe("optionElicitorNode — intent-aware smart defaults (Story 10.5)", () =
       }),
     );
 
-    expect(result.elicitedOptions).toBeDefined();
-    expect(result.elicitedOptions?.["BucketName"]).toBe("my-bucket");
+    // Wave 17: strengthened.
+    expect(result.elicitedOptions).toMatchObject({
+      BucketName: "my-bucket",
+    });
   });
 
   // Task 3.10: Intent defaults do not override user-provided values
@@ -1059,9 +1079,16 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
       [failingPricingTool],
     );
 
-    // Discovery should still have succeeded despite pricing failure
+    // Discovery should still have succeeded despite pricing failure.
+    // Wave 17: strengthened — assert the InstanceType + ImageId values
+    // actually flowed through the wizard despite the pricing tool
+    // throwing. The previous `toBeDefined()` would have passed even
+    // for `{}` if the wizard silently swallowed both values.
     expect(discoverAmis).toHaveBeenCalled();
-    expect(result.elicitedOptions).toBeDefined();
+    expect(result.elicitedOptions).toMatchObject({
+      InstanceType: "t3.micro",
+      ImageId: "ami-123",
+    });
   });
 
   it("graceful degradation: discovery failure does not block pricing", async () => {
@@ -1077,9 +1104,12 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
 
     const result = await optionElicitorNode(makeState());
 
-    // Node should complete successfully with fallback fields
-    expect(result.elicitedOptions).toBeDefined();
-    expect(result.elicitedOptions?.["Name"]).toBe("my-resource");
+    // Node should complete successfully with fallback fields.
+    // Wave 17: strengthened — toMatchObject catches both undefined
+    // elicitedOptions and missing Name in one assertion.
+    expect(result.elicitedOptions).toMatchObject({
+      Name: "my-resource",
+    });
   });
 
   it("unified spinner wraps entire parallel block", async () => {

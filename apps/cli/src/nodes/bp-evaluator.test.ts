@@ -128,7 +128,10 @@ describe("bpEvaluatorNode", () => {
 
     const result = await bpEvaluatorNode(state);
 
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     expect(result.bpFindings).toHaveLength(1);
     expect(result.bpFindings![0]!.practiceId).toBe("BP-S3-001");
     expect(result.bpFindings![0]!.severity).toBe("MEDIUM");
@@ -146,7 +149,10 @@ describe("bpEvaluatorNode", () => {
 
     const result = await bpEvaluatorNode(state);
 
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     expect(result.bpFindings).toHaveLength(0);
   });
 
@@ -165,7 +171,10 @@ describe("bpEvaluatorNode", () => {
 
     const result = await bpEvaluatorNode(state);
 
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     expect(result.bpFindings).toHaveLength(2);
 
     const ids = result.bpFindings!.map((f) => f.practiceId);
@@ -183,7 +192,10 @@ describe("bpEvaluatorNode", () => {
 
     const result = await bpEvaluatorNode(state);
 
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     expect(result.bpFindings).toHaveLength(0);
   });
 
@@ -307,7 +319,10 @@ describe("BP integrity enforcement (H18)", () => {
     });
 
     const result = await bpEvaluatorNode(makeState());
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     expect(stderrSpy).toHaveBeenCalled();
     const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(messages).toContain("BP manifest integrity check failed");
@@ -334,7 +349,10 @@ describe("BP integrity enforcement (H18)", () => {
     });
 
     const result = await bpEvaluatorNode(makeState());
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     expect(verifyManifest).not.toHaveBeenCalled();
   });
 
@@ -343,7 +361,10 @@ describe("BP integrity enforcement (H18)", () => {
     vi.mocked(verifyManifest).mockReturnValue({ valid: true });
 
     const result = await bpEvaluatorNode(makeState());
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
   });
 
   // REG-N3 regression: cache MUST NOT be populated when the integrity check
@@ -399,7 +420,10 @@ describe("BP integrity enforcement (H18)", () => {
     });
 
     const result = await bpEvaluatorNode(makeState());
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(messages).toContain("BP manifest is unsigned");
     expect(messages).toContain("ASSIGNEE_BP_REQUIRE_SIGNATURE");
@@ -459,7 +483,10 @@ describe("BP integrity enforcement (H18)", () => {
     });
 
     const result = await bpEvaluatorNode(makeState());
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
   });
 
   it("ENFORCE mode + REQUIRE_SIGNATURE: throws when gpg is not available", async () => {
@@ -494,7 +521,10 @@ describe("BP integrity enforcement (H18)", () => {
     });
 
     const result = await bpEvaluatorNode(makeState());
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(messages).toContain("GPG is not installed");
   });
@@ -516,7 +546,10 @@ describe("BP integrity enforcement (H18)", () => {
     // Repair the manifest.
     vi.mocked(verifyManifest).mockReturnValue({ valid: true });
     const result = await bpEvaluatorNode(makeState());
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
   });
 });
 
@@ -556,7 +589,10 @@ describe("BP log action separation (L-A7)", () => {
         },
       }),
     );
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes (e.g. a regression that wraps findings in an
+    // object). Bare `toBeDefined()` would have passed for those.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
 
     const evaluatedCalls = logMock.mock.calls.filter((args) => {
       const event = args[0] as { action?: string };

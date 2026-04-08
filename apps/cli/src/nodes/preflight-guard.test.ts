@@ -278,9 +278,12 @@ describe("preflightGuardNode", () => {
       );
       // Walker bails at depth 32 — leaf is unreachable but no exception.
       // Preflight may fail for OTHER reasons (no Role at top level), but
-      // it must NOT throw. Anything other than an unhandled exception
-      // is an acceptable outcome.
-      expect(result).toBeDefined();
+      // it must NOT throw. Wave 17: strengthened — assert the result
+      // is a real partial-state object, not just any non-undefined
+      // value. The previous `toBeDefined()` would have passed even
+      // for a Promise that hadn't resolved.
+      expect(typeof result).toBe("object");
+      expect(result).not.toBeNull();
     });
   });
 
@@ -815,9 +818,16 @@ describe("preflightGuardNode — parallel pricing + IAM fan-out (Story 9.10)", (
     const pricingEnd = executionLog.find(
       (e) => e.task === "pricing" && e.event === "end",
     );
-    expect(pricingStart).toBeDefined();
-    expect(iamStart).toBeDefined();
-    expect(pricingEnd).toBeDefined();
+    // Wave 17: strengthened — assert each timing entry is a real
+    // object with a numeric `time` field. The previous `toBeDefined()`
+    // would have passed for any non-undefined `find()` result, but the
+    // subsequent `iamStart!.time` chain requires the entries to be
+    // shape-correct objects. Making the shape check explicit means a
+    // regression that changes the executionLog event format fails
+    // here instead of producing a confusing arithmetic error below.
+    expect(typeof pricingStart?.time).toBe("number");
+    expect(typeof iamStart?.time).toBe("number");
+    expect(typeof pricingEnd?.time).toBe("number");
     // IAM should start before pricing ends (proving concurrency)
     expect(iamStart!.time).toBeLessThanOrEqual(pricingEnd!.time);
   });
@@ -841,7 +851,11 @@ describe("preflightGuardNode — parallel pricing + IAM fan-out (Story 9.10)", (
     expect(result.preflightPassed).toBe(true);
     expect(result.executionStatus).toBeUndefined();
     // Cost should fall back to local estimate
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Wave 17: strengthened — graceful-degradation paths must still
+    // produce a real cost STRING (typically the local-estimate fallback
+    // or "N/A"), not just any defined value.
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost!.length).toBeGreaterThan(0);
   });
 
   it("graceful degradation: IAM failure does not block pricing", async () => {
@@ -886,7 +900,11 @@ describe("preflightGuardNode — parallel pricing + IAM fan-out (Story 9.10)", (
     ]);
 
     // Pricing should succeed, IAM should degrade gracefully
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Wave 17: strengthened — graceful-degradation paths must still
+    // produce a real cost STRING (typically the local-estimate fallback
+    // or "N/A"), not just any defined value.
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost!.length).toBeGreaterThan(0);
     expect(result.preflightPassed).toBe(true);
     expect(result.executionStatus).toBeUndefined();
   });
@@ -909,7 +927,11 @@ describe("preflightGuardNode — parallel pricing + IAM fan-out (Story 9.10)", (
 
     // Both degrade gracefully — preflight still passes
     expect(result.preflightPassed).toBe(true);
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Wave 17: strengthened — graceful-degradation paths must still
+    // produce a real cost STRING (typically the local-estimate fallback
+    // or "N/A"), not just any defined value.
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost!.length).toBeGreaterThan(0);
     expect(result.executionStatus).toBeUndefined();
   });
 
