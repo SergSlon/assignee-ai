@@ -350,6 +350,28 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "elasticfilesystem:CreateMountTarget",
       "elasticfilesystem:DeleteMountTarget",
     ],
+    // A8 (2026-04-08): EventBridge Rule first-class promotion.
+    // Minimum viable set: PutRule covers Create+Update, DeleteRule
+    // for destroy, DescribeRule for drift, PutTargets/RemoveTargets
+    // for target attach/detach (create + update paths both call
+    // PutTargets), TagResource for plan-time tagging. The 3 List*
+    // actions collapse to `events:List*` via collapseToWildcards()
+    // (Describe/List/Get threshold = 3+ members). Deliberately
+    // omitted to keep the operator policy inside 6144-byte limit:
+    //   - events:EnableRule / DisableRule  — CCAPI UpdateResource
+    //     mutates `State` via the same PutRule path
+    //   - events:UntagResource             — drift reconcile, future
+    //   - iam:PassRole                     — already granted via
+    //     other resource types (EC2_INSTANCE, LAMBDA_FUNCTION,
+    //     IAM_ROLE) and deduped in the Set
+    [RESOURCE_TYPES.EVENTS_RULE]: [
+      "events:PutRule",
+      "events:DeleteRule",
+      "events:DescribeRule",
+      "events:PutTargets",
+      "events:RemoveTargets",
+      "events:TagResource",
+    ],
   };
 
   const serviceActions = serviceActionMap[resourceType] ?? [];

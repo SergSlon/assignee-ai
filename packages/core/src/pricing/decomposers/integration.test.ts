@@ -36,6 +36,11 @@ const FREE_TYPES: readonly string[] = [
   // A1 follow-up: EFS::MountTarget is free — the billable cost lives
   // on the parent EFS::FileSystem storage + NFS data transfer.
   RESOURCE_TYPES.EFS_MOUNT_TARGET,
+  // A8 (2026-04-08): EventBridge Rule is free on the default bus —
+  // rule evaluation and target delivery bill $0; custom-bus publishing
+  // is a bus-level charge, not a rule-level one, and the per-month
+  // cost is workload-dependent, so the decomposer returns [].
+  RESOURCE_TYPES.EVENTS_RULE,
   // SSM Standard tier is also free, but the decomposer is registered for
   // Advanced tier too — it is NOT in the "always free" list.
 ] as const;

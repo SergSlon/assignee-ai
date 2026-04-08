@@ -32,6 +32,8 @@ import { subnetRouteTableAssociationPricingStrategy } from "./strategies/subnet-
 // A1 (2026-04-08) — EFS
 import { efsPricingStrategy } from "./strategies/efs.js";
 import { efsMountTargetPricingStrategy } from "./strategies/efs-mount-target.js";
+// A8 (2026-04-08) — EventBridge Rule
+import { eventsRulePricingStrategy } from "./strategies/events-rule.js";
 import { ec2PricingDecomposer } from "./decomposers/ec2.js";
 import { rdsPricingDecomposer } from "./decomposers/rds.js";
 import { s3PricingDecomposer } from "./decomposers/s3.js";
@@ -64,6 +66,8 @@ import {
   subnetRouteTableAssociationPricingDecomposer,
   // A1 follow-up
   efsMountTargetPricingDecomposer,
+  // A8 (2026-04-08): EventBridge Rule is free on the default bus
+  eventsRulePricingDecomposer,
 } from "./decomposers/free.js";
 
 /**
@@ -173,6 +177,11 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.EFS_MOUNT_TARGET,
   efsMountTargetPricingStrategy,
 );
+// A8 (2026-04-08) — EventBridge Rule
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.EVENTS_RULE,
+  eventsRulePricingStrategy,
+);
 
 /**
  * The default pre-populated pricing decomposer registry (Story 23.1).
@@ -211,6 +220,7 @@ defaultDecomposerRegistry.register(
 // A1 (2026-04-08) — EFS
 defaultDecomposerRegistry.register(efsPricingDecomposer);
 defaultDecomposerRegistry.register(efsMountTargetPricingDecomposer);
+defaultDecomposerRegistry.register(eventsRulePricingDecomposer);
 
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";
