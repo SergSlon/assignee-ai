@@ -182,6 +182,12 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "iam:ListRolePolicies",
       "iam:ListAttachedRolePolicies",
       "iam:GetRolePolicy",
+      // Wave 19 Bug #8: preflight verifies every ManagedPolicyArn against
+      // IAM with iam:GetPolicy before CCAPI sees it, so the LLM can't
+      // hallucinate a non-existent ARN past the gate. Without this perm
+      // the preflight verifier fails open (no block) and a hallucinated
+      // ARN reaches CCAPI which then 404s with a less actionable error.
+      "iam:GetPolicy",
     ],
     [RESOURCE_TYPES.EC2_SUBNET]: [
       "ec2:CreateSubnet",
@@ -255,6 +261,12 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "ec2:CreateTags",
       "ec2:AllocateAddress",
       "ec2:ReleaseAddress",
+      // Wave 19 Bug #5: EIP-reuse pre-hook calls DescribeAddresses before
+      // allocating a new EIP. Missing perm caused silent fall-through to
+      // "always allocate" which, combined with Bug #6 (EIP not in bulk-destroy
+      // tier table), produced a monotonic EIP leak loop observed against
+      // live AWS on 2026-04-08 (5 orphaned EIPs recovered from prior runs).
+      "ec2:DescribeAddresses",
     ],
     // Sprint G: Tier 2 resources (Epic 26)
     [RESOURCE_TYPES.APIGATEWAYV2_API]: [

@@ -10,6 +10,58 @@ import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
+/**
+ * Wave 19 Bug #2: recognize a real AssumeRolePolicyDocument emitted by the
+ * LLM plan_generator, so we can pass it through unchanged instead of trying
+ * to look it up as if it were a 3-enum wizard key. The LLM may emit the
+ * policy as either:
+ *
+ *   1. A parsed JSON OBJECT — `{ Version: "2012-10-17", Statement: [...] }`
+ *      (rare; happens when the upstream pipeline already parsed it)
+ *   2. A JSON STRING — `'{"Version":"2012-10-17","Statement":[...]}'`
+ *      (common; matches what we observed in the 2026-04-08 live smoke logs)
+ *
+ * Both forms must be accepted. The CFN AssumeRolePolicyDocument property
+ * itself is a JSON-typed structure, so handing CCAPI either an object or a
+ * pre-stringified JSON works the same way at the CloudFormation level.
+ *
+ * Returns the parsed/passed-through policy object on success, or null when
+ * the input is not a recognizable policy shape (callers fall back to enum
+ * lookup).
+ */
+function tryParseTrustPolicyDocument(value: unknown): object | null {
+  // Object shape — pass through unchanged
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const doc = value as { Statement?: unknown };
+    if (Array.isArray(doc.Statement) && doc.Statement.length > 0) {
+      return value;
+    }
+    return null;
+  }
+  // String shape — try parsing as JSON. The leading `{` check is a cheap
+  // pre-filter so we don't run JSON.parse on enum keys like "ec2" / "lambda".
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed.startsWith("{")) return null;
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        !Array.isArray(parsed)
+      ) {
+        const doc = parsed as { Statement?: unknown };
+        if (Array.isArray(doc.Statement) && doc.Statement.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Not valid JSON — fall through to enum lookup
+    }
+  }
+  return null;
+}
+
 /** Common trust policies for AWS service principals. */
 const TRUST_POLICIES: Record<string, object> = {
   ec2: {
@@ -98,6 +150,35 @@ export const iamRolePlugin: ResourcePlugin = {
         hint: "Determines which AWS service can assume this role. Choose based on where the role will be used.",
       },
       toCfn: (answer: unknown) => {
+        // Wave 19 Bug #2: accept three shapes.
+        //
+        // 1. Wizard path: `answer` is a short enum key ("ec2"/"lambda"/"ecs")
+        //    and we look it up in TRUST_POLICIES for a pre-built document.
+        //
+        // 2. LLM-as-object path: the plan_generator hands us a parsed
+        //    AssumeRolePolicyDocument JSON object.
+        //
+        // 3. LLM-as-string path: the plan_generator hands us a JSON string
+        //    (this is the common case observed in the 2026-04-08 live
+        //    smoke logs — the warning fired with the literal JSON in the
+        //    "Unknown trust policy" message because String(stringValue)
+        //    just returns the string unchanged).
+        //
+        // Before this fix, both LLM paths fell through the enum lookup,
+        // hit `undefined`, emitted a scary "Unknown trust policy" warning,
+        // and then the required-field validator killed the run with
+        // "Missing required fields for AWS::IAM::Role". This meant every
+        // plain-intent `assignee apply "Create an IAM role ..."` failed
+        // unless the user knew the `--set AssumeRolePolicyDocument=ec2`
+        // workaround.
+        //
+        // Pass-through recognizes anything that looks like a valid policy
+        // document (object or JSON string with a non-empty Statement array).
+        // Invalid strings still emit the warning + drop behavior.
+        const llmPolicy = tryParseTrustPolicyDocument(answer);
+        if (llmPolicy !== null) {
+          return llmPolicy;
+        }
         const key = String(answer);
         const policy = TRUST_POLICIES[key];
         if (!policy) {
@@ -204,5 +285,40 @@ export const iamRolePlugin: ResourcePlugin = {
     "AssumeRolePolicyDocument is REQUIRED — it defines which AWS service (ec2, lambda, ecs) or account can assume the role. Without it the role is unusable.",
     "ManagedPolicyArns is an array of strings — maximum 10 managed policies per role. Exceeding the limit causes a CloudFormation error.",
     "RoleName is immutable — changing it triggers replacement of the role and all resources that reference it.",
+    // Wave 19 Bug #8: the LLM was observed hallucinating non-existent AWS
+    // managed policy ARNs like `arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforAWSServiceAccess`
+    // and `.../AmazonEC2RoleforAWSCodeDeployRole` (both 404 from CCAPI).
+    // Constrain it to a verified list. If the user's intent doesn't clearly
+    // need a managed policy attachment, OMIT ManagedPolicyArns entirely
+    // rather than inventing one — the role will still work via inline
+    // policies (PolicyDocument under Policies) or a permissions boundary.
+    "ManagedPolicyArns: ONLY use ARNs from this verified list of common AWS-managed policies. " +
+      "If the user's intent does not clearly require any of these, OMIT ManagedPolicyArns (do NOT invent ARNs). " +
+      "Verified list: " +
+      [
+        "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+        "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+        "arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess",
+        "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess",
+        "arn:aws:iam::aws:policy/AmazonSQSReadOnlyAccess",
+        "arn:aws:iam::aws:policy/AmazonSQSFullAccess",
+        "arn:aws:iam::aws:policy/AmazonSNSReadOnlyAccess",
+        "arn:aws:iam::aws:policy/AmazonSNSFullAccess",
+        "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess",
+        "arn:aws:iam::aws:policy/CloudWatchFullAccess",
+        "arn:aws:iam::aws:policy/CloudWatchLogsReadOnlyAccess",
+        "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess",
+        "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess",
+        "arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess",
+        "arn:aws:iam::aws:policy/AmazonRDSFullAccess",
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole",
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaDynamoDBExecutionRole",
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaKinesisExecutionRole",
+        "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+        "arn:aws:iam::aws:policy/PowerUserAccess",
+        "arn:aws:iam::aws:policy/ReadOnlyAccess",
+      ].join(", "),
   ],
 };

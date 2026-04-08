@@ -542,7 +542,26 @@ export async function resultFormatterNode(
           .join(", ");
         const haltedAt = state.resourceType ?? "unknown resource";
 
-        // Build cleanup guidance with ARNs in reverse dependency order
+        // Build cleanup guidance with ARNs in reverse dependency order.
+        //
+        // Wave 19 Bug #7: AWS::EC2::Route, AWS::EC2::VPCGatewayAttachment, and
+        // AWS::EC2::SubnetRouteTableAssociation use composite primary
+        // identifiers (e.g. `rtb-xxx|0.0.0.0/0`, `IGW|vpc-xxx`,
+        // `subnet-xxx|rtb-xxx`) that the destroy command's resource resolver
+        // cannot match against the RGTA / per-service listing path. Before
+        // this fix, the cleanup script told users to run
+        // `assignee destroy "rtb-xxx|0.0.0.0/0"` and the destroy command
+        // immediately responded with "No managed resource found", which is
+        // misleading and scary. In practice these resources are torn down
+        // implicitly when their parent (RouteTable / IGW / Subnet) is
+        // destroyed via the existing pre-detach / pre-disassociate hooks,
+        // so the right behavior is to surface that fact in the script
+        // rather than emit a destroy command the user can't run.
+        const COMPOSITE_ID_TYPES: ReadonlySet<string> = new Set([
+          "AWS::EC2::Route",
+          "AWS::EC2::VPCGatewayAttachment",
+          "AWS::EC2::SubnetRouteTableAssociation",
+        ]);
         const resourcesWithArns = successfulResources.filter(
           (r) => r.resourceArn,
         );
@@ -550,14 +569,22 @@ export async function resultFormatterNode(
 
         let cleanupGuidance = "";
         if (reversedResources.length > 0) {
-          const arnList = reversedResources
-            .map(
-              (r) => `  - ${r.resourceType}: assignee destroy ${r.resourceArn}`,
-            )
-            .join("\n");
+          const lines = reversedResources.map((r) => {
+            if (COMPOSITE_ID_TYPES.has(r.resourceType)) {
+              return (
+                `  # ${r.resourceType}: cascades from parent — ` +
+                `skip (composite identifier ${r.resourceArn} is not resolvable; ` +
+                `parent resource's pre-detach hook handles teardown)`
+              );
+            }
+            return `  - ${r.resourceType}: assignee destroy ${r.resourceArn}`;
+          });
           cleanupGuidance =
-            `\n\nSuccessfully created resources:\n${arnList}` +
-            `\n\nTo clean up partially created resources, run the destroy commands above in the listed order (reverse dependency order).`;
+            `\n\nSuccessfully created resources:\n${lines.join("\n")}` +
+            `\n\nTo clean up partially created resources, run the destroy commands above ` +
+            `(lines starting with "-") in the listed order (reverse dependency order). ` +
+            `Lines starting with "#" are skipped — they cascade from their parent resource ` +
+            `and have no standalone destroy path.`;
         }
 
         renderError(
@@ -630,15 +657,38 @@ export async function resultFormatterNode(
           };
           process.stdout.write(JSON.stringify(jsonPayload, null, 2) + "\n");
         } else {
-          renderPlanBox(state);
+          // Tier S #3: pass the compound queue into the renderable state so
+          // renderPlanBox displays a "Compound: N resources" listing INSIDE
+          // the boxen frame. The original Wave 19 fix wrote a separate
+          // prelude block ABOVE the boxen frame, which gave TTY users two
+          // disconnected blocks; this version is one unified frame.
+          const stateWithQueue =
+            state.resourcePattern &&
+            state.resourceQueue &&
+            state.resourceQueue.length > 0
+              ? {
+                  ...state,
+                  compoundQueue: {
+                    patternDisplayName: state.resourcePattern.displayName,
+                    resources: state.resourceQueue.map((r) => ({
+                      resourceType: r.resourceType,
+                      ...(r.displayName ? { displayName: r.displayName } : {}),
+                    })),
+                  },
+                }
+              : state;
+          renderPlanBox(stateWithQueue);
 
           // Story 35.4: Interactive fix selection after plan display (TTY only)
           const fixResult = await promptFixSelection(state);
           if (fixResult) {
             // Re-render plan box with updated state — preserve cost estimate
-            // (fixes like encryption/versioning don't materially change the rate)
+            // (fixes like encryption/versioning don't materially change the rate).
+            // Also preserve the compound queue listing (Tier S #3) so the
+            // re-rendered frame still shows the full pattern, not just the
+            // first resource.
             const updatedState = {
-              ...state,
+              ...stateWithQueue,
               desiredState: fixResult.desiredState,
               bpFindings: fixResult.bpFindings,
               appliedFixes: fixResult.appliedFixes,

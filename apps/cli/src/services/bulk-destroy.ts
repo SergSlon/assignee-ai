@@ -10,7 +10,11 @@
  * @see Story 36.2
  */
 
-import { RESOURCE_TYPES, LIST_RESOURCE_TYPES } from "@assignee/core";
+import {
+  RESOURCE_TYPES,
+  LIST_RESOURCE_TYPES,
+  COMPANION_RESOURCE_TYPES,
+} from "@assignee/core";
 import { fetchManagedResources, parseArn } from "./list-resources.js";
 
 /** A managed resource enriched with destruction-ordering metadata. */
@@ -67,6 +71,17 @@ export const DESTROY_TIER: Record<string, number> = {
   [RESOURCE_TYPES.EC2_SUBNET]: 4,
   [RESOURCE_TYPES.EC2_INTERNET_GATEWAY]: 4,
   [RESOURCE_TYPES.EC2_ROUTE_TABLE]: 4,
+  // Wave 19 Bug #6: EIP must be released AFTER NAT Gateway (tier 3) but
+  // before VPC (tier 5). EIP is technically a companion resource type,
+  // but it's the only one in COMPANION_RESOURCE_TYPES that ends up
+  // standalone-tagged in AWS — every NAT Gateway compound run leaves an
+  // EIP behind that needs explicit cleanup. Tier 4 puts it alongside the
+  // network infrastructure that holds it, after the NAT Gateway that
+  // references it. CCAPI supports `AWS::EC2::EIP` deletion via the
+  // standard destroy path. Combined with the managed-by=assignee-ai tag
+  // added in resource-provisioner.ts (also Wave 19 Bug #6), this finally
+  // closes the EIP leak loop observed during the 2026-04-08 live smoke.
+  [COMPANION_RESOURCE_TYPES.EC2_EIP]: 4,
   // Tier 5: Foundations
   [RESOURCE_TYPES.S3_BUCKET]: 5,
   [RESOURCE_TYPES.EC2_VPC]: 5,

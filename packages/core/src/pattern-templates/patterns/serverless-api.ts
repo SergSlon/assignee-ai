@@ -146,6 +146,17 @@ export const serverlessApiPattern: ArchitecturePattern = {
       MemorySize: 512,
       Timeout: 30,
       Architectures: [AwsDefault.ARCH_ARM],
+      // Wave 19 Bug #1 (parity fix): same Code/Handler defaults as the
+      // lambda-with-exec-role pattern. Without these, this pattern would
+      // hit the same `required key [Code] not found` failure as Wave 13.
+      // The lambda-function.ts plugin has matching defaults for the
+      // standalone path; the compound path skips plugin-defaults injection
+      // and uses only the pattern's defaultOptions, so we mirror them here.
+      Code: {
+        ZipFile:
+          "exports.handler = async (event) => ({ statusCode: 200, body: 'placeholder' });",
+      },
+      Handler: AwsDefault.LAMBDA_HANDLER,
       // Use a marker token instead of a CloudFormation intrinsic — CloudControl
       // does not process Fn::GetAtt. The compound plan-generator substitutes
       // this with the real IAM Role name/ARN from completedResources before

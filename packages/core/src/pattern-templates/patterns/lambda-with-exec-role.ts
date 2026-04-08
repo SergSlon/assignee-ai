@@ -130,6 +130,22 @@ export const lambdaWithExecRolePattern: ArchitecturePattern = {
       MemorySize: 512,
       Timeout: 30,
       Architectures: [AwsDefault.ARCH_ARM],
+      // Wave 19 Bug #1: Code and Handler are CFN-required fields. Without
+      // them in the pattern template, the compound apply path produced
+      // `Model validation failed (#: required key [Code] not found)` at
+      // CCAPI provision time, leaving an orphaned IAM Role. The plugin
+      // (lambda-function.ts) has matching defaults for the standalone
+      // path, but the compound path skips plugin-defaults injection and
+      // relies entirely on the pattern's defaultOptions. Mirror the
+      // plugin defaults here so plain "Create a lambda" intents work
+      // end-to-end. The placeholder ZipFile is a 200-OK echo handler —
+      // users can replace it after the function exists, but the goal
+      // here is to make `assignee apply` succeed against AWS.
+      Code: {
+        ZipFile:
+          "exports.handler = async (event) => ({ statusCode: 200, body: 'placeholder' });",
+      },
+      Handler: AwsDefault.LAMBDA_HANDLER,
       // Marker token: plan-generator's compound branch substitutes this
       // with the real role ARN at apply time (apps/cli/src/nodes/
       // plan-generator.ts line ~545: when the current resource is a

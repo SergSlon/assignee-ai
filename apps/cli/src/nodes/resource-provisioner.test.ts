@@ -870,8 +870,16 @@ describe("resourceProvisionerNode", () => {
       };
       expect(createTagsCall._type).toBe("CreateTagsCommand");
       expect(createTagsCall.input.Resources).toEqual(["eipalloc-new-001"]);
+      // Wave 19 Bug #6: EIPs must carry BOTH the runId tag (used for retry
+      // discovery via DescribeAddresses) AND the standard managed-by tag
+      // so the Resource Groups Tagging API returns them to
+      // `fetchManagedResources` / `assignee list` / `bulk-destroy`. Before
+      // this fix, EIPs were only tagged with assignee:runId, so they were
+      // invisible to the destroy path and leaked at ~$3.60/month each.
+      // The 2026-04-08 live smoke recovered 6 EIPs leaked from prior runs.
       expect(createTagsCall.input.Tags).toEqual([
         { Key: "assignee:runId", Value: "run-natgw-eip-001" },
+        { Key: "managed-by", Value: "assignee-ai" },
       ]);
     });
 
@@ -1919,8 +1927,9 @@ describe("resourceProvisionerNode", () => {
   describe("formatErrorForLog (L-A5)", () => {
     it("returns the stack trace when err is an Error with a stack", () => {
       const err = new Error("DescribeAddresses failed");
-      // Node sets err.stack on construction; sanity check before asserting.
-      expect(err.stack).toBeDefined();
+      // Node sets err.stack on construction; sanity check it's a string.
+      // Tier C: strengthened — typeof string instead of just defined
+      expect(typeof err.stack).toBe("string");
       const formatted = formatErrorForLog(err);
       expect(formatted).toBe(err.stack);
       expect(formatted).toContain("DescribeAddresses failed");

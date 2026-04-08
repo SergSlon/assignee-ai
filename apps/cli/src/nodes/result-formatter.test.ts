@@ -516,6 +516,104 @@ describe("resultFormatterNode — compound FAILED with partial results", () => {
     expect(errorMsg).toContain("reverse dependency order");
   });
 
+  // Wave 19 Bug #7: composite-id resources (Route, VPCGatewayAttachment,
+  // SubnetRouteTableAssociation) must NOT emit a `assignee destroy` line
+  // because the resolver can't match composite identifiers — they cascade
+  // from their parents instead. Verified against the real partial state
+  // observed during compound VPC Run 1 on 2026-04-08.
+  it("annotates composite-id resources as cascading instead of emitting unrunnable destroy commands (Wave 19 Bug #7)", async () => {
+    const resourceQueue = makeResourceQueue();
+    const state = makeState({
+      executionStatus: ExecutionStatus.FAILED,
+      resourcePattern: mockPattern,
+      resourceQueue,
+      currentResourceIndex: 11,
+      // Real partial state from the compound VPC Run 1 failure: 11 resources
+      // including the 3 composite-id types that hit Bug #7.
+      completedResources: [
+        {
+          resourceId: "vpc",
+          resourceType: "AWS::EC2::VPC",
+          resourceArn:
+            "arn:aws:ec2:us-east-1:112233445566:vpc/vpc-00609e37203c1044c",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+        {
+          resourceId: "subnet-public-1",
+          resourceType: "AWS::EC2::Subnet",
+          resourceArn:
+            "arn:aws:ec2:us-east-1:112233445566:subnet/subnet-0f855779f1b6c0ff8",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+        {
+          resourceId: "igw",
+          resourceType: "AWS::EC2::InternetGateway",
+          resourceArn:
+            "arn:aws:ec2:us-east-1:112233445566:internet-gateway/igw-0398fb964fa35931d",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+        {
+          // COMPOSITE — must be skipped
+          resourceId: "vpc-gateway-attachment",
+          resourceType: "AWS::EC2::VPCGatewayAttachment",
+          resourceArn: "IGW|vpc-00609e37203c1044c",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+        {
+          resourceId: "rt-public",
+          resourceType: "AWS::EC2::RouteTable",
+          resourceArn:
+            "arn:aws:ec2:us-east-1:112233445566:route-table/rtb-07fb017a426465e6f",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+        {
+          // COMPOSITE — must be skipped
+          resourceId: "route-public",
+          resourceType: "AWS::EC2::Route",
+          resourceArn: "rtb-07fb017a426465e6f|0.0.0.0/0",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+      resourceType: "AWS::EC2::NatGateway",
+      errorMessage:
+        "EIP allocation failed for NatGateway: The maximum number of addresses has been reached.",
+    });
+
+    await resultFormatterNode(state);
+
+    expect(renderError).toHaveBeenCalledOnce();
+    const [errorMsg] = vi.mocked(renderError).mock.calls[0] as [
+      string,
+      ...unknown[],
+    ];
+
+    // Bare-id resources should still get a runnable destroy line
+    expect(errorMsg).toContain(
+      "AWS::EC2::VPC: assignee destroy arn:aws:ec2:us-east-1:112233445566:vpc/vpc-00609e37203c1044c",
+    );
+    expect(errorMsg).toContain("AWS::EC2::InternetGateway: assignee destroy");
+
+    // Composite-id resources MUST NOT emit a runnable destroy command —
+    // the resolver can't match them and the user gets a misleading error
+    expect(errorMsg).not.toContain(
+      "assignee destroy IGW|vpc-00609e37203c1044c",
+    );
+    expect(errorMsg).not.toContain(
+      "assignee destroy rtb-07fb017a426465e6f|0.0.0.0/0",
+    );
+
+    // Composite-id lines must be present as annotated comments instead
+    expect(errorMsg).toContain(
+      "AWS::EC2::VPCGatewayAttachment: cascades from parent",
+    );
+    expect(errorMsg).toContain("AWS::EC2::Route: cascades from parent");
+    expect(errorMsg).toContain("IGW|vpc-00609e37203c1044c");
+    expect(errorMsg).toContain("rtb-07fb017a426465e6f|0.0.0.0/0");
+
+    // The legend at the bottom must explain the "#" prefix
+    expect(errorMsg).toContain("Lines starting with");
+  });
+
   it("renders standard error message when no resources were provisioned yet", async () => {
     const resourceQueue = makeResourceQueue();
     const state = makeState({

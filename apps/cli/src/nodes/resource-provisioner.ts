@@ -23,7 +23,11 @@ import {
 import type { ProvisioningPort } from "../services/provisioning-port.js";
 import { ProvisioningErrorKind } from "../services/provisioning-port.js";
 import type { SDKFallbackDispatcher } from "../services/sdk-fallback-dispatcher.js";
-import { injectMandatoryTags } from "../utils/tags.js";
+import {
+  injectMandatoryTags,
+  TAG_KEY_MANAGED_BY,
+  TAG_VALUE_MANAGED_BY,
+} from "../utils/tags.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { AWS_REGION, ASSIGNEE_DIR } from "../config/constants.js";
 import { requireAssigneeCredentials } from "../config/aws-credentials.js";
@@ -378,15 +382,34 @@ export async function resourceProvisionerNode(
           }
         }
       } catch (err) {
-        // DescribeAddresses failure is non-fatal — fall through to allocate a new EIP
+        // Wave 19 Bug #5: promote AccessDenied to a warn-level event with an
+        // actionable hint. The previous info-level swallow meant every
+        // compound VPC run in an account with a stale operator policy
+        // silently allocated a fresh EIP, hiding the underlying IAM gap.
+        // The reuse path is still non-fatal (we fall through to allocate
+        // a new EIP so the user's intent succeeds), but the log is now
+        // greppable at warn level and names the remediation.
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const isAccessDenied =
+          errMsg.includes("not authorized") ||
+          errMsg.includes("UnauthorizedOperation") ||
+          errMsg.includes("AccessDenied");
         log({
           ts: new Date().toISOString(),
           runId: state.runId,
-          level: "info",
+          level: isAccessDenied ? "warn" : "info",
           action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
           extras: {
             phase: "describe_addresses_eip_reuse",
             error: formatErrorForLog(err),
+            ...(isAccessDenied && {
+              hint:
+                "Operator role lacks ec2:DescribeAddresses. This is already in " +
+                "iam-actions.ts for EC2_NAT_GATEWAY as of Wave 19 Bug #5 — run " +
+                "`assignee setup` to refresh AssigneeOperatorPolicy in AWS. " +
+                "Falling through to allocate a fresh EIP (leak-prone until " +
+                "setup is re-run).",
+            }),
           },
         });
       }
@@ -408,12 +431,28 @@ export async function resourceProvisionerNode(
         // failure. Reused EIPs (found via DescribeAddresses above) must NOT
         // be released on failure — they belong to a previous attempt.
         eipAllocatedThisInvocation = true;
-        // Tag the EIP with runId so it can be found on retry
+        // Tag the EIP with runId AND the standard managed-by tag.
+        //
+        // Wave 19 Bug #6: before this fix, EIPs were tagged ONLY with
+        // `assignee:runId`, NOT with `managed-by=assignee-ai`. This meant:
+        //   1. `fetchManagedResources` (which RGTA-filters on
+        //      `managed-by=assignee-ai`) never returned the EIP, so it was
+        //      invisible to `assignee list` and `assignee destroy --all`.
+        //   2. Combined with the absence of `AWS::EC2::EIP` from the
+        //      bulk-destroy tier table, every compound VPC apply leaked
+        //      exactly 1 EIP at ~$3.60/month forever.
+        //   3. The 2026-04-08 live smoke recovered 6 leaked EIPs from prior
+        //      runs, all stranded by this exact bug.
+        // Adding the managed-by tag here brings EIPs into the same destroy
+        // path as every other primary resource type.
         try {
           await ec2.send(
             new CreateTagsCommand({
               Resources: [allocationId],
-              Tags: [{ Key: "assignee:runId", Value: state.runId }],
+              Tags: [
+                { Key: "assignee:runId", Value: state.runId },
+                { Key: TAG_KEY_MANAGED_BY, Value: TAG_VALUE_MANAGED_BY },
+              ],
             }),
           );
         } catch (err) {
