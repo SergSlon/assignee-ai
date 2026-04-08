@@ -119,8 +119,21 @@ patternsCommand
   .command("list", { isDefault: true })
   .description("List all registered compound patterns")
   .option("--json", "Output as JSON")
-  .action((opts: { json?: boolean }) => {
-    const entries = defaultPatternRegistry.list().map(toListEntry);
+  .option(
+    "--search <keyword>",
+    "Filter patterns whose patternId, displayName, or keywords contain the substring (case-insensitive)",
+  )
+  .action((opts: { json?: boolean; search?: string }) => {
+    let entries = defaultPatternRegistry.list().map(toListEntry);
+    if (opts.search) {
+      const needle = opts.search.toLowerCase();
+      entries = entries.filter(
+        (e) =>
+          e.patternId.toLowerCase().includes(needle) ||
+          e.displayName.toLowerCase().includes(needle) ||
+          e.keywords.some((kw) => kw.toLowerCase().includes(needle)),
+      );
+    }
     if (opts.json) {
       process.stdout.write(JSON.stringify(entries, null, 2) + "\n");
       return;
