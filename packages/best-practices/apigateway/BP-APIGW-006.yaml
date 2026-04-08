@@ -1,0 +1,17 @@
+id: BP-APIGW-006
+title: "API Gateway custom domain must enforce TLS 1.2+"
+severity: HIGH
+resource_type: "AWS::ApiGateway::DomainName"
+property_path: "SecurityPolicy"
+check_type: "equals"
+expected_value: "TLS_1_2"
+source: "AWS Guard Rules Registry"
+source_id: "api_gw_domain_deny_non_tls_traffic"
+description: "API Gateway custom domain names have a SecurityPolicy property that controls the minimum TLS version the endpoint accepts. The default (when omitted) is TLS_1_0 which allows legacy clients and is deprecated by PCI DSS 4.0 and most compliance frameworks. The only acceptable value is TLS_1_2."
+remediation: "Set `SecurityPolicy: TLS_1_2` on the DomainName resource. The same value is valid for both REST and HTTP APIs. There is no 'TLS_1_3' option — the TLS 1.2 policy already permits TLS 1.3 negotiation with compatible clients."
+consequence: "TLS 1.0/1.1 connections are vulnerable to BEAST, POODLE, and several cipher-suite downgrade attacks. Compliance auditors (PCI, HIPAA, SOC 2) flag the default SecurityPolicy as a finding."
+category: security
+lastVerified: "2026-04-08"
+autoFixable: true
+desiredStatePatch:
+  SecurityPolicy: "TLS_1_2"

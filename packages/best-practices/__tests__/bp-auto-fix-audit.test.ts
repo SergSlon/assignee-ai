@@ -246,16 +246,29 @@ const testCases: AutoFixTestCase[] = [
   },
   // --- A5.4 ELBv2 rules ---
   {
-    // BP-ELB-006 is the only A5 rule with an autoFixable patch — all the
-    // policy_antipattern rules (Tiers 1/3) have no mechanical fix, and
-    // the Listener/LoadBalancer rules in A5.4 other than SSL policy are
-    // either user-intent decisions (HTTP protocol, certificate ARN) or
-    // awareness-only (WAF, redirect). See docs/bp-cfn-guard-gap-
+    // BP-ELB-006 is the only A5.4 rule with an autoFixable patch — all
+    // the policy_antipattern rules (Tiers 1/3) have no mechanical fix,
+    // and the Listener/LoadBalancer rules in A5.4 other than SSL policy
+    // are either user-intent decisions (HTTP protocol, certificate ARN)
+    // or awareness-only (WAF, redirect). See docs/bp-cfn-guard-gap-
     // analysis-2026-04-08.md for the per-rule autoFixable decision.
     id: "BP-ELB-006",
     resourceType: "AWS::ElasticLoadBalancingV2::Listener",
     triggeringState: {
       SslPolicy: "ELBSecurityPolicy-2016-08",
+    },
+  },
+  // --- A5.5 API Gateway REST API hygiene ---
+  {
+    // BP-APIGW-006 patches SecurityPolicy to TLS_1_2 on DomainName —
+    // the only A5.5 rule with a mechanical auto-fix. BP-APIGW-004/005
+    // are awareness-only (nested MethodSettings arrays) and the Lambda
+    // permission rules (BP-LAMBDA-013/014) are user-intent decisions
+    // that should not be silently rewritten.
+    id: "BP-APIGW-006",
+    resourceType: "AWS::ApiGateway::DomainName",
+    triggeringState: {
+      SecurityPolicy: "TLS_1_0",
     },
   },
 ];
