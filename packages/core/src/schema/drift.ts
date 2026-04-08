@@ -76,6 +76,12 @@ export const AUTO_POPULATED_FIELDS: Record<string, Set<string>> = {
     CfnKey.DUAL_STACK_DOMAIN_NAME,
     CfnKey.WEBSITE_URL,
   ]),
+  // A3 (2026-04-08): EFS CCAPI readOnly properties that surface in
+  // GetResource responses but aren't part of the desired state the
+  // user ever sets. Without this filter, every EFS drift check would
+  // report FileSystemId and ReplicationConfiguration as "added
+  // externally" false-positive drifts.
+  "AWS::EFS::FileSystem": new Set(["FileSystemId", "ReplicationConfiguration"]),
 };
 
 /**
