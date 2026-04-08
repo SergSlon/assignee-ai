@@ -65,6 +65,7 @@ interface CleanOpts {
   memory?: boolean;
   resources?: boolean;
   logs?: boolean;
+  baselines?: boolean;
   json?: boolean;
 }
 
@@ -205,6 +206,48 @@ async function cleanResources(opts: CleanOpts): Promise<void> {
 /** Action handler extracted for reuse by the factory. */
 async function cleanAction(opts: CleanOpts): Promise<void> {
   const dryRun = !(opts.confirm || opts.yes);
+
+  // ── --baselines: standalone scope (A3 follow-up) ─────────────────
+  // Runs independently of the main cleanup machinery because adopted
+  // baselines are a new storage root not yet represented in
+  // CleanupCategoryName / runFullCleanup. Threading them through the
+  // full report pipeline would touch 6+ files for a single directory
+  // delete; a scoped self-contained block is the minimum-viable
+  // cleanup surface.
+  if (opts.baselines === true) {
+    const { BASELINES_DIR } = await import("../config/constants.js");
+    const path = await import("node:path");
+    const fs = await import("node:fs/promises");
+    const baselineDir = path.resolve(process.cwd(), BASELINES_DIR);
+    let files: string[] = [];
+    try {
+      files = await fs.readdir(baselineDir);
+    } catch {
+      process.stdout.write("No baseline files found (nothing to clean).\n");
+      return;
+    }
+    const jsonFiles = files.filter((f) => f.endsWith(".json"));
+    if (jsonFiles.length === 0) {
+      process.stdout.write("No baseline files found (nothing to clean).\n");
+      return;
+    }
+    if (dryRun) {
+      process.stdout.write(
+        `Would remove ${jsonFiles.length} baseline file${jsonFiles.length === 1 ? "" : "s"} from ${baselineDir}:\n`,
+      );
+      for (const f of jsonFiles) process.stdout.write(`  ${f}\n`);
+      process.stdout.write("\nRe-run with --confirm to delete.\n");
+      return;
+    }
+    for (const f of jsonFiles) {
+      await fs.unlink(path.join(baselineDir, f)).catch(() => {});
+    }
+    process.stdout.write(
+      `Removed ${jsonFiles.length} baseline file${jsonFiles.length === 1 ? "" : "s"} from ${baselineDir}.\n`,
+    );
+    return;
+  }
+
   const hasLocalFlags = opts.checkpoints || opts.cache || opts.memory;
   const hasResources = opts.resources === true;
   const hasLogs = opts.logs === true;
@@ -329,6 +372,10 @@ export function createCleanCommand(): Command {
     .option(
       "--logs",
       "Prune persistent warn/error log files older than the retention window (ASSIGNEE_LOG_RETENTION_DAYS, default 14 days)",
+    )
+    .option(
+      "--baselines",
+      "Remove all baseline files adopted via `assignee drift --baseline`",
     )
     .option("--json", "Output results as JSON")
     .action(cleanAction);
