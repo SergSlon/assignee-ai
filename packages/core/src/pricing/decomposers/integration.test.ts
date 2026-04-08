@@ -33,6 +33,9 @@ const FREE_TYPES: readonly string[] = [
   // WV4-A: VPC compound cross-references — pure CFN linkage, no cost
   RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
   RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
+  // A1 follow-up: EFS::MountTarget is free — the billable cost lives
+  // on the parent EFS::FileSystem storage + NFS data transfer.
+  RESOURCE_TYPES.EFS_MOUNT_TARGET,
   // SSM Standard tier is also free, but the decomposer is registered for
   // Advanced tier too — it is NOT in the "always free" list.
 ] as const;

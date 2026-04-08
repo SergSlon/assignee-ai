@@ -52,3 +52,9 @@ export const vpcGatewayAttachmentPricingDecomposer = createFreeDecomposer(
 );
 export const subnetRouteTableAssociationPricingDecomposer =
   createFreeDecomposer(RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION);
+// A1 follow-up: EFS MountTarget is free — the billable cost lives
+// on the parent EFS::FileSystem (storage) and the NFS data transfer
+// across the VPC.
+export const efsMountTargetPricingDecomposer = createFreeDecomposer(
+  RESOURCE_TYPES.EFS_MOUNT_TARGET,
+);

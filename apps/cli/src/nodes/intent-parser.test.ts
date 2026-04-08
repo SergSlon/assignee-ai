@@ -82,8 +82,9 @@ describe("intentParserNode", () => {
     expect(SUPPORTED_TYPES).toContain("AWS::SQS::Queue");
     expect(SUPPORTED_TYPES).toContain("AWS::ECS::Cluster");
     expect(SUPPORTED_TYPES).toContain("AWS::ECR::Repository");
-    // A1 (2026-04-08): EFS first-class support lifted the count to 26.
+    // A1 (2026-04-08): EFS + EFS::MountTarget lifted the count to 27.
     expect(SUPPORTED_TYPES).toContain("AWS::EFS::FileSystem");
-    expect(SUPPORTED_TYPES).toHaveLength(26);
+    expect(SUPPORTED_TYPES).toContain("AWS::EFS::MountTarget");
+    expect(SUPPORTED_TYPES).toHaveLength(27);
   });
 });

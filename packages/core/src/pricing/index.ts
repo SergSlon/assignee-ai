@@ -31,6 +31,7 @@ import { vpcGatewayAttachmentPricingStrategy } from "./strategies/vpc-gateway-at
 import { subnetRouteTableAssociationPricingStrategy } from "./strategies/subnet-route-table-association.js";
 // A1 (2026-04-08) — EFS
 import { efsPricingStrategy } from "./strategies/efs.js";
+import { efsMountTargetPricingStrategy } from "./strategies/efs-mount-target.js";
 import { ec2PricingDecomposer } from "./decomposers/ec2.js";
 import { rdsPricingDecomposer } from "./decomposers/rds.js";
 import { s3PricingDecomposer } from "./decomposers/s3.js";
@@ -61,6 +62,8 @@ import {
   // WV4-A
   vpcGatewayAttachmentPricingDecomposer,
   subnetRouteTableAssociationPricingDecomposer,
+  // A1 follow-up
+  efsMountTargetPricingDecomposer,
 } from "./decomposers/free.js";
 
 /**
@@ -166,6 +169,10 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.EFS_FILE_SYSTEM,
   efsPricingStrategy,
 );
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.EFS_MOUNT_TARGET,
+  efsMountTargetPricingStrategy,
+);
 
 /**
  * The default pre-populated pricing decomposer registry (Story 23.1).
@@ -203,6 +210,7 @@ defaultDecomposerRegistry.register(
 );
 // A1 (2026-04-08) — EFS
 defaultDecomposerRegistry.register(efsPricingDecomposer);
+defaultDecomposerRegistry.register(efsMountTargetPricingDecomposer);
 
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";

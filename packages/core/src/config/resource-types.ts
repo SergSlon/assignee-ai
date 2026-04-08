@@ -43,6 +43,12 @@ export const SUPPORTED_TYPES_ARRAY = [
   // (BP-EFS-001 encryption, BP-EFS-002 backup). CCAPI schema verified
   // to support create/delete/update handlers.
   "AWS::EFS::FileSystem",
+  // A1 follow-up (2026-04-08): EFS MountTarget — attaches an EFS
+  // file system to a subnet + security group so EC2/Lambda/ECS
+  // workloads can actually mount it. CCAPI schema probed: required
+  // fields FileSystemId + SecurityGroups + SubnetId, primary id
+  // /properties/Id, create/delete handlers present.
+  "AWS::EFS::MountTarget",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -81,6 +87,7 @@ export const RESOURCE_TYPES = {
   EC2_SUBNET_ROUTE_TABLE_ASSOCIATION: "AWS::EC2::SubnetRouteTableAssociation",
   // A1 (2026-04-08)
   EFS_FILE_SYSTEM: "AWS::EFS::FileSystem",
+  EFS_MOUNT_TARGET: "AWS::EFS::MountTarget",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */
