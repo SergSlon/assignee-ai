@@ -25,6 +25,16 @@ export class PricingStrategyRegistry {
     this.strategies.set(resourceType, strategy);
   }
 
+  /**
+   * Whether a strategy is registered for this type. Use for UI/display
+   * paths that care whether the per-month estimate is real or the
+   * `unknownPricingStrategy` "Pricing unavailable" fallback — callers
+   * that just want an estimate should use `estimate()` directly.
+   */
+  has(resourceType: string): boolean {
+    return this.strategies.has(resourceType);
+  }
+
   private getStrategy(resourceType: string): PricingStrategy {
     return this.strategies.get(resourceType) ?? unknownPricingStrategy;
   }

@@ -642,6 +642,36 @@ assignee patterns show efs-with-vpc --json      # JSON for CI consumers
 assignee patterns list --json | jq '.[].patternId'
 ```
 
+### types
+
+Discover the CloudFormation resource types assignee can provision directly (companion to `assignee patterns` which covers the compound routing layer).
+
+```
+assignee types [list|show <type>] [options]
+```
+
+**Subcommands:**
+
+| Subcommand       | Description                                                                       |
+| ---------------- | --------------------------------------------------------------------------------- |
+| `list` (default) | Print every supported type with short name, plugin field count, and BP rule count |
+| `show <type>`    | Print the full plugin field list, BP rules, and pricing info for a single type    |
+
+**Options:**
+
+| Flag     | Description    | Default |
+| -------- | -------------- | ------- |
+| `--json` | Output as JSON | false   |
+
+**Examples:**
+
+```bash
+assignee types                               # list all 28 supported types
+assignee types show AWS::Events::Rule        # full detail for one type
+assignee types list --json | jq '.[].resourceType'
+assignee types show AWS::Lambda::Function --json
+```
+
 ### whoami
 
 A fast, single-purpose pre-flight check: prints the operator-role STS identity, AWS region, and whether a project config file is loaded in the cwd. Designed to answer the most common debugging question: "which AWS identity am I about to use?" before running `plan`/`apply`.
