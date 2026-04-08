@@ -531,7 +531,9 @@ describe("resourceProvisionerNode — compound context", () => {
           currentResourceIndex: 3,
         }),
         mockProvisioner,
-        mockFallback as any,
+        mockFallback as unknown as Parameters<
+          typeof resourceProvisionerNode
+        >[2],
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
@@ -561,7 +563,9 @@ describe("resourceProvisionerNode — compound context", () => {
           currentResourceIndex: 4,
         }),
         mockProvisioner,
-        mockFallback as any,
+        mockFallback as unknown as Parameters<
+          typeof resourceProvisionerNode
+        >[2],
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);

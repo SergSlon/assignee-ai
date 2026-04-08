@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { ExecutionStatus } from "@assignee/core";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
@@ -74,7 +75,7 @@ const { LlmAdapter } = await import("../services/llm-adapter.js");
 
 // ── Test setup ──────────────────────────────────────────────────────────────
 
-let exitSpy: ReturnType<typeof vi.spyOn>;
+let exitSpy: MockInstance;
 
 let origOperatorKey: string | undefined;
 let origOperatorSecret: string | undefined;
@@ -93,9 +94,7 @@ beforeEach(() => {
         generateStructured: vi.fn(),
       }) as unknown as InstanceType<typeof LlmAdapter>,
   );
-  exitSpy = vi
-    .spyOn(process, "exit")
-    .mockImplementation((() => {}) as never) as any;
+  exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
   origOperatorKey = process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
   origOperatorSecret = process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
   process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "test-key";

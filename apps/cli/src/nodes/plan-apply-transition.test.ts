@@ -13,6 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { ExecutionStatus, ProvisioningError } from "@assignee/core";
 import type { AgentState } from "../services/graph.js";
 
@@ -109,7 +110,7 @@ function makeProvisionerState(overrides: Record<string, unknown> = {}) {
 describe("plan-to-apply transition: humanApprovalNode", () => {
   let originalStdinIsTTY: boolean | undefined;
   let originalStdoutIsTTY: boolean | undefined;
-  let stderrWriteSpy: any;
+  let stderrWriteSpy: MockInstance;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -235,11 +236,10 @@ describe("plan-to-apply transition: humanApprovalNode", () => {
       // Tier C: dropped redundant toBeDefined() — find!() at the find site
       const logCalls = vi.mocked(log).mock.calls;
       const approvedCall = logCalls.find(
-        (call) => (call[0] as any).action === "plan_approved",
+        (call) => (call[0] as { action?: string }).action === "plan_approved",
       )!;
-      const extras = (approvedCall[0] as any).extras as
-        | Record<string, unknown>
-        | undefined;
+      const extras = (approvedCall[0] as { extras?: Record<string, unknown> })
+        .extras;
       // Story 42.2d: audit trail now includes approval source
       expect(extras).toEqual({ approvalSource: "interactive" });
     });
@@ -383,7 +383,7 @@ describe("plan-to-apply transition: error messages registry", () => {
 
 describe("plan-to-apply transition: cost history display", () => {
   let stdoutChunks: string[];
-  let stdoutSpy: any;
+  let stdoutSpy: MockInstance;
   let originalStdoutIsTTY: boolean | undefined;
 
   beforeEach(() => {

@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import type { AgentState } from "../services/graph-state.js";
 import { GraphNode } from "../constants/graph.js";
 
 // ── 1. Graph node enumeration ────────────────────────────────────────────────
@@ -95,7 +96,10 @@ describe("Pipeline contract — routing functions", () => {
   it("routeCheckpointEntry returns intent_parser for fresh runs", async () => {
     const { routeCheckpointEntry } =
       await import("../services/graph-routing.js");
-    const state = { checkpointResumed: false, desiredState: undefined } as any;
+    const state = {
+      checkpointResumed: false,
+      desiredState: undefined,
+    } as unknown as AgentState;
     expect(routeCheckpointEntry(state)).toBe(GraphNode.INTENT_PARSER);
   });
 
@@ -105,7 +109,7 @@ describe("Pipeline contract — routing functions", () => {
     const state = {
       checkpointResumed: true,
       desiredState: { BucketName: "test" },
-    } as any;
+    } as unknown as AgentState;
     expect(routeCheckpointEntry(state)).toBe(GraphNode.HUMAN_APPROVAL);
   });
 
@@ -113,7 +117,9 @@ describe("Pipeline contract — routing functions", () => {
     const { routePreflightGuard } =
       await import("../services/graph-routing.js");
     const { ExecutionMode } = await import("@assignee/core");
-    const state = { executionMode: ExecutionMode.PLAN } as any;
+    const state = {
+      executionMode: ExecutionMode.PLAN,
+    } as unknown as AgentState;
     expect(routePreflightGuard(state)).toBe(GraphNode.RESULT_FORMATTER);
   });
 
@@ -121,7 +127,9 @@ describe("Pipeline contract — routing functions", () => {
     const { routeResourceProvisioner } =
       await import("../services/graph-routing.js");
     const { ExecutionStatus } = await import("@assignee/core");
-    const state = { executionStatus: ExecutionStatus.IN_PROGRESS } as any;
+    const state = {
+      executionStatus: ExecutionStatus.IN_PROGRESS,
+    } as unknown as AgentState;
     expect(routeResourceProvisioner(state)).toBe(GraphNode.STATUS_POLLER);
   });
 
@@ -129,7 +137,9 @@ describe("Pipeline contract — routing functions", () => {
     const { routeResourceProvisioner } =
       await import("../services/graph-routing.js");
     const { ExecutionStatus } = await import("@assignee/core");
-    const state = { executionStatus: ExecutionStatus.SUCCESS } as any;
+    const state = {
+      executionStatus: ExecutionStatus.SUCCESS,
+    } as unknown as AgentState;
     expect(routeResourceProvisioner(state)).toBe(GraphNode.RESULT_FORMATTER);
   });
 });

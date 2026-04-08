@@ -55,10 +55,10 @@ defaults:
 
     // Tier C: dropped redundant toBeDefined() — toHaveProperty fails on undefined
     expect(config).toHaveProperty("defaults");
-    expect((config as any).defaults["AWS::S3::Bucket"]).toHaveProperty(
-      "BucketName",
-      "my-default-bucket",
-    );
+    expect(
+      (config as { defaults: Record<string, Record<string, unknown>> })
+        .defaults["AWS::S3::Bucket"],
+    ).toHaveProperty("BucketName", "my-default-bucket");
   });
 
   it("loadUserConfig returns undefined for missing config (graceful degradation)", async () => {

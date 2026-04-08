@@ -13,7 +13,10 @@ import {
   ExecutionStatus,
   CheckpointError,
 } from "@assignee/core";
-import type { RunCommandOptions } from "../utils/command-runner.js";
+import type {
+  CommandContext,
+  RunCommandOptions,
+} from "../utils/command-runner.js";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
@@ -93,7 +96,7 @@ function makeCtx(
         next: [],
         values: defaultResult,
       }),
-    } as any,
+    } as unknown as CommandContext["graph"],
   };
 }
 
@@ -497,7 +500,9 @@ describe("applyCommand — auto-detect checkpoint (intent provided)", () => {
     };
 
     vi.mocked(findNewestValidCheckpoint).mockResolvedValue(
-      mockCheckpoint as any,
+      mockCheckpoint as unknown as Awaited<
+        ReturnType<typeof findNewestValidCheckpoint>
+      >,
     );
     const clack = await import("@clack/prompts");
     vi.mocked(clack.confirm).mockResolvedValue(true);
@@ -542,7 +547,9 @@ describe("applyCommand — auto-detect checkpoint (intent provided)", () => {
     };
 
     vi.mocked(findNewestValidCheckpoint).mockResolvedValue(
-      mockCheckpoint as any,
+      mockCheckpoint as unknown as Awaited<
+        ReturnType<typeof findNewestValidCheckpoint>
+      >,
     );
     const clack = await import("@clack/prompts");
     vi.mocked(clack.confirm).mockResolvedValue(false);
@@ -617,7 +624,11 @@ describe("applyCommand — checkpoint resume flow", () => {
       ttl_hours: 72,
     };
 
-    vi.mocked(loadCheckpointFromPath).mockResolvedValue(mockCheckpoint as any);
+    vi.mocked(loadCheckpointFromPath).mockResolvedValue(
+      mockCheckpoint as unknown as Awaited<
+        ReturnType<typeof loadCheckpointFromPath>
+      >,
+    );
 
     capturedOpts = null;
     const { applyCommand } = await import("./apply.js");

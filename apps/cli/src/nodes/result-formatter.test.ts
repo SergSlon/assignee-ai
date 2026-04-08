@@ -5,6 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
+import type { BPFinding } from "@assignee/best-practices";
 import {
   ExecutionStatus,
   ExecutionMode,
@@ -862,7 +864,7 @@ describe("resultFormatterNode — Story 19.2 graceful degradation", () => {
   it("prints warning when security tool invocation throws", async () => {
     const stderrSpy = vi
       .spyOn(process.stderr, "write")
-      .mockImplementation((() => true) as any);
+      .mockImplementation((() => true) as never);
     const tool = {
       name: "AnalyzeSecurityPosture",
       invoke: vi.fn().mockRejectedValue(new Error("Connection refused")),
@@ -1197,7 +1199,7 @@ describe("resultFormatterNode — P1-2 plan mode promptFixSelection integration"
           blocking: false,
           propertyPath: "LifecycleConfiguration",
         },
-      ] as any,
+      ] as BPFinding[],
     });
 
     const result = await resultFormatterNode(state);
@@ -1277,7 +1279,7 @@ describe("resultFormatterNode — P1-3 plan mode JSON skips promptFixSelection",
           message: "S3 bucket allows public access",
           blocking: true,
         },
-      ] as any,
+      ] as BPFinding[],
     });
 
     const result = await resultFormatterNode(state);
@@ -1299,17 +1301,17 @@ describe("resultFormatterNode — P1-3 plan mode JSON skips promptFixSelection",
 // ── Story 37.4: Post-provision static site upload ───────────────────────────
 
 describe("resultFormatterNode — Story 37.4 static site upload", () => {
-  let stdoutSpy: any;
+  let stdoutSpy: MockInstance;
 
-  let stderrSpy: any;
+  let stderrSpy: MockInstance;
 
   beforeEach(() => {
     stdoutSpy = vi
       .spyOn(process.stdout, "write")
-      .mockImplementation((() => true) as any);
+      .mockImplementation((() => true) as never);
     stderrSpy = vi
       .spyOn(process.stderr, "write")
-      .mockImplementation((() => true) as any);
+      .mockImplementation((() => true) as never);
   });
 
   afterEach(() => {

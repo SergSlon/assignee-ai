@@ -15,7 +15,7 @@ import {
   LIST_RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
 } from "@assignee/core";
-import { fetchManagedResources, parseArn } from "./list-resources.js";
+import { fetchManagedResources } from "./list-resources.js";
 
 /** A managed resource enriched with destruction-ordering metadata. */
 export interface ManagedResource {

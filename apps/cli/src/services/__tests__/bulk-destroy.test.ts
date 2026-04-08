@@ -3,7 +3,6 @@ import {
   buildPlanFromResources,
   DESTROY_TIER,
   isAssigneeInfraResource,
-  type BulkDestroyOptions,
   type ManagedResource,
 } from "../bulk-destroy.js";
 

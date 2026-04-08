@@ -4,15 +4,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import type { ResourceField, ResolvedFieldConfig } from "@assignee/core";
+import type { BPFinding } from "@assignee/best-practices";
 
 // Capture stdout/stderr writes
 function captureStream(stream: NodeJS.WriteStream) {
   const chunks: string[] = [];
-  const original = stream.write.bind(stream);
   const spy = vi
     .spyOn(stream, "write")
-    .mockImplementation((chunk: unknown, ...args: unknown[]) => {
+    .mockImplementation((chunk: unknown, ..._args: unknown[]) => {
       chunks.push(String(chunk));
       return true;
     });
@@ -1347,12 +1348,12 @@ describe("renderPlanBox with BP findings — non-TTY", () => {
 // ── Story 19.2: renderSecurityWarnings ─────────────────────────────────────
 
 describe("renderSecurityWarnings", () => {
-  let writeSpy: any;
+  let writeSpy: MockInstance;
 
   beforeEach(() => {
     writeSpy = vi
       .spyOn(process.stdout, "write")
-      .mockImplementation((() => true) as any);
+      .mockImplementation((() => true) as never);
   });
 
   afterEach(() => {
@@ -1371,7 +1372,7 @@ describe("renderSecurityWarnings", () => {
       },
     ]);
 
-    const allOutput = writeSpy.mock.calls.map((c: any[]) => c[0]).join("");
+    const allOutput = writeSpy.mock.calls.map((c) => c[0]).join("");
     expect(allOutput).toContain("Security findings for arn:aws:s3:::my-bucket");
     expect(allOutput).toContain("[CRITICAL] S3 bucket has public read access");
     expect(allOutput).toContain("Block public access");
@@ -1395,7 +1396,7 @@ describe("renderSecurityWarnings", () => {
       },
     ]);
 
-    const allOutput = writeSpy.mock.calls.map((c: any[]) => c[0]).join("");
+    const allOutput = writeSpy.mock.calls.map((c) => c[0]).join("");
     expect(allOutput).toContain("[CRITICAL] Public access enabled");
     expect(allOutput).toContain("[HIGH] No encryption");
     expect(allOutput).toContain("Disable public access");
@@ -1571,12 +1572,14 @@ describe("formatFindings — non-TTY", () => {
     const { formatFindings } = await import("./display.js");
     const result = formatFindings([
       {
-        ruleId: "r1",
+        practiceId: "BP-S3-002",
+        title: "S3 encryption required",
+        category: "security",
         severity: "CRITICAL",
         message: "Encryption missing",
         blocking: true,
       },
-    ] as any);
+    ] as BPFinding[]);
     expect(result).toContain("[BLOCK]");
     expect(result).toContain("1 blocking");
   });
@@ -1585,30 +1588,38 @@ describe("formatFindings — non-TTY", () => {
     const { formatFindings } = await import("./display.js");
     const result = formatFindings([
       {
-        ruleId: "r1",
+        practiceId: "BP-S3-001",
+        title: "Block public access",
+        category: "security",
         severity: "CRITICAL",
         message: "Critical issue",
         blocking: false,
       },
       {
-        ruleId: "r2",
+        practiceId: "BP-EC2-001",
+        title: "EC2 IMDSv2",
+        category: "security",
         severity: "HIGH",
         message: "High issue",
         blocking: false,
       },
       {
-        ruleId: "r3",
+        practiceId: "BP-S3-006",
+        title: "S3 lifecycle",
+        category: "cost",
         severity: "MEDIUM",
         message: "Medium issue",
         blocking: false,
       },
       {
-        ruleId: "r4",
+        practiceId: "BP-LOGS-001",
+        title: "CloudWatch retention",
+        category: "operations",
         severity: "INFO",
         message: "Info note",
         blocking: false,
       },
-    ] as any);
+    ] as BPFinding[]);
     expect(result).toContain("1 critical");
     expect(result).toContain("1 high");
     expect(result).toContain("1 medium");
@@ -1623,13 +1634,15 @@ describe("formatFindings — non-TTY", () => {
     const { formatFindings } = await import("./display.js");
     const result = formatFindings([
       {
-        ruleId: "r1",
+        practiceId: "BP-S3-001",
+        title: "Block public access",
+        category: "security",
         severity: "HIGH",
         message: "Public access enabled",
         remediation: "Set BlockPublicAccess to true",
         blocking: false,
       },
-    ] as any);
+    ] as BPFinding[]);
     expect(result).toContain("Set BlockPublicAccess to true");
   });
 });
@@ -1657,12 +1670,14 @@ describe("renderPlanBox — with BP findings", () => {
       ...mockState,
       bpFindings: [
         {
-          ruleId: "r1",
+          practiceId: "BP-S3-002",
+          title: "S3 encryption required",
+          category: "security",
           severity: "CRITICAL",
           message: "Encryption not enabled",
           blocking: false,
         },
-      ] as any,
+      ] as BPFinding[],
     });
     restore();
 
@@ -1837,7 +1852,7 @@ describe("renderSecurityWarnings", () => {
   it("no findings — no output", async () => {
     const stdoutSpy = vi
       .spyOn(process.stdout, "write")
-      .mockImplementation((() => true) as any);
+      .mockImplementation((() => true) as never);
     const { renderSecurityWarnings } = await import("./display.js");
     renderSecurityWarnings("arn:aws:s3:::test", []);
     expect(stdoutSpy).not.toHaveBeenCalled();
@@ -1847,7 +1862,7 @@ describe("renderSecurityWarnings", () => {
   it("CRITICAL + HIGH findings — shows both with icons", async () => {
     const stdoutSpy = vi
       .spyOn(process.stdout, "write")
-      .mockImplementation((() => true) as any);
+      .mockImplementation((() => true) as never);
     const { renderSecurityWarnings } = await import("./display.js");
     renderSecurityWarnings("arn:aws:s3:::test", [
       {
@@ -1863,9 +1878,7 @@ describe("renderSecurityWarnings", () => {
         service: "s3",
       },
     ]);
-    const output = stdoutSpy.mock.calls
-      .map((c: any[]) => String(c[0]))
-      .join("");
+    const output = stdoutSpy.mock.calls.map((c) => String(c[0])).join("");
     expect(output).toContain("Public bucket");
     expect(output).toContain("No encryption");
     expect(output).toContain("Block public access");
@@ -2571,12 +2584,7 @@ describe("renderOptionPrompt — categorySelect", () => {
 
 // ── Epic 35 — Actionable Findings test matrix ─────────────────────────────────
 
-import type { BPFinding } from "@assignee/best-practices";
-import {
-  resolveAction,
-  countFixable,
-  countAutoFixable,
-} from "./fix-command-resolver.js";
+import { resolveAction } from "./fix-command-resolver.js";
 
 /**
  * Realistic BP-style findings used across the Epic 35 test matrix.
@@ -3136,8 +3144,11 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
         "PublicAccessBlockConfiguration",
       );
       expect(
-        (result!.desiredState as any).PublicAccessBlockConfiguration
-          .BlockPublicAcls,
+        (
+          result!.desiredState as {
+            PublicAccessBlockConfiguration: { BlockPublicAcls: boolean };
+          }
+        ).PublicAccessBlockConfiguration.BlockPublicAcls,
       ).toBe(true);
       expect(result!.desiredState).toHaveProperty("BucketEncryption");
 
@@ -3193,12 +3204,18 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       );
       // DesiredState has patches from fixed findings only
       expect(
-        (result!.desiredState as any).PublicAccessBlockConfiguration
-          .BlockPublicAcls,
+        (
+          result!.desiredState as {
+            PublicAccessBlockConfiguration: { BlockPublicAcls: boolean };
+          }
+        ).PublicAccessBlockConfiguration.BlockPublicAcls,
       ).toBe(true);
       expect(
-        (result!.desiredState as any).PublicAccessBlockConfiguration
-          .BlockPublicPolicy,
+        (
+          result!.desiredState as {
+            PublicAccessBlockConfiguration: { BlockPublicPolicy: boolean };
+          }
+        ).PublicAccessBlockConfiguration.BlockPublicPolicy,
       ).toBe(true);
       // Encryption patch was skipped — should NOT be in desiredState
       expect(result!.desiredState).not.toHaveProperty("BucketEncryption");
@@ -3264,7 +3281,16 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       // All 4 findings fixed → residual should be empty
       expect(result!.bpFindings.length).toBe(0);
       // All 4 sub-properties merged into single PublicAccessBlockConfiguration object
-      const pab = (result!.desiredState as any).PublicAccessBlockConfiguration;
+      const pab = (
+        result!.desiredState as {
+          PublicAccessBlockConfiguration: {
+            BlockPublicAcls: boolean;
+            BlockPublicPolicy: boolean;
+            IgnorePublicAcls: boolean;
+            RestrictPublicBuckets: boolean;
+          };
+        }
+      ).PublicAccessBlockConfiguration;
       expect(pab.BlockPublicAcls).toBe(true);
       expect(pab.BlockPublicPolicy).toBe(true);
       expect(pab.IgnorePublicAcls).toBe(true);
@@ -3440,12 +3466,16 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
 
       expect(result).not.toBeNull();
       // Global Object.prototype must NOT be polluted
-      expect(({} as any).polluted).toBeUndefined();
+      expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
 
       // Nested Config object: safe key applied, dangerous keys skipped
       // Tier C: dropped redundant toBeDefined() — .SafeNested access fails
       // naturally on undefined
-      const config = (result!.desiredState as any).Config;
+      const config = (
+        result!.desiredState as {
+          Config: { SafeNested: string; Existing: string };
+        }
+      ).Config;
       expect(config.SafeNested).toBe("nested-safe-value");
       expect(config.Existing).toBe("yes"); // original key preserved by deep merge
       expect(Object.keys(config)).not.toContain("__proto__");

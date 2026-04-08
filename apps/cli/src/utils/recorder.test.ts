@@ -73,7 +73,7 @@ function createTestRecorder(
   const recorder = new RecordingInterceptor(runId, command);
   // Access private dir via prototype trick — set it to our tmpDir
 
-  (recorder as any).dir = tmpDir;
+  (recorder as unknown as { dir: string }).dir = tmpDir;
   return { recorder, tmpDir };
 }
 
@@ -254,9 +254,10 @@ describe("RecordingInterceptor", () => {
     const recorder = new RecordingInterceptor("run-err");
     // Point to an impossible path
 
-    (recorder as any).dir = "/nonexistent/impossible/path/XXXX";
+    (recorder as unknown as { dir: string }).dir =
+      "/nonexistent/impossible/path/XXXX";
 
-    (recorder as any).dirCreated = true; // skip mkdirSync, force writeFileSync to fail
+    (recorder as unknown as { dirCreated: boolean }).dirCreated = true; // skip mkdirSync, force writeFileSync to fail
 
     expect(() =>
       recorder.recordCall({
