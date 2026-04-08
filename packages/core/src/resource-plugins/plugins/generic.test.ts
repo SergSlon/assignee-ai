@@ -24,10 +24,11 @@ describe("genericPlugin", () => {
     expect(field?.question.type).toBe("string");
   });
 
-  it("Tags is a string type with toCfn", () => {
-    const field = genericPlugin.commonFields.find((f) => f.name === "Tags");
-    expect(field?.question.type).toBe("string");
-    expect(field?.toCfn).toBeDefined();
+  it("Tags is a string type with callable toCfn", () => {
+    // Tier C: strengthened — find!() + function-ness
+    const field = genericPlugin.commonFields.find((f) => f.name === "Tags")!;
+    expect(field.question.type).toBe("string");
+    expect(typeof field.toCfn).toBe("function");
   });
 
   it("advancedFields is empty (AC-5)", () => {

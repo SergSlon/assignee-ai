@@ -220,7 +220,8 @@ describe("estimate_cost tool (MCP client level)", () => {
     expect(result.isError).toBeFalsy();
     const body = parseResult(result);
     expect(body.resourceType).toBe("AWS::S3::Bucket");
-    expect(body.estimatedMonthlyCost).toBeDefined();
+    // Tier C: strengthened — typeof string check
+    expect(typeof body.estimatedMonthlyCost).toBe("string");
     expect(body.description).toBe("S3 bucket for static website hosting");
     expect(body.region).toBe("us-east-1");
     expect(body.note).toContain("baseline estimate");

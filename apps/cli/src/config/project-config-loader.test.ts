@@ -45,7 +45,8 @@ preferences:
 
     const result = await loadProjectConfig(tmpDir);
 
-    expect(result).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — optional-chained property
+    // toBe(literal) checks fail naturally on undefined
     expect(result?.defaults?.region).toBe("us-west-2");
     expect(result?.defaults?.tags).toEqual({ team: "backend" });
     expect(result?.preferences?.auto_fix).toBe("skip");
@@ -70,7 +71,7 @@ preferences:
 
     const result = await loadProjectConfig(subDir);
 
-    expect(result).toBeDefined();
+    // Tier C: dropped redundant toBeDefined()
     expect(result?.defaults?.region).toBe("eu-west-1");
   });
 
@@ -128,7 +129,7 @@ preferences:
 
     const result = await loadProjectConfig(tmpDir);
 
-    expect(result).toBeDefined();
+    // Tier C: dropped redundant toBeDefined()
     expect(result?.defaults?.region).toBe("ap-southeast-1");
     // validateConfig fills in preference defaults
     expect(result?.preferences?.auto_fix).toBe("ask");

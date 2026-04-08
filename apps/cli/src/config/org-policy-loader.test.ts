@@ -59,8 +59,9 @@ describe("org-policy-loader", () => {
       });
 
       const result = await loadLocalOrgPolicy("/tmp/test-project");
-      expect(result).toBeDefined();
-      expect(result!["AWS::S3::Bucket"]).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — assert the deep property
+      // directly. The non-null chain `result!["..."]!` already crashes on
+      // undefined with a clear error.
       expect(result!["AWS::S3::Bucket"]!["BucketEncryption"]!.policy).toBe(
         "locked",
       );
@@ -81,7 +82,7 @@ describe("org-policy-loader", () => {
       });
 
       const result = await loadLocalOrgPolicy("/tmp/test-project");
-      expect(result).toBeDefined();
+      // Tier C: dropped redundant toBeDefined()
       expect(result!["AWS::Lambda::Function"]!["Runtime"]!.policy).toBe(
         "always_ask",
       );
@@ -122,7 +123,7 @@ describe("org-policy-loader", () => {
       });
 
       const result = await loadLocalOrgPolicy("/tmp/test-project");
-      expect(result).toBeDefined();
+      // Tier C: dropped redundant toBeDefined()
       // Project-level Tags wins
       expect(result!["AWS::S3::Bucket"]!["Tags"]!.policy).toBe("locked");
       expect(
@@ -152,7 +153,7 @@ describe("org-policy-loader", () => {
       });
 
       const result = await loadLocalOrgPolicy("/tmp/test-project");
-      expect(result).toBeDefined();
+      // Tier C: dropped redundant toBeDefined()
       const field =
         result!["AWS::S3::Bucket"]!["PublicAccessBlockConfiguration"]!;
       expect(field.policy).toBe("locked");
@@ -174,7 +175,7 @@ describe("org-policy-loader", () => {
       });
 
       const result = await loadLocalOrgPolicy("/tmp/test-project");
-      expect(result).toBeDefined();
+      // Tier C: dropped redundant toBeDefined()
       const field = result!["AWS::S3::Bucket"]!["Tags"]!;
       expect(field.policy).toBe("default");
       expect(field.value).toEqual({ "cost-center": "CC-1234" });
@@ -193,7 +194,7 @@ describe("org-policy-loader", () => {
       });
 
       const result = await loadLocalOrgPolicy("/tmp/test-project");
-      expect(result).toBeDefined();
+      // Tier C: dropped redundant toBeDefined()
       const field = result!["AWS::Lambda::Function"]!["Runtime"]!;
       expect(field.policy).toBe("always_ask");
       expect(field.value).toBeUndefined();
@@ -285,8 +286,15 @@ describe("org-policy-loader", () => {
       };
 
       const result = mergeOrgPolicies(low, high);
-      expect(result["AWS::S3::Bucket"]).toBeDefined();
-      expect(result["AWS::EC2::Instance"]).toBeDefined();
+      // Tier C: strengthened — assert the actual config shape, not just
+      // defined-ness. mergeOrgPolicies must preserve the unique fields
+      // from both inputs.
+      expect(result["AWS::S3::Bucket"]).toMatchObject({
+        Tags: { policy: "default" },
+      });
+      expect(result["AWS::EC2::Instance"]).toMatchObject({
+        InstanceType: { policy: "locked", value: "t3.micro" },
+      });
     });
   });
 });

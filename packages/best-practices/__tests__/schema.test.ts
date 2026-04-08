@@ -63,6 +63,9 @@ describe("bestPracticeSchema", () => {
   });
 
   it("rejects missing required field (id)", () => {
+    // Tier C: drop redundant toBeDefined() — find!() at the find site
+    // and let the assertion fail naturally with a clear message if the
+    // expected zod error path is missing.
     const { id: _id, ...noId } = validBP;
     expect(() => bestPracticeSchema.parse(noId)).toThrow(ZodError);
     try {
@@ -70,38 +73,39 @@ describe("bestPracticeSchema", () => {
     } catch (err) {
       expect(err).toBeInstanceOf(ZodError);
       const zodErr = err as ZodError;
-      const idError = zodErr.errors.find((e) => e.path.includes("id"));
-      expect(idError).toBeDefined();
+      const idError = zodErr.errors.find((e) => e.path.includes("id"))!;
+      expect(idError.path).toContain("id");
     }
   });
 
   it('rejects invalid severity value "LOW"', () => {
+    // Tier C: same pattern + assert the message in one go
     const badSeverity = { ...validBP, severity: "LOW" };
     expect(() => bestPracticeSchema.parse(badSeverity)).toThrow(ZodError);
     try {
       bestPracticeSchema.parse(badSeverity);
     } catch (err) {
       const zodErr = err as ZodError;
-      const sevError = zodErr.errors.find((e) => e.path.includes("severity"));
-      expect(sevError).toBeDefined();
-      expect(sevError?.message).toContain("Invalid enum value");
+      const sevError = zodErr.errors.find((e) => e.path.includes("severity"))!;
+      expect(sevError.message).toContain("Invalid enum value");
     }
   });
 
   it("rejects invalid id format (missing BP- prefix)", () => {
+    // Tier C: same pattern
     const badId = { ...validBP, id: "S3-001" };
     expect(() => bestPracticeSchema.parse(badId)).toThrow(ZodError);
     try {
       bestPracticeSchema.parse(badId);
     } catch (err) {
       const zodErr = err as ZodError;
-      const idError = zodErr.errors.find((e) => e.path.includes("id"));
-      expect(idError).toBeDefined();
-      expect(idError?.message).toContain("BP ID must match format");
+      const idError = zodErr.errors.find((e) => e.path.includes("id"))!;
+      expect(idError.message).toContain("BP ID must match format");
     }
   });
 
   it("rejects extra unknown field in strict mode", () => {
+    // Tier C: same pattern
     const withExtra = { ...validBP, unknownField: "should fail" };
     expect(() => bestPracticeSchema.parse(withExtra)).toThrow(ZodError);
     try {
@@ -110,8 +114,8 @@ describe("bestPracticeSchema", () => {
       const zodErr = err as ZodError;
       const extraError = zodErr.errors.find((e) =>
         e.message.includes("Unrecognized key"),
-      );
-      expect(extraError).toBeDefined();
+      )!;
+      expect(extraError.message).toContain("Unrecognized key");
     }
   });
 

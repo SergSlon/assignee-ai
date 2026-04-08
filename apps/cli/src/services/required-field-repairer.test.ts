@@ -22,7 +22,8 @@ describe("repairRequiredFields", () => {
         ["FunctionName", "Code"],
       );
 
-      expect(repaired["Code"]).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — the next assertion
+      // (.ZipFile access through cast) fails on undefined
       expect(
         (repaired["Code"] as Record<string, unknown>)["ZipFile"],
       ).toContain("exports.handler");

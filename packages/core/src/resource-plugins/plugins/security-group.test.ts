@@ -15,29 +15,34 @@ describe("securityGroupPlugin", () => {
   });
 
   it("GroupDescription is required", () => {
+    // Tier C: strengthened — find!() + toMatchObject
     const field = securityGroupPlugin.commonFields.find(
       (f) => f.name === "GroupDescription",
-    );
-    expect(field).toBeDefined();
-    expect(field?.required).toBe(true);
-    expect(field?.question.type).toBe("string");
+    )!;
+    expect(field).toMatchObject({
+      name: "GroupDescription",
+      required: true,
+      question: { type: "string" },
+    });
   });
 
   it("VpcId is an enum with discover-vpcs fetcher", () => {
+    // Tier C: strengthened
     const field = securityGroupPlugin.commonFields.find(
       (f) => f.name === "VpcId",
-    );
-    expect(field).toBeDefined();
-    expect(field?.question.type).toBe("enum");
-    expect(field?.question.fetcher).toBe("discover-vpcs");
+    )!;
+    expect(field.question).toMatchObject({
+      type: "enum",
+      fetcher: "discover-vpcs",
+    });
   });
 
-  it("Tags field has toCfn transform", () => {
+  it("Tags field has callable toCfn transform", () => {
+    // Tier C: strengthened — function-ness check
     const field = securityGroupPlugin.commonFields.find(
       (f) => f.name === "Tags",
-    );
-    expect(field).toBeDefined();
-    expect(field?.toCfn).toBeDefined();
+    )!;
+    expect(typeof field.toCfn).toBe("function");
   });
 
   describe("Tags toCfn transform", () => {
@@ -110,8 +115,9 @@ describe("securityGroupPlugin", () => {
     });
   });
 
-  it("has configHints", () => {
-    expect(securityGroupPlugin.configHints).toBeDefined();
-    expect(securityGroupPlugin.configHints!.length).toBeGreaterThan(0);
+  it("has at least 2 configHints (Tier C: was toBeDefined+>0)", () => {
+    // Tier C: strengthened — meaningful floor
+    expect(securityGroupPlugin.configHints).toBeInstanceOf(Array);
+    expect(securityGroupPlugin.configHints!.length).toBeGreaterThanOrEqual(2);
   });
 });

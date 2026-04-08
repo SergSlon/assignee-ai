@@ -10,6 +10,9 @@ import {
 describe("analyzeRdsSecretsIntegration", () => {
   describe("auto-suggestion trigger", () => {
     it("suggests SecretsManager when no MasterUserPassword is provided", () => {
+      // Tier C: strengthened — assert the actual shape of each resource,
+      // not just defined-ness. The secret/attachment must have the right
+      // CFN type or the integration is silently broken.
       const result = analyzeRdsSecretsIntegration(
         { Engine: "postgres", DBInstanceClass: "db.t3.micro" },
         "MyDatabase",
@@ -17,9 +20,16 @@ describe("analyzeRdsSecretsIntegration", () => {
 
       expect(result.shouldSuggest).toBe(true);
       expect(result.userProvidedPassword).toBe(false);
-      expect(result.secretResource).toBeDefined();
-      expect(result.attachmentResource).toBeDefined();
-      expect(result.dynamicReference).toBeDefined();
+      expect(result.secretResource).toMatchObject({
+        type: "AWS::SecretsManager::Secret",
+      });
+      expect(result.attachmentResource).toMatchObject({
+        type: "AWS::SecretsManager::SecretTargetAttachment",
+      });
+      // dynamicReference is the resolve:secretsmanager template literal
+      expect(result.dynamicReference).toMatch(
+        /^\{\{resolve:secretsmanager:\$\{[\w-]+Secret\}:SecretString:password\}\}$/,
+      );
     });
 
     it("suggests SecretsManager when MasterUserPassword is empty string", () => {
@@ -89,16 +99,16 @@ describe("analyzeRdsSecretsIntegration", () => {
   });
 
   describe("SecretTargetAttachment companion resource", () => {
-    it("is included in the result", () => {
+    it("is included in the result with the correct CFN type", () => {
+      // Tier C: collapsed redundant toBeDefined into the type assertion
       const result = analyzeRdsSecretsIntegration(
         { Engine: "postgres" },
         "MyDB",
       );
 
-      expect(result.attachmentResource).toBeDefined();
-      expect(result.attachmentResource?.type).toBe(
-        "AWS::SecretsManager::SecretTargetAttachment",
-      );
+      expect(result.attachmentResource).toMatchObject({
+        type: "AWS::SecretsManager::SecretTargetAttachment",
+      });
     });
 
     it("has correct SecretId and TargetId references", () => {

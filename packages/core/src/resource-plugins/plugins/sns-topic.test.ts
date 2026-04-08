@@ -34,35 +34,54 @@ describe("snsTopicPlugin", () => {
       expect(field.question.validate?.("my-topic-123")).toBeUndefined();
     });
 
-    it("rejects names longer than 256 chars", () => {
-      expect(field.question.validate?.("a".repeat(257))).toBeDefined();
+    it("rejects names longer than 256 chars with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("a".repeat(257))).toBe(
+        "Topic name must be 1-256 characters",
+      );
     });
 
-    it("rejects names with special characters", () => {
-      expect(field.question.validate?.("my topic!")).toBeDefined();
+    it("accepts exactly 256 chars (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("a".repeat(256))).toBeUndefined();
+    });
+
+    it("rejects names with special characters with charset error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("my topic!")).toBe(
+        "Topic name can only contain alphanumeric characters, hyphens, and underscores",
+      );
     });
   });
 
   it("FifoTopic is a boolean field", () => {
+    // Tier C: strengthened — find!() + toMatchObject
     const field = snsTopicPlugin.commonFields.find(
       (f) => f.name === "FifoTopic",
-    );
-    expect(field).toBeDefined();
-    expect(field?.question.type).toBe("boolean");
-    expect(field?.question.initialValue).toBe(false);
+    )!;
+    expect(field).toMatchObject({
+      name: "FifoTopic",
+      question: { type: "boolean", initialValue: false },
+    });
   });
 
-  it("DisplayName validation rejects > 100 chars", () => {
+  it("DisplayName validation rejects > 100 chars with length error", () => {
+    // Tier C: strengthened from toBeDefined()
     const field = snsTopicPlugin.commonFields.find(
       (f) => f.name === "DisplayName",
     )!;
-    expect(field.question.validate?.("a".repeat(101))).toBeDefined();
+    expect(field.question.validate?.("a".repeat(101))).toBe(
+      "Display name must be 100 characters or fewer",
+    );
     expect(field.question.validate?.("valid name")).toBeUndefined();
+    // Boundary
+    expect(field.question.validate?.("a".repeat(100))).toBeUndefined();
   });
 
-  it("Tags field has toCfn transform", () => {
-    const field = snsTopicPlugin.commonFields.find((f) => f.name === "Tags");
-    expect(field?.toCfn).toBeDefined();
+  it("Tags field has callable toCfn transform", () => {
+    // Tier C: strengthened — function-ness check
+    const field = snsTopicPlugin.commonFields.find((f) => f.name === "Tags")!;
+    expect(typeof field.toCfn).toBe("function");
   });
 
   describe("Tags toCfn transform", () => {
@@ -103,15 +122,19 @@ describe("snsTopicPlugin", () => {
       expect(field.question.validate?.("alias/aws/sns")).toBeUndefined();
     });
 
-    it("rejects invalid format", () => {
-      expect(field.question.validate?.("not-a-valid-key")).toBeDefined();
+    it("rejects invalid format with KMS-format error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("not-a-valid-key")).toBe(
+        "Must be a KMS key ARN or alias",
+      );
     });
   });
 
   describe("configHints", () => {
-    it("has configHints defined", () => {
-      expect(snsTopicPlugin.configHints).toBeDefined();
-      expect(snsTopicPlugin.configHints!.length).toBeGreaterThan(0);
+    it("has at least 3 configHints (Tier C: was toBeDefined+>0)", () => {
+      // Tier C: strengthened — meaningful floor
+      expect(snsTopicPlugin.configHints).toBeInstanceOf(Array);
+      expect(snsTopicPlugin.configHints!.length).toBeGreaterThanOrEqual(3);
     });
 
     it("includes guidance about KMS encryption", () => {

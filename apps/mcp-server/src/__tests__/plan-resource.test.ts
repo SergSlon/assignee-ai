@@ -98,10 +98,13 @@ describe("plan_resource tool", () => {
         VersioningConfiguration: { Status: "Enabled" },
       });
       expect(data["estimatedMonthlyCost"]).toBe("$0.023/GB");
-      expect(data["checkpointPath"]).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — typeof string is stronger
       expect(typeof data["checkpointPath"]).toBe("string");
       expect(data["checkpointPath"] as string).toContain("checkpoint-");
-      expect(data["runId"]).toBeDefined();
+      // Tier C: assert UUID shape for runId, not just defined
+      expect(data["runId"]).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
       expect(result.isError).toBeFalsy();
     });
 
@@ -184,7 +187,8 @@ describe("plan_resource tool", () => {
 
       const data = parseToolResult(result);
       expect(data["bpFindings"]).toHaveLength(1);
-      expect(data["freeTierNote"]).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — the .type access fails
+      // naturally on undefined
       expect((data["freeTierNote"] as Record<string, unknown>)["type"]).toBe(
         "always_free",
       );
@@ -232,7 +236,7 @@ describe("plan_resource tool", () => {
       expect(result.isError).toBe(true);
       expect(data["error"]).toBe(true);
       expect(data["status"]).toBe(ExecutionStatus.UNSUPPORTED_RESOURCE);
-      expect(data["hint"]).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — typeof is stronger
       expect(typeof data["hint"]).toBe("string");
       expect(data["hint"] as string).toContain("Supported types");
     });
@@ -457,7 +461,10 @@ describe("plan_resource tool", () => {
 
       expect(invokeInput["executionMode"]).toBe(ExecutionMode.PLAN);
       expect(invokeInput["noWizard"]).toBe(true);
-      expect(invokeInput["startedAt"]).toBeDefined();
+      // Tier C: strengthened — assert startedAt is a positive timestamp
+      // (number, not just defined)
+      expect(typeof invokeInput["startedAt"]).toBe("number");
+      expect(invokeInput["startedAt"]).toBeGreaterThan(0);
       expect(typeof invokeInput["runId"]).toBe("string");
       expect(invokeConfig.configurable.thread_id).toBe(invokeInput["runId"]);
     });

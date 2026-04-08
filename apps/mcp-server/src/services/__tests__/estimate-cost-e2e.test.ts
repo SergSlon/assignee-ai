@@ -166,8 +166,9 @@ describe("estimate-cost E2E: keyword -> classify -> estimate -> free tier", () =
         expect(classified).toBe(expectedType);
 
         // Step 2: Estimate cost (exercises pricing registry + free tier)
+        // Tier C: dropped redundant toBeDefined() — subsequent property
+        // accesses fail naturally on undefined
         const result = estimateCostForResource(classified!);
-        expect(result).toBeDefined();
         expect(result.resourceType).toBe(expectedType);
         expect(typeof result.estimatedMonthlyCost).toBe("string");
         expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
@@ -177,7 +178,9 @@ describe("estimate-cost E2E: keyword -> classify -> estimate -> free tier", () =
 
         if (freeTierCategory === "always_free") {
           expect(result.freeTierEligible).toBe(true);
-          expect(result.freeTierNote).toBeDefined();
+          // Tier C: assert freeTierNote is a non-empty string instead of
+          // just defined
+          expect(typeof result.freeTierNote).toBe("string");
           // Always-free types show "$0.00 (always free)" when the pricing
           // strategy sets isFree=true, or "$0.00 (within free tier)" when
           // the pricing strategy has no price but free-tier info applies.
@@ -188,12 +191,12 @@ describe("estimate-cost E2E: keyword -> classify -> estimate -> free tier", () =
           expect(freeTier!.type).toBe("always_free");
         } else if (freeTierCategory === "usage_limited") {
           expect(result.freeTierEligible).toBe(true);
-          expect(result.freeTierNote).toBeDefined();
+          expect(typeof result.freeTierNote).toBe("string");
           expect(freeTier).not.toBeNull();
           expect(freeTier!.type).toBe("usage_limited");
         } else if (freeTierCategory === "legacy_eligible") {
           expect(result.freeTierEligible).toBe(true);
-          expect(result.freeTierNote).toBeDefined();
+          expect(typeof result.freeTierNote).toBe("string");
           expect(freeTier).not.toBeNull();
           expect(freeTier!.type).toBe("legacy_eligible");
         } else {
@@ -281,9 +284,10 @@ describe("estimate-cost E2E: keyword -> classify -> estimate -> free tier", () =
     });
 
     it("estimateCostForResource with unknown type does not crash", () => {
+      // Tier C: dropped redundant toBeDefined() — subsequent property
+      // assertions fail naturally on undefined
       const result = estimateCostForResource("AWS::Unknown::Widget");
 
-      expect(result).toBeDefined();
       expect(result.resourceType).toBe("AWS::Unknown::Widget");
       expect(typeof result.estimatedMonthlyCost).toBe("string");
       expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
@@ -293,11 +297,11 @@ describe("estimate-cost E2E: keyword -> classify -> estimate -> free tier", () =
     });
 
     it("estimateCostForResource with desiredState returns enriched estimate for EC2", () => {
+      // Tier C: dropped redundant toBeDefined()
       const result = estimateCostForResource("AWS::EC2::Instance", {
         InstanceType: "t3.micro",
       });
 
-      expect(result).toBeDefined();
       expect(result.resourceType).toBe("AWS::EC2::Instance");
       expect(typeof result.estimatedMonthlyCost).toBe("string");
       expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
@@ -306,12 +310,12 @@ describe("estimate-cost E2E: keyword -> classify -> estimate -> free tier", () =
     });
 
     it("estimateCostForResource with desiredState returns enriched estimate for RDS", () => {
+      // Tier C: dropped redundant toBeDefined()
       const result = estimateCostForResource("AWS::RDS::DBInstance", {
         DBInstanceClass: "db.t3.micro",
         Engine: "postgres",
       });
 
-      expect(result).toBeDefined();
       expect(result.resourceType).toBe("AWS::RDS::DBInstance");
       expect(typeof result.estimatedMonthlyCost).toBe("string");
       expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
@@ -351,9 +355,10 @@ describe("estimate-cost E2E: keyword -> classify -> estimate -> free tier", () =
       // If we proceed with null, the caller should handle it.
       // Verify estimateCostForResource still works with a fallback type.
       if (classified === null) {
+        // Tier C: dropped redundant toBeDefined()
         const result = estimateCostForResource("AWS::Unknown::Resource");
-        expect(result).toBeDefined();
         expect(result.resourceType).toBe("AWS::Unknown::Resource");
+        expect(typeof result.estimatedMonthlyCost).toBe("string");
       }
     });
   });

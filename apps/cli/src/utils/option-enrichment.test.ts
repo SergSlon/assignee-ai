@@ -81,28 +81,28 @@ describe("enrichOptionLabel", () => {
 describe("S3 plugin option metadata (AC: #1, #2)", () => {
   const s3Plugin = defaultPluginRegistry.get(RESOURCE_TYPES.S3_BUCKET)!;
 
-  it("BucketEncryption has a hint", () => {
+  it("BucketEncryption has a hint mentioning KMS", () => {
+    // Tier C: dropped redundant toBeDefined() — toContain fails on undefined
     const field = s3Plugin.commonFields.find(
       (f) => f.name === "BucketEncryption",
-    );
-    expect(field?.question.hint).toBeDefined();
-    expect(field?.question.hint).toContain("KMS");
+    )!;
+    expect(field.question.hint).toContain("KMS");
   });
 
-  it("VersioningConfiguration has a hint", () => {
+  it("VersioningConfiguration has a hint mentioning storage", () => {
+    // Tier C: dropped redundant toBeDefined()
     const field = s3Plugin.commonFields.find(
       (f) => f.name === "VersioningConfiguration",
-    );
-    expect(field?.question.hint).toBeDefined();
-    expect(field?.question.hint).toContain("storage");
+    )!;
+    expect(field.question.hint).toContain("storage");
   });
 
-  it("PublicAccessBlockConfiguration has a hint", () => {
+  it("PublicAccessBlockConfiguration has a hint mentioning security", () => {
+    // Tier C: dropped redundant toBeDefined()
     const field = s3Plugin.commonFields.find(
       (f) => f.name === "PublicAccessBlockConfiguration",
-    );
-    expect(field?.question.hint).toBeDefined();
-    expect(field?.question.hint).toContain("security");
+    )!;
+    expect(field.question.hint).toContain("security");
   });
 });
 

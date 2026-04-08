@@ -121,16 +121,17 @@ describe("LlmAdapter", () => {
   });
 
   it("uses DEFAULT_MODEL when no modelString is provided", () => {
-    // Should not throw — defaults to bedrock which doesn't need API key env var
+    // Tier C: strengthened — assert it's actually an LlmAdapter instance
     const adapter = new LlmAdapter();
-    expect(adapter).toBeDefined();
+    expect(adapter).toBeInstanceOf(LlmAdapter);
   });
 
   it("accepts explicit modelString", () => {
+    // Tier C: strengthened — instanceof check
     const adapter = new LlmAdapter({
       modelString: "anthropic/claude-sonnet-4-5",
     });
-    expect(adapter).toBeDefined();
+    expect(adapter).toBeInstanceOf(LlmAdapter);
   });
 
   describe("generateText", () => {

@@ -262,40 +262,44 @@ describe("Auto-fix audit: all auto-fixable BP rules have correct desiredStatePat
   it.each(testCases)(
     "$id: finding fires with autoFixable=true and desiredStatePatch defined",
     ({ id, resourceType, triggeringState }) => {
-      const practice = autoFixablePractices.find((p) => p.id === id);
-      expect(practice).toBeDefined();
+      // Tier C: drop redundant toBeDefined() pre-checks and use find!()
+      // at the find sites so failures point at the missing element with
+      // a clear error message instead of silently passing the !.foo
+      // chain when the element is undefined.
+      const practice = autoFixablePractices.find((p) => p.id === id)!;
+      expect(practice.id).toBe(id);
 
       const context: EvalContext = {
         resourceType,
         desiredState: triggeringState,
       };
 
-      const findings = evaluateTriggers(context, [practice!]);
-      const finding = findings.find((f) => f.practiceId === id);
+      const findings = evaluateTriggers(context, [practice]);
+      const finding = findings.find((f) => f.practiceId === id)!;
 
-      expect(finding).toBeDefined();
-      expect(finding!.autoFixable).toBe(true);
-      expect(finding!.desiredStatePatch).toBeDefined();
-      expect(Object.keys(finding!.desiredStatePatch!).length).toBeGreaterThan(
-        0,
-      );
+      expect(finding).toMatchObject({
+        autoFixable: true,
+      });
+      expect(finding.desiredStatePatch).toBeInstanceOf(Object);
+      expect(Object.keys(finding.desiredStatePatch!).length).toBeGreaterThan(0);
     },
   );
 
   it.each(testCases)(
     "$id: desiredStatePatch fixes the finding when applied via deep merge",
     ({ id, resourceType, triggeringState }) => {
-      const practice = autoFixablePractices.find((p) => p.id === id);
-      expect(practice).toBeDefined();
+      // Tier C: same pattern
+      const practice = autoFixablePractices.find((p) => p.id === id)!;
+      expect(practice.id).toBe(id);
 
       // Step 1: get the finding and its patch
       const contextBefore: EvalContext = {
         resourceType,
         desiredState: triggeringState,
       };
-      const findingsBefore = evaluateTriggers(contextBefore, [practice!]);
-      const finding = findingsBefore.find((f) => f.practiceId === id);
-      expect(finding).toBeDefined();
+      const findingsBefore = evaluateTriggers(contextBefore, [practice]);
+      const finding = findingsBefore.find((f) => f.practiceId === id)!;
+      expect(finding.practiceId).toBe(id);
 
       const patch = finding!.desiredStatePatch!;
 

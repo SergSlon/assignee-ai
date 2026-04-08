@@ -179,16 +179,28 @@ describe("cloudWatchAlarmPlugin", () => {
       expect(field.required).toBe(true);
     });
 
-    it("rejects empty value", () => {
-      expect(field.question.validate?.("")).toBeDefined();
+    it("rejects empty value with 'required' error", () => {
+      // Tier C: was toBeDefined() — strengthened to lock the user-visible
+      // error message so future refactors can't accidentally degrade the
+      // wording (e.g. an LLM-driven cleanup pass).
+      expect(field.question.validate?.("")).toBe("Alarm name is required");
     });
 
     it("accepts valid alarm name", () => {
       expect(field.question.validate?.("my-cpu-alarm")).toBeUndefined();
     });
 
-    it("rejects names longer than 255 chars", () => {
-      expect(field.question.validate?.("a".repeat(256))).toBeDefined();
+    it("rejects names longer than 255 chars with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("a".repeat(256))).toBe(
+        "Alarm name must be 255 characters or fewer",
+      );
+    });
+
+    it("accepts exactly 255 chars (boundary)", () => {
+      // Tier C: new boundary test — Wave 14 found bugs in untested
+      // boundary conditions.
+      expect(field.question.validate?.("a".repeat(255))).toBeUndefined();
     });
   });
 
@@ -202,8 +214,9 @@ describe("cloudWatchAlarmPlugin", () => {
       expect(field.required).toBe(true);
     });
 
-    it("rejects empty value", () => {
-      expect(field.question.validate?.("")).toBeDefined();
+    it("rejects empty value with 'required' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("")).toBe("Metric name is required");
     });
 
     it("accepts valid metric name", () => {
@@ -221,12 +234,16 @@ describe("cloudWatchAlarmPlugin", () => {
       expect(field.required).toBe(true);
     });
 
-    it("rejects empty value", () => {
-      expect(field.question.validate?.("")).toBeDefined();
+    it("rejects empty value with 'required' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("")).toBe("Threshold is required");
     });
 
-    it("rejects non-numeric value", () => {
-      expect(field.question.validate?.("abc")).toBeDefined();
+    it("rejects non-numeric value with 'must be a number' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("abc")).toBe(
+        "Threshold must be a number",
+      );
     });
 
     it("accepts numeric value", () => {
@@ -260,8 +277,13 @@ describe("cloudWatchAlarmPlugin", () => {
       ).toBeUndefined();
     });
 
-    it("rejects invalid ARN", () => {
-      expect(field.question.validate?.("not-an-arn")).toBeDefined();
+    it("rejects invalid ARN with the offending value in the error", () => {
+      // Tier C: strengthened from toBeDefined() — assert the error names
+      // the bad value so users can find it in long ARN lists.
+      const result = field.question.validate?.("not-an-arn");
+      expect(result).toBe(
+        "Invalid SNS topic ARN: not-an-arn. Must start with arn:aws:sns:",
+      );
     });
   });
 
@@ -275,16 +297,29 @@ describe("cloudWatchAlarmPlugin", () => {
       expect(field.question.initialValue).toBe("300");
     });
 
-    it("rejects non-integer", () => {
-      expect(field.question.validate?.("abc")).toBeDefined();
+    it("rejects non-integer with positive-integer error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("abc")).toBe(
+        "Period must be a positive integer (seconds)",
+      );
     });
 
-    it("rejects period less than 10", () => {
-      expect(field.question.validate?.("5")).toBeDefined();
+    it("rejects period less than 10 with minimum-period error", () => {
+      // Tier C: strengthened from toBeDefined() — distinguishing from
+      // the "not an integer" case is important because the user fix is
+      // different (raise the value vs. use a number at all).
+      expect(field.question.validate?.("5")).toBe(
+        "Minimum period is 10 seconds",
+      );
     });
 
     it("accepts 60", () => {
       expect(field.question.validate?.("60")).toBeUndefined();
+    });
+
+    it("accepts 10 (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("10")).toBeUndefined();
     });
   });
 
@@ -298,8 +333,11 @@ describe("cloudWatchAlarmPlugin", () => {
       expect(field.question.initialValue).toBe("3");
     });
 
-    it("rejects non-integer", () => {
-      expect(field.question.validate?.("abc")).toBeDefined();
+    it("rejects non-integer with positive-integer error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("abc")).toBe(
+        "Evaluation periods must be a positive integer",
+      );
     });
 
     it("accepts 1", () => {
@@ -323,24 +361,46 @@ describe("cloudWatchAlarmPlugin", () => {
       ).toBeUndefined();
     });
 
-    it("rejects invalid JSON", () => {
-      expect(field.question.validate?.("not json")).toBeDefined();
+    it("rejects invalid JSON with 'Invalid JSON format' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("not json")).toBe("Invalid JSON format");
     });
 
-    it("rejects non-array JSON", () => {
-      expect(field.question.validate?.('{"Name":"InstanceId"}')).toBeDefined();
+    it("rejects non-array JSON with 'must be a JSON array' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.('{"Name":"InstanceId"}')).toBe(
+        "Dimensions must be a JSON array",
+      );
     });
 
-    it("rejects dimension missing Name", () => {
-      expect(field.question.validate?.('[{"Value":"i-123"}]')).toBeDefined();
+    it("rejects dimension missing Name with shape error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.('[{"Value":"i-123"}]')).toBe(
+        "Each dimension must have Name and Value",
+      );
+    });
+
+    it("rejects dimension missing Value with shape error", () => {
+      // Tier C: new symmetric case — Wave 14 lesson is to test BOTH
+      // sides of a "must have X and Y" shape check.
+      expect(field.question.validate?.('[{"Name":"InstanceId"}]')).toBe(
+        "Each dimension must have Name and Value",
+      );
     });
   });
 
   // ── configHints ──
   describe("configHints", () => {
-    it("has configHints defined", () => {
-      expect(cloudWatchAlarmPlugin.configHints).toBeDefined();
-      expect(cloudWatchAlarmPlugin.configHints!.length).toBeGreaterThan(0);
+    it("has at least 5 configHints (Tier C: was toBeDefined+>0)", () => {
+      // Tier C: strengthened — assert a meaningful floor on count instead
+      // of just "exists and >0". The plugin currently has 6 hints; if a
+      // future change deletes most of them the LLM will have less
+      // guidance and start hallucinating. 5 is the floor we want to
+      // enforce.
+      expect(cloudWatchAlarmPlugin.configHints).toBeInstanceOf(Array);
+      expect(cloudWatchAlarmPlugin.configHints!.length).toBeGreaterThanOrEqual(
+        5,
+      );
     });
 
     it("includes SQS DLQ pattern", () => {

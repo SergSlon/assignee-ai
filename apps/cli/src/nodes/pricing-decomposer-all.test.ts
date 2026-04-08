@@ -641,8 +641,9 @@ describe("EC2 pricing — filter-dispatched queryLineItemPrices (regression test
 
     expect(result.preflightPassed).toBe(true);
 
-    const breakdown = result.pricingBreakdown;
-    expect(breakdown).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — subsequent breakdown!.field
+    // accesses fail naturally on undefined
+    const breakdown = result.pricingBreakdown!;
 
     // EC2 with public IP: 3 fixed (compute, storage, IPv4) + 1 usage-based (data transfer)
     expect(breakdown!.fixedItems).toHaveLength(3);
@@ -762,8 +763,9 @@ describe("RDS pricing — filter-dispatched queryLineItemPrices (regression test
 
     expect(result.preflightPassed).toBe(true);
 
-    const breakdown = result.pricingBreakdown;
-    expect(breakdown).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — subsequent breakdown!.field
+    // accesses fail naturally on undefined
+    const breakdown = result.pricingBreakdown!;
 
     // 2 fixed (compute, storage) + 1 usage-based (backup)
     expect(breakdown!.fixedItems).toHaveLength(2);
@@ -904,8 +906,9 @@ describe("Lambda pricing — filter-dispatched queryLineItemPrices (regression t
 
     expect(result.preflightPassed).toBe(true);
 
-    const breakdown = result.pricingBreakdown;
-    expect(breakdown).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — subsequent breakdown!.field
+    // accesses fail naturally on undefined
+    const breakdown = result.pricingBreakdown!;
 
     // All Lambda items are usage_based
     expect(breakdown!.fixedItems).toHaveLength(0);
@@ -1045,8 +1048,9 @@ describe("DynamoDB on-demand pricing — filter-dispatched queryLineItemPrices (
 
     expect(result.preflightPassed).toBe(true);
 
-    const breakdown = result.pricingBreakdown;
-    expect(breakdown).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — subsequent breakdown!.field
+    // accesses fail naturally on undefined
+    const breakdown = result.pricingBreakdown!;
 
     // All on-demand items are usage_based
     expect(breakdown!.fixedItems).toHaveLength(0);
@@ -1092,8 +1096,9 @@ describe("DynamoDB provisioned pricing — filter-dispatched queryLineItemPrices
 
     expect(result.preflightPassed).toBe(true);
 
-    const breakdown = result.pricingBreakdown;
-    expect(breakdown).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — subsequent breakdown!.field
+    // accesses fail naturally on undefined
+    const breakdown = result.pricingBreakdown!;
 
     // 2 fixed (read, write capacity) + 1 usage_based (storage)
     expect(breakdown!.fixedItems).toHaveLength(2);

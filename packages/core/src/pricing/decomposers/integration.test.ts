@@ -183,6 +183,8 @@ describe("variant consistency", () => {
 
   describe("SQS — Standard vs FIFO", () => {
     it("Standard queue has productFamily=Queue", () => {
+      // Tier C: dropped redundant toBeDefined() — use find!() at the find
+      // site so the subsequent .Value access is unconditional
       const items = defaultDecomposerRegistry.decompose(
         RESOURCE_TYPES.SQS_QUEUE,
         {},
@@ -190,12 +192,12 @@ describe("variant consistency", () => {
       expect(items).toHaveLength(1);
       const productFamily = items[0]!.filters.find(
         (f) => f.Field === "productFamily",
-      );
-      expect(productFamily).toBeDefined();
-      expect(productFamily!.Value).toBe("Queue");
+      )!;
+      expect(productFamily.Value).toBe("Queue");
     });
 
     it("FIFO queue has productFamily=FIFO Queue", () => {
+      // Tier C: same pattern
       const items = defaultDecomposerRegistry.decompose(
         RESOURCE_TYPES.SQS_QUEUE,
         { FifoQueue: true },
@@ -203,33 +205,32 @@ describe("variant consistency", () => {
       expect(items).toHaveLength(1);
       const productFamily = items[0]!.filters.find(
         (f) => f.Field === "productFamily",
-      );
-      expect(productFamily).toBeDefined();
-      expect(productFamily!.Value).toBe("FIFO Queue");
+      )!;
+      expect(productFamily.Value).toBe("FIFO Queue");
     });
   });
 
   describe("CloudWatch Alarm — standard vs high resolution", () => {
     it("Period=10 returns High Resolution", () => {
+      // Tier C: same pattern
       const items = defaultDecomposerRegistry.decompose(
         RESOURCE_TYPES.CLOUDWATCH_ALARM,
         { Period: 10 },
       );
       expect(items).toHaveLength(1);
-      const alarmType = items[0]!.filters.find((f) => f.Field === "alarmType");
-      expect(alarmType).toBeDefined();
-      expect(alarmType!.Value).toBe("High Resolution");
+      const alarmType = items[0]!.filters.find((f) => f.Field === "alarmType")!;
+      expect(alarmType.Value).toBe("High Resolution");
     });
 
     it("Period=300 returns Standard", () => {
+      // Tier C: same pattern
       const items = defaultDecomposerRegistry.decompose(
         RESOURCE_TYPES.CLOUDWATCH_ALARM,
         { Period: 300 },
       );
       expect(items).toHaveLength(1);
-      const alarmType = items[0]!.filters.find((f) => f.Field === "alarmType");
-      expect(alarmType).toBeDefined();
-      expect(alarmType!.Value).toBe("Standard");
+      const alarmType = items[0]!.filters.find((f) => f.Field === "alarmType")!;
+      expect(alarmType.Value).toBe("Standard");
     });
   });
 

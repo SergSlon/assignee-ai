@@ -306,7 +306,7 @@ describe("planGeneratorNode — Story 19.3 memory hints", () => {
 
     expect(capturedPrompt).toContain("COST CONTEXT");
     expect(capturedPrompt).toContain("$0.50/month");
-    expect(result.memoryHints).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — toHaveLength fails on undefined
     expect(result.memoryHints).toHaveLength(1);
     expect(result.memoryHints![0]).toContain("$0.50/month");
   });
@@ -414,11 +414,10 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
     const node = createPlanGeneratorNode({ llmClient: mock });
     const result = await node(makeState());
 
-    expect(result.memoryHints).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — find!() at the find site
     const failureHint = result.memoryHints!.find((h: string) =>
       h.includes("Previous error"),
-    );
-    expect(failureHint).toBeDefined();
+    )!;
     expect(failureHint).toContain("AWS::S3::Bucket");
     expect(failureHint).toContain("Bucket already exists");
     expect(failureHint).toContain("Fix: Try a different name.");
@@ -616,10 +615,10 @@ describe("planGeneratorNode — Story 19.4 failure history warnings", () => {
     const node = createPlanGeneratorNode({ llmClient: mock });
     const result = await node(makeState());
 
+    // Tier C: dropped redundant toBeDefined() — find!()
     const failureHint = result.memoryHints!.find((h: string) =>
       h.includes("Previous error"),
-    );
-    expect(failureHint).toBeDefined();
+    )!;
     expect(failureHint).toContain("Bucket already exists");
   });
 });

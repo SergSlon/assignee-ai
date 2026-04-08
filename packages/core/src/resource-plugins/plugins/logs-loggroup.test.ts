@@ -120,12 +120,23 @@ describe("logGroupPlugin", () => {
       ).toBeUndefined();
     });
 
-    it("rejects names longer than 512 characters", () => {
-      expect(field.question.validate?.("a".repeat(513))).toBeDefined();
+    it("rejects names longer than 512 characters with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("a".repeat(513))).toBe(
+        "Log group name must be 512 characters or fewer",
+      );
     });
 
-    it("rejects names with invalid characters", () => {
-      expect(field.question.validate?.("my log group!")).toBeDefined();
+    it("accepts exactly 512 chars (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("a".repeat(512))).toBeUndefined();
+    });
+
+    it("rejects names with invalid characters with charset error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("my log group!")).toBe(
+        "Log group name can only contain alphanumeric characters, underscores, hyphens, slashes, hash signs, and periods",
+      );
     });
   });
 
@@ -146,16 +157,20 @@ describe("logGroupPlugin", () => {
       ).toBeUndefined();
     });
 
-    it("rejects non-KMS ARN", () => {
-      expect(field.question.validate?.("not-an-arn")).toBeDefined();
+    it("rejects non-KMS ARN with KMS-format error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("not-an-arn")).toBe(
+        "Must be a KMS key ARN (arn:aws:kms:...)",
+      );
     });
   });
 
   describe("Tags toCfn transform", () => {
     const field = logGroupPlugin.commonFields.find((f) => f.name === "Tags")!;
 
-    it("has toCfn defined", () => {
-      expect(field.toCfn).toBeDefined();
+    it("has callable toCfn", () => {
+      // Tier C: strengthened — function-ness check
+      expect(typeof field.toCfn).toBe("function");
     });
 
     it("transforms comma-separated tags to CloudFormation format", () => {
@@ -198,8 +213,9 @@ describe("logGroupPlugin", () => {
     expect(logGroupPlugin.defaults["LogGroupClass"]).toBe("STANDARD");
   });
 
-  it("has configHints defined", () => {
-    expect(logGroupPlugin.configHints).toBeDefined();
-    expect(logGroupPlugin.configHints!.length).toBeGreaterThan(0);
+  it("has at least 3 configHints (Tier C: was toBeDefined+>0)", () => {
+    // Tier C: strengthened — meaningful floor
+    expect(logGroupPlugin.configHints).toBeInstanceOf(Array);
+    expect(logGroupPlugin.configHints!.length).toBeGreaterThanOrEqual(3);
   });
 });

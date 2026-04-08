@@ -73,7 +73,8 @@ describe("MCP Protocol Compliance", () => {
       const result = await client.listTools();
 
       for (const tool of result.tools) {
-        expect(tool.inputSchema).toBeDefined();
+        // Tier C: dropped redundant toBeDefined() — .type access fails
+        // naturally and the toBe("object") is strictly stronger
         expect(tool.inputSchema.type).toBe("object");
         expect(typeof tool.inputSchema.properties).toBe("object");
         // JSON Schema must not have undefined keys
@@ -264,8 +265,10 @@ describe("Tool Parameter Schemas", () => {
         { type: string }
       >;
 
-      expect(props["region"]).toBeDefined();
-      expect(props["resourceType"]).toBeDefined();
+      // Tier C: strengthened — assert the actual schema type, not just
+      // defined-ness
+      expect(props["region"]).toMatchObject({ type: "string" });
+      expect(props["resourceType"]).toMatchObject({ type: "string" });
     });
   });
 
@@ -291,7 +294,7 @@ describe("Tool Parameter Schemas", () => {
         { type: string }
       >;
 
-      expect(props["desiredState"]).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — .type access fails on undefined
       expect(props["desiredState"]!.type).toBe("object");
     });
   });
@@ -474,7 +477,8 @@ describe("Edge Cases", () => {
       expect(result.isError).toBeFalsy();
       const body = parseResult(result);
       expect(body.resourceType).toBe("AWS::S3::Bucket");
-      expect(body.estimatedMonthlyCost).toBeDefined();
+      // Tier C: strengthened — must be a non-empty string
+      expect(typeof body.estimatedMonthlyCost).toBe("string");
       expect(body.note).toContain("baseline estimate");
     });
   });
@@ -603,8 +607,9 @@ describe("Edge Cases", () => {
       for (const result of results) {
         expect(result.isError).toBeFalsy();
         const body = parseResult(result);
-        expect(body.resourceType).toBeDefined();
-        expect(body.estimatedMonthlyCost).toBeDefined();
+        // Tier C: strengthened — must be non-empty CFN type strings
+        expect(body.resourceType).toMatch(/^AWS::[A-Za-z0-9]+::[A-Za-z0-9]+$/);
+        expect(typeof body.estimatedMonthlyCost).toBe("string");
       }
     });
   });

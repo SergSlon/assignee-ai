@@ -240,8 +240,13 @@ describe("RecordingInterceptor", () => {
     expect(manifest.runId).toBe("run-6");
     expect(manifest.command).toBe("plan test");
     expect(manifest.files).toHaveLength(1);
-    expect(manifest.startedAt).toBeDefined();
-    expect(manifest.completedAt).toBeDefined();
+    // Tier C: strengthened — assert ISO timestamp shape, not just defined
+    expect(manifest.startedAt).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
+    expect(manifest.completedAt).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
     expect(manifest.totalDurationMs).toBeGreaterThanOrEqual(0);
   });
 

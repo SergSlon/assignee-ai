@@ -32,24 +32,41 @@ describe("elbv2LoadBalancerPlugin", () => {
       expect(field.required).toBe(true);
     });
 
-    it("rejects empty value", () => {
-      expect(field.question.validate?.("")).toBeDefined();
+    it("rejects empty value with 'required' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("")).toBe(
+        "Load balancer name is required",
+      );
     });
 
     it("accepts valid name", () => {
       expect(field.question.validate?.("my-alb")).toBeUndefined();
     });
 
-    it("rejects names longer than 32 chars", () => {
-      expect(field.question.validate?.("a".repeat(33))).toBeDefined();
+    it("rejects names longer than 32 chars with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("a".repeat(33))).toBe(
+        "Name must be 1-32 characters",
+      );
     });
 
-    it("rejects names starting with hyphen", () => {
-      expect(field.question.validate?.("-my-alb")).toBeDefined();
+    it("accepts exactly 32 chars (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("a".repeat(32))).toBeUndefined();
     });
 
-    it("rejects names ending with hyphen", () => {
-      expect(field.question.validate?.("my-alb-")).toBeDefined();
+    it("rejects names starting with hyphen with charset error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("-my-alb")).toBe(
+        "Must contain only letters, numbers, hyphens, and cannot start/end with a hyphen",
+      );
+    });
+
+    it("rejects names ending with hyphen with charset error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("my-alb-")).toBe(
+        "Must contain only letters, numbers, hyphens, and cannot start/end with a hyphen",
+      );
     });
   });
 
@@ -84,11 +101,12 @@ describe("elbv2LoadBalancerPlugin", () => {
     expect(field?.question.fetcher).toBe("discover-subnets");
   });
 
-  it("Tags field has toCfn transform", () => {
+  it("Tags field has callable toCfn transform", () => {
+    // Tier C: strengthened — find!() + function-ness
     const field = elbv2LoadBalancerPlugin.commonFields.find(
       (f) => f.name === "Tags",
-    );
-    expect(field?.toCfn).toBeDefined();
+    )!;
+    expect(typeof field.toCfn).toBe("function");
   });
 
   describe("Tags toCfn transform", () => {

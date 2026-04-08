@@ -52,7 +52,10 @@ describe("serializeCheckpoint", () => {
     expect(checkpoint.preflightPassed).toBe(true);
     expect(checkpoint.checkpoint_version).toBe("1");
     expect(checkpoint.ttl_hours).toBe(72);
-    expect(checkpoint.created_at).toBeDefined();
+    // Tier C: strengthened — assert ISO timestamp shape
+    expect(checkpoint.created_at).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
 
     // Non-serializable fields must be excluded
     expect("messages" in checkpoint).toBe(false);

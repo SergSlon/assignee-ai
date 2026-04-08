@@ -189,9 +189,11 @@ describe("Serverless API pattern (Story 26.4)", () => {
   });
 
   it("Route references API ID and Integration ID", () => {
+    // Tier C: strengthened — Target should reference the integration via
+    // marker token, not just "be defined"
     const routeOpts = serverlessApiPattern.defaultOptions["default-route"];
     expect(routeOpts?.["ApiId"]).toBe("__ASSIGNEE_REF_http-api__");
-    expect(routeOpts?.["Target"]).toBeDefined();
+    expect(routeOpts?.["Target"]).toMatch(/^integrations\/__ASSIGNEE_REF_/);
   });
 
   it("Stage references LogGroup ARN and API ID via marker tokens", () => {
@@ -207,13 +209,15 @@ describe("Serverless API pattern (Story 26.4)", () => {
   });
 
   it("Permission references Lambda ARN and API Gateway source", () => {
+    // Tier C: strengthened — SourceArn should reference the HTTP API
+    // marker, not just "be defined"
     const permOpts =
       serverlessApiPattern.defaultOptions["api-invoke-permission"];
     expect(permOpts?.["FunctionName"]).toBe(
       "__ASSIGNEE_GETATT_lambda-fn_Arn__",
     );
     expect(permOpts?.["Principal"]).toBe("apigateway.amazonaws.com");
-    expect(permOpts?.["SourceArn"]).toBeDefined();
+    expect(permOpts?.["SourceArn"]).toBe("__ASSIGNEE_REF_http-api__");
   });
 
   it("emits no CloudFormation intrinsics in defaultOptions", () => {
@@ -224,15 +228,28 @@ describe("Serverless API pattern (Story 26.4)", () => {
     expect(serialized).not.toMatch(/"Ref":/);
   });
 
-  it("IAM Role has permission boundary enforced", () => {
+  it("IAM Role has permission boundary enforced (PowerUserAccess)", () => {
+    // Tier C: strengthened — PowerUserAccess is the safety envelope used
+    // by both lambda-with-exec-role and serverless-api per Wave 13 design;
+    // assert the actual ARN, not just defined-ness, so a refactor that
+    // accidentally drops the boundary or substitutes a weaker one fails CI.
     const roleOpts = serverlessApiPattern.defaultOptions["iam-execution-role"];
-    expect(roleOpts?.["PermissionsBoundary"]).toBeDefined();
+    expect(roleOpts?.["PermissionsBoundary"]).toBe(
+      "arn:aws:iam::aws:policy/PowerUserAccess",
+    );
   });
 
   it("HTTP API has CORS configuration", () => {
+    // Tier C: strengthened — CorsConfiguration is a structured object
+    // with AllowMethods/AllowHeaders arrays. Assert the shape so a
+    // refactor that drops one of the arrays fails CI.
     const apiOpts = serverlessApiPattern.defaultOptions["http-api"];
-    expect(apiOpts?.["CorsConfiguration"]).toBeDefined();
     expect(apiOpts?.["ProtocolType"]).toBe("HTTP");
+    const cors = apiOpts?.["CorsConfiguration"] as Record<string, unknown>;
+    expect(cors).toMatchObject({
+      AllowMethods: expect.any(Array),
+      AllowHeaders: expect.any(Array),
+    });
   });
 
   it("non-provisionable resources are correctly marked", () => {

@@ -50,7 +50,10 @@ describe("checkpoint service", () => {
       });
 
       expect(result.checkpoint_version).toBe(CHECKPOINT_VERSION);
-      expect(result.created_at).toBeDefined();
+      // Tier C: strengthened — assert ISO timestamp shape, not just defined
+      expect(result.created_at).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      );
       expect(result.ttl_hours).toBe(72);
       expect(result.runId).toBe(runId);
       expect(result.userIntent).toBe("Create an S3 bucket");

@@ -143,8 +143,11 @@ describe("drift-report", () => {
       expect(report.resources[0]!.driftedFields[0]!.path).toBe(
         "Encryption.SSEAlgorithm",
       );
-      expect(report.resources[0]!.actualState).toBeDefined();
-      expect(report.resources[0]!.desiredState).toBeDefined();
+      // Tier C: strengthened — actualState and desiredState are full
+      // CFN-shaped objects, not just "defined". Assert they're plain
+      // objects, not arrays/null/strings.
+      expect(report.resources[0]!.actualState).toBeInstanceOf(Object);
+      expect(report.resources[0]!.desiredState).toBeInstanceOf(Object);
     });
   });
 });

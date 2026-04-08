@@ -5,12 +5,13 @@ import type { PricingStrategy } from "./types.js";
 
 describe("PricingStrategyRegistry", () => {
   it("returns defined cost label for registered S3::Bucket", () => {
+    // Tier C: dropped redundant toBeDefined() — typeof string is stronger
     const result = defaultPricingRegistry.estimate(
       "AWS::S3::Bucket",
       undefined,
     );
-    expect(result).toBeDefined();
     expect(typeof result.label).toBe("string");
+    expect(result.label.length).toBeGreaterThan(0);
   });
 
   it("returns Free for IAM::Role (local estimate, no MCP needed)", () => {
@@ -41,7 +42,8 @@ describe("PricingStrategyRegistry", () => {
       "AWS::DynamoDB::Table",
       undefined,
     );
-    expect(result.label).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — typeof string is stronger
+    expect(typeof result.label).toBe("string");
     expect(result.label).not.toBe("Pricing unavailable");
   });
 

@@ -599,7 +599,9 @@ describe("Graph integration — plan generator resilience", () => {
     // in .assignee/config.yaml, auto-fix resolves them and preflight passes.
     // If config not found (turborepo cwd differs), findings remain and preflight fails.
     // Both outcomes are valid — the test validates schema stripping, not auto-fix.
-    expect(result.bpFindings).toBeDefined();
+    // Tier C: strengthened — bpFindings must be an array (could be empty
+    // after auto-fix), not just defined.
+    expect(result.bpFindings).toBeInstanceOf(Array);
   });
 
   it("unwraps nested CloudFormation Resources format from LLM", async () => {

@@ -22,41 +22,64 @@ describe("subnetPlugin", () => {
   });
 
   it("VpcId field exists, is required, and uses discover-vpcs fetcher", () => {
-    const field = subnetPlugin.commonFields.find((f) => f.name === "VpcId");
-    expect(field).toBeDefined();
-    expect(field?.required).toBe(true);
-    expect(field?.question.type).toBe("enum");
-    expect(field?.question.fetcher).toBe("discover-vpcs");
+    // Tier C: drop the toBeDefined() pre-check — using `!` at find time
+    // makes the assertion fail naturally if the field disappears, AND
+    // the subsequent property accesses become unconditional. The
+    // previous `field?.required` form silently passed when field was
+    // undefined.
+    const field = subnetPlugin.commonFields.find((f) => f.name === "VpcId")!;
+    expect(field).toMatchObject({
+      name: "VpcId",
+      required: true,
+      question: {
+        type: "enum",
+        fetcher: "discover-vpcs",
+      },
+    });
   });
 
   it("CidrBlock field exists and is required", () => {
-    const field = subnetPlugin.commonFields.find((f) => f.name === "CidrBlock");
-    expect(field).toBeDefined();
-    expect(field?.required).toBe(true);
-    expect(field?.question.type).toBe("string");
+    // Tier C: strengthened — toMatchObject locks the full shape
+    const field = subnetPlugin.commonFields.find(
+      (f) => f.name === "CidrBlock",
+    )!;
+    expect(field).toMatchObject({
+      name: "CidrBlock",
+      required: true,
+      question: { type: "string" },
+    });
   });
 
   it("AvailabilityZone field uses discover-availability-zones fetcher", () => {
+    // Tier C: strengthened
     const field = subnetPlugin.commonFields.find(
       (f) => f.name === "AvailabilityZone",
-    );
-    expect(field).toBeDefined();
-    expect(field?.required).toBe(true);
-    expect(field?.question.fetcher).toBe("discover-availability-zones");
+    )!;
+    expect(field).toMatchObject({
+      name: "AvailabilityZone",
+      required: true,
+      question: { fetcher: "discover-availability-zones" },
+    });
   });
 
   it("MapPublicIpOnLaunch defaults to false", () => {
+    // Tier C: strengthened
     const field = subnetPlugin.commonFields.find(
       (f) => f.name === "MapPublicIpOnLaunch",
-    );
-    expect(field).toBeDefined();
-    expect(field?.question.initialValue).toBe(false);
+    )!;
+    expect(field).toMatchObject({
+      name: "MapPublicIpOnLaunch",
+      question: { initialValue: false },
+    });
   });
 
-  it("Tags field has toCfn transform", () => {
-    const field = subnetPlugin.commonFields.find((f) => f.name === "Tags");
-    expect(field).toBeDefined();
-    expect(field?.toCfn).toBeDefined();
+  it("Tags field has callable toCfn transform", () => {
+    // Tier C: strengthened — assert toCfn is actually a function (the
+    // previous `toBeDefined()` would have passed for any non-undefined
+    // value including a string or number, which is meaningless here).
+    const field = subnetPlugin.commonFields.find((f) => f.name === "Tags")!;
+    expect(field.name).toBe("Tags");
+    expect(typeof field.toCfn).toBe("function");
   });
 
   it("advancedFields is empty", () => {
@@ -67,9 +90,10 @@ describe("subnetPlugin", () => {
     expect(subnetPlugin.defaults["MapPublicIpOnLaunch"]).toBe(false);
   });
 
-  it("has configHints", () => {
-    expect(subnetPlugin.configHints).toBeDefined();
-    expect(subnetPlugin.configHints!.length).toBeGreaterThan(0);
+  it("has at least 3 configHints (Tier C: was toBeDefined+>0)", () => {
+    // Tier C: strengthened — meaningful floor instead of just "exists"
+    expect(subnetPlugin.configHints).toBeInstanceOf(Array);
+    expect(subnetPlugin.configHints!.length).toBeGreaterThanOrEqual(3);
   });
 
   describe("CidrBlock validation", () => {
@@ -81,20 +105,42 @@ describe("subnetPlugin", () => {
       expect(field.question.validate?.("10.0.1.0/24")).toBeUndefined();
     });
 
-    it("rejects empty value (required)", () => {
-      expect(field.question.validate?.("")).toBeDefined();
+    it("rejects empty value with 'required' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("")).toBe(
+        "Subnet CIDR block is required",
+      );
     });
 
-    it("rejects invalid format", () => {
-      expect(field.question.validate?.("not-a-cidr")).toBeDefined();
+    it("rejects invalid format with CIDR-notation error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("not-a-cidr")).toBe(
+        "Must be valid CIDR notation (e.g. 10.0.1.0/24)",
+      );
     });
 
-    it("rejects prefix smaller than /16", () => {
-      expect(field.question.validate?.("10.0.0.0/8")).toBeDefined();
+    it("rejects prefix smaller than /16 with prefix-range error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("10.0.0.0/8")).toBe(
+        "Subnet CIDR prefix must be between /16 and /28",
+      );
     });
 
-    it("rejects prefix larger than /28", () => {
-      expect(field.question.validate?.("10.0.0.0/30")).toBeDefined();
+    it("rejects prefix larger than /28 with prefix-range error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("10.0.0.0/30")).toBe(
+        "Subnet CIDR prefix must be between /16 and /28",
+      );
+    });
+
+    it("accepts /16 (lower boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("10.0.0.0/16")).toBeUndefined();
+    });
+
+    it("accepts /28 (upper boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("10.0.0.0/28")).toBeUndefined();
     });
   });
 

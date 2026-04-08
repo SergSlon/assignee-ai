@@ -2738,11 +2738,11 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
         const result = formatFindings([s3PublicAccessFinding]);
         const lines = result.split("\n");
         // First line is summary, then finding title, then hint
+        // Tier C: dropped redundant toBeDefined() — find!()
         const titleLine = lines.find((l) =>
           l.includes("Block S3 Public Access"),
-        );
-        expect(titleLine).toBeDefined();
-        const titleIdx = lines.indexOf(titleLine!);
+        )!;
+        const titleIdx = lines.indexOf(titleLine);
         const hintLine = lines[titleIdx + 1];
         expect(hintLine).toContain("\u2192");
       });
@@ -3443,8 +3443,9 @@ describe("Epic 35 — Actionable Findings test matrix", () => {
       expect(({} as any).polluted).toBeUndefined();
 
       // Nested Config object: safe key applied, dangerous keys skipped
+      // Tier C: dropped redundant toBeDefined() — .SafeNested access fails
+      // naturally on undefined
       const config = (result!.desiredState as any).Config;
-      expect(config).toBeDefined();
       expect(config.SafeNested).toBe("nested-safe-value");
       expect(config.Existing).toBe("yes"); // original key preserved by deep merge
       expect(Object.keys(config)).not.toContain("__proto__");

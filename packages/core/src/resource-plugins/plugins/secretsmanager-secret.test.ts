@@ -41,8 +41,9 @@ describe("secretsManagerSecretPlugin", () => {
       (f) => f.name === "Name",
     )!;
 
-    it("rejects empty value", () => {
-      expect(field.question.validate?.("")).toBeDefined();
+    it("rejects empty value with 'required' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("")).toBe("Secret name is required");
     });
 
     it("accepts valid secret name", () => {
@@ -51,12 +52,23 @@ describe("secretsManagerSecretPlugin", () => {
       ).toBeUndefined();
     });
 
-    it("rejects names longer than 512 chars", () => {
-      expect(field.question.validate?.("a".repeat(513))).toBeDefined();
+    it("rejects names longer than 512 chars with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("a".repeat(513))).toBe(
+        "Secret name must be 512 characters or fewer",
+      );
     });
 
-    it("rejects names with invalid characters", () => {
-      expect(field.question.validate?.("my secret!")).toBeDefined();
+    it("accepts exactly 512 chars (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("a".repeat(512))).toBeUndefined();
+    });
+
+    it("rejects names with invalid characters with charset error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("my secret!")).toBe(
+        "Secret name can only contain alphanumeric characters, /, _, +, =, ., @, and -",
+      );
     });
   });
 
@@ -94,8 +106,11 @@ describe("secretsManagerSecretPlugin", () => {
       expect(field.question.validate?.("alias/my-key")).toBeUndefined();
     });
 
-    it("rejects invalid values", () => {
-      expect(field.question.validate?.("random-string")).toBeDefined();
+    it("rejects invalid values with KMS-format error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("random-string")).toBe(
+        "Must be 'aws/secretsmanager', a KMS key ARN, or a key alias (alias/...)",
+      );
     });
 
     it("accepts empty/undefined (optional)", () => {
@@ -141,16 +156,27 @@ describe("secretsManagerSecretPlugin", () => {
       (f) => f.name === "SecretString",
     )!;
 
-    it("rejects empty value", () => {
-      expect(field.question.validate?.("")).toBeDefined();
+    it("rejects empty value with 'required when not auto-generate' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("")).toBe(
+        "Secret value is required when not using auto-generate",
+      );
     });
 
     it("accepts non-empty value", () => {
       expect(field.question.validate?.("my-secret-value")).toBeUndefined();
     });
 
-    it("rejects values over 65536 chars", () => {
-      expect(field.question.validate?.("x".repeat(65537))).toBeDefined();
+    it("rejects values over 65536 chars with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("x".repeat(65537))).toBe(
+        "Secret value must be 65536 characters or fewer",
+      );
+    });
+
+    it("accepts exactly 65536 chars (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("x".repeat(65536))).toBeUndefined();
     });
   });
 
@@ -165,8 +191,9 @@ describe("secretsManagerSecretPlugin", () => {
       ).toBeUndefined();
     });
 
-    it("rejects invalid JSON", () => {
-      expect(field.question.validate?.("not json")).toBeDefined();
+    it("rejects invalid JSON with 'must be valid JSON' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("not json")).toBe("Must be valid JSON");
     });
 
     it("accepts empty/undefined (optional)", () => {
@@ -180,9 +207,12 @@ describe("secretsManagerSecretPlugin", () => {
     });
   });
 
-  it("configHints is a non-empty array", () => {
-    expect(secretsManagerSecretPlugin.configHints).toBeDefined();
-    expect(secretsManagerSecretPlugin.configHints!.length).toBeGreaterThan(0);
+  it("configHints has at least 3 entries (Tier C: was toBeDefined+>0)", () => {
+    // Tier C: strengthened — meaningful floor
+    expect(secretsManagerSecretPlugin.configHints).toBeInstanceOf(Array);
+    expect(
+      secretsManagerSecretPlugin.configHints!.length,
+    ).toBeGreaterThanOrEqual(3);
   });
 
   it("configHints mention GenerateSecretString, KMS, and rotation", () => {
@@ -192,11 +222,12 @@ describe("secretsManagerSecretPlugin", () => {
     expect(hints).toContain("rotation");
   });
 
-  it("Tags field has toCfn transform", () => {
+  it("Tags field has callable toCfn transform", () => {
+    // Tier C: strengthened — find!() + assert function-ness
     const field = secretsManagerSecretPlugin.commonFields.find(
       (f) => f.name === "Tags",
-    );
-    expect(field?.toCfn).toBeDefined();
+    )!;
+    expect(typeof field.toCfn).toBe("function");
   });
 
   it("Tags toCfn transforms comma-separated pairs", () => {

@@ -53,7 +53,7 @@ defaults:
     const { loadUserConfig } = await import("../config/user-config-loader.js");
     const config = await loadUserConfig();
 
-    expect(config).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — toHaveProperty fails on undefined
     expect(config).toHaveProperty("defaults");
     expect((config as any).defaults["AWS::S3::Bucket"]).toHaveProperty(
       "BucketName",
@@ -161,12 +161,12 @@ describe("Cross-epic: provision log -> drift detect -> reconcile", () => {
 
     expect(result.status).toBe("DRIFTED");
     expect(result.driftedFields.length).toBeGreaterThan(0);
+    // Tier C: dropped redundant toBeDefined() — find!()
     const versioningDrift = result.driftedFields.find(
       (f) => f.path === "VersioningConfiguration.Status",
-    );
-    expect(versioningDrift).toBeDefined();
-    expect(versioningDrift!.desiredValue).toBe("Enabled");
-    expect(versioningDrift!.actualValue).toBe("Suspended");
+    )!;
+    expect(versioningDrift.desiredValue).toBe("Enabled");
+    expect(versioningDrift.actualValue).toBe("Suspended");
   });
 
   it("buildPatchDocument creates correct JSON Patch from drifted fields", async () => {

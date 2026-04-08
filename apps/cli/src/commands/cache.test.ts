@@ -71,11 +71,11 @@ describe("cache command", () => {
 
   describe("cache clear", () => {
     it("calls invalidateCache and shows success message", async () => {
+      // Tier C: dropped redundant toBeDefined() — find!() at find site
       const { cacheCommand } = await import("./cache.js");
-      const clearCmd = cacheCommand.commands.find((c) => c.name() === "clear");
-      expect(clearCmd).toBeDefined();
+      const clearCmd = cacheCommand.commands.find((c) => c.name() === "clear")!;
 
-      await clearCmd!.parseAsync(["node", "clear"], { from: "user" });
+      await clearCmd.parseAsync(["node", "clear"], { from: "user" });
 
       expect(mockInvalidateCache).toHaveBeenCalled();
       expect(mockLogSuccess).toHaveBeenCalledWith("Schema cache cleared");

@@ -144,8 +144,8 @@ describe("rdsPricingDecomposer", () => {
   it("backup is included when BackupRetentionPeriod > 0 (default 7)", () => {
     const items = rdsPricingDecomposer.decompose({});
 
+    // Tier C: dropped redundant toBeDefined() — find!() is at the find site
     const backup = items.find((i) => i.label === "Backup")!;
-    expect(backup).toBeDefined();
     expect(backup.kind).toBe("usage_based");
     expect(backup.quantity).toBe(20); // defaults to AllocatedStorage
     expect(backup.description).toBe("7 days retention");
