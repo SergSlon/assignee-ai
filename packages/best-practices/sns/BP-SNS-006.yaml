@@ -1,0 +1,14 @@
+id: BP-SNS-006
+title: "SNS topic policy must not use Allow + NotPrincipal"
+severity: CRITICAL
+resource_type: "AWS::SNS::TopicPolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "allow-plus-not-principal"
+source: "AWS Guard Rules Registry"
+source_id: "sns_topicpolicy_no_allow_plus_notprincipal"
+description: "An Allow statement with NotPrincipal in a topic policy inverts the identity check — \"allow anyone except N\" — exposing publish or subscribe rights to the entire AWS customer base and every anonymous caller. Combined with sns:Publish, this is a broadcast-spam primitive; combined with sns:Subscribe, it's a data-exfiltration primitive (an attacker subscribes their own endpoint and receives every message)."
+remediation: "List the specific principals the topic should trust under Principal. If you want to explicitly exclude a principal from an otherwise-trusted set, write a Deny + Principal statement alongside the Allow — never an Allow + NotPrincipal."
+consequence: "Every identity not in NotPrincipal inherits the statement — in practice the entire AWS customer base. Attackers can publish spam or subscribe their own endpoint and exfiltrate every message."
+category: security
+lastVerified: "2026-04-08"

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "hash": "4b962937d36095321513d834132affa1a5312794013dc1b690ebc9ec3024ca71",
+  "hash": "892405013743188bc26568810cc854e7d625fcec09d9dc16bc9c4aba6b02fee2",
   "files": {
     "apigateway/BP-APIGW-001.yaml": "bec1fb5d3e88707c41e07e4066bee54bc8290f7886ef02fe8054f89199d59267",
     "apigateway/BP-APIGW-002.yaml": "f0b8df494b6fbb8b1a7793a9e408d692fc01355122692bd6af0099f3bc1767f5",
@@ -119,6 +119,9 @@
     "s3/BP-S3-015.yaml": "38a69768631d8bbd0416e242b06b7fd358573a3167b2e0fc98e521b2a0bc7664",
     "s3/BP-S3-016.yaml": "8132cb6cbf38286fbe1776dc261f0a9b7e146592d3c6b1e03ba0507974162845",
     "s3/BP-S3-017.yaml": "43db5b096834e459cc8b6fa7648a82529574f7856ce19eadfefc96cb0cd6aabf",
+    "s3/BP-S3-018.yaml": "ca1859429465917e9034a534f4926486c1a095adf40b56374cf79f218e6d17c0",
+    "s3/BP-S3-019.yaml": "76c85afca23b8a8bbb00c3fbdcf7a86cfaf78d5cec379a32a8a6d0767f88fc2f",
+    "s3/BP-S3-020.yaml": "f1ff3d4eb73f9c7514167f6b93978f62a618de788bbec839a665b1bf796937f6",
     "secretsmanager/BP-SM-001.yaml": "652329fc6e188252d7dd6db713c73167643a133730c1b90cbbd80fa65d4c5e97",
     "secretsmanager/BP-SM-002.yaml": "623a0d05f2977d8ff544e595fba6b40e4560fd40ec0173b09e77013838af82ee",
     "secretsmanager/BP-SM-003.yaml": "6e37c4edc637c420e714cd20ed08b1a23561f5d7e6e8ce4a96d134f9c0821b65",
@@ -128,11 +131,17 @@
     "sns/BP-SNS-002.yaml": "46f15691a824ca5c10c172bb6fb9235bb10985af757a0ccb5f89577efb8f8131",
     "sns/BP-SNS-003.yaml": "69a2e007630cf4e367e11d13a32bba0badf007654b5b37c538880584127a8f09",
     "sns/BP-SNS-004.yaml": "c62e224a0d42d89875b9a469f590bda31a279de99ccc597f55efdc8d035e1620",
+    "sns/BP-SNS-005.yaml": "b6225d71c80a1b533d8fccaa15152771f305a9d0dcac037035edeaa69b1699d3",
+    "sns/BP-SNS-006.yaml": "04ac4c9e22e6fb2e47a330957573ecf0f33e844ee51c8ae85a6de959b157187f",
     "sqs/BP-SQS-001.yaml": "2f992326459eb764cbe984fb6b0a95ce2da9de8f33ba36e0ac234fc7be3bf4a3",
     "sqs/BP-SQS-002.yaml": "6e60b8c5d6b6cbebfd7df08282577b1a965def014b155c09f85ec34e3e6b3052",
     "sqs/BP-SQS-003.yaml": "208ce3821917b321a486b5aff3dab83bbd828564e98e13815d6bb810dceed841",
     "sqs/BP-SQS-004.yaml": "7d635fdb80f16ed49c33ff5dab6cf25c9f907548b769153238266443a43b1d20",
     "sqs/BP-SQS-005.yaml": "e2c44b48e21732417e3e2f66dcbc0995f9cf9eca256b4940ed8fd3c4c565708f",
+    "sqs/BP-SQS-006.yaml": "3bf8cc14706c188de615f76e51f97449a35da4e299aa6486fa766f8097aeb0b1",
+    "sqs/BP-SQS-007.yaml": "2a37a3845f6b353e28d47555bf7d5ff0f1be9a8e9160e6b94e90eb06b7a279ff",
+    "sqs/BP-SQS-008.yaml": "f5c588b4bd896f7ff4e83ce97fa25531d8cb684c90a26d934773b6bce520abbe",
+    "sqs/BP-SQS-009.yaml": "dc97e9ad04f8033916eeaf4c7d3836737ae9d44a0cad43a84385ed2f0ec9409a",
     "ssm/BP-SSM-001.yaml": "937c6ef25545592d8ed12c8bb6096db029ddf92718a97c68772b16418a9fd709",
     "ssm/BP-SSM-002.yaml": "eb02fa748b31b2229d09dee10dc1f23936e54974e21124946b92f6f31255566f",
     "ssm/BP-SSM-003.yaml": "a7c4f2e802e3e73b27eff4f8eacf2e3d1c381235ebf4222fc3914ce0d145199a",
@@ -140,6 +149,6 @@
     "vpc/BP-VPC-001.yaml": "d1efbeaa898d16f6dd2605519b7fa3564c7237553193faf8e709ac8044290000",
     "vpc/BP-VPC-002.yaml": "f7c720a24811610df4bac22b00485c0d779ba5452c334bb7266b84afd7160e5f"
   },
-  "count": 137,
-  "generatedAt": "2026-04-08T16:05:29.991Z"
+  "count": 146,
+  "generatedAt": "2026-04-08T16:13:01.112Z"
 }

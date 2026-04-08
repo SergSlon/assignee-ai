@@ -1,0 +1,14 @@
+id: BP-S3-020
+title: "S3 bucket policy must not use Allow + NotAction"
+severity: HIGH
+resource_type: "AWS::S3::BucketPolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "allow-plus-not-action"
+source: "AWS Guard Rules Registry"
+source_id: "s3_bucket_policy_no_allow_plus_not_action"
+description: "An Allow statement paired with NotAction in a bucket policy is the \"allow every S3 operation except X\" anti-pattern. It silently grants any new S3 API AWS ships (e.g. new replication or lifecycle actions) — a policy that was narrow at audit time becomes broader over the life of the bucket. Bucket policies deserve the same explicit-action-list discipline as IAM policies."
+remediation: "List the specific s3:* actions the statement is meant to allow under Action instead of enumerating exclusions under NotAction. If the action surface genuinely is \"everything except one\", express it as an Allow on the explicit list followed by a narrow Deny on the excluded action."
+consequence: "The bucket's permission surface drifts over time without any code or audit signal — a policy that was least-privilege when merged becomes over-privileged as AWS releases new S3 operations."
+category: security
+lastVerified: "2026-04-08"

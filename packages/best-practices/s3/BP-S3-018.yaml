@@ -1,0 +1,14 @@
+id: BP-S3-018
+title: "S3 bucket policy must not grant wildcard Action: *"
+severity: HIGH
+resource_type: "AWS::S3::BucketPolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "wildcard-action"
+source: "AWS Guard Rules Registry"
+source_id: "s3_bucket_policy_no_wildcard_action"
+description: "A bucket policy Allow statement with Action: \"*\" grants every S3 action (read, write, delete, tag, replicate, change ACL, change policy) to whoever the statement is addressed to. Even with a narrow Principal, \"*\" is almost always broader than the intent — a legitimate \"allow CloudFront to read\" policy only needs s3:GetObject, not every operation the service can perform."
+remediation: "Replace Action: \"*\" with the explicit action list the statement requires (e.g. [\"s3:GetObject\", \"s3:GetObjectVersion\"] for read workloads). Prefer the narrowest set that still lets the legitimate principal function."
+consequence: "Any principal the statement applies to can silently escalate from the intended read/write use case to destructive operations (DeleteObject, PutBucketPolicy) that compromise the bucket."
+category: security
+lastVerified: "2026-04-08"

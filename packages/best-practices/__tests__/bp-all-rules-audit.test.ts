@@ -441,6 +441,31 @@ const s3Rules: RuleSpec[] = [
     checkType: "exists",
     expectedValue: true,
   },
+  // ── A5.3: S3 bucket policy anti-patterns (Tier 3 of the cfn-guard gap
+  // ── analysis). Target AWS::S3::BucketPolicy.PolicyDocument — a
+  // ── separate resource from AWS::S3::Bucket, so these rules fire on
+  // ── the BucketPolicy resource rather than the Bucket resource itself.
+  {
+    id: "BP-S3-018",
+    resourceType: "AWS::S3::BucketPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "wildcard-action",
+  },
+  {
+    id: "BP-S3-019",
+    resourceType: "AWS::S3::BucketPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "wildcard-principal",
+  },
+  {
+    id: "BP-S3-020",
+    resourceType: "AWS::S3::BucketPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "allow-plus-not-action",
+  },
 ];
 
 const ec2Rules: RuleSpec[] = [
@@ -1149,6 +1174,36 @@ const sqsRules: RuleSpec[] = [
     checkType: "greater_than",
     expectedValue: 60,
   },
+  // ── A5.3: SQS queue policy anti-patterns. Target AWS::SQS::QueuePolicy,
+  // ── a separate resource from AWS::SQS::Queue.
+  {
+    id: "BP-SQS-006",
+    resourceType: "AWS::SQS::QueuePolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "wildcard-action",
+  },
+  {
+    id: "BP-SQS-007",
+    resourceType: "AWS::SQS::QueuePolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "wildcard-principal",
+  },
+  {
+    id: "BP-SQS-008",
+    resourceType: "AWS::SQS::QueuePolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "allow-plus-not-action",
+  },
+  {
+    id: "BP-SQS-009",
+    resourceType: "AWS::SQS::QueuePolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "allow-plus-not-principal",
+  },
 ];
 
 const smRules: RuleSpec[] = [
@@ -1217,6 +1272,24 @@ const snsRules: RuleSpec[] = [
     propertyPath: "TopicPolicy",
     checkType: "awareness",
     expectedValue: true,
+  },
+  // ── A5.3: SNS topic policy anti-patterns. Target AWS::SNS::TopicPolicy,
+  // ── a separate resource from AWS::SNS::Topic. BP-SNS-004 covers the
+  // ── wildcard-principal case already (via the public-access awareness
+  // ── rule), so we only add NotAction / NotPrincipal here.
+  {
+    id: "BP-SNS-005",
+    resourceType: "AWS::SNS::TopicPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "allow-plus-not-action",
+  },
+  {
+    id: "BP-SNS-006",
+    resourceType: "AWS::SNS::TopicPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "allow-plus-not-principal",
   },
 ];
 
@@ -1602,7 +1675,7 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("SQS (5 rules)", () => {
+  describe("SQS (9 rules)", () => {
     for (const spec of sqsRules) {
       runRuleTests(spec);
     }
@@ -1618,7 +1691,7 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("SNS (4 rules)", () => {
+  describe("SNS (6 rules)", () => {
     for (const spec of snsRules) {
       runRuleTests(spec);
     }
@@ -1701,12 +1774,17 @@ describe("BP All Rules Audit", () => {
       ...asgRules,
     ];
 
-    it("covers exactly 137 rule specs", () => {
-      // 131 pre-A5 + 6 new Tier-1 IAM rules (BP-IAM-011..016).
-      // BP-IAM-017 (elevated *FullAccess heuristic) is deferred to a
-      // follow-up because it needs a walker over ManagedPolicyArns
-      // rather than over PolicyDocument.Statement[].
-      expect(allSpecs.length).toBe(137);
+    it("covers exactly 146 rule specs", () => {
+      // 131 pre-A5
+      // + 6 Tier-1 IAM rules       (BP-IAM-011..016)
+      // + 9 Tier-3 policy rules    (BP-S3-018..020, BP-SQS-006..009, BP-SNS-005..006)
+      //   Note: BP-S3-015..017 were already taken by pre-A5 rules
+      //   (replication / intelligent tiering / access logging), so the
+      //   new S3 bucket-policy rules start at BP-S3-018.
+      // BP-IAM-017 (elevated *FullAccess heuristic) is still deferred
+      // — it needs a walker over ManagedPolicyArns rather than over
+      // PolicyDocument.Statement[].
+      expect(allSpecs.length).toBe(146);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

@@ -1,0 +1,14 @@
+id: BP-SNS-005
+title: "SNS topic policy must not use Allow + NotAction"
+severity: HIGH
+resource_type: "AWS::SNS::TopicPolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "allow-plus-not-action"
+source: "AWS Guard Rules Registry"
+source_id: "sns_topicpolicy_no_allow_plus_not_action"
+description: "An Allow statement paired with NotAction on an SNS topic policy silently grants any new SNS API AWS ships. Topic policy surfaces are narrow (Publish, Subscribe, Unsubscribe, ListSubscriptionsByTopic, SetTopicAttributes, AddPermission, RemovePermission, DeleteTopic) and the correct set for any real workload is tiny — \"everything except X\" is never the right way to write these permissions."
+remediation: "List the specific sns:* actions the statement needs under Action. Publisher workflows typically only need sns:Publish; subscriber workflows need sns:Subscribe + sns:ConfirmSubscription. Avoid NotAction entirely on topic policies."
+consequence: "The topic's permission surface drifts silently — new SNS operations AWS ships become automatically authorised, including destructive ones like DeleteTopic."
+category: security
+lastVerified: "2026-04-08"

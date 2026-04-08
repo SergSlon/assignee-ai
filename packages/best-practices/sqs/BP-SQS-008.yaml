@@ -1,0 +1,14 @@
+id: BP-SQS-008
+title: "SQS queue policy must not use Allow + NotAction"
+severity: HIGH
+resource_type: "AWS::SQS::QueuePolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "allow-plus-not-action"
+source: "AWS Guard Rules Registry"
+source_id: "sqs_queuepolicy_no_allow_plus_not_action"
+description: "An Allow statement paired with NotAction on a queue policy silently grants any new SQS API that AWS ships. Queue policy surfaces are narrow enough that an explicit Action list is always feasible — there is no legitimate reason to phrase permissions as \"all SQS operations except X\"."
+remediation: "Rewrite the statement as Allow + Action with the explicit list the workload needs (SendMessage, ReceiveMessage, etc.). If you're actually trying to block a single operation, pair a narrow Deny with the positive Allow."
+consequence: "The queue's permission surface drifts silently over time — new SQS APIs that AWS launches become automatically authorised without any code change or audit signal."
+category: security
+lastVerified: "2026-04-08"

@@ -1,0 +1,14 @@
+id: BP-S3-019
+title: "S3 bucket policy must not grant wildcard Principal: *"
+severity: CRITICAL
+resource_type: "AWS::S3::BucketPolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "wildcard-principal"
+source: "AWS Guard Rules Registry"
+source_id: "s3_bucket_policy_no_wildcard_principal"
+description: "An Allow statement with Principal: \"*\" (or { AWS: \"*\" }) exposes the bucket to every AWS account and every anonymous caller on the internet. The S3 PublicAccessBlock rules (BP-S3-001…004) cover the bucket-level public-access toggles, but a wildcard principal in the bucket POLICY is a separate control that PAB does not catch — PAB only guards against public ACLs and certain policy shapes, not every wildcard combination."
+remediation: "Replace Principal: \"*\" with the specific CloudFront OAI, IAM role, cross-account root, or service principal the policy is meant to allow. If you want an S3 bucket to serve public web content, use a CloudFront distribution with an Origin Access Identity instead of a wildcard bucket policy."
+consequence: "Every object in the bucket is readable (or writable, depending on Action) to anyone on the internet — one of the top-5 causes of AWS data breaches in the public incident database."
+category: security
+lastVerified: "2026-04-08"
