@@ -175,6 +175,35 @@ function checkPasses(
       return true;
     }
 
+    case "not_contains_pattern": {
+      // A1 warmup: pattern-based array element check. Used by BP-IAM-017
+      // (elevated *FullAccess managed policies on IAM roles) and any
+      // future rule that needs regex matching against array elements
+      // where `not_contains` only handles exact equality.
+      //
+      // Missing field trivially passes — nothing to match. Invalid regex
+      // strings also pass; a misconfigured rule should not silently
+      // flood findings. The YAML author should have a test in
+      // bp-all-rules-audit.test.ts that exercises the pattern.
+      if (fieldValue === undefined || fieldValue === null) return true;
+      if (typeof expectedValue !== "string") return true;
+      let pattern: RegExp;
+      try {
+        pattern = new RegExp(expectedValue);
+      } catch {
+        return true;
+      }
+      if (typeof fieldValue === "string") {
+        return !pattern.test(fieldValue);
+      }
+      if (Array.isArray(fieldValue)) {
+        return !fieldValue.some(
+          (item) => typeof item === "string" && pattern.test(item),
+        );
+      }
+      return true;
+    }
+
     case "conditional_forbidden":
       // Field must not exist when the condition is met. Both undefined and
       // null are treated as "absent" (CFN uses null for unset fields).

@@ -164,6 +164,14 @@ function firingState(spec: RuleSpec): Record<string, unknown> {
       }
       return stateWith(spec.propertyPath, [spec.expectedValue]);
 
+    case "not_contains_pattern":
+      // Field contains at least one element that matches the regex → fires.
+      // BP-IAM-017's pattern matches AWS-managed *FullAccess ARNs, so a
+      // realistic triggering element is AmazonS3FullAccess.
+      return stateWith(spec.propertyPath, [
+        "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+      ]);
+
     case "conditional_forbidden":
       // Field exists → fires
       return stateWith(spec.propertyPath, "igw-12345");
@@ -322,6 +330,14 @@ function passingState(spec: RuleSpec): Record<string, unknown> {
 
     case "not_contains":
       return stateWith(spec.propertyPath, "__CLEAN__");
+
+    case "not_contains_pattern":
+      // No element matches the regex → passes. BP-IAM-017's pattern
+      // exempts ReadOnly and SecurityAudit — both are stable examples.
+      return stateWith(spec.propertyPath, [
+        "arn:aws:iam::aws:policy/ReadOnlyAccess",
+        "arn:aws:iam::aws:policy/SecurityAudit",
+      ]);
 
     case "conditional_forbidden":
       return {};
@@ -1009,6 +1025,18 @@ const iamRules: RuleSpec[] = [
     propertyPath: "ManagedPolicyArns",
     checkType: "not_contains",
     expectedValue: "arn:aws:iam::aws:policy/AdministratorAccess",
+  },
+  // A1 warmup (2026-04-08) — elevated *FullAccess heuristic. Uses the
+  // new `not_contains_pattern` check_type so the regex in the YAML is
+  // exercised by the audit harness (fires on AmazonS3FullAccess,
+  // passes on ReadOnlyAccess / SecurityAudit exemptions).
+  {
+    id: "BP-IAM-017",
+    resourceType: "AWS::IAM::Role",
+    propertyPath: "ManagedPolicyArns",
+    checkType: "not_contains_pattern",
+    expectedValue:
+      "^arn:aws[\\w-]*:iam::aws:policy/(?!ReadOnly|SecurityAudit|Billing|Job-function/|service-role/)[A-Za-z0-9_-]*FullAccess$",
   },
 ];
 
@@ -1930,11 +1958,11 @@ describe("BP All Rules Audit", () => {
       //     capacity) → the memo's proposed DynamoDB backup-plan rule
       //     was dropped because BP-DYNAMODB-001 (PITR) already covers
       //     the recoverable-backup concern.
-      // BP-IAM-017 (elevated *FullAccess heuristic) is still deferred
-      // — it needs a walker over ManagedPolicyArns rather than over
-      // PolicyDocument.Statement[].
       // + 2 A1 rules                 (BP-EFS-001 encrypted, BP-EFS-002 backup)
-      expect(allSpecs.length).toBe(160);
+      // + 1 A1-warmup rule            (BP-IAM-017 elevated *FullAccess —
+      //   uses not_contains_pattern, a new check_type added alongside
+      //   the rule for regex matching over array-of-strings fields)
+      expect(allSpecs.length).toBe(161);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {
