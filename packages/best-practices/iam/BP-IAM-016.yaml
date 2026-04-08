@@ -1,0 +1,14 @@
+id: BP-IAM-016
+title: "IAM role must not attach AdministratorAccess managed policy"
+severity: CRITICAL
+resource_type: "AWS::IAM::Role"
+property_path: "ManagedPolicyArns"
+check_type: "not_contains"
+expected_value: "arn:aws:iam::aws:policy/AdministratorAccess"
+source: "AWS Guard Rules Registry"
+source_id: "iam_role_administrator_access_policy_rule"
+description: "AdministratorAccess is AWS's most permissive managed policy — it grants Action: \"*\", Resource: \"*\". Attaching it to a role makes every action the role can perform identical to a root user's. Existing BP-IAM-001 inspects inline PolicyDocument statements for wildcards, but it does not check whether an AWS-managed admin policy is attached via ManagedPolicyArns — that's this rule's job."
+remediation: "Replace AdministratorAccess with a scoped custom managed policy or a combination of job-function-specific AWS managed policies (e.g. PowerUserAccess, ReadOnlyAccess, service-specific access). If the role truly needs admin-level capabilities for a bounded task, use a PermissionsBoundary to cap the reachable permissions and prefer assume-role workflows gated by MFA."
+consequence: "Any compromise of the role — or of a principal that can assume it — results in immediate full account takeover."
+category: security
+lastVerified: "2026-04-08"

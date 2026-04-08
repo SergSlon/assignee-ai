@@ -89,7 +89,8 @@ type CheckType =
   | "conditional_forbidden"
   | "awareness"
   | "cross_resource_count"
-  | "cross_resource_reference";
+  | "cross_resource_reference"
+  | "policy_antipattern";
 
 interface RuleSpec {
   id: string;
@@ -173,9 +174,110 @@ function firingState(spec: RuleSpec): Record<string, unknown> {
       // Always fires
       return stateWith(spec.propertyPath, "any-value");
 
+    case "policy_antipattern": {
+      // Build a minimal Allow statement that hits the named anti-pattern.
+      // Callers pass the pattern name as expectedValue (same convention
+      // the production check uses).
+      const doc = buildAntipatternFiringDoc(String(spec.expectedValue));
+      return stateWith(spec.propertyPath, doc);
+    }
+
     default:
       return {};
   }
+}
+
+/**
+ * Build a real-shaped policy document that fires the named anti-pattern.
+ * Each branch mirrors one case in `src/policy-inspector.ts`; if a new
+ * anti-pattern is added to POLICY_ANTIPATTERNS the test harness must
+ * grow a matching branch here (otherwise firingState returns {} and
+ * the "fires" test fails with a clear diagnostic).
+ */
+function buildAntipatternFiringDoc(pattern: string): Record<string, unknown> {
+  const base = { Version: "2012-10-17" };
+  switch (pattern) {
+    case "wildcard-resource":
+      return {
+        ...base,
+        Statement: [{ Effect: "Allow", Action: "s3:GetObject", Resource: "*" }],
+      };
+    case "wildcard-action":
+      return {
+        ...base,
+        Statement: [
+          { Effect: "Allow", Action: "*", Resource: "arn:aws:s3:::b/*" },
+        ],
+      };
+    case "wildcard-principal":
+      return {
+        ...base,
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: "*",
+            Action: "s3:GetObject",
+            Resource: "arn:aws:s3:::b/*",
+          },
+        ],
+      };
+    case "allow-plus-not-action":
+      return {
+        ...base,
+        Statement: [{ Effect: "Allow", NotAction: ["iam:*"], Resource: "*" }],
+      };
+    case "allow-plus-not-resource":
+      return {
+        ...base,
+        Statement: [
+          {
+            Effect: "Allow",
+            Action: "s3:DeleteObject",
+            NotResource: "arn:aws:s3:::critical/*",
+          },
+        ],
+      };
+    case "allow-plus-not-principal":
+      return {
+        ...base,
+        Statement: [
+          {
+            Effect: "Allow",
+            NotPrincipal: { AWS: "arn:aws:iam::123456789012:root" },
+            Action: "sts:AssumeRole",
+          },
+        ],
+      };
+    case "passrole-wildcard-resource":
+      return {
+        ...base,
+        Statement: [{ Effect: "Allow", Action: "iam:PassRole", Resource: "*" }],
+      };
+    default:
+      // Unknown pattern — return an empty-but-valid doc. The rule will
+      // pass (no match) which makes the "fires" test fail visibly so
+      // the test author notices the missing branch.
+      return { ...base, Statement: [] };
+  }
+}
+
+/**
+ * Build a real-shaped policy document that does NOT match the named
+ * anti-pattern — a narrow, auditable policy with no wildcards and no
+ * inversions. Used by `passingState()`.
+ */
+function buildAntipatternPassingDoc(): Record<string, unknown> {
+  return {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Sid: "NarrowRead",
+        Effect: "Allow",
+        Action: ["s3:GetObject", "s3:ListBucket"],
+        Resource: ["arn:aws:s3:::my-bucket", "arn:aws:s3:::my-bucket/*"],
+      },
+    ],
+  };
 }
 
 function passingState(spec: RuleSpec): Record<string, unknown> {
@@ -223,6 +325,12 @@ function passingState(spec: RuleSpec): Record<string, unknown> {
 
     case "conditional_forbidden":
       return {};
+
+    case "policy_antipattern":
+      // Narrow, auditable policy — no wildcards, no inversions. The
+      // trust-policy rule (BP-IAM-015) targets `AssumeRolePolicyDocument`
+      // which is shape-compatible; we use the same doc for both.
+      return stateWith(spec.propertyPath, buildAntipatternPassingDoc());
 
     // awareness/cross_resource_count/cross_resource_reference never pass
     default:
@@ -814,6 +922,52 @@ const iamRules: RuleSpec[] = [
     propertyPath: "AssumeRolePolicyDocument",
     checkType: "awareness",
     expectedValue: true,
+  },
+  // ── A5.2: IAM policy-document anti-patterns (Tier 1 of the cfn-guard
+  // ── gap analysis). Each uses the shared policy_antipattern check type
+  // ── backed by src/policy-inspector.ts. See
+  // ── docs/bp-cfn-guard-gap-analysis-2026-04-08.md for the full rationale.
+  {
+    id: "BP-IAM-011",
+    resourceType: "AWS::IAM::ManagedPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "wildcard-resource",
+  },
+  {
+    id: "BP-IAM-012",
+    resourceType: "AWS::IAM::ManagedPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "passrole-wildcard-resource",
+  },
+  {
+    id: "BP-IAM-013",
+    resourceType: "AWS::IAM::ManagedPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "allow-plus-not-action",
+  },
+  {
+    id: "BP-IAM-014",
+    resourceType: "AWS::IAM::ManagedPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "allow-plus-not-resource",
+  },
+  {
+    id: "BP-IAM-015",
+    resourceType: "AWS::IAM::Role",
+    propertyPath: "AssumeRolePolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "allow-plus-not-principal",
+  },
+  {
+    id: "BP-IAM-016",
+    resourceType: "AWS::IAM::Role",
+    propertyPath: "ManagedPolicyArns",
+    checkType: "not_contains",
+    expectedValue: "arn:aws:iam::aws:policy/AdministratorAccess",
   },
 ];
 
@@ -1424,7 +1578,7 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("IAM (10 rules)", () => {
+  describe("IAM (16 rules)", () => {
     for (const spec of iamRules) {
       runRuleTests(spec);
     }
@@ -1547,8 +1701,12 @@ describe("BP All Rules Audit", () => {
       ...asgRules,
     ];
 
-    it("covers exactly 131 rule specs", () => {
-      expect(allSpecs.length).toBe(131);
+    it("covers exactly 137 rule specs", () => {
+      // 131 pre-A5 + 6 new Tier-1 IAM rules (BP-IAM-011..016).
+      // BP-IAM-017 (elevated *FullAccess heuristic) is deferred to a
+      // follow-up because it needs a walker over ManagedPolicyArns
+      // rather than over PolicyDocument.Statement[].
+      expect(allSpecs.length).toBe(137);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

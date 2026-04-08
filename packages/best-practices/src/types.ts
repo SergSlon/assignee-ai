@@ -32,6 +32,18 @@ export const BP_CHECK_TYPE = [
   "cross_resource_count",
   "cross_resource_reference",
   "awareness",
+  /**
+   * Inspect an IAM / resource policy document (at the rule's
+   * property_path) for one of the anti-patterns catalogued in
+   * `policy-inspector.ts`. The `expected_value` field carries the
+   * antipattern name ("wildcard-resource", "allow-plus-not-action",
+   * etc.). Rule fails when the pattern is found in any Allow
+   * statement; passes otherwise (including malformed documents,
+   * which we silently skip to avoid plan-time noise).
+   *
+   * @see docs/bp-cfn-guard-gap-analysis-2026-04-08.md
+   */
+  "policy_antipattern",
 ] as const;
 export type BPCheckType = (typeof BP_CHECK_TYPE)[number];
 
