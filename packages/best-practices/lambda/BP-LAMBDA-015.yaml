@@ -1,0 +1,18 @@
+id: BP-LAMBDA-015
+title: "Lambda function should have X-Ray tracing enabled"
+severity: MEDIUM
+resource_type: "AWS::Lambda::Function"
+property_path: "TracingConfig.Mode"
+check_type: "equals"
+expected_value: "Active"
+source: "AWS Well-Architected Framework — Operational Excellence Pillar"
+source_id: "OPS-04"
+description: "AWS Lambda functions should have X-Ray tracing enabled in Active mode so distributed traces capture the full request lifecycle. Active mode samples traces for every invocation; PassThrough mode only records traces when the caller already has a sampling decision, which means cold-start paths and direct event invocations (EventBridge, S3, SQS) are invisible. X-Ray tracing is the only way to profile latency distributions and diagnose the 'Lambda got slower last Tuesday' class of incident."
+remediation: "Set TracingConfig.Mode to 'Active'. The X-Ray trace storage and ingestion are billed at $5 per million traces — typically pennies per month for a low-volume function, and the observability gain is disproportionate. Requires the function's IAM role to include the AWSXRayDaemonWriteAccess managed policy or equivalent inline permissions."
+consequence: "Cold-start latency, downstream AWS SDK calls, and error propagation become opaque — performance regressions and incident triage take 3-5x longer."
+category: reliability
+lastVerified: "2026-04-09"
+autoFixable: true
+desiredStatePatch:
+  TracingConfig:
+    Mode: "Active"

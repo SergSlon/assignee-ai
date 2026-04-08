@@ -311,6 +311,17 @@ const testCases: AutoFixTestCase[] = [
       State: "DISABLED",
     },
   },
+  // --- A8 follow-up: Lambda X-Ray tracing ---
+  {
+    // BP-LAMBDA-015 patches TracingConfig.Mode to "Active" when the
+    // user explicitly opts out via PassThrough or omits it entirely.
+    // Triggering state: Mode=PassThrough.
+    id: "BP-LAMBDA-015",
+    resourceType: "AWS::Lambda::Function",
+    triggeringState: {
+      TracingConfig: { Mode: "PassThrough" },
+    },
+  },
 ];
 
 describe("Auto-fix audit: all auto-fixable BP rules have correct desiredStatePatch", () => {

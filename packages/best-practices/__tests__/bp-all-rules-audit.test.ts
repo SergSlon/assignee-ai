@@ -907,6 +907,14 @@ const lambdaRules: RuleSpec[] = [
     checkType: "equals",
     expectedValue: "lambda:InvokeFunction",
   },
+  // A8 follow-up: Lambda X-Ray tracing — easy observability lever.
+  {
+    id: "BP-LAMBDA-015",
+    resourceType: "AWS::Lambda::Function",
+    propertyPath: "TracingConfig.Mode",
+    checkType: "equals",
+    expectedValue: "Active",
+  },
 ];
 
 const iamRules: RuleSpec[] = [
@@ -2012,7 +2020,10 @@ describe("BP All Rules Audit", () => {
       //   default). Together with the A8 Events::Rule resource-type
       //   promotion (plugin + pricing + IAM actions), these give the
       //   new type full BP coverage on par with the established types.
-      expect(allSpecs.length).toBe(165);
+      // + 1 A8 follow-up rule         (BP-LAMBDA-015 X-Ray tracing must
+      //   be Active — covers cold-start + EventBridge-invoked paths
+      //   that PassThrough mode misses).
+      expect(allSpecs.length).toBe(166);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {
