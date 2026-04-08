@@ -29,6 +29,8 @@ import { secretsManagerPricingStrategy } from "./strategies/secretsmanager.js";
 // WV4-A: VPC compound cross-reference free-tier strategies
 import { vpcGatewayAttachmentPricingStrategy } from "./strategies/vpc-gateway-attachment.js";
 import { subnetRouteTableAssociationPricingStrategy } from "./strategies/subnet-route-table-association.js";
+// A1 (2026-04-08) — EFS
+import { efsPricingStrategy } from "./strategies/efs.js";
 import { ec2PricingDecomposer } from "./decomposers/ec2.js";
 import { rdsPricingDecomposer } from "./decomposers/rds.js";
 import { s3PricingDecomposer } from "./decomposers/s3.js";
@@ -45,6 +47,8 @@ import { cloudWatchAlarmPricingDecomposer } from "./decomposers/cloudwatch-alarm
 import { logsPricingDecomposer } from "./decomposers/logs.js";
 import { ecrPricingDecomposer } from "./decomposers/ecr.js";
 import { ssmPricingDecomposer } from "./decomposers/ssm.js";
+// A1 (2026-04-08) — EFS
+import { efsPricingDecomposer } from "./decomposers/efs.js";
 import {
   vpcPricingDecomposer,
   subnetPricingDecomposer,
@@ -157,6 +161,11 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
   subnetRouteTableAssociationPricingStrategy,
 );
+// A1 (2026-04-08) — EFS
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.EFS_FILE_SYSTEM,
+  efsPricingStrategy,
+);
 
 /**
  * The default pre-populated pricing decomposer registry (Story 23.1).
@@ -192,6 +201,8 @@ defaultDecomposerRegistry.register(vpcGatewayAttachmentPricingDecomposer);
 defaultDecomposerRegistry.register(
   subnetRouteTableAssociationPricingDecomposer,
 );
+// A1 (2026-04-08) — EFS
+defaultDecomposerRegistry.register(efsPricingDecomposer);
 
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";

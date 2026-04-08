@@ -154,11 +154,14 @@ export function operatorPolicy(
   // emitted document is compacted.
   const serviceActions = collapseToWildcards(serviceActionsRaw);
 
-  // SDK fallback actions for types that bypass CloudControl
+  // SDK fallback actions for types that bypass CloudControl.
+  // A6 (2026-04-08): Lambda EventSourceMapping was migrated to CCAPI so
+  // the LAMBDA_*_ESM actions were removed from this block — the CCAPI
+  // create handler perms for AWS::Lambda::EventSourceMapping come from
+  // the create handler metadata via iam-actions.ts if ever needed, and
+  // the SDK path no longer exists. Only SNS Subscription remains on SDK,
+  // plus the SSH key-pair companion operations.
   const sdkFallbackActions = [
-    IamAction.LAMBDA_CREATE_ESM,
-    IamAction.LAMBDA_GET_ESM,
-    IamAction.LAMBDA_DELETE_ESM,
     IamAction.SNS_SUBSCRIBE,
     IamAction.SNS_UNSUBSCRIBE,
     // SSH key pair auto-create flow (Epic 41 — SSH intent bundle)

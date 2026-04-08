@@ -282,6 +282,25 @@ const testCases: AutoFixTestCase[] = [
       HealthCheckType: "EC2",
     },
   },
+  // --- A1 EFS rules ---
+  {
+    // BP-EFS-001 patches Encrypted to true when the user explicitly
+    // opts out. Triggering state: Encrypted=false on the file system.
+    id: "BP-EFS-001",
+    resourceType: "AWS::EFS::FileSystem",
+    triggeringState: {
+      Encrypted: false,
+    },
+  },
+  {
+    // BP-EFS-002 patches BackupPolicy.Status to ENABLED when the user
+    // disables automatic backups. Triggering state: Status="DISABLED".
+    id: "BP-EFS-002",
+    resourceType: "AWS::EFS::FileSystem",
+    triggeringState: {
+      BackupPolicy: { Status: "DISABLED" },
+    },
+  },
 ];
 
 describe("Auto-fix audit: all auto-fixable BP rules have correct desiredStatePatch", () => {

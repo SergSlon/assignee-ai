@@ -1,0 +1,19 @@
+id: BP-EFS-002
+title: "EFS file system should have automatic backups enabled"
+severity: HIGH
+resource_type: "AWS::EFS::FileSystem"
+property_path: "BackupPolicy.Status"
+check_type: "equals"
+expected_value: "ENABLED"
+source: "AWS Well-Architected — Reliability Pillar"
+source_id: "EFS.2"
+description: "EFS file systems should have automatic backups enabled through the BackupPolicy property. AWS Backup creates daily snapshots and retains them for 35 days by default, protecting against accidental deletion, ransomware, and application-level corruption."
+remediation: "Set BackupPolicy.Status to ENABLED on the file system. This opts the file system into the default AWS Backup plan (daily snapshots, 35-day retention, warm storage). Backups are billed separately through AWSBackup at approximately $0.05 per GB-month for warm storage — disable only for ephemeral or reproducible workloads where loss is tolerable."
+consequence: "Without automatic backups, an accidental rm -rf, a bad deploy, or ransomware has no recovery point. EFS has no built-in versioning — AWS Backup opt-in is the only data-protection path."
+category: reliability
+lastVerified: "2026-04-08"
+blocking: false
+autoFixable: true
+desiredStatePatch:
+  BackupPolicy:
+    Status: "ENABLED"
