@@ -59,9 +59,65 @@ export function costAlternatives(
     hints.push(
       `${AdviceIcon.COST} CloudWatch Logs ingestion costs $0.50/GB \u2014 set a retention period to avoid unbounded storage costs`,
     );
+  } else if (resourceType === RESOURCE_TYPES.EFS_FILE_SYSTEM) {
+    efsCostHints(desiredState, hints);
+  } else if (resourceType === RESOURCE_TYPES.EFS_MOUNT_TARGET) {
+    hints.push(
+      `${AdviceIcon.COST} EFS mount targets are free \u2014 storage and NFS data transfer are billed on the parent AWS::EFS::FileSystem. One mount target per AZ is required for multi-AZ access.`,
+    );
   }
 
   return hints;
+}
+
+/**
+ * EFS cost hints. Ordered from most to least impactful — the plugin
+ * surfaces at most 5 lines in the inline advice box so the first
+ * hint should be the one most likely to save money on the user's
+ * workload.
+ */
+function efsCostHints(ds: Record<string, unknown>, hints: string[]): void {
+  const throughputMode = ds[CfnKey.THROUGHPUT_MODE] as string | undefined;
+  const provisionedMiBps = ds[CfnKey.PROVISIONED_THROUGHPUT_IN_MIBPS] as
+    | number
+    | string
+    | undefined;
+  const azName = ds[CfnKey.AVAILABILITY_ZONE_NAME];
+
+  // Provisioned throughput — expensive and often unnecessary.
+  if (throughputMode === "provisioned") {
+    const provisionedNum =
+      typeof provisionedMiBps === "number"
+        ? provisionedMiBps
+        : typeof provisionedMiBps === "string"
+          ? Number(provisionedMiBps)
+          : undefined;
+    if (provisionedNum && provisionedNum > 0) {
+      hints.push(
+        `${AdviceIcon.COST} ThroughputMode=provisioned with ${provisionedNum} MiB/s — consider 'elastic' mode instead: it scales automatically and is typically cheaper unless you have a sustained high-throughput baseline.`,
+      );
+    } else {
+      hints.push(
+        `${AdviceIcon.COST} ThroughputMode=provisioned is billed per MiB/s-month regardless of actual usage — consider 'elastic' mode for spiky workloads.`,
+      );
+    }
+  }
+
+  // One Zone mode — dramatically cheaper for non-critical data.
+  if (typeof azName === "string" && azName.length > 0) {
+    hints.push(
+      `${AdviceIcon.COST} One Zone EFS (AvailabilityZoneName=${azName}) is ~47% cheaper per GB-month than Regional, but has zero multi-AZ redundancy — only use for reproducible or easily-recoverable data.`,
+    );
+  } else {
+    hints.push(
+      `${AdviceIcon.COST} Regional EFS (default) stores data across 3 AZs. For non-critical workloads, consider One Zone (AvailabilityZoneName) to save ~47% per GB-month.`,
+    );
+  }
+
+  // Lifecycle tiering — big lever for cold data.
+  hints.push(
+    `${AdviceIcon.COST} Enable EFS Lifecycle Management (IA after 30d, Archive after 90d) to move cold data to cheaper tiers automatically — can cut storage bill by 80%+ for write-once-read-rarely workloads.`,
+  );
 }
 
 function ec2CostHints(ds: Record<string, unknown>, hints: string[]): void {
