@@ -162,4 +162,60 @@ describe("costAlternatives", () => {
       ).toBe(true);
     });
   });
+
+  // A8 (2026-04-08): EventBridge Rule cost hints.
+  describe("EventBridge Rule", () => {
+    it("default bus mentions free rule evaluation + target workload cost", () => {
+      const hints = costAlternatives("AWS::Events::Rule", {
+        ScheduleExpression: "rate(1 hour)",
+      });
+      expect(hints.some((h) => h.includes("default bus is free"))).toBe(true);
+    });
+
+    it("custom bus calls out $1/million publish cost", () => {
+      const hints = costAlternatives("AWS::Events::Rule", {
+        EventBusName: "my-bus",
+      });
+      expect(
+        hints.some((h) => h.includes('"my-bus"') && h.includes("$1.00")),
+      ).toBe(true);
+    });
+
+    it("rate(1 minute) surfaces a ~43800/month invocation estimate", () => {
+      const hints = costAlternatives("AWS::Events::Rule", {
+        ScheduleExpression: "rate(1 minute)",
+      });
+      // 60 * 24 * 30.44 / 1 ≈ 43,834
+      expect(
+        hints.some((h) => h.includes("rate(1 minute)") && /43,?\d{3}/.test(h)),
+      ).toBe(true);
+    });
+
+    it("rate(1 hour) surfaces a ~731/month invocation estimate", () => {
+      const hints = costAlternatives("AWS::Events::Rule", {
+        ScheduleExpression: "rate(1 hour)",
+      });
+      // 24 * 30.44 ≈ 731
+      expect(
+        hints.some((h) => h.includes("rate(1 hour)") && /7\d{2}/.test(h)),
+      ).toBe(true);
+    });
+
+    it("cron expressions do not trip the rate() frequency estimator", () => {
+      const hints = costAlternatives("AWS::Events::Rule", {
+        ScheduleExpression: "cron(0 12 * * ? *)",
+      });
+      // cron() is not parsed — estimator stays silent for cron expressions
+      expect(hints.some((h) => h.includes("fires approximately"))).toBe(false);
+    });
+
+    it("always mentions DeadLetterConfig + RetryPolicy as a cost-control lever", () => {
+      const hints = costAlternatives("AWS::Events::Rule", {});
+      expect(
+        hints.some(
+          (h) => h.includes("DeadLetterConfig") && h.includes("185 retries"),
+        ),
+      ).toBe(true);
+    });
+  });
 });
