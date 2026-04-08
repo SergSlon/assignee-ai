@@ -50,4 +50,14 @@ export class PatternRegistry {
   size(): number {
     return this.patterns.size;
   }
+
+  /**
+   * List all registered patterns in insertion (registration) order.
+   * Used by `assignee patterns list` for discoverability. Insertion
+   * order matters because pattern detection is first-match-wins on
+   * keyword substring — the listing reflects the precedence.
+   */
+  list(): ArchitecturePattern[] {
+    return Array.from(this.patterns.values());
+  }
 }
