@@ -243,6 +243,41 @@ describe("DriftDetectorService", () => {
       expect(tagField.path).toContain("Tags[0]");
     });
 
+    it("excludes EFS-specific auto-populated fields (A3 — FileSystemId + ReplicationConfiguration)", async () => {
+      // A3 (2026-04-08): EFS readOnly properties FileSystemId and
+      // ReplicationConfiguration surface in CCAPI GetResource
+      // responses but aren't part of the user's desired state. Without
+      // the EFS-specific entry in AUTO_POPULATED_FIELDS, every drift
+      // check against an EFS resource would report these as
+      // ADDED_EXTERNALLY false positives.
+      const desired = {
+        Encrypted: true,
+        PerformanceMode: "generalPurpose",
+        ThroughputMode: "elastic",
+        FileSystemTags: [{ Key: "Name", Value: "my-efs" }],
+      };
+      const actual = {
+        Encrypted: true,
+        PerformanceMode: "generalPurpose",
+        ThroughputMode: "elastic",
+        FileSystemTags: [{ Key: "Name", Value: "my-efs" }],
+        // AWS-populated readOnly fields that must be filtered out.
+        FileSystemId: "fs-0123456789abcdef0",
+        ReplicationConfiguration: { Destinations: [] },
+      };
+      const port = createMockPort(async () => [null, ccResponse(actual)]);
+      const service = new DriftDetectorService({ provisioningPort: port });
+
+      const result = await service.checkResource(
+        "AWS::EFS::FileSystem",
+        "fs-0123456789abcdef0",
+        desired,
+      );
+
+      expect(result.status).toBe(DriftStatus.IN_SYNC);
+      expect(result.driftedFields).toHaveLength(0);
+    });
+
     it("excludes auto-populated fields (Arn differs but is ignored)", async () => {
       const desired = { BucketName: "my-bucket" };
       const actual = {

@@ -80,6 +80,13 @@ function renderDriftTable(
 
 /**
  * Render the summary line below the table.
+ *
+ * A3 (2026-04-08): BASELINE_MISSING is surfaced as its own bucket
+ * rather than being collapsed into `errors`. A missing checkpoint
+ * is not an error — it means the resource was provisioned outside
+ * assignee (or its checkpoint TTL has expired), which is a common
+ * operator state that should be actionable (run `assignee reconcile`
+ * or `assignee drift --baseline`), not a failure.
  */
 function renderSummary(results: DriftResult[]): void {
   const total = results.length;
@@ -90,15 +97,20 @@ function renderSummary(results: DriftResult[]): void {
   const deleted = results.filter(
     (r) => r.status === DriftStatus.DELETED,
   ).length;
-  const errors = results.filter(
-    (r) =>
-      r.status === DriftStatus.ERROR ||
-      r.status === DriftStatus.BASELINE_MISSING,
+  const noBaseline = results.filter(
+    (r) => r.status === DriftStatus.BASELINE_MISSING,
   ).length;
+  const errors = results.filter((r) => r.status === DriftStatus.ERROR).length;
 
-  process.stdout.write(
-    `\n${total} resources checked: ${inSync} in-sync, ${drifted} drifted, ${deleted} deleted, ${errors} errors\n`,
-  );
+  const parts = [
+    `${inSync} in-sync`,
+    `${drifted} drifted`,
+    `${deleted} deleted`,
+  ];
+  if (noBaseline > 0) parts.push(`${noBaseline} no-baseline`);
+  if (errors > 0) parts.push(`${errors} errors`);
+
+  process.stdout.write(`\n${total} resources checked: ${parts.join(", ")}\n`);
 }
 
 export const driftCommand = new Command("drift")

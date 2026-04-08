@@ -159,9 +159,9 @@ function buildDefaultDesiredState(
 // ---------------------------------------------------------------------------
 
 describe("Secure defaults audit — all wizard defaults pass blocking BP rules", () => {
-  // Verify we cover all 25 types (+2 from WV4-A: VPCGatewayAttachment + SubnetRouteTableAssociation)
+  // A1 (2026-04-08): EFS first-class support lifted the count to 26.
   it(`covers all ${SUPPORTED_TYPES_ARRAY.length} supported resource types`, () => {
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(25);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(26);
   });
 
   for (const resourceType of SUPPORTED_TYPES_ARRAY) {
