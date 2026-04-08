@@ -235,7 +235,12 @@ describe("assignee clean", () => {
       const raw = capture.output();
       const parsed = JSON.parse(raw);
       expect(parsed).toMatchObject(sampleReport);
-      expect(parsed.logs).toBeDefined();
+      // Wave 18: strengthened — `parsed.logs` is the rotation report
+      // structure (object with deleted/kept/skipped counts), not just
+      // any non-undefined value. Assert object shape so a regression
+      // that flattens or removes the field fails here.
+      expect(typeof parsed.logs).toBe("object");
+      expect(parsed.logs).not.toBeNull();
     } finally {
       capture.restore();
     }

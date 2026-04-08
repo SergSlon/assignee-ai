@@ -143,7 +143,11 @@ describe("planCommand — flag parsing", () => {
       .argument("[intent]")
       .option("--no-apply", "Skip apply prompt");
     const opt = cmd.options.find((o) => o.long === "--no-apply");
-    expect(opt).toBeDefined();
+    // Wave 18: strengthened — assert by long-flag name. The previous
+    // `toBeDefined()` would have passed for any non-undefined Option
+    // object the find() returned, even one with a different long flag.
+    expect(opt?.long).toBe("--no-apply");
+    expect(opt?.description).toBe("Skip apply prompt");
   });
 
   it("--no-apply sets opts.apply to false", () => {

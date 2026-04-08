@@ -34,7 +34,12 @@ describe("applyCommand — --no-wizard flag parsing (Story 11.1)", () => {
     const noWizardOption = cmd.options.find(
       (opt) => opt.long === "--no-wizard",
     );
-    expect(noWizardOption).toBeDefined();
+    // Wave 18: strengthened — assert by long-flag name. The previous
+    // `toBeDefined()` would have passed even if `find()` returned a
+    // different option (the description chain below uses `?.` so
+    // optional-chained undefined silently failed at the `toBe(...)`
+    // line, producing a confusing diagnostic).
+    expect(noWizardOption?.long).toBe("--no-wizard");
     expect(noWizardOption?.description).toBe(
       "Skip interactive option prompts, use defaults",
     );
@@ -57,7 +62,8 @@ describe("applyCommand — --checkpoint flag parsing (Story 11.3)", () => {
   it("--checkpoint / -c option is registered on the command", () => {
     const cmd = createTestCommand();
     const cpOption = cmd.options.find((opt) => opt.long === "--checkpoint");
-    expect(cpOption).toBeDefined();
+    // Wave 18: strengthened — assert by long-flag name (see --no-wizard).
+    expect(cpOption?.long).toBe("--checkpoint");
     expect(cpOption?.short).toBe("-c");
     expect(cpOption?.description).toBe(
       "Use a saved plan checkpoint instead of running Phase 1",

@@ -534,7 +534,10 @@ describe("checkBestPractices", () => {
     // any drift here is a real bug we want to catch.
     expect(section.status === "ok" || section.status === "warn").toBe(true);
     const manifestSub = section.subs.find((s) => s.label === "manifest");
-    expect(manifestSub).toBeDefined();
+    // Wave 18: strengthened — assert by label so a refactor that
+    // renames the sub-check fails here instead of producing a
+    // confusing `manifestSub?.detail` chain failure later.
+    expect(manifestSub?.label).toBe("manifest");
     if (section.status === "ok") {
       expect(manifestSub?.detail).toContain("matches");
       // Rule count must match the project's BP coverage (>= 100 rules).
