@@ -27,6 +27,8 @@ import { secretsManagerSecretPlugin } from "./plugins/secretsmanager-secret.js";
 // A1 (2026-04-08): first-class EFS support
 import { efsFileSystemPlugin } from "./plugins/efs-file-system.js";
 import { efsMountTargetPlugin } from "./plugins/efs-mount-target.js";
+// A8 (2026-04-08): EventBridge Rule first-class
+import { eventsRulePlugin } from "./plugins/events-rule.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -67,6 +69,8 @@ defaultPluginRegistry.register(secretsManagerSecretPlugin);
 // A1 (2026-04-08): first-class EFS support
 defaultPluginRegistry.register(efsFileSystemPlugin);
 defaultPluginRegistry.register(efsMountTargetPlugin);
+// A8 (2026-04-08): EventBridge Rule first-class
+defaultPluginRegistry.register(eventsRulePlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 export { PluginRegistry };
@@ -98,6 +102,8 @@ export { secretsManagerSecretPlugin } from "./plugins/secretsmanager-secret.js";
 // A1 (2026-04-08): first-class EFS support
 export { efsFileSystemPlugin } from "./plugins/efs-file-system.js";
 export { efsMountTargetPlugin } from "./plugins/efs-mount-target.js";
+// A8 (2026-04-08): EventBridge Rule first-class
+export { eventsRulePlugin } from "./plugins/events-rule.js";
 export { genericPlugin } from "./plugins/generic.js";
 export type {
   ResourcePlugin,

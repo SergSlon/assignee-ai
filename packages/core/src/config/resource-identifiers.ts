@@ -53,6 +53,13 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   // /properties/Id (fsmt-xxxxxxxx) — auto-generated like most
   // network attachment resources. State guard skips it.
   [RESOURCE_TYPES.EFS_MOUNT_TARGET]: "Id",
+  // A8 (2026-04-08): AWS::Events::Rule primary identifier is the
+  // auto-generated Arn (readOnly in the CCAPI schema). The Name is
+  // createOnly but not the primary ID — if users supply a Name we
+  // still can't use it for GetResource because CCAPI keys on the
+  // Arn. State guard will skip Read-Before-Write because Arn is
+  // never present in desiredState at plan time.
+  [RESOURCE_TYPES.EVENTS_RULE]: "Arn",
 } as const;
 
 /**

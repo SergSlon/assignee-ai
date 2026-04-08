@@ -58,3 +58,14 @@ export const subnetRouteTableAssociationPricingDecomposer =
 export const efsMountTargetPricingDecomposer = createFreeDecomposer(
   RESOURCE_TYPES.EFS_MOUNT_TARGET,
 );
+// A8 (2026-04-08): EventBridge Rule is free on the default bus. Rule
+// evaluation and AWS-service-event delivery to targets on the default
+// bus bill $0. Custom event buses bill $1/million events at the BUS
+// level, not the rule level — the decomposer returns [] because the
+// per-month cost of a rule is not knowable from its desiredState
+// (depends on publish volume, which is a workload fact). Target
+// workload fees (Lambda invocation, SQS delivery) come from the
+// target's own decomposer and are counted there.
+export const eventsRulePricingDecomposer = createFreeDecomposer(
+  RESOURCE_TYPES.EVENTS_RULE,
+);

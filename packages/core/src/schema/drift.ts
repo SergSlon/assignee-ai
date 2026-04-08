@@ -82,6 +82,13 @@ export const AUTO_POPULATED_FIELDS: Record<string, Set<string>> = {
   // report FileSystemId and ReplicationConfiguration as "added
   // externally" false-positive drifts.
   "AWS::EFS::FileSystem": new Set(["FileSystemId", "ReplicationConfiguration"]),
+  // A8 (2026-04-08): AWS::Events::Rule exposes Arn as a readOnly
+  // property in GetResource — the global _global set already covers
+  // "Arn" at the top level, but explicitly reserving the per-type
+  // slot keeps the exclusion list discoverable alongside the rest of
+  // the EventBridge wiring and makes it easy to add Id-style
+  // generated fields later if AWS ever expands the schema.
+  "AWS::Events::Rule": new Set(["Arn"]),
 };
 
 /**

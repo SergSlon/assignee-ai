@@ -43,6 +43,7 @@ const TYPE_TO_KEYWORD: Record<string, string> = {
   "AWS::EC2::SubnetRouteTableAssociation": "subnet route table association",
   "AWS::EFS::FileSystem": "efs",
   "AWS::EFS::MountTarget": "efs mount target",
+  "AWS::Events::Rule": "eventbridge rule",
 };
 
 describe("cross-system consistency", () => {

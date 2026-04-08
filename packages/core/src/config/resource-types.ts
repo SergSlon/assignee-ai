@@ -49,6 +49,14 @@ export const SUPPORTED_TYPES_ARRAY = [
   // fields FileSystemId + SecurityGroups + SubnetId, primary id
   // /properties/Id, create/delete handlers present.
   "AWS::EFS::MountTarget",
+  // A8 (2026-04-08): AWS::Events::Rule promoted from LIST_RESOURCE_TYPES
+  // to first-class support. CCAPI schema probed on 2026-04-08 —
+  // primaryIdentifier /properties/Arn (readOnly), createOnly [Name],
+  // no required fields at schema level (but logically either
+  // EventPattern or ScheduleExpression plus at least one Target
+  // are needed). Unblocks event-driven Lambda patterns and the
+  // future scheduled-lambda compound.
+  "AWS::Events::Rule",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -88,6 +96,8 @@ export const RESOURCE_TYPES = {
   // A1 (2026-04-08)
   EFS_FILE_SYSTEM: "AWS::EFS::FileSystem",
   EFS_MOUNT_TARGET: "AWS::EFS::MountTarget",
+  // A8 (2026-04-08) — EventBridge Rule first-class
+  EVENTS_RULE: "AWS::Events::Rule",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */
@@ -135,7 +145,9 @@ export const COMPANION_RESOURCE_TYPES = {
 /** Named constants for resource types that appear only in listing/resolve operations. */
 export const LIST_RESOURCE_TYPES = {
   CLOUDFORMATION_STACK: "AWS::CloudFormation::Stack",
-  EVENTS_RULE: "AWS::Events::Rule",
+  // A8 (2026-04-08): EVENTS_RULE promoted to SUPPORTED_TYPES_ARRAY /
+  // RESOURCE_TYPES — full plugin, pricing, IAM actions, BP rules.
+  // Listing + destroy routes still work via the main registry.
   CLOUDFRONT_DISTRIBUTION: "AWS::CloudFront::Distribution",
   EKS_CLUSTER: "AWS::EKS::Cluster",
   ELASTICACHE_CACHE_CLUSTER: "AWS::ElastiCache::CacheCluster",
