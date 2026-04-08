@@ -245,7 +245,7 @@ describe("logger", () => {
     expect(parsed.level).toBe("warn");
   });
 
-  it("does NOT persist info events to file", async () => {
+  it("does NOT persist info events to file (default — non-allowlisted action)", async () => {
     delete process.env["ASSIGNEE_VERBOSITY"];
     delete process.env["ASSIGNEE_LOG_LEVEL"];
 
@@ -259,7 +259,93 @@ describe("logger", () => {
     log(event);
 
     expect(stderrSpy).not.toHaveBeenCalled();
-    // No log file should have been created for info events
+    // No log file should have been created for non-allowlisted info events
+    const entries = await fs.readdir(tmpLogDir);
+    expect(entries.filter((e) => e.endsWith(".jsonl"))).toHaveLength(0);
+  });
+
+  // Wave 19 Bug #4: TOKEN_USAGE_SUMMARY is info-level but MUST be persisted
+  // so per-command token cost is greppable from ~/.assignee/logs/cli-*.jsonl
+  // (the goal stated in feedback_token_cost_visibility.md). Before this fix,
+  // running `grep token_usage ~/.assignee/logs/cli-2026-04-08.jsonl` after
+  // ~10 real apply commands returned 0 hits even with ASSIGNEE_LOG_LEVEL=debug.
+  it("PERSISTS info-level TOKEN_USAGE_SUMMARY events to file (Wave 19 Bug #4 allowlist)", async () => {
+    delete process.env["ASSIGNEE_VERBOSITY"];
+    delete process.env["ASSIGNEE_LOG_LEVEL"];
+
+    // Real-shaped TOKEN_USAGE_SUMMARY event matching the actual emit point
+    // in result-formatter.ts. Numbers chosen from a real S3 apply on
+    // 2026-04-08 (3025 total tokens at nova-lite-v1:0).
+    const event: LogEvent = {
+      ts: "2026-04-08T07:29:32.019Z",
+      runId: "1c1b9ae0-6411-4eb5-aaa6-e8947c9fc4bf",
+      level: "info",
+      action: LOG_ACTIONS.TOKEN_USAGE_SUMMARY,
+      extras: {
+        totalCallCount: 3,
+        totalInputTokens: 2714,
+        totalOutputTokens: 311,
+        totalTokens: 3025,
+        byCallsite: {
+          intent_parser: {
+            callCount: 1,
+            inputTokens: 863,
+            outputTokens: 20,
+            totalTokens: 883,
+          },
+          plan_generator: {
+            callCount: 1,
+            inputTokens: 1563,
+            outputTokens: 174,
+            totalTokens: 1737,
+          },
+          advice_generator: {
+            callCount: 1,
+            inputTokens: 288,
+            outputTokens: 117,
+            totalTokens: 405,
+          },
+        },
+      },
+    };
+
+    log(event);
+
+    // Even without verbose mode, the TOKEN_USAGE_SUMMARY must reach disk
+    expect(stderrSpy).not.toHaveBeenCalled();
+    const lines = await readLogFile();
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0]!) as LogEvent;
+    expect(parsed.level).toBe("info");
+    expect(parsed.action).toBe("token_usage_summary");
+    // Real numbers must round-trip exactly — no truncation/coercion
+    const extras = parsed.extras as Record<string, unknown>;
+    expect(extras["totalTokens"]).toBe(3025);
+    expect(extras["totalCallCount"]).toBe(3);
+  });
+
+  it("does NOT persist info-level TOKEN_USAGE per-call events (only the SUMMARY)", async () => {
+    // The per-callsite TOKEN_USAGE event fires for every LLM call (3+ per
+    // command). Persisting all of them would balloon log files. Only the
+    // end-of-command SUMMARY is in the allowlist.
+    delete process.env["ASSIGNEE_VERBOSITY"];
+    delete process.env["ASSIGNEE_LOG_LEVEL"];
+
+    const event: LogEvent = {
+      ts: "2026-04-08T07:29:13.450Z",
+      runId: "1c1b9ae0-6411-4eb5-aaa6-e8947c9fc4bf",
+      level: "info",
+      action: LOG_ACTIONS.TOKEN_USAGE,
+      extras: {
+        callsite: "intent_parser",
+        inputTokens: 863,
+        outputTokens: 20,
+        totalTokens: 883,
+      },
+    };
+
+    log(event);
+
     const entries = await fs.readdir(tmpLogDir);
     expect(entries.filter((e) => e.endsWith(".jsonl"))).toHaveLength(0);
   });
@@ -306,12 +392,12 @@ describe("logger", () => {
       action: LOG_ACTIONS.APPLY_FAILED,
     });
 
+    // Tier C: dropped redundant toBeDefined() — find!() at the find site
     const entries = fsSync.readdirSync(tmpLogDir);
     const jsonl = entries.find(
       (e) => e.startsWith("cli-") && e.endsWith(".jsonl"),
-    );
-    expect(jsonl).toBeDefined();
-    const filePath = path.join(tmpLogDir, jsonl!);
+    )!;
+    const filePath = path.join(tmpLogDir, jsonl);
     const mode = fsSync.statSync(filePath).mode & 0o777;
     // On macOS/Linux we expect 0o600. Skip strict check on Windows (non-POSIX).
     if (process.platform !== "win32") {

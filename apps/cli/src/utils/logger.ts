@@ -438,13 +438,32 @@ function appendPersistent(event: LogEvent): void {
 }
 
 /**
+ * Wave 19 Bug #4: info-level events that MUST be persisted to disk regardless
+ * of verbose mode. Listed here because the original logger design said
+ * "info: never persisted" but Wave 12's TOKEN_USAGE_SUMMARY is supposed to be
+ * the canonical "what did this command cost in tokens" answer, and
+ * `feedback_token_cost_visibility.md` explicitly says it must be greppable
+ * from the persistent log file. Without this allowlist a user wanting to
+ * answer "what did this week of `assignee` runs cost" has to scrape terminal
+ * scrollback, which defeats the purpose of the instrumentation entirely.
+ *
+ * Add new entries here only if the same "must be queryable after the fact"
+ * justification applies — do NOT use this allowlist as a back-door to
+ * persist debug noise.
+ */
+const PERSIST_INFO_ALLOWLIST: ReadonlySet<string> = new Set([
+  LOG_ACTIONS.TOKEN_USAGE_SUMMARY,
+]);
+
+/**
  * Writes a structured JSON log event.
  *
  * Behaviour by level:
  *   - error / warn: ALWAYS appended to the rotating daily log file. Also
  *     emitted to stderr when verbose mode is enabled.
- *   - info: emitted to stderr only when verbose mode is enabled; never
- *     persisted to disk.
+ *   - info: emitted to stderr only when verbose mode is enabled. Persisted
+ *     to disk only when `event.action` is in PERSIST_INFO_ALLOWLIST (Wave 19
+ *     Bug #4 — TOKEN_USAGE_SUMMARY needs greppable cost telemetry).
  *
  * Verbose mode is triggered by `--verbose`, `ASSIGNEE_VERBOSITY=verbose`, or
  * `ASSIGNEE_LOG_LEVEL=debug`.
@@ -453,10 +472,12 @@ function appendPersistent(event: LogEvent): void {
  */
 export function log(event: LogEvent): void {
   const verbose = isVerbose();
-  const isPersistent =
+  const isWarnOrError =
     event.level === LogLevel.ERROR || event.level === LogLevel.WARN;
+  const isPersistInfo =
+    event.level === LogLevel.INFO && PERSIST_INFO_ALLOWLIST.has(event.action);
 
-  if (isPersistent) {
+  if (isWarnOrError || isPersistInfo) {
     appendPersistent(event);
   }
 

@@ -745,6 +745,91 @@ export function createPlanGeneratorNode({
         });
       }
 
+      // Wave 19 Bug #1 (generic safety net): inject plugin-level defaults for
+      // any required CFN field that the pattern template forgot. The compound
+      // path used to rely entirely on `patternDefaults` and never consulted
+      // the resource plugin's `defaults` map — which meant any pattern that
+      // omitted a required field (e.g. lambda-with-exec-role missing
+      // `Code` and `Handler`) would silently produce an apply-time CCAPI
+      // failure.
+      //
+      // We mirror what `repairRequiredFields` does in the standalone path,
+      // but without a schema to drive it (compound mode short-circuits the
+      // schema fetch). Instead, we use the plugin's `commonFields` declarations
+      // — fields marked `required: true` are the ones whose defaults should
+      // be injected. This narrowly targets the actual gap (CFN-required
+      // missing fields) while avoiding the trap that the original Wave 19
+      // safety net hit: blindly injecting EVERY plugin default included
+      // wizard-only discriminators like `RouteType` for AWS::EC2::Route,
+      // which CCAPI rejects with `extraneous key [RouteType] is not permitted`
+      // and breaks compound VPC apply.
+      try {
+        const plugin = defaultPluginRegistry.get(currentResource.resourceType);
+        if (plugin) {
+          // Index the plugin's commonFields by name so we can apply each
+          // field's `toCfn` transform when injecting its default. Wizard-only
+          // discriminators like AWS::EC2::Route's `RouteType` are marked
+          // `required: true` (the wizard needs them to drive showIf logic)
+          // but their `toCfn` returns undefined — meaning the value should
+          // never reach CCAPI. Without calling `toCfn`, the safety net
+          // injects `RouteType: "public"` literally and CCAPI rejects with
+          // `extraneous key [RouteType] is not permitted`. We mirror what
+          // the wizard path does.
+          const fieldByName = new Map(
+            plugin.commonFields.map((f) => [f.name, f] as const),
+          );
+          const requiredFieldNames = new Set<string>(
+            plugin.commonFields
+              .filter((f) => f.required === true)
+              .map((f) => f.name),
+          );
+          const injectedFromPluginDefaults: string[] = [];
+          for (const [key, rawValue] of Object.entries(plugin.defaults)) {
+            if (!requiredFieldNames.has(key)) continue;
+            if (desiredState[key] !== undefined) continue;
+            if (rawValue === undefined) continue;
+            // Apply the field's toCfn transform if present. Skip injection
+            // when toCfn maps the value to undefined — this is the
+            // wizard-only-discriminator escape hatch. Default values that
+            // have no toCfn pass through unchanged.
+            const field = fieldByName.get(key);
+            const cfnValue = field?.toCfn ? field.toCfn(rawValue) : rawValue;
+            if (cfnValue === undefined) continue;
+            desiredState[key] = cfnValue;
+            injectedFromPluginDefaults.push(key);
+          }
+          if (injectedFromPluginDefaults.length > 0) {
+            log({
+              ts: new Date().toISOString(),
+              runId: state.runId,
+              level: "info",
+              action: LOG_ACTIONS.PLAN_GENERATED,
+              extras: {
+                phase: "compound_plugin_defaults_injected",
+                resourceType: currentResource.resourceType,
+                resourceId: currentResource.resourceId,
+                injectedFields: injectedFromPluginDefaults,
+              },
+            });
+          }
+        }
+      } catch (err) {
+        // Plugin lookup failure is non-fatal — fall through to whatever
+        // patternDefaults provided. The downstream preflight-guard will
+        // catch any genuinely missing required fields.
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.PLAN_GENERATED,
+          extras: {
+            phase: "compound_plugin_defaults_skipped",
+            resourceType: currentResource.resourceType,
+            error: String(err),
+          },
+        });
+      }
+
       // EC2 post-processing for compound mode (same as standalone path)
       if (currentResource.resourceType === RESOURCE_TYPES.EC2_INSTANCE) {
         const sgIds = desiredState[CfnKey.SECURITY_GROUP_IDS];

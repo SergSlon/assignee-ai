@@ -16,6 +16,7 @@
 import {
   CCAPI_FALLBACK_TYPES,
   CCAPI_REDIRECT_TYPES,
+  COMPANION_RESOURCE_TYPES,
   RESOURCE_TYPES,
 } from "@assignee/core";
 import { createCloudControlClient } from "./cloudcontrol-client.js";
@@ -259,10 +260,70 @@ export async function destroySingleResource(
   }
 
   // ── Resolve AWS credentials ──────────────────────────────────────────
+  // Wave 19 Bug #9: IAM is a global service. The bulk-destroy plan tags
+  // IAM resources with `region: "global"` (matching how list-resources.ts
+  // reports them), and the CLI's destroy command passes that through to
+  // destroySingleResource as `options.region`. Without remapping, the
+  // CloudControl SDK builds an endpoint of `cloudcontrolapi.global.amazonaws.com`,
+  // which doesn't exist — the destroy fails with `getaddrinfo ENOTFOUND
+  // cloudcontrolapi.global.amazonaws.com` and leaves the IAM resource
+  // orphaned. Always promote "global" to a real Bedrock-eligible region
+  // (us-east-1 is the canonical IAM control-plane region).
+  const requestedRegion = options?.region;
+  const effectiveRegion =
+    requestedRegion === "global" || !requestedRegion
+      ? AWS_REGION
+      : requestedRegion;
   const awsConfig: AwsConfig = {
     ...operatorCredentials(),
-    ...(options?.region ? { region: options.region } : {}),
+    region: effectiveRegion,
   };
+
+  // ── EIP destroy via native ec2:ReleaseAddress ────────────────────────
+  // Wave 19 Bug #6: EIP is not destroyable via CloudControl DeleteResource
+  // (the type schema exists but the delete handler is unreliable for EIPs
+  // attached to NAT Gateways that have been deleted but not yet propagated).
+  // Always go through ec2:ReleaseAddress directly. The bulk-destroy tier
+  // table now lists EIP at tier 4, after NAT Gateway at tier 3, so by the
+  // time we reach this branch the NAT Gateway is already gone and the EIP
+  // is in `disassociated` state.
+  if (resourceType === COMPANION_RESOURCE_TYPES.EC2_EIP) {
+    try {
+      const { EC2Client, ReleaseAddressCommand } =
+        await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({
+        region: resource.region,
+        ...(awsConfig.accessKeyId && awsConfig.secretAccessKey
+          ? {
+              credentials: {
+                accessKeyId: awsConfig.accessKeyId,
+                secretAccessKey: awsConfig.secretAccessKey,
+              },
+            }
+          : {}),
+      });
+      // ARN format: arn:aws:ec2:us-east-1:054125018476:elastic-ip/eipalloc-xxx
+      // Identifier comes from extractIdentifier and is just `eipalloc-xxx`.
+      await ec2.send(
+        new ReleaseAddressCommand({ AllocationId: resource.identifier }),
+      );
+      return { ...baseResult, success: true };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      // InvalidAllocationID.NotFound = already released, treat as success
+      if (
+        errMsg.includes("InvalidAllocationID.NotFound") ||
+        errMsg.includes("does not exist")
+      ) {
+        return { ...baseResult, success: true };
+      }
+      return {
+        ...baseResult,
+        success: false,
+        error: `Failed to release EIP ${resource.identifier}: ${errMsg}`,
+      };
+    }
+  }
 
   // ── SDK fallback for CCAPI gap types ─────────────────────────────────
   if (
@@ -634,11 +695,36 @@ export async function destroySingleResource(
           error: `Cannot empty S3 bucket before delete: ${err.message}`,
         };
       }
-      // Non-fatal: bucket may already be empty, or the role may lack
-      // s3:ListBucketVersions / s3:DeleteObject on it. Log and continue.
+      // Wave 19 Bug #3: AccessDenied on ListBucketVersions / DeleteObjectVersion
+      // used to be swallowed as a warn and the destroy continued — which only
+      // appeared to work on empty buckets. On any bucket that had ever received
+      // writes, CloudControl DeleteBucket would then fail with BucketNotEmpty
+      // and the user got an opaque error. Promoted to hard failure so the
+      // user learns the real cause (missing IAM perm) instead of a
+      // second-order CCAPI error. s3:ListBucketVersions + s3:DeleteObjectVersion
+      // are already in iam-actions.ts for S3_BUCKET; if the deployed
+      // AssigneeOperatorPolicy lacks them, re-run `assignee setup`.
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isAccessDenied =
+        errMsg.includes("AccessDenied") ||
+        errMsg.includes("not authorized") ||
+        errMsg.includes("UnauthorizedOperation");
+      if (isAccessDenied) {
+        return {
+          ...baseResult,
+          success: false,
+          error:
+            `Cannot empty S3 bucket "${resource.identifier}" before delete — the operator role lacks ` +
+            `s3:ListBucketVersions / s3:DeleteObjectVersion. These are already in iam-actions.ts for ` +
+            `S3_BUCKET; run \`assignee setup\` to refresh AssigneeOperatorPolicy in AWS. ` +
+            `Original AWS error: ${errMsg}`,
+        };
+      }
+      // Other failures (network, throttling, empty bucket) — log and continue
+      // so destroy still attempts DeleteBucket.
       warnDestroy("s3_empty_bucket_failed", {
         identifier: resource.identifier,
-        error: err instanceof Error ? err.message : String(err),
+        error: errMsg,
       });
     }
   }
