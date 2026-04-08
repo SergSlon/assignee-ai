@@ -1,0 +1,14 @@
+id: BP-LAMBDA-014
+title: "Lambda permission Action must not be wildcard lambda:*"
+severity: HIGH
+resource_type: "AWS::Lambda::Permission"
+property_path: "Action"
+check_type: "equals"
+expected_value: "lambda:InvokeFunction"
+source: "AWS Guard Rules Registry"
+source_id: "lambda_permission_invoke_function_action"
+description: "An AWS::Lambda::Permission resource grants a specific Action to the named Principal. The only legitimate value for almost every use case is `lambda:InvokeFunction` — the permission grants a service (API Gateway, S3, EventBridge, SNS, etc.) the ability to invoke the function. A wildcard value like `lambda:*` or `*` grants administrative operations (GetFunction, UpdateFunctionCode, DeleteFunction, PutFunctionConcurrency) that no invoker needs. Restricting Action to lambda:InvokeFunction is the least-privilege default."
+remediation: "Set `Action: lambda:InvokeFunction` on the permission resource. If you actually need to grant a narrow set of admin operations, create a separate IAM role/policy rather than expanding the Lambda::Permission Action field — that's not what the Permission resource is designed for."
+consequence: "An attacker who compromises the named Principal can not only invoke the function but also modify its code, update its concurrency, or delete it — turning narrow trust into full-function takeover."
+category: security
+lastVerified: "2026-04-08"

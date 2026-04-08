@@ -1,0 +1,14 @@
+id: BP-APIGW-005
+title: "REST API stage execution logging must be enabled"
+severity: HIGH
+resource_type: "AWS::ApiGateway::Stage"
+property_path: "MethodSettings"
+check_type: "awareness"
+expected_value: true
+source: "AWS Guard Rules Registry"
+source_id: "api_gw_execution_logging_enabled"
+description: "Execution logging (different from access logging) records the full integration request/response and the authoriser outcome for every call. It is controlled per-method via MethodSettings[].LoggingLevel — must be 'INFO' or 'ERROR', never 'OFF'. BP-APIGW-001 already covers access logs at the stage level; this rule covers the lower-level execution logs that are invaluable for debugging 5xx responses from the backend integration. Awareness rule because the method-settings array is too nested to check via a single property path."
+remediation: "Set `MethodSettings: [{ ResourcePath: '/*', HttpMethod: '*', LoggingLevel: 'INFO', DataTraceEnabled: false }]` on the stage. Use LoggingLevel: ERROR in production to reduce log volume; INFO is more useful in dev/staging. Avoid DataTraceEnabled: true in production — it logs request/response bodies and can leak PII."
+consequence: "When an integration returns a 5xx or an authoriser denies a request, you have no backend-side trace — debugging requires reproducing the issue live instead of reading the logs."
+category: security
+lastVerified: "2026-04-08"

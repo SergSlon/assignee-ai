@@ -1,0 +1,14 @@
+id: BP-LAMBDA-013
+title: "Lambda permission must not grant Principal: *"
+severity: CRITICAL
+resource_type: "AWS::Lambda::Permission"
+property_path: "Principal"
+check_type: "not_equals"
+expected_value: "*"
+source: "AWS Guard Rules Registry"
+source_id: "lambda_function_public_access_prohibited"
+description: "An AWS::Lambda::Permission resource with Principal: \"*\" makes the function invokable by any AWS principal — in practice, the entire AWS customer base and (when combined with an unauthenticated invocation URL) any anonymous caller on the internet. The Principal field should name a specific service (e.g. \"apigateway.amazonaws.com\", \"s3.amazonaws.com\") or a specific account ARN, never a wildcard."
+remediation: "Replace Principal: \"*\" with the specific service principal that should be allowed to invoke the function, such as \"apigateway.amazonaws.com\" for API Gateway integration or \"s3.amazonaws.com\" for S3 event notifications. Combine with SourceArn/SourceAccount conditions to further scope the permission to the exact source resource."
+consequence: "Any AWS account can invoke the function — attackers trigger arbitrary billed invocations, exfiltrate data via logging amplification, or chain the function into their own attack infrastructure."
+category: security
+lastVerified: "2026-04-08"

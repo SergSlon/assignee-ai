@@ -1,0 +1,14 @@
+id: BP-APIGW-004
+title: "REST API stage cache must be encrypted when enabled"
+severity: HIGH
+resource_type: "AWS::ApiGateway::Stage"
+property_path: "MethodSettings"
+check_type: "awareness"
+expected_value: true
+source: "AWS Guard Rules Registry"
+source_id: "api_gw_cache_enabled_and_encrypted"
+description: "When a REST API stage enables method caching, the cache holds the most recent upstream responses. If `CacheDataEncrypted` is false (or omitted) the cache stores response bodies unencrypted at rest. This rule is an awareness reminder — if any MethodSettings entry sets CachingEnabled=true, CacheDataEncrypted must also be true on the same entry. The single-field property-path evaluator cannot walk the MethodSettings array and correlate two fields, so this fires on every REST API stage with MethodSettings for the user to audit."
+remediation: "For every MethodSettings entry with CachingEnabled: true, also set CacheDataEncrypted: true. If caching is not needed, remove CachingEnabled entirely — the cache incurs cost ($0.020-$0.250/hour per cache size) and is usually unnecessary for low-traffic APIs."
+consequence: "API responses — potentially including user records, tokens, or personally-identifiable data — are stored in the cache in plaintext, accessible to anyone with access to the cache storage layer."
+category: security
+lastVerified: "2026-04-08"

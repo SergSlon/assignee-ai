@@ -875,6 +875,22 @@ const lambdaRules: RuleSpec[] = [
     checkType: "exists",
     expectedValue: true,
   },
+  // ── A5.5: Lambda::Permission hygiene (Tier 4 of the cfn-guard gap
+  // ── analysis). Target AWS::Lambda::Permission, not the Function.
+  {
+    id: "BP-LAMBDA-013",
+    resourceType: "AWS::Lambda::Permission",
+    propertyPath: "Principal",
+    checkType: "not_equals",
+    expectedValue: "*",
+  },
+  {
+    id: "BP-LAMBDA-014",
+    resourceType: "AWS::Lambda::Permission",
+    propertyPath: "Action",
+    checkType: "equals",
+    expectedValue: "lambda:InvokeFunction",
+  },
 ];
 
 const iamRules: RuleSpec[] = [
@@ -1315,6 +1331,30 @@ const apigwRules: RuleSpec[] = [
     checkType: "not_equals",
     expectedValue: "NONE",
   },
+  // ── A5.5: API Gateway REST API hygiene (Tier 4). Target the v1
+  // ── REST API resources (ApiGateway::Stage, ApiGateway::DomainName),
+  // ── not the v2 HTTP API shapes that BP-APIGW-001..003 cover.
+  {
+    id: "BP-APIGW-004",
+    resourceType: "AWS::ApiGateway::Stage",
+    propertyPath: "MethodSettings",
+    checkType: "awareness",
+    expectedValue: true,
+  },
+  {
+    id: "BP-APIGW-005",
+    resourceType: "AWS::ApiGateway::Stage",
+    propertyPath: "MethodSettings",
+    checkType: "awareness",
+    expectedValue: true,
+  },
+  {
+    id: "BP-APIGW-006",
+    resourceType: "AWS::ApiGateway::DomainName",
+    propertyPath: "SecurityPolicy",
+    checkType: "equals",
+    expectedValue: "TLS_1_2",
+  },
 ];
 
 const ecrRules: RuleSpec[] = [
@@ -1690,7 +1730,7 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("Lambda (11 rules)", () => {
+  describe("Lambda (13 rules)", () => {
     for (const spec of lambdaRules) {
       runRuleTests(spec);
     }
@@ -1742,7 +1782,7 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("API Gateway (3 rules)", () => {
+  describe("API Gateway (6 rules)", () => {
     for (const spec of apigwRules) {
       if (spec.id === "BP-APIGW-002") {
         runApigwNotContainsTests(spec);
@@ -1830,18 +1870,22 @@ describe("BP All Rules Audit", () => {
       ...asgRules,
     ];
 
-    it("covers exactly 151 rule specs", () => {
+    it("covers exactly 156 rule specs", () => {
       // 131 pre-A5
       // + 6 Tier-1 IAM rules       (BP-IAM-011..016)
       // + 9 Tier-3 policy rules    (BP-S3-018..020, BP-SQS-006..009, BP-SNS-005..006)
       // + 5 Tier-2 ELBv2 rules     (BP-ELB-004..008)
+      // + 5 Tier-4 APIGW/Lambda    (BP-APIGW-004..006, BP-LAMBDA-013..014)
       //   Note: BP-S3-015..017 were already taken by pre-A5 rules
-      //   (replication / intelligent tiering / access logging), so the
-      //   new S3 bucket-policy rules start at BP-S3-018.
+      //   (replication / intelligent tiering / access logging) and
+      //   BP-LAMBDA-011/012 were already taken (deprecated nodejs16.x
+      //   runtime + code signing config), so the new resource-policy
+      //   rules start at BP-S3-018 and the Lambda::Permission rules at
+      //   BP-LAMBDA-013.
       // BP-IAM-017 (elevated *FullAccess heuristic) is still deferred
       // — it needs a walker over ManagedPolicyArns rather than over
       // PolicyDocument.Statement[].
-      expect(allSpecs.length).toBe(151);
+      expect(allSpecs.length).toBe(156);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {
