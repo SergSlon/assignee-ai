@@ -331,7 +331,9 @@ describe("BP enforcement — enforce + blocking BPs in plan mode", () => {
     expect(result.preflightPassed).toBe(false);
 
     // BP findings should be present with blocking entries
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes. Same pattern as bp-evaluator.test.ts.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     expect(result.bpFindings!.length).toBeGreaterThan(0);
     const blockingFindings = result.bpFindings!.filter(
       (f: { blocking: boolean }) => f.blocking,
@@ -379,7 +381,9 @@ describe("BP enforcement — enforce + blocking BPs in apply mode", () => {
     expect(result.preflightPassed).toBe(false);
 
     // BP findings present with blocking entries
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes. Same pattern as bp-evaluator.test.ts.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     const blockingFindings = result.bpFindings!.filter(
       (f: { blocking: boolean }) => f.blocking,
     );
@@ -500,7 +504,9 @@ describe("BP enforcement — warn + blocking BPs in apply mode", () => {
 
     // BP findings SHOULD still be present with blocking entries
     // (bp_evaluator always runs, warn only affects preflight_guard behaviour)
-    expect(midValues["bpFindings"]).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes. Same pattern as bp-evaluator.test.ts.
+    expect(Array.isArray(midValues["bpFindings"])).toBe(true);
     const findings = midValues["bpFindings"] as Array<{
       blocking: boolean;
       practiceId: string;
@@ -566,7 +572,9 @@ describe("BP enforcement — skip + blocking BPs in apply mode", () => {
 
     // bp_evaluator still runs (it has no enforcement-level check),
     // so findings are still populated in state with blocking entries
-    expect(midValues["bpFindings"]).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes. Same pattern as bp-evaluator.test.ts.
+    expect(Array.isArray(midValues["bpFindings"])).toBe(true);
     const findings = midValues["bpFindings"] as Array<{
       blocking: boolean;
       practiceId: string;
@@ -619,7 +627,9 @@ describe("BP enforcement — enforce blocks even with autoApprove=true", () => {
     expect(result.preflightPassed).toBe(false);
 
     // BP findings present with blocking entries
-    expect(result.bpFindings).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes. Same pattern as bp-evaluator.test.ts.
+    expect(Array.isArray(result.bpFindings)).toBe(true);
     const blockingFindings = result.bpFindings!.filter(
       (f: { blocking: boolean }) => f.blocking,
     );
@@ -683,7 +693,9 @@ describe("BP enforcement — enforce with noWizard=true (defaults applied)", () 
     expect(midValues["preflightPassed"]).toBe(true);
 
     // BP findings should still be present (non-blocking advisories remain)
-    expect(midValues["bpFindings"]).toBeDefined();
+    // Wave 17: strengthened — Array.isArray catches null/undefined AND
+    // non-array shapes. Same pattern as bp-evaluator.test.ts.
+    expect(Array.isArray(midValues["bpFindings"])).toBe(true);
     const findings = midValues["bpFindings"] as Array<{
       blocking: boolean;
       practiceId: string;

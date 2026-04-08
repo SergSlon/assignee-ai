@@ -279,7 +279,9 @@ describe("S3 pricing decomposer — line item structure", () => {
 
   it("Storage item has correct serviceCode, filters, kind", () => {
     const storage = items.find((i) => i.label === "Storage")!;
-    expect(storage).toBeDefined();
+    // Wave 17: strengthened — assert by label so a refactor that
+    // renames the line item fails here.
+    expect(storage?.label).toBe("Storage");
     expect(storage.serviceCode).toBe("AmazonS3");
     expect(storage.kind).toBe("usage_based");
     expect(storage.priceUnit).toBe("/GB-mo");
@@ -297,7 +299,8 @@ describe("S3 pricing decomposer — line item structure", () => {
 
   it("PUT requests item has correct filters and kind", () => {
     const put = items.find((i) => i.label === "PUT requests")!;
-    expect(put).toBeDefined();
+    // Wave 17: strengthened.
+    expect(put?.label).toBe("PUT requests");
     expect(put.serviceCode).toBe("AmazonS3");
     expect(put.kind).toBe("usage_based");
     expect(put.priceUnit).toBe("/1000 reqs");
@@ -311,7 +314,8 @@ describe("S3 pricing decomposer — line item structure", () => {
 
   it("GET requests item has correct filters and kind", () => {
     const get = items.find((i) => i.label === "GET requests")!;
-    expect(get).toBeDefined();
+    // Wave 17: strengthened.
+    expect(get?.label).toBe("GET requests");
     expect(get.serviceCode).toBe("AmazonS3");
     expect(get.kind).toBe("usage_based");
     expect(get.priceUnit).toBe("/1000 reqs");
@@ -325,7 +329,8 @@ describe("S3 pricing decomposer — line item structure", () => {
 
   it("Data transfer out item has correct serviceCode and filters", () => {
     const dt = items.find((i) => i.label === "Data transfer out")!;
-    expect(dt).toBeDefined();
+    // Wave 17: strengthened.
+    expect(dt?.label).toBe("Data transfer out");
     expect(dt.serviceCode).toBe("AWSDataTransfer");
     expect(dt.kind).toBe("usage_based");
     expect(dt.priceUnit).toBe("/GB");
@@ -365,9 +370,15 @@ describe("S3 pricing — filter-dispatched queryLineItemPrices via preflightGuar
     // At least 4 calls for the decomposer line items
     expect(invokeFn.mock.calls.length).toBeGreaterThanOrEqual(4);
 
-    // Verify the pricingBreakdown was returned
+    // Verify the pricingBreakdown was returned. Wave 17: strengthened
+    // — assert breakdown is a real object with the expected key
+    // shape. The previous `toBeDefined()` would have passed for any
+    // non-undefined value, including a string or number.
     const breakdown = result.pricingBreakdown;
-    expect(breakdown).toBeDefined();
+    expect(typeof breakdown).toBe("object");
+    expect(breakdown).not.toBeNull();
+    expect(Array.isArray(breakdown!.usageBasedItems)).toBe(true);
+    expect(Array.isArray(breakdown!.fixedItems)).toBe(true);
 
     // All S3 items are usage_based
     expect(breakdown!.usageBasedItems).toHaveLength(4);
@@ -394,7 +405,9 @@ describe("S3 pricing — filter-dispatched queryLineItemPrices via preflightGuar
     const pricingTool = createFilterDispatchedPricingTool();
     const result = await preflightGuardNode(makeState(), [pricingTool]);
 
-    expect(result.pricingBreakdown).toBeDefined();
+    // Wave 17: strengthened — assert object shape, not just defined.
+    expect(typeof result.pricingBreakdown).toBe("object");
+    expect(result.pricingBreakdown).not.toBeNull();
     expect(result.pricingBreakdown!.hasPartialFailure).toBe(false);
   });
 
@@ -440,7 +453,9 @@ describe("S3 pricing — filter-dispatched queryLineItemPrices via preflightGuar
 
     const result = await preflightGuardNode(makeState(), [pricingTool]);
 
-    expect(result.pricingBreakdown).toBeDefined();
+    // Wave 17: strengthened — assert object shape, not just defined.
+    expect(typeof result.pricingBreakdown).toBe("object");
+    expect(result.pricingBreakdown).not.toBeNull();
     expect(result.pricingBreakdown!.hasPartialFailure).toBe(true);
 
     // 3 items priced, 1 unavailable
@@ -578,7 +593,9 @@ describe("PricingBreakdown structure", () => {
     const result = await preflightGuardNode(makeState(), [pricingTool]);
 
     const breakdown = result.pricingBreakdown!;
-    expect(breakdown).toBeDefined();
+    // Wave 17: strengthened — assert object shape, not just defined.
+    expect(typeof breakdown).toBe("object");
+    expect(breakdown).not.toBeNull();
 
     // All S3 items are usage_based — no fixed items
     expect(breakdown.fixedItems).toHaveLength(0);
@@ -666,7 +683,9 @@ describe("Price cache — filter-based key differentiation", () => {
 
     // Prices should still be correct from cache
     const breakdown = result2.pricingBreakdown!;
-    expect(breakdown).toBeDefined();
+    // Wave 17: strengthened — assert object shape, not just defined.
+    expect(typeof breakdown).toBe("object");
+    expect(breakdown).not.toBeNull();
 
     const priceMap = new Map<string, string | null>();
     for (const item of breakdown.usageBasedItems) {
