@@ -19,10 +19,13 @@ import {
   tryAssigneeCredentials,
   DEFAULT_AWS_REGION,
   type ExplicitAwsCredentials,
+  type ResolvedGlobalConfig,
 } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { ProcessExitCode } from "../constants/errors.js";
+import { loadGlobalConfig } from "../config/load-global-config.js";
+import { loadUserConfig } from "../config/user-config-loader.js";
 
 /** Per-call STS deadline. Doctor's <10s budget => 5s per check. */
 const STS_TIMEOUT_MS = 5000;
@@ -43,6 +46,12 @@ export interface WhoamiDeps {
   stdout?: (msg: string) => void;
   stderr?: (msg: string) => void;
   exit?: (code: number) => void;
+  /**
+   * A2 follow-up (2026-04-08): inject the global config loader so unit
+   * tests don't need to touch the real filesystem or env vars. Defaults
+   * to the production `loadGlobalConfig(loadUserConfig())` composition.
+   */
+  loadResolvedConfig?: () => Promise<ResolvedGlobalConfig | undefined>;
 }
 
 /** Resolve the active AWS region from env (matches the rest of the CLI). */
@@ -150,16 +159,47 @@ export async function runWhoami(deps: WhoamiDeps = {}): Promise<number> {
   const configPath = findProjectConfig(cwd());
   const configLine = configPath ? `${configPath} (loaded)` : "(none in cwd)";
 
+  // A2 follow-up (2026-04-08): surface the resolved global preferences
+  // so operators can verify ASSIGNEE_* env vars / project YAML / user
+  // YAML are actually taking effect. Silent fallback — if the loader
+  // throws for any reason, we just skip the block and still show the
+  // identity info (never let preference resolution break whoami).
+  const loadResolved =
+    deps.loadResolvedConfig ??
+    (async () => {
+      try {
+        const userConfig = await loadUserConfig();
+        return await loadGlobalConfig(userConfig);
+      } catch {
+        return undefined;
+      }
+    });
+  const resolvedConfig = await loadResolved();
+
   const lines = [
     `Account:  ${account}`,
     `User ARN: ${arn}`,
     `Region:   ${region}`,
     `Role:     operator (${EnvVar.OPERATOR_ACCESS_KEY})`,
     `Config:   ${configLine}`,
-    "",
-    "For full diagnostics, run `assignee doctor`.",
-    "",
   ];
+
+  if (resolvedConfig) {
+    const prefs = resolvedConfig.preferences;
+    const defaultRegion = resolvedConfig.defaults?.region;
+    lines.push(
+      "",
+      "Resolved global preferences (flag > env > project > user > defaults):",
+      `  auto_fix:      ${prefs.auto_fix}`,
+      `  output_format: ${prefs.output_format}`,
+      `  verbosity:     ${prefs.verbosity}`,
+    );
+    if (defaultRegion) {
+      lines.push(`  defaults.region: ${defaultRegion}`);
+    }
+  }
+
+  lines.push("", "For full diagnostics, run `assignee doctor`.", "");
   stdout(lines.join("\n"));
   return ProcessExitCode.SUCCESS;
 }
