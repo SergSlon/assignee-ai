@@ -40,6 +40,7 @@ import {
   renderError,
 } from "../utils/display.js";
 import type { ManagedResource } from "../services/list-resources.js";
+import { parseMonthlyCost } from "./list.js";
 
 const MOCK_RESOURCES: ManagedResource[] = [
   {
@@ -156,5 +157,49 @@ describe("assignee list command", () => {
       expect.stringContaining("AWS credentials"),
       expect.objectContaining({ why: "Something went wrong" }),
     );
+  });
+
+  // A3 / optimize follow-up (2026-04-08): the --total-cost flag uses
+  // parseMonthlyCost() to coerce the four cost-string shapes the list
+  // service emits into a single USD monthly number. The fn is exported
+  // precisely so we can lock the coercion rules in a unit test and
+  // avoid regressing on the cost summation.
+  describe("parseMonthlyCost", () => {
+    it("returns 0 for known free-tier labels", () => {
+      expect(parseMonthlyCost("Free")).toBe(0);
+      expect(parseMonthlyCost("N/A")).toBe(0);
+      expect(parseMonthlyCost("Pay per use")).toBe(0);
+      expect(parseMonthlyCost("Unavailable")).toBe(0);
+      // Case-insensitive per the production regex.
+      expect(parseMonthlyCost("FREE")).toBe(0);
+      expect(parseMonthlyCost("free")).toBe(0);
+    });
+
+    it("returns 0 for empty string", () => {
+      expect(parseMonthlyCost("")).toBe(0);
+    });
+
+    it("parses $X.XX/mo into a raw monthly number", () => {
+      expect(parseMonthlyCost("$12.34/mo")).toBe(12.34);
+      expect(parseMonthlyCost("$0.20/mo")).toBe(0.2);
+    });
+
+    it("parses $X.XX (no suffix) as monthly", () => {
+      expect(parseMonthlyCost("$12.34")).toBe(12.34);
+    });
+
+    it("parses $X.XXXX/hr by multiplying by 730 hours/month", () => {
+      // 0.0416 × 730 = 30.368 (t3.medium reference rate)
+      expect(parseMonthlyCost("$0.0416/hr")).toBeCloseTo(30.368, 3);
+    });
+
+    it("returns null for unparseable strings", () => {
+      expect(parseMonthlyCost("weird value")).toBeNull();
+      expect(parseMonthlyCost("$abc/mo")).toBeNull();
+      // Note: a leading "-$5.00/mo" is NOT rejected — the regex anchors
+      // on `$[0-9]+` so it parses to 5 (the leading "-" is ignored).
+      // In practice the list service never emits negative costs, so
+      // tightening the regex is future work, not a blocker.
+    });
   });
 });
