@@ -63,6 +63,15 @@ export const CHECKPOINT_DEFAULT_TTL_HOURS = 72;
 /** Directory for checkpoint files, relative to project root. */
 export const CHECKPOINT_DIR = ASSIGNEE_DIR;
 
+/**
+ * Directory for baseline files written by \`assignee drift --baseline <arn>\`.
+ * A3 follow-up (2026-04-08): lets operators adopt resources provisioned
+ * outside assignee into drift tracking. Lives under \`.assignee/baselines/\`
+ * so it shares project scoping with checkpoints but never conflicts with
+ * the \`checkpoint-*.json\` file names \`resolveDesiredState()\` scans.
+ */
+export const BASELINES_DIR = `${ASSIGNEE_DIR}/baselines` as const;
+
 /** SaaS API base URL for org policy fetch (Story 7.2). */
 export const SAAS_API_URL =
   process.env[EnvVar.ASSIGNEE_SAAS_URL] ?? "https://app.assignee.ai";
