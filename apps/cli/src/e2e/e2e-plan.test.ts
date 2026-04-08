@@ -951,6 +951,57 @@ describeE2E("E2E: EFS FileSystem plan", () => {
   }, 60_000);
 });
 
+describeE2E("E2E: EventBridge Rule plan", () => {
+  it("generates a plan with secure defaults (State=ENABLED, at least one Target)", async () => {
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create an EventBridge rule that runs every hour to trigger my nightly cleanup Lambda",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    // Intent either hits the scheduled-lambda compound pattern or the
+    // single-resource Events::Rule plan; both are acceptable for this
+    // smoke test. When the compound pattern fires, the resourceType
+    // reflects the last-queued resource (the display-only permission
+    // or the rule itself), so we accept either shape.
+    const acceptableTypes = new Set([
+      "AWS::Events::Rule",
+      "AWS::IAM::Role",
+      "AWS::Lambda::Function",
+      "AWS::Lambda::Permission",
+    ]);
+    expect(acceptableTypes.has(s.resourceType ?? "")).toBe(true);
+
+    // A8 secure-by-default: the plugin's defaults.State must produce
+    // an ENABLED rule so BP-EVENTS-003 doesn't fire. If the pattern
+    // path ran instead, the compound's default is also ENABLED.
+    if (s.resourceType === "AWS::Events::Rule") {
+      expect(s.desiredState?.["State"]).toBe("ENABLED");
+    }
+
+    // Neither BP-EVENTS-001 (Targets required) nor BP-EVENTS-003
+    // (ENABLED) should surface as a blocking finding when the
+    // plan either uses the compound pattern or is generated against
+    // the plugin's defaults.
+    const blocking = (s.bpFindings ?? []).filter((f) => f.blocking === true);
+    const eventsBlocking = blocking.filter((f) =>
+      f.practiceId?.startsWith("BP-EVENTS-"),
+    );
+    expect(eventsBlocking).toHaveLength(0);
+  }, 60_000);
+});
+
 describeE2E("E2E: IAM Role plan", () => {
   it("generates a plan with assume role policy", async () => {
     const graph = createGraph(tools);
