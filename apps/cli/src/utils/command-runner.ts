@@ -50,6 +50,12 @@ import { runAutoCleanup } from "../services/cleanup.js";
 import { defaultMemoryService } from "../services/memory.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { CHECKPOINT_DIR, MAX_PROVISION_LOOPS } from "../config/constants.js";
+import {
+  startTimer,
+  endTimer,
+  persistTimings,
+  resetTimings,
+} from "../telemetry/timing.js";
 
 export interface CommandContext {
   intent: string;
@@ -77,169 +83,205 @@ export interface RunCommandOptions {
  * The `run` callback should handle command-specific spinners, mid-flow logging, and error rendering.
  */
 export async function runCommand(opts: RunCommandOptions): Promise<void> {
-  if (!opts.silent) renderIntro();
+  // Story 29.5 / NFR-05: measure cold-start phases against the budgets in
+  // `constants/time-budget.ts`. resetTimings() clears any previous in-process
+  // state so a long-running parent (tests, REPL) gets clean per-command timings.
+  resetTimings();
+  startTimer("total");
 
-  // Early credential check — fail fast before the wizard, not after.
-  // Accepts either:
-  //   (a) Dedicated ASSIGNEE_OPERATOR_* env vars (preferred — least privilege)
-  //   (b) Standard AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY (promoted w/ warning)
-  //   (c) AWS_PROFILE pointing to a shared credentials file (promoted w/ warning)
-  const hasOperatorKey =
-    process.env[EnvVar.OPERATOR_ACCESS_KEY] &&
-    process.env[EnvVar.OPERATOR_SECRET_KEY];
-  const hasStandardKey =
-    process.env["AWS_ACCESS_KEY_ID"] && process.env["AWS_SECRET_ACCESS_KEY"];
-  const hasProfile = process.env["AWS_PROFILE"];
-
-  if (!hasOperatorKey && hasStandardKey) {
-    // Auto-promote standard AWS vars to ASSIGNEE_OPERATOR_* so the rest of the
-    // pipeline (which reads ASSIGNEE_OPERATOR_*) works seamlessly.
-    process.env[EnvVar.OPERATOR_ACCESS_KEY] = process.env["AWS_ACCESS_KEY_ID"];
-    process.env[EnvVar.OPERATOR_SECRET_KEY] =
-      process.env["AWS_SECRET_ACCESS_KEY"];
-    if (process.env["AWS_SESSION_TOKEN"]) {
-      process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] =
-        process.env["AWS_SESSION_TOKEN"];
-    }
-    if (!opts.silent) {
-      process.stderr.write(
-        "\u001B[33m⚠  Using AWS_ACCESS_KEY_ID — consider running `assignee setup` to create least-privilege IAM users.\u001B[0m\n",
-      );
-    }
-  } else if (!hasOperatorKey && hasProfile) {
-    // AWS_PROFILE alone is not supported — the SDK default provider chain
-    // (which would read ~/.aws/credentials) is intentionally bypassed by the
-    // aws-credentials.ts helper to enforce least-privilege ASSIGNEE_OPERATOR_*
-    // credentials. Users with AWS_PROFILE must either export keys or run setup.
-    if (!opts.silent) {
-      process.stderr.write(
-        "\u001B[33m⚠  AWS_PROFILE detected but ASSIGNEE_OPERATOR_* not set. Run `assignee setup` for least-privilege users, or export AWS_ACCESS_KEY_ID directly.\u001B[0m\n",
-      );
-    }
-    throw new ConfigurationError(
-      "AWS_PROFILE alone is not supported. Export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY directly, or run `assignee setup` to create ASSIGNEE_OPERATOR_* credentials.",
-    );
-  } else if (!hasOperatorKey) {
-    throw new ConfigurationError(
-      "No AWS credentials detected.\n" +
-        "Assignee.ai requires either:\n" +
-        "  • ASSIGNEE_OPERATOR_ACCESS_KEY_ID + ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY (preferred — least privilege)\n" +
-        "  • AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (will be auto-promoted to operator role)\n" +
-        "Note: AWS_PROFILE alone is not currently supported. Run `assignee setup` to create least-privilege IAM users.",
-    );
-  }
-
+  // Generate runId early so the outer telemetry try/finally can persist
+  // timings even when an early-fail (missing credentials) bypasses the inner
+  // MCP/graph try/catch entirely.
   const runId = crypto.randomUUID();
-  const startTs = Date.now();
-
-  log({
-    ts: new Date().toISOString(),
-    runId,
-    level: "info",
-    action: opts.startAction,
-    extras: { intent: opts.intent },
-  });
-
-  // Story 9.7: Initialize recording session when ASSIGNEE_RECORD=1
-  const recorder = isRecordingEnabled()
-    ? new RecordingInterceptor(runId, opts.intent)
-    : null;
 
   try {
-    try {
-      // Story 29.3: Only start MCP servers required by this command
-      const requiredServers = opts.commandName
-        ? getRequiredServers(opts.commandName)
-        : null;
-      const serverCount = requiredServers?.length ?? 3;
-      if (!opts.silent)
-        startSpinner(
-          `Connecting to AWS${serverCount > 1 ? ` (${serverCount} services)` : ""}...`,
-        );
-      const mcpClient = await createMcpClient(requiredServers);
-      if (!opts.silent) updateSpinner("Loading tools...");
-      let tools = await getMcpTools(mcpClient);
-      if (!opts.silent) stopSpinner("Connected");
+    if (!opts.silent) renderIntro();
 
-      // Story 9.7: Wrap MCP tools with recorder when recording enabled
-      if (recorder) {
-        tools = tools.map((t) => wrapToolWithRecorder(t, recorder));
+    // Early credential check — fail fast before the wizard, not after.
+    startTimer("credential-check");
+    // Accepts either:
+    //   (a) Dedicated ASSIGNEE_OPERATOR_* env vars (preferred — least privilege)
+    //   (b) Standard AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY (promoted w/ warning)
+    //   (c) AWS_PROFILE pointing to a shared credentials file (promoted w/ warning)
+    const hasOperatorKey =
+      process.env[EnvVar.OPERATOR_ACCESS_KEY] &&
+      process.env[EnvVar.OPERATOR_SECRET_KEY];
+    const hasStandardKey =
+      process.env["AWS_ACCESS_KEY_ID"] && process.env["AWS_SECRET_ACCESS_KEY"];
+    const hasProfile = process.env["AWS_PROFILE"];
+
+    if (!hasOperatorKey && hasStandardKey) {
+      // Auto-promote standard AWS vars to ASSIGNEE_OPERATOR_* so the rest of the
+      // pipeline (which reads ASSIGNEE_OPERATOR_*) works seamlessly.
+      process.env[EnvVar.OPERATOR_ACCESS_KEY] =
+        process.env["AWS_ACCESS_KEY_ID"];
+      process.env[EnvVar.OPERATOR_SECRET_KEY] =
+        process.env["AWS_SECRET_ACCESS_KEY"];
+      if (process.env["AWS_SESSION_TOKEN"]) {
+        process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] =
+          process.env["AWS_SESSION_TOKEN"];
       }
-
-      // Story 9.7: Wrap LLM adapter with recorder when recording enabled
-      const { LlmAdapter } = await import("../services/llm-adapter.js");
-      const baseLlm = new LlmAdapter({
-        modelString: process.env[EnvVar.ASSIGNEE_MODEL],
-        guardrailId: process.env[EnvVar.BEDROCK_GUARDRAIL_ID],
-        guardrailVersion: process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION],
-      });
-      const llmClient = recorder
-        ? new RecordingLlmAdapter(
-            baseLlm,
-            recorder,
-            process.env[EnvVar.ASSIGNEE_MODEL] ??
-              "bedrock/amazon.nova-lite-v1:0",
-          )
-        : undefined;
-
-      const graph = createGraph(tools, {
-        llmClient,
-        recorder: recorder ?? undefined,
-      });
-
-      const result = await opts.run({
-        intent: opts.intent,
-        runId,
-        startTs,
-        tools,
-        graph,
-      });
-
-      // Story 9.7: Finalize recording session
-      if (recorder) {
-        recorder.finalizeSession();
-      }
-
-      if (!opts.silent) renderOutro(result.success);
-      await closeMcpClient().catch(() => {});
-      if (!result.success) {
-        // Error was already rendered by the graph run — don't throw (which would
-        // double-render via the catch block). Just return so the process exits cleanly.
-        return;
-      }
-    } catch (err: unknown) {
-      stopSpinner();
-      const errMsg = err instanceof Error ? err.message : String(err);
-      log({
-        ts: new Date().toISOString(),
-        runId,
-        level: "error",
-        action: opts.endAction,
-        durationMs: Date.now() - startTs,
-        result: "error",
-      });
-
-      // Story 9.7: Finalize recording even on error
-      if (recorder) {
-        recorder.finalizeSession();
-      }
-
       if (!opts.silent) {
-        renderError(`${opts.errorPrefix}: ${errMsg}`, opts.errorHint);
-        renderOutro(false);
+        process.stderr.write(
+          "\u001B[33m⚠  Using AWS_ACCESS_KEY_ID — consider running `assignee setup` to create least-privilege IAM users.\u001B[0m\n",
+        );
       }
-      await closeMcpClient().catch(() => {});
-      if (err instanceof AssigneeError) throw err;
-      throw new AssigneeError(
-        `${opts.errorPrefix}: ${errMsg}`,
-        "COMMAND_FAILED",
+    } else if (!hasOperatorKey && hasProfile) {
+      // AWS_PROFILE alone is not supported — the SDK default provider chain
+      // (which would read ~/.aws/credentials) is intentionally bypassed by the
+      // aws-credentials.ts helper to enforce least-privilege ASSIGNEE_OPERATOR_*
+      // credentials. Users with AWS_PROFILE must either export keys or run setup.
+      if (!opts.silent) {
+        process.stderr.write(
+          "\u001B[33m⚠  AWS_PROFILE detected but ASSIGNEE_OPERATOR_* not set. Run `assignee setup` for least-privilege users, or export AWS_ACCESS_KEY_ID directly.\u001B[0m\n",
+        );
+      }
+      throw new ConfigurationError(
+        "AWS_PROFILE alone is not supported. Export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY directly, or run `assignee setup` to create ASSIGNEE_OPERATOR_* credentials.",
+      );
+    } else if (!hasOperatorKey) {
+      endTimer("credential-check");
+      throw new ConfigurationError(
+        "No AWS credentials detected.\n" +
+          "Assignee.ai requires either:\n" +
+          "  • ASSIGNEE_OPERATOR_ACCESS_KEY_ID + ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY (preferred — least privilege)\n" +
+          "  • AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (will be auto-promoted to operator role)\n" +
+          "Note: AWS_PROFILE alone is not currently supported. Run `assignee setup` to create least-privilege IAM users.",
       );
     }
+    endTimer("credential-check");
+
+    const startTs = Date.now();
+
+    log({
+      ts: new Date().toISOString(),
+      runId,
+      level: "info",
+      action: opts.startAction,
+      extras: { intent: opts.intent },
+    });
+
+    // Story 9.7: Initialize recording session when ASSIGNEE_RECORD=1
+    const recorder = isRecordingEnabled()
+      ? new RecordingInterceptor(runId, opts.intent)
+      : null;
+
+    try {
+      try {
+        // Story 29.3: Only start MCP servers required by this command
+        const requiredServers = opts.commandName
+          ? getRequiredServers(opts.commandName)
+          : null;
+        const serverCount = requiredServers?.length ?? 3;
+        if (!opts.silent)
+          startSpinner(
+            `Connecting to AWS${serverCount > 1 ? ` (${serverCount} services)` : ""}...`,
+          );
+        startTimer("mcp-startup");
+        const mcpClient = await createMcpClient(requiredServers);
+        if (!opts.silent) updateSpinner("Loading tools...");
+        let tools = await getMcpTools(mcpClient);
+        endTimer("mcp-startup");
+        if (!opts.silent) stopSpinner("Connected");
+
+        // Story 9.7: Wrap MCP tools with recorder when recording enabled
+        if (recorder) {
+          tools = tools.map((t) => wrapToolWithRecorder(t, recorder));
+        }
+
+        // Story 9.7: Wrap LLM adapter with recorder when recording enabled
+        const { LlmAdapter } = await import("../services/llm-adapter.js");
+        const baseLlm = new LlmAdapter({
+          modelString: process.env[EnvVar.ASSIGNEE_MODEL],
+          guardrailId: process.env[EnvVar.BEDROCK_GUARDRAIL_ID],
+          guardrailVersion: process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION],
+        });
+        const llmClient = recorder
+          ? new RecordingLlmAdapter(
+              baseLlm,
+              recorder,
+              process.env[EnvVar.ASSIGNEE_MODEL] ??
+                "bedrock/amazon.nova-lite-v1:0",
+            )
+          : undefined;
+
+        const graph = createGraph(tools, {
+          llmClient,
+          recorder: recorder ?? undefined,
+        });
+
+        const result = await opts.run({
+          intent: opts.intent,
+          runId,
+          startTs,
+          tools,
+          graph,
+        });
+
+        // Story 9.7: Finalize recording session
+        if (recorder) {
+          recorder.finalizeSession();
+        }
+
+        if (!opts.silent) renderOutro(result.success);
+        await closeMcpClient().catch(() => {});
+        if (!result.success) {
+          // Error was already rendered by the graph run — don't throw (which would
+          // double-render via the catch block). Just return so the process exits cleanly.
+          return;
+        }
+      } catch (err: unknown) {
+        stopSpinner();
+        const errMsg = err instanceof Error ? err.message : String(err);
+        log({
+          ts: new Date().toISOString(),
+          runId,
+          level: "error",
+          action: opts.endAction,
+          durationMs: Date.now() - startTs,
+          result: "error",
+        });
+
+        // Story 9.7: Finalize recording even on error
+        if (recorder) {
+          recorder.finalizeSession();
+        }
+
+        if (!opts.silent) {
+          renderError(`${opts.errorPrefix}: ${errMsg}`, opts.errorHint);
+          renderOutro(false);
+        }
+        await closeMcpClient().catch(() => {});
+        if (err instanceof AssigneeError) throw err;
+        throw new AssigneeError(
+          `${opts.errorPrefix}: ${errMsg}`,
+          "COMMAND_FAILED",
+        );
+      }
+    } finally {
+      // Story 33.4: Fire-and-forget auto-cleanup after every command run.
+      // Uses void to explicitly discard the promise; .catch() swallows errors
+      // so cleanup failures never affect the command exit code.
+      void runAutoCleanup(CHECKPOINT_DIR, defaultMemoryService).catch(() => {});
+    }
   } finally {
-    // Story 33.4: Fire-and-forget auto-cleanup after every command run.
-    // Uses void to explicitly discard the promise; .catch() swallows errors
-    // so cleanup failures never affect the command exit code.
-    void runAutoCleanup(CHECKPOINT_DIR, defaultMemoryService).catch(() => {});
+    // Story 29.5 / NFR-05: stop the total-cold-start timer and persist
+    // per-phase durations to ~/.assignee/telemetry/timing.json. persistTimings
+    // also runs checkTimingsAgainstBudgets() which writes a stderr WARNING
+    // line for any phase that exceeded its budget — this is the user-visible
+    // surface for the NFR-05 plan-time budget. The outer try/finally that
+    // wraps the credential check + inner try/catch guarantees the total
+    // timer is closed even when the early-credential check throws.
+    try {
+      endTimer("total");
+    } catch {
+      // total timer was never started — defensive against unusual exit paths.
+    }
+    try {
+      persistTimings(runId);
+    } catch {
+      // Persistence is best-effort; never crash the CLI for telemetry.
+    }
   }
 }
 
