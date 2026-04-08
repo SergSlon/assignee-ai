@@ -1567,6 +1567,16 @@ const efsRules: RuleSpec[] = [
     checkType: "equals",
     expectedValue: "ENABLED",
   },
+  // A1 follow-up (2026-04-08): in-transit encryption. Uses the
+  // policy_antipattern check type to catch the Allow+NotAction
+  // inversion that would bypass the SecureTransport deny.
+  {
+    id: "BP-EFS-003",
+    resourceType: "AWS::EFS::FileSystem",
+    propertyPath: "FileSystemPolicy",
+    checkType: "policy_antipattern",
+    expectedValue: "allow-plus-not-action",
+  },
 ];
 
 const asgRules: RuleSpec[] = [
@@ -1962,7 +1972,10 @@ describe("BP All Rules Audit", () => {
       // + 1 A1-warmup rule            (BP-IAM-017 elevated *FullAccess —
       //   uses not_contains_pattern, a new check_type added alongside
       //   the rule for regex matching over array-of-strings fields)
-      expect(allSpecs.length).toBe(161);
+      // + 1 A1 follow-up rule         (BP-EFS-003 SecureTransport —
+      //   reuses the existing policy_antipattern check with
+      //   allow-plus-not-action to catch Deny-inversion bypasses)
+      expect(allSpecs.length).toBe(162);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {
