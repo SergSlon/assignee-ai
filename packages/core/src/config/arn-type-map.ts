@@ -11,7 +11,6 @@ import {
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
   LIST_RESOURCE_TYPES,
-  CCAPI_FALLBACK_TYPES,
 } from "./resource-types.js";
 import { AWS_SERVICE_EXECUTE_API } from "./cfn-keys.js";
 
@@ -84,7 +83,7 @@ export const SERVICE_SUBTYPE_MAP: Readonly<
     parameter: RESOURCE_TYPES.SSM_PARAMETER,
   },
   lambda: {
-    "event-source-mapping": CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING,
+    "event-source-mapping": LIST_RESOURCE_TYPES.LAMBDA_EVENT_SOURCE_MAPPING,
     "": RESOURCE_TYPES.LAMBDA_FUNCTION,
   },
 } as const;

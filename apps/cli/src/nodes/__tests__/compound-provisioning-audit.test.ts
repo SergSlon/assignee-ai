@@ -508,18 +508,19 @@ describe("resourceProvisionerNode — compound context", () => {
       return {
         canHandle: vi.fn().mockReturnValue(false),
         isRedirect: vi.fn().mockReturnValue(null),
-        createEventSourceMapping: vi.fn(),
         subscribe: vi.fn(),
       };
     }
 
-    it("dispatches EventSourceMapping via SDK fallback in compound flow", async () => {
+    it("rejects Lambda EventSourceMapping in compound flow as unsupported (A6 — SDK fallback removed)", async () => {
+      // A6 (2026-04-08): CCAPI fully supports AWS::Lambda::EventSourceMapping
+      // for destroy (see destroy-service.test.ts), but ESM has no plugin /
+      // pattern / intent path — it is not in SUPPORTED_TYPES_ARRAY. So any
+      // create attempt through the provisioner (including inside a
+      // compound) must fail the state guard, not silently fall back to the
+      // removed SDK helper.
       const mockFallback = createMockFallbackDispatcher();
-      mockFallback.canHandle.mockReturnValue(true);
-      mockFallback.createEventSourceMapping.mockResolvedValueOnce([
-        null,
-        { identifier: "esm-uuid-compound" },
-      ]);
+      mockFallback.canHandle.mockReturnValue(false);
 
       const result = await resourceProvisionerNode(
         makeState({
@@ -536,8 +537,11 @@ describe("resourceProvisionerNode — compound context", () => {
         >[2],
       );
 
-      expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
-      expect(result.resourceArn).toBe("esm-uuid-compound");
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(
+        /unsupported or missing resourceType/,
+      );
+      expect(mockFallback.subscribe).not.toHaveBeenCalled();
       expect(mockProvisioner.createResource).not.toHaveBeenCalled();
     });
 

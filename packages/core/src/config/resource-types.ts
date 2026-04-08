@@ -79,13 +79,18 @@ export const RESOURCE_TYPES = {
 /** Ordered array of all resource types supported in the POC phase. */
 export const SUPPORTED_POC_TYPES: ResourceType[] = [...SUPPORTED_TYPES_ARRAY];
 
-// ── CCAPI Fallback Types (Story 7.7) ────────────────────────────────────────
+// ── CCAPI Fallback Types (Story 7.7; narrowed by A6) ────────────────────────
 // Resource types that cannot be provisioned via Cloud Control API.
 // These are routed to SDK-specific fallback handlers or rejected with a redirect message.
+//
+// A6 (2026-04-08) removed AWS::Lambda::EventSourceMapping from this set after
+// verifying CCAPI has full Create/Delete/Update handlers for the type — see
+// apps/cli/src/services/sdk-fallback-dispatcher.ts history and
+// docs/nfr-assessment-2026-04-08.md. The type is still referenced from
+// LIST_RESOURCE_TYPES so ARN-to-type resolution keeps working for destroy.
 
 /** All resource types known to have CCAPI gaps. */
 export const CCAPI_FALLBACK_TYPES = {
-  LAMBDA_EVENT_SOURCE_MAPPING: "AWS::Lambda::EventSourceMapping",
   SNS_SUBSCRIPTION: "AWS::SNS::Subscription",
   LAMBDA_PERMISSION: "AWS::Lambda::Permission",
   ELASTICACHE_REPLICATION_GROUP: "AWS::ElastiCache::ReplicationGroup",
@@ -129,6 +134,11 @@ export const LIST_RESOURCE_TYPES = {
   APIGATEWAY_REST_API: "AWS::ApiGateway::RestApi",
   ELBV2_TARGET_GROUP: "AWS::ElasticLoadBalancingV2::TargetGroup",
   RDS_DB_CLUSTER: "AWS::RDS::DBCluster",
+  // A6 (2026-04-08): Lambda EventSourceMapping migrated out of CCAPI_FALLBACK_TYPES.
+  // CCAPI fully supports create/delete/update for this type, but it has no
+  // Assignee plan-generation path (no plugin, no compound pattern), so it only
+  // shows up during destroy-by-ARN resolution.
+  LAMBDA_EVENT_SOURCE_MAPPING: "AWS::Lambda::EventSourceMapping",
 } as const;
 
 /** Union of all CCAPI fallback resource type strings. */
@@ -137,7 +147,6 @@ export type CcapiFallbackType =
 
 /** Resource types that can be handled via direct AWS SDK calls (not CCAPI). */
 export const CCAPI_SDK_ROUTABLE_TYPES: readonly string[] = [
-  CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING,
   CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION,
 ] as const;
 

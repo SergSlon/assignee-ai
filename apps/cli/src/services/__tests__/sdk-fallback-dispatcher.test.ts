@@ -6,16 +6,10 @@ import { ProvisioningErrorKind } from "../provisioning-port.js";
 // NOTE: Plain class for client constructors (so they survive mockReset),
 // vi.fn for command constructors (tests assert on .toHaveBeenCalledWith).
 // Command vi.fn implementations are re-installed in beforeEach.
-const mockLambdaSend = vi.fn();
-vi.mock("@aws-sdk/client-lambda", () => {
-  class LambdaClient {
-    send = mockLambdaSend;
-  }
-  return {
-    LambdaClient,
-    CreateEventSourceMappingCommand: vi.fn(),
-  };
-});
+//
+// A6 (2026-04-08): Lambda EventSourceMapping was migrated from SDK fallback
+// to CCAPI, so this test file no longer mocks @aws-sdk/client-lambda. SNS
+// Subscription is the only remaining SDK-routed create type.
 
 const mockSnsSend = vi.fn();
 vi.mock("@aws-sdk/client-sns", () => {
@@ -30,7 +24,6 @@ vi.mock("@aws-sdk/client-sns", () => {
 
 // Import AFTER mocks are set up
 import { SDKFallbackDispatcher } from "../sdk-fallback-dispatcher.js";
-import { CreateEventSourceMappingCommand } from "@aws-sdk/client-lambda";
 import { SubscribeCommand } from "@aws-sdk/client-sns";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,9 +39,6 @@ let dispatcher: SDKFallbackDispatcher;
 beforeEach(() => {
   vi.clearAllMocks();
   // Re-install command impls (mockReset wipes them).
-  vi.mocked(CreateEventSourceMappingCommand).mockImplementation(
-    (input) => input as unknown as CreateEventSourceMappingCommand,
-  );
   vi.mocked(SubscribeCommand).mockImplementation(
     (input) => input as unknown as SubscribeCommand,
   );
@@ -59,14 +49,21 @@ beforeEach(() => {
 
 describe("SDKFallbackDispatcher", () => {
   describe("canHandle", () => {
-    it("returns true for AWS::Lambda::EventSourceMapping", () => {
+    it("returns true for AWS::SNS::Subscription", () => {
+      expect(dispatcher.canHandle("AWS::SNS::Subscription")).toBe(true);
+    });
+
+    it("returns false for AWS::Lambda::EventSourceMapping (migrated to CCAPI by A6)", () => {
+      // A6 (2026-04-08): Lambda EventSourceMapping was removed from
+      // CCAPI_SDK_ROUTABLE_TYPES after a live-AWS probe confirmed CCAPI has
+      // full create/delete/update handlers for the type.
       expect(dispatcher.canHandle("AWS::Lambda::EventSourceMapping")).toBe(
-        true,
+        false,
       );
     });
 
-    it("returns true for AWS::SNS::Subscription", () => {
-      expect(dispatcher.canHandle("AWS::SNS::Subscription")).toBe(true);
+    it("returns false for AWS::SNS::Topic (SNS Topic delete was migrated to CCAPI by A6)", () => {
+      expect(dispatcher.canHandle("AWS::SNS::Topic")).toBe(false);
     });
 
     it("returns false for AWS::S3::Bucket (standard CCAPI type)", () => {
@@ -105,109 +102,12 @@ describe("SDKFallbackDispatcher", () => {
       );
     });
 
-    it("returns null for SDK-routable types", () => {
-      expect(
-        dispatcher.isRedirect("AWS::Lambda::EventSourceMapping"),
-      ).toBeNull();
+    it("returns null for SDK-routable types (SNS Subscription)", () => {
+      expect(dispatcher.isRedirect("AWS::SNS::Subscription")).toBeNull();
     });
 
     it("returns null for standard CCAPI types", () => {
       expect(dispatcher.isRedirect("AWS::S3::Bucket")).toBeNull();
-    });
-  });
-
-  describe("createEventSourceMapping", () => {
-    it("returns UUID identifier on success", async () => {
-      const testUuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-      mockLambdaSend.mockResolvedValueOnce({ UUID: testUuid });
-
-      const [err, result] = await dispatcher.createEventSourceMapping({
-        EventSourceArn: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-        FunctionName: "my-function",
-        BatchSize: 5,
-      });
-
-      expect(err).toBeNull();
-      expect(result).not.toBeNull();
-      expect(result!.identifier).toBe(testUuid);
-    });
-
-    it("returns error when SDK returns no UUID", async () => {
-      mockLambdaSend.mockResolvedValueOnce({});
-
-      const [err, result] = await dispatcher.createEventSourceMapping({
-        EventSourceArn: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-        FunctionName: "my-function",
-      });
-
-      expect(err).not.toBeNull();
-      expect(err!.kind).toBe(ProvisioningErrorKind.UNKNOWN);
-      expect(err!.message).toMatch(/no UUID/);
-      expect(result).toBeNull();
-    });
-
-    it("returns typed error on SDK failure", async () => {
-      const sdkError = new Error("Function not found");
-      sdkError.name = "ResourceNotFoundException";
-      mockLambdaSend.mockRejectedValueOnce(sdkError);
-
-      const [err, result] = await dispatcher.createEventSourceMapping({
-        EventSourceArn: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-        FunctionName: "nonexistent-function",
-      });
-
-      expect(err).not.toBeNull();
-      expect(err!.kind).toBe(ProvisioningErrorKind.NOT_FOUND);
-      expect(err!.message).toMatch(/Function not found/);
-      expect(result).toBeNull();
-    });
-
-    it("maps ResourceConflictException to ALREADY_EXISTS", async () => {
-      const sdkError = new Error("Mapping already exists");
-      sdkError.name = "ResourceConflictException";
-      mockLambdaSend.mockRejectedValueOnce(sdkError);
-
-      const [err, result] = await dispatcher.createEventSourceMapping({
-        EventSourceArn: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-        FunctionName: "my-function",
-      });
-
-      expect(err).not.toBeNull();
-      expect(err!.kind).toBe(ProvisioningErrorKind.ALREADY_EXISTS);
-      expect(result).toBeNull();
-    });
-
-    it("maps TooManyRequestsException to THROTTLED", async () => {
-      const sdkError = new Error("Rate exceeded");
-      sdkError.name = "TooManyRequestsException";
-      mockLambdaSend.mockRejectedValueOnce(sdkError);
-
-      const [err, result] = await dispatcher.createEventSourceMapping({
-        EventSourceArn: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-        FunctionName: "my-function",
-      });
-
-      expect(err).not.toBeNull();
-      expect(err!.kind).toBe(ProvisioningErrorKind.THROTTLED);
-      expect(result).toBeNull();
-    });
-
-    it("uses default BatchSize of 10 when not specified", async () => {
-      mockLambdaSend.mockResolvedValueOnce({
-        UUID: "default-batch-uuid",
-      });
-
-      await dispatcher.createEventSourceMapping({
-        EventSourceArn: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-        FunctionName: "my-function",
-      });
-
-      // The CreateEventSourceMappingCommand mock captures the input
-      const { CreateEventSourceMappingCommand } =
-        await import("@aws-sdk/client-lambda");
-      expect(CreateEventSourceMappingCommand).toHaveBeenCalledWith(
-        expect.objectContaining({ BatchSize: 10 }),
-      );
     });
   });
 

@@ -17,12 +17,13 @@ import { MissingAssigneeCredentialsError } from "@assignee/core";
 import { requireAssigneeCredentials } from "../../config/aws-credentials.js";
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
+// A6 (2026-04-08): mockDeleteEventSourceMapping and mockDeleteTopic were
+// removed after Lambda ESM and SNS Topic delete were migrated from SDK
+// fallback to CCAPI. Both types now go through mockDeleteResource.
 const {
   mockDeleteResource,
   mockGetRequestStatus,
-  mockDeleteEventSourceMapping,
   mockUnsubscribe,
-  mockDeleteTopic,
   mockCfSend,
   mockDdbSend,
   mockS3Send,
@@ -30,9 +31,7 @@ const {
 } = vi.hoisted(() => ({
   mockDeleteResource: vi.fn(),
   mockGetRequestStatus: vi.fn(),
-  mockDeleteEventSourceMapping: vi.fn(),
   mockUnsubscribe: vi.fn(),
-  mockDeleteTopic: vi.fn(),
   mockCfSend: vi.fn(),
   mockDdbSend: vi.fn(),
   mockS3Send: vi.fn(),
@@ -81,11 +80,10 @@ vi.mock("../cloudcontrol-client.js", () => ({
 }));
 
 // ── Mock SDKFallbackDispatcher ────────────────────────────────────────────────
+// After A6, the dispatcher only exposes unsubscribe() (SNS Subscription).
 vi.mock("../sdk-fallback-dispatcher.js", () => {
   class SDKFallbackDispatcher {
-    deleteEventSourceMapping = mockDeleteEventSourceMapping;
     unsubscribe = mockUnsubscribe;
-    deleteTopic = mockDeleteTopic;
   }
   return { SDKFallbackDispatcher };
 });
@@ -509,10 +507,17 @@ describe("destroySingleResource", () => {
     });
   });
 
-  // ── SDK fallback: Lambda EventSourceMapping ───────────────────────────────
-  describe("SDK fallback — Lambda EventSourceMapping", () => {
-    it("returns success on successful deletion", async () => {
-      mockDeleteEventSourceMapping.mockResolvedValue([null, {}]);
+  // ── A6: Lambda EventSourceMapping now routes through CCAPI ────────────────
+  describe("CCAPI path — Lambda EventSourceMapping (A6)", () => {
+    it("calls CloudControl DeleteResource with the mapping UUID as identifier", async () => {
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-esm-1" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
 
       const result = await destroySingleResource({
         arn: "arn:aws:lambda:us-east-1:123456:event-source-mapping:uuid-123",
@@ -522,13 +527,26 @@ describe("destroySingleResource", () => {
       });
 
       expect(result.success).toBe(true);
-      expect(mockDeleteEventSourceMapping).toHaveBeenCalledWith("uuid-123");
+      expect(mockDeleteResource).toHaveBeenCalledWith(
+        "AWS::Lambda::EventSourceMapping",
+        "uuid-123",
+      );
+      // The A6 migration removed the SDK fallback entirely — unsubscribe is
+      // only used for SNS Subscription, and must not be called here.
+      expect(mockUnsubscribe).not.toHaveBeenCalled();
     });
 
-    it("returns failure when SDK call fails", async () => {
-      mockDeleteEventSourceMapping.mockResolvedValue([
-        { kind: "UNKNOWN", message: "Mapping not found" },
+    it("surfaces CloudControl FAILED as a destroy failure", async () => {
+      mockDeleteResource.mockResolvedValue([
         null,
+        { requestToken: "tok-esm-fail" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        {
+          operationStatus: "FAILED",
+          statusMessage: "Mapping is being deleted",
+        },
       ]);
 
       const result = await destroySingleResource({
@@ -539,7 +557,7 @@ describe("destroySingleResource", () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain("Mapping not found");
+      expect(result.error).toContain("Mapping is being deleted");
     });
   });
 
@@ -562,10 +580,20 @@ describe("destroySingleResource", () => {
     });
   });
 
-  // ── SDK fallback: SNS Topic ───────────────────────────────────────────────
-  describe("SDK fallback — SNS Topic", () => {
-    it("returns success on successful topic deletion", async () => {
-      mockDeleteTopic.mockResolvedValue([null, {}]);
+  // ── A6: SNS Topic delete now routes through CCAPI ─────────────────────────
+  describe("CCAPI path — SNS Topic (A6)", () => {
+    it("calls CloudControl DeleteResource with the full TopicArn as identifier", async () => {
+      // A6 (2026-04-08): verified via live-AWS probe that CCAPI accepts the
+      // full TopicArn as the primary identifier and deletes the topic
+      // successfully. The SDK fallback (DeleteTopicCommand) is gone.
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-topic-1" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
 
       const result = await destroySingleResource({
         arn: "arn:aws:sns:us-east-1:123456:my-topic",
@@ -575,9 +603,11 @@ describe("destroySingleResource", () => {
       });
 
       expect(result.success).toBe(true);
-      expect(mockDeleteTopic).toHaveBeenCalledWith(
-        "arn:aws:sns:us-east-1:123456:my-topic",
+      expect(mockDeleteResource).toHaveBeenCalledWith(
+        "AWS::SNS::Topic",
+        "my-topic",
       );
+      expect(mockUnsubscribe).not.toHaveBeenCalled();
     });
   });
 
@@ -596,7 +626,7 @@ describe("destroySingleResource", () => {
       expect(result.error).toContain("manual deletion");
       // Should NOT call any delete method
       expect(mockDeleteResource).not.toHaveBeenCalled();
-      expect(mockDeleteEventSourceMapping).not.toHaveBeenCalled();
+      expect(mockUnsubscribe).not.toHaveBeenCalled();
     });
   });
 

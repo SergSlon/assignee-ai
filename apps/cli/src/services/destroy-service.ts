@@ -3,7 +3,7 @@
  *
  * Provides a `destroySingleResource()` function that handles:
  * - CloudControl API deletion with polling
- * - SDK fallback for EventSourceMapping, SNS Subscription, SNS Topic
+ * - SDK fallback for SNS Subscription (the only remaining CCAPI gap)
  * - Pre-delete hooks (DynamoDB deletion protection)
  * - Redirect types (returns error)
  *
@@ -11,6 +11,8 @@
  * suitable for both single-resource and bulk-destroy workflows.
  *
  * @see Story 36.1
+ * @see A6 (2026-04-08) — Lambda EventSourceMapping + SNS Topic delete
+ *      migrated from SDK fallback to CCAPI.
  */
 
 import {
@@ -326,28 +328,13 @@ export async function destroySingleResource(
   }
 
   // ── SDK fallback for CCAPI gap types ─────────────────────────────────
-  if (
-    resourceType === CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING ||
-    resourceType === CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION ||
-    resourceType === RESOURCE_TYPES.SNS_TOPIC
-  ) {
+  // After A6, the only type that still needs SDK-based delete is
+  // AWS::SNS::Subscription. Lambda EventSourceMapping and SNS Topic now
+  // fall through to the standard CCAPI delete path below.
+  if (resourceType === CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION) {
     try {
       const dispatcher = new SDKFallbackDispatcher(awsConfig);
-
-      let deleteResult;
-      if (resourceType === CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING) {
-        deleteResult = await dispatcher.deleteEventSourceMapping(
-          resource.identifier,
-        );
-      } else if (resourceType === RESOURCE_TYPES.SNS_TOPIC) {
-        // SNS Topic delete via CloudControl fails with invalid TopicArn format.
-        // Use native SDK DeleteTopicCommand instead.
-        deleteResult = await dispatcher.deleteTopic(resource.arn);
-      } else {
-        deleteResult = await dispatcher.unsubscribe(resource.arn);
-      }
-
-      const [deleteErr] = deleteResult;
+      const [deleteErr] = await dispatcher.unsubscribe(resource.arn);
       if (deleteErr) {
         return {
           ...baseResult,

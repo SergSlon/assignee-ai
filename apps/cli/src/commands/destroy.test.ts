@@ -7,13 +7,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Hoisted mocks (accessible inside vi.mock factories) ─────────────────────
+// A6 (2026-04-08): mockLambdaSend was removed after Lambda EventSourceMapping
+// was migrated from the SDK fallback to CCAPI. The @aws-sdk/client-lambda
+// module is no longer imported by sdk-fallback-dispatcher, so mocking it
+// here is dead code.
 const {
   mockText,
   mockOutro,
   mockIsCancel,
   mockCCSend,
   mockTaggingSend,
-  mockLambdaSend,
   mockSnsSend,
   mockResolveResource,
   mockCreateTaggingClient,
@@ -25,7 +28,6 @@ const {
   mockIsCancel: vi.fn().mockReturnValue(false),
   mockCCSend: vi.fn(),
   mockTaggingSend: vi.fn(),
-  mockLambdaSend: vi.fn(),
   mockSnsSend: vi.fn(),
   mockResolveResource: vi.fn(),
   mockCreateTaggingClient: vi.fn().mockReturnValue({}),
@@ -117,17 +119,6 @@ vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
   return {
     ResourceGroupsTaggingAPIClient: MockResourceGroupsTaggingAPIClient,
     GetResourcesCommand: vi.fn(),
-  };
-});
-
-vi.mock("@aws-sdk/client-lambda", () => {
-  class MockLambdaClient {
-    send = mockLambdaSend;
-  }
-  return {
-    LambdaClient: MockLambdaClient,
-    CreateEventSourceMappingCommand: vi.fn(),
-    DeleteEventSourceMappingCommand: vi.fn(),
   };
 });
 
