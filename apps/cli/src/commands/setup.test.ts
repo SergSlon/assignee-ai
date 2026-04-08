@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { IAM_USER_NAMES, IAM_POLICY_NAMES } from "@assignee/core";
 
 // Mock @aws-sdk/client-iam
@@ -131,7 +132,7 @@ vi.mock("../utils/env-writer.js", () => ({
 // process.exit spy is installed in beforeEach so restoreMocks doesn't bring
 // the real exit back between tests.
 
-let mockExit: any;
+let mockExit: MockInstance;
 
 /**
  * Resets Commander option state between tests. Commander persists parsed

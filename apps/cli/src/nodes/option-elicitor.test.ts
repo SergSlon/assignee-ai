@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ExecutionStatus } from "@assignee/core";
-import type { ResourcePlugin } from "@assignee/core";
+import type { ResourceField, ResourcePlugin } from "@assignee/core";
 
 vi.mock("@clack/prompts", () => ({
   confirm: vi.fn(),
@@ -1001,7 +1001,8 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
 
     const { defaultPluginRegistry } = await import("@assignee/core");
     vi.mocked(defaultPluginRegistry.get).mockImplementation((type: string) => {
-      if (type === "AWS::EC2::Instance") return ec2PluginWithFetchers as any;
+      if (type === "AWS::EC2::Instance")
+        return ec2PluginWithFetchers as unknown as ResourcePlugin;
       return undefined;
     });
 
@@ -1060,7 +1061,8 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
 
     const { defaultPluginRegistry } = await import("@assignee/core");
     vi.mocked(defaultPluginRegistry.get).mockImplementation((type: string) => {
-      if (type === "AWS::EC2::Instance") return ec2PluginWithFetchers as any;
+      if (type === "AWS::EC2::Instance")
+        return ec2PluginWithFetchers as unknown as ResourcePlugin;
       return undefined;
     });
 
@@ -1115,7 +1117,9 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
   it("unified spinner wraps entire parallel block", async () => {
     const { spinner } = await import("@clack/prompts");
     const mockSpinner = { start: vi.fn(), stop: vi.fn() };
-    vi.mocked(spinner).mockReturnValue(mockSpinner as any);
+    vi.mocked(spinner).mockReturnValue(
+      mockSpinner as unknown as ReturnType<typeof spinner>,
+    );
 
     vi.mocked(text).mockResolvedValueOnce("my-resource");
     vi.mocked(select).mockResolvedValueOnce("false");
@@ -1159,11 +1163,11 @@ describe("applyOptionRanking (Story 21.4)", () => {
   }
 
   it("memory-intensive profile ranks r6g/r5 classes first", () => {
-    const fields = [rdsInstanceClassField()] as any;
+    const fields = [rdsInstanceClassField()] as unknown as ResourceField[];
     const result = applyOptionRanking(fields, "memory-intensive");
 
     const options = result[0]!.question.options!;
-    const values = options.map((o: any) => o.value);
+    const values = options.map((o) => o.value);
 
     // r5, r6g, r7g should be ranked first (they match memory-intensive keywords)
     const topValues = values.slice(0, 5);
@@ -1174,11 +1178,11 @@ describe("applyOptionRanking (Story 21.4)", () => {
   });
 
   it("burstable profile ranks t3/t4g classes first", () => {
-    const fields = [rdsInstanceClassField()] as any;
+    const fields = [rdsInstanceClassField()] as unknown as ResourceField[];
     const result = applyOptionRanking(fields, "burstable");
 
     const options = result[0]!.question.options!;
-    const values = options.map((o: any) => o.value);
+    const values = options.map((o) => o.value);
 
     // t3 and t4g should be ranked first
     const topValues = values.slice(0, 5);
@@ -1202,26 +1206,26 @@ describe("applyOptionRanking (Story 21.4)", () => {
         ],
       },
     };
-    const fields = [smallField] as any;
+    const fields = [smallField] as unknown as ResourceField[];
     const result = applyOptionRanking(fields, "memory-intensive");
 
     // Options should remain in original order
-    const values = result[0]!.question.options!.map((o: any) => o.value);
+    const values = result[0]!.question.options!.map((o) => o.value);
     expect(values).toEqual(["gp3", "gp2", "io1"]);
   });
 
   it("unknown profile returns options in original order (no ranking)", () => {
-    const fields = [rdsInstanceClassField()] as any;
-    const original = fields[0]!.question.options!.map((o: any) => o.value);
+    const fields = [rdsInstanceClassField()] as unknown as ResourceField[];
+    const original = fields[0]!.question.options!.map((o) => o.value);
 
     const result = applyOptionRanking(fields, "unknown");
 
-    const values = result[0]!.question.options!.map((o: any) => o.value);
+    const values = result[0]!.question.options!.map((o) => o.value);
     expect(values).toEqual(original);
   });
 
   it("preserves all options (ranked order, no truncation)", () => {
-    const fields = [rdsInstanceClassField()] as any;
+    const fields = [rdsInstanceClassField()] as unknown as ResourceField[];
     const originalCount = fields[0]!.question.options!.length;
 
     const result = applyOptionRanking(fields, "burstable");
@@ -1238,7 +1242,7 @@ describe("applyOptionRanking (Story 21.4)", () => {
         label: "Database name",
       },
     };
-    const fields = [stringField] as any;
+    const fields = [stringField] as unknown as ResourceField[];
     const result = applyOptionRanking(fields, "burstable");
 
     expect(result[0]).toBe(stringField);
@@ -1299,7 +1303,7 @@ function categorySelectField() {
 
 describe("applyCategorySmartFilter (Story 21.3)", () => {
   it("burstable profile reorders categories to put burstable first", () => {
-    const fields = [categorySelectField()] as any;
+    const fields = [categorySelectField()] as unknown as ResourceField[];
     const result = applyCategorySmartFilter(fields, "burstable");
 
     const cats = result[0]!.question.categories!;
@@ -1312,7 +1316,7 @@ describe("applyCategorySmartFilter (Story 21.3)", () => {
   });
 
   it("compute-heavy profile reorders categories to put compute first", () => {
-    const fields = [categorySelectField()] as any;
+    const fields = [categorySelectField()] as unknown as ResourceField[];
     const result = applyCategorySmartFilter(fields, "compute-heavy");
 
     const cats = result[0]!.question.categories!;
@@ -1322,7 +1326,7 @@ describe("applyCategorySmartFilter (Story 21.3)", () => {
   });
 
   it("memory-intensive profile reorders categories to put memory first", () => {
-    const fields = [categorySelectField()] as any;
+    const fields = [categorySelectField()] as unknown as ResourceField[];
     const result = applyCategorySmartFilter(fields, "memory-intensive");
 
     const cats = result[0]!.question.categories!;
@@ -1331,7 +1335,7 @@ describe("applyCategorySmartFilter (Story 21.3)", () => {
   });
 
   it("general-purpose profile reorders categories to put general first", () => {
-    const fields = [categorySelectField()] as any;
+    const fields = [categorySelectField()] as unknown as ResourceField[];
     const result = applyCategorySmartFilter(fields, "general-purpose");
 
     const cats = result[0]!.question.categories!;
@@ -1340,7 +1344,7 @@ describe("applyCategorySmartFilter (Story 21.3)", () => {
   });
 
   it("unknown profile leaves order unchanged", () => {
-    const fields = [categorySelectField()] as any;
+    const fields = [categorySelectField()] as unknown as ResourceField[];
     const result = applyCategorySmartFilter(fields, "unknown");
 
     // Should return the exact same reference (no transformation)
@@ -1348,14 +1352,14 @@ describe("applyCategorySmartFilter (Story 21.3)", () => {
   });
 
   it("undefined profile leaves order unchanged", () => {
-    const fields = [categorySelectField()] as any;
+    const fields = [categorySelectField()] as unknown as ResourceField[];
     const result = applyCategorySmartFilter(fields, undefined);
 
     expect(result).toBe(fields);
   });
 
   it("gpu-accelerated profile adds GPU note to hint", () => {
-    const fields = [categorySelectField()] as any;
+    const fields = [categorySelectField()] as unknown as ResourceField[];
     const result = applyCategorySmartFilter(fields, "gpu-accelerated");
 
     const hint = result[0]!.question.hint;
@@ -1398,7 +1402,7 @@ describe("applyCategorySmartFilter (Story 21.3)", () => {
         ],
       },
     };
-    const fields = [field] as any;
+    const fields = [field] as unknown as ResourceField[];
     const result = applyCategorySmartFilter(fields, "burstable");
 
     // The burstable category should be first
@@ -1406,12 +1410,12 @@ describe("applyCategorySmartFilter (Story 21.3)", () => {
     expect(burstCat.key).toBe("burstable");
     // Options should be ranked — t3.micro matches "t3" + "micro", t4g.small matches "small"
     // t3.micro scores higher (matches t3 + micro = 10), t4g.small scores (small = 5), t3.xlarge (t3 = 5)
-    const values = burstCat.options.map((o: any) => o.value);
+    const values = burstCat.options.map((o) => o.value);
     expect(values[0]).toBe("t3.micro");
   });
 
   it("preserves total category count after reordering", () => {
-    const fields = [categorySelectField()] as any;
+    const fields = [categorySelectField()] as unknown as ResourceField[];
     const result = applyCategorySmartFilter(fields, "compute-heavy");
 
     expect(result[0]!.question.categories).toHaveLength(4);
@@ -1426,7 +1430,7 @@ describe("applyCategorySmartFilter (Story 21.3)", () => {
         options: [{ value: "sm", label: "Small" }],
       },
     };
-    const fields = [enumField] as any;
+    const fields = [enumField] as unknown as ResourceField[];
     const result = applyCategorySmartFilter(fields, "burstable");
 
     expect(result[0]).toBe(enumField);

@@ -380,7 +380,7 @@ describeE2E("E2E: SSM Parameter plan + apply + destroy", () => {
     const config = { configurable: { thread_id: threadId } };
 
     // Phase 1: Plan + Apply in one pass (auto-approve)
-    const state = await graph.invoke(
+    await graph.invoke(
       {
         userIntent: `Create an SSM parameter named ${paramName} with value "e2e-test-value"`,
         runId: crypto.randomUUID(),
@@ -786,7 +786,6 @@ describeE2E("E2E: Auto-fix verification", () => {
       // or at minimum the fix_applicator ran without errors.
       // The LLM may generate a plan that already satisfies some BPs,
       // so we check that findings + applied fixes cover the expected BPs.
-      const totalFindings = (s.bpFindings ?? []).length;
       const appliedCount = (s.appliedFixes ?? []).length;
 
       if (appliedCount > 0) {

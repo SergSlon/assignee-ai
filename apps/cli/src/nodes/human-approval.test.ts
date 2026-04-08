@@ -402,14 +402,14 @@ describe("humanApprovalNode — interactive fix selection (Story 35.4)", () => {
         patternId: "test",
         displayName: "Test",
         resources: [],
-      } as any,
+      } as unknown as AgentState["resourcePattern"],
       resourceQueue: [
         {
           resourceType: "AWS::S3::Bucket",
           resourceId: "r1",
           displayName: "Bucket",
         },
-      ] as any,
+      ] as unknown as AgentState["resourceQueue"],
     });
 
     await humanApprovalNode(state);

@@ -615,7 +615,9 @@ describe("MemoryService — rotation TOCTOU (REG-N5)", () => {
     // print when the rotation holds the lock.
     const stderrSpy = vi
       .spyOn(process.stderr, "write")
-      .mockImplementation((() => true) as any);
+      .mockImplementation(
+        (() => true) as unknown as typeof process.stderr.write,
+      );
 
     const newRecord = makeProvision({
       runId: "550e8400-e29b-41d4-a716-446655440099",
@@ -655,12 +657,14 @@ describe("MemoryService — rotation TOCTOU (REG-N5)", () => {
 // ── EC-29: Corrupt file backup tests ─────────────────────────────────────────
 
 describe("MemoryService — corrupt file backup (EC-29)", () => {
-  let stderrSpy: MockInstance<any>;
+  let stderrSpy: MockInstance<typeof process.stderr.write>;
 
   beforeEach(() => {
     stderrSpy = vi
       .spyOn(process.stderr, "write")
-      .mockImplementation((() => true) as any);
+      .mockImplementation(
+        (() => true) as unknown as typeof process.stderr.write,
+      );
   });
 
   afterEach(() => {

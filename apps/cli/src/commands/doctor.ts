@@ -45,7 +45,7 @@ import {
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { ProcessExitCode } from "../constants/errors.js";
-import { AWS_REGION, BEDROCK_MODEL_ID } from "../config/constants.js";
+import { AWS_REGION } from "../config/constants.js";
 import { LlmAdapter, DEFAULT_MODEL } from "../services/llm-adapter.js";
 import {
   getMcpServerConfigs,

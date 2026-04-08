@@ -6,7 +6,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { MCP_PINS } from "../config/mcp-servers.js";
+import type { McpServerNameType } from "../constants/mcp.js";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
@@ -34,8 +36,8 @@ vi.mock("../config/mcp-servers.js", async (importOriginal) => {
   };
 });
 
-let exitSpy: ReturnType<typeof vi.spyOn>;
-let stderrWriteSpy: any;
+let exitSpy: MockInstance;
+let stderrWriteSpy: MockInstance;
 
 function installDefaultMocks() {
   MockMultiServerMCPClient.mockImplementation(() => ({
@@ -60,10 +62,10 @@ beforeEach(async () => {
   vi.mocked(configMod.getOptionalMcpServerConfigs).mockReturnValue({});
   exitSpy = vi
     .spyOn(process, "exit")
-    .mockImplementation((() => {}) as never) as any;
+    .mockImplementation((() => undefined) as never);
   stderrWriteSpy = vi
     .spyOn(process.stderr, "write")
-    .mockImplementation((() => true) as any);
+    .mockImplementation((() => true) as never);
 });
 
 afterEach(() => {
@@ -248,7 +250,7 @@ describe("createMcpClient — lazy loading (Story 29.3)", () => {
     mockInitializeConnections.mockResolvedValue(undefined);
     const { createMcpClient } = await freshImportMultiServer();
 
-    await createMcpClient(["aws-pricing-mcp-server"] as any);
+    await createMcpClient(["aws-pricing-mcp-server"] as McpServerNameType[]);
 
     const coreConfig = MockMultiServerMCPClient.mock.calls[0]?.[0];
     expect(Object.keys(coreConfig.mcpServers)).toEqual([
@@ -261,7 +263,10 @@ describe("createMcpClient — lazy loading (Story 29.3)", () => {
     const { createMcpClient } = await freshImportMultiServer();
 
     // Request only pricing (core) + iam (optional)
-    await createMcpClient(["aws-pricing-mcp-server", "iam-mcp-server"] as any);
+    await createMcpClient([
+      "aws-pricing-mcp-server",
+      "iam-mcp-server",
+    ] as McpServerNameType[]);
 
     // Core: only pricing
     const coreConfig = MockMultiServerMCPClient.mock.calls[0]?.[0];

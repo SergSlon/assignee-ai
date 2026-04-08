@@ -149,7 +149,9 @@ describe("sanitizeDesiredState", () => {
         schema,
       );
 
-      expect((sanitized as any).CreditSpecification).toEqual({
+      expect(
+        (sanitized as { CreditSpecification: unknown }).CreditSpecification,
+      ).toEqual({
         CPUCredits: "standard",
       });
       expect(strippedKeys).toContain("CreditSpecification.CpuCredits");
@@ -187,7 +189,9 @@ describe("sanitizeDesiredState", () => {
         schema,
       );
 
-      expect((sanitized as any).Level1.Level2).toEqual({ ValidKey: "ok" });
+      expect(
+        (sanitized as { Level1: { Level2: unknown } }).Level1.Level2,
+      ).toEqual({ ValidKey: "ok" });
       expect(strippedKeys).toContain("Level1.ExtraL1");
       expect(strippedKeys).toContain("Level1.Level2.BadKey");
     });
@@ -377,7 +381,7 @@ describe("sanitizeDesiredState", () => {
         schema,
       );
 
-      expect((sanitized as any).Tags).toEqual([
+      expect((sanitized as { Tags: unknown }).Tags).toEqual([
         { Key: "env", Value: "test" },
         { Key: "name", Value: "ok" },
       ]);

@@ -10,9 +10,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { Command } from "commander";
 import { ExecutionMode, ExecutionStatus } from "@assignee/core";
-import type { RunCommandOptions } from "../utils/command-runner.js";
+import type {
+  CommandContext,
+  RunCommandOptions,
+} from "../utils/command-runner.js";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
@@ -92,7 +96,7 @@ function makeCtx(graphInvokeFn?: (...args: unknown[]) => unknown) {
       next: [],
       values: defaultGraphResult,
     }),
-  } as any;
+  } as unknown as CommandContext["graph"];
 
   return {
     intent: "Create an S3 bucket",
@@ -103,7 +107,7 @@ function makeCtx(graphInvokeFn?: (...args: unknown[]) => unknown) {
   };
 }
 
-let stdoutWriteSpy: ReturnType<typeof vi.spyOn>;
+let stdoutWriteSpy: MockInstance;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -111,7 +115,7 @@ beforeEach(() => {
   vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
   stdoutWriteSpy = vi
     .spyOn(process.stdout, "write")
-    .mockImplementation(() => true) as any;
+    .mockImplementation(() => true);
   vi.spyOn(process.stderr, "write").mockImplementation(() => true);
   Object.defineProperty(process.stdin, "isTTY", {
     value: false,

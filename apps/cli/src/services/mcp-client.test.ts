@@ -11,7 +11,7 @@ describe.skipIf(!!process.env["CI"])("MCP integration", () => {
     // Silence expected stderr output during tests
     stderrSpy = vi
       .spyOn(process.stderr, "write")
-      .mockImplementation((() => true) as any);
+      .mockImplementation((() => true) as never);
   });
 
   afterAll(() => {

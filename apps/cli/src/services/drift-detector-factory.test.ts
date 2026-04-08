@@ -99,7 +99,9 @@ describe("createDriftDetectorFromEnv", () => {
     });
 
     const fakeClient = { send: vi.fn() };
-    vi.mocked(createCloudControlClient).mockReturnValue(fakeClient as any);
+    vi.mocked(createCloudControlClient).mockReturnValue(
+      fakeClient as unknown as ReturnType<typeof createCloudControlClient>,
+    );
 
     const { createDriftDetectorFromEnv } =
       await import("./drift-detector-factory.js");

@@ -20,7 +20,6 @@ import {
   ArnPrefix,
   ConfigurationError,
   RESOURCE_TYPES,
-  COMPANION_RESOURCE_TYPES,
   LIST_RESOURCE_TYPES,
   CCAPI_FALLBACK_TYPES,
 } from "@assignee/core";
