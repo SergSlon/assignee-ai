@@ -19,4 +19,14 @@ export const PatternId = {
    * serverless-api pattern auto-creates a minimal exec role.
    */
   LAMBDA_WITH_EXEC_ROLE: "lambda-with-exec-role",
+  /**
+   * EFS FileSystem + VPC compound. Bare "create an EFS file system"
+   * intents need a full VPC topology (2 private subnets across 2 AZs,
+   * a dedicated NFS security group, one MountTarget per AZ) because
+   * EFS is reached by NFS mount from workloads inside the VPC — there
+   * is no useful single-resource EFS plan. This pattern bundles the
+   * network + file system + mount targets so the first-run experience
+   * matches the promise of "natural language → running".
+   */
+  EFS_WITH_VPC: "efs-with-vpc",
 } as const;
