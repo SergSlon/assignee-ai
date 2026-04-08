@@ -41,6 +41,8 @@ const TYPE_TO_KEYWORD: Record<string, string> = {
   // round-trip testing only.
   "AWS::EC2::VPCGatewayAttachment": "vpc gateway attachment",
   "AWS::EC2::SubnetRouteTableAssociation": "subnet route table association",
+  "AWS::EFS::FileSystem": "efs",
+  "AWS::EFS::MountTarget": "efs mount target",
 };
 
 describe("cross-system consistency", () => {
