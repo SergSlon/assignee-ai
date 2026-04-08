@@ -314,6 +314,35 @@ describe("checkBedrock", () => {
     expect(guardrailSub?.status).toBe("ok");
     expect(guardrailSub?.detail).toContain("abc123:DRAFT");
   });
+
+  // Tier S #2: pre-fix the doctor header always showed BEDROCK_MODEL_ID
+  // (the default model) even when ASSIGNEE_MODEL was set to override it.
+  // Observed in 2026-04-08 live smoke when forcing the Wave 12 region-error
+  // hint via `ASSIGNEE_MODEL=bedrock/bogus-model-...` — the header still
+  // displayed `model us.amazon.nova-lite-v1:0` despite the actual call
+  // using the bogus model. The header now reflects modelString.
+  it("Tier S #2: header reflects ASSIGNEE_MODEL override, not the default", async () => {
+    process.env["ASSIGNEE_MODEL"] = "bedrock/anthropic.claude-3-5-sonnet";
+    const section = await checkBedrock({
+      llmFactory: () => ({
+        generateText: vi.fn().mockResolvedValue([null, "ok"] as const),
+      }),
+    });
+    expect(section.name).toContain("anthropic.claude-3-5-sonnet");
+    expect(section.name).not.toContain("nova-lite");
+  });
+
+  it("Tier S #2: header strips the bedrock/ provider prefix from the model display", async () => {
+    process.env["ASSIGNEE_MODEL"] = "bedrock/amazon.nova-lite-v1:0";
+    const section = await checkBedrock({
+      llmFactory: () => ({
+        generateText: vi.fn().mockResolvedValue([null, "ok"] as const),
+      }),
+    });
+    // Should be "model amazon.nova-lite-v1:0", not "model bedrock/amazon..."
+    expect(section.name).toContain("model amazon.nova-lite-v1:0");
+    expect(section.name).not.toContain("model bedrock/");
+  });
 });
 
 // ── MCP servers check ─────────────────────────────────────────────────────
