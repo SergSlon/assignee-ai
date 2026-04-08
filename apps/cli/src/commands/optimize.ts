@@ -100,17 +100,36 @@ function renderTable(
 }
 
 /**
- * Render the summary line below the table. When no recommendations
- * were found at all, emit a friendly "nothing to optimize" line
- * instead of an empty table.
+ * Render the summary line below the table. Separates "scanned"
+ * (resources enumerated via RGTA) from "analyzed" (resources with
+ * a checkpoint that could actually be compared) so operators see
+ * both the scan coverage and the actionable subset.
+ *
+ * When no recommendations were found, the message distinguishes
+ * three cases:
+ *   - 0 analyzable → "N resources scanned, 0 analyzable (no
+ *     checkpoint found). Run `assignee plan` or
+ *     `assignee drift --baseline <arn>` to adopt."
+ *   - ≥1 analyzable, 0 recommendations → "N of M analyzable —
+ *     no rightsizing opportunities detected."
+ *   - ≥1 recommendation → "N of M analyzable, R recommendations.
+ *     Est. total monthly savings: \$X.XX/mo"
  */
 function renderSummary(
   totalResourcesScanned: number,
   recommendations: CostOptRecommendation[],
+  analyzed: number,
 ): void {
   if (recommendations.length === 0) {
+    if (analyzed === 0) {
+      process.stdout.write(
+        `\n${totalResourcesScanned} resources scanned, 0 analyzable (no checkpoint found). ` +
+          `Run \`assignee plan\` to provision new resources, or \`assignee drift --baseline <arn>\` to adopt existing ones.\n`,
+      );
+      return;
+    }
     process.stdout.write(
-      `\n${totalResourcesScanned} resources scanned — no rightsizing opportunities detected.\n`,
+      `\n${analyzed} of ${totalResourcesScanned} resources analyzed — no rightsizing opportunities detected.\n`,
     );
     return;
   }
@@ -120,7 +139,7 @@ function renderSummary(
     0,
   );
   process.stdout.write(
-    `\n${totalResourcesScanned} resources scanned, ${recommendations.length} recommendations. ` +
+    `\n${analyzed} of ${totalResourcesScanned} resources analyzed, ${recommendations.length} recommendations. ` +
       `Est. total monthly savings: $${totalMonthly.toFixed(2)}/mo\n`,
   );
 }
@@ -225,11 +244,16 @@ export const optimizeCommand = new Command("optimize")
           // desiredState and delegate to the analyzer. Resources
           // without a checkpoint are silently skipped — optimize
           // cannot make a meaningful recommendation without knowing
-          // what the user intended to deploy.
+          // what the user intended to deploy. Track the two
+          // counts separately so the caller can surface "0 of 100
+          // scanned were analyzable" vs "0 of 100 had a cheaper
+          // alternative" — very different operator experiences.
           const allRecommendations: CostOptRecommendation[] = [];
+          let analyzed = 0;
           for (const resource of targets) {
             const desiredState = await resolveDesiredState(resource.arn);
             if (!desiredState) continue;
+            analyzed++;
             const recommendation = await analyzeResource(
               { arn: resource.arn, resourceType: resource.resourceType },
               desiredState,
@@ -269,6 +293,8 @@ export const optimizeCommand = new Command("optimize")
               JSON.stringify(
                 {
                   scanned: targets.length,
+                  analyzed,
+                  skippedMissingCheckpoint: targets.length - analyzed,
                   recommendations,
                   ...(reconcilePlaybook ? { reconcilePlaybook } : {}),
                 },
@@ -280,7 +306,7 @@ export const optimizeCommand = new Command("optimize")
             if (recommendations.length > 0) {
               renderTable(recommendations, noColor);
             }
-            renderSummary(targets.length, recommendations);
+            renderSummary(targets.length, recommendations, analyzed);
             if (opts.reconcile) {
               renderReconcilePlaybook(recommendations);
             }
