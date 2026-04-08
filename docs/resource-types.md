@@ -1,6 +1,6 @@
 # Supported Resource Types
 
-assignee.ai supports 23 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
+assignee.ai supports 27 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
 
 ## Resource Type Table
 
@@ -29,6 +29,10 @@ assignee.ai supports 23 AWS resource types via CloudFormation CloudControl API, 
 | 21  | `AWS::ApiGatewayV2::Api`                    | API Gateway V2       | apigatewayv2-api      | -             |
 | 22  | `AWS::CloudWatch::Alarm`                    | CloudWatch Alarm     | cloudwatch-alarm      | -             |
 | 23  | `AWS::SecretsManager::Secret`               | Secrets Manager      | secretsmanager-secret | -             |
+| 24  | `AWS::EC2::VPCGatewayAttachment`            | VPC Gateway Attach   | (compound-only)       | -             |
+| 25  | `AWS::EC2::SubnetRouteTableAssociation`     | Subnet→RT Assoc      | (compound-only)       | -             |
+| 26  | `AWS::EFS::FileSystem` (A1)                 | EFS File System      | efs-file-system       | -             |
+| 27  | `AWS::EFS::MountTarget` (A1 follow-up)      | EFS Mount Target     | efs-mount-target      | -             |
 
 A **generic plugin** handles any resource type not covered by a dedicated plugin, using CloudFormation schema defaults.
 
