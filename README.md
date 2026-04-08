@@ -214,7 +214,7 @@ packages/
 
 Optional servers (IAM, Well-Architected Security, Billing) are spawned only when the corresponding command requires them.
 
-> **Note:** CloudFormation schemas and CCAPI provisioning are accessed directly via `@aws-sdk/client-cloudformation` and `@aws-sdk/client-cloudcontrol`. The legacy `cfn-mcp-server` and `ccapi-mcp-server` MCP wrappers were removed in Stories 7.6 and 31.4 — a guardrail test in `apps/cli/src/config/mcp-servers.test.ts` enforces that they never re-appear.
+> **Note:** CloudFormation schemas and CCAPI provisioning are accessed directly via `@aws-sdk/client-cloudformation` and `@aws-sdk/client-cloudcontrol`. The legacy `cfn-mcp-server` and `ccapi-mcp-server` MCP wrappers were removed in Stories 7.6 and 31.4, and their announced replacement `aws-iac-mcp-server` was evaluated and declined (see [`docs/iac-mcp-evaluation.md`](docs/iac-mcp-evaluation.md) for the full rationale). A guardrail test in `apps/cli/src/config/mcp-servers.test.ts` enforces that none of the three can re-appear.
 
 **LLM provider:** Default `us.amazon.nova-lite-v1:0` (Bedrock). Override with `ASSIGNEE_MODEL=anthropic/claude-haiku-4-5` or any LiteLLM-compatible string (OpenAI, Google, Anthropic).
 

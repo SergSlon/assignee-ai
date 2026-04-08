@@ -91,11 +91,30 @@ describe("getMcpServerConfigs", () => {
     expect(optional[McpServerName.KNOWLEDGE]).toBeUndefined();
   });
 
-  it("does not include cfn-mcp-server in any entry", () => {
-    const configs = getMcpServerConfigs();
+  // Guardrail: none of the deprecated/declined AWS Labs IaC MCP wrappers may
+  // re-appear in the spawned server list. cfn-mcp-server and ccapi-mcp-server
+  // are deprecated (Story 7.6 / Story 31.1 migrated us to @aws-sdk/client-
+  // cloudformation DescribeType + @aws-sdk/client-cloudcontrol direct calls).
+  // aws-iac-mcp-server is the announced replacement for both but was
+  // evaluated and declined — see docs/iac-mcp-evaluation.md for the full
+  // rationale (architectural mismatch with our in-pipeline BP engine,
+  // stack-bound troubleshooter unreachable for CCAPI direct, @latest-only
+  // supply-chain story regressing the Wave-2 pinning policy).
+  it("does not include any deprecated or declined IaC MCP server", () => {
+    const forbidden = [
+      "cfn-mcp-server",
+      "ccapi-mcp-server",
+      "aws-iac-mcp-server",
+    ];
+    const configs = {
+      ...getMcpServerConfigs(),
+      ...getOptionalMcpServerConfigs(),
+    };
     for (const [name, config] of Object.entries(configs)) {
-      expect(name).not.toContain("cfn-mcp-server");
-      expect(config.args.join(" ")).not.toContain("cfn-mcp-server");
+      for (const banned of forbidden) {
+        expect(name).not.toContain(banned);
+        expect(config.args.join(" ")).not.toContain(banned);
+      }
     }
   });
 
