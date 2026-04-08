@@ -186,12 +186,17 @@ describe("status command registration", () => {
 });
 
 describe("status command options registration", () => {
+  // Wave 18: strengthened the three command-option-registration tests
+  // below to assert the option's long-flag name explicitly. The
+  // previous `toBeDefined()` would have passed for any non-undefined
+  // Option object the find() returned, even one with a different long
+  // flag — masking refactors that rename a flag.
   it("has --bp-coverage option registered", async () => {
     const { statusCommand } = await import("./status.js");
     const bpOption = statusCommand.options.find(
       (opt) => opt.long === "--bp-coverage",
     );
-    expect(bpOption).toBeDefined();
+    expect(bpOption?.long).toBe("--bp-coverage");
     expect(bpOption!.description).toBe("Show BP rule coverage dashboard");
   });
 
@@ -200,7 +205,7 @@ describe("status command options registration", () => {
     const regionOption = statusCommand.options.find(
       (opt) => opt.long === "--region",
     );
-    expect(regionOption).toBeDefined();
+    expect(regionOption?.long).toBe("--region");
     expect(regionOption!.description).toBe("Filter to a specific AWS region");
   });
 
@@ -209,7 +214,7 @@ describe("status command options registration", () => {
     const jsonOption = statusCommand.options.find(
       (opt) => opt.long === "--json",
     );
-    expect(jsonOption).toBeDefined();
+    expect(jsonOption?.long).toBe("--json");
     expect(jsonOption!.description).toBe("Output status data as JSON");
   });
 

@@ -424,8 +424,14 @@ describe("setup command", () => {
 
     // The "IAM Users" section must be a single multi-line string
     // containing all 3 user names — proves it was emitted as one block.
+    // Wave 18: strengthened all four section assertions below — replaced
+    // bare `toBeDefined()` with `typeof === "string"` checks. The
+    // previous form would have passed for any non-undefined value
+    // (e.g. a number, an object) and the `.toContain()` chain would
+    // throw a confusing diagnostic. The string check anchors the
+    // section at its expected shape.
     const usersSection = stepTexts.find((s) => s.startsWith("IAM Users:"));
-    expect(usersSection).toBeDefined();
+    expect(typeof usersSection).toBe("string");
     expect(usersSection).toContain(IAM_USER_NAMES.operator);
     expect(usersSection).toContain(IAM_USER_NAMES.reader);
     expect(usersSection).toContain(IAM_USER_NAMES.auditor);
@@ -436,7 +442,7 @@ describe("setup command", () => {
     const policiesSection = stepTexts.find((s) =>
       s.startsWith("IAM Managed Policies:"),
     );
-    expect(policiesSection).toBeDefined();
+    expect(typeof policiesSection).toBe("string");
     expect(policiesSection).toContain(IAM_POLICY_NAMES.operator);
     expect(policiesSection).toContain(IAM_POLICY_NAMES.reader);
     expect(policiesSection).toContain(IAM_POLICY_NAMES.auditor);
@@ -444,7 +450,7 @@ describe("setup command", () => {
 
     // Access keys section must be one block listing all 3 env var pairs.
     const keysSection = stepTexts.find((s) => s.startsWith("IAM Access Keys:"));
-    expect(keysSection).toBeDefined();
+    expect(typeof keysSection).toBe("string");
     expect(keysSection).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
     expect(keysSection).toContain("ASSIGNEE_READER_ACCESS_KEY_ID");
     expect(keysSection).toContain("ASSIGNEE_AUDITOR_ACCESS_KEY_ID");
@@ -455,7 +461,7 @@ describe("setup command", () => {
     const bedrockSection = stepTexts.find((s) =>
       s.startsWith("Bedrock invocation logging infrastructure:"),
     );
-    expect(bedrockSection).toBeDefined();
+    expect(typeof bedrockSection).toBe("string");
     expect(bedrockSection).toContain("AssigneeAiBedrockLoggingRole");
     expect(bedrockSection).toContain("BedrockLoggingPolicy");
     expect(bedrockSection).toContain("/assignee-ai/bedrock-invocations");
