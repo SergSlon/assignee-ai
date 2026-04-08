@@ -164,20 +164,30 @@ typesCommand
     "List every supported resource type with its field + BP rule count",
   )
   .option("--json", "Output as JSON")
-  .action((opts: { json?: boolean }) => {
+  .option(
+    "--search <keyword>",
+    "Filter types whose resourceType or short name contains the substring (case-insensitive)",
+  )
+  .action((opts: { json?: boolean; search?: string }) => {
     const practices = loadPractices();
-    const entries: TypeListEntry[] = SUPPORTED_TYPES_ARRAY.map(
-      (resourceType) => {
-        const plugin = defaultPluginRegistry.get(resourceType);
-        return {
-          resourceType,
-          shortName: shortName(resourceType),
-          commonFieldCount: plugin?.commonFields.length ?? 0,
-          advancedFieldCount: plugin?.advancedFields.length ?? 0,
-          bpRuleCount: bpRulesForType(resourceType, practices).length,
-        };
-      },
-    );
+    let entries: TypeListEntry[] = SUPPORTED_TYPES_ARRAY.map((resourceType) => {
+      const plugin = defaultPluginRegistry.get(resourceType);
+      return {
+        resourceType,
+        shortName: shortName(resourceType),
+        commonFieldCount: plugin?.commonFields.length ?? 0,
+        advancedFieldCount: plugin?.advancedFields.length ?? 0,
+        bpRuleCount: bpRulesForType(resourceType, practices).length,
+      };
+    });
+    if (opts.search) {
+      const needle = opts.search.toLowerCase();
+      entries = entries.filter(
+        (e) =>
+          e.resourceType.toLowerCase().includes(needle) ||
+          e.shortName.toLowerCase().includes(needle),
+      );
+    }
     if (opts.json) {
       process.stdout.write(JSON.stringify(entries, null, 2) + "\n");
       return;

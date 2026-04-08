@@ -1174,6 +1174,20 @@ describe("types command definition", () => {
       expect(jsonOpt, `${name} must expose --json`).not.toBeUndefined();
     }
   });
+
+  it("types list exposes --search for grep-like filtering", async () => {
+    const { typesCommand } = await import("../commands/types.js");
+    const sub = typesCommand.commands.find((c) => c.name() === "list");
+    const searchOpt = sub!.options.find((o) => o.long === "--search");
+    expect(searchOpt, "list must expose --search").not.toBeUndefined();
+  });
+
+  it("patterns list exposes --search for grep-like filtering", async () => {
+    const { patternsCommand } = await import("../commands/patterns.js");
+    const sub = patternsCommand.commands.find((c) => c.name() === "list");
+    const searchOpt = sub!.options.find((o) => o.long === "--search");
+    expect(searchOpt, "list must expose --search").not.toBeUndefined();
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
