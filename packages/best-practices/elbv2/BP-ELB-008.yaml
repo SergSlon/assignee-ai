@@ -1,0 +1,14 @@
+id: BP-ELB-008
+title: "ALB HTTP listener should redirect to HTTPS"
+severity: MEDIUM
+resource_type: "AWS::ElasticLoadBalancingV2::Listener"
+property_path: "DefaultActions"
+check_type: "awareness"
+expected_value: true
+source: "AWS Guard Rules Registry"
+source_id: "alb_http_to_https_redirection_check"
+description: "If a listener accepts Protocol: HTTP (see BP-ELB-004), its DefaultActions should be a single redirect action that rewrites incoming HTTP requests to HTTPS on port 443. A permanent redirect (StatusCode: HTTP_301) lets browsers cache the upgrade and ensures legitimate clients never send sensitive data in cleartext. This is an awareness rule because legitimate exceptions exist (internal-only health check listeners, legacy client compatibility windows), but every HTTP listener should be audited for the redirect."
+remediation: "Set `DefaultActions: [{ Type: 'redirect', RedirectConfig: { Protocol: 'HTTPS', Port: '443', StatusCode: 'HTTP_301', Host: '#{host}', Path: '/#{path}', Query: '#{query}' } }]`. The #{host}/#{path}/#{query} tokens preserve the original request's location; StatusCode HTTP_301 is the permanent redirect (cacheable) while HTTP_302 is temporary (not cached)."
+consequence: "Clients that connect over HTTP for form posts, API calls or asset requests send data in cleartext even when the user typed https:// initially — downgrade attacks exploit this every day."
+category: security
+lastVerified: "2026-04-08"

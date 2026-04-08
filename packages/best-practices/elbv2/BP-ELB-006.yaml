@@ -1,0 +1,17 @@
+id: BP-ELB-006
+title: "ALB listener SSL policy should enforce TLS 1.2 or later"
+severity: HIGH
+resource_type: "AWS::ElasticLoadBalancingV2::Listener"
+property_path: "SslPolicy"
+check_type: "equals"
+expected_value: "ELBSecurityPolicy-TLS13-1-2-2021-06"
+source: "AWS Guard Rules Registry"
+source_id: "elbv2_listener_ssl_policy_rule"
+description: "The listener's SslPolicy controls which TLS versions and cipher suites the load balancer negotiates with clients. Legacy policies like ELBSecurityPolicy-2016-08 still allow TLS 1.0/1.1, which are deprecated by PCI DSS 4.0 and disallowed by most compliance frameworks. The recommended modern policy is ELBSecurityPolicy-TLS13-1-2-2021-06, which requires TLS 1.2+ and supports TLS 1.3."
+remediation: "Set `SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06` on the listener. If you need to support legacy clients, ELBSecurityPolicy-TLS13-1-2-Res-2021-06 is the restricted variant; ELBSecurityPolicy-FS-1-2-Res-2020-10 enforces forward secrecy."
+consequence: "TLS 1.0/1.1 connections are vulnerable to BEAST, POODLE, and several cipher-suite downgrade attacks. Compliance auditors (PCI, HIPAA, SOC 2) flag legacy SSL policies as a finding."
+category: security
+lastVerified: "2026-04-08"
+autoFixable: true
+desiredStatePatch:
+  SslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06"

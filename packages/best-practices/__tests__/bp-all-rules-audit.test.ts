@@ -1364,6 +1364,51 @@ const elbRules: RuleSpec[] = [
     checkType: "equals",
     expectedValue: "true",
   },
+  // ── A5.4: ELBv2 HTTPS hygiene (Tier 2 of the cfn-guard gap analysis).
+  // ── These target AWS::ElasticLoadBalancingV2::Listener, not the
+  // ── LoadBalancer resource — a new resource type in the audit harness.
+  // ── runElbRuleTests is the bracket-key helper for LB attributes; these
+  // ── listener rules use simple property paths and go through runRuleTests.
+  {
+    id: "BP-ELB-004",
+    resourceType: "AWS::ElasticLoadBalancingV2::Listener",
+    propertyPath: "Protocol",
+    checkType: "not_equals",
+    expectedValue: "HTTP",
+  },
+  {
+    id: "BP-ELB-005",
+    resourceType: "AWS::ElasticLoadBalancingV2::Listener",
+    propertyPath: "Certificates",
+    checkType: "exists",
+    expectedValue: true,
+  },
+  {
+    id: "BP-ELB-006",
+    resourceType: "AWS::ElasticLoadBalancingV2::Listener",
+    propertyPath: "SslPolicy",
+    checkType: "equals",
+    expectedValue: "ELBSecurityPolicy-TLS13-1-2-2021-06",
+  },
+  // BP-ELB-007 / BP-ELB-008 are awareness-only — they always fire on
+  // their target resource type to surface cross-resource recommendations
+  // (WAF association and HTTP→HTTPS redirect) that cannot be expressed
+  // as a single-field check. The runRuleTests helper handles awareness
+  // via ALWAYS_FIRE_TYPES.
+  {
+    id: "BP-ELB-007",
+    resourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    propertyPath: "Scheme",
+    checkType: "awareness",
+    expectedValue: true,
+  },
+  {
+    id: "BP-ELB-008",
+    resourceType: "AWS::ElasticLoadBalancingV2::Listener",
+    propertyPath: "DefaultActions",
+    checkType: "awareness",
+    expectedValue: true,
+  },
 ];
 
 const logsRules: RuleSpec[] = [
@@ -1713,9 +1758,20 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("ELBv2 (3 rules)", () => {
-    for (const spec of elbRules) {
+  describe("ELBv2 (8 rules)", () => {
+    // BP-ELB-001..003 use LoadBalancerAttributes[bracket.key] paths that
+    // need the dedicated runElbRuleTests helper. BP-ELB-004..008 (A5.4)
+    // are simple property or awareness checks on Listener/LoadBalancer
+    // and go through the standard runRuleTests harness.
+    const bracketKeyRules = elbRules.filter((r) =>
+      r.propertyPath.includes("["),
+    );
+    const simpleRules = elbRules.filter((r) => !r.propertyPath.includes("["));
+    for (const spec of bracketKeyRules) {
       runElbRuleTests(spec);
+    }
+    for (const spec of simpleRules) {
+      runRuleTests(spec);
     }
   });
 
@@ -1774,17 +1830,18 @@ describe("BP All Rules Audit", () => {
       ...asgRules,
     ];
 
-    it("covers exactly 146 rule specs", () => {
+    it("covers exactly 151 rule specs", () => {
       // 131 pre-A5
       // + 6 Tier-1 IAM rules       (BP-IAM-011..016)
       // + 9 Tier-3 policy rules    (BP-S3-018..020, BP-SQS-006..009, BP-SNS-005..006)
+      // + 5 Tier-2 ELBv2 rules     (BP-ELB-004..008)
       //   Note: BP-S3-015..017 were already taken by pre-A5 rules
       //   (replication / intelligent tiering / access logging), so the
       //   new S3 bucket-policy rules start at BP-S3-018.
       // BP-IAM-017 (elevated *FullAccess heuristic) is still deferred
       // — it needs a walker over ManagedPolicyArns rather than over
       // PolicyDocument.Statement[].
-      expect(allSpecs.length).toBe(146);
+      expect(allSpecs.length).toBe(151);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

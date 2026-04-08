@@ -1,0 +1,14 @@
+id: BP-ELB-007
+title: "Internet-facing ALB should be associated with a WAFv2 Web ACL"
+severity: MEDIUM
+resource_type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+property_path: "Scheme"
+check_type: "awareness"
+expected_value: true
+source: "AWS Guard Rules Registry"
+source_id: "alb_waf_enabled"
+description: "Internet-facing Application Load Balancers should route traffic through a WAFv2 Web ACL for defence-in-depth against OWASP Top 10 attack classes (SQL injection, XSS, HTTP request smuggling, common bot signatures). WAFv2 is a per-region managed service that attaches to an ALB via an AWS::WAFv2::WebACLAssociation resource. This rule is an awareness reminder — if the current plan does not already include the association, consider adding it or setting up a baseline managed rule group."
+remediation: "Create an AWS::WAFv2::WebACL with the AWS-managed AWSManagedRulesCommonRuleSet (baseline OWASP coverage) and attach it via `AWS::WAFv2::WebACLAssociation { ResourceArn: <alb-arn>, WebACLArn: <acl-arn> }`. Evaluate rule group costs ($1/month per managed rule group + $0.60 per million requests)."
+consequence: "Without a Web ACL, the ALB forwards every request to the target group — attacks and scanners reach the application directly, and only backend input validation stands between them and your data."
+category: security
+lastVerified: "2026-04-08"

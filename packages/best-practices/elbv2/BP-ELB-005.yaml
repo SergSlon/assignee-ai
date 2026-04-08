@@ -1,0 +1,14 @@
+id: BP-ELB-005
+title: "ALB listener must reference an ACM certificate"
+severity: CRITICAL
+resource_type: "AWS::ElasticLoadBalancingV2::Listener"
+property_path: "Certificates"
+check_type: "exists"
+expected_value: true
+source: "AWS Guard Rules Registry"
+source_id: "elbv2_acm_certificate_required"
+description: "HTTPS and TLS listeners must reference at least one ACM certificate via the Certificates property. A listener without a certificate cannot terminate TLS and the CloudFormation deployment will fail; missing the certificate at plan time is a hard configuration error that should be caught before apply."
+remediation: "Add `Certificates: [{ CertificateArn: 'arn:aws:acm:<region>:<account>:certificate/<id>' }]` to the listener. The ACM certificate must be validated and in the same region as the load balancer. For SNI support, supply additional certificates via `AWS::ElasticLoadBalancingV2::ListenerCertificate` resources."
+consequence: "The CloudFormation stack will fail at apply time, or worse, partially succeed and leave an internet-facing listener in a broken state that rejects all connections. Fix at plan time, not at apply time."
+category: security
+lastVerified: "2026-04-08"
