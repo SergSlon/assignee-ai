@@ -45,4 +45,9 @@ export class PatternRegistry {
   has(patternId: string): boolean {
     return this.patterns.has(patternId);
   }
+
+  /** Number of registered patterns — used by doctor and status commands. */
+  size(): number {
+    return this.patterns.size;
+  }
 }

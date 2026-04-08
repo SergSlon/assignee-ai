@@ -33,6 +33,8 @@ import {
   envVarsForRole,
   tryAssigneeCredentials,
   ASSIGNEE_DIR,
+  SUPPORTED_TYPES_ARRAY,
+  defaultPatternRegistry,
   type AssigneeRole,
   type ExplicitAwsCredentials,
 } from "@assignee/core";
@@ -796,6 +798,17 @@ export function checkBestPractices(deps: BpCheckDeps = {}): DoctorSection {
   } catch {
     // Freshness is informational only — never fails the section.
   }
+
+  // A8 follow-up: surface the resource-type and compound-pattern
+  // counts next to the BP rule count so operators can see at a
+  // glance what surface area assignee can provision. These lines
+  // are informational — never fail or warn — so they slot after the
+  // manifest + freshness checks which can actually fail.
+  subs.push({
+    label: "coverage",
+    status: "ok",
+    detail: `${SUPPORTED_TYPES_ARRAY.length} resource types, ${defaultPatternRegistry.size()} compound patterns`,
+  });
 
   return {
     name: "Best practices",
