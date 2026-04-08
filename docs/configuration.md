@@ -17,6 +17,15 @@ Settings are resolved in this order (highest priority first):
 
 Higher-priority values override lower ones. Unknown keys are silently ignored for forward compatibility.
 
+### Global Preferences (A2, 2026-04-08)
+
+Global preferences (`defaults.region`, `defaults.tags`, `preferences.auto_fix`, `preferences.output_format`, `preferences.verbosity`, `budget`) flow through a single `resolveGlobalConfig()` helper in `@assignee/core` that merges the sources above into a fully-populated `ResolvedGlobalConfig` object. The CLI calls this helper inside `plan`, `apply`, and `whoami` at boot, then plumbs the result into graph state as `resolvedConfig` so downstream nodes read one authoritative source instead of re-reading env vars or raw user config point-of-use.
+
+- **Nested merging.** `defaults.tags` and `defaults.naming` merge **key-by-key** rather than whole-object replacement, so a user-level `defaults.naming.prefix` and a project-level `defaults.naming.suffix` both survive. Similarly, `defaults.tags.env=prod` from env can coexist with `defaults.tags.owner=alice` from user yaml.
+- **`org_policy` is NOT merged.** The highest-priority source that defines `org_policy` wins wholesale — per-resource-type keys make shallow merging surprising and deep merging unsafe.
+- **Verifying the resolution.** Run `assignee whoami` — the output includes a `Resolved global preferences` block showing the final `auto_fix` / `output_format` / `verbosity` values after the merge. This is the quickest way to confirm an `ASSIGNEE_*` env var is taking effect.
+- **Resource-level fields** (per-type wizard overrides like `InstanceType` or `BucketName`) use a separate 6-level merger in `apps/cli/src/utils/merge-configs.ts`. That merger handles the org-policy `locked` / `always_ask` semantics and is called inside the option-elicitor node, not at boot.
+
 ### `--set` Flag
 
 The `--set key=value` flag (available on `plan` and `apply` commands) pre-fills wizard fields at the highest priority level (CLI flags). This skips the interactive prompt for that field entirely. It is repeatable:
