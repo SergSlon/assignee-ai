@@ -139,14 +139,31 @@ export const driftCommand = new Command("drift")
       },
     ) => {
       const memory = new MemoryService();
-      const provisions = await memory.readProvisions();
+      const rawProvisions = await memory.readProvisions();
 
-      if (provisions.length === 0) {
+      if (rawProvisions.length === 0) {
         process.stdout.write(
           "No managed resources found. Run `assignee plan` and `assignee apply` to provision resources.\n",
         );
         return;
       }
+
+      // A3 follow-up (2026-04-08): dedupe by resourceArn keeping the
+      // newest entry per ARN. Past test fixtures accumulate thousands
+      // of rows for the same ARN in the provision log — without this
+      // pass, `assignee drift` would iterate 6000+ duplicate rows
+      // marking each as BASELINE_MISSING (observed on this account
+      // during the A3 live probe). Newer `timestamp` wins so the
+      // checkpoint resolution path always targets the most recent
+      // desiredState.
+      const newestByArn = new Map<string, (typeof rawProvisions)[number]>();
+      for (const p of rawProvisions) {
+        const existing = newestByArn.get(p.resourceArn);
+        if (!existing || p.timestamp > existing.timestamp) {
+          newestByArn.set(p.resourceArn, p);
+        }
+      }
+      const provisions = Array.from(newestByArn.values());
 
       // Filter provisions
       let filtered = provisions;
