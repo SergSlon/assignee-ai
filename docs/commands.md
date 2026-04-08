@@ -68,6 +68,10 @@ assignee plan "Create a Lambda function for image processing"
 assignee plan --no-apply "Create a VPC with public and private subnets"
 assignee plan -o json "Create a DynamoDB table named users" | jq .
 assignee plan --set BucketName=my-logs "Create an S3 bucket"
+# Compound patterns — auto-detected from the intent
+assignee plan "Create an EFS file system for shared Lambda storage"
+assignee plan "Create a scheduled lambda that runs every 5 minutes"
+assignee plan --set ScheduleExpression="cron(0 12 * * ? *)" "Create a nightly cleanup lambda"
 ```
 
 ### apply
