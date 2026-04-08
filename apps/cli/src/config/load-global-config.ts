@@ -1,8 +1,9 @@
 /**
  * load-global-config.ts — CLI-side composition of the global config
- * resolver. Loads environment overrides, adapts the legacy UserConfig
- * shape into `AssigneeConfig`, and feeds both into
- * `resolveGlobalConfig()` from @assignee/core.
+ * resolver. Loads environment overrides, the project YAML (via
+ * `loadProjectConfig()`), and adapts the legacy UserConfig shape,
+ * then feeds all three into `resolveGlobalConfig()` from
+ * @assignee/core.
  *
  * Before A2 (2026-04-08), `loadEnvOverrides()` existed but was never
  * called from production code — setting `ASSIGNEE_AUTO_FIX=apply` in
@@ -10,15 +11,14 @@
  * gap: the resolved config is plumbed into graph state as
  * `resolvedConfig`, and `fix-applicator` reads its preferences.
  *
- * Project-config.yaml is NOT yet loaded here. The existing project
- * config loader produces a per-resource-type override map (not an
- * AssigneeConfig), so wiring it as a third source would require
- * reshaping the project yaml — deliberately out of scope for this
- * slice. When project yaml grows `defaults`/`preferences`/`budget`
- * keys, they can be fed into `resolveGlobalConfig({projectConfig})`
- * without touching any existing call site.
+ * A5 (post-A2, same session) — project YAML is now wired as a
+ * `resolveGlobalConfig({projectConfig})` source. `loadProjectConfig()`
+ * already returns the validated `AssigneeConfig` shape (it calls
+ * `validateConfig()` from @assignee/core), so the wire-up is a
+ * single async call. Precedence still matches the A2 design:
+ * env > projectYaml > userYaml > CONFIG_DEFAULTS.
  *
- * @see A2 sprint slice — config precedence
+ * @see A2 / A5 sprint slices — config precedence
  */
 
 import {
@@ -28,6 +28,7 @@ import {
   type ResolvedGlobalConfig,
 } from "@assignee/core";
 import { loadEnvOverrides } from "./env-overrides.js";
+import { loadProjectConfig } from "./project-config-loader.js";
 import type { UserConfig } from "./user-config-loader.js";
 
 /**
@@ -76,17 +77,25 @@ export function adaptUserConfigToAssignee(
 /**
  * Compose the final resolved global config from:
  *   - env overrides  (`ASSIGNEE_*` variables)
+ *   - project config (`./.assignee/config.yaml` — A5 addition)
  *   - user config    (adapted from legacy UserConfig)
  *
- * CLI flags and project yaml are not yet wired; add them as extra
- * sources on the `resolveGlobalConfig()` call when the upstream
- * loaders exist in `AssigneeConfig` shape.
+ * CLI flags are not yet wired; add them as an extra source on the
+ * `resolveGlobalConfig()` call when `--auto-fix=apply` / etc.
+ * surface as Commander `.option()` entries.
+ *
+ * Async because `loadProjectConfig()` walks the filesystem for
+ * `.assignee/config.yaml`. The legacy synchronous call sites that
+ * only needed env + user config can continue to compose
+ * `resolveGlobalConfig()` directly if they need a sync path.
  */
-export function loadGlobalConfig(
+export async function loadGlobalConfig(
   userConfig: UserConfig | undefined,
-): ResolvedGlobalConfig {
+): Promise<ResolvedGlobalConfig> {
+  const projectConfig = await loadProjectConfig();
   return resolveGlobalConfig({
     envOverrides: loadEnvOverrides(),
+    projectConfig,
     userConfig: adaptUserConfigToAssignee(userConfig),
   });
 }

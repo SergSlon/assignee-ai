@@ -326,10 +326,11 @@ export const applyCommand = new Command(CommandName.APPLY)
             readAuthToken(),
           ]);
           const orgConfig = await fetchOrgPolicy(authToken);
-          // A2 (2026-04-08): merge env vars + user config into a single
-          // resolved global config so ASSIGNEE_* env vars actually take
-          // effect at node-execution time (see fix-applicator.ts).
-          const resolvedConfig = loadGlobalConfig(userConfig);
+          // A2 + A5 (2026-04-08): merge env vars + project yaml + user
+          // config into a single resolved global config so ASSIGNEE_*
+          // env vars actually take effect at node-execution time (see
+          // fix-applicator.ts).
+          const resolvedConfig = await loadGlobalConfig(userConfig);
 
           const config = {
             configurable: { thread_id: ctx.runId },

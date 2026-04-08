@@ -891,6 +891,66 @@ describeE2E("E2E: DynamoDB Table plan", () => {
   }, 60_000);
 });
 
+// A1 (2026-04-08): first-class EFS support. Plan-only test — EFS
+// apply is expensive (an EFS file system costs ~$0.30/GB-month
+// minimum even empty) so the nightly RUN_E2E suite uses plan mode
+// only. The provisioning smoke test for A1 will be run manually by
+// the operator when they want to exercise the full lifecycle.
+describeE2E("E2E: EFS FileSystem plan", () => {
+  it("generates a plan with secure defaults (Encrypted=true, BackupPolicy.Status=ENABLED)", async () => {
+    const graph = createGraph(tools);
+
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create an EFS file system named e2e-efs-test for shared Lambda storage",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+
+    const s = state as AgentState;
+
+    expect(s.resourceType).toBe("AWS::EFS::FileSystem");
+    // Tier C: desiredState must be a real object, not just defined.
+    expect(s.desiredState).toBeInstanceOf(Object);
+    // A1 secure-by-default: plugin.defaults set Encrypted=true so the
+    // plan must not drift into an unencrypted file system even when
+    // the user didn't explicitly ask for encryption in the intent.
+    expect(s.desiredState?.["Encrypted"]).toBe(true);
+    // BP-EFS-002 compliance: BackupPolicy.Status defaults to ENABLED.
+    const backupPolicy = s.desiredState?.["BackupPolicy"] as
+      | { Status?: string }
+      | undefined;
+    expect(backupPolicy?.Status).toBe("ENABLED");
+
+    // The plugin promotes a friendly name into FileSystemTags rather
+    // than an (unsupported) FileSystemName property. Verify the Name
+    // tag is present.
+    const fsTags = s.desiredState?.["FileSystemTags"] as
+      | Array<{ Key: string; Value: string }>
+      | undefined;
+    expect(fsTags).toBeInstanceOf(Array);
+    const nameTag = fsTags?.find((t) => t.Key === "Name");
+    expect(nameTag?.Value).toBe("e2e-efs-test");
+
+    // BP findings should exist (at minimum the awareness-level
+    // advisories fire even on fully-compliant defaults).
+    expect(s.bpFindings).toBeInstanceOf(Array);
+    // Neither BP-EFS-001 nor BP-EFS-002 should surface as a blocking
+    // finding when the secure defaults are in place.
+    const blocking = (s.bpFindings ?? []).filter((f) => f.blocking === true);
+    const efsBlocking = blocking.filter(
+      (f) => f.practiceId === "BP-EFS-001" || f.practiceId === "BP-EFS-002",
+    );
+    expect(efsBlocking).toHaveLength(0);
+  }, 60_000);
+});
+
 describeE2E("E2E: IAM Role plan", () => {
   it("generates a plan with assume role policy", async () => {
     const graph = createGraph(tools);

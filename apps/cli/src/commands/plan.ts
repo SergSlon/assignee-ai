@@ -147,10 +147,10 @@ export const planCommand = new Command(CommandName.PLAN)
             readAuthToken(),
           ]);
           const orgConfig = await fetchOrgPolicy(authToken);
-          // A2 (2026-04-08): merge env vars + user config into a single
-          // resolved global config so ASSIGNEE_* env vars actually take
-          // effect at node-execution time.
-          const resolvedConfig = loadGlobalConfig(userConfig);
+          // A2 + A5 (2026-04-08): merge env vars + project yaml + user
+          // config into a single resolved global config so ASSIGNEE_*
+          // env vars actually take effect at node-execution time.
+          const resolvedConfig = await loadGlobalConfig(userConfig);
 
           if (outputFormat !== "json") startSpinner("Generating plan...");
 
