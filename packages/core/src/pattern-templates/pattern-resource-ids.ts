@@ -51,3 +51,17 @@ export const StaticWebsiteResourceId = {
   CDN_DISTRIBUTION: "cdn-distribution",
   CDN_OAC: "cdn-oac",
 } as const;
+
+/**
+ * Resource IDs for the Wave 13 Lambda + auto-created exec role pattern.
+ * Mirrors `ServerlessApiResourceId.IAM_EXECUTION_ROLE` / `.LAMBDA_FN` so
+ * the plan-generator's existing compound role-injection logic in
+ * apps/cli/src/nodes/plan-generator.ts (the LAMBDA_FUNCTION + completed
+ * IAM_ROLE branch around line 545) handles this pattern with zero
+ * additional code paths. The two values are intentionally identical
+ * to the serverless-api equivalents for that reason.
+ */
+export const LambdaWithExecRoleResourceId = {
+  IAM_EXECUTION_ROLE: "iam-execution-role",
+  LAMBDA_FN: "lambda-fn",
+} as const;

@@ -315,9 +315,18 @@ describe("Graph integration — plan mode", () => {
     const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
 
     const graph = createGraph(tools);
+    // Wave 13: use a phrasing that does NOT match the
+    // lambda-with-exec-role pattern keywords ("create a lambda",
+    // "lambda function", "create a function", "deploy a lambda",
+    // "node lambda", "python lambda", "node function",
+    // "python function", "serverless function", "background worker",
+    // "scheduled lambda"). "Create an AWS Lambda" bypasses all of
+    // them so this test continues to exercise the SINGLE-RESOURCE
+    // Lambda flow (LLM classification → plan generator → preflight)
+    // instead of the new compound auto-create path.
     const result = await graph.invoke(
       {
-        userIntent: "Create a Lambda function",
+        userIntent: "Create an AWS Lambda named my-fn",
         executionMode: ExecutionMode.PLAN,
       },
       { configurable: { thread_id: "integration-lambda-missing-field" } },
@@ -374,9 +383,12 @@ describe("Graph integration — plan mode", () => {
     const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
 
     const graph = createGraph(tools);
+    // Wave 13: bypass the lambda-with-exec-role pattern (see comment
+    // in the previous Lambda test). "Create an AWS Lambda" wording
+    // is substring-disjoint from every keyword the pattern declares.
     const result = await graph.invoke(
       {
-        userIntent: "Create a Lambda function named my-fn using Node.js 22",
+        userIntent: "Create an AWS Lambda named my-fn using Node.js 22",
         executionMode: ExecutionMode.PLAN,
       },
       { configurable: { thread_id: "integration-lambda-local-pricing" } },
@@ -538,9 +550,15 @@ describe("Graph integration — failure paths", () => {
     const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
 
     const graph = createGraph(tools);
+    // Wave 13: explicitly bypass the lambda-with-exec-role pattern
+    // (which would auto-create a Role and prevent the preflight
+    // failure this test is meant to validate). "Create an AWS Lambda"
+    // wording is substring-disjoint from every keyword. The single-
+    // resource Lambda flow then runs and preflight rejects the
+    // missing Role field as expected.
     const result = await graph.invoke(
       {
-        userIntent: "Create a Lambda function",
+        userIntent: "Create an AWS Lambda named my-fn",
         executionMode: ExecutionMode.PLAN,
       },
       { configurable: { thread_id: "integration-lambda-missing-role" } },

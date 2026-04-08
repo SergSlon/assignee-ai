@@ -16,10 +16,22 @@ describe("intentParserNode", () => {
     expect(result.executionStatus).toBeUndefined();
   });
 
+  // Wave 13: the Lambda intent must NOT match any of the
+  // lambda-with-exec-role pattern's keywords ("create a lambda",
+  // "lambda function", "create a function", "deploy a lambda",
+  // "node lambda", "python lambda", "node function", "python function",
+  // "serverless function", "background worker", "scheduled lambda").
+  // The pre-Wave-13 phrase "create a Lambda function for image
+  // processing" matched "lambda function" → was intercepted by the
+  // pattern detector and never reached the LLM classifier this test
+  // is meant to exercise. Use a phrasing that bypasses every keyword:
+  // "create an AWS Lambda" — substring-disjoint from all keywords (no
+  // "function", different prefix from "create a lambda" because "an"
+  // breaks the substring match).
   it.each([
     ["AWS::EC2::Instance", "create an EC2 t3.micro instance"],
     ["AWS::RDS::DBInstance", "create a MySQL RDS database"],
-    ["AWS::Lambda::Function", "create a Lambda function for image processing"],
+    ["AWS::Lambda::Function", "create an AWS Lambda for image processing"],
   ])("identifies %s correctly", async (resourceType, intent) => {
     const mock = new MockLlmAdapter({ resourceType });
     const node = createIntentParserNode({ llmClient: mock });
