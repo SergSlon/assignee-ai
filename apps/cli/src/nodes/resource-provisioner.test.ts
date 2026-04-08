@@ -569,19 +569,21 @@ describe("resourceProvisionerNode", () => {
     });
   });
 
-  // ── SDK Fallback Dispatcher Tests (Story 7.7) ─────────────────────────────
+  // ── SDK Fallback Dispatcher Tests (Story 7.7; narrowed by A6) ─────────────
+  // A6 (2026-04-08): Lambda EventSourceMapping was migrated to CCAPI. The
+  // only SDK-routed create type is now AWS::SNS::Subscription. The tests
+  // below still exercise the redirect-type branches and the standard-type
+  // pass-through which remain in effect.
 
   describe("SDK fallback dispatch (Story 7.7)", () => {
     function createMockFallbackDispatcher(): {
       canHandle: ReturnType<typeof vi.fn>;
       isRedirect: ReturnType<typeof vi.fn>;
-      createEventSourceMapping: ReturnType<typeof vi.fn>;
       subscribe: ReturnType<typeof vi.fn>;
     } {
       return {
         canHandle: vi.fn().mockReturnValue(false),
         isRedirect: vi.fn().mockReturnValue(null),
-        createEventSourceMapping: vi.fn(),
         subscribe: vi.fn(),
       };
     }
@@ -592,12 +594,14 @@ describe("resourceProvisionerNode", () => {
       mockFallback = createMockFallbackDispatcher();
     });
 
-    it("dispatches EventSourceMapping via SDK fallback and returns SUCCESS with UUID", async () => {
-      mockFallback.canHandle.mockReturnValue(true);
-      mockFallback.createEventSourceMapping.mockResolvedValueOnce([
-        null,
-        { identifier: "esm-uuid-1234" },
-      ]);
+    it("does NOT dispatch Lambda EventSourceMapping via SDK fallback (A6 — migrated to CCAPI)", async () => {
+      // After A6, the SDK dispatcher must refuse to canHandle Lambda ESM.
+      // ESM has no plugin / pattern / intent path, so it is deliberately
+      // absent from SUPPORTED_TYPES_ARRAY; the provisioner's state guard
+      // will reject any ESM create request as an unsupported type. The
+      // destroy-by-ARN path (covered in destroy-service.test.ts) remains
+      // the only reachable ESM code path.
+      mockFallback.canHandle.mockReturnValue(false);
 
       const result = await resourceProvisionerNode(
         makeState({
@@ -611,15 +615,14 @@ describe("resourceProvisionerNode", () => {
         mockFallback as unknown as SDKFallbackDispatcher,
       );
 
-      expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
-      expect(result.resourceArn).toBe("esm-uuid-1234");
-      expect(mockFallback.canHandle).toHaveBeenCalledWith(
-        "AWS::Lambda::EventSourceMapping",
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(
+        /unsupported or missing resourceType/,
       );
-      expect(mockFallback.createEventSourceMapping).toHaveBeenCalled();
-      // Should NOT have gone through CloudControl path
-      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
+      expect(mockFallback.subscribe).not.toHaveBeenCalled();
+      // Neither the SDK fallback NOR the CloudControl path should have run.
       expect(mockProvisioner.createResource).not.toHaveBeenCalled();
+      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
     });
 
     it("dispatches SNS Subscription via SDK fallback and returns SUCCESS with ARN", async () => {
@@ -736,22 +739,23 @@ describe("resourceProvisionerNode", () => {
       expect(mockProvisioner.getResource).toHaveBeenCalled();
     });
 
-    it("returns FAILED when SDK fallback createEventSourceMapping fails", async () => {
+    it("returns FAILED when SDK fallback subscribe fails", async () => {
       mockFallback.canHandle.mockReturnValue(true);
-      mockFallback.createEventSourceMapping.mockResolvedValueOnce([
+      mockFallback.subscribe.mockResolvedValueOnce([
         {
           kind: ProvisioningErrorKind.NOT_FOUND,
-          message: "Function not found",
+          message: "Topic not found",
         },
         null,
       ]);
 
       const result = await resourceProvisionerNode(
         makeState({
-          resourceType: "AWS::Lambda::EventSourceMapping",
+          resourceType: "AWS::SNS::Subscription",
           desiredState: {
-            EventSourceArn: "arn:aws:sqs:us-east-1:123456789012:queue",
-            FunctionName: "nonexistent",
+            TopicArn: "arn:aws:sns:us-east-1:123456789012:missing-topic",
+            Protocol: "sqs",
+            Endpoint: "arn:aws:sqs:us-east-1:123456789012:queue",
           },
         }),
         mockProvisioner,
@@ -760,7 +764,7 @@ describe("resourceProvisionerNode", () => {
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(/SDK fallback provisioning failed/);
-      expect(result.errorMessage).toMatch(/Function not found/);
+      expect(result.errorMessage).toMatch(/Topic not found/);
     });
   });
 

@@ -6,18 +6,15 @@
  * Uses ASSIGNEE_OPERATOR_* credentials for provisioning.
  *
  * @see Story 7.7 — SDK Fallback Dispatcher for CCAPI Gaps
+ * @see A6 (2026-04-08) — Lambda EventSourceMapping and SNS Topic delete
+ *      migrated to CCAPI after live-AWS probes confirmed full support.
+ *      SNS Subscription is the only remaining SDK-routed type.
  */
 
-import {
-  LambdaClient,
-  CreateEventSourceMappingCommand,
-  DeleteEventSourceMappingCommand,
-} from "@aws-sdk/client-lambda";
 import {
   SNSClient,
   SubscribeCommand,
   UnsubscribeCommand,
-  DeleteTopicCommand,
 } from "@aws-sdk/client-sns";
 import {
   CCAPI_FALLBACK_TYPES,
@@ -48,7 +45,6 @@ export interface RedirectInfo {
  * that cannot be provisioned through Cloud Control API.
  *
  * Supported SDK routes:
- *   - AWS::Lambda::EventSourceMapping → Lambda SDK CreateEventSourceMappingCommand
  *   - AWS::SNS::Subscription → SNS SDK SubscribeCommand
  *
  * Redirect types (return error with guidance):
@@ -56,7 +52,6 @@ export interface RedirectInfo {
  *   - AWS::ElastiCache::ReplicationGroup → use AWS::ElastiCache::ServerlessCache
  */
 export class SDKFallbackDispatcher {
-  private readonly lambdaClient: LambdaClient;
   private readonly snsClient: SNSClient;
 
   constructor(config: AwsConfig) {
@@ -73,11 +68,6 @@ export class SDKFallbackDispatcher {
     };
 
     const region = config.region || AWS_REGION;
-
-    this.lambdaClient = new LambdaClient({
-      region,
-      credentials,
-    });
 
     this.snsClient = new SNSClient({
       region,
@@ -136,25 +126,6 @@ export class SDKFallbackDispatcher {
   }
 
   /**
-   * Deletes a Lambda EventSourceMapping via the Lambda SDK.
-   *
-   * @param identifier - The event source mapping UUID
-   * @returns Error-first tuple with void result on success
-   */
-  async deleteEventSourceMapping(
-    identifier: string,
-  ): Promise<FallbackResult<{ success: true }>> {
-    try {
-      await this.lambdaClient.send(
-        new DeleteEventSourceMappingCommand({ UUID: identifier }),
-      );
-      return [null, { success: true }];
-    } catch (err) {
-      return [classifySdkError(err), null];
-    }
-  }
-
-  /**
    * Unsubscribes an SNS Subscription via the SNS SDK.
    *
    * @param subscriptionArn - The subscription ARN to remove
@@ -168,67 +139,6 @@ export class SDKFallbackDispatcher {
         new UnsubscribeCommand({ SubscriptionArn: subscriptionArn }),
       );
       return [null, { success: true }];
-    } catch (err) {
-      return [classifySdkError(err), null];
-    }
-  }
-
-  /**
-   * Deletes an SNS Topic via the SNS SDK.
-   * CloudControl API has known issues with SNS Topic deletion (invalid TopicArn format errors).
-   *
-   * @param topicArn - The topic ARN to delete
-   * @returns Error-first tuple with void result on success
-   */
-  async deleteTopic(
-    topicArn: string,
-  ): Promise<FallbackResult<{ success: true }>> {
-    try {
-      await this.snsClient.send(new DeleteTopicCommand({ TopicArn: topicArn }));
-      return [null, { success: true }];
-    } catch (err) {
-      return [classifySdkError(err), null];
-    }
-  }
-
-  /**
-   * Creates a Lambda EventSourceMapping via the Lambda SDK.
-   * Maps SQS queues or DynamoDB streams to Lambda functions.
-   *
-   * @param desiredState - Resource properties matching CloudFormation schema
-   * @returns Error-first tuple with the mapping UUID as identifier on success
-   */
-  async createEventSourceMapping(
-    desiredState: Record<string, unknown>,
-  ): Promise<FallbackResult<{ identifier: string }>> {
-    try {
-      const command = new CreateEventSourceMappingCommand({
-        EventSourceArn: desiredState[CfnKey.EVENT_SOURCE_ARN] as string,
-        FunctionName: desiredState[CfnKey.FUNCTION_NAME] as string,
-        BatchSize:
-          (desiredState[CfnKey.BATCH_SIZE] as number | undefined) ?? 10,
-        Enabled: (desiredState[CfnKey.ENABLED] as boolean | undefined) ?? true,
-        StartingPosition: desiredState[CfnKey.STARTING_POSITION] as
-          | "TRIM_HORIZON"
-          | "LATEST"
-          | "AT_TIMESTAMP"
-          | undefined,
-        Tags: desiredState[CfnKey.TAGS] as Record<string, string> | undefined,
-      });
-
-      const result = await this.lambdaClient.send(command);
-
-      if (!result.UUID) {
-        return [
-          {
-            kind: ProvisioningErrorKind.UNKNOWN,
-            message: "CreateEventSourceMapping returned no UUID identifier",
-          },
-          null,
-        ];
-      }
-
-      return [null, { identifier: result.UUID }];
     } catch (err) {
       return [classifySdkError(err), null];
     }

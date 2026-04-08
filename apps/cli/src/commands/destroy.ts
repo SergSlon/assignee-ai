@@ -6,7 +6,8 @@
  * requires strict confirmation ("destroy all"), and executes sequentially.
  *
  * Uses CloudControl API DeleteResourceCommand for supported types,
- * SDK fallback for types with known CCAPI gaps (EventSourceMapping, SNS Subscription).
+ * SDK fallback for the one remaining CCAPI gap (SNS Subscription; A6 migrated
+ * Lambda EventSourceMapping and SNS Topic delete to CCAPI on 2026-04-08).
  *
  * Delegates core deletion logic to destroySingleResource() from destroy-service.ts.
  *

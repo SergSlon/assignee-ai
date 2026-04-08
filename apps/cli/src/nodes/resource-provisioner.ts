@@ -153,7 +153,10 @@ export async function resourceProvisionerNode(
       };
     }
 
-    // Check SDK-routable types (can be provisioned via native SDK)
+    // Check SDK-routable types (can be provisioned via native SDK).
+    // After A6, the only SDK-routed create type is AWS::SNS::Subscription.
+    // Lambda EventSourceMapping was migrated to CCAPI and now flows through
+    // the normal provisioning path below.
     if (fallbackDispatcher.canHandle(state.resourceType)) {
       log({
         ts: new Date().toISOString(),
@@ -166,34 +169,8 @@ export async function resourceProvisionerNode(
         },
       });
 
-      // Inject tags for EventSourceMapping (supports Tags parameter)
-      // SNS Subscriptions do NOT support tags at creation time
-      const desiredStateForSdk =
-        state.resourceType === CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING
-          ? injectMandatoryTags(desiredState, state.runId, state.resourceType)
-          : desiredState;
-
-      if (
-        state.resourceType === CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING
-      ) {
-        const [err, result] =
-          await fallbackDispatcher.createEventSourceMapping(desiredStateForSdk);
-        if (err) {
-          return {
-            executionStatus: ExecutionStatus.FAILED,
-            errorMessage: `SDK fallback provisioning failed: ${err.message}`,
-            error: new ProvisioningError(
-              err.message,
-              PROVISIONING_ERROR_CODES.UNKNOWN,
-            ),
-          };
-        }
-        return {
-          executionStatus: ExecutionStatus.SUCCESS,
-          resourceArn: result.identifier,
-        };
-      }
-
+      // SNS Subscriptions do NOT support tags at creation time, so we pass
+      // the desired state through unchanged.
       if (state.resourceType === CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION) {
         const [err, result] = await fallbackDispatcher.subscribe(desiredState);
         if (err) {

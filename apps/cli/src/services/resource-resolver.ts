@@ -21,7 +21,6 @@ import {
   ConfigurationError,
   RESOURCE_TYPES,
   LIST_RESOURCE_TYPES,
-  CCAPI_FALLBACK_TYPES,
 } from "@assignee/core";
 import {
   AWS_REGION,
@@ -122,7 +121,7 @@ function arnToResourceType(arn: string): string | null {
     rds: { db: RESOURCE_TYPES.RDS_DB_INSTANCE },
     lambda: {
       function: RESOURCE_TYPES.LAMBDA_FUNCTION,
-      "event-source-mapping": CCAPI_FALLBACK_TYPES.LAMBDA_EVENT_SOURCE_MAPPING,
+      "event-source-mapping": LIST_RESOURCE_TYPES.LAMBDA_EVENT_SOURCE_MAPPING,
     },
     dynamodb: { table: RESOURCE_TYPES.DYNAMODB_TABLE },
     sqs: { "": RESOURCE_TYPES.SQS_QUEUE },

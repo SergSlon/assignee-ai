@@ -352,8 +352,19 @@ describe("destroy_resource tool", () => {
   });
 
   describe("SDK fallback types", () => {
-    it("should return error for Lambda EventSourceMapping (SDK fallback type)", async () => {
-      // EventSourceMapping ARN: arn:aws:lambda:us-east-1:123:event-source-mapping:uuid
+    // A6 (2026-04-08): the original "return error for Lambda
+    // EventSourceMapping" case was removed because ESM now routes through
+    // CCAPI. No analogous SNS Subscription case is possible because the
+    // MCP server's ARN resolver maps every `arn:aws:sns:...` ARN to
+    // AWS::SNS::Topic (see arn-type-map.ts — there is no subscription
+    // sub-entry), so AWS::SNS::Subscription is effectively unreachable
+    // from the MCP destroy surface. The fallback-refusal guard in
+    // destroy-resource.ts remains as a defense-in-depth backstop.
+
+    it("routes Lambda EventSourceMapping through CloudControl after A6 migration", async () => {
+      // Before A6, EventSourceMapping hit the MCP server's "SDK fallback
+      // not supported" guard. After A6, it flows through to the standard
+      // CCAPI delete path and the MCP server must succeed.
       mockTaggingSend.mockResolvedValue({
         ResourceTagMappingList: [
           {
@@ -364,6 +375,13 @@ describe("destroy_resource tool", () => {
         ],
         PaginationToken: undefined,
       });
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-esm-mcp" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
 
       const { client } = await createTestClient();
 
@@ -376,11 +394,12 @@ describe("destroy_resource tool", () => {
         },
       });
 
-      expect(result.isError).toBe(true);
+      expect(result.isError).toBeUndefined();
       const body = parseResult(result);
-      expect(body.error).toBe(true);
-      expect(body.message).toContain("SDK fallback");
-      expect(body.message).toContain("CLI");
+      expect(body.status).toBe("SUCCESS");
+      expect(body.resource.resourceType).toBe(
+        "AWS::Lambda::EventSourceMapping",
+      );
     });
   });
 
