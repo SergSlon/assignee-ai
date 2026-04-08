@@ -608,6 +608,40 @@ assignee cache clear
 assignee cache refresh
 ```
 
+### patterns
+
+Discover the compound architecture patterns assignee can auto-route natural-language intents to. Lists every registered pattern with its display name, resource count, and keyword preview; or shows the full resource list, dependency order, and all keywords for a single pattern.
+
+```
+assignee patterns [list|show <patternId>] [options]
+```
+
+**Subcommands:**
+
+| Subcommand         | Description                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| `list` (default)   | Print all registered compound patterns in precedence order                            |
+| `show <patternId>` | Print the full resource list + dependency groups + every keyword for a single pattern |
+
+**Options:**
+
+| Flag     | Description    | Default |
+| -------- | -------------- | ------- |
+| `--json` | Output as JSON | false   |
+
+**Behavior:**
+
+Pattern detection is first-keyword-match-wins in registration order, so the `list` output reflects the precedence — earlier-listed patterns get first crack at matching user intents. Use `assignee patterns show <patternId>` to see why a particular pattern matched or to understand the full resource footprint before running `plan`.
+
+**Examples:**
+
+```bash
+assignee patterns                               # list all patterns
+assignee patterns show scheduled-lambda         # show one pattern's details
+assignee patterns show efs-with-vpc --json      # JSON for CI consumers
+assignee patterns list --json | jq '.[].patternId'
+```
+
 ### whoami
 
 A fast, single-purpose pre-flight check: prints the operator-role STS identity, AWS region, and whether a project config file is loaded in the cwd. Designed to answer the most common debugging question: "which AWS identity am I about to use?" before running `plan`/`apply`.
