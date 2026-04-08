@@ -1668,6 +1668,52 @@ describe("resolveCompoundMarkers — VPC compound apply fix", () => {
     // Final check: no marker tokens remain anywhere in the state.
     expect(JSON.stringify(desiredState)).not.toMatch(/__ASSIGNEE_/);
   });
+
+  // A8 (2026-04-08): The scheduled-lambda compound pattern emits
+  // Events::Rule desiredState with Targets as an array of OBJECTS,
+  // where each object has an Arn field set to markerGetAtt(LAMBDA_FN, "Arn").
+  // walk() must recurse through both the array layer AND the inner
+  // object layer to find the nested marker. This test locks in the
+  // nested-in-array-of-objects behavior so a future refactor that
+  // replaces walk()'s recursion can't silently break scheduled-lambda.
+  it("resolves markerGetAtt tokens nested inside an array of objects (Events::Rule Targets)", async () => {
+    const desiredState: Record<string, unknown> = {
+      ScheduleExpression: "rate(1 hour)",
+      State: "ENABLED",
+      Targets: [
+        {
+          Id: "lambda-target",
+          Arn: markerGetAtt("lambda-fn", "Arn"),
+        },
+      ],
+    };
+
+    await resolveCompoundMarkers(desiredState, {
+      completedResources: [
+        {
+          resourceId: "lambda-fn",
+          resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+          resourceArn: "arn:aws:lambda:us-east-1:123456789012:function:my-fn",
+          executionStatus: ExecutionStatus.SUCCESS,
+        },
+      ],
+      region: "us-east-1",
+      currentResourceId: "schedule-rule",
+      azLookup: async () => realUsEast1Azs,
+    });
+
+    expect(desiredState).toEqual({
+      ScheduleExpression: "rate(1 hour)",
+      State: "ENABLED",
+      Targets: [
+        {
+          Id: "lambda-target",
+          Arn: "arn:aws:lambda:us-east-1:123456789012:function:my-fn",
+        },
+      ],
+    });
+    expect(JSON.stringify(desiredState)).not.toMatch(/__ASSIGNEE_/);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────
