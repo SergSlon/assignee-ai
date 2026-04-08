@@ -1149,6 +1149,34 @@ describe("patterns command definition", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// TYPES COMMAND — subcommand validation
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("types command definition", () => {
+  it("has list subcommand (default)", async () => {
+    const { typesCommand } = await import("../commands/types.js");
+    const sub = typesCommand.commands.find((c) => c.name() === "list");
+    expect(sub, "list subcommand must exist on types").not.toBeUndefined();
+  });
+
+  it("has show subcommand with <type> arg", async () => {
+    const { typesCommand } = await import("../commands/types.js");
+    const sub = typesCommand.commands.find((c) => c.name() === "show");
+    expect(sub, "show subcommand must exist on types").not.toBeUndefined();
+    expect(sub!.description()).toContain("BP rules");
+  });
+
+  it("both subcommands expose --json", async () => {
+    const { typesCommand } = await import("../commands/types.js");
+    for (const name of ["list", "show"]) {
+      const sub = typesCommand.commands.find((c) => c.name() === name);
+      const jsonOpt = sub!.options.find((o) => o.long === "--json");
+      expect(jsonOpt, `${name} must expose --json`).not.toBeUndefined();
+    }
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // SUPPORTED TYPES — core exports
 // ═════════════════════════════════════════════════════════════════════════════
 
