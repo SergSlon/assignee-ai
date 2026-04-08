@@ -10,14 +10,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RESOURCE_TYPES, CfnKey } from "@assignee/core";
 
-const { mockFetchEc2Prices, mockFetchRdsPrices } = vi.hoisted(() => ({
-  mockFetchEc2Prices: vi.fn(),
-  mockFetchRdsPrices: vi.fn(),
-}));
+const { mockFetchEc2Prices, mockFetchRdsPrices, mockFetchLambdaArchPrices } =
+  vi.hoisted(() => ({
+    mockFetchEc2Prices: vi.fn(),
+    mockFetchRdsPrices: vi.fn(),
+    mockFetchLambdaArchPrices: vi.fn(),
+  }));
 
 vi.mock("../../utils/pricing-lookup.js", () => ({
   fetchEc2InstancePrices: mockFetchEc2Prices,
   fetchRdsInstancePrices: mockFetchRdsPrices,
+  fetchLambdaArchPrices: mockFetchLambdaArchPrices,
 }));
 
 // Import after the mock is installed so the analyzer binds to the
@@ -25,6 +28,7 @@ vi.mock("../../utils/pricing-lookup.js", () => ({
 import {
   analyzeEc2Instance,
   analyzeRdsInstance,
+  analyzeLambdaFunction,
   analyzeResource,
   buildRecommendation,
 } from "./cost-optimizer.js";
@@ -37,7 +41,11 @@ const FAKE_TOOLS = [] as never; // pricing-lookup is mocked so tools are never t
 beforeEach(() => {
   mockFetchEc2Prices.mockReset();
   mockFetchRdsPrices.mockReset();
+  mockFetchLambdaArchPrices.mockReset();
 });
+
+const FAKE_LAMBDA_ARN =
+  "arn:aws:lambda:us-east-1:123456789012:function:prod-handler";
 
 describe("buildRecommendation (pure math)", () => {
   it("computes the correct monthly savings for a t3.large → t4g.large swap", () => {
@@ -237,6 +245,81 @@ describe("analyzeRdsInstance", () => {
   });
 });
 
+describe("analyzeLambdaFunction", () => {
+  it("recommends arm64 for a default (undefined Architectures) Lambda function", async () => {
+    // AWS published rates for AWSLambda Duration SKUs (us-east-1,
+    // 2026-04-08):
+    //   Lambda-GB-Second     = $0.0000166667
+    //   Lambda-GB-Second-ARM = $0.0000133334
+    // parseHourly() strips the "/hr" stamp and keeps the raw
+    // numeric rate so the percent math works regardless of units.
+    mockFetchLambdaArchPrices.mockResolvedValueOnce({
+      x86: "$0.0000166667/hr",
+      arm: "$0.0000133334/hr",
+    });
+
+    const rec = await analyzeLambdaFunction(
+      FAKE_LAMBDA_ARN,
+      {}, // no Architectures → x86_64 default
+      FAKE_TOOLS,
+    );
+
+    expect(rec).not.toBeNull();
+    expect(rec!.currentConfig).toBe("x86_64");
+    expect(rec!.recommendedConfig).toBe("arm64");
+    expect(rec!.confidence).toBe("medium");
+    // 20% is the canonical AWS-published delta; the real math must
+    // land within ±1 percentage point.
+    expect(rec!.savingsPercent).toBeGreaterThanOrEqual(19);
+    expect(rec!.savingsPercent).toBeLessThanOrEqual(21);
+    // Savings string carries the trailing asterisk marker that
+    // documents the "reference workload" caveat.
+    expect(rec!.monthlySavings.endsWith("/mo*")).toBe(true);
+  });
+
+  it('recommends arm64 when Architectures is explicitly ["x86_64"]', async () => {
+    mockFetchLambdaArchPrices.mockResolvedValueOnce({
+      x86: "$0.0000166667/hr",
+      arm: "$0.0000133334/hr",
+    });
+
+    const rec = await analyzeLambdaFunction(
+      FAKE_LAMBDA_ARN,
+      { Architectures: ["x86_64"] },
+      FAKE_TOOLS,
+    );
+
+    expect(rec).not.toBeNull();
+    expect(rec!.currentConfig).toBe("x86_64");
+  });
+
+  it('returns null when Architectures is already ["arm64"]', async () => {
+    const rec = await analyzeLambdaFunction(
+      FAKE_LAMBDA_ARN,
+      { Architectures: ["arm64"] },
+      FAKE_TOOLS,
+    );
+    expect(rec).toBeNull();
+    // The analyzer must short-circuit before hitting the Pricing MCP —
+    // no point burning an MCP call for a no-op.
+    expect(mockFetchLambdaArchPrices).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the Pricing MCP returns no prices", async () => {
+    mockFetchLambdaArchPrices.mockResolvedValueOnce({});
+    const rec = await analyzeLambdaFunction(FAKE_LAMBDA_ARN, {}, FAKE_TOOLS);
+    expect(rec).toBeNull();
+  });
+
+  it("returns null when the Pricing MCP returns only the x86 price", async () => {
+    mockFetchLambdaArchPrices.mockResolvedValueOnce({
+      x86: "$0.0000166667/hr",
+    });
+    const rec = await analyzeLambdaFunction(FAKE_LAMBDA_ARN, {}, FAKE_TOOLS);
+    expect(rec).toBeNull();
+  });
+});
+
 describe("analyzeResource dispatcher", () => {
   it("routes EC2::Instance to the EC2 analyzer", async () => {
     mockFetchEc2Prices.mockResolvedValueOnce({
@@ -269,6 +352,20 @@ describe("analyzeResource dispatcher", () => {
     expect(rec!.recommendedConfig).toBe("db.m6g.large");
   });
 
+  it("routes Lambda::Function to the Lambda analyzer", async () => {
+    mockFetchLambdaArchPrices.mockResolvedValueOnce({
+      x86: "$0.0000166667/hr",
+      arm: "$0.0000133334/hr",
+    });
+    const rec = await analyzeResource(
+      { arn: FAKE_LAMBDA_ARN, resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION },
+      {},
+      FAKE_TOOLS,
+    );
+    expect(rec).not.toBeNull();
+    expect(rec!.recommendedConfig).toBe("arm64");
+  });
+
   it("returns null for resource types with no analyzer (graceful no-op)", async () => {
     const rec = await analyzeResource(
       {
@@ -279,8 +376,9 @@ describe("analyzeResource dispatcher", () => {
       FAKE_TOOLS,
     );
     expect(rec).toBeNull();
-    // Neither analyzer was consulted.
+    // None of the type-specific analyzers were consulted.
     expect(mockFetchEc2Prices).not.toHaveBeenCalled();
     expect(mockFetchRdsPrices).not.toHaveBeenCalled();
+    expect(mockFetchLambdaArchPrices).not.toHaveBeenCalled();
   });
 });
