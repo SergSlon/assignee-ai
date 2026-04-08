@@ -917,17 +917,20 @@ describe("Graph integration — new resource types", () => {
 
     expect(result.resourceType).toBe("AWS::EC2::Subnet");
     expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
-    // Wave 14: strengthened. CidrBlock IS supplied by the LLM mock
-    // but is dropped somewhere between option-elicitor and the final
-    // desiredState — even with `noWizard: true`. Known issue (filed
-    // as Wave 14 finding "Subnet CidrBlock dropped between elicitor
-    // and plan-generator"). For now, this test asserts only the
-    // fields that DO survive the pipeline so the strengthening
-    // catches the OTHER (positive) pipeline behaviors. The CidrBlock
-    // drop will be investigated separately — likely a defaults-merge
-    // ordering bug in the option-elicitor noWizard branch.
+    // Wave 14 found this assertion's CidrBlock check failing because
+    // the Subnet plugin's CidrBlock placeholder ("10.0.1.0/24") was
+    // identical to the test fixture, and stripEmpty was dropping any
+    // LLM-supplied value that exactly matched a plugin placeholder.
+    // Wave 15 fixed the root cause: collectPluginPlaceholders now
+    // only returns OBVIOUSLY-template placeholders (containing
+    // markers like "my-", "...", "example", "12345"). Real-shaped
+    // values like "10.0.1.0/24" are no longer in the strip set, so
+    // legitimate user CIDRs survive the pipeline. Strict assertion
+    // re-enabled — if this regresses, the placeholder-strip
+    // heuristic has been broken again.
     expect(result.desiredState).toMatchObject({
       VpcId: "vpc-123",
+      CidrBlock: "10.0.1.0/24",
       AvailabilityZone: "us-east-1a",
     });
   });

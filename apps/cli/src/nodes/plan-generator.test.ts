@@ -10,6 +10,8 @@ import {
   applyToCfnTransforms,
   resolveCompoundMarkers,
   __resetAzCacheForTests,
+  isTemplatePlaceholder,
+  collectPluginPlaceholders,
 } from "./plan-generator.js";
 import {
   markerRef,
@@ -1764,5 +1766,98 @@ describe("compound plan-generator branch — marker resolution integration", () 
     expect(result.errorMessage).toMatch(
       /no completed resource with resourceId "vpc"/,
     );
+  });
+});
+
+// Wave 15: tests for the placeholder-strip heuristic introduced to fix
+// the Subnet CidrBlock drop bug. Before Wave 15, collectPluginPlaceholders
+// returned every plugin placeholder verbatim, and stripEmpty dropped any
+// LLM-supplied value matching one. The Subnet plugin's CidrBlock
+// placeholder is "10.0.1.0/24" — a valid CIDR — so users whose actual
+// subnet CIDR happened to be 10.0.1.0/24 had it silently dropped from
+// the desiredState. Wave 15 narrowed the strip set to OBVIOUSLY-template
+// placeholders (containing markers like "my-", "...", "12345").
+describe("isTemplatePlaceholder (Wave 15)", () => {
+  it("identifies obviously-template values via canonical markers", () => {
+    expect(isTemplatePlaceholder("my-bucket")).toBe(true);
+    expect(isTemplatePlaceholder("my-function")).toBe(true);
+    expect(isTemplatePlaceholder("your-app")).toBe(true);
+    expect(isTemplatePlaceholder("arn:aws:kms:...")).toBe(true);
+    expect(
+      isTemplatePlaceholder("arn:aws:iam::123456789012:role/my-role"),
+    ).toBe(true);
+    expect(isTemplatePlaceholder("ami-0abcdef1234567890")).toBe(true);
+    expect(isTemplatePlaceholder("subnet-0abc1234")).toBe(true);
+    expect(
+      isTemplatePlaceholder("my-bucket (leave blank for auto-generated)"),
+    ).toBe(true);
+    expect(isTemplatePlaceholder("KEY1=value1,KEY2=value2")).toBe(true);
+    expect(
+      isTemplatePlaceholder("Brief description of what this function does"),
+    ).toBe(true);
+    expect(isTemplatePlaceholder("https://example.com")).toBe(true);
+  });
+
+  it("does NOT classify valid-shaped real values as templates", () => {
+    // CIDRs — the Wave 14/15 anomaly that started this whole investigation
+    expect(isTemplatePlaceholder("10.0.1.0/24")).toBe(false);
+    expect(isTemplatePlaceholder("10.0.0.0/16")).toBe(false);
+    expect(isTemplatePlaceholder("172.16.0.0/12")).toBe(false);
+    // Valid-shaped lambda handler
+    expect(isTemplatePlaceholder("index.handler")).toBe(false);
+    // Numeric values — could be a real timeout / port / TTL
+    expect(isTemplatePlaceholder("30")).toBe(false);
+    expect(isTemplatePlaceholder("365")).toBe(false);
+    expect(isTemplatePlaceholder("-1")).toBe(false);
+    // Real-looking SSM parameter name
+    expect(isTemplatePlaceholder("/prod/config/db-host")).toBe(false);
+    // Real-looking tag string
+    expect(isTemplatePlaceholder("env:production, team:backend")).toBe(false);
+  });
+
+  it("is case-insensitive on marker matching", () => {
+    expect(isTemplatePlaceholder("MY-bucket")).toBe(true);
+    expect(isTemplatePlaceholder("YOUR-app")).toBe(true);
+    expect(isTemplatePlaceholder("My-Function")).toBe(true);
+    expect(isTemplatePlaceholder("Example.com")).toBe(true);
+  });
+});
+
+describe("collectPluginPlaceholders (Wave 15)", () => {
+  it("returns the Subnet plugin's template placeholders but NOT the realistic CIDR", () => {
+    const placeholders = collectPluginPlaceholders(RESOURCE_TYPES.EC2_SUBNET);
+    // The CidrBlock placeholder "10.0.1.0/24" must NOT be in the strip
+    // set — that's the whole point of Wave 15.
+    expect(placeholders.has("10.0.1.0/24")).toBe(false);
+    // The Tags placeholder "env:production, tier:public" is also NOT a
+    // template (no marker matches) — it's a realistic example. Excluded.
+    expect(placeholders.has("env:production, tier:public")).toBe(false);
+  });
+
+  it("returns the S3 plugin's obviously-template placeholders", () => {
+    const placeholders = collectPluginPlaceholders(RESOURCE_TYPES.S3_BUCKET);
+    // The S3 BucketName placeholder is "my-bucket (leave blank for
+    // auto-generated)" — both the full string and its prefix "my-bucket"
+    // get added to the strip set.
+    expect(placeholders.has("my-bucket (leave blank for auto-generated)")).toBe(
+      true,
+    );
+    expect(placeholders.has("my-bucket")).toBe(true);
+  });
+
+  it("returns the Lambda plugin's template ARN placeholder", () => {
+    const placeholders = collectPluginPlaceholders(
+      RESOURCE_TYPES.LAMBDA_FUNCTION,
+    );
+    // The Lambda Role placeholder is "arn:aws:iam::123456789012:role/my-role"
+    // — contains both the docs account placeholder AND "my-" → template.
+    expect(placeholders.has("arn:aws:iam::123456789012:role/my-role")).toBe(
+      true,
+    );
+  });
+
+  it("returns an empty set for unknown resource types", () => {
+    const placeholders = collectPluginPlaceholders("AWS::NotAReal::Type");
+    expect(placeholders.size).toBe(0);
   });
 });
