@@ -582,6 +582,27 @@ describe("checkBestPractices", () => {
     const section = checkBestPractices({ bpDir: tmp });
     expect(section.status).toBe("fail");
   });
+
+  // A8 follow-up: the BP section now surfaces resource-type and
+  // compound-pattern counts as a "coverage" sub-check. Lock in the
+  // label + detail shape so a future refactor that renames or moves
+  // the line fails here instead of silently breaking the doctor UX.
+  it("surfaces resource type + compound pattern counts in the coverage sub-check", () => {
+    const section = checkBestPractices();
+    const coverageSub = section.subs.find((s) => s.label === "coverage");
+    expect(coverageSub?.label).toBe("coverage");
+    expect(coverageSub?.status).toBe("ok");
+    // Real counts are >= the current state; a future PR may add
+    // types/patterns but never remove them. We assert the minimums
+    // rather than the exact count so the test doesn't churn on every
+    // addition.
+    const resourceMatch = coverageSub?.detail?.match(/(\d+) resource types/);
+    const patternMatch = coverageSub?.detail?.match(/(\d+) compound patterns/);
+    expect(resourceMatch).not.toBeNull();
+    expect(patternMatch).not.toBeNull();
+    expect(Number(resourceMatch?.[1] ?? 0)).toBeGreaterThanOrEqual(28);
+    expect(Number(patternMatch?.[1] ?? 0)).toBeGreaterThanOrEqual(10);
+  });
 });
 
 // ── Render ──────────────────────────────────────────────────────────────
