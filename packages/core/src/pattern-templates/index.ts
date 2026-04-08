@@ -8,6 +8,7 @@ import {
   vpcNetworkingPattern,
   vpcPublicOnlyPattern,
 } from "./patterns/vpc-networking.js";
+import { lambdaWithExecRolePattern } from "./patterns/lambda-with-exec-role.js";
 
 export { PatternId } from "./pattern-ids.js";
 
@@ -19,6 +20,14 @@ export { PatternId } from "./pattern-ids.js";
  *   1. Create patterns/<pattern-name>.ts
  *   2. Import + register here
  *   Zero changes to graph nodes or CLI commands required.
+ *
+ * **Registration order matters.** PatternRegistry.detect() returns the
+ * FIRST keyword match in insertion order. Larger / more specific
+ * patterns must register BEFORE smaller / more generic ones so
+ * intents like "create a serverless api with lambda" match the
+ * 8-resource serverless-api pattern instead of the 2-resource
+ * lambda-with-exec-role pattern. The lambda-with-exec-role pattern is
+ * therefore registered LAST among the Lambda-bearing patterns.
  */
 export const defaultPatternRegistry = new PatternRegistry();
 defaultPatternRegistry.register(serverlessApiPattern);
@@ -28,6 +37,10 @@ defaultPatternRegistry.register(messageProcessingPattern);
 defaultPatternRegistry.register(staticWebsitePattern);
 defaultPatternRegistry.register(vpcNetworkingPattern);
 defaultPatternRegistry.register(vpcPublicOnlyPattern);
+// Wave 13: registered LAST so longer-form Lambda-bearing intents match
+// their dedicated patterns first. See pattern file for the keyword
+// disjointness analysis.
+defaultPatternRegistry.register(lambdaWithExecRolePattern);
 
 export { PatternRegistry };
 export { serverlessApiPattern } from "./patterns/serverless-api.js";
@@ -39,6 +52,7 @@ export {
   vpcNetworkingPattern,
   vpcPublicOnlyPattern,
 } from "./patterns/vpc-networking.js";
+export { lambdaWithExecRolePattern } from "./patterns/lambda-with-exec-role.js";
 export type { ArchitecturePattern, ResourceSpec } from "./types.js";
 export {
   ServerlessApiResourceId,
@@ -46,4 +60,5 @@ export {
   ThreeTierWebResourceId,
   ContainerServiceResourceId,
   StaticWebsiteResourceId,
+  LambdaWithExecRoleResourceId,
 } from "./pattern-resource-ids.js";
