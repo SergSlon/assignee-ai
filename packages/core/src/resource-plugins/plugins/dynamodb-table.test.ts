@@ -24,13 +24,23 @@ describe("dynamodbTablePlugin", () => {
     expect(field?.required).toBe(true);
   });
 
+  // Wave 16: strengthened the validator tests below to assert each
+  // returns a non-empty STRING error message rather than just any
+  // non-undefined value. The previous `toBeDefined()` would have
+  // passed for `0`, `false`, `""` — none of which a wizard prompt
+  // could meaningfully display.
   describe("TableName validation", () => {
     const validate = dynamodbTablePlugin.commonFields.find(
       (f) => f.name === "TableName",
     )!.question.validate!;
 
+    function expectStringError(value: unknown): void {
+      expect(typeof value).toBe("string");
+      expect((value as string).length).toBeGreaterThan(0);
+    }
+
     it("rejects empty value", () => {
-      expect(validate("")).toBeDefined();
+      expectStringError(validate(""));
     });
 
     it("accepts valid table name", () => {
@@ -38,11 +48,11 @@ describe("dynamodbTablePlugin", () => {
     });
 
     it("rejects names with invalid characters", () => {
-      expect(validate("my table!")).toBeDefined();
+      expectStringError(validate("my table!"));
     });
 
     it("rejects names shorter than 3 chars", () => {
-      expect(validate("ab")).toBeDefined();
+      expectStringError(validate("ab"));
     });
   });
 
@@ -51,8 +61,13 @@ describe("dynamodbTablePlugin", () => {
       (f) => f.name === "PartitionKey",
     )!.question.validate!;
 
+    function expectStringError(value: unknown): void {
+      expect(typeof value).toBe("string");
+      expect((value as string).length).toBeGreaterThan(0);
+    }
+
     it("rejects empty value", () => {
-      expect(validate("")).toBeDefined();
+      expectStringError(validate(""));
     });
 
     it("accepts valid format", () => {
@@ -62,8 +77,8 @@ describe("dynamodbTablePlugin", () => {
     });
 
     it("rejects invalid format", () => {
-      expect(validate("userId")).toBeDefined();
-      expect(validate("userId:X")).toBeDefined();
+      expectStringError(validate("userId"));
+      expectStringError(validate("userId:X"));
     });
   });
 
@@ -128,7 +143,9 @@ describe("dynamodbTablePlugin", () => {
   });
 
   it("has configHints for LLM", () => {
-    expect(dynamodbTablePlugin.configHints).toBeDefined();
+    // Wave 16: dropped redundant `toBeDefined()` — `Array.isArray`
+    // catches null/undefined AND non-array shapes.
+    expect(Array.isArray(dynamodbTablePlugin.configHints)).toBe(true);
     expect(dynamodbTablePlugin.configHints!.length).toBeGreaterThan(0);
   });
 });

@@ -31,7 +31,10 @@ describe("ec2InstancePlugin", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "InstanceType",
     );
-    expect(field).toBeDefined();
+    // Wave 16: strengthened — assert by name + question type instead
+    // of bare existence (matches the strengthening pattern across all
+    // plugin tests in this wave).
+    expect(field?.name).toBe("InstanceType");
     expect(field?.question.type).toBe("categorySelect");
     expect(field?.question.initialValue).toBe("t3.micro");
     expect(field?.question.categories?.length).toBe(4);
@@ -53,7 +56,8 @@ describe("ec2InstancePlugin", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "ImageId",
     );
-    expect(field).toBeDefined();
+    // Wave 16: strengthened.
+    expect(field?.name).toBe("ImageId");
     expect(field?.question.type).toBe("enum");
     expect(field?.question.fetcher).toBe("discover-amis");
   });
@@ -62,7 +66,8 @@ describe("ec2InstancePlugin", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "KeyName",
     );
-    expect(field).toBeDefined();
+    // Wave 16: strengthened.
+    expect(field?.name).toBe("KeyName");
     expect(field?.question.type).toBe("enum");
     expect(field?.question.fetcher).toBe("discover-key-pairs");
   });
@@ -71,15 +76,17 @@ describe("ec2InstancePlugin", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "SecurityGroupIds",
     );
-    expect(field).toBeDefined();
+    // Wave 16: strengthened.
+    expect(field?.name).toBe("SecurityGroupIds");
     expect(field?.question.type).toBe("multi");
   });
 
   it("Tags field is string type with toCfn transform", () => {
     const field = ec2InstancePlugin.commonFields.find((f) => f.name === "Tags");
-    expect(field).toBeDefined();
+    // Wave 16: strengthened — assert by name + that toCfn is callable.
+    expect(field?.name).toBe("Tags");
     expect(field?.question.type).toBe("string");
-    expect(field?.toCfn).toBeDefined();
+    expect(typeof field?.toCfn).toBe("function");
   });
 
   describe("Tags toCfn transform", () => {
@@ -159,22 +166,34 @@ describe("ec2InstancePlugin", () => {
       expect(field.question.validate?.("16384")).toBeUndefined();
     });
 
+    // Wave 16: strengthened — validators must return a non-empty STRING
+    // error message, not just any non-undefined value (e.g. `0`,
+    // `false`, `""`). Same pattern as the lambda-function and
+    // s3-bucket plugin tests.
     it("rejects value below 1", () => {
-      expect(field.question.validate?.("0")).toBeDefined();
+      const err = field.question.validate?.("0");
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
 
     it("rejects value above 16384", () => {
-      expect(field.question.validate?.("16385")).toBeDefined();
+      const err = field.question.validate?.("16385");
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
 
     it("rejects non-numeric value", () => {
-      expect(field.question.validate?.("abc")).toBeDefined();
+      const err = field.question.validate?.("abc");
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
   });
 
   describe("configHints", () => {
     it("has configHints defined", () => {
-      expect(ec2InstancePlugin.configHints).toBeDefined();
+      // Wave 16: dropped redundant `toBeDefined()` — `Array.isArray`
+      // catches null/undefined AND non-array shapes.
+      expect(Array.isArray(ec2InstancePlugin.configHints)).toBe(true);
       expect(ec2InstancePlugin.configHints!.length).toBeGreaterThan(0);
     });
 
