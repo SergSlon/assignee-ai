@@ -125,14 +125,17 @@ assignee list [options]
 
 **Options:**
 
-| Flag                | Description                     | Default     |
-| ------------------- | ------------------------------- | ----------- |
-| `--json`            | Output as JSON array            | false       |
-| `--region <region>` | Filter to a specific AWS region | all regions |
+| Flag                | Description                                                                               | Default     |
+| ------------------- | ----------------------------------------------------------------------------------------- | ----------- |
+| `--json`            | Output as JSON array                                                                      | false       |
+| `--region <region>` | Filter to a specific AWS region                                                           | all regions |
+| `--total-cost`      | Print an estimated monthly total after the table (skips Free / N/A / unparseable entries) | false       |
 
 **Behavior:**
 
-Queries the AWS Resource Groups Tagging API for resources tagged with `managed-by=assignee-ai`. Displays a formatted table with resource type, ARN, region, and tags.
+Queries the AWS Resource Groups Tagging API for resources tagged with `managed-by=assignee-ai`. Displays a formatted table with resource type, ARN, region, creation date, and estimated monthly cost.
+
+When `--total-cost` is set, the command sums the parseable monthly costs into a footer line. `$X.XX/mo` values are taken as-is; `$X.XXXX/hr` values are multiplied by 730 (the AWS monthly billing convention). Rows with `Free`, `N/A`, `Pay per use`, or `Unavailable` contribute 0. Any other unparseable string is counted separately and the footer shows a "(N resources with non-numeric cost not included)" caveat so the operator knows the total is incomplete.
 
 **Examples:**
 
@@ -140,6 +143,7 @@ Queries the AWS Resource Groups Tagging API for resources tagged with `managed-b
 assignee list
 assignee list --json
 assignee list --region us-west-2
+assignee list --total-cost
 assignee list --json | jq '.[].ResourceARN'
 ```
 
@@ -233,20 +237,24 @@ assignee drift [resource-id] [options]
 
 **Options:**
 
-| Flag                | Description                                               | Default     |
-| ------------------- | --------------------------------------------------------- | ----------- |
-| `--resource <type>` | Filter by resource type                                   | all types   |
-| `--region <region>` | Filter by AWS region                                      | all regions |
-| `--status <status>` | Filter by drift status (IN_SYNC, DRIFTED, DELETED, ERROR) | all         |
-| `--json`            | Output as JSON                                            | false       |
-| `--output <file>`   | Write JSON report to file (requires `--json`)             | stdout      |
-| `--concurrency <n>` | Max parallel drift checks (1-50)                          | 10          |
-| `--no-color`        | Disable color output                                      | false       |
-| `--verbose`         | Show all fields including matching ones                   | false       |
+| Flag                 | Description                                                                 | Default     |
+| -------------------- | --------------------------------------------------------------------------- | ----------- |
+| `--resource <type>`  | Filter by resource type                                                     | all types   |
+| `--region <region>`  | Filter by AWS region                                                        | all regions |
+| `--status <status>`  | Filter by drift status (IN_SYNC, DRIFTED, DELETED, ERROR, BASELINE_MISSING) | all         |
+| `--exclude <status>` | Exclude a drift status (e.g. `--exclude BASELINE_MISSING` for CI)           | none        |
+| `--baseline`         | Adopt `[resource-id]` into tracking by snapshotting its live CCAPI state    | false       |
+| `--json`             | Output as JSON                                                              | false       |
+| `--output <file>`    | Write JSON report to file (requires `--json`)                               | stdout      |
+| `--concurrency <n>`  | Max parallel drift checks (1-50)                                            | 10          |
+| `--no-color`         | Disable color output                                                        | false       |
+| `--verbose`          | Show all fields including matching ones                                     | false       |
 
 **Behavior:**
 
 Compares the desired state (from checkpoint files) against the actual state (from CloudControl GetResource). Shows a table with drift status per resource. Exit code 1 if any resource has drifted.
+
+After the drift scan, the provision log is deduped by ARN keeping the newest entry per resource (A3 follow-up fix). This avoids spamming the operator with hundreds of identical `BASELINE_MISSING` rows from past test fixtures.
 
 **Drift statuses:**
 
@@ -258,6 +266,19 @@ Compares the desired state (from checkpoint files) against the actual state (fro
 | `ERROR`            | Could not check (permissions, API error) |
 | `BASELINE_MISSING` | No checkpoint found for comparison       |
 
+The summary line renders `BASELINE_MISSING` as its own `no-baseline` bucket rather than collapsing it into `errors` — a missing checkpoint is an actionable operator state (run `assignee reconcile` or `drift --baseline`), not a failure.
+
+**`--baseline` adoption flow:**
+
+When `--baseline` is set alongside a positional `<resource-id>` ARN, the command:
+
+1. Infers the CloudFormation resource type from the ARN.
+2. Calls CCAPI `GetResource` for the live state.
+3. Writes a baseline payload to `.assignee/baselines/<slugified-arn>.json` containing the live state, resource type, and an ISO timestamp.
+4. Future `assignee drift` runs will find the baseline via the checkpoint fallback in `resolve-desired-state.ts` and compare against it instead of reporting `BASELINE_MISSING`.
+
+Checkpoints still win over baselines — the baseline is a last-resort fallback for resources adopted AFTER they were provisioned. Use `assignee clean --baselines` (future slice) or delete the `.assignee/baselines/` directory manually to drop adopted baselines.
+
 **Examples:**
 
 ```bash
@@ -265,6 +286,8 @@ assignee drift
 assignee drift arn:aws:s3:::my-bucket
 assignee drift --resource AWS::S3::Bucket
 assignee drift --status DRIFTED
+assignee drift --exclude BASELINE_MISSING  # CI mode: ignore unadopted rows
+assignee drift --baseline arn:aws:s3:::adopted-bucket
 assignee drift --json --output drift-report.json
 assignee drift --concurrency 20
 ```
