@@ -40,8 +40,12 @@ export const COMMAND_SERVER_MAP: Record<string, McpServerNameType[]> = {
   setup: [],
   completions: [],
 
-  // drift: [] — will be added by Epic 28 (Drift Detection)
-  // optimize: [McpServerName.PRICING] — will be added by Epic 32 (Cost Optimization)
+  // drift: [] — uses direct CCAPI SDK, no MCP servers needed
+  drift: [],
+  // A7 (2026-04-08) — optimize only needs the Pricing MCP to compare
+  // current instance prices against cheaper alternatives. All other
+  // work (resource enumeration, desiredState lookup) is direct SDK.
+  optimize: [McpServerName.PRICING],
 };
 
 /**

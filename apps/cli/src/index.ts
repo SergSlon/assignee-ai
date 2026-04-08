@@ -18,6 +18,7 @@ import { completionsCommand } from "./commands/completions.js";
 import { initCommand } from "./commands/init.js";
 import { destroyCommand } from "./commands/destroy.js";
 import { driftCommand } from "./commands/drift.js";
+import { optimizeCommand } from "./commands/optimize.js";
 import { listCommand } from "./commands/list.js";
 import { setupCommand } from "./commands/setup.js";
 import { statusCommand } from "./commands/status.js";
@@ -90,6 +91,7 @@ program
 program.addCommand(completionsCommand);
 program.addCommand(destroyCommand);
 program.addCommand(driftCommand);
+program.addCommand(optimizeCommand);
 program.addCommand(initCommand);
 program.addCommand(listCommand);
 program.addCommand(planCommand);
