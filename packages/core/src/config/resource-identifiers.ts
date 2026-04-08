@@ -49,6 +49,10 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   // time — state guard will skip Read-Before-Write for EFS, same as
   // the other auto-ID types above.
   [RESOURCE_TYPES.EFS_FILE_SYSTEM]: "FileSystemId",
+  // A1 follow-up: EFS::MountTarget primary identifier is
+  // /properties/Id (fsmt-xxxxxxxx) — auto-generated like most
+  // network attachment resources. State guard skips it.
+  [RESOURCE_TYPES.EFS_MOUNT_TARGET]: "Id",
 } as const;
 
 /**

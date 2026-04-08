@@ -337,6 +337,19 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "kms:GenerateDataKeyWithoutPlaintext",
       "kms:CreateGrant",
     ],
+    // A1 follow-up: EFS MountTarget. Minimum-viable set — Create +
+    // Delete only. The Describe* actions are shared with the
+    // FileSystem type and collapse into the existing
+    // elasticfilesystem:Describe* wildcard for free. Modify/update
+    // flows (ModifyMountTargetSecurityGroups) are deferred — they
+    // require ~50 bytes the operator policy cannot currently spare
+    // (see the policy-size comment above). Users who need to rotate
+    // mount-target security groups can add them to the policy
+    // post-setup.
+    [RESOURCE_TYPES.EFS_MOUNT_TARGET]: [
+      "elasticfilesystem:CreateMountTarget",
+      "elasticfilesystem:DeleteMountTarget",
+    ],
   };
 
   const serviceActions = serviceActionMap[resourceType] ?? [];

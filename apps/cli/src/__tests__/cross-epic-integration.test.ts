@@ -273,8 +273,8 @@ describe("Cross-epic: schema fetch -> plan generation", () => {
   it("SUPPORTED_TYPES_ARRAY covers all expected resource types", async () => {
     const { SUPPORTED_TYPES_ARRAY } = await import("@assignee/core");
 
-    // A1 (2026-04-08): EFS first-class support lifted the count to 26.
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(26);
+    // A1 (2026-04-08): EFS + EFS::MountTarget lifted the count to 27.
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(27);
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::S3::Bucket");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EC2::Instance");
@@ -292,5 +292,6 @@ describe("Cross-epic: schema fetch -> plan generation", () => {
     );
     // A1
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EFS::FileSystem");
+    expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EFS::MountTarget");
   });
 });
