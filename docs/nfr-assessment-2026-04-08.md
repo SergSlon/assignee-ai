@@ -145,6 +145,8 @@
 
 > **2026-04-08 update.** The initial single-evaluator pass closed at 89.7 with M-6.4, Q-7.1, and T-2.3 marked CONCERNS. All three were closed in the same session by wiring the existing `telemetry/timing.ts` infrastructure into `command-runner.ts` (Q-7.1), adding a minimal OTLP/HTTP-JSON log exporter at `telemetry/otel-exporter.ts` activated by `ASSIGNEE_OTEL_ENDPOINT` (M-6.4), and committing the nightly RUN_E2E workflow at `.github/workflows/nightly-e2e.yml` (T-2.3). The three PASS upgrades take Monitorability from 3.5/4 → 4/4, QoS/QoE from 3.5/4 → 4/4, and Test Data Strategy from 2.5/3 → 3/3, lifting the aggregate from 89.7 → **94.8**.
 
+> **2026-04-08 second update.** After the NFR re-score, the session landed the approved 6-slice plan (A6 / A1 / A3 / A2 / A4 / A7 + BP-IAM-017 warmup), which lifted D-4.3 from CONCERNS → PASS (**94.8 → 96.6**). A subsequent "continue" stretch shipped ~20 additional follow-up slices including EFS::MountTarget first-class support, BP-EFS-003 in-transit encryption, the Lambda arm64 optimizer, `drift --baseline` adoption flow, `list --total-cost`, `clean --baselines`, `version` MCP pin display, the A2 `whoami` preference surface, and four documentation refreshes. The stretch additions don't affect the NFR score (the rubric's 29 criteria were already all maxed except P-8.3, which is a sanctioned FAIL), but they close most of the "still-open concerns" from the previous session roll-up. Test count grew 5582 → **5730** passing, BP rules 158 → **162**, supported resource types 25 → **27**.
+
 ## Delta vs the previous (pre-Wave-5) score
 
 Pre-Wave-5: **83.7** · Post-Wave-20 (initial pass): **89.7** · After M-6.4 + Q-7.1 + T-2.3 closeout: **94.8** · **Δ = +11.1**
