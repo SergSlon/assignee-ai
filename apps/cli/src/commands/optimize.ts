@@ -163,6 +163,10 @@ export const optimizeCommand = new Command("optimize")
     "--reconcile",
     "Print suggested `assignee plan` commands for each recommendation (operator still runs them manually)",
   )
+  .option(
+    "--min-savings <usd>",
+    "Drop recommendations whose projected monthly savings are below this USD threshold (e.g. 10 for ≥$10/mo)",
+  )
   .option("--no-color", "Disable color output")
   .action(
     async (
@@ -171,6 +175,7 @@ export const optimizeCommand = new Command("optimize")
         region?: string;
         json?: boolean;
         reconcile?: boolean;
+        minSavings?: string;
         color?: boolean;
       },
     ) => {
@@ -201,12 +206,27 @@ export const optimizeCommand = new Command("optimize")
               )
             : allResources;
 
+          // Parse the --min-savings threshold early so an invalid
+          // value surfaces as a clear error instead of silently
+          // keeping every recommendation.
+          let minSavingsUsd = 0;
+          if (opts.minSavings !== undefined) {
+            const parsed = Number(opts.minSavings);
+            if (!Number.isFinite(parsed) || parsed < 0) {
+              process.stderr.write(
+                `Invalid --min-savings value '${opts.minSavings}': must be a non-negative number\n`,
+              );
+              return { success: false };
+            }
+            minSavingsUsd = parsed;
+          }
+
           // For each managed resource, resolve the checkpointed
           // desiredState and delegate to the analyzer. Resources
           // without a checkpoint are silently skipped — optimize
           // cannot make a meaningful recommendation without knowing
           // what the user intended to deploy.
-          const recommendations: CostOptRecommendation[] = [];
+          const allRecommendations: CostOptRecommendation[] = [];
           for (const resource of targets) {
             const desiredState = await resolveDesiredState(resource.arn);
             if (!desiredState) continue;
@@ -215,8 +235,16 @@ export const optimizeCommand = new Command("optimize")
               desiredState,
               ctx.tools,
             );
-            if (recommendation) recommendations.push(recommendation);
+            if (recommendation) allRecommendations.push(recommendation);
           }
+
+          // Drop sub-threshold recommendations when --min-savings is
+          // set. The threshold is compared against the absolute USD
+          // delta (not percent) so operators can write predictable
+          // "only show me recommendations worth ≥$50/month" policies.
+          const recommendations = allRecommendations.filter(
+            (r) => r.savingsAbsoluteUsd >= minSavingsUsd,
+          );
 
           // Sort highest-saving first so the most impactful
           // recommendation is visible at the top of the table.
