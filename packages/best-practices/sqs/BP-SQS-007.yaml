@@ -1,0 +1,14 @@
+id: BP-SQS-007
+title: "SQS queue policy must not grant wildcard Principal: *"
+severity: CRITICAL
+resource_type: "AWS::SQS::QueuePolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "wildcard-principal"
+source: "AWS Guard Rules Registry"
+source_id: "sqs_queuepolicy_no_wildcard_principal"
+description: "An Allow statement with Principal: \"*\" (or { AWS: \"*\" }) exposes the queue to the entire AWS customer base — anyone can send arbitrary messages into your workload (poisoning, billing amplification) or drain the queue via receive+delete. Queue policies are not gated by a separate \"block public access\" toggle the way S3 buckets are, so this wildcard is the only line of defence."
+remediation: "Replace Principal: \"*\" with the specific account root, IAM role, or service principal the statement is meant to allow. Cross-service integrations (SNS, EventBridge, S3 event notifications) use service principals like \"sns.amazonaws.com\" — combine with an aws:SourceArn condition to scope to the specific source resource."
+consequence: "Attackers can flood the queue (triggering downstream Lambda cost + on-call alarms), drain real messages before legitimate consumers see them, or inject payloads the consumer trusts."
+category: security
+lastVerified: "2026-04-08"

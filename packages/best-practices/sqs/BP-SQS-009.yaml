@@ -1,0 +1,14 @@
+id: BP-SQS-009
+title: "SQS queue policy must not use Allow + NotPrincipal"
+severity: CRITICAL
+resource_type: "AWS::SQS::QueuePolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "allow-plus-not-principal"
+source: "AWS Guard Rules Registry"
+source_id: "sqs_queuepolicy_no_allow_plus_notprincipal"
+description: "An Allow statement with NotPrincipal in a queue policy inverts the identity check — \"allow anyone except N\" — which is functionally equivalent to exposing the queue to the entire AWS customer base. There is no legitimate use case for NotPrincipal in a queue policy: if you want to deny a specific principal, express that as a Deny statement instead of inverting the Allow."
+remediation: "List the specific principals the queue should accept messages from under Principal. If you want to explicitly block one principal from an otherwise-permissive policy, write a Deny + Principal statement alongside the Allow — not an Allow + NotPrincipal."
+consequence: "Every identity not in NotPrincipal inherits the Allow — effectively the entire AWS customer base. Among the most dangerous policy shapes in the AWS Guard Rules Registry."
+category: security
+lastVerified: "2026-04-08"

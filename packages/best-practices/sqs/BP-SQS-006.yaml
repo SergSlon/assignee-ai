@@ -1,0 +1,14 @@
+id: BP-SQS-006
+title: "SQS queue policy must not grant wildcard Action: *"
+severity: HIGH
+resource_type: "AWS::SQS::QueuePolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "wildcard-action"
+source: "AWS Guard Rules Registry"
+source_id: "sqs_queuepolicy_no_wildcard_action"
+description: "An Allow statement with Action: \"*\" in a queue policy grants every SQS operation — Send, Receive, Delete, ChangeMessageVisibility, PurgeQueue, SetQueueAttributes — to the addressed principal. Most real integrations only need a subset (typically SendMessage for a producer or ReceiveMessage + DeleteMessage for a consumer)."
+remediation: "Replace Action: \"*\" with the explicit SQS action list the statement requires. Producers usually need sqs:SendMessage + sqs:GetQueueAttributes; consumers need sqs:ReceiveMessage + sqs:DeleteMessage + sqs:ChangeMessageVisibility."
+consequence: "Any principal the statement applies to can silently escalate to PurgeQueue or SetQueueAttributes — operations that delete every in-flight message or disable the queue entirely."
+category: security
+lastVerified: "2026-04-08"
