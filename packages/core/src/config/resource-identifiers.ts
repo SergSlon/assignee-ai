@@ -44,6 +44,11 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   // skips Read-Before-Write, which is correct for cross-reference resources.
   [RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT]: "AttachmentId",
   [RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION]: "Id",
+  // A1 (2026-04-08): EFS primary identifier is the auto-generated
+  // FileSystemId (fs-xxxxxxxx). Not present in desiredState at plan
+  // time — state guard will skip Read-Before-Write for EFS, same as
+  // the other auto-ID types above.
+  [RESOURCE_TYPES.EFS_FILE_SYSTEM]: "FileSystemId",
 } as const;
 
 /**

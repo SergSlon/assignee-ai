@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "hash": "6045cd194ef5aa37be23a7b274e467f2efcc5d688b16693f6cba9cefa9d4a209",
+  "hash": "e38e5aacbf90c842ec00845f7c37e2aa1dd3098a543c9c624f1ef5e6fdc77975",
   "files": {
     "apigateway/BP-APIGW-001.yaml": "bec1fb5d3e88707c41e07e4066bee54bc8290f7886ef02fe8054f89199d59267",
     "apigateway/BP-APIGW-002.yaml": "f0b8df494b6fbb8b1a7793a9e408d692fc01355122692bd6af0099f3bc1767f5",
@@ -65,6 +65,8 @@
     "ecs/BP-ECS-007.yaml": "bb52bb7aad480f66eed02bdb8c92390a83e0555f0c50671112266db382597f2c",
     "ecs/BP-ECS-008.yaml": "d9270061b7b9edbbc6a62d050926bca8c2bcdc077b1ada9b0b92b887d36e011b",
     "ecs/BP-ECS-009.yaml": "bc6717604859b3ba80355aa4411ec0919d65e1253148d50f0340a791eabd3e54",
+    "efs/BP-EFS-001.yaml": "0023edf8d49ca6cb6c31bdc777cb144ef9c0dee48bcf016065b28623d1f70a91",
+    "efs/BP-EFS-002.yaml": "f79d933b279c3d90cc0e92366be4dc2b7d6d8d39f54617e11ebd8b2a292bd3d0",
     "elbv2/BP-ELB-001.yaml": "15db529d6209e45ee2e94bf99a093bbc6ff68675d6ce8d068316442905f5a740",
     "elbv2/BP-ELB-002.yaml": "e2a59ccc50a7c4ca98210ad49dd69d3e4eca90d35b7d7594bddb6423d04bca04",
     "elbv2/BP-ELB-003.yaml": "a3a7d37dda4d8a8c7ede44bb4e0cc9d7fd672454d9422b906d536acebfbc1934",
@@ -161,6 +163,6 @@
     "vpc/BP-VPC-001.yaml": "d1efbeaa898d16f6dd2605519b7fa3564c7237553193faf8e709ac8044290000",
     "vpc/BP-VPC-002.yaml": "f7c720a24811610df4bac22b00485c0d779ba5452c334bb7266b84afd7160e5f"
   },
-  "count": 158,
-  "generatedAt": "2026-04-08T16:33:43.039Z"
+  "count": 160,
+  "generatedAt": "2026-04-08T18:16:18.745Z"
 }

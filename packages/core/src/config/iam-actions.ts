@@ -298,6 +298,45 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "secretsmanager:GetSecretValue",
       "secretsmanager:TagResource",
     ],
+    // A1 (2026-04-08): EFS. Minimum-viable set — the 9 actions below
+    // are the strict subset of the CCAPI create/delete handler perms
+    // (verified via cloudformation:DescribeType probe on 2026-04-08)
+    // that cannot be omitted without breaking create+tag+delete. The
+    // three Describe* actions meet the 3-member threshold so
+    // collapseToWildcards() collapses them to a single
+    // `elasticfilesystem:Describe*` wildcard, which at runtime still
+    // grants the full set the EFS handler calls (DescribeBackupPolicy,
+    // DescribeFileSystemPolicy, DescribeFileSystems,
+    // DescribeLifecycleConfiguration, DescribeReplicationConfigurations).
+    //
+    // Intentionally omitted to keep the operator policy within the
+    // 6144-byte limit (promote to this list only if a user flow hits
+    // a MissingPermission error):
+    //   - elasticfilesystem:UpdateFileSystem      (CCAPI treats update as replace)
+    //   - elasticfilesystem:PutLifecycleConfiguration (IA tiering is an advanced feature)
+    //   - elasticfilesystem:PutFileSystemPolicy   (resource policy is an advanced feature)
+    //   - elasticfilesystem:UpdateFileSystemProtection (rarely used)
+    //   - elasticfilesystem:ListTagsForResource   (not needed for create/delete)
+    //   - elasticfilesystem:UntagResource         (drift reconcile, future A3)
+    //   - iam:CreateServiceLinkedRole             (one-time per account; already
+    //                                              created by the time this tool is used;
+    //                                              users with a fresh account get a
+    //                                              clear error pointing at the missing perm)
+    [RESOURCE_TYPES.EFS_FILE_SYSTEM]: [
+      "elasticfilesystem:CreateFileSystem",
+      "elasticfilesystem:DeleteFileSystem",
+      "elasticfilesystem:DescribeFileSystems",
+      "elasticfilesystem:DescribeBackupPolicy",
+      "elasticfilesystem:DescribeReplicationConfigurations",
+      "elasticfilesystem:PutBackupPolicy",
+      "elasticfilesystem:TagResource",
+      // Encryption: KMS grant creation for customer-managed keys. The
+      // CCAPI create handler explicitly requires GenerateDataKey +
+      // CreateGrant; DescribeKey is already granted via other resource
+      // types so it gets deduped across the Set.
+      "kms:GenerateDataKeyWithoutPlaintext",
+      "kms:CreateGrant",
+    ],
   };
 
   const serviceActions = serviceActionMap[resourceType] ?? [];

@@ -230,6 +230,17 @@ export const CfnKey = {
   PROTOCOL: "Protocol",
   ENDPOINT: "Endpoint",
 
+  // ── EFS (A1) ────────────────────────────────────────────────
+  FILE_SYSTEM_TAGS: "FileSystemTags",
+  PERFORMANCE_MODE: "PerformanceMode",
+  THROUGHPUT_MODE: "ThroughputMode",
+  PROVISIONED_THROUGHPUT_IN_MIBPS: "ProvisionedThroughputInMibps",
+  BACKUP_POLICY: "BackupPolicy",
+  BACKUP_POLICY_STATUS: "Status",
+  LIFECYCLE_POLICIES: "LifecyclePolicies",
+  FILE_SYSTEM_POLICY: "FileSystemPolicy",
+  AVAILABILITY_ZONE_NAME: "AvailabilityZoneName",
+
   // ── S3 Lifecycle (nested keys) ─────────────────────────────
   RULES: "Rules",
   TRANSITIONS: "Transitions",
@@ -375,6 +386,15 @@ export const AwsDefault = {
   // ── ECS ───────────────────────────────────────────────────────
   CAPACITY_FARGATE: "FARGATE",
   CAPACITY_FARGATE_SPOT: "FARGATE_SPOT",
+
+  // ── EFS ───────────────────────────────────────────────────────
+  EFS_PERFORMANCE_GENERAL_PURPOSE: "generalPurpose",
+  EFS_PERFORMANCE_MAX_IO: "maxIO",
+  EFS_THROUGHPUT_BURSTING: "bursting",
+  EFS_THROUGHPUT_PROVISIONED: "provisioned",
+  EFS_THROUGHPUT_ELASTIC: "elastic",
+  EFS_BACKUP_ENABLED: "ENABLED",
+  EFS_BACKUP_DISABLED: "DISABLED",
 
   // ── Connectivity / Visibility ──────────────────────────────────
   CONNECTIVITY_PUBLIC: "public",

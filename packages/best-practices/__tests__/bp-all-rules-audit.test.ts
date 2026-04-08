@@ -1523,6 +1523,24 @@ const vpcRules: RuleSpec[] = [
   },
 ];
 
+// A1 (2026-04-08) — EFS rules
+const efsRules: RuleSpec[] = [
+  {
+    id: "BP-EFS-001",
+    resourceType: "AWS::EFS::FileSystem",
+    propertyPath: "Encrypted",
+    checkType: "equals",
+    expectedValue: true,
+  },
+  {
+    id: "BP-EFS-002",
+    resourceType: "AWS::EFS::FileSystem",
+    propertyPath: "BackupPolicy.Status",
+    checkType: "equals",
+    expectedValue: "ENABLED",
+  },
+];
+
 const asgRules: RuleSpec[] = [
   {
     id: "BP-ASG-001",
@@ -1857,6 +1875,12 @@ describe("BP All Rules Audit", () => {
     }
   });
 
+  describe("EFS (2 rules — A1)", () => {
+    for (const spec of efsRules) {
+      runRuleTests(spec);
+    }
+  });
+
   // ---------------------------------------------------------------------------
   // Meta-test: verify all 138 rule IDs are covered
   // ---------------------------------------------------------------------------
@@ -1886,9 +1910,10 @@ describe("BP All Rules Audit", () => {
       ...ssmRules,
       ...vpcRules,
       ...asgRules,
+      ...efsRules,
     ];
 
-    it("covers exactly 158 rule specs", () => {
+    it("covers exactly 160 rule specs", () => {
       // 131 pre-A5
       // + 6 Tier-1 IAM rules       (BP-IAM-011..016)
       // + 9 Tier-3 policy rules    (BP-S3-018..020, BP-SQS-006..009, BP-SNS-005..006)
@@ -1908,7 +1933,8 @@ describe("BP All Rules Audit", () => {
       // BP-IAM-017 (elevated *FullAccess heuristic) is still deferred
       // — it needs a walker over ManagedPolicyArns rather than over
       // PolicyDocument.Statement[].
-      expect(allSpecs.length).toBe(158);
+      // + 2 A1 rules                 (BP-EFS-001 encrypted, BP-EFS-002 backup)
+      expect(allSpecs.length).toBe(160);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

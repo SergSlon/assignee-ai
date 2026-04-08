@@ -43,6 +43,8 @@ export const PricingServiceCode = {
   SSM: "AWSSystemsManager",
   VPC: "AmazonVPC",
   DATA_TRANSFER: "AWSDataTransfer",
+  // A1 (2026-04-08) — EFS
+  EFS: "AmazonEFS",
 } as const;
 
 export const PricingKind = {

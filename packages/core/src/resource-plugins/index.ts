@@ -24,6 +24,8 @@ import { natGatewayPlugin } from "./plugins/ec2-nat-gateway.js";
 import { apiGatewayV2Plugin } from "./plugins/apigatewayv2-api.js";
 import { cloudWatchAlarmPlugin } from "./plugins/cloudwatch-alarm.js";
 import { secretsManagerSecretPlugin } from "./plugins/secretsmanager-secret.js";
+// A1 (2026-04-08): first-class EFS support
+import { efsFileSystemPlugin } from "./plugins/efs-file-system.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -61,6 +63,8 @@ defaultPluginRegistry.register(natGatewayPlugin);
 defaultPluginRegistry.register(apiGatewayV2Plugin);
 defaultPluginRegistry.register(cloudWatchAlarmPlugin);
 defaultPluginRegistry.register(secretsManagerSecretPlugin);
+// A1 (2026-04-08): first-class EFS support
+defaultPluginRegistry.register(efsFileSystemPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 export { PluginRegistry };
@@ -89,6 +93,8 @@ export { natGatewayPlugin } from "./plugins/ec2-nat-gateway.js";
 export { apiGatewayV2Plugin } from "./plugins/apigatewayv2-api.js";
 export { cloudWatchAlarmPlugin } from "./plugins/cloudwatch-alarm.js";
 export { secretsManagerSecretPlugin } from "./plugins/secretsmanager-secret.js";
+// A1 (2026-04-08): first-class EFS support
+export { efsFileSystemPlugin } from "./plugins/efs-file-system.js";
 export { genericPlugin } from "./plugins/generic.js";
 export type {
   ResourcePlugin,

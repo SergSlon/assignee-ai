@@ -24,6 +24,8 @@ export const SERVICE_TYPE_MAP: Readonly<Record<string, string>> = {
   dynamodb: RESOURCE_TYPES.DYNAMODB_TABLE,
   sqs: RESOURCE_TYPES.SQS_QUEUE,
   sns: RESOURCE_TYPES.SNS_TOPIC,
+  // A1 — EFS (service name is "elasticfilesystem", not "efs")
+  elasticfilesystem: RESOURCE_TYPES.EFS_FILE_SYSTEM,
   cloudformation: LIST_RESOURCE_TYPES.CLOUDFORMATION_STACK,
   logs: RESOURCE_TYPES.LOGS_LOG_GROUP,
   events: LIST_RESOURCE_TYPES.EVENTS_RULE,

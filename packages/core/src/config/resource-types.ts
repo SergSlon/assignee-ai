@@ -38,6 +38,11 @@ export const SUPPORTED_TYPES_ARRAY = [
   // before the marker resolver landed in plan-generator.ts)
   "AWS::EC2::VPCGatewayAttachment",
   "AWS::EC2::SubnetRouteTableAssociation",
+  // A1 (2026-04-08): first-class EFS support for stateful Lambda /
+  // ECS shared volumes. Full plugin, pricing decomposer, BP rules
+  // (BP-EFS-001 encryption, BP-EFS-002 backup). CCAPI schema verified
+  // to support create/delete/update handlers.
+  "AWS::EFS::FileSystem",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -74,6 +79,8 @@ export const RESOURCE_TYPES = {
   // WV4-A: VPC compound provisioning support
   EC2_VPC_GATEWAY_ATTACHMENT: "AWS::EC2::VPCGatewayAttachment",
   EC2_SUBNET_ROUTE_TABLE_ASSOCIATION: "AWS::EC2::SubnetRouteTableAssociation",
+  // A1 (2026-04-08)
+  EFS_FILE_SYSTEM: "AWS::EFS::FileSystem",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */
