@@ -40,13 +40,13 @@
 
 ## 2. Test Data Strategy (3 criteria)
 
-| #     | Criterion                                                         | Verdict  | Evidence                                                                                                                                                                                                              |
-| ----- | ----------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T-2.1 | Test fixtures captured from live sources, not hand-fabricated     | PASS     | `apps/cli/scripts/capture-mcp-responses.mjs` (now marked historical) plus the real-data rule in `.claude/rules/testing.md`                                                                                            |
-| T-2.2 | Branch coverage exercises both happy and unhappy paths            | PASS     | All BP rules have positive + negative coverage in `packages/best-practices/*/test/`; 4 parallel-invocation safety tests in `bulk-destroy.test.ts`; preflight ARN guard tests cover all 4 canonical placeholder shapes |
-| T-2.3 | Test data is reproducible without hidden environment dependencies | CONCERNS | RUN_E2E gate requires real AWS credentials and live regional capacity; non-RUN_E2E tests are hermetic, but the real-AWS specs only re-run when an operator chooses to spend money. **(judgment)**                     |
+| #     | Criterion                                                         | Verdict | Evidence                                                                                                                                                                                                                                                                                                                                        |
+| ----- | ----------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T-2.1 | Test fixtures captured from live sources, not hand-fabricated     | PASS    | `apps/cli/scripts/capture-mcp-responses.mjs` (now marked historical) plus the real-data rule in `.claude/rules/testing.md`                                                                                                                                                                                                                      |
+| T-2.2 | Branch coverage exercises both happy and unhappy paths            | PASS    | All BP rules have positive + negative coverage in `packages/best-practices/*/test/`; 4 parallel-invocation safety tests in `bulk-destroy.test.ts`; preflight ARN guard tests cover all 4 canonical placeholder shapes                                                                                                                           |
+| T-2.3 | Test data is reproducible without hidden environment dependencies | PASS    | Nightly GitHub Actions workflow `.github/workflows/nightly-e2e.yml` runs the full RUN_E2E=1 suite against a dedicated test account at 03:00 UTC. Fails fast if secrets are missing; runs `assignee list` leak-detection after the suite and fails if any Assignee-managed resources are stranded. Closes the "only on operator demand" concern. |
 
-**Subtotal: 2 PASS + 1 CONCERNS = 2.5 / 3**
+**Subtotal: 3 / 3**
 
 ---
 
@@ -128,26 +128,26 @@
 
 ## Aggregate
 
-| Category                                 | Score       |
-| ---------------------------------------- | ----------- |
-| 1. Testability & Automation              | 4 / 4       |
-| 2. Test Data Strategy                    | 2.5 / 3     |
-| 3. Scalability & Availability            | 4 / 4       |
-| 4. Disaster Recovery                     | 2.5 / 3     |
-| 5. Security                              | 4 / 4       |
-| 6. Monitorability / Debuggability / Mgmt | 4 / 4       |
-| 7. QoS / QoE                             | 4 / 4       |
-| 8. Deployability                         | 2 / 3       |
-| **Total**                                | **27 / 29** |
-| **Percent**                              | **93.1**    |
+| Category                                 | Score         |
+| ---------------------------------------- | ------------- |
+| 1. Testability & Automation              | 4 / 4         |
+| 2. Test Data Strategy                    | 3 / 3         |
+| 3. Scalability & Availability            | 4 / 4         |
+| 4. Disaster Recovery                     | 2.5 / 3       |
+| 5. Security                              | 4 / 4         |
+| 6. Monitorability / Debuggability / Mgmt | 4 / 4         |
+| 7. QoS / QoE                             | 4 / 4         |
+| 8. Deployability                         | 2 / 3         |
+| **Total**                                | **27.5 / 29** |
+| **Percent**                              | **94.8**      |
 
-`bmad-testarch-nfr` rubric: ≥ 26/29 = **Strong foundation** (≥ 90%). This re-score lands the project at **93.1**, comfortably inside the "Strong foundation" band.
+`bmad-testarch-nfr` rubric: ≥ 26/29 = **Strong foundation** (≥ 90%). This re-score lands the project at **94.8**, comfortably inside the "Strong foundation" band.
 
-> **2026-04-08 update.** The initial single-evaluator pass closed at 89.7 with M-6.4 and Q-7.1 marked CONCERNS. Both were closed in the same session by wiring the existing `telemetry/timing.ts` infrastructure into `command-runner.ts` (Q-7.1) and adding a minimal OTLP/HTTP-JSON log exporter at `telemetry/otel-exporter.ts` activated by `ASSIGNEE_OTEL_ENDPOINT` (M-6.4). The two PASS upgrades take Monitorability from 3.5/4 → 4/4 and QoS/QoE from 3.5/4 → 4/4, lifting the aggregate from 89.7 → **93.1**.
+> **2026-04-08 update.** The initial single-evaluator pass closed at 89.7 with M-6.4, Q-7.1, and T-2.3 marked CONCERNS. All three were closed in the same session by wiring the existing `telemetry/timing.ts` infrastructure into `command-runner.ts` (Q-7.1), adding a minimal OTLP/HTTP-JSON log exporter at `telemetry/otel-exporter.ts` activated by `ASSIGNEE_OTEL_ENDPOINT` (M-6.4), and committing the nightly RUN_E2E workflow at `.github/workflows/nightly-e2e.yml` (T-2.3). The three PASS upgrades take Monitorability from 3.5/4 → 4/4, QoS/QoE from 3.5/4 → 4/4, and Test Data Strategy from 2.5/3 → 3/3, lifting the aggregate from 89.7 → **94.8**.
 
 ## Delta vs the previous (pre-Wave-5) score
 
-Pre-Wave-5: **83.7** · Post-Wave-20 (initial pass): **89.7** · After M-6.4 + Q-7.1 closeout: **93.1** · **Δ = +9.4**
+Pre-Wave-5: **83.7** · Post-Wave-20 (initial pass): **89.7** · After M-6.4 + Q-7.1 + T-2.3 closeout: **94.8** · **Δ = +11.1**
 
 The improvement is concentrated in:
 
@@ -157,12 +157,12 @@ The improvement is concentrated in:
 
 ## Concerns and how to clear them
 
-| #     | Concern                                    | Status                                                                                                                                                                                                                                                                                                                                             |
-| ----- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T-2.3 | RUN_E2E only re-runs on operator demand    | **Open.** Stand up a nightly RUN_E2E job in a low-cost test account (≈ free-tier).                                                                                                                                                                                                                                                                 |
-| D-4.3 | Drift detection is a stub for some types   | **Open.** The drift-detection epic (sprint plan A3) closes this — large but already scoped.                                                                                                                                                                                                                                                        |
-| M-6.4 | No OTEL/X-Ray exporter                     | **Closed.** OTLP/HTTP-JSON log exporter at `apps/cli/src/telemetry/otel-exporter.ts`. Activates when `ASSIGNEE_OTEL_ENDPOINT` is set; mirrors every `log()` event to `<endpoint>/v1/logs` with a 1 s timeout and silent failure semantics. Span semantics deferred — logs alone clear "no exporter present".                                       |
-| Q-7.1 | No automated NFR-05 (plan ≤ 3 s) benchmark | **Closed.** `telemetry/timing.ts` is now wired through `command-runner.ts` for `total` / `credential-check` / `mcp-startup`. Each command persists per-phase durations to `~/.assignee/telemetry/timing.json` and emits a stderr WARNING when any phase exceeds its budget. Three regression tests in `command-runner.test.ts` lock in the wiring. |
+| #     | Concern                                    | Status                                                                                                                                                                                                                                                                                                                                                                     |
+| ----- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T-2.3 | RUN_E2E only re-runs on operator demand    | **Closed.** Nightly workflow `.github/workflows/nightly-e2e.yml` runs the full RUN*E2E=1 suite at 03:00 UTC against a dedicated test account. Documented at `.github/workflows/README.md`. Requires `ASSIGNEE_NIGHTLY*\*`GitHub secrets (6 total — operator/reader/auditor × key+secret). Fail-fast on missing secrets; leak-detection via`assignee list` after the suite. |
+| D-4.3 | Drift detection is a stub for some types   | **Open.** The drift-detection epic (sprint plan A3) closes this — large but already scoped.                                                                                                                                                                                                                                                                                |
+| M-6.4 | No OTEL/X-Ray exporter                     | **Closed.** OTLP/HTTP-JSON log exporter at `apps/cli/src/telemetry/otel-exporter.ts`. Activates when `ASSIGNEE_OTEL_ENDPOINT` is set; mirrors every `log()` event to `<endpoint>/v1/logs` with a 1 s timeout and silent failure semantics. Span semantics deferred — logs alone clear "no exporter present".                                                               |
+| Q-7.1 | No automated NFR-05 (plan ≤ 3 s) benchmark | **Closed.** `telemetry/timing.ts` is now wired through `command-runner.ts` for `total` / `credential-check` / `mcp-startup`. Each command persists per-phase durations to `~/.assignee/telemetry/timing.json` and emits a stderr WARNING when any phase exceeds its budget. Three regression tests in `command-runner.test.ts` lock in the wiring.                         |
 
 `P-8.3 (release artifacts)` is intentionally a sanctioned FAIL — clearing it requires the "tool approved for public artifacts" decision the user has not yet made and is **out of scope** for any technical fix.
 

@@ -1,0 +1,167 @@
+name: Nightly E2E (real AWS)
+
+# Closes NFR concern T-2.3 from docs/nfr-assessment-2026-04-08.md.
+# Purpose: run the full RUN_E2E=1 test suite against a dedicated,
+# budget-protected test AWS account on a nightly schedule, catching
+# regressions that unit tests miss. The RUN_E2E gate is currently
+# only exercised when an operator chooses to run `pnpm test` with
+# the env var set — T-2.3 flags that as "only re-runs on operator
+# demand", which this workflow fixes.
+#
+# Secrets this workflow requires (set via repo Settings → Secrets):
+#   ASSIGNEE_NIGHTLY_OPERATOR_ACCESS_KEY_ID     — operator IAM user key
+#   ASSIGNEE_NIGHTLY_OPERATOR_SECRET_ACCESS_KEY — operator IAM user secret
+#   ASSIGNEE_NIGHTLY_READER_ACCESS_KEY_ID       — reader IAM user key (MCP)
+#   ASSIGNEE_NIGHTLY_READER_SECRET_ACCESS_KEY   — reader IAM user secret
+#   ASSIGNEE_NIGHTLY_AUDITOR_ACCESS_KEY_ID      — auditor IAM user key (MCP)
+#   ASSIGNEE_NIGHTLY_AUDITOR_SECRET_ACCESS_KEY  — auditor IAM user secret
+#
+# These MUST come from a dedicated test account (NOT the main prod
+# account) — the suite creates and destroys real resources, and a
+# misconfigured test can leak a few dollars of EIP / NAT Gateway cost.
+# Set up the test account via `assignee setup` from a workstation once,
+# then copy the access keys into the GitHub secrets above.
+#
+# If any secret is missing, the job fails fast at the "Verify nightly
+# secrets are configured" step rather than silently skipping the tests
+# — a silent skip would mean the gate passes every night without
+# actually running anything, the exact outcome T-2.3 is trying to
+# prevent.
+
+on:
+  schedule:
+    # 03:00 UTC daily. Picks a low-traffic window so CI concurrency
+    # limits and AWS API rate limits are less likely to cause flakes.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    # Allow manual triggering from the Actions UI for ad-hoc runs
+    # (e.g. after merging a risky change and wanting to check the
+    # full suite without waiting for the next night).
+
+concurrency:
+  # Serialize nightly runs so a manual dispatch during the scheduled
+  # window doesn't double-run against the same test account.
+  group: nightly-e2e
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  nightly-e2e:
+    runs-on: ubuntu-latest
+    # 60 min — the RUN_E2E suite includes 22 specs that hit real AWS
+    # (plan + apply + destroy lifecycle per resource type, plus one
+    # compound VPC pattern). Typical wall-clock is 15-25 min; the
+    # extra headroom covers slow days.
+    timeout-minutes: 60
+
+    env:
+      RUN_E2E: '1'
+      # The 3 role-separated credentials Assignee.ai reads. These
+      # intentionally use distinct secret names from the main CI
+      # workflow so a misconfigured nightly account cannot leak into
+      # day-to-day CI runs against the main account.
+      ASSIGNEE_OPERATOR_ACCESS_KEY_ID: ${{ secrets.ASSIGNEE_NIGHTLY_OPERATOR_ACCESS_KEY_ID }}
+      ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY: ${{ secrets.ASSIGNEE_NIGHTLY_OPERATOR_SECRET_ACCESS_KEY }}
+      ASSIGNEE_READER_ACCESS_KEY_ID: ${{ secrets.ASSIGNEE_NIGHTLY_READER_ACCESS_KEY_ID }}
+      ASSIGNEE_READER_SECRET_ACCESS_KEY: ${{ secrets.ASSIGNEE_NIGHTLY_READER_SECRET_ACCESS_KEY }}
+      ASSIGNEE_AUDITOR_ACCESS_KEY_ID: ${{ secrets.ASSIGNEE_NIGHTLY_AUDITOR_ACCESS_KEY_ID }}
+      ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY: ${{ secrets.ASSIGNEE_NIGHTLY_AUDITOR_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+
+    steps:
+      - name: Verify nightly secrets are configured
+        # Fail fast if the secrets were never set. A bare `env` check
+        # inside a step is the cheapest way to detect a missing secret
+        # — GH Actions does not warn about missing secret references.
+        run: |
+          missing=()
+          [ -z "$ASSIGNEE_OPERATOR_ACCESS_KEY_ID" ] && missing+=("ASSIGNEE_NIGHTLY_OPERATOR_ACCESS_KEY_ID")
+          [ -z "$ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY" ] && missing+=("ASSIGNEE_NIGHTLY_OPERATOR_SECRET_ACCESS_KEY")
+          [ -z "$ASSIGNEE_READER_ACCESS_KEY_ID" ] && missing+=("ASSIGNEE_NIGHTLY_READER_ACCESS_KEY_ID")
+          [ -z "$ASSIGNEE_READER_SECRET_ACCESS_KEY" ] && missing+=("ASSIGNEE_NIGHTLY_READER_SECRET_ACCESS_KEY")
+          [ -z "$ASSIGNEE_AUDITOR_ACCESS_KEY_ID" ] && missing+=("ASSIGNEE_NIGHTLY_AUDITOR_ACCESS_KEY_ID")
+          [ -z "$ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY" ] && missing+=("ASSIGNEE_NIGHTLY_AUDITOR_SECRET_ACCESS_KEY")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Nightly E2E is missing required secrets:"
+            printf '::error::  - %s\n' "${missing[@]}"
+            echo "::error::See .github/workflows/nightly-e2e.yml for setup instructions."
+            exit 1
+          fi
+          echo "All 6 nightly credentials are present."
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: npx turbo build
+
+      - name: Run doctor preflight
+        # Verify credentials + MCP servers + BP integrity before
+        # spending money on the real-AWS suite. If doctor fails, fail
+        # the job immediately — the E2E suite's first test would fail
+        # anyway and we'd waste the compute budget.
+        run: node apps/cli/dist/index.js doctor
+
+      - name: Run RUN_E2E suite
+        # The suite respects RUN_E2E=1 and the 22 gated specs in
+        # apps/cli/src/e2e/e2e-plan.test.ts will run. Every other
+        # package's test suite is hermetic and unchanged by the env.
+        run: pnpm test
+
+      - name: Verify no leaked resources
+        # After the test suite, confirm the test account has zero
+        # Assignee-managed resources left. The suite cleans up after
+        # each spec via its own afterAll blocks, but a crash or a
+        # rare CCAPI NotFound race could leave something behind —
+        # this step is the last line of defence and fails the nightly
+        # if anything is stranded.
+        #
+        # The protected infra allowlist (per feedback_assignee_infra_
+        # safety_allowlist.md: AssigneeOperator/Reader/Auditor policies
+        # + AssigneeAiBedrockLoggingRole) is intentionally excluded
+        # from `list --json` output, so a non-empty result means
+        # genuine leakage.
+        if: always()  # Run even if tests failed — we need to know about leaks regardless
+        run: |
+          set -euo pipefail
+          echo "Listing all Assignee-managed resources in the nightly account..."
+          output=$(node apps/cli/dist/index.js list --all --json 2>/dev/null || echo '[]')
+          count=$(echo "$output" | node -e "
+            const data = JSON.parse(require('fs').readFileSync(0, 'utf-8'));
+            const resources = Array.isArray(data) ? data : (data.resources ?? []);
+            console.log(resources.length);
+          ")
+          if [ "$count" -gt 0 ]; then
+            echo "::error::$count leaked resource(s) detected in the nightly test account:"
+            echo "$output"
+            echo "::error::Run 'assignee destroy --all' against the nightly account to clean up."
+            exit 1
+          fi
+          echo "Nightly account is clean — zero Assignee-managed resources."
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-e2e-logs-${{ github.run_number }}
+          # The CLI persists structured logs to ~/.assignee/logs — capture
+          # them for post-mortem on failures. Also capture the vitest
+          # output if vitest wrote a reporter file.
+          path: |
+            ~/.assignee/logs/
+            apps/cli/test-results/
+          if-no-files-found: ignore
+          retention-days: 30
