@@ -29,4 +29,14 @@ export const PatternId = {
    * matches the promise of "natural language → running".
    */
   EFS_WITH_VPC: "efs-with-vpc",
+  /**
+   * Scheduled Lambda (cron Lambda) pattern. A Lambda function that
+   * fires on a time-based schedule via EventBridge. 4 resources:
+   * IAM exec role, Lambda function, Events::Rule with
+   * ScheduleExpression + inline Target, and a display-only
+   * Lambda::Permission granting events.amazonaws.com invoke.
+   * Unblocks "scheduled lambda" / "cron lambda" intents that
+   * previously had no compound answer.
+   */
+  SCHEDULED_LAMBDA: "scheduled-lambda",
 } as const;

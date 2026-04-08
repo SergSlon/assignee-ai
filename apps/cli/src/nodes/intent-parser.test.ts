@@ -85,6 +85,8 @@ describe("intentParserNode", () => {
     // A1 (2026-04-08): EFS + EFS::MountTarget lifted the count to 27.
     expect(SUPPORTED_TYPES).toContain("AWS::EFS::FileSystem");
     expect(SUPPORTED_TYPES).toContain("AWS::EFS::MountTarget");
-    expect(SUPPORTED_TYPES).toHaveLength(27);
+    // A8 (2026-04-08): EventBridge Rule lifted the count to 28.
+    expect(SUPPORTED_TYPES).toContain("AWS::Events::Rule");
+    expect(SUPPORTED_TYPES).toHaveLength(28);
   });
 });

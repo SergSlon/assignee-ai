@@ -193,6 +193,23 @@ Cost: ~$32/month (NAT Gateway is the dominant cost driver).
 | EC2 Instance              | `AWS::EC2::Instance`                        |
 | RDS Database              | `AWS::RDS::DBInstance`                      |
 
+### Scheduled Lambda (EventBridge cron) — 4 resources
+
+**Trigger keywords**: "scheduled lambda", "cron lambda", "periodic lambda", "nightly lambda", "nightly job", "cron job", "scheduled task", "recurring lambda", "eventbridge scheduled lambda"
+
+Time-triggered Lambda function that fires on an EventBridge schedule. Bundles the IAM execution role, Lambda function, schedule rule, and display-only permission grant for events.amazonaws.com.
+
+| Resource                  | Type                      | Count | Notes                                |
+| ------------------------- | ------------------------- | ----- | ------------------------------------ |
+| Lambda Execution Role     | `AWS::IAM::Role`          | 1     | PowerUserAccess permissions boundary |
+| Lambda Function           | `AWS::Lambda::Function`   | 1     | arm64 Graviton, 512 MB, placeholder  |
+| EventBridge Schedule Rule | `AWS::Events::Rule`       | 1     | `rate(1 hour)` by default, ENABLED   |
+| Lambda Permission         | `AWS::Lambda::Permission` | 1     | display-only (manual post-apply)     |
+
+**Defaults**: ScheduleExpression is `rate(1 hour)` — override with `--set ScheduleExpression="rate(5 minutes)"` or `--set ScheduleExpression="cron(0 12 * * ? *)"`. The rule has an inline Target referencing the Lambda's ARN via `markerGetAtt`. Lambda Permission is display-only because CCAPI routes `AWS::Lambda::Permission` through `AWS::Lambda::PermissionPolicy` (known-flaky for schedule rules), so users run `aws lambda add-permission` post-apply to let events.amazonaws.com actually invoke the function.
+
+**Costs**: Rule evaluation on the default bus is free. The workload fee is the Lambda invocation cost at the scheduled rate.
+
 ### EFS File System (with private VPC) — 10 resources
 
 **Trigger keywords**: "efs", "efs file system", "elastic file system", "nfs file system", "create an efs", "create a shared file system", "shared storage for lambda", "shared storage for ec2", "nfs mount"

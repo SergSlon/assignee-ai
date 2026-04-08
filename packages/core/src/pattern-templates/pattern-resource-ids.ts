@@ -67,6 +67,21 @@ export const LambdaWithExecRoleResourceId = {
 } as const;
 
 /**
+ * Resource IDs for the scheduled-lambda compound pattern.
+ *
+ * Mirrors `LambdaWithExecRoleResourceId` for the IAM+Lambda pair so
+ * plan-generator's existing compound role-injection branch handles
+ * both patterns with zero additional code. The EventBridge rule and
+ * display-only Lambda Permission are unique to this pattern.
+ */
+export const ScheduledLambdaResourceId = {
+  IAM_EXECUTION_ROLE: "iam-execution-role",
+  LAMBDA_FN: "lambda-fn",
+  SCHEDULE_RULE: "schedule-rule",
+  INVOKE_PERMISSION: "invoke-permission",
+} as const;
+
+/**
  * Resource IDs for the EFS-with-VPC compound pattern.
  *
  * The VPC-bearing resource IDs intentionally reuse the same string
