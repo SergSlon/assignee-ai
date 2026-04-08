@@ -22,58 +22,115 @@ import {
   renderError,
 } from "../utils/display.js";
 
+/**
+ * Parse an `estimatedMonthlyCost` string into a numeric USD monthly
+ * amount. Handles the four shapes the list service emits:
+ *
+ *   - "$X.XX/mo"                  — take the number as-is
+ *   - "$X.XXXX/hr"                — multiply by 730 (AWS billing convention)
+ *   - "Free" / "N/A" / "Pay per use" / "Unavailable" — return 0 (skip in sum)
+ *   - anything else               — return null so the caller can flag
+ *                                   "some rows could not be summed"
+ *
+ * Exported for unit testing.
+ */
+export function parseMonthlyCost(raw: string): number | null {
+  if (!raw) return 0;
+  const trimmed = raw.trim();
+  if (/^(free|n\/a|pay per use|unavailable)/i.test(trimmed)) return 0;
+  const monthlyMatch = trimmed.match(/\$([0-9]+(?:\.[0-9]+)?)(?:\/mo)?$/);
+  if (monthlyMatch) {
+    const value = Number(monthlyMatch[1]);
+    return Number.isFinite(value) ? value : null;
+  }
+  const hourlyMatch = trimmed.match(/\$([0-9]+(?:\.[0-9]+)?)\/hr$/);
+  if (hourlyMatch) {
+    const value = Number(hourlyMatch[1]);
+    return Number.isFinite(value) ? value * 730 : null;
+  }
+  return null;
+}
+
 export const listCommand = new Command(CommandName.LIST)
   .description(CommandDescription.LIST)
   .option("--json", "Output as JSON array")
   .option("--region <region>", "Filter to a specific AWS region")
-  .action(async (opts: { json?: boolean; region?: string }) => {
-    try {
-      const resources = await fetchManagedResources(opts.region);
+  .option(
+    "--total-cost",
+    "After the table, print a total estimated monthly cost across all resources (skips Free / N/A / unparseable entries)",
+  )
+  .action(
+    async (opts: { json?: boolean; region?: string; totalCost?: boolean }) => {
+      try {
+        const resources = await fetchManagedResources(opts.region);
 
-      if (resources.length === 0) {
-        renderEmptyList();
-        return;
-      }
+        if (resources.length === 0) {
+          renderEmptyList();
+          return;
+        }
 
-      if (opts.json) {
-        process.stdout.write(JSON.stringify(resources, null, 2) + "\n");
-        return;
-      }
+        if (opts.json) {
+          process.stdout.write(JSON.stringify(resources, null, 2) + "\n");
+          return;
+        }
 
-      renderResourceTable(resources);
-    } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      const errName = (error as { name?: string }).name ?? "";
+        renderResourceTable(resources);
 
-      if (errName === AwsErrorName.ACCESS_DENIED) {
-        renderError(
-          "Cannot list managed resources.",
-          "Ask your admin to grant the `ResourceGroupsTaggingAPI:GetResources` action.",
-          {
-            why: "Your IAM identity lacks `tag:GetResources` permission.",
-          },
+        if (opts.totalCost) {
+          // Sum parseable monthly rates. Unparseable entries are tracked
+          // separately so we can warn the operator when the total is
+          // incomplete instead of silently under-reporting.
+          let total = 0;
+          let unparseable = 0;
+          for (const r of resources) {
+            const parsed = parseMonthlyCost(r.estimatedMonthlyCost);
+            if (parsed === null) {
+              unparseable++;
+            } else {
+              total += parsed;
+            }
+          }
+          const totalLine = `Estimated total: $${total.toFixed(2)}/mo`;
+          const warn =
+            unparseable > 0
+              ? ` (${unparseable} resource${unparseable === 1 ? "" : "s"} with non-numeric cost not included)`
+              : "";
+          process.stdout.write(`\n${totalLine}${warn}\n`);
+        }
+      } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        const errName = (error as { name?: string }).name ?? "";
+
+        if (errName === AwsErrorName.ACCESS_DENIED) {
+          renderError(
+            "Cannot list managed resources.",
+            "Ask your admin to grant the `ResourceGroupsTaggingAPI:GetResources` action.",
+            {
+              why: "Your IAM identity lacks `tag:GetResources` permission.",
+            },
+          );
+        } else if (
+          err.message.includes("ENOTFOUND") ||
+          err.message.includes(AwsErrorName.NETWORKING_ERROR) ||
+          err.message.includes("getaddrinfo") ||
+          errName === AwsErrorName.NETWORKING_ERROR
+        ) {
+          renderError(
+            "Failed to connect to AWS.",
+            "Check your internet connection and AWS credentials, then try again.",
+          );
+        } else {
+          renderError(
+            "Failed to list managed resources.",
+            "Check your AWS credentials and try again.",
+            { why: err.message },
+          );
+        }
+
+        throw new AssigneeError(
+          err.message || "Failed to list managed resources.",
+          "LIST_ERROR",
         );
-      } else if (
-        err.message.includes("ENOTFOUND") ||
-        err.message.includes(AwsErrorName.NETWORKING_ERROR) ||
-        err.message.includes("getaddrinfo") ||
-        errName === AwsErrorName.NETWORKING_ERROR
-      ) {
-        renderError(
-          "Failed to connect to AWS.",
-          "Check your internet connection and AWS credentials, then try again.",
-        );
-      } else {
-        renderError(
-          "Failed to list managed resources.",
-          "Check your AWS credentials and try again.",
-          { why: err.message },
-        );
       }
-
-      throw new AssigneeError(
-        err.message || "Failed to list managed resources.",
-        "LIST_ERROR",
-      );
-    }
-  });
+    },
+  );
