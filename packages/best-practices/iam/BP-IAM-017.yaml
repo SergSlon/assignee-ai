@@ -1,0 +1,16 @@
+id: BP-IAM-017
+title: "IAM role should not attach elevated *FullAccess managed policies"
+severity: HIGH
+resource_type: "AWS::IAM::Role"
+property_path: "ManagedPolicyArns"
+check_type: "not_contains_pattern"
+expected_value: "^arn:aws[\\w-]*:iam::aws:policy/(?!ReadOnly|SecurityAudit|Billing|Job-function/|service-role/)[A-Za-z0-9_-]*FullAccess$"
+source: "AWS Guard Rules Registry"
+source_id: "iam_role_elevated_managed_policy_rule"
+description: "AWS-managed policies whose names end in FullAccess grant service-wide admin-equivalent permissions (AmazonS3FullAccess, IAMFullAccess, AmazonDynamoDBFullAccess, etc.). BP-IAM-016 catches the single AdministratorAccess admin policy and BP-IAM-001/011-015 inspect inline PolicyDocument statements, but a role that pulls in AmazonEC2FullAccess via ManagedPolicyArns can still reach the entire EC2 service through a single attachment. This heuristic surfaces those attachments for explicit review."
+remediation: "Replace the *FullAccess policy with either a scoped custom managed policy, a job-function managed policy (PowerUserAccess, ReadOnlyAccess, DatabaseAdministrator, etc.), or a service-specific least-privilege policy generated from the actions the role actually calls (iam:GenerateServiceLastAccessedDetails is a good starting point). If a FullAccess policy is genuinely required, bound it with a PermissionsBoundary and gate role assumption with MFA."
+consequence: "A single *FullAccess attachment collapses the principal of least privilege for one AWS service. Combined with assume-role chains or compromised workloads, it becomes a direct lateral-movement vector."
+category: security
+lastVerified: "2026-04-08"
+blocking: false
+autoFixable: false

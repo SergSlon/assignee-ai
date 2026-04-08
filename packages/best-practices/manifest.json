@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "hash": "e38e5aacbf90c842ec00845f7c37e2aa1dd3098a543c9c624f1ef5e6fdc77975",
+  "hash": "50d402d22b57151c4ddb028042c0169d22210bee5131e27145a46201c21b14e0",
   "files": {
     "apigateway/BP-APIGW-001.yaml": "bec1fb5d3e88707c41e07e4066bee54bc8290f7886ef02fe8054f89199d59267",
     "apigateway/BP-APIGW-002.yaml": "f0b8df494b6fbb8b1a7793a9e408d692fc01355122692bd6af0099f3bc1767f5",
@@ -91,6 +91,7 @@
     "iam/BP-IAM-014.yaml": "02c93a9d72d4de78fda010543c10de235d18f44587ab1656e2557205024c30ac",
     "iam/BP-IAM-015.yaml": "d1ab7ec7213bf05c6073c7292c4c056fa8b5e58466f4c4157199fa9b0d3115f9",
     "iam/BP-IAM-016.yaml": "8b4c16a2a9282903f66699e5e2e14a14910747b1f709575c1ba88fe28f6d870b",
+    "iam/BP-IAM-017.yaml": "07db825cb1706a800b91f9c0cf6e76cd506d66654bc3a74bae0edd23a4ddd501",
     "lambda/BP-LAMBDA-001.yaml": "0522d12730c3d9acf3132094269203a86c45e6134ad2853857e324fb4946a750",
     "lambda/BP-LAMBDA-002.yaml": "f0f5fc6a0b3622754cb00bc325a8ab8843943d9061ae43655989e0aef050c62f",
     "lambda/BP-LAMBDA-003.yaml": "a5aa3e517d7bf08b49940716b297f7ace20c5b3cd45dee6a5d769b9063258090",
@@ -163,6 +164,6 @@
     "vpc/BP-VPC-001.yaml": "d1efbeaa898d16f6dd2605519b7fa3564c7237553193faf8e709ac8044290000",
     "vpc/BP-VPC-002.yaml": "f7c720a24811610df4bac22b00485c0d779ba5452c334bb7266b84afd7160e5f"
   },
-  "count": 160,
-  "generatedAt": "2026-04-08T18:16:18.745Z"
+  "count": 161,
+  "generatedAt": "2026-04-08T18:43:12.496Z"
 }

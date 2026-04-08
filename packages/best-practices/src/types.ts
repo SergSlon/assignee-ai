@@ -44,6 +44,24 @@ export const BP_CHECK_TYPE = [
    * @see docs/bp-cfn-guard-gap-analysis-2026-04-08.md
    */
   "policy_antipattern",
+  /**
+   * Pattern-based variant of `not_contains`: the `expected_value` is
+   * treated as a JavaScript regex source string and tested against
+   * either the string `fieldValue` or — when `fieldValue` is an array
+   * — every element in turn. The rule PASSES when no element matches
+   * the pattern; FAILS (finding fires) when at least one does.
+   *
+   * Missing/null fieldValue trivially passes (nothing to match).
+   *
+   * Intended for array-of-strings fields where `not_contains` cannot
+   * express the "any element matching X" shape — the canonical use
+   * case is BP-IAM-017 (IAM role ManagedPolicyArns must not attach
+   * AWS-managed policies whose ARN ends in `FullAccess` without
+   * explicit review).
+   *
+   * @see A1 warmup — BP-IAM-017 elevated *FullAccess heuristic
+   */
+  "not_contains_pattern",
 ] as const;
 export type BPCheckType = (typeof BP_CHECK_TYPE)[number];
 
