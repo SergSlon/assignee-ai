@@ -135,6 +135,103 @@ function detectPlaceholderArn(
   );
 }
 
+/**
+ * Wave 19 Bug #8: verify that every ManagedPolicyArn in an IAM::Role plan
+ * actually exists in IAM. The LLM was observed inventing plausible-looking
+ * but fictional ARNs (e.g. `arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforAWSServiceAccess`).
+ *
+ * Returns an error message string when at least one ARN doesn't exist, or
+ * `null` when all ARNs verify successfully (or verification couldn't run
+ * for IAM-permission reasons — fail-open here is OK because CCAPI will
+ * still reject bad ARNs at provision time, just with a less actionable
+ * error).
+ *
+ * Uses the operator's existing IAM client. `iam:GetPolicy` is already in
+ * AssigneeOperatorPolicy via the auditor read paths.
+ */
+async function verifyManagedPolicyArns(
+  arns: readonly string[],
+): Promise<string | null> {
+  if (arns.length === 0) return null;
+  try {
+    const { IAMClient, GetPolicyCommand } = await import("@aws-sdk/client-iam");
+    const { operatorCredentials } =
+      await import("../config/operator-credentials.js");
+    const creds = operatorCredentials();
+    const iam = new IAMClient({
+      // IAM is global; us-east-1 is the canonical control-plane region
+      region: "us-east-1",
+      ...(creds.accessKeyId && creds.secretAccessKey
+        ? {
+            credentials: {
+              accessKeyId: creds.accessKeyId,
+              secretAccessKey: creds.secretAccessKey,
+            },
+          }
+        : {}),
+    });
+
+    const invalidArns: { arn: string; reason: string }[] = [];
+    for (const arn of arns) {
+      try {
+        await iam.send(new GetPolicyCommand({ PolicyArn: arn }));
+      } catch (err) {
+        const errName = (err as { name?: string })?.name ?? "";
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errName === "NoSuchEntityException") {
+          invalidArns.push({
+            arn,
+            reason: "policy does not exist in IAM",
+          });
+        } else if (
+          errName === "AccessDenied" ||
+          errMsg.includes("not authorized")
+        ) {
+          // Operator role lacks iam:GetPolicy — fail open. CCAPI will still
+          // reject bad ARNs at provision time. Don't block on a permission
+          // gap that's separate from the bug we're trying to catch.
+          return null;
+        } else {
+          // Unknown error — log to extras but don't block. Network blip,
+          // throttling, etc.
+          invalidArns.push({
+            arn,
+            reason: `verification failed: ${errMsg}`,
+          });
+        }
+      }
+    }
+
+    if (invalidArns.length > 0) {
+      const lines = invalidArns
+        .map((x) => `  - ${x.arn} → ${x.reason}`)
+        .join("\n");
+      return (
+        `One or more ManagedPolicyArns do not exist in IAM:\n${lines}\n\n` +
+        `These ARNs were likely hallucinated by the LLM. Either:\n` +
+        `  1. Remove them: \`assignee apply <intent> --set ManagedPolicyArns=\`\n` +
+        `  2. Replace with a verified ARN: see iam-role.ts configHints for the verified list\n` +
+        `  3. Specify the policies you want explicitly in your intent (e.g. ` +
+        `"... attach the AmazonS3ReadOnlyAccess policy")`
+      );
+    }
+    return null;
+  } catch (err) {
+    // Import or client construction failed — don't block, fall through
+    log({
+      ts: new Date().toISOString(),
+      runId: "system",
+      level: "warn",
+      action: LOG_ACTIONS.PREFLIGHT_COMPLETED,
+      extras: {
+        phase: "managed_policy_verification_skipped",
+        error: err instanceof Error ? err.message : String(err),
+      },
+    });
+    return null;
+  }
+}
+
 export async function preflightGuardNode(
   state: AgentState,
   tools?: StructuredTool[],
@@ -171,6 +268,32 @@ export async function preflightGuardNode(
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: placeholderArnError,
     };
+  }
+
+  // Wave 19 Bug #8: the LLM was observed hallucinating non-existent AWS
+  // managed policy ARNs (e.g. `AmazonEC2RoleforAWSServiceAccess`,
+  // `AmazonEC2RoleforAWSCodeDeployRole` — neither exists). Submitting these
+  // to CCAPI produces a confusing
+  // `Scope ARN: arn:aws:iam::aws:policy/... does not exist or is not attachable`
+  // 404 at provision time, leaving the user thinking the resource type is
+  // broken. Verify each ManagedPolicyArn against IAM with `iam:GetPolicy`
+  // before CCAPI sees it. The configHint added to iam-role.ts already
+  // constrains the LLM to a verified allowlist, but this preflight is the
+  // belt-and-braces guarantee for cases where the LLM ignores the hint or
+  // the user passes an invented ARN via --set.
+  if (state.resourceType === "AWS::IAM::Role") {
+    const managedPolicyArns = desiredState["ManagedPolicyArns"];
+    if (Array.isArray(managedPolicyArns) && managedPolicyArns.length > 0) {
+      const verificationError = await verifyManagedPolicyArns(
+        managedPolicyArns.filter((a): a is string => typeof a === "string"),
+      );
+      if (verificationError) {
+        return {
+          executionStatus: ExecutionStatus.FAILED,
+          errorMessage: verificationError,
+        };
+      }
+    }
   }
 
   const mcpConfig = defaultPricingRegistry.getMcpConfig(

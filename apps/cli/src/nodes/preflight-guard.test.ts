@@ -287,6 +287,212 @@ describe("preflightGuardNode", () => {
     });
   });
 
+  // Wave 19 Bug #8: the LLM was observed inventing AWS managed policy ARNs
+  // (e.g. AmazonEC2RoleforAWSServiceAccess, AmazonEC2RoleforAWSCodeDeployRole)
+  // that don't exist. CCAPI 404s with a confusing
+  // `Scope ARN: ... does not exist or is not attachable` error. The
+  // preflight verifier added in Wave 19 calls iam:GetPolicy against each
+  // ManagedPolicyArn before CCAPI sees it.
+  describe("Wave 19 Bug #8: ManagedPolicyArns existence verification", () => {
+    // Mock @aws-sdk/client-iam — preflight-guard.ts dynamic-imports the SDK
+    // so the mock has to be hoisted alongside it. vi.hoisted lets the
+    // factory closure see sendMock without tripping vitest's hoisting.
+    const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }));
+    vi.mock("@aws-sdk/client-iam", () => {
+      class GetPolicyCommand {
+        public input: { PolicyArn: string };
+        constructor(input: { PolicyArn: string }) {
+          this.input = input;
+        }
+      }
+      class IAMClient {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        send(cmd: any): Promise<unknown> {
+          return sendMock(cmd);
+        }
+      }
+      return { IAMClient, GetPolicyCommand };
+    });
+
+    beforeEach(() => {
+      sendMock.mockReset();
+    });
+
+    it("rejects a hallucinated ARN with NoSuchEntityException (real reproducer)", async () => {
+      // The actual ARN observed in the 2026-04-08 live smoke logs.
+      const hallucinated =
+        "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforAWSServiceAccess";
+      sendMock.mockImplementation(() => {
+        const err = new Error("Policy not found") as Error & { name: string };
+        err.name = "NoSuchEntityException";
+        return Promise.reject(err);
+      });
+
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          resourceSchema: {
+            required: ["AssumeRolePolicyDocument"],
+          },
+          desiredState: {
+            RoleName: "smoke-test-bug2",
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            },
+            ManagedPolicyArns: [hallucinated],
+          },
+        }),
+      );
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toContain("ManagedPolicyArns");
+      expect(result.errorMessage).toContain(hallucinated);
+      expect(result.errorMessage).toContain("does not exist in IAM");
+      expect(result.errorMessage).toContain("hallucinated");
+      // Must include actionable remediation (the verified ARN list pointer)
+      expect(result.errorMessage).toContain("verified");
+    });
+
+    it("passes preflight when every ManagedPolicyArn exists in IAM", async () => {
+      const realArns = [
+        "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      ];
+      sendMock.mockResolvedValue({
+        Policy: { Arn: "ok", PolicyName: "ok" },
+      });
+
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          resourceSchema: { required: ["AssumeRolePolicyDocument"] },
+          desiredState: {
+            RoleName: "smoke-test-real",
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            },
+            ManagedPolicyArns: realArns,
+          },
+        }),
+      );
+
+      // Verifier passed — preflight should not fail at THIS step. (The
+      // overall preflight may still pass or block on BP findings, but the
+      // failure mode we're guarding against is the verifier killing a
+      // real ARN.)
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+      // sendMock called once per ARN
+      expect(sendMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("fails OPEN (no block) when iam:GetPolicy itself returns AccessDenied", async () => {
+      // Operator role doesn't have iam:GetPolicy yet — per Wave 19 fix
+      // path, the verifier should NOT block in this case (CCAPI will
+      // still reject bad ARNs at provision time, just less actionably).
+      // Blocking on a permission gap that's separate from the bug we're
+      // trying to catch would break every existing user's IAM Role flow.
+      sendMock.mockImplementation(() => {
+        const err = new Error(
+          "User: arn:aws:iam::054125018476:user/assignee-operator is not authorized to perform: iam:GetPolicy",
+        ) as Error & { name: string };
+        err.name = "AccessDenied";
+        return Promise.reject(err);
+      });
+
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          resourceSchema: { required: ["AssumeRolePolicyDocument"] },
+          desiredState: {
+            RoleName: "fails-open",
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            },
+            ManagedPolicyArns: [
+              "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+            ],
+          },
+        }),
+      );
+
+      // Must NOT fail because of the AccessDenied — fail-open contract
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    });
+
+    it("does not run verification at all when ManagedPolicyArns is absent", async () => {
+      // Common case: user creates an IAM Role with no managed policies
+      // attached (just a trust policy). No iam:GetPolicy calls should
+      // fire because there's nothing to verify.
+      sendMock.mockResolvedValue({});
+
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          resourceSchema: { required: ["AssumeRolePolicyDocument"] },
+          desiredState: {
+            RoleName: "no-managed-policies",
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            },
+          },
+        }),
+      );
+
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it("does not run verification for non-IAM-Role resource types", async () => {
+      // Verifier is scoped to AWS::IAM::Role only — Lambda, EC2, etc.
+      // may also have ManagedPolicyArns-shaped fields but those aren't
+      // the bug we're catching.
+      sendMock.mockResolvedValue({});
+
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Role: "arn:aws:iam::054125018476:role/exec-role",
+          },
+        }),
+      );
+
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    });
+  });
+
   it("returns Free for IAM::Role without calling pricing tool", async () => {
     const pricingTool = {
       name: "get_pricing",
