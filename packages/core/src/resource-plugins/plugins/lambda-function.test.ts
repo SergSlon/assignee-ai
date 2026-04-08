@@ -8,7 +8,11 @@ describe("lambdaFunctionPlugin", () => {
     const field = lambdaFunctionPlugin.commonFields.find(
       (f) => f.name === "FunctionName",
     );
-    expect(field).toBeDefined();
+    // Wave 16: strengthened — assert the field name explicitly so a
+    // refactor that renames the field (e.g. to `functionName`) fails
+    // here instead of producing a confusing `field!.required` access
+    // on undefined later.
+    expect(field?.name).toBe("FunctionName");
     expect(field!.required).toBe(true);
   });
 
@@ -16,7 +20,8 @@ describe("lambdaFunctionPlugin", () => {
     const field = lambdaFunctionPlugin.commonFields.find(
       (f) => f.name === "Role",
     );
-    expect(field).toBeDefined();
+    // Wave 16: strengthened — see FunctionName test above.
+    expect(field?.name).toBe("Role");
     expect(field!.required).toBe(true);
   });
 
@@ -26,7 +31,10 @@ describe("lambdaFunctionPlugin", () => {
     const runtimeField = lambdaFunctionPlugin.commonFields.find(
       (f) => f.name === "Runtime",
     );
-    expect(runtimeField).toBeDefined();
+    // Wave 16: strengthened — assert the field's name + question type
+    // so a refactor that changes either fails here.
+    expect(runtimeField?.name).toBe("Runtime");
+    expect(runtimeField?.question.type).toBe("enum");
     const options = runtimeField!.question.options!;
     expect(options).toHaveLength(8);
 
@@ -49,7 +57,9 @@ describe("lambdaFunctionPlugin", () => {
     );
 
     it("exists in commonFields with correct type and placeholder", () => {
-      expect(envField).toBeDefined();
+      // Wave 16: strengthened — assert envField is the right object
+      // before chaining `.question.*` access.
+      expect(envField?.name).toBe("Environment");
       expect(envField!.question.type).toBe("string");
       expect(envField!.question.placeholder).toBe("KEY1=value1,KEY2=value2");
     });
@@ -114,9 +124,13 @@ describe("lambdaFunctionPlugin", () => {
     const field = lambdaFunctionPlugin.commonFields.find(
       (f) => f.name === "Tags",
     );
-    expect(field).toBeDefined();
+    // Wave 16: strengthened — assert field shape AND that toCfn is
+    // actually a callable function (not just defined). The previous
+    // `toBeDefined()` would have passed for any non-undefined value,
+    // including a stringified function or a malformed object.
+    expect(field?.name).toBe("Tags");
     expect(field?.question.type).toBe("string");
-    expect(field?.toCfn).toBeDefined();
+    expect(typeof field?.toCfn).toBe("function");
   });
 
   // ── Story 18.11: FunctionName validation ─────────────────────────────────
@@ -135,12 +149,25 @@ describe("lambdaFunctionPlugin", () => {
     });
 
     it("rejects names longer than 64 chars", () => {
-      expect(field.question.validate?.("a".repeat(65))).toBeDefined();
+      // Wave 16: strengthened — validators MUST return a non-empty
+      // string error message for invalid input. The previous
+      // `toBeDefined()` would have passed for `0`, `false`, an empty
+      // string, or any other non-undefined "falsy-ish" value, none
+      // of which a wizard prompt could meaningfully display.
+      const err = field.question.validate?.("a".repeat(65));
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
 
     it("rejects names with special characters", () => {
-      expect(field.question.validate?.("my.function")).toBeDefined();
-      expect(field.question.validate?.("my function")).toBeDefined();
+      // Wave 16: strengthened — see "rejects names longer than 64 chars".
+      const errDot = field.question.validate?.("my.function");
+      expect(typeof errDot).toBe("string");
+      expect((errDot as string).length).toBeGreaterThan(0);
+
+      const errSpace = field.question.validate?.("my function");
+      expect(typeof errSpace).toBe("string");
+      expect((errSpace as string).length).toBeGreaterThan(0);
     });
   });
 
@@ -160,13 +187,21 @@ describe("lambdaFunctionPlugin", () => {
     });
 
     it("rejects handler without dot", () => {
-      expect(field.question.validate?.("handler")).toBeDefined();
+      // Wave 16: strengthened — assert the validator returns a real
+      // string error message, not just a non-undefined value.
+      const err = field.question.validate?.("handler");
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
   });
 
   describe("configHints", () => {
     it("has configHints defined", () => {
-      expect(lambdaFunctionPlugin.configHints).toBeDefined();
+      // Wave 16: dropped redundant `toBeDefined()` — `Array.isArray`
+      // catches both null/undefined AND non-array shapes. The
+      // `.length > 0` check below additionally requires a non-empty
+      // array, which is the actual contract.
+      expect(Array.isArray(lambdaFunctionPlugin.configHints)).toBe(true);
       expect(lambdaFunctionPlugin.configHints!.length).toBeGreaterThan(0);
     });
 

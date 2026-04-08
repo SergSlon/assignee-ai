@@ -357,7 +357,16 @@ describe("resourceProvisionerNode", () => {
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("0ff011d6-654f-4110-8a37-9754bd6aad59");
-      expect(result.startedAt).toBeDefined();
+      // Wave 16: strengthened — startedAt is a Date.now() millis value
+      // (per packages/core/src/schema/graph-state.ts:75 — number, not
+      // ISO string). Assert it's a positive integer within ±5 minutes
+      // of "now". Catches regressions where startedAt is set to NaN,
+      // 0, an out-of-band ISO string, or an unrelated value.
+      expect(typeof result.startedAt).toBe("number");
+      expect(result.startedAt!).toBeGreaterThan(0);
+      expect(Math.abs(Date.now() - result.startedAt!)).toBeLessThan(
+        5 * 60 * 1000,
+      );
 
       expect(mockProvisioner.getResource).toHaveBeenCalledWith(
         "AWS::IAM::Role",
@@ -1294,10 +1303,14 @@ describe("resourceProvisionerNode", () => {
       // Once the code fix lands, the node should expose the resolved
       // AllocationId via a returned `desiredState` partial (or equivalent
       // mechanism) — assert it is a NEW object, not the same reference.
+      // Wave 16: dropped redundant `toBeDefined()` — the `![CfnKey.X]`
+      // chains below already throw on undefined, AND the `not.toBe(ref)`
+      // implicitly requires the value to be an object (`not.toBe` on
+      // undefined vs reference returns true, so this IS load-bearing).
       const returnedDesired = (
         result as { desiredState?: Record<string, unknown> }
       ).desiredState;
-      expect(returnedDesired).toBeDefined();
+      expect(typeof returnedDesired).toBe("object");
       expect(returnedDesired).not.toBe(originalDesiredStateRef);
       expect(returnedDesired![CfnKey.ALLOCATION_ID]).toBe("eipalloc-immut-001");
     });
@@ -1348,10 +1361,11 @@ describe("resourceProvisionerNode", () => {
 
       // Once the code fix lands, the node should expose the cleaned
       // desiredState (without KeyName) via the returned partial.
+      // Wave 16: strengthened — assert returnedDesired is an object.
       const returnedDesired = (
         result as { desiredState?: Record<string, unknown> }
       ).desiredState;
-      expect(returnedDesired).toBeDefined();
+      expect(typeof returnedDesired).toBe("object");
       expect(returnedDesired).not.toBe(originalDesiredStateRef);
       expect(returnedDesired![CfnKey.KEY_NAME]).toBeUndefined();
     });
@@ -1491,7 +1505,8 @@ describe("resourceProvisionerNode", () => {
 
       // H9 regression: failure path must carry the cloned desiredState back
       // through the reducer so downstream retries can see the reused EIP.
-      expect(result.desiredState).toBeDefined();
+      // Wave 16: dropped redundant `toBeDefined()` — the
+      // `["AllocationId"]` chain below already throws on undefined.
       expect(result.desiredState!["AllocationId"]).toBe(
         "eipalloc-reused-0abc1234def567890",
       );
@@ -1592,10 +1607,16 @@ describe("resourceProvisionerNode", () => {
 
       // The mandatory tags SHOULD be present on the JSON that went to
       // CloudControl — proving we mutated the clone, not the original.
+      // Wave 16: strengthened — assert sentJson is a non-empty string.
+      // `JSON.parse` would throw on undefined but silently accept
+      // `"null"` or other nonsense; the explicit shape check catches
+      // regressions where createResource is called with the wrong
+      // positional argument.
       const sentJson = mockProvisioner.createResource.mock.calls[0]![1] as
         | string
         | undefined;
-      expect(sentJson).toBeDefined();
+      expect(typeof sentJson).toBe("string");
+      expect((sentJson as string).length).toBeGreaterThan(0);
       const sent = JSON.parse(sentJson as string) as Record<string, unknown>;
       const sentTags = sent["Tags"] as { Key: string; Value: string }[];
       expect(sentTags.length).toBeGreaterThan(originalNestedTags.length);
@@ -1641,8 +1662,9 @@ describe("resourceProvisionerNode", () => {
       const result = await resourceProvisionerNode(state, mockProvisioner);
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      // Must surface the cloned desiredState even on failure
-      expect(result.desiredState).toBeDefined();
+      // Must surface the cloned desiredState even on failure.
+      // Wave 16: dropped redundant `toBeDefined()` — the `![SubnetId]`
+      // chain and `not.toBe(ref)` already require a real object.
       expect(result.desiredState).not.toBe(state.desiredState);
       expect(result.desiredState!["SubnetId"]).toBe("subnet-0abc123def4567890");
     });
@@ -1692,8 +1714,13 @@ describe("resourceProvisionerNode", () => {
         | string
         | undefined;
 
-      expect(token1).toBeDefined();
-      expect(token2).toBeDefined();
+      // Wave 16: strengthened — assert both tokens are non-empty
+      // strings. `toBeDefined()` would pass for `""` or a number,
+      // neither of which would be a valid CloudControl ClientToken.
+      expect(typeof token1).toBe("string");
+      expect(typeof token2).toBe("string");
+      expect((token1 as string).length).toBeGreaterThan(0);
+      expect((token2 as string).length).toBeGreaterThan(0);
       // Both must contain the runId and index as a prefix
       expect(token1).toMatch(/^run-h11-retry-token-001-3-/);
       expect(token2).toMatch(/^run-h11-retry-token-001-3-/);
@@ -1999,7 +2026,15 @@ describe("resourceProvisionerNode", () => {
           event.extras?.["reason"] === "eip_leak_detected"
         );
       });
-      expect(leakWarn).toBeDefined();
+      // Wave 16: strengthened — the leak-warn entry MUST be produced
+      // by the eip_leak_detected path. The previous `toBeDefined()`
+      // would have passed on any matching find() result, but the
+      // subsequent `.extras` chain below was the real assertion. Make
+      // the shape check explicit so a regression that changes the
+      // logger signature (arg[0] no longer the event) fails here
+      // instead of at the cryptic `.extras["count"]` line below.
+      expect(leakWarn).toBeTruthy();
+      expect(leakWarn!.length).toBeGreaterThan(0);
       const event = leakWarn![0] as {
         extras: Record<string, unknown>;
       };

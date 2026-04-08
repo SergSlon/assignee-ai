@@ -25,7 +25,9 @@ describe("s3BucketPlugin", () => {
     const kmsField = s3BucketPlugin.commonFields.find(
       (f) => f.name === "KMSMasterKeyID",
     );
-    expect(kmsField).toBeDefined();
+    // Wave 16: strengthened — assert kmsField is the right object
+    // (not just any non-undefined value).
+    expect(kmsField?.name).toBe("KMSMasterKeyID");
     expect(kmsField?.question.showIf).toEqual({
       field: "BucketEncryption",
       value: true,
@@ -36,7 +38,8 @@ describe("s3BucketPlugin", () => {
     const field = s3BucketPlugin.commonFields.find(
       (f) => f.name === "BucketName",
     );
-    expect(field).toBeDefined();
+    // Wave 16: strengthened — assert by name + type instead of bare existence.
+    expect(field?.name).toBe("BucketName");
     expect(field?.question.type).toBe("string");
   });
 
@@ -53,28 +56,43 @@ describe("s3BucketPlugin", () => {
       expect(field.question.validate?.("my-bucket-123")).toBeUndefined();
     });
 
+    // Wave 16: strengthened the four bucket-name validation tests below
+    // to assert the validator returns a non-empty STRING error message,
+    // not just any non-undefined value. The previous `toBeDefined()`
+    // would have passed for `0`, `false`, an empty string, or any
+    // other "non-undefined" return value — none of which a wizard
+    // prompt could meaningfully display to the user.
     it("rejects too short name", () => {
-      expect(field.question.validate?.("ab")).toBeDefined();
+      const err = field.question.validate?.("ab");
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
 
     it("rejects too long name (>63 chars)", () => {
-      expect(field.question.validate?.("a".repeat(64))).toBeDefined();
+      const err = field.question.validate?.("a".repeat(64));
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
 
     it("rejects uppercase letters", () => {
-      expect(field.question.validate?.("MyBucket")).toBeDefined();
+      const err = field.question.validate?.("MyBucket");
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
 
     it("rejects consecutive periods", () => {
-      expect(field.question.validate?.("my..bucket")).toBeDefined();
+      const err = field.question.validate?.("my..bucket");
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
   });
 
   it("Tags field is string type with toCfn transform", () => {
     const field = s3BucketPlugin.commonFields.find((f) => f.name === "Tags");
-    expect(field).toBeDefined();
+    // Wave 16: strengthened — assert by name + that toCfn is callable.
+    expect(field?.name).toBe("Tags");
     expect(field?.question.type).toBe("string");
-    expect(field?.toCfn).toBeDefined();
+    expect(typeof field?.toCfn).toBe("function");
   });
 
   it("defaults contain PublicAccessBlockConfiguration", () => {
@@ -215,7 +233,8 @@ describe("s3BucketPlugin", () => {
       });
 
       it("Tags has toCfn", () => {
-        expect(findField("Tags").toCfn).toBeDefined();
+        // Wave 16: strengthened — assert toCfn is callable, not just defined.
+        expect(typeof findField("Tags").toCfn).toBe("function");
       });
     });
   });

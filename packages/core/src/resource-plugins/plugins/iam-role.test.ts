@@ -34,12 +34,18 @@ describe("iamRolePlugin", () => {
       expect(field.question.validate?.("my-app-role")).toBeUndefined();
     });
 
+    // Wave 16: strengthened — validators MUST return a non-empty
+    // STRING error message rather than just any non-undefined value.
     it("rejects names longer than 64 chars", () => {
-      expect(field.question.validate?.("a".repeat(65))).toBeDefined();
+      const err = field.question.validate?.("a".repeat(65));
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
 
     it("rejects names with invalid characters", () => {
-      expect(field.question.validate?.("my role!")).toBeDefined();
+      const err = field.question.validate?.("my role!");
+      expect(typeof err).toBe("string");
+      expect((err as string).length).toBeGreaterThan(0);
     });
   });
 
@@ -95,7 +101,9 @@ describe("iamRolePlugin", () => {
 
   it("Tags field has toCfn transform", () => {
     const field = iamRolePlugin.commonFields.find((f) => f.name === "Tags");
-    expect(field?.toCfn).toBeDefined();
+    // Wave 16: strengthened — assert by name + that toCfn is callable.
+    expect(field?.name).toBe("Tags");
+    expect(typeof field?.toCfn).toBe("function");
   });
 
   it("advancedFields contains ManagedPolicyArns", () => {
@@ -129,7 +137,9 @@ describe("iamRolePlugin", () => {
   });
 
   it("has configHints about AdminAccess and least privilege", () => {
-    expect(iamRolePlugin.configHints).toBeDefined();
+    // Wave 16: dropped redundant `toBeDefined()` — `Array.isArray`
+    // catches null/undefined AND non-array shapes.
+    expect(Array.isArray(iamRolePlugin.configHints)).toBe(true);
     expect(iamRolePlugin.configHints!.length).toBeGreaterThan(0);
     const hints = iamRolePlugin.configHints!.join(" ");
     expect(hints).toContain("AdministratorAccess");
