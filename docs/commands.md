@@ -302,6 +302,119 @@ assignee reconcile --auto-reconcile
 assignee reconcile --resource AWS::S3::Bucket
 ```
 
+### optimize
+
+Scan managed resources for cost-rightsizing opportunities. Read-only —
+the command never mutates AWS state. Queries the Pricing MCP server in
+parallel for the current instance configuration and a cheaper
+alternative, then ranks recommendations by estimated monthly savings.
+
+```
+assignee optimize [resource-id] [options]
+```
+
+**Arguments:**
+
+| Argument      | Description                                                 |
+| ------------- | ----------------------------------------------------------- |
+| `resource-id` | Optional ARN or trailing-name to optimize a single resource |
+
+**Options:**
+
+| Flag                | Description                                                           | Default      |
+| ------------------- | --------------------------------------------------------------------- | ------------ |
+| `--region <region>` | AWS region to scan                                                    | `AWS_REGION` |
+| `--json`            | Emit recommendations as JSON instead of a table                       | false        |
+| `--reconcile`       | Also print suggested `assignee plan` commands for each recommendation | false        |
+| `--no-color`        | Disable color output                                                  | false        |
+
+**Supported resource types:**
+
+| Type                    | Recommendation                                         | Data source                           |
+| ----------------------- | ------------------------------------------------------ | ------------------------------------- |
+| `AWS::EC2::Instance`    | Graviton (ARM) family swap — t3/m5/c5 → t4g/m6g/c6g    | Pricing MCP: compute instance hourly  |
+| `AWS::RDS::DBInstance`  | Graviton equivalent — db.{r5,m5,c5} → db.{r6g,m6g,c6g} | Pricing MCP: database instance hourly |
+| `AWS::Lambda::Function` | x86_64 → arm64 architecture migration                  | Pricing MCP: Lambda-GB-Second + ARM   |
+
+Resources of other types return "no recommendation" (graceful no-op).
+Rightsizing for types that need runtime CPU/memory metrics (e.g.
+idle load balancers, oversized CloudWatch alarms) is intentionally
+out of scope — assignee.ai is plan-time and does not consume
+CloudWatch Metrics.
+
+**Behavior:**
+
+1. Enumerates managed resources via the Resource Groups Tagging API
+   (scoped by `managed-by=assignee-ai`).
+2. For each resource, loads the checkpointed desiredState via the
+   same scanner `assignee drift` uses. Resources without a checkpoint
+   are silently skipped — the optimizer cannot recommend changes
+   without knowing the user's original intent.
+3. For EC2/RDS/Lambda resources, queries the Pricing MCP for the
+   current configuration and a cheaper alternative in a single
+   parallel round-trip.
+4. Computes monthly savings at the AWS 730-hours/month billing
+   convention (EC2/RDS) or against a canonical 10M GB-second/month
+   reference workload (Lambda — percent delta is
+   workload-independent, absolute dollar amount scales linearly).
+5. Drops recommendations where the savings round to zero.
+6. Sorts highest-saving first and renders either a table or JSON.
+
+**All prices come from the Pricing MCP at runtime.** Zero hardcoded
+dollar amounts — when the server is unavailable, the recommendation
+for that resource is silently skipped and the operator sees "no
+recommendation" instead of a stale price.
+
+**--reconcile output:**
+
+When `--reconcile` is set, the command prints a suggested
+reconciliation playbook after the table: one `assignee plan
+"Change <resource> from X to Y"` line per recommendation. This does
+**not** auto-execute anything — Graviton swaps require AMI rebuild
+(for EC2) or RDS snapshot restore on the new instance class, both
+mutation-heavy interactive flows that should go through the normal
+`plan` → HITL → `apply` pipeline.
+
+In `--json` mode, the playbook surfaces as a `reconcilePlaybook:
+string[]` field on the JSON payload so CI pipelines can consume the
+machine-readable recommendations and the human-readable action list
+from a single invocation.
+
+**Examples:**
+
+```bash
+assignee optimize
+assignee optimize --json
+assignee optimize --reconcile
+assignee optimize i-0123456789abcdef0
+assignee optimize --json --reconcile --no-color
+```
+
+**Sample output:**
+
+```
+╭─ Cost Optimization Recommendations ─────────────────────────────────╮
+│                                                                     │
+│  Resource ID                          Type                  Current       Recommended       Savings            Confidence │
+│  ────────────────────────────────────────────────────────────────── │
+│  i-0abc...                            AWS::EC2::Instance   t3.large     t4g.large         $11.68/mo (19%)    high       │
+│  prod-primary                         AWS::RDS::DBInstance db.r5.large  db.r6g.large      $17.52/mo (10%)    medium     │
+│  prod-handler                         AWS::Lambda::Function x86_64      arm64             $33.33/mo* (20%)   medium     │
+│                                                                     │
+╰─────────────────────────────────────────────────────────────────────╯
+
+3 resources scanned, 3 recommendations. Est. total monthly savings: $62.53/mo
+
+Suggested reconcile commands (copy/paste):
+  assignee plan "Change AWS::EC2::Instance i-0abc... from t3.large to t4g.large"
+  assignee plan "Change AWS::RDS::DBInstance prod-primary from db.r5.large to db.r6g.large"
+  assignee plan "Change AWS::Lambda::Function prod-handler from x86_64 to arm64"
+```
+
+The trailing asterisk on the Lambda row flags that the savings figure
+is projected against a 10M GB-second/month reference workload — the
+real dollar amount scales linearly with actual invocation volume.
+
 ---
 
 ## Configure Workflow
