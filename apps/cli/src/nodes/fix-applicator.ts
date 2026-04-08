@@ -20,16 +20,26 @@ import { PROTO_POLLUTION_KEYS } from "../config/constants.js";
 
 /**
  * Resolve auto-fix mode from graph state.
- * Priority: userConfig.preferences.auto_fix > CONFIG_DEFAULTS ("ask").
+ *
+ * A2 (2026-04-08): reads from state.resolvedConfig.preferences.auto_fix,
+ * which is produced by `loadGlobalConfig()` at CLI command boot and
+ * merges (highest wins) CLI flags → env vars (ASSIGNEE_AUTO_FIX) →
+ * project yaml → user yaml → CONFIG_DEFAULTS. Falls back to the
+ * legacy `state.userConfig.preferences.auto_fix` loose read for
+ * backward compatibility with any old call path that still injects a
+ * raw userConfig without going through loadGlobalConfig.
+ *
  * "ask"   → auto-fixable findings are left for interactive fix-selection prompt
  * "apply" → auto-fixable findings are applied silently (CI/CD)
  * "skip"  → auto-fixes disabled entirely
  */
 function resolveAutoFixMode(state: AgentState): string {
-  const config = state.userConfig as
+  const fromResolved = state.resolvedConfig?.preferences?.auto_fix;
+  if (fromResolved) return fromResolved;
+  const legacy = state.userConfig as
     | { preferences?: { auto_fix?: string } }
     | undefined;
-  return config?.preferences?.auto_fix ?? AutoFixMode.ASK;
+  return legacy?.preferences?.auto_fix ?? AutoFixMode.ASK;
 }
 
 /**

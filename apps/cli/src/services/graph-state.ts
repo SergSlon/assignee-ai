@@ -19,6 +19,7 @@ import {
   type OrgResourceConfig,
   type UserResourceConfig,
   type PricingBreakdown,
+  type ResolvedGlobalConfig,
   AssigneeError,
 } from "@assignee/core";
 import type { BPFinding } from "@assignee/best-practices";
@@ -112,6 +113,13 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
   }),
   userConfig: Annotation<UserResourceConfig | undefined>({
+    reducer: (_, b) => b,
+  }),
+  // A2 (2026-04-08): merged global config from envOverrides + userConfig +
+  // future project yaml / CLI flags. Populated by loadGlobalConfig() at
+  // command boot; nodes consume it via state.resolvedConfig.preferences.*
+  // instead of reading process.env or userConfig directly.
+  resolvedConfig: Annotation<ResolvedGlobalConfig | undefined>({
     reducer: (_, b) => b,
   }),
   // Story 10.1: checkpoint reuse — set to true when apply resumes from a saved checkpoint
