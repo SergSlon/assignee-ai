@@ -1,0 +1,21 @@
+id: BP-EVENTS-001
+title: "EventBridge Rule must declare at least one Target"
+severity: CRITICAL
+resource_type: "AWS::Events::Rule"
+property_path: "Targets"
+check_type: "exists"
+expected_value: true
+source: "AWS EventBridge Best Practices"
+source_id: "EVENTS-BP-01"
+description: "An EventBridge Rule with no Targets is a no-op — the rule will fire when its EventPattern matches or its ScheduleExpression triggers, but there is nowhere for the event to go. CloudFormation will technically accept a rule with zero targets, but the operational outcome is a silently broken schedule or event handler that costs time to diagnose."
+remediation: "Add at least one Target object to the Targets array. Each target needs an Id (unique within the rule) and an Arn pointing at a Lambda function, SQS queue, SNS topic, Step Function state machine, Kinesis stream, or any other EventBridge-compatible target. For Lambda targets, remember to grant events.amazonaws.com the lambda:InvokeFunction permission on the function after applying."
+consequence: "The rule fires but goes nowhere — schedule or filter looks correct in the console but silently drops every match. No error, just missing downstream effects."
+category: reliability
+lastVerified: "2026-04-08"
+# Not marked `blocking: true` despite CRITICAL severity because the
+# fix ("add a Target with a real ARN") cannot be auto-patched — we
+# don't know what workload the user wants to invoke, and the
+# interactive-fix flow doesn't ship with a Targets editor for
+# EventBridge yet. When the user explicitly authors a rule without
+# Targets the BP warning surfaces as a HIGH-severity plan-box notice
+# so they see it, but the plan still applies.

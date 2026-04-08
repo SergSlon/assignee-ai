@@ -1579,6 +1579,31 @@ const efsRules: RuleSpec[] = [
   },
 ];
 
+// A8 (2026-04-08) — EventBridge Rule BP rules
+const eventsRules: RuleSpec[] = [
+  {
+    id: "BP-EVENTS-001",
+    resourceType: "AWS::Events::Rule",
+    propertyPath: "Targets",
+    checkType: "exists",
+    expectedValue: true,
+  },
+  {
+    id: "BP-EVENTS-002",
+    resourceType: "AWS::Events::Rule",
+    propertyPath: "Description",
+    checkType: "exists",
+    expectedValue: true,
+  },
+  {
+    id: "BP-EVENTS-003",
+    resourceType: "AWS::Events::Rule",
+    propertyPath: "State",
+    checkType: "equals",
+    expectedValue: "ENABLED",
+  },
+];
+
 const asgRules: RuleSpec[] = [
   {
     id: "BP-ASG-001",
@@ -1919,6 +1944,12 @@ describe("BP All Rules Audit", () => {
     }
   });
 
+  describe("EventBridge (3 rules — A8)", () => {
+    for (const spec of eventsRules) {
+      runRuleTests(spec);
+    }
+  });
+
   // ---------------------------------------------------------------------------
   // Meta-test: verify all 138 rule IDs are covered
   // ---------------------------------------------------------------------------
@@ -1949,9 +1980,10 @@ describe("BP All Rules Audit", () => {
       ...vpcRules,
       ...asgRules,
       ...efsRules,
+      ...eventsRules,
     ];
 
-    it("covers exactly 160 rule specs", () => {
+    it("covers exactly 165 rule specs", () => {
       // 131 pre-A5
       // + 6 Tier-1 IAM rules       (BP-IAM-011..016)
       // + 9 Tier-3 policy rules    (BP-S3-018..020, BP-SQS-006..009, BP-SNS-005..006)
@@ -1975,7 +2007,12 @@ describe("BP All Rules Audit", () => {
       // + 1 A1 follow-up rule         (BP-EFS-003 SecureTransport —
       //   reuses the existing policy_antipattern check with
       //   allow-plus-not-action to catch Deny-inversion bypasses)
-      expect(allSpecs.length).toBe(162);
+      // + 3 A8 EventBridge rules      (BP-EVENTS-001 Targets required,
+      //   BP-EVENTS-002 Description hygiene, BP-EVENTS-003 State=ENABLED
+      //   default). Together with the A8 Events::Rule resource-type
+      //   promotion (plugin + pricing + IAM actions), these give the
+      //   new type full BP coverage on par with the established types.
+      expect(allSpecs.length).toBe(165);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "hash": "17533d5798c5c95cc5bb52413eea2b95555072e2554af7c15d237e0b184553a8",
+  "hash": "7cb7633e053b249286e23bfa0aa039a4ced7ceb1c403e89ebfe7044a09a6d4c4",
   "files": {
     "apigateway/BP-APIGW-001.yaml": "bec1fb5d3e88707c41e07e4066bee54bc8290f7886ef02fe8054f89199d59267",
     "apigateway/BP-APIGW-002.yaml": "f0b8df494b6fbb8b1a7793a9e408d692fc01355122692bd6af0099f3bc1767f5",
@@ -76,6 +76,9 @@
     "elbv2/BP-ELB-006.yaml": "7cd4a14e409e326ed48d51edd52895eaaff7976439aae0e167a6629d8690bb12",
     "elbv2/BP-ELB-007.yaml": "9de1a35028c25c28e5468310868bd64a7ed6c0a3f4ffd330878ed5b6d807b0bd",
     "elbv2/BP-ELB-008.yaml": "f87ccb1d9bee1d8cd1d1a273658c918bd90287fedc1d97db9eff980bbf984070",
+    "events/BP-EVENTS-001.yaml": "fac761b1013cb052e082e190f52cc7e6180588defb82bc9c984b435396e863b1",
+    "events/BP-EVENTS-002.yaml": "6670a8253b55bb84ae19d58e96d5c5da7d56ec4e208987754e3e3d21953e1d65",
+    "events/BP-EVENTS-003.yaml": "19eba1ad149867e53973f3cb7b1779f155253a61a852b817f1043f2a6ee96346",
     "iam/BP-IAM-001.yaml": "f5cacc037090a405717b26baf8ac09924581bd19583c5df7a33913897e7c77b8",
     "iam/BP-IAM-002.yaml": "f0f4122432cdcdadda73ed919b50d5747ebf0a94146c0e570e0717f1b6c72461",
     "iam/BP-IAM-003.yaml": "8c83e48987ce37687afcd1bf954ccd97f2e1c28c689991553877adf5eef450dc",
@@ -165,6 +168,6 @@
     "vpc/BP-VPC-001.yaml": "d1efbeaa898d16f6dd2605519b7fa3564c7237553193faf8e709ac8044290000",
     "vpc/BP-VPC-002.yaml": "f7c720a24811610df4bac22b00485c0d779ba5452c334bb7266b84afd7160e5f"
   },
-  "count": 162,
-  "generatedAt": "2026-04-08T19:19:53.385Z"
+  "count": 165,
+  "generatedAt": "2026-04-08T21:44:06.930Z"
 }

@@ -1,0 +1,17 @@
+id: BP-EVENTS-003
+title: "EventBridge Rule State should be ENABLED at creation"
+severity: MEDIUM
+resource_type: "AWS::Events::Rule"
+property_path: "State"
+check_type: "equals"
+expected_value: "ENABLED"
+source: "AWS EventBridge Best Practices"
+source_id: "EVENTS-BP-03"
+description: "Creating a rule in the DISABLED state is a common footgun — the rule appears in the console, is wired to its targets, looks correct, and silently never fires. DISABLED is legitimate when rolling out a new rule behind a feature flag, but it should be a deliberate choice, not a typo or a leftover from testing. Default to ENABLED unless you have a reason otherwise."
+remediation: "Set State to 'ENABLED' (the default in the assignee plugin). If you genuinely need a paused rule, set State to 'DISABLED' explicitly and document the reason in the Description field so the next operator knows it is intentional."
+consequence: "A scheduled job or event handler appears healthy in the console but never fires. The bug survives until a downstream metric alerts on the missing output."
+category: reliability
+lastVerified: "2026-04-08"
+autoFixable: true
+desiredStatePatch:
+  State: ENABLED
