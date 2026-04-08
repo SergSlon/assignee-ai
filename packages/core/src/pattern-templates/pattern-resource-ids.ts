@@ -65,3 +65,27 @@ export const LambdaWithExecRoleResourceId = {
   IAM_EXECUTION_ROLE: "iam-execution-role",
   LAMBDA_FN: "lambda-fn",
 } as const;
+
+/**
+ * Resource IDs for the EFS-with-VPC compound pattern.
+ *
+ * The VPC-bearing resource IDs intentionally reuse the same string
+ * values as `VpcResourceId` in vpc-networking.ts so the two patterns
+ * are consistent and the compound-provisioner's ref resolution walks
+ * the same resourceId namespace. The NFS security group and mount
+ * targets are unique to this pattern.
+ */
+export const EfsWithVpcResourceId = {
+  // VPC topology (mirrors VpcResourceId)
+  VPC: "vpc",
+  PRIVATE_SUBNET_1: "private-subnet-1",
+  PRIVATE_SUBNET_2: "private-subnet-2",
+  PRIVATE_ROUTE_TABLE: "private-route-table",
+  PRIVATE_SUBNET_1_RT_ASSOC: "private-subnet-1-rt-assoc",
+  PRIVATE_SUBNET_2_RT_ASSOC: "private-subnet-2-rt-assoc",
+  // EFS-specific
+  NFS_SG: "nfs-sg",
+  EFS_FILE_SYSTEM: "efs-file-system",
+  MOUNT_TARGET_1: "mount-target-1",
+  MOUNT_TARGET_2: "mount-target-2",
+} as const;

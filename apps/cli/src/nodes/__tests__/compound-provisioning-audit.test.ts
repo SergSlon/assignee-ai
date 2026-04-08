@@ -4,8 +4,8 @@
  * Verifies compound pattern provisioning flows work correctly end-to-end through
  * the key nodes: compound-dispatcher -> plan-generator -> resource-provisioner -> result-formatter.
  *
- * Tests all 6 patterns: serverless-api, three-tier-web, vpc-networking,
- * message-processing, container-service, static-website.
+ * Tests all 7 patterns: serverless-api, three-tier-web, vpc-networking,
+ * message-processing, container-service, static-website, efs-with-vpc.
  *
  * @see Story 8.2 — Compound Patterns
  */
@@ -109,6 +109,7 @@ const messageProcessingPattern =
 const containerServicePattern =
   defaultPatternRegistry.get("container-service")!;
 const staticWebsitePattern = defaultPatternRegistry.get("static-website")!;
+const efsWithVpcPattern = defaultPatternRegistry.get("efs-with-vpc")!;
 
 /** VPC Networking pattern — 17 resources, constructed inline (not in default registry) */
 const vpcNetworkingPattern: ArchitecturePattern = {
@@ -232,10 +233,10 @@ const vpcNetworkingPattern: ArchitecturePattern = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 1. Compound Dispatcher Tests for ALL 6 Patterns
+// 1. Compound Dispatcher Tests for ALL 7 Patterns
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe("compoundDispatcherNode — all 6 patterns", () => {
+describe("compoundDispatcherNode — all 7 patterns", () => {
   const patternCases: Array<{
     name: string;
     pattern: ArchitecturePattern;
@@ -284,6 +285,13 @@ describe("compoundDispatcherNode — all 6 patterns", () => {
       expectedQueueLength: 3,
       expectedFirstResourceType: RESOURCE_TYPES.S3_BUCKET,
       expectedFirstResourceId: "website-bucket",
+    },
+    {
+      name: "efs-with-vpc (10 resources: VPC + subnets + RT + SG + FS + mount targets)",
+      pattern: efsWithVpcPattern,
+      expectedQueueLength: 10,
+      expectedFirstResourceType: RESOURCE_TYPES.EC2_VPC,
+      expectedFirstResourceId: "vpc",
     },
   ];
 

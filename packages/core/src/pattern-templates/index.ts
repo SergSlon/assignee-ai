@@ -9,6 +9,7 @@ import {
   vpcPublicOnlyPattern,
 } from "./patterns/vpc-networking.js";
 import { lambdaWithExecRolePattern } from "./patterns/lambda-with-exec-role.js";
+import { efsWithVpcPattern } from "./patterns/efs-with-vpc.js";
 
 export { PatternId } from "./pattern-ids.js";
 
@@ -35,6 +36,10 @@ defaultPatternRegistry.register(threeTierWebPattern);
 defaultPatternRegistry.register(containerServicePattern);
 defaultPatternRegistry.register(messageProcessingPattern);
 defaultPatternRegistry.register(staticWebsitePattern);
+// EFS-with-VPC must register BEFORE vpc-networking — the "efs" keyword
+// family is more specific than the generic "vpc" keywords, but both
+// patterns produce VPC resources, so first-match-wins order matters.
+defaultPatternRegistry.register(efsWithVpcPattern);
 defaultPatternRegistry.register(vpcNetworkingPattern);
 defaultPatternRegistry.register(vpcPublicOnlyPattern);
 // Wave 13: registered LAST so longer-form Lambda-bearing intents match
@@ -53,6 +58,7 @@ export {
   vpcPublicOnlyPattern,
 } from "./patterns/vpc-networking.js";
 export { lambdaWithExecRolePattern } from "./patterns/lambda-with-exec-role.js";
+export { efsWithVpcPattern } from "./patterns/efs-with-vpc.js";
 export type { ArchitecturePattern, ResourceSpec } from "./types.js";
 export {
   ServerlessApiResourceId,
@@ -61,4 +67,5 @@ export {
   ContainerServiceResourceId,
   StaticWebsiteResourceId,
   LambdaWithExecRoleResourceId,
+  EfsWithVpcResourceId,
 } from "./pattern-resource-ids.js";

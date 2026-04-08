@@ -192,6 +192,35 @@ Cost: ~$32/month (NAT Gateway is the dominant cost driver).
 | EC2 Instance              | `AWS::EC2::Instance`                        |
 | RDS Database              | `AWS::RDS::DBInstance`                      |
 
+### EFS File System (with private VPC) — 10 resources
+
+**Trigger keywords**: "efs", "efs file system", "elastic file system", "nfs file system", "create an efs", "create a shared file system", "shared storage for lambda", "shared storage for ec2", "nfs mount"
+
+Bare "create an EFS file system" intents bundle the minimum viable VPC topology so the file system is usable on first apply. EFS is reached by NFS mount from workloads inside a VPC, and every mount target needs a subnet + security group allowing TCP 2049, so there is no useful single-resource EFS plan.
+
+| Resource                   | Type                                    | Count |
+| -------------------------- | --------------------------------------- | ----- |
+| VPC (10.0.0.0/16)          | `AWS::EC2::VPC`                         | 1     |
+| Private Subnets (multi-AZ) | `AWS::EC2::Subnet`                      | 2     |
+| Private Route Table        | `AWS::EC2::RouteTable`                  | 1     |
+| Subnet-RT Associations     | `AWS::EC2::SubnetRouteTableAssociation` | 2     |
+| NFS Security Group         | `AWS::EC2::SecurityGroup`               | 1     |
+| EFS File System            | `AWS::EFS::FileSystem`                  | 1     |
+| EFS Mount Targets          | `AWS::EFS::MountTarget`                 | 2     |
+
+Provisioning order (4 groups):
+
+1. VPC
+2. Subnets + RouteTable + Security Group + EFS FileSystem (parallel — all depend only on VPC)
+3. Subnet ↔ RouteTable associations (parallel)
+4. Mount Targets (parallel — one per private subnet)
+
+**Defaults**: Encrypted at rest, elastic throughput mode, backups ON via BackupPolicy, NFS SG allows TCP 2049 from the VPC CIDR only (never 0.0.0.0/0).
+
+**Why private-only?** Public subnets + lax SGs are the canonical "open NFS to the world" misconfiguration. If you need outbound internet from the EFS-mounting workload, combine with the full `vpc-networking` pattern (`"create a vpc with EFS"` — matches vpc-networking first and EFS is added separately).
+
+Cost: ~$0 for the networking layer (VPC + private subnets + route tables are free). EFS storage bills at the per-GB/month rate from the Pricing MCP.
+
 ### Static Website
 
 **Trigger keywords**: "static website", "static site", "frontend hosting", "spa hosting"
