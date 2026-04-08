@@ -296,7 +296,13 @@ export async function checkBedrock(
       detail: `operator credentials required for bedrock provider`,
     });
     return {
-      name: `Bedrock (${AWS_REGION}, model ${BEDROCK_MODEL_ID}${guardrailId ? `, guardrail ${guardrailId}:${guardrailVersion ?? "1"}` : ""})`,
+      // Tier S #2: header reflects the ACTUAL model that will be used,
+      // not the BEDROCK_MODEL_ID default. When the user sets ASSIGNEE_MODEL
+      // to override the model (e.g. for testing the Wave 12 region-error
+      // hint), the header used to lie and show the default model name even
+      // though the LLM call below correctly used the override. The
+      // modelString variable already incorporates the env override.
+      name: `Bedrock (${AWS_REGION}, model ${modelString.replace(/^bedrock\//, "")}${guardrailId ? `, guardrail ${guardrailId}:${guardrailVersion ?? "1"}` : ""})`,
       status: "fail",
       subs,
     };
@@ -345,7 +351,13 @@ export async function checkBedrock(
   }
 
   return {
-    name: `Bedrock (${AWS_REGION}, model ${BEDROCK_MODEL_ID}${guardrailId ? `, guardrail ${guardrailId}:${guardrailVersion ?? "1"}` : ""})`,
+    // Tier S #2: header reflects the ACTUAL model that will be used,
+    // not the BEDROCK_MODEL_ID default. When the user sets ASSIGNEE_MODEL
+    // to override the model (e.g. for testing the Wave 12 region-error
+    // hint), the header used to lie and show the default model name even
+    // though the LLM call below correctly used the override. The
+    // modelString variable already incorporates the env override.
+    name: `Bedrock (${AWS_REGION}, model ${modelString.replace(/^bedrock\//, "")}${guardrailId ? `, guardrail ${guardrailId}:${guardrailVersion ?? "1"}` : ""})`,
     status: rollup(subs),
     subs,
   };

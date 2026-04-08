@@ -12,8 +12,17 @@ import {
 import { PriceUnit } from "../price-units.js";
 
 export const sqsPricingStrategy: PricingStrategy = {
-  estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: "Per-request pricing (standard queue)" };
+  estimateLocal(desiredState?: Record<string, unknown>): PricingEstimate {
+    // Tier S #1: distinguish FIFO vs Standard in the cost label so destroy
+    // summaries don't say "Per-request pricing (standard queue) saved" for
+    // a FIFO queue. The CloudFormation property is `FifoQueue: true|false`;
+    // FIFO queues are billed at a higher per-request rate than standard.
+    const isFifo = desiredState?.["FifoQueue"] === true;
+    const queueKind = isFifo ? "FIFO queue" : "standard queue";
+    return {
+      perMonth: null,
+      label: `Per-request pricing (${queueKind})`,
+    };
   },
   mcpConfig(): McpPricingConfig {
     return {

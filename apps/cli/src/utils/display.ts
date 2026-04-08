@@ -75,6 +75,20 @@ import type { AppliedFix } from "../services/graph-state.js";
 import { CfnKey, AwsDefault, RESOURCE_TYPES } from "@assignee/core";
 import type { PricingBreakdown } from "@assignee/core";
 
+/**
+ * Minimal compound-pattern shape for plan-box rendering. Mirrors the
+ * relevant fields of `ArchitecturePattern` and `resourceQueue` without
+ * pulling those types into display.ts (which would create a circular
+ * import with graph-state.ts).
+ */
+export interface RenderableCompoundQueue {
+  patternDisplayName: string;
+  resources: ReadonlyArray<{
+    resourceType: string;
+    displayName?: string;
+  }>;
+}
+
 /** Minimal state shape needed for rendering — avoids circular imports with graph.ts */
 export interface RenderableState {
   resourceType: string;
@@ -94,6 +108,11 @@ export interface RenderableState {
   adviceHints?: string[];
   sourceDir?: string;
   sourceFileCount?: number;
+  // Tier S #3: when populated, the plan box renders a "Compound: N
+  // resources" prelude listing every resource in the queue. Without
+  // this, compound plans only displayed the first resource which
+  // misled users about what was about to happen.
+  compoundQueue?: RenderableCompoundQueue;
 }
 
 // ── Friendly key names for plan box rendering (Story 18.11) ─────────────────

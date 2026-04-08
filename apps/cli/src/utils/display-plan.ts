@@ -93,7 +93,28 @@ export function renderPlanBox(state: RenderableState): void {
     sourceFilesLine = `Source files:    ${fileCount} file${fileCount === 1 ? "" : "s"} from ${state.sourceDir}`;
   }
 
+  // Tier S #3: for compound plans, render a queue listing block at the
+  // top of the plan box so the user sees ALL N resources, not just the
+  // first one. Wave 19's original fix added this as a separate prelude
+  // ABOVE the boxen frame; integrating it INSIDE gives TTY users one
+  // unified frame instead of two unrelated blocks.
+  const compoundLines: string[] = [];
+  if (state.compoundQueue && state.compoundQueue.resources.length > 0) {
+    compoundLines.push(
+      `Compound:        ${state.compoundQueue.patternDisplayName} (${state.compoundQueue.resources.length} resources)`,
+    );
+    for (let i = 0; i < state.compoundQueue.resources.length; i++) {
+      const r = state.compoundQueue.resources[i]!;
+      const num = String(i + 1).padStart(2, " ");
+      const dn = r.displayName ? ` — ${r.displayName}` : "";
+      const marker = r.resourceType === state.resourceType ? "▸" : " ";
+      compoundLines.push(`  ${marker} ${num}. ${r.resourceType}${dn}`);
+    }
+    compoundLines.push("");
+  }
+
   const content = [
+    ...compoundLines,
     `Resource Type:   ${state.resourceType}`,
     `Region:          ${regionLabel()}`,
     `Config:`,
