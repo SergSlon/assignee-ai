@@ -426,7 +426,7 @@ assignee optimize --json --reconcile --no-color
 │                                                                     │
 ╰─────────────────────────────────────────────────────────────────────╯
 
-3 resources scanned, 3 recommendations. Est. total monthly savings: $62.53/mo
+3 of 3 resources analyzed, 3 recommendations. Est. total monthly savings: $62.53/mo
 
 Suggested reconcile commands (copy/paste):
   assignee plan "Change AWS::EC2::Instance i-0abc... from t3.large to t4g.large"
@@ -437,6 +437,14 @@ Suggested reconcile commands (copy/paste):
 The trailing asterisk on the Lambda row flags that the savings figure
 is projected against a 10M GB-second/month reference workload — the
 real dollar amount scales linearly with actual invocation volume.
+
+The "N of M analyzed" phrasing in the summary line separates the
+total resources scanned (via RGTA) from the subset that had a
+resolvable checkpoint. When every scanned resource lacks a
+checkpoint (common for operators testing `assignee optimize` on
+an account with pre-existing unmanaged resources), the summary
+instead prints an actionable hint pointing at `assignee plan` and
+`assignee drift --baseline <arn>` as the two adoption paths.
 
 ---
 
