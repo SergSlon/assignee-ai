@@ -57,6 +57,7 @@ import {
   loadUserConfig,
   type UserConfig,
 } from "../config/user-config-loader.js";
+import { loadGlobalConfig } from "../config/load-global-config.js";
 import { fetchOrgPolicy, readAuthToken } from "../config/org-policy-cache.js";
 import type { PlanCheckpoint } from "@assignee/core";
 import { reEvaluateBP } from "../utils/bp-reeval.js";
@@ -325,6 +326,10 @@ export const applyCommand = new Command(CommandName.APPLY)
             readAuthToken(),
           ]);
           const orgConfig = await fetchOrgPolicy(authToken);
+          // A2 (2026-04-08): merge env vars + user config into a single
+          // resolved global config so ASSIGNEE_* env vars actually take
+          // effect at node-execution time (see fix-applicator.ts).
+          const resolvedConfig = loadGlobalConfig(userConfig);
 
           const config = {
             configurable: { thread_id: ctx.runId },
@@ -431,6 +436,7 @@ export const applyCommand = new Command(CommandName.APPLY)
                   ...(opts.yes ? { autoApprove: true } : {}),
                   ...(userConfig ? { userConfig } : {}),
                   ...(orgConfig ? { orgConfig } : {}),
+                  resolvedConfig,
                   ...(opts.set?.length
                     ? {
                         presetFields: Object.fromEntries(

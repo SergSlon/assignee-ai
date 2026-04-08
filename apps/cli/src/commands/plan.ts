@@ -43,6 +43,7 @@ import { ErrorCode } from "../constants/errors.js";
 import { serializeCheckpoint, saveCheckpoint } from "../services/checkpoint.js";
 import { checkBudget } from "../services/budget-guard.js";
 import { loadUserConfig } from "../config/user-config-loader.js";
+import { loadGlobalConfig } from "../config/load-global-config.js";
 import { fetchOrgPolicy, readAuthToken } from "../config/org-policy-cache.js";
 
 export const planCommand = new Command(CommandName.PLAN)
@@ -146,6 +147,10 @@ export const planCommand = new Command(CommandName.PLAN)
             readAuthToken(),
           ]);
           const orgConfig = await fetchOrgPolicy(authToken);
+          // A2 (2026-04-08): merge env vars + user config into a single
+          // resolved global config so ASSIGNEE_* env vars actually take
+          // effect at node-execution time.
+          const resolvedConfig = loadGlobalConfig(userConfig);
 
           if (outputFormat !== "json") startSpinner("Generating plan...");
 
@@ -165,6 +170,7 @@ export const planCommand = new Command(CommandName.PLAN)
               ...(opts.advice === false ? { noAdvice: true } : {}),
               ...(userConfig ? { userConfig } : {}),
               ...(orgConfig ? { orgConfig } : {}),
+              resolvedConfig,
               ...(Object.keys(presetFields).length > 0 ? { presetFields } : {}),
               ...(outputFormat !== "text" ? { outputFormat } : {}),
             },

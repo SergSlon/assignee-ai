@@ -106,6 +106,9 @@ export {
   CONFIG_DEFAULTS,
   DEFAULT_AWS_REGION,
   AutoFixMode,
+  resolveGlobalConfig,
+  type GlobalConfigSources,
+  type ResolvedGlobalConfig,
 } from "./config/index.js";
 
 // Config — resource type constants and identifier mappings
