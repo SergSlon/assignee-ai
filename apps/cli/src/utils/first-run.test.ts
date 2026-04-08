@@ -94,6 +94,11 @@ describe("first-run", () => {
       expect(allOutput).toContain("Assignee.ai v0.1.0");
       // Should include credential detection or next-steps guidance
       expect(allOutput).toMatch(/credentials|assignee plan|AWS_ACCESS_KEY_ID/);
+      // A8 follow-up: discoverability hints point at the new patterns
+      // and types listing commands so new users can explore without
+      // reading docs.
+      expect(allOutput).toContain("assignee patterns");
+      expect(allOutput).toContain("assignee types");
 
       Object.defineProperty(process.stderr, "isTTY", {
         value: origIsTTY,

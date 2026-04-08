@@ -138,6 +138,16 @@ export function showFirstRunWelcome(version: string): void {
     );
   }
 
+  // Discoverability hints for first-time users — point at the
+  // listing commands so new users can explore the surface area
+  // without having to read docs.
+  lines.push(
+    "\u001B[90m  Discover what assignee can build:\u001B[0m",
+    "  \u001B[36m  assignee patterns\u001B[0m          \u001B[90m# list all compound architecture patterns\u001B[0m",
+    "  \u001B[36m  assignee types\u001B[0m             \u001B[90m# list all supported resource types\u001B[0m",
+    "",
+  );
+
   process.stderr.write(lines.join("\n"));
 }
 
