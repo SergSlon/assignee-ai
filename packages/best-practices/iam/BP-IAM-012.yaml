@@ -1,0 +1,14 @@
+id: BP-IAM-012
+title: "IAM policy must not grant iam:PassRole with wildcard Resource"
+severity: CRITICAL
+resource_type: "AWS::IAM::ManagedPolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "passrole-wildcard-resource"
+source: "AWS Guard Rules Registry"
+source_id: "iam_policy_no_wildcard_resource_on_passrole"
+description: "iam:PassRole with Resource: \"*\" lets the holder pass any role in the account to any service that accepts a role. This is the canonical privilege-escalation primitive — a user with a narrow policy that includes this single permission can assume roles they would never otherwise have access to by passing an elevated role to Lambda, CodeBuild, Glue, Step Functions, or any other pass-target service."
+remediation: "Scope iam:PassRole to the specific role ARNs the workload must actually pass (e.g. Resource: \"arn:aws:iam::123456789012:role/my-lambda-exec\"). Use a PassedToService condition to further restrict which AWS service can receive the passed role."
+consequence: "A narrow-looking permission becomes a full-account takeover in one assume-role call to a service that accepts passed roles."
+category: security
+lastVerified: "2026-04-08"

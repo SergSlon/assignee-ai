@@ -1,0 +1,14 @@
+id: BP-IAM-014
+title: "IAM policy must not use Allow + NotResource"
+severity: HIGH
+resource_type: "AWS::IAM::ManagedPolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "allow-plus-not-resource"
+source: "AWS Guard Rules Registry"
+source_id: "iam_role_or_policy_no_allow_plus_not_resource"
+description: "An Allow statement paired with NotResource is the resource-side mirror of the NotAction anti-pattern. It grants the listed actions on everything except the named resources — so new buckets, new tables, new secrets, new queues that did not exist at audit time are silently in scope. Use explicit Resource lists instead so the permission boundary is discoverable."
+remediation: "Replace NotResource with an explicit Resource list naming the ARNs (or ARN patterns) the workload is actually allowed to operate on. If you truly want \"everything except X\" semantics, express it as two statements: an Allow on Resource: \"*\" followed by a Deny on the specific resources — but only if the Deny is strictly required."
+consequence: "A newly-provisioned resource of the same type is silently and retroactively in scope, even though nobody ever audited whether that was intentional."
+category: security
+lastVerified: "2026-04-08"

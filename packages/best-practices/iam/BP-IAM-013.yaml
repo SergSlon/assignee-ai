@@ -1,0 +1,14 @@
+id: BP-IAM-013
+title: "IAM policy must not use Allow + NotAction"
+severity: HIGH
+resource_type: "AWS::IAM::ManagedPolicy"
+property_path: "PolicyDocument"
+check_type: "policy_antipattern"
+expected_value: "allow-plus-not-action"
+source: "AWS Guard Rules Registry"
+source_id: "iam_role_or_policy_no_allow_plus_not_action"
+description: "An Allow statement paired with NotAction is the \"allow everything except X\" anti-pattern. It silently grants every NEW AWS service AWS launches — a policy that was carefully audited today will cover services that didn't exist at audit time. Use explicit Action lists (even long ones) so the permission surface is bounded and auditable."
+remediation: "Invert the logic: list the specific actions the workload needs under Action (an Allow + Action list) rather than enumerating what it should NOT do under NotAction. If the list feels too long, split the intent into multiple focused statements or consider a service-level permissions boundary."
+consequence: "A policy that was \"least privilege\" at write time automatically becomes over-privileged the next time AWS ships a new service."
+category: security
+lastVerified: "2026-04-08"

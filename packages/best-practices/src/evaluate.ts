@@ -1,4 +1,8 @@
 import type { BestPractice, BPFinding, Trigger } from "./types.js";
+import {
+  inspectPolicyDocument,
+  type PolicyAntipattern,
+} from "./policy-inspector.js";
 
 /** Pattern ID constant for message-processing — must match @assignee/core PatternId.MESSAGE_PROCESSING */
 const PATTERN_MESSAGE_PROCESSING = "message-processing" as const;
@@ -181,6 +185,28 @@ function checkPasses(
     case "cross_resource_reference":
       // Awareness checks always "fire" — they surface informational findings.
       return false;
+
+    case "policy_antipattern": {
+      // A5.1 BP expansion — IAM/resource policy anti-patterns from the
+      // AWS Guard Rules Registry gap analysis. The rule passes (no
+      // finding) when the policy document does NOT contain the named
+      // pattern; fails (finding fires) when it does.
+      //
+      // `expected_value` MUST be one of PolicyAntipattern values. If
+      // the YAML author mistyped it, the inspector's internal guard
+      // returns matched:false and the rule passes silently — not ideal
+      // but safer than crashing the pipeline. The rule-authoring tests
+      // + Zod schema validation should catch typos before they reach
+      // production manifests.
+      //
+      // Missing fieldValue (no policy document at the property path)
+      // also passes — a rule that needs to enforce presence of the
+      // policy itself should use `exists` as a second rule.
+      if (fieldValue === undefined || fieldValue === null) return true;
+      const patternName = expectedValue as PolicyAntipattern;
+      const result = inspectPolicyDocument(fieldValue, patternName);
+      return !result.matched;
+    }
 
     default:
       return true;
