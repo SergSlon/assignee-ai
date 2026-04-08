@@ -48,6 +48,5 @@ The full CI gate is `pnpm build && pnpm test` from the repo root.
 ## Where to read more
 
 - [docs/architecture.md](../../docs/architecture.md) — how core is wired into the LangGraph pipeline
-- [docs/component-inventory.md](../../docs/component-inventory.md) — registries, plugins, and services living in this package
 - [docs/resource-types.md](../../docs/resource-types.md) — supported AWS resource types and their plugin contracts
 - [docs/configuration.md](../../docs/configuration.md) — `AssigneeConfig` schema reference

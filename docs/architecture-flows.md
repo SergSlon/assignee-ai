@@ -26,7 +26,7 @@ flowchart TD
 
         subgraph PHASE1["Phase 1 — Planning"]
             IP["1. INTENT_PARSER<br/>—————<br/>Pattern match OR<br/>Bedrock LLM classify"]
-            SF["2. SCHEMA_FETCHER<br/>—————<br/>MCP: cfn-mcp-server<br/>get_resource_schema"]
+            SF["2. SCHEMA_FETCHER<br/>—————<br/>AWS SDK: CloudFormation<br/>DescribeType (Story 31.1)"]
             OE["3. OPTION_ELICITOR<br/>—————<br/>Interactive wizard<br/>+ live pricing<br/>+ AWS discovery<br/>+ workload classification<br/>+ option ranking<br/>+ --set key=value pre-fills"]
             CD["4. COMPOUND_DISPATCHER<br/>—————<br/>Single vs multi-resource<br/>routing"]
             PG["5. PLAN_GENERATOR<br/>—————<br/>LLM generates CFN JSON<br/>+ toCfn transforms<br/>+ assembleComposites"]
@@ -87,10 +87,9 @@ flowchart TD
 flowchart LR
     subgraph CORE["Core MCP Servers (Required)"]
         direction TB
-        CFN["☁️ cfn-mcp-server<br/>uvx awslabs.cfn-mcp-server<br/>—————<br/>Creds: READER<br/>Region: us-east-1"]
         PRICING["💰 aws-pricing-mcp-server<br/>uvx awslabs.aws-pricing-mcp-server<br/>—————<br/>Creds: READER<br/>Region: us-east-1"]
         DOCS["📖 aws-documentation-mcp-server<br/>uvx awslabs.aws-documentation-mcp-server<br/>—————<br/>Creds: None (public)"]
-        KNOW["🧠 aws-knowledge-mcp-server<br/>fastmcp remote API<br/>—————<br/>Creds: None (public)"]
+        KNOW["🧠 aws-knowledge-mcp-server<br/>fastmcp remote API (opt-in)<br/>—————<br/>Creds: None (public)"]
     end
 
     subgraph OPT["Optional MCP Servers (Graceful Degrade)"]
@@ -108,7 +107,6 @@ flowchart LR
         DS2["destroy cmd"]
     end
 
-    CFN -->|"get_resource_schema"| SF2
     PRICING -->|"get_pricing"| OE2
     PRICING -->|"get_pricing"| PF2
     DOCS -->|"search_documentation<br/>read_sections"| OE2
@@ -438,7 +436,7 @@ flowchart TD
 
     Q2 --> SCHEMA
 
-    SCHEMA["Additional fields from<br/>CloudFormation Schema<br/>─────<br/>🔄 DYNAMIC: cfn-mcp-server<br/>required[] properties<br/>surfaced to user"]
+    SCHEMA["Additional fields from<br/>CloudFormation Schema<br/>─────<br/>🔄 DYNAMIC: AWS SDK DescribeType<br/>required[] properties<br/>surfaced to user"]
 
     SCHEMA --> PG([Plan Generator<br/>LLM fills remaining<br/>properties from schema])
 
@@ -463,10 +461,9 @@ flowchart TB
     end
 
     subgraph CORE_MCP["Core MCP Servers"]
-        CFN["cfn-mcp-server"]
         PRICE["aws-pricing-mcp-server"]
         DOCS["aws-documentation-mcp-server<br/>(no creds needed)"]
-        KNOW["aws-knowledge-mcp-server<br/>(no creds needed)"]
+        KNOW["aws-knowledge-mcp-server<br/>(opt-in, no creds needed)"]
     end
 
     subgraph OPT_MCP["Optional MCP Servers"]
@@ -486,7 +483,6 @@ flowchart TB
         IAMD["IAM<br/>Create/Attach<br/>(setup only)"]
     end
 
-    RD -->|"AWS_* env mapped"| CFN
     RD -->|"AWS_* env mapped"| PRICE
     RD -->|"AWS_* env mapped"| BILL_S
     RD --> EC2D
@@ -513,7 +509,6 @@ flowchart TB
     BED --> N_IP
     BED --> N_OE
     BED --> N_PF
-    CFN --> N_SF
     PRICE --> N_OE
     PRICE --> N_PF
     EC2D --> N_OE

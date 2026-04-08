@@ -204,18 +204,17 @@ packages/
 
 **MCP servers (spawned at runtime via `uvx`):**
 
-| Server                                         | Purpose                                  |
-| :--------------------------------------------- | :--------------------------------------- |
-| `awslabs.cfn-mcp-server`                       | CloudFormation schemas (plan validation) |
-| `awslabs.aws-pricing-mcp-server`               | Live cost estimates                      |
-| `awslabs.aws-documentation-mcp-server`         | AWS doc search and reads                 |
-| `awslabs.iam-mcp-server`                       | IAM policy analysis (read-only)          |
-| `awslabs.well-architected-security-mcp-server` | Well-Architected security pillar         |
-| `awslabs.cost-and-usage-mcp-server`            | Billing and cost management              |
+| Server                                         | Purpose                          | Tier     |
+| :--------------------------------------------- | :------------------------------- | :------- |
+| `awslabs.aws-pricing-mcp-server`               | Live cost estimates              | Core     |
+| `awslabs.aws-documentation-mcp-server`         | AWS doc search and reads         | Core     |
+| `awslabs.iam-mcp-server`                       | IAM policy analysis (read-only)  | Optional |
+| `awslabs.well-architected-security-mcp-server` | Well-Architected security pillar | Optional |
+| `awslabs.cost-management-mcp-server`           | Billing and cost management      | Optional |
 
 Optional servers (IAM, Well-Architected Security, Billing) are spawned only when the corresponding command requires them.
 
-> **Note:** CCAPI provisioning migrated from `ccapi-mcp-server` to `@aws-sdk/client-cloudcontrol` SDK (Story 7.6).
+> **Note:** CloudFormation schemas and CCAPI provisioning are accessed directly via `@aws-sdk/client-cloudformation` and `@aws-sdk/client-cloudcontrol`. The legacy `cfn-mcp-server` and `ccapi-mcp-server` MCP wrappers were removed in Stories 7.6 and 31.4 — a guardrail test in `apps/cli/src/config/mcp-servers.test.ts` enforces that they never re-appear.
 
 **LLM provider:** Default `us.amazon.nova-lite-v1:0` (Bedrock). Override with `ASSIGNEE_MODEL=anthropic/claude-haiku-4-5` or any LiteLLM-compatible string (OpenAI, Google, Anthropic).
 
