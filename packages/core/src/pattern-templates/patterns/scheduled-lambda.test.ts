@@ -172,8 +172,11 @@ describe("scheduledLambdaPattern — registry detection & ordering", () => {
     "create a scheduled lambda",
     "cron lambda every hour",
     "nightly lambda job",
+    "nightly cleanup of expired s3 objects",
     "recurring lambda task",
+    "recurring job that calls our cleanup API",
     "periodic lambda",
+    "timer lambda that resets counters",
   ];
 
   for (const intent of positiveCases) {

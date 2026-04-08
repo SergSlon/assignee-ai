@@ -71,10 +71,13 @@ export const scheduledLambdaPattern: ArchitecturePattern = {
     "periodic lambda",
     "nightly lambda",
     "nightly job",
+    "nightly cleanup",
     "cron job",
     "scheduled task",
     "recurring lambda",
+    "recurring job",
     "eventbridge scheduled lambda",
+    "timer lambda",
   ],
   resourceList: [
     {
