@@ -271,6 +271,17 @@ const testCases: AutoFixTestCase[] = [
       SecurityPolicy: "TLS_1_0",
     },
   },
+  // --- A5.6 AutoScaling rules ---
+  {
+    // BP-ASG-002 patches HealthCheckType to ELB. Triggering state is
+    // the default EC2 health check — the ASG-level default that only
+    // triggers replacement on instance-level failure, not app-level.
+    id: "BP-ASG-002",
+    resourceType: "AWS::AutoScaling::AutoScalingGroup",
+    triggeringState: {
+      HealthCheckType: "EC2",
+    },
+  },
 ];
 
 describe("Auto-fix audit: all auto-fixable BP rules have correct desiredStatePatch", () => {

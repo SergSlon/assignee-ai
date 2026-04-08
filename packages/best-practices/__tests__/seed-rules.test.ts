@@ -107,9 +107,12 @@ describe("Seed BP Library — Sprint A+B + guardrail migration (47 rules)", () =
     expect(files.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("AutoScaling directory contains 1 YAML file", () => {
+  it("AutoScaling directory contains 3 YAML files", () => {
+    // Originally 1 (BP-ASG-001 MaxSize). A5.6 added BP-ASG-002
+    // (HealthCheckType: ELB) and BP-ASG-003 (no public IP in launch
+    // template), bringing the count to 3.
     const files = readdirSync(ASG_DIR).filter((f) => f.endsWith(".yaml"));
-    expect(files).toHaveLength(1);
+    expect(files).toHaveLength(3);
   });
 
   it("SSM directory contains expected YAML files", () => {

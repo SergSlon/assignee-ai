@@ -1,0 +1,14 @@
+id: BP-ASG-003
+title: "Auto Scaling launch template must not assign public IPs"
+severity: HIGH
+resource_type: "AWS::EC2::LaunchTemplate"
+property_path: "LaunchTemplateData.NetworkInterfaces"
+check_type: "awareness"
+expected_value: true
+source: "AWS Guard Rules Registry"
+source_id: "autoscaling_launch_config_public_ip_disabled"
+description: "Instances launched from an Auto Scaling launch template should not auto-assign public IPv4 addresses. Instances that need internet egress should sit in a private subnet and reach the internet via a NAT Gateway; instances that need to be reached from the internet should sit behind a load balancer, not have their own public IPs. A public IP on every scaled instance expands the attack surface and makes security-group misconfigurations immediately exploitable. This is an awareness rule because the check involves walking the NetworkInterfaces array and looking for AssociatePublicIpAddress: true on any interface — the single-field evaluator can't do that lookup today."
+remediation: "In the launch template, either omit NetworkInterfaces entirely (inherits the subnet's default, which should be false for private subnets) or explicitly set `NetworkInterfaces: [{ DeviceIndex: 0, AssociatePublicIpAddress: false, ... }]`. Also verify the subnet's MapPublicIpOnLaunch is false (covered by BP-SUBNET-001)."
+consequence: "Every scaled instance gets an internet-routable IPv4. Security-group misconfigurations become exploitable instantly, and scaling events expand the attack surface faster than ops can audit."
+category: security
+lastVerified: "2026-04-08"

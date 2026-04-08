@@ -1,0 +1,17 @@
+id: BP-ASG-002
+title: "Auto Scaling Group should use ELB health check when behind a load balancer"
+severity: HIGH
+resource_type: "AWS::AutoScaling::AutoScalingGroup"
+property_path: "HealthCheckType"
+check_type: "equals"
+expected_value: "ELB"
+source: "AWS Guard Rules Registry"
+source_id: "autoscaling_group_elb_healthcheck_required"
+description: "The default HealthCheckType for an Auto Scaling Group is EC2, which only replaces instances when the instance itself fails (hardware, OS crash). If the ASG is attached to a load balancer, HealthCheckType should be ELB so the load balancer's target health checks (HTTP responses, TCP port liveness) trigger instance replacement. Otherwise an application that hangs or returns 5xx stays in service until the underlying EC2 instance dies — often never."
+remediation: "Set `HealthCheckType: ELB` on the ASG resource. Pair with an appropriate `HealthCheckGracePeriod` (typically 60-300 seconds) so newly-launched instances have time to finish boot before the load balancer starts probing them."
+consequence: "Unhealthy application instances stay in rotation — users see 5xx errors, latency spikes, or timeouts until someone manually terminates the bad instance. Monitoring catches it; the ASG doesn't."
+category: reliability
+lastVerified: "2026-04-08"
+autoFixable: true
+desiredStatePatch:
+  HealthCheckType: "ELB"

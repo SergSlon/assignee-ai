@@ -1531,6 +1531,24 @@ const asgRules: RuleSpec[] = [
     checkType: "exists",
     expectedValue: true,
   },
+  // ── A5.6: AutoScaling rules (Tier 5). BP-ASG-002 is a simple equals
+  // ── check on HealthCheckType (autoFixable). BP-ASG-003 targets the
+  // ── launch template's NetworkInterfaces array, which the single-
+  // ── field evaluator can't walk, so it's awareness-only.
+  {
+    id: "BP-ASG-002",
+    resourceType: "AWS::AutoScaling::AutoScalingGroup",
+    propertyPath: "HealthCheckType",
+    checkType: "equals",
+    expectedValue: "ELB",
+  },
+  {
+    id: "BP-ASG-003",
+    resourceType: "AWS::EC2::LaunchTemplate",
+    propertyPath: "LaunchTemplateData.NetworkInterfaces",
+    checkType: "awareness",
+    expectedValue: true,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1833,7 +1851,7 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("AutoScaling (1 rule)", () => {
+  describe("AutoScaling (3 rules)", () => {
     for (const spec of asgRules) {
       runRuleTests(spec);
     }
@@ -1870,22 +1888,27 @@ describe("BP All Rules Audit", () => {
       ...asgRules,
     ];
 
-    it("covers exactly 156 rule specs", () => {
+    it("covers exactly 158 rule specs", () => {
       // 131 pre-A5
       // + 6 Tier-1 IAM rules       (BP-IAM-011..016)
       // + 9 Tier-3 policy rules    (BP-S3-018..020, BP-SQS-006..009, BP-SNS-005..006)
       // + 5 Tier-2 ELBv2 rules     (BP-ELB-004..008)
       // + 5 Tier-4 APIGW/Lambda    (BP-APIGW-004..006, BP-LAMBDA-013..014)
-      //   Note: BP-S3-015..017 were already taken by pre-A5 rules
-      //   (replication / intelligent tiering / access logging) and
-      //   BP-LAMBDA-011/012 were already taken (deprecated nodejs16.x
-      //   runtime + code signing config), so the new resource-policy
-      //   rules start at BP-S3-018 and the Lambda::Permission rules at
-      //   BP-LAMBDA-013.
+      // + 2 Tier-5 AutoScaling     (BP-ASG-002..003)
+      //   Notes on ID collisions vs the original gap memo:
+      //   - BP-S3-015..017 already taken (replication / intelligent
+      //     tiering / access logging) → resource-policy rules start at
+      //     BP-S3-018.
+      //   - BP-LAMBDA-011/012 already taken (nodejs16.x runtime + code
+      //     signing) → Lambda::Permission rules start at BP-LAMBDA-013.
+      //   - BP-DYNAMODB-006 already taken (on-demand/auto-scaled
+      //     capacity) → the memo's proposed DynamoDB backup-plan rule
+      //     was dropped because BP-DYNAMODB-001 (PITR) already covers
+      //     the recoverable-backup concern.
       // BP-IAM-017 (elevated *FullAccess heuristic) is still deferred
       // — it needs a walker over ManagedPolicyArns rather than over
       // PolicyDocument.Statement[].
-      expect(allSpecs.length).toBe(156);
+      expect(allSpecs.length).toBe(158);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {
