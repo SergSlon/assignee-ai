@@ -59,6 +59,7 @@ describe("types command — renderTypeDetail", () => {
       advancedFields: [],
       bpRules: [],
       hasPricingStrategy: true,
+      usedByPatterns: [],
     });
     expect(out).toContain("* RequiredField");
     expect(out).toContain("  OptionalField");
@@ -75,6 +76,7 @@ describe("types command — renderTypeDetail", () => {
       advancedFields: [],
       bpRules: [],
       hasPricingStrategy: false,
+      usedByPatterns: [],
     });
     expect(out).not.toContain("Advanced fields");
   });
@@ -90,6 +92,7 @@ describe("types command — renderTypeDetail", () => {
       advancedFields: [],
       bpRules: [],
       hasPricingStrategy: false,
+      usedByPatterns: [],
     });
     expect(out).toContain("(none — this type has no BP coverage yet)");
   });
@@ -116,10 +119,20 @@ describe("types command — renderTypeDetail", () => {
         },
       ],
       hasPricingStrategy: true,
+      usedByPatterns: [
+        {
+          patternId: "scheduled-lambda",
+          displayName: "Scheduled Lambda (EventBridge cron)",
+        },
+      ],
     });
     expect(out).toContain("[CRITICAL] BP-EVENTS-001");
     expect(out).toContain("[MEDIUM] BP-EVENTS-003");
     expect(out).toContain("Pricing strategy: registered");
+    // Reverse lookup surfaces the compound patterns that include this type.
+    expect(out).toContain(
+      "scheduled-lambda — Scheduled Lambda (EventBridge cron)",
+    );
   });
 
   it("reports 'none' for pricing when no strategy registered", () => {
@@ -133,7 +146,10 @@ describe("types command — renderTypeDetail", () => {
       advancedFields: [],
       bpRules: [],
       hasPricingStrategy: false,
+      usedByPatterns: [],
     });
     expect(out).toContain("Pricing strategy: none");
+    // Zero patterns → the "only provisioned directly" hint surfaces.
+    expect(out).toContain("only provisioned directly");
   });
 });

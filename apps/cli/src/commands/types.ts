@@ -24,6 +24,7 @@ import {
   SUPPORTED_TYPES_ARRAY,
   defaultPluginRegistry,
   defaultPricingRegistry,
+  defaultPatternRegistry,
 } from "@assignee/core";
 import { loadBestPractices } from "@assignee/best-practices";
 
@@ -40,6 +41,21 @@ interface TypeDetail extends TypeListEntry {
   advancedFields: Array<{ name: string; required: boolean }>;
   bpRules: Array<{ id: string; severity: string; title: string }>;
   hasPricingStrategy: boolean;
+  usedByPatterns: Array<{ patternId: string; displayName: string }>;
+}
+
+/**
+ * Reverse lookup: which compound patterns include a given resource
+ * type? Walks every registered pattern's resourceList looking for a
+ * resourceType match. Returns in registration order.
+ */
+function patternsContaining(
+  resourceType: string,
+): Array<{ patternId: string; displayName: string }> {
+  return defaultPatternRegistry
+    .list()
+    .filter((p) => p.resourceList.some((r) => r.resourceType === resourceType))
+    .map((p) => ({ patternId: p.patternId, displayName: p.displayName }));
 }
 
 function shortName(resourceType: string): string {
@@ -124,6 +140,17 @@ export function renderTypeDetail(detail: TypeDetail): string {
       lines.push(`  [${rule.severity}] ${rule.id} — ${rule.title}`);
     }
   }
+  lines.push("");
+  lines.push(`Used by compound patterns (${detail.usedByPatterns.length}):`);
+  if (detail.usedByPatterns.length === 0) {
+    lines.push(
+      "  (none — this type is only provisioned directly, not as part of any compound)",
+    );
+  } else {
+    for (const pattern of detail.usedByPatterns) {
+      lines.push(`  ${pattern.patternId} — ${pattern.displayName}`);
+    }
+  }
   return lines.join("\n") + "\n";
 }
 
@@ -189,6 +216,7 @@ typesCommand
       })),
       bpRules: bpRulesForType(resourceType, practices),
       hasPricingStrategy: defaultPricingRegistry.has(resourceType),
+      usedByPatterns: patternsContaining(resourceType),
     };
     if (opts.json) {
       process.stdout.write(JSON.stringify(detail, null, 2) + "\n");
