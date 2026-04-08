@@ -10,6 +10,7 @@ import {
 } from "./patterns/vpc-networking.js";
 import { lambdaWithExecRolePattern } from "./patterns/lambda-with-exec-role.js";
 import { efsWithVpcPattern } from "./patterns/efs-with-vpc.js";
+import { scheduledLambdaPattern } from "./patterns/scheduled-lambda.js";
 
 export { PatternId } from "./pattern-ids.js";
 
@@ -42,6 +43,11 @@ defaultPatternRegistry.register(staticWebsitePattern);
 defaultPatternRegistry.register(efsWithVpcPattern);
 defaultPatternRegistry.register(vpcNetworkingPattern);
 defaultPatternRegistry.register(vpcPublicOnlyPattern);
+// A8 follow-up: scheduled-lambda MUST register BEFORE
+// lambda-with-exec-role so the "scheduled lambda" keyword family
+// routes to the 4-resource EventBridge pattern instead of the
+// 2-resource lambda+role pattern.
+defaultPatternRegistry.register(scheduledLambdaPattern);
 // Wave 13: registered LAST so longer-form Lambda-bearing intents match
 // their dedicated patterns first. See pattern file for the keyword
 // disjointness analysis.
@@ -59,6 +65,7 @@ export {
 } from "./patterns/vpc-networking.js";
 export { lambdaWithExecRolePattern } from "./patterns/lambda-with-exec-role.js";
 export { efsWithVpcPattern } from "./patterns/efs-with-vpc.js";
+export { scheduledLambdaPattern } from "./patterns/scheduled-lambda.js";
 export type { ArchitecturePattern, ResourceSpec } from "./types.js";
 export {
   ServerlessApiResourceId,
@@ -68,4 +75,5 @@ export {
   StaticWebsiteResourceId,
   LambdaWithExecRoleResourceId,
   EfsWithVpcResourceId,
+  ScheduledLambdaResourceId,
 } from "./pattern-resource-ids.js";

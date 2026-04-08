@@ -1126,8 +1126,8 @@ describe("supported resource types", () => {
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
   });
 
-  it("SUPPORTED_TYPES_ARRAY has exactly 27 types (25 + EFS + EFS::MountTarget from A1)", async () => {
+  it("SUPPORTED_TYPES_ARRAY has exactly 28 types (27 + Events::Rule from A8)", async () => {
     const { SUPPORTED_TYPES_ARRAY } = await import("@assignee/core");
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(27);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(28);
   });
 });
