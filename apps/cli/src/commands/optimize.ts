@@ -125,6 +125,32 @@ function renderSummary(
   );
 }
 
+/**
+ * Render the reconcile playbook — a list of suggested `assignee plan`
+ * commands the operator can copy/paste to apply the top recommendations.
+ *
+ * This deliberately does NOT auto-execute anything. Graviton swaps
+ * require rebuilding the AMI (for EC2) or restoring a snapshot on
+ * the new instance class (for RDS), both of which are mutation-heavy
+ * interactive flows that should go through the normal `assignee plan`
+ * → `assignee apply` pipeline with full HITL review. The --reconcile
+ * flag just produces the playbook; the operator is in control.
+ */
+function renderReconcilePlaybook(
+  recommendations: CostOptRecommendation[],
+): void {
+  if (recommendations.length === 0) return;
+  process.stdout.write("\nSuggested reconcile commands (copy/paste):\n");
+  for (const r of recommendations) {
+    const shortId = r.resourceArn.split("/").pop() ?? r.resourceArn;
+    const cmd = `  assignee plan "Change ${r.resourceType} ${shortId} from ${r.currentConfig} to ${r.recommendedConfig}"`;
+    process.stdout.write(cmd + "\n");
+  }
+  process.stdout.write(
+    "\nReview each plan carefully before running `assignee apply` — Graviton swaps require AMI rebuild (EC2) or snapshot restore (RDS).\n",
+  );
+}
+
 export const optimizeCommand = new Command("optimize")
   .description("Scan managed resources for cost-rightsizing opportunities")
   .argument("[resource-id]", "Optional ARN to optimize a single resource")
@@ -133,6 +159,10 @@ export const optimizeCommand = new Command("optimize")
     "AWS region to scan (defaults to AWS_REGION env var)",
   )
   .option("--json", "Emit recommendations as JSON instead of a table")
+  .option(
+    "--reconcile",
+    "Print suggested `assignee plan` commands for each recommendation (operator still runs them manually)",
+  )
   .option("--no-color", "Disable color output")
   .action(
     async (
@@ -140,6 +170,7 @@ export const optimizeCommand = new Command("optimize")
       opts: {
         region?: string;
         json?: boolean;
+        reconcile?: boolean;
         color?: boolean;
       },
     ) => {
@@ -194,11 +225,24 @@ export const optimizeCommand = new Command("optimize")
           );
 
           if (asJson) {
+            // --reconcile's playbook is additive metadata in JSON
+            // mode — emit the same `assignee plan` commands the TTY
+            // view prints, so CI pipelines can consume both the
+            // machine-readable recommendations and the human-readable
+            // action list from a single invocation.
+            const reconcilePlaybook = opts.reconcile
+              ? recommendations.map((r) => {
+                  const shortId =
+                    r.resourceArn.split("/").pop() ?? r.resourceArn;
+                  return `assignee plan "Change ${r.resourceType} ${shortId} from ${r.currentConfig} to ${r.recommendedConfig}"`;
+                })
+              : undefined;
             process.stdout.write(
               JSON.stringify(
                 {
                   scanned: targets.length,
                   recommendations,
+                  ...(reconcilePlaybook ? { reconcilePlaybook } : {}),
                 },
                 null,
                 2,
@@ -209,6 +253,9 @@ export const optimizeCommand = new Command("optimize")
               renderTable(recommendations, noColor);
             }
             renderSummary(targets.length, recommendations);
+            if (opts.reconcile) {
+              renderReconcilePlaybook(recommendations);
+            }
           }
 
           return { success: true };
