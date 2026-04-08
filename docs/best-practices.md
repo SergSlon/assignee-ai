@@ -10,7 +10,7 @@ The best practices pipeline runs as three nodes in the 12-node LangGraph graph:
 plan_generator -> bp_evaluator -> auto_fix_applier -> preflight_guard
 ```
 
-1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **162 rules** (133 initial, plus the A5 27-rule expansion from `docs/bp-cfn-guard-gap-analysis-2026-04-08.md`, BP-IAM-017 for elevated `*FullAccess` managed policies, and BP-EFS-001/002/003 for the A1 EFS resource type). Completes in <10ms for all rules.
+1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **165 rules** (133 initial, plus the A5 27-rule expansion from `docs/bp-cfn-guard-gap-analysis-2026-04-08.md`, BP-IAM-017 for elevated `*FullAccess` managed policies, BP-EFS-001/002/003 for the A1 EFS resource type, and BP-EVENTS-001/002/003 for the A8 EventBridge Rule type). Completes in <10ms for all rules.
 
 2. **auto_fix_applier**: For findings with `fixType: auto`, patches the `desiredState` directly using `desiredStatePatch`. For findings with `fixType: interactive`, prompts the user with choices. Respects the `preferences.auto_fix` config setting (`ask` / `apply` / `skip`).
 
