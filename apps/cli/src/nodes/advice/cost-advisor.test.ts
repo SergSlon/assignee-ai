@@ -103,4 +103,63 @@ describe("costAlternatives", () => {
       expect(hints).toHaveLength(0);
     });
   });
+
+  // A1 follow-up (2026-04-08): EFS file system + mount target cost hints.
+  describe("EFS", () => {
+    it("warns about provisioned throughput with an explicit MiB/s", () => {
+      const hints = costAlternatives("AWS::EFS::FileSystem", {
+        ThroughputMode: "provisioned",
+        ProvisionedThroughputInMibps: 100,
+      });
+      expect(
+        hints.some((h) => h.includes("provisioned") && h.includes("100 MiB/s")),
+      ).toBe(true);
+    });
+
+    it("warns about provisioned throughput even without a MiB/s value", () => {
+      const hints = costAlternatives("AWS::EFS::FileSystem", {
+        ThroughputMode: "provisioned",
+      });
+      expect(hints.some((h) => h.includes("provisioned"))).toBe(true);
+    });
+
+    it("does NOT warn about provisioned throughput when mode is elastic", () => {
+      const hints = costAlternatives("AWS::EFS::FileSystem", {
+        ThroughputMode: "elastic",
+      });
+      expect(hints.some((h) => h.includes("ThroughputMode"))).toBe(false);
+    });
+
+    it("mentions One Zone savings when AvailabilityZoneName is set", () => {
+      const hints = costAlternatives("AWS::EFS::FileSystem", {
+        AvailabilityZoneName: "us-east-1a",
+      });
+      expect(
+        hints.some((h) => h.includes("One Zone") && h.includes("us-east-1a")),
+      ).toBe(true);
+    });
+
+    it("suggests One Zone as an opt-in when AvailabilityZoneName is absent", () => {
+      const hints = costAlternatives("AWS::EFS::FileSystem", {});
+      expect(
+        hints.some((h) => h.includes("Regional") && h.includes("One Zone")),
+      ).toBe(true);
+    });
+
+    it("always mentions lifecycle tiering for cold data", () => {
+      const hints = costAlternatives("AWS::EFS::FileSystem", {});
+      expect(
+        hints.some((h) => h.includes("Lifecycle") && h.includes("Archive")),
+      ).toBe(true);
+    });
+
+    it("MountTarget advice calls out the billing model", () => {
+      const hints = costAlternatives("AWS::EFS::MountTarget", {});
+      expect(
+        hints.some(
+          (h) => h.includes("mount target") && h.includes("FileSystem"),
+        ),
+      ).toBe(true);
+    });
+  });
 });
