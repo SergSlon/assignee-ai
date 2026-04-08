@@ -277,7 +277,7 @@ When `--baseline` is set alongside a positional `<resource-id>` ARN, the command
 3. Writes a baseline payload to `.assignee/baselines/<slugified-arn>.json` containing the live state, resource type, and an ISO timestamp.
 4. Future `assignee drift` runs will find the baseline via the checkpoint fallback in `resolve-desired-state.ts` and compare against it instead of reporting `BASELINE_MISSING`.
 
-Checkpoints still win over baselines — the baseline is a last-resort fallback for resources adopted AFTER they were provisioned. Use `assignee clean --baselines` (future slice) or delete the `.assignee/baselines/` directory manually to drop adopted baselines.
+Checkpoints still win over baselines — the baseline is a last-resort fallback for resources adopted AFTER they were provisioned. Run `assignee clean --baselines --confirm` to drop adopted baselines.
 
 **Examples:**
 
@@ -539,32 +539,39 @@ assignee clean [options]
 
 **Options:**
 
-| Flag            | Description                            | Default                 |
-| --------------- | -------------------------------------- | ----------------------- |
-| `--dry-run`     | Preview cleanup without making changes | true (default behavior) |
-| `--confirm`     | Execute cleanup                        | false                   |
-| `--yes`         | Alias for `--confirm` (CI-friendly)    | false                   |
-| `--checkpoints` | Only clean checkpoint files            | false                   |
-| `--cache`       | Only clean price cache                 | false                   |
-| `--memory`      | Only rotate memory files               | false                   |
-| `--resources`   | Clean orphaned resource records        | false                   |
-| `--json`        | Output results as JSON                 | false                   |
+| Flag            | Description                                                                      | Default                 |
+| --------------- | -------------------------------------------------------------------------------- | ----------------------- |
+| `--dry-run`     | Preview cleanup without making changes                                           | true (default behavior) |
+| `--confirm`     | Execute cleanup                                                                  | false                   |
+| `--yes`         | Alias for `--confirm` (CI-friendly)                                              | false                   |
+| `--checkpoints` | Only clean checkpoint files                                                      | false                   |
+| `--cache`       | Only clean price cache                                                           | false                   |
+| `--memory`      | Only rotate memory files                                                         | false                   |
+| `--resources`   | Clean orphaned resource records                                                  | false                   |
+| `--logs`        | Prune persistent warn/error logs older than `ASSIGNEE_LOG_RETENTION_DAYS`        | false                   |
+| `--baselines`   | Remove all baseline files adopted via `assignee drift --baseline` (A3 follow-up) | false                   |
+| `--json`        | Output results as JSON                                                           | false                   |
 
 **Behavior:**
 
-Default is a safe dry-run preview. Three cleanup categories:
+Default is a safe dry-run preview. Cleanup categories:
 
 - **Checkpoints**: removes expired checkpoint files (>72h)
 - **Cache**: removes stale price cache entries
 - **Memory**: rotates oversized provision/failure/pattern logs
+- **Logs**: prunes persistent warn/error logs older than the retention window
+- **Baselines**: removes files under `.assignee/baselines/` adopted via `assignee drift --baseline`
+
+The `--baselines` scope runs as a self-contained branch independent of the main cleanup report — it only touches the `.assignee/baselines/` directory under the current project cwd, never walks up to the user home, and never touches checkpoints or the provision log. Missing directory or empty listing prints "No baseline files found (nothing to clean)." and exits cleanly.
 
 **Examples:**
 
 ```bash
-assignee clean                    # dry-run preview
-assignee clean --confirm          # execute cleanup
+assignee clean                          # dry-run preview
+assignee clean --confirm                # execute cleanup
 assignee clean --checkpoints --confirm
-assignee clean --json --yes       # CI-friendly JSON output
+assignee clean --baselines --confirm    # drop adopted drift baselines
+assignee clean --json --yes             # CI-friendly JSON output
 ```
 
 ### cache
