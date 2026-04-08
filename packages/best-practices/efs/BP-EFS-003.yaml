@@ -1,0 +1,16 @@
+id: BP-EFS-003
+title: "EFS file system policy should deny unencrypted transit"
+severity: HIGH
+resource_type: "AWS::EFS::FileSystem"
+property_path: "FileSystemPolicy"
+check_type: "policy_antipattern"
+expected_value: "allow-plus-not-action"
+source: "AWS Security Hub FSBP"
+source_id: "EFS.4"
+description: "EFS file system policies should explicitly deny NFS operations over unencrypted transit. Without a Deny statement on `aws:SecureTransport=false`, a misconfigured client or a compromised subnet route could mount the file system over plain NFS and read/write data in cleartext — even though EFS encryption at rest (BP-EFS-001) protects data on the underlying disks. The policy_antipattern check here specifically rejects `Allow` + `NotAction` inversions because the canonical EFS secure-transport guard is a Deny-with-Condition, not an Allow-with-wildcard."
+remediation: "Attach a FileSystemPolicy with an explicit `Deny` statement whose Condition contains `Bool: { aws:SecureTransport: false }` and whose Action matches `elasticfilesystem:ClientMount*` or `*`. Example policy:\n  Statement:\n    - Effect: Deny\n      Principal: \"*\"\n      Action: \"*\"\n      Resource: \"*\"\n      Condition:\n        Bool:\n          aws:SecureTransport: \"false\""
+consequence: "NFS clients can mount over unencrypted TCP 2049, exposing every file transfer to passive sniffing. Any workload with network reach to the mount target can exfiltrate data."
+category: security
+lastVerified: "2026-04-08"
+blocking: false
+autoFixable: false
