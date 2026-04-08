@@ -301,6 +301,16 @@ const testCases: AutoFixTestCase[] = [
       BackupPolicy: { Status: "DISABLED" },
     },
   },
+  // --- A8 EventBridge rules ---
+  {
+    // BP-EVENTS-003 patches State back to "ENABLED" when the user
+    // accidentally ships a DISABLED rule. Triggering state: State="DISABLED".
+    id: "BP-EVENTS-003",
+    resourceType: "AWS::Events::Rule",
+    triggeringState: {
+      State: "DISABLED",
+    },
+  },
 ];
 
 describe("Auto-fix audit: all auto-fixable BP rules have correct desiredStatePatch", () => {

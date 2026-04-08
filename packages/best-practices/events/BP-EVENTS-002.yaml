@@ -1,0 +1,14 @@
+id: BP-EVENTS-002
+title: "EventBridge Rule should have a Description field"
+severity: INFO
+resource_type: "AWS::Events::Rule"
+property_path: "Description"
+check_type: "exists"
+expected_value: true
+source: "AWS EventBridge Best Practices"
+source_id: "EVENTS-BP-02"
+description: "EventBridge Rules without a Description field are hard to audit and maintain. When on-call engineers triage a failing rule at 3am, the console shows only the rule name and expression — a one-line Description saves real triage time. Rules show up in CloudTrail events and the EventBridge console without any context unless a Description is set."
+remediation: "Set Description to a one-sentence explanation of what the rule does and why it exists. Include the owning team or the ticket/epic that created the rule. Example: 'Nightly cleanup of expired S3 audit logs — owned by platform-team, epic PLAT-342'."
+consequence: "On-call engineers cannot tell what a misfiring rule is supposed to do, leading to longer incident resolution and accidental disables of load-bearing rules."
+category: reliability
+lastVerified: "2026-04-08"
