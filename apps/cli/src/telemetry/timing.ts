@@ -123,7 +123,16 @@ const LABEL_TO_BUDGET: Record<string, { label: string; budgetMs: number }> = {
   "credential-check": STARTUP_BUDGETS.CREDENTIAL_CHECK,
   "mcp-startup": STARTUP_BUDGETS.MCP_TOTAL_PLAN,
   "first-llm-call": STARTUP_BUDGETS.LLM_FIRST_CALL,
-  total: STARTUP_BUDGETS.TOTAL_COLD_START,
+  // A4 (2026-04-08) — the "total" timer covers the entire command
+  // runtime (from runCommand entry through the outer finally), not
+  // cold start. Its budget target was previously TOTAL_COLD_START
+  // (10s) which fired WARNING for almost every real plan/apply run.
+  // Moved to COMMAND_TOTAL (60s — the 60s rule) so cold-start
+  // budgets remain enforced via the individual sub-phases above
+  // (cli-parse + credential-check + mcp-startup + first-llm-call),
+  // and the "total" warning only surfaces when a command is
+  // genuinely blocking the user for too long.
+  total: STARTUP_BUDGETS.COMMAND_TOTAL,
 };
 
 /**

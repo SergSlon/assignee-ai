@@ -6,6 +6,7 @@ import {
   MCP_STARTUP_TOTAL_MS,
   FIRST_LLM_CALL_MS,
   TOTAL_COLD_START_MS,
+  COMMAND_TOTAL_MS,
   STARTUP_BUDGETS,
   ALL_BUDGETS,
   checkBudget,
@@ -37,6 +38,11 @@ describe("time-budget", () => {
     it("exports TOTAL_COLD_START_MS = 10000", () => {
       expect(TOTAL_COLD_START_MS).toBe(10000);
     });
+
+    // A4 (2026-04-08): the 60s rule.
+    it("exports COMMAND_TOTAL_MS = 60000 (the 60s rule)", () => {
+      expect(COMMAND_TOTAL_MS).toBe(60000);
+    });
   });
 
   describe("STARTUP_BUDGETS constants", () => {
@@ -63,11 +69,16 @@ describe("time-budget", () => {
     it("defines TOTAL_COLD_START budget at 10000ms", () => {
       expect(STARTUP_BUDGETS.TOTAL_COLD_START.budgetMs).toBe(10000);
     });
+
+    it("defines COMMAND_TOTAL budget at 60000ms (A4 — 60s rule)", () => {
+      expect(STARTUP_BUDGETS.COMMAND_TOTAL.budgetMs).toBe(60000);
+      expect(STARTUP_BUDGETS.COMMAND_TOTAL.label).toBe("Total command runtime");
+    });
   });
 
   describe("ALL_BUDGETS", () => {
-    it("contains all 6 budget entries", () => {
-      expect(ALL_BUDGETS).toHaveLength(6);
+    it("contains all 7 budget entries (6 startup + COMMAND_TOTAL)", () => {
+      expect(ALL_BUDGETS).toHaveLength(7);
     });
 
     it("each entry has non-empty label and positive budgetMs", () => {
