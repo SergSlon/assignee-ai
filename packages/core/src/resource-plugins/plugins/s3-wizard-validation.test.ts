@@ -170,16 +170,20 @@ describe("Tags field — validate", () => {
   });
 
   it("rejects tags without colons: 'vvbbcc' → error message", () => {
+    // Tier C: strengthened — assert the full error message
     const result = tagsValidate("vvbbcc");
-    expect(result).toBeDefined();
-    expect(result).toContain("Invalid tag format");
+    expect(result).toBe(
+      "Invalid tag format. Use Key:Value pairs separated by commas (e.g. env:production, team:backend)",
+    );
   });
 
   it("warns about mixed valid/invalid: 'env:prod, badtag, team:be'", () => {
+    // Tier C: strengthened — assert the full error message including the
+    // offending tag name in the list
     const result = tagsValidate("env:prod, badtag, team:be");
-    expect(result).toBeDefined();
-    expect(result).toContain("badtag");
-    expect(result).toContain("missing colon");
+    expect(result).toBe(
+      "Some tags missing colon separator and will be ignored: badtag",
+    );
   });
 
   it("accepts empty string (optional field)", () => {
@@ -290,9 +294,7 @@ describe("S3 composite assembly (applyToCfnTransforms)", () => {
       Rules: [
         {
           Status: "Enabled",
-          Transitions: [
-            { StorageClass: "STANDARD_IA", TransitionInDays: 60 },
-          ],
+          Transitions: [{ StorageClass: "STANDARD_IA", TransitionInDays: 60 }],
           ExpirationInDays: 365,
         },
       ],

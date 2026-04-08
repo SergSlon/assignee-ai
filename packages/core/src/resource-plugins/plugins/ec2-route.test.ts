@@ -22,50 +22,55 @@ describe("routePlugin", () => {
   });
 
   it("RouteTableId field exists and is required", () => {
+    // Tier C: strengthened — find!() + toMatchObject
     const field = routePlugin.commonFields.find(
       (f) => f.name === "RouteTableId",
-    );
-    expect(field).toBeDefined();
-    expect(field?.required).toBe(true);
-    expect(field?.question.type).toBe("string");
+    )!;
+    expect(field).toMatchObject({
+      name: "RouteTableId",
+      required: true,
+      question: { type: "string" },
+    });
   });
 
   it("DestinationCidrBlock field has default 0.0.0.0/0", () => {
+    // Tier C: strengthened
     const field = routePlugin.commonFields.find(
       (f) => f.name === "DestinationCidrBlock",
-    );
-    expect(field).toBeDefined();
-    expect(field?.required).toBe(true);
-    expect(field?.question.initialValue).toBe("0.0.0.0/0");
+    )!;
+    expect(field).toMatchObject({
+      name: "DestinationCidrBlock",
+      required: true,
+      question: { initialValue: "0.0.0.0/0" },
+    });
   });
 
   it("RouteType field is enum with public/private options", () => {
-    const field = routePlugin.commonFields.find((f) => f.name === "RouteType");
-    expect(field).toBeDefined();
-    expect(field?.question.type).toBe("enum");
-    const values = field?.question.options?.map((o) => o.value);
-    expect(values).toContain("public");
-    expect(values).toContain("private");
+    // Tier C: strengthened
+    const field = routePlugin.commonFields.find((f) => f.name === "RouteType")!;
+    expect(field.question.type).toBe("enum");
+    const values = field.question.options!.map((o) => o.value);
+    expect(values).toEqual(["public", "private"]);
   });
 
   describe("showIf conditions", () => {
     it("GatewayId is shown when RouteType is public", () => {
+      // Tier C: strengthened
       const field = routePlugin.commonFields.find(
         (f) => f.name === "GatewayId",
-      );
-      expect(field).toBeDefined();
-      expect(field?.question.showIf).toEqual({
+      )!;
+      expect(field.question.showIf).toEqual({
         field: "RouteType",
         value: "public",
       });
     });
 
     it("NatGatewayId is shown when RouteType is private", () => {
+      // Tier C: strengthened
       const field = routePlugin.commonFields.find(
         (f) => f.name === "NatGatewayId",
-      );
-      expect(field).toBeDefined();
-      expect(field?.question.showIf).toEqual({
+      )!;
+      expect(field.question.showIf).toEqual({
         field: "RouteType",
         value: "private",
       });
@@ -96,9 +101,10 @@ describe("routePlugin", () => {
     expect(routePlugin.defaults["RouteType"]).toBe("public");
   });
 
-  it("has configHints", () => {
-    expect(routePlugin.configHints).toBeDefined();
-    expect(routePlugin.configHints!.length).toBeGreaterThan(0);
+  it("has at least 3 configHints (Tier C: was toBeDefined+>0)", () => {
+    // Tier C: strengthened — meaningful floor
+    expect(routePlugin.configHints).toBeInstanceOf(Array);
+    expect(routePlugin.configHints!.length).toBeGreaterThanOrEqual(3);
   });
 
   it("configHints mention target exclusivity", () => {

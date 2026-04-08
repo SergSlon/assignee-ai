@@ -138,6 +138,8 @@ describe("validateConfig", () => {
 
   describe("org_policy passthrough", () => {
     it("passes through org_policy without deep validation", () => {
+      // Tier C: strengthened — assert the actual passed-through shape,
+      // not just defined-ness
       const result = validateConfig({
         org_policy: {
           "AWS::S3::Bucket": {
@@ -145,8 +147,9 @@ describe("validateConfig", () => {
           },
         },
       });
-      expect(result.org_policy).toBeDefined();
-      expect(result.org_policy?.["AWS::S3::Bucket"]).toBeDefined();
+      expect(result.org_policy?.["AWS::S3::Bucket"]).toMatchObject({
+        Encryption: { policy: "locked", value: "AES256" },
+      });
     });
   });
 

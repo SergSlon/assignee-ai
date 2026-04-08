@@ -59,16 +59,17 @@ aws_secret_access_key = je7MtGbClwBF/2Zp9Utk/h3yCo8nvbEXAMPLEKEY
 `;
     const result = parseIniFile(content);
 
-    const defaultSection = result["default"];
-    expect(defaultSection).toBeDefined();
-    expect(defaultSection?.["aws_access_key_id"]).toBe("AKIAIOSFODNN7EXAMPLE");
-    expect(defaultSection?.["aws_secret_access_key"]).toBe(
+    // Tier C: dropped redundant toBeDefined() — toBe(literal) on
+    // optional-chained access fails on undefined
+    const defaultSection = result["default"]!;
+    expect(defaultSection["aws_access_key_id"]).toBe("AKIAIOSFODNN7EXAMPLE");
+    expect(defaultSection["aws_secret_access_key"]).toBe(
       "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
     );
 
-    const stagingSection = result["staging"];
-    expect(stagingSection).toBeDefined();
-    expect(stagingSection?.["aws_access_key_id"]).toBe("AKIAI44QH8DHBEXAMPLE");
+    // Tier C: same pattern
+    const stagingSection = result["staging"]!;
+    expect(stagingSection["aws_access_key_id"]).toBe("AKIAI44QH8DHBEXAMPLE");
   });
 
   it("handles [profile name] syntax from aws config", () => {
@@ -178,7 +179,7 @@ aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     const result = await detectCredentials(tmpDir);
 
     expect(result.detected).toBe(false);
-    expect(result.reason).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — toContain fails on undefined
     expect(result.reason).toContain("No AWS credentials found");
     expect(result.reason).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
     expect(result.reason).toContain("~/.aws/credentials");

@@ -70,11 +70,12 @@ describe("time-budget", () => {
       expect(ALL_BUDGETS).toHaveLength(6);
     });
 
-    it("each entry has label and budgetMs", () => {
+    it("each entry has non-empty label and positive budgetMs", () => {
+      // Tier C: dropped redundant toBeDefined() — typeof checks are
+      // strictly stronger
       for (const entry of ALL_BUDGETS) {
-        expect(entry.label).toBeDefined();
         expect(typeof entry.label).toBe("string");
-        expect(entry.budgetMs).toBeDefined();
+        expect(entry.label.length).toBeGreaterThan(0);
         expect(typeof entry.budgetMs).toBe("number");
         expect(entry.budgetMs).toBeGreaterThan(0);
       }

@@ -68,20 +68,20 @@ describe("extractCommands", () => {
     const commands = extractCommands(program);
     const planCmd = commands.find((c) => c.name === "plan")!;
 
-    const outputOpt = planCmd.options.find((o) => o.long === "--output");
-    expect(outputOpt).toBeDefined();
-    expect(outputOpt!.short).toBe("-o");
-    expect(outputOpt!.argName).toBe("format");
+    // Tier C: dropped redundant toBeDefined() — find!()
+    const outputOpt = planCmd.options.find((o) => o.long === "--output")!;
+    expect(outputOpt.short).toBe("-o");
+    expect(outputOpt.argName).toBe("format");
   });
 
   it("extracts options without short flags", () => {
+    // Tier C: dropped redundant toBeDefined() — find!()
     const program = buildTestProgram();
     const commands = extractCommands(program);
     const applyCmd = commands.find((c) => c.name === "apply")!;
 
-    const yesOpt = applyCmd.options.find((o) => o.long === "--yes");
-    expect(yesOpt).toBeDefined();
-    expect(yesOpt!.short).toBeUndefined();
+    const yesOpt = applyCmd.options.find((o) => o.long === "--yes")!;
+    expect(yesOpt.short).toBeUndefined();
   });
 
   it("extracts command descriptions", () => {

@@ -78,9 +78,11 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
             );
             if (hasToCfn) {
               // toCfn(true) should produce a non-boolean object
+              // Tier C: dropped redundant toBeDefined() — typeof check fails
+              // on undefined ("undefined" !== "object")
               expect(result[field.name]).not.toBe(true);
-              expect(result[field.name]).toBeDefined();
               expect(typeof result[field.name]).toBe("object");
+              expect(result[field.name]).not.toBeNull();
             } else {
               // No transform — boolean passes through
               expect(result[field.name]).toBe(true);
@@ -520,7 +522,12 @@ describe("applyToCfnTransforms — exhaustive field coverage", () => {
       expect(result["EbsVolumeSize"]).toBeUndefined();
       expect(result["EbsEncrypted"]).toBeUndefined();
       expect(result["InstanceType"]).toBe("t3.micro");
-      expect(result["BlockDeviceMappings"]).toBeDefined();
+      // Tier C: strengthened — BlockDeviceMappings should be a non-empty
+      // array (containing the EBS root device with the user's settings)
+      expect(result["BlockDeviceMappings"]).toBeInstanceOf(Array);
+      expect(
+        (result["BlockDeviceMappings"] as unknown[]).length,
+      ).toBeGreaterThan(0);
     });
   });
 

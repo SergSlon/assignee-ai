@@ -34,12 +34,23 @@ describe("ecsClusterPlugin", () => {
       expect(field.question.validate?.("my-cluster-123")).toBeUndefined();
     });
 
-    it("rejects names longer than 255 chars", () => {
-      expect(field.question.validate?.("a".repeat(256))).toBeDefined();
+    it("rejects names longer than 255 chars with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("a".repeat(256))).toBe(
+        "Cluster name must be 1-255 characters",
+      );
     });
 
-    it("rejects names with special characters", () => {
-      expect(field.question.validate?.("my cluster!")).toBeDefined();
+    it("accepts exactly 255 chars (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("a".repeat(255))).toBeUndefined();
+    });
+
+    it("rejects names with special characters with charset error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("my cluster!")).toBe(
+        "Cluster name can only contain letters, numbers, hyphens, and underscores",
+      );
     });
   });
 
@@ -69,9 +80,10 @@ describe("ecsClusterPlugin", () => {
     });
   });
 
-  it("Tags field has toCfn transform", () => {
-    const field = ecsClusterPlugin.commonFields.find((f) => f.name === "Tags");
-    expect(field?.toCfn).toBeDefined();
+  it("Tags field has callable toCfn transform", () => {
+    // Tier C: strengthened — find!() + function-ness
+    const field = ecsClusterPlugin.commonFields.find((f) => f.name === "Tags")!;
+    expect(typeof field.toCfn).toBe("function");
   });
 
   describe("Tags toCfn transform", () => {

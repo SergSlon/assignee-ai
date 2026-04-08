@@ -28,8 +28,9 @@ describe("Tier 2 resource types in SUPPORTED_TYPES_ARRAY", () => {
 
 describe("Tier 2 plugin registrations", () => {
   it.each(TIER_2_TYPES)("%s has a registered plugin", (type) => {
+    // Tier C: dropped redundant toBeDefined() — `?.resourceType` returns
+    // undefined for missing plugin, which fails the toBe() check
     const plugin = defaultPluginRegistry.get(type);
-    expect(plugin).toBeDefined();
     expect(plugin?.resourceType).toBe(type);
   });
 });
@@ -96,8 +97,8 @@ describe("Serverless API compound pattern integration", () => {
   });
 
   it("detects 'create a serverless API' intent", () => {
+    // Tier C: dropped redundant toBeDefined()
     const pattern = defaultPatternRegistry.detect("create a serverless API");
-    expect(pattern).toBeDefined();
     expect(pattern?.patternId).toBe("serverless-api");
   });
 

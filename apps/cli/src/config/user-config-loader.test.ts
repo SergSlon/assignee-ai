@@ -122,7 +122,8 @@ AWS::Lambda::Function:
 
       const result = await loadUserConfig();
 
-      expect(result).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — optional-chained .toBe()
+      // already fails on undefined
       expect(result?.bestPractices?.enforcement).toBe("enforce");
       expect(result?.bestPractices?.autoFix).toBe(true);
     });

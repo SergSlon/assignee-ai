@@ -39,12 +39,12 @@ describe("Distribution package configuration", () => {
   });
 
   it("has engines.node >= 20", () => {
-    expect(pkg.engines).toBeDefined();
+    // Tier C: dropped redundant toBeDefined()
     expect(pkg.engines.node).toBe(">=20.0.0");
   });
 
   it("has repository field", () => {
-    expect(pkg.repository).toBeDefined();
+    // Tier C: dropped redundant toBeDefined()
     expect(pkg.repository.type).toBe("git");
     expect(pkg.repository.directory).toBe("apps/mcp-server");
   });
@@ -59,12 +59,13 @@ describe("Distribution package configuration", () => {
   });
 
   it("has prepublishOnly script that runs turbo build", () => {
-    expect(pkg.scripts.prepublishOnly).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — toContain fails on undefined
     expect(pkg.scripts.prepublishOnly).toContain("turbo build");
   });
 
-  it("has description", () => {
-    expect(pkg.description).toBeDefined();
+  it("has description with at least 10 chars", () => {
+    // Tier C: dropped redundant toBeDefined() — typeof string is stronger
+    expect(typeof pkg.description).toBe("string");
     expect(pkg.description.length).toBeGreaterThan(10);
   });
 

@@ -80,7 +80,7 @@ describe("npx quick-start", () => {
       readFileSync(resolve(__dirname, "..", "..", "package.json"), "utf-8"),
     );
 
-    expect(pkg.bin).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — .assignee access fails on undefined
     expect(pkg.bin.assignee).toBe("./dist/index.js");
   });
 
@@ -89,7 +89,8 @@ describe("npx quick-start", () => {
       readFileSync(resolve(__dirname, "..", "..", "package.json"), "utf-8"),
     );
 
-    expect(pkg.files).toBeDefined();
+    // Tier C: strengthened — must be a non-empty array
+    expect(pkg.files).toBeInstanceOf(Array);
     expect(pkg.files.some((f: string) => f.includes("dist"))).toBe(true);
   });
 

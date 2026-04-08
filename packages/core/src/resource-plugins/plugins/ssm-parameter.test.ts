@@ -26,8 +26,9 @@ describe("ssmParameterPlugin", () => {
       (f) => f.name === "Name",
     )!;
 
-    it("rejects empty value", () => {
-      expect(field.question.validate?.("")).toBeDefined();
+    it("rejects empty value with 'required' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("")).toBe("Parameter name is required");
     });
 
     it("accepts valid parameter name", () => {
@@ -36,12 +37,24 @@ describe("ssmParameterPlugin", () => {
       ).toBeUndefined();
     });
 
-    it("rejects names not starting with /", () => {
-      expect(field.question.validate?.("no-slash")).toBeDefined();
+    it("rejects names not starting with / with prefix error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("no-slash")).toBe(
+        "Parameter name must start with /",
+      );
     });
 
-    it("rejects names longer than 2048 chars", () => {
-      expect(field.question.validate?.("/" + "a".repeat(2048))).toBeDefined();
+    it("rejects names longer than 2048 chars with length error", () => {
+      // Tier C: strengthened from toBeDefined() — 2048-char input creates
+      // a 2049-char total (with the leading /), tripping the length check.
+      expect(field.question.validate?.("/" + "a".repeat(2048))).toBe(
+        "Parameter name must be 2048 characters or fewer",
+      );
+    });
+
+    it("accepts exactly 2048 chars (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("/" + "a".repeat(2047))).toBeUndefined();
     });
   });
 
@@ -79,11 +92,12 @@ describe("ssmParameterPlugin", () => {
     expect(field?.question.options).toHaveLength(2);
   });
 
-  it("Tags field has toCfn transform", () => {
+  it("Tags field has callable toCfn transform", () => {
+    // Tier C: strengthened — find!() + function-ness
     const field = ssmParameterPlugin.commonFields.find(
       (f) => f.name === "Tags",
-    );
-    expect(field?.toCfn).toBeDefined();
+    )!;
+    expect(typeof field.toCfn).toBe("function");
   });
 
   it("defaults include Type and Tier", () => {

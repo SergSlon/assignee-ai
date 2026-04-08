@@ -396,7 +396,8 @@ describe("Apply mode — blocking BP finding prevents provisioning", () => {
     expect(result.preflightPassed).toBe(false);
 
     // BP findings should be present with blocking entries
-    expect(result.bpFindings).toBeDefined();
+    // Tier C: strengthened — instanceof Array + length check
+    expect(result.bpFindings).toBeInstanceOf(Array);
     expect(result.bpFindings!.length).toBeGreaterThan(0);
     const blockingFindings = result.bpFindings!.filter(
       (f: { blocking: boolean }) => f.blocking,

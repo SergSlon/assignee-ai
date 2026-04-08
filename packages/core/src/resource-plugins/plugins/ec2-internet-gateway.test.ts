@@ -32,9 +32,10 @@ describe("internetGatewayPlugin", () => {
     expect(internetGatewayPlugin.defaults).toEqual({});
   });
 
-  it("has configHints", () => {
-    expect(internetGatewayPlugin.configHints).toBeDefined();
-    expect(internetGatewayPlugin.configHints!.length).toBeGreaterThan(0);
+  it("has at least 2 configHints (Tier C: was toBeDefined+>0)", () => {
+    // Tier C: strengthened — meaningful floor
+    expect(internetGatewayPlugin.configHints).toBeInstanceOf(Array);
+    expect(internetGatewayPlugin.configHints!.length).toBeGreaterThanOrEqual(2);
   });
 
   it("configHints mention VPCGatewayAttachment", () => {
@@ -52,8 +53,9 @@ describe("internetGatewayPlugin", () => {
       (f) => f.name === "Tags",
     )!;
 
-    it("Tags field has toCfn transform", () => {
-      expect(field.toCfn).toBeDefined();
+    it("Tags field has callable toCfn transform", () => {
+      // Tier C: strengthened — function-ness check
+      expect(typeof field.toCfn).toBe("function");
     });
 
     it("transforms comma-separated pairs", () => {

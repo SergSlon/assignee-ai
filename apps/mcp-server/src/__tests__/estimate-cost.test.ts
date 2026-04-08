@@ -187,8 +187,10 @@ describe("estimateCostForResource", () => {
     const result = estimateCostForResource("AWS::S3::Bucket");
 
     expect(result.resourceType).toBe("AWS::S3::Bucket");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — typeof string check
+    // is strictly stronger (typeof undefined === "undefined" !== "string")
     expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
   });
 
   it("should return cost estimate for Lambda function with free tier note", () => {
@@ -196,7 +198,7 @@ describe("estimateCostForResource", () => {
 
     expect(result.resourceType).toBe("AWS::Lambda::Function");
     expect(result.freeTierEligible).toBe(true);
-    expect(result.freeTierNote).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — toContain fails on undefined
     expect(result.freeTierNote).toContain("Lambda");
   });
 
@@ -212,7 +214,8 @@ describe("estimateCostForResource", () => {
     const result = estimateCostForResource("AWS::Unknown::Resource");
 
     expect(result.resourceType).toBe("AWS::Unknown::Resource");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: strengthened — typeof string
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
     // No free tier note for unknown types
     expect(result.freeTierEligible).toBeUndefined();
   });
@@ -244,7 +247,9 @@ describe("estimateCostForResource", () => {
     });
 
     expect(result.resourceType).toBe("AWS::Lambda::Function");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: strengthened — typeof string + non-empty
+    expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
   });
 
   it("should not have free tier note for EC2 instances", () => {
@@ -261,63 +266,79 @@ describe("estimateCostForResource", () => {
     const result = estimateCostForResource("AWS::Logs::LogGroup");
 
     expect(result.resourceType).toBe("AWS::Logs::LogGroup");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — typeof string check
+    // is strictly stronger (typeof undefined === "undefined" !== "string")
     expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
   });
 
   it("should return cost estimate for CloudWatch::Alarm", () => {
     const result = estimateCostForResource("AWS::CloudWatch::Alarm");
 
     expect(result.resourceType).toBe("AWS::CloudWatch::Alarm");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — typeof string check
+    // is strictly stronger (typeof undefined === "undefined" !== "string")
     expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
   });
 
   it("should return cost estimate for SecretsManager::Secret", () => {
     const result = estimateCostForResource("AWS::SecretsManager::Secret");
 
     expect(result.resourceType).toBe("AWS::SecretsManager::Secret");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — typeof string check
+    // is strictly stronger (typeof undefined === "undefined" !== "string")
     expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
   });
 
   it("should return cost estimate for ApiGatewayV2::Api", () => {
     const result = estimateCostForResource("AWS::ApiGatewayV2::Api");
 
     expect(result.resourceType).toBe("AWS::ApiGatewayV2::Api");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — typeof string check
+    // is strictly stronger (typeof undefined === "undefined" !== "string")
     expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
   });
 
   it("should return cost estimate for EC2::InternetGateway", () => {
     const result = estimateCostForResource("AWS::EC2::InternetGateway");
 
     expect(result.resourceType).toBe("AWS::EC2::InternetGateway");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — typeof string check
+    // is strictly stronger (typeof undefined === "undefined" !== "string")
     expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
   });
 
   it("should return cost estimate for EC2::RouteTable", () => {
     const result = estimateCostForResource("AWS::EC2::RouteTable");
 
     expect(result.resourceType).toBe("AWS::EC2::RouteTable");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — typeof string check
+    // is strictly stronger (typeof undefined === "undefined" !== "string")
     expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
   });
 
   it("should return cost estimate for EC2::Route", () => {
     const result = estimateCostForResource("AWS::EC2::Route");
 
     expect(result.resourceType).toBe("AWS::EC2::Route");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — typeof string check
+    // is strictly stronger (typeof undefined === "undefined" !== "string")
     expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
   });
 
   it("should return cost estimate for EC2::NatGateway", () => {
     const result = estimateCostForResource("AWS::EC2::NatGateway");
 
     expect(result.resourceType).toBe("AWS::EC2::NatGateway");
-    expect(result.estimatedMonthlyCost).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — typeof string check
+    // is strictly stronger (typeof undefined === "undefined" !== "string")
     expect(typeof result.estimatedMonthlyCost).toBe("string");
+    expect(result.estimatedMonthlyCost.length).toBeGreaterThan(0);
   });
 });

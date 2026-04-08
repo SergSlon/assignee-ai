@@ -661,10 +661,11 @@ describe("adaptDescribeTypeToMcpFormat", () => {
         additionalProperties: false,
       };
       const result = adaptDescribeTypeToMcpFormat(schema);
-      expect(result.definitions).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — defs[...] access fails
+      // naturally on undefined; assert the actual nested shape instead.
       const defs = result.definitions as Record<string, unknown>;
-      expect(defs["Config"]).toBeDefined();
-      expect(defs["SubConfig"]).toBeDefined();
+      expect(defs["Config"]).toBeInstanceOf(Object);
+      expect(defs["SubConfig"]).toBeInstanceOf(Object);
       expect(defs["DeepField"]).toEqual({
         type: "string",
         description: "A deeply nested field",

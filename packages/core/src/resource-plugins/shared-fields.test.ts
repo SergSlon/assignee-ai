@@ -12,34 +12,37 @@ describe("TAGS_VALIDATE", () => {
     expect(TAGS_VALIDATE("dash-key:under_val")).toBeUndefined();
   });
 
-  it("rejects backslash in tag value", () => {
+  // Tier C: dropped redundant toBeDefined() — toMatch with a precise
+  // pattern is strictly stronger than the toBeDefined+toContain combo.
+  it("rejects backslash in tag value with charset error", () => {
     const result = TAGS_VALIDATE("env:prod\\test");
-    expect(result).toBeDefined();
-    expect(result).toContain("invalid characters");
+    expect(result).toMatch(
+      /Tag value "[^"]*" contains invalid characters\. Allowed:/,
+    );
   });
 
-  it("rejects quotes in tag value", () => {
+  it("rejects quotes in tag value with charset error", () => {
+    // The error message embeds the offending value, which itself contains
+    // quotes here — match on the stable suffix instead.
     const result = TAGS_VALIDATE('name:"quoted"');
-    expect(result).toBeDefined();
-    expect(result).toContain("invalid characters");
+    expect(result).toMatch(/contains invalid characters\. Allowed:/);
   });
 
-  it("rejects tab and newline in tag value", () => {
+  it("rejects tab and newline in tag value with charset error", () => {
     const result = TAGS_VALIDATE("env:prod\ttest");
-    expect(result).toBeDefined();
-    expect(result).toContain("invalid characters");
+    expect(result).toMatch(
+      /Tag value "[^"]*" contains invalid characters\. Allowed:/,
+    );
   });
 
-  it("rejects tag key exceeding 128 characters", () => {
+  it("rejects tag key exceeding 128 characters with length error", () => {
     const result = TAGS_VALIDATE("a".repeat(129) + ":val");
-    expect(result).toBeDefined();
-    expect(result).toContain("128");
+    expect(result).toMatch(/Tag key "[^"]*" exceeds 128 character limit/);
   });
 
-  it("rejects tag value exceeding 256 characters", () => {
+  it("rejects tag value exceeding 256 characters with length error", () => {
     const result = TAGS_VALIDATE("key:" + "a".repeat(257));
-    expect(result).toBeDefined();
-    expect(result).toContain("256");
+    expect(result).toBe('Tag value for "key" exceeds 256 character limit');
   });
 
   it("accepts tag key at exactly 128 characters", () => {
@@ -56,9 +59,11 @@ describe("TAGS_VALIDATE", () => {
     expect(TAGS_VALIDATE("arn:aws:s3:::bucket")).toBeUndefined();
   });
 
-  it("rejects tag missing colon separator", () => {
+  it("rejects tag missing colon separator with format error", () => {
+    // Tier C: strengthened — assert the full error message
     const result = TAGS_VALIDATE("novalue");
-    expect(result).toBeDefined();
-    expect(result).toContain("format");
+    expect(result).toBe(
+      "Invalid tag format. Use Key:Value pairs separated by commas (e.g. env:production, team:backend)",
+    );
   });
 });

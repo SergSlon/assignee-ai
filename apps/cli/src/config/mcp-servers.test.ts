@@ -69,9 +69,18 @@ describe("getMcpServerConfigs", () => {
   });
 
   it("includes Pricing and Docs servers", () => {
+    // Tier C: strengthened — assert config shape (command + args), not
+    // just defined-ness. The MCP server config is { command, args, env }
+    // and a typo in any of those fields silently breaks the spawn.
     const configs = getMcpServerConfigs();
-    expect(configs[McpServerName.PRICING]).toBeDefined();
-    expect(configs[McpServerName.DOCS]).toBeDefined();
+    expect(configs[McpServerName.PRICING]).toMatchObject({
+      command: expect.any(String),
+      args: expect.any(Array),
+    });
+    expect(configs[McpServerName.DOCS]).toMatchObject({
+      command: expect.any(String),
+      args: expect.any(Array),
+    });
   });
 
   it("Knowledge server is optional (not core) and gated off by default", () => {
@@ -129,8 +138,11 @@ describe("getMcpServerConfigs", () => {
 
     expect(configs[McpServerName.PRICING]).toBeUndefined();
     // Docs server is credential-free and must still be present so the CLI
-    // can still spawn its core MCP stack.
-    expect(configs[McpServerName.DOCS]).toBeDefined();
+    // can still spawn its core MCP stack. Tier C: assert it's actually a
+    // config object with args, not just defined.
+    expect(configs[McpServerName.DOCS]).toMatchObject({
+      args: expect.any(Array),
+    });
   });
 
   // Symmetric: operator-only env returns successfully, with the same
@@ -144,22 +156,31 @@ describe("getMcpServerConfigs", () => {
 
     const configs = getMcpServerConfigs();
     expect(configs[McpServerName.PRICING]).toBeUndefined();
-    expect(configs[McpServerName.DOCS]).toBeDefined();
+    // Tier C: strengthened
+    expect(configs[McpServerName.DOCS]).toMatchObject({
+      args: expect.any(Array),
+    });
   });
 
   // With reader creds set, Pricing IS present (round-trip from previous case).
   it("includes Pricing when reader creds present (post-omission round-trip)", () => {
     setReaderEnv();
     const configs = getMcpServerConfigs();
-    expect(configs[McpServerName.PRICING]).toBeDefined();
-    expect(configs[McpServerName.DOCS]).toBeDefined();
+    // Tier C: strengthened — assert env carries the reader creds
+    expect(configs[McpServerName.PRICING]).toMatchObject({
+      env: expect.objectContaining({ AWS_ACCESS_KEY_ID: READER_AK }),
+    });
+    expect(configs[McpServerName.DOCS]).toMatchObject({
+      args: expect.any(Array),
+    });
   });
 
   it("never emits empty-string AWS_ACCESS_KEY_ID for the Pricing subprocess", () => {
     setReaderEnv();
     const configs = getMcpServerConfigs();
     const pricing = configs[McpServerName.PRICING]!;
-    expect(pricing.env).toBeDefined();
+    // Tier C: strengthened — env must be a non-empty object, not just defined
+    expect(pricing.env).toBeInstanceOf(Object);
     expect(pricing.env!["AWS_ACCESS_KEY_ID"]).toBe(READER_AK);
     expect(pricing.env!["AWS_ACCESS_KEY_ID"]).not.toBe("");
     expect(pricing.env!["AWS_SECRET_ACCESS_KEY"]).toBe(READER_SK);
@@ -169,20 +190,21 @@ describe("getMcpServerConfigs", () => {
 describe("getOptionalMcpServerConfigs", () => {
   // ── Supply-chain pinning (H2) ───────────────────────────────────────────
   it("pins the Billing MCP server to an exact version (never @latest)", () => {
+    // Tier C: dropped redundant toBeDefined() — the next toMatch fails
+    // naturally if the entry is undefined
     setReaderEnv();
     const configs = getOptionalMcpServerConfigs();
     const billing = configs[McpServerName.BILLING]!;
-    expect(billing).toBeDefined();
     const joined = billing.args.join(" ");
     expect(joined).toMatch(/awslabs\.cost-management-mcp-server@\d+\.\d+\.\d+/);
     expect(joined).not.toContain("@latest");
   });
 
   it("pins the IAM MCP server to an exact version (never @latest)", () => {
+    // Tier C: dropped redundant toBeDefined()
     setAuditorEnv();
     const configs = getOptionalMcpServerConfigs();
     const iam = configs[McpServerName.IAM]!;
-    expect(iam).toBeDefined();
     const joined = iam.args.join(" ");
     expect(joined).toMatch(/awslabs\.iam-mcp-server@\d+\.\d+\.\d+/);
     expect(joined).not.toContain("@latest");
@@ -190,10 +212,10 @@ describe("getOptionalMcpServerConfigs", () => {
   });
 
   it("pins the Well-Architected Security MCP server (never @latest)", () => {
+    // Tier C: dropped redundant toBeDefined()
     setAuditorEnv();
     const configs = getOptionalMcpServerConfigs();
     const wa = configs[McpServerName.WELL_ARCHITECTED_SECURITY]!;
-    expect(wa).toBeDefined();
     const joined = wa.args.join(" ");
     expect(joined).toMatch(
       /awslabs\.well-architected-security-mcp-server@\d+\.\d+\.\d+/,
@@ -209,23 +231,27 @@ describe("getOptionalMcpServerConfigs", () => {
   });
 
   it("billing server emits real reader credentials in its env block", () => {
+    // Tier C: strengthened — assert env shape including a non-empty
+    // AWS_DEFAULT_REGION (not just "defined").
     setReaderEnv();
     const configs = getOptionalMcpServerConfigs();
     const billing = configs[McpServerName.BILLING]!;
-    expect(billing.env).toBeDefined();
+    expect(billing.env).toBeInstanceOf(Object);
     expect(billing.env!["AWS_ACCESS_KEY_ID"]).toBe(READER_AK);
     expect(billing.env!["AWS_SECRET_ACCESS_KEY"]).toBe(READER_SK);
-    expect(billing.env!["AWS_DEFAULT_REGION"]).toBeDefined();
+    expect(billing.env!["AWS_DEFAULT_REGION"]).toMatch(/^[a-z]{2}-[a-z]+-\d$/);
   });
 
   it("includes IAM and Well-Architected Security servers when auditor creds set", () => {
+    // Tier C: strengthened — toMatchObject with expected env
     setAuditorEnv();
     const configs = getOptionalMcpServerConfigs();
-    expect(configs[McpServerName.IAM]).toBeDefined();
-    expect(configs[McpServerName.WELL_ARCHITECTED_SECURITY]).toBeDefined();
-    expect(configs[McpServerName.IAM]!.env!["AWS_ACCESS_KEY_ID"]).toBe(
-      AUDITOR_AK,
-    );
+    expect(configs[McpServerName.IAM]).toMatchObject({
+      env: expect.objectContaining({ AWS_ACCESS_KEY_ID: AUDITOR_AK }),
+    });
+    expect(configs[McpServerName.WELL_ARCHITECTED_SECURITY]).toMatchObject({
+      env: expect.objectContaining({ AWS_ACCESS_KEY_ID: AUDITOR_AK }),
+    });
   });
 
   // ── Graceful degradation for optional servers (H1) ──────────────────────
@@ -234,16 +260,20 @@ describe("getOptionalMcpServerConfigs", () => {
     const configs = getOptionalMcpServerConfigs();
     expect(configs[McpServerName.IAM]).toBeUndefined();
     expect(configs[McpServerName.WELL_ARCHITECTED_SECURITY]).toBeUndefined();
-    // Billing still present — it uses reader creds.
-    expect(configs[McpServerName.BILLING]).toBeDefined();
+    // Billing still present — it uses reader creds. Tier C: assert shape.
+    expect(configs[McpServerName.BILLING]).toMatchObject({
+      args: expect.any(Array),
+    });
   });
 
   it("omits billing server when ASSIGNEE_READER_* unset", () => {
     setAuditorEnv(); // only auditor, no reader
     const configs = getOptionalMcpServerConfigs();
     expect(configs[McpServerName.BILLING]).toBeUndefined();
-    // IAM + WA-Security still present.
-    expect(configs[McpServerName.IAM]).toBeDefined();
+    // IAM + WA-Security still present. Tier C: assert shape.
+    expect(configs[McpServerName.IAM]).toMatchObject({
+      args: expect.any(Array),
+    });
   });
 
   it("returns an empty config when no Assignee creds are set", () => {
@@ -259,12 +289,12 @@ describe("getOptionalMcpServerConfigs", () => {
   });
 
   it("includes the remote knowledge server only when ASSIGNEE_ENABLE_REMOTE_MCP=1", () => {
+    // Tier C: dropped redundant toBeDefined() — the args.join check
+    // fails naturally if undefined
     process.env["ASSIGNEE_ENABLE_REMOTE_MCP"] = "1";
     const configs = getOptionalMcpServerConfigs();
-    expect(configs[McpServerName.KNOWLEDGE]).toBeDefined();
-    expect(configs[McpServerName.KNOWLEDGE]!.args.join(" ")).toContain(
-      "knowledge-mcp.global.api.aws",
-    );
+    const knowledge = configs[McpServerName.KNOWLEDGE]!;
+    expect(knowledge.args.join(" ")).toContain("knowledge-mcp.global.api.aws");
   });
 
   it("does NOT include the remote knowledge server when ASSIGNEE_ENABLE_REMOTE_MCP is a value other than '1'", () => {

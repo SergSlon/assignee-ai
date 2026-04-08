@@ -115,7 +115,11 @@ describe("createMcpClient", () => {
 
     expect(MockMultiServerMCPClient).toHaveBeenCalled();
     expect(mockInitializeConnections).toHaveBeenCalledOnce();
-    expect(client).toBeDefined();
+    // Tier C: strengthened — assert it's a real object. The wrapper
+    // returns a plain object with delegated methods, not the raw mock
+    // class instance, so we can't use toBeInstanceOf on the mock.
+    expect(client).toBeInstanceOf(Object);
+    expect(client).not.toBeNull();
   });
 
   it("returns singleton on subsequent calls", async () => {

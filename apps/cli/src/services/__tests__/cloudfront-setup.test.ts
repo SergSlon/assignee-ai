@@ -209,7 +209,7 @@ describe("generateCloudFrontBucketPolicy", () => {
 
     const policy = JSON.parse(policyStr);
     const condition = policy.Statement[0].Condition;
-    expect(condition.StringEquals).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — bracket access fails on undefined
     // The key should be "aws:SourceArn" (lowercase aws prefix per AWS IAM condition key spec)
     expect(condition.StringEquals["aws:SourceArn"]).toBe(
       "arn:aws:cloudfront::123456:distribution/dist-abc",

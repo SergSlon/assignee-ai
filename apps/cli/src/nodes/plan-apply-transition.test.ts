@@ -232,12 +232,12 @@ describe("plan-to-apply transition: humanApprovalNode", () => {
           action: "plan_approved",
         }),
       );
+      // Tier C: dropped redundant toBeDefined() — find!() at the find site
       const logCalls = vi.mocked(log).mock.calls;
       const approvedCall = logCalls.find(
         (call) => (call[0] as any).action === "plan_approved",
-      );
-      expect(approvedCall).toBeDefined();
-      const extras = (approvedCall![0] as any).extras as
+      )!;
+      const extras = (approvedCall[0] as any).extras as
         | Record<string, unknown>
         | undefined;
       // Story 42.2d: audit trail now includes approval source
@@ -357,12 +357,17 @@ describe("plan-to-apply transition: error messages registry", () => {
   });
 
   it("StateMismatch entry has all three structured fields (what/why/howToFix)", () => {
-    const entry = defaultErrorMessageRegistry.get("StateMismatch");
-
-    expect(entry).toBeDefined();
-    expect(entry!.what).toBeTruthy();
-    expect(entry!.why).toBeTruthy();
-    expect(entry!.howToFix).toBeTruthy();
+    // Tier C: dropped redundant toBeDefined() — toMatchObject locks all
+    // three string fields in one assertion
+    const entry = defaultErrorMessageRegistry.get("StateMismatch")!;
+    expect(entry).toMatchObject({
+      what: expect.any(String),
+      why: expect.any(String),
+      howToFix: expect.any(String),
+    });
+    expect(entry.what.length).toBeGreaterThan(0);
+    expect(entry.why.length).toBeGreaterThan(0);
+    expect(entry.howToFix.length).toBeGreaterThan(0);
   });
 
   it('resolves error message string containing "already exists" to AlreadyExists entry', () => {

@@ -18,8 +18,11 @@ const VALID_CONFIG = {
 
 describe("createCloudControlClient", () => {
   it("returns a CloudControlClient when config is valid", () => {
+    // Tier C: strengthened — assert it's a real object, not just defined.
+    // The shape varies by SDK version so we don't assert specific methods.
     const client = createCloudControlClient(VALID_CONFIG);
-    expect(client).toBeDefined();
+    expect(client).toBeInstanceOf(Object);
+    expect(client).not.toBeNull();
   });
 
   it("throws ConfigurationError when accessKeyId is empty", () => {

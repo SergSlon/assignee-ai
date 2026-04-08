@@ -280,9 +280,15 @@ describe("plan_resource for all 23 resource types (Story E2E.2 AC1)", () => {
       expect(result.isError).toBeFalsy();
       const body = parseResult(result);
       expect(body.resourceType).toBe(fixture.cfnType);
-      expect(body.desiredState).toBeDefined();
-      expect(body.checkpointPath).toBeDefined();
+      // Tier C: strengthened — desiredState must be a plain object.
+      // Some resource types (e.g. AWS::EC2::InternetGateway) legitimately
+      // have empty desiredState because their only optional property is
+      // Tags, so we don't enforce a non-zero key count here.
+      expect(body.desiredState).toBeInstanceOf(Object);
+      expect(Array.isArray(body.desiredState)).toBe(false);
+      // Tier C: dropped redundant toBeDefined() — typeof string is stronger
       expect(typeof body.checkpointPath).toBe("string");
+      expect(body.checkpointPath).toContain("checkpoint-");
     });
   }
 
@@ -323,6 +329,8 @@ describe("plan_resource for all 23 resource types (Story E2E.2 AC1)", () => {
     expect(result.isError).toBe(true);
     const body = parseResult(result);
     expect(body.status).toBe("UNSUPPORTED_RESOURCE");
-    expect(body.hint).toBeDefined();
+    // Tier C: strengthened — hint must be a non-empty string
+    expect(typeof body.hint).toBe("string");
+    expect(body.hint.length).toBeGreaterThan(0);
   });
 });

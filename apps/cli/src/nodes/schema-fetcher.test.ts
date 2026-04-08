@@ -59,7 +59,8 @@ describe("schemaFetcherNode", () => {
     const result = await schemaFetcherNode(makeState());
 
     expect(mockGetSchema).toHaveBeenCalledWith("AWS::S3::Bucket");
-    expect(result.resourceSchema).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — subsequent property
+    // accesses fail naturally on undefined
     const schema = result.resourceSchema as Record<string, unknown>;
     // Adapter should strip `handlers`
     expect(schema["handlers"]).toBeUndefined();

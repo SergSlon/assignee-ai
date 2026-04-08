@@ -246,8 +246,11 @@ describe("computeManifest", () => {
       expect(key).not.toContain("\\");
       expect(key).toContain("/");
     }
-    expect(manifest.files["s3/BP-S3-001.yaml"]).toBeDefined();
-    expect(manifest.files["ec2/BP-EC2-001.yaml"]).toBeDefined();
+    // Tier C: strengthened — assert the file entry has a non-empty hash
+    // string, not just defined-ness. The manifest stores SHA-256 hashes,
+    // so we can lock in the shape (hex string of length 64).
+    expect(manifest.files["s3/BP-S3-001.yaml"]).toMatch(/^[0-9a-f]{64}$/);
+    expect(manifest.files["ec2/BP-EC2-001.yaml"]).toMatch(/^[0-9a-f]{64}$/);
   });
 });
 
@@ -454,8 +457,9 @@ describe("walkBpFiles TOCTOU race resilience (M-R5)", () => {
     const manifest = computeManifest(dir);
     // The two real files are still hashed.
     expect(manifest.count).toBe(2);
-    expect(manifest.files["s3/BP-S3-001.yaml"]).toBeDefined();
-    expect(manifest.files["s3/BP-S3-002.yaml"]).toBeDefined();
+    // Tier C: strengthened — assert the SHA-256 hex shape
+    expect(manifest.files["s3/BP-S3-001.yaml"]).toMatch(/^[0-9a-f]{64}$/);
+    expect(manifest.files["s3/BP-S3-002.yaml"]).toMatch(/^[0-9a-f]{64}$/);
     // The broken file is silently absent — never half-recorded.
     expect(manifest.files["s3/BP-S3-999-disappeared.yaml"]).toBeUndefined();
   });
@@ -487,7 +491,8 @@ describe("walkBpFiles TOCTOU race resilience (M-R5)", () => {
     expect(() => computeManifest(dir)).not.toThrow();
     const m = computeManifest(dir);
     expect(m.count).toBe(1);
-    expect(m.files["s3/BP-S3-001.yaml"]).toBeDefined();
+    // Tier C: strengthened — SHA-256 hex
+    expect(m.files["s3/BP-S3-001.yaml"]).toMatch(/^[0-9a-f]{64}$/);
   });
 });
 
@@ -651,11 +656,14 @@ describe("verifyManifest signature propagation", () => {
     writeFileSync(refPath, JSON.stringify(computed));
 
     const result = verifyManifest(computed, refPath);
+    // Tier C: dropped redundant toBeDefined() — toMatchObject locks all
+    // three signature subfields in one assertion
     expect(result.valid).toBe(true);
-    expect(result.signature).toBeDefined();
-    expect(result.signature!.verified).toBe(false);
-    expect(result.signature!.signaturePresent).toBe(false);
-    expect(result.signature!.reason).toBe("signature file missing");
+    expect(result.signature).toMatchObject({
+      verified: false,
+      signaturePresent: false,
+      reason: "signature file missing",
+    });
   });
 
   it("attaches signature result on hash-mismatch failures too", () => {
@@ -671,9 +679,11 @@ describe("verifyManifest signature propagation", () => {
     writeFileSync(refPath, JSON.stringify(tampered));
 
     const result = verifyManifest(computed, refPath);
+    // Tier C: dropped redundant toBeDefined()
     expect(result.valid).toBe(false);
-    expect(result.signature).toBeDefined();
-    expect(result.signature!.signaturePresent).toBe(false);
+    expect(result.signature).toMatchObject({
+      signaturePresent: false,
+    });
   });
 
   it("omits signature when reference is missing (no file to verify against)", () => {

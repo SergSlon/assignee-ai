@@ -35,12 +35,15 @@ describe("apiGatewayV2Plugin", () => {
   });
 
   it("Name field is required", () => {
+    // Tier C: strengthened — find!() + toMatchObject
     const field = apiGatewayV2Plugin.commonFields.find(
       (f) => f.name === "Name",
-    );
-    expect(field).toBeDefined();
-    expect(field?.required).toBe(true);
-    expect(field?.question.type).toBe("string");
+    )!;
+    expect(field).toMatchObject({
+      name: "Name",
+      required: true,
+      question: { type: "string" },
+    });
   });
 
   describe("Name validation", () => {
@@ -48,26 +51,35 @@ describe("apiGatewayV2Plugin", () => {
       (f) => f.name === "Name",
     )!;
 
-    it("rejects empty value", () => {
-      expect(field.question.validate?.("")).toBeDefined();
+    it("rejects empty value with 'required' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("")).toBe("API name is required");
     });
 
     it("accepts valid API name", () => {
       expect(field.question.validate?.("my-http-api")).toBeUndefined();
     });
 
-    it("rejects name longer than 128 characters", () => {
-      expect(field.question.validate?.("a".repeat(129))).toBeDefined();
+    it("rejects name longer than 128 characters with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("a".repeat(129))).toBe(
+        "API name must be 128 characters or fewer",
+      );
+    });
+
+    it("accepts exactly 128 chars (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("a".repeat(128))).toBeUndefined();
     });
   });
 
   it("ProtocolType field is enum with HTTP and WEBSOCKET options", () => {
+    // Tier C: strengthened
     const field = apiGatewayV2Plugin.commonFields.find(
       (f) => f.name === "ProtocolType",
-    );
-    expect(field).toBeDefined();
-    expect(field?.question.type).toBe("enum");
-    const values = field?.question.options?.map((o) => o.value);
+    )!;
+    expect(field.question.type).toBe("enum");
+    const values = field.question.options!.map((o) => o.value);
     expect(values).toContain("HTTP");
     expect(values).toContain("WEBSOCKET");
   });
@@ -121,13 +133,13 @@ describe("apiGatewayV2Plugin", () => {
     expect(field?.question.initialValue).toBe("$request.method $request.path");
   });
 
-  it("Tags field is string type with toCfn transform", () => {
+  it("Tags field is string type with callable toCfn transform", () => {
+    // Tier C: strengthened — find!() + function-ness check
     const field = apiGatewayV2Plugin.commonFields.find(
       (f) => f.name === "Tags",
-    );
-    expect(field).toBeDefined();
-    expect(field?.question.type).toBe("string");
-    expect(field?.toCfn).toBeDefined();
+    )!;
+    expect(field.question.type).toBe("string");
+    expect(typeof field.toCfn).toBe("function");
   });
 
   describe("Tags toCfn transform", () => {
@@ -163,9 +175,12 @@ describe("apiGatewayV2Plugin", () => {
     });
   });
 
-  it("configHints are present and non-empty", () => {
-    expect(apiGatewayV2Plugin.configHints).toBeDefined();
-    expect(apiGatewayV2Plugin.configHints!.length).toBeGreaterThanOrEqual(3);
+  it("configHints has at least 4 entries (Tier C: was toBeDefined+>=3)", () => {
+    // Tier C: strengthened — toBeInstanceOf + raised floor since the file's
+    // own subsequent tests verify 4 distinct hint topics, so 4 is the
+    // natural floor.
+    expect(apiGatewayV2Plugin.configHints).toBeInstanceOf(Array);
+    expect(apiGatewayV2Plugin.configHints!.length).toBeGreaterThanOrEqual(4);
   });
 
   it("configHints cover ProtocolType semantics", () => {

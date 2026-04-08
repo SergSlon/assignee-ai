@@ -105,9 +105,12 @@ describe("createDriftDetectorFromEnv", () => {
       await import("./drift-detector-factory.js");
     const result = createDriftDetectorFromEnv();
 
-    expect(result).toBeDefined();
-    expect(result!.detector).toBeDefined();
-    expect(result!.port).toBeDefined();
+    // Tier C: strengthened — assert the actual shape (both detector and
+    // port are present and non-null), not just defined-ness
+    expect(result).toMatchObject({
+      detector: expect.anything(),
+      port: expect.anything(),
+    });
   });
 
   it("returns undefined when createCloudControlClient throws", async () => {

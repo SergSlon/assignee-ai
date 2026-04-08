@@ -14,19 +14,21 @@ describe("wizard-recommendations — Lambda rules", () => {
       "build an api gateway handler",
       RESOURCE_TYPES.LAMBDA_FUNCTION,
     );
-    const rec = recs.find((r) => r.id === "lambda-low-memory-api");
-    expect(rec).toBeDefined();
-    expect(rec!.severity).toBe("info");
-    expect(rec!.message).toContain("256+ MB");
+    // Tier C: dropped redundant toBeDefined() — find!() at the find site
+    const rec = recs.find((r) => r.id === "lambda-low-memory-api")!;
+    expect(rec.severity).toBe("info");
+    expect(rec.message).toContain("256+ MB");
   });
 
   it("triggers lambda-low-memory-api when MemorySize is undefined and intent contains api", () => {
+    // Tier C: strengthened — assert recs contains the expected id by
+    // mapping to ids and using toContain
     const recs = evaluateWizardRecommendations(
       {},
       "api service",
       RESOURCE_TYPES.LAMBDA_FUNCTION,
     );
-    expect(recs.find((r) => r.id === "lambda-low-memory-api")).toBeDefined();
+    expect(recs.map((r) => r.id)).toContain("lambda-low-memory-api");
   });
 
   it("does not trigger lambda-low-memory-api when MemorySize=512", () => {
@@ -55,10 +57,10 @@ describe("wizard-recommendations — Lambda rules", () => {
       "any intent",
       RESOURCE_TYPES.LAMBDA_FUNCTION,
     );
-    const rec = recs.find((r) => r.id === "lambda-no-reserved-concurrency");
-    expect(rec).toBeDefined();
-    expect(rec!.severity).toBe("info");
-    expect(rec!.message).toContain("reserved concurrency");
+    // Tier C: dropped redundant toBeDefined() — find!()
+    const rec = recs.find((r) => r.id === "lambda-no-reserved-concurrency")!;
+    expect(rec.severity).toBe("info");
+    expect(rec.message).toContain("reserved concurrency");
   });
 
   it("triggers lambda-no-reserved-concurrency when ReservedConcurrentExecutions is empty string", () => {

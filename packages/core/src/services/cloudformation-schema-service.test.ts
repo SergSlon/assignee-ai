@@ -320,7 +320,10 @@ describe("CloudFormationSchemaService", () => {
       const service = await createService();
       expect(service).toBeInstanceOf(CloudFormationSchemaService);
       expect(lastClientConfig).not.toBeNull();
-      expect(lastClientConfig!.credentialDefaultProvider).toBeDefined();
+      // Tier C: strengthened — assert it's a callable function, not just defined
+      expect(typeof lastClientConfig!.credentialDefaultProvider).toBe(
+        "function",
+      );
     });
 
     it("credentialDefaultProvider throws MissingAssigneeCredentialsError when reader env unset", async () => {

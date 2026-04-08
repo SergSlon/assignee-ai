@@ -30,8 +30,9 @@ describe("ecrRepositoryPlugin", () => {
       expect(field.required).toBe(true);
     });
 
-    it("rejects empty value", () => {
-      expect(field.question.validate?.("")).toBeDefined();
+    it("rejects empty value with 'required' error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("")).toBe("Repository name is required");
     });
 
     it("accepts valid repository name", () => {
@@ -42,16 +43,35 @@ describe("ecrRepositoryPlugin", () => {
       expect(field.question.validate?.("team/my-app")).toBeUndefined();
     });
 
-    it("rejects names shorter than 2 chars", () => {
-      expect(field.question.validate?.("a")).toBeDefined();
+    it("rejects names shorter than 2 chars with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("a")).toBe(
+        "Repository name must be 2-256 characters",
+      );
     });
 
-    it("rejects names longer than 256 chars", () => {
-      expect(field.question.validate?.("a".repeat(257))).toBeDefined();
+    it("rejects names longer than 256 chars with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("a".repeat(257))).toBe(
+        "Repository name must be 2-256 characters",
+      );
     });
 
-    it("rejects names with uppercase", () => {
-      expect(field.question.validate?.("MyApp")).toBeDefined();
+    it("accepts exactly 256 chars (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("a".repeat(256))).toBeUndefined();
+    });
+
+    it("accepts exactly 2 chars (lower boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("ab")).toBeUndefined();
+    });
+
+    it("rejects names with uppercase with charset error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("MyApp")).toBe(
+        "Must start with lowercase letter/number and contain only lowercase letters, numbers, hyphens, underscores, forward slashes, and periods",
+      );
     });
   });
 
@@ -86,11 +106,12 @@ describe("ecrRepositoryPlugin", () => {
     });
   });
 
-  it("Tags field has toCfn transform", () => {
+  it("Tags field has callable toCfn transform", () => {
+    // Tier C: strengthened — find!() + function-ness
     const field = ecrRepositoryPlugin.commonFields.find(
       (f) => f.name === "Tags",
-    );
-    expect(field?.toCfn).toBeDefined();
+    )!;
+    expect(typeof field.toCfn).toBe("function");
   });
 
   describe("Tags toCfn transform", () => {
@@ -142,8 +163,11 @@ describe("ecrRepositoryPlugin", () => {
       ).toBeUndefined();
     });
 
-    it("rejects invalid ARN", () => {
-      expect(field.question.validate?.("not-a-kms-arn")).toBeDefined();
+    it("rejects invalid ARN with KMS-format error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("not-a-kms-arn")).toBe(
+        "Must be a KMS key ARN (arn:aws:kms:...)",
+      );
     });
   });
 

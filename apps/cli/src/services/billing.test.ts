@@ -61,11 +61,12 @@ describe("fetchBillingData", () => {
 
     const result = await fetchBillingData([sampleResource], tools);
 
+    // Tier C: dropped redundant toBeDefined() — get returns undefined
+    // for missing keys; the toBe() asserts fail naturally with `!`
     expect(result.size).toBe(1);
-    const entry = result.get(sampleResource.arn);
-    expect(entry).toBeDefined();
-    expect(entry!.actualMonthlyCost).toBe("$0.02/month");
-    expect(entry!.currency).toBe("USD");
+    const entry = result.get(sampleResource.arn)!;
+    expect(entry.actualMonthlyCost).toBe("$0.02/month");
+    expect(entry.currency).toBe("USD");
   });
 
   it("returns multiple resources from MCP tools", async () => {
@@ -102,11 +103,11 @@ describe("fetchBillingData", () => {
 
     const result = await fetchBillingData([sampleResource]);
 
+    // Tier C: dropped redundant toBeDefined()
     expect(result.size).toBe(1);
-    const entry = result.get(sampleResource.arn);
-    expect(entry).toBeDefined();
-    expect(entry!.actualMonthlyCost).toBe("$0.05/month");
-    expect(entry!.forecastedMonthlyCost).toBe("$0.05/month");
+    const entry = result.get(sampleResource.arn)!;
+    expect(entry.actualMonthlyCost).toBe("$0.05/month");
+    expect(entry.forecastedMonthlyCost).toBe("$0.05/month");
   });
 
   it("falls back to provision log when MCP tools fail", async () => {

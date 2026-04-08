@@ -14,27 +14,29 @@ describe("ec2PricingDecomposer", () => {
   it("returns compute + data transfer for minimal desiredState", () => {
     const items = ec2PricingDecomposer.decompose({});
 
-    // Compute always present
-    const compute = items.find((i) => i.label === "Compute");
-    expect(compute).toBeDefined();
-    expect(compute!.serviceCode).toBe("AmazonEC2");
-    expect(compute!.kind).toBe("fixed");
-    expect(compute!.priceUnit).toBe("/hr");
-    // Default instance type when not specified
-    expect(compute!.description).toBe("t3.micro");
-    expect(compute!.filters).toEqual(
+    // Compute always present — Tier C: drop redundant toBeDefined() in
+    // favor of toMatchObject which locks the full expected shape.
+    const compute = items.find((i) => i.label === "Compute")!;
+    expect(compute).toMatchObject({
+      serviceCode: "AmazonEC2",
+      kind: "fixed",
+      priceUnit: "/hr",
+      description: "t3.micro", // Default instance type when not specified
+    });
+    expect(compute.filters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ Field: "instanceType", Value: "t3.micro" }),
         expect.objectContaining({ Field: "operatingSystem", Value: "Linux" }),
       ]),
     );
 
-    // Data transfer always present
-    const dt = items.find((i) => i.label === "Data transfer out");
-    expect(dt).toBeDefined();
-    expect(dt!.kind).toBe("usage_based");
-    expect(dt!.quantity).toBe(0);
-    expect(dt!.serviceCode).toBe("AWSDataTransfer");
+    // Data transfer always present — Tier C: same pattern
+    const dt = items.find((i) => i.label === "Data transfer out")!;
+    expect(dt).toMatchObject({
+      kind: "usage_based",
+      quantity: 0,
+      serviceCode: "AWSDataTransfer",
+    });
 
     // No EBS storage without BlockDeviceMappings
     const storage = items.find((i) => i.label === "Storage");
@@ -73,14 +75,16 @@ describe("ec2PricingDecomposer", () => {
       ],
     });
 
-    const storage = items.find((i) => i.label === "Storage");
-    expect(storage).toBeDefined();
-    expect(storage!.quantity).toBe(50);
-    expect(storage!.unit).toBe("GB");
-    expect(storage!.serviceCode).toBe("AmazonEC2");
-    expect(storage!.description).toBe("50 GB gp3");
-    expect(storage!.priceUnit).toBe("/GB-mo");
-    expect(storage!.filters).toEqual(
+    const storage = items.find((i) => i.label === "Storage")!;
+    // Tier C: dropped redundant toBeDefined() — toMatchObject locks shape
+    expect(storage).toMatchObject({
+      quantity: 50,
+      unit: "GB",
+      serviceCode: "AmazonEC2",
+      description: "50 GB gp3",
+      priceUnit: "/GB-mo",
+    });
+    expect(storage.filters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ Field: "productFamily", Value: "Storage" }),
         expect.objectContaining({ Field: "volumeApiName", Value: "gp3" }),
@@ -93,10 +97,12 @@ describe("ec2PricingDecomposer", () => {
       BlockDeviceMappings: [{ Ebs: {} }],
     });
 
-    const storage = items.find((i) => i.label === "Storage");
-    expect(storage).toBeDefined();
-    expect(storage!.quantity).toBe(8);
-    expect(storage!.description).toBe("8 GB gp3");
+    const storage = items.find((i) => i.label === "Storage")!;
+    // Tier C: dropped redundant toBeDefined()
+    expect(storage).toMatchObject({
+      quantity: 8,
+      description: "8 GB gp3",
+    });
   });
 
   it("includes public IPv4 when AssociatePublicIpAddress is true", () => {
@@ -105,12 +111,14 @@ describe("ec2PricingDecomposer", () => {
       AssociatePublicIpAddress: true,
     });
 
-    const ipv4 = items.find((i) => i.label === "Public IPv4");
-    expect(ipv4).toBeDefined();
-    expect(ipv4!.serviceCode).toBe("AmazonVPC");
-    expect(ipv4!.kind).toBe("fixed");
-    expect(ipv4!.priceUnit).toBe("/hr");
-    expect(ipv4!.filters).toEqual(
+    const ipv4 = items.find((i) => i.label === "Public IPv4")!;
+    // Tier C: dropped redundant toBeDefined() — toMatchObject locks shape
+    expect(ipv4).toMatchObject({
+      serviceCode: "AmazonVPC",
+      kind: "fixed",
+      priceUnit: "/hr",
+    });
+    expect(ipv4.filters).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           Field: "productFamily",

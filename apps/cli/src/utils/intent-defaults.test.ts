@@ -172,17 +172,16 @@ describe("getIntentDefaults", () => {
       "Create an EC2 with SSH",
       RESOURCE_TYPES.EC2_INSTANCE,
     );
+    // Tier C: dropped redundant toBeDefined() — find!()
     const keyNameOverride = overrides.find(
       (o) => o.fieldName === CfnKey.KEY_NAME,
-    );
+    )!;
     const publicIpOverride = overrides.find(
       (o) => o.fieldName === CfnKey.ASSOCIATE_PUBLIC_IP,
-    );
-    expect(keyNameOverride).toBeDefined();
-    expect(keyNameOverride!.value).toBe(ResourceDefault.SSH_KEY_PLACEHOLDER);
-    expect(publicIpOverride).toBeDefined();
-    expect(publicIpOverride!.value).toBe(true);
-    expect(publicIpOverride!.reason).toContain("SSH bundle");
+    )!;
+    expect(keyNameOverride.value).toBe(ResourceDefault.SSH_KEY_PLACEHOLDER);
+    expect(publicIpOverride.value).toBe(true);
+    expect(publicIpOverride.reason).toContain("SSH bundle");
   });
 
   it('EC2 "ssh into" intent returns SSH bundle overrides', () => {

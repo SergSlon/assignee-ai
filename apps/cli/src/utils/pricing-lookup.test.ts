@@ -68,7 +68,7 @@ describe("fetchEc2InstancePrices", () => {
     } as unknown as StructuredTool;
 
     const result = await fetchEc2InstancePrices([tool], ["t3.micro"]);
-    expect(result["t3.micro"]).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — toMatch fails on undefined
     expect(result["t3.micro"]).toMatch(/^\$[\d.]+\/hr$/);
   });
 
@@ -147,7 +147,7 @@ describe("fetchRdsInstancePrices", () => {
       ["db.t3.micro"],
       "postgres",
     );
-    expect(result["db.t3.micro"]).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — toMatch fails on undefined
     expect(result["db.t3.micro"]).toMatch(/^\$[\d.]+\/hr$/);
   });
 
@@ -163,7 +163,7 @@ describe("fetchRdsInstancePrices", () => {
     const callArgs = mockFn.mock.calls[0]?.[0] as {
       filters: Array<{ Field: string }>;
     };
-    expect(callArgs).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — .filters access fails on undefined
     const hasDeployment = callArgs.filters.some(
       (f) => f.Field === "deploymentOption",
     );
@@ -182,7 +182,7 @@ describe("fetchRdsInstancePrices", () => {
     const callArgs = mockFn.mock.calls[0]?.[0] as {
       filters: Array<{ Field: string }>;
     };
-    expect(callArgs).toBeDefined();
+    // Tier C: dropped redundant toBeDefined() — .filters access fails on undefined
     const hasDeployment = callArgs.filters.some(
       (f) => f.Field === "deploymentOption",
     );

@@ -30,16 +30,18 @@ describe("natGatewayPlugin", () => {
   });
 
   it("ConnectivityType defaults to 'public'", () => {
+    // Tier C: strengthened — toMatchObject locks the shape; options
+    // assertion is now driven from values directly so the
+    // toBeDefined() pre-check is unnecessary.
     const field = natGatewayPlugin.commonFields.find(
       (f) => f.name === "ConnectivityType",
     )!;
-    expect(field.question.initialValue).toBe("public");
-    expect(field.question.type).toBe("enum");
-    expect(field.question.options).toBeDefined();
-    expect(field.question.options!.length).toBe(2);
+    expect(field.question).toMatchObject({
+      type: "enum",
+      initialValue: "public",
+    });
     const values = field.question.options!.map((o) => o.value);
-    expect(values).toContain("public");
-    expect(values).toContain("private");
+    expect(values).toEqual(["public", "private"]);
   });
 
   it("all commonField question types are valid QuestionType values", () => {
@@ -70,14 +72,22 @@ describe("natGatewayPlugin", () => {
   });
 
   it("MaxDrainDurationSeconds validates range", () => {
+    // Tier C: strengthened — every error path now asserts the actual
+    // message + boundary tests added for both ends of the 1..4000 range
     const field = natGatewayPlugin.advancedFields.find(
       (f) => f.name === "MaxDrainDurationSeconds",
     )!;
+    const expectedErr = "Must be between 1 and 4000 seconds";
+    // Valid values
     expect(field.question.validate!("100")).toBeUndefined();
-    expect(field.question.validate!("0")).toBeDefined();
-    expect(field.question.validate!("5000")).toBeDefined();
-    expect(field.question.validate!("abc")).toBeDefined();
-    expect(field.question.validate!("")).toBeUndefined();
+    expect(field.question.validate!("1")).toBeUndefined(); // lower boundary
+    expect(field.question.validate!("4000")).toBeUndefined(); // upper boundary
+    expect(field.question.validate!("")).toBeUndefined(); // empty is allowed (optional)
+    // Invalid values
+    expect(field.question.validate!("0")).toBe(expectedErr);
+    expect(field.question.validate!("5000")).toBe(expectedErr);
+    expect(field.question.validate!("4001")).toBe(expectedErr); // just above upper
+    expect(field.question.validate!("abc")).toBe(expectedErr);
   });
 
   // ── defaults ──────────────────────────────────────────────────────────
@@ -88,9 +98,11 @@ describe("natGatewayPlugin", () => {
 
   // ── configHints ───────────────────────────────────────────────────────
 
-  it("has configHints", () => {
-    expect(natGatewayPlugin.configHints).toBeDefined();
-    expect(natGatewayPlugin.configHints!.length).toBeGreaterThan(0);
+  it("has at least 4 configHints (Tier C: was toBeDefined+>0)", () => {
+    // Tier C: strengthened — meaningful floor; the file's own subsequent
+    // tests verify 4 specific hint topics so 4 is the natural floor.
+    expect(natGatewayPlugin.configHints).toBeInstanceOf(Array);
+    expect(natGatewayPlugin.configHints!.length).toBeGreaterThanOrEqual(4);
   });
 
   it("configHints mention public subnet requirement", () => {
@@ -118,8 +130,9 @@ describe("natGatewayPlugin", () => {
   describe("Tags toCfn transform", () => {
     const field = natGatewayPlugin.commonFields.find((f) => f.name === "Tags")!;
 
-    it("Tags field has toCfn transform", () => {
-      expect(field.toCfn).toBeDefined();
+    it("Tags field has callable toCfn transform", () => {
+      // Tier C: strengthened — assert function-ness, not just defined
+      expect(typeof field.toCfn).toBe("function");
     });
 
     it("transforms comma-separated pairs", () => {
@@ -168,18 +181,24 @@ describe("natGatewayPlugin", () => {
     });
 
     it("NatGateway AllocationId references the EIP via Fn::GetAtt", () => {
+      // Tier C: strengthened — assert the actual GetAtt shape, not just
+      // existence. The CFN Fn::GetAtt is a 2-element array
+      // [logicalId, attribute] and the attribute MUST be "AllocationId"
+      // for the reference to actually wire up the EIP.
       const result = natGatewayPlugin.toCfn!({
         SubnetId: "subnet-abc123",
         ConnectivityType: "public",
       }) as CfnOutput[];
 
       const natGw = result.find((r) => r.type === "AWS::EC2::NatGateway")!;
-      expect(natGw.properties["AllocationId"]).toBeDefined();
       const allocationRef = natGw.properties["AllocationId"] as Record<
         string,
         unknown
       >;
-      expect(allocationRef["Fn::GetAtt"]).toBeDefined();
+      expect(allocationRef).toBeInstanceOf(Object);
+      const getAtt = allocationRef["Fn::GetAtt"];
+      expect(getAtt).toBeInstanceOf(Array);
+      expect((getAtt as unknown[])[1]).toBe("AllocationId");
     });
 
     it("NatGateway includes SubnetId and ConnectivityType", () => {

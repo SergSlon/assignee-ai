@@ -37,12 +37,13 @@ async function createTestServerAndClient() {
 }
 
 describe("MCP Server", () => {
-  it("should instantiate without error", () => {
+  it("should instantiate as an McpServer", () => {
+    // Tier C: strengthened — assert it's actually an McpServer instance
     const server = new McpServer({
       name: "assignee-ai-test",
       version: "0.1.0",
     });
-    expect(server).toBeDefined();
+    expect(server).toBeInstanceOf(McpServer);
   });
 
   it("should register all 5 tools", async () => {
@@ -67,7 +68,8 @@ describe("MCP Server", () => {
     const result = await client.listTools();
 
     for (const tool of result.tools) {
-      expect(tool.inputSchema).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — `type` access fails
+      // naturally on undefined and the .toBe("object") check is stronger
       expect(tool.inputSchema.type).toBe("object");
       expect(typeof tool.inputSchema.properties).toBe("object");
     }
@@ -79,7 +81,8 @@ describe("MCP Server", () => {
     const result = await client.listTools();
 
     for (const tool of result.tools) {
-      expect(tool.description).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — typeof string strictly
+      // stronger
       expect(typeof tool.description).toBe("string");
       expect(tool.description!.length).toBeGreaterThan(0);
     }
@@ -90,11 +93,11 @@ describe("MCP Server", () => {
       const { client } = await createTestServerAndClient();
 
       const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === "plan_resource");
+      const tool = result.tools.find((t) => t.name === "plan_resource")!;
 
-      expect(tool).toBeDefined();
-      expect(tool!.inputSchema.properties).toHaveProperty("description");
-      expect(tool!.inputSchema.required).toContain("description");
+      // Tier C: dropped redundant toBeDefined() — find!() at the find site
+      expect(tool.inputSchema.properties).toHaveProperty("description");
+      expect(tool.inputSchema.required).toContain("description");
     });
 
     it("should have optional 'region' and 'env' parameters", async () => {
@@ -128,11 +131,11 @@ describe("MCP Server", () => {
       const { client } = await createTestServerAndClient();
 
       const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === "apply_plan");
+      const tool = result.tools.find((t) => t.name === "apply_plan")!;
 
-      expect(tool).toBeDefined();
-      expect(tool!.inputSchema.required).toContain("checkpointPath");
-      expect(tool!.inputSchema.required).toContain("confirmed");
+      // Tier C: dropped redundant toBeDefined()
+      expect(tool.inputSchema.required).toContain("checkpointPath");
+      expect(tool.inputSchema.required).toContain("confirmed");
     });
 
     it("should reject unconfirmed apply with safety error", async () => {
@@ -161,11 +164,11 @@ describe("MCP Server", () => {
       const result = await client.listTools();
       const tool = result.tools.find(
         (t) => t.name === "list_managed_resources",
-      );
+      )!;
 
-      expect(tool).toBeDefined();
-      expect(tool!.inputSchema.properties).toHaveProperty("region");
-      expect(tool!.inputSchema.properties).toHaveProperty("resourceType");
+      // Tier C: dropped redundant toBeDefined()
+      expect(tool.inputSchema.properties).toHaveProperty("region");
+      expect(tool.inputSchema.properties).toHaveProperty("resourceType");
     });
   });
 
@@ -174,10 +177,10 @@ describe("MCP Server", () => {
       const { client } = await createTestServerAndClient();
 
       const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === "estimate_cost");
+      const tool = result.tools.find((t) => t.name === "estimate_cost")!;
 
-      expect(tool).toBeDefined();
-      expect(tool!.inputSchema.required).toContain("description");
+      // Tier C: dropped redundant toBeDefined()
+      expect(tool.inputSchema.required).toContain("description");
     });
   });
 });

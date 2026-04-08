@@ -44,18 +44,23 @@ const TYPE_TO_KEYWORD: Record<string, string> = {
 };
 
 describe("cross-system consistency", () => {
-  it("has keyword mapping for every supported type", () => {
+  it("has non-empty keyword mapping for every supported type", () => {
+    // Tier C: strengthened — assert keyword is a non-empty string, not
+    // just defined (which would pass for any literal)
     for (const type of SUPPORTED_TYPES_ARRAY) {
-      expect(TYPE_TO_KEYWORD[type]).toBeDefined();
+      const keyword = TYPE_TO_KEYWORD[type];
+      expect(typeof keyword).toBe("string");
+      expect(keyword!.length).toBeGreaterThan(0);
     }
   });
 
   describe("every resource type is classifiable by keyword", () => {
     for (const type of SUPPORTED_TYPES_ARRAY) {
       it(`classifies "${TYPE_TO_KEYWORD[type]}" as ${type}`, () => {
-        const keyword = TYPE_TO_KEYWORD[type];
-        expect(keyword).toBeDefined();
-        expect(classifyResourceType(keyword!)).toBe(type);
+        // Tier C: dropped redundant toBeDefined() — non-null assertion at
+        // the read site fails naturally if the map is missing the type
+        const keyword = TYPE_TO_KEYWORD[type]!;
+        expect(classifyResourceType(keyword)).toBe(type);
       });
     }
   });

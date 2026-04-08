@@ -13,7 +13,8 @@ function assertAllFieldsHaveHints(plugin: ResourcePlugin, pluginName: string) {
 
   for (const field of allFields) {
     it(`${pluginName} → ${field.name} has a non-empty hint (≥${MIN_HINT_LENGTH} chars)`, () => {
-      expect(field.question.hint).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — typeof string check
+      // already requires the value to be defined AND a string.
       expect(typeof field.question.hint).toBe("string");
       expect(field.question.hint!.length).toBeGreaterThanOrEqual(
         MIN_HINT_LENGTH,

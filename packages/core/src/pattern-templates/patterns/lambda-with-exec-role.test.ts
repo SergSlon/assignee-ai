@@ -56,11 +56,16 @@ describe("lambdaWithExecRolePattern — structure", () => {
     ]);
   });
 
-  it("has defaultOptions for both resources", () => {
-    expect(
-      lambdaWithExecRolePattern.defaultOptions[R.IAM_EXECUTION_ROLE],
-    ).toBeDefined();
-    expect(lambdaWithExecRolePattern.defaultOptions[R.LAMBDA_FN]).toBeDefined();
+  it("has non-empty defaultOptions for both resources", () => {
+    // Tier C: strengthened — assert keys count > 0, not just defined
+    const roleOpts = lambdaWithExecRolePattern.defaultOptions[
+      R.IAM_EXECUTION_ROLE
+    ] as Record<string, unknown>;
+    const lambdaOpts = lambdaWithExecRolePattern.defaultOptions[
+      R.LAMBDA_FN
+    ] as Record<string, unknown>;
+    expect(Object.keys(roleOpts).length).toBeGreaterThan(0);
+    expect(Object.keys(lambdaOpts).length).toBeGreaterThan(0);
   });
 
   it("IAM Role default has the canonical Lambda trust policy", () => {

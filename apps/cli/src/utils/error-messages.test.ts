@@ -458,10 +458,10 @@ describe("ErrorMessageRegistry — resolveMessage", () => {
 
 describe("ErrorMessageRegistry — MISSING_INTENT", () => {
   it("MISSING_INTENT entry exists and has actionable howToFix", () => {
-    const entry = defaultErrorMessageRegistry.get("MISSING_INTENT");
-    expect(entry).toBeDefined();
-    expect(entry!.code).toBe("MISSING_INTENT");
-    expect(entry!.howToFix).toContain("assignee plan");
+    // Tier C: dropped redundant toBeDefined() — get!() + property accesses
+    const entry = defaultErrorMessageRegistry.get("MISSING_INTENT")!;
+    expect(entry.code).toBe("MISSING_INTENT");
+    expect(entry.howToFix).toContain("assignee plan");
   });
 });
 

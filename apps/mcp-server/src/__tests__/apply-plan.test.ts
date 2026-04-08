@@ -152,7 +152,9 @@ describe("apply_plan tool", () => {
       );
       expect(body.error).toBe(true);
       expect(body.message).toContain("explicit confirmation");
-      expect(body.hint).toBeDefined();
+      // Tier C: strengthened — hint must be a non-empty string
+      expect(typeof body.hint).toBe("string");
+      expect(body.hint.length).toBeGreaterThan(0);
     });
 
     it("should include hint about reviewing the plan first", async () => {
@@ -703,7 +705,7 @@ describe("apply_plan tool", () => {
         configurable: Record<string, string>;
       };
       expect(config.recursionLimit).toBe(500);
-      expect(config.configurable).toBeDefined();
+      // Tier C: dropped redundant toBeDefined() — toContain fails on undefined
       expect(config.configurable["thread_id"]).toContain("mcp-apply");
     });
 

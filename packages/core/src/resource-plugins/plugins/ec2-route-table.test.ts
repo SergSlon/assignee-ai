@@ -21,22 +21,25 @@ describe("routeTablePlugin", () => {
     }
   });
 
-  it("VpcId field exists and is required", () => {
-    const field = routeTablePlugin.commonFields.find((f) => f.name === "VpcId");
-    expect(field).toBeDefined();
-    expect(field?.required).toBe(true);
-    expect(field?.question.type).toBe("enum");
-  });
-
-  it("VpcId field has discover-vpcs fetcher", () => {
-    const field = routeTablePlugin.commonFields.find((f) => f.name === "VpcId");
-    expect(field?.question.fetcher).toBe("discover-vpcs");
+  it("VpcId field exists, is required, and uses discover-vpcs fetcher", () => {
+    // Tier C: collapsed two related tests + strengthened with toMatchObject
+    const field = routeTablePlugin.commonFields.find(
+      (f) => f.name === "VpcId",
+    )!;
+    expect(field).toMatchObject({
+      name: "VpcId",
+      required: true,
+      question: { type: "enum", fetcher: "discover-vpcs" },
+    });
   });
 
   it("Tags field exists", () => {
-    const field = routeTablePlugin.commonFields.find((f) => f.name === "Tags");
-    expect(field).toBeDefined();
-    expect(field?.question.type).toBe("string");
+    // Tier C: strengthened — find!() + toMatchObject
+    const field = routeTablePlugin.commonFields.find((f) => f.name === "Tags")!;
+    expect(field).toMatchObject({
+      name: "Tags",
+      question: { type: "string" },
+    });
   });
 
   it("advancedFields is empty", () => {
@@ -47,9 +50,10 @@ describe("routeTablePlugin", () => {
     expect(routeTablePlugin.defaults).toEqual({});
   });
 
-  it("has configHints", () => {
-    expect(routeTablePlugin.configHints).toBeDefined();
-    expect(routeTablePlugin.configHints!.length).toBeGreaterThan(0);
+  it("has at least 1 configHint (Tier C: was toBeDefined+>0)", () => {
+    // Tier C: strengthened — meaningful floor
+    expect(routeTablePlugin.configHints).toBeInstanceOf(Array);
+    expect(routeTablePlugin.configHints!.length).toBeGreaterThanOrEqual(1);
   });
 
   it("configHints mention SubnetRouteTableAssociation immutability", () => {
@@ -58,16 +62,18 @@ describe("routeTablePlugin", () => {
     expect(hints).toContain("IMMUTABLE");
   });
 
-  it("has toCfn method", () => {
-    expect(routeTablePlugin.toCfn).toBeDefined();
+  it("has callable toCfn method", () => {
+    // Tier C: strengthened — already had typeof check; drop the redundant
+    // toBeDefined() pre-check.
     expect(typeof routeTablePlugin.toCfn).toBe("function");
   });
 
   describe("Tags toCfn transform", () => {
     const field = routeTablePlugin.commonFields.find((f) => f.name === "Tags")!;
 
-    it("Tags field has toCfn transform", () => {
-      expect(field.toCfn).toBeDefined();
+    it("Tags field has callable toCfn transform", () => {
+      // Tier C: strengthened — function-ness check
+      expect(typeof field.toCfn).toBe("function");
     });
 
     it("transforms comma-separated pairs", () => {

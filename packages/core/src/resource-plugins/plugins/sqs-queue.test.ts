@@ -34,36 +34,50 @@ describe("sqsQueuePlugin", () => {
       expect(field.question.validate?.("my-queue-123")).toBeUndefined();
     });
 
-    it("rejects names longer than 80 chars", () => {
-      expect(field.question.validate?.("a".repeat(81))).toBeDefined();
+    it("rejects names longer than 80 chars with length error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("a".repeat(81))).toBe(
+        "Queue name must be 1-80 characters",
+      );
     });
 
-    it("rejects names with special characters", () => {
-      expect(field.question.validate?.("my queue!")).toBeDefined();
+    it("accepts exactly 80 chars (boundary)", () => {
+      // Tier C: new boundary test
+      expect(field.question.validate?.("a".repeat(80))).toBeUndefined();
+    });
+
+    it("rejects names with special characters with charset error", () => {
+      // Tier C: strengthened from toBeDefined()
+      expect(field.question.validate?.("my queue!")).toBe(
+        "Queue name can only contain alphanumeric characters, hyphens, and underscores",
+      );
     });
   });
 
   it("FifoQueue is a boolean field", () => {
+    // Tier C: strengthened — find!() + toMatchObject
     const field = sqsQueuePlugin.commonFields.find(
       (f) => f.name === "FifoQueue",
-    );
-    expect(field).toBeDefined();
-    expect(field?.question.type).toBe("boolean");
-    expect(field?.question.initialValue).toBe(false);
+    )!;
+    expect(field).toMatchObject({
+      name: "FifoQueue",
+      question: { type: "boolean", initialValue: false },
+    });
   });
 
   it("MessageRetentionPeriod is an enum with 5 options", () => {
+    // Tier C: strengthened
     const field = sqsQueuePlugin.commonFields.find(
       (f) => f.name === "MessageRetentionPeriod",
-    );
-    expect(field).toBeDefined();
-    expect(field?.question.type).toBe("enum");
-    expect(field?.question.options).toHaveLength(5);
+    )!;
+    expect(field.question.type).toBe("enum");
+    expect(field.question.options).toHaveLength(5);
   });
 
-  it("Tags field has toCfn transform", () => {
-    const field = sqsQueuePlugin.commonFields.find((f) => f.name === "Tags");
-    expect(field?.toCfn).toBeDefined();
+  it("Tags field has callable toCfn transform", () => {
+    // Tier C: strengthened — function-ness check
+    const field = sqsQueuePlugin.commonFields.find((f) => f.name === "Tags")!;
+    expect(typeof field.toCfn).toBe("function");
   });
 
   describe("Tags toCfn transform", () => {

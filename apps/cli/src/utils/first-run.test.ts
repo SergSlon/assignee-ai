@@ -111,9 +111,9 @@ describe("first-run", () => {
       showFirstRunWelcome("0.1.0");
 
       // Non-TTY path writes a simple one-liner with version, no ANSI codes
+      // Tier C: dropped redundant toBeDefined() — find!() at the find site
       const calls = stderrSpy.mock.calls.map((c) => String(c[0]));
-      const welcomeCall = calls.find((c) => c.includes("Assignee v"));
-      expect(welcomeCall).toBeDefined();
+      const welcomeCall = calls.find((c) => c.includes("Assignee v"))!;
       expect(welcomeCall).toContain("0.1.0");
       // Should NOT contain ANSI escape codes in non-TTY mode
       expect(welcomeCall).not.toContain("\u001B[");
