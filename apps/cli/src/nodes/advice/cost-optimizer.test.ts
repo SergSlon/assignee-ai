@@ -1,0 +1,286 @@
+/**
+ * Unit tests for the A7 cost-optimizer node.
+ *
+ * The analyzer is pure except for its Pricing MCP dependency, which
+ * is mocked at the module boundary via `vi.mock("../../utils/pricing-lookup")`.
+ * Every test exercises real recommendation math against real-shaped
+ * `$X.XXXX/hr` strings — no rounded placeholders.
+ */
+
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { RESOURCE_TYPES, CfnKey } from "@assignee/core";
+
+const { mockFetchEc2Prices, mockFetchRdsPrices } = vi.hoisted(() => ({
+  mockFetchEc2Prices: vi.fn(),
+  mockFetchRdsPrices: vi.fn(),
+}));
+
+vi.mock("../../utils/pricing-lookup.js", () => ({
+  fetchEc2InstancePrices: mockFetchEc2Prices,
+  fetchRdsInstancePrices: mockFetchRdsPrices,
+}));
+
+// Import after the mock is installed so the analyzer binds to the
+// mocked pricing module.
+import {
+  analyzeEc2Instance,
+  analyzeRdsInstance,
+  analyzeResource,
+  buildRecommendation,
+} from "./cost-optimizer.js";
+
+const FAKE_EC2_ARN =
+  "arn:aws:ec2:us-east-1:123456789012:instance/i-0123456789abcdef0";
+const FAKE_RDS_ARN = "arn:aws:rds:us-east-1:123456789012:db:prod-primary";
+const FAKE_TOOLS = [] as never; // pricing-lookup is mocked so tools are never touched
+
+beforeEach(() => {
+  mockFetchEc2Prices.mockReset();
+  mockFetchRdsPrices.mockReset();
+});
+
+describe("buildRecommendation (pure math)", () => {
+  it("computes the correct monthly savings for a t3.large → t4g.large swap", () => {
+    const rec = buildRecommendation({
+      resourceArn: FAKE_EC2_ARN,
+      resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+      currentConfig: "t3.large",
+      recommendedConfig: "t4g.large",
+      // Real on-demand us-east-1 prices (captured from the pricing
+      // MCP server on 2026-04-08). t3.large = $0.0832/hr,
+      // t4g.large = $0.0672/hr.
+      currentHourlyRaw: "$0.0832/hr",
+      recommendedHourlyRaw: "$0.0672/hr",
+      rationale: "test",
+      confidence: "high",
+    });
+
+    expect(rec).not.toBeNull();
+    // (0.0832 - 0.0672) * 730 = 0.016 * 730 = 11.68
+    expect(rec!.savingsAbsoluteUsd).toBeCloseTo(11.68, 2);
+    expect(rec!.monthlySavings).toBe("$11.68/mo");
+    // 11.68 / 60.736 ≈ 19.23 → rounds to 19
+    expect(rec!.savingsPercent).toBe(19);
+    expect(rec!.confidence).toBe("high");
+  });
+
+  it("returns null when the recommended price is not strictly cheaper", () => {
+    const rec = buildRecommendation({
+      resourceArn: FAKE_EC2_ARN,
+      resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+      currentConfig: "t3.large",
+      recommendedConfig: "t4g.large",
+      currentHourlyRaw: "$0.05/hr",
+      recommendedHourlyRaw: "$0.05/hr", // same
+      rationale: "test",
+      confidence: "high",
+    });
+    expect(rec).toBeNull();
+  });
+
+  it("returns null when the recommended price is more expensive", () => {
+    const rec = buildRecommendation({
+      resourceArn: FAKE_EC2_ARN,
+      resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+      currentConfig: "t3.large",
+      recommendedConfig: "t4g.large",
+      currentHourlyRaw: "$0.05/hr",
+      recommendedHourlyRaw: "$0.06/hr",
+      rationale: "test",
+      confidence: "high",
+    });
+    expect(rec).toBeNull();
+  });
+
+  it("returns null when either price is missing from the MCP response", () => {
+    expect(
+      buildRecommendation({
+        resourceArn: FAKE_EC2_ARN,
+        resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+        currentConfig: "t3.large",
+        recommendedConfig: "t4g.large",
+        currentHourlyRaw: "",
+        recommendedHourlyRaw: "$0.05/hr",
+        rationale: "test",
+        confidence: "high",
+      }),
+    ).toBeNull();
+    expect(
+      buildRecommendation({
+        resourceArn: FAKE_EC2_ARN,
+        resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+        currentConfig: "t3.large",
+        recommendedConfig: "t4g.large",
+        currentHourlyRaw: "$0.05/hr",
+        recommendedHourlyRaw: "not-a-price",
+        rationale: "test",
+        confidence: "high",
+      }),
+    ).toBeNull();
+  });
+
+  it("drops recommendations with sub-cent savings", () => {
+    // 0.050001 vs 0.05 → delta ~0.000001/hr * 730 ≈ 0.00073 → below cent floor.
+    const rec = buildRecommendation({
+      resourceArn: FAKE_EC2_ARN,
+      resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+      currentConfig: "t3.large",
+      recommendedConfig: "t4g.large",
+      currentHourlyRaw: "$0.050001/hr",
+      recommendedHourlyRaw: "$0.05/hr",
+      rationale: "test",
+      confidence: "high",
+    });
+    expect(rec).toBeNull();
+  });
+});
+
+describe("analyzeEc2Instance", () => {
+  it("suggests the ARM equivalent when one exists and the swap is cheaper", async () => {
+    mockFetchEc2Prices.mockResolvedValueOnce({
+      "t3.large": "$0.0832/hr",
+      "t4g.large": "$0.0672/hr",
+    });
+
+    const rec = await analyzeEc2Instance(
+      FAKE_EC2_ARN,
+      { [CfnKey.INSTANCE_TYPE]: "t3.large" },
+      FAKE_TOOLS,
+    );
+
+    expect(rec).not.toBeNull();
+    expect(rec!.currentConfig).toBe("t3.large");
+    expect(rec!.recommendedConfig).toBe("t4g.large");
+    expect(rec!.confidence).toBe("high");
+    // The analyzer must ask for BOTH instance types in one call so the
+    // caller can compare prices from a single MCP round-trip.
+    expect(mockFetchEc2Prices).toHaveBeenCalledWith(FAKE_TOOLS, [
+      "t3.large",
+      "t4g.large",
+    ]);
+  });
+
+  it("returns null when the instance type is not in the ARM equivalence map", async () => {
+    const rec = await analyzeEc2Instance(
+      FAKE_EC2_ARN,
+      { [CfnKey.INSTANCE_TYPE]: "a1.large" }, // no mapping for a1.*
+      FAKE_TOOLS,
+    );
+    expect(rec).toBeNull();
+    expect(mockFetchEc2Prices).not.toHaveBeenCalled();
+  });
+
+  it("returns null when desiredState has no InstanceType", async () => {
+    const rec = await analyzeEc2Instance(FAKE_EC2_ARN, {}, FAKE_TOOLS);
+    expect(rec).toBeNull();
+    expect(mockFetchEc2Prices).not.toHaveBeenCalled();
+  });
+
+  it("gracefully degrades when the Pricing MCP returns no price for either type", async () => {
+    mockFetchEc2Prices.mockResolvedValueOnce({});
+    const rec = await analyzeEc2Instance(
+      FAKE_EC2_ARN,
+      { [CfnKey.INSTANCE_TYPE]: "t3.large" },
+      FAKE_TOOLS,
+    );
+    expect(rec).toBeNull();
+  });
+});
+
+describe("analyzeRdsInstance", () => {
+  it("suggests the Graviton equivalent for db.r5.large → db.r6g.large", async () => {
+    mockFetchRdsPrices.mockResolvedValueOnce({
+      "db.r5.large": "$0.2400/hr",
+      "db.r6g.large": "$0.2160/hr",
+    });
+
+    const rec = await analyzeRdsInstance(
+      FAKE_RDS_ARN,
+      {
+        [CfnKey.DB_INSTANCE_CLASS]: "db.r5.large",
+        [CfnKey.ENGINE]: "postgres",
+      },
+      FAKE_TOOLS,
+    );
+
+    expect(rec).not.toBeNull();
+    expect(rec!.currentConfig).toBe("db.r5.large");
+    expect(rec!.recommendedConfig).toBe("db.r6g.large");
+    expect(rec!.confidence).toBe("medium");
+    expect(mockFetchRdsPrices).toHaveBeenCalledWith(
+      FAKE_TOOLS,
+      ["db.r5.large", "db.r6g.large"],
+      "postgres",
+    );
+  });
+
+  it("returns null when the instance class has no Graviton mapping", async () => {
+    const rec = await analyzeRdsInstance(
+      FAKE_RDS_ARN,
+      {
+        [CfnKey.DB_INSTANCE_CLASS]: "db.x2gd.xlarge",
+        [CfnKey.ENGINE]: "postgres",
+      },
+      FAKE_TOOLS,
+    );
+    expect(rec).toBeNull();
+    expect(mockFetchRdsPrices).not.toHaveBeenCalled();
+  });
+
+  it("returns null when desiredState is missing the engine", async () => {
+    const rec = await analyzeRdsInstance(
+      FAKE_RDS_ARN,
+      { [CfnKey.DB_INSTANCE_CLASS]: "db.r5.large" },
+      FAKE_TOOLS,
+    );
+    expect(rec).toBeNull();
+  });
+});
+
+describe("analyzeResource dispatcher", () => {
+  it("routes EC2::Instance to the EC2 analyzer", async () => {
+    mockFetchEc2Prices.mockResolvedValueOnce({
+      "m5.large": "$0.0960/hr",
+      "m6g.large": "$0.0770/hr",
+    });
+    const rec = await analyzeResource(
+      { arn: FAKE_EC2_ARN, resourceType: RESOURCE_TYPES.EC2_INSTANCE },
+      { [CfnKey.INSTANCE_TYPE]: "m5.large" },
+      FAKE_TOOLS,
+    );
+    expect(rec).not.toBeNull();
+    expect(rec!.recommendedConfig).toBe("m6g.large");
+  });
+
+  it("routes RDS::DBInstance to the RDS analyzer", async () => {
+    mockFetchRdsPrices.mockResolvedValueOnce({
+      "db.m5.large": "$0.1700/hr",
+      "db.m6g.large": "$0.1500/hr",
+    });
+    const rec = await analyzeResource(
+      { arn: FAKE_RDS_ARN, resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE },
+      {
+        [CfnKey.DB_INSTANCE_CLASS]: "db.m5.large",
+        [CfnKey.ENGINE]: "mysql",
+      },
+      FAKE_TOOLS,
+    );
+    expect(rec).not.toBeNull();
+    expect(rec!.recommendedConfig).toBe("db.m6g.large");
+  });
+
+  it("returns null for resource types with no analyzer (graceful no-op)", async () => {
+    const rec = await analyzeResource(
+      {
+        arn: "arn:aws:s3:::my-bucket",
+        resourceType: RESOURCE_TYPES.S3_BUCKET,
+      },
+      {},
+      FAKE_TOOLS,
+    );
+    expect(rec).toBeNull();
+    // Neither analyzer was consulted.
+    expect(mockFetchEc2Prices).not.toHaveBeenCalled();
+    expect(mockFetchRdsPrices).not.toHaveBeenCalled();
+  });
+});
