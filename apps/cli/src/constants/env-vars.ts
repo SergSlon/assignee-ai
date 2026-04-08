@@ -53,4 +53,19 @@ export const EnvVar = {
   ASSIGNEE_BP_REQUIRE_SIGNATURE: "ASSIGNEE_BP_REQUIRE_SIGNATURE",
   ASSIGNEE_LOG_DIR: "ASSIGNEE_LOG_DIR",
   ASSIGNEE_LOG_RETENTION_DAYS: "ASSIGNEE_LOG_RETENTION_DAYS",
+
+  // ── Distributed tracing / OTLP exporter ──────────────────────
+  /**
+   * When set, every structured log event is also emitted to the
+   * OTLP/HTTP-JSON `/v1/logs` endpoint at this URL (e.g.
+   * `http://localhost:4318` for a local OpenTelemetry Collector).
+   * Errors and timeouts are swallowed silently — the exporter never
+   * blocks or crashes the CLI. @see telemetry/otel-exporter.ts
+   */
+  ASSIGNEE_OTEL_ENDPOINT: "ASSIGNEE_OTEL_ENDPOINT",
+  /**
+   * Optional service.name attribute attached to every emitted log
+   * record. Defaults to "assignee-cli" when unset.
+   */
+  ASSIGNEE_OTEL_SERVICE_NAME: "ASSIGNEE_OTEL_SERVICE_NAME",
 } as const;

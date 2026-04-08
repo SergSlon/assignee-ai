@@ -16,6 +16,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { EnvVar } from "../constants/env-vars.js";
+import { exportLogEvent } from "../telemetry/otel-exporter.js";
 
 export const LOG_ACTIONS = {
   PLAN_STARTED: "plan_started",
@@ -484,4 +485,10 @@ export function log(event: LogEvent): void {
   if (verbose) {
     process.stderr.write(JSON.stringify(event) + "\n");
   }
+
+  // M-6.4 / OTEL exporter: when ASSIGNEE_OTEL_ENDPOINT is set, mirror this
+  // event to the OTLP/HTTP-JSON v1/logs endpoint. The exporter is fire-
+  // and-forget and never throws — see telemetry/otel-exporter.ts. Use
+  // void to explicitly discard the promise so log() stays synchronous.
+  void exportLogEvent(event);
 }
