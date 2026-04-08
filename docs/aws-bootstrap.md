@@ -26,6 +26,12 @@ This creates:
 
 Access keys are written to `.env` automatically. The command is idempotent — safe to re-run.
 
+> **Existing users:** re-run `assignee setup` to pick up Wave 19/20 IAM updates
+> (`s3:ListBucketVersions`, `s3:DeleteObjectVersion`, `ec2:DescribeAddresses`,
+> `iam:GetPolicy`) and the v30 compacted `AssigneeOperatorPolicy` shape.
+> Without these, S3 destroy on versioned buckets, NAT Gateway EIP-reuse, and
+> the managed-policy-ARN preflight will silently fall back to less-safe paths.
+
 > **Policies are generated from code** by `packages/core/src/config/iam-policies.ts`.
 > They derive permissions from `SUPPORTED_TYPES_ARRAY` and `getRequiredIamActions()`.
 > Do not edit IAM policies manually — update the code instead.

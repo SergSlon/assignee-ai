@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 /**
- * Process captured MCP responses into trimmed fixture-ready JSON.
+ * Process captured MCP responses into trimmed fixture-ready JSON. HISTORICAL / DEV-ONLY.
+ *
  * Reads from captured-responses/, writes to processed-responses/.
+ *
+ * STATUS: companion to `capture-mcp-responses.mjs`. The CFN schema branch
+ * (`cfn-mcp-server--*.json`) is historical — CloudFormation schemas are
+ * fetched at runtime via `@aws-sdk/client-cloudformation` DescribeType
+ * (Story 31.1). Cached fixtures shape-match the SDK output and remain
+ * valid; this script is only re-run when fixtures need regeneration.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";

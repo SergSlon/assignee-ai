@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 /**
- * MCP Response Capture Script
+ * MCP Response Capture Script — HISTORICAL / DEV-ONLY
+ *
+ * STATUS: Retained for historical regeneration of test fixtures.
+ *   The `awslabs.cfn-mcp-server` capture path is no longer reachable
+ *   in production: CloudFormation schemas are now fetched via
+ *   `@aws-sdk/client-cloudformation` DescribeType (Story 31.1).
+ *   The cached CFN schema fixtures remain valid because they shape-match
+ *   what the SDK returns. Do NOT spawn cfn-mcp-server in any runtime path —
+ *   `apps/cli/src/config/mcp-servers.test.ts` enforces this with a guardrail.
  *
  * Spawns each MCP server via uvx and calls tools with representative inputs.
  * Saves raw wire-format JSON responses to captured-responses/ directory.
