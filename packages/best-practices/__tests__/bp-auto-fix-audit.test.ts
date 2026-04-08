@@ -244,6 +244,20 @@ const testCases: AutoFixTestCase[] = [
       EnableDnsHostnames: false,
     },
   },
+  // --- A5.4 ELBv2 rules ---
+  {
+    // BP-ELB-006 is the only A5 rule with an autoFixable patch — all the
+    // policy_antipattern rules (Tiers 1/3) have no mechanical fix, and
+    // the Listener/LoadBalancer rules in A5.4 other than SSL policy are
+    // either user-intent decisions (HTTP protocol, certificate ARN) or
+    // awareness-only (WAF, redirect). See docs/bp-cfn-guard-gap-
+    // analysis-2026-04-08.md for the per-rule autoFixable decision.
+    id: "BP-ELB-006",
+    resourceType: "AWS::ElasticLoadBalancingV2::Listener",
+    triggeringState: {
+      SslPolicy: "ELBSecurityPolicy-2016-08",
+    },
+  },
 ];
 
 describe("Auto-fix audit: all auto-fixable BP rules have correct desiredStatePatch", () => {
