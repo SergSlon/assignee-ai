@@ -119,6 +119,10 @@ export const driftCommand = new Command("drift")
   .option("--resource <type>", "Filter by resource type")
   .option("--region <region>", "Filter by AWS region")
   .option("--status <status>", "Filter by drift status")
+  .option(
+    "--exclude <status>",
+    "Exclude a drift status from output (e.g. --exclude BASELINE_MISSING for CI)",
+  )
   .option("--json", "Output as JSON")
   .option("--output <file>", "Write JSON report to file (requires --json)")
   .option("--concurrency <n>", "Max parallel drift checks (default 10, max 50)")
@@ -131,6 +135,7 @@ export const driftCommand = new Command("drift")
         resource?: string;
         region?: string;
         status?: string;
+        exclude?: string;
         json?: boolean;
         output?: string;
         concurrency?: string;
@@ -290,6 +295,15 @@ export const driftCommand = new Command("drift")
       if (opts.status) {
         const statusUpper = opts.status.toUpperCase();
         displayResults = results.filter((r) => r.status === statusUpper);
+      }
+      // Then --exclude. This runs AFTER --status so the two compose:
+      // `--status DRIFTED --exclude ERROR` would yield the intersection,
+      // which is the predictable read for operators writing CI gates.
+      if (opts.exclude) {
+        const excludeUpper = opts.exclude.toUpperCase();
+        displayResults = displayResults.filter(
+          (r) => r.status !== excludeUpper,
+        );
       }
 
       if (opts.json) {
