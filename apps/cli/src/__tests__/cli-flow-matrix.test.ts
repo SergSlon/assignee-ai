@@ -1115,6 +1115,40 @@ describe("cache command definition", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// PATTERNS COMMAND — subcommand validation
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("patterns command definition", () => {
+  it("has list subcommand (default)", async () => {
+    const { patternsCommand } = await import("../commands/patterns.js");
+    const sub = patternsCommand.commands.find((c) => c.name() === "list");
+    expect(sub, "list subcommand must exist on patterns").not.toBeUndefined();
+    expect(sub!.name()).toBe("list");
+  });
+
+  it("has show subcommand with <patternId> arg", async () => {
+    const { patternsCommand } = await import("../commands/patterns.js");
+    const sub = patternsCommand.commands.find((c) => c.name() === "show");
+    expect(sub, "show subcommand must exist on patterns").not.toBeUndefined();
+    expect(sub!.description()).toContain("resource list");
+  });
+
+  it("list subcommand has --json option", async () => {
+    const { patternsCommand } = await import("../commands/patterns.js");
+    const sub = patternsCommand.commands.find((c) => c.name() === "list");
+    const jsonOpt = sub!.options.find((o) => o.long === "--json");
+    expect(jsonOpt, "list must expose --json").not.toBeUndefined();
+  });
+
+  it("show subcommand has --json option", async () => {
+    const { patternsCommand } = await import("../commands/patterns.js");
+    const sub = patternsCommand.commands.find((c) => c.name() === "show");
+    const jsonOpt = sub!.options.find((o) => o.long === "--json");
+    expect(jsonOpt, "show must expose --json").not.toBeUndefined();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // SUPPORTED TYPES — core exports
 // ═════════════════════════════════════════════════════════════════════════════
 
