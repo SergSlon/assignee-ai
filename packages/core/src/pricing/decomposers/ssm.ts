@@ -57,7 +57,8 @@ export const ssmPricingDecomposer: PricingDecomposer = {
         },
       ],
       kind: K.FIXED,
-      description: "Advanced tier",
+      description:
+        "Advanced tier parameter storage (billed per param regardless of reads)",
       priceUnit: PriceUnit.PER_PARAM_MONTH,
     });
 
@@ -80,7 +81,8 @@ export const ssmPricingDecomposer: PricingDecomposer = {
         },
       ],
       kind: K.USAGE_BASED,
-      description: "higher throughput API",
+      description:
+        "Advanced tier higher-throughput API calls (per 10k requests)",
       priceUnit: PriceUnit.PER_10K_REQS,
     });
 

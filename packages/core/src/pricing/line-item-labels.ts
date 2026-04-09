@@ -36,6 +36,8 @@ export const LineItemLabel = {
   KEY_STORAGE: "Key storage",
   // (f) 2026-04-09: EFS provisioned throughput (separate from Standard storage)
   PROVISIONED_THROUGHPUT: "Provisioned throughput",
+  // (f) 2026-04-09: Lambda provisioned concurrency (committed warm GB-seconds)
+  PROVISIONED_CONCURRENCY: "Provisioned concurrency",
 } as const;
 
 /**

@@ -29,6 +29,23 @@ describe("ssmPricingDecomposer", () => {
     expect(items[0]!.quantity).toBe(1);
   });
 
+  // (f) 2026-04-09 — description must make tier + billing model obvious
+  // at plan time. Zero hardcoded dollar amounts per pricing rules.
+  it("Advanced storage description calls out tier + 'billed per param'", () => {
+    const items = ssmPricingDecomposer.decompose({ Tier: "Advanced" });
+    expect(items[0]!.description).toContain("Advanced tier");
+    expect(items[0]!.description).toContain("billed per param");
+    // Defensive: no hardcoded dollar amounts allowed in descriptions.
+    expect(items[0]!.description).not.toMatch(/\$\d/);
+  });
+
+  it("Advanced API description calls out tier + per 10k unit", () => {
+    const items = ssmPricingDecomposer.decompose({ Tier: "Advanced" });
+    expect(items[1]!.description).toContain("Advanced tier");
+    expect(items[1]!.description).toContain("10k");
+    expect(items[1]!.description).not.toMatch(/\$\d/);
+  });
+
   it("Advanced API is usage_based with quantity 0", () => {
     const items = ssmPricingDecomposer.decompose({ Tier: "Advanced" });
     expect(items[1]!.kind).toBe("usage_based");

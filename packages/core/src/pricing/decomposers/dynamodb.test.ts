@@ -20,10 +20,27 @@ describe("dynamodbPricingDecomposer", () => {
       expect(write?.kind).toBe("usage_based");
     });
 
+    // (f) 2026-04-09 — descriptions must call out billing mode so the
+    // plan box is unambiguous about which mode the user is committing to.
+    it("read/write descriptions call out PAY_PER_REQUEST explicitly", () => {
+      const read = items.find((i) => i.label === "Read capacity");
+      const write = items.find((i) => i.label === "Write capacity");
+      expect(read?.description).toContain("On-demand (PAY_PER_REQUEST)");
+      expect(read?.description).toContain("read request units");
+      expect(write?.description).toContain("On-demand (PAY_PER_REQUEST)");
+      expect(write?.description).toContain("write request units");
+    });
+
     it("has usage-based storage", () => {
       const storage = items.find((i) => i.label === "Storage");
       expect(storage?.kind).toBe("usage_based");
       expect(storage?.priceUnit).toBe("/GB-mo");
+    });
+
+    it("storage description calls out PAY_PER_REQUEST mode + 25 GB free tier", () => {
+      const storage = items.find((i) => i.label === "Storage");
+      expect(storage?.description).toContain("PAY_PER_REQUEST");
+      expect(storage?.description).toContain("25 GB free");
     });
   });
 
@@ -57,10 +74,27 @@ describe("dynamodbPricingDecomposer", () => {
       const write = items.find((i) => i.label === "Write capacity");
       expect(read?.kind).toBe("fixed");
       expect(read?.quantity).toBe(10);
-      expect(read?.description).toBe("10 RCUs");
       expect(write?.kind).toBe("fixed");
       expect(write?.quantity).toBe(20);
-      expect(write?.description).toBe("20 WCUs");
+    });
+
+    // (f) 2026-04-09 — descriptions must call out PROVISIONED mode so the
+    // plan box distinguishes it from on-demand at a glance.
+    it("read/write descriptions call out PROVISIONED + committed units", () => {
+      const read = items.find((i) => i.label === "Read capacity");
+      const write = items.find((i) => i.label === "Write capacity");
+      expect(read?.description).toBe(
+        "Provisioned (PROVISIONED) — 10 RCUs committed",
+      );
+      expect(write?.description).toBe(
+        "Provisioned (PROVISIONED) — 20 WCUs committed",
+      );
+    });
+
+    it("storage description calls out PROVISIONED mode", () => {
+      const storage = items.find((i) => i.label === "Storage");
+      expect(storage?.description).toContain("PROVISIONED");
+      expect(storage?.description).toContain("25 GB free");
     });
 
     it("uses default RCU/WCU when throughput not specified", () => {

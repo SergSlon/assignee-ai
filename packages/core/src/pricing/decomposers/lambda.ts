@@ -80,6 +80,46 @@ export const lambdaPricingDecomposer: PricingDecomposer = {
       priceUnit: PriceUnit.PER_GB_INGESTED,
     });
 
+    // 4. Provisioned concurrency (conditional, FIXED). PC is a
+    //    commitment — users pay for the allocated warm capacity in
+    //    GB-seconds regardless of invocation volume, which is
+    //    exactly what makes it FIXED. Knowable from
+    //    ProvisionedConcurrencyConfig.ProvisionedConcurrentExecutions
+    //    on the function. Quantity is the committed concurrency count
+    //    (rate × memoryGB is applied downstream by the pricing engine).
+    //
+    //    @see (f) 2026-04-09 — PC trap surfacing
+    const pcConfig = desiredState[CfnKey.PROVISIONED_CONCURRENCY_CONFIG] as
+      | Record<string, unknown>
+      | undefined;
+    const pcCount = Number(
+      pcConfig?.[CfnKey.PROVISIONED_CONCURRENT_EXECUTIONS] ?? 0,
+    );
+    if (pcConfig && Number.isFinite(pcCount) && pcCount > 0) {
+      const memoryGb = memoryMb / 1024;
+      items.push({
+        label: LineItemLabel.PROVISIONED_CONCURRENCY,
+        quantity: pcCount * memoryGb,
+        unit: PricingUnit.GB_SECOND,
+        serviceCode: SC.LAMBDA,
+        filters: [
+          {
+            Field: F.PRODUCT_FAMILY,
+            Value: PF.SERVERLESS,
+            Type: M.TERM_MATCH,
+          },
+          {
+            Field: F.USAGE_TYPE,
+            Value: FV.LAMBDA_PROVISIONED_CONCURRENCY_GB_SECOND,
+            Type: M.TERM_MATCH,
+          },
+        ],
+        kind: K.FIXED,
+        description: `${pcCount} warm instance${pcCount === 1 ? "" : "s"} × ${memoryMb} MB — committed, billed 24/7`,
+        priceUnit: PriceUnit.PER_GB_SECOND,
+      });
+    }
+
     return items;
   },
 };
