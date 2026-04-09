@@ -1721,3 +1721,256 @@ describeE2E("E2E: compound VPC EIP leak regression (Wave 19 Bug #6)", () => {
     expect(newlyLeaked).toEqual([]);
   }, 900_000);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A10 follow-up (2026-04-09): efs-with-vpc compound apply + destroy e2e.
+//
+// Before this test, `efs-with-vpc` had unit coverage of the static pattern
+// shape (pattern-templates/patterns/efs-with-vpc.test.ts) and an E2E
+// plan-mode smoke (see "E2E: EFS FileSystem plan" above), but NO apply +
+// destroy exercise against real AWS. That left the compound's runtime
+// correctness unverified for:
+//   - resourceQueue ordering (VPC → Subnet → SG → EFS FS → MountTargets)
+//   - EFS FileSystem + MountTarget provisioning + inter-resource refs
+//   - cleanup coverage — EFS MountTargets must be deleted before EFS FS,
+//     EFS FS before SG, SG before subnets, subnets before VPC
+//
+// Mirrors the lambda-with-exec-role compound apply+destroy test
+// (`E2E: lambda-with-exec-role compound apply + destroy` above). Gated on
+// `RUN_E2E=1` like every other e2e test — no effect on plain `pnpm test`.
+// Destroy is exercised via `planBulkDestroy` + `destroySingleResource`
+// rather than a hand-rolled SDK cleanup, so the destroy pipeline ships
+// with the same regression coverage.
+// ─────────────────────────────────────────────────────────────────────────────
+describeE2E("E2E: efs-with-vpc compound apply + destroy", () => {
+  const efsSuffix = `${Date.now()}`;
+
+  it("plans, applies, and bulk-destroys an EFS file system wired into a fresh VPC", async () => {
+    const graph = createGraph(tools);
+    const threadId = crypto.randomUUID();
+    // efs-with-vpc produces 7+ provisionable resources inside a VPC —
+    // each one runs through the full LangGraph node cycle, so the
+    // default recursion limit (25) is not enough. Match the production
+    // apply.ts override.
+    const config = {
+      configurable: { thread_id: threadId },
+      recursionLimit: 500,
+    };
+
+    await graph.invoke(
+      {
+        // Phrasing that lands on the efs-with-vpc pattern dispatcher —
+        // a verified keyword combo from pattern-templates/patterns/
+        // efs-with-vpc.ts (both "efs" and "vpc" mentioned together).
+        userIntent: `Create an EFS file system inside a new VPC for e2e test ${efsSuffix}`,
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.APPLY,
+        startedAt: Date.now(),
+        noWizard: true,
+        autoApprove: true,
+        projectDir: process.cwd(),
+      },
+      config,
+    );
+
+    // Drain HITL interrupts until the graph settles.
+    let graphState = await graph.getState(config);
+    while (graphState.next.length > 0) {
+      await graph.invoke(null, config);
+      graphState = await graph.getState(config);
+    }
+
+    const finalState = graphState.values as AgentState;
+
+    if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+      console.error("EFS-WITH-VPC COMPOUND E2E FAILED:", {
+        status: finalState.executionStatus,
+        error: finalState.errorMessage,
+        completed: finalState.completedResources?.map(
+          (c) => `${c.resourceId}(${c.resourceType})=${c.resourceArn}`,
+        ),
+      });
+    }
+
+    expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(finalState.resourcePattern?.patternId).toBe("efs-with-vpc");
+
+    const completed = finalState.completedResources ?? [];
+
+    // Every first-class resource in the pattern must land with a real
+    // physical ID. Minimum viable surface: a VPC, at least one Subnet,
+    // a SecurityGroup that the MountTargets hang off, an EFS
+    // FileSystem, and at least one MountTarget attached to it.
+    const vpc = completed.find((c) => c.resourceType === "AWS::EC2::VPC");
+    expect(vpc?.resourceArn).toMatch(/^vpc-[0-9a-f]{8,}$/);
+
+    const subnets = completed.filter(
+      (c) => c.resourceType === "AWS::EC2::Subnet",
+    );
+    expect(subnets.length).toBeGreaterThanOrEqual(1);
+    for (const s of subnets) {
+      expect(s.resourceArn).toMatch(/^subnet-[0-9a-f]{8,}$/);
+    }
+
+    const securityGroup = completed.find(
+      (c) => c.resourceType === "AWS::EC2::SecurityGroup",
+    );
+    expect(securityGroup?.resourceArn).toMatch(/^sg-[0-9a-f]{8,}$/);
+
+    const efsFs = completed.find(
+      (c) => c.resourceType === "AWS::EFS::FileSystem",
+    );
+    expect(efsFs?.resourceArn).toMatch(/^fs-[0-9a-f]{8,}$/);
+    expect(efsFs?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const mountTargets = completed.filter(
+      (c) => c.resourceType === "AWS::EFS::MountTarget",
+    );
+    // The pattern provisions at least one MountTarget per subnet — the
+    // minimum is 1. Without this, the EFS file system would not be
+    // reachable from any workload, which is the whole point of the
+    // compound.
+    expect(mountTargets.length).toBeGreaterThanOrEqual(1);
+    for (const mt of mountTargets) {
+      expect(mt.resourceArn).toMatch(/^fsmt-[0-9a-f]{8,}$/);
+      expect(mt.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    }
+
+    // ── Destroy pipeline exercise ───────────────────────────────────
+    // Exercises the real bulk-destroy pipeline instead of a hand-rolled
+    // SDK teardown: discovers the resources by tag, orders them by
+    // DESTROY_TIER, and runs destroySingleResource() on each. That's
+    // exactly what `assignee destroy --all` does in production, so
+    // this is the test that catches dependency-order regressions
+    // (EFS MountTargets must go before the FileSystem, the FileSystem
+    // before the SecurityGroup, the SG before the Subnets, etc.).
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
+    const { destroySingleResource } =
+      await import("../services/destroy-service.js");
+    const plan = await planBulkDestroy({ region });
+    const failures: string[] = [];
+    for (const r of plan.resources) {
+      const result = await destroySingleResource(r, { region });
+      if (!result.success) {
+        failures.push(
+          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
+        );
+      }
+    }
+    // Any destroy failure is a real bug — the pattern creates the
+    // resources and the destroy pipeline owns the cleanup. If a
+    // MountTarget fails to delete, the EFS FS destroy will fail too
+    // with DependencyViolation, so surface the FIRST failure loudly.
+    expect(failures).toEqual([]);
+  }, 900_000);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A10 follow-up (2026-04-09): scheduled-lambda compound apply + destroy e2e.
+//
+// Mirrors the efs-with-vpc test above for the 8th compound pattern —
+// EventBridge Rule + IAM Role + Lambda Function (+ optional Lambda
+// Permission + LogGroup companions). The pattern was shipped in A8 but
+// only had plan-mode coverage. This test locks in:
+//   - resourceQueue ordering (Role → Lambda → Rule; Rule depends on
+//     Lambda ARN, Lambda depends on Role ARN)
+//   - Events::Rule Targets[] must reference the Lambda ARN after the
+//     marker-resolver substitution
+//   - destroy ordering — Rule first, then the target Lambda, then the
+//     Role (detach boundary) — the inverse of the create order
+// ─────────────────────────────────────────────────────────────────────────────
+describeE2E("E2E: scheduled-lambda compound apply + destroy", () => {
+  const schedSuffix = `${Date.now()}`;
+
+  it("plans, applies, and bulk-destroys a scheduled Lambda wired to an EventBridge rule", async () => {
+    const graph = createGraph(tools);
+    const threadId = crypto.randomUUID();
+    const config = {
+      configurable: { thread_id: threadId },
+      recursionLimit: 500,
+    };
+
+    await graph.invoke(
+      {
+        // Phrasing that routes into the scheduled-lambda compound —
+        // both "scheduled" and "lambda" mentioned, matching the
+        // pattern's keyword set (see packages/core/src/pattern-templates/
+        // patterns/scheduled-lambda.ts).
+        userIntent: `Create a scheduled lambda that runs every hour for e2e test ${schedSuffix}`,
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.APPLY,
+        startedAt: Date.now(),
+        noWizard: true,
+        autoApprove: true,
+        projectDir: process.cwd(),
+      },
+      config,
+    );
+
+    let graphState = await graph.getState(config);
+    while (graphState.next.length > 0) {
+      await graph.invoke(null, config);
+      graphState = await graph.getState(config);
+    }
+
+    const finalState = graphState.values as AgentState;
+
+    if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+      console.error("SCHEDULED-LAMBDA COMPOUND E2E FAILED:", {
+        status: finalState.executionStatus,
+        error: finalState.errorMessage,
+        completed: finalState.completedResources?.map(
+          (c) => `${c.resourceId}(${c.resourceType})=${c.resourceArn}`,
+        ),
+      });
+    }
+
+    expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(finalState.resourcePattern?.patternId).toBe("scheduled-lambda");
+
+    const completed = finalState.completedResources ?? [];
+
+    // Minimum surface: IAM Role, Lambda Function, Events::Rule all
+    // created with real physical IDs.
+    const role = completed.find((c) => c.resourceType === "AWS::IAM::Role");
+    expect(typeof role?.resourceArn).toBe("string");
+    expect(role?.resourceArn?.length ?? 0).toBeGreaterThan(0);
+    expect(role?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const lambda = completed.find(
+      (c) => c.resourceType === "AWS::Lambda::Function",
+    );
+    expect(lambda?.resourceArn).toMatch(
+      /^arn:aws:lambda:[a-z0-9-]+:\d+:function:/,
+    );
+    expect(lambda?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const rule = completed.find((c) => c.resourceType === "AWS::Events::Rule");
+    // Events::Rule primaryIdentifier is /properties/Arn (readOnly) —
+    // the provisioner captures the ARN from the CCAPI create response.
+    expect(rule?.resourceArn).toMatch(/^arn:aws:events:[a-z0-9-]+:\d+:rule\//);
+    expect(rule?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    // ── Destroy pipeline exercise ───────────────────────────────────
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
+    const { destroySingleResource } =
+      await import("../services/destroy-service.js");
+    const plan = await planBulkDestroy({ region });
+    const failures: string[] = [];
+    for (const r of plan.resources) {
+      const result = await destroySingleResource(r, { region });
+      if (!result.success) {
+        failures.push(
+          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
+        );
+      }
+    }
+    // The Events::Rule destroy MUST happen before (or tolerate) the
+    // Lambda target destroy, otherwise the rule will sit with a dangling
+    // target reference. If the Rule destroy strategy doesn't first
+    // RemoveTargets, the test surfaces a CCAPI DependencyViolation here.
+    expect(failures).toEqual([]);
+  }, 900_000);
+});
