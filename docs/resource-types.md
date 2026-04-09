@@ -112,7 +112,19 @@ Historical note:
   `sdk-fallback-dispatcher.ts` were deleted, and the `sns:Subscribe` /
   `sns:Unsubscribe` IAM actions moved from the unscoped
   `SdkFallbackActions` policy statement to the CCAPI-scoped
-  `ServiceSpecificActions` statement in `operatorServicesPolicy()`.
+  `ServiceSpecificActions` statements (split across
+  `operatorServicesAPolicy()` + `operatorServicesBPolicy()` after the
+  (f) 2026-04-09 A/B split).
+- **(f) 2026-04-09 A/B split** — the single
+  `AssigneeOperatorServicesPolicy` managed policy was split into two
+  byte-balanced halves (`AssigneeOperatorServicesAPolicy` +
+  `AssigneeOperatorServicesBPolicy`) so the combined service-action
+  surface fits inside AWS's 6144-byte managed-policy limit with
+  ~3300 bytes of headroom per half. All three operator policies
+  (core + A + B) attach to the same `assignee-operator` IAM user and
+  AWS evaluates the union — strictly equivalent to the pre-split
+  single-policy version. The split unblocks ~30 additional resource
+  type promotions before the next headroom threshold fires.
 
 ## Co-provisioning
 

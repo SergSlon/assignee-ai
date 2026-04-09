@@ -522,11 +522,21 @@ assignee setup [options]
 
 Creates three IAM users with scoped policies:
 
-| User                   | Policy                                 | Purpose          |
-| ---------------------- | -------------------------------------- | ---------------- |
-| `assignee-ai-operator` | Bedrock + CloudControl                 | CLI provisioning |
-| `assignee-ai-reader`   | Schema + Pricing + Billing (read-only) | MCP reader       |
-| `assignee-ai-auditor`  | IAM Simulate + SecurityHub (read-only) | MCP auditor      |
+| User                | Policies attached                                                                                                                                           | Purpose          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `assignee-operator` | `AssigneeOperatorPolicy` + `AssigneeOperatorServicesAPolicy` + `AssigneeOperatorServicesBPolicy` (union: Bedrock + CloudControl + service-specific actions) | CLI provisioning |
+| `assignee-reader`   | `AssigneeReaderPolicy` (Schema + Pricing + Billing read-only)                                                                                               | MCP reader       |
+| `assignee-auditor`  | `AssigneeAuditorPolicy` (IAM Simulate + SecurityHub read-only)                                                                                              | MCP auditor      |
+
+The operator user gets **three** managed policies because the
+service-specific action surface would exceed AWS's 6144-byte
+per-managed-policy limit if bundled into one. The core policy carries
+Bedrock + CCAPI + tagging + XRay + SDK fallback; the Services-A and
+Services-B policies each hold a byte-balanced half of the service
+actions. All three attach to the same IAM user and AWS evaluates the
+union, so behavior is identical to a single hypothetical unlimited
+policy. See `packages/core/src/config/iam-policies.ts` for the split
+algorithm.
 
 Also sets up Bedrock invocation logging (IAM role, CloudWatch log group, Bedrock logging config).
 
