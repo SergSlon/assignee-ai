@@ -235,22 +235,24 @@ describe("destroyAction", () => {
 
   it("rejects --include-iam without --all", async () => {
     const { destroyAction } = await import("../commands/destroy.js");
+    // Item 4b (2026-04-10): flag-conflict errors rewritten to
+    // guide-the-user messages with concrete example commands.
     await expect(
       destroyAction("some-resource", { includeIam: true }),
-    ).rejects.toThrow("--include-iam can only be used with --all");
+    ).rejects.toThrow(/--include-iam only works in bulk-destroy mode/);
   });
 
   it("rejects --dry-run without --all", async () => {
     const { destroyAction } = await import("../commands/destroy.js");
     await expect(
       destroyAction("some-resource", { dryRun: true }),
-    ).rejects.toThrow("--dry-run can only be used with --all");
+    ).rejects.toThrow(/--dry-run only works in bulk-destroy mode/);
   });
 
   it("rejects missing resource when --all not set", async () => {
     const { destroyAction } = await import("../commands/destroy.js");
     await expect(destroyAction(undefined, {})).rejects.toThrow(
-      "Resource ARN or name is required",
+      /needs to know what to destroy/,
     );
   });
 });

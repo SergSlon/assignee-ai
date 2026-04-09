@@ -193,12 +193,19 @@ export const planCommand = new Command(CommandName.PLAN)
           });
 
           if (failed) {
+            // Item 4b (2026-04-10): supply a default guide-the-user hint
+            // when the node pipeline didn't attach one. Previous behavior
+            // left the user with a bare "Plan generation failed" and no
+            // actionable next step — a first-run user would have to read
+            // the stack trace to guess what went wrong.
+            const defaultHint =
+              finalState.executionStatus ===
+              ExecutionStatus.UNSUPPORTED_RESOURCE
+                ? SUPPORTED_TYPES_HINT
+                : "Try rephrasing your intent, or run `assignee --verbose plan <intent>` to see the full node trace. Common causes: Bedrock region mismatch, missing credentials, or an intent the LLM could not map to a supported type.";
             renderError(
               finalState.errorMessage ?? PLAN_GENERATION_FAILED,
-              finalState.executionStatus ===
-                ExecutionStatus.UNSUPPORTED_RESOURCE
-                ? SUPPORTED_TYPES_HINT
-                : undefined,
+              defaultHint,
             );
           }
 
@@ -363,9 +370,18 @@ export const planCommand = new Command(CommandName.PLAN)
             phase1State.executionStatus === ExecutionStatus.FAILED ||
             phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
           ) {
+            // Item 4b (2026-04-10): the old "Apply failed" fallback
+            // was both blame-flavored and uninformative. Callers hit
+            // this branch when the LLM couldn't map the intent or a
+            // downstream node (schema-fetcher, option-elicitor,
+            // bp-evaluator) returned FAILED without a node-specific
+            // error message. The new hint guides the user to the two
+            // most productive next actions: regenerate the plan or
+            // enable verbose node tracing.
             renderError(
-              phase1State.errorMessage ?? "Apply failed",
-              "Check the error details above and try again. Run `assignee plan` to regenerate.",
+              phase1State.errorMessage ??
+                "Apply could not start — the planning phase did not produce a valid plan.",
+              "Run `assignee plan <intent>` first to see the full node trace. If the plan succeeds there, re-run `assignee apply` against the saved checkpoint in .assignee/. If the plan also fails, add `--verbose` to surface which node returned FAILED.",
             );
             return { success: false };
           }

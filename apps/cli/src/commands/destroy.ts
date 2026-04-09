@@ -252,8 +252,11 @@ async function bulkDestroyAction(opts: {
     }
   } else {
     if (!process.stdin.isTTY) {
+      // Item 4b (2026-04-10): explain WHY the confirmation is blocking,
+      // so users in CI scripts know this is intentional and not a
+      // missing-TTY bug.
       throw new AssigneeError(
-        "Bulk destroy requires confirmation. Use --yes for non-interactive mode.",
+        "Bulk destroy irreversibly removes every Assignee-managed resource and needs an explicit confirmation prompt, but stdin is not a TTY. For CI / non-interactive runs, pass `--yes` to acknowledge the blast radius and skip the prompt.",
         ErrorCode.DESTROY_ERROR,
       );
     }
@@ -284,8 +287,12 @@ async function bulkDestroyAction(opts: {
       );
     } else {
       if (!process.stdin.isTTY) {
+        // Item 4b (2026-04-10): IAM is the highest-blast-radius
+        // surface in a destroy (self-lockout is possible), so the
+        // error spells out exactly why the second prompt exists
+        // and what flag bypasses it in CI.
         throw new AssigneeError(
-          "IAM destroy requires confirmation. Use --yes for non-interactive mode.",
+          "Destroying IAM policies and roles can lock Assignee itself out of your account, so `--include-iam` requires a second explicit confirmation, but stdin is not a TTY. For CI / non-interactive runs, pass `--yes` alongside `--include-iam` to acknowledge the extra risk and skip the second prompt.",
           ErrorCode.DESTROY_ERROR,
         );
       }
@@ -370,8 +377,10 @@ export async function destroyAction(
   // ── Bulk destroy mode ──────────────────────────────────────────────
   if (opts.all) {
     if (resource) {
+      // Item 4b (2026-04-10): guide-the-user framing with concrete
+      // "did you mean?" suggestions for both interpretations.
       throw new AssigneeError(
-        "Cannot use --all with a specific resource. Use one or the other.",
+        `--all destroys everything managed by assignee; a specific resource ("${resource}") is ambiguous. Did you mean "assignee destroy --all" (destroy everything) or "assignee destroy ${resource}" (just that one)?`,
         ErrorCode.USAGE_ERROR,
       );
     }
@@ -381,13 +390,13 @@ export async function destroyAction(
   // ── Validate flags that only work with --all ───────────────────────
   if (opts.includeIam) {
     throw new AssigneeError(
-      "--include-iam can only be used with --all.",
+      "--include-iam only works in bulk-destroy mode because single-resource destroy already targets one explicit ARN. Usage: `assignee destroy --all --include-iam` to sweep every Assignee-managed resource including IAM policies and roles.",
       ErrorCode.DESTROY_ERROR,
     );
   }
   if (opts.dryRun) {
     throw new AssigneeError(
-      "--dry-run can only be used with --all.",
+      "--dry-run only works in bulk-destroy mode; a single-resource destroy has nothing to enumerate. Usage: `assignee destroy --all --dry-run` to preview what would be swept without touching AWS.",
       ErrorCode.DESTROY_ERROR,
     );
   }
@@ -395,7 +404,7 @@ export async function destroyAction(
   // ── Single-resource mode requires the resource argument ────────────
   if (!resource) {
     throw new AssigneeError(
-      "Resource ARN or name is required. Usage: assignee destroy <resource-arn-or-name>",
+      "Destroy needs to know what to destroy. Pass a resource ARN or name as the positional argument, e.g. `assignee destroy my-bucket` or `assignee destroy arn:aws:s3:::my-bucket`. To sweep everything Assignee manages at once, use `assignee destroy --all`.",
       ErrorCode.DESTROY_ERROR,
     );
   }
@@ -491,8 +500,14 @@ export async function destroyAction(
   stopSpinner();
 
   if (!result.success) {
+    // Item 4b (2026-04-10): prefer the provider-level error when
+    // present (it's always more specific than a generic "destroy
+    // failed"), otherwise guide the user toward the two most useful
+    // next actions: confirm the resource still exists and inspect
+    // the structured logs.
     throw new AssigneeError(
-      result.error ?? "Destroy failed",
+      result.error ??
+        `Destroy call returned no error message — the resource may already be gone or AWS accepted the call without confirming. Run \`assignee list\` to verify, and check \`~/.assignee/logs/\` for the full structured trace.`,
       ErrorCode.DESTROY_ERROR,
     );
   }

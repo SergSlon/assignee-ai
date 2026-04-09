@@ -248,9 +248,13 @@ const mockResource = {
 describe("assignee destroy", () => {
   describe("--include-iam without --all", () => {
     it("rejects --include-iam without --all", async () => {
+      // Item 4b (2026-04-10): error text updated to a guide-the-user
+      // message with a concrete `assignee destroy --all --include-iam`
+      // suggestion. Assertion matches on the invariant phrase
+      // "bulk-destroy mode" which anchors the guidance.
       await expect(
         destroyAction("some-resource", { includeIam: true }),
-      ).rejects.toThrow("--include-iam can only be used with --all");
+      ).rejects.toThrow(/--include-iam only works in bulk-destroy mode/);
     });
   });
 
@@ -258,14 +262,17 @@ describe("assignee destroy", () => {
     it("rejects --dry-run without --all", async () => {
       await expect(
         destroyAction("some-resource", { dryRun: true }),
-      ).rejects.toThrow("--dry-run can only be used with --all");
+      ).rejects.toThrow(/--dry-run only works in bulk-destroy mode/);
     });
   });
 
   describe("missing resource argument", () => {
     it("rejects when no resource and no --all", async () => {
+      // Item 4b (2026-04-10): error rewritten to guide-the-user with
+      // concrete examples. Assertion matches the invariant phrase
+      // "needs to know what to destroy" which anchors the guidance.
       await expect(destroyAction(undefined, {})).rejects.toThrow(
-        "Resource ARN or name is required",
+        /needs to know what to destroy/,
       );
     });
   });

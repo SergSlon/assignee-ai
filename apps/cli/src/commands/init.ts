@@ -270,13 +270,18 @@ export const initCommand = new Command(CommandName.INIT)
       // Check for existing global config
       try {
         await fs.access(configPath);
+        // Item 4b (2026-04-10): surface the resolved path so the user
+        // knows exactly which file they're about to overwrite — not
+        // every user knows the default lives at ~/.config/assignee/.
         const overwrite = await clack.confirm({
-          message: "Global config already exists. Overwrite?",
+          message: `Global config already exists at ${configPath}. Overwrite it?`,
           initialValue: false,
         });
 
         if (clack.isCancel(overwrite) || overwrite === false) {
-          clack.outro("Keeping existing configuration.");
+          clack.outro(
+            `Keeping existing configuration at ${configPath}. No changes made.`,
+          );
           return;
         }
       } catch {
@@ -353,14 +358,20 @@ export const initCommand = new Command(CommandName.INIT)
 
     try {
       await fs.access(configPath);
-      // Config exists — prompt for overwrite
+      // Item 4b (2026-04-10): surface the resolved project-config
+      // path so users see what's about to be overwritten. The project
+      // config lives under ./.assignee/config.yaml by default — easy
+      // to miss if you're in a subdirectory and didn't expect init
+      // to walk up.
       const overwrite = await clack.confirm({
-        message: "Config already exists. Overwrite?",
+        message: `Project config already exists at ${configPath}. Overwrite it?`,
         initialValue: false,
       });
 
       if (clack.isCancel(overwrite) || overwrite === false) {
-        clack.outro("Keeping existing configuration.");
+        clack.outro(
+          `Keeping existing configuration at ${configPath}. No changes made.`,
+        );
         return;
       }
     } catch {
