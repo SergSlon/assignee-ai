@@ -100,7 +100,7 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 
 ## Supported resource types
 
-**29 first-class CCAPI types** + 2 SDK-routable fallback types. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
+**33 first-class CCAPI types.** As of A10 + A13, every supported type flows through the CloudControl API — there are no remaining SDK-routable write paths in this codebase. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
 
 | Type                                        | Notes                                                      |
 | :------------------------------------------ | :--------------------------------------------------------- |
@@ -116,6 +116,7 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 | `AWS::DynamoDB::Table`                      |                                                            |
 | `AWS::SQS::Queue`                           |                                                            |
 | `AWS::SNS::Topic`                           |                                                            |
+| `AWS::SNS::Subscription`                    | First-class since A10 (was SDK fallback pre-2026-04-09)    |
 | `AWS::ElasticLoadBalancingV2::LoadBalancer` |                                                            |
 | `AWS::ECS::Cluster`                         |                                                            |
 | `AWS::ECR::Repository`                      |                                                            |
@@ -129,12 +130,20 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 | `AWS::SecretsManager::Secret`               | Secret management                                          |
 | `AWS::EC2::VPCGatewayAttachment`            | VPC compound only (marker-ref)                             |
 | `AWS::EC2::SubnetRouteTableAssociation`     | VPC compound only (marker-ref)                             |
-| `AWS::EFS::FileSystem`                      | Used in EFS-with-VPC pattern                               |
+| `AWS::EFS::FileSystem`                      | Used in EFS-with-VPC pattern; provisioned-throughput line  |
 | `AWS::EFS::MountTarget`                     | Used in EFS-with-VPC pattern                               |
 | `AWS::Events::Rule`                         | Used in Scheduled Lambda pattern                           |
 | `AWS::Events::EventBus`                     | Custom event bus for cross-account / SaaS partner events   |
-| `AWS::Lambda::EventSourceMapping`           | SDK fallback (not CCAPI)                                   |
-| `AWS::SNS::Subscription`                    | SDK fallback (not CCAPI)                                   |
+| `AWS::Events::Connection`                   | Outbound HTTP auth store (API key / Basic / OAuth) — A12   |
+| `AWS::Events::ApiDestination`               | Outbound HTTP endpoint (URL + method + rate limit) — A13   |
+| `AWS::KMS::Key`                             | Customer-managed keys; rotation default true — A11         |
+
+The only remaining entries in `CCAPI_FALLBACK_TYPES` are **pure redirect types** with no SDK write path — they are rejected at plan time with a friendly alternative:
+
+| Unsupported Type                     | Recommended Alternative             |
+| :----------------------------------- | :---------------------------------- |
+| `AWS::Lambda::Permission`            | `AWS::Lambda::PermissionPolicy`     |
+| `AWS::ElastiCache::ReplicationGroup` | `AWS::ElastiCache::ServerlessCache` |
 
 ### Compound architecture patterns
 
