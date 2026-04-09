@@ -17,6 +17,7 @@ import type { AppliedFix } from "../services/graph-state.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { wizardKeyMap } from "../utils/wizard-key-map.js";
 import { PROTO_POLLUTION_KEYS } from "../config/constants.js";
+import { formatFixValue } from "../utils/display-plan.js";
 
 /**
  * Resolve auto-fix mode from graph state.
@@ -325,13 +326,28 @@ export async function fixApplicatorNode(
     const oldValue = extractOldValue(originalState, patch);
     patchedState = deepMergePatch(patchedState, patch);
 
-    appliedFixes.push({
+    const appliedFix: AppliedFix = {
       practiceId: finding.practiceId,
       title: finding.title,
       fieldPath: extractFieldPath(patch),
       oldValue,
       newValue: extractNewValue(patch),
-    });
+    };
+    appliedFixes.push(appliedFix);
+
+    // Item 4a (2026-04-09): mid-wizard transparency — surface each
+    // auto-fix at the moment it lands so the user sees *why* their
+    // plan drifted from what they typed into the wizard. Skipped in
+    // non-TTY (MCP / CI) contexts where the full applied-fixes list
+    // is already rendered into the final plan box; repeating it here
+    // would pollute machine-readable stdout.
+    if (process.stdout.isTTY) {
+      const old = formatFixValue(appliedFix.oldValue);
+      const next = formatFixValue(appliedFix.newValue);
+      clack.log.info(
+        `Changed ${appliedFix.fieldPath}: ${old} → ${next} because ${appliedFix.practiceId} (auto-fixed)`,
+      );
+    }
 
     fixedPracticeIds.add(finding.practiceId);
   }
