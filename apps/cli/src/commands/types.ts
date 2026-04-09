@@ -25,6 +25,8 @@ import {
   defaultPluginRegistry,
   defaultPricingRegistry,
   defaultPatternRegistry,
+  RESOURCE_IDENTIFIER_KEYS,
+  type ResourceType,
 } from "@assignee/core";
 import { loadBestPractices } from "@assignee/best-practices";
 
@@ -42,6 +44,7 @@ interface TypeDetail extends TypeListEntry {
   bpRules: Array<{ id: string; severity: string; title: string }>;
   hasPricingStrategy: boolean;
   usedByPatterns: Array<{ patternId: string; displayName: string }>;
+  primaryIdentifier: string;
 }
 
 /**
@@ -128,6 +131,7 @@ export function renderTypeDetail(detail: TypeDetail): string {
     }
   }
   lines.push("");
+  lines.push(`Primary identifier: ${detail.primaryIdentifier}`);
   lines.push(
     `Pricing strategy: ${detail.hasPricingStrategy ? "registered" : "none"}`,
   );
@@ -227,6 +231,8 @@ typesCommand
       bpRules: bpRulesForType(resourceType, practices),
       hasPricingStrategy: defaultPricingRegistry.has(resourceType),
       usedByPatterns: patternsContaining(resourceType),
+      primaryIdentifier:
+        RESOURCE_IDENTIFIER_KEYS[resourceType as ResourceType] ?? "(unknown)",
     };
     if (opts.json) {
       process.stdout.write(JSON.stringify(detail, null, 2) + "\n");
