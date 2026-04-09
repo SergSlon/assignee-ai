@@ -623,10 +623,11 @@ assignee patterns [list|show <patternId>] [options]
 
 **Subcommands:**
 
-| Subcommand         | Description                                                                           |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| `list` (default)   | Print all registered compound patterns in precedence order                            |
-| `show <patternId>` | Print the full resource list + dependency groups + every keyword for a single pattern |
+| Subcommand           | Description                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| `list` (default)     | Print all registered compound patterns in precedence order                            |
+| `show <patternId>`   | Print the full resource list + dependency groups + every keyword for a single pattern |
+| `detect <intent...>` | Run the same keyword classifier the CLI uses and print which pattern would match      |
 
 **Options:**
 
@@ -645,6 +646,10 @@ assignee patterns                               # list all patterns
 assignee patterns show scheduled-lambda         # show one pattern's details
 assignee patterns show efs-with-vpc --json      # JSON for CI consumers
 assignee patterns list --json | jq '.[].patternId'
+assignee patterns list --search lambda          # grep-like filter
+assignee patterns detect "create a nightly cleanup lambda"
+# → Matched: scheduled-lambda — Scheduled Lambda (EventBridge cron)
+#   Winning keyword: "nightly cleanup"
 ```
 
 ### types
