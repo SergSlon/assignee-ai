@@ -489,12 +489,21 @@ export const applyCommand = new Command(CommandName.APPLY)
               durationMs: Date.now() - ctx.startTs,
               result: phase1State.executionStatus,
             });
-            renderError(
-              phase1State.errorMessage ?? "Apply failed during planning phase",
+            // Item 4b (2026-04-10): provide a guide-the-user default
+            // hint even when the downstream node didn't attach one.
+            // A first-run user hitting a bare "Apply failed during
+            // planning phase" had no next-step guidance — now they
+            // get either the unsupported-types help or a verbose-trace
+            // suggestion with the two most common root causes.
+            const defaultHint =
               phase1State.executionStatus ===
-                ExecutionStatus.UNSUPPORTED_RESOURCE
+              ExecutionStatus.UNSUPPORTED_RESOURCE
                 ? SUPPORTED_TYPES_HINT
-                : undefined,
+                : "Try rephrasing your intent, or run `assignee --verbose apply <intent>` to see which node returned FAILED. Common causes: Bedrock region mismatch, missing credentials, or an intent the LLM could not map to a supported type.";
+            renderError(
+              phase1State.errorMessage ??
+                "Apply could not start — the planning phase did not produce a valid plan.",
+              defaultHint,
             );
             return { success: false };
           }
@@ -599,9 +608,16 @@ export const applyCommand = new Command(CommandName.APPLY)
               result: phase1State.executionStatus,
               extras: { errorMessage: phase1State.errorMessage },
             });
+            // Item 4b (2026-04-10): the old fallback dumped the raw
+            // LangGraph status enum at the user ("Unexpected status
+            // after planning: POLICY_BLOCKED") which reads like an
+            // internal assertion. The new fallback still names the
+            // status (developers need it for bug reports) but frames
+            // it as a next-step suggestion rather than developer-speak.
             renderError(
               phase1State.errorMessage ??
-                `Unexpected status after planning: ${phase1State.executionStatus}`,
+                `Apply stopped after planning in an unexpected state (${phase1State.executionStatus}).`,
+              "This usually means a downstream node returned a status the apply loop doesn't know how to handle. Run `assignee --verbose apply <intent>` to capture the full node trace, then open an issue with the trace attached.",
             );
             return { success: false };
           }

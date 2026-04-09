@@ -415,7 +415,13 @@ describe("planCommand — run callback (no --no-apply)", () => {
 
     const result = await capturedOpts!.run(ctx);
 
-    expect(renderError).toHaveBeenCalledWith("LLM crashed", undefined);
+    // Item 4b (2026-04-10): the fallback hint is no longer undefined —
+    // every FAILED plan now carries a guide-the-user default hint that
+    // suggests `--verbose` and lists the most common root causes.
+    expect(renderError).toHaveBeenCalledWith(
+      "LLM crashed",
+      expect.stringContaining("--verbose"),
+    );
     expect(result.success).toBe(false);
   });
 
@@ -516,10 +522,16 @@ describe("planCommand — run callback (no --no-apply)", () => {
 
     const result = await capturedOpts!.run(ctx);
 
+    // Item 4b (2026-04-10): the errorMessage is still forwarded
+    // verbatim, but the fallback hint was rewritten to guide the
+    // user toward `assignee plan` + `--verbose` instead of a
+    // blame-flavored "Check the error details above".
     expect(renderError).toHaveBeenCalledWith(
       "Apply failed",
-      "Check the error details above and try again. Run `assignee plan` to regenerate.",
+      expect.stringContaining("assignee plan"),
     );
+    const [, hint] = vi.mocked(renderError).mock.calls[0]!;
+    expect(hint).toMatch(/--verbose/);
     expect(result.success).toBe(false);
   });
 });

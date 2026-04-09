@@ -196,15 +196,23 @@ describe("assignee init command", () => {
 
     await runInitAction();
 
-    // Verify confirm was called
+    // Verify confirm was called with the path-aware overwrite prompt.
+    // Item 4b (2026-04-10): message now embeds the full resolved
+    // configPath so users see exactly what they're about to overwrite.
     expect(clack.confirm).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: "Config already exists. Overwrite?",
+        message: expect.stringMatching(
+          /Project config already exists at .*config\.yaml\. Overwrite it\?/,
+        ) as unknown as string,
       }),
     );
 
-    // Verify outro message
-    expect(clack.outro).toHaveBeenCalledWith("Keeping existing configuration.");
+    // Verify outro message mentions the preserved path
+    expect(clack.outro).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /Keeping existing configuration at .*config\.yaml\. No changes made\./,
+      ),
+    );
 
     // Verify original config was NOT overwritten
     const content = await fs.readFile(
@@ -608,12 +616,20 @@ describe("assignee init --global", () => {
 
     await runInitGlobal();
 
+    // Item 4b (2026-04-10): prompt now embeds the full resolved path
+    // so users see which file is about to be overwritten.
     expect(clack.confirm).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: "Global config already exists. Overwrite?",
+        message: expect.stringMatching(
+          /Global config already exists at .*config\.yaml\. Overwrite it\?/,
+        ) as unknown as string,
       }),
     );
-    expect(clack.outro).toHaveBeenCalledWith("Keeping existing configuration.");
+    expect(clack.outro).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /Keeping existing configuration at .*config\.yaml\. No changes made\./,
+      ),
+    );
   });
 
   // Note: "no --global flag" behavior is fully tested in the "assignee init command" describe block above.

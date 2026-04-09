@@ -214,7 +214,13 @@ describe("applyCommand — fresh intent flow (run callback)", () => {
 
     const result = await capturedOpts!.run(ctx);
 
-    expect(renderError).toHaveBeenCalledWith("LLM error", undefined);
+    // Item 4b (2026-04-10): the explicit errorMessage still flows
+    // through verbatim, but the hint is now always populated with
+    // a --verbose suggestion instead of `undefined`.
+    expect(renderError).toHaveBeenCalledWith(
+      "LLM error",
+      expect.stringContaining("--verbose"),
+    );
     expect(result.success).toBe(false);
   });
 
@@ -303,9 +309,11 @@ describe("applyCommand — phase 1 status combinations (gap coverage)", () => {
 
     const result = await capturedOpts!.run(ctx);
 
+    // Item 4b (2026-04-10): explicit errorMessage flows through
+    // verbatim; hint is always populated with a --verbose suggestion.
     expect(renderError).toHaveBeenCalledWith(
       "Org policy blocks this resource",
-      undefined,
+      expect.stringContaining("--verbose"),
     );
     expect(result.success).toBe(false);
     expect(runProvisioningLoop).not.toHaveBeenCalled();
@@ -320,9 +328,12 @@ describe("applyCommand — phase 1 status combinations (gap coverage)", () => {
 
     const result = await capturedOpts!.run(ctx);
 
+    // Item 4b (2026-04-10): the fallback message is now a
+    // guide-the-user sentence and the hint is always populated
+    // (no more `undefined` second arg) with a `--verbose` suggestion.
     expect(renderError).toHaveBeenCalledWith(
-      "Apply failed during planning phase",
-      undefined,
+      expect.stringContaining("planning phase did not produce a valid plan"),
+      expect.stringContaining("--verbose"),
     );
     expect(result.success).toBe(false);
   });
@@ -376,8 +387,12 @@ describe("applyCommand — phase 1 status combinations (gap coverage)", () => {
 
     const result = await capturedOpts!.run(ctx);
 
+    // Item 4b (2026-04-10): unexpected-status fallback rewritten
+    // from developer-speak to a guide-the-user message that still
+    // names the status (for bug reports) plus a --verbose suggestion.
     expect(renderError).toHaveBeenCalledWith(
-      expect.stringContaining("Unexpected status"),
+      expect.stringContaining("unexpected state"),
+      expect.stringContaining("--verbose"),
     );
     expect(result.success).toBe(false);
   });
@@ -391,9 +406,11 @@ describe("applyCommand — phase 1 status combinations (gap coverage)", () => {
 
     const result = await capturedOpts!.run(ctx);
 
+    // Item 4b (2026-04-10): fallback message + hint both upgraded
+    // to guide-the-user framing.
     expect(renderError).toHaveBeenCalledWith(
-      "Apply failed during planning phase",
-      undefined,
+      expect.stringContaining("planning phase did not produce a valid plan"),
+      expect.stringContaining("--verbose"),
     );
     expect(result.success).toBe(false);
   });
