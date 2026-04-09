@@ -79,6 +79,44 @@ describe("display.ts — non-TTY (CI) mode", () => {
     expect(output).not.toMatch(/\x1b\[[0-9;]*m/);
   });
 
+  it("formatAppliedFixes includes BP rule ID per fix (Item 4a)", async () => {
+    const { formatAppliedFixes } = await import("./display-plan.js");
+    const line = formatAppliedFixes([
+      {
+        practiceId: "BP-S3-006",
+        title: "Server-side encryption required",
+        fieldPath: "BucketEncryption",
+        oldValue: undefined,
+        newValue: { SSEAlgorithm: "AES256" },
+      },
+      {
+        practiceId: "BP-S3-001",
+        title: "S3 bucket should block public ACLs",
+        fieldPath: "PublicAccessBlockConfiguration.BlockPublicAcls",
+        oldValue: false,
+        newValue: true,
+      },
+    ]);
+    expect(line).not.toBeNull();
+    // Each line must carry the practiceId so users can grep the library
+    expect(line).toContain("BP-S3-006");
+    expect(line).toContain("BP-S3-001");
+    // And the human-readable title for context
+    expect(line).toContain("Server-side encryption required");
+    expect(line).toContain("S3 bucket should block public ACLs");
+    // And a value-diff arrow for each fix
+    const arrows = (line!.match(/→/g) ?? []).length;
+    expect(arrows).toBe(2);
+    // Header shows total count
+    expect(line).toContain("2 fixes applied");
+  });
+
+  it("formatAppliedFixes returns null for empty/undefined", async () => {
+    const { formatAppliedFixes } = await import("./display-plan.js");
+    expect(formatAppliedFixes(undefined)).toBeNull();
+    expect(formatAppliedFixes([])).toBeNull();
+  });
+
   it("renderPlanBox includes Resource Type, Region, Config, Estimated Cost fields", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);

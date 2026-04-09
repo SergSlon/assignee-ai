@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { ec2InstancePlugin } from "./ec2-instance.js";
+import {
+  ec2InstancePlugin,
+  classifyUserData,
+  encodeUserData,
+} from "./ec2-instance.js";
 
 describe("ec2InstancePlugin", () => {
   it("has the correct resourceType", () => {
@@ -226,6 +230,169 @@ describe("ec2InstancePlugin", () => {
       const hints = ec2InstancePlugin.configHints!.join(" ");
       expect(hints).toMatch(/CreditSpecification/i);
       expect(hints).toMatch(/burstable/i);
+    });
+  });
+
+  describe("UserData base64/plaintext detection (Item 3a)", () => {
+    const userDataField = ec2InstancePlugin.advancedFields.find(
+      (f) => f.name === "UserData",
+    )!;
+
+    describe("classifyUserData", () => {
+      it("classifies bash shebang as plaintext", () => {
+        expect(classifyUserData("#!/bin/bash\necho hello")).toBe("plaintext");
+      });
+
+      it("classifies sh shebang as plaintext", () => {
+        expect(classifyUserData("#!/bin/sh\nexit 0")).toBe("plaintext");
+      });
+
+      it("classifies cloud-init YAML as plaintext", () => {
+        expect(classifyUserData("#cloud-config\nruncmd:\n  - echo hello")).toBe(
+          "plaintext",
+        );
+      });
+
+      it("classifies multipart MIME as plaintext", () => {
+        expect(
+          classifyUserData(
+            'Content-Type: multipart/mixed; boundary="//"\n\n--//\n',
+          ),
+        ).toBe("plaintext");
+      });
+
+      it("classifies valid base64 (binary blob) as base64", () => {
+        // "hello world" → aGVsbG8gd29ybGQ= (no plaintext marker on decode)
+        expect(classifyUserData("aGVsbG8gd29ybGQ=")).toBe("base64");
+      });
+
+      it("classifies double-base64 of a shell script as double-base64", () => {
+        const script = "#!/bin/bash\necho hello";
+        const encoded = Buffer.from(script, "utf8").toString("base64");
+        expect(classifyUserData(encoded)).toBe("double-base64");
+      });
+
+      it("classifies double-base64 of cloud-init as double-base64", () => {
+        const script = "#cloud-config\nruncmd:\n  - echo hi\n";
+        const encoded = Buffer.from(script, "utf8").toString("base64");
+        expect(classifyUserData(encoded)).toBe("double-base64");
+      });
+
+      it("classifies empty string as plaintext", () => {
+        expect(classifyUserData("")).toBe("plaintext");
+      });
+
+      it("classifies whitespace-only string as plaintext", () => {
+        expect(classifyUserData("   \n\t  ")).toBe("plaintext");
+      });
+
+      it("classifies UTF-8 non-ASCII plaintext as plaintext", () => {
+        // Japanese characters — not valid base64 chars
+        expect(classifyUserData("こんにちは世界")).toBe("plaintext");
+      });
+
+      it("classifies base64 with newlines as base64 (stripped)", () => {
+        // Split base64 across lines — still valid base64
+        const encoded = Buffer.from("binary blob content", "utf8").toString(
+          "base64",
+        );
+        const multiline = encoded.slice(0, 8) + "\n" + encoded.slice(8);
+        expect(classifyUserData(multiline)).toBe("base64");
+      });
+
+      it("classifies non-multiple-of-4 length as plaintext", () => {
+        // Length 5 — can't be real base64
+        expect(classifyUserData("abcde")).toBe("plaintext");
+      });
+    });
+
+    describe("encodeUserData", () => {
+      it("encodes bash shebang plaintext", () => {
+        const input = "#!/bin/bash\necho hello";
+        expect(encodeUserData(input)).toBe(
+          Buffer.from(input, "utf8").toString("base64"),
+        );
+      });
+
+      it("encodes cloud-init plaintext", () => {
+        const input = "#cloud-config\nruncmd:\n  - echo hi";
+        expect(encodeUserData(input)).toBe(
+          Buffer.from(input, "utf8").toString("base64"),
+        );
+      });
+
+      it("passes through valid base64 blob unchanged", () => {
+        const encoded = "aGVsbG8gd29ybGQ=";
+        expect(encodeUserData(encoded)).toBe(encoded);
+      });
+
+      it("strips whitespace from base64 blob", () => {
+        const encoded = "aGVsbG8gd29ybGQ=";
+        const multiline = "aGVsbG8g\nd29ybGQ=";
+        expect(encodeUserData(multiline)).toBe(encoded);
+      });
+
+      it("throws with actionable hint on double-base64", () => {
+        const script = "#!/bin/bash\necho hi";
+        const encoded = Buffer.from(script, "utf8").toString("base64");
+        expect(() => encodeUserData(encoded)).toThrow(
+          /already base64-encoded/i,
+        );
+        expect(() => encodeUserData(encoded)).toThrow(/raw script text/i);
+      });
+
+      it("encodes UTF-8 non-ASCII plaintext", () => {
+        const input = "こんにちは";
+        expect(encodeUserData(input)).toBe(
+          Buffer.from(input, "utf8").toString("base64"),
+        );
+      });
+    });
+
+    describe("UserData field wiring", () => {
+      it("validate rejects double-base64 with hint", () => {
+        const script = "#!/bin/bash\necho hi";
+        const encoded = Buffer.from(script, "utf8").toString("base64");
+        const err = userDataField.question.validate!(encoded);
+        expect(typeof err).toBe("string");
+        expect(err as string).toMatch(/already base64-encoded/i);
+      });
+
+      it("validate accepts plaintext shebang", () => {
+        expect(
+          userDataField.question.validate!("#!/bin/bash\necho hi"),
+        ).toBeUndefined();
+      });
+
+      it("validate still enforces 16 KB cap", () => {
+        const big = "x".repeat(16385);
+        expect(userDataField.question.validate!(big)).toMatch(/16 KB/);
+      });
+
+      it("toCfn encodes plaintext shebang", () => {
+        const input = "#!/bin/bash\necho hi";
+        expect(userDataField.toCfn!(input)).toBe(
+          Buffer.from(input, "utf8").toString("base64"),
+        );
+      });
+
+      it("toCfn passes through valid base64 blob", () => {
+        const encoded = "aGVsbG8gd29ybGQ=";
+        expect(userDataField.toCfn!(encoded)).toBe(encoded);
+      });
+
+      it("toCfn returns undefined for empty", () => {
+        expect(userDataField.toCfn!("")).toBeUndefined();
+        expect(userDataField.toCfn!(undefined)).toBeUndefined();
+      });
+
+      it("toCfn throws on double-base64 (safety net for LLM/--set path)", () => {
+        const script = "#cloud-config\nruncmd:\n  - echo hi";
+        const encoded = Buffer.from(script, "utf8").toString("base64");
+        expect(() => userDataField.toCfn!(encoded)).toThrow(
+          /already base64-encoded/i,
+        );
+      });
     });
   });
 

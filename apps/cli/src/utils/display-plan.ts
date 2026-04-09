@@ -218,7 +218,10 @@ export function formatAppliedFixes(
 
   const header = `Auto-fixed:      ${fixes.length} fix${fixes.length === 1 ? "" : "es"} applied`;
   const lines = fixes.map((f) => {
-    const detail = `  \u2713 ${f.title} (${f.fieldPath}: ${formatFixValue(f.oldValue)} \u2192 ${formatFixValue(f.newValue)})`;
+    // Item 4a (2026-04-09): surface the BP rule ID so users can `grep`
+    // the practiceId in the best-practices YAML library or in docs
+    // and understand *why* their wizard input was changed mid-plan.
+    const detail = `  \u2713 ${f.fieldPath}: ${formatFixValue(f.oldValue)} \u2192 ${formatFixValue(f.newValue)} (${f.practiceId}: ${f.title})`;
     return isTTY ? chalk.green(detail) : detail;
   });
 
