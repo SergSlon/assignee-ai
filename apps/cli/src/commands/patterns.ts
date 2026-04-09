@@ -111,9 +111,9 @@ export function renderPatternDetail(detail: PatternDetail): string {
   return lines.join("\n") + "\n";
 }
 
-export const patternsCommand = new Command("patterns").description(
-  "List and inspect compound architecture patterns",
-);
+export const patternsCommand = new Command("patterns")
+  .alias("pattern")
+  .description("List and inspect compound architecture patterns");
 
 patternsCommand
   .command("list", { isDefault: true })
