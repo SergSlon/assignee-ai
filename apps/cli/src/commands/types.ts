@@ -158,9 +158,11 @@ export function renderTypeDetail(detail: TypeDetail): string {
   return lines.join("\n") + "\n";
 }
 
-export const typesCommand = new Command("types").description(
-  "List and inspect the CloudFormation resource types assignee can provision",
-);
+export const typesCommand = new Command("types")
+  .alias("type")
+  .description(
+    "List and inspect the CloudFormation resource types assignee can provision",
+  );
 
 typesCommand
   .command("list", { isDefault: true })

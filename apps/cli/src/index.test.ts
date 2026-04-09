@@ -14,6 +14,7 @@ vi.mock("commander", () => {
   MockCommand.prototype.addHelpText = vi.fn().mockReturnThis();
   MockCommand.prototype.configureHelp = vi.fn().mockReturnThis();
   MockCommand.prototype.hook = vi.fn().mockReturnThis();
+  MockCommand.prototype.alias = vi.fn().mockReturnThis();
   MockCommand.prototype.commands = [];
   MockCommand.prototype.parseAsync = vi.fn().mockResolvedValue(undefined);
   return { Command: MockCommand };
