@@ -282,9 +282,14 @@ describe("compoundDispatcherNode — all 8 patterns", () => {
       expectedFirstResourceId: "ecr-repo",
     },
     {
-      name: "static-website (3 resources: S3 + CloudFront + OAC)",
+      // (f) 2026-04-09 Task 4b: static-website is now a 4-resource
+      // fully-CCAPI compound — added AWS::S3::BucketPolicy as the
+      // terminal resource that grants CloudFront OAC read access
+      // to the bucket (replaces the post-provision SDK
+      // PutBucketPolicy call that used to live in cloudfront-setup.ts).
+      name: "static-website (4 resources: S3 + OAC + CloudFront + BucketPolicy)",
       pattern: staticWebsitePattern,
-      expectedQueueLength: 3,
+      expectedQueueLength: 4,
       expectedFirstResourceType: RESOURCE_TYPES.S3_BUCKET,
       expectedFirstResourceId: "website-bucket",
     },

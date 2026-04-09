@@ -494,6 +494,39 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "cloudfront:TagResource",
       "cloudfront:UntagResource",
     ],
+    // (f) 2026-04-09 Task 4b: AWS::CloudFront::OriginAccessControl.
+    // CCAPI create/read/update/delete/list handlers probed 2026-04-09.
+    // CreateOriginAccessControl already lives on the S3_BUCKET entry
+    // (historical: Epic 37 granted it for the post-provision SDK
+    // flow); the dedup in collectServiceActions() means the Create
+    // verb adds zero net bytes here. The two Get* verbs fold into the
+    // existing cloudfront:Get* wildcard (distribution + OAC = 4+
+    // actions → collapser promotes the group). ListOriginAccessControls
+    // folds into the cloudfront:List* wildcard. Update and Delete
+    // are the only new net bytes because cloudfront:Update*/Delete*
+    // are write-side and excluded from SAFE_WILDCARD_PREFIXES.
+    [RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL]: [
+      "cloudfront:CreateOriginAccessControl",
+      "cloudfront:GetOriginAccessControl",
+      "cloudfront:GetOriginAccessControlConfig",
+      "cloudfront:UpdateOriginAccessControl",
+      "cloudfront:DeleteOriginAccessControl",
+      "cloudfront:ListOriginAccessControls",
+    ],
+    // (f) 2026-04-09 Task 4b: AWS::S3::BucketPolicy.
+    // s3:PutBucketPolicy and s3:DeleteBucketPolicy are new net bytes
+    // (they did NOT already exist on the S3_BUCKET entry — the
+    // historical post-provision bucket-policy flow ran via the same
+    // operator credentials but without explicit scoping here).
+    // s3:GetBucketPolicy folds into the existing s3:Get* wildcard
+    // (many S3 Get* actions → safely collapsed). With the Option Y
+    // A/B services split in place each half has ~3300B headroom so
+    // the ~60 bytes added here are comfortably inside budget.
+    [RESOURCE_TYPES.S3_BUCKET_POLICY]: [
+      "s3:GetBucketPolicy",
+      "s3:PutBucketPolicy",
+      "s3:DeleteBucketPolicy",
+    ],
     // A9 (2026-04-09): AWS::Events::EventBus minimum viable set.
     // CreateEventBus + DeleteEventBus + DescribeEventBus cover the
     // core lifecycle. PutPermission/RemovePermission are needed for

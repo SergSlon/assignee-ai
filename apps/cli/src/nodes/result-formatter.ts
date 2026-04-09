@@ -52,24 +52,29 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * Post-provision: upload static site files to S3, create CloudFront distribution,
- * and show the website URLs (Story 37.4).
- * Non-blocking: upload/CloudFront failures are logged as warnings but never mark
+ * Post-provision: upload static site files to an already-created S3
+ * bucket.
+ *
+ * Pre (f) 2026-04-09 Task 4b this helper ALSO used direct SDK calls
+ * to create a CloudFront distribution, Origin Access Control, and
+ * update the S3 BucketPolicy — a ~430 LOC SDK post-provision hook in
+ * cloudfront-setup.ts. All three of those operations are now
+ * first-class CCAPI resources owned by the static-website compound
+ * pattern (AWS::CloudFront::OriginAccessControl +
+ * AWS::CloudFront::Distribution + AWS::S3::BucketPolicy), so this
+ * helper is now ONLY responsible for uploading the user's application
+ * files to S3. Everything else flows through the main CCAPI graph.
+ *
+ * Non-blocking: upload failures are logged as warnings but never mark
  * the provision as failed.
  */
 async function uploadStaticSiteFiles(
   bucketName: string,
   sourceDir: string,
-  createCloudFront = false,
 ): Promise<void> {
   const { uploadStaticSite } = await import("../services/s3-upload.js");
 
-  const region =
-    process.env[EnvVar.AWS_REGION] ??
-    process.env[EnvVar.AWS_DEFAULT_REGION] ??
-    AWS_REGION;
-
-  // 1. Upload files to S3
+  // Upload files to S3
   const spinner = clack.spinner();
   spinner.start("Uploading files...");
 
@@ -91,102 +96,47 @@ async function uploadStaticSiteFiles(
       process.stderr.write(chalk.dim(`  ${err.file}: ${err.error}\n`));
     }
   }
+}
 
-  if (!createCloudFront) {
-    // No CloudFront — set public-read bucket policy and show S3 website URL only
-    try {
-      const { configureBucketPolicy } =
-        await import("../services/s3-upload.js");
-      await configureBucketPolicy(bucketName);
-    } catch {
-      process.stderr.write(
-        chalk.dim("  Could not set public-read bucket policy.\n"),
-      );
-    }
-
-    const s3Url = `http://${bucketName}.s3-website-${region}.amazonaws.com`;
-    process.stdout.write(chalk.cyan(`\n\uD83C\uDF10 Website URL: ${s3Url}\n`));
-    return;
-  }
-
-  // 2. Create CloudFront distribution with OAC
-  try {
-    const { createCloudFrontDistribution, generateCloudFrontBucketPolicy } =
-      await import("../services/cloudfront-setup.js");
-    const { PutBucketPolicyCommand, S3Client } =
-      await import("@aws-sdk/client-s3");
-    const { requireAssigneeCredentials } =
-      await import("../config/aws-credentials.js");
-
-    const cfSpinner = clack.spinner();
-    cfSpinner.start("Creating CloudFront distribution...");
-
-    const cfResult = await createCloudFrontDistribution(bucketName, region);
-
-    // 3. Update bucket policy to use OAC (replaces public-read).
-    // Centralized helper throws MissingAssigneeCredentialsError if
-    // ASSIGNEE_OPERATOR_* env vars are not set — never falls through to
-    // ~/.aws/credentials, SSO, or instance metadata.
-    const s3Client = new S3Client({
-      region,
-      credentials: requireAssigneeCredentials("operator"),
-    });
-    const oacPolicy = generateCloudFrontBucketPolicy(
-      bucketName,
-      cfResult.distributionArn,
-    );
-    await s3Client.send(
-      new PutBucketPolicyCommand({
-        Bucket: bucketName,
-        Policy: oacPolicy,
-      }),
-    );
-
-    cfSpinner.stop("CloudFront distribution created");
-
-    // Show both URLs
-    const s3Url = `http://${bucketName}.s3-website-${region}.amazonaws.com`;
-    const cfUrl = `https://${cfResult.domainName}`;
-    process.stdout.write(
-      chalk.cyan(`\n\uD83C\uDF10 S3 Website URL: ${s3Url}\n`),
-    );
-    process.stdout.write(
-      chalk.cyan(`\u2601 CloudFront distribution created: ${cfUrl}\n`),
-    );
-    process.stdout.write(
-      chalk.dim(`  Distribution ID: ${cfResult.distributionId}\n`),
-    );
-    process.stdout.write(
-      chalk.dim(
-        "  Status: InProgress (may take 5-15 minutes to fully deploy)\n",
-      ),
-    );
-    process.stdout.write(chalk.green(`  Recommended URL: ${cfUrl}\n`));
-  } catch (cfErr) {
-    // CloudFront failure is non-blocking — fall back to S3 website URL
-    process.stderr.write(
-      chalk.yellow(
-        `\u26A0 CloudFront setup failed: ${cfErr instanceof Error ? cfErr.message : String(cfErr)}\n`,
-      ),
-    );
-    process.stderr.write(
-      chalk.dim("  Falling back to S3 website hosting (HTTP only).\n"),
-    );
-
-    // Set public-read bucket policy as fallback
-    try {
-      const { configureBucketPolicy } =
-        await import("../services/s3-upload.js");
-      await configureBucketPolicy(bucketName);
-    } catch {
-      process.stderr.write(
-        chalk.dim("  Could not set public-read bucket policy either.\n"),
-      );
-    }
-
-    const s3Url = `http://${bucketName}.s3-website-${region}.amazonaws.com`;
-    process.stdout.write(chalk.cyan(`\n\uD83C\uDF10 Website URL: ${s3Url}\n`));
-  }
+/**
+ * Print the CloudFront URL for a completed static-website compound.
+ *
+ * The distribution's domain is deterministic: CloudFront assigns
+ * `<distribution-id>.cloudfront.net` at create time. Once the
+ * distribution resource is in `completedResources` we can synthesize
+ * the URL without a GetResource call. Propagation still takes 5-15
+ * minutes before traffic actually flows through the edge network —
+ * we call that out explicitly so users don't think something is
+ * broken when the URL 404s immediately after apply.
+ *
+ * @see (f) 2026-04-09 Task 4b — replaced the cloudfront-setup.ts
+ *      SDK post-provision flow; URL display is now the only
+ *      post-compound hook for static-website
+ */
+function printStaticWebsiteCloudFrontUrl(
+  completedResources: readonly ResourceResult[],
+): void {
+  const distribution = completedResources.find(
+    (r) =>
+      r.resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION &&
+      r.resourceArn,
+  );
+  if (!distribution?.resourceArn) return;
+  // The distribution's CCAPI primaryIdentifier is the bare Id
+  // (e.g. "E1ABCDEFG12345"). CloudFront assigns the public domain
+  // `<id>.cloudfront.net` deterministically at create time.
+  const distributionId = distribution.resourceArn;
+  const cfUrl = `https://${distributionId}.cloudfront.net`;
+  process.stdout.write(
+    chalk.cyan(`\n\u2601 CloudFront distribution created: ${cfUrl}\n`),
+  );
+  process.stdout.write(chalk.dim(`  Distribution ID: ${distributionId}\n`));
+  process.stdout.write(
+    chalk.dim(
+      "  Status: propagating (may take 5-15 minutes before traffic flows)\n",
+    ),
+  );
+  process.stdout.write(chalk.green(`  Recommended URL: ${cfUrl}\n`));
 }
 
 export async function resultFormatterNode(
@@ -394,13 +344,7 @@ export async function resultFormatterNode(
               // Skip upload for this resource
             } else {
               try {
-                const createCf =
-                  state.resourcePattern?.patternId === PatternId.STATIC_WEBSITE;
-                await uploadStaticSiteFiles(
-                  bucketName,
-                  state.sourceDir,
-                  createCf,
-                );
+                await uploadStaticSiteFiles(bucketName, state.sourceDir);
               } catch (err) {
                 process.stderr.write(
                   chalk.yellow(
@@ -426,6 +370,16 @@ export async function resultFormatterNode(
               `\u26A0 --source flag ignored: file upload only supported for S3 buckets, not ${state.resourceType}\n`,
             ),
           );
+        }
+
+        // (f) 2026-04-09 Task 4b: for the static-website compound, print
+        // the CloudFront URL synthesized from the distribution Id.
+        // This replaces the old post-provision SDK flow in
+        // cloudfront-setup.ts — the distribution is now a regular CCAPI
+        // resource in the compound so its Id is already in
+        // updatedCompleted.
+        if (state.resourcePattern?.patternId === PatternId.STATIC_WEBSITE) {
+          printStaticWebsiteCloudFrontUrl(updatedCompleted);
         }
 
         return { completedResources: updatedCompleted };

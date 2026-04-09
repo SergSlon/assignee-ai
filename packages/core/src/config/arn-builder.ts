@@ -181,6 +181,28 @@ export function buildResourceArn(args: BuildResourceArnArgs): string {
     case RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION:
       return identifier;
 
+    // ── CloudFront (global service, account-scoped ARN) ───────────
+    // CloudFront is a global service so the ARN has no region segment.
+    // The distribution identifier CCAPI returns is the bare Id
+    // (e.g. "E1234567890ABC"); we synthesize the account-scoped ARN
+    // so compound patterns can reference the full ARN in dependent
+    // resources like S3 BucketPolicy (aws:SourceArn condition).
+    case RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION:
+      return `arn:${partition}:cloudfront::${accountId}:distribution/${identifier}`;
+    // CloudFront OriginAccessControl has an ARN format, but
+    // CloudFront itself only references it by Id in
+    // DistributionConfig.Origins[].OriginAccessControlId — no
+    // downstream consumer needs the full ARN. Return the bare Id so
+    // compound marker resolution drops the Id straight into the
+    // origin config.
+    case RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL:
+      return identifier;
+    // S3 BucketPolicy has no ARN per se — the CCAPI primaryIdentifier
+    // is the bucket name itself (the policy IS the bucket's policy
+    // attribute). Return the bucket name unchanged.
+    case RESOURCE_TYPES.S3_BUCKET_POLICY:
+      return identifier;
+
     default:
       // Unknown resource type — return the bare identifier rather
       // than fabricate a wrong-shaped ARN. Callers that need a

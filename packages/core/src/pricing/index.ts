@@ -38,6 +38,8 @@ import { eventsRulePricingStrategy } from "./strategies/events-rule.js";
 import { eventsEventBusPricingStrategy } from "./strategies/events-eventbus.js";
 // A10 (2026-04-09) — SNS Subscription promoted out of CCAPI_FALLBACK_TYPES
 import { snsSubscriptionPricingStrategy } from "./strategies/sns-subscription.js";
+import { cloudFrontOacPricingStrategy } from "./strategies/cloudfront-origin-access-control.js";
+import { s3BucketPolicyPricingStrategy } from "./strategies/s3-bucket-policy.js";
 // A11 (2026-04-09) — KMS::Key first-class (customer-managed keys)
 import { kmsKeyPricingStrategy } from "./strategies/kms-key.js";
 import { kmsKeyPricingDecomposer } from "./decomposers/kms-key.js";
@@ -89,6 +91,9 @@ import {
   snsSubscriptionPricingDecomposer,
   // A12 (2026-04-09): Events::Connection — free (cost on ApiDestination)
   eventsConnectionPricingDecomposer,
+  // (f) 2026-04-09 Task 4b: CloudFront OAC + S3 BucketPolicy — both free
+  cloudFrontOacPricingDecomposer,
+  s3BucketPolicyPricingDecomposer,
 } from "./decomposers/free.js";
 
 /**
@@ -230,6 +235,16 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
   cloudFrontDistributionPricingStrategy,
 );
+// (f) 2026-04-09 Task 4b — CloudFront::OriginAccessControl + S3::BucketPolicy
+// (both free — cost lives on parent distribution and parent bucket)
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+  cloudFrontOacPricingStrategy,
+);
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.S3_BUCKET_POLICY,
+  s3BucketPolicyPricingStrategy,
+);
 
 /**
  * The default pre-populated pricing decomposer registry (Story 23.1).
@@ -280,6 +295,10 @@ defaultDecomposerRegistry.register(eventsConnectionPricingDecomposer);
 defaultDecomposerRegistry.register(eventsApiDestinationPricingDecomposer);
 // A14 (2026-04-09) — CloudFront::Distribution (usage-based data + reqs)
 defaultDecomposerRegistry.register(cloudFrontDistributionPricingDecomposer);
+// (f) 2026-04-09 Task 4b — CloudFront::OriginAccessControl + S3::BucketPolicy
+// (both free — cost lives on parent CloudFront distribution and S3 bucket)
+defaultDecomposerRegistry.register(cloudFrontOacPricingDecomposer);
+defaultDecomposerRegistry.register(s3BucketPolicyPricingDecomposer);
 
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";

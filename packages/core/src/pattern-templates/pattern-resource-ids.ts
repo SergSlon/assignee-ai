@@ -48,8 +48,15 @@ export const ContainerServiceResourceId = {
 /** Resource IDs for the Static Website pattern. */
 export const StaticWebsiteResourceId = {
   WEBSITE_BUCKET: "website-bucket",
-  CDN_DISTRIBUTION: "cdn-distribution",
   CDN_OAC: "cdn-oac",
+  CDN_DISTRIBUTION: "cdn-distribution",
+  // (f) 2026-04-09 Task 4b: explicit BucketPolicy resource that grants
+  // CloudFront (via OAC) read access to the bucket, scoped to the
+  // distribution's aws:SourceArn. Pre-migration this was applied via
+  // a post-provision PutBucketPolicy SDK call in result-formatter.ts;
+  // the migration rewires it as a compound resource with a marker-
+  // resolved dependency on the distribution.
+  BUCKET_POLICY: "bucket-policy",
 } as const;
 
 /**

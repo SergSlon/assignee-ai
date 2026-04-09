@@ -41,6 +41,10 @@ import { eventsConnectionPlugin } from "./plugins/events-connection.js";
 import { eventsApiDestinationPlugin } from "./plugins/events-apidestination.js";
 // A14 (2026-04-09): CloudFront::Distribution first-class
 import { cloudFrontDistributionPlugin } from "./plugins/cloudfront-distribution.js";
+// (f) 2026-04-09 Task 4b: CloudFront::OriginAccessControl + S3::BucketPolicy
+// first-class (unblocks static-website compound migration off SDK)
+import { cloudFrontOriginAccessControlPlugin } from "./plugins/cloudfront-origin-access-control.js";
+import { s3BucketPolicyPlugin } from "./plugins/s3-bucket-policy.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -95,6 +99,9 @@ defaultPluginRegistry.register(eventsConnectionPlugin);
 defaultPluginRegistry.register(eventsApiDestinationPlugin);
 // A14 (2026-04-09): CloudFront::Distribution first-class
 defaultPluginRegistry.register(cloudFrontDistributionPlugin);
+// (f) 2026-04-09 Task 4b: OAC + BucketPolicy for static-website compound
+defaultPluginRegistry.register(cloudFrontOriginAccessControlPlugin);
+defaultPluginRegistry.register(s3BucketPolicyPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 export { PluginRegistry };
@@ -140,6 +147,9 @@ export { eventsConnectionPlugin } from "./plugins/events-connection.js";
 export { eventsApiDestinationPlugin } from "./plugins/events-apidestination.js";
 // A14 (2026-04-09): CloudFront::Distribution first-class
 export { cloudFrontDistributionPlugin } from "./plugins/cloudfront-distribution.js";
+// (f) 2026-04-09 Task 4b: OAC + BucketPolicy for static-website compound
+export { cloudFrontOriginAccessControlPlugin } from "./plugins/cloudfront-origin-access-control.js";
+export { s3BucketPolicyPlugin } from "./plugins/s3-bucket-policy.js";
 export { genericPlugin } from "./plugins/generic.js";
 export type {
   ResourcePlugin,

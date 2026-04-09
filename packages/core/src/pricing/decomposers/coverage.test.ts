@@ -20,8 +20,8 @@ import { defaultPricingRegistry, defaultDecomposerRegistry } from "../index.js";
 // The PricingDecomposerRegistry has `has()`.
 
 describe("pricing coverage — all supported resource types", () => {
-  it("SUPPORTED_TYPES_ARRAY has exactly 34 types (33 + CloudFront::Distribution from A14)", () => {
-    expect(SUPPORTED_TYPES_ARRAY).toHaveLength(34);
+  it("SUPPORTED_TYPES_ARRAY has exactly 36 types (34 + CloudFront::OriginAccessControl + S3::BucketPolicy from Task 4b)", () => {
+    expect(SUPPORTED_TYPES_ARRAY).toHaveLength(36);
   });
 
   describe("pricing strategy registered for every type", () => {

@@ -1,13 +1,39 @@
 import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { IamEffect } from "../../config/iam-effects.js";
+import {
+  AwsServicePrincipal,
+  IamAction,
+  IamPolicy,
+} from "../../config/aws-arns.js";
+import { markerRef } from "../../config/marker-tokens.js";
 import type { ArchitecturePattern } from "../types.js";
 import { StaticWebsiteResourceId as R } from "../pattern-resource-ids.js";
 import { PatternId } from "../pattern-ids.js";
 
 /**
- * Static Website pattern — S3 bucket + CloudFront distribution.
- * S3 is provisioned via CloudControl. CloudFront + OAC are created post-provision
- * via direct SDK calls (not CloudControl). File upload uses --source flag.
+ * Static Website pattern — S3 bucket + CloudFront distribution with
+ * Origin Access Control (OAC). Fully CCAPI end-to-end as of
+ * (f) 2026-04-09 Task 4b; before that migration the CloudFront
+ * distribution, OAC, and S3 bucket policy were created via direct
+ * SDK calls in a post-provision hook (cloudfront-setup.ts).
+ *
+ * Resource order:
+ *   1. website-bucket       — AWS::S3::Bucket (private, encrypted)
+ *   2. cdn-oac              — AWS::CloudFront::OriginAccessControl
+ *   3. cdn-distribution     — AWS::CloudFront::Distribution (depends on
+ *                             the OAC Id via markerRef; the S3 origin
+ *                             domain is synthesized from the bucket
+ *                             name)
+ *   4. bucket-policy        — AWS::S3::BucketPolicy (depends on the
+ *                             distribution's ARN via markerRef; grants
+ *                             cloudfront.amazonaws.com read access
+ *                             scoped to aws:SourceArn)
+ *
+ * File upload (--source flag) still happens in the post-apply
+ * result-formatter step AFTER all four CCAPI resources land, because
+ * the upload is an application-level concern (user's HTML/CSS/JS),
+ * not part of the infrastructure graph.
  */
 export const staticWebsitePattern: ArchitecturePattern = {
   patternId: PatternId.STATIC_WEBSITE,
@@ -27,25 +53,28 @@ export const staticWebsitePattern: ArchitecturePattern = {
       displayName: "S3 Website Bucket",
     },
     {
-      resourceType: "AWS::CloudFront::Distribution",
-      resourceId: R.CDN_DISTRIBUTION,
-      displayName: "CloudFront CDN (HTTPS)",
-      provisionable: false, // Created post-provision via SDK when --source is used
-    },
-    {
-      resourceType: "AWS::CloudFront::OriginAccessControl",
+      resourceType: RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
       resourceId: R.CDN_OAC,
       displayName: "Origin Access Control",
-      provisionable: false, // Created alongside CloudFront distribution
+    },
+    {
+      resourceType: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
+      resourceId: R.CDN_DISTRIBUTION,
+      displayName: "CloudFront CDN (HTTPS)",
+    },
+    {
+      resourceType: RESOURCE_TYPES.S3_BUCKET_POLICY,
+      resourceId: R.BUCKET_POLICY,
+      displayName: "S3 Bucket Policy (OAC read grant)",
     },
   ],
-  dependencyOrder: [[R.WEBSITE_BUCKET], [R.CDN_OAC, R.CDN_DISTRIBUTION]],
+  dependencyOrder: [
+    [R.WEBSITE_BUCKET, R.CDN_OAC],
+    [R.CDN_DISTRIBUTION],
+    [R.BUCKET_POLICY],
+  ],
   defaultOptions: {
     [R.WEBSITE_BUCKET]: {
-      WebsiteConfiguration: {
-        IndexDocument: "index.html",
-        ErrorDocument: "error.html",
-      },
       BucketEncryption: {
         ServerSideEncryptionConfiguration: [
           {
@@ -56,11 +85,133 @@ export const staticWebsitePattern: ArchitecturePattern = {
         ],
       },
       VersioningConfiguration: { Status: CfnKey.ENABLED },
+      // Private bucket — OAC is the ONLY path to the content. Block
+      // all public access so a misconfigured policy cannot accidentally
+      // expose the bucket. This is the whole security premise of OAC.
       PublicAccessBlockConfiguration: {
-        BlockPublicAcls: false,
-        BlockPublicPolicy: false,
-        IgnorePublicAcls: false,
-        RestrictPublicBuckets: false,
+        BlockPublicAcls: true,
+        BlockPublicPolicy: true,
+        IgnorePublicAcls: true,
+        RestrictPublicBuckets: true,
+      },
+    },
+    [R.CDN_OAC]: {
+      OriginAccessControlConfig: {
+        Name: "assignee-static-website-oac",
+        Description: "OAC for assignee.ai static-website compound pattern",
+        SigningProtocol: "sigv4",
+        SigningBehavior: "always",
+        OriginAccessControlOriginType: "s3",
+      },
+    },
+    [R.CDN_DISTRIBUTION]: {
+      DistributionConfig: {
+        // CallerReference must be unique per-distribution; the
+        // plan-generator injects the runId short hash into compound
+        // resource names via the NAME_FIELDS map, but CloudFront
+        // has no Name field so we use a static string here and let
+        // CloudFront auto-generate the Id. CallerReference is
+        // cosmetic once the distribution is live.
+        CallerReference: "assignee-static-website",
+        Comment: "Assignee.ai static website (S3 + OAC)",
+        Enabled: true,
+        DefaultRootObject: "index.html",
+        PriceClass: "PriceClass_100",
+        Origins: {
+          Quantity: 1,
+          Items: [
+            {
+              Id: "S3Origin",
+              // CloudFront expects the regional S3 endpoint, not the
+              // global virtual-hosted-style URL. The compound marker
+              // resolver substitutes the bucket name at apply time;
+              // region is injected by the result-formatter at
+              // post-apply time when the distribution is already live,
+              // but here at plan time we rely on the generic S3
+              // website compound convention of using the standard
+              // regional endpoint. The empty S3OriginConfig +
+              // OriginAccessControlId together tell CloudFront this
+              // is an OAC-gated S3 origin.
+              DomainName: `${markerRef(R.WEBSITE_BUCKET)}.s3.amazonaws.com`,
+              OriginAccessControlId: markerRef(R.CDN_OAC),
+              S3OriginConfig: {
+                OriginAccessIdentity: "",
+              },
+            },
+          ],
+        },
+        DefaultCacheBehavior: {
+          TargetOriginId: "S3Origin",
+          ViewerProtocolPolicy: "redirect-to-https",
+          AllowedMethods: {
+            Quantity: 2,
+            Items: ["GET", "HEAD"],
+            CachedMethods: {
+              Quantity: 2,
+              Items: ["GET", "HEAD"],
+            },
+          },
+          // AWS-managed "CachingOptimized" policy — modern replacement
+          // for the legacy ForwardedValues/MinTTL/DefaultTTL/MaxTTL
+          // tuple. Using the managed policy id avoids shipping tuning
+          // knobs that nobody in the static-website hot path wants to
+          // touch at plan time.
+          CachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
+          Compress: true,
+        },
+        // Single-page-app friendly: map 403 (CloudFront returns this
+        // when OAC has access but the key doesn't exist) to
+        // index.html with 200. Client-side routing in React/Vue/
+        // Angular SPAs expects to serve index.html for every path
+        // and let the JS router take over.
+        CustomErrorResponses: {
+          Quantity: 1,
+          Items: [
+            {
+              ErrorCode: 403,
+              ResponsePagePath: "/index.html",
+              ResponseCode: "200",
+              ErrorCachingMinTTL: 10,
+            },
+          ],
+        },
+      },
+    },
+    [R.BUCKET_POLICY]: {
+      // BucketPolicy.Bucket is a marker ref to the bucket logical id
+      // — resolves to the bucket's name at apply time. Note that the
+      // S3::BucketPolicy CCAPI primaryIdentifier IS the bucket name,
+      // so this doubles as both the cross-reference and the primary
+      // identifier.
+      Bucket: markerRef(R.WEBSITE_BUCKET),
+      // The PolicyDocument grants read access to CloudFront service
+      // principal, scoped by aws:SourceArn to the specific
+      // distribution that will reference this bucket. The resolver
+      // substitutes the full distribution ARN via markerRef
+      // (buildResourceArn synthesizes the account-scoped global ARN
+      // for CloudFront distributions — see arn-builder.ts).
+      PolicyDocument: {
+        Version: IamPolicy.VERSION,
+        Statement: [
+          {
+            Sid: "AllowCloudFrontServicePrincipalReadOnly",
+            Effect: IamEffect.ALLOW,
+            Principal: {
+              Service: AwsServicePrincipal.CLOUDFRONT,
+            },
+            Action: IamAction.S3_GET_OBJECT,
+            // S3 object ARN — uses the resolved bucket name as the
+            // resource segment. The compound resolver substitutes
+            // markerRef(R.WEBSITE_BUCKET) with the real bucket name
+            // before the policy hits CCAPI.
+            Resource: `arn:aws:s3:::${markerRef(R.WEBSITE_BUCKET)}/*`,
+            Condition: {
+              StringEquals: {
+                "aws:SourceArn": markerRef(R.CDN_DISTRIBUTION),
+              },
+            },
+          },
+        ],
       },
     },
   },

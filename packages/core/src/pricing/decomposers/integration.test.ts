@@ -54,6 +54,15 @@ const FREE_TYPES: readonly string[] = [
   // cost lives on the ApiDestination that uses it (per-invocation
   // HTTP fee) and on the target service if any.
   RESOURCE_TYPES.EVENTS_CONNECTION,
+  // (f) 2026-04-09 Task 4b: CloudFront OriginAccessControl has no
+  // per-resource meter — the SigV4 signing work is captured by the
+  // parent distribution's per-request pricing. Decomposer returns [].
+  RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+  // (f) 2026-04-09 Task 4b: S3::BucketPolicy is an attribute of the
+  // parent bucket, not a separately billable resource. Decomposer
+  // returns [] — the bucket itself carries all storage / request /
+  // transfer charges via s3PricingDecomposer.
+  RESOURCE_TYPES.S3_BUCKET_POLICY,
   // SSM Standard tier is also free, but the decomposer is registered for
   // Advanced tier too — it is NOT in the "always free" list.
 ] as const;

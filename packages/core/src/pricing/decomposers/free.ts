@@ -96,3 +96,17 @@ export const snsSubscriptionPricingDecomposer = createFreeDecomposer(
 export const eventsConnectionPricingDecomposer = createFreeDecomposer(
   RESOURCE_TYPES.EVENTS_CONNECTION,
 );
+// (f) 2026-04-09 Task 4b: AWS::CloudFront::OriginAccessControl is
+// free. OAC itself has no meter; the SigV4 signing work happens on
+// CloudFront's edge nodes whose cost is already captured by the
+// parent distribution's per-request pricing. Decomposer returns [].
+export const cloudFrontOacPricingDecomposer = createFreeDecomposer(
+  RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+);
+// (f) 2026-04-09 Task 4b: AWS::S3::BucketPolicy is free — the policy
+// IS an attribute of the bucket, and S3 does not bill for policy
+// evaluation. The bucket itself is billed (storage, requests,
+// transfer) by the s3PricingDecomposer. Returns [] accordingly.
+export const s3BucketPolicyPricingDecomposer = createFreeDecomposer(
+  RESOURCE_TYPES.S3_BUCKET_POLICY,
+);

@@ -126,26 +126,41 @@ export const SUPPORTED_TYPES_ARRAY = [
   // paste the JSON from AWS docs or the /static-website compound
   // pattern. Modeling it as conditional showIf fields would require
   // ~30 nested form widgets that no one would actually use.
-  //
-  // The existing static-website compound pattern keeps its
-  // post-provision SDK path (provisionable: false + direct
-  // CloudFrontClient calls) because migrating that compound to
-  // CCAPI would require co-promoting CloudFront::OriginAccessControl
-  // and wiring up the new resource dependency graph. Deferred to a
-  // future slice — the first-class promotion here is ADDITIVE and
-  // lets users provision standalone distributions without touching
-  // the compound.
-  //
-  // Policy-size safety: cloudfront:* actions already live on the
-  // S3_BUCKET iam-actions entry (because the static-website compound
-  // grants them for post-provision CloudFront work). The dedup in
-  // collectServiceActions() means this promotion only adds the DIFF
-  // — CreateDistributionWithTags, UntagResource,
-  // UpdateDistributionWithStagingConfig, CreateConnectionGroup —
-  // plus the cloudcontrol:TypeName entry in core policy. Net
-  // services-policy cost is ~100 bytes, well within the 865-byte
-  // headroom left after A13.
   "AWS::CloudFront::Distribution",
+  // (f) 2026-04-09 Task 4b: AWS::CloudFront::OriginAccessControl first-class.
+  // Promoted to unblock the static-website compound migration off the
+  // SDK post-provision path (cloudfront-setup.ts). CCAPI schema:
+  //   - primaryIdentifier: /properties/Id (readOnly, auto-generated)
+  //   - required: [OriginAccessControlConfig]
+  //   - createOnly: (none — Name + Description + Signing*/OriginType
+  //     are all update-able post-create)
+  //   - tagging.taggable = false (OAC is not taggable — added to
+  //     NO_TAG_TYPES in apps/cli/src/utils/tags.ts so
+  //     injectMandatoryTags skips it)
+  //   - handlers: create, read, update, delete, list (all present)
+  // Pricing: free (no direct charge — CloudFront bills per-request
+  // on the parent distribution). Added to the free decomposer.
+  "AWS::CloudFront::OriginAccessControl",
+  // (f) 2026-04-09 Task 4b: AWS::S3::BucketPolicy first-class.
+  // Co-promoted alongside OriginAccessControl because the static-
+  // website compound needs a BucketPolicy that grants the CloudFront
+  // distribution's Service Principal read access scoped to
+  // aws:SourceArn = <distribution ARN>. Pre-promotion that policy
+  // was applied via SDK PutBucketPolicy in result-formatter.ts; the
+  // migration rewires it as a CCAPI resource so the compound is
+  // fully CCAPI end-to-end.
+  //
+  // CCAPI schema:
+  //   - primaryIdentifier: /properties/Bucket
+  //   - required: [Bucket, PolicyDocument]
+  //   - createOnly: [Bucket] — changing the bucket replaces the
+  //     policy (conceptually the policy IS the bucket's policy
+  //     attribute, there's only ever one per bucket)
+  //   - tagging.taggable = false
+  //   - handlers: create, read, update, delete, list (all present)
+  //
+  // Pricing: free (no direct charge; S3 bucket itself is billed).
+  "AWS::S3::BucketPolicy",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -199,6 +214,13 @@ export const RESOURCE_TYPES = {
   EVENTS_API_DESTINATION: "AWS::Events::ApiDestination",
   // A14 (2026-04-09) — CloudFront::Distribution first-class
   CLOUDFRONT_DISTRIBUTION: "AWS::CloudFront::Distribution",
+  // (f) 2026-04-09 Task 4b — CloudFront OriginAccessControl first-class
+  // (unblocks static-website compound migration off SDK post-provision)
+  CLOUDFRONT_ORIGIN_ACCESS_CONTROL: "AWS::CloudFront::OriginAccessControl",
+  // (f) 2026-04-09 Task 4b — S3::BucketPolicy first-class (co-promoted
+  // so the static-website compound can wire the CloudFront OAC read
+  // grant via CCAPI instead of a post-provision PutBucketPolicy call)
+  S3_BUCKET_POLICY: "AWS::S3::BucketPolicy",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */

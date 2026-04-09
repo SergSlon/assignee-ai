@@ -1211,8 +1211,8 @@ describe("supported resource types", () => {
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
   });
 
-  it("SUPPORTED_TYPES_ARRAY has exactly 34 types (33 + CloudFront::Distribution from A14)", async () => {
+  it("SUPPORTED_TYPES_ARRAY has exactly 36 types (34 + OAC + S3 BucketPolicy from Task 4b)", async () => {
     const { SUPPORTED_TYPES_ARRAY } = await import("@assignee/core");
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(34);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(36);
   });
 });
