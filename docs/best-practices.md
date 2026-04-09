@@ -10,7 +10,7 @@ The best practices pipeline runs as three nodes in the 12-node LangGraph graph:
 plan_generator -> bp_evaluator -> auto_fix_applier -> preflight_guard
 ```
 
-1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **175 rules** (133 initial, plus the A5 27-rule expansion from `docs/bp-cfn-guard-gap-analysis-2026-04-08.md`, BP-IAM-017 for elevated `*FullAccess` managed policies, BP-EFS-001/002/003 for the A1 EFS resource type, BP-EVENTS-001/002/003/004 for the A8 EventBridge Rule type, BP-EVENTBUS-001/002/003 for the A9 EventBridge EventBus type, BP-LAMBDA-015 for X-Ray tracing defaults, BP-SNS-007 RedrivePolicy DLQ for the A10 first-class AWS::SNS::Subscription, BP-KMS-001 EnableKeyRotation for the A11 first-class AWS::KMS::Key, BP-EVENTS-005/006 for the A12+A13 first-class AWS::Events::Connection + AWS::Events::ApiDestination types, and BP-CF-001 ViewerProtocolPolicy=redirect-to-https for the A14 first-class AWS::CloudFront::Distribution). Completes in <10ms for all rules.
+1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **184 rules** (133 initial, plus the A5 27-rule expansion from `docs/bp-cfn-guard-gap-analysis-2026-04-08.md`, BP-IAM-017 for elevated `*FullAccess` managed policies, BP-EFS-001/002/003 for the A1 EFS resource type, BP-EVENTS-001/002/003/004 for the A8 EventBridge Rule type, BP-EVENTBUS-001/002/003 for the A9 EventBridge EventBus type, BP-LAMBDA-015 for X-Ray tracing defaults, BP-SNS-007 RedrivePolicy DLQ for the A10 first-class AWS::SNS::Subscription, BP-KMS-001 EnableKeyRotation for the A11 first-class AWS::KMS::Key, BP-EVENTS-005/006 for the A12+A13 first-class AWS::Events::Connection + AWS::Events::ApiDestination types, BP-CF-001 ViewerProtocolPolicy=redirect-to-https for the A14 first-class AWS::CloudFront::Distribution, and the (f) 2026-04-09 Task 9 Epic 30 Phase 2 Well-Architected expansion: BP-S3-007 AbortIncompleteMultipartUpload, BP-S3BP-001 wildcard-principal policy guard, BP-DYNAMODB-004 ContributorInsights, BP-KMS-002 PendingWindowInDays>=30, BP-IAM-018 MaxSessionDuration cap, BP-CF-002 access logging, BP-OAC-001 SigningBehavior=always, BP-LAMBDA-008 explicit Timeout, BP-APIGW-007 DisableExecuteApiEndpoint). Completes in <10ms for all rules.
 
 2. **auto_fix_applier**: For findings with `fixType: auto`, patches the `desiredState` directly using `desiredStatePatch`. For findings with `fixType: interactive`, prompts the user with choices. Respects the `preferences.auto_fix` config setting (`ask` / `apply` / `skip`).
 
@@ -194,7 +194,7 @@ AWS::RDS::DBInstance                          10        6           1      3    
 AWS::ECS::Service                              9        5           1      3    2026-03-22
 ...
 
-Summary: 175 rules | 33 auto-fixable (19%) | 13 interactive | 129 manual
+Summary: 184 rules | 40 auto-fixable (22%) | 13 interactive | 131 manual
 ```
 
 ## Excluding Rules

@@ -1,0 +1,15 @@
+id: BP-CF-002
+title: "CloudFront distribution should enable access logging"
+severity: MEDIUM
+resource_type: "AWS::CloudFront::Distribution"
+property_path: "DistributionConfig.Logging.Bucket"
+check_type: "exists"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "CloudFront.5"
+description: "CloudFront access logs record every request served by the edge network — client IP, request URI, cache hit/miss, edge location, and response size. Without them the only visible signal post-incident is a spike in CloudWatch metrics with no ability to answer 'which resource was hit, from where, by whom?'. FSBP CloudFront.5 requires access logging enabled as a forensics prerequisite."
+remediation: "Set DistributionConfig.Logging.Bucket to the S3 bucket (full regional domain, e.g. 'logs.example.com.s3.amazonaws.com') where logs should be delivered. Optionally set Logging.Prefix to group logs by distribution, and Logging.IncludeCookies=true if the workload has any cookie-based auth you want forensic visibility into."
+consequence: "Without access logs, post-incident forensics are blind: CloudWatch shows the traffic spike but not which URIs were hit or which client IPs drove it. Mandatory for any IR capability."
+category: security
+lastVerified: "2026-04-09"
+blocking: false

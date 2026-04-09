@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "hash": "44c7e7e3a052fa064aff8c63544b88a83d2eef8645a75af5bac80c7f6dfd6edf",
+  "hash": "93bb53bbcdaf137bf38e7ba358a7a50cd36a2b00160133cf0c1aae49f2c7fb29",
   "files": {
     "apigateway/BP-APIGW-001.yaml": "bec1fb5d3e88707c41e07e4066bee54bc8290f7886ef02fe8054f89199d59267",
     "apigateway/BP-APIGW-002.yaml": "f0b8df494b6fbb8b1a7793a9e408d692fc01355122692bd6af0099f3bc1767f5",
@@ -8,10 +8,13 @@
     "apigateway/BP-APIGW-004.yaml": "5209aef6c60c2828d2ea1a3ae0e1a64ba46e4ee041e293e85926a10985494067",
     "apigateway/BP-APIGW-005.yaml": "f9b7f588245b9684c911b31d4bba5a440b2a77397d32fb6f0f72a067f6c87270",
     "apigateway/BP-APIGW-006.yaml": "0098725483fe8f9a52624e63e40f3fbec3472102004e007f3bd757c203ea6bdf",
+    "apigateway/BP-APIGW-007.yaml": "67dd1676009124c1108ae28f5efcffce2e3e684c65537adfb032e272d4999e7e",
     "autoscaling/BP-ASG-001.yaml": "772a0c55eb76e66f17b39a81206a2c7d3cf50f698e516b65fcc8919ef0c8aa22",
     "autoscaling/BP-ASG-002.yaml": "b544f144215572763cedc4421fb2076959055fab473a24f5f5ed397e5b6c97ec",
     "autoscaling/BP-ASG-003.yaml": "f8cf313ba9efe54ae12e744708e2f66f516bf0e19da29833e5916068d1582145",
     "cloudfront/BP-CF-001.yaml": "77deca2427abaf68ea40bab2176b21bb191a861099d6f4d3a8ad0e5124e93efe",
+    "cloudfront/BP-CF-002.yaml": "20fc5ae10f9686fbce84b33b216023db0ed0e485677b6e3eced383af87c4cd81",
+    "cloudfront/BP-OAC-001.yaml": "2d41d39eca9fb47546c39f34b7e99b6e7a3bd239c4527363132d564a4c5719c9",
     "cloudwatch/BP-CW-001.yaml": "37f1ff665606e8c0405e58a1d6ac9339cbdacd2b0bfd9037aba40667c269208e",
     "cloudwatch/BP-CW-002.yaml": "5c9770ffb7756f821cf3ef703bfec311098582e8c5f342949776efdc9fba4e15",
     "cloudwatch/BP-CWA-001.yaml": "a45d36bd0e580e674dd0e731518913ec0fd6cabddebc7f6a7ed88fbf910098e7",
@@ -20,6 +23,7 @@
     "dynamodb/BP-DYNAMODB-001.yaml": "9fd20480639843993106f4115100282f0073d8d4e4846dbc4136dccbc0917881",
     "dynamodb/BP-DYNAMODB-002.yaml": "adc44456a53e0eec62e4904496e6efde13800dbcca06601068d5fbe689d84628",
     "dynamodb/BP-DYNAMODB-003.yaml": "3770e666589fca0cc6373e4804d186fb4d61346ae2306f434771b5b20d6ef164",
+    "dynamodb/BP-DYNAMODB-004.yaml": "fdfa8499e0561a2dc55e4641f5f25a617737c34e82d848f2a4ac38e59f945c24",
     "dynamodb/BP-DYNAMODB-005.yaml": "1c91666cafc022a330af0b2c345887124bc113ae052edf37af6e24a700479631",
     "dynamodb/BP-DYNAMODB-006.yaml": "248118f41fe487c35d1783a49358633f41e6573bc490895bfd2e149f4f4a1103",
     "ec2/BP-EC2-001.yaml": "44b690a713debc6b7e22f117e3173e925aa7945cef7afae414bf51f2dfe48caa",
@@ -103,7 +107,9 @@
     "iam/BP-IAM-015.yaml": "d1ab7ec7213bf05c6073c7292c4c056fa8b5e58466f4c4157199fa9b0d3115f9",
     "iam/BP-IAM-016.yaml": "8b4c16a2a9282903f66699e5e2e14a14910747b1f709575c1ba88fe28f6d870b",
     "iam/BP-IAM-017.yaml": "07db825cb1706a800b91f9c0cf6e76cd506d66654bc3a74bae0edd23a4ddd501",
+    "iam/BP-IAM-018.yaml": "b41a5784205d968a35485d5de54ebdfcf78481df247cbed5d239b75978f074ca",
     "kms/BP-KMS-001.yaml": "1c033d90f60ee3d76bc42544dbf439fd08da7194cb23cda828ed32dbdfc800f1",
+    "kms/BP-KMS-002.yaml": "da00d42a135d6704ef1e249360457f5e18578eefed5506ee11128587b0d87faa",
     "lambda/BP-LAMBDA-001.yaml": "0522d12730c3d9acf3132094269203a86c45e6134ad2853857e324fb4946a750",
     "lambda/BP-LAMBDA-002.yaml": "f0f5fc6a0b3622754cb00bc325a8ab8843943d9061ae43655989e0aef050c62f",
     "lambda/BP-LAMBDA-003.yaml": "a5aa3e517d7bf08b49940716b297f7ace20c5b3cd45dee6a5d769b9063258090",
@@ -111,6 +117,7 @@
     "lambda/BP-LAMBDA-005.yaml": "c4121e648654053e7a549b5c3c9162dbf365e3b35ee1cfbc24076646d1902d88",
     "lambda/BP-LAMBDA-006.yaml": "887237b55d6ca5a87e25d3f3d3aaa261d438d1046eff6126c6537d12e9331924",
     "lambda/BP-LAMBDA-007.yaml": "3f3345d02b60f8a46b2faaa694ddd605d9614b37e9e63a4809a96b49c838fad0",
+    "lambda/BP-LAMBDA-008.yaml": "ee2ea3731c87de5c94c2c542ce47d61345ee1508516cb1c93eaa6aca3e53d85e",
     "lambda/BP-LAMBDA-010.yaml": "744416fe22c8258ae6cc2a465f7a49f1087485625cd01190f9f2a68d52e444f3",
     "lambda/BP-LAMBDA-011.yaml": "144b252361bdf49e41246da4323824fe9e1652467b9bea49adf41a6268228029",
     "lambda/BP-LAMBDA-012.yaml": "184cef20c6c40bc87b919e34827fa7fdac9878dd04ada2684bb2d303e287434c",
@@ -139,6 +146,7 @@
     "s3/BP-S3-004.yaml": "3d804c8bd321ddea8bc070d6af5be0df25f2cb76de5310bfa81dae4de8ef5746",
     "s3/BP-S3-005.yaml": "e3ae929e09da175dff1eb3c3f471ac795555b722a338649d4b4720dde796cfc3",
     "s3/BP-S3-006.yaml": "7f429432ea0f3e36a8a15fdeb98ebdf23f6259c79c71a061a4b6e25bcfbebab1",
+    "s3/BP-S3-007.yaml": "d037b55795cea1a3e65988da6a8225a7fbd5899dea9c48ae5645bf56dd9e3eef",
     "s3/BP-S3-008.yaml": "3841246e298711d125e2f028ec0db9e1e4c6d4ce9b0b57b664d33ca031c32d78",
     "s3/BP-S3-009.yaml": "0e3db952de99a6da1e58983f4668e286a7f21fe51f8ed5c58a7e2fec78cabf0e",
     "s3/BP-S3-010.yaml": "cbd36acc38602079cedc09decc2716105d126143364fa6d62e4deebca5935b4e",
@@ -150,6 +158,7 @@
     "s3/BP-S3-018.yaml": "ca1859429465917e9034a534f4926486c1a095adf40b56374cf79f218e6d17c0",
     "s3/BP-S3-019.yaml": "76c85afca23b8a8bbb00c3fbdcf7a86cfaf78d5cec379a32a8a6d0767f88fc2f",
     "s3/BP-S3-020.yaml": "f1ff3d4eb73f9c7514167f6b93978f62a618de788bbec839a665b1bf796937f6",
+    "s3/BP-S3BP-001.yaml": "8d551a69334cbfcbcf36dfdf0891a42af2cd14e3436c015303d5f65f9451d764",
     "secretsmanager/BP-SM-001.yaml": "652329fc6e188252d7dd6db713c73167643a133730c1b90cbbd80fa65d4c5e97",
     "secretsmanager/BP-SM-002.yaml": "623a0d05f2977d8ff544e595fba6b40e4560fd40ec0173b09e77013838af82ee",
     "secretsmanager/BP-SM-003.yaml": "6e37c4edc637c420e714cd20ed08b1a23561f5d7e6e8ce4a96d134f9c0821b65",
@@ -178,6 +187,6 @@
     "vpc/BP-VPC-001.yaml": "d1efbeaa898d16f6dd2605519b7fa3564c7237553193faf8e709ac8044290000",
     "vpc/BP-VPC-002.yaml": "f7c720a24811610df4bac22b00485c0d779ba5452c334bb7266b84afd7160e5f"
   },
-  "count": 175,
-  "generatedAt": "2026-04-09T14:53:28.228Z"
+  "count": 184,
+  "generatedAt": "2026-04-09T19:52:25.789Z"
 }
