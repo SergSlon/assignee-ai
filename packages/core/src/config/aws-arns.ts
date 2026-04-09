@@ -136,12 +136,19 @@ export const IamAction = {
   // Tagging
   TAG_TAG_RESOURCES: "tag:TagResources",
   TAG_GET_RESOURCES: "tag:GetResources",
-  // SDK fallback
-  LAMBDA_CREATE_ESM: "lambda:CreateEventSourceMapping",
-  LAMBDA_GET_ESM: "lambda:GetEventSourceMapping",
-  LAMBDA_DELETE_ESM: "lambda:DeleteEventSourceMapping",
-  SNS_SUBSCRIBE: "sns:Subscribe",
-  SNS_UNSUBSCRIBE: "sns:Unsubscribe",
+  // A6 (2026-04-08) dropped LAMBDA_CREATE_ESM / LAMBDA_GET_ESM /
+  //   LAMBDA_DELETE_ESM when Lambda::EventSourceMapping was migrated
+  //   from SDK fallback to CCAPI.
+  // A10 (2026-04-09) dropped SNS_SUBSCRIBE / SNS_UNSUBSCRIBE when
+  //   SNS::Subscription was promoted from CCAPI_FALLBACK_TYPES to a
+  //   first-class CCAPI type. The sns:Subscribe / sns:Unsubscribe
+  //   perms now live inside the scoped SNS_SUBSCRIPTION entry in
+  //   iam-actions.ts serviceActionMap.
+  // No SDK-fallback actions remain — every first-class type flows
+  // through CCAPI. The SSH key-pair companion perms
+  // (ec2:CreateKeyPair / ec2:DeleteKeyPair / ec2:DescribeKeyPairs)
+  // are unscoped in operatorPolicy() but live with the rest of the
+  // EC2 actions in iam-actions.ts, not here.
 } as const;
 
 /** AWS service principals for IAM trust policies. */
