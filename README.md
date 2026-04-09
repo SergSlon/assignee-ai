@@ -100,43 +100,44 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 
 ## Supported resource types
 
-**33 first-class CCAPI types.** As of A10 + A13, every supported type flows through the CloudControl API — there are no remaining SDK-routable write paths in this codebase. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
+**34 first-class CCAPI types.** As of A10 + A14, every supported type flows through the CloudControl API — there are no remaining SDK-routable write paths in this codebase. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
 
-| Type                                        | Notes                                                      |
-| :------------------------------------------ | :--------------------------------------------------------- |
-| `AWS::S3::Bucket`                           | Interactive prompts: encryption, versioning, public access |
-| `AWS::SSM::Parameter`                       |                                                            |
-| `AWS::IAM::Role`                            | Cost: Free                                                 |
-| `AWS::EC2::Instance`                        | Interactive prompts: instance type with live $/hr pricing  |
-| `AWS::RDS::DBInstance`                      | Interactive prompts: engine, class with live $/hr pricing  |
-| `AWS::Lambda::Function`                     | Interactive prompts: runtime, handler, memory, timeout     |
-| `AWS::EC2::VPC`                             |                                                            |
-| `AWS::EC2::Subnet`                          |                                                            |
-| `AWS::EC2::SecurityGroup`                   |                                                            |
-| `AWS::DynamoDB::Table`                      |                                                            |
-| `AWS::SQS::Queue`                           |                                                            |
-| `AWS::SNS::Topic`                           |                                                            |
-| `AWS::SNS::Subscription`                    | First-class since A10 (was SDK fallback pre-2026-04-09)    |
-| `AWS::ElasticLoadBalancingV2::LoadBalancer` |                                                            |
-| `AWS::ECS::Cluster`                         |                                                            |
-| `AWS::ECR::Repository`                      |                                                            |
-| `AWS::Logs::LogGroup`                       | Co-provisioned with Lambda and ECS                         |
-| `AWS::EC2::InternetGateway`                 | Used in VPC Networking pattern                             |
-| `AWS::EC2::RouteTable`                      | Used in VPC Networking pattern                             |
-| `AWS::EC2::Route`                           | Used in VPC Networking pattern                             |
-| `AWS::EC2::NatGateway`                      | Used in VPC Networking pattern                             |
-| `AWS::ApiGatewayV2::Api`                    | Used in Serverless API pattern                             |
-| `AWS::CloudWatch::Alarm`                    | Monitoring                                                 |
-| `AWS::SecretsManager::Secret`               | Secret management                                          |
-| `AWS::EC2::VPCGatewayAttachment`            | VPC compound only (marker-ref)                             |
-| `AWS::EC2::SubnetRouteTableAssociation`     | VPC compound only (marker-ref)                             |
-| `AWS::EFS::FileSystem`                      | Used in EFS-with-VPC pattern; provisioned-throughput line  |
-| `AWS::EFS::MountTarget`                     | Used in EFS-with-VPC pattern                               |
-| `AWS::Events::Rule`                         | Used in Scheduled Lambda pattern                           |
-| `AWS::Events::EventBus`                     | Custom event bus for cross-account / SaaS partner events   |
-| `AWS::Events::Connection`                   | Outbound HTTP auth store (API key / Basic / OAuth) — A12   |
-| `AWS::Events::ApiDestination`               | Outbound HTTP endpoint (URL + method + rate limit) — A13   |
-| `AWS::KMS::Key`                             | Customer-managed keys; rotation default true — A11         |
+| Type                                        | Notes                                                        |
+| :------------------------------------------ | :----------------------------------------------------------- |
+| `AWS::S3::Bucket`                           | Interactive prompts: encryption, versioning, public access   |
+| `AWS::SSM::Parameter`                       |                                                              |
+| `AWS::IAM::Role`                            | Cost: Free                                                   |
+| `AWS::EC2::Instance`                        | Interactive prompts: instance type with live $/hr pricing    |
+| `AWS::RDS::DBInstance`                      | Interactive prompts: engine, class with live $/hr pricing    |
+| `AWS::Lambda::Function`                     | Interactive prompts: runtime, handler, memory, timeout       |
+| `AWS::EC2::VPC`                             |                                                              |
+| `AWS::EC2::Subnet`                          |                                                              |
+| `AWS::EC2::SecurityGroup`                   |                                                              |
+| `AWS::DynamoDB::Table`                      |                                                              |
+| `AWS::SQS::Queue`                           |                                                              |
+| `AWS::SNS::Topic`                           |                                                              |
+| `AWS::SNS::Subscription`                    | First-class since A10 (was SDK fallback pre-2026-04-09)      |
+| `AWS::ElasticLoadBalancingV2::LoadBalancer` |                                                              |
+| `AWS::ECS::Cluster`                         |                                                              |
+| `AWS::ECR::Repository`                      |                                                              |
+| `AWS::Logs::LogGroup`                       | Co-provisioned with Lambda and ECS                           |
+| `AWS::EC2::InternetGateway`                 | Used in VPC Networking pattern                               |
+| `AWS::EC2::RouteTable`                      | Used in VPC Networking pattern                               |
+| `AWS::EC2::Route`                           | Used in VPC Networking pattern                               |
+| `AWS::EC2::NatGateway`                      | Used in VPC Networking pattern                               |
+| `AWS::ApiGatewayV2::Api`                    | Used in Serverless API pattern                               |
+| `AWS::CloudWatch::Alarm`                    | Monitoring                                                   |
+| `AWS::SecretsManager::Secret`               | Secret management                                            |
+| `AWS::EC2::VPCGatewayAttachment`            | VPC compound only (marker-ref)                               |
+| `AWS::EC2::SubnetRouteTableAssociation`     | VPC compound only (marker-ref)                               |
+| `AWS::EFS::FileSystem`                      | Used in EFS-with-VPC pattern; provisioned-throughput line    |
+| `AWS::EFS::MountTarget`                     | Used in EFS-with-VPC pattern                                 |
+| `AWS::Events::Rule`                         | Used in Scheduled Lambda pattern                             |
+| `AWS::Events::EventBus`                     | Custom event bus for cross-account / SaaS partner events     |
+| `AWS::Events::Connection`                   | Outbound HTTP auth store (API key / Basic / OAuth) — A12     |
+| `AWS::Events::ApiDestination`               | Outbound HTTP endpoint (URL + method + rate limit) — A13     |
+| `AWS::KMS::Key`                             | Customer-managed keys; rotation default true — A11           |
+| `AWS::CloudFront::Distribution`             | Standalone CDN; static-website compound still uses SDK — A14 |
 
 The only remaining entries in `CCAPI_FALLBACK_TYPES` are **pure redirect types** with no SDK write path — they are rejected at plan time with a friendly alternative:
 

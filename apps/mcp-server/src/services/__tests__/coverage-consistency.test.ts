@@ -62,6 +62,8 @@ const TYPE_TO_KEYWORD: Record<string, string> = {
   "AWS::Events::Connection": "eventbridge connection",
   // A13 (2026-04-09): Events::ApiDestination classification.
   "AWS::Events::ApiDestination": "api destination",
+  // A14 (2026-04-09): CloudFront::Distribution classification.
+  "AWS::CloudFront::Distribution": "cloudfront",
 };
 
 describe("cross-system consistency", () => {

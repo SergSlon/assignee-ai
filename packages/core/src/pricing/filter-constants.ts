@@ -51,6 +51,8 @@ export const PricingServiceCode = {
   // and the ApiDestination per-invocation fee; not previously needed
   // because Events::Rule + Events::EventBus are modelled as free).
   EVENTS: "AmazonEventBridge",
+  // A14 (2026-04-09) — CloudFront::Distribution
+  CLOUDFRONT: "AmazonCloudFront",
 } as const;
 
 export const PricingKind = {

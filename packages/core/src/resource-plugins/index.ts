@@ -39,6 +39,8 @@ import { kmsKeyPlugin } from "./plugins/kms-key.js";
 import { eventsConnectionPlugin } from "./plugins/events-connection.js";
 // A13 (2026-04-09): Events::ApiDestination first-class (outbound HTTP endpoint)
 import { eventsApiDestinationPlugin } from "./plugins/events-apidestination.js";
+// A14 (2026-04-09): CloudFront::Distribution first-class
+import { cloudFrontDistributionPlugin } from "./plugins/cloudfront-distribution.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -91,6 +93,8 @@ defaultPluginRegistry.register(kmsKeyPlugin);
 defaultPluginRegistry.register(eventsConnectionPlugin);
 // A13 (2026-04-09): Events::ApiDestination first-class
 defaultPluginRegistry.register(eventsApiDestinationPlugin);
+// A14 (2026-04-09): CloudFront::Distribution first-class
+defaultPluginRegistry.register(cloudFrontDistributionPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 export { PluginRegistry };
@@ -134,6 +138,8 @@ export { kmsKeyPlugin } from "./plugins/kms-key.js";
 export { eventsConnectionPlugin } from "./plugins/events-connection.js";
 // A13 (2026-04-09): Events::ApiDestination first-class
 export { eventsApiDestinationPlugin } from "./plugins/events-apidestination.js";
+// A14 (2026-04-09): CloudFront::Distribution first-class
+export { cloudFrontDistributionPlugin } from "./plugins/cloudfront-distribution.js";
 export { genericPlugin } from "./plugins/generic.js";
 export type {
   ResourcePlugin,

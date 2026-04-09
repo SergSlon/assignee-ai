@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "hash": "cd1db2d7fba7203ef6ff6bfef38226c4f4d454f8040a0d8b58a4672ad649d229",
+  "hash": "44c7e7e3a052fa064aff8c63544b88a83d2eef8645a75af5bac80c7f6dfd6edf",
   "files": {
     "apigateway/BP-APIGW-001.yaml": "bec1fb5d3e88707c41e07e4066bee54bc8290f7886ef02fe8054f89199d59267",
     "apigateway/BP-APIGW-002.yaml": "f0b8df494b6fbb8b1a7793a9e408d692fc01355122692bd6af0099f3bc1767f5",
@@ -11,6 +11,7 @@
     "autoscaling/BP-ASG-001.yaml": "772a0c55eb76e66f17b39a81206a2c7d3cf50f698e516b65fcc8919ef0c8aa22",
     "autoscaling/BP-ASG-002.yaml": "b544f144215572763cedc4421fb2076959055fab473a24f5f5ed397e5b6c97ec",
     "autoscaling/BP-ASG-003.yaml": "f8cf313ba9efe54ae12e744708e2f66f516bf0e19da29833e5916068d1582145",
+    "cloudfront/BP-CF-001.yaml": "77deca2427abaf68ea40bab2176b21bb191a861099d6f4d3a8ad0e5124e93efe",
     "cloudwatch/BP-CW-001.yaml": "37f1ff665606e8c0405e58a1d6ac9339cbdacd2b0bfd9037aba40667c269208e",
     "cloudwatch/BP-CW-002.yaml": "5c9770ffb7756f821cf3ef703bfec311098582e8c5f342949776efdc9fba4e15",
     "cloudwatch/BP-CWA-001.yaml": "a45d36bd0e580e674dd0e731518913ec0fd6cabddebc7f6a7ed88fbf910098e7",
@@ -177,6 +178,6 @@
     "vpc/BP-VPC-001.yaml": "d1efbeaa898d16f6dd2605519b7fa3564c7237553193faf8e709ac8044290000",
     "vpc/BP-VPC-002.yaml": "f7c720a24811610df4bac22b00485c0d779ba5452c334bb7266b84afd7160e5f"
   },
-  "count": 174,
-  "generatedAt": "2026-04-09T14:38:17.221Z"
+  "count": 175,
+  "generatedAt": "2026-04-09T14:53:28.228Z"
 }

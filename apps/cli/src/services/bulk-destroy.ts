@@ -52,7 +52,7 @@ export const DESTROY_TIER: Record<string, number> = {
   [RESOURCE_TYPES.SECRETSMANAGER_SECRET]: 1,
   [RESOURCE_TYPES.LOGS_LOG_GROUP]: 1,
   [RESOURCE_TYPES.SSM_PARAMETER]: 1,
-  [LIST_RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION]: 1, // Must be disabled/deleted before S3 bucket
+  [RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION]: 1, // Must be disabled/deleted before S3 bucket
   // Tier 2: Service resources
   [RESOURCE_TYPES.LAMBDA_FUNCTION]: 2,
   [RESOURCE_TYPES.SQS_QUEUE]: 2,

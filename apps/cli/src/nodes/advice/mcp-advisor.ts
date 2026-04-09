@@ -157,6 +157,9 @@ function resourceTypeToServiceCode(resourceType: string): string | undefined {
     // A11 (2026-04-09): KMS customer-managed keys
     // ($1/key-month prorated, plus API request fees).
     "AWS::KMS::Key": "awskms",
+    // A14 (2026-04-09): CloudFront::Distribution
+    // (data transfer out + HTTPS requests, tiered by geography).
+    "AWS::CloudFront::Distribution": "AmazonCloudFront",
   };
   return map[resourceType];
 }

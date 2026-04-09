@@ -281,7 +281,8 @@ describe("Cross-epic: schema fetch -> plan generation", () => {
     // A11 (2026-04-09): KMS::Key first-class (symmetric CMK), count 31.
     // A12 (2026-04-09): Events::Connection first-class, count 32.
     // A13 (2026-04-09): Events::ApiDestination first-class, count 33.
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(33);
+    // A14 (2026-04-09): CloudFront::Distribution first-class, count 34.
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(34);
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::S3::Bucket");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EC2::Instance");

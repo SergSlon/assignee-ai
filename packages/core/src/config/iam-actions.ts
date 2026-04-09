@@ -463,6 +463,37 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "events:DescribeApiDestination",
       "events:ListApiDestinations",
     ],
+    // A14 (2026-04-09): AWS::CloudFront::Distribution first-class.
+    // Seven of these actions already live on the S3_BUCKET entry
+    // (the static-website compound uses them for post-provision
+    // CloudFront work), so the dedup in collectServiceActions()
+    // makes this a near-no-op on the services policy.
+    //
+    // Deliberately OMITTED (rare flows the canary couldn't fit):
+    //   - cloudfront:CreateConnectionGroup + GetConnectionGroup
+    //     (VPC origin flow — rare, used only when pointing CloudFront
+    //     at a resource inside a private VPC).
+    //   - cloudfront:UpdateDistributionWithStagingConfig (gradual
+    //     rollout via staging distributions — exotic feature most
+    //     users never touch).
+    //   - cloudfront:GetVpcOrigin (only needed when the VPC origin
+    //     flow above is active).
+    //
+    // Users who hit one of these flows will get a clear IAM error
+    // pointing at the missing action and we can re-add it with
+    // an explicit canary recalibration.
+    [RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION]: [
+      "cloudfront:CreateDistribution",
+      "cloudfront:CreateDistributionWithTags",
+      "cloudfront:UpdateDistribution",
+      "cloudfront:DeleteDistribution",
+      "cloudfront:GetDistribution",
+      "cloudfront:GetDistributionConfig",
+      "cloudfront:ListDistributions",
+      "cloudfront:ListTagsForResource",
+      "cloudfront:TagResource",
+      "cloudfront:UntagResource",
+    ],
     // A9 (2026-04-09): AWS::Events::EventBus minimum viable set.
     // CreateEventBus + DeleteEventBus + DescribeEventBus cover the
     // core lifecycle. PutPermission/RemovePermission are needed for
