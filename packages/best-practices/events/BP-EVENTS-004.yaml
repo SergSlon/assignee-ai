@@ -1,0 +1,14 @@
+id: BP-EVENTS-004
+title: "EventBridge Rule cost awareness — high-frequency schedules and retry amplification"
+severity: INFO
+resource_type: "AWS::Events::Rule"
+property_path: "ScheduleExpression"
+check_type: "awareness"
+expected_value: "Review schedule frequency + target retry policy before shipping"
+source: "AWS EventBridge Best Practices"
+source_id: "EVENTS-BP-04"
+description: "Every EventBridge Rule deserves a deliberate cadence choice. A rate(1 minute) rule fires ~43,800 times per month — a Lambda target at 128 MB / 100ms billed invocations costs ~$3-5/month just from the schedule, and a misbehaving async handler can amplify the bill 185x via the default retry policy before the DLQ catches the failures. This advisory fires on every rule so the cost is visible at plan time."
+remediation: "Confirm the schedule frequency matches the actual business need — rate(1 hour) is often sufficient for cleanup/sync tasks. Set DeadLetterConfig + RetryPolicy on each Target (MaximumRetryAttempts=2, MaximumEventAgeInSeconds=3600) to cap retry amplification. For custom event buses, remember the $1/million published-events charge is on top of target invocation fees."
+consequence: "Unbounded retry + high-frequency schedule = runaway spend if the handler fails silently. The 185-retry default can turn a buggy Lambda into $100s of extra invocations per rule per day."
+category: cost
+lastVerified: "2026-04-09"
