@@ -1,0 +1,14 @@
+id: BP-EVENTS-005
+title: "Events::Connection should encrypt credentials with a customer-managed KMS key"
+severity: MEDIUM
+resource_type: "AWS::Events::Connection"
+property_path: "KmsKeyIdentifier"
+check_type: "exists"
+expected_value: true
+source: "AWS EventBridge Best Practices"
+source_id: "EVENTS-BP-05"
+description: "Events::Connection stores auth credentials in a managed Secrets Manager secret on your behalf. By default the secret is envelope-encrypted with the AWS-managed aws/secretsmanager key, which gives you no rotation control and no CloudTrail audit on every decrypt. A customer-managed CMK routed through KmsKeyIdentifier gives the operator team key rotation, a per-decrypt audit trail, and a kill switch via key disable."
+remediation: "Create an AWS::KMS::Key with EnableKeyRotation=true (see BP-KMS-001) and set KmsKeyIdentifier on the Connection to the key's ARN or alias. The Connection create handler needs kms:Encrypt + kms:GenerateDataKey on the key — the operator policy already grants these via the KMS_KEY service-action entry."
+consequence: "Stored auth credentials decrypt under a shared AWS-owned key with no rotation or per-decrypt audit. Credential exposure in the event of a Secrets Manager incident has no scoped blast radius."
+category: security
+lastVerified: "2026-04-09"

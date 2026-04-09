@@ -112,7 +112,22 @@ async function fetchSecurityContext(
   return text.length > 500 ? text.slice(0, 500) + "..." : text;
 }
 
-/** Maps CloudFormation resource type to AWS Pricing API service code. */
+/**
+ * Maps CloudFormation resource type to AWS Pricing API service code for
+ * LLM advice enrichment.
+ *
+ * Only PAID / workload-dependent types are listed — free wiring types
+ * (VPC, Subnet, SecurityGroup, IAM::Role, Events::Rule, Events::Connection,
+ * SNS::Subscription, etc.) deliberately return undefined so the advisor
+ * skips the MCP call instead of wasting budget on a query that surfaces
+ * no useful number.
+ *
+ * NOTE: This map drifted out of sync with SUPPORTED_TYPES_ARRAY when
+ * Sprint G → A13 landed new paid types without updating the advisor.
+ * The 2026-04-09 (f) audit pass caught it — every type added since
+ * Sprint G (EFS::FileSystem, Events::EventBus, Events::ApiDestination,
+ * KMS::Key) is now present.
+ */
 function resourceTypeToServiceCode(resourceType: string): string | undefined {
   const map: Record<string, string> = {
     "AWS::EC2::Instance": "AmazonEC2",
@@ -130,6 +145,18 @@ function resourceTypeToServiceCode(resourceType: string): string | undefined {
     "AWS::SecretsManager::Secret": "AWSSecretsManager",
     "AWS::ECR::Repository": "AmazonECR",
     "AWS::ApiGatewayV2::Api": "AmazonApiGateway",
+    // A1 (2026-04-08): EFS storage ($0.30/GB-mo) + optional
+    // provisioned throughput (~$6/MiB-s-mo).
+    "AWS::EFS::FileSystem": "AmazonEFS",
+    // A9 (2026-04-09): EventBridge custom event bus
+    // ($1/M events PUBLISHED to the bus).
+    "AWS::Events::EventBus": "AmazonEventBridge",
+    // A13 (2026-04-09): EventBridge API destination
+    // ($0.20 per 1M invocations).
+    "AWS::Events::ApiDestination": "AmazonEventBridge",
+    // A11 (2026-04-09): KMS customer-managed keys
+    // ($1/key-month prorated, plus API request fees).
+    "AWS::KMS::Key": "awskms",
   };
   return map[resourceType];
 }

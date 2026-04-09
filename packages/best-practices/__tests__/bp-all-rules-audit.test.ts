@@ -1656,6 +1656,26 @@ const eventsRules: RuleSpec[] = [
     checkType: "exists",
     expectedValue: true,
   },
+  // A12+A13 follow-up (2026-04-09): BP coverage for the two new
+  // EventBridge outbound-HTTP types. Events::Connection gets a
+  // credential-encryption rule (MEDIUM, security) and
+  // Events::ApiDestination gets an awareness-level rate-limit rule
+  // (INFO, reliability) — not blocking, but surfaces the "300
+  // default is wrong for most targets" gotcha at plan time.
+  {
+    id: "BP-EVENTS-005",
+    resourceType: "AWS::Events::Connection",
+    propertyPath: "KmsKeyIdentifier",
+    checkType: "exists",
+    expectedValue: true,
+  },
+  {
+    id: "BP-EVENTS-006",
+    resourceType: "AWS::Events::ApiDestination",
+    propertyPath: "InvocationRateLimitPerSecond",
+    checkType: "exists",
+    expectedValue: true,
+  },
 ];
 
 // A11 (2026-04-09) — KMS::Key first-class BP rules
@@ -2015,7 +2035,7 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("EventBridge (4 Rule rules — A8 — and 3 EventBus rules — A9)", () => {
+  describe("EventBridge (4 Rule rules — A8, 3 EventBus rules — A9, 2 Connection/ApiDestination rules — A12+A13)", () => {
     for (const spec of eventsRules) {
       runRuleTests(spec);
     }
@@ -2133,7 +2153,12 @@ describe("BP All Rules Audit", () => {
       //   auditor checks for on the newly-promoted first-class
       //   AWS::KMS::Key type — automatic annual rotation bounds
       //   single-key-version exposure to ~365 days of ciphertext.
-      expect(allSpecs.length).toBe(172);
+      // + 2 A12+A13 EventBridge rules  (BP-EVENTS-005 Connection
+      //   KmsKeyIdentifier recommended, BP-EVENTS-006 ApiDestination
+      //   InvocationRateLimitPerSecond awareness). Closes the zero-
+      //   BP gap the post-A13 `assignee types show` smoke test
+      //   surfaced for the two new first-class outbound-HTTP types.
+      expect(allSpecs.length).toBe(174);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

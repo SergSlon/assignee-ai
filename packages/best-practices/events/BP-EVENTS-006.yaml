@@ -1,0 +1,14 @@
+id: BP-EVENTS-006
+title: "Events::ApiDestination should declare an explicit InvocationRateLimitPerSecond"
+severity: INFO
+resource_type: "AWS::Events::ApiDestination"
+property_path: "InvocationRateLimitPerSecond"
+check_type: "exists"
+expected_value: true
+source: "AWS EventBridge Best Practices"
+source_id: "EVENTS-BP-06"
+description: "ApiDestination defaults InvocationRateLimitPerSecond to 300 — the maximum. That's the wrong default for most targets. Slack webhooks cap at ~1 request per second per channel; Stripe rate-limits at 25/sec; internal APIs usually have their own quota. Relying on the 300 default trades a thundering-herd outbound burst for a downstream rate-limit error storm on the first high-volume event day. Pick a limit that matches the target API's documented quota."
+remediation: "Set InvocationRateLimitPerSecond to the LOWER of (a) the target API's documented rate limit and (b) 300. Slack webhooks: 1. Stripe: 25. Datadog: 30. PagerDuty: 120. For internal APIs with no quota, 300 is acceptable but should still be set explicitly so the decision is visible in the plan."
+consequence: "Silent reliance on the 300/sec default causes rate-limit error storms on first high-volume event; EventBridge has no 429 backoff — retries go to the DLQ."
+category: reliability
+lastVerified: "2026-04-09"
