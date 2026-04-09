@@ -1146,6 +1146,15 @@ describe("patterns command definition", () => {
     const jsonOpt = sub!.options.find((o) => o.long === "--json");
     expect(jsonOpt, "show must expose --json").not.toBeUndefined();
   });
+
+  it("has detect subcommand with --json and <intent...> variadic arg", async () => {
+    const { patternsCommand } = await import("../commands/patterns.js");
+    const sub = patternsCommand.commands.find((c) => c.name() === "detect");
+    expect(sub, "detect subcommand must exist on patterns").not.toBeUndefined();
+    expect(sub!.description()).toContain("keyword classifier");
+    const jsonOpt = sub!.options.find((o) => o.long === "--json");
+    expect(jsonOpt, "detect must expose --json").not.toBeUndefined();
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

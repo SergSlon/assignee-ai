@@ -142,6 +142,56 @@ patternsCommand
   });
 
 patternsCommand
+  .command("detect <intent...>")
+  .description(
+    "Run the same keyword classifier the CLI uses and print which pattern (if any) would match the given intent",
+  )
+  .option("--json", "Output as JSON")
+  .action((intentArgs: string[], opts: { json?: boolean }) => {
+    const intent = intentArgs.join(" ");
+    if (!intent.trim()) {
+      process.stderr.write("Intent is empty — nothing to match.\n");
+      process.exit(1);
+    }
+    const detected = defaultPatternRegistry.detect(intent);
+    if (opts.json) {
+      process.stdout.write(
+        JSON.stringify(
+          {
+            intent,
+            matched: detected !== null,
+            patternId: detected?.patternId ?? null,
+            displayName: detected?.displayName ?? null,
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      return;
+    }
+    if (!detected) {
+      process.stdout.write(
+        `No compound pattern matches: "${intent}"\n` +
+          `The intent-parser will fall back to single-resource classification via Bedrock.\n`,
+      );
+      return;
+    }
+    // Show which specific keyword substring won the match, since
+    // precedence is first-match-wins in insertion order. This is
+    // the most common "why did it route to X?" question.
+    const normalized = intent.toLowerCase();
+    const winningKeyword = detected.keywords.find((kw) =>
+      normalized.includes(kw.toLowerCase()),
+    );
+    process.stdout.write(
+      `Matched: ${detected.patternId} — ${detected.displayName}\n` +
+        `Winning keyword: "${winningKeyword}"\n` +
+        `\n` +
+        `Run 'assignee patterns show ${detected.patternId}' for the full resource list.\n`,
+    );
+  });
+
+patternsCommand
   .command("show <patternId>")
   .description(
     "Show the full resource list + dependency order + keywords for a pattern",
