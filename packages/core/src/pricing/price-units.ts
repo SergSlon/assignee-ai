@@ -31,4 +31,6 @@ export const PriceUnit = {
   PER_MILLION_REQUESTS_LONG: "/million requests",
   // A11 (2026-04-09): AWS::KMS::Key — $1/key-month (symmetric + asymmetric)
   PER_KEY_MONTH: "/key-mo",
+  // (f) 2026-04-09: EFS provisioned throughput billing unit.
+  PER_MIBPS_MONTH: "/MiB/s-mo",
 } as const;

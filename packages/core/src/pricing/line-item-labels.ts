@@ -34,6 +34,8 @@ export const LineItemLabel = {
   GET_REQUESTS: "GET requests",
   // A11 (2026-04-09): AWS::KMS::Key
   KEY_STORAGE: "Key storage",
+  // (f) 2026-04-09: EFS provisioned throughput (separate from Standard storage)
+  PROVISIONED_THROUGHPUT: "Provisioned throughput",
 } as const;
 
 /**
