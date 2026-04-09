@@ -45,7 +45,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--profile --yes --enable-llm-logging --disable-llm-logging --dry-run" -- "${cur}") )
       ;;
     status)
-      COMPREPLY=( $(compgen -W "--json --region --bp-coverage --gaps-only" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--json --region --bp-coverage --gaps-only --include-structural-gaps" -- "${cur}") )
       ;;
     clean)
       COMPREPLY=( $(compgen -W "--dry-run --confirm --yes --checkpoints --cache --memory --resources --logs --baselines --json" -- "${cur}") )

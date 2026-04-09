@@ -82,7 +82,8 @@ complete -c assignee -n "__fish_seen_subcommand_from setup" -l dry-run -d 'Print
 complete -c assignee -n "__fish_seen_subcommand_from status" -l json -d 'Output status data as JSON'
 complete -c assignee -n "__fish_seen_subcommand_from status" -l region -r -d 'Filter to a specific AWS region'
 complete -c assignee -n "__fish_seen_subcommand_from status" -l bp-coverage -d 'Show BP rule coverage dashboard'
-complete -c assignee -n "__fish_seen_subcommand_from status" -l gaps-only -d 'With --bp-coverage: print only the list of resource types with zero BP rules, and exit non-zero if any gaps are found (CI-friendly)'
+complete -c assignee -n "__fish_seen_subcommand_from status" -l gaps-only -d 'With --bp-coverage: print only the list of resource types with zero BP rules, and exit non-zero if any gaps are found (CI-friendly). Structural types (RouteTable, VPCGatewayAttachment, etc.) are excluded by default — override with --include-structural-gaps.'
+complete -c assignee -n "__fish_seen_subcommand_from status" -l include-structural-gaps -d 'With --gaps-only: include structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS::MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.'
 
 # Options for 'clean'
 complete -c assignee -n "__fish_seen_subcommand_from clean" -l dry-run -d 'Preview cleanup without making changes (default)'

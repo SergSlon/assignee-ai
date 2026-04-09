@@ -6,6 +6,7 @@ import {
   computeBPCoverage,
   renderBPCoverage,
   renderBPCoverageGaps,
+  filterActionableGaps,
   type BPCoverageData,
 } from "./status-bp-coverage.js";
 
@@ -327,6 +328,32 @@ describe("status-bp-coverage", () => {
       expect(output).toContain("1 BP coverage gap");
       expect(output).not.toContain("1 BP coverage gaps");
       stdoutSpy.mockRestore();
+    });
+  });
+
+  describe("filterActionableGaps", () => {
+    it("drops the 4 structural/cross-reference types by default", () => {
+      const raw = [
+        "AWS::EC2::RouteTable",
+        "AWS::EC2::VPCGatewayAttachment",
+        "AWS::EC2::SubnetRouteTableAssociation",
+        "AWS::EFS::MountTarget",
+      ];
+      expect(filterActionableGaps(raw)).toEqual([]);
+    });
+
+    it("keeps non-structural gaps intact", () => {
+      expect(
+        filterActionableGaps([
+          "AWS::EC2::Instance",
+          "AWS::EC2::RouteTable",
+          "AWS::S3::Bucket",
+        ]),
+      ).toEqual(["AWS::EC2::Instance", "AWS::S3::Bucket"]);
+    });
+
+    it("returns empty array for empty input", () => {
+      expect(filterActionableGaps([])).toEqual([]);
     });
   });
 });

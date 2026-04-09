@@ -14,6 +14,43 @@ import { SUPPORTED_TYPES_ARRAY } from "@assignee/core";
 import { FixType, SKIP_DIRS } from "@assignee/best-practices";
 import { UNKNOWN_FALLBACK } from "../config/constants.js";
 
+/**
+ * Resource types whose BP content lives elsewhere by design —
+ * these are "structural" cross-reference or attachment resources
+ * that don't have meaningful standalone best practices:
+ *
+ *   - AWS::EC2::RouteTable: BPs live on child Route resources
+ *     (BP-RT-001 0.0.0.0/0 routing) and associated Subnets
+ *     (BP-RT-002 explicit association) instead.
+ *   - AWS::EC2::VPCGatewayAttachment: pure cross-reference, no
+ *     properties to validate beyond the VPC + IGW it joins.
+ *   - AWS::EC2::SubnetRouteTableAssociation: same — just a link.
+ *   - AWS::EFS::MountTarget: BP content lives on the EFS
+ *     FileSystem (BP-EFS-001/002/003) and the referenced
+ *     SecurityGroup (BP-SG-*). The MountTarget itself has no
+ *     standalone security posture.
+ *
+ * Excluded from `--gaps-only` by default so CI gates don't
+ * false-positive on these. The full dashboard still lists them
+ * in the "Gap Analysis" section for visibility. Override with
+ * `--include-structural-gaps` if you genuinely want to author
+ * a rule for one of these types.
+ */
+const STRUCTURAL_GAP_TYPES: ReadonlySet<string> = new Set([
+  "AWS::EC2::RouteTable",
+  "AWS::EC2::VPCGatewayAttachment",
+  "AWS::EC2::SubnetRouteTableAssociation",
+  "AWS::EFS::MountTarget",
+]);
+
+/**
+ * Return the subset of gap types that are NOT structural — these
+ * are the ones CI should actually fail on.
+ */
+export function filterActionableGaps(gaps: readonly string[]): string[] {
+  return gaps.filter((g) => !STRUCTURAL_GAP_TYPES.has(g));
+}
+
 export interface ResourceTypeCoverage {
   resourceType: string;
   total: number;

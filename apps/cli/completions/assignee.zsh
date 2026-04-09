@@ -106,7 +106,8 @@ _assignee() {
             '--json[Output status data as JSON]' \
             '--region[Filter to a specific AWS region]:region:' \
             '--bp-coverage[Show BP rule coverage dashboard]' \
-            '--gaps-only[With --bp-coverage\: print only the list of resource types with zero BP rules, and exit non-zero if any gaps are found (CI-friendly)]'
+            '--gaps-only[With --bp-coverage\: print only the list of resource types with zero BP rules, and exit non-zero if any gaps are found (CI-friendly). Structural types (RouteTable, VPCGatewayAttachment, etc.) are excluded by default — override with --include-structural-gaps.]' \
+            '--include-structural-gaps[With --gaps-only\: include structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS\:\:MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.]'
           ;;
         clean)
           _arguments \
