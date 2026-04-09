@@ -39,16 +39,29 @@ export const IAM_USER_NAMES = {
 
 export const IAM_POLICY_NAMES = {
   operator: "AssigneeOperatorPolicy",
-  // A8 follow-up: the operator role is split across two managed
-  // policies because the combined surface (Bedrock + CCAPI +
-  // service-specific perms + tagging + xray + sdk-fallback) exceeds
-  // the AWS 6144-byte managed-policy size limit at 28+ resource types.
-  // The split keeps each policy independently reviewable and uses
-  // the AWS-supported multi-policy attachment pattern (up to 10
-  // managed policies per IAM user) — strictly preferred over a
-  // wildcard collapser that would over-grant Create*/Delete*
-  // permissions for entire AWS services.
-  operatorServices: "AssigneeOperatorServicesPolicy",
+  // A8 (2026-04-08): the operator role was split across two managed
+  // policies — core + services — because the combined surface
+  // (Bedrock + CCAPI + service-specific perms + tagging + xray +
+  // sdk-fallback) exceeded the AWS 6144-byte managed-policy size
+  // limit at 28+ resource types.
+  //
+  // (f) 2026-04-09 A/B split: the services half outgrew the 700-byte
+  // canary floor as well (A10-A14 landed SNS::Subscription, KMS::Key,
+  // Events::Connection, Events::ApiDestination, and CloudFront
+  // Distribution), so it is now split once more into Services-A +
+  // Services-B. All three policies (core + A + B) attach to the same
+  // `assignee-operator` IAM user. The A/B split is deterministic and
+  // byte-balanced: service actions are sorted and partitioned at the
+  // index that keeps the two halves within 2% of each other by
+  // cumulative byte count.
+  //
+  // Multi-policy attach is explicitly AWS-supported (up to 10 managed
+  // policies per IAM user) and is strictly preferred over a wildcard
+  // collapser that would over-grant Create*/Delete*/Update* for entire
+  // AWS services — notably kms:Update* reshapes keys in ways the CLI
+  // never needs.
+  operatorServicesA: "AssigneeOperatorServicesAPolicy",
+  operatorServicesB: "AssigneeOperatorServicesBPolicy",
   reader: "AssigneeReaderPolicy",
   auditor: "AssigneeAuditorPolicy",
 } as const;
@@ -257,23 +270,85 @@ export function operatorPolicy(
 }
 
 /**
- * Generates the operator-services policy document — the bulky
- * service-specific actions split out from `operatorPolicy()` so the
- * combined surface fits inside AWS's 6144-byte managed-policy limit.
+ * Partitions the fully-collected, sorted service-specific action list
+ * into two byte-balanced halves (`a` and `b`) so each half can be
+ * emitted as its own managed policy and still fit inside the AWS
+ * 6144-byte limit.
  *
- * Both `AssigneeOperatorPolicy` (core: Bedrock + CCAPI + tagging + xray
- * + SDK fallback) and `AssigneeOperatorServicesPolicy` (this) attach
- * to the same `assignee-operator` IAM user. The effective permission
- * set is the union — identical to the pre-split single-policy version.
+ * Algorithm (deterministic, stable, byte-balanced):
+ *   1. Compute the total serialized byte count of the action array.
+ *   2. Walk the sorted list accumulating byte cost (quoted + comma).
+ *   3. Cut at the first index where the running total has crossed
+ *      half of the grand total — putting the rest in `b`.
  *
- * Why split instead of expanding the wildcard collapser? AWS docs
- * explicitly recommend the multi-policy attach pattern for managed
- * policies that exceed the 6144-byte limit. The alternative —
- * adding `Create*` / `Delete*` to `SAFE_WILDCARD_PREFIXES` — would
- * silently grant entire-service write capability for any service
- * with 3+ Create or Delete actions, including operations the CLI
- * never invokes (e.g. `ec2:CreateImage`, `ec2:CreateSnapshot`,
- * `apigateway:CreateAccount`). The split avoids that over-grant.
+ * Why cumulative bytes and not `splice(length / 2)`? Service actions
+ * can vary in length (`s3:Get*` is 7 bytes, `elasticloadbalancing:
+ * DescribeTargetGroupAttributes` is 52). A count-based midpoint would
+ * silently grow lopsided as long-named services dominate one half.
+ * The byte-based cut keeps both halves within a couple percent of
+ * each other regardless of how the action set shifts.
+ */
+function splitServiceActions(actions: readonly string[]): {
+  a: string[];
+  b: string[];
+} {
+  if (actions.length < 2) {
+    return { a: [...actions], b: [] };
+  }
+  // Approximate JSON serialization cost per action: the action string
+  // itself + two quotes + a comma. Off by a constant but the ratio
+  // (what we care about) is preserved.
+  const byteCost = (s: string): number => s.length + 3;
+  const total = actions.reduce((sum, a) => sum + byteCost(a), 0);
+  const halfTarget = total / 2;
+  let running = 0;
+  let cut = 0;
+  for (let i = 0; i < actions.length; i++) {
+    running += byteCost(actions[i]!);
+    if (running >= halfTarget) {
+      // Cut AFTER this action so `a` includes it — then `b` picks up
+      // from the next index. This biases `a` to be >=  `b` by at most
+      // one action-worth of bytes, which is both stable and small.
+      cut = i + 1;
+      break;
+    }
+  }
+  // Defensive: always leave at least one action in each half.
+  if (cut === 0) cut = 1;
+  if (cut >= actions.length) cut = actions.length - 1;
+  return {
+    a: actions.slice(0, cut),
+    b: actions.slice(cut),
+  };
+}
+
+/**
+ * Generates the first half of the operator-services policy document.
+ *
+ * Historical context: A8 (2026-04-08) first split the operator policy
+ * into core + services to fit inside AWS's 6144-byte managed-policy
+ * limit. The services half was one monolithic `ServiceSpecificActions`
+ * statement. After A10-A14 landed (SNS Subscription, KMS Key, Events
+ * Connection, Events ApiDestination, CloudFront Distribution), the
+ * services half itself dropped below the 700-byte canary floor, so
+ * (f) 2026-04-09 split it once more into A + B.
+ *
+ * All three of `AssigneeOperatorPolicy` (core), this policy
+ * (`AssigneeOperatorServicesAPolicy`), and the sibling
+ * (`AssigneeOperatorServicesBPolicy`) attach to the same
+ * `assignee-operator` IAM user. IAM evaluates the union — strictly
+ * equivalent to the pre-split single-policy version.
+ *
+ * Why Option Y (split) over Option X (wildcard collapser expansion)?
+ * Expanding `SAFE_WILDCARD_PREFIXES` to include `Update` or
+ * `Create/Delete` would silently grant entire-service write
+ * capability for any service with 3+ matching actions, including
+ * operations the CLI never invokes (`ec2:CreateImage`,
+ * `ec2:CreateSnapshot`, `kms:UpdatePrimaryRegion`,
+ * `kms:UpdateCustomKeyStore`). The security review burden of each
+ * new wildcard is not worth ~100 bytes. The split is cheap: AWS IAM
+ * supports up to 10 managed policies per user and the A/B partition
+ * is a 10-line pure-function change with no dispatch impact.
  *
  * The cloudcontrol:TypeName Condition that scopes CCAPI calls to
  * SUPPORTED_TYPES_ARRAY lives in `operatorPolicy()` — it doesn't
@@ -281,15 +356,38 @@ export function operatorPolicy(
  * conditions independently and the CCAPI Allow only takes effect
  * with the Condition matched.
  */
-export function operatorServicesPolicy(): PolicyDocument {
+export function operatorServicesAPolicy(): PolicyDocument {
   const { serviceActions } = collectServiceActions();
+  const { a } = splitServiceActions(serviceActions);
   return {
     Version: IamPolicy.VERSION,
     Statement: [
       {
-        Sid: "ServiceSpecificActions",
+        Sid: "ServiceSpecificActionsA",
         Effect: IamEffect.ALLOW,
-        Action: serviceActions,
+        Action: a,
+        Resource: "*",
+      },
+    ],
+  };
+}
+
+/**
+ * Generates the second half of the operator-services policy document.
+ * See `operatorServicesAPolicy()` for split rationale. Both policies
+ * are attached to the same `assignee-operator` IAM user — IAM unions
+ * them.
+ */
+export function operatorServicesBPolicy(): PolicyDocument {
+  const { serviceActions } = collectServiceActions();
+  const { b } = splitServiceActions(serviceActions);
+  return {
+    Version: IamPolicy.VERSION,
+    Statement: [
+      {
+        Sid: "ServiceSpecificActionsB",
+        Effect: IamEffect.ALLOW,
+        Action: b,
         Resource: "*",
       },
     ],

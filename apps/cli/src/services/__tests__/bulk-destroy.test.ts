@@ -172,32 +172,54 @@ describe("BulkDestroyService — buildPlanFromResources", () => {
       "AWS::IAM::Role",
     );
 
-    it("isAssigneeInfraResource matches all 4 setup-created policies (operator split into core + services per A8)", () => {
+    it("isAssigneeInfraResource matches all 5 setup-created policies (A8 + (f) 2026-04-09 A/B split)", () => {
       expect(isAssigneeInfraResource(ASSIGNEE_OPERATOR_POLICY.arn)).toBe(true);
       expect(isAssigneeInfraResource(ASSIGNEE_READER_POLICY.arn)).toBe(true);
       expect(isAssigneeInfraResource(ASSIGNEE_AUDITOR_POLICY.arn)).toBe(true);
-      // A8 follow-up: AssigneeOperatorServicesPolicy is the second
-      // half of the operator policy split. It MUST be covered by the
-      // safety allowlist or `assignee destroy --all --include-iam`
-      // would lock the operator user out of every service-specific
-      // permission.
+      // A8 (2026-04-08): AssigneeOperatorServicesPolicy was the second
+      // half of the operator policy split.
+      // (f) 2026-04-09: the services half itself was split into A + B
+      // so both new names MUST be covered by the safety allowlist or
+      // `assignee destroy --all --include-iam` would lock the operator
+      // user out of every service-specific permission.
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws:iam::054125018476:policy/AssigneeOperatorServicesAPolicy",
+        ),
+      ).toBe(true);
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws:iam::054125018476:policy/AssigneeOperatorServicesBPolicy",
+        ),
+      ).toBe(true);
+      // Legacy name from the pre-(f)2026-04-09 single-services policy
+      // still matches so upgrade-in-place installations stay protected
+      // during the transition window (setup will create A+B, and the
+      // old single services policy sticks around until a cleanup pass
+      // explicitly detaches it).
       expect(
         isAssigneeInfraResource(
           "arn:aws:iam::054125018476:policy/AssigneeOperatorServicesPolicy",
         ),
       ).toBe(true);
-      // Partition-aware: GovCloud + China variants stay protected.
+      // Partition-aware: GovCloud + China variants stay protected for
+      // all three services policy name shapes.
       expect(
         isAssigneeInfraResource(
-          "arn:aws-us-gov:iam::054125018476:policy/AssigneeOperatorServicesPolicy",
+          "arn:aws-us-gov:iam::054125018476:policy/AssigneeOperatorServicesAPolicy",
+        ),
+      ).toBe(true);
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws-cn:iam::054125018476:policy/AssigneeOperatorServicesBPolicy",
         ),
       ).toBe(true);
     });
 
-    it("isAssigneeInfraResource still rejects substring-clone attacks against the new services policy", () => {
+    it("isAssigneeInfraResource still rejects substring-clone attacks against the A/B services policies", () => {
       // The leading `^` and trailing `$` in ASSIGNEE_INFRA_NAME_PATTERN
       // mean substring matches are NOT protected — verify the new
-      // optional `Services` segment didn't accidentally widen the
+      // optional `Services[AB]?` segment didn't accidentally widen the
       // pattern enough to over-match.
       expect(
         isAssigneeInfraResource(
@@ -207,6 +229,24 @@ describe("BulkDestroyService — buildPlanFromResources", () => {
       expect(
         isAssigneeInfraResource(
           "arn:aws:iam::054125018476:policy/MyAssigneeOperatorServicesPolicy",
+        ),
+      ).toBe(false);
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws:iam::054125018476:policy/AssigneeOperatorServicesAPolicyClone",
+        ),
+      ).toBe(false);
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws:iam::054125018476:policy/MyAssigneeOperatorServicesAPolicy",
+        ),
+      ).toBe(false);
+      // "ServicesC" is NOT a real name — the A/B split has exactly
+      // two halves. A future third split would need a regex update,
+      // not a widening of the current character class.
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws:iam::054125018476:policy/AssigneeOperatorServicesCPolicy",
         ),
       ).toBe(false);
     });

@@ -114,8 +114,17 @@ const IAM_TYPE_PREFIX = "AWS::IAM::";
 // service-specific permission. The leading `^` and trailing `$`
 // stay mandatory so substring matches like
 // `MyAssigneeOperatorServicesPolicyClone` are NOT protected.
+//
+// (f) 2026-04-09 A/B split: the services half was split once more
+// into Services-A + Services-B to fit inside the 6144-byte managed
+// policy limit. The optional `[AB]?` segment matches the new names
+// (AssigneeOperatorServicesAPolicy, AssigneeOperatorServicesBPolicy)
+// AND keeps matching the legacy AssigneeOperatorServicesPolicy name
+// so existing installations are still protected during the upgrade
+// window. The trailing `$` anchor means Clone/Backup suffixes are
+// still NOT protected — substring spoofing requires an exact match.
 const ASSIGNEE_INFRA_NAME_PATTERN =
-  /^Assignee(Ai)?(Operator|Reader|Auditor|Bedrock\w*)?(Services)?(Policy|Role|User|Group)?$/;
+  /^Assignee(Ai)?(Operator|Reader|Auditor|Bedrock\w*)?(Services[AB]?)?(Policy|Role|User|Group)?$/;
 
 /**
  * Returns true when the given ARN points at one of assignee.ai's own

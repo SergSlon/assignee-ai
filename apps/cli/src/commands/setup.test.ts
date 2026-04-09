@@ -223,36 +223,40 @@ describe("setup command", () => {
     expect(userNames).toContain(IAM_USER_NAMES.auditor);
   });
 
-  it("creates 4 managed policies with correct names (operator split into core + services per A8)", async () => {
+  it("creates 5 managed policies with correct names (operator split into core + servicesA + servicesB per (f) 2026-04-09)", async () => {
     const { setupCommand } = await import("./setup.js");
     await setupCommand.parseAsync(["node", "setup"]);
 
     const createPolicyCalls = mockSend.mock.calls.filter(
       (c) => c[0]._type === "CreatePolicy",
     );
-    // 4 policies: operator core, operator services, reader, auditor.
-    expect(createPolicyCalls).toHaveLength(4);
+    // 5 policies: operator core, operator servicesA, operator servicesB,
+    // reader, auditor. The A/B split of the services half became
+    // necessary when the single services policy dropped below the
+    // 700-byte canary floor after A10-A14 resource type promotions.
+    expect(createPolicyCalls).toHaveLength(5);
 
     const policyNames = createPolicyCalls.map((c) => c[0].input["PolicyName"]);
     expect(policyNames).toContain(IAM_POLICY_NAMES.operator);
-    expect(policyNames).toContain(IAM_POLICY_NAMES.operatorServices);
+    expect(policyNames).toContain(IAM_POLICY_NAMES.operatorServicesA);
+    expect(policyNames).toContain(IAM_POLICY_NAMES.operatorServicesB);
     expect(policyNames).toContain(IAM_POLICY_NAMES.reader);
     expect(policyNames).toContain(IAM_POLICY_NAMES.auditor);
   });
 
-  it("attaches each policy to its user (4 attachments after A8 split)", async () => {
+  it("attaches each policy to its user (5 attachments after the A/B split)", async () => {
     const { setupCommand } = await import("./setup.js");
     await setupCommand.parseAsync(["node", "setup"]);
 
     const attachCalls = mockSend.mock.calls.filter(
       (c) => c[0]._type === "AttachUserPolicy",
     );
-    expect(attachCalls).toHaveLength(4);
-    // Both operator policies must attach to the operator user
+    expect(attachCalls).toHaveLength(5);
+    // All THREE operator policies must attach to the operator user.
     const operatorAttachments = attachCalls.filter(
       (c) => c[0].input["UserName"] === IAM_USER_NAMES.operator,
     );
-    expect(operatorAttachments).toHaveLength(2);
+    expect(operatorAttachments).toHaveLength(3);
   });
 
   it("creates access keys for each user", async () => {
@@ -330,13 +334,13 @@ describe("setup command", () => {
     );
     expect(createUserCalls).toHaveLength(0);
 
-    // Should call CreatePolicyVersion (update existing) — 4 policies after
-    // the A8 operator split (operator core + operator services + reader +
-    // auditor)
+    // Should call CreatePolicyVersion (update existing) — 5 policies
+    // after the (f) 2026-04-09 A/B split (operator core + operator
+    // servicesA + operator servicesB + reader + auditor).
     const policyVersionCalls = mockSend.mock.calls.filter(
       (c) => c[0]._type === "CreatePolicyVersion",
     );
-    expect(policyVersionCalls).toHaveLength(4);
+    expect(policyVersionCalls).toHaveLength(5);
   });
 
   it("exits with error when STS fails", async () => {
@@ -448,19 +452,22 @@ describe("setup command", () => {
     // Must contain 3 newlines (header + 3 users = 4 lines, 3 newlines)
     expect((usersSection!.match(/\n/g) ?? []).length).toBe(3);
 
-    // Similar for the policies section. After A8: 4 policies because
-    // the operator role splits into core + services. The dry-run text
-    // is one entry per policy, so the expected newline count is 4
-    // (header + 4 policies = 5 lines, 4 newlines).
+    // Similar for the policies section. (f) 2026-04-09: 5 policies
+    // because the operator role now splits into core + servicesA +
+    // servicesB (services split into two byte-balanced halves to
+    // stay below 6144 per managed policy). The dry-run text is one
+    // entry per policy, so the expected newline count is 5 (header +
+    // 5 policies = 6 lines, 5 newlines).
     const policiesSection = stepTexts.find((s) =>
       s.startsWith("IAM Managed Policies:"),
     );
     expect(typeof policiesSection).toBe("string");
     expect(policiesSection).toContain(IAM_POLICY_NAMES.operator);
-    expect(policiesSection).toContain(IAM_POLICY_NAMES.operatorServices);
+    expect(policiesSection).toContain(IAM_POLICY_NAMES.operatorServicesA);
+    expect(policiesSection).toContain(IAM_POLICY_NAMES.operatorServicesB);
     expect(policiesSection).toContain(IAM_POLICY_NAMES.reader);
     expect(policiesSection).toContain(IAM_POLICY_NAMES.auditor);
-    expect((policiesSection!.match(/\n/g) ?? []).length).toBe(4);
+    expect((policiesSection!.match(/\n/g) ?? []).length).toBe(5);
 
     // Access keys section must be one block listing all 3 env var pairs.
     const keysSection = stepTexts.find((s) => s.startsWith("IAM Access Keys:"));

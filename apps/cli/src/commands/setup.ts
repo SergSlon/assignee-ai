@@ -32,7 +32,8 @@ import {
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import {
   operatorPolicy,
-  operatorServicesPolicy,
+  operatorServicesAPolicy,
+  operatorServicesBPolicy,
   readerPolicy,
   auditorPolicy,
   IAM_USER_NAMES,
@@ -56,11 +57,23 @@ import {
  * Maps role keys to their policy generators, user names, and env var prefixes.
  *
  * Each role has a `policies` array because the operator surface is split
- * across two managed policies (A8 follow-up: AssigneeOperatorPolicy +
- * AssigneeOperatorServicesPolicy) to fit inside the AWS 6144-byte
- * managed-policy size limit. Both policies attach to the same operator
- * IAM user and AWS evaluates the union — strictly equivalent to the
- * pre-split single-policy version.
+ * across THREE managed policies:
+ *
+ *   - `AssigneeOperatorPolicy` — core: Bedrock + CCAPI + tagging +
+ *     XRay + SDK fallback
+ *   - `AssigneeOperatorServicesAPolicy` — first byte-balanced half of
+ *     the service-specific actions
+ *   - `AssigneeOperatorServicesBPolicy` — second byte-balanced half
+ *
+ * The multi-policy split is required to fit inside AWS's 6144-byte
+ * managed-policy size limit. A8 (2026-04-08) introduced the first
+ * split (core + services); (f) 2026-04-09 added the A/B split when
+ * the services half dropped below the 700-byte canary floor after
+ * A10-A14 resource type promotions.
+ *
+ * All three policies attach to the same `assignee-operator` IAM user
+ * — AWS evaluates the union, strictly equivalent to the pre-split
+ * single-policy version.
  */
 const ROLES = [
   {
@@ -69,8 +82,12 @@ const ROLES = [
     policies: [
       { name: IAM_POLICY_NAMES.operator, fn: operatorPolicy },
       {
-        name: IAM_POLICY_NAMES.operatorServices,
-        fn: operatorServicesPolicy,
+        name: IAM_POLICY_NAMES.operatorServicesA,
+        fn: operatorServicesAPolicy,
+      },
+      {
+        name: IAM_POLICY_NAMES.operatorServicesB,
+        fn: operatorServicesBPolicy,
       },
     ],
     envKeyId: "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
