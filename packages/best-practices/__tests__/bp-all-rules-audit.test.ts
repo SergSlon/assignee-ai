@@ -1956,6 +1956,35 @@ describe("BP All Rules Audit", () => {
     for (const spec of eventsRules) {
       runRuleTests(spec);
     }
+
+    // Targeted regression test for the exists-semantics fix landed
+    // in A8 (see packages/best-practices/src/evaluate.ts comment).
+    // BP-EVENTS-001 must fire on `Targets: []` — not just missing
+    // Targets. Before the fix, the empty-array case silently
+    // passed the `exists` check because `[] !== undefined`.
+    it("BP-EVENTS-001 fires on empty Targets array (A8 exists semantics)", () => {
+      const findings = findingsFor("BP-EVENTS-001", "AWS::Events::Rule", {
+        Targets: [],
+      });
+      expect(
+        findings.some((f) => f.practiceId === "BP-EVENTS-001"),
+        "BP-EVENTS-001 must fire on empty Targets array",
+      ).toBe(true);
+    });
+
+    it("BP-EVENTS-001 passes with one valid Target entry", () => {
+      const findings = findingsFor("BP-EVENTS-001", "AWS::Events::Rule", {
+        Targets: [
+          {
+            Id: "lambda-target",
+            Arn: "arn:aws:lambda:us-east-1:123456789012:function:test",
+          },
+        ],
+      });
+      expect(
+        findings.filter((f) => f.practiceId === "BP-EVENTS-001").length,
+      ).toBe(0);
+    });
   });
 
   // ---------------------------------------------------------------------------
