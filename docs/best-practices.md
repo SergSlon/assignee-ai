@@ -10,7 +10,7 @@ The best practices pipeline runs as three nodes in the 12-node LangGraph graph:
 plan_generator -> bp_evaluator -> auto_fix_applier -> preflight_guard
 ```
 
-1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **167 rules** (133 initial, plus the A5 27-rule expansion from `docs/bp-cfn-guard-gap-analysis-2026-04-08.md`, BP-IAM-017 for elevated `*FullAccess` managed policies, BP-EFS-001/002/003 for the A1 EFS resource type, BP-EVENTS-001/002/003/004 for the A8 EventBridge Rule type, and BP-LAMBDA-015 for X-Ray tracing defaults). Completes in <10ms for all rules.
+1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **170 rules** (133 initial, plus the A5 27-rule expansion from `docs/bp-cfn-guard-gap-analysis-2026-04-08.md`, BP-IAM-017 for elevated `*FullAccess` managed policies, BP-EFS-001/002/003 for the A1 EFS resource type, BP-EVENTS-001/002/003/004 for the A8 EventBridge Rule type, BP-EVENTBUS-001/002/003 for the A9 EventBridge EventBus type, and BP-LAMBDA-015 for X-Ray tracing defaults). Completes in <10ms for all rules.
 
 2. **auto_fix_applier**: For findings with `fixType: auto`, patches the `desiredState` directly using `desiredStatePatch`. For findings with `fixType: interactive`, prompts the user with choices. Respects the `preferences.auto_fix` config setting (`ask` / `apply` / `skip`).
 
@@ -194,7 +194,7 @@ AWS::RDS::DBInstance                          10        6           1      3    
 AWS::ECS::Service                              9        5           1      3    2026-03-22
 ...
 
-Summary: 167 rules | 33 auto-fixable (19%) | 13 interactive | 121 manual
+Summary: 170 rules | 33 auto-fixable (19%) | 13 interactive | 124 manual
 ```
 
 ## Excluding Rules
