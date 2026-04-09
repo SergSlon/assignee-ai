@@ -23,7 +23,11 @@ import {
   renderError,
 } from "../utils/display.js";
 import { buildStatusData } from "../services/status-aggregator.js";
-import { computeBPCoverage, renderBPCoverage } from "./status-bp-coverage.js";
+import {
+  computeBPCoverage,
+  renderBPCoverage,
+  renderBPCoverageGaps,
+} from "./status-bp-coverage.js";
 import { getBpDir } from "./status-factory.js";
 
 export const statusCommand = new Command(CommandName.STATUS)
@@ -31,8 +35,17 @@ export const statusCommand = new Command(CommandName.STATUS)
   .option("--json", "Output status data as JSON")
   .option("--region <region>", "Filter to a specific AWS region")
   .option("--bp-coverage", "Show BP rule coverage dashboard")
+  .option(
+    "--gaps-only",
+    "With --bp-coverage: print only the list of resource types with zero BP rules, and exit non-zero if any gaps are found (CI-friendly)",
+  )
   .action(
-    async (opts: { json?: boolean; region?: string; bpCoverage?: boolean }) => {
+    async (opts: {
+      json?: boolean;
+      region?: string;
+      bpCoverage?: boolean;
+      gapsOnly?: boolean;
+    }) => {
       // BP Coverage mode (Story 30.7)
       if (opts.bpCoverage) {
         try {
@@ -40,6 +53,23 @@ export const statusCommand = new Command(CommandName.STATUS)
           const bpDir = getBpDir();
 
           const data = computeBPCoverage(bpDir);
+
+          // --gaps-only: CI-friendly filtered view. JSON mode returns
+          // just the gaps array so `jq length` gives the gap count;
+          // text mode prints the short list and exits 1 if non-empty.
+          if (opts.gapsOnly) {
+            if (opts.json) {
+              process.stdout.write(
+                JSON.stringify({ gaps: data.gaps }, null, 2) + "\n",
+              );
+            } else {
+              renderBPCoverageGaps(data.gaps);
+            }
+            if (data.gaps.length > 0) {
+              process.exit(1);
+            }
+            return;
+          }
 
           if (opts.json) {
             process.stdout.write(JSON.stringify(data, null, 2) + "\n");

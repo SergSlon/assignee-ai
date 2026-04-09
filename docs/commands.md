@@ -161,15 +161,18 @@ assignee status [options]
 
 **Options:**
 
-| Flag                | Description                     | Default     |
-| ------------------- | ------------------------------- | ----------- |
-| `--json`            | Output status data as JSON      | false       |
-| `--region <region>` | Filter to a specific AWS region | all regions |
-| `--bp-coverage`     | Show BP rule coverage dashboard | false       |
+| Flag                | Description                                                                                     | Default     |
+| ------------------- | ----------------------------------------------------------------------------------------------- | ----------- |
+| `--json`            | Output status data as JSON                                                                      | false       |
+| `--region <region>` | Filter to a specific AWS region                                                                 | all regions |
+| `--bp-coverage`     | Show BP rule coverage dashboard                                                                 | false       |
+| `--gaps-only`       | With `--bp-coverage`: print only the list of resource types with zero rules, exit 1 if any gaps | false       |
 
 **Behavior:**
 
 Fetches all managed resources and aggregates by type and region with cost totals. The `--bp-coverage` flag scans the best-practices rule directory and displays rules per resource type, auto-fix percentages, and coverage gaps.
+
+When `--gaps-only` is set alongside `--bp-coverage`, the full dashboard is replaced with a short "N BP coverage gaps" header followed by the list of resource types that have zero rules, and the command exits with code 1 if any gaps exist. The JSON mode returns only the `{ gaps: [...] }` array for easy CI consumption (`jq 'length'`).
 
 **Examples:**
 
@@ -179,6 +182,8 @@ assignee status --json
 assignee status --region us-east-1
 assignee status --bp-coverage
 assignee status --bp-coverage --json
+assignee status --bp-coverage --gaps-only          # CI gate: fails if any type has 0 rules
+assignee status --bp-coverage --gaps-only --json   # machine-readable gap list
 ```
 
 ### destroy

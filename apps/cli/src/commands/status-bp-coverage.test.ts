@@ -5,6 +5,7 @@ import * as os from "node:os";
 import {
   computeBPCoverage,
   renderBPCoverage,
+  renderBPCoverageGaps,
   type BPCoverageData,
 } from "./status-bp-coverage.js";
 
@@ -290,6 +291,41 @@ describe("status-bp-coverage", () => {
       expect(output).toContain("Source Breakdown");
       expect(output).toContain("FSBP: 3");
 
+      stdoutSpy.mockRestore();
+    });
+  });
+
+  describe("renderBPCoverageGaps", () => {
+    it("prints the green 0-gaps header when every type has coverage", () => {
+      const stdoutSpy = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+      renderBPCoverageGaps([]);
+      const output = stdoutSpy.mock.calls.map((c) => c[0]).join("");
+      expect(output).toContain("0 BP coverage gaps");
+      expect(output).toContain("every supported type has at least one rule");
+      stdoutSpy.mockRestore();
+    });
+
+    it("prints a one-per-line list when gaps exist and uses plural label", () => {
+      const stdoutSpy = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+      renderBPCoverageGaps([
+        "AWS::EC2::RouteTable",
+        "AWS::EC2::VPCGatewayAttachment",
+        "AWS::EC2::SubnetRouteTableAssociation",
+      ]);
+      const output = stdoutSpy.mock.calls.map((c) => c[0]).join("");
+      expect(output).toContain("3 BP coverage gaps");
+      expect(output).toContain("AWS::EC2::RouteTable");
+      expect(output).toContain("AWS::EC2::VPCGatewayAttachment");
+      expect(output).toContain("AWS::EC2::SubnetRouteTableAssociation");
+      stdoutSpy.mockRestore();
+    });
+
+    it("uses singular label when exactly 1 gap exists", () => {
+      const stdoutSpy = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+      renderBPCoverageGaps(["AWS::Only::One"]);
+      const output = stdoutSpy.mock.calls.map((c) => c[0]).join("");
+      expect(output).toContain("1 BP coverage gap");
+      expect(output).not.toContain("1 BP coverage gaps");
       stdoutSpy.mockRestore();
     });
   });
