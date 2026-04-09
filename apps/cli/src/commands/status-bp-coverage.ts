@@ -194,3 +194,30 @@ export function renderBPCoverage(data: BPCoverageData): void {
   const sevStr = sevEntries.map(([k, v]) => `${k}: ${v}`).join(" | ");
   process.stdout.write(`  ${sevStr}\n\n`);
 }
+
+/**
+ * Render ONLY the list of resource types that have zero BP rules.
+ * CI-friendly output for `assignee status --bp-coverage --gaps-only`:
+ * no table, no summary, no severity breakdown — just a short
+ * list that a shell script can parse line-by-line, and a clear
+ * "0 gaps" / "N gaps" header so a failing CI run points at the
+ * actual count rather than a dashboard to be manually scanned.
+ */
+export function renderBPCoverageGaps(gaps: string[]): void {
+  if (gaps.length === 0) {
+    process.stdout.write(
+      chalk.green(
+        "0 BP coverage gaps — every supported type has at least one rule.\n",
+      ),
+    );
+    return;
+  }
+  process.stdout.write(
+    chalk.yellow(
+      `${gaps.length} BP coverage gap${gaps.length === 1 ? "" : "s"} (types with 0 rules):\n`,
+    ),
+  );
+  for (const gap of gaps) {
+    process.stdout.write(`  ${gap}\n`);
+  }
+}
