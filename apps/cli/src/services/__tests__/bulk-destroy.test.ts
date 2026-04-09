@@ -172,10 +172,43 @@ describe("BulkDestroyService — buildPlanFromResources", () => {
       "AWS::IAM::Role",
     );
 
-    it("isAssigneeInfraResource matches all 3 setup-created policies", () => {
+    it("isAssigneeInfraResource matches all 4 setup-created policies (operator split into core + services per A8)", () => {
       expect(isAssigneeInfraResource(ASSIGNEE_OPERATOR_POLICY.arn)).toBe(true);
       expect(isAssigneeInfraResource(ASSIGNEE_READER_POLICY.arn)).toBe(true);
       expect(isAssigneeInfraResource(ASSIGNEE_AUDITOR_POLICY.arn)).toBe(true);
+      // A8 follow-up: AssigneeOperatorServicesPolicy is the second
+      // half of the operator policy split. It MUST be covered by the
+      // safety allowlist or `assignee destroy --all --include-iam`
+      // would lock the operator user out of every service-specific
+      // permission.
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws:iam::054125018476:policy/AssigneeOperatorServicesPolicy",
+        ),
+      ).toBe(true);
+      // Partition-aware: GovCloud + China variants stay protected.
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws-us-gov:iam::054125018476:policy/AssigneeOperatorServicesPolicy",
+        ),
+      ).toBe(true);
+    });
+
+    it("isAssigneeInfraResource still rejects substring-clone attacks against the new services policy", () => {
+      // The leading `^` and trailing `$` in ASSIGNEE_INFRA_NAME_PATTERN
+      // mean substring matches are NOT protected — verify the new
+      // optional `Services` segment didn't accidentally widen the
+      // pattern enough to over-match.
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws:iam::054125018476:policy/AssigneeOperatorServicesPolicyClone",
+        ),
+      ).toBe(false);
+      expect(
+        isAssigneeInfraResource(
+          "arn:aws:iam::054125018476:policy/MyAssigneeOperatorServicesPolicy",
+        ),
+      ).toBe(false);
     });
 
     it("isAssigneeInfraResource matches the AssigneeAi* role created by setup", () => {

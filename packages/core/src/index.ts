@@ -147,6 +147,7 @@ export {
 export { getRequiredIamActions } from "./config/iam-actions.js";
 export {
   operatorPolicy,
+  operatorServicesPolicy,
   readerPolicy,
   auditorPolicy,
   IAM_USER_NAMES,

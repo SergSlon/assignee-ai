@@ -39,6 +39,16 @@ export const IAM_USER_NAMES = {
 
 export const IAM_POLICY_NAMES = {
   operator: "AssigneeOperatorPolicy",
+  // A8 follow-up: the operator role is split across two managed
+  // policies because the combined surface (Bedrock + CCAPI +
+  // service-specific perms + tagging + xray + sdk-fallback) exceeds
+  // the AWS 6144-byte managed-policy size limit at 28+ resource types.
+  // The split keeps each policy independently reviewable and uses
+  // the AWS-supported multi-policy attachment pattern (up to 10
+  // managed policies per IAM user) — strictly preferred over a
+  // wildcard collapser that would over-grant Create*/Delete*
+  // permissions for entire AWS services.
+  operatorServices: "AssigneeOperatorServicesPolicy",
   reader: "AssigneeReaderPolicy",
   auditor: "AssigneeAuditorPolicy",
 } as const;
@@ -126,10 +136,16 @@ function collapseToWildcards(actions: readonly string[]): string[] {
  *
  * @param modelArn - Optional Bedrock model ARN. Defaults to wildcard foundation model.
  */
-export function operatorPolicy(
-  modelArn: string = BEDROCK_MODEL_ARN_WILDCARD,
-): PolicyDocument {
-  // Aggregate all service-specific actions across all supported types
+/**
+ * Aggregate every service-specific action required across all
+ * SUPPORTED_TYPES_ARRAY entries. Used by both `operatorPolicy()`
+ * (to know what to OMIT — those go in the services policy) and
+ * `operatorServicesPolicy()` (which emits them).
+ */
+function collectServiceActions(): {
+  ccapiActions: string[];
+  serviceActions: string[];
+} {
   const allActions = new Set<string>();
   for (const resourceType of SUPPORTED_TYPES_ARRAY) {
     for (const action of getRequiredIamActions(resourceType)) {
@@ -137,7 +153,6 @@ export function operatorPolicy(
     }
   }
 
-  // Separate CloudControl actions from service-specific actions
   const ccapiActions: string[] = [];
   const serviceActionsRaw: string[] = [];
   for (const action of allActions) {
@@ -153,6 +168,26 @@ export function operatorPolicy(
   // managed-policy size limit. iam-actions.ts stays explicit; only the
   // emitted document is compacted.
   const serviceActions = collapseToWildcards(serviceActionsRaw);
+  return { ccapiActions, serviceActions };
+}
+
+/**
+ * Generates the operator-core policy document.
+ * Highest privilege: Bedrock invoke, CloudControl CRUD (scoped to
+ * SUPPORTED_TYPES_ARRAY), XRay tracing, resource tagging, SDK fallback
+ * actions.
+ *
+ * The bulky service-specific actions live in a SEPARATE managed policy
+ * `operatorServicesPolicy()` so the combined surface fits inside the
+ * AWS 6144-byte-per-managed-policy limit. Both policies attach to
+ * the same `assignee-operator` IAM user.
+ *
+ * @param modelArn - Optional Bedrock model ARN. Defaults to wildcard foundation model.
+ */
+export function operatorPolicy(
+  modelArn: string = BEDROCK_MODEL_ARN_WILDCARD,
+): PolicyDocument {
+  const { ccapiActions } = collectServiceActions();
 
   // SDK fallback actions for types that bypass CloudControl.
   // A6 (2026-04-08): Lambda EventSourceMapping was migrated to CCAPI so
@@ -191,12 +226,6 @@ export function operatorPolicy(
         },
       },
       {
-        Sid: "ServiceSpecificActions",
-        Effect: IamEffect.ALLOW,
-        Action: serviceActions,
-        Resource: "*",
-      },
-      {
         Sid: "SdkFallbackActions",
         Effect: IamEffect.ALLOW,
         Action: sdkFallbackActions,
@@ -215,6 +244,46 @@ export function operatorPolicy(
         Sid: "ResourceTagging",
         Effect: IamEffect.ALLOW,
         Action: [IamAction.TAG_TAG_RESOURCES, IamAction.TAG_GET_RESOURCES],
+        Resource: "*",
+      },
+    ],
+  };
+}
+
+/**
+ * Generates the operator-services policy document — the bulky
+ * service-specific actions split out from `operatorPolicy()` so the
+ * combined surface fits inside AWS's 6144-byte managed-policy limit.
+ *
+ * Both `AssigneeOperatorPolicy` (core: Bedrock + CCAPI + tagging + xray
+ * + SDK fallback) and `AssigneeOperatorServicesPolicy` (this) attach
+ * to the same `assignee-operator` IAM user. The effective permission
+ * set is the union — identical to the pre-split single-policy version.
+ *
+ * Why split instead of expanding the wildcard collapser? AWS docs
+ * explicitly recommend the multi-policy attach pattern for managed
+ * policies that exceed the 6144-byte limit. The alternative —
+ * adding `Create*` / `Delete*` to `SAFE_WILDCARD_PREFIXES` — would
+ * silently grant entire-service write capability for any service
+ * with 3+ Create or Delete actions, including operations the CLI
+ * never invokes (e.g. `ec2:CreateImage`, `ec2:CreateSnapshot`,
+ * `apigateway:CreateAccount`). The split avoids that over-grant.
+ *
+ * The cloudcontrol:TypeName Condition that scopes CCAPI calls to
+ * SUPPORTED_TYPES_ARRAY lives in `operatorPolicy()` — it doesn't
+ * need to be duplicated here because IAM evaluates each policy's
+ * conditions independently and the CCAPI Allow only takes effect
+ * with the Condition matched.
+ */
+export function operatorServicesPolicy(): PolicyDocument {
+  const { serviceActions } = collectServiceActions();
+  return {
+    Version: IamPolicy.VERSION,
+    Statement: [
+      {
+        Sid: "ServiceSpecificActions",
+        Effect: IamEffect.ALLOW,
+        Action: serviceActions,
         Resource: "*",
       },
     ],
