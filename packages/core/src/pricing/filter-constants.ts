@@ -47,6 +47,10 @@ export const PricingServiceCode = {
   EFS: "AmazonEFS",
   // A11 (2026-04-09) — KMS::Key
   KMS: "awskms",
+  // A13 (2026-04-09) — EventBridge (shared with Events::Rule cost reqs
+  // and the ApiDestination per-invocation fee; not previously needed
+  // because Events::Rule + Events::EventBus are modelled as free).
+  EVENTS: "AmazonEventBridge",
 } as const;
 
 export const PricingKind = {

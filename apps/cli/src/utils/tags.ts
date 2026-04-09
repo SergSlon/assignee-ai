@@ -46,6 +46,14 @@ const NO_TAG_TYPES: Set<string> = new Set([
   // tagging.taggable=false. Injecting Tags causes CCAPI to reject
   // the create/update with a "Properties validation failed" error.
   RESOURCE_TYPES.SNS_SUBSCRIPTION,
+  // A12 (2026-04-09): AWS::Events::Connection — tagging.taggable=false
+  // in the CCAPI schema. Auth credentials live in a managed Secrets
+  // Manager secret which IS taggable, but the Connection itself
+  // isn't.
+  RESOURCE_TYPES.EVENTS_CONNECTION,
+  // A13 (2026-04-09): AWS::Events::ApiDestination — also
+  // tagging.taggable=false per the CCAPI schema.
+  RESOURCE_TYPES.EVENTS_API_DESTINATION,
 ]);
 
 /**

@@ -164,8 +164,10 @@ describe("Secure defaults audit — all wizard defaults pass blocking BP rules",
   // A9  (2026-04-09): EventBridge EventBus lifted the count to 29.
   // A10 (2026-04-09): SNS Subscription promoted to first-class, count 30.
   // A11 (2026-04-09): KMS::Key first-class (symmetric CMK), count 31.
+  // A12 (2026-04-09): Events::Connection first-class, count 32.
+  // A13 (2026-04-09): Events::ApiDestination first-class, count 33.
   it(`covers all ${SUPPORTED_TYPES_ARRAY.length} supported resource types`, () => {
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(31);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(33);
   });
 
   for (const resourceType of SUPPORTED_TYPES_ARRAY) {

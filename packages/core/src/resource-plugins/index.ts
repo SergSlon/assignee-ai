@@ -35,6 +35,10 @@ import { eventsEventBusPlugin } from "./plugins/events-eventbus.js";
 import { snsSubscriptionPlugin } from "./plugins/sns-subscription.js";
 // A11 (2026-04-09): KMS::Key first-class (symmetric customer-managed keys)
 import { kmsKeyPlugin } from "./plugins/kms-key.js";
+// A12 (2026-04-09): Events::Connection first-class (outbound HTTP auth)
+import { eventsConnectionPlugin } from "./plugins/events-connection.js";
+// A13 (2026-04-09): Events::ApiDestination first-class (outbound HTTP endpoint)
+import { eventsApiDestinationPlugin } from "./plugins/events-apidestination.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -83,6 +87,10 @@ defaultPluginRegistry.register(eventsEventBusPlugin);
 defaultPluginRegistry.register(snsSubscriptionPlugin);
 // A11 (2026-04-09): KMS::Key first-class
 defaultPluginRegistry.register(kmsKeyPlugin);
+// A12 (2026-04-09): Events::Connection first-class
+defaultPluginRegistry.register(eventsConnectionPlugin);
+// A13 (2026-04-09): Events::ApiDestination first-class
+defaultPluginRegistry.register(eventsApiDestinationPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 export { PluginRegistry };
@@ -122,6 +130,10 @@ export { eventsEventBusPlugin } from "./plugins/events-eventbus.js";
 export { snsSubscriptionPlugin } from "./plugins/sns-subscription.js";
 // A11 (2026-04-09): KMS::Key first-class
 export { kmsKeyPlugin } from "./plugins/kms-key.js";
+// A12 (2026-04-09): Events::Connection first-class
+export { eventsConnectionPlugin } from "./plugins/events-connection.js";
+// A13 (2026-04-09): Events::ApiDestination first-class
+export { eventsApiDestinationPlugin } from "./plugins/events-apidestination.js";
 export { genericPlugin } from "./plugins/generic.js";
 export type {
   ResourcePlugin,

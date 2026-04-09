@@ -1,6 +1,6 @@
 # Supported Resource Types
 
-assignee.ai supports 31 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
+assignee.ai supports 33 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
 
 ## Resource Type Table
 
@@ -37,6 +37,8 @@ assignee.ai supports 31 AWS resource types via CloudFormation CloudControl API, 
 | 29  | `AWS::Events::EventBus` (A9)                | EventBridge EventBus | events-eventbus       | -             |
 | 30  | `AWS::SNS::Subscription` (A10)              | SNS Subscription     | sns-subscription      | -             |
 | 31  | `AWS::KMS::Key` (A11)                       | KMS Key (CMK)        | kms-key               | -             |
+| 32  | `AWS::Events::Connection` (A12)             | EventBridge Conn.    | events-connection     | Secret (auto) |
+| 33  | `AWS::Events::ApiDestination` (A13)         | EventBridge ApiDest. | events-apidestination | -             |
 
 A **generic plugin** handles any resource type not covered by a dedicated plugin, using CloudFormation schema defaults.
 

@@ -279,7 +279,9 @@ describe("Cross-epic: schema fetch -> plan generation", () => {
     // A10 (2026-04-09): SNS Subscription promoted from CCAPI_FALLBACK_TYPES
     //                   to first-class, lifting the count to 30.
     // A11 (2026-04-09): KMS::Key first-class (symmetric CMK), count 31.
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(31);
+    // A12 (2026-04-09): Events::Connection first-class, count 32.
+    // A13 (2026-04-09): Events::ApiDestination first-class, count 33.
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(33);
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::S3::Bucket");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EC2::Instance");

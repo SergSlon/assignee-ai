@@ -50,6 +50,10 @@ const FREE_TYPES: readonly string[] = [
   // SNS::Topic decomposer; the target service (SQS/Lambda/Firehose)
   // bills on its own meter. Subscription decomposer returns [].
   RESOURCE_TYPES.SNS_SUBSCRIPTION,
+  // A12 (2026-04-09): Events::Connection is free — the billable
+  // cost lives on the ApiDestination that uses it (per-invocation
+  // HTTP fee) and on the target service if any.
+  RESOURCE_TYPES.EVENTS_CONNECTION,
   // SSM Standard tier is also free, but the decomposer is registered for
   // Advanced tier too — it is NOT in the "always free" list.
 ] as const;

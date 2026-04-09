@@ -131,6 +131,16 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "kms:UntagResource",
       "kms:ListResourceTags",
       "kms:ListKeys",
+      // A12 follow-up (2026-04-09): data-key operations needed by
+      // the Events::Connection CCAPI create handler so the
+      // auto-generated Secret gets envelope-encrypted. Generally
+      // useful for any service integration that envelope-encrypts
+      // via a CMK (Secrets Manager, SNS, SQS, etc.) so scoping
+      // them onto the KMS_KEY entry lights up cross-service
+      // encryption flows without a dedicated bridge.
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:GenerateDataKey",
     ],
     // A10 (2026-04-09): AWS::SNS::Subscription — first-class.
     // CCAPI handler permissions probed 2026-04-09:
@@ -424,6 +434,34 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "events:PutTargets",
       "events:RemoveTargets",
       "events:TagResource",
+    ],
+    // A12 (2026-04-09): AWS::Events::Connection CCAPI handler perms.
+    // Create handler stores auth credentials in an auto-generated
+    // Secrets Manager secret, so the cross-service perms live on
+    // SECRETSMANAGER_SECRET (already present) and KMS_KEY (Encrypt/
+    // Decrypt/GenerateDataKey added above) rather than being
+    // duplicated here. DescribeConnection + ListConnections collapse
+    // into the existing events:Describe*/List* wildcards emitted by
+    // the Events::Rule + Events::EventBus entries.
+    [RESOURCE_TYPES.EVENTS_CONNECTION]: [
+      "events:CreateConnection",
+      "events:UpdateConnection",
+      "events:DeleteConnection",
+      "events:DescribeConnection",
+      "events:ListConnections",
+      // Connection create handler needs these to register itself.
+      "iam:CreateServiceLinkedRole",
+    ],
+    // A13 (2026-04-09): AWS::Events::ApiDestination CCAPI handler
+    // perms. Only events:* — the cross-service complexity lives
+    // on the Connection. Describe*/List* collapse into the
+    // existing events:Describe*/List* wildcards.
+    [RESOURCE_TYPES.EVENTS_API_DESTINATION]: [
+      "events:CreateApiDestination",
+      "events:UpdateApiDestination",
+      "events:DeleteApiDestination",
+      "events:DescribeApiDestination",
+      "events:ListApiDestinations",
     ],
     // A9 (2026-04-09): AWS::Events::EventBus minimum viable set.
     // CreateEventBus + DeleteEventBus + DescribeEventBus cover the

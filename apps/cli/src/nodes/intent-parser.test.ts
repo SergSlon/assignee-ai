@@ -93,6 +93,10 @@ describe("intentParserNode", () => {
     expect(SUPPORTED_TYPES).toContain("AWS::SNS::Subscription");
     // A11 (2026-04-09): KMS::Key first-class, count 31.
     expect(SUPPORTED_TYPES).toContain("AWS::KMS::Key");
-    expect(SUPPORTED_TYPES).toHaveLength(31);
+    // A12 (2026-04-09): Events::Connection first-class, count 32.
+    expect(SUPPORTED_TYPES).toContain("AWS::Events::Connection");
+    // A13 (2026-04-09): Events::ApiDestination first-class, count 33.
+    expect(SUPPORTED_TYPES).toContain("AWS::Events::ApiDestination");
+    expect(SUPPORTED_TYPES).toHaveLength(33);
   });
 });
