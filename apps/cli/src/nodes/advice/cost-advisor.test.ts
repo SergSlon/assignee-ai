@@ -73,7 +73,92 @@ describe("costAlternatives", () => {
         BucketName: "my-logs",
         LifecycleConfiguration: { Rules: [] },
       });
-      expect(hints.some((h) => h.includes("lifecycle"))).toBe(false);
+      // Lifecycle hint still references "lifecycle" — but IT/replication
+      // hints don't. Assert the lifecycle-rules suggestion specifically
+      // is silenced.
+      expect(hints.some((h) => h.includes("lifecycle rules"))).toBe(false);
+    });
+
+    // (f) 2026-04-09 — IT decomposer reminder
+    it("mentions IT break-even when IntelligentTieringConfigurations is set", () => {
+      const hints = costAlternatives(RESOURCE_TYPES.S3_BUCKET, {
+        BucketName: "my-logs",
+        IntelligentTieringConfigurations: [
+          { Id: "ArchiveConfig", Status: "Enabled" },
+        ],
+      });
+      expect(
+        hints.some(
+          (h) =>
+            h.includes("Intelligent-Tiering") &&
+            h.includes("128KB") &&
+            h.includes("30 days") &&
+            h.includes("monitoring fee"),
+        ),
+      ).toBe(true);
+    });
+
+    it("does NOT mention IT when IntelligentTieringConfigurations is absent", () => {
+      const hints = costAlternatives(RESOURCE_TYPES.S3_BUCKET, {
+        BucketName: "my-logs",
+      });
+      expect(hints.some((h) => h.includes("Intelligent-Tiering"))).toBe(false);
+    });
+
+    it("does NOT mention IT when IntelligentTieringConfigurations is empty", () => {
+      const hints = costAlternatives(RESOURCE_TYPES.S3_BUCKET, {
+        BucketName: "my-logs",
+        IntelligentTieringConfigurations: [],
+      });
+      expect(hints.some((h) => h.includes("Intelligent-Tiering"))).toBe(false);
+    });
+
+    // (f) 2026-04-09 — Replication decomposer reminder
+    it("mentions inter-region DTO gap when ReplicationConfiguration has rules", () => {
+      const hints = costAlternatives(RESOURCE_TYPES.S3_BUCKET, {
+        BucketName: "my-logs",
+        ReplicationConfiguration: {
+          Role: "arn:aws:iam::123456789012:role/r",
+          Rules: [
+            {
+              Destination: {
+                Bucket: "arn:aws:s3:::dest",
+              },
+              Status: "Enabled",
+            },
+          ],
+        },
+      });
+      expect(
+        hints.some(
+          (h) =>
+            h.includes("Cross-region replication") &&
+            h.includes("inter-region data transfer") &&
+            h.includes("not shown separately"),
+        ),
+      ).toBe(true);
+    });
+
+    it("does NOT mention replication DTO when ReplicationConfiguration has no rules", () => {
+      const hints = costAlternatives(RESOURCE_TYPES.S3_BUCKET, {
+        BucketName: "my-logs",
+        ReplicationConfiguration: {
+          Role: "arn:aws:iam::123456789012:role/r",
+          Rules: [],
+        },
+      });
+      expect(hints.some((h) => h.includes("Cross-region replication"))).toBe(
+        false,
+      );
+    });
+
+    it("does NOT mention replication DTO when ReplicationConfiguration is absent", () => {
+      const hints = costAlternatives(RESOURCE_TYPES.S3_BUCKET, {
+        BucketName: "my-logs",
+      });
+      expect(hints.some((h) => h.includes("Cross-region replication"))).toBe(
+        false,
+      );
     });
   });
 
@@ -111,8 +196,17 @@ describe("costAlternatives", () => {
         ThroughputMode: "provisioned",
         ProvisionedThroughputInMibps: 100,
       });
+      // Wording matches the decomposer's FIXED provisioned-throughput
+      // line: $6/MiB-s-month baseline, ~50 MiB/s switchback threshold.
       expect(
-        hints.some((h) => h.includes("provisioned") && h.includes("100 MiB/s")),
+        hints.some(
+          (h) =>
+            h.includes("provisioned") &&
+            h.includes("100 MiB/s") &&
+            h.includes("$6/MiB-s-month") &&
+            h.includes("bursting / elastic") &&
+            h.includes("50 MiB/s"),
+        ),
       ).toBe(true);
     });
 
@@ -120,7 +214,13 @@ describe("costAlternatives", () => {
       const hints = costAlternatives("AWS::EFS::FileSystem", {
         ThroughputMode: "provisioned",
       });
-      expect(hints.some((h) => h.includes("provisioned"))).toBe(true);
+      expect(
+        hints.some(
+          (h) =>
+            h.includes("ThroughputMode=provisioned") &&
+            h.includes("$6/MiB-s-month"),
+        ),
+      ).toBe(true);
     });
 
     it("does NOT warn about provisioned throughput when mode is elastic", () => {
@@ -158,6 +258,58 @@ describe("costAlternatives", () => {
       expect(
         hints.some(
           (h) => h.includes("mount target") && h.includes("FileSystem"),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  // (f) 2026-04-09: SQS cross-region DTO reminder + CloudFront
+  // invalidation trap — wired from decomposer line item descriptions.
+  describe("SQS", () => {
+    it("always mentions the cross-region DTO caveat for standard queues", () => {
+      const hints = costAlternatives(RESOURCE_TYPES.SQS_QUEUE, {
+        QueueName: "orders-queue",
+      });
+      expect(
+        hints.some(
+          (h) =>
+            h.includes("In-region consumers are free") &&
+            h.includes("another region") &&
+            h.includes("multi-region consumers"),
+        ),
+      ).toBe(true);
+    });
+
+    it("mentions the cross-region DTO caveat AND the FIFO surcharge for FIFO queues", () => {
+      const hints = costAlternatives(RESOURCE_TYPES.SQS_QUEUE, {
+        QueueName: "orders.fifo",
+        FifoQueue: true,
+      });
+      expect(hints.some((h) => h.includes("FIFO queues cost 25%"))).toBe(true);
+      expect(
+        hints.some((h) => h.includes("In-region consumers are free")),
+      ).toBe(true);
+    });
+  });
+
+  describe("CloudFront Distribution", () => {
+    it("always surfaces the invalidation trap reminder", () => {
+      const hints = costAlternatives(RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION, {
+        DistributionConfig: {
+          Enabled: true,
+          DefaultCacheBehavior: {
+            TargetOriginId: "primary",
+            ViewerProtocolPolicy: "redirect-to-https",
+          },
+          Origins: [{ Id: "primary", DomainName: "origin.example.com" }],
+        },
+      });
+      expect(
+        hints.some(
+          (h) =>
+            h.includes("1,000 invalidation paths/month") &&
+            h.includes("$0.005") &&
+            h.includes("cache-busting filenames"),
         ),
       ).toBe(true);
     });

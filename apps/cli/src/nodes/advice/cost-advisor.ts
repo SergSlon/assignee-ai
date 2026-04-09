@@ -67,9 +67,27 @@ export function costAlternatives(
     );
   } else if (resourceType === RESOURCE_TYPES.EVENTS_RULE) {
     eventsRuleCostHints(desiredState, hints);
+  } else if (resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION) {
+    cloudFrontCostHints(hints);
   }
 
   return hints;
+}
+
+/**
+ * CloudFront Distribution cost hints. The decomposer emits data-transfer-out
+ * + HTTPS requests as the two always-on usage-based lines; the invalidation
+ * trap is the non-obvious one that bites teams who do per-deploy wildcard
+ * invalidations. We always surface it because the trap is behavior-driven,
+ * not config-driven — knowable only at deploy time.
+ *
+ * @see A14 (2026-04-09) — CloudFront::Distribution first-class
+ * @see (f) 2026-04-09 — wired from decomposer reminder list
+ */
+function cloudFrontCostHints(hints: string[]): void {
+  hints.push(
+    `${AdviceIcon.COST} First 1,000 invalidation paths/month are free; $0.005 each after that. Aggressive per-deploy invalidations can turn into real cost \u2014 prefer cache-busting filenames.`,
+  );
 }
 
 /**
@@ -145,7 +163,11 @@ function efsCostHints(ds: Record<string, unknown>, hints: string[]): void {
     | undefined;
   const azName = ds[CfnKey.AVAILABILITY_ZONE_NAME];
 
-  // Provisioned throughput — expensive and often unnecessary.
+  // Provisioned throughput — expensive and often unnecessary. Wording
+  // mirrors the decomposer's FIXED provisioned-throughput line so the
+  // plan box and the advisor tell the same story: ~$6/MiB-s-month
+  // baseline, bills regardless of utilization, crossover with
+  // bursting/elastic sits around ~50 MiB/s for typical workloads.
   if (throughputMode === "provisioned") {
     const provisionedNum =
       typeof provisionedMiBps === "number"
@@ -153,15 +175,13 @@ function efsCostHints(ds: Record<string, unknown>, hints: string[]): void {
         : typeof provisionedMiBps === "string"
           ? Number(provisionedMiBps)
           : undefined;
-    if (provisionedNum && provisionedNum > 0) {
-      hints.push(
-        `${AdviceIcon.COST} ThroughputMode=provisioned with ${provisionedNum} MiB/s — consider 'elastic' mode instead: it scales automatically and is typically cheaper unless you have a sustained high-throughput baseline.`,
-      );
-    } else {
-      hints.push(
-        `${AdviceIcon.COST} ThroughputMode=provisioned is billed per MiB/s-month regardless of actual usage — consider 'elastic' mode for spiky workloads.`,
-      );
-    }
+    const prefix =
+      provisionedNum && provisionedNum > 0
+        ? `ThroughputMode=provisioned with ${provisionedNum} MiB/s`
+        : `ThroughputMode=provisioned`;
+    hints.push(
+      `${AdviceIcon.COST} ${prefix} \u2014 $6/MiB-s-month baseline; the committed rate bills regardless of usage. Switch back to bursting / elastic if steady-state throughput is below ~50 MiB/s.`,
+    );
   }
 
   // One Zone mode — dramatically cheaper for non-critical data.
@@ -235,6 +255,34 @@ function s3CostHints(ds: Record<string, unknown>, hints: string[]): void {
       `${AdviceIcon.COST} Consider adding lifecycle rules to transition infrequent data to S3-IA or Glacier after 30-90 days`,
     );
   }
+
+  // Intelligent-Tiering reminder — mirrors the decomposer's IT line item
+  // so plan-time advice explains the break-even logic. IT is a clear win
+  // for large objects with unpredictable access, but is actively worse
+  // than Standard for tiny or rarely-accessed objects due to the per-
+  // object monitoring fee.
+  const itConfigs = ds["IntelligentTieringConfigurations"];
+  if (Array.isArray(itConfigs) && itConfigs.length > 0) {
+    hints.push(
+      `${AdviceIcon.COST} Intelligent-Tiering saves ~45% vs Standard for access patterns >128KB; breaks even around 30 days per object. Worse than Standard for objects accessed <1/month due to the monitoring fee.`,
+    );
+  }
+
+  // Replication reminder — the decomposer already surfaces the source-side
+  // PUT + destination-side storage line items, but inter-region data
+  // transfer at the destination region's inbound rate is NOT shown as its
+  // own line item. Call it out so users don't under-estimate CRR spend.
+  const replicationConfig = ds["ReplicationConfiguration"];
+  const hasReplication =
+    typeof replicationConfig === "object" &&
+    replicationConfig !== null &&
+    Array.isArray((replicationConfig as Record<string, unknown>)["Rules"]) &&
+    ((replicationConfig as { Rules: unknown[] }).Rules.length ?? 0) > 0;
+  if (hasReplication) {
+    hints.push(
+      `${AdviceIcon.COST} Cross-region replication ALSO bills inter-region data transfer at the destination region's inbound rate \u2014 not shown separately in the plan box above.`,
+    );
+  }
 }
 
 function lambdaCostHints(ds: Record<string, unknown>, hints: string[]): void {
@@ -267,4 +315,13 @@ function sqsCostHints(ds: Record<string, unknown>, hints: string[]): void {
       `${AdviceIcon.COST} FIFO queues cost 25% more than standard \u2014 use only when message ordering and exactly-once delivery are required`,
     );
   }
+  // SQS data-transfer-out reminder — the decomposer emits a DTO line item
+  // with description "Data transfer out (only cross-region consumers)" so
+  // users see the line in the plan box; this advisor annotation explains
+  // when the line actually bills. In-region consumers (the overwhelming
+  // common case) pay nothing; the charge only applies if readers live in
+  // a different region from the queue.
+  hints.push(
+    `${AdviceIcon.COST} In-region consumers are free; the data-transfer-out line only applies if your readers are in another region. Watch this if you're fanning out to multi-region consumers.`,
+  );
 }
