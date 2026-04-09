@@ -2081,3 +2081,414 @@ describeE2E("E2E: scheduled-lambda compound apply + destroy", () => {
     expect(failures).toEqual([]);
   }, 900_000);
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Item 3d RUN_E2E ratchet (2026-04-10) — 4 previously-uncovered compounds.
+// Each block is gated by RUN_E2E=1 like every other e2e test in this file and
+// contributes zero runtime to plain `pnpm test`. The nightly GitHub Actions
+// workflow at .github/workflows/nightly-e2e.yml runs the full suite against a
+// dedicated test account at 03:00 UTC, so these blocks ship as documentation
+// of the expected surface and become live coverage on the next nightly run.
+//
+// Covered by this ratchet:
+//   1. serverless-api     (8 resources: IAM, Lambda, LogGroup, ApiGw V2,
+//                          Integration, Route, Stage, Permission)
+//   2. message-processing (5 resources: DLQ + MainQueue + DynamoDB +
+//                          Lambda role + Processor Lambda)
+//   3. container-service  (5 resources: ECR + Task role + SG + ECS Cluster +
+//                          ALB)
+//   4. three-tier-web     (6 resources: ALB SG + App SG + Instance profile
+//                          role + ALB + EC2 + RDS)
+//
+// Assertions follow the reference template established by the existing
+// static-website + scheduled-lambda blocks:
+//   - invoke graph → poll until terminal → assert SUCCESS + patternId
+//   - assert the hero resources of each compound carry real physical ARNs
+//   - exercise the bulk-destroy pipeline end-to-end and assert zero
+//     failures, which catches cleanup ordering bugs (parent-before-child
+//     deletion, dangling dependency references).
+//
+// Timeouts are set generously because some compounds have long-poll
+// resources: ALB provisioning can take ~5 min, RDS up to ~15 min.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describeE2E("E2E: serverless-api compound apply + destroy", () => {
+  const apiSuffix = `${Date.now()}`;
+
+  it("plans, applies, and bulk-destroys a serverless API (Lambda + API Gateway V2)", async () => {
+    const graph = createGraph(tools);
+    const threadId = crypto.randomUUID();
+    const config = {
+      configurable: { thread_id: threadId },
+      recursionLimit: 500,
+    };
+
+    await graph.invoke(
+      {
+        userIntent: `Create a serverless api for e2e test ${apiSuffix}`,
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.APPLY,
+        startedAt: Date.now(),
+        noWizard: true,
+        autoApprove: true,
+        projectDir: process.cwd(),
+      },
+      config,
+    );
+
+    let graphState = await graph.getState(config);
+    while (graphState.next.length > 0) {
+      await graph.invoke(null, config);
+      graphState = await graph.getState(config);
+    }
+
+    const finalState = graphState.values as AgentState;
+
+    if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+      console.error("SERVERLESS-API COMPOUND E2E FAILED:", {
+        status: finalState.executionStatus,
+        error: finalState.errorMessage,
+        completed: finalState.completedResources?.map(
+          (c) => `${c.resourceId}(${c.resourceType})=${c.resourceArn}`,
+        ),
+      });
+    }
+
+    expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(finalState.resourcePattern?.patternId).toBe("serverless-api");
+
+    const completed = finalState.completedResources ?? [];
+
+    // Hero resources: IAM role + Lambda + API Gateway V2 Api.
+    // Lambda Permission is display-only (CCAPI routes it through the
+    // flaky AWS::Lambda::PermissionPolicy path), so it may land as
+    // display-only without a full ARN — do not assert its presence here.
+    const role = completed.find((c) => c.resourceType === "AWS::IAM::Role");
+    expect(typeof role?.resourceArn).toBe("string");
+    expect(role?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const fn = completed.find(
+      (c) => c.resourceType === "AWS::Lambda::Function",
+    );
+    expect(fn?.resourceArn).toMatch(/^arn:aws:lambda:[a-z0-9-]+:\d+:function:/);
+    expect(fn?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const api = completed.find(
+      (c) => c.resourceType === "AWS::ApiGatewayV2::Api",
+    );
+    expect(typeof api?.resourceArn).toBe("string");
+    expect(api?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    // ── Destroy pipeline exercise ───────────────────────────────────
+    // API Gateway deletion must cascade through routes/stages/integrations
+    // before the Api itself can be removed. bulk-destroy tier ordering
+    // handles the dependency graph; if it ever regresses, the
+    // DependencyViolation surfaces here.
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
+    const { destroySingleResource } =
+      await import("../services/destroy-service.js");
+    const plan = await planBulkDestroy({ region });
+    const failures: string[] = [];
+    for (const r of plan.resources) {
+      const result = await destroySingleResource(r, { region });
+      if (!result.success) {
+        failures.push(
+          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
+        );
+      }
+    }
+    expect(failures).toEqual([]);
+  }, 900_000);
+});
+
+describeE2E("E2E: message-processing compound apply + destroy", () => {
+  const mpSuffix = `${Date.now()}`;
+
+  it("plans, applies, and bulk-destroys an SQS→Lambda→DynamoDB message processing pipeline", async () => {
+    const graph = createGraph(tools);
+    const threadId = crypto.randomUUID();
+    const config = {
+      configurable: { thread_id: threadId },
+      recursionLimit: 500,
+    };
+
+    await graph.invoke(
+      {
+        userIntent: `Create a message processing pipeline for e2e test ${mpSuffix}`,
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.APPLY,
+        startedAt: Date.now(),
+        noWizard: true,
+        autoApprove: true,
+        projectDir: process.cwd(),
+      },
+      config,
+    );
+
+    let graphState = await graph.getState(config);
+    while (graphState.next.length > 0) {
+      await graph.invoke(null, config);
+      graphState = await graph.getState(config);
+    }
+
+    const finalState = graphState.values as AgentState;
+
+    if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+      console.error("MESSAGE-PROCESSING COMPOUND E2E FAILED:", {
+        status: finalState.executionStatus,
+        error: finalState.errorMessage,
+        completed: finalState.completedResources?.map(
+          (c) => `${c.resourceId}(${c.resourceType})=${c.resourceArn}`,
+        ),
+      });
+    }
+
+    expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(finalState.resourcePattern?.patternId).toBe("message-processing");
+
+    const completed = finalState.completedResources ?? [];
+
+    // Compound produces exactly 5 resources: DLQ, main queue, DynamoDB
+    // table, IAM role, and the processor Lambda. All must land with
+    // physical identifiers.
+    const queues = completed.filter(
+      (c) => c.resourceType === "AWS::SQS::Queue",
+    );
+    expect(queues.length).toBe(2); // DLQ + main queue
+    for (const q of queues) {
+      expect(typeof q.resourceArn).toBe("string");
+      expect(q.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    }
+
+    const table = completed.find(
+      (c) => c.resourceType === "AWS::DynamoDB::Table",
+    );
+    expect(typeof table?.resourceArn).toBe("string");
+    expect(table?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const fn = completed.find(
+      (c) => c.resourceType === "AWS::Lambda::Function",
+    );
+    expect(fn?.resourceArn).toMatch(/^arn:aws:lambda:[a-z0-9-]+:\d+:function:/);
+    expect(fn?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    // ── Destroy pipeline exercise ───────────────────────────────────
+    // DynamoDB requires DeletionProtection=false before delete;
+    // destroy-service.ts has a dedicated hook for this. If the hook
+    // ever regresses, the failures array surfaces it.
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
+    const { destroySingleResource } =
+      await import("../services/destroy-service.js");
+    const plan = await planBulkDestroy({ region });
+    const failures: string[] = [];
+    for (const r of plan.resources) {
+      const result = await destroySingleResource(r, { region });
+      if (!result.success) {
+        failures.push(
+          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
+        );
+      }
+    }
+    expect(failures).toEqual([]);
+  }, 900_000);
+});
+
+describeE2E("E2E: container-service compound apply + destroy", () => {
+  const csSuffix = `${Date.now()}`;
+
+  it("plans, applies, and bulk-destroys an ECS Fargate container service with ALB", async () => {
+    const graph = createGraph(tools);
+    const threadId = crypto.randomUUID();
+    const config = {
+      configurable: { thread_id: threadId },
+      recursionLimit: 500,
+    };
+
+    await graph.invoke(
+      {
+        userIntent: `Create a container service with ecs fargate for e2e test ${csSuffix}`,
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.APPLY,
+        startedAt: Date.now(),
+        noWizard: true,
+        autoApprove: true,
+        projectDir: process.cwd(),
+      },
+      config,
+    );
+
+    let graphState = await graph.getState(config);
+    while (graphState.next.length > 0) {
+      await graph.invoke(null, config);
+      graphState = await graph.getState(config);
+    }
+
+    const finalState = graphState.values as AgentState;
+
+    if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+      console.error("CONTAINER-SERVICE COMPOUND E2E FAILED:", {
+        status: finalState.executionStatus,
+        error: finalState.errorMessage,
+        completed: finalState.completedResources?.map(
+          (c) => `${c.resourceId}(${c.resourceType})=${c.resourceArn}`,
+        ),
+      });
+    }
+
+    expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(finalState.resourcePattern?.patternId).toBe("container-service");
+
+    const completed = finalState.completedResources ?? [];
+
+    // Hero resources: ECR repository, IAM task role, ECS cluster, ALB.
+    const ecr = completed.find(
+      (c) => c.resourceType === "AWS::ECR::Repository",
+    );
+    expect(typeof ecr?.resourceArn).toBe("string");
+    expect(ecr?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const role = completed.find((c) => c.resourceType === "AWS::IAM::Role");
+    expect(typeof role?.resourceArn).toBe("string");
+    expect(role?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const cluster = completed.find(
+      (c) => c.resourceType === "AWS::ECS::Cluster",
+    );
+    expect(typeof cluster?.resourceArn).toBe("string");
+    expect(cluster?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const alb = completed.find(
+      (c) => c.resourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    );
+    expect(alb?.resourceArn).toMatch(
+      /^arn:aws:elasticloadbalancing:[a-z0-9-]+:\d+:loadbalancer\/app\//,
+    );
+    expect(alb?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    // ── Destroy pipeline exercise ───────────────────────────────────
+    // ALB provisioning can take ~5 min; destroy is usually quick. ECR
+    // repositories reject delete if images are present but our E2E
+    // never pushes images, so the ECR delete proceeds cleanly.
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
+    const { destroySingleResource } =
+      await import("../services/destroy-service.js");
+    const plan = await planBulkDestroy({ region });
+    const failures: string[] = [];
+    for (const r of plan.resources) {
+      const result = await destroySingleResource(r, { region });
+      if (!result.success) {
+        failures.push(
+          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
+        );
+      }
+    }
+    expect(failures).toEqual([]);
+  }, 1_500_000);
+});
+
+describeE2E("E2E: three-tier-web compound apply + destroy", () => {
+  const ttSuffix = `${Date.now()}`;
+
+  it("plans, applies, and bulk-destroys a three-tier web app (ALB + EC2 + RDS)", async () => {
+    const graph = createGraph(tools);
+    const threadId = crypto.randomUUID();
+    const config = {
+      configurable: { thread_id: threadId },
+      recursionLimit: 500,
+    };
+
+    await graph.invoke(
+      {
+        userIntent: `Create a three tier web application with alb ec2 rds for e2e test ${ttSuffix}`,
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.APPLY,
+        startedAt: Date.now(),
+        noWizard: true,
+        autoApprove: true,
+        projectDir: process.cwd(),
+      },
+      config,
+    );
+
+    let graphState = await graph.getState(config);
+    while (graphState.next.length > 0) {
+      await graph.invoke(null, config);
+      graphState = await graph.getState(config);
+    }
+
+    const finalState = graphState.values as AgentState;
+
+    if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+      console.error("THREE-TIER-WEB COMPOUND E2E FAILED:", {
+        status: finalState.executionStatus,
+        error: finalState.errorMessage,
+        completed: finalState.completedResources?.map(
+          (c) => `${c.resourceId}(${c.resourceType})=${c.resourceArn}`,
+        ),
+      });
+    }
+
+    expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(finalState.resourcePattern?.patternId).toBe("three-tier-web");
+
+    const completed = finalState.completedResources ?? [];
+
+    // Hero resources: two SGs (ALB + App), instance profile role, ALB,
+    // EC2 instance, RDS instance.
+    const sgs = completed.filter(
+      (c) => c.resourceType === "AWS::EC2::SecurityGroup",
+    );
+    expect(sgs.length).toBeGreaterThanOrEqual(2);
+    for (const sg of sgs) {
+      expect(typeof sg.resourceArn).toBe("string");
+      expect(sg.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    }
+
+    const role = completed.find((c) => c.resourceType === "AWS::IAM::Role");
+    expect(typeof role?.resourceArn).toBe("string");
+    expect(role?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const alb = completed.find(
+      (c) => c.resourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    );
+    expect(alb?.resourceArn).toMatch(
+      /^arn:aws:elasticloadbalancing:[a-z0-9-]+:\d+:loadbalancer\/app\//,
+    );
+    expect(alb?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const ec2 = completed.find((c) => c.resourceType === "AWS::EC2::Instance");
+    expect(ec2?.resourceArn).toMatch(/^i-[0-9a-f]+$|^arn:aws:ec2:/);
+    expect(ec2?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const rds = completed.find(
+      (c) => c.resourceType === "AWS::RDS::DBInstance",
+    );
+    expect(typeof rds?.resourceArn).toBe("string");
+    expect(rds?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    // ── Destroy pipeline exercise ───────────────────────────────────
+    // RDS + ALB are the long-poll resources in this compound. RDS needs
+    // DeletionProtection=false + SkipFinalSnapshot=true pre-delete
+    // hooks (both handled by destroy-service.ts); ALB destroy removes
+    // target groups + listeners implicitly. The 30-minute timeout
+    // accommodates a worst-case RDS delete.
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
+    const { destroySingleResource } =
+      await import("../services/destroy-service.js");
+    const plan = await planBulkDestroy({ region });
+    const failures: string[] = [];
+    for (const r of plan.resources) {
+      const result = await destroySingleResource(r, { region });
+      if (!result.success) {
+        failures.push(
+          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
+        );
+      }
+    }
+    expect(failures).toEqual([]);
+  }, 1_800_000);
+});
