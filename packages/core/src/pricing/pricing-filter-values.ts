@@ -24,6 +24,14 @@ export const PricingFilterValue = {
   TIMED_STORAGE_BYTE_HRS: "TimedStorage-ByteHrs",
   REQUESTS_TIER1: "Requests-Tier1",
   REQUESTS_TIER2: "Requests-Tier2",
+  // (f) 2026-04-09: S3 Intelligent-Tiering Frequent Access usage type.
+  // The Pricing API publishes IT under a separate usagetype family —
+  // this matches the Frequent Access tier (the default landing tier
+  // for new objects). Other tiers (Infrequent Access, Archive
+  // Instant, Archive, Deep Archive) have their own usage types and
+  // are surfaced as awareness-only via the cost-advisor when the IT
+  // configuration declares lifecycle transitions to them.
+  TIMED_STORAGE_INT_BYTE_HRS_FREQ: "TimedStorage-INT-FA-ByteHrs",
 
   // RDS deployment options
   MULTI_AZ: "Multi-AZ",

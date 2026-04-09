@@ -126,9 +126,17 @@ async function fetchSecurityContext(
  * Sprint G → A13 landed new paid types without updating the advisor.
  * The 2026-04-09 (f) audit pass caught it — every type added since
  * Sprint G (EFS::FileSystem, Events::EventBus, Events::ApiDestination,
- * KMS::Key) is now present.
+ * KMS::Key) is now present. mcp-advisor.test.ts installs a CI-gate
+ * that forces every new SUPPORTED_TYPES_ARRAY entry to be explicitly
+ * categorized as mapped (paid) or exempt (free wiring), so the next
+ * type promotion cannot silently skip this step.
+ *
+ * Exported for testing — do not call directly from production code
+ * outside this file. The public API is `gatherMcpAdviceContext`.
  */
-function resourceTypeToServiceCode(resourceType: string): string | undefined {
+export function resourceTypeToServiceCode(
+  resourceType: string,
+): string | undefined {
   const map: Record<string, string> = {
     "AWS::EC2::Instance": "AmazonEC2",
     "AWS::RDS::DBInstance": "AmazonRDS",
@@ -137,7 +145,13 @@ function resourceTypeToServiceCode(resourceType: string): string | undefined {
     "AWS::DynamoDB::Table": "AmazonDynamoDB",
     "AWS::EC2::NatGateway": "AmazonEC2",
     "AWS::ElasticLoadBalancingV2::LoadBalancer": "ElasticLoadBalancing",
-    "AWS::SQS::Queue": "AWSQueueService",
+    // SQS uses AmazonSQS to match the SC.SQS constant in
+    // packages/core/src/pricing/filter-constants.ts. The filter
+    // constants are the single source of truth — every other
+    // SQS-related call site (decomposer, strategy, integration
+    // tests) reads from there. The advisor used to drift to the
+    // legacy "AWSQueueService" code; the (f) audit caught it.
+    "AWS::SQS::Queue": "AmazonSQS",
     "AWS::SNS::Topic": "AmazonSNS",
     "AWS::ECS::Cluster": "AmazonECS",
     "AWS::CloudWatch::Alarm": "AmazonCloudWatch",

@@ -11,7 +11,11 @@ describe("s3PricingDecomposer", () => {
     expect(s3PricingDecomposer.resourceType).toBe("AWS::S3::Bucket");
   });
 
-  it("returns all 4 usage-based line items for any desiredState", () => {
+  it("returns 4 always-on usage-based line items for the default bucket shape", () => {
+    // (f) 2026-04-09: the decomposer now also emits conditional
+    // line items for IntelligentTieringConfigurations and
+    // ReplicationConfiguration. The 4 always-on lines below are
+    // the headline ones that fire for any S3 bucket.
     const items = s3PricingDecomposer.decompose({
       BucketName: "my-test-bucket",
     });
@@ -116,7 +120,13 @@ describe("s3PricingDecomposer", () => {
     );
   });
 
-  it("returns same line items regardless of desiredState contents", () => {
+  it("returns same line items for buckets that don't enable IT or replication", () => {
+    // (f) 2026-04-09: this test is now scoped to fields that DON'T
+    // toggle the new conditional lines. Adding
+    // IntelligentTieringConfigurations or ReplicationConfiguration
+    // would correctly extend the line-item list — those cases are
+    // covered in the "Intelligent-Tiering" and "Replication" describe
+    // blocks below.
     const minimal = s3PricingDecomposer.decompose({});
     const full = s3PricingDecomposer.decompose({
       BucketName: "full-bucket",
@@ -134,6 +144,147 @@ describe("s3PricingDecomposer", () => {
 
     expect(minimal).toHaveLength(full.length);
     expect(minimal.map((i) => i.label)).toEqual(full.map((i) => i.label));
+  });
+
+  describe("Intelligent-Tiering conditional line item (f) 2026-04-09", () => {
+    it("does NOT add an IT line when IntelligentTieringConfigurations is absent", () => {
+      const items = s3PricingDecomposer.decompose({});
+      expect(items).toHaveLength(4);
+    });
+
+    it("does NOT add an IT line when IntelligentTieringConfigurations is empty array", () => {
+      const items = s3PricingDecomposer.decompose({
+        IntelligentTieringConfigurations: [],
+      });
+      expect(items).toHaveLength(4);
+    });
+
+    it("adds an IT Frequent Access storage line when at least one IT config is set", () => {
+      const items = s3PricingDecomposer.decompose({
+        IntelligentTieringConfigurations: [
+          { Id: "default-it", Status: "Enabled", Tierings: [] },
+        ],
+      });
+      expect(items).toHaveLength(5);
+      const itLine = items.find(
+        (i) => i.description === "Intelligent-Tiering (Frequent Access)",
+      );
+      expect(itLine).toBeDefined();
+      expect(itLine!.serviceCode).toBe("AmazonS3");
+      expect(itLine!.kind).toBe("usage_based");
+      expect(itLine!.unit).toBe("GB");
+      expect(itLine!.priceUnit).toBe("/GB-mo");
+    });
+
+    it("uses the IT-FA-ByteHrs Pricing API usage type", () => {
+      const items = s3PricingDecomposer.decompose({
+        IntelligentTieringConfigurations: [{ Id: "x" }],
+      });
+      const itLine = items.find(
+        (i) => i.description === "Intelligent-Tiering (Frequent Access)",
+      )!;
+      expect(itLine.filters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            Field: "usagetype",
+            Value: "TimedStorage-INT-FA-ByteHrs",
+          }),
+        ]),
+      );
+    });
+
+    it("ignores non-array IntelligentTieringConfigurations values", () => {
+      // Defensive guard: a malformed CFN object that's not an array
+      // should NOT crash the decomposer or trigger the line item.
+      expect(
+        s3PricingDecomposer.decompose({
+          IntelligentTieringConfigurations: "oops",
+        }),
+      ).toHaveLength(4);
+      expect(
+        s3PricingDecomposer.decompose({
+          IntelligentTieringConfigurations: { Id: "single-not-array" },
+        }),
+      ).toHaveLength(4);
+    });
+  });
+
+  describe("Replication conditional line items (f) 2026-04-09", () => {
+    it("does NOT add replication lines when ReplicationConfiguration is absent", () => {
+      const items = s3PricingDecomposer.decompose({});
+      expect(items).toHaveLength(4);
+    });
+
+    it("does NOT add replication lines when Rules is empty", () => {
+      const items = s3PricingDecomposer.decompose({
+        ReplicationConfiguration: { Role: "arn:aws:iam::1:role/r", Rules: [] },
+      });
+      expect(items).toHaveLength(4);
+    });
+
+    it("adds 2 replication lines when at least one Rule is set", () => {
+      const items = s3PricingDecomposer.decompose({
+        ReplicationConfiguration: {
+          Role: "arn:aws:iam::1:role/r",
+          Rules: [
+            {
+              Id: "to-replica-bucket",
+              Status: "Enabled",
+              Destination: { Bucket: "arn:aws:s3:::replica" },
+            },
+          ],
+        },
+      });
+      expect(items).toHaveLength(6);
+
+      const replicationLines = items.filter((i) =>
+        i.description?.includes("Replication"),
+      );
+      expect(replicationLines).toHaveLength(2);
+
+      const putLine = replicationLines.find((i) =>
+        i.description?.includes("PUT"),
+      )!;
+      expect(putLine.label).toBe("PUT requests");
+      expect(putLine.priceUnit).toBe("/1000 reqs");
+
+      const storageLine = replicationLines.find((i) =>
+        i.description?.includes("storage"),
+      )!;
+      expect(storageLine.label).toBe("Storage");
+      expect(storageLine.priceUnit).toBe("/GB-mo");
+    });
+
+    it("does NOT crash when ReplicationConfiguration is not an object", () => {
+      expect(
+        s3PricingDecomposer.decompose({
+          ReplicationConfiguration: "oops",
+        }),
+      ).toHaveLength(4);
+      expect(
+        s3PricingDecomposer.decompose({
+          ReplicationConfiguration: null,
+        }),
+      ).toHaveLength(4);
+      expect(
+        s3PricingDecomposer.decompose({
+          ReplicationConfiguration: { Rules: "not-an-array" },
+        }),
+      ).toHaveLength(4);
+    });
+
+    it("composes correctly with IntelligentTieringConfigurations (5+1+2 = 7 lines)", () => {
+      // Both conditional features at once: 4 always-on + 1 IT + 2
+      // replication = 7 line items.
+      const items = s3PricingDecomposer.decompose({
+        IntelligentTieringConfigurations: [{ Id: "x" }],
+        ReplicationConfiguration: {
+          Role: "arn:aws:iam::1:role/r",
+          Rules: [{ Id: "r1", Status: "Enabled", Destination: {} }],
+        },
+      });
+      expect(items).toHaveLength(7);
+    });
   });
 
   it("all filters use TERM_MATCH type", () => {

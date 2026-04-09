@@ -203,28 +203,31 @@ describe("variant consistency", () => {
   });
 
   describe("SQS — Standard vs FIFO", () => {
-    it("Standard queue has productFamily=Queue", () => {
-      // Tier C: dropped redundant toBeDefined() — use find!() at the find
-      // site so the subsequent .Value access is unconditional
+    it("Standard queue has productFamily=Queue (+ DTO line item from (f) 2026-04-09)", () => {
+      // (f) 2026-04-09: SQS decomposer extended to emit a second
+      // Data transfer out line alongside Requests. The first
+      // (Requests) line is what carries the Standard vs FIFO
+      // productFamily distinction; the DTO line uses Data Transfer.
       const items = defaultDecomposerRegistry.decompose(
         RESOURCE_TYPES.SQS_QUEUE,
         {},
       );
-      expect(items).toHaveLength(1);
-      const productFamily = items[0]!.filters.find(
+      expect(items).toHaveLength(2);
+      const requests = items.find((i) => i.label === "Requests")!;
+      const productFamily = requests.filters.find(
         (f) => f.Field === "productFamily",
       )!;
       expect(productFamily.Value).toBe("Queue");
     });
 
-    it("FIFO queue has productFamily=FIFO Queue", () => {
-      // Tier C: same pattern
+    it("FIFO queue has productFamily=FIFO Queue (+ DTO line item)", () => {
       const items = defaultDecomposerRegistry.decompose(
         RESOURCE_TYPES.SQS_QUEUE,
         { FifoQueue: true },
       );
-      expect(items).toHaveLength(1);
-      const productFamily = items[0]!.filters.find(
+      expect(items).toHaveLength(2);
+      const requests = items.find((i) => i.label === "Requests")!;
+      const productFamily = requests.filters.find(
         (f) => f.Field === "productFamily",
       )!;
       expect(productFamily.Value).toBe("FIFO Queue");
