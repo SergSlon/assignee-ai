@@ -64,6 +64,12 @@ const TYPE_TO_KEYWORD: Record<string, string> = {
   "AWS::Events::ApiDestination": "api destination",
   // A14 (2026-04-09): CloudFront::Distribution classification.
   "AWS::CloudFront::Distribution": "cloudfront",
+  // (f) 2026-04-09 Task 4b: OAC + BucketPolicy classification. Both
+  // routed via the TASK_4B_PRIORITY_KEYWORDS block in cost-estimator.ts
+  // so they win against the bare "cloudfront" / "bucket" keywords
+  // that would otherwise misclassify them.
+  "AWS::CloudFront::OriginAccessControl": "cloudfront oac",
+  "AWS::S3::BucketPolicy": "s3 bucket policy",
 };
 
 describe("cross-system consistency", () => {
