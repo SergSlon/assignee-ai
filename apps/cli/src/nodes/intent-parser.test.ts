@@ -99,6 +99,10 @@ describe("intentParserNode", () => {
     expect(SUPPORTED_TYPES).toContain("AWS::Events::ApiDestination");
     // A14 (2026-04-09): CloudFront::Distribution first-class, count 34.
     expect(SUPPORTED_TYPES).toContain("AWS::CloudFront::Distribution");
-    expect(SUPPORTED_TYPES).toHaveLength(34);
+    // (f) 2026-04-09 Task 4b: CloudFront OriginAccessControl + S3 BucketPolicy
+    // first-class to unblock the static-website compound migration, count 36.
+    expect(SUPPORTED_TYPES).toContain("AWS::CloudFront::OriginAccessControl");
+    expect(SUPPORTED_TYPES).toContain("AWS::S3::BucketPolicy");
+    expect(SUPPORTED_TYPES).toHaveLength(36);
   });
 });

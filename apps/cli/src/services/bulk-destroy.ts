@@ -52,7 +52,17 @@ export const DESTROY_TIER: Record<string, number> = {
   [RESOURCE_TYPES.SECRETSMANAGER_SECRET]: 1,
   [RESOURCE_TYPES.LOGS_LOG_GROUP]: 1,
   [RESOURCE_TYPES.SSM_PARAMETER]: 1,
+  // (f) 2026-04-09 Task 4b: static-website compound destroy order.
+  // The BucketPolicy holds an aws:SourceArn reference to the
+  // distribution — the policy must be deleted BEFORE both the
+  // bucket (S3 ordering) and the distribution (clean reference
+  // semantics). Tier 0 goes first, then the distribution at tier 1
+  // (disabled + deleted), then the OAC at tier 2 (CloudFront
+  // rejects OAC deletion while an attached distribution is still
+  // active), then the bucket at tier 5.
+  [RESOURCE_TYPES.S3_BUCKET_POLICY]: 0,
   [RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION]: 1, // Must be disabled/deleted before S3 bucket
+  [RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL]: 2,
   // Tier 2: Service resources
   [RESOURCE_TYPES.LAMBDA_FUNCTION]: 2,
   [RESOURCE_TYPES.SQS_QUEUE]: 2,

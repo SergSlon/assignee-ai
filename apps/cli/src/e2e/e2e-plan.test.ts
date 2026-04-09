@@ -1880,6 +1880,113 @@ describeE2E("E2E: efs-with-vpc compound apply + destroy", () => {
 //   - destroy ordering — Rule first, then the target Lambda, then the
 //     Role (detach boundary) — the inverse of the create order
 // ─────────────────────────────────────────────────────────────────────────────
+// (f) 2026-04-09 Task 4b: the static-website compound migrated off
+// the SDK post-provision path (cloudfront-setup.ts) to fully CCAPI.
+// This spec exercises the 4-resource compound end-to-end: S3 bucket
+// -> OAC -> CloudFront Distribution -> S3 BucketPolicy, then bulk
+// destroys the whole lot. CloudFront propagation can take 5-15
+// minutes so the destroy needs a generous timeout; we set 20 minutes
+// and rely on the bulk-destroy tier ordering (CLOUDFRONT_DISTRIBUTION
+// must be disabled + deleted BEFORE the bucket is emptied).
+describeE2E("E2E: static-website compound apply + destroy", () => {
+  const staticSuffix = `${Date.now()}`;
+
+  it("plans, applies, and bulk-destroys a CCAPI static-website (S3 + OAC + CF + BucketPolicy)", async () => {
+    const graph = createGraph(tools);
+    const threadId = crypto.randomUUID();
+    const config = {
+      configurable: { thread_id: threadId },
+      recursionLimit: 500,
+    };
+
+    await graph.invoke(
+      {
+        userIntent: `Create a static website with CloudFront CDN for e2e test ${staticSuffix}`,
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.APPLY,
+        startedAt: Date.now(),
+        noWizard: true,
+        autoApprove: true,
+        projectDir: process.cwd(),
+      },
+      config,
+    );
+
+    let graphState = await graph.getState(config);
+    while (graphState.next.length > 0) {
+      await graph.invoke(null, config);
+      graphState = await graph.getState(config);
+    }
+
+    const finalState = graphState.values as AgentState;
+
+    if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+      console.error("STATIC-WEBSITE COMPOUND E2E FAILED:", {
+        status: finalState.executionStatus,
+        error: finalState.errorMessage,
+        completed: finalState.completedResources?.map(
+          (c) => `${c.resourceId}(${c.resourceType})=${c.resourceArn}`,
+        ),
+      });
+    }
+
+    expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    expect(finalState.resourcePattern?.patternId).toBe("static-website");
+
+    const completed = finalState.completedResources ?? [];
+
+    // All four resources must land with physical identifiers.
+    const bucket = completed.find((c) => c.resourceType === "AWS::S3::Bucket");
+    expect(typeof bucket?.resourceArn).toBe("string");
+    expect(bucket?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const oac = completed.find(
+      (c) => c.resourceType === "AWS::CloudFront::OriginAccessControl",
+    );
+    expect(typeof oac?.resourceArn).toBe("string");
+    expect(oac?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const distribution = completed.find(
+      (c) => c.resourceType === "AWS::CloudFront::Distribution",
+    );
+    expect(typeof distribution?.resourceArn).toBe("string");
+    expect(distribution?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const policy = completed.find(
+      (c) => c.resourceType === "AWS::S3::BucketPolicy",
+    );
+    expect(typeof policy?.resourceArn).toBe("string");
+    expect(policy?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    // ── Destroy pipeline exercise ───────────────────────────────────
+    // CloudFront requires Disabled=true + propagation wait before the
+    // distribution can be deleted. The bulk-destroy strategy handles
+    // the two-step flow; we give it a generous timeout.
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
+    const { destroySingleResource } =
+      await import("../services/destroy-service.js");
+    const plan = await planBulkDestroy({ region });
+    const failures: string[] = [];
+    for (const r of plan.resources) {
+      const result = await destroySingleResource(r, { region });
+      if (!result.success) {
+        failures.push(
+          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
+        );
+      }
+    }
+    // Must succeed end-to-end. The BucketPolicy deletes must happen
+    // before the Bucket delete (otherwise S3 rejects with
+    // BucketNotEmpty-style errors); the Distribution must be
+    // disabled + deleted before the OAC (CloudFront rejects OAC
+    // deletion when an attached distribution is still active); and
+    // the OAC must be deleted before the BucketPolicy (stale OAC
+    // reference).
+    expect(failures).toEqual([]);
+  }, 1_200_000);
+});
+
 describeE2E("E2E: scheduled-lambda compound apply + destroy", () => {
   const schedSuffix = `${Date.now()}`;
 

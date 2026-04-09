@@ -69,6 +69,12 @@ const FREE_WIRING_TYPES = new Set<string>([
   "AWS::Events::Rule",
   "AWS::Events::Connection",
   "AWS::SNS::Subscription",
+  // (f) 2026-04-09 Task 4b: CloudFront OAC and S3 BucketPolicy are
+  // pure wiring — the cost lives on the parent distribution (per
+  // request + data transfer) and the parent bucket (storage + reqs)
+  // respectively. Neither has its own meter.
+  "AWS::CloudFront::OriginAccessControl",
+  "AWS::S3::BucketPolicy",
 ]);
 
 // ────────────────────────────────────────────────────────────────────

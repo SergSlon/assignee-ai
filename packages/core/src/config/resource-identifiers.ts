@@ -98,6 +98,19 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   // state guard skips Read-Before-Write for this type — same
   // pattern as EFS::FileSystem and KMS::Key.
   [RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION]: "Id",
+  // (f) 2026-04-09 Task 4b: AWS::CloudFront::OriginAccessControl
+  // primary identifier is the auto-generated Id (readOnly). The Id
+  // is never present in desiredState at plan time — state guard
+  // skips Read-Before-Write, same pattern as the parent distribution.
+  [RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL]: "Id",
+  // (f) 2026-04-09 Task 4b: AWS::S3::BucketPolicy primary identifier
+  // is the bucket name itself. Unlike most cross-reference resources,
+  // the Bucket IS the primary ID and IS present in desiredState at
+  // plan time (often as a marker token that the compound resolver
+  // substitutes before CCAPI is called). State guard can Read-Before-
+  // Write against the resolved bucket name to catch existing-policy
+  // collisions before CCAPI throws AlreadyExists.
+  [RESOURCE_TYPES.S3_BUCKET_POLICY]: "Bucket",
 } as const;
 
 /**

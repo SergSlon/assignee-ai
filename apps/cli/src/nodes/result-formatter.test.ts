@@ -43,32 +43,14 @@ vi.mock("../services/s3-upload.js", () => ({
   configureBucketPolicy: vi.fn(),
 }));
 
-// Mock cloudfront-setup service (Epic 37 — CloudFront distribution).
-// Default impls re-installed in beforeEach.
-vi.mock("../services/cloudfront-setup.js", () => ({
-  createCloudFrontDistribution: vi.fn(),
-  generateCloudFrontBucketPolicy: vi.fn(),
-}));
-
-// result-formatter.ts now uses requireAssigneeCredentials("operator") from
-// the centralized helper instead of the legacy operator-credentials shim.
-// Provide realistic-shaped operator env vars in beforeEach so the dynamic
-// import in the CloudFront path can construct the S3Client. Tests verifying
-// fail-closed behavior delete the env vars within their own beforeEach.
-
-// Mock @aws-sdk/client-s3 PutBucketPolicyCommand (used for OAC policy).
-// Plain class survives mockReset:true.
-vi.mock("@aws-sdk/client-s3", () => {
-  class S3Client {
-    async send() {
-      return {};
-    }
-  }
-  return {
-    S3Client,
-    PutBucketPolicyCommand: vi.fn(),
-  };
-});
+// (f) 2026-04-09 Task 4b: cloudfront-setup.ts (the SDK post-provision
+// distribution + OAC + bucket-policy hook) was deleted — the same
+// operations are now first-class CCAPI resources owned by the
+// static-website compound pattern. The old vi.mock stubs for
+// cloudfront-setup.js and @aws-sdk/client-s3 PutBucketPolicy are
+// gone; the post-provision hook in result-formatter now only
+// uploads files and synthesizes the CloudFront URL from the
+// distribution's CCAPI primaryIdentifier.
 
 // Suppress display output for all tests. Default impls re-installed in beforeEach.
 vi.mock("../utils/display.js", () => ({
@@ -117,7 +99,6 @@ import {
   uploadStaticSite,
   configureBucketPolicy,
 } from "../services/s3-upload.js";
-import { createCloudFrontDistribution } from "../services/cloudfront-setup.js";
 
 /** 3-resource pattern for compound tests */
 const mockPattern: ArchitecturePattern = {
@@ -178,28 +159,6 @@ beforeEach(async () => {
     errors: [],
   });
   vi.mocked(s3.configureBucketPolicy).mockResolvedValue(undefined);
-
-  const cf = await import("../services/cloudfront-setup.js");
-  vi.mocked(cf.createCloudFrontDistribution).mockResolvedValue({
-    distributionId: "E1234EXAMPLE",
-    domainName: "d1234example.cloudfront.net",
-    distributionArn:
-      "arn:aws:cloudfront::123456789012:distribution/E1234EXAMPLE",
-  });
-  vi.mocked(cf.generateCloudFrontBucketPolicy).mockReturnValue(
-    JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
-        {
-          Sid: "AllowCloudFrontServicePrincipalReadOnly",
-          Effect: "Allow",
-          Principal: { Service: "cloudfront.amazonaws.com" },
-          Action: "s3:GetObject",
-          Resource: "arn:aws:s3:::mock-bucket/*",
-        },
-      ],
-    }),
-  );
 
   const display = await import("../utils/display.js");
   vi.mocked(display.promptFixSelection).mockResolvedValue(null);
@@ -1319,7 +1278,14 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
     stderrSpy.mockRestore();
   });
 
-  it("uploads files and shows website URL when sourceDir is set for S3 bucket (no CloudFront for single-resource)", async () => {
+  it("uploads files when sourceDir is set for a single-resource S3 bucket", async () => {
+    // (f) 2026-04-09 Task 4b: single-resource S3 buckets NO LONGER get
+    // automatic website-hosting setup. Website hosting with CloudFront
+    // is only available via the static-website compound pattern, which
+    // provisions the S3 bucket + OAC + distribution + bucket policy
+    // fully via CCAPI. A standalone `apply s3 bucket --source dir`
+    // now ONLY uploads the files — users who want an auto-served URL
+    // use the compound.
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourceType: "AWS::S3::Bucket",
@@ -1336,19 +1302,17 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
       expect.objectContaining({ onProgress: expect.any(Function) }),
     );
 
-    // Single-resource S3 buckets do NOT get CloudFront
-    expect(createCloudFrontDistribution).not.toHaveBeenCalled();
+    // The post-provision flow no longer touches the bucket's
+    // BucketPolicy — that's either owned by the static-website
+    // compound's AWS::S3::BucketPolicy resource or left to the user.
+    expect(configureBucketPolicy).not.toHaveBeenCalled();
 
-    // Should set public-read bucket policy instead
-    expect(configureBucketPolicy).toHaveBeenCalledWith("my-static-site-bucket");
-
-    // Should show S3 website URL only (no CloudFront)
+    // No CloudFront domain is printed for a standalone bucket apply —
+    // that's exclusively a compound-pattern post-success display.
     const allStdout = stdoutSpy.mock.calls
       .map((c: unknown[]) => String(c[0]))
       .join("");
-    expect(allStdout).toContain("my-static-site-bucket.s3-website-");
-    expect(allStdout).toContain(".amazonaws.com");
-    expect(allStdout).not.toContain("d1234example.cloudfront.net");
+    expect(allStdout).not.toContain("cloudfront.net");
 
     // Result should be empty — upload does not affect provision status
     expect(result).toEqual({});
@@ -1364,7 +1328,6 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
     await resultFormatterNode(state);
 
     expect(uploadStaticSite).not.toHaveBeenCalled();
-    expect(createCloudFrontDistribution).not.toHaveBeenCalled();
   });
 
   it("does NOT upload for non-S3 resource types", async () => {
@@ -1378,7 +1341,6 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
     await resultFormatterNode(state);
 
     expect(uploadStaticSite).not.toHaveBeenCalled();
-    expect(createCloudFrontDistribution).not.toHaveBeenCalled();
   });
 
   it("does NOT upload when resourceArn is undefined", async () => {
@@ -1449,7 +1411,11 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
     expect(allStderr).toContain("Permission denied");
   });
 
-  it("single-resource S3 bucket uses public-read policy (no CloudFront attempted)", async () => {
+  it("single-resource S3 bucket uploads files without touching the bucket policy or printing a website URL", async () => {
+    // (f) 2026-04-09 Task 4b: removed the post-provision
+    // configureBucketPolicy + website URL display from the
+    // single-resource path. Website hosting with CloudFront is
+    // exclusively a compound-pattern concern now.
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourceType: "AWS::S3::Bucket",
@@ -1459,56 +1425,29 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
 
     await resultFormatterNode(state);
 
-    // Upload should succeed
+    // Upload should succeed.
     expect(uploadStaticSite).toHaveBeenCalled();
 
-    // Single-resource path should NOT attempt CloudFront
-    expect(createCloudFrontDistribution).not.toHaveBeenCalled();
+    // The bucket's policy is NOT touched post-apply anymore — users
+    // who want CloudFront hosting use the static-website compound,
+    // which owns the BucketPolicy as a CCAPI resource.
+    expect(configureBucketPolicy).not.toHaveBeenCalled();
 
-    // Should set public-read bucket policy directly
-    expect(configureBucketPolicy).toHaveBeenCalledWith("my-bucket");
-
-    // Should show S3 website URL
+    // No website URL printed for a standalone apply.
     const allStdout = stdoutSpy.mock.calls
       .map((c: unknown[]) => String(c[0]))
       .join("");
-    expect(allStdout).toContain("my-bucket.s3-website-");
-  });
-
-  it("uses AWS_REGION env for website URL", async () => {
-    const originalRegion = process.env["AWS_REGION"];
-    process.env["AWS_REGION"] = "eu-west-1";
-
-    try {
-      const state = makeState({
-        executionStatus: ExecutionStatus.SUCCESS,
-        resourceType: "AWS::S3::Bucket",
-        resourceArn: "arn:aws:s3:::my-bucket",
-        sourceDir: "/tmp/build",
-      });
-
-      await resultFormatterNode(state);
-
-      const allStdout = stdoutSpy.mock.calls
-        .map((c: unknown[]) => String(c[0]))
-        .join("");
-      expect(allStdout).toContain(
-        "my-bucket.s3-website-eu-west-1.amazonaws.com",
-      );
-    } finally {
-      if (originalRegion !== undefined) {
-        process.env["AWS_REGION"] = originalRegion;
-      } else {
-        delete process.env["AWS_REGION"];
-      }
-    }
+    expect(allStdout).not.toContain("s3-website-");
+    expect(allStdout).not.toContain("cloudfront.net");
   });
 
   // ── Fail-closed: missing operator env vars ────────────────────────────────
-  // The result-formatter dynamically imports `requireAssigneeCredentials`
-  // when constructing the S3Client used to apply the CloudFront OAC bucket
-  // policy. With env vars unset, that helper throws — and the upload flow
-  // catches the error and continues without leaking to the default chain.
+  // Pre-migration this test protected a fail-closed S3Client construction
+  // path inside the old CloudFront post-provision hook. After the Task 4b
+  // migration, that S3Client path is gone (all bucket-policy work is now
+  // CCAPI-owned), but the fail-closed behavior is still worth locking in:
+  // the upload flow must tolerate missing operator env vars gracefully
+  // and must never mark the provision as failed.
   it("fail-closed: upload still completes when ASSIGNEE_OPERATOR_* missing", async () => {
     delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
     delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
@@ -1523,10 +1462,6 @@ describe("resultFormatterNode — Story 37.4 static site upload", () => {
       sourceDir: "/tmp/build",
     });
 
-    // Single-resource S3 bucket path does NOT call CloudFront — and the
-    // public-read configureBucketPolicy is mocked above. Even with missing
-    // operator creds, the upload flow must NOT throw all the way out and
-    // must NOT mark provision as failed.
     const result = await resultFormatterNode(state);
     expect(result).toEqual({});
     expect(uploadStaticSite).toHaveBeenCalled();

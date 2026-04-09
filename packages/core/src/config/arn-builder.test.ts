@@ -428,6 +428,63 @@ describe("buildResourceArn", () => {
         }),
       ).toBe("IGW|vpc-0712644090346eb2b");
     });
+
+    // (f) 2026-04-09 Task 4b: OAC + BucketPolicy pass-through. Neither
+    // needs a full ARN synthesized — downstream consumers reference
+    // OAC by bare Id (CloudFront DistributionConfig.Origins[].
+    // OriginAccessControlId) and BucketPolicy by bucket name
+    // (the policy IS the bucket's attribute).
+    it("CloudFront OriginAccessControl returns the bare Id unchanged", () => {
+      expect(
+        buildResourceArn({
+          resourceType: RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+          identifier: "E1ABCDEFG12345",
+          region: REGION,
+          accountId: ACCOUNT,
+        }),
+      ).toBe("E1ABCDEFG12345");
+    });
+
+    it("S3 BucketPolicy returns the bucket name unchanged", () => {
+      expect(
+        buildResourceArn({
+          resourceType: RESOURCE_TYPES.S3_BUCKET_POLICY,
+          identifier: "my-static-site-bucket",
+          region: REGION,
+          accountId: ACCOUNT,
+        }),
+      ).toBe("my-static-site-bucket");
+    });
+  });
+
+  // (f) 2026-04-09 Task 4b: CloudFront is a global service so the
+  // ARN has no region segment; the distribution Id is the CCAPI
+  // primaryIdentifier and we synthesize the account-scoped ARN for
+  // compound pattern marker resolution.
+  describe("CloudFront Distribution (global, account-scoped ARN)", () => {
+    it("synthesizes the canonical account-scoped distribution ARN", () => {
+      expect(
+        buildResourceArn({
+          resourceType: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
+          identifier: "E1ABCDEFG12345",
+          region: REGION,
+          accountId: ACCOUNT,
+        }),
+      ).toBe("arn:aws:cloudfront::054125018476:distribution/E1ABCDEFG12345");
+    });
+
+    it("uses the aws-us-gov partition for GovCloud callers", () => {
+      expect(
+        buildResourceArn({
+          resourceType: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
+          identifier: "E1ABCDEFG12345",
+          region: "us-gov-east-1",
+          accountId: ACCOUNT,
+        }),
+      ).toBe(
+        "arn:aws-us-gov:cloudfront::054125018476:distribution/E1ABCDEFG12345",
+      );
+    });
   });
 
   describe("partition handling", () => {

@@ -280,18 +280,41 @@ describe("Individual pattern data integrity", () => {
     expect(mainQueueGroup).toContain("main-queue");
   });
 
-  it("staticWebsitePattern includes S3 bucket + CloudFront + OAC", () => {
-    expect(staticWebsitePattern.resourceList).toHaveLength(3);
-    expect(staticWebsitePattern.resourceList[0]?.resourceType).toBe(
+  it("staticWebsitePattern is a 4-resource fully-CCAPI compound (S3 + OAC + CloudFront + BucketPolicy)", () => {
+    // (f) 2026-04-09 Task 4b: the static-website compound now flows
+    // entirely through CCAPI. CloudFront::Distribution,
+    // CloudFront::OriginAccessControl, and S3::BucketPolicy are all
+    // first-class resources, and the ~430 LOC cloudfront-setup.ts SDK
+    // post-provision hook was deleted.
+    expect(staticWebsitePattern.resourceList).toHaveLength(4);
+    const typesInOrder = staticWebsitePattern.resourceList.map(
+      (r) => r.resourceType,
+    );
+    expect(typesInOrder).toEqual([
       "AWS::S3::Bucket",
-    );
-    expect(staticWebsitePattern.resourceList[1]?.resourceType).toBe(
-      "AWS::CloudFront::Distribution",
-    );
-    expect(staticWebsitePattern.resourceList[1]?.provisionable).toBe(false);
-    expect(staticWebsitePattern.resourceList[2]?.resourceType).toBe(
       "AWS::CloudFront::OriginAccessControl",
-    );
-    expect(staticWebsitePattern.resourceList[2]?.provisionable).toBe(false);
+      "AWS::CloudFront::Distribution",
+      "AWS::S3::BucketPolicy",
+    ]);
+    // Every resource is provisionable via CCAPI — no more
+    // provisionable:false markers that would force a post-provision
+    // SDK hook.
+    for (const entry of staticWebsitePattern.resourceList) {
+      expect(entry.provisionable).not.toBe(false);
+    }
+  });
+
+  it("staticWebsitePattern dependency order enforces OAC-before-Distribution-before-BucketPolicy", () => {
+    // Distribution needs the OAC Id in DistributionConfig, so OAC
+    // must land first. BucketPolicy needs the Distribution ARN in
+    // its aws:SourceArn condition, so it must land last.
+    const order = staticWebsitePattern.dependencyOrder.flat();
+    const oacIdx = order.indexOf("cdn-oac");
+    const distIdx = order.indexOf("cdn-distribution");
+    const policyIdx = order.indexOf("bucket-policy");
+    const bucketIdx = order.indexOf("website-bucket");
+    expect(oacIdx).toBeLessThan(distIdx);
+    expect(distIdx).toBeLessThan(policyIdx);
+    expect(bucketIdx).toBeLessThan(distIdx);
   });
 });
