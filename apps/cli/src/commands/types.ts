@@ -174,32 +174,52 @@ typesCommand
     "--search <keyword>",
     "Filter types whose resourceType or short name contains the substring (case-insensitive)",
   )
-  .action((opts: { json?: boolean; search?: string }) => {
-    const practices = loadPractices();
-    let entries: TypeListEntry[] = SUPPORTED_TYPES_ARRAY.map((resourceType) => {
-      const plugin = defaultPluginRegistry.get(resourceType);
-      return {
-        resourceType,
-        shortName: shortName(resourceType),
-        commonFieldCount: plugin?.commonFields.length ?? 0,
-        advancedFieldCount: plugin?.advancedFields.length ?? 0,
-        bpRuleCount: bpRulesForType(resourceType, practices).length,
-      };
-    });
-    if (opts.search) {
-      const needle = opts.search.toLowerCase();
-      entries = entries.filter(
-        (e) =>
-          e.resourceType.toLowerCase().includes(needle) ||
-          e.shortName.toLowerCase().includes(needle),
+  .option(
+    "--with-bp",
+    "Only show types that have at least one BP rule (inverse: `--without-bp`)",
+  )
+  .option("--without-bp", "Only show types that have zero BP rules")
+  .action(
+    (opts: {
+      json?: boolean;
+      search?: string;
+      withBp?: boolean;
+      withoutBp?: boolean;
+    }) => {
+      const practices = loadPractices();
+      let entries: TypeListEntry[] = SUPPORTED_TYPES_ARRAY.map(
+        (resourceType) => {
+          const plugin = defaultPluginRegistry.get(resourceType);
+          return {
+            resourceType,
+            shortName: shortName(resourceType),
+            commonFieldCount: plugin?.commonFields.length ?? 0,
+            advancedFieldCount: plugin?.advancedFields.length ?? 0,
+            bpRuleCount: bpRulesForType(resourceType, practices).length,
+          };
+        },
       );
-    }
-    if (opts.json) {
-      process.stdout.write(JSON.stringify(entries, null, 2) + "\n");
-      return;
-    }
-    process.stdout.write(renderTypeList(entries));
-  });
+      if (opts.search) {
+        const needle = opts.search.toLowerCase();
+        entries = entries.filter(
+          (e) =>
+            e.resourceType.toLowerCase().includes(needle) ||
+            e.shortName.toLowerCase().includes(needle),
+        );
+      }
+      if (opts.withBp) {
+        entries = entries.filter((e) => e.bpRuleCount > 0);
+      }
+      if (opts.withoutBp) {
+        entries = entries.filter((e) => e.bpRuleCount === 0);
+      }
+      if (opts.json) {
+        process.stdout.write(JSON.stringify(entries, null, 2) + "\n");
+        return;
+      }
+      process.stdout.write(renderTypeList(entries));
+    },
+  );
 
 typesCommand
   .command("show <type>")
