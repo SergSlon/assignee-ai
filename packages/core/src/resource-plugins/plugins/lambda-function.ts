@@ -437,6 +437,14 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
     [CfnKey.HANDLER]: AwsDefault.LAMBDA_HANDLER,
     [CfnKey.ARCHITECTURES]: [AwsDefault.ARCH_X86],
     [CfnKey.EPHEMERAL_STORAGE]: { Size: 512 },
+    // A8 follow-up: default to Active X-Ray tracing so BP-LAMBDA-015
+    // (TracingConfig.Mode=Active) passes on fresh plans without
+    // requiring the autoFix pass. The AWSXRayDaemonWriteAccess
+    // actions are already covered by the PowerUserAccess
+    // PermissionsBoundary shipped with the Lambda-bearing compound
+    // patterns, so enabling tracing at the plan default level is
+    // a zero-friction observability gain.
+    TracingConfig: { Mode: "Active" },
     // Story E2E.3: Placeholder Code for noWizard/MCP mode.
     // Lambda cannot be created without Code; repairer injects this when LLM omits it.
     [CfnKey.CODE]: {
