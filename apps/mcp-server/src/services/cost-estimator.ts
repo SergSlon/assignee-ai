@@ -257,6 +257,11 @@ const COMPOUND_CROSS_REF_KEYWORDS: Array<{
   // A14 (2026-04-09): CloudFront::Distribution classification. Priority
   // block so the unique phrases win — "cdn" / "cloudfront" are distinct
   // enough that no other entry in the regular table would match them.
+  // NOTE: ORDER MATTERS. The OAC entry below MUST come before this
+  // distribution entry because "cloudfront oac" and "origin access
+  // control" both contain the substring "cloudfront" and would
+  // otherwise be misclassified as CLOUDFRONT_DISTRIBUTION. The
+  // classifier returns on first match within each block.
   {
     keywords: [
       "cloudfront",
@@ -270,12 +275,61 @@ const COMPOUND_CROSS_REF_KEYWORDS: Array<{
   },
 ];
 
+// (f) 2026-04-09 Task 4b: classification for OAC + BucketPolicy. Kept
+// in their own priority block that runs BEFORE the main CF block so
+// the more-specific phrases win against bare "cloudfront" /
+// "bucket". The static-website compound is the canonical consumer;
+// standalone natural-language requests are rare but must still
+// classify cleanly for cost estimation.
+const TASK_4B_PRIORITY_KEYWORDS: Array<{
+  keywords: string[];
+  resourceType: string;
+}> = [
+  {
+    keywords: [
+      "cloudfront origin access control",
+      "cloudfront oac",
+      "origin access control",
+      "oac for cloudfront",
+      "oac for s3",
+    ],
+    resourceType: RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+  },
+  {
+    keywords: [
+      "s3 bucket policy",
+      "bucket policy",
+      "s3 resource policy",
+      "bucketpolicy",
+    ],
+    resourceType: RESOURCE_TYPES.S3_BUCKET_POLICY,
+  },
+];
+
 /**
  * Classifies a natural language description into a CloudFormation resource type.
  * Uses case-insensitive keyword matching. Returns null if no match found.
  */
-export function classifyResourceType(description: string): string | null {
+export function classifyResourceType(
+  description: string | undefined | null,
+): string | null {
+  // Defensive: the upstream caller can pass undefined (e.g. empty MCP
+  // request body or a missing TYPE_TO_KEYWORD entry). Return null
+  // instead of throwing so cross-system consistency tests surface
+  // missing-keyword gaps as clean failures rather than TypeErrors.
+  if (typeof description !== "string" || description.length === 0) {
+    return null;
+  }
   const normalized = description.toLowerCase();
+  // (f) 2026-04-09 Task 4b: OAC + BucketPolicy must run before the
+  // main CloudFront block — otherwise "cloudfront origin access
+  // control" matches the "cloudfront" keyword first and classifies
+  // as CLOUDFRONT_DISTRIBUTION.
+  for (const entry of TASK_4B_PRIORITY_KEYWORDS) {
+    if (entry.keywords.some((kw) => normalized.includes(kw))) {
+      return entry.resourceType;
+    }
+  }
   // WV4-A: check long multi-word compound cross-ref keywords first so they
   // are not pre-empted by shorter substrings in the regular table.
   for (const entry of COMPOUND_CROSS_REF_KEYWORDS) {
