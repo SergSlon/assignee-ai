@@ -147,6 +147,54 @@ export const eventsEventBusPlugin: ResourcePlugin = {
         }
       },
     },
+    {
+      // A9 hygiene (2026-04-09): BP-EVENTBUS-003 requires
+      // DeadLetterConfig.Arn to exist, but the A9 plugin forgot to
+      // expose the field — there was no way for a wizard user to
+      // satisfy the rule. This advanced field takes an SQS queue
+      // ARN and emits the nested `{ Arn: "<sqs-arn>" }` structure
+      // CCAPI expects.
+      name: "DeadLetterConfig",
+      question: {
+        type: "string",
+        label: "Dead-letter queue SQS ARN",
+        placeholder: "arn:aws:sqs:us-east-1:123456789012:eventbus-dlq",
+        hint: "Strongly recommended. SQS queue ARN that captures events EventBridge cannot deliver to any rule target. Without a DLQ, undeliverable events are silently dropped — wire a same-account SQS queue here so failures are recoverable. The bus service principal needs sqs:SendMessage on the DLQ via a queue policy.",
+        validate: (value: unknown) => {
+          if (!value) return undefined;
+          const s = String(value);
+          // Partition-aware — covers GovCloud / China partitions.
+          if (!/^arn:aws[\w-]*:sqs:/.test(s))
+            return "DeadLetterConfig must be a valid SQS queue ARN";
+          return undefined;
+        },
+      },
+      toCfn: (answer: unknown) => {
+        if (typeof answer !== "string" || !answer.trim()) return undefined;
+        return { Arn: answer.trim() };
+      },
+    },
+    {
+      // A9 hygiene (2026-04-09): LogConfig is in the CCAPI schema
+      // but the original A9 plugin missed it. Accepts an enum-style
+      // IncludeDetail level so the wizard is constrained; the toCfn
+      // adapter wraps it into the nested `{ IncludeDetail: "..." }`
+      // object CloudFormation expects.
+      name: "LogConfig",
+      question: {
+        type: "enum",
+        label: "EventBus log detail",
+        hint: "Optional. Controls how much information EventBridge writes to the service's own observability logs when events fail delivery. NONE (default) is the free tier — FULL adds detail at the standard CloudWatch Logs rate.",
+        options: [
+          { value: "NONE", label: "None (default)" },
+          { value: "FULL", label: "Full — includes trace + payload detail" },
+        ],
+      },
+      toCfn: (answer: unknown) => {
+        if (!answer || answer === "NONE") return undefined;
+        return { IncludeDetail: String(answer) };
+      },
+    },
   ],
   defaults: {},
   configHints: [
