@@ -497,6 +497,17 @@ const s3Rules: RuleSpec[] = [
     checkType: "policy_antipattern",
     expectedValue: "wildcard-principal",
   },
+  // (f) 2026-04-09 Task 9 follow-up: SSE-KMS ratchet for compliance
+  // workloads — complements BP-S3-006 (which only requires some
+  // BucketEncryption exists) by requiring aws:kms over AES256.
+  {
+    id: "BP-S3-013",
+    resourceType: "AWS::S3::Bucket",
+    propertyPath:
+      "BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.SSEAlgorithm",
+    checkType: "equals",
+    expectedValue: "aws:kms",
+  },
 ];
 
 const ec2Rules: RuleSpec[] = [
@@ -2276,7 +2287,7 @@ describe("BP All Rules Audit", () => {
       //   resource type), BP-LAMBDA-008 explicit Timeout (reliability),
       //   BP-APIGW-007 DisableExecuteApiEndpoint (security — default
       //   URL bypasses custom-domain WAF/throttling).
-      expect(allSpecs.length).toBe(184);
+      expect(allSpecs.length).toBe(185);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

@@ -1,0 +1,15 @@
+id: BP-S3-013
+title: "S3 bucket should use SSE-KMS with a customer-managed key for compliance workloads"
+severity: MEDIUM
+resource_type: "AWS::S3::Bucket"
+property_path: "BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.SSEAlgorithm"
+check_type: "equals"
+expected_value: "aws:kms"
+source: "AWS Well-Architected — Security + HIPAA/PCI-DSS/SOC2 compliance controls"
+source_id: "SEC-S3-013"
+description: "BP-S3-006 requires BucketEncryption to exist; this complementary rule ratchets the algorithm to SSE-KMS (aws:kms) instead of AES256 (SSE-S3). SSE-KMS gives the customer control over the key itself — rotation policy, access audit logs via CloudTrail data events, per-key IAM policies, and the ability to revoke access by deleting the key. AES256 (SSE-S3) encrypts at rest but the key escrow lives with AWS and cannot be audited or revoked. Compliance regimes (HIPAA, PCI-DSS Level 1, SOC 2 Type II, FedRAMP) require customer-managed key ownership for data at rest, which only SSE-KMS satisfies. Non-compliance workloads can keep AES256 — this rule is non-blocking so dev buckets are free to ignore it."
+remediation: "Set ServerSideEncryptionConfiguration[].ServerSideEncryptionByDefault.SSEAlgorithm to 'aws:kms' and reference a customer-managed KMS key via KMSMasterKeyID. Omitting KMSMasterKeyID uses the AWS-managed aws/s3 key, which still satisfies SSE-KMS but does not give you control over rotation policy or audit-event visibility."
+consequence: "AES256 satisfies FSBP S3.4 but not the customer-managed-key clauses of HIPAA Technical Safeguards, PCI-DSS 3.6, or SOC 2 CC6.1. Auditors treat AES256 buckets as findings during compliance reviews."
+category: compliance
+lastVerified: "2026-04-09"
+blocking: false
