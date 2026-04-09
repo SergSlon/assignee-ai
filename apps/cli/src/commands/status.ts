@@ -27,6 +27,7 @@ import {
   computeBPCoverage,
   renderBPCoverage,
   renderBPCoverageGaps,
+  filterActionableGaps,
 } from "./status-bp-coverage.js";
 import { getBpDir } from "./status-factory.js";
 
@@ -37,7 +38,11 @@ export const statusCommand = new Command(CommandName.STATUS)
   .option("--bp-coverage", "Show BP rule coverage dashboard")
   .option(
     "--gaps-only",
-    "With --bp-coverage: print only the list of resource types with zero BP rules, and exit non-zero if any gaps are found (CI-friendly)",
+    "With --bp-coverage: print only the list of resource types with zero BP rules, and exit non-zero if any gaps are found (CI-friendly). Structural types (RouteTable, VPCGatewayAttachment, etc.) are excluded by default — override with --include-structural-gaps.",
+  )
+  .option(
+    "--include-structural-gaps",
+    "With --gaps-only: include structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS::MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.",
   )
   .action(
     async (opts: {
@@ -45,6 +50,7 @@ export const statusCommand = new Command(CommandName.STATUS)
       region?: string;
       bpCoverage?: boolean;
       gapsOnly?: boolean;
+      includeStructuralGaps?: boolean;
     }) => {
       // BP Coverage mode (Story 30.7)
       if (opts.bpCoverage) {
@@ -57,15 +63,22 @@ export const statusCommand = new Command(CommandName.STATUS)
           // --gaps-only: CI-friendly filtered view. JSON mode returns
           // just the gaps array so `jq length` gives the gap count;
           // text mode prints the short list and exits 1 if non-empty.
+          // By default the filter drops structural/cross-reference
+          // types whose BP content lives on child resources —
+          // opts.includeStructuralGaps restores the raw list for
+          // users who explicitly want to audit those too.
           if (opts.gapsOnly) {
+            const reportedGaps = opts.includeStructuralGaps
+              ? data.gaps
+              : filterActionableGaps(data.gaps);
             if (opts.json) {
               process.stdout.write(
-                JSON.stringify({ gaps: data.gaps }, null, 2) + "\n",
+                JSON.stringify({ gaps: reportedGaps }, null, 2) + "\n",
               );
             } else {
-              renderBPCoverageGaps(data.gaps);
+              renderBPCoverageGaps(reportedGaps);
             }
-            if (data.gaps.length > 0) {
+            if (reportedGaps.length > 0) {
               process.exit(1);
             }
             return;
