@@ -161,8 +161,9 @@ function buildDefaultDesiredState(
 describe("Secure defaults audit — all wizard defaults pass blocking BP rules", () => {
   // A1 (2026-04-08): EFS + EFS::MountTarget lifted the count to 27.
   // A8 (2026-04-08): EventBridge Rule lifted the count to 28.
+  // A9 (2026-04-09): EventBridge EventBus lifted the count to 29.
   it(`covers all ${SUPPORTED_TYPES_ARRAY.length} supported resource types`, () => {
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(28);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(29);
   });
 
   for (const resourceType of SUPPORTED_TYPES_ARRAY) {

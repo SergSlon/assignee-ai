@@ -60,6 +60,13 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   // Arn. State guard will skip Read-Before-Write because Arn is
   // never present in desiredState at plan time.
   [RESOURCE_TYPES.EVENTS_RULE]: "Arn",
+  // A9 (2026-04-09): AWS::Events::EventBus primary identifier is
+  // the user-supplied Name (createOnly + required). Unlike
+  // Events::Rule, the Name IS the primary ID — CCAPI keys on it,
+  // and the user supplies it at plan time, so the state guard
+  // CAN do Read-Before-Write for EventBus and catch existing-bus
+  // collisions before CCAPI throws AlreadyExists.
+  [RESOURCE_TYPES.EVENTS_EVENT_BUS]: "Name",
 } as const;
 
 /**

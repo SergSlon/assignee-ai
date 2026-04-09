@@ -87,6 +87,8 @@ describe("intentParserNode", () => {
     expect(SUPPORTED_TYPES).toContain("AWS::EFS::MountTarget");
     // A8 (2026-04-08): EventBridge Rule lifted the count to 28.
     expect(SUPPORTED_TYPES).toContain("AWS::Events::Rule");
-    expect(SUPPORTED_TYPES).toHaveLength(28);
+    // A9 (2026-04-09): EventBridge custom event bus lifted the count to 29.
+    expect(SUPPORTED_TYPES).toContain("AWS::Events::EventBus");
+    expect(SUPPORTED_TYPES).toHaveLength(29);
   });
 });

@@ -275,7 +275,8 @@ describe("Cross-epic: schema fetch -> plan generation", () => {
 
     // A1 (2026-04-08): EFS + EFS::MountTarget lifted the count to 27.
     // A8 (2026-04-08): EventBridge Rule lifted the count to 28.
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(28);
+    // A9 (2026-04-09): EventBridge EventBus lifted the count to 29.
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(29);
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::S3::Bucket");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EC2::Instance");

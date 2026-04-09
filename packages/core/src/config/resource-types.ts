@@ -57,6 +57,14 @@ export const SUPPORTED_TYPES_ARRAY = [
   // are needed). Unblocks event-driven Lambda patterns and the
   // future scheduled-lambda compound.
   "AWS::Events::Rule",
+  // A9 (2026-04-09): AWS::Events::EventBus first-class support.
+  // First service added after the operator-policy split that
+  // restored 4581/1616 bytes of headroom on the core/services
+  // policies. CCAPI schema probed on 2026-04-09 — primaryIdentifier
+  // /properties/Name (createOnly + required), readOnly /properties/Arn,
+  // optional KmsKeyIdentifier + Policy + DeadLetterConfig + LogConfig.
+  // Unblocks cross-account / SaaS-partner event ingestion patterns.
+  "AWS::Events::EventBus",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -98,6 +106,8 @@ export const RESOURCE_TYPES = {
   EFS_MOUNT_TARGET: "AWS::EFS::MountTarget",
   // A8 (2026-04-08) — EventBridge Rule first-class
   EVENTS_RULE: "AWS::Events::Rule",
+  // A9 (2026-04-09) — EventBridge custom event bus first-class
+  EVENTS_EVENT_BUS: "AWS::Events::EventBus",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */

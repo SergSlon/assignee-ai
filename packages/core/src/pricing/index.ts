@@ -34,6 +34,8 @@ import { efsPricingStrategy } from "./strategies/efs.js";
 import { efsMountTargetPricingStrategy } from "./strategies/efs-mount-target.js";
 // A8 (2026-04-08) — EventBridge Rule
 import { eventsRulePricingStrategy } from "./strategies/events-rule.js";
+// A9 (2026-04-09) — EventBridge custom event bus
+import { eventsEventBusPricingStrategy } from "./strategies/events-eventbus.js";
 import { ec2PricingDecomposer } from "./decomposers/ec2.js";
 import { rdsPricingDecomposer } from "./decomposers/rds.js";
 import { s3PricingDecomposer } from "./decomposers/s3.js";
@@ -68,6 +70,8 @@ import {
   efsMountTargetPricingDecomposer,
   // A8 (2026-04-08): EventBridge Rule is free on the default bus
   eventsRulePricingDecomposer,
+  // A9 (2026-04-09): EventBridge custom event bus
+  eventsEventBusPricingDecomposer,
 } from "./decomposers/free.js";
 
 /**
@@ -182,6 +186,11 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.EVENTS_RULE,
   eventsRulePricingStrategy,
 );
+// A9 (2026-04-09) — EventBridge custom event bus
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.EVENTS_EVENT_BUS,
+  eventsEventBusPricingStrategy,
+);
 
 /**
  * The default pre-populated pricing decomposer registry (Story 23.1).
@@ -221,6 +230,7 @@ defaultDecomposerRegistry.register(
 defaultDecomposerRegistry.register(efsPricingDecomposer);
 defaultDecomposerRegistry.register(efsMountTargetPricingDecomposer);
 defaultDecomposerRegistry.register(eventsRulePricingDecomposer);
+defaultDecomposerRegistry.register(eventsEventBusPricingDecomposer);
 
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";

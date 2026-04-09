@@ -372,6 +372,26 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "events:RemoveTargets",
       "events:TagResource",
     ],
+    // A9 (2026-04-09): AWS::Events::EventBus minimum viable set.
+    // CreateEventBus + DeleteEventBus + DescribeEventBus cover the
+    // core lifecycle. PutPermission/RemovePermission are needed for
+    // cross-account event publishing (the canonical use case for
+    // custom event buses) — without them users would have to grant
+    // post-apply via the console. ListEventBuses is needed for the
+    // state guard's Read-Before-Write check via CCAPI GetResource.
+    // Together with the existing events:Describe* + events:List*
+    // collapsed wildcards (introduced for Events::Rule), this adds
+    // ~150 bytes to the operatorServicesPolicy — well inside the
+    // ~1600-byte headroom restored by the A8 split.
+    [RESOURCE_TYPES.EVENTS_EVENT_BUS]: [
+      "events:CreateEventBus",
+      "events:DeleteEventBus",
+      "events:DescribeEventBus",
+      "events:ListEventBuses",
+      "events:PutPermission",
+      "events:RemovePermission",
+      "events:TagResource",
+    ],
   };
 
   const serviceActions = serviceActionMap[resourceType] ?? [];

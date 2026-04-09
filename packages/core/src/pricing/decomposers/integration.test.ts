@@ -41,6 +41,10 @@ const FREE_TYPES: readonly string[] = [
   // is a bus-level charge, not a rule-level one, and the per-month
   // cost is workload-dependent, so the decomposer returns [].
   RESOURCE_TYPES.EVENTS_RULE,
+  // A9 (2026-04-09): EventBridge custom EventBus bills $1/M events
+  // PUBLISHED to the bus. Per-event rate is fixed but publish volume
+  // is workload-dependent, so the decomposer returns [].
+  RESOURCE_TYPES.EVENTS_EVENT_BUS,
   // SSM Standard tier is also free, but the decomposer is registered for
   // Advanced tier too — it is NOT in the "always free" list.
 ] as const;

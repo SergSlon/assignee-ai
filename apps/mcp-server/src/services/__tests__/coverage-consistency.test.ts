@@ -44,6 +44,7 @@ const TYPE_TO_KEYWORD: Record<string, string> = {
   "AWS::EFS::FileSystem": "efs",
   "AWS::EFS::MountTarget": "efs mount target",
   "AWS::Events::Rule": "eventbridge rule",
+  "AWS::Events::EventBus": "eventbridge bus",
 };
 
 describe("cross-system consistency", () => {
