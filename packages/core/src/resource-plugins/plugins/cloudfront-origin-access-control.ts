@@ -98,7 +98,21 @@ export const cloudFrontOriginAccessControlPlugin: ResourcePlugin = {
     },
   ],
   advancedFields: [],
-  defaults: {},
+  defaults: {
+    // (f) 2026-04-09 Task 9: ship a fully-safe default
+    // OriginAccessControlConfig so a user who accepts every wizard
+    // prompt with Enter still produces a secure OAC that passes
+    // BP-OAC-001 (SigningBehavior=always). The static-website
+    // compound overrides this with its own branded values; standalone
+    // wizard users get a generic safe fallback.
+    OriginAccessControlConfig: {
+      Name: "assignee-oac",
+      Description: "assignee.ai-managed origin access control",
+      SigningProtocol: "sigv4",
+      SigningBehavior: "always",
+      OriginAccessControlOriginType: "s3",
+    },
+  },
   configHints: [
     "NEVER include Tags — AWS::CloudFront::OriginAccessControl is not taggable (CCAPI schema reports tagging.taggable=false). Omit Tags entirely.",
     "SigningBehavior=always is the safe default for private S3 buckets. 'no-override' preserves pre-signed URLs from the origin; 'never' disables signing (defeats the point of OAC).",

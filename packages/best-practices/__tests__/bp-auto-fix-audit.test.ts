@@ -322,6 +322,60 @@ const testCases: AutoFixTestCase[] = [
       TracingConfig: { Mode: "PassThrough" },
     },
   },
+  // --- (f) 2026-04-09 Task 9 — Epic 30 Phase 2 WA expansion ---
+  {
+    // BP-S3-007 patches LifecycleConfiguration with a single
+    // AbortIncompleteMultipartUpload rule. Triggering state: no
+    // LifecycleConfiguration (check_type=exists, property absent).
+    id: "BP-S3-007",
+    resourceType: "AWS::S3::Bucket",
+    triggeringState: {},
+  },
+  {
+    // BP-DYNAMODB-004 patches ContributorInsightsSpecification.Enabled
+    // to true. Triggering state: not set (check_type=equals default).
+    id: "BP-DYNAMODB-004",
+    resourceType: "AWS::DynamoDB::Table",
+    triggeringState: {
+      ContributorInsightsSpecification: { Enabled: false },
+    },
+  },
+  {
+    // BP-KMS-002 patches PendingWindowInDays to 30. Triggering state:
+    // any value < 30 (check_type=greater_than 29).
+    id: "BP-KMS-002",
+    resourceType: "AWS::KMS::Key",
+    triggeringState: {
+      PendingWindowInDays: 7,
+    },
+  },
+  {
+    // BP-IAM-018 patches MaxSessionDuration to 14400. Triggering
+    // state: any value >= 14401 (check_type=less_than 14401).
+    id: "BP-IAM-018",
+    resourceType: "AWS::IAM::Role",
+    triggeringState: {
+      MaxSessionDuration: 43200,
+    },
+  },
+  {
+    // BP-OAC-001 patches OriginAccessControlConfig.SigningBehavior
+    // to "always". Triggering state: any other behavior.
+    id: "BP-OAC-001",
+    resourceType: "AWS::CloudFront::OriginAccessControl",
+    triggeringState: {
+      OriginAccessControlConfig: { SigningBehavior: "never" },
+    },
+  },
+  {
+    // BP-APIGW-007 patches DisableExecuteApiEndpoint to true.
+    // Triggering state: default (false or unset).
+    id: "BP-APIGW-007",
+    resourceType: "AWS::ApiGatewayV2::Api",
+    triggeringState: {
+      DisableExecuteApiEndpoint: false,
+    },
+  },
 ];
 
 describe("Auto-fix audit: all auto-fixable BP rules have correct desiredStatePatch", () => {

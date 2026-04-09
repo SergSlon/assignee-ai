@@ -13,3 +13,10 @@ consequence: "A wildcard Principal paired with s3:GetObject and no Condition exp
 category: security
 lastVerified: "2026-04-09"
 blocking: true
+fixType: interactive
+interactiveOptions:
+  - label: "Keep current policy as-is (NOT RECOMMENDED — wildcard principal without condition)"
+    action: "skip"
+  - label: "Remove the wildcard-principal statement entirely (safe but drops grants)"
+    action: "remove_property"
+    targetField: "PolicyDocument.Statement"
