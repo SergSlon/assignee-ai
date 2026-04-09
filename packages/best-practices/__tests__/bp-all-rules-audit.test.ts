@@ -482,6 +482,21 @@ const s3Rules: RuleSpec[] = [
     checkType: "policy_antipattern",
     expectedValue: "allow-plus-not-action",
   },
+  // (f) 2026-04-09 Task 9 — Epic 30 Phase 2 WA expansion
+  {
+    id: "BP-S3-007",
+    resourceType: "AWS::S3::Bucket",
+    propertyPath: "LifecycleConfiguration.Rules",
+    checkType: "exists",
+    expectedValue: true,
+  },
+  {
+    id: "BP-S3BP-001",
+    resourceType: "AWS::S3::BucketPolicy",
+    propertyPath: "PolicyDocument",
+    checkType: "policy_antipattern",
+    expectedValue: "wildcard-principal",
+  },
 ];
 
 const ec2Rules: RuleSpec[] = [
@@ -915,6 +930,15 @@ const lambdaRules: RuleSpec[] = [
     checkType: "equals",
     expectedValue: "Active",
   },
+  // (f) 2026-04-09 Task 9 — Epic 30 Phase 2 WA expansion: explicit
+  // Timeout required (CFN default of 3s is almost never correct).
+  {
+    id: "BP-LAMBDA-008",
+    resourceType: "AWS::Lambda::Function",
+    propertyPath: "Timeout",
+    checkType: "exists",
+    expectedValue: true,
+  },
 ];
 
 const iamRules: RuleSpec[] = [
@@ -1046,6 +1070,16 @@ const iamRules: RuleSpec[] = [
     expectedValue:
       "^arn:aws[\\w-]*:iam::aws:policy/(?!ReadOnly|SecurityAudit|Billing|Job-function/|service-role/)[A-Za-z0-9_-]*FullAccess$",
   },
+  // (f) 2026-04-09 Task 9 — Epic 30 Phase 2 WA expansion: cap
+  // MaxSessionDuration at 14400s (4h) to shrink credential-leak
+  // exposure windows.
+  {
+    id: "BP-IAM-018",
+    resourceType: "AWS::IAM::Role",
+    propertyPath: "MaxSessionDuration",
+    checkType: "less_than",
+    expectedValue: 14401,
+  },
 ];
 
 const dynamodbRules: RuleSpec[] = [
@@ -1082,6 +1116,15 @@ const dynamodbRules: RuleSpec[] = [
     resourceType: "AWS::DynamoDB::Table",
     propertyPath: "BillingMode",
     checkType: "awareness",
+    expectedValue: true,
+  },
+  // (f) 2026-04-09 Task 9 — Epic 30 Phase 2 WA expansion: enable
+  // ContributorInsights for hot-key observability.
+  {
+    id: "BP-DYNAMODB-004",
+    resourceType: "AWS::DynamoDB::Table",
+    propertyPath: "ContributorInsightsSpecification.Enabled",
+    checkType: "equals",
     expectedValue: true,
   },
 ];
@@ -1407,6 +1450,16 @@ const apigwRules: RuleSpec[] = [
     checkType: "equals",
     expectedValue: "TLS_1_2",
   },
+  // (f) 2026-04-09 Task 9 — Epic 30 Phase 2 WA expansion: disable the
+  // default execute-api URL so the custom domain is the single
+  // entrypoint (WAF / throttling / auth layers actually apply).
+  {
+    id: "BP-APIGW-007",
+    resourceType: "AWS::ApiGatewayV2::Api",
+    propertyPath: "DisableExecuteApiEndpoint",
+    checkType: "equals",
+    expectedValue: true,
+  },
 ];
 
 const ecrRules: RuleSpec[] = [
@@ -1687,6 +1740,15 @@ const kmsRules: RuleSpec[] = [
     checkType: "equals",
     expectedValue: true,
   },
+  // (f) 2026-04-09 Task 9 — Epic 30 Phase 2 WA expansion: 30-day
+  // pending-deletion window to keep the recovery path open.
+  {
+    id: "BP-KMS-002",
+    resourceType: "AWS::KMS::Key",
+    propertyPath: "PendingWindowInDays",
+    checkType: "greater_than",
+    expectedValue: 29,
+  },
 ];
 
 // A14 (2026-04-09) — CloudFront::Distribution first-class BP rules
@@ -1698,6 +1760,25 @@ const cloudFrontRules: RuleSpec[] = [
       "DistributionConfig.DefaultCacheBehavior.ViewerProtocolPolicy",
     checkType: "equals",
     expectedValue: "redirect-to-https",
+  },
+  // (f) 2026-04-09 Task 9 — Epic 30 Phase 2 WA expansion: access
+  // logging for post-incident forensics.
+  {
+    id: "BP-CF-002",
+    resourceType: "AWS::CloudFront::Distribution",
+    propertyPath: "DistributionConfig.Logging.Bucket",
+    checkType: "exists",
+    expectedValue: true,
+  },
+  // (f) 2026-04-09 Task 4b/Task 9 companion: OAC SigningBehavior
+  // must be "always" or the OAC is decorative. Covers the new
+  // AWS::CloudFront::OriginAccessControl resource type.
+  {
+    id: "BP-OAC-001",
+    resourceType: "AWS::CloudFront::OriginAccessControl",
+    propertyPath: "OriginAccessControlConfig.SigningBehavior",
+    checkType: "equals",
+    expectedValue: "always",
   },
 ];
 
@@ -2182,7 +2263,20 @@ describe("BP All Rules Audit", () => {
       //   security finding — unencrypted HTTP at the edge is a
       //   mandatory gate under PCI-DSS / HIPAA / most enterprise
       //   security baselines.
-      expect(allSpecs.length).toBe(175);
+      // + 9 (f) 2026-04-09 Task 9 Epic 30 Phase 2 WA expansion rules:
+      //   BP-S3-007 AbortIncompleteMultipartUpload (cost_optimization),
+      //   BP-S3BP-001 wildcard-principal policy_antipattern guard
+      //   (security + blocking, non-fixable), BP-DYNAMODB-004
+      //   ContributorInsights (performance observability), BP-KMS-002
+      //   PendingWindowInDays>=30 (reliability recovery window),
+      //   BP-IAM-018 MaxSessionDuration cap (security leak exposure),
+      //   BP-CF-002 CloudFront access logging (security forensics),
+      //   BP-OAC-001 SigningBehavior=always (security, critical +
+      //   blocking + auto-fixable; Task 4b companion for the new OAC
+      //   resource type), BP-LAMBDA-008 explicit Timeout (reliability),
+      //   BP-APIGW-007 DisableExecuteApiEndpoint (security — default
+      //   URL bypasses custom-domain WAF/throttling).
+      expect(allSpecs.length).toBe(184);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {
