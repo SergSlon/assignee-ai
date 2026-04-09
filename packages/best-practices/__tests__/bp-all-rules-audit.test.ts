@@ -1610,6 +1610,14 @@ const eventsRules: RuleSpec[] = [
     checkType: "equals",
     expectedValue: "ENABLED",
   },
+  {
+    id: "BP-EVENTS-004",
+    resourceType: "AWS::Events::Rule",
+    propertyPath: "ScheduleExpression",
+    checkType: "awareness",
+    expectedValue:
+      "Review schedule frequency + target retry policy before shipping",
+  },
 ];
 
 const asgRules: RuleSpec[] = [
@@ -2052,7 +2060,10 @@ describe("BP All Rules Audit", () => {
       // + 1 A8 follow-up rule         (BP-LAMBDA-015 X-Ray tracing must
       //   be Active — covers cold-start + EventBridge-invoked paths
       //   that PassThrough mode misses).
-      expect(allSpecs.length).toBe(166);
+      // + 1 A8 awareness rule          (BP-EVENTS-004 schedule
+      //   frequency + retry amplification cost awareness). Always
+      //   fires to surface the cost lever at plan time.
+      expect(allSpecs.length).toBe(167);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {
