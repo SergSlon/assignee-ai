@@ -117,6 +117,165 @@ describe("display.ts — non-TTY (CI) mode", () => {
     expect(formatAppliedFixes([])).toBeNull();
   });
 
+  describe("renderCompoundPartialFailure (Item 1)", () => {
+    const fakePattern = {
+      patternId: "vpc-networking",
+      displayName: "VPC Networking",
+      description: "test",
+      triggerKeywords: [],
+      resources: [],
+      dependencyOrder: [],
+    } as unknown as import("@assignee/core").ArchitecturePattern;
+
+    it("lists successes, failure, and not-attempted in a structured block", async () => {
+      const { renderCompoundPartialFailure } = await import("./display.js");
+      const { chunks, restore } = captureStream(process.stderr);
+
+      renderCompoundPartialFailure({
+        pattern: fakePattern,
+        completed: [
+          {
+            resourceId: "vpc",
+            resourceType: "AWS::EC2::VPC",
+            resourceArn: "vpc-0abc",
+            executionStatus: "SUCCESS" as never,
+          },
+          {
+            resourceId: "subnet-public-a",
+            resourceType: "AWS::EC2::Subnet",
+            resourceArn: "subnet-0def",
+            executionStatus: "SUCCESS" as never,
+          },
+        ],
+        failedResource: {
+          resourceId: "natgw",
+          resourceType: "AWS::EC2::NatGateway",
+          displayName: "NAT Gateway",
+          errorMessage:
+            "AccessDenied: User is not authorized to perform: ec2:CreateNatGateway",
+        },
+        notAttempted: [
+          {
+            resourceId: "private-route",
+            resourceType: "AWS::EC2::Route",
+            displayName: "Private Route",
+          },
+          {
+            resourceId: "subnet-rt-assoc-a",
+            resourceType: "AWS::EC2::SubnetRouteTableAssociation",
+            displayName: "Subnet/RT Association",
+          },
+        ] as never,
+        runId: "run-abc-123",
+      });
+      restore();
+
+      const output = chunks.join("");
+      // Header + pattern name
+      expect(output).toContain("VPC Networking");
+      expect(output).toContain("halted at AWS::EC2::NatGateway");
+      // (i) Successes
+      expect(output).toContain("Successfully provisioned (2)");
+      expect(output).toContain("AWS::EC2::VPC");
+      expect(output).toContain("vpc-0abc");
+      expect(output).toContain("subnet-0def");
+      // (ii) Failure + reason
+      expect(output).toContain("Failed:");
+      expect(output).toContain("AWS::EC2::NatGateway");
+      expect(output).toContain("ec2:CreateNatGateway");
+      // (iii) Not attempted
+      expect(output).toContain("Not attempted (2)");
+      expect(output).toContain("Private Route");
+      expect(output).toContain("Subnet/RT Association");
+      // (iv) Recovery actions
+      expect(output).toContain("Next steps:");
+      expect(output).toContain("assignee destroy subnet-0def");
+      expect(output).toContain("assignee destroy vpc-0abc");
+      // Reverse-order destroy: subnet destroy line must come BEFORE vpc destroy line
+      const subnetDestroyIdx = output.indexOf("assignee destroy subnet-0def");
+      const vpcDestroyIdx = output.indexOf("assignee destroy vpc-0abc");
+      expect(subnetDestroyIdx).toBeGreaterThan(-1);
+      expect(vpcDestroyIdx).toBeGreaterThan(subnetDestroyIdx);
+      // Resume command includes the runId
+      expect(output).toContain("assignee status run-abc-123 --resume");
+    });
+
+    it("annotates composite-identifier resources with cascade note", async () => {
+      const { renderCompoundPartialFailure } = await import("./display.js");
+      const { chunks, restore } = captureStream(process.stderr);
+
+      renderCompoundPartialFailure({
+        pattern: fakePattern,
+        completed: [
+          {
+            resourceId: "rt",
+            resourceType: "AWS::EC2::RouteTable",
+            resourceArn: "rtb-0abc",
+            executionStatus: "SUCCESS" as never,
+          },
+          {
+            resourceId: "public-route",
+            resourceType: "AWS::EC2::Route",
+            // Composite identifier — destroy resolver cannot match it
+            resourceArn: "rtb-0abc|0.0.0.0/0",
+            executionStatus: "SUCCESS" as never,
+          },
+        ],
+        failedResource: {
+          resourceId: "natgw",
+          resourceType: "AWS::EC2::NatGateway",
+          errorMessage: "InsufficientInstanceCapacity",
+        },
+        notAttempted: [],
+        runId: "run-composite-1",
+      });
+      restore();
+
+      const output = chunks.join("");
+      // RouteTable gets a normal destroy line
+      expect(output).toContain("assignee destroy rtb-0abc");
+      // But Route (composite id) gets a comment, not a destroy command
+      expect(output).toMatch(
+        /# AWS::EC2::Route: cascades from parent.*rtb-0abc\|0.0.0.0\/0/,
+      );
+      // And does NOT emit a bogus destroy command with the pipe character
+      expect(output).not.toContain("assignee destroy rtb-0abc|0.0.0.0/0");
+    });
+
+    it("renders 'nothing was provisioned' when completed is empty", async () => {
+      const { renderCompoundPartialFailure } = await import("./display.js");
+      const { chunks, restore } = captureStream(process.stderr);
+
+      renderCompoundPartialFailure({
+        pattern: fakePattern,
+        completed: [],
+        failedResource: {
+          resourceId: "vpc",
+          resourceType: "AWS::EC2::VPC",
+          errorMessage: "InvalidVpcRange: CIDR must be /16-/28",
+        },
+        notAttempted: [
+          {
+            resourceId: "subnet",
+            resourceType: "AWS::EC2::Subnet",
+            displayName: "Public Subnet",
+          },
+        ] as never,
+        runId: "run-empty",
+      });
+      restore();
+
+      const output = chunks.join("");
+      expect(output).not.toContain("Successfully provisioned");
+      expect(output).toContain("Failed:");
+      expect(output).toContain("InvalidVpcRange");
+      expect(output).toContain("Nothing was provisioned");
+      // No destroy/resume commands when nothing landed
+      expect(output).not.toContain("assignee destroy");
+      expect(output).not.toContain("--resume");
+    });
+  });
+
   it("renderPlanBox includes Resource Type, Region, Config, Estimated Cost fields", async () => {
     const { renderPlanBox } = await import("./display.js");
     const { chunks, restore } = captureStream(process.stdout);

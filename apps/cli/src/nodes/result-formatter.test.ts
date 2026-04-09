@@ -56,6 +56,7 @@ vi.mock("../services/s3-upload.js", () => ({
 vi.mock("../utils/display.js", () => ({
   renderApplySuccess: vi.fn(),
   renderCompoundSuccess: vi.fn(),
+  renderCompoundPartialFailure: vi.fn(),
   renderError: vi.fn(),
   renderPlanBox: vi.fn(),
   renderSecurityWarnings: vi.fn(),
@@ -88,6 +89,7 @@ import { resultFormatterNode } from "./result-formatter.js";
 import {
   renderApplySuccess,
   renderCompoundSuccess,
+  renderCompoundPartialFailure,
   renderError,
   renderPlanBox,
   renderSecurityWarnings,
@@ -403,7 +405,7 @@ describe("resultFormatterNode — compound SUCCESS final resource", () => {
 // ── Compound FAILED partial result ───────────────────────────────────────────
 
 describe("resultFormatterNode — compound FAILED with partial results", () => {
-  it("renders cleanup warning when some resources were already provisioned", async () => {
+  it("calls renderCompoundPartialFailure with successful + failed + not-attempted (Item 1)", async () => {
     const resourceQueue = makeResourceQueue();
     const state = makeState({
       executionStatus: ExecutionStatus.FAILED,
@@ -424,14 +426,28 @@ describe("resultFormatterNode — compound FAILED with partial results", () => {
 
     await resultFormatterNode(state);
 
-    expect(renderError).toHaveBeenCalledOnce();
-    const [errorMsg] = vi.mocked(renderError).mock.calls[0] as [
-      string,
-      ...unknown[],
+    // Item 1: cleanup guidance now flows through renderCompoundPartialFailure,
+    // not through the old inline-error-blob path. renderError is still
+    // called with a short pointer message so the user also sees the
+    // structured why/howToFix registry output.
+    expect(renderCompoundPartialFailure).toHaveBeenCalledOnce();
+    const [call] = vi.mocked(renderCompoundPartialFailure).mock.calls[0] as [
+      {
+        pattern: ArchitecturePattern;
+        completed: Array<{ resourceType: string; resourceArn?: string }>;
+        failedResource: { resourceType: string; errorMessage: string };
+        notAttempted: Array<{ resourceType: string }>;
+        runId: string;
+      },
     ];
-    expect(errorMsg).toContain("Provision halted at AWS::Lambda::Function");
-    expect(errorMsg).toContain("AWS::IAM::Role");
-    expect(errorMsg).toContain("Manual cleanup may be required");
+    expect(call.pattern).toBe(mockPattern);
+    expect(call.completed).toHaveLength(1);
+    expect(call.completed[0]!.resourceType).toBe("AWS::IAM::Role");
+    expect(call.failedResource.resourceType).toBe("AWS::Lambda::Function");
+    // Not attempted = resourceQueue slice after currentResourceIndex (1)
+    expect(call.notAttempted).toHaveLength(1);
+    expect(call.notAttempted[0]!.resourceType).toBe("AWS::ApiGatewayV2::Api");
+    expect(call.runId).toBe("test-run-id");
   });
 
   it("includes ARNs and reverse-order destroy commands in cleanup guidance (EC-22)", async () => {
@@ -461,20 +477,24 @@ describe("resultFormatterNode — compound FAILED with partial results", () => {
 
     await resultFormatterNode(state);
 
-    expect(renderError).toHaveBeenCalledOnce();
-    const [errorMsg] = vi.mocked(renderError).mock.calls[0] as [
-      string,
-      ...unknown[],
+    // Item 1: reverse-order destroy guidance is now the renderer's job.
+    // We assert the structured inputs here and leave the reverse-order
+    // string assertion to the display unit test (which exercises the
+    // renderer directly against captured stderr output).
+    expect(renderCompoundPartialFailure).toHaveBeenCalledOnce();
+    const [call] = vi.mocked(renderCompoundPartialFailure).mock.calls[0] as [
+      {
+        completed: Array<{ resourceType: string; resourceArn?: string }>;
+        failedResource: { resourceType: string };
+      },
     ];
-    // Should list ARNs
-    expect(errorMsg).toContain("arn:aws:iam::123:role/exec-role");
-    expect(errorMsg).toContain("arn:aws:lambda::123:function:my-fn");
-    // Should include destroy commands in reverse order (Lambda before IAM)
-    const lambdaIdx = errorMsg.indexOf("assignee destroy arn:aws:lambda");
-    const iamIdx = errorMsg.indexOf("assignee destroy arn:aws:iam");
-    expect(lambdaIdx).toBeLessThan(iamIdx);
-    // Should mention reverse dependency order
-    expect(errorMsg).toContain("reverse dependency order");
+    expect(call.completed).toHaveLength(2);
+    // Completed list is in forward order (vpc, lambda) — the renderer
+    // reverses for destroy. Assert both ARNs made it through.
+    const arns = call.completed.map((r) => r.resourceArn);
+    expect(arns).toContain("arn:aws:iam::123:role/exec-role");
+    expect(arns).toContain("arn:aws:lambda::123:function:my-fn");
+    expect(call.failedResource.resourceType).toBe("AWS::ApiGatewayV2::Api");
   });
 
   // Wave 19 Bug #7: composite-id resources (Route, VPCGatewayAttachment,
@@ -542,37 +562,31 @@ describe("resultFormatterNode — compound FAILED with partial results", () => {
 
     await resultFormatterNode(state);
 
-    expect(renderError).toHaveBeenCalledOnce();
-    const [errorMsg] = vi.mocked(renderError).mock.calls[0] as [
-      string,
-      ...unknown[],
+    // Item 1 (Wave 19 Bug #7 coverage): composite-identifier handling
+    // is now the renderer's job. We assert that the full completedResources
+    // list (including the 2 composite-id entries) is forwarded to
+    // renderCompoundPartialFailure — the matching cascade-comment
+    // rendering is verified in display.test.ts against captured stderr
+    // output so we don't re-assert the render string here.
+    expect(renderCompoundPartialFailure).toHaveBeenCalledOnce();
+    const [call] = vi.mocked(renderCompoundPartialFailure).mock.calls[0] as [
+      {
+        completed: Array<{ resourceType: string; resourceArn?: string }>;
+        failedResource: { resourceType: string };
+      },
     ];
-
-    // Bare-id resources should still get a runnable destroy line
-    expect(errorMsg).toContain(
-      "AWS::EC2::VPC: assignee destroy arn:aws:ec2:us-east-1:054125018476:vpc/vpc-00609e37203c1044c",
-    );
-    expect(errorMsg).toContain("AWS::EC2::InternetGateway: assignee destroy");
-
-    // Composite-id resources MUST NOT emit a runnable destroy command —
-    // the resolver can't match them and the user gets a misleading error
-    expect(errorMsg).not.toContain(
-      "assignee destroy IGW|vpc-00609e37203c1044c",
-    );
-    expect(errorMsg).not.toContain(
-      "assignee destroy rtb-07fb017a426465e6f|0.0.0.0/0",
-    );
-
-    // Composite-id lines must be present as annotated comments instead
-    expect(errorMsg).toContain(
-      "AWS::EC2::VPCGatewayAttachment: cascades from parent",
-    );
-    expect(errorMsg).toContain("AWS::EC2::Route: cascades from parent");
-    expect(errorMsg).toContain("IGW|vpc-00609e37203c1044c");
-    expect(errorMsg).toContain("rtb-07fb017a426465e6f|0.0.0.0/0");
-
-    // The legend at the bottom must explain the "#" prefix
-    expect(errorMsg).toContain("Lines starting with");
+    expect(call.completed).toHaveLength(6);
+    const types = call.completed.map((r) => r.resourceType);
+    expect(types).toContain("AWS::EC2::VPC");
+    expect(types).toContain("AWS::EC2::VPCGatewayAttachment"); // composite
+    expect(types).toContain("AWS::EC2::Route"); // composite
+    expect(types).toContain("AWS::EC2::InternetGateway");
+    // Composite-id ARNs must survive the pass-through so the renderer
+    // can annotate them with the cascade note.
+    const arns = call.completed.map((r) => r.resourceArn);
+    expect(arns).toContain("IGW|vpc-00609e37203c1044c");
+    expect(arns).toContain("rtb-07fb017a426465e6f|0.0.0.0/0");
+    expect(call.failedResource.resourceType).toBe("AWS::EC2::NatGateway");
   });
 
   it("renders standard error message when no resources were provisioned yet", async () => {
