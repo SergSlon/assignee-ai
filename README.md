@@ -100,7 +100,7 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 
 ## Supported resource types
 
-21 CCAPI types + 2 SDK-routable fallback types = 23 total:
+**28 first-class CCAPI types** + 2 SDK-routable fallback types. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
 
 | Type                                        | Notes                                                      |
 | :------------------------------------------ | :--------------------------------------------------------- |
@@ -127,21 +127,29 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 | `AWS::ApiGatewayV2::Api`                    | Used in Serverless API pattern                             |
 | `AWS::CloudWatch::Alarm`                    | Monitoring                                                 |
 | `AWS::SecretsManager::Secret`               | Secret management                                          |
+| `AWS::EC2::VPCGatewayAttachment`            | VPC compound only (marker-ref)                             |
+| `AWS::EC2::SubnetRouteTableAssociation`     | VPC compound only (marker-ref)                             |
+| `AWS::EFS::FileSystem`                      | Used in EFS-with-VPC pattern                               |
+| `AWS::EFS::MountTarget`                     | Used in EFS-with-VPC pattern                               |
+| `AWS::Events::Rule`                         | Used in Scheduled Lambda pattern                           |
 | `AWS::Lambda::EventSourceMapping`           | SDK fallback (not CCAPI)                                   |
 | `AWS::SNS::Subscription`                    | SDK fallback (not CCAPI)                                   |
 
 ### Compound architecture patterns
 
-Multi-resource intents are detected by keyword matching (zero LLM latency) and provisioned in dependency order:
+Multi-resource intents are detected by keyword matching (zero LLM latency) and provisioned in dependency order. Run `assignee patterns` for the live listing, or `assignee patterns show <patternId>` for the full resource list + dependency groups.
 
-| Pattern            | Resources                                              | Trigger keywords                    |
-| :----------------- | :----------------------------------------------------- | :---------------------------------- |
-| VPC Networking     | VPC → Subnets → IGW → RouteTables → NAT (17 resources) | "create a vpc", "vpc with subnets"  |
-| Serverless API     | IAM Role → Lambda → API Gateway V2 (8 resources)       | "serverless api", "lambda api"      |
-| Static Website     | S3 Bucket + CloudFront + OAC + S3 upload               | "static website", "static site"     |
-| Message Processing | SQS DLQ → SQS + DynamoDB + IAM Role → Lambda           | "message queue", "event processing" |
-| Three-Tier Web     | VPC → Subnet → SecurityGroup → ECS → ALB               | "three tier", "web application"     |
-| Container Service  | ECR → ECS Cluster → IAM Role                           | "container service", "ecs"          |
+| Pattern              | Resources                                              | Trigger keywords                       |
+| :------------------- | :----------------------------------------------------- | :------------------------------------- |
+| VPC Networking       | VPC → Subnets → IGW → RouteTables → NAT (17 resources) | "create a vpc", "vpc with subnets"     |
+| Serverless API       | IAM Role → Lambda → API Gateway V2 (8 resources)       | "serverless api", "lambda api"         |
+| Static Website       | S3 Bucket + CloudFront + OAC + S3 upload               | "static website", "static site"        |
+| Message Processing   | SQS DLQ → SQS + DynamoDB + IAM Role → Lambda           | "message queue", "event processing"    |
+| Three-Tier Web       | VPC → Subnet → SecurityGroup → ECS → ALB               | "three tier", "web application"        |
+| Container Service    | ECR → ECS Cluster → IAM Role                           | "container service", "ecs"             |
+| EFS with private VPC | VPC + private subnets + NFS SG + FS + MountTargets     | "create an efs", "shared file system"  |
+| Scheduled Lambda     | IAM Role → Lambda → EventBridge Rule (cron)            | "scheduled lambda", "cron lambda"      |
+| Lambda + Exec Role   | IAM Role → Lambda (minimal auto-exec-role pattern)     | "create a lambda", "create a function" |
 
 ---
 
