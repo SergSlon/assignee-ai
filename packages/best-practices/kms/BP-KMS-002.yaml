@@ -1,0 +1,18 @@
+id: BP-KMS-002
+title: "KMS key should use a 30-day pending-deletion window for recovery"
+severity: HIGH
+resource_type: "AWS::KMS::Key"
+property_path: "PendingWindowInDays"
+check_type: "greater_than"
+expected_value: 29
+source: "AWS Well-Architected — Reliability"
+source_id: "REL-KMS-001"
+description: "KMS keys scheduled for deletion enter a PendingDeletion state that lasts PendingWindowInDays (7-30 days, default 30). After the window expires, the key is permanently destroyed and every ciphertext it wrapped becomes unreadable forever. Setting PendingWindowInDays below 30 narrows the recovery window for a key that may still have active encrypted data in S3, EBS snapshots, Secrets Manager, or cross-region replicas. The only reason to lower it is compliance-driven destruction SLAs — which also require a formal key-destruction runbook that explicitly catalogs the data the key wraps."
+remediation: "Set PendingWindowInDays to 30 (the AWS default) unless you have a documented compliance requirement with a narrower window AND a key-destruction runbook that inventories every consumer."
+consequence: "A rushed 7-day deletion window bricks every ciphertext the key wrapped: S3 AccessDenied forever, RDS snapshots unrestorable, EBS volumes unmountable. AWS cannot restore a destroyed KMS key."
+category: reliability
+lastVerified: "2026-04-09"
+blocking: false
+autoFixable: true
+desiredStatePatch:
+  PendingWindowInDays: 30

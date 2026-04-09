@@ -1,0 +1,19 @@
+id: BP-OAC-001
+title: "OriginAccessControl SigningBehavior must be 'always'"
+severity: CRITICAL
+resource_type: "AWS::CloudFront::OriginAccessControl"
+property_path: "OriginAccessControlConfig.SigningBehavior"
+check_type: "equals"
+expected_value: "always"
+source: "AWS Well-Architected — Security"
+source_id: "SEC-OAC-001"
+description: "OriginAccessControl's SigningBehavior controls when CloudFront adds a SigV4 Authorization header to origin requests. 'always' is the only value that makes OAC actually secure — CloudFront signs every origin request, and the origin bucket policy can gate access on aws:SourceArn. 'no-override' preserves any Authorization header the viewer sent (useful for pre-signed URL use cases, but defeats OAC's security guarantee when paired with a private bucket). 'never' turns signing off entirely — the origin is effectively public, because the bucket policy has no way to distinguish CloudFront requests from anonymous ones. The static-website compound pattern sets 'always' by default; this rule catches hand-crafted OACs that regressed."
+remediation: "Set OriginAccessControlConfig.SigningBehavior to 'always'. If you thought you needed 'no-override' for a pre-signed URL flow, you actually need a different architecture entirely — OAC is not the right primitive for pre-signed URLs, use the legacy Origin Access Identity (OAI) with a signed-URL viewer-request function instead."
+consequence: "SigningBehavior=never leaves the origin publicly accessible — any attacker with the bucket URL can bypass CloudFront entirely. The OAC becomes decorative."
+category: security
+lastVerified: "2026-04-09"
+blocking: true
+autoFixable: true
+desiredStatePatch:
+  OriginAccessControlConfig:
+    SigningBehavior: "always"

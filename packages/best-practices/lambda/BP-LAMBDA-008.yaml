@@ -1,0 +1,15 @@
+id: BP-LAMBDA-008
+title: "Lambda function Timeout should be set explicitly (not CFN default of 3s)"
+severity: MEDIUM
+resource_type: "AWS::Lambda::Function"
+property_path: "Timeout"
+check_type: "exists"
+expected_value: true
+source: "AWS Well-Architected — Reliability"
+source_id: "REL-LAMBDA-008"
+description: "CloudFormation's AWS::Lambda::Function Timeout property defaults to 3 seconds when unset. That is almost never the value you want: cold starts alone can exceed 3s on larger-memory functions, and any downstream HTTP call or DynamoDB read pushes well past the default. Functions that hit the 3s default silently return 502s in API Gateway integrations and fail mysteriously in async invocations. Setting Timeout explicitly forces the developer to think about the latency budget at plan time rather than discovering it in production. Use 30s for user-facing APIs, 60-300s for batch/async handlers, and 900s (the max) only when justified."
+remediation: "Set Timeout to a value that reflects the function's actual latency budget. Start with 30 for API Gateway integrations and 60 for SQS/EventBridge targets. Revisit after you have p95 Duration metrics and trim to 2x-3x the observed p99."
+consequence: "Functions at the 3s default silently fail — 502 Bad Gateway at API Gateway, DLQ buildup on async invocations, Step Functions timeouts. Root cause is usually cold start + first downstream call > 3s."
+category: reliability
+lastVerified: "2026-04-09"
+blocking: false

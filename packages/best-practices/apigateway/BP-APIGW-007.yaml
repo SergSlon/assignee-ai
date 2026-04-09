@@ -1,0 +1,18 @@
+id: BP-APIGW-007
+title: "API Gateway v2 HTTP API should set a DisableExecuteApiEndpoint flag for production"
+severity: MEDIUM
+resource_type: "AWS::ApiGatewayV2::Api"
+property_path: "DisableExecuteApiEndpoint"
+check_type: "equals"
+expected_value: true
+source: "AWS Well-Architected — Security"
+source_id: "SEC-APIGW-007"
+description: "Every API Gateway v2 HTTP API is automatically reachable via the execute-api URL 'https://{api-id}.execute-api.{region}.amazonaws.com/' regardless of any custom domain you configure. Production APIs typically attach a CloudFront distribution or custom domain with WAF, TLS, and routing rules, but the execute-api URL continues to bypass all of it. DisableExecuteApiEndpoint=true turns off the default URL so the only entrypoint is the custom domain you've hardened. Leave it false only when you deliberately use the default URL (dev/test environments that don't warrant a custom domain)."
+remediation: "Set DisableExecuteApiEndpoint to true on production APIs. Configure a DomainName + ApiMapping + (optionally) a CloudFront distribution as the single front door. If you are currently using the default execute-api URL for anything (CI checks, mobile apps), migrate them to the custom domain before flipping this."
+consequence: "The execute-api URL is scanned by WAF-bypass probes the moment the API is live. Any WAF / throttling / auth rule on the custom domain is silently skipped by direct execute-api requests."
+category: security
+lastVerified: "2026-04-09"
+blocking: false
+autoFixable: true
+desiredStatePatch:
+  DisableExecuteApiEndpoint: true

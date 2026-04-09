@@ -1,0 +1,18 @@
+id: BP-IAM-018
+title: "IAM role session duration should not exceed 4 hours by default"
+severity: MEDIUM
+resource_type: "AWS::IAM::Role"
+property_path: "MaxSessionDuration"
+check_type: "less_than"
+expected_value: 14401
+source: "AWS Well-Architected — Security (session hygiene)"
+source_id: "SEC-IAM-018"
+description: "IAM role MaxSessionDuration caps how long a single AssumeRole session's temporary credentials remain valid — the CloudFormation default is 3600 (1 hour), but the legal maximum is 43200 (12 hours). Long session durations amplify the blast radius of a leaked credential: a 12-hour session stays dangerous for 12 hours regardless of how fast you rotate the underlying role policy. Capping at 4 hours (14400) is a reasonable compromise between operator convenience (covers a work session) and incident response (session expiry limits leak exposure)."
+remediation: "Set MaxSessionDuration to 14400 (4 hours) or less. Workloads that genuinely need longer sessions (long-running ETL, video transcoding jobs) should use IAM role chaining with short hops rather than a single long session."
+consequence: "A leak from a 12-hour session stays exploitable for 12 hours even after detection and role deletion — STS does not invalidate issued tokens. Shorter windows shrink the exposure gap."
+category: security
+lastVerified: "2026-04-09"
+blocking: false
+autoFixable: true
+desiredStatePatch:
+  MaxSessionDuration: 14400

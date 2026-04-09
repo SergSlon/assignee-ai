@@ -1,0 +1,24 @@
+id: BP-S3-007
+title: "S3 bucket lifecycle should abort incomplete multipart uploads"
+severity: MEDIUM
+resource_type: "AWS::S3::Bucket"
+property_path: "LifecycleConfiguration.Rules"
+check_type: "exists"
+expected_value: true
+source: "AWS Security Hub FSBP"
+source_id: "S3.10"
+description: "Incomplete multipart uploads consume storage indefinitely and are invisible in the bucket listing. A LifecycleConfiguration rule with AbortIncompleteMultipartUpload.DaysAfterInitiation automatically cleans them up after N days and stops the silent cost leak. FSBP S3.10 targets this as a cost-optimization pillar finding."
+remediation: "Add a LifecycleConfiguration.Rule with {Status: Enabled, AbortIncompleteMultipartUpload: {DaysAfterInitiation: 7}}. The rule does not affect successfully-completed uploads — only orphaned in-progress parts that never finished. 7 days is the FSBP-recommended default; raise it to 14 only if you have failed client tooling that genuinely needs multi-week resume windows."
+consequence: "Failed multipart uploads park partial bytes in the bucket forever. They bill at normal storage rates but never appear in ListObjects — the bucket grows silently month-over-month."
+category: cost_optimization
+lastVerified: "2026-04-09"
+blocking: false
+autoFixable: true
+desiredStatePatch:
+  LifecycleConfiguration:
+    Rules:
+      - Id: "assignee-abort-incomplete-multipart"
+        Status: "Enabled"
+        Prefix: ""
+        AbortIncompleteMultipartUpload:
+          DaysAfterInitiation: 7

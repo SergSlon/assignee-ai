@@ -1,0 +1,19 @@
+id: BP-DYNAMODB-004
+title: "DynamoDB table should enable ContributorInsights for hot-key observability"
+severity: INFO
+resource_type: "AWS::DynamoDB::Table"
+property_path: "ContributorInsightsSpecification.Enabled"
+check_type: "equals"
+expected_value: true
+source: "AWS Well-Architected — Operational Excellence"
+source_id: "OPS-DDB-001"
+description: "ContributorInsights surfaces the top partition keys and most-accessed items in a DynamoDB table, making hot-key problems visible BEFORE they turn into throttling incidents. Without it, the only signal you get is ThrottledRequests in CloudWatch after customers are already being rate-limited. Enabling Contributor Insights costs ~$0.01/hour per table and is the cheapest observability lever DynamoDB offers."
+remediation: "Set ContributorInsightsSpecification.Enabled to true on the table. The setting is enabled separately on each Global Secondary Index — if you have GSIs, set ContributorInsightsSpecification.Enabled=true on each GlobalSecondaryIndexes[] entry too."
+consequence: "Hot-partition problems stay invisible until ThrottledRequests hit a user-facing threshold — by then customers already see 400 errors. Contributor Insights surfaces the hot key a week earlier."
+category: performance
+lastVerified: "2026-04-09"
+blocking: false
+autoFixable: true
+desiredStatePatch:
+  ContributorInsightsSpecification:
+    Enabled: true
