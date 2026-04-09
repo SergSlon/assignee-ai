@@ -1,83 +1,48 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ProvisioningErrorKind } from "../provisioning-port.js";
+import { describe, it, expect } from "vitest";
 
-// ── Mock AWS SDK clients ────────────────────────────────────────────────────
-
-// NOTE: Plain class for client constructors (so they survive mockReset),
-// vi.fn for command constructors (tests assert on .toHaveBeenCalledWith).
-// Command vi.fn implementations are re-installed in beforeEach.
+// A10 (2026-04-09): after SNS Subscription promotion the dispatcher
+// no longer instantiates any AWS SDK client — it is pure in-memory
+// classification logic. The @aws-sdk/client-sns mocks that earlier
+// versions of this file set up are no longer needed.
 //
-// A6 (2026-04-08): Lambda EventSourceMapping was migrated from SDK fallback
-// to CCAPI, so this test file no longer mocks @aws-sdk/client-lambda. SNS
-// Subscription is the only remaining SDK-routed create type.
+// The only things worth testing here are:
+//   - canHandle() / canDelete() return false for every known type
+//     (CCAPI_SDK_ROUTABLE_TYPES is empty after A10)
+//   - isRedirect() returns the right friendly message for the two
+//     remaining redirect-only types
+//     (AWS::Lambda::Permission, AWS::ElastiCache::ReplicationGroup)
+//   - isRedirect() returns null for supported CCAPI types and for
+//     types that were redirect-routed pre-A10 (SNS Subscription)
 
-const mockSnsSend = vi.fn();
-vi.mock("@aws-sdk/client-sns", () => {
-  class SNSClient {
-    send = mockSnsSend;
-  }
-  return {
-    SNSClient,
-    SubscribeCommand: vi.fn(),
-  };
-});
-
-// Import AFTER mocks are set up
 import { SDKFallbackDispatcher } from "../sdk-fallback-dispatcher.js";
-import { SubscribeCommand } from "@aws-sdk/client-sns";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+describe("SDKFallbackDispatcher (A10 — redirect-only)", () => {
+  const dispatcher = new SDKFallbackDispatcher();
 
-const TEST_CONFIG = {
-  accessKeyId: "AKIATEST",
-  secretAccessKey: "test-secret",
-  region: "us-east-1",
-};
-
-let dispatcher: SDKFallbackDispatcher;
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  // Re-install command impls (mockReset wipes them).
-  vi.mocked(SubscribeCommand).mockImplementation(
-    (input) => input as unknown as SubscribeCommand,
-  );
-  dispatcher = new SDKFallbackDispatcher(TEST_CONFIG);
-});
-
-// ── Tests ────────────────────────────────────────────────────────────────────
-
-describe("SDKFallbackDispatcher", () => {
   describe("canHandle", () => {
-    it("returns true for AWS::SNS::Subscription", () => {
-      expect(dispatcher.canHandle("AWS::SNS::Subscription")).toBe(true);
-    });
-
-    it("returns false for AWS::Lambda::EventSourceMapping (migrated to CCAPI by A6)", () => {
-      // A6 (2026-04-08): Lambda EventSourceMapping was removed from
-      // CCAPI_SDK_ROUTABLE_TYPES after a live-AWS probe confirmed CCAPI has
-      // full create/delete/update handlers for the type.
+    it("returns false for every type (CCAPI_SDK_ROUTABLE_TYPES is empty after A10)", () => {
+      // A10: SNS Subscription was the last SDK-routable type. After
+      // promoting it to first-class, there are zero remaining SDK
+      // write paths in this codebase. The canHandle() hook survives
+      // as an always-false extension point.
+      expect(dispatcher.canHandle("AWS::SNS::Subscription")).toBe(false);
       expect(dispatcher.canHandle("AWS::Lambda::EventSourceMapping")).toBe(
         false,
       );
-    });
-
-    it("returns false for AWS::SNS::Topic (SNS Topic delete was migrated to CCAPI by A6)", () => {
       expect(dispatcher.canHandle("AWS::SNS::Topic")).toBe(false);
-    });
-
-    it("returns false for AWS::S3::Bucket (standard CCAPI type)", () => {
       expect(dispatcher.canHandle("AWS::S3::Bucket")).toBe(false);
-    });
-
-    it("returns false for AWS::Lambda::Permission (redirect type, not SDK-routable)", () => {
       expect(dispatcher.canHandle("AWS::Lambda::Permission")).toBe(false);
-    });
-
-    it("returns false for AWS::ElastiCache::ReplicationGroup (redirect type, not SDK-routable)", () => {
       expect(dispatcher.canHandle("AWS::ElastiCache::ReplicationGroup")).toBe(
         false,
       );
+    });
+  });
+
+  describe("canDelete", () => {
+    it("mirrors canHandle — always false after A10", () => {
+      expect(dispatcher.canDelete("AWS::SNS::Subscription")).toBe(false);
+      expect(dispatcher.canDelete("AWS::S3::Bucket")).toBe(false);
+      expect(dispatcher.canDelete("AWS::Lambda::Permission")).toBe(false);
     });
   });
 
@@ -102,96 +67,42 @@ describe("SDKFallbackDispatcher", () => {
       );
     });
 
-    it("returns null for SDK-routable types (SNS Subscription)", () => {
+    it("returns null for AWS::SNS::Subscription after A10 promotion", () => {
+      // Pre-A10 this type was a redirect candidate routed through the
+      // SDK dispatcher. After A10 it has a real plugin + full CCAPI
+      // support and isRedirect() must NOT short-circuit it or the
+      // resource-provisioner node will never reach the CloudControl
+      // CreateResource call.
       expect(dispatcher.isRedirect("AWS::SNS::Subscription")).toBeNull();
+    });
+
+    it("returns null for AWS::Lambda::EventSourceMapping (A6 promotion)", () => {
+      expect(
+        dispatcher.isRedirect("AWS::Lambda::EventSourceMapping"),
+      ).toBeNull();
     });
 
     it("returns null for standard CCAPI types", () => {
       expect(dispatcher.isRedirect("AWS::S3::Bucket")).toBeNull();
+      expect(dispatcher.isRedirect("AWS::EC2::Instance")).toBeNull();
+      expect(dispatcher.isRedirect("AWS::Lambda::Function")).toBeNull();
+      expect(dispatcher.isRedirect("AWS::IAM::Role")).toBeNull();
+    });
+
+    it("returns null for unknown resource types", () => {
+      expect(dispatcher.isRedirect("AWS::Nonexistent::Type")).toBeNull();
+      expect(dispatcher.isRedirect("")).toBeNull();
     });
   });
 
-  describe("subscribe", () => {
-    it("returns subscription ARN on success", async () => {
-      const testArn = "arn:aws:sns:us-east-1:123456789012:my-topic:a1b2c3d4";
-      mockSnsSend.mockResolvedValueOnce({
-        SubscriptionArn: testArn,
-      });
-
-      const [err, result] = await dispatcher.subscribe({
-        TopicArn: "arn:aws:sns:us-east-1:123456789012:my-topic",
-        Protocol: "sqs",
-        Endpoint: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-      });
-
-      expect(err).toBeNull();
-      expect(result).not.toBeNull();
-      expect(result!.identifier).toBe(testArn);
-    });
-
-    it("returns error when SDK returns no SubscriptionArn", async () => {
-      mockSnsSend.mockResolvedValueOnce({});
-
-      const [err, result] = await dispatcher.subscribe({
-        TopicArn: "arn:aws:sns:us-east-1:123456789012:my-topic",
-        Protocol: "sqs",
-        Endpoint: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-      });
-
-      expect(err).not.toBeNull();
-      expect(err!.kind).toBe(ProvisioningErrorKind.UNKNOWN);
-      expect(err!.message).toMatch(/no SubscriptionArn/);
-      expect(result).toBeNull();
-    });
-
-    it("returns typed error on SDK failure", async () => {
-      const sdkError = new Error("Topic not found");
-      sdkError.name = "NotFoundException";
-      mockSnsSend.mockRejectedValueOnce(sdkError);
-
-      const [err, result] = await dispatcher.subscribe({
-        TopicArn: "arn:aws:sns:us-east-1:123456789012:nonexistent",
-        Protocol: "sqs",
-        Endpoint: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-      });
-
-      expect(err).not.toBeNull();
-      expect(err!.kind).toBe(ProvisioningErrorKind.NOT_FOUND);
-      expect(err!.message).toMatch(/Topic not found/);
-      expect(result).toBeNull();
-    });
-
-    it("maps ThrottlingException to THROTTLED", async () => {
-      const sdkError = new Error("Rate exceeded");
-      sdkError.name = "ThrottlingException";
-      mockSnsSend.mockRejectedValueOnce(sdkError);
-
-      const [err, result] = await dispatcher.subscribe({
-        TopicArn: "arn:aws:sns:us-east-1:123456789012:my-topic",
-        Protocol: "sqs",
-        Endpoint: "arn:aws:sqs:us-east-1:123456789012:my-queue",
-      });
-
-      expect(err).not.toBeNull();
-      expect(err!.kind).toBe(ProvisioningErrorKind.THROTTLED);
-      expect(result).toBeNull();
-    });
-
-    it("passes ReturnSubscriptionArn: true", async () => {
-      mockSnsSend.mockResolvedValueOnce({
-        SubscriptionArn: "arn:aws:sns:us-east-1:123456789012:my-topic:sub-id",
-      });
-
-      await dispatcher.subscribe({
-        TopicArn: "arn:aws:sns:us-east-1:123456789012:my-topic",
-        Protocol: "lambda",
-        Endpoint: "arn:aws:lambda:us-east-1:123456789012:function:my-fn",
-      });
-
-      const { SubscribeCommand } = await import("@aws-sdk/client-sns");
-      expect(SubscribeCommand).toHaveBeenCalledWith(
-        expect.objectContaining({ ReturnSubscriptionArn: true }),
-      );
+  describe("construction", () => {
+    it("does not require credentials (pure in-memory classifier)", () => {
+      // Pre-A10 the constructor instantiated an SNSClient from AWS
+      // credentials and threw ConfigurationError if they were
+      // missing. After A10 the dispatcher is pure logic — constructors
+      // must succeed unconditionally so no-credential flows (doctor,
+      // intent-parser, plan preview) don't blow up.
+      expect(() => new SDKFallbackDispatcher()).not.toThrow();
     });
   });
 });

@@ -42,6 +42,10 @@ const NO_TAG_TYPES: Set<string> = new Set([
   // WV4-A: Cross-reference resources don't accept Tags in CloudFormation
   RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT,
   RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION,
+  // A10 (2026-04-09): AWS::SNS::Subscription — CCAPI schema reports
+  // tagging.taggable=false. Injecting Tags causes CCAPI to reject
+  // the create/update with a "Properties validation failed" error.
+  RESOURCE_TYPES.SNS_SUBSCRIPTION,
 ]);
 
 /**

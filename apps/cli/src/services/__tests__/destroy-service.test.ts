@@ -17,13 +17,16 @@ import { MissingAssigneeCredentialsError } from "@assignee/core";
 import { requireAssigneeCredentials } from "../../config/aws-credentials.js";
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
-// A6 (2026-04-08): mockDeleteEventSourceMapping and mockDeleteTopic were
-// removed after Lambda ESM and SNS Topic delete were migrated from SDK
-// fallback to CCAPI. Both types now go through mockDeleteResource.
+// A6  (2026-04-08): mockDeleteEventSourceMapping and mockDeleteTopic were
+//                   removed after Lambda ESM and SNS Topic delete were
+//                   migrated from SDK fallback to CCAPI. Both types now go
+//                   through mockDeleteResource.
+// A10 (2026-04-09): mockUnsubscribe was removed after SNS::Subscription was
+//                   promoted to first-class; destroy now routes through
+//                   mockDeleteResource too.
 const {
   mockDeleteResource,
   mockGetRequestStatus,
-  mockUnsubscribe,
   mockCfSend,
   mockDdbSend,
   mockS3Send,
@@ -31,7 +34,6 @@ const {
 } = vi.hoisted(() => ({
   mockDeleteResource: vi.fn(),
   mockGetRequestStatus: vi.fn(),
-  mockUnsubscribe: vi.fn(),
   mockCfSend: vi.fn(),
   mockDdbSend: vi.fn(),
   mockS3Send: vi.fn(),
@@ -80,10 +82,16 @@ vi.mock("../cloudcontrol-client.js", () => ({
 }));
 
 // ── Mock SDKFallbackDispatcher ────────────────────────────────────────────────
-// After A6, the dispatcher only exposes unsubscribe() (SNS Subscription).
+// A10 (2026-04-09): after SNS Subscription promotion the dispatcher is a
+// redirect-only classifier with no SDK write paths. destroy-service no
+// longer constructs the dispatcher at all, but keeping a trivial mock
+// here guarantees any future regression that re-introduces a dispatcher
+// import surfaces immediately.
 vi.mock("../sdk-fallback-dispatcher.js", () => {
   class SDKFallbackDispatcher {
-    unsubscribe = mockUnsubscribe;
+    canHandle = () => false;
+    canDelete = () => false;
+    isRedirect = () => null;
   }
   return { SDKFallbackDispatcher };
 });
@@ -531,9 +539,6 @@ describe("destroySingleResource", () => {
         "AWS::Lambda::EventSourceMapping",
         "uuid-123",
       );
-      // The A6 migration removed the SDK fallback entirely — unsubscribe is
-      // only used for SNS Subscription, and must not be called here.
-      expect(mockUnsubscribe).not.toHaveBeenCalled();
     });
 
     it("surfaces CloudControl FAILED as a destroy failure", async () => {
@@ -561,22 +566,62 @@ describe("destroySingleResource", () => {
     });
   });
 
-  // ── SDK fallback: SNS Subscription ────────────────────────────────────────
-  describe("SDK fallback — SNS Subscription", () => {
-    it("returns success on successful unsubscribe", async () => {
-      mockUnsubscribe.mockResolvedValue([null, {}]);
+  // ── A10: SNS Subscription delete now routes through CCAPI ────────────────
+  describe("CCAPI path — SNS Subscription (A10)", () => {
+    it("calls CloudControl DeleteResource with the subscription ARN as identifier", async () => {
+      // A10 (2026-04-09): AWS::SNS::Subscription was promoted from
+      // CCAPI_FALLBACK_TYPES to first-class. The previous SDK
+      // UnsubscribeCommand branch is retired — destroy routes
+      // through the standard CCAPI DeleteResource path, same as
+      // every other first-class type. The primary identifier is
+      // /properties/Arn so CCAPI receives the full subscription
+      // ARN verbatim.
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-sub-1" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
 
       const result = await destroySingleResource({
-        arn: "arn:aws:sns:us-east-1:123456:my-topic:sub-id",
+        arn: "arn:aws:sns:us-east-1:123456:my-topic:abcd-1234",
         resourceType: "AWS::SNS::Subscription",
-        identifier: "sub-id",
+        identifier: "arn:aws:sns:us-east-1:123456:my-topic:abcd-1234",
         region: "us-east-1",
       });
 
       expect(result.success).toBe(true);
-      expect(mockUnsubscribe).toHaveBeenCalledWith(
-        "arn:aws:sns:us-east-1:123456:my-topic:sub-id",
+      expect(mockDeleteResource).toHaveBeenCalledWith(
+        "AWS::SNS::Subscription",
+        "arn:aws:sns:us-east-1:123456:my-topic:abcd-1234",
       );
+    });
+
+    it("surfaces CloudControl FAILED as a destroy failure", async () => {
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-sub-fail" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        {
+          operationStatus: "FAILED",
+          statusMessage:
+            "Subscription cannot be deleted in PendingConfirmation state",
+        },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:sns:us-east-1:123456:my-topic:pending-confirm",
+        resourceType: "AWS::SNS::Subscription",
+        identifier: "arn:aws:sns:us-east-1:123456:my-topic:pending-confirm",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("PendingConfirmation");
     });
   });
 
@@ -607,7 +652,6 @@ describe("destroySingleResource", () => {
         "AWS::SNS::Topic",
         "my-topic",
       );
-      expect(mockUnsubscribe).not.toHaveBeenCalled();
     });
   });
 
@@ -626,7 +670,6 @@ describe("destroySingleResource", () => {
       expect(result.error).toContain("manual deletion");
       // Should NOT call any delete method
       expect(mockDeleteResource).not.toHaveBeenCalled();
-      expect(mockUnsubscribe).not.toHaveBeenCalled();
     });
   });
 

@@ -66,12 +66,14 @@ export function createGraph(
 
   const provisioner = new CloudControlAdapter(cloudClient);
 
-  let fallbackDispatcher: SDKFallbackDispatcher | undefined;
-  try {
-    fallbackDispatcher = new SDKFallbackDispatcher(opCreds);
-  } catch {
-    // SDK fallback unavailable (missing credentials) — graph works without it
-  }
+  // A10 (2026-04-09): SDKFallbackDispatcher is now a pure in-memory
+  // redirect classifier — it no longer needs credentials after the
+  // SNS Subscription promotion removed the last SDK write path. The
+  // try/catch that used to tolerate missing credentials is therefore
+  // dead, but we keep the dispatcher as an always-constructed gate
+  // so resource_provisioner can check isRedirect() for the two
+  // remaining CCAPI-gap types (Lambda::Permission, ElastiCache::RG).
+  const fallbackDispatcher: SDKFallbackDispatcher = new SDKFallbackDispatcher();
 
   const llmAdapter: LlmPort =
     options.llmClient ??

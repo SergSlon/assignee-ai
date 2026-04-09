@@ -78,3 +78,12 @@ export const eventsRulePricingDecomposer = createFreeDecomposer(
 export const eventsEventBusPricingDecomposer = createFreeDecomposer(
   RESOURCE_TYPES.EVENTS_EVENT_BUS,
 );
+// A10 (2026-04-09): AWS::SNS::Subscription is pure plumbing — it
+// has no per-subscription charge. All billable traffic is counted
+// by the parent SNS::Topic (publish + delivery fees) and the
+// target service (SQS/Lambda/Firehose/etc.). Decomposer returns []
+// so the subscription shows up in the plan box without double-
+// counting what the topic is already charging for.
+export const snsSubscriptionPricingDecomposer = createFreeDecomposer(
+  RESOURCE_TYPES.SNS_SUBSCRIPTION,
+);

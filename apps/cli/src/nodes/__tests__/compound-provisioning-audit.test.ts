@@ -562,15 +562,22 @@ describe("resourceProvisionerNode — compound context", () => {
       expect(mockProvisioner.createResource).not.toHaveBeenCalled();
     });
 
-    it("dispatches SNS Subscription via SDK fallback in compound flow", async () => {
+    it("routes SNS Subscription through CCAPI in compound flow (A10 — promoted to first-class)", async () => {
+      // A10 (2026-04-09): AWS::SNS::Subscription was promoted out of
+      // CCAPI_FALLBACK_TYPES and now flows through the standard
+      // CloudControl CreateResource path — inside compound flows
+      // too. The dispatcher.subscribe() branch is retired.
       const mockFallback = createMockFallbackDispatcher();
-      mockFallback.canHandle.mockReturnValue(true);
-      mockFallback.subscribe.mockResolvedValueOnce([
+      mockFallback.canHandle.mockReturnValue(false);
+      mockFallback.isRedirect.mockReturnValue(null);
+
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
         null,
-        {
-          identifier:
-            "arn:aws:sns:us-east-1:123456789012:compound-topic:sub-abc",
-        },
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "compound-sns-sub-token" },
       ]);
 
       const result = await resourceProvisionerNode(
@@ -589,11 +596,10 @@ describe("resourceProvisionerNode — compound context", () => {
         >[2],
       );
 
-      expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
-      expect(result.resourceArn).toBe(
-        "arn:aws:sns:us-east-1:123456789012:compound-topic:sub-abc",
-      );
-      expect(mockProvisioner.createResource).not.toHaveBeenCalled();
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      expect(result.requestToken).toBe("compound-sns-sub-token");
+      expect(mockFallback.subscribe).not.toHaveBeenCalled();
+      expect(mockProvisioner.createResource).toHaveBeenCalled();
     });
   });
 });

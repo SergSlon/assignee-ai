@@ -36,6 +36,11 @@ import { efsMountTargetPricingStrategy } from "./strategies/efs-mount-target.js"
 import { eventsRulePricingStrategy } from "./strategies/events-rule.js";
 // A9 (2026-04-09) — EventBridge custom event bus
 import { eventsEventBusPricingStrategy } from "./strategies/events-eventbus.js";
+// A10 (2026-04-09) — SNS Subscription promoted out of CCAPI_FALLBACK_TYPES
+import { snsSubscriptionPricingStrategy } from "./strategies/sns-subscription.js";
+// A11 (2026-04-09) — KMS::Key first-class (customer-managed keys)
+import { kmsKeyPricingStrategy } from "./strategies/kms-key.js";
+import { kmsKeyPricingDecomposer } from "./decomposers/kms-key.js";
 import { ec2PricingDecomposer } from "./decomposers/ec2.js";
 import { rdsPricingDecomposer } from "./decomposers/rds.js";
 import { s3PricingDecomposer } from "./decomposers/s3.js";
@@ -72,6 +77,8 @@ import {
   eventsRulePricingDecomposer,
   // A9 (2026-04-09): EventBridge custom event bus
   eventsEventBusPricingDecomposer,
+  // A10 (2026-04-09): SNS Subscription — cost owned by topic + target
+  snsSubscriptionPricingDecomposer,
 } from "./decomposers/free.js";
 
 /**
@@ -191,6 +198,13 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.EVENTS_EVENT_BUS,
   eventsEventBusPricingStrategy,
 );
+// A10 (2026-04-09) — SNS Subscription (free — cost owned by topic + target)
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.SNS_SUBSCRIPTION,
+  snsSubscriptionPricingStrategy,
+);
+// A11 (2026-04-09) — KMS::Key (customer-managed keys, $1/key/month + reqs)
+defaultPricingRegistry.register(RESOURCE_TYPES.KMS_KEY, kmsKeyPricingStrategy);
 
 /**
  * The default pre-populated pricing decomposer registry (Story 23.1).
@@ -231,6 +245,10 @@ defaultDecomposerRegistry.register(efsPricingDecomposer);
 defaultDecomposerRegistry.register(efsMountTargetPricingDecomposer);
 defaultDecomposerRegistry.register(eventsRulePricingDecomposer);
 defaultDecomposerRegistry.register(eventsEventBusPricingDecomposer);
+// A10 (2026-04-09) — SNS Subscription
+defaultDecomposerRegistry.register(snsSubscriptionPricingDecomposer);
+// A11 (2026-04-09) — KMS::Key
+defaultDecomposerRegistry.register(kmsKeyPricingDecomposer);
 
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";

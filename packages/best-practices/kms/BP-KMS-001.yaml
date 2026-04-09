@@ -1,0 +1,14 @@
+id: BP-KMS-001
+title: "KMS customer-managed keys should have automatic rotation enabled"
+severity: HIGH
+resource_type: "AWS::KMS::Key"
+property_path: "EnableKeyRotation"
+check_type: "equals"
+expected_value: true
+source: "AWS KMS Best Practices"
+source_id: "KMS-BP-01"
+description: "Automatic annual rotation replaces the underlying cryptographic material without changing the KeyId — consumers keep working, old ciphertexts stay readable, and the cryptographic exposure of any single key version is bounded to ~365 days of traffic. Applies only to SYMMETRIC_DEFAULT keys; asymmetric and HMAC keys ignore this field and must be rotated manually by creating a new key. Mandatory for CMKs under PCI-DSS, HIPAA, SOC 2, and FedRAMP compliance regimes."
+remediation: "Set EnableKeyRotation=true at key creation. For existing keys, call kms:EnableKeyRotation via the console, CLI, or Terraform — no downtime, no ciphertext migration needed. Rotation takes effect at the next annual boundary. Asymmetric + HMAC KeySpec values ignore this field; rotate those by creating a new key and updating consumers."
+consequence: "A single key version protects years of cumulative ciphertext; compromise exposes every historical message. Default auditor finding on any un-rotated CMK."
+category: security
+lastVerified: "2026-04-09"

@@ -1343,6 +1343,22 @@ const snsRules: RuleSpec[] = [
     checkType: "policy_antipattern",
     expectedValue: "allow-plus-not-principal",
   },
+  // A10 (2026-04-09): AWS::SNS::Subscription promoted to first-class.
+  // Closes the #1 SNS failure mode (silent drop on delivery exhaustion)
+  // by requiring RedrivePolicy.deadLetterTargetArn to point at an SQS
+  // DLQ. Mirrors BP-EVENTBUS-003 for the EventBridge custom event bus.
+  // Named BP-SNS-007 (not BP-SNS-SUB-001) because the manifest schema
+  // validator enforces a strict BP-{SERVICE}-{NNN} ID pattern — the
+  // SNS service already owns BP-SNS-001..006 on AWS::SNS::Topic, so
+  // this entry continues the sequence even though it targets a
+  // different CloudFormation resource type.
+  {
+    id: "BP-SNS-007",
+    resourceType: "AWS::SNS::Subscription",
+    propertyPath: "RedrivePolicy.deadLetterTargetArn",
+    checkType: "exists",
+    expectedValue: true,
+  },
 ];
 
 const apigwRules: RuleSpec[] = [
@@ -1642,6 +1658,17 @@ const eventsRules: RuleSpec[] = [
   },
 ];
 
+// A11 (2026-04-09) — KMS::Key first-class BP rules
+const kmsRules: RuleSpec[] = [
+  {
+    id: "BP-KMS-001",
+    resourceType: "AWS::KMS::Key",
+    propertyPath: "EnableKeyRotation",
+    checkType: "equals",
+    expectedValue: true,
+  },
+];
+
 const asgRules: RuleSpec[] = [
   {
     id: "BP-ASG-001",
@@ -1913,7 +1940,7 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("SNS (6 rules)", () => {
+  describe("SNS (7 rules)", () => {
     for (const spec of snsRules) {
       runRuleTests(spec);
     }
@@ -1978,6 +2005,12 @@ describe("BP All Rules Audit", () => {
 
   describe("EFS (2 rules — A1)", () => {
     for (const spec of efsRules) {
+      runRuleTests(spec);
+    }
+  });
+
+  describe("KMS (1 Key rule — A11)", () => {
+    for (const spec of kmsRules) {
       runRuleTests(spec);
     }
   });
@@ -2048,6 +2081,7 @@ describe("BP All Rules Audit", () => {
       ...asgRules,
       ...efsRules,
       ...eventsRules,
+      ...kmsRules,
     ];
 
     it("covers exactly 165 rule specs", () => {
@@ -2089,7 +2123,17 @@ describe("BP All Rules Audit", () => {
       //   BP-EVENTBUS-002 Description hygiene, BP-EVENTBUS-003 DLQ
       //   for unrouted events). Locks in the secure-by-default
       //   posture for the new first-class type.
-      expect(allSpecs.length).toBe(170);
+      // + 1 A10 SNS Subscription rule  (BP-SNS-007 RedrivePolicy DLQ
+      //   required). Closes the silent-drop failure mode on the
+      //   newly-promoted first-class AWS::SNS::Subscription type.
+      //   Named BP-SNS-007 (not BP-SNS-SUB-001) so it matches the
+      //   manifest-schema BP-{SERVICE}-{NNN} pattern.
+      // + 1 A11 KMS::Key rule          (BP-KMS-001 EnableKeyRotation
+      //   must be true). Enforces the compliance default that every
+      //   auditor checks for on the newly-promoted first-class
+      //   AWS::KMS::Key type — automatic annual rotation bounds
+      //   single-key-version exposure to ~365 days of ciphertext.
+      expect(allSpecs.length).toBe(172);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

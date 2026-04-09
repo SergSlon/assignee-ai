@@ -190,15 +190,21 @@ export function operatorPolicy(
   const { ccapiActions } = collectServiceActions();
 
   // SDK fallback actions for types that bypass CloudControl.
-  // A6 (2026-04-08): Lambda EventSourceMapping was migrated to CCAPI so
-  // the LAMBDA_*_ESM actions were removed from this block — the CCAPI
-  // create handler perms for AWS::Lambda::EventSourceMapping come from
-  // the create handler metadata via iam-actions.ts if ever needed, and
-  // the SDK path no longer exists. Only SNS Subscription remains on SDK,
-  // plus the SSH key-pair companion operations.
+  // A6  (2026-04-08): Lambda EventSourceMapping was migrated to CCAPI so
+  //                   the LAMBDA_*_ESM actions were removed from this
+  //                   block — the CCAPI create handler perms come from
+  //                   iam-actions.ts instead.
+  // A10 (2026-04-09): SNS::Subscription was promoted to first-class. The
+  //                   sns:Subscribe / sns:Unsubscribe perms moved to
+  //                   the serviceActionMap[SNS_SUBSCRIPTION] entry in
+  //                   iam-actions.ts so they are gated by the CCAPI
+  //                   TypeName Condition instead of granted unscoped.
+  //                   Only the SSH key-pair companion operations
+  //                   (auto-created alongside EC2::Instance) remain
+  //                   unscoped because there is no CCAPI surface for
+  //                   them — EC2::KeyPair's CCAPI schema lacks the
+  //                   readable KeyMaterial field.
   const sdkFallbackActions = [
-    IamAction.SNS_SUBSCRIBE,
-    IamAction.SNS_UNSUBSCRIBE,
     // SSH key pair auto-create flow (Epic 41 — SSH intent bundle)
     IamAction.EC2_CREATE_KEY_PAIR,
     IamAction.EC2_DELETE_KEY_PAIR,

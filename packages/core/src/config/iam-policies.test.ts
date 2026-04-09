@@ -89,18 +89,26 @@ describe("IAM Policy Generators", () => {
 
     it("includes SDK fallback actions for CCAPI bypass types", () => {
       // Tier C: strengthened
-      // A6 (2026-04-08): lambda:CreateEventSourceMapping was removed
-      // from sdkFallbackActions when Lambda EventSourceMapping was
-      // migrated from SDK fallback to CCAPI. The SNS Subscription and
-      // SSH key-pair companion perms are the only remaining entries.
+      // A6  (2026-04-08): lambda:CreateEventSourceMapping was removed
+      //                   from sdkFallbackActions when Lambda
+      //                   EventSourceMapping was migrated from SDK
+      //                   fallback to CCAPI.
+      // A10 (2026-04-09): sns:Subscribe + sns:Unsubscribe were removed
+      //                   when AWS::SNS::Subscription was promoted to
+      //                   first-class. Those actions moved to the
+      //                   SNS_SUBSCRIPTION entry in
+      //                   serviceActionMap (iam-actions.ts) and are
+      //                   now gated by the cloudcontrol:TypeName
+      //                   Condition instead of granted unscoped.
+      //                   The only remaining entries are the SSH
+      //                   key-pair companion perms (EC2::Instance
+      //                   auto-provisioning).
       const policy = operatorPolicy();
       const fallbackStatement = policy.Statement.find(
         (s) => s.Sid === "SdkFallbackActions",
       )!;
       expect(fallbackStatement.Sid).toBe("SdkFallbackActions");
       const required = [
-        "sns:Subscribe",
-        "sns:Unsubscribe",
         // SSH key pair auto-create flow (Epic 41 — SSH intent bundle)
         "ec2:CreateKeyPair",
         "ec2:DeleteKeyPair",
@@ -118,6 +126,12 @@ describe("IAM Policy Generators", () => {
       expect(fallbackStatement.Action).not.toContain(
         "lambda:DeleteEventSourceMapping",
       );
+      // A10: sns:Subscribe / sns:Unsubscribe moved from
+      // sdkFallbackActions to the scoped serviceActionMap entry for
+      // AWS::SNS::Subscription. They must no longer appear in the
+      // unscoped SdkFallbackActions statement.
+      expect(fallbackStatement.Action).not.toContain("sns:Subscribe");
+      expect(fallbackStatement.Action).not.toContain("sns:Unsubscribe");
     });
 
     it("includes Bedrock invoke actions on the configured model resource", () => {

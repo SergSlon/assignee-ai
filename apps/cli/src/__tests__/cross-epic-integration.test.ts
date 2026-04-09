@@ -273,10 +273,13 @@ describe("Cross-epic: schema fetch -> plan generation", () => {
   it("SUPPORTED_TYPES_ARRAY covers all expected resource types", async () => {
     const { SUPPORTED_TYPES_ARRAY } = await import("@assignee/core");
 
-    // A1 (2026-04-08): EFS + EFS::MountTarget lifted the count to 27.
-    // A8 (2026-04-08): EventBridge Rule lifted the count to 28.
-    // A9 (2026-04-09): EventBridge EventBus lifted the count to 29.
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(29);
+    // A1  (2026-04-08): EFS + EFS::MountTarget lifted the count to 27.
+    // A8  (2026-04-08): EventBridge Rule lifted the count to 28.
+    // A9  (2026-04-09): EventBridge EventBus lifted the count to 29.
+    // A10 (2026-04-09): SNS Subscription promoted from CCAPI_FALLBACK_TYPES
+    //                   to first-class, lifting the count to 30.
+    // A11 (2026-04-09): KMS::Key first-class (symmetric CMK), count 31.
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(31);
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::S3::Bucket");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EC2::Instance");

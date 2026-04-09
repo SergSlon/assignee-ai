@@ -29,4 +29,6 @@ export const PriceUnit = {
   PER_HOUR_LONG: "/hour",
   PER_GB_MONTH_LONG: "/GB-month",
   PER_MILLION_REQUESTS_LONG: "/million requests",
+  // A11 (2026-04-09): AWS::KMS::Key — $1/key-month (symmetric + asymmetric)
+  PER_KEY_MONTH: "/key-mo",
 } as const;

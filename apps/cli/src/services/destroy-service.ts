@@ -3,7 +3,6 @@
  *
  * Provides a `destroySingleResource()` function that handles:
  * - CloudControl API deletion with polling
- * - SDK fallback for SNS Subscription (the only remaining CCAPI gap)
  * - Pre-delete hooks (DynamoDB deletion protection)
  * - Redirect types (returns error)
  *
@@ -11,12 +10,13 @@
  * suitable for both single-resource and bulk-destroy workflows.
  *
  * @see Story 36.1
- * @see A6 (2026-04-08) — Lambda EventSourceMapping + SNS Topic delete
- *      migrated from SDK fallback to CCAPI.
+ * @see A6  (2026-04-08) — Lambda EventSourceMapping + SNS Topic delete
+ *                         migrated from SDK fallback to CCAPI.
+ * @see A10 (2026-04-09) — SNS Subscription promoted to first-class;
+ *                         SDK Unsubscribe path removed from this file.
  */
 
 import {
-  CCAPI_FALLBACK_TYPES,
   CCAPI_REDIRECT_TYPES,
   COMPANION_RESOURCE_TYPES,
   RESOURCE_TYPES,
@@ -25,7 +25,6 @@ import { createCloudControlClient } from "./cloudcontrol-client.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { ProvisioningErrorKind } from "./provisioning-port.js";
-import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import {
   requireAssigneeCredentials,
@@ -327,32 +326,10 @@ export async function destroySingleResource(
     }
   }
 
-  // ── SDK fallback for CCAPI gap types ─────────────────────────────────
-  // After A6, the only type that still needs SDK-based delete is
-  // AWS::SNS::Subscription. Lambda EventSourceMapping and SNS Topic now
-  // fall through to the standard CCAPI delete path below.
-  if (resourceType === CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION) {
-    try {
-      const dispatcher = new SDKFallbackDispatcher(awsConfig);
-      const [deleteErr] = await dispatcher.unsubscribe(resource.arn);
-      if (deleteErr) {
-        return {
-          ...baseResult,
-          success: false,
-          error: `Failed to destroy resource: ${deleteErr.message}`,
-        };
-      }
-
-      return { ...baseResult, success: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        ...baseResult,
-        success: false,
-        error: `Failed to destroy resource: ${message}`,
-      };
-    }
-  }
+  // A10 (2026-04-09): SNS Subscription is no longer routed through
+  // the SDK dispatcher — it's now a first-class CCAPI type with its
+  // own plugin and flows through the standard DeleteResource path
+  // below. The dispatcher.unsubscribe() branch was removed.
 
   // ── CloudFront distribution: disable then delete (SDK only) ──────────
   if (resourceType === "AWS::CloudFront::Distribution") {

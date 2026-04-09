@@ -1,38 +1,39 @@
 /**
- * SDKFallbackDispatcher — handles resource types with known CCAPI gaps.
- * Routes to native AWS SDK calls for types that Cloud Control API cannot provision.
+ * SDKFallbackDispatcher — gate for resource types with known CCAPI gaps.
  *
- * Follows the same Result tuple pattern as ProvisioningPort for consistency.
- * Uses ASSIGNEE_OPERATOR_* credentials for provisioning.
+ * Historically this class also drove direct AWS SDK write paths for
+ * types that CloudControl could not provision. After A10 there are
+ * no remaining SDK-write code paths in this codebase:
+ *
+ *   - A6  (2026-04-08): Lambda EventSourceMapping + SNS Topic delete
+ *                       migrated to CCAPI (live-AWS probe confirmed
+ *                       full handler support).
+ *   - A10 (2026-04-09): AWS::SNS::Subscription promoted to first-class
+ *                       with its own ResourcePlugin. Subscribe /
+ *                       Unsubscribe SDK commands removed; CCAPI
+ *                       handles the full CRUD lifecycle.
+ *
+ * The class survives in a slimmer form because the remaining entries
+ * in CCAPI_FALLBACK_TYPES (LAMBDA_PERMISSION, ELASTICACHE_REPLICATION_GROUP)
+ * are pure redirect types — the resource_provisioner node still asks
+ * `dispatcher.isRedirect()` to emit a friendly "use X instead"
+ * message before attempting the CloudControl path. `canHandle()` and
+ * `canDelete()` are retained as always-false hooks so a future
+ * SDK-only promotion wouldn't require re-plumbing the graph node.
+ *
+ * No AWS SDK client is instantiated here anymore — the class is pure
+ * in-memory lookup logic and can be safely constructed without
+ * credentials (previously the SNS-client setup required valid
+ * access keys which made the class hostile to no-credential flows).
  *
  * @see Story 7.7 — SDK Fallback Dispatcher for CCAPI Gaps
- * @see A6 (2026-04-08) — Lambda EventSourceMapping and SNS Topic delete
- *      migrated to CCAPI after live-AWS probes confirmed full support.
- *      SNS Subscription is the only remaining SDK-routed type.
  */
 
-import {
-  SNSClient,
-  SubscribeCommand,
-  UnsubscribeCommand,
-} from "@aws-sdk/client-sns";
 import {
   CCAPI_FALLBACK_TYPES,
   CCAPI_SDK_ROUTABLE_TYPES,
   CCAPI_REDIRECT_TYPES,
-  ConfigurationError,
-  CfnKey,
 } from "@assignee/core";
-import {
-  ProvisioningErrorKind,
-  type ProvisioningPortError,
-} from "./provisioning-port.js";
-import type { AwsConfig } from "./cloudcontrol-client.js";
-import { AWS_REGION, CredentialError } from "../config/constants.js";
-import { AwsErrorName } from "../constants/aws-errors.js";
-
-/** Result type alias following error-first tuple convention. */
-type FallbackResult<T> = [ProvisioningPortError, null] | [null, T];
 
 /** Redirect info returned when a resource type is unsupported but has a known alternative. */
 export interface RedirectInfo {
@@ -41,43 +42,19 @@ export interface RedirectInfo {
 }
 
 /**
- * Dispatches provisioning calls to native AWS SDK for resource types
- * that cannot be provisioned through Cloud Control API.
+ * Classifies CCAPI-gap resource types into redirect or no-op.
  *
- * Supported SDK routes:
- *   - AWS::SNS::Subscription → SNS SDK SubscribeCommand
- *
- * Redirect types (return error with guidance):
+ * Redirect types (return friendly guidance from isRedirect):
  *   - AWS::Lambda::Permission → use AWS::Lambda::PermissionPolicy
  *   - AWS::ElastiCache::ReplicationGroup → use AWS::ElastiCache::ServerlessCache
+ *
+ * SDK-routable types (handled by canHandle):
+ *   - (none after A10 — empty CCAPI_SDK_ROUTABLE_TYPES)
  */
 export class SDKFallbackDispatcher {
-  private readonly snsClient: SNSClient;
-
-  constructor(config: AwsConfig) {
-    if (!config.accessKeyId) {
-      throw new ConfigurationError(CredentialError.MISSING_ACCESS_KEY);
-    }
-    if (!config.secretAccessKey) {
-      throw new ConfigurationError(CredentialError.MISSING_SECRET_KEY);
-    }
-
-    const credentials = {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    };
-
-    const region = config.region || AWS_REGION;
-
-    this.snsClient = new SNSClient({
-      region,
-      credentials,
-    });
-  }
-
   /**
    * Returns true if the given resource type can be handled by direct SDK calls.
-   * @param resourceType - CloudFormation resource type string
+   * Always false after A10 — kept as a stable extension hook.
    */
   canHandle(resourceType: string): boolean {
     return (CCAPI_SDK_ROUTABLE_TYPES as readonly string[]).includes(
@@ -88,7 +65,6 @@ export class SDKFallbackDispatcher {
   /**
    * Returns redirect info if the resource type is unsupported and has a known alternative.
    * Returns null if the type is not a redirect type.
-   * @param resourceType - CloudFormation resource type string
    */
   isRedirect(resourceType: string): RedirectInfo | null {
     const alternative = CCAPI_REDIRECT_TYPES[resourceType];
@@ -116,105 +92,11 @@ export class SDKFallbackDispatcher {
 
   /**
    * Returns true if the given resource type can be deleted by direct SDK calls.
-   * Mirrors canHandle() for delete operations.
-   * @param resourceType - CloudFormation resource type string
+   * Always false after A10. Kept as a stable hook to mirror canHandle().
    */
   canDelete(resourceType: string): boolean {
     return (CCAPI_SDK_ROUTABLE_TYPES as readonly string[]).includes(
       resourceType,
     );
   }
-
-  /**
-   * Unsubscribes an SNS Subscription via the SNS SDK.
-   *
-   * @param subscriptionArn - The subscription ARN to remove
-   * @returns Error-first tuple with void result on success
-   */
-  async unsubscribe(
-    subscriptionArn: string,
-  ): Promise<FallbackResult<{ success: true }>> {
-    try {
-      await this.snsClient.send(
-        new UnsubscribeCommand({ SubscriptionArn: subscriptionArn }),
-      );
-      return [null, { success: true }];
-    } catch (err) {
-      return [classifySdkError(err), null];
-    }
-  }
-
-  /**
-   * Creates an SNS Subscription via the SNS SDK.
-   *
-   * @param desiredState - Resource properties matching CloudFormation schema
-   * @returns Error-first tuple with the subscription ARN as identifier on success
-   */
-  async subscribe(
-    desiredState: Record<string, unknown>,
-  ): Promise<FallbackResult<{ identifier: string }>> {
-    try {
-      const command = new SubscribeCommand({
-        TopicArn: desiredState[CfnKey.TOPIC_ARN] as string,
-        Protocol: desiredState[CfnKey.PROTOCOL] as string,
-        Endpoint: desiredState[CfnKey.ENDPOINT] as string,
-        ReturnSubscriptionArn: true,
-      });
-
-      const result = await this.snsClient.send(command);
-
-      if (!result.SubscriptionArn) {
-        return [
-          {
-            kind: ProvisioningErrorKind.UNKNOWN,
-            message: "SubscribeCommand returned no SubscriptionArn",
-          },
-          null,
-        ];
-      }
-
-      return [null, { identifier: result.SubscriptionArn }];
-    } catch (err) {
-      return [classifySdkError(err), null];
-    }
-  }
-}
-
-/**
- * Classifies a generic SDK error into a ProvisioningPortError.
- * @param err - The caught error from an AWS SDK call
- */
-function classifySdkError(err: unknown): ProvisioningPortError {
-  if (err instanceof Error) {
-    const name = err.name;
-    if (
-      name === AwsErrorName.RESOURCE_NOT_FOUND ||
-      name === AwsErrorName.NOT_FOUND
-    ) {
-      return { kind: ProvisioningErrorKind.NOT_FOUND, message: err.message };
-    }
-    if (
-      name === AwsErrorName.RESOURCE_CONFLICT ||
-      name === AwsErrorName.INVALID_PARAMETER
-    ) {
-      return {
-        kind: ProvisioningErrorKind.ALREADY_EXISTS,
-        message: err.message,
-      };
-    }
-    if (
-      name === AwsErrorName.TOO_MANY_REQUESTS ||
-      name === AwsErrorName.THROTTLING
-    ) {
-      return { kind: ProvisioningErrorKind.THROTTLED, message: err.message };
-    }
-    if (name === AwsErrorName.SERVICE_EXCEPTION) {
-      return {
-        kind: ProvisioningErrorKind.SERVICE_ERROR,
-        message: err.message,
-      };
-    }
-    return { kind: ProvisioningErrorKind.UNKNOWN, message: err.message };
-  }
-  return { kind: ProvisioningErrorKind.UNKNOWN, message: String(err) };
 }
