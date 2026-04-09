@@ -254,6 +254,20 @@ const COMPOUND_CROSS_REF_KEYWORDS: Array<{
     ],
     resourceType: RESOURCE_TYPES.EVENTS_API_DESTINATION,
   },
+  // A14 (2026-04-09): CloudFront::Distribution classification. Priority
+  // block so the unique phrases win — "cdn" / "cloudfront" are distinct
+  // enough that no other entry in the regular table would match them.
+  {
+    keywords: [
+      "cloudfront",
+      "cloud front",
+      "cdn",
+      "content delivery network",
+      "cloudfront distribution",
+      "edge cache",
+    ],
+    resourceType: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
+  },
 ];
 
 /**

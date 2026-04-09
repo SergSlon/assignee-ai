@@ -97,6 +97,8 @@ describe("intentParserNode", () => {
     expect(SUPPORTED_TYPES).toContain("AWS::Events::Connection");
     // A13 (2026-04-09): Events::ApiDestination first-class, count 33.
     expect(SUPPORTED_TYPES).toContain("AWS::Events::ApiDestination");
-    expect(SUPPORTED_TYPES).toHaveLength(33);
+    // A14 (2026-04-09): CloudFront::Distribution first-class, count 34.
+    expect(SUPPORTED_TYPES).toContain("AWS::CloudFront::Distribution");
+    expect(SUPPORTED_TYPES).toHaveLength(34);
   });
 });

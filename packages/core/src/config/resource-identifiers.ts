@@ -91,6 +91,13 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   // is the user-supplied Name (createOnly). Same Read-Before-Write
   // semantics as Events::Connection above.
   [RESOURCE_TYPES.EVENTS_API_DESTINATION]: "Name",
+  // A14 (2026-04-09): AWS::CloudFront::Distribution primary
+  // identifier is the auto-generated Id (readOnly in the CCAPI
+  // schema, alphanumeric 14-char string like "E1ABCDEFG1234H").
+  // The Id is never present in desiredState at plan time, so the
+  // state guard skips Read-Before-Write for this type — same
+  // pattern as EFS::FileSystem and KMS::Key.
+  [RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION]: "Id",
 } as const;
 
 /**

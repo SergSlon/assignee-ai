@@ -1,44 +1,45 @@
 # Supported Resource Types
 
-assignee.ai supports 33 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
+assignee.ai supports 34 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
 
 ## Resource Type Table
 
-| #   | CloudFormation Type                         | Short Name           | Plugin                | Co-provisions |
-| --- | ------------------------------------------- | -------------------- | --------------------- | ------------- |
-| 1   | `AWS::S3::Bucket`                           | S3 Bucket            | s3-bucket             | -             |
-| 2   | `AWS::SSM::Parameter`                       | SSM Parameter        | ssm-parameter         | -             |
-| 3   | `AWS::IAM::Role`                            | IAM Role             | iam-role              | -             |
-| 4   | `AWS::EC2::Instance`                        | EC2 Instance         | ec2-instance          | -             |
-| 5   | `AWS::RDS::DBInstance`                      | RDS Database         | rds-dbinstance        | -             |
-| 6   | `AWS::Lambda::Function`                     | Lambda Function      | lambda-function       | LogGroup      |
-| 7   | `AWS::EC2::VPC`                             | VPC                  | vpc                   | -             |
-| 8   | `AWS::EC2::Subnet`                          | Subnet               | subnet                | -             |
-| 9   | `AWS::EC2::SecurityGroup`                   | Security Group       | security-group        | -             |
-| 10  | `AWS::DynamoDB::Table`                      | DynamoDB Table       | dynamodb-table        | -             |
-| 11  | `AWS::SQS::Queue`                           | SQS Queue            | sqs-queue             | -             |
-| 12  | `AWS::SNS::Topic`                           | SNS Topic            | sns-topic             | -             |
-| 13  | `AWS::ElasticLoadBalancingV2::LoadBalancer` | ALB/NLB              | elbv2-loadbalancer    | -             |
-| 14  | `AWS::ECS::Cluster`                         | ECS Cluster          | ecs-cluster           | LogGroup      |
-| 15  | `AWS::ECR::Repository`                      | ECR Repository       | ecr-repository        | -             |
-| 16  | `AWS::Logs::LogGroup`                       | CloudWatch Log Group | logs-loggroup         | -             |
-| 17  | `AWS::EC2::InternetGateway`                 | Internet Gateway     | ec2-internet-gateway  | -             |
-| 18  | `AWS::EC2::RouteTable`                      | Route Table          | ec2-route-table       | -             |
-| 19  | `AWS::EC2::Route`                           | Route                | ec2-route             | -             |
-| 20  | `AWS::EC2::NatGateway`                      | NAT Gateway          | ec2-nat-gateway       | -             |
-| 21  | `AWS::ApiGatewayV2::Api`                    | API Gateway V2       | apigatewayv2-api      | -             |
-| 22  | `AWS::CloudWatch::Alarm`                    | CloudWatch Alarm     | cloudwatch-alarm      | -             |
-| 23  | `AWS::SecretsManager::Secret`               | Secrets Manager      | secretsmanager-secret | -             |
-| 24  | `AWS::EC2::VPCGatewayAttachment`            | VPC Gateway Attach   | (compound-only)       | -             |
-| 25  | `AWS::EC2::SubnetRouteTableAssociation`     | Subnet→RT Assoc      | (compound-only)       | -             |
-| 26  | `AWS::EFS::FileSystem` (A1)                 | EFS File System      | efs-file-system       | -             |
-| 27  | `AWS::EFS::MountTarget` (A1 follow-up)      | EFS Mount Target     | efs-mount-target      | -             |
-| 28  | `AWS::Events::Rule` (A8)                    | EventBridge Rule     | events-rule           | -             |
-| 29  | `AWS::Events::EventBus` (A9)                | EventBridge EventBus | events-eventbus       | -             |
-| 30  | `AWS::SNS::Subscription` (A10)              | SNS Subscription     | sns-subscription      | -             |
-| 31  | `AWS::KMS::Key` (A11)                       | KMS Key (CMK)        | kms-key               | -             |
-| 32  | `AWS::Events::Connection` (A12)             | EventBridge Conn.    | events-connection     | Secret (auto) |
-| 33  | `AWS::Events::ApiDestination` (A13)         | EventBridge ApiDest. | events-apidestination | -             |
+| #   | CloudFormation Type                         | Short Name           | Plugin                  | Co-provisions |
+| --- | ------------------------------------------- | -------------------- | ----------------------- | ------------- |
+| 1   | `AWS::S3::Bucket`                           | S3 Bucket            | s3-bucket               | -             |
+| 2   | `AWS::SSM::Parameter`                       | SSM Parameter        | ssm-parameter           | -             |
+| 3   | `AWS::IAM::Role`                            | IAM Role             | iam-role                | -             |
+| 4   | `AWS::EC2::Instance`                        | EC2 Instance         | ec2-instance            | -             |
+| 5   | `AWS::RDS::DBInstance`                      | RDS Database         | rds-dbinstance          | -             |
+| 6   | `AWS::Lambda::Function`                     | Lambda Function      | lambda-function         | LogGroup      |
+| 7   | `AWS::EC2::VPC`                             | VPC                  | vpc                     | -             |
+| 8   | `AWS::EC2::Subnet`                          | Subnet               | subnet                  | -             |
+| 9   | `AWS::EC2::SecurityGroup`                   | Security Group       | security-group          | -             |
+| 10  | `AWS::DynamoDB::Table`                      | DynamoDB Table       | dynamodb-table          | -             |
+| 11  | `AWS::SQS::Queue`                           | SQS Queue            | sqs-queue               | -             |
+| 12  | `AWS::SNS::Topic`                           | SNS Topic            | sns-topic               | -             |
+| 13  | `AWS::ElasticLoadBalancingV2::LoadBalancer` | ALB/NLB              | elbv2-loadbalancer      | -             |
+| 14  | `AWS::ECS::Cluster`                         | ECS Cluster          | ecs-cluster             | LogGroup      |
+| 15  | `AWS::ECR::Repository`                      | ECR Repository       | ecr-repository          | -             |
+| 16  | `AWS::Logs::LogGroup`                       | CloudWatch Log Group | logs-loggroup           | -             |
+| 17  | `AWS::EC2::InternetGateway`                 | Internet Gateway     | ec2-internet-gateway    | -             |
+| 18  | `AWS::EC2::RouteTable`                      | Route Table          | ec2-route-table         | -             |
+| 19  | `AWS::EC2::Route`                           | Route                | ec2-route               | -             |
+| 20  | `AWS::EC2::NatGateway`                      | NAT Gateway          | ec2-nat-gateway         | -             |
+| 21  | `AWS::ApiGatewayV2::Api`                    | API Gateway V2       | apigatewayv2-api        | -             |
+| 22  | `AWS::CloudWatch::Alarm`                    | CloudWatch Alarm     | cloudwatch-alarm        | -             |
+| 23  | `AWS::SecretsManager::Secret`               | Secrets Manager      | secretsmanager-secret   | -             |
+| 24  | `AWS::EC2::VPCGatewayAttachment`            | VPC Gateway Attach   | (compound-only)         | -             |
+| 25  | `AWS::EC2::SubnetRouteTableAssociation`     | Subnet→RT Assoc      | (compound-only)         | -             |
+| 26  | `AWS::EFS::FileSystem` (A1)                 | EFS File System      | efs-file-system         | -             |
+| 27  | `AWS::EFS::MountTarget` (A1 follow-up)      | EFS Mount Target     | efs-mount-target        | -             |
+| 28  | `AWS::Events::Rule` (A8)                    | EventBridge Rule     | events-rule             | -             |
+| 29  | `AWS::Events::EventBus` (A9)                | EventBridge EventBus | events-eventbus         | -             |
+| 30  | `AWS::SNS::Subscription` (A10)              | SNS Subscription     | sns-subscription        | -             |
+| 31  | `AWS::KMS::Key` (A11)                       | KMS Key (CMK)        | kms-key                 | -             |
+| 32  | `AWS::Events::Connection` (A12)             | EventBridge Conn.    | events-connection       | Secret (auto) |
+| 33  | `AWS::Events::ApiDestination` (A13)         | EventBridge ApiDest. | events-apidestination   | -             |
+| 34  | `AWS::CloudFront::Distribution` (A14)       | CloudFront CDN       | cloudfront-distribution | -             |
 
 A **generic plugin** handles any resource type not covered by a dedicated plugin, using CloudFormation schema defaults.
 

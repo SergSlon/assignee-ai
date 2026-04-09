@@ -114,6 +114,38 @@ export const SUPPORTED_TYPES_ARRAY = [
   // InvocationEndpoint, HttpMethod]. Not taggable. Only events:*
   // perms needed — the cross-service work lives on Connection.
   "AWS::Events::ApiDestination",
+  // A14 (2026-04-09): AWS::CloudFront::Distribution first-class.
+  // CCAPI schema probed 2026-04-09: all 5 handlers, primaryIdentifier
+  // /properties/Id (auto-generated, readOnly), required=[DistributionConfig],
+  // no createOnly fields, tagging.taggable=true.
+  //
+  // The DistributionConfig property is a deeply-nested object
+  // (~300 leaf fields across Origins, CacheBehaviors, Restrictions,
+  // ViewerCertificate, CustomErrorResponses, Logging). The plugin
+  // surfaces it as a raw JSON field with shape validation — users
+  // paste the JSON from AWS docs or the /static-website compound
+  // pattern. Modeling it as conditional showIf fields would require
+  // ~30 nested form widgets that no one would actually use.
+  //
+  // The existing static-website compound pattern keeps its
+  // post-provision SDK path (provisionable: false + direct
+  // CloudFrontClient calls) because migrating that compound to
+  // CCAPI would require co-promoting CloudFront::OriginAccessControl
+  // and wiring up the new resource dependency graph. Deferred to a
+  // future slice — the first-class promotion here is ADDITIVE and
+  // lets users provision standalone distributions without touching
+  // the compound.
+  //
+  // Policy-size safety: cloudfront:* actions already live on the
+  // S3_BUCKET iam-actions entry (because the static-website compound
+  // grants them for post-provision CloudFront work). The dedup in
+  // collectServiceActions() means this promotion only adds the DIFF
+  // — CreateDistributionWithTags, UntagResource,
+  // UpdateDistributionWithStagingConfig, CreateConnectionGroup —
+  // plus the cloudcontrol:TypeName entry in core policy. Net
+  // services-policy cost is ~100 bytes, well within the 865-byte
+  // headroom left after A13.
+  "AWS::CloudFront::Distribution",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -165,6 +197,8 @@ export const RESOURCE_TYPES = {
   EVENTS_CONNECTION: "AWS::Events::Connection",
   // A13 (2026-04-09) — Events::ApiDestination (outbound HTTP endpoint)
   EVENTS_API_DESTINATION: "AWS::Events::ApiDestination",
+  // A14 (2026-04-09) — CloudFront::Distribution first-class
+  CLOUDFRONT_DISTRIBUTION: "AWS::CloudFront::Distribution",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */
@@ -223,7 +257,8 @@ export const LIST_RESOURCE_TYPES = {
   // A8 (2026-04-08): EVENTS_RULE promoted to SUPPORTED_TYPES_ARRAY /
   // RESOURCE_TYPES — full plugin, pricing, IAM actions, BP rules.
   // Listing + destroy routes still work via the main registry.
-  CLOUDFRONT_DISTRIBUTION: "AWS::CloudFront::Distribution",
+  // A14 (2026-04-09): CLOUDFRONT_DISTRIBUTION removed from here —
+  // promoted to first-class in SUPPORTED_TYPES_ARRAY above.
   EKS_CLUSTER: "AWS::EKS::Cluster",
   ELASTICACHE_CACHE_CLUSTER: "AWS::ElastiCache::CacheCluster",
   KINESIS_STREAM: "AWS::Kinesis::Stream",

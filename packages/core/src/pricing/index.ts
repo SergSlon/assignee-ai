@@ -46,6 +46,9 @@ import { eventsConnectionPricingStrategy } from "./strategies/events-connection.
 // A13 (2026-04-09) — Events::ApiDestination first-class ($0.20/1M invocations)
 import { eventsApiDestinationPricingStrategy } from "./strategies/events-apidestination.js";
 import { eventsApiDestinationPricingDecomposer } from "./decomposers/events-apidestination.js";
+// A14 (2026-04-09) — CloudFront::Distribution first-class (data transfer + reqs)
+import { cloudFrontDistributionPricingStrategy } from "./strategies/cloudfront-distribution.js";
+import { cloudFrontDistributionPricingDecomposer } from "./decomposers/cloudfront-distribution.js";
 import { ec2PricingDecomposer } from "./decomposers/ec2.js";
 import { rdsPricingDecomposer } from "./decomposers/rds.js";
 import { s3PricingDecomposer } from "./decomposers/s3.js";
@@ -222,6 +225,11 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.EVENTS_API_DESTINATION,
   eventsApiDestinationPricingStrategy,
 );
+// A14 (2026-04-09) — CloudFront::Distribution (data transfer + HTTPS reqs)
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
+  cloudFrontDistributionPricingStrategy,
+);
 
 /**
  * The default pre-populated pricing decomposer registry (Story 23.1).
@@ -270,6 +278,8 @@ defaultDecomposerRegistry.register(kmsKeyPricingDecomposer);
 defaultDecomposerRegistry.register(eventsConnectionPricingDecomposer);
 // A13 (2026-04-09) — Events::ApiDestination (usage-based)
 defaultDecomposerRegistry.register(eventsApiDestinationPricingDecomposer);
+// A14 (2026-04-09) — CloudFront::Distribution (usage-based data + reqs)
+defaultDecomposerRegistry.register(cloudFrontDistributionPricingDecomposer);
 
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";

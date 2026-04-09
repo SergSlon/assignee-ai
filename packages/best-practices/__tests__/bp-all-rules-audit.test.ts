@@ -1689,6 +1689,18 @@ const kmsRules: RuleSpec[] = [
   },
 ];
 
+// A14 (2026-04-09) — CloudFront::Distribution first-class BP rules
+const cloudFrontRules: RuleSpec[] = [
+  {
+    id: "BP-CF-001",
+    resourceType: "AWS::CloudFront::Distribution",
+    propertyPath:
+      "DistributionConfig.DefaultCacheBehavior.ViewerProtocolPolicy",
+    checkType: "equals",
+    expectedValue: "redirect-to-https",
+  },
+];
+
 const asgRules: RuleSpec[] = [
   {
     id: "BP-ASG-001",
@@ -2035,6 +2047,12 @@ describe("BP All Rules Audit", () => {
     }
   });
 
+  describe("CloudFront (1 Distribution rule — A14)", () => {
+    for (const spec of cloudFrontRules) {
+      runRuleTests(spec);
+    }
+  });
+
   describe("EventBridge (4 Rule rules — A8, 3 EventBus rules — A9, 2 Connection/ApiDestination rules — A12+A13)", () => {
     for (const spec of eventsRules) {
       runRuleTests(spec);
@@ -2102,6 +2120,7 @@ describe("BP All Rules Audit", () => {
       ...efsRules,
       ...eventsRules,
       ...kmsRules,
+      ...cloudFrontRules,
     ];
 
     it("covers exactly 165 rule specs", () => {
@@ -2158,7 +2177,12 @@ describe("BP All Rules Audit", () => {
       //   InvocationRateLimitPerSecond awareness). Closes the zero-
       //   BP gap the post-A13 `assignee types show` smoke test
       //   surfaced for the two new first-class outbound-HTTP types.
-      expect(allSpecs.length).toBe(174);
+      // + 1 A14 CloudFront rule        (BP-CF-001 ViewerProtocolPolicy
+      //   must be redirect-to-https). The canonical CloudFront
+      //   security finding — unencrypted HTTP at the edge is a
+      //   mandatory gate under PCI-DSS / HIPAA / most enterprise
+      //   security baselines.
+      expect(allSpecs.length).toBe(175);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

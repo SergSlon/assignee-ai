@@ -1,0 +1,14 @@
+id: BP-CF-001
+title: "CloudFront distributions should redirect HTTP to HTTPS"
+severity: HIGH
+resource_type: "AWS::CloudFront::Distribution"
+property_path: "DistributionConfig.DefaultCacheBehavior.ViewerProtocolPolicy"
+check_type: "equals"
+expected_value: "redirect-to-https"
+source: "AWS CloudFront Best Practices"
+source_id: "CF-BP-01"
+description: "ViewerProtocolPolicy controls how CloudFront handles HTTP vs HTTPS requests. allow-all lets plaintext HTTP through — user credentials, cookies, and form posts travel unencrypted across the public internet. redirect-to-https (the recommended value) transparently upgrades HTTP clients to HTTPS while serving HTTPS clients directly. https-only returns an error for HTTP clients instead of redirecting, which breaks mixed-client workflows."
+remediation: "Set DistributionConfig.DefaultCacheBehavior.ViewerProtocolPolicy to 'redirect-to-https'. If you have per-path CacheBehaviors, apply the same value to each one — CloudFront does not inherit from the default cache behavior. Certificate must be in us-east-1 (CloudFront regional ACM constraint)."
+consequence: "HTTP clients transmit credentials and payload data in plaintext across every network hop between client and edge. Mandatory finding under PCI-DSS, HIPAA, and most enterprise security baselines."
+category: security
+lastVerified: "2026-04-09"
