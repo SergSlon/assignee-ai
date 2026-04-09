@@ -263,6 +263,75 @@ describe("evaluateTriggers — exists", () => {
     const findings = evaluateTriggers(ctx, [bp]);
     expect(findings).toHaveLength(0);
   });
+
+  // A8 follow-up: lock in the stricter empty-collection semantics.
+  // Without this, BP-EVENTS-001 (EventBridge Rule must declare at
+  // least one Target) silently passed when Targets was []. Same
+  // bug affected BP-LAMBDA-006 (VpcConfig.SubnetIds required) and
+  // BP-APIGW-001 (AccessLogSettings.DestinationArn required).
+  it("fires when field is present but an empty array", () => {
+    const bp = makeBP({
+      check_type: "exists",
+      property_path: "Targets",
+    });
+    const ctx = makeCtx({ desiredState: { Targets: [] } });
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+  });
+
+  it("fires when field is present but an empty string", () => {
+    const bp = makeBP({
+      check_type: "exists",
+      property_path: "DestinationArn",
+    });
+    const ctx = makeCtx({ desiredState: { DestinationArn: "" } });
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+  });
+
+  it("fires when field is explicitly null", () => {
+    const bp = makeBP({
+      check_type: "exists",
+      property_path: "DeadLetterConfig",
+    });
+    const ctx = makeCtx({ desiredState: { DeadLetterConfig: null } });
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+  });
+
+  it("does NOT fire when field is present and a non-empty array", () => {
+    const bp = makeBP({
+      check_type: "exists",
+      property_path: "Targets",
+    });
+    const ctx = makeCtx({
+      desiredState: {
+        Targets: [{ Id: "t1", Arn: "arn:aws:lambda:us-east-1:123:function:f" }],
+      },
+    });
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("does NOT fire for explicit false (explicit opt-out, not absence)", () => {
+    const bp = makeBP({
+      check_type: "exists",
+      property_path: "Encrypted",
+    });
+    const ctx = makeCtx({ desiredState: { Encrypted: false } });
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("does NOT fire for zero (explicit opt-out, not absence)", () => {
+    const bp = makeBP({
+      check_type: "exists",
+      property_path: "Timeout",
+    });
+    const ctx = makeCtx({ desiredState: { Timeout: 0 } });
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

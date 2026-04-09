@@ -122,10 +122,30 @@ function checkPasses(
       return fieldValue !== expectedValue;
 
     case "exists":
-      return fieldValue !== undefined;
+      // "exists" treats empty arrays AND empty strings as absent.
+      // An `AWS::Events::Rule` with `Targets: []` is functionally
+      // equivalent to a rule with no Targets key — the rule fires
+      // but has nowhere to deliver the event. Similarly, an
+      // `AccessLogSettings: { DestinationArn: "" }` is equivalent
+      // to a missing destination. Treating `undefined` alone as
+      // absent would let these configurations silently pass the
+      // existence check and surface as broken infrastructure at
+      // apply time. A8 follow-up: aligns with the stricter
+      // interpretation the rule authors actually intended.
+      if (fieldValue === undefined || fieldValue === null) return false;
+      if (Array.isArray(fieldValue) && fieldValue.length === 0) return false;
+      if (typeof fieldValue === "string" && fieldValue.length === 0)
+        return false;
+      return true;
 
     case "not_exists":
-      return fieldValue === undefined;
+      // Symmetric with exists above: empty arrays + strings count
+      // as not-exists so `not_exists` rules fire on them too.
+      if (fieldValue === undefined || fieldValue === null) return true;
+      if (Array.isArray(fieldValue) && fieldValue.length === 0) return true;
+      if (typeof fieldValue === "string" && fieldValue.length === 0)
+        return true;
+      return false;
 
     case "greater_than": {
       // Missing expected_value or fieldValue → fail to surface the finding
