@@ -8,7 +8,7 @@ _assignee_completions() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-  commands="plan apply init completions"
+  commands="plan apply init completions destroy drift optimize list setup status clean reconcile cache doctor whoami patterns types"
 
   if [[ ${COMP_CWORD} -eq 1 ]]; then
     COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
@@ -27,6 +27,45 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--global" -- "${cur}") )
       ;;
     completions)
+      COMPREPLY=( $(compgen -W "" -- "${cur}") )
+      ;;
+    destroy)
+      COMPREPLY=( $(compgen -W "--yes --all --include-iam --dry-run" -- "${cur}") )
+      ;;
+    drift)
+      COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --json --output --concurrency --no-color --verbose" -- "${cur}") )
+      ;;
+    optimize)
+      COMPREPLY=( $(compgen -W "--region --json --reconcile --min-savings --no-color" -- "${cur}") )
+      ;;
+    list)
+      COMPREPLY=( $(compgen -W "--json --region --total-cost" -- "${cur}") )
+      ;;
+    setup)
+      COMPREPLY=( $(compgen -W "--profile --yes --enable-llm-logging --disable-llm-logging --dry-run" -- "${cur}") )
+      ;;
+    status)
+      COMPREPLY=( $(compgen -W "--json --region --bp-coverage --gaps-only" -- "${cur}") )
+      ;;
+    clean)
+      COMPREPLY=( $(compgen -W "--dry-run --confirm --yes --checkpoints --cache --memory --resources --logs --baselines --json" -- "${cur}") )
+      ;;
+    reconcile)
+      COMPREPLY=( $(compgen -W "--resource --dry-run --auto-reconcile" -- "${cur}") )
+      ;;
+    cache)
+      COMPREPLY=( $(compgen -W "" -- "${cur}") )
+      ;;
+    doctor)
+      COMPREPLY=( $(compgen -W "--json --skip-bedrock --skip-mcp" -- "${cur}") )
+      ;;
+    whoami)
+      COMPREPLY=( $(compgen -W "" -- "${cur}") )
+      ;;
+    patterns)
+      COMPREPLY=( $(compgen -W "" -- "${cur}") )
+      ;;
+    types)
       COMPREPLY=( $(compgen -W "" -- "${cur}") )
       ;;
   esac
