@@ -100,7 +100,7 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 
 ## Supported resource types
 
-**28 first-class CCAPI types** + 2 SDK-routable fallback types. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
+**29 first-class CCAPI types** + 2 SDK-routable fallback types. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
 
 | Type                                        | Notes                                                      |
 | :------------------------------------------ | :--------------------------------------------------------- |
@@ -132,6 +132,7 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 | `AWS::EFS::FileSystem`                      | Used in EFS-with-VPC pattern                               |
 | `AWS::EFS::MountTarget`                     | Used in EFS-with-VPC pattern                               |
 | `AWS::Events::Rule`                         | Used in Scheduled Lambda pattern                           |
+| `AWS::Events::EventBus`                     | Custom event bus for cross-account / SaaS partner events   |
 | `AWS::Lambda::EventSourceMapping`           | SDK fallback (not CCAPI)                                   |
 | `AWS::SNS::Subscription`                    | SDK fallback (not CCAPI)                                   |
 

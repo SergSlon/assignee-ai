@@ -1,6 +1,6 @@
 # Supported Resource Types
 
-assignee.ai supports 28 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
+assignee.ai supports 29 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
 
 ## Resource Type Table
 
@@ -34,6 +34,7 @@ assignee.ai supports 28 AWS resource types via CloudFormation CloudControl API, 
 | 26  | `AWS::EFS::FileSystem` (A1)                 | EFS File System      | efs-file-system       | -             |
 | 27  | `AWS::EFS::MountTarget` (A1 follow-up)      | EFS Mount Target     | efs-mount-target      | -             |
 | 28  | `AWS::Events::Rule` (A8)                    | EventBridge Rule     | events-rule           | -             |
+| 29  | `AWS::Events::EventBus` (A9)                | EventBridge EventBus | events-eventbus       | -             |
 
 A **generic plugin** handles any resource type not covered by a dedicated plugin, using CloudFormation schema defaults.
 
