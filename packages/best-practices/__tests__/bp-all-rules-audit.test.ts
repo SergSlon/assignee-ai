@@ -1618,6 +1618,28 @@ const eventsRules: RuleSpec[] = [
     expectedValue:
       "Review schedule frequency + target retry policy before shipping",
   },
+  // A9 (2026-04-09): EventBridge custom EventBus rules
+  {
+    id: "BP-EVENTBUS-001",
+    resourceType: "AWS::Events::EventBus",
+    propertyPath: "KmsKeyIdentifier",
+    checkType: "exists",
+    expectedValue: true,
+  },
+  {
+    id: "BP-EVENTBUS-002",
+    resourceType: "AWS::Events::EventBus",
+    propertyPath: "Description",
+    checkType: "exists",
+    expectedValue: true,
+  },
+  {
+    id: "BP-EVENTBUS-003",
+    resourceType: "AWS::Events::EventBus",
+    propertyPath: "DeadLetterConfig.Arn",
+    checkType: "exists",
+    expectedValue: true,
+  },
 ];
 
 const asgRules: RuleSpec[] = [
@@ -1960,7 +1982,7 @@ describe("BP All Rules Audit", () => {
     }
   });
 
-  describe("EventBridge (3 rules — A8)", () => {
+  describe("EventBridge (4 Rule rules — A8 — and 3 EventBus rules — A9)", () => {
     for (const spec of eventsRules) {
       runRuleTests(spec);
     }
@@ -2063,7 +2085,11 @@ describe("BP All Rules Audit", () => {
       // + 1 A8 awareness rule          (BP-EVENTS-004 schedule
       //   frequency + retry amplification cost awareness). Always
       //   fires to surface the cost lever at plan time.
-      expect(allSpecs.length).toBe(167);
+      // + 3 A9 EventBus rules          (BP-EVENTBUS-001 KMS encryption,
+      //   BP-EVENTBUS-002 Description hygiene, BP-EVENTBUS-003 DLQ
+      //   for unrouted events). Locks in the secure-by-default
+      //   posture for the new first-class type.
+      expect(allSpecs.length).toBe(170);
     });
 
     it("every spec ID exists in the loaded YAML library", () => {

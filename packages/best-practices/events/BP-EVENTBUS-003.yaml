@@ -1,0 +1,14 @@
+id: BP-EVENTBUS-003
+title: "EventBridge custom event bus should have a DeadLetterConfig"
+severity: HIGH
+resource_type: "AWS::Events::EventBus"
+property_path: "DeadLetterConfig.Arn"
+check_type: "exists"
+expected_value: true
+source: "AWS EventBridge Best Practices"
+source_id: "EVENTBUS-BP-03"
+description: "EventBridge silently drops events that fail rule processing OR have no matching rule. Without a DeadLetterConfig, those events are unrecoverable — there's no replay path, no alerting hook, and no audit trail. A same-account SQS queue wired into DeadLetterConfig.Arn captures every dropped event so operators can replay them after fixing the broken rule."
+remediation: "Create an SQS queue in the same account and wire its ARN into DeadLetterConfig.Arn. The bus operator IAM role needs sqs:SendMessage on the DLQ. Set a CloudWatch alarm on the DLQ's ApproximateNumberOfMessagesVisible metric so the team gets paged when events start dropping."
+consequence: "Dropped events disappear silently — a bug in a rule pattern or target retry exhaustion means lost data with no recovery path. Common silent-failure mode for new buses."
+category: reliability
+lastVerified: "2026-04-09"
