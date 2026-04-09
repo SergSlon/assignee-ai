@@ -10,17 +10,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RESOURCE_TYPES, CfnKey } from "@assignee/core";
 
-const { mockFetchEc2Prices, mockFetchRdsPrices, mockFetchLambdaArchPrices } =
-  vi.hoisted(() => ({
-    mockFetchEc2Prices: vi.fn(),
-    mockFetchRdsPrices: vi.fn(),
-    mockFetchLambdaArchPrices: vi.fn(),
-  }));
+const {
+  mockFetchEc2Prices,
+  mockFetchRdsPrices,
+  mockFetchLambdaArchPrices,
+  mockFetchCwLogsStoragePrice,
+} = vi.hoisted(() => ({
+  mockFetchEc2Prices: vi.fn(),
+  mockFetchRdsPrices: vi.fn(),
+  mockFetchLambdaArchPrices: vi.fn(),
+  mockFetchCwLogsStoragePrice: vi.fn(),
+}));
 
 vi.mock("../../utils/pricing-lookup.js", () => ({
   fetchEc2InstancePrices: mockFetchEc2Prices,
   fetchRdsInstancePrices: mockFetchRdsPrices,
   fetchLambdaArchPrices: mockFetchLambdaArchPrices,
+  fetchCwLogsStoragePrice: mockFetchCwLogsStoragePrice,
 }));
 
 // Import after the mock is installed so the analyzer binds to the
@@ -29,6 +35,7 @@ import {
   analyzeEc2Instance,
   analyzeRdsInstance,
   analyzeLambdaFunction,
+  analyzeLogsLogGroup,
   analyzeResource,
   buildRecommendation,
 } from "./cost-optimizer.js";
@@ -42,6 +49,7 @@ beforeEach(() => {
   mockFetchEc2Prices.mockReset();
   mockFetchRdsPrices.mockReset();
   mockFetchLambdaArchPrices.mockReset();
+  mockFetchCwLogsStoragePrice.mockReset();
 });
 
 const FAKE_LAMBDA_ARN =
@@ -380,5 +388,82 @@ describe("analyzeResource dispatcher", () => {
     expect(mockFetchEc2Prices).not.toHaveBeenCalled();
     expect(mockFetchRdsPrices).not.toHaveBeenCalled();
     expect(mockFetchLambdaArchPrices).not.toHaveBeenCalled();
+    expect(mockFetchCwLogsStoragePrice).not.toHaveBeenCalled();
+  });
+
+  it("routes Logs::LogGroup to the retention analyzer", async () => {
+    mockFetchCwLogsStoragePrice.mockResolvedValueOnce("$0.03/hr");
+    const rec = await analyzeResource(
+      {
+        arn: "arn:aws:logs:us-east-1:123:log-group:/aws/lambda/fn",
+        resourceType: RESOURCE_TYPES.LOGS_LOG_GROUP,
+      },
+      {},
+      FAKE_TOOLS,
+    );
+    expect(rec).not.toBeNull();
+    expect(rec!.recommendedConfig).toBe("RetentionInDays=30");
+  });
+});
+
+// ── Task 8 (Epic 32 slice): CW Logs retention analyzer ───────────────────────
+
+describe("analyzeLogsLogGroup", () => {
+  const FAKE_LOG_ARN = "arn:aws:logs:us-east-1:123:log-group:/aws/lambda/app";
+
+  it("returns a typed recommendation when RetentionInDays is missing", async () => {
+    mockFetchCwLogsStoragePrice.mockResolvedValueOnce("$0.03/hr");
+    const rec = await analyzeLogsLogGroup(FAKE_LOG_ARN, {}, FAKE_TOOLS);
+    expect(rec).not.toBeNull();
+    expect(rec!.resourceType).toBe(RESOURCE_TYPES.LOGS_LOG_GROUP);
+    expect(rec!.currentConfig).toContain("never expire");
+    expect(rec!.recommendedConfig).toBe("RetentionInDays=30");
+    // 100 GB × $0.03/GB-month × 91% reduction = $2.73/mo
+    expect(rec!.savingsAbsoluteUsd).toBeCloseTo(2.73, 2);
+    expect(rec!.monthlySavings).toMatch(/^\$2\.73\/mo\*$/);
+    expect(rec!.savingsPercent).toBe(91);
+    expect(rec!.confidence).toBe("high");
+    expect(rec!.rationale).toContain("never expire");
+    expect(rec!.rationale).toContain("100 GB");
+  });
+
+  it("returns null when RetentionInDays is already set (any positive value)", async () => {
+    for (const days of [1, 7, 30, 90, 365, 3650]) {
+      const rec = await analyzeLogsLogGroup(
+        FAKE_LOG_ARN,
+        { [CfnKey.RETENTION_IN_DAYS]: days },
+        FAKE_TOOLS,
+      );
+      expect(
+        rec,
+        `retention=${days} should be treated as already-configured`,
+      ).toBeNull();
+    }
+    // Short-circuits before touching the pricing MCP.
+    expect(mockFetchCwLogsStoragePrice).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the pricing MCP is unavailable (graceful degradation)", async () => {
+    mockFetchCwLogsStoragePrice.mockResolvedValueOnce(null);
+    const rec = await analyzeLogsLogGroup(FAKE_LOG_ARN, {}, FAKE_TOOLS);
+    expect(rec).toBeNull();
+  });
+
+  it("returns null when the MCP response cannot be parsed", async () => {
+    mockFetchCwLogsStoragePrice.mockResolvedValueOnce("Pricing unavailable");
+    const rec = await analyzeLogsLogGroup(FAKE_LOG_ARN, {}, FAKE_TOOLS);
+    expect(rec).toBeNull();
+  });
+
+  it("treats RetentionInDays=0 as not-configured (edge case)", async () => {
+    // CCAPI rejects 0 but callers might pass it; make sure the
+    // analyzer doesn't treat it as a real retention setting.
+    mockFetchCwLogsStoragePrice.mockResolvedValueOnce("$0.03/hr");
+    const rec = await analyzeLogsLogGroup(
+      FAKE_LOG_ARN,
+      { [CfnKey.RETENTION_IN_DAYS]: 0 },
+      FAKE_TOOLS,
+    );
+    expect(rec).not.toBeNull();
   });
 });

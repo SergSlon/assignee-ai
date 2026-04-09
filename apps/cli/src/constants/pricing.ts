@@ -6,6 +6,12 @@ export const PricingServiceCode = {
   EC2: "AmazonEC2",
   RDS: "AmazonRDS",
   LAMBDA: "AWSLambda",
+  // (f) 2026-04-09 Task 8: CloudWatch service code for the Logs
+  // storage price lookup in the cost-optimizer analyzeLogsLogGroup
+  // retention slice. The CloudWatch Logs storage rate bills under
+  // the AmazonCloudWatch service (shared with alarm metric storage
+  // and high-resolution alarm surcharges).
+  CLOUDWATCH: "AmazonCloudWatch",
 } as const;
 
 export const PricingFilter = {
@@ -34,6 +40,16 @@ export const PricingFilter = {
     RDS_SINGLE_AZ: "Single-AZ",
     LAMBDA_PRODUCT_FAMILY: "Serverless",
     LAMBDA_REQUESTS_GROUP: "AWS-Lambda-Requests",
+    // (f) 2026-04-09 Task 8: CloudWatch Logs pricing filter values
+    // used by the cost-optimizer analyzeLogsLogGroup retention check.
+    // The LogGroup storage line bills under productFamily=Storage
+    // Snapshot (mirrors what logsPricingDecomposer uses) — the
+    // usagetype differentiates Standard vs Infrequent Access
+    // classes. StorageByteHrs is a usagetype suffix; the prefix is
+    // "CW:DataStorage-Bytes" for Standard and
+    // "CW:LogInfrequentAccess-DataStorage-Bytes" for IA.
+    CLOUDWATCH_STORAGE_SNAPSHOT: "Storage Snapshot",
+    CW_LOG_STORAGE_STANDARD_USAGE_TYPE: "CW:DataStorage-Bytes",
   },
 } as const;
 
