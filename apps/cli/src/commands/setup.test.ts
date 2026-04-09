@@ -223,29 +223,36 @@ describe("setup command", () => {
     expect(userNames).toContain(IAM_USER_NAMES.auditor);
   });
 
-  it("creates 3 managed policies with correct names", async () => {
+  it("creates 4 managed policies with correct names (operator split into core + services per A8)", async () => {
     const { setupCommand } = await import("./setup.js");
     await setupCommand.parseAsync(["node", "setup"]);
 
     const createPolicyCalls = mockSend.mock.calls.filter(
       (c) => c[0]._type === "CreatePolicy",
     );
-    expect(createPolicyCalls).toHaveLength(3);
+    // 4 policies: operator core, operator services, reader, auditor.
+    expect(createPolicyCalls).toHaveLength(4);
 
     const policyNames = createPolicyCalls.map((c) => c[0].input["PolicyName"]);
     expect(policyNames).toContain(IAM_POLICY_NAMES.operator);
+    expect(policyNames).toContain(IAM_POLICY_NAMES.operatorServices);
     expect(policyNames).toContain(IAM_POLICY_NAMES.reader);
     expect(policyNames).toContain(IAM_POLICY_NAMES.auditor);
   });
 
-  it("attaches each policy to its user", async () => {
+  it("attaches each policy to its user (4 attachments after A8 split)", async () => {
     const { setupCommand } = await import("./setup.js");
     await setupCommand.parseAsync(["node", "setup"]);
 
     const attachCalls = mockSend.mock.calls.filter(
       (c) => c[0]._type === "AttachUserPolicy",
     );
-    expect(attachCalls).toHaveLength(3);
+    expect(attachCalls).toHaveLength(4);
+    // Both operator policies must attach to the operator user
+    const operatorAttachments = attachCalls.filter(
+      (c) => c[0].input["UserName"] === IAM_USER_NAMES.operator,
+    );
+    expect(operatorAttachments).toHaveLength(2);
   });
 
   it("creates access keys for each user", async () => {
@@ -323,11 +330,13 @@ describe("setup command", () => {
     );
     expect(createUserCalls).toHaveLength(0);
 
-    // Should call CreatePolicyVersion (update existing)
+    // Should call CreatePolicyVersion (update existing) — 4 policies after
+    // the A8 operator split (operator core + operator services + reader +
+    // auditor)
     const policyVersionCalls = mockSend.mock.calls.filter(
       (c) => c[0]._type === "CreatePolicyVersion",
     );
-    expect(policyVersionCalls).toHaveLength(3);
+    expect(policyVersionCalls).toHaveLength(4);
   });
 
   it("exits with error when STS fails", async () => {
@@ -439,15 +448,19 @@ describe("setup command", () => {
     // Must contain 3 newlines (header + 3 users = 4 lines, 3 newlines)
     expect((usersSection!.match(/\n/g) ?? []).length).toBe(3);
 
-    // Similar for the policies section.
+    // Similar for the policies section. After A8: 4 policies because
+    // the operator role splits into core + services. The dry-run text
+    // is one entry per policy, so the expected newline count is 4
+    // (header + 4 policies = 5 lines, 4 newlines).
     const policiesSection = stepTexts.find((s) =>
       s.startsWith("IAM Managed Policies:"),
     );
     expect(typeof policiesSection).toBe("string");
     expect(policiesSection).toContain(IAM_POLICY_NAMES.operator);
+    expect(policiesSection).toContain(IAM_POLICY_NAMES.operatorServices);
     expect(policiesSection).toContain(IAM_POLICY_NAMES.reader);
     expect(policiesSection).toContain(IAM_POLICY_NAMES.auditor);
-    expect((policiesSection!.match(/\n/g) ?? []).length).toBe(3);
+    expect((policiesSection!.match(/\n/g) ?? []).length).toBe(4);
 
     // Access keys section must be one block listing all 3 env var pairs.
     const keysSection = stepTexts.find((s) => s.startsWith("IAM Access Keys:"));

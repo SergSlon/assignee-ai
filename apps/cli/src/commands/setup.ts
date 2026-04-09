@@ -32,6 +32,7 @@ import {
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import {
   operatorPolicy,
+  operatorServicesPolicy,
   readerPolicy,
   auditorPolicy,
   IAM_USER_NAMES,
@@ -51,13 +52,27 @@ import {
   AwsServicePrincipal,
 } from "@assignee/core";
 
-/** Maps role keys to their policy generators, user names, and env var prefixes. */
+/**
+ * Maps role keys to their policy generators, user names, and env var prefixes.
+ *
+ * Each role has a `policies` array because the operator surface is split
+ * across two managed policies (A8 follow-up: AssigneeOperatorPolicy +
+ * AssigneeOperatorServicesPolicy) to fit inside the AWS 6144-byte
+ * managed-policy size limit. Both policies attach to the same operator
+ * IAM user and AWS evaluates the union — strictly equivalent to the
+ * pre-split single-policy version.
+ */
 const ROLES = [
   {
     key: "operator" as const,
     userName: IAM_USER_NAMES.operator,
-    policyName: IAM_POLICY_NAMES.operator,
-    policyFn: operatorPolicy,
+    policies: [
+      { name: IAM_POLICY_NAMES.operator, fn: operatorPolicy },
+      {
+        name: IAM_POLICY_NAMES.operatorServices,
+        fn: operatorServicesPolicy,
+      },
+    ],
     envKeyId: "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
     envSecretKey: "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
     description: "CLI operator — Bedrock + CloudControl provisioning",
@@ -65,8 +80,7 @@ const ROLES = [
   {
     key: "reader" as const,
     userName: IAM_USER_NAMES.reader,
-    policyName: IAM_POLICY_NAMES.reader,
-    policyFn: readerPolicy,
+    policies: [{ name: IAM_POLICY_NAMES.reader, fn: readerPolicy }],
     envKeyId: "ASSIGNEE_READER_ACCESS_KEY_ID",
     envSecretKey: "ASSIGNEE_READER_SECRET_ACCESS_KEY",
     description: "MCP reader — schema, pricing, billing (read-only)",
@@ -74,8 +88,7 @@ const ROLES = [
   {
     key: "auditor" as const,
     userName: IAM_USER_NAMES.auditor,
-    policyName: IAM_POLICY_NAMES.auditor,
-    policyFn: auditorPolicy,
+    policies: [{ name: IAM_POLICY_NAMES.auditor, fn: auditorPolicy }],
     envKeyId: "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
     envSecretKey: "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
     description: "MCP auditor — IAM simulate, SecurityHub (read-only)",
@@ -372,13 +385,15 @@ export const setupCommand = new Command(CommandName.SETUP)
           "IAM Users:\n" +
             ROLES.map(
               (r) =>
-                `  - ${r.userName} (managed policy: ${r.policyName}) — ${r.description}`,
+                `  - ${r.userName} (managed policies: ${r.policies.map((p) => p.name).join(", ")}) — ${r.description}`,
             ).join("\n"),
         );
         clack.log.step(
           "IAM Managed Policies:\n" +
-            ROLES.map(
-              (r) => `  - ${r.policyName} (attached to user ${r.userName})`,
+            ROLES.flatMap((r) =>
+              r.policies.map(
+                (p) => `  - ${p.name} (attached to user ${r.userName})`,
+              ),
             ).join("\n"),
         );
         clack.log.step(
@@ -453,8 +468,9 @@ export const setupCommand = new Command(CommandName.SETUP)
         "This command will create/update the following IAM resources:",
       );
       for (const role of ROLES) {
+        const policyList = role.policies.map((p) => p.name).join(", ");
         clack.log.step(
-          `  User: ${role.userName}\n  Policy: ${role.policyName}\n  Purpose: ${role.description}`,
+          `  User: ${role.userName}\n  Policy: ${policyList}\n  Purpose: ${role.description}`,
         );
       }
 
@@ -525,30 +541,37 @@ export const setupCommand = new Command(CommandName.SETUP)
             }),
           );
 
-          // 2. Create or update policy
-          const policyDoc = role.policyFn();
-          const policyArn = await ensurePolicy(
-            iam,
-            accountId,
-            role.policyName,
-            policyDoc,
-          );
+          // 2. Create + attach every policy in the role's `policies`
+          // array. The operator role has 2 (core + services) due to
+          // the A8 split; reader/auditor have 1 each. AWS allows up
+          // to 10 managed policies per user so this is well within
+          // bounds.
+          for (const { name: policyName, fn: policyFn } of role.policies) {
+            const policyDoc = policyFn();
+            const policyArn = await ensurePolicy(
+              iam,
+              accountId,
+              policyName,
+              policyDoc,
+            );
 
-          // Tag policy idempotently
-          await iam.send(
-            new TagPolicyCommand({
-              PolicyArn: policyArn,
-              Tags: [MANAGED_TAG],
-            }),
-          );
+            // Tag policy idempotently
+            await iam.send(
+              new TagPolicyCommand({
+                PolicyArn: policyArn,
+                Tags: [MANAGED_TAG],
+              }),
+            );
 
-          // 3. Attach policy to user
-          await iam.send(
-            new AttachUserPolicyCommand({
-              UserName: role.userName,
-              PolicyArn: policyArn,
-            }),
-          );
+            // Attach policy to user (idempotent — IAM tolerates
+            // re-attaching an already-attached policy)
+            await iam.send(
+              new AttachUserPolicyCommand({
+                UserName: role.userName,
+                PolicyArn: policyArn,
+              }),
+            );
+          }
 
           // 4. Handle access keys
           let shouldCreateKey = isNew;
@@ -615,10 +638,11 @@ export const setupCommand = new Command(CommandName.SETUP)
         value: { role, isNew, roleEnv },
       } of succeeded) {
         Object.assign(envUpdates, roleEnv);
+        const policyList = role.policies.map((p) => p.name).join(", ");
         clack.log.step(
           isNew
-            ? `Created user ${role.userName} with policy ${role.policyName}`
-            : `User ${role.userName} verified, policy ${role.policyName} updated`,
+            ? `Created user ${role.userName} with policy ${policyList}`
+            : `User ${role.userName} verified, policy ${policyList} updated`,
         );
       }
 
@@ -805,8 +829,9 @@ export const setupCommand = new Command(CommandName.SETUP)
       // ── Summary ──────────────────────────────────────────────────────
       clack.log.success("IAM setup complete! Users and policies:");
       for (const role of ROLES) {
+        const policyList = role.policies.map((p) => p.name).join(", ");
         clack.log.step(
-          `  ${role.userName} → ${role.policyName} (env: ${role.envKeyId})`,
+          `  ${role.userName} → ${policyList} (env: ${role.envKeyId})`,
         );
       }
 

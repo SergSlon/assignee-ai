@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   operatorPolicy,
+  operatorServicesPolicy,
   readerPolicy,
   auditorPolicy,
   IAM_USER_NAMES,
@@ -38,10 +39,15 @@ describe("IAM Policy Generators", () => {
       }
     });
 
-    it("includes deduplicated service-specific actions", () => {
-      // Tier C: strengthened
-      const policy = operatorPolicy();
-      const serviceStatement = policy.Statement.find(
+    it("includes deduplicated service-specific actions (in operatorServicesPolicy after A8 split)", () => {
+      // A8 follow-up: ServiceSpecificActions moved to operatorServicesPolicy()
+      // because the combined policy exceeded the AWS 6144-byte managed-policy
+      // size limit at 28+ resource types. operatorPolicy() retains Bedrock,
+      // CCAPI, SDK fallback, XRay, and tagging; operatorServicesPolicy()
+      // emits the bulky service-specific actions on its own. Both attach to
+      // the same `assignee-operator` user — the union is unchanged.
+      const services = operatorServicesPolicy();
+      const serviceStatement = services.Statement.find(
         (s) => s.Sid === "ServiceSpecificActions",
       )!;
       const actions = serviceStatement.Action;
@@ -50,17 +56,24 @@ describe("IAM Policy Generators", () => {
       expect(actions.length).toBe(unique.size);
       // Sanity floor — must have meaningful breadth, not 1-2 actions
       expect(actions.length).toBeGreaterThan(50);
+      // Cross-check: operatorPolicy() must NOT carry the bulky statement
+      // anymore (that's the whole point of the split).
+      const corePolicy = operatorPolicy();
+      expect(
+        corePolicy.Statement.find((s) => s.Sid === "ServiceSpecificActions"),
+      ).toBeUndefined();
     });
 
-    it("includes S3 versioned-object cleanup actions used by destroy-service", () => {
+    it("includes S3 versioned-object cleanup actions used by destroy-service (in operatorServicesPolicy)", () => {
       // destroy-service.ts calls ListObjectVersions + DeleteObjects(VersionId)
       // to empty versioned buckets before CloudControl DeleteResource runs.
       // Tier C: strengthened — also tolerate the wildcard-collapsed form
       // (`s3:Get*` etc) introduced in Wave 20's collapseToWildcards. The
       // assertion is "the destroy-service grant is reachable", which is
       // satisfied by either the literal action or a covering wildcard.
-      const policy = operatorPolicy();
-      const serviceStatement = policy.Statement.find(
+      // A8 follow-up: now reads from operatorServicesPolicy after split.
+      const services = operatorServicesPolicy();
+      const serviceStatement = services.Statement.find(
         (s) => s.Sid === "ServiceSpecificActions",
       )!;
       const actions = serviceStatement.Action;
@@ -172,15 +185,17 @@ describe("IAM Policy Generators", () => {
     // size budget AND the narrow set of permitted prefix-wildcards so a
     // future contributor can't quietly add `s3:*` or `iam:*` to the
     // collapser without tripping CI.
-    it("fits inside the 6144-byte AWS managed policy size limit (Wave 19 Bug #6 follow-up)", () => {
-      const policy = operatorPolicy();
-      const compactSize = JSON.stringify(policy).length;
-      expect(compactSize).toBeLessThan(6144);
-      // Leave headroom for the next added permission — when this
-      // assertion starts failing, look at the collapser config before
-      // adding more wildcards. See the block comment on the Tier S #4
-      // test below for the authoritative recalibration rationale.
-      expect(compactSize).toBeLessThan(6144 - 80);
+    it("BOTH operator policies fit inside the 6144-byte AWS managed policy size limit (A8 split)", () => {
+      // A8 follow-up: pre-split this test asserted operatorPolicy() <
+      // 6144. Now both halves of the split must fit independently.
+      // Each policy is attached to the same `assignee-operator` IAM
+      // user; AWS evaluates the union, so behavior is unchanged.
+      const corePolicy = operatorPolicy();
+      const servicesPolicy = operatorServicesPolicy();
+      const coreSize = JSON.stringify(corePolicy).length;
+      const servicesSize = JSON.stringify(servicesPolicy).length;
+      expect(coreSize, "operatorPolicy()").toBeLessThan(6144);
+      expect(servicesSize, "operatorServicesPolicy()").toBeLessThan(6144);
     });
 
     // Tier S #4: trip a CI alarm BEFORE we run out of room. The collapser
@@ -218,19 +233,33 @@ describe("IAM Policy Generators", () => {
     // Each recalibration has kept the collapser untouched — the
     // threshold tracks the cost of adding a new service, not a new
     // wildcard.
-    it("Tier S #4: leaves at least 80 bytes of headroom in the operator policy size budget", () => {
-      const policy = operatorPolicy();
-      const compactSize = JSON.stringify(policy).length;
-      const headroom = 6144 - compactSize;
-      // 80 bytes ≈ 2 more narrow IAM actions worth of space.
-      // See the recalibration history in the block comment above.
-      expect(headroom).toBeGreaterThanOrEqual(80);
+    it("Tier S #4: leaves at least 1024 bytes of headroom in BOTH operator policies after the A8 split", () => {
+      // A8 follow-up: the operator surface is now split across
+      // operatorPolicy() (core: Bedrock + CCAPI + tagging + xray + SDK
+      // fallback) and operatorServicesPolicy() (the bulky service-
+      // specific actions). Each must independently fit inside the
+      // 6144-byte managed-policy limit AND leave generous headroom
+      // for new resource types. Pre-split the threshold was 80 bytes
+      // (a single action away from blowing the limit); the split
+      // restores ~4500 bytes of headroom on the core policy and
+      // ~1600 bytes on the services policy. Lock in 1024 bytes
+      // minimum on each so we get an early warning ~30 resource
+      // types from now.
+      const corePolicy = operatorPolicy();
+      const servicesPolicy = operatorServicesPolicy();
+      const coreSize = JSON.stringify(corePolicy).length;
+      const servicesSize = JSON.stringify(servicesPolicy).length;
+      expect(coreSize, "core operator policy size").toBeLessThan(6144 - 1024);
+      expect(servicesSize, "operator services policy size").toBeLessThan(
+        6144 - 1024,
+      );
     });
 
     it("only collapses safe Describe/Get/List wildcards, never Create/Delete/Put (Wave 19 Bug #6 follow-up)", () => {
       // Tier C: strengthened from toBeDefined() — find!() at the call site
-      const policy = operatorPolicy();
-      const stmt = policy.Statement.find(
+      // A8 follow-up: ServiceSpecificActions moved to operatorServicesPolicy
+      const services = operatorServicesPolicy();
+      const stmt = services.Statement.find(
         (s) => s.Sid === "ServiceSpecificActions",
       )!;
       expect(stmt.Sid).toBe("ServiceSpecificActions");
@@ -255,6 +284,49 @@ describe("IAM Policy Generators", () => {
         /:(Describe|Get|List)\*$/.test(a),
       );
       expect(hasCollapserWildcards).toBe(true);
+    });
+
+    it("operatorServicesPolicy is a valid standalone policy with one ServiceSpecificActions statement", () => {
+      const services = operatorServicesPolicy();
+      expect(services.Version).toBe("2012-10-17");
+      expect(services.Statement).toHaveLength(1);
+      expect(services.Statement[0]!.Sid).toBe("ServiceSpecificActions");
+      expect(services.Statement[0]!.Effect).toBe("Allow");
+      expect(services.Statement[0]!.Action.length).toBeGreaterThan(50);
+      expect(services.Statement[0]!.Resource).toBe("*");
+    });
+
+    it("operator core + services together cover the full pre-split action set", () => {
+      // Round-trip guarantee: union(corePolicy.Actions, servicesPolicy.Actions)
+      // must contain every action that was in the pre-split single-policy
+      // version. The split is purely about JSON size — not security posture.
+      const core = operatorPolicy();
+      const services = operatorServicesPolicy();
+      const coreActions = new Set(
+        core.Statement.flatMap((s) =>
+          Array.isArray(s.Action) ? s.Action : [s.Action],
+        ),
+      );
+      const servicesActions = new Set(
+        services.Statement.flatMap((s) =>
+          Array.isArray(s.Action) ? s.Action : [s.Action],
+        ),
+      );
+      const union = new Set([...coreActions, ...servicesActions]);
+      // Sanity floor: combined surface is meaningfully large
+      expect(union.size).toBeGreaterThan(60);
+      // Bedrock invoke must be in the core policy (NOT services)
+      expect(coreActions.has("bedrock:InvokeModel")).toBe(true);
+      expect(servicesActions.has("bedrock:InvokeModel")).toBe(false);
+      // Service-specific examples must be in the services policy (NOT core)
+      const hasS3 = [...servicesActions].some((a) => a.startsWith("s3:"));
+      const hasLambda = [...servicesActions].some((a) =>
+        a.startsWith("lambda:"),
+      );
+      expect(hasS3, "services policy must carry s3: actions").toBe(true);
+      expect(hasLambda, "services policy must carry lambda: actions").toBe(
+        true,
+      );
     });
 
     it("accepts a custom model ARN for Bedrock scoping", () => {
@@ -347,6 +419,9 @@ describe("IAM Policy Generators", () => {
   describe("IAM_POLICY_NAMES", () => {
     it("has correct policy names", () => {
       expect(IAM_POLICY_NAMES.operator).toBe("AssigneeOperatorPolicy");
+      expect(IAM_POLICY_NAMES.operatorServices).toBe(
+        "AssigneeOperatorServicesPolicy",
+      );
       expect(IAM_POLICY_NAMES.reader).toBe("AssigneeReaderPolicy");
       expect(IAM_POLICY_NAMES.auditor).toBe("AssigneeAuditorPolicy");
     });

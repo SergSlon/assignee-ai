@@ -106,8 +106,16 @@ const IAM_TYPE_PREFIX = "AWS::IAM::";
  * `/`). The leading `^` and trailing `$` are mandatory — a substring
  * match would over-protect roles like `MyAssigneeOperatorPolicyClone`.
  */
+// A8 follow-up: added optional `Services` segment so the
+// AssigneeOperatorServicesPolicy (the second half of the operator
+// policy split) is also covered by the safety allowlist. Without
+// this, `assignee destroy --all --include-iam` would destroy the
+// services policy and lock the operator user out of every
+// service-specific permission. The leading `^` and trailing `$`
+// stay mandatory so substring matches like
+// `MyAssigneeOperatorServicesPolicyClone` are NOT protected.
 const ASSIGNEE_INFRA_NAME_PATTERN =
-  /^Assignee(Ai)?(Operator|Reader|Auditor|Bedrock\w*)?(Policy|Role|User|Group)?$/;
+  /^Assignee(Ai)?(Operator|Reader|Auditor|Bedrock\w*)?(Services)?(Policy|Role|User|Group)?$/;
 
 /**
  * Returns true when the given ARN points at one of assignee.ai's own
