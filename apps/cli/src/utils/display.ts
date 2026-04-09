@@ -43,6 +43,7 @@ export {
   renderError,
   renderApplySuccess,
   renderCompoundSuccess,
+  renderCompoundPartialFailure,
   renderSecurityWarnings,
   renderDependencyPlan,
   renderResourceTable,

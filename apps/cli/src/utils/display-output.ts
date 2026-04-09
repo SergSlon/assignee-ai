@@ -191,6 +191,170 @@ export function renderCompoundSuccess(
   }
 }
 
+/**
+ * Item 1 (2026-04-09): structured renderer for compound partial-failure.
+ *
+ * Called when a compound apply halts mid-pattern. Replaces the old
+ * inline renderError-with-cleanup-blob that lived in result-formatter.ts
+ * and dumped a single multi-line error string with every piece of
+ * recovery guidance squashed together.
+ *
+ * The renderer surfaces four discrete blocks so the user can see at a
+ * glance what landed, what broke, what never ran, and what to do next:
+ *
+ *   (i)   Successfully provisioned — the [0..N-1] prefix that AWS
+ *         already holds and the user is billed for.
+ *   (ii)  Failed — the resource at position N and the reason string.
+ *   (iii) Not attempted — positions [N+1..end] that the compound
+ *         never reached because of the dependency chain.
+ *   (iv)  Recovery actions — one-shot `assignee destroy <runId>` to
+ *         unwind, or `assignee status <runId> --resume` to retry
+ *         from the failed position once the root cause is addressed.
+ *
+ * All four blocks are emitted to stderr (not stdout) because this is
+ * an error path and the user may be piping stdout to `jq` for JSON
+ * output mode. Composite-identifier resources (Route, VPCGatewayAttachment,
+ * SubnetRouteTableAssociation) are annotated with a cascade note so the
+ * user isn't told to run `assignee destroy rtb-xxx|0.0.0.0/0` which the
+ * resource resolver cannot match.
+ */
+export function renderCompoundPartialFailure(input: {
+  pattern: ArchitecturePattern;
+  completed: ResourceResult[];
+  failedResource: {
+    resourceId: string;
+    resourceType: string;
+    displayName?: string;
+    errorMessage: string;
+  };
+  notAttempted: ResourceSpec[];
+  runId: string;
+}): void {
+  stopSpinner();
+
+  const COMPOSITE_ID_TYPES: ReadonlySet<string> = new Set([
+    "AWS::EC2::Route",
+    "AWS::EC2::VPCGatewayAttachment",
+    "AWS::EC2::SubnetRouteTableAssociation",
+  ]);
+
+  const successful = input.completed.filter(
+    (r) => r.resourceType !== undefined,
+  );
+  const isTTY = process.stderr.isTTY;
+  const bold = (s: string) => (isTTY ? chalk.bold(s) : s);
+  const red = (s: string) => (isTTY ? chalk.red(s) : s);
+  const green = (s: string) => (isTTY ? chalk.green(s) : s);
+  const yellow = (s: string) => (isTTY ? chalk.yellow(s) : s);
+  const dim = (s: string) => (isTTY ? chalk.dim(s) : s);
+
+  const lines: string[] = [];
+
+  lines.push(
+    red(
+      `✖ ${input.pattern.displayName} halted at ${input.failedResource.resourceType}${input.failedResource.displayName ? ` (${input.failedResource.displayName})` : ""}.`,
+    ),
+  );
+  lines.push("");
+
+  // (i) Successfully provisioned
+  if (successful.length > 0) {
+    lines.push(bold(`Successfully provisioned (${successful.length}):`));
+    for (const r of successful) {
+      const arnTail = r.resourceArn ? ` → ${r.resourceArn}` : "";
+      lines.push(green(`  ✓ ${r.resourceType}${arnTail}`));
+    }
+    lines.push("");
+  }
+
+  // (ii) Failed
+  lines.push(bold("Failed:"));
+  lines.push(red(`  ✖ ${input.failedResource.resourceType}`));
+  lines.push(
+    dim(
+      `    reason: ${input.failedResource.errorMessage || "(no error message captured)"}`,
+    ),
+  );
+  lines.push("");
+
+  // (iii) Not attempted
+  if (input.notAttempted.length > 0) {
+    lines.push(
+      bold(
+        `Not attempted (${input.notAttempted.length}) — waiting on ${input.failedResource.resourceType}:`,
+      ),
+    );
+    for (const r of input.notAttempted) {
+      lines.push(
+        yellow(
+          `  ◦ ${r.resourceType}${r.displayName ? ` (${r.displayName})` : ""}`,
+        ),
+      );
+    }
+    lines.push("");
+  }
+
+  // (iv) Recovery actions
+  lines.push(bold("Next steps:"));
+  if (successful.length === 0) {
+    lines.push(
+      dim(
+        "  Nothing was provisioned. Fix the error reported above and re-run your `assignee apply` command.",
+      ),
+    );
+  } else {
+    // Destroy guidance — one-shot per completed resource, reversed so
+    // child resources unwind before parents. Composite-ID rows become
+    // comments because the destroy resolver cannot match them.
+    const resourcesWithArns = successful.filter((r) => r.resourceArn);
+    const reversed = [...resourcesWithArns].reverse();
+    lines.push(
+      dim(
+        "  To unwind the partial state, run the destroy commands below in order",
+      ),
+    );
+    lines.push(
+      dim(
+        "  (reverse dependency order — lines starting with `#` cascade from a parent):",
+      ),
+    );
+    for (const r of reversed) {
+      if (COMPOSITE_ID_TYPES.has(r.resourceType)) {
+        lines.push(
+          dim(
+            `    # ${r.resourceType}: cascades from parent (composite id ${r.resourceArn})`,
+          ),
+        );
+      } else {
+        lines.push(`    assignee destroy ${r.resourceArn}`);
+      }
+    }
+    lines.push("");
+    lines.push(
+      dim(`  Or retry from the failed step after addressing the root cause:`),
+    );
+    lines.push(`    assignee status ${input.runId} --resume`);
+  }
+  lines.push("");
+
+  const body = lines.join("\n");
+
+  if (isTTY) {
+    process.stderr.write(
+      boxen(body, {
+        title: "Compound Provisioning Halted",
+        titleAlignment: BoxenAlign.LEFT,
+        borderColor: "red",
+        padding: 1,
+      }) + "\n",
+    );
+  } else {
+    process.stderr.write(
+      `=== Compound Provisioning Halted ===\n${body}\n====================================\n`,
+    );
+  }
+}
+
 // ── Security warnings (Story 19.2) ────────────────────────────────────────────
 
 /**

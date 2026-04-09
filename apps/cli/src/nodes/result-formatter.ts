@@ -20,6 +20,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import {
   renderApplySuccess,
   renderCompoundSuccess,
+  renderCompoundPartialFailure,
   renderError,
   renderPlanBox,
   promptFixSelection,
@@ -482,70 +483,57 @@ export async function resultFormatterNode(
       // Legacy hint from ErrorHintRegistry as fallback for howToFix
       const legacyHint = defaultErrorHintRegistry.getHint(state.error);
 
-      // Compound mode: show partial results with cleanup guidance (EC-22)
+      // Compound mode: Item 1 (2026-04-09) — delegate to the dedicated
+      // renderCompoundPartialFailure renderer. The previous inline
+      // implementation squashed everything into a single renderError
+      // blob that hid the "not attempted" resources from the user and
+      // buried the recovery commands in narrative text. The new
+      // renderer surfaces four discrete blocks (success / failure /
+      // not attempted / recovery) so partial failure is always readable
+      // at a glance, and the unattempted-resources list is derived
+      // from state.resourceQueue[currentResourceIndex + 1..] so users
+      // understand the blast radius of the halt.
       if (
         state.resourcePattern &&
+        state.resourceQueue &&
         state.completedResources &&
-        state.completedResources.length > 0
+        state.completedResources.length > 0 &&
+        state.currentResourceIndex !== undefined
       ) {
         const successfulResources = state.completedResources.filter(
           (r) => r.executionStatus === ExecutionStatus.SUCCESS,
         );
-        const provisioned = successfulResources
-          .map((r) => r.resourceType)
-          .join(", ");
-        const haltedAt = state.resourceType ?? "unknown resource";
-
-        // Build cleanup guidance with ARNs in reverse dependency order.
-        //
-        // Wave 19 Bug #7: AWS::EC2::Route, AWS::EC2::VPCGatewayAttachment, and
-        // AWS::EC2::SubnetRouteTableAssociation use composite primary
-        // identifiers (e.g. `rtb-xxx|0.0.0.0/0`, `IGW|vpc-xxx`,
-        // `subnet-xxx|rtb-xxx`) that the destroy command's resource resolver
-        // cannot match against the RGTA / per-service listing path. Before
-        // this fix, the cleanup script told users to run
-        // `assignee destroy "rtb-xxx|0.0.0.0/0"` and the destroy command
-        // immediately responded with "No managed resource found", which is
-        // misleading and scary. In practice these resources are torn down
-        // implicitly when their parent (RouteTable / IGW / Subnet) is
-        // destroyed via the existing pre-detach / pre-disassociate hooks,
-        // so the right behavior is to surface that fact in the script
-        // rather than emit a destroy command the user can't run.
-        const COMPOSITE_ID_TYPES: ReadonlySet<string> = new Set([
-          "AWS::EC2::Route",
-          "AWS::EC2::VPCGatewayAttachment",
-          "AWS::EC2::SubnetRouteTableAssociation",
-        ]);
-        const resourcesWithArns = successfulResources.filter(
-          (r) => r.resourceArn,
+        const failedResourceSpec =
+          state.resourceQueue[state.currentResourceIndex];
+        const notAttempted = state.resourceQueue.slice(
+          state.currentResourceIndex + 1,
         );
-        const reversedResources = [...resourcesWithArns].reverse();
 
-        let cleanupGuidance = "";
-        if (reversedResources.length > 0) {
-          const lines = reversedResources.map((r) => {
-            if (COMPOSITE_ID_TYPES.has(r.resourceType)) {
-              return (
-                `  # ${r.resourceType}: cascades from parent — ` +
-                `skip (composite identifier ${r.resourceArn} is not resolvable; ` +
-                `parent resource's pre-detach hook handles teardown)`
-              );
-            }
-            return `  - ${r.resourceType}: assignee destroy ${r.resourceArn}`;
-          });
-          cleanupGuidance =
-            `\n\nSuccessfully created resources:\n${lines.join("\n")}` +
-            `\n\nTo clean up partially created resources, run the destroy commands above ` +
-            `(lines starting with "-") in the listed order (reverse dependency order). ` +
-            `Lines starting with "#" are skipped — they cascade from their parent resource ` +
-            `and have no standalone destroy path.`;
+        renderCompoundPartialFailure({
+          pattern: state.resourcePattern,
+          completed: successfulResources,
+          failedResource: {
+            resourceId: failedResourceSpec?.resourceId ?? "unknown",
+            resourceType:
+              failedResourceSpec?.resourceType ??
+              state.resourceType ??
+              "unknown",
+            displayName: failedResourceSpec?.displayName,
+            errorMessage: resolved.what,
+          },
+          notAttempted,
+          runId: state.runId,
+        });
+        // Also log the legacy hint / why-block through the default
+        // error channel so the user still sees the structured hint
+        // guidance alongside the partial-failure box.
+        if (resolved.why || legacyHint || resolved.howToFix) {
+          renderError(
+            `Compound apply halted — see the Compound Provisioning Halted box above for recoverable state.`,
+            legacyHint ?? resolved.howToFix,
+            { why: resolved.why },
+          );
         }
-
-        renderError(
-          `Provision halted at ${haltedAt}. Previously provisioned: ${provisioned}. Manual cleanup may be required.${cleanupGuidance}`,
-          legacyHint ?? resolved.howToFix,
-          { why: resolved.why },
-        );
       } else {
         renderError(resolved.what, legacyHint ?? resolved.howToFix, {
           why: resolved.why,

@@ -48,6 +48,7 @@ vi.mock("../../utils/logger.js", () => ({
 vi.mock("../../utils/display.js", () => ({
   renderApplySuccess: vi.fn(),
   renderCompoundSuccess: vi.fn(),
+  renderCompoundPartialFailure: vi.fn(),
   renderError: vi.fn(),
   renderPlanBox: vi.fn(),
   renderSecurityWarnings: vi.fn(),
@@ -885,7 +886,8 @@ describe("compound flow error handling", () => {
   });
 
   it("result-formatter shows cleanup guidance with previously provisioned resources on failure", async () => {
-    const { renderError } = await import("../../utils/display.js");
+    const { renderCompoundPartialFailure } =
+      await import("../../utils/display.js");
 
     const state = makeState({
       executionStatus: ExecutionStatus.FAILED,
@@ -912,19 +914,26 @@ describe("compound flow error handling", () => {
 
     await resultFormatterNode(state);
 
-    expect(renderError).toHaveBeenCalled();
-    const errorCall = (renderError as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    const errorMessage = errorCall[0] as string;
-
-    // Verify cleanup guidance mentions previously provisioned resources
-    expect(errorMessage).toMatch(/halted at/i);
-    expect(errorMessage).toMatch(/AWS::Lambda::Function/);
-    expect(errorMessage).toMatch(/AWS::EC2::SecurityGroup/);
-    expect(errorMessage).toMatch(/AWS::IAM::Role/);
+    // Item 1 (2026-04-09): cleanup guidance is now structured input
+    // to renderCompoundPartialFailure instead of a single stringified
+    // renderError blob. Assert that both completed resources are
+    // forwarded and the failed resource is identified.
+    expect(renderCompoundPartialFailure).toHaveBeenCalled();
+    const call = (renderCompoundPartialFailure as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0] as {
+      completed: Array<{ resourceType: string }>;
+      failedResource: { resourceType: string };
+    };
+    expect(call.completed.map((r) => r.resourceType)).toEqual([
+      "AWS::EC2::SecurityGroup",
+      "AWS::IAM::Role",
+    ]);
+    expect(call.failedResource.resourceType).toMatch(/Lambda|Function/);
   });
 
-  it("cleanup guidance lists resources in reverse dependency order", async () => {
-    const { renderError } = await import("../../utils/display.js");
+  it("cleanup guidance lists resources in forward order (renderer reverses for destroy)", async () => {
+    const { renderCompoundPartialFailure } =
+      await import("../../utils/display.js");
 
     const state = makeState({
       executionStatus: ExecutionStatus.FAILED,
@@ -957,25 +966,20 @@ describe("compound flow error handling", () => {
 
     await resultFormatterNode(state);
 
-    const errorCall = (renderError as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    const errorMessage = errorCall[0] as string;
-
-    // Verify all three are mentioned in the cleanup guidance
-    expect(errorMessage).toContain("AWS::Lambda::Function");
-    expect(errorMessage).toContain("AWS::IAM::Role");
-    expect(errorMessage).toContain("AWS::EC2::SecurityGroup");
-
-    // Verify the cleanup commands section has resources in reverse order
-    // (Lambda destroy listed before Role destroy, Role before SG)
-    const cleanupSection = errorMessage.substring(
-      errorMessage.indexOf("assignee destroy"),
-    );
-    const lambdaDestroyIdx = cleanupSection.indexOf("AWS::Lambda::Function");
-    const roleDestroyIdx = cleanupSection.indexOf("AWS::IAM::Role");
-    const sgDestroyIdx = cleanupSection.indexOf("AWS::EC2::SecurityGroup");
-
-    expect(lambdaDestroyIdx).toBeLessThan(roleDestroyIdx);
-    expect(roleDestroyIdx).toBeLessThan(sgDestroyIdx);
+    expect(renderCompoundPartialFailure).toHaveBeenCalled();
+    const call = (renderCompoundPartialFailure as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0] as {
+      completed: Array<{ resourceType: string; resourceArn?: string }>;
+    };
+    // Forward (dependency) order — renderer handles reversal for
+    // the destroy output. The reverse-order destroy assertion
+    // lives in apps/cli/src/utils/display.test.ts against real
+    // captured stderr output.
+    expect(call.completed.map((r) => r.resourceType)).toEqual([
+      "AWS::EC2::SecurityGroup",
+      "AWS::IAM::Role",
+      "AWS::Lambda::Function",
+    ]);
   });
 
   it("partial failure with no completed resources shows standard error (no cleanup guidance)", async () => {

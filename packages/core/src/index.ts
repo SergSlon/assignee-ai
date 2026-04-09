@@ -174,6 +174,10 @@ export {
   defaultPatternRegistry,
   PatternRegistry,
   PatternId,
+  // Item 1 (2026-04-09): exported so the compound cleanup-matrix
+  // harness in apps/cli/src/test-harness/ can import it by name
+  // instead of reaching into an internal module path.
+  vpcNetworkingPattern,
 } from "./pattern-templates/index.js";
 export type {
   ArchitecturePattern,
