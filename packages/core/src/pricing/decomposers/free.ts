@@ -69,3 +69,12 @@ export const efsMountTargetPricingDecomposer = createFreeDecomposer(
 export const eventsRulePricingDecomposer = createFreeDecomposer(
   RESOURCE_TYPES.EVENTS_RULE,
 );
+// A9 (2026-04-09): AWS::Events::EventBus bills $1.00 per million
+// events PUBLISHED to the bus. The per-event rate is fixed but the
+// publish volume is workload-dependent — not knowable from the
+// desiredState — so the decomposer returns []. The cost-advisor
+// surfaces the $1/M rate as a workload-cost reminder when the user
+// creates a non-default event bus.
+export const eventsEventBusPricingDecomposer = createFreeDecomposer(
+  RESOURCE_TYPES.EVENTS_EVENT_BUS,
+);

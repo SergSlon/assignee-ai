@@ -29,6 +29,8 @@ import { efsFileSystemPlugin } from "./plugins/efs-file-system.js";
 import { efsMountTargetPlugin } from "./plugins/efs-mount-target.js";
 // A8 (2026-04-08): EventBridge Rule first-class
 import { eventsRulePlugin } from "./plugins/events-rule.js";
+// A9 (2026-04-09): EventBridge custom event bus first-class
+import { eventsEventBusPlugin } from "./plugins/events-eventbus.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -71,6 +73,8 @@ defaultPluginRegistry.register(efsFileSystemPlugin);
 defaultPluginRegistry.register(efsMountTargetPlugin);
 // A8 (2026-04-08): EventBridge Rule first-class
 defaultPluginRegistry.register(eventsRulePlugin);
+// A9 (2026-04-09): EventBridge custom event bus first-class
+defaultPluginRegistry.register(eventsEventBusPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 export { PluginRegistry };
@@ -104,6 +108,8 @@ export { efsFileSystemPlugin } from "./plugins/efs-file-system.js";
 export { efsMountTargetPlugin } from "./plugins/efs-mount-target.js";
 // A8 (2026-04-08): EventBridge Rule first-class
 export { eventsRulePlugin } from "./plugins/events-rule.js";
+// A9 (2026-04-09): EventBridge custom event bus first-class
+export { eventsEventBusPlugin } from "./plugins/events-eventbus.js";
 export { genericPlugin } from "./plugins/generic.js";
 export type {
   ResourcePlugin,

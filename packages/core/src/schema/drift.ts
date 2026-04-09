@@ -89,6 +89,11 @@ export const AUTO_POPULATED_FIELDS: Record<string, Set<string>> = {
   // the EventBridge wiring and makes it easy to add Id-style
   // generated fields later if AWS ever expands the schema.
   "AWS::Events::Rule": new Set(["Arn"]),
+  // A9 (2026-04-09): AWS::Events::EventBus exposes Arn as readOnly
+  // (already covered by _global) — the per-type entry stays here
+  // for symmetry with Events::Rule and to make it easy to add
+  // future generated fields.
+  "AWS::Events::EventBus": new Set(["Arn"]),
 };
 
 /**
