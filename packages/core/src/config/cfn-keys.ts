@@ -81,6 +81,11 @@ export const CfnKey = {
   ENVIRONMENT: "Environment",
   ARCHITECTURES: "Architectures",
   RESERVED_CONCURRENT_EXECUTIONS: "ReservedConcurrentExecutions",
+  // (f) 2026-04-09: Lambda provisioned concurrency config lives on the
+  // Version/Alias in AWS but our plugin surfaces it on the function
+  // desiredState for plan-time cost visibility.
+  PROVISIONED_CONCURRENCY_CONFIG: "ProvisionedConcurrencyConfig",
+  PROVISIONED_CONCURRENT_EXECUTIONS: "ProvisionedConcurrentExecutions",
   EPHEMERAL_STORAGE: "EphemeralStorage",
   LAYERS: "Layers",
   CODE: "Code",

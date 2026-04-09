@@ -45,6 +45,11 @@ export const PricingFilterValue = {
   API_GATEWAY_MINUTE: "ApiGatewayMinute",
   LAMBDA_REQUEST: "Request",
   LAMBDA_GB_SECOND: "Lambda-GB-Second",
+  // (f) 2026-04-09: Lambda provisioned concurrency GB-seconds usage type.
+  // AWS bills committed provisioned concurrency per GB-second whether or
+  // not the warm instances handle any invocations — hence FIXED line item.
+  LAMBDA_PROVISIONED_CONCURRENCY_GB_SECOND:
+    "Lambda-Provisioned-Concurrency-GB-Second",
   DATA_PROCESSING_BYTES: "DataProcessing-Bytes",
   DELIVERY_ATTEMPTS_HTTP: "DeliveryAttempts-HTTP",
 } as const;

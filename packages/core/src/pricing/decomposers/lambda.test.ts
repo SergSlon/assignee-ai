@@ -136,4 +136,81 @@ describe("lambdaPricingDecomposer", () => {
       }
     }
   });
+
+  // (f) 2026-04-09 — provisioned concurrency conditional line item.
+  describe("provisioned concurrency", () => {
+    it("adds a FIXED PC line when ProvisionedConcurrencyConfig.ProvisionedConcurrentExecutions > 0", () => {
+      const items = lambdaPricingDecomposer.decompose({
+        MemorySize: 1024,
+        ProvisionedConcurrencyConfig: {
+          ProvisionedConcurrentExecutions: 5,
+        },
+      });
+      expect(items).toHaveLength(4);
+      const pc = items.find((i) => i.label === "Provisioned concurrency")!;
+      expect(pc.kind).toBe("fixed");
+      // 5 warm instances × (1024 / 1024) = 5 GB-seconds committed
+      expect(pc.quantity).toBe(5);
+      expect(pc.unit).toBe("GB-second");
+      expect(pc.priceUnit).toBe("/GB-s");
+      expect(pc.serviceCode).toBe("AWSLambda");
+      expect(pc.description).toContain("5 warm instances");
+      expect(pc.description).toContain("1024 MB");
+      expect(pc.description).toContain("committed");
+      expect(pc.description).toContain("24/7");
+      expect(pc.filters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            Field: "productFamily",
+            Value: "Serverless",
+          }),
+          expect.objectContaining({
+            Field: "usagetype",
+            Value: "Lambda-Provisioned-Concurrency-GB-Second",
+          }),
+        ]),
+      );
+    });
+
+    it("uses singular 'instance' for a single warm executor", () => {
+      const items = lambdaPricingDecomposer.decompose({
+        MemorySize: 512,
+        ProvisionedConcurrencyConfig: {
+          ProvisionedConcurrentExecutions: 1,
+        },
+      });
+      const pc = items.find((i) => i.label === "Provisioned concurrency")!;
+      expect(pc.description).toContain("1 warm instance ");
+      // 1 × 512/1024 = 0.5 GB committed
+      expect(pc.quantity).toBe(0.5);
+    });
+
+    it("does NOT add a PC line when ProvisionedConcurrencyConfig is absent", () => {
+      const items = lambdaPricingDecomposer.decompose({
+        MemorySize: 512,
+      });
+      expect(items).toHaveLength(3);
+      expect(
+        items.find((i) => i.label === "Provisioned concurrency"),
+      ).toBeUndefined();
+    });
+
+    it("does NOT add a PC line when ProvisionedConcurrentExecutions is 0", () => {
+      const items = lambdaPricingDecomposer.decompose({
+        MemorySize: 512,
+        ProvisionedConcurrencyConfig: {
+          ProvisionedConcurrentExecutions: 0,
+        },
+      });
+      expect(items).toHaveLength(3);
+    });
+
+    it("does NOT add a PC line when ProvisionedConcurrentExecutions is missing from the config", () => {
+      const items = lambdaPricingDecomposer.decompose({
+        MemorySize: 512,
+        ProvisionedConcurrencyConfig: {},
+      });
+      expect(items).toHaveLength(3);
+    });
+  });
 });

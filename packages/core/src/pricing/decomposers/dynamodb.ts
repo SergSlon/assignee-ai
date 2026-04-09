@@ -56,7 +56,7 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
           { Field: F.GROUP, Value: FV.DDB_READ_UNITS, Type: M.TERM_MATCH },
         ],
         kind: K.FIXED,
-        description: `${rcu} RCUs`,
+        description: `Provisioned (PROVISIONED) — ${rcu} RCUs committed`,
         priceUnit: PriceUnit.PER_RCU_HOUR,
       });
 
@@ -75,7 +75,7 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
           { Field: F.GROUP, Value: FV.DDB_WRITE_UNITS, Type: M.TERM_MATCH },
         ],
         kind: K.FIXED,
-        description: `${wcu} WCUs`,
+        description: `Provisioned (PROVISIONED) — ${wcu} WCUs committed`,
         priceUnit: PriceUnit.PER_WCU_HOUR,
       });
     } else {
@@ -94,7 +94,8 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
           { Field: F.GROUP, Value: FV.DDB_READ_UNITS, Type: M.TERM_MATCH },
         ],
         kind: K.USAGE_BASED,
-        description: "per million read request units",
+        description:
+          "On-demand (PAY_PER_REQUEST) — per million read request units",
         priceUnit: PriceUnit.PER_MILLION_READ_REQS,
       });
 
@@ -113,7 +114,8 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
           { Field: F.GROUP, Value: FV.DDB_WRITE_UNITS, Type: M.TERM_MATCH },
         ],
         kind: K.USAGE_BASED,
-        description: "per million write request units",
+        description:
+          "On-demand (PAY_PER_REQUEST) — per million write request units",
         priceUnit: PriceUnit.PER_MILLION_WRITE_REQS,
       });
     }
@@ -137,7 +139,7 @@ export const dynamodbPricingDecomposer: PricingDecomposer = {
         },
       ],
       kind: K.USAGE_BASED,
-      description: "per GB-month",
+      description: `Table storage (${isProvisioned ? "PROVISIONED" : "PAY_PER_REQUEST"}) — per GB-month, first 25 GB free`,
       priceUnit: PriceUnit.PER_GB_MONTH,
     });
 
