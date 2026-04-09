@@ -87,3 +87,12 @@ export const eventsEventBusPricingDecomposer = createFreeDecomposer(
 export const snsSubscriptionPricingDecomposer = createFreeDecomposer(
   RESOURCE_TYPES.SNS_SUBSCRIPTION,
 );
+// A12 (2026-04-09): AWS::Events::Connection is free — the cost
+// lives on the ApiDestination that references it (per-invocation
+// HTTP fee) and on the target service if there is one. The
+// managed Secrets Manager secret that Connection creates on your
+// behalf is NOT separately billed; it's bundled into the Connection
+// lifecycle. Decomposer returns [] accordingly.
+export const eventsConnectionPricingDecomposer = createFreeDecomposer(
+  RESOURCE_TYPES.EVENTS_CONNECTION,
+);

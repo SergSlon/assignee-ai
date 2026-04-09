@@ -227,6 +227,33 @@ const COMPOUND_CROSS_REF_KEYWORDS: Array<{
     ],
     resourceType: RESOURCE_TYPES.KMS_KEY,
   },
+  // A12 (2026-04-09): Events::Connection classification. Must be in
+  // priority block because the unique phrases here would otherwise
+  // be subsumed by "eventbridge rule" or "event bus" in the regular
+  // table.
+  {
+    keywords: [
+      "eventbridge connection",
+      "events connection",
+      "api connection",
+      "webhook connection",
+      "outbound api connection",
+    ],
+    resourceType: RESOURCE_TYPES.EVENTS_CONNECTION,
+  },
+  // A13 (2026-04-09): Events::ApiDestination classification. Same
+  // priority-block reasoning.
+  {
+    keywords: [
+      "api destination",
+      "apidestination",
+      "eventbridge destination",
+      "outbound webhook",
+      "webhook destination",
+      "external api target",
+    ],
+    resourceType: RESOURCE_TYPES.EVENTS_API_DESTINATION,
+  },
 ];
 
 /**

@@ -41,6 +41,11 @@ import { snsSubscriptionPricingStrategy } from "./strategies/sns-subscription.js
 // A11 (2026-04-09) — KMS::Key first-class (customer-managed keys)
 import { kmsKeyPricingStrategy } from "./strategies/kms-key.js";
 import { kmsKeyPricingDecomposer } from "./decomposers/kms-key.js";
+// A12 (2026-04-09) — Events::Connection first-class (free)
+import { eventsConnectionPricingStrategy } from "./strategies/events-connection.js";
+// A13 (2026-04-09) — Events::ApiDestination first-class ($0.20/1M invocations)
+import { eventsApiDestinationPricingStrategy } from "./strategies/events-apidestination.js";
+import { eventsApiDestinationPricingDecomposer } from "./decomposers/events-apidestination.js";
 import { ec2PricingDecomposer } from "./decomposers/ec2.js";
 import { rdsPricingDecomposer } from "./decomposers/rds.js";
 import { s3PricingDecomposer } from "./decomposers/s3.js";
@@ -79,6 +84,8 @@ import {
   eventsEventBusPricingDecomposer,
   // A10 (2026-04-09): SNS Subscription — cost owned by topic + target
   snsSubscriptionPricingDecomposer,
+  // A12 (2026-04-09): Events::Connection — free (cost on ApiDestination)
+  eventsConnectionPricingDecomposer,
 } from "./decomposers/free.js";
 
 /**
@@ -205,6 +212,16 @@ defaultPricingRegistry.register(
 );
 // A11 (2026-04-09) — KMS::Key (customer-managed keys, $1/key/month + reqs)
 defaultPricingRegistry.register(RESOURCE_TYPES.KMS_KEY, kmsKeyPricingStrategy);
+// A12 (2026-04-09) — Events::Connection (free)
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.EVENTS_CONNECTION,
+  eventsConnectionPricingStrategy,
+);
+// A13 (2026-04-09) — Events::ApiDestination ($0.20 per 1M invocations)
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.EVENTS_API_DESTINATION,
+  eventsApiDestinationPricingStrategy,
+);
 
 /**
  * The default pre-populated pricing decomposer registry (Story 23.1).
@@ -249,6 +266,10 @@ defaultDecomposerRegistry.register(eventsEventBusPricingDecomposer);
 defaultDecomposerRegistry.register(snsSubscriptionPricingDecomposer);
 // A11 (2026-04-09) — KMS::Key
 defaultDecomposerRegistry.register(kmsKeyPricingDecomposer);
+// A12 (2026-04-09) — Events::Connection (free)
+defaultDecomposerRegistry.register(eventsConnectionPricingDecomposer);
+// A13 (2026-04-09) — Events::ApiDestination (usage-based)
+defaultDecomposerRegistry.register(eventsApiDestinationPricingDecomposer);
 
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";

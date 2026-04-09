@@ -89,6 +89,31 @@ export const SUPPORTED_TYPES_ARRAY = [
   // external material (Origin=EXTERNAL) are callable from the
   // generic plugin if a user asks, but are not wizard-promoted.
   "AWS::KMS::Key",
+  // A12 (2026-04-09): AWS::Events::Connection first-class. Natural
+  // follow-up to A9 EventBus — lets Events::Rule targets reach
+  // external HTTP APIs (Slack webhooks, Datadog, Stripe, any SaaS
+  // partner). CCAPI schema probed 2026-04-09: all 5 handlers,
+  // primaryIdentifier /properties/Name (createOnly + required for
+  // CCAPI although the schema marks required=[] — the create
+  // handler rejects requests without Name + AuthorizationType +
+  // AuthParameters). Not taggable. Create handler also needs
+  // secretsmanager:CreateSecret/GetSecretValue/PutSecretValue
+  // because the Connection stores auth credentials in a managed
+  // Secret, plus kms:Encrypt/Decrypt/GenerateDataKey for the
+  // Secret's at-rest envelope encryption — those cross-service
+  // perms are added to the KMS_KEY + SECRETSMANAGER_SECRET entries
+  // in iam-actions.ts so the operator role can complete the
+  // handler's work.
+  "AWS::Events::Connection",
+  // A13 (2026-04-09): AWS::Events::ApiDestination first-class.
+  // Pairs with A12 Connection — references a ConnectionArn and
+  // adds the HTTP invocation endpoint (URL + method) so
+  // Events::Rule Targets can POST/GET/PUT to external APIs.
+  // CCAPI schema probed 2026-04-09: all 5 handlers, Name is the
+  // only createOnly field, required=[ConnectionArn,
+  // InvocationEndpoint, HttpMethod]. Not taggable. Only events:*
+  // perms needed — the cross-service work lives on Connection.
+  "AWS::Events::ApiDestination",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -136,6 +161,10 @@ export const RESOURCE_TYPES = {
   SNS_SUBSCRIPTION: "AWS::SNS::Subscription",
   // A11 (2026-04-09) — KMS::Key first-class (symmetric CMK common case)
   KMS_KEY: "AWS::KMS::Key",
+  // A12 (2026-04-09) — Events::Connection (outbound HTTP auth wire)
+  EVENTS_CONNECTION: "AWS::Events::Connection",
+  // A13 (2026-04-09) — Events::ApiDestination (outbound HTTP endpoint)
+  EVENTS_API_DESTINATION: "AWS::Events::ApiDestination",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */

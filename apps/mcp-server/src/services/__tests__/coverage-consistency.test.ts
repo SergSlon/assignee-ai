@@ -56,6 +56,12 @@ const TYPE_TO_KEYWORD: Record<string, string> = {
   // Routed via the priority COMPOUND_CROSS_REF_KEYWORDS block in
   // cost-estimator.ts with the unique phrase "kms key".
   "AWS::KMS::Key": "kms key",
+  // A12 (2026-04-09): Events::Connection classification. Same
+  // priority-block routing — distinct phrase to avoid collision
+  // with the Events::Rule / EventBus keywords.
+  "AWS::Events::Connection": "eventbridge connection",
+  // A13 (2026-04-09): Events::ApiDestination classification.
+  "AWS::Events::ApiDestination": "api destination",
 };
 
 describe("cross-system consistency", () => {

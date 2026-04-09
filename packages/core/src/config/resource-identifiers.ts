@@ -81,6 +81,16 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   // at plan time, so the state guard skips Read-Before-Write for
   // this type (same pattern as EFS::FileSystem and VPC).
   [RESOURCE_TYPES.KMS_KEY]: "KeyId",
+  // A12 (2026-04-09): AWS::Events::Connection primary identifier is
+  // the user-supplied Name (createOnly). Same pattern as
+  // Events::EventBus — the Name IS the primary ID, CCAPI keys on it,
+  // so the state guard CAN do Read-Before-Write and catch existing-
+  // connection collisions before CCAPI throws AlreadyExists.
+  [RESOURCE_TYPES.EVENTS_CONNECTION]: "Name",
+  // A13 (2026-04-09): AWS::Events::ApiDestination primary identifier
+  // is the user-supplied Name (createOnly). Same Read-Before-Write
+  // semantics as Events::Connection above.
+  [RESOURCE_TYPES.EVENTS_API_DESTINATION]: "Name",
 } as const;
 
 /**
