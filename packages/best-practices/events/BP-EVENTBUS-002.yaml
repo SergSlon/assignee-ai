@@ -1,0 +1,14 @@
+id: BP-EVENTBUS-002
+title: "EventBridge custom event bus should have a Description field"
+severity: INFO
+resource_type: "AWS::Events::EventBus"
+property_path: "Description"
+check_type: "exists"
+expected_value: true
+source: "AWS EventBridge Best Practices"
+source_id: "EVENTBUS-BP-02"
+description: "Custom event buses without a Description are hard to audit and maintain. When a multi-domain SaaS account has 5+ buses (orders, inventory, payments, audit, partner-events), the EventBridge console only shows the bus name + ARN — a one-line Description saves real triage time during incidents and surfaces ownership in CloudTrail event records."
+remediation: "Set Description to a one-sentence explanation of what events the bus carries and which team owns it. Example: 'Production order events for the checkout domain — owned by platform-orders, epic ORD-512'."
+consequence: "On-call engineers triaging at 3am don't know what events a misbehaving bus carries or who owns it — longer resolution + accidental disables of load-bearing buses."
+category: reliability
+lastVerified: "2026-04-09"

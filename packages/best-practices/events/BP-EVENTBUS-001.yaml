@@ -1,0 +1,14 @@
+id: BP-EVENTBUS-001
+title: "EventBridge custom event bus should use customer-managed KMS encryption"
+severity: MEDIUM
+resource_type: "AWS::Events::EventBus"
+property_path: "KmsKeyIdentifier"
+check_type: "exists"
+expected_value: true
+source: "AWS Well-Architected Framework — Security Pillar"
+source_id: "SEC-08"
+description: "EventBridge encrypts events at rest with the AWS-owned key by default. Customer-managed KMS keys give you key rotation control plus a CloudTrail audit trail on every encrypt/decrypt operation, which is required for SOC 2, HIPAA, and PCI-DSS compliance evidence. The AWS-managed key 'alias/aws/events' is the lightweight option (free, account-scoped, no rotation control); a customer-managed key adds rotation + audit at $1/month per key."
+remediation: "Set KmsKeyIdentifier to either 'alias/aws/events' (AWS-managed, free) or a customer-managed KMS key ARN. For compliance-bound workloads always pick a customer-managed key — the audit trail is the entire point. The bus operator IAM role needs kms:Decrypt + kms:GenerateDataKey on the chosen key."
+consequence: "Events at rest use the AWS-owned key — no key rotation control + no CloudTrail audit trail. Compliance auditors flag this for buses carrying PII or financial data."
+category: security
+lastVerified: "2026-04-09"
