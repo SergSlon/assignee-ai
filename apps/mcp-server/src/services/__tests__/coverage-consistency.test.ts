@@ -45,6 +45,17 @@ const TYPE_TO_KEYWORD: Record<string, string> = {
   "AWS::EFS::MountTarget": "efs mount target",
   "AWS::Events::Rule": "eventbridge rule",
   "AWS::Events::EventBus": "eventbridge bus",
+  // A10 (2026-04-09): SNS Subscription keyword must NOT contain plain
+  // "sns" because classifyResourceType returns on first match and the
+  // SNS_TOPIC entry earlier in the regular table owns "sns". The
+  // cost-estimator classifier therefore lists SNS_SUBSCRIPTION in the
+  // priority COMPOUND_CROSS_REF_KEYWORDS block with the unique phrase
+  // "sns subscription" — that is what must round-trip here.
+  "AWS::SNS::Subscription": "sns subscription",
+  // A11 (2026-04-09): KMS::Key customer-managed key classification.
+  // Routed via the priority COMPOUND_CROSS_REF_KEYWORDS block in
+  // cost-estimator.ts with the unique phrase "kms key".
+  "AWS::KMS::Key": "kms key",
 };
 
 describe("cross-system consistency", () => {

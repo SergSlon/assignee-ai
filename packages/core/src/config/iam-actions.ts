@@ -101,6 +101,59 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "sns:TagResource",
       "sns:ListTagsForResource",
     ],
+    // A11 (2026-04-09): AWS::KMS::Key — first-class (symmetric CMK).
+    // CCAPI handler permissions probed 2026-04-09 — union of create,
+    // read, update, delete, list handlers:
+    //   kms:CreateKey, kms:ScheduleKeyDeletion, kms:DescribeKey,
+    //   kms:EnableKey, kms:DisableKey,
+    //   kms:EnableKeyRotation, kms:DisableKeyRotation,
+    //   kms:GetKeyRotationStatus,
+    //   kms:PutKeyPolicy, kms:GetKeyPolicy, kms:UpdateKeyDescription,
+    //   kms:TagResource, kms:UntagResource, kms:ListResourceTags,
+    //   kms:ListKeys
+    // The Get*/Describe*/List* subset collapses into existing wildcard
+    // prefixes (SAFE_WILDCARD_PREFIXES), so the net byte cost to the
+    // services policy is mostly the Create/Delete/Enable/Disable/Put/
+    // Update/Tag/Untag verbs that cannot collapse.
+    [RESOURCE_TYPES.KMS_KEY]: [
+      "kms:CreateKey",
+      "kms:ScheduleKeyDeletion",
+      "kms:DescribeKey",
+      "kms:EnableKey",
+      "kms:DisableKey",
+      "kms:EnableKeyRotation",
+      "kms:DisableKeyRotation",
+      "kms:GetKeyRotationStatus",
+      "kms:GetKeyPolicy",
+      "kms:PutKeyPolicy",
+      "kms:UpdateKeyDescription",
+      "kms:TagResource",
+      "kms:UntagResource",
+      "kms:ListResourceTags",
+      "kms:ListKeys",
+    ],
+    // A10 (2026-04-09): AWS::SNS::Subscription — first-class.
+    // CCAPI handler permissions probed 2026-04-09:
+    //   create: iam:GetRole, iam:PassRole, sns:Subscribe
+    //   read:   sns:GetSubscriptionAttributes
+    //   update: iam:GetRole, iam:PassRole, sns:SetSubscriptionAttributes
+    //   delete: sns:Unsubscribe, sns:GetSubscriptionAttributes
+    //   list:   sns:ListSubscriptions
+    // iam:GetRole + iam:PassRole are only needed when creating a
+    // Firehose delivery-stream subscription with SubscriptionRoleArn
+    // — we grab them anyway so that path works without a second
+    // round of policy edits. Tagging is NOT supported (schema
+    // reports tagging.taggable=false), so no sns:Tag* actions.
+    [RESOURCE_TYPES.SNS_SUBSCRIPTION]: [
+      "sns:Subscribe",
+      "sns:Unsubscribe",
+      "sns:GetSubscriptionAttributes",
+      "sns:SetSubscriptionAttributes",
+      "sns:ListSubscriptions",
+      "sns:ListSubscriptionsByTopic",
+      "iam:GetRole",
+      "iam:PassRole",
+    ],
     [RESOURCE_TYPES.SSM_PARAMETER]: [
       "ssm:PutParameter",
       "ssm:GetParameter",

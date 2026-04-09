@@ -1,6 +1,6 @@
 # Supported Resource Types
 
-assignee.ai supports 29 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
+assignee.ai supports 31 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
 
 ## Resource Type Table
 
@@ -35,6 +35,8 @@ assignee.ai supports 29 AWS resource types via CloudFormation CloudControl API, 
 | 27  | `AWS::EFS::MountTarget` (A1 follow-up)      | EFS Mount Target     | efs-mount-target      | -             |
 | 28  | `AWS::Events::Rule` (A8)                    | EventBridge Rule     | events-rule           | -             |
 | 29  | `AWS::Events::EventBus` (A9)                | EventBridge EventBus | events-eventbus       | -             |
+| 30  | `AWS::SNS::Subscription` (A10)              | SNS Subscription     | sns-subscription      | -             |
+| 31  | `AWS::KMS::Key` (A11)                       | KMS Key (CMK)        | kms-key               | -             |
 
 A **generic plugin** handles any resource type not covered by a dedicated plugin, using CloudFormation schema defaults.
 
@@ -85,19 +87,29 @@ The `AWS::ElasticLoadBalancingV2::LoadBalancer` plugin defaults `Scheme` to `int
 
 ## CCAPI Fallback Types
 
-These resource types cannot be provisioned via CloudControl API and use direct SDK calls:
-
-| Type                              | Fallback Method                      |
-| --------------------------------- | ------------------------------------ |
-| `AWS::Lambda::EventSourceMapping` | SDK: Lambda CreateEventSourceMapping |
-| `AWS::SNS::Subscription`          | SDK: SNS Subscribe                   |
-
-These types are redirected with a suggestion to use an alternative:
+After the A6 and A10 migrations, assignee.ai no longer has any direct
+SDK write paths for AWS resources — every first-class type flows through
+the CloudControl API. The only remaining entries in `CCAPI_FALLBACK_TYPES`
+are types that CCAPI cannot model at all, which are redirected to a
+supported alternative at plan time:
 
 | Unsupported Type                     | Recommended Alternative             |
 | ------------------------------------ | ----------------------------------- |
 | `AWS::Lambda::Permission`            | `AWS::Lambda::PermissionPolicy`     |
 | `AWS::ElastiCache::ReplicationGroup` | `AWS::ElastiCache::ServerlessCache` |
+
+Historical note:
+
+- **A6 (2026-04-08)** — `AWS::Lambda::EventSourceMapping` was migrated
+  from SDK fallback to CCAPI after a live-AWS probe confirmed full
+  handler support.
+- **A10 (2026-04-09)** — `AWS::SNS::Subscription` was promoted from
+  `CCAPI_FALLBACK_TYPES` to a first-class CCAPI type. The SDK
+  `SubscribeCommand`/`UnsubscribeCommand` code paths in
+  `sdk-fallback-dispatcher.ts` were deleted, and the `sns:Subscribe` /
+  `sns:Unsubscribe` IAM actions moved from the unscoped
+  `SdkFallbackActions` policy statement to the CCAPI-scoped
+  `ServiceSpecificActions` statement in `operatorServicesPolicy()`.
 
 ## Co-provisioning
 

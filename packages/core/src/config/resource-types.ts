@@ -65,6 +65,30 @@ export const SUPPORTED_TYPES_ARRAY = [
   // optional KmsKeyIdentifier + Policy + DeadLetterConfig + LogConfig.
   // Unblocks cross-account / SaaS-partner event ingestion patterns.
   "AWS::Events::EventBus",
+  // A10 (2026-04-09): AWS::SNS::Subscription promoted out of
+  // CCAPI_FALLBACK_TYPES to first-class. CCAPI schema probed
+  // 2026-04-09 — all five handlers (create/read/update/delete/list)
+  // present. Required: TopicArn + Protocol. createOnly: TopicArn,
+  // Protocol, Endpoint. primaryIdentifier + readOnly: /properties/Arn.
+  // NOT taggable (tagging.taggable=false) — listed in NO_TAG_TYPES
+  // in apps/cli/src/utils/tags.ts so injectMandatoryTags skips it.
+  // Promoting retires sdk-fallback-dispatcher subscribe/unsubscribe
+  // code paths and frees ~50 bytes from sdkFallbackActions.
+  "AWS::SNS::Subscription",
+  // A11 (2026-04-09): AWS::KMS::Key first-class. Lights up
+  // customer-managed-key targets for BP-EFS-001, BP-S3-001,
+  // BP-RDS-* and every other "use a CMK instead of the AWS-managed
+  // key" advisory. CCAPI schema probed 2026-04-09: all five handlers
+  // present, primaryIdentifier /properties/KeyId (auto-generated,
+  // readOnly), taggable on create + update, no schema-required
+  // fields. Supports symmetric encryption keys (default
+  // SYMMETRIC_DEFAULT), asymmetric signing/encrypting keys via
+  // KeySpec, and MultiRegion=true for cross-region replication.
+  // Scope for this slice: symmetric customer-managed keys — the
+  // common case. Custom key stores (Origin=AWS_CLOUDHSM) and
+  // external material (Origin=EXTERNAL) are callable from the
+  // generic plugin if a user asks, but are not wizard-promoted.
+  "AWS::KMS::Key",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -108,24 +132,36 @@ export const RESOURCE_TYPES = {
   EVENTS_RULE: "AWS::Events::Rule",
   // A9 (2026-04-09) — EventBridge custom event bus first-class
   EVENTS_EVENT_BUS: "AWS::Events::EventBus",
+  // A10 (2026-04-09) — SNS Subscription promoted from CCAPI_FALLBACK_TYPES
+  SNS_SUBSCRIPTION: "AWS::SNS::Subscription",
+  // A11 (2026-04-09) — KMS::Key first-class (symmetric CMK common case)
+  KMS_KEY: "AWS::KMS::Key",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */
 export const SUPPORTED_POC_TYPES: ResourceType[] = [...SUPPORTED_TYPES_ARRAY];
 
-// ── CCAPI Fallback Types (Story 7.7; narrowed by A6) ────────────────────────
+// ── CCAPI Fallback Types (Story 7.7; narrowed by A6 and A10) ────────────────
 // Resource types that cannot be provisioned via Cloud Control API.
-// These are routed to SDK-specific fallback handlers or rejected with a redirect message.
+// After A10 these are redirect-only types — there is no remaining
+// SDK-based create/delete path in this codebase, only friendly
+// redirect messages pointing at the supported alternative.
 //
-// A6 (2026-04-08) removed AWS::Lambda::EventSourceMapping from this set after
-// verifying CCAPI has full Create/Delete/Update handlers for the type — see
-// apps/cli/src/services/sdk-fallback-dispatcher.ts history and
-// docs/nfr-assessment-2026-04-08.md. The type is still referenced from
-// LIST_RESOURCE_TYPES so ARN-to-type resolution keeps working for destroy.
+// A6  (2026-04-08) removed AWS::Lambda::EventSourceMapping from this set
+//                  after verifying CCAPI has full Create/Delete/Update
+//                  handlers. The type is still referenced from
+//                  LIST_RESOURCE_TYPES for ARN-to-type resolution on
+//                  destroy.
+// A10 (2026-04-09) removed AWS::SNS::Subscription after the CCAPI
+//                  schema probe confirmed all five handlers
+//                  (create/read/update/delete/list). The SDK
+//                  SubscribeCommand/UnsubscribeCommand code paths in
+//                  sdk-fallback-dispatcher.ts were deleted. The only
+//                  remaining entries are pure redirect types with no
+//                  SDK write-path in this codebase.
 
 /** All resource types known to have CCAPI gaps. */
 export const CCAPI_FALLBACK_TYPES = {
-  SNS_SUBSCRIPTION: "AWS::SNS::Subscription",
   LAMBDA_PERMISSION: "AWS::Lambda::Permission",
   ELASTICACHE_REPLICATION_GROUP: "AWS::ElastiCache::ReplicationGroup",
 } as const;
@@ -181,10 +217,17 @@ export const LIST_RESOURCE_TYPES = {
 export type CcapiFallbackType =
   (typeof CCAPI_FALLBACK_TYPES)[keyof typeof CCAPI_FALLBACK_TYPES];
 
-/** Resource types that can be handled via direct AWS SDK calls (not CCAPI). */
-export const CCAPI_SDK_ROUTABLE_TYPES: readonly string[] = [
-  CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION,
-] as const;
+/**
+ * Resource types that can be handled via direct AWS SDK calls (not CCAPI).
+ *
+ * A10 (2026-04-09): emptied after SNS::Subscription was promoted to
+ * first-class. The SDK dispatcher now only handles redirect-type
+ * short-circuits (LAMBDA_PERMISSION, ELASTICACHE_REPLICATION_GROUP).
+ * Kept as an empty readonly array so the dispatcher's canHandle() /
+ * canDelete() hooks keep compiling — promoting a future SDK-only
+ * type would re-populate this list.
+ */
+export const CCAPI_SDK_ROUTABLE_TYPES: readonly string[] = [] as const;
 
 /**
  * Resource types that are not supported and should redirect to an alternative.

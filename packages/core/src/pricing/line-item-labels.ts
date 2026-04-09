@@ -32,6 +32,8 @@ export const LineItemLabel = {
   IMAGE_STORAGE: "Image storage",
   PUT_REQUESTS: "PUT requests",
   GET_REQUESTS: "GET requests",
+  // A11 (2026-04-09): AWS::KMS::Key
+  KEY_STORAGE: "Key storage",
 } as const;
 
 /**

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "hash": "cb1f081c4795e8b5154af196e2369172d4c42359fc3ae1602c18c8d6314d9ab4",
+  "hash": "2caed4fff70232a3988c143696fc803934c851338f3e7ec0e3eb4a33d6d08138",
   "files": {
     "apigateway/BP-APIGW-001.yaml": "bec1fb5d3e88707c41e07e4066bee54bc8290f7886ef02fe8054f89199d59267",
     "apigateway/BP-APIGW-002.yaml": "f0b8df494b6fbb8b1a7793a9e408d692fc01355122692bd6af0099f3bc1767f5",
@@ -100,6 +100,7 @@
     "iam/BP-IAM-015.yaml": "d1ab7ec7213bf05c6073c7292c4c056fa8b5e58466f4c4157199fa9b0d3115f9",
     "iam/BP-IAM-016.yaml": "8b4c16a2a9282903f66699e5e2e14a14910747b1f709575c1ba88fe28f6d870b",
     "iam/BP-IAM-017.yaml": "07db825cb1706a800b91f9c0cf6e76cd506d66654bc3a74bae0edd23a4ddd501",
+    "kms/BP-KMS-001.yaml": "1c033d90f60ee3d76bc42544dbf439fd08da7194cb23cda828ed32dbdfc800f1",
     "lambda/BP-LAMBDA-001.yaml": "0522d12730c3d9acf3132094269203a86c45e6134ad2853857e324fb4946a750",
     "lambda/BP-LAMBDA-002.yaml": "f0f5fc6a0b3622754cb00bc325a8ab8843943d9061ae43655989e0aef050c62f",
     "lambda/BP-LAMBDA-003.yaml": "a5aa3e517d7bf08b49940716b297f7ace20c5b3cd45dee6a5d769b9063258090",
@@ -157,6 +158,7 @@
     "sns/BP-SNS-004.yaml": "c62e224a0d42d89875b9a469f590bda31a279de99ccc597f55efdc8d035e1620",
     "sns/BP-SNS-005.yaml": "b6225d71c80a1b533d8fccaa15152771f305a9d0dcac037035edeaa69b1699d3",
     "sns/BP-SNS-006.yaml": "04ac4c9e22e6fb2e47a330957573ecf0f33e844ee51c8ae85a6de959b157187f",
+    "sns/BP-SNS-007.yaml": "e484ac4c2b68b87ecdb0b203b5f3a4159cd5b154dd9214d6503a8c373b0f0ec4",
     "sqs/BP-SQS-001.yaml": "2f992326459eb764cbe984fb6b0a95ce2da9de8f33ba36e0ac234fc7be3bf4a3",
     "sqs/BP-SQS-002.yaml": "6e60b8c5d6b6cbebfd7df08282577b1a965def014b155c09f85ec34e3e6b3052",
     "sqs/BP-SQS-003.yaml": "208ce3821917b321a486b5aff3dab83bbd828564e98e13815d6bb810dceed841",
@@ -173,6 +175,6 @@
     "vpc/BP-VPC-001.yaml": "d1efbeaa898d16f6dd2605519b7fa3564c7237553193faf8e709ac8044290000",
     "vpc/BP-VPC-002.yaml": "f7c720a24811610df4bac22b00485c0d779ba5452c334bb7266b84afd7160e5f"
   },
-  "count": 170,
-  "generatedAt": "2026-04-09T07:03:38.754Z"
+  "count": 172,
+  "generatedAt": "2026-04-09T11:06:17.634Z"
 }

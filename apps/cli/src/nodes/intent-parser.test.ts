@@ -87,8 +87,12 @@ describe("intentParserNode", () => {
     expect(SUPPORTED_TYPES).toContain("AWS::EFS::MountTarget");
     // A8 (2026-04-08): EventBridge Rule lifted the count to 28.
     expect(SUPPORTED_TYPES).toContain("AWS::Events::Rule");
-    // A9 (2026-04-09): EventBridge custom event bus lifted the count to 29.
+    // A9  (2026-04-09): EventBridge custom event bus lifted the count to 29.
     expect(SUPPORTED_TYPES).toContain("AWS::Events::EventBus");
-    expect(SUPPORTED_TYPES).toHaveLength(29);
+    // A10 (2026-04-09): SNS Subscription promoted to first-class, count 30.
+    expect(SUPPORTED_TYPES).toContain("AWS::SNS::Subscription");
+    // A11 (2026-04-09): KMS::Key first-class, count 31.
+    expect(SUPPORTED_TYPES).toContain("AWS::KMS::Key");
+    expect(SUPPORTED_TYPES).toHaveLength(31);
   });
 });

@@ -22,4 +22,6 @@ export const PricingUnit = {
   GB_SECOND: "GB-second",
   LCU_HR: "LCU-hr",
   NLCU_HR: "NLCU-hr",
+  // A11 (2026-04-09): AWS::KMS::Key — $1/key/month prorated to the hour
+  KEY: "key",
 } as const;

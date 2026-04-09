@@ -67,6 +67,20 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   // CAN do Read-Before-Write for EventBus and catch existing-bus
   // collisions before CCAPI throws AlreadyExists.
   [RESOURCE_TYPES.EVENTS_EVENT_BUS]: "Name",
+  // A10 (2026-04-09): AWS::SNS::Subscription primary identifier is
+  // the auto-generated subscription Arn (readOnly in the CCAPI
+  // schema). TopicArn + Protocol + Endpoint are all createOnly and
+  // together determine the Arn, but the Arn itself is never
+  // present in desiredState at plan time — state guard skips the
+  // Read-Before-Write check, mirroring Events::Rule.
+  [RESOURCE_TYPES.SNS_SUBSCRIPTION]: "Arn",
+  // A11 (2026-04-09): AWS::KMS::Key primary identifier is the
+  // auto-generated KeyId (UUID, readOnly in the CCAPI schema).
+  // The human-friendly Description is NOT the primary identifier
+  // — CCAPI keys on KeyId, which is never present in desiredState
+  // at plan time, so the state guard skips Read-Before-Write for
+  // this type (same pattern as EFS::FileSystem and VPC).
+  [RESOURCE_TYPES.KMS_KEY]: "KeyId",
 } as const;
 
 /**

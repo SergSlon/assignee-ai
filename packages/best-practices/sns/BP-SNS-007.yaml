@@ -1,0 +1,14 @@
+id: BP-SNS-007
+title: "SNS subscription must declare a RedrivePolicy dead-letter queue"
+severity: HIGH
+resource_type: "AWS::SNS::Subscription"
+property_path: "RedrivePolicy.deadLetterTargetArn"
+check_type: "exists"
+expected_value: true
+source: "AWS SNS Best Practices"
+source_id: "SNS-SUB-BP-01"
+description: "Without a RedrivePolicy, SNS silently drops any message that cannot be delivered to the subscriber after its retry policy exhausts. This is the #1 SNS failure mode: a subscriber outage, quota exhaustion, or a malformed endpoint URL causes production events to disappear with no recovery path, no alerting hook, and no audit trail. A same-account SQS DLQ wired into RedrivePolicy.deadLetterTargetArn captures every undeliverable message so operators can replay them after fixing the broken subscriber."
+remediation: "Create an SQS queue in the same account and wire its ARN into RedrivePolicy: {\"deadLetterTargetArn\":\"<sqs-arn>\"}. The SNS topic's service principal (sns.amazonaws.com) needs sqs:SendMessage on the DLQ via a queue policy. Set a CloudWatch alarm on the DLQ's ApproximateNumberOfMessagesVisible metric so the team gets paged when deliveries start failing."
+consequence: "Undeliverable messages disappear silently. A subscriber outage or endpoint misconfiguration means lost production events with no recovery path — common silent-failure mode for new SNS wire-ups."
+category: reliability
+lastVerified: "2026-04-09"

@@ -45,6 +45,8 @@ export const PricingServiceCode = {
   DATA_TRANSFER: "AWSDataTransfer",
   // A1 (2026-04-08) — EFS
   EFS: "AmazonEFS",
+  // A11 (2026-04-09) — KMS::Key
+  KMS: "awskms",
 } as const;
 
 export const PricingKind = {
@@ -92,6 +94,8 @@ export const PricingProductFamily = {
   SECRET: "Secret",
   // SSM
   SYSTEMS_MANAGER: "AWS Systems Manager",
+  // A11 (2026-04-09) — KMS
+  ENCRYPTION_KEY: "Encryption Key",
 } as const;
 
 /** Standard free tier message used for resources with no usage limits. */

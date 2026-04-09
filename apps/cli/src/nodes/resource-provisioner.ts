@@ -11,7 +11,6 @@ import {
   ExecutionStatus,
   getPrimaryIdentifier,
   SUPPORTED_TYPES_ARRAY,
-  CCAPI_FALLBACK_TYPES,
   RESOURCE_TYPES,
   PROVISIONING_ERROR_CODES,
   type ResourceType,
@@ -153,42 +152,12 @@ export async function resourceProvisionerNode(
       };
     }
 
-    // Check SDK-routable types (can be provisioned via native SDK).
-    // After A6, the only SDK-routed create type is AWS::SNS::Subscription.
-    // Lambda EventSourceMapping was migrated to CCAPI and now flows through
-    // the normal provisioning path below.
-    if (fallbackDispatcher.canHandle(state.resourceType)) {
-      log({
-        ts: new Date().toISOString(),
-        runId: state.runId,
-        level: "info",
-        action: LOG_ACTIONS.SDK_FALLBACK_DISPATCHED,
-        extras: {
-          resourceType: state.resourceType,
-          dispatchPath: "sdk_fallback",
-        },
-      });
-
-      // SNS Subscriptions do NOT support tags at creation time, so we pass
-      // the desired state through unchanged.
-      if (state.resourceType === CCAPI_FALLBACK_TYPES.SNS_SUBSCRIPTION) {
-        const [err, result] = await fallbackDispatcher.subscribe(desiredState);
-        if (err) {
-          return {
-            executionStatus: ExecutionStatus.FAILED,
-            errorMessage: `SDK fallback provisioning failed: ${err.message}`,
-            error: new ProvisioningError(
-              err.message,
-              PROVISIONING_ERROR_CODES.UNKNOWN,
-            ),
-          };
-        }
-        return {
-          executionStatus: ExecutionStatus.SUCCESS,
-          resourceArn: result.identifier,
-        };
-      }
-    }
+    // A10 (2026-04-09): no SDK-routable create types remain. The
+    // dispatcher.canHandle() branch that used to route SNS
+    // Subscription (and, before A6, Lambda EventSourceMapping) to
+    // native SDK calls is retired — those types now flow through
+    // the normal CCAPI path below via their first-class plugins.
+    // The dispatcher survives only for isRedirect() above.
   }
 
   // ── State Guard (FR-15 Read-Before-Write) ────────────────────────────────

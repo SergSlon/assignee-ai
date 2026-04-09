@@ -45,6 +45,11 @@ const FREE_TYPES: readonly string[] = [
   // PUBLISHED to the bus. Per-event rate is fixed but publish volume
   // is workload-dependent, so the decomposer returns [].
   RESOURCE_TYPES.EVENTS_EVENT_BUS,
+  // A10 (2026-04-09): AWS::SNS::Subscription has no per-subscription
+  // charge. Publish + delivery fees are counted by the parent
+  // SNS::Topic decomposer; the target service (SQS/Lambda/Firehose)
+  // bills on its own meter. Subscription decomposer returns [].
+  RESOURCE_TYPES.SNS_SUBSCRIPTION,
   // SSM Standard tier is also free, but the decomposer is registered for
   // Advanced tier too — it is NOT in the "always free" list.
 ] as const;

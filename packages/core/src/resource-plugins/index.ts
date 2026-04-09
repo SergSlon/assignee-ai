@@ -31,6 +31,10 @@ import { efsMountTargetPlugin } from "./plugins/efs-mount-target.js";
 import { eventsRulePlugin } from "./plugins/events-rule.js";
 // A9 (2026-04-09): EventBridge custom event bus first-class
 import { eventsEventBusPlugin } from "./plugins/events-eventbus.js";
+// A10 (2026-04-09): SNS Subscription promoted out of CCAPI_FALLBACK_TYPES
+import { snsSubscriptionPlugin } from "./plugins/sns-subscription.js";
+// A11 (2026-04-09): KMS::Key first-class (symmetric customer-managed keys)
+import { kmsKeyPlugin } from "./plugins/kms-key.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -75,6 +79,10 @@ defaultPluginRegistry.register(efsMountTargetPlugin);
 defaultPluginRegistry.register(eventsRulePlugin);
 // A9 (2026-04-09): EventBridge custom event bus first-class
 defaultPluginRegistry.register(eventsEventBusPlugin);
+// A10 (2026-04-09): SNS Subscription first-class
+defaultPluginRegistry.register(snsSubscriptionPlugin);
+// A11 (2026-04-09): KMS::Key first-class
+defaultPluginRegistry.register(kmsKeyPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 export { PluginRegistry };
@@ -110,6 +118,10 @@ export { efsMountTargetPlugin } from "./plugins/efs-mount-target.js";
 export { eventsRulePlugin } from "./plugins/events-rule.js";
 // A9 (2026-04-09): EventBridge custom event bus first-class
 export { eventsEventBusPlugin } from "./plugins/events-eventbus.js";
+// A10 (2026-04-09): SNS Subscription first-class
+export { snsSubscriptionPlugin } from "./plugins/sns-subscription.js";
+// A11 (2026-04-09): KMS::Key first-class
+export { kmsKeyPlugin } from "./plugins/kms-key.js";
 export { genericPlugin } from "./plugins/generic.js";
 export type {
   ResourcePlugin,

@@ -625,13 +625,23 @@ describe("resourceProvisionerNode", () => {
       expect(mockProvisioner.getResource).not.toHaveBeenCalled();
     });
 
-    it("dispatches SNS Subscription via SDK fallback and returns SUCCESS with ARN", async () => {
-      mockFallback.canHandle.mockReturnValue(true);
-      mockFallback.subscribe.mockResolvedValueOnce([
+    it("routes SNS Subscription through the standard CCAPI path (A10 — promoted to first-class)", async () => {
+      // A10 (2026-04-09): SNS::Subscription was promoted out of
+      // CCAPI_FALLBACK_TYPES. The SDK Subscribe dispatch path is
+      // removed — the resource must flow through the standard
+      // CloudControl CreateResource path, same as every other
+      // first-class type. canHandle() returns false and the normal
+      // provisioner.createResource() call happens.
+      mockFallback.canHandle.mockReturnValue(false);
+      mockFallback.isRedirect.mockReturnValue(null);
+
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
         null,
-        {
-          identifier: "arn:aws:sns:us-east-1:123456789012:my-topic:sub-id",
-        },
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
+        null,
+        { requestToken: "sns-sub-token" },
       ]);
 
       const result = await resourceProvisionerNode(
@@ -647,12 +657,10 @@ describe("resourceProvisionerNode", () => {
         mockFallback as unknown as SDKFallbackDispatcher,
       );
 
-      expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
-      expect(result.resourceArn).toBe(
-        "arn:aws:sns:us-east-1:123456789012:my-topic:sub-id",
-      );
-      expect(mockFallback.subscribe).toHaveBeenCalled();
-      expect(mockProvisioner.getResource).not.toHaveBeenCalled();
+      expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
+      expect(result.requestToken).toBe("sns-sub-token");
+      expect(mockFallback.subscribe).not.toHaveBeenCalled();
+      expect(mockProvisioner.createResource).toHaveBeenCalled();
     });
 
     it("returns FAILED with redirect message for Lambda::Permission", async () => {
@@ -739,12 +747,24 @@ describe("resourceProvisionerNode", () => {
       expect(mockProvisioner.getResource).toHaveBeenCalled();
     });
 
-    it("returns FAILED when SDK fallback subscribe fails", async () => {
-      mockFallback.canHandle.mockReturnValue(true);
-      mockFallback.subscribe.mockResolvedValueOnce([
+    it("surfaces CCAPI NOT_FOUND on SNS Subscription TopicArn mistakes (A10 path)", async () => {
+      // A10 follow-up: when the referenced topic does not exist,
+      // CCAPI CreateResource surfaces a validation error through
+      // the standard provisioner path. Previously the SDK dispatcher
+      // classified this to NOT_FOUND; now it bubbles through
+      // createResource like every other type.
+      mockFallback.canHandle.mockReturnValue(false);
+      mockFallback.isRedirect.mockReturnValue(null);
+
+      mockProvisioner.getResource.mockResolvedValueOnce([
+        { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
+        null,
+      ]);
+      mockProvisioner.createResource.mockResolvedValueOnce([
         {
           kind: ProvisioningErrorKind.NOT_FOUND,
-          message: "Topic not found",
+          message:
+            "Topic arn:aws:sns:us-east-1:123456789012:missing-topic not found",
         },
         null,
       ]);
@@ -763,8 +783,7 @@ describe("resourceProvisionerNode", () => {
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(result.errorMessage).toMatch(/SDK fallback provisioning failed/);
-      expect(result.errorMessage).toMatch(/Topic not found/);
+      expect(mockFallback.subscribe).not.toHaveBeenCalled();
     });
   });
 
