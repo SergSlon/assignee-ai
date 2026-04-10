@@ -26,21 +26,30 @@ These documents were already present in the `docs/` directory:
 | [resource-types.md](resource-types.md)         | Supported resource types            |
 | [testing-guide.md](testing-guide.md)           | Testing guide                       |
 
-## Key Metrics (from code scan)
+## Assessments & Delta Scorecards
 
-| Metric                         | Count             |
-| ------------------------------ | ----------------- |
-| Supported AWS resource types   | 23                |
-| Compound architecture patterns | 7                 |
-| LangGraph pipeline nodes       | 12                |
-| CLI commands                   | 12                |
-| MCP server tools               | 5                 |
-| Resource plugins               | 24 (23 + generic) |
-| Best practice YAML rules       | 136               |
-| Pricing strategies             | 23                |
-| Pricing decomposers            | 23                |
-| Config precedence levels       | 6                 |
-| LLM providers supported        | 5                 |
-| IAM credential users           | 3                 |
-| Business logic services        | 28                |
-| Utility modules                | 30+               |
+| Document                                                                 | Description                                                                     |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| [nfr-assessment-2026-04-08.md](nfr-assessment-2026-04-08.md)             | Full 29-criterion NFR scorecard (96.6/29, 27 PASS + 1 sanctioned FAIL P-8.3)    |
+| [nfr-rescore-delta-2026-04-10.md](nfr-rescore-delta-2026-04-10.md)       | Delta vs 2026-04-08: confidence sharpened on S-3.4 (~85%→~97%), test counts +97 |
+| [session-N+1/owner-dogfood-notes.md](session-N+1/owner-dogfood-notes.md) | Stopwatch dogfood: plan 10s, apply 24s, destroy 5s, 0 orphans                   |
+
+## Key Metrics (as of 2026-04-10)
+
+| Metric                         | Count                                    |
+| ------------------------------ | ---------------------------------------- |
+| Supported AWS resource types   | 36                                       |
+| Compound architecture patterns | 9 first-class + 1 variant                |
+| LangGraph pipeline nodes       | 12                                       |
+| CLI commands                   | 12                                       |
+| MCP server tools               | 5                                        |
+| Resource plugins               | 36 (35 + generic)                        |
+| Best practice YAML rules       | 185                                      |
+| Pricing strategies             | 23                                       |
+| Pricing decomposers            | 23                                       |
+| Config precedence levels       | 6                                        |
+| LLM providers supported        | 5                                        |
+| IAM credential users           | 3                                        |
+| Test cases (passing)           | 6,367                                    |
+| Test files                     | 256 (129 CLI + 94 core + 11 BP + 22 MCP) |
+| RUN_E2E compound coverage      | 9/9 first-class compounds                |

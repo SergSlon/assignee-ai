@@ -292,7 +292,7 @@ Check the server logs in your IDE's MCP output panel.
 
 ### "Unsupported resource type" from `plan_resource`
 
-Not all CloudFormation types are supported yet. The 23 supported types include: S3, SSM Parameter, IAM Role, EC2, RDS, Lambda, VPC, Subnet, Security Group, DynamoDB, SQS, SNS, ELBv2 (ALB/NLB), ECS Cluster, ECR Repository, CloudWatch Logs, Internet Gateway, Route Table, Route, NAT Gateway, API Gateway V2, CloudWatch Alarm, and Secrets Manager. See [resource-types.md](./resource-types.md) for the full list.
+Not all CloudFormation types are supported yet. The 36 supported types include S3, SSM Parameter, IAM Role, EC2, RDS, Lambda, VPC, Subnet, Security Group, DynamoDB, SQS, SNS, SNS Subscription, ELBv2 (ALB/NLB), ECS Cluster, ECR Repository, CloudWatch Logs, Internet Gateway, Route Table, Route, NAT Gateway, API Gateway V2, CloudWatch Alarm, Secrets Manager, EFS FileSystem, EFS MountTarget, EventBridge Rule, EventBridge EventBus, EventBridge Connection, EventBridge ApiDestination, KMS Key, CloudFront Distribution, CloudFront OAC, S3 BucketPolicy, and compound-only types (VPCGatewayAttachment, SubnetRouteTableAssociation). See [resource-types.md](./resource-types.md) for the full list.
 
 ### "SDK fallback deletion not supported" from `destroy_resource`
 

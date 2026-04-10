@@ -36,9 +36,9 @@ The shared foundation. Contains **zero business logic** -- only types, data, and
 
 **Provides to both CLI and MCP server:**
 
-- All 23 resource type constants and type definitions
-- Resource plugin registry (24 plugins with wizard field definitions)
-- Pattern template registry (7 compound architecture patterns)
+- All 36 resource type constants and type definitions
+- Resource plugin registry (36 plugins with wizard field definitions)
+- Pattern template registry (9 compound architecture patterns + 1 variant)
 - Pricing strategy registry (23 strategies) and decomposer registry (23 decomposers)
 - CloudFormation schema service (DescribeType + disk cache)
 - Schema adapter (raw CloudFormation -> normalized format)
