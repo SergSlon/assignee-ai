@@ -199,6 +199,8 @@ ASSIGNEE_LLM_DEFAULT=openai/gpt-4o assignee plan "Create an S3 bucket"
 
 **Diagnostics:** Run `assignee doctor` to see the resolved routing table when `llm.*` config is present.
 
+**See also:** [MCP Intelligence Audit](mcp-intelligence-audit.md) for the full MCP server usage matrix and integration opportunities.
+
 ## Environment Variables
 
 | Variable                              | Description                                                                                                                                                                                                                                                      | Default                          |
