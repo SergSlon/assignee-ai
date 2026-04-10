@@ -43,11 +43,11 @@ import { AWS_REGION } from "./constants.js";
 // Exported so tests can reference the same pins instead of hardcoding @latest
 // fixtures (V3 audit finding — fixtures must drift-detect when prod pins move).
 export const MCP_PINS = {
-  AWS_PRICING: "awslabs.aws-pricing-mcp-server@1.0.6",
-  AWS_DOCUMENTATION: "awslabs.aws-documentation-mcp-server@1.1.1",
-  AWS_IAM: "awslabs.iam-mcp-server@1.0.2",
-  AWS_WA_SECURITY: "awslabs.well-architected-security-mcp-server@1.0.2",
-  AWS_COST_MANAGEMENT: "awslabs.cost-management-mcp-server@1.0.2",
+  AWS_PRICING: "awslabs.aws-pricing-mcp-server@1.0.27",
+  AWS_DOCUMENTATION: "awslabs.aws-documentation-mcp-server@1.1.20",
+  AWS_IAM: "awslabs.iam-mcp-server@1.0.17",
+  AWS_WA_SECURITY: "awslabs.well-architected-security-mcp-server@0.1.7",
+  AWS_COST_MANAGEMENT: "awslabs.billing-cost-management-mcp-server@0.0.17",
 } as const;
 
 /** Env var that must be set to `1` to enable the remote knowledge MCP server. */

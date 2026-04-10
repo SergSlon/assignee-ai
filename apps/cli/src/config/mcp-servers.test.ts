@@ -215,7 +215,9 @@ describe("getOptionalMcpServerConfigs", () => {
     const configs = getOptionalMcpServerConfigs();
     const billing = configs[McpServerName.BILLING]!;
     const joined = billing.args.join(" ");
-    expect(joined).toMatch(/awslabs\.cost-management-mcp-server@\d+\.\d+\.\d+/);
+    expect(joined).toMatch(
+      /awslabs\.billing-cost-management-mcp-server@\d+\.\d+\.\d+/,
+    );
     expect(joined).not.toContain("@latest");
   });
 
