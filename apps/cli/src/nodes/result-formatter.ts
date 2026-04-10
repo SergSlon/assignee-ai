@@ -24,6 +24,7 @@ import {
   renderError,
   renderPlanBox,
   promptFixSelection,
+  type FixSelectionResult,
 } from "../utils/display.js";
 import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
 import {
@@ -558,8 +559,10 @@ export async function resultFormatterNode(
       break;
     }
 
-    default:
+    default: {
       // PENDING — render plan preview box (plan mode OR apply blocked by BP findings)
+      let fixResult: FixSelectionResult | null = null;
+
       if (
         state.executionMode === ExecutionMode.PLAN ||
         (state.executionMode === ExecutionMode.APPLY && !state.preflightPassed)
@@ -622,7 +625,7 @@ export async function resultFormatterNode(
           renderPlanBox(stateWithQueue);
 
           // Story 35.4: Interactive fix selection after plan display (TTY only)
-          const fixResult = await promptFixSelection(state);
+          fixResult = await promptFixSelection(state);
           if (fixResult) {
             // Re-render plan box with updated state — preserve cost estimate
             // (fixes like encryption/versioning don't materially change the rate).
@@ -636,15 +639,60 @@ export async function resultFormatterNode(
               appliedFixes: fixResult.appliedFixes,
             };
             renderPlanBox(updatedState);
-            return {
-              desiredState: fixResult.desiredState,
-              bpFindings: fixResult.bpFindings,
-              appliedFixes: fixResult.appliedFixes,
-            };
           }
         }
       }
+
+      // Compound plan-mode advance: after rendering the plan for the current
+      // resource, advance to the next provisionable resource so the graph
+      // loops back to plan_generator for it. Skips non-provisionable
+      // companion resources (e.g., Lambda Permission, VPC Gateway Attachment).
+      if (
+        state.executionMode === ExecutionMode.PLAN &&
+        state.resourcePattern &&
+        state.resourceQueue &&
+        state.currentResourceIndex !== undefined
+      ) {
+        let nextIndex = state.currentResourceIndex + 1;
+        while (
+          nextIndex < state.resourceQueue.length &&
+          state.resourceQueue[nextIndex]?.provisionable === false
+        ) {
+          nextIndex++;
+        }
+
+        const advance: Partial<AgentState> =
+          nextIndex < state.resourceQueue.length
+            ? {
+                currentResourceIndex: nextIndex,
+                resourceType: state.resourceQueue[nextIndex]!.resourceType,
+                desiredState: undefined,
+                executionStatus: ExecutionStatus.PENDING,
+              }
+            : // All resources planned — advance past end so router sends to END
+              { currentResourceIndex: state.resourceQueue.length };
+
+        if (fixResult) {
+          return {
+            desiredState: fixResult.desiredState,
+            bpFindings: fixResult.bpFindings,
+            appliedFixes: fixResult.appliedFixes,
+            ...advance,
+          };
+        }
+        return advance;
+      }
+
+      // Single resource or non-plan mode: return fix result or empty
+      if (fixResult) {
+        return {
+          desiredState: fixResult.desiredState,
+          bpFindings: fixResult.bpFindings,
+          appliedFixes: fixResult.appliedFixes,
+        };
+      }
       break;
+    }
   }
 
   return {};

@@ -300,6 +300,128 @@ describe("resultFormatterNode — apply mode with BP blocking (PENDING + preflig
   });
 });
 
+// ── Compound plan-mode iteration (bug-lambda-compound-rendering fix) ────────
+
+describe("resultFormatterNode — compound plan-mode iteration", () => {
+  it("advances to next resource after rendering plan box", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      executionMode: ExecutionMode.PLAN,
+      resourceType: "AWS::IAM::Role",
+      resourcePattern: mockPattern as never,
+      resourceQueue: makeResourceQueue() as never,
+      currentResourceIndex: 0,
+    });
+
+    const result = await resultFormatterNode(state);
+
+    expect(renderPlanBox).toHaveBeenCalled();
+    expect(result.currentResourceIndex).toBe(1);
+    expect(result.resourceType).toBe("AWS::Lambda::Function");
+    expect(result.desiredState).toBeUndefined();
+    expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
+  });
+
+  it("advances past queue end after last resource", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      executionMode: ExecutionMode.PLAN,
+      resourceType: "AWS::ApiGatewayV2::Api",
+      resourcePattern: mockPattern as never,
+      resourceQueue: makeResourceQueue() as never,
+      currentResourceIndex: 2, // last resource (index 2 of 3)
+    });
+
+    const result = await resultFormatterNode(state);
+
+    expect(renderPlanBox).toHaveBeenCalled();
+    // Past the end — router will send to END
+    expect(result.currentResourceIndex).toBe(3);
+  });
+
+  it("skips non-provisionable resources when advancing", async () => {
+    const queueWithCompanion = [
+      {
+        resourceId: "vpc",
+        resourceType: "AWS::EC2::VPC",
+        displayName: "VPC",
+      },
+      {
+        resourceId: "igw-attachment",
+        resourceType: "AWS::EC2::VPCGatewayAttachment",
+        displayName: "IGW Attachment",
+        provisionable: false,
+      },
+      {
+        resourceId: "igw",
+        resourceType: "AWS::EC2::InternetGateway",
+        displayName: "Internet Gateway",
+      },
+    ];
+    const patternWithCompanion = {
+      ...mockPattern,
+      resourceList: queueWithCompanion,
+      dependencyOrder: [["vpc"], ["igw-attachment"], ["igw"]],
+    };
+
+    const state = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      executionMode: ExecutionMode.PLAN,
+      resourceType: "AWS::EC2::VPC",
+      resourcePattern: patternWithCompanion as never,
+      resourceQueue: queueWithCompanion as never,
+      currentResourceIndex: 0,
+    });
+
+    const result = await resultFormatterNode(state);
+
+    // Should skip index 1 (non-provisionable) and advance to index 2
+    expect(result.currentResourceIndex).toBe(2);
+    expect(result.resourceType).toBe("AWS::EC2::InternetGateway");
+  });
+
+  it("does NOT advance in apply mode (existing SUCCESS path handles that)", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      executionMode: ExecutionMode.APPLY,
+      preflightPassed: false, // triggers plan box in apply mode
+      resourceType: "AWS::IAM::Role",
+      resourcePattern: mockPattern as never,
+      resourceQueue: makeResourceQueue() as never,
+      currentResourceIndex: 0,
+      bpFindings: [
+        {
+          practiceId: "BP-IAM-001",
+          title: "Test",
+          severity: "HIGH",
+          category: "security",
+          message: "Test finding",
+          blocking: true,
+        },
+      ],
+    });
+
+    const result = await resultFormatterNode(state);
+
+    // Apply mode should NOT advance — the router handles termination
+    expect(result.currentResourceIndex).toBeUndefined();
+  });
+
+  it("returns empty for single-resource plan mode (no compound)", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      executionMode: ExecutionMode.PLAN,
+      resourceType: "AWS::S3::Bucket",
+      // No resourcePattern — single resource
+    });
+
+    const result = await resultFormatterNode(state);
+
+    expect(renderPlanBox).toHaveBeenCalled();
+    expect(result).toEqual({});
+  });
+});
+
 // ── Compound SUCCESS routing ─────────────────────────────────────────────────
 
 describe("resultFormatterNode — compound SUCCESS with more resources", () => {

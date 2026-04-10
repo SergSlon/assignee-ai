@@ -265,7 +265,7 @@ describe("routeResultFormatter", () => {
     expect(result).toBe(END);
   });
 
-  it("compound but plan mode → END (no loop in plan mode)", () => {
+  it("compound plan mode with remaining resources → loops to PLAN_GENERATOR", () => {
     const result = routeResultFormatter(
       makeState({
         resourcePattern: { patternId: "test" } as never,
@@ -273,7 +273,24 @@ describe("routeResultFormatter", () => {
           { resourceId: "r1" } as never,
           { resourceId: "r2" } as never,
         ],
-        currentResourceIndex: 0,
+        currentResourceIndex: 1,
+        executionStatus: ExecutionStatus.PENDING,
+        executionMode: ExecutionMode.PLAN,
+        preflightPassed: true,
+      }),
+    );
+    expect(result).toBe(GraphNode.PLAN_GENERATOR);
+  });
+
+  it("compound plan mode past queue end → END", () => {
+    const result = routeResultFormatter(
+      makeState({
+        resourcePattern: { patternId: "test" } as never,
+        resourceQueue: [
+          { resourceId: "r1" } as never,
+          { resourceId: "r2" } as never,
+        ],
+        currentResourceIndex: 2, // past end
         executionStatus: ExecutionStatus.PENDING,
         executionMode: ExecutionMode.PLAN,
       }),
