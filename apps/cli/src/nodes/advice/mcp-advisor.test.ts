@@ -245,7 +245,7 @@ describe("gatherMcpAdviceContext", () => {
       makeMockTool(ToolName.SEARCH_DOCUMENTATION, {
         doc: "EC2 instance guide",
       }),
-      makeMockTool(ToolName.ANALYZE_SECURITY_POSTURE, {
+      makeMockTool(ToolName.CHECK_SECURITY_SERVICES, {
         findings: ["open-to-world SG"],
       }),
     ];
@@ -336,7 +336,7 @@ describe("gatherMcpAdviceContext", () => {
     const securityInvoke = vi.fn(async () => ({ safe: true }));
     const tools = [
       {
-        name: ToolName.ANALYZE_SECURITY_POSTURE,
+        name: ToolName.CHECK_SECURITY_SERVICES,
         description: "mock security",
         schema: {} as never,
         invoke: securityInvoke,

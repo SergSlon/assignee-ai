@@ -21,12 +21,14 @@ export const ToolName = {
   // ── iam-mcp-server ────────────────────────────────────────────────────────
   SIMULATE_PRINCIPAL_POLICY: "simulate_principal_policy",
 
-  // ── well-architected-security-mcp-server ──────────────────────────────────
-  ANALYZE_SECURITY_POSTURE: "AnalyzeSecurityPosture",
+  // ── well-architected-security-mcp-server (v0.1.7+) ────────────────────────
+  CHECK_SECURITY_SERVICES: "CheckSecurityServices",
+  GET_SECURITY_FINDINGS: "GetSecurityFindings",
+  CHECK_STORAGE_ENCRYPTION: "CheckStorageEncryption",
+  CHECK_NETWORK_SECURITY: "CheckNetworkSecurity",
 
-  // ── aws-cost-management-mcp-server ──────────────────────────────────────
-  GET_COST_AND_USAGE: "get_cost_and_usage",
-  GET_COST_FORECAST: "get_cost_forecast",
+  // ── billing-cost-management-mcp-server ──────────────────────────────────
+  COST_EXPLORER: "cost-explorer",
 } as const;
 
 export type ToolNameType = (typeof ToolName)[keyof typeof ToolName];

@@ -47,7 +47,7 @@ describe("enrichBpWithMcp", () => {
   });
 
   it("returns extra findings from the Well-Architected security posture tool", async () => {
-    const securityTool = makeTool(ToolName.ANALYZE_SECURITY_POSTURE, async () =>
+    const securityTool = makeTool(ToolName.CHECK_SECURITY_SERVICES, async () =>
       JSON.stringify({
         findings: [
           {
@@ -84,7 +84,7 @@ describe("enrichBpWithMcp", () => {
   });
 
   it("deduplicates findings already covered by static BP rules via propertyPath", async () => {
-    const securityTool = makeTool(ToolName.ANALYZE_SECURITY_POSTURE, async () =>
+    const securityTool = makeTool(ToolName.CHECK_SECURITY_SERVICES, async () =>
       JSON.stringify({
         findings: [
           {
@@ -116,7 +116,7 @@ describe("enrichBpWithMcp", () => {
   });
 
   it("maps MCP severities and defaults unknown values to INFO", async () => {
-    const securityTool = makeTool(ToolName.ANALYZE_SECURITY_POSTURE, async () =>
+    const securityTool = makeTool(ToolName.CHECK_SECURITY_SERVICES, async () =>
       JSON.stringify({
         findings: [
           {
@@ -176,7 +176,7 @@ describe("enrichBpWithMcp", () => {
 
   it("returns [] gracefully when MCP returns malformed JSON", async () => {
     const securityTool = makeTool(
-      ToolName.ANALYZE_SECURITY_POSTURE,
+      ToolName.CHECK_SECURITY_SERVICES,
       async () => "this is not json {{{",
     );
     const extras = await enrichBpWithMcp(
@@ -189,7 +189,7 @@ describe("enrichBpWithMcp", () => {
   });
 
   it("returns [] gracefully when MCP returns an unexpected shape (no findings array)", async () => {
-    const securityTool = makeTool(ToolName.ANALYZE_SECURITY_POSTURE, async () =>
+    const securityTool = makeTool(ToolName.CHECK_SECURITY_SERVICES, async () =>
       JSON.stringify({ results: "other shape" }),
     );
     const extras = await enrichBpWithMcp(
@@ -203,7 +203,7 @@ describe("enrichBpWithMcp", () => {
 
   it("returns [] gracefully when the MCP tool throws (server unavailable)", async () => {
     const securityTool = makeTool(
-      ToolName.ANALYZE_SECURITY_POSTURE,
+      ToolName.CHECK_SECURITY_SERVICES,
       async () => {
         throw new Error("ECONNREFUSED");
       },
@@ -232,7 +232,7 @@ describe("enrichBpWithMcp", () => {
   });
 
   it("integrates with the BPFinding output shape from bp-evaluator", async () => {
-    const securityTool = makeTool(ToolName.ANALYZE_SECURITY_POSTURE, async () =>
+    const securityTool = makeTool(ToolName.CHECK_SECURITY_SERVICES, async () =>
       JSON.stringify({
         findings: [
           {

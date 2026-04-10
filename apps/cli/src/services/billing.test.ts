@@ -112,7 +112,7 @@ describe("fetchBillingData", () => {
 
   it("falls back to provision log when MCP tools fail", async () => {
     const failingTool = createFailingMockTool(
-      ToolName.GET_COST_AND_USAGE,
+      ToolName.COST_EXPLORER,
       new Error("MCP server unavailable"),
     );
 
@@ -227,7 +227,7 @@ describe("getCostSavingsEstimate", () => {
 
   it('returns "N/A" when MCP tools fail', async () => {
     const failingTool = createFailingMockTool(
-      ToolName.GET_COST_AND_USAGE,
+      ToolName.COST_EXPLORER,
       new Error("Server down"),
     );
 

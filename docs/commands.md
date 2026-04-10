@@ -768,7 +768,7 @@ Doctor summary (assignee.ai 0.1.0):
     • ✓ awslabs.aws-pricing-mcp-server@1.0.6     → launched (uvx)
     • ✓ awslabs.aws-documentation-mcp-server@1.1.1 → launched (uvx)
     • ✓ awslabs.iam-mcp-server@1.0.2             → launched (uvx)
-    • ✗ awslabs.well-architected-security-mcp-server@1.0.2 → uvx exited with code 127
+    • ✗ awslabs.well-architected-security-mcp-server@0.1.7 → uvx exited with code 127
     • ✓ awslabs.cost-management-mcp-server@1.0.2 → launched (uvx)
 [✓] Cache
     • ✓ /home/u/.assignee → 3.4 MB, 0 stale checkpoints, 14 log files

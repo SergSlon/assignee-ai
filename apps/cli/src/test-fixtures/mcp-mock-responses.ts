@@ -3844,8 +3844,8 @@ const iamResponses = {
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 6. well-architected-security-mcp-server — AnalyzeSecurityPosture
-//    Captured 2026-03-22 via: uvx awslabs.well-architected-security-mcp-server@latest
+// 6. well-architected-security-mcp-server — GetSecurityFindings (v0.1.7+)
+//    Captured 2026-03-22 via: uvx awslabs.well-architected-security-mcp-server@0.1.7
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const securityPostureResponses = {
@@ -3902,12 +3902,12 @@ const securityPostureResponses = {
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 8. aws-cost-management-mcp-server — get_cost_and_usage, get_cost_forecast
-//    Captured 2026-03-22 via: uvx awslabs.cost-management-mcp-server@latest
+// 8. billing-cost-management-mcp-server — cost-explorer (getCostAndUsage, getCostForecast)
+//    Captured 2026-03-22 via: uvx awslabs.billing-cost-management-mcp-server@latest
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const billingResponses = {
-  /** Captured 2026-03-22 from cost-management-mcp-server. Single S3 bucket cost for current month. */
+  /** Captured 2026-03-22 from billing-cost-management-mcp-server. Single S3 bucket cost for current month. */
   s3BucketCost: {
     success: mcpText({
       ResultsByTime: [
@@ -4197,7 +4197,7 @@ export function createIamMockTool(
 }
 
 /**
- * Creates a mock AnalyzeSecurityPosture tool with a captured response.
+ * Creates a mock GetSecurityFindings tool with a captured response.
  *
  * @example
  *   const tool = createSecurityMockTool(McpMocks.security.s3BucketPosture.success);
@@ -4205,11 +4205,11 @@ export function createIamMockTool(
 export function createSecurityMockTool(
   response = McpMocks.security.noFindings.success,
 ): StructuredTool {
-  return createMockTool(ToolName.ANALYZE_SECURITY_POSTURE, response);
+  return createMockTool(ToolName.GET_SECURITY_FINDINGS, response);
 }
 
 /**
- * Creates a mock get_cost_and_usage tool with a captured response.
+ * Creates a mock cost-explorer tool with a captured response.
  *
  * @example
  *   const tool = createBillingMockTool(McpMocks.billing.s3BucketCost.success);
@@ -4217,7 +4217,7 @@ export function createSecurityMockTool(
 export function createBillingMockTool(
   response = McpMocks.billing.s3BucketCost.success,
 ): StructuredTool {
-  return createMockTool(ToolName.GET_COST_AND_USAGE, response);
+  return createMockTool(ToolName.COST_EXPLORER, response);
 }
 
 /**
@@ -4244,16 +4244,12 @@ export function createAllMockTools(): StructuredTool[] {
       McpMocks.iam.s3BucketAllowed.success,
     ),
     createMockTool(
-      ToolName.ANALYZE_SECURITY_POSTURE,
+      ToolName.GET_SECURITY_FINDINGS,
       McpMocks.security.noFindings.success,
     ),
     createMockTool(
-      ToolName.GET_COST_AND_USAGE,
+      ToolName.COST_EXPLORER,
       McpMocks.billing.s3BucketCost.success,
-    ),
-    createMockTool(
-      ToolName.GET_COST_FORECAST,
-      McpMocks.billing.costForecast.success,
     ),
   ];
 }

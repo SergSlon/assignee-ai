@@ -15,7 +15,7 @@
 | Pricing         | `awslabs.aws-pricing-mcp-server@1.0.6`               | reader          | plan, apply, optimize |
 | Documentation   | `awslabs.aws-documentation-mcp-server@1.1.1`         | reader          | plan, apply           |
 | IAM             | `awslabs.iam-mcp-server@1.0.2`                       | auditor         | status                |
-| WA Security     | `awslabs.well-architected-security-mcp-server@1.0.2` | auditor         | status                |
+| WA Security     | `awslabs.well-architected-security-mcp-server@0.1.7` | auditor         | status                |
 | Cost Management | `awslabs.aws-cost-management-mcp-server@1.0.2`       | auditor         | status                |
 
 All servers are supply-chain pinned (never `@latest`). Optional servers degrade gracefully — 3s timeout, `Promise.allSettled`, local fallback.
@@ -29,27 +29,28 @@ All servers are supply-chain pinned (never `@latest`). Optional servers degrade 
 | `read_sections`             | Documentation   | display-docs.ts                                                                  | Full doc page reads for trade-off analysis                     |
 | `read_documentation`        | Documentation   | display-docs.ts                                                                  | Direct doc page reads                                          |
 | `simulate_principal_policy` | IAM             | preflight-guard                                                                  | Pre-apply IAM permission validation                            |
-| `AnalyzeSecurityPosture`    | WA Security     | mcp-advisor, bp-mcp-enricher, security-posture.ts                                | Post-provision SecurityHub/GuardDuty findings                  |
+| `CheckSecurityServices`     | WA Security     | mcp-advisor, bp-mcp-enricher                                                     | Verify security services enabled                               |
+| `GetSecurityFindings`       | WA Security     | security-posture.ts                                                              | Post-provision SecurityHub/GuardDuty findings                  |
 | `get_cost_and_usage`        | Cost Management | billing.ts, list-resources.ts                                                    | Live billing for current month                                 |
 | `get_cost_forecast`         | Cost Management | billing.ts                                                                       | Forecast for destroy savings estimate                          |
 
 ### 1.3 Pipeline Node Inventory
 
-| Node                 | Receives Tools? | MCP Tools Used                                                  | Notes                                      |
-| -------------------- | --------------- | --------------------------------------------------------------- | ------------------------------------------ |
-| intent_parser        | No              | —                                                               | LLM-only classification                    |
-| schema_fetcher       | No              | —                                                               | Direct SDK (CloudFormation schema service) |
-| option_elicitor      | Yes             | `get_pricing`                                                   | Live pricing in wizard labels              |
-| compound_dispatcher  | No              | —                                                               | Pattern routing only                       |
-| plan_generator       | No              | —                                                               | LLM-only JSON generation                   |
-| advice_generator     | Yes             | `get_pricing`, `search_documentation`, `AnalyzeSecurityPosture` | Context enrichment for hints               |
-| bp_evaluator         | Yes             | —                                                               | Tools passed but not directly called       |
-| fix_applicator       | No              | —                                                               | BP fix application                         |
-| preflight_guard      | Yes             | `get_pricing`, `simulate_principal_policy`                      | Cost + IAM validation                      |
-| human_approval       | No              | —                                                               | HITL gate                                  |
-| resource_provisioner | No              | —                                                               | CloudControl provision                     |
-| status_poller        | No              | —                                                               | CloudControl polling                       |
-| result_formatter     | No              | —                                                               | Display formatting only                    |
+| Node                 | Receives Tools? | MCP Tools Used                                                 | Notes                                      |
+| -------------------- | --------------- | -------------------------------------------------------------- | ------------------------------------------ |
+| intent_parser        | No              | —                                                              | LLM-only classification                    |
+| schema_fetcher       | No              | —                                                              | Direct SDK (CloudFormation schema service) |
+| option_elicitor      | Yes             | `get_pricing`                                                  | Live pricing in wizard labels              |
+| compound_dispatcher  | No              | —                                                              | Pattern routing only                       |
+| plan_generator       | No              | —                                                              | LLM-only JSON generation                   |
+| advice_generator     | Yes             | `get_pricing`, `search_documentation`, `CheckSecurityServices` | Context enrichment for hints               |
+| bp_evaluator         | Yes             | —                                                              | Tools passed but not directly called       |
+| fix_applicator       | No              | —                                                              | BP fix application                         |
+| preflight_guard      | Yes             | `get_pricing`, `simulate_principal_policy`                     | Cost + IAM validation                      |
+| human_approval       | No              | —                                                              | HITL gate                                  |
+| resource_provisioner | No              | —                                                              | CloudControl provision                     |
+| status_poller        | No              | —                                                              | CloudControl polling                       |
+| result_formatter     | No              | —                                                              | Display formatting only                    |
 
 ---
 
@@ -115,7 +116,7 @@ All servers are supply-chain pinned (never `@latest`). Optional servers degrade 
 
 ### Opportunity 6: WA Security enrichment for BP evaluator (pre-provision)
 
-- **Tool:** `AnalyzeSecurityPosture`
+- **Tool:** `CheckSecurityServices` / `GetSecurityFindings`
 - **Target:** bp_evaluator node
 - **What:** Enrich BP findings with Well-Architected pillar references before provision
 - **Effort:** S (1 day)

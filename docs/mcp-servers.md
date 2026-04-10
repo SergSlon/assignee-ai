@@ -9,7 +9,7 @@ Assignee.ai uses 5 AWS MCP servers (+ 1 optional remote knowledge server) to enr
 | Pricing       | `awslabs.aws-pricing-mcp-server`               | `1.0.27` | reader     | plan, apply, optimize | Live $/hr for cost estimation  |
 | Documentation | `awslabs.aws-documentation-mcp-server`         | `1.1.20` | reader     | plan, apply           | Field docs, runtime catalogs   |
 | IAM           | `awslabs.iam-mcp-server`                       | `1.0.17` | auditor    | status                | IAM permission simulation      |
-| WA Security   | `awslabs.well-architected-security-mcp-server` | `1.0.2`  | auditor    | status                | SecurityHub/GuardDuty findings |
+| WA Security   | `awslabs.well-architected-security-mcp-server` | `0.1.7`  | auditor    | status                | SecurityHub/GuardDuty findings |
 | Billing       | `awslabs.cost-management-mcp-server`           | `1.0.2`  | reader     | status                | Live billing, cost forecast    |
 | Knowledge     | `knowledge-mcp.global.api.aws`                 | remote   | reader     | plan, apply           | Optional remote AWS knowledge  |
 
@@ -52,13 +52,16 @@ Assignee.ai uses 5 AWS MCP servers (+ 1 optional remote knowledge server) to enr
 | --------------------------- | --------------- | ----------------------------------- |
 | `simulate_principal_policy` | preflight-guard | Pre-apply IAM permission validation |
 
-### WA Security (`awslabs.well-architected-security-mcp-server@1.0.2`)
+### WA Security (`awslabs.well-architected-security-mcp-server@0.1.7`)
 
-**Upgrade blocked:** Newer versions (0.1.x) renamed `AnalyzeSecurityPosture` to `CheckSecurityServices` + split into multiple tools. Requires code changes in security-posture.ts, mcp-advisor.ts, bp-mcp-enricher.ts.
+Upgraded in Story 45.1 from 1.0.2 (single `AnalyzeSecurityPosture` tool) to the multi-tool v0.1.7 API.
 
-| Tool                     | Used By                                           | Purpose                                       |
-| ------------------------ | ------------------------------------------------- | --------------------------------------------- |
-| `AnalyzeSecurityPosture` | mcp-advisor, bp-mcp-enricher, security-posture.ts | Post-provision SecurityHub/GuardDuty findings |
+| Tool                     | Used By                      | Purpose                                       |
+| ------------------------ | ---------------------------- | --------------------------------------------- |
+| `CheckSecurityServices`  | mcp-advisor, bp-mcp-enricher | Verify security services enabled              |
+| `GetSecurityFindings`    | security-posture.ts          | Post-provision SecurityHub/GuardDuty findings |
+| `CheckStorageEncryption` | (available, not yet wired)   | Data-at-rest protection checks                |
+| `CheckNetworkSecurity`   | (available, not yet wired)   | Data-in-transit protection checks             |
 
 ### Billing (`awslabs.cost-management-mcp-server@1.0.2`)
 
