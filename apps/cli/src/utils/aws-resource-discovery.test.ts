@@ -868,4 +868,32 @@ describe("aws-resource-discovery", () => {
       });
     });
   });
+
+  // ── Story 44.4: discoverLambdaRuntimes ──────────────────────────────────
+  describe("discoverLambdaRuntimes (Story 44.4)", () => {
+    it("returns runtime options from the canonical list", async () => {
+      const { discoverLambdaRuntimes, clearDiscoveryCache } =
+        await import("./aws-resource-discovery.js");
+      clearDiscoveryCache();
+      const result = await discoverLambdaRuntimes();
+      expect(result.length).toBeGreaterThanOrEqual(7);
+      expect(result[0]).toHaveProperty("value");
+      expect(result[0]).toHaveProperty("label");
+      // Verify known runtimes are present
+      const values = result.map((r: { value: string }) => r.value);
+      expect(values).toContain("nodejs22.x");
+      expect(values).toContain("python3.13");
+      expect(values).toContain("provided.al2023");
+    });
+
+    it("returns cached results on second call", async () => {
+      const { discoverLambdaRuntimes, clearDiscoveryCache } =
+        await import("./aws-resource-discovery.js");
+      clearDiscoveryCache();
+      const first = await discoverLambdaRuntimes();
+      const second = await discoverLambdaRuntimes();
+      // Same reference from cache
+      expect(first).toBe(second);
+    });
+  });
 });

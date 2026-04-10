@@ -99,4 +99,26 @@ describe("classifyWorkload", () => {
     expect(r2).toBe("storage-heavy");
     expect(generateStructuredSpy).toHaveBeenCalledTimes(2);
   });
+
+  // Story 44.1: verify callsite tag is passed to LLM
+  it("passes callsite 'workload_classifier' to generateStructured", async () => {
+    const generateStructuredSpy = vi
+      .fn()
+      .mockResolvedValueOnce([
+        null,
+        { profile: "general-purpose", confidence: 0.9 },
+      ] as const);
+
+    const llm = {
+      generateStructured: generateStructuredSpy,
+      generateText: vi.fn(),
+    };
+
+    await classifyWorkload("web application", llm);
+    expect(generateStructuredSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      expect.objectContaining({ callsite: "workload_classifier" }),
+    );
+  });
 });
