@@ -17,15 +17,14 @@ Runs on every pull request and every push to `main`. Executes:
 7. Uploads coverage HTML reports as an artifact
 
 All tests run in **hermetic mode** — the `RUN_E2E` gate is not set, so
-the 22 real-AWS specs in `apps/cli/src/e2e/e2e-plan.test.ts` are
-skipped. The rest of the monorepo test suite (~5,500 tests) runs in
+the 31 real-AWS specs in `apps/cli/src/e2e/e2e-plan.test.ts` are
+skipped. The rest of the monorepo test suite (~6,300+ tests) runs in
 full and does not touch AWS.
 
 ### `nightly-e2e.yml` — Nightly real-AWS E2E
 
-Closes NFR concern T-2.3 from
-[`docs/nfr-assessment-2026-04-08.md`](../../docs/nfr-assessment-2026-04-08.md)
-— "RUN_E2E only re-runs on operator demand".
+Closes NFR concern T-2.3 ("RUN_E2E only re-runs on operator demand")
+from the 2026-04-08 NFR assessment.
 
 **Schedule:** daily at 03:00 UTC. Also supports `workflow_dispatch`
 for manual runs from the Actions UI.

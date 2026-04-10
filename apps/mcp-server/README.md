@@ -8,7 +8,7 @@ AI-native AWS infrastructure provisioning via MCP (Model Context Protocol). Plan
 
 - **Node.js** >= 20.0.0
 - **Python 3.10+** (required by MCP sub-servers)
-- **uvx** (Python package runner, used to launch CloudFormation, pricing, knowledge base, and AWS docs sub-servers)
+- **uvx** (Python package runner, used to launch pricing, documentation, IAM, security, and cost management sub-servers)
 - **AWS credentials** configured (environment variables or `~/.aws/credentials`)
 
 ## Quick Start (Local Development)
@@ -100,12 +100,12 @@ Add to your Windsurf MCP configuration:
 
 ## Environment Variables
 
-| Variable                              | Required | Description                                |
-| :------------------------------------ | :------- | :----------------------------------------- |
-| `AWS_REGION`                          | Yes      | Default AWS region for provisioning        |
-| `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | Yes      | AWS access key for the operator            |
-| `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | Yes      | AWS secret key for the operator            |
-| `ASSIGNEE_MODEL`                      | No       | LLM model string (default: Bedrock Claude) |
+| Variable                              | Required | Description                                                        |
+| :------------------------------------ | :------- | :----------------------------------------------------------------- |
+| `AWS_REGION`                          | Yes      | Default AWS region for provisioning                                |
+| `ASSIGNEE_OPERATOR_ACCESS_KEY_ID`     | Yes      | AWS access key for the operator                                    |
+| `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` | Yes      | AWS secret key for the operator                                    |
+| `ASSIGNEE_MODEL`                      | No       | LLM model string (default: `us.amazon.nova-lite-v1:0` via Bedrock) |
 
 > **Security Note:** Never commit AWS credentials to version control. Use environment variables or AWS credential profiles. For shared team setups, consider using `aws-vault` or similar credential management tools.
 
