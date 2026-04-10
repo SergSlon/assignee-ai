@@ -80,7 +80,7 @@ export function routeStatusPoller(
 }
 
 /** Routes after result_formatter: compound pending → plan_generator loop, else → END.
- *  Plan mode shows only the first resource — no loop.
+ *  Works in both plan and apply modes so compound patterns render all resources.
  *
  *  SAFETY: when a compound resource is blocked by a preflight / BP failure
  *  in APPLY mode, the preflight guard keeps executionStatus = PENDING but
@@ -98,7 +98,6 @@ export function routeResultFormatter(
     state.currentResourceIndex !== undefined &&
     state.executionStatus === ExecutionStatus.PENDING &&
     state.currentResourceIndex < state.resourceQueue.length &&
-    state.executionMode !== ExecutionMode.PLAN &&
     state.preflightPassed !== false
   ) {
     return GraphNode.PLAN_GENERATOR;

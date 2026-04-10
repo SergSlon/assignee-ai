@@ -1733,6 +1733,7 @@ describe("compound plan-generator branch — marker resolution integration", () 
 
     const result = await node(
       makeState({
+        executionMode: "apply", // apply mode resolves markers against completedResources
         resourceType: RESOURCE_TYPES.EC2_SUBNET,
         userIntent: "Create a VPC with public subnets",
         resourcePattern: {
@@ -1783,6 +1784,7 @@ describe("compound plan-generator branch — marker resolution integration", () 
 
     const result = await node(
       makeState({
+        executionMode: "apply", // apply mode requires completedResources for markers
         resourceType: RESOURCE_TYPES.EC2_SUBNET,
         userIntent: "Create a VPC with public subnets",
         resourcePattern: {

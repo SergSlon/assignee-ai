@@ -191,7 +191,10 @@ function mockLlmForPlanFlow(resourceType: string, desiredStateJson: string) {
     // Call 2: plan-generator → generateText → uses text field
     .mockResolvedValueOnce({ text: desiredStateJson, output: undefined })
     // Call 3: advice-generator → generateText → uses text field
-    .mockResolvedValueOnce({ text: "[]", output: undefined });
+    .mockResolvedValueOnce({ text: "[]", output: undefined })
+    // Default: compound plan iteration may trigger additional advice-generator
+    // calls for each resource in the pattern. Return empty advice for all.
+    .mockResolvedValue({ text: "[]", output: undefined });
 }
 
 // ── Test setup ──────────────────────────────────────────────────────────────
@@ -866,7 +869,7 @@ describe("Graph integration — new resource types", () => {
     });
   });
 
-  it("VPC: plan with CIDR block", async () => {
+  it("VPC: plan with CIDR block (compound — iterates all resources)", async () => {
     const state = JSON.stringify({ CidrBlock: "10.0.0.0/16" });
     mockLlmForPlanFlow("AWS::EC2::VPC", state);
 
@@ -878,15 +881,24 @@ describe("Graph integration — new resource types", () => {
         executionMode: ExecutionMode.PLAN,
         noWizard: true,
       },
-      { configurable: { thread_id: "integration-vpc-plan" } },
+      // VPC compound pattern iterates ~11 provisionable resources × 6 nodes each
+      {
+        configurable: { thread_id: "integration-vpc-plan" },
+        recursionLimit: 500,
+      },
     );
 
-    expect(result.resourceType).toBe("AWS::EC2::VPC");
+    // VPC is a compound pattern — plan mode now iterates through ALL
+    // provisionable resources (VPC, subnets, IGW, routes, NAT, etc.).
+    // The final state reflects the last planned resource, not VPC.
     expect(result.executionStatus).toBe(ExecutionStatus.PENDING);
-    // Wave 14: strengthened.
-    expect(result.desiredState).toMatchObject({
-      CidrBlock: "10.0.0.0/16",
-    });
+    expect(result.resourcePattern).toBeDefined();
+    expect(result.resourceQueue).toBeDefined();
+    expect(result.resourceQueue!.length).toBeGreaterThan(1);
+    // VPC is always the first resource in the compound queue
+    expect(result.resourceQueue![0]!.resourceType).toBe("AWS::EC2::VPC");
+    // currentResourceIndex should be past the end (all resources planned)
+    expect(result.currentResourceIndex).toBe(result.resourceQueue!.length);
   });
 
   it("Subnet: plan in a VPC", async () => {

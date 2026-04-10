@@ -7,6 +7,7 @@
  */
 
 import {
+  ExecutionMode,
   ExecutionStatus,
   defaultPluginRegistry,
   RESOURCE_TYPES,
@@ -457,6 +458,56 @@ export function __resetAzCacheForTests(): void {
  *
  * Mutates `desiredState` in place (and returns it) for ergonomic chaining.
  */
+
+/**
+ * Plan-mode placeholder resolution: replaces compound markers with
+ * human-readable placeholders for display. Unlike `resolveCompoundMarkers`,
+ * this does NOT need AWS credentials or completed resources — it produces
+ * display-only strings like "(from vpc)" or "us-east-1a".
+ *
+ * Mutates `desiredState` in place.
+ */
+function resolvePlaceholderMarkers(
+  desiredState: Record<string, unknown>,
+  region: string,
+): void {
+  function azPlaceholder(index: number): string {
+    return `${region}${String.fromCharCode(97 + index)}`;
+  }
+
+  function resolveValue(value: string): string {
+    const parsed = parseMarker(value);
+    if (!parsed) return value;
+    if (parsed.kind === "ref" || parsed.kind === "getatt") {
+      return `(from ${parsed.resourceId})`;
+    }
+    return azPlaceholder(parsed.index);
+  }
+
+  function walk(obj: unknown): unknown {
+    if (typeof obj === "string") {
+      return resolveValue(obj);
+    }
+    if (Array.isArray(obj)) {
+      for (let i = 0; i < obj.length; i++) {
+        obj[i] = walk(obj[i]);
+      }
+      return obj;
+    }
+    if (obj && typeof obj === "object") {
+      for (const [key, value] of Object.entries(
+        obj as Record<string, unknown>,
+      )) {
+        (obj as Record<string, unknown>)[key] = walk(value);
+      }
+      return obj;
+    }
+    return obj;
+  }
+
+  walk(desiredState);
+}
+
 export async function resolveCompoundMarkers(
   desiredState: Record<string, unknown>,
   options: {
@@ -699,21 +750,29 @@ export function createPlanGeneratorNode({
       // from `completedResources` and the target region's AZ list. This MUST
       // run before CloudControl sees the desiredState, because CloudControl
       // does NOT process CloudFormation intrinsics or marker tokens.
-      try {
-        await resolveCompoundMarkers(desiredState, {
-          completedResources: state.completedResources ?? [],
-          region: AWS_REGION,
-          currentResourceId: currentResource.resourceId,
-          azLookup,
-        });
-      } catch (resolveErr) {
-        return {
-          executionStatus: ExecutionStatus.FAILED,
-          errorMessage:
-            resolveErr instanceof Error
-              ? resolveErr.message
-              : String(resolveErr),
-        };
+      //
+      // In PLAN mode, skip full resolution — resources aren't provisioned yet
+      // so Ref markers have no targets, and AZ lookups may lack credentials.
+      // Instead, replace markers with human-readable placeholders for display.
+      if (state.executionMode === ExecutionMode.PLAN) {
+        resolvePlaceholderMarkers(desiredState, AWS_REGION);
+      } else {
+        try {
+          await resolveCompoundMarkers(desiredState, {
+            completedResources: state.completedResources ?? [],
+            region: AWS_REGION,
+            currentResourceId: currentResource.resourceId,
+            azLookup,
+          });
+        } catch (resolveErr) {
+          return {
+            executionStatus: ExecutionStatus.FAILED,
+            errorMessage:
+              resolveErr instanceof Error
+                ? resolveErr.message
+                : String(resolveErr),
+          };
+        }
       }
 
       // Story 19.5: Read pattern memory for compound mode hints
