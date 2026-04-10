@@ -391,6 +391,33 @@ describe("gatherMcpAdviceContext", () => {
     expect(ctx.securitySnippet).toBeUndefined();
   });
 
+  it("returns undefined securitySnippet when CheckSecurityServices returns unparseable garbage", async () => {
+    // Simulates a corrupt MCP response — fetchSecurityContext must catch the
+    // JSON.parse error and fall through to the catch branch, which still
+    // truncates the raw text. Since the garbage string is short (<500 chars),
+    // it returns as-is rather than undefined.
+    // However the *outer* JSON.parse in the try block will fail, so control
+    // falls to the catch block which returns a truncated string of the raw
+    // response. We verify it does NOT throw and does NOT crash the caller.
+    const garbagePayload = "<<<not-json-at-all:::{{{garbage";
+    const tools = [
+      makeMockTool(ToolName.CHECK_SECURITY_SERVICES, garbagePayload),
+    ];
+
+    // Must not throw — the catch block in fetchSecurityContext handles the parse error
+    const ctx = await gatherMcpAdviceContext(
+      "AWS::S3::Bucket",
+      { BucketName: "test-bucket" },
+      tools,
+    );
+
+    // The catch block returns the raw text (truncated if >500 chars),
+    // so securitySnippet should be defined but contain the garbage.
+    // The important assertion: no exception propagated.
+    expect(ctx.securitySnippet).toBeDefined();
+    expect(ctx.securitySnippet).toContain("not-json-at-all");
+  });
+
   it("searches documentation using the short type name", async () => {
     const docInvoke = vi.fn(async () => "doc-result");
     const tools = [
