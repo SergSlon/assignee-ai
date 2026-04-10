@@ -12,7 +12,7 @@ This is the user-facing CLI of Assignee.ai. It wires a [LangGraph](https://githu
 
 - It owns user interaction (prompts, output rendering, exit codes).
 - It depends on [`@assignee/core`](../../packages/core/README.md) for shared schemas, ports, and resource plugins, and on [`@assignee/best-practices`](../../packages/best-practices/README.md) for the BP rules library.
-- It launches sub-MCP servers (CloudFormation, Pricing, Knowledge Base, AWS Docs) and translates their responses into provisioning plans.
+- It launches sub-MCP servers (Pricing, Documentation, IAM, Well-Architected Security, Cost Management) and translates their responses into provisioning plans. CloudFormation schemas are fetched directly via `@aws-sdk/client-cloudformation`.
 - All business logic that needs to be shared with the MCP server lives in `@assignee/core` — never in this package.
 
 ## Commands

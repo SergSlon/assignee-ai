@@ -185,7 +185,6 @@ Two registries:
 | `desired-state-sanitizer.ts` | services/ | Strip extraneous keys, coerce types          |
 | `required-field-repairer.ts` | services/ | Fill missing required fields from defaults   |
 | `s3-upload.ts`               | services/ | Static site file upload to S3                |
-| `cloudfront-setup.ts`        | services/ | CloudFront distribution creation             |
 
 ## Configuration System
 

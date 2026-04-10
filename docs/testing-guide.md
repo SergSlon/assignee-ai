@@ -142,11 +142,9 @@ node apps/mcp-server/e2e-test.mjs --smoke
 | destroy  | CloudControl + pre-delete hooks            | Resource deleted, dependencies handled      |
 | verify   | Confirm resource absent                    | Tagging API de-index or AWS API state check |
 
-### Resource types (23 supported + 2 SDK-routable = 25 total)
+### Resource types (36 first-class CCAPI types, 0 SDK-routable)
 
-22 individual: SSM-Parameter, IAM-Role, S3-Bucket, DynamoDB-Table, SQS-Queue, SNS-Topic, ECS-Cluster, ECR-Repository, Lambda-Function, LogGroup, CloudWatch-Alarm, SecretsManager, VPC, InternetGateway, Subnet, RouteTable, Route, SecurityGroup, EC2-Instance, RDS-DBInstance, ELBv2-LoadBalancer, NatGateway.
-
-3 compound: API-Gateway-V2 (serverless-api pattern), Compound-MessageQueue, Compound-ServerlessAPI.
+All 36 supported resource types flow through the CloudControl API. There are no remaining SDK write paths. See [docs/resource-types.md](resource-types.md) for the full list. 9 compound patterns are exercised end-to-end (VPC, lambda-with-exec-role, efs-with-vpc, static-website, scheduled-lambda, serverless-api, message-processing, container-service, three-tier-web).
 
 ### Cost
 
@@ -336,11 +334,11 @@ All supported resource types have pricing decomposers registered in `packages/co
 
 ### Cost estimator and free tier tests (Epic 40)
 
-| File (MCP server)              | Tests | What it covers                                                                 |
-| ------------------------------ | ----- | ------------------------------------------------------------------------------ |
-| `cost-estimator.test.ts`       | 33    | All 23 types reachable via NL keywords; substring collision safety; case tests |
-| `free-tier.test.ts`            | 19    | 9 always-free + 4 usage-limited + paid types return null                       |
-| `coverage-consistency.test.ts` | 41    | Cross-system: keyword coverage + free tier maps sync + paid exclusion          |
+| File (MCP server)              | Tests | What it covers                                                                        |
+| ------------------------------ | ----- | ------------------------------------------------------------------------------------- |
+| `cost-estimator.test.ts`       | 33    | All supported types reachable via NL keywords; substring collision safety; case tests |
+| `free-tier.test.ts`            | 19    | 9 always-free + 4 usage-limited + paid types return null                              |
+| `coverage-consistency.test.ts` | 41    | Cross-system: keyword coverage + free tier maps sync + paid exclusion                 |
 
 ---
 
