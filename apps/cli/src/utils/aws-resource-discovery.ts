@@ -29,6 +29,7 @@ import {
   ResourceDefault,
   AmiOs,
   DiscoveryCacheKey,
+  lambdaRuntimes,
 } from "@assignee/core";
 import { withTimeout } from "./timeout.js";
 import { AWS_REGION, PromiseStatus } from "../config/constants.js";
@@ -718,11 +719,7 @@ export async function searchAmis(query: string): Promise<DiscoveryOption[]> {
  *   (c) the 15-minute cache TTL (DISCOVERY_TTL_MS) applies
  */
 export async function discoverLambdaRuntimes(): Promise<DiscoveryOption[]> {
-  return cachedDiscover(DiscoveryCacheKey.LAMBDA_RUNTIMES, async () => {
-    const { lambdaRuntimes } = await import("@assignee/core");
-    return lambdaRuntimes.map((r: { value: string; label: string }) => ({
-      value: r.value,
-      label: r.label,
-    }));
-  });
+  return cachedDiscover(DiscoveryCacheKey.LAMBDA_RUNTIMES, async () =>
+    lambdaRuntimes.map((r) => ({ value: r.value, label: r.label })),
+  );
 }
