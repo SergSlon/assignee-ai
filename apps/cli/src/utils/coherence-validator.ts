@@ -58,7 +58,7 @@ function ec2Coherence(
   if (!sgIds || sgIds.length === 0) {
     warnings.push({
       id: "ssh-no-sg",
-      message: `SSH key "${keyName}" configured but no security group selected \u2014 the default VPC security group typically blocks port ${Port.SSH}. Add a security group with SSH (port ${Port.SSH}) inbound access.`,
+      message: `SSH key "${keyName}" configured but no security group selected \u2014 using the default VPC SG violates BP-EC2-010. A security group with SSH (port ${Port.SSH}) inbound will be auto-created during provisioning.`,
     });
   }
 }

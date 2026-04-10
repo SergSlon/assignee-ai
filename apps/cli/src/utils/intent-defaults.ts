@@ -62,7 +62,7 @@ const INTENT_RULES: IntentRule[] = [
       },
     ],
   },
-  // EC2 — SSH access (intent bundle: key pair + public IP + SG hint)
+  // EC2 — SSH access (intent bundle: key pair + public IP + SG with port 22)
   {
     resourceType: RESOURCE_TYPES.EC2_INSTANCE,
     keywords: ["ssh"],
@@ -76,6 +76,12 @@ const INTENT_RULES: IntentRule[] = [
         fieldName: CfnKey.ASSOCIATE_PUBLIC_IP,
         value: true,
         reason: "SSH bundle: public IP enabled for SSH reachability",
+      },
+      {
+        fieldName: CfnKey.SECURITY_GROUP_IDS,
+        value: [],
+        reason:
+          "SSH bundle: a security group with inbound port 22 will be auto-created by the companion resource system",
       },
     ],
   },
