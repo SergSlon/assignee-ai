@@ -569,10 +569,30 @@ export function injectPriceLabels(
   const enrichLabel = (opt: { value: string; label: string }) => {
     const livePrice = priceMap[opt.value];
     if (!livePrice) return opt;
+    // Story 44.2: append (live) so users can distinguish MCP prices from fallbacks
     const label = opt.label.includes(" — ")
-      ? `${opt.label.split(" — ")[0]} — ${livePrice}`
-      : `${opt.label} — ${livePrice}`;
+      ? `${opt.label.split(" — ")[0]} — ${livePrice} (live)`
+      : `${opt.label} — ${livePrice} (live)`;
     return { ...opt, label };
+  };
+
+  /** Recompute category header with live price range when options have live prices. */
+  const enrichCategoryLabel = (
+    catLabel: string,
+    options: ReadonlyArray<{ value: string }>,
+  ): string => {
+    const livePrices = options
+      .map((o) => priceMap[o.value])
+      .filter((p): p is string => !!p)
+      .map((p) => parseFloat(p.replace("$", "").replace("/hr", "")))
+      .filter((n) => !isNaN(n));
+    if (livePrices.length === 0) return catLabel;
+    const min = Math.min(...livePrices);
+    const max = Math.max(...livePrices);
+    const base = catLabel.includes(" — ") ? catLabel.split(" — ")[0] : catLabel;
+    return min === max
+      ? `${base} — $${min}/hr (live)`
+      : `${base} — $${min}-${max}/hr (live)`;
   };
 
   return fields.map((field) => {
@@ -588,6 +608,7 @@ export function injectPriceLabels(
           ...field.question,
           categories: field.question.categories.map((cat) => ({
             ...cat,
+            label: enrichCategoryLabel(cat.label, cat.options),
             options: cat.options.map(enrichLabel),
           })),
         },
