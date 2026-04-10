@@ -141,6 +141,40 @@ describe("loadGlobalConfig composition (A2 + A5)", () => {
     });
   });
 
+  // ── Story 44.1: llm passthrough in adaptUserConfigToAssignee ───────────
+  it("passes llm section through adaptUserConfigToAssignee", () => {
+    const uc = {
+      llm: {
+        default: "bedrock/amazon.nova-lite-v1:0",
+        plan_generator: "anthropic/claude-sonnet-4-5",
+      },
+    } as unknown as Parameters<typeof adaptUserConfigToAssignee>[0];
+    const result = adaptUserConfigToAssignee(uc);
+    expect(result?.llm).toEqual({
+      default: "bedrock/amazon.nova-lite-v1:0",
+      plan_generator: "anthropic/claude-sonnet-4-5",
+    });
+  });
+
+  it("passes llm section even when no preferences/defaults/budget exist", () => {
+    // This was the bug: only llm → guard didn't trigger
+    const uc = {
+      llm: { plan_generator: "anthropic/claude-sonnet-4-5" },
+    } as unknown as Parameters<typeof adaptUserConfigToAssignee>[0];
+    const result = adaptUserConfigToAssignee(uc);
+    expect(result?.llm?.["plan_generator"]).toBe("anthropic/claude-sonnet-4-5");
+  });
+
+  it("user-level llm config flows through loadGlobalConfig to resolved result", async () => {
+    mockLoadEnvOverrides.mockReturnValueOnce({});
+    mockLoadProjectConfig.mockResolvedValueOnce(undefined);
+    const userConfig = {
+      llm: { default: "bedrock/amazon.nova-lite-v1:0" },
+    } as unknown as Parameters<typeof loadGlobalConfig>[0];
+    const result = await loadGlobalConfig(userConfig);
+    expect(result.llm?.["default"]).toBe("bedrock/amazon.nova-lite-v1:0");
+  });
+
   it("A5: env var for ASSIGNEE_AUTO_FIX reaches the resolved config (regression guard)", async () => {
     // Before A2 + A5 wire-up, loadEnvOverrides() was dead code and
     // an operator setting ASSIGNEE_AUTO_FIX=apply saw no effect in

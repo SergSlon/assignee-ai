@@ -705,4 +705,40 @@ describe("checkLlmRouting (Story 44.1)", () => {
     const result = await checkLlmRouting();
     expect(result).toBeNull();
   });
+
+  it("returns a section with callsite entries when ASSIGNEE_LLM_* env vars are set", async () => {
+    process.env["ASSIGNEE_LLM_DEFAULT"] = "bedrock/amazon.nova-lite-v1:0";
+    process.env["ASSIGNEE_LLM_PLAN_GENERATOR"] = "anthropic/claude-sonnet-4-5";
+    try {
+      const result = await checkLlmRouting();
+      expect(result).not.toBeNull();
+      expect(result!.name).toContain("LLM routing");
+      expect(result!.name).toContain("callsite");
+      expect(result!.status).toBe("ok");
+      expect(result!.subs.length).toBeGreaterThanOrEqual(2);
+      // Verify callsite labels are present
+      const labels = result!.subs.map((s) => s.label.trim());
+      expect(labels).toContain("default");
+      expect(labels).toContain("plan_generator");
+    } finally {
+      delete process.env["ASSIGNEE_LLM_DEFAULT"];
+      delete process.env["ASSIGNEE_LLM_PLAN_GENERATOR"];
+    }
+  });
+
+  it("shows fallback info when no default key is configured", async () => {
+    process.env["ASSIGNEE_LLM_PLAN_GENERATOR"] = "anthropic/claude-sonnet-4-5";
+    try {
+      const result = await checkLlmRouting();
+      expect(result).not.toBeNull();
+      // Should include a (fallback) entry
+      const fallback = result!.subs.find(
+        (s) => s.label.trim() === "(fallback)",
+      );
+      expect(fallback).toBeDefined();
+      expect(fallback!.detail).toContain("built-in default");
+    } finally {
+      delete process.env["ASSIGNEE_LLM_PLAN_GENERATOR"];
+    }
+  });
 });
