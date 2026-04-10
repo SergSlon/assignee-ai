@@ -206,16 +206,17 @@ export async function renderOptionPrompt(
       break;
     }
     case "string": {
-      const placeholder = showBack
-        ? "Type value (or 'back' to return to previous field)"
-        : (question.placeholder ?? "");
+      const placeholder = question.placeholder ?? "";
+      const backHint = showBack ? " (type 'back' to go back)" : "";
       result = await clack.text({
         message: question.label,
-        placeholder,
+        placeholder: placeholder
+          ? `${placeholder}${backHint}`
+          : backHint.trim(),
         initialValue:
           typeof defaultValue === "string" ? defaultValue : undefined,
         validate: (value) => {
-          if (value === HELP_SENTINEL) return undefined; // Bypass validation for field help
+          if (value === HELP_SENTINEL) return undefined;
           if (showBack && value?.toLowerCase() === "back") return undefined;
           return question.validate?.(value, answers);
         },
