@@ -215,6 +215,20 @@ export async function getMcpTools(
 export async function getBillingMcpToolsAsync(): Promise<
   StructuredTool[] | undefined
 > {
+  // If the optional client init was started (by createMcpClient in a
+  // previous command) but hasn't completed yet, wait briefly.
+  // Commands that don't call createMcpClient (like `status`) will see
+  // optionalInitPromise=null → skip straight to the null check below.
+  if (optionalInitPromise && !optionalClient) {
+    try {
+      await Promise.race([
+        optionalInitPromise,
+        new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
+      ]);
+    } catch {
+      // Init failed or timed out — proceed without billing tools
+    }
+  }
   if (!optionalClient) return undefined;
 
   try {
