@@ -35,8 +35,9 @@ export async function checkSecurityPosture(
       SECURITY_CHECK_TIMEOUT_MS,
     );
     if (result !== null) {
-      const posture = JSON.parse(unwrapMcpText(result));
-      // v0.1.7: response has { enabled, findings, summary } —
+      const raw = JSON.parse(unwrapMcpText(result));
+      // v0.1.7: real server wraps payload in { result: {...} }
+      const posture = raw?.result ?? raw;
       // gracefully return empty when the service is disabled.
       if (posture.enabled === false) return;
       const rawFindings = Array.isArray(posture.findings)
