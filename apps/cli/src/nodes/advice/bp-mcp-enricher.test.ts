@@ -47,8 +47,10 @@ describe("enrichBpWithMcp", () => {
   });
 
   it("returns extra findings from the Well-Architected security posture tool", async () => {
-    const securityTool = makeTool(ToolName.CHECK_SECURITY_SERVICES, async () =>
+    const securityTool = makeTool(ToolName.GET_SECURITY_FINDINGS, async () =>
       JSON.stringify({
+        service: "securityhub",
+        enabled: true,
         findings: [
           {
             severity: "HIGH",
@@ -84,8 +86,10 @@ describe("enrichBpWithMcp", () => {
   });
 
   it("deduplicates findings already covered by static BP rules via propertyPath", async () => {
-    const securityTool = makeTool(ToolName.CHECK_SECURITY_SERVICES, async () =>
+    const securityTool = makeTool(ToolName.GET_SECURITY_FINDINGS, async () =>
       JSON.stringify({
+        service: "securityhub",
+        enabled: true,
         findings: [
           {
             severity: "HIGH",
@@ -116,8 +120,10 @@ describe("enrichBpWithMcp", () => {
   });
 
   it("maps MCP severities and defaults unknown values to INFO", async () => {
-    const securityTool = makeTool(ToolName.CHECK_SECURITY_SERVICES, async () =>
+    const securityTool = makeTool(ToolName.GET_SECURITY_FINDINGS, async () =>
       JSON.stringify({
+        service: "securityhub",
+        enabled: true,
         findings: [
           {
             severity: "CRITICAL",
@@ -176,7 +182,7 @@ describe("enrichBpWithMcp", () => {
 
   it("returns [] gracefully when MCP returns malformed JSON", async () => {
     const securityTool = makeTool(
-      ToolName.CHECK_SECURITY_SERVICES,
+      ToolName.GET_SECURITY_FINDINGS,
       async () => "this is not json {{{",
     );
     const extras = await enrichBpWithMcp(
@@ -189,7 +195,7 @@ describe("enrichBpWithMcp", () => {
   });
 
   it("returns [] gracefully when MCP returns an unexpected shape (no findings array)", async () => {
-    const securityTool = makeTool(ToolName.CHECK_SECURITY_SERVICES, async () =>
+    const securityTool = makeTool(ToolName.GET_SECURITY_FINDINGS, async () =>
       JSON.stringify({ results: "other shape" }),
     );
     const extras = await enrichBpWithMcp(
@@ -202,12 +208,9 @@ describe("enrichBpWithMcp", () => {
   });
 
   it("returns [] gracefully when the MCP tool throws (server unavailable)", async () => {
-    const securityTool = makeTool(
-      ToolName.CHECK_SECURITY_SERVICES,
-      async () => {
-        throw new Error("ECONNREFUSED");
-      },
-    );
+    const securityTool = makeTool(ToolName.GET_SECURITY_FINDINGS, async () => {
+      throw new Error("ECONNREFUSED");
+    });
     const extras = await enrichBpWithMcp(
       RESOURCE_TYPE,
       DESIRED_STATE,
@@ -231,9 +234,28 @@ describe("enrichBpWithMcp", () => {
     expect(extras).toEqual([]);
   });
 
-  it("integrates with the BPFinding output shape from bp-evaluator", async () => {
-    const securityTool = makeTool(ToolName.CHECK_SECURITY_SERVICES, async () =>
+  it("returns [] gracefully when enabled is false (service not active)", async () => {
+    const securityTool = makeTool(ToolName.GET_SECURITY_FINDINGS, async () =>
       JSON.stringify({
+        service: "securityhub",
+        enabled: false,
+        message: "Security Hub is not enabled in us-east-1.",
+      }),
+    );
+    const extras = await enrichBpWithMcp(
+      RESOURCE_TYPE,
+      DESIRED_STATE,
+      [],
+      [securityTool],
+    );
+    expect(extras).toEqual([]);
+  });
+
+  it("integrates with the BPFinding output shape from bp-evaluator", async () => {
+    const securityTool = makeTool(ToolName.GET_SECURITY_FINDINGS, async () =>
+      JSON.stringify({
+        service: "securityhub",
+        enabled: true,
         findings: [
           {
             severity: "HIGH",

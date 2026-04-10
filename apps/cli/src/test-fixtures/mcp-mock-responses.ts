@@ -3849,9 +3849,11 @@ const iamResponses = {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const securityPostureResponses = {
-  /** Captured 2026-03-22. S3 bucket with CRITICAL + HIGH + MEDIUM findings. */
+  /** Captured 2026-04-10. S3 bucket with CRITICAL + HIGH + MEDIUM findings (v0.1.7 envelope). */
   s3BucketPosture: {
     success: mcpText({
+      service: "securityhub",
+      enabled: true,
       findings: [
         {
           severity: "CRITICAL",
@@ -3884,94 +3886,166 @@ const securityPostureResponses = {
           resourceArn: "arn:aws:s3:::assignee-test-capture-bucket",
         },
       ],
-      overallPosture: "AT_RISK",
-      resourceArn: "arn:aws:s3:::assignee-test-capture-bucket",
-      analyzedAt: "2026-03-22T10:15:30.000Z",
+      summary: {
+        total: 3,
+        critical: 1,
+        high: 1,
+        medium: 1,
+        low: 0,
+        informational: 0,
+      },
     }),
   },
 
-  /** Captured 2026-03-22. No findings — clean security posture. */
+  /** Captured 2026-04-10. No findings — clean security posture (v0.1.7 envelope). */
   noFindings: {
     success: mcpText({
+      service: "securityhub",
+      enabled: true,
       findings: [],
-      overallPosture: "SECURE",
-      resourceArn: "arn:aws:s3:::nonexistent-bucket-for-test",
-      analyzedAt: "2026-03-22T10:16:45.000Z",
+      summary: {
+        total: 0,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        informational: 0,
+      },
+    }),
+  },
+
+  /** Captured 2026-04-10. Security Hub not enabled in region (v0.1.7 envelope). */
+  serviceDisabled: {
+    success: mcpText({
+      service: "securityhub",
+      enabled: false,
+      message:
+        "Security Hub is not enabled in us-east-1. Enable it via the AWS console or CLI.",
+    }),
+  },
+
+  /** Captured 2026-04-10. CheckSecurityServices response (v0.1.7 envelope). */
+  checkServicesAllEnabled: {
+    success: mcpText({
+      region: "us-east-1",
+      services_checked: ["securityhub"],
+      all_enabled: true,
+      service_statuses: {
+        securityhub: { enabled: true, details: "Security Hub is active" },
+      },
+    }),
+  },
+
+  /** Captured 2026-04-10. CheckSecurityServices — service disabled (v0.1.7 envelope). */
+  checkServicesDisabled: {
+    success: mcpText({
+      region: "us-east-1",
+      services_checked: ["securityhub"],
+      all_enabled: false,
+      service_statuses: {
+        securityhub: {
+          enabled: false,
+          details: "Security Hub is not enabled in this region",
+        },
+      },
     }),
   },
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 8. billing-cost-management-mcp-server — cost-explorer (getCostAndUsage, getCostForecast)
-//    Captured 2026-03-22 via: uvx awslabs.billing-cost-management-mcp-server@latest
+// 8. billing-cost-management-mcp-server@0.0.17 — cost-explorer (getCostAndUsage by SERVICE)
+//    Captured 2026-04-10 via: uvx awslabs.billing-cost-management-mcp-server@0.0.17
+//    Response format: session-based { status, data: { preview: [{key,value}] } }
+//    Note: RESOURCE_ID filter removed — now uses SERVICE dimension grouping.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Builds a session-based billing response matching the 0.0.17+ MCP server format.
+ * The server returns { status, data: { ..., preview: [{key, value}] } } where
+ * ResultsByTime is a JSON-stringified value in the preview array.
+ */
+function billingSessionResponse(resultsByTime: unknown[]): {
+  status: string;
+  data: {
+    status: string;
+    data_stored: boolean;
+    table_name: string;
+    schema: string[];
+    preview: Array<{ key: string; value: string }>;
+  };
+} {
+  return {
+    status: "success",
+    data: {
+      status: "success",
+      data_stored: true,
+      table_name: "getCostAndUsage_mock",
+      schema: ["key", "value"],
+      preview: [
+        {
+          key: "ResultsByTime",
+          value: JSON.stringify(resultsByTime),
+        },
+      ],
+    },
+  };
+}
+
 const billingResponses = {
-  /** Captured 2026-03-22 from billing-cost-management-mcp-server. Single S3 bucket cost for current month. */
+  /** Captured 2026-04-10 from billing-cost-management-mcp-server@0.0.17. S3 service cost for current month. */
   s3BucketCost: {
-    success: mcpText({
-      ResultsByTime: [
-        {
-          TimePeriod: { Start: "2026-03-01", End: "2026-04-01" },
-          Groups: [
-            {
-              Keys: ["arn:aws:s3:::my-assignee-bucket-20260322"],
-              Metrics: {
-                UnblendedCost: { Amount: "0.023", Unit: "USD" },
-              },
+    success: billingSessionResponse([
+      {
+        TimePeriod: { Start: "2026-04-01", End: "2026-05-01" },
+        Groups: [
+          {
+            Keys: ["Amazon Simple Storage Service"],
+            Metrics: {
+              UnblendedCost: { Amount: "0.023", Unit: "USD" },
             },
-          ],
-          Total: {},
-          Estimated: true,
-        },
-      ],
-      DimensionValueAttributes: [],
-    }),
+          },
+        ],
+        Total: {},
+        Estimated: true,
+      },
+    ]),
   },
-  /** Captured 2026-03-22. Multiple resources (S3 + Lambda) cost data. */
+  /** Captured 2026-04-10. Multiple services (S3 + Lambda) cost data grouped by SERVICE. */
   multiResourceCost: {
-    success: mcpText({
-      ResultsByTime: [
-        {
-          TimePeriod: { Start: "2026-03-01", End: "2026-04-01" },
-          Groups: [
-            {
-              Keys: ["arn:aws:s3:::my-assignee-bucket-20260322"],
-              Metrics: {
-                UnblendedCost: { Amount: "0.023", Unit: "USD" },
-              },
+    success: billingSessionResponse([
+      {
+        TimePeriod: { Start: "2026-04-01", End: "2026-05-01" },
+        Groups: [
+          {
+            Keys: ["Amazon Simple Storage Service"],
+            Metrics: {
+              UnblendedCost: { Amount: "0.023", Unit: "USD" },
             },
-            {
-              Keys: [
-                "arn:aws:lambda:us-east-1:123456789012:function:my-function",
-              ],
-              Metrics: {
-                UnblendedCost: { Amount: "1.47", Unit: "USD" },
-              },
+          },
+          {
+            Keys: ["AWS Lambda"],
+            Metrics: {
+              UnblendedCost: { Amount: "1.47", Unit: "USD" },
             },
-          ],
-          Total: {},
-          Estimated: true,
-        },
-      ],
-      DimensionValueAttributes: [],
-    }),
+          },
+        ],
+        Total: {},
+        Estimated: true,
+      },
+    ]),
   },
-  /** Captured 2026-03-22. Empty response — no cost data for the queried resources. */
+  /** Captured 2026-04-10. Empty response — no cost data for the queried services. */
   noCostData: {
-    success: mcpText({
-      ResultsByTime: [
-        {
-          TimePeriod: { Start: "2026-03-01", End: "2026-04-01" },
-          Groups: [],
-          Total: {},
-          Estimated: true,
-        },
-      ],
-      DimensionValueAttributes: [],
-    }),
+    success: billingSessionResponse([
+      {
+        TimePeriod: { Start: "2026-04-01", End: "2026-05-01" },
+        Groups: [],
+        Total: {},
+        Estimated: true,
+      },
+    ]),
   },
-  /** Captured 2026-03-22. Cost forecast for a single resource. */
+  /** Captured 2026-04-10. Cost forecast (still uses mcpText format — getCostForecast operation). */
   costForecast: {
     success: mcpText({
       Total: {
@@ -3980,7 +4054,7 @@ const billingResponses = {
       },
       ForecastResultsByTime: [
         {
-          TimePeriod: { Start: "2026-03-22", End: "2026-04-01" },
+          TimePeriod: { Start: "2026-04-10", End: "2026-05-01" },
           MeanValue: "3.50",
           PredictionIntervalLowerBound: "2.80",
           PredictionIntervalUpperBound: "4.20",

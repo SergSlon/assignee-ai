@@ -8,7 +8,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import { Severity } from "@assignee/best-practices";
 import { renderSecurityWarnings } from "./display.js";
 import { ToolName } from "../constants/tools.js";
-import { SECURITY_CHECK_TIMEOUT_MS } from "../config/constants.js";
+import { AWS_REGION, SECURITY_CHECK_TIMEOUT_MS } from "../config/constants.js";
 import { unwrapMcpText } from "./mcp.js";
 import { withTimeout } from "./timeout.js";
 import { log, LOG_ACTIONS } from "./logger.js";
@@ -27,12 +27,18 @@ export async function checkSecurityPosture(
   try {
     const result = await withTimeout(
       securityTool.invoke({
-        resource_arn: resourceArn,
+        service: "securityhub",
+        region: AWS_REGION,
+        max_findings: 10,
+        severity_filter: "CRITICAL",
       }),
       SECURITY_CHECK_TIMEOUT_MS,
     );
     if (result !== null) {
       const posture = JSON.parse(unwrapMcpText(result));
+      // v0.1.7: response has { enabled, findings, summary } —
+      // gracefully return empty when the service is disabled.
+      if (posture.enabled === false) return;
       const criticalHighFindings = (
         (posture.findings ?? []) as SecurityFinding[]
       ).filter(
