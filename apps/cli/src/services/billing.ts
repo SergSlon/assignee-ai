@@ -15,6 +15,7 @@
 
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
+import { unwrapMcpText } from "../utils/mcp.js";
 import { defaultMemoryService } from "./memory.js";
 import { AWS_REGION, UNKNOWN_FALLBACK } from "../config/constants.js";
 import type { ManagedResource } from "./list-resources.js";
@@ -101,7 +102,23 @@ function arnToServiceSlug(arn: string): string | undefined {
 function extractResultsByTime(response: unknown): unknown[] {
   if (typeof response !== "object" || response === null) return [];
 
-  const resp = response as Record<string, unknown>;
+  // Unwrap MCP text wrapper ({ type: "text", text: "<JSON>" }) if present
+  let resp = response as Record<string, unknown>;
+  if ("text" in resp && typeof resp["text"] === "string") {
+    try {
+      resp = JSON.parse(resp["text"] as string) as Record<string, unknown>;
+    } catch {
+      return [];
+    }
+  }
+  // Also handle string responses (unwrapMcpText output)
+  if (typeof resp === "string") {
+    try {
+      resp = JSON.parse(resp) as Record<string, unknown>;
+    } catch {
+      return [];
+    }
+  }
 
   // New session-based format: data.preview contains key-value pairs
   const data = resp["data"] as Record<string, unknown> | undefined;
@@ -148,83 +165,90 @@ async function queryBillingMcp(
     if (ceName) serviceNames.add(ceName);
   }
 
-  const response = await costTool.invoke({
-    operation: "getCostAndUsage",
-    start_date: start,
-    end_date: end,
-    granularity: "MONTHLY",
-    metrics: JSON.stringify(["UnblendedCost"]),
-    group_by: JSON.stringify([{ Type: "DIMENSION", Key: "SERVICE" }]),
-    filter:
-      serviceNames.size > 0
-        ? JSON.stringify({
-            Dimensions: {
-              Key: "SERVICE",
-              Values: [...serviceNames],
-            },
-          })
-        : undefined,
-  });
+  try {
+    const response = await costTool.invoke({
+      operation: "getCostAndUsage",
+      start_date: start,
+      end_date: end,
+      granularity: "MONTHLY",
+      metrics: JSON.stringify(["UnblendedCost"]),
+      group_by: JSON.stringify([{ Type: "DIMENSION", Key: "SERVICE" }]),
+      filter:
+        serviceNames.size > 0
+          ? JSON.stringify({
+              Dimensions: {
+                Key: "SERVICE",
+                Values: [...serviceNames],
+              },
+            })
+          : undefined,
+    });
 
-  const resultsByTime = extractResultsByTime(response);
-  const results: BillingCostData[] = [];
+    const resultsByTime = extractResultsByTime(response);
+    const results: BillingCostData[] = [];
 
-  // Build a map of service name -> total cost from the response
-  const serviceCosts = new Map<string, { amount: number; unit: string }>();
-  for (const timePeriod of resultsByTime as Array<{
-    Groups?: Array<{
-      Keys?: string[];
-      Metrics?: Record<string, { Amount?: string; Unit?: string }>;
-    }>;
-  }>) {
-    if (timePeriod?.Groups) {
-      for (const group of timePeriod.Groups) {
-        const serviceName = group?.Keys?.[0];
-        const ubCost = group?.Metrics?.["UnblendedCost"] as
-          | { Amount?: string; Unit?: string }
-          | undefined;
-        const amount = ubCost?.Amount;
-        const unit = ubCost?.Unit ?? "USD";
-        if (serviceName && amount !== undefined) {
-          const existing = serviceCosts.get(serviceName);
-          const newAmount = parseFloat(amount) + (existing?.amount ?? 0);
-          serviceCosts.set(serviceName, { amount: newAmount, unit });
+    // Build a map of service name -> total cost from the response
+    const serviceCosts = new Map<string, { amount: number; unit: string }>();
+    for (const timePeriod of resultsByTime as Array<{
+      Groups?: Array<{
+        Keys?: string[];
+        Metrics?: Record<string, { Amount?: string; Unit?: string }>;
+      }>;
+    }>) {
+      if (timePeriod?.Groups) {
+        for (const group of timePeriod.Groups) {
+          const serviceName = group?.Keys?.[0];
+          const ubCost = group?.Metrics?.["UnblendedCost"] as
+            | { Amount?: string; Unit?: string }
+            | undefined;
+          const amount = ubCost?.Amount;
+          const unit = ubCost?.Unit ?? "USD";
+          if (serviceName && amount !== undefined) {
+            const parsed = parseFloat(amount);
+            if (Number.isNaN(parsed)) continue;
+            const existing = serviceCosts.get(serviceName);
+            const newAmount = parsed + (existing?.amount ?? 0);
+            serviceCosts.set(serviceName, { amount: newAmount, unit });
+          }
         }
       }
     }
-  }
 
-  // Distribute service costs across resources of the same service
-  // Group resources by their CE service name
-  const resourcesByService = new Map<string, ManagedResource[]>();
-  for (const r of resources) {
-    const slug = arnToServiceSlug(r.arn);
-    const ceName = slug ? ARN_SERVICE_TO_CE_SERVICE[slug] : undefined;
-    if (ceName) {
-      const list = resourcesByService.get(ceName) ?? [];
-      list.push(r);
-      resourcesByService.set(ceName, list);
+    // Distribute service costs across resources of the same service
+    // Group resources by their CE service name
+    const resourcesByService = new Map<string, ManagedResource[]>();
+    for (const r of resources) {
+      const slug = arnToServiceSlug(r.arn);
+      const ceName = slug ? ARN_SERVICE_TO_CE_SERVICE[slug] : undefined;
+      if (ceName) {
+        const list = resourcesByService.get(ceName) ?? [];
+        list.push(r);
+        resourcesByService.set(ceName, list);
+      }
     }
-  }
 
-  for (const [serviceName, serviceResources] of resourcesByService) {
-    const cost = serviceCosts.get(serviceName);
-    if (!cost) continue;
+    for (const [serviceName, serviceResources] of resourcesByService) {
+      const cost = serviceCosts.get(serviceName);
+      if (!cost) continue;
 
-    // Split cost evenly among resources of this service type
-    const perResourceCost = cost.amount / serviceResources.length;
-    for (const r of serviceResources) {
-      results.push({
-        arn: r.arn,
-        actualMonthlyCost: `$${perResourceCost.toFixed(2)}/month`,
-        forecastedMonthlyCost: `$${perResourceCost.toFixed(2)}/month`,
-        currency: cost.unit,
-        lastUpdated: new Date().toISOString(),
-      });
+      // Split cost evenly among resources of this service type
+      const perResourceCost = cost.amount / serviceResources.length;
+      for (const r of serviceResources) {
+        results.push({
+          arn: r.arn,
+          actualMonthlyCost: `$${perResourceCost.toFixed(2)}/month`,
+          forecastedMonthlyCost: `$${perResourceCost.toFixed(2)}/month`,
+          currency: cost.unit,
+          lastUpdated: new Date().toISOString(),
+        });
+      }
     }
-  }
 
-  return results;
+    return results;
+  } catch {
+    // Graceful degradation: billing is non-blocking — return empty on any error
+    return [];
+  }
 }
 
 /**

@@ -30,7 +30,7 @@ export async function checkSecurityPosture(
         service: "securityhub",
         region: AWS_REGION,
         max_findings: 10,
-        severity_filter: "CRITICAL",
+        severity_filter: "HIGH",
       }),
       SECURITY_CHECK_TIMEOUT_MS,
     );
@@ -39,9 +39,10 @@ export async function checkSecurityPosture(
       // v0.1.7: response has { enabled, findings, summary } —
       // gracefully return empty when the service is disabled.
       if (posture.enabled === false) return;
-      const criticalHighFindings = (
-        (posture.findings ?? []) as SecurityFinding[]
-      ).filter(
+      const rawFindings = Array.isArray(posture.findings)
+        ? posture.findings
+        : [];
+      const criticalHighFindings = (rawFindings as SecurityFinding[]).filter(
         (f) => f.severity === Severity.CRITICAL || f.severity === Severity.HIGH,
       );
       if (criticalHighFindings.length > 0) {
