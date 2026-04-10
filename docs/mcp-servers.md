@@ -9,8 +9,8 @@ Assignee.ai uses 5 AWS MCP servers (+ 1 optional remote knowledge server) to enr
 | Pricing       | `awslabs.aws-pricing-mcp-server`               | `1.0.27` | reader     | plan, apply, optimize | Live $/hr for cost estimation  |
 | Documentation | `awslabs.aws-documentation-mcp-server`         | `1.1.20` | reader     | plan, apply           | Field docs, runtime catalogs   |
 | IAM           | `awslabs.iam-mcp-server`                       | `1.0.17` | auditor    | status                | IAM permission simulation      |
-| WA Security   | `awslabs.well-architected-security-mcp-server` | `0.1.7`  | auditor    | status                | SecurityHub/GuardDuty findings |
-| Billing       | `awslabs.billing-cost-management-mcp-server`   | `0.0.17` | reader     | status                | Live billing, cost forecast    |
+| WA Security   | `awslabs.well-architected-security-mcp-server` | `1.0.2`  | auditor    | status                | SecurityHub/GuardDuty findings |
+| Billing       | `awslabs.cost-management-mcp-server`           | `1.0.2`  | reader     | status                | Live billing, cost forecast    |
 | Knowledge     | `knowledge-mcp.global.api.aws`                 | remote   | reader     | plan, apply           | Optional remote AWS knowledge  |
 
 **Pin location:** `apps/cli/src/config/mcp-servers.ts` → `MCP_PINS`
@@ -52,13 +52,17 @@ Assignee.ai uses 5 AWS MCP servers (+ 1 optional remote knowledge server) to enr
 | --------------------------- | --------------- | ----------------------------------- |
 | `simulate_principal_policy` | preflight-guard | Pre-apply IAM permission validation |
 
-### WA Security (`awslabs.well-architected-security-mcp-server@0.1.7`)
+### WA Security (`awslabs.well-architected-security-mcp-server@1.0.2`)
+
+**Upgrade blocked:** Newer versions (0.1.x) renamed `AnalyzeSecurityPosture` to `CheckSecurityServices` + split into multiple tools. Requires code changes in security-posture.ts, mcp-advisor.ts, bp-mcp-enricher.ts.
 
 | Tool                     | Used By                                           | Purpose                                       |
 | ------------------------ | ------------------------------------------------- | --------------------------------------------- |
 | `AnalyzeSecurityPosture` | mcp-advisor, bp-mcp-enricher, security-posture.ts | Post-provision SecurityHub/GuardDuty findings |
 
-### Billing (`awslabs.billing-cost-management-mcp-server@0.0.17`)
+### Billing (`awslabs.cost-management-mcp-server@1.0.2`)
+
+**Upgrade blocked:** Newer package (`billing-cost-management-mcp-server`) replaced `get_cost_and_usage`/`get_cost_forecast` with a single `cost-explorer` tool using an `operation` parameter. Requires code changes in billing.ts and list-resources.ts.
 
 | Tool                 | Used By                       | Purpose                               |
 | -------------------- | ----------------------------- | ------------------------------------- |

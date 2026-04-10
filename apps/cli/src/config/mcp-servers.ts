@@ -46,8 +46,16 @@ export const MCP_PINS = {
   AWS_PRICING: "awslabs.aws-pricing-mcp-server@1.0.27",
   AWS_DOCUMENTATION: "awslabs.aws-documentation-mcp-server@1.1.20",
   AWS_IAM: "awslabs.iam-mcp-server@1.0.17",
-  AWS_WA_SECURITY: "awslabs.well-architected-security-mcp-server@0.1.7",
-  AWS_COST_MANAGEMENT: "awslabs.billing-cost-management-mcp-server@0.0.17",
+  // PINNED to 1.0.2: newer versions (0.1.x) renamed AnalyzeSecurityPosture →
+  // CheckSecurityServices + split into multiple tools. Upgrading requires
+  // updating security-posture.ts, mcp-advisor.ts, bp-mcp-enricher.ts, and
+  // all test fixtures. Track in a future story.
+  AWS_WA_SECURITY: "awslabs.well-architected-security-mcp-server@1.0.2",
+  // PINNED to 1.0.2: newer package (billing-cost-management-mcp-server)
+  // replaced get_cost_and_usage/get_cost_forecast with a single cost-explorer
+  // tool using operation parameter. Upgrading requires updating billing.ts
+  // and list-resources.ts. Track in a future story.
+  AWS_COST_MANAGEMENT: "awslabs.cost-management-mcp-server@1.0.2",
 } as const;
 
 /** Env var that must be set to `1` to enable the remote knowledge MCP server. */
