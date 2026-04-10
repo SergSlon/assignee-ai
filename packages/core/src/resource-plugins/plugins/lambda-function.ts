@@ -1,6 +1,7 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, AwsDefault, SizeLabel } from "../../config/cfn-keys.js";
 import { ArnPrefix } from "../../config/aws-arns.js";
+import { DiscoveryCacheKey } from "../../config/discovery-keys.js";
 import type { ResourcePlugin, OptionMetadata, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
@@ -196,6 +197,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         hint: "Language and version your code runs on. Node.js has the fastest cold starts. Python is popular for ML/data. Java has slower cold starts but strong enterprise support.",
         options: sortedRuntimes,
         initialValue: AwsDefault.LAMBDA_RUNTIME,
+        fetcher: DiscoveryCacheKey.LAMBDA_RUNTIMES,
       },
     },
     {

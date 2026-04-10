@@ -168,6 +168,7 @@ export {
   defaultPluginRegistry,
   PluginRegistry,
   collectCompanionResources,
+  lambdaRuntimes,
 } from "./resource-plugins/index.js";
 
 // Pattern Templates (Story 8.1)

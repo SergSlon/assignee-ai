@@ -108,7 +108,10 @@ export { PluginRegistry };
 export { s3BucketPlugin } from "./plugins/s3-bucket.js";
 export { ec2InstancePlugin } from "./plugins/ec2-instance.js";
 export { rdsDbInstancePlugin } from "./plugins/rds-dbinstance.js";
-export { lambdaFunctionPlugin } from "./plugins/lambda-function.js";
+export {
+  lambdaFunctionPlugin,
+  sortedRuntimes as lambdaRuntimes,
+} from "./plugins/lambda-function.js";
 export { securityGroupPlugin } from "./plugins/security-group.js";
 export { dynamodbTablePlugin } from "./plugins/dynamodb-table.js";
 export { vpcPlugin } from "./plugins/vpc.js";

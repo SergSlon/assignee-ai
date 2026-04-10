@@ -36,6 +36,7 @@ vi.mock("../utils/aws-resource-discovery.js", () => ({
   discoverInstanceTypes: vi.fn().mockResolvedValue(null),
   discoverRdsEngineVersions: vi.fn().mockResolvedValue([]),
   discoverRdsInstanceClasses: vi.fn().mockResolvedValue([]),
+  discoverLambdaRuntimes: vi.fn().mockResolvedValue([]),
   clearDiscoveryCache: vi.fn(),
   resolveAmiFromOsName: vi.fn().mockResolvedValue(null),
   DiscoveryCacheKey: {
