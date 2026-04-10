@@ -34,6 +34,7 @@ import { getFreeTierNote, loadAccountCreatedDate } from "../utils/free-tier.js";
 import { getCachedPrice, setCachedPrice } from "../services/price-cache.js";
 import type { AgentState } from "../services/graph.js";
 import { PromiseStatus } from "../config/constants.js";
+import { getOperatorCallerArn } from "../utils/resolve-arn.js";
 
 /**
  * Placeholder AWS account IDs that show up in AWS documentation examples.
@@ -443,21 +444,49 @@ export async function preflightGuardNode(
       );
       if (!iamTool) return { passed: true, missing: [] };
       try {
+        // The real IAM MCP server requires policy_source_arn (the IAM
+        // principal whose policies to evaluate). Resolve the operator's
+        // caller ARN from the cached STS GetCallerIdentity response.
+        // If credentials are missing or STS fails, skip gracefully.
+        const callerArn = await getOperatorCallerArn();
+        if (!callerArn) {
+          log({
+            ts: new Date().toISOString(),
+            runId: state.runId,
+            level: "warn",
+            action: LOG_ACTIONS.IAM_CHECK_SKIPPED,
+            extras: {
+              resourceType: state.resourceType,
+              reason: "operator_arn_unavailable",
+            },
+          });
+          return { passed: true, missing: [] };
+        }
         const requiredActions = getRequiredIamActions(state.resourceType);
         const result = await withTimeout(
           iamTool.invoke({
+            policy_source_arn: callerArn,
             action_names: requiredActions,
             resource_arns: ["*"],
           }),
           PRICING_TIMEOUT_MS,
         );
         if (result === null) return { passed: true, missing: [] };
-        const simResult = JSON.parse(unwrapMcpText(result)) as {
+        // The real IAM MCP server wraps the response in { result: {...} }.
+        // Unwrap the envelope the same way as WA Security (v0.1.7 pattern).
+        const parsed = JSON.parse(unwrapMcpText(result)) as {
+          result?: {
+            EvaluationResults?: Array<{
+              EvalDecision?: string;
+              EvalActionName?: string;
+            }>;
+          };
           EvaluationResults?: Array<{
             EvalDecision?: string;
             EvalActionName?: string;
           }>;
         };
+        const simResult = parsed.result ?? parsed;
         const missing = (simResult.EvaluationResults ?? [])
           .filter((r) => r.EvalDecision !== "allowed")
           .map((r) => r.EvalActionName as string);

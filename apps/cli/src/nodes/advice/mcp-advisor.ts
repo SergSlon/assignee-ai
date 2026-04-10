@@ -81,7 +81,7 @@ async function fetchDocContext(
   const result = await withTimeout(
     tool.invoke({
       search_phrase: `${shortType} best practices security`,
-      max_results: 2,
+      limit: 2,
     }),
     MCP_ADVICE_TIMEOUT_MS,
   );

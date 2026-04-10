@@ -29,4 +29,21 @@ describe("unwrapMcpText", () => {
     const response = { text: 42 };
     expect(unwrapMcpText(response)).toBe('{"text":42}');
   });
+
+  it("extracts result from { result: '...' } wrapper (documentation MCP)", () => {
+    const response = { result: "## Section content\n\nSome documentation." };
+    expect(unwrapMcpText(response)).toBe(
+      "## Section content\n\nSome documentation.",
+    );
+  });
+
+  it("prefers text over result when both present", () => {
+    const response = { text: "from-text", result: "from-result" };
+    expect(unwrapMcpText(response)).toBe("from-text");
+  });
+
+  it("returns JSON.stringify when result property is not a string", () => {
+    const response = { result: { nested: true } };
+    expect(unwrapMcpText(response)).toBe('{"result":{"nested":true}}');
+  });
 });

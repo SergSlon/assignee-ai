@@ -37,6 +37,7 @@ import { AWS_REGION } from "../config/constants.js";
 
 /** Module-level cache: one STS lookup per CLI process. */
 let cachedAccountId: string | undefined;
+let cachedCallerArn: string | undefined;
 let cachedAccountIdLookup: Promise<string | undefined> | undefined;
 
 /**
@@ -110,6 +111,9 @@ export async function getOperatorAccountId(): Promise<string | undefined> {
 
       if (identity.Account) {
         cachedAccountId = identity.Account;
+        if (identity.Arn) {
+          cachedCallerArn = identity.Arn;
+        }
         return cachedAccountId;
       }
       return undefined;
@@ -130,12 +134,34 @@ export async function getOperatorAccountId(): Promise<string | undefined> {
 }
 
 /**
- * Resets the cached account ID. Used by tests; production code should
- * never call this — the cache is correct for the duration of one CLI
- * process and the operator credentials cannot change mid-run.
+ * Returns the full caller ARN from the STS GetCallerIdentity response
+ * (e.g. `arn:aws:iam::054125018476:user/assignee-operator`).
+ *
+ * Piggybacks on the same STS call as getOperatorAccountId — no extra
+ * network request. Returns undefined when:
+ *   - operator credentials are not configured
+ *   - STS call fails or times out
+ *   - STS returned an Account but no Arn (shouldn't happen in practice)
+ *
+ * Used by preflight-guard to supply `policy_source_arn` to the IAM MCP
+ * server's `simulate_principal_policy` tool, which requires it.
+ */
+export async function getOperatorCallerArn(): Promise<string | undefined> {
+  if (cachedCallerArn !== undefined) return cachedCallerArn;
+  // Trigger the STS lookup if it hasn't happened yet — this populates
+  // cachedCallerArn as a side-effect.
+  await getOperatorAccountId();
+  return cachedCallerArn;
+}
+
+/**
+ * Resets the cached account ID and caller ARN. Used by tests; production
+ * code should never call this — the cache is correct for the duration of
+ * one CLI process and the operator credentials cannot change mid-run.
  */
 export function resetAccountIdCache(): void {
   cachedAccountId = undefined;
+  cachedCallerArn = undefined;
   cachedAccountIdLookup = undefined;
 }
 

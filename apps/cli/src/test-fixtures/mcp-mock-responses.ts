@@ -10,7 +10,10 @@
  *   Schema responses are available in MCP-wrapped format (McpMocks.schema.*.success)
  *   and as raw objects (RawSchemas.*) for mocking CloudFormationSchemaService.getSchema().
  *
- * MCP responses mirror the wire format: { type: "text", text: "<json>" }
+ * MCP responses mirror the wire format:
+ * - Pricing/Schema/IAM/Security: { type: "text", text: "<json>" }
+ * - Documentation read_sections/read_documentation: { result: "<content>" }
+ * - Documentation search_documentation: { search_results: [...], query_id, facets }
  * See: apps/cli/src/utils/mcp.ts — unwrapMcpText()
  *
  * aws-knowledge-mcp-server: configured but no app code calls its tools — no mocks needed.
@@ -2629,6 +2632,7 @@ const docSearchResponses = {
   /** Captured 2026-03-22 from aws-documentation-mcp-server. Input: { search_phrase: "BucketName AWS::S3::Bucket" }. 10 results, 3 kept. */
   s3BucketName: {
     success: {
+      query_id: "q-s3-bucket-name-001",
       search_results: [
         {
           rank_order: 1,
@@ -2651,12 +2655,14 @@ const docSearchResponses = {
             "Specifies a cross-origin access rule for an Amazon S3 bucket.",
         },
       ],
+      facets: {},
     },
   },
 
   /** Captured 2026-03-22 from aws-documentation-mcp-server. Input: { search_phrase: "InstanceType AWS::EC2::Instance" } */
   ec2InstanceType: {
     success: {
+      query_id: "q-ec2-instance-type-001",
       search_results: [
         {
           rank_order: 1,
@@ -2679,12 +2685,14 @@ const docSearchResponses = {
             "Discover suitable EC2 instance types based on compute, memory, storage needs. Filter by Availability Zone, memory size, instance storage, hibernation support.",
         },
       ],
+      facets: {},
     },
   },
 
   /** Captured 2026-03-22 from aws-documentation-mcp-server. Input: { search_phrase: "Runtime AWS::Lambda::Function" } */
   lambdaRuntime: {
     success: {
+      query_id: "q-lambda-runtime-001",
       search_results: [
         {
           rank_order: 1,
@@ -2708,12 +2716,14 @@ const docSearchResponses = {
             "Use the CloudFormation AWS::Lambda::Version.RuntimePolicy resource for Lambda.",
         },
       ],
+      facets: {},
     },
   },
 
   /** Captured 2026-03-22 from aws-documentation-mcp-server. Input: { search_phrase: "Engine AWS::RDS::DBInstance" } */
   rdsEngine: {
     success: {
+      query_id: "q-rds-engine-001",
       search_results: [
         {
           rank_order: 1,
@@ -2737,6 +2747,7 @@ const docSearchResponses = {
             "Aws::RDS::Model::DBInstance Class Reference - AWS SDK for C++ v1",
         },
       ],
+      facets: {},
     },
   },
 
@@ -2775,8 +2786,7 @@ const docReadSectionsResponses = {
   /** Captured 2026-03-22 from aws-documentation-mcp-server read_sections. Input: { url: CFN S3 Bucket page, section_titles: [Overview,Description,Properties,Syntax] }. Truncated from 24K chars. */
   s3BucketName: {
     success: {
-      type: "text" as const,
-      text: `## Syntax
+      result: `## Syntax
 
 To declare this entity in your CloudFormation template, use the following syntax:
 
@@ -2821,24 +2831,24 @@ To declare this entity in your CloudFormation template, use the following syntax
 Type: AWS::S3::Bucket
 Properties:
   AbacStatus: String
-  AccelerateConfiguration: 
+  AccelerateConfiguration:
     AccelerateConfiguration
   AccessControl: String
-  AnalyticsConfigurations: 
+  AnalyticsConfigurations:
     - AnalyticsConfiguration
-  BucketEncryption: 
+  BucketEncryption:
     BucketEncryption
   BucketName: String
   BucketNamePrefix: String
   BucketNamespace: String
-  CorsConfiguration: 
+  CorsConfiguration:
     CorsConfiguration
-  IntelligentTieringConfigurations: 
+  IntelligentTieringConfigurations:
     - IntelligentTieringConfiguration
-  InventoryConfigurations: 
+  InventoryConfigurations:
     - InventoryConfiguration
-  LifecycleConfiguration: 
- 
+  LifecycleConfiguration:
+
 
 [Content truncated for test fixture]`,
     },
@@ -2847,8 +2857,7 @@ Properties:
   /** Captured 2026-03-22. read_sections on CFN EC2 Instance page. Truncated from 50K chars. */
   ec2InstanceType: {
     success: {
-      type: "text" as const,
-      text: `## Syntax
+      result: `## Syntax
 
 To declare this entity in your CloudFormation template, use the following syntax:
 
@@ -2921,8 +2930,7 @@ Properties:
   /** Captured 2026-03-22. read_sections on CFN Lambda Function page. Truncated from 28K chars. */
   lambdaRuntime: {
     success: {
-      type: "text" as const,
-      text: `## Syntax
+      result: `## Syntax
 
 To declare this entity in your CloudFormation template, use the following syntax:
 
@@ -3012,8 +3020,7 @@ Properties:
   /** Captured 2026-03-22. read_sections on CFN RDS DBInstance page. Truncated from 97K chars. */
   rdsEngine: {
     success: {
-      type: "text" as const,
-      text: `## Syntax
+      result: `## Syntax
 
 To declare this entity in your CloudFormation template, use the following syntax:
 
@@ -3078,8 +3085,7 @@ To declare this entity in your CloudFormation template, use the following syntax
   /** Captured 2026-03-22. read_sections on CFN DynamoDB Table page. Truncated from 20K chars. */
   dynamoDbBillingMode: {
     success: {
-      type: "text" as const,
-      text: `## Syntax
+      result: `## Syntax
 
 To declare this entity in your CloudFormation template, use the following syntax:
 
@@ -3154,8 +3160,9 @@ Properties:
 
   /** Synthetic: very long content — stress test for truncation/synthesis. */
   longContent: {
-    success: mcpText(
-      "## Overview\n\n" +
+    success: {
+      result:
+        "## Overview\n\n" +
         "This is a very long documentation page that covers many aspects of the resource configuration. ".repeat(
           50,
         ) +
@@ -3163,17 +3170,18 @@ Properties:
         "PropertyA: Description of property A.\n" +
         "PropertyB: Description of property B.\n" +
         "PropertyC: Description of property C.\n",
-    ),
+    },
   },
 
   /** Synthetic: response with "Note: not found" pattern — stripped by display.ts regex. */
   withNotFoundNote: {
-    success: mcpText(
-      "> **Note**: Section 'Syntax' not found in the document.\n\n" +
+    success: {
+      result:
+        "> **Note**: Section 'Syntax' not found in the document.\n\n" +
         "## Properties\n\n" +
         "**BucketName**\n" +
         "A name for the bucket.",
-    ),
+    },
   },
 
   /** Synthetic: no matching sections error — triggers fallback to read_documentation. */
@@ -3198,8 +3206,7 @@ const docReadFullResponses = {
   /** Captured 2026-03-22 from aws-documentation-mcp-server read_documentation. Full S3 Bucket page, truncated from 5K chars. */
   s3BucketFull: {
     success: {
-      type: "text" as const,
-      text: `AWS Documentation from https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket.html:
+      result: `AWS Documentation from https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket.html:
 
 This is the new *CloudFormation Template Reference Guide*.
 Please update your bookmarks and links. For help getting started with CloudFormation, see the
@@ -3285,8 +3292,7 @@ Properties:
   /** Captured 2026-03-22. Full Lambda Function page, truncated from 5K chars. */
   lambdaFunctionFull: {
     success: {
-      type: "text" as const,
-      text: `AWS Documentation from https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-function.html:
+      result: `AWS Documentation from https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-function.html:
 
 This is the new *CloudFormation Template Reference Guide*.
 Please update your bookmarks and links. For help getting started with CloudFormation, see the
@@ -3320,526 +3326,559 @@ if your deployment package is a .zip file archive. T
 
   /** Synthetic: empty page — edge case. */
   emptyPage: {
-    success: mcpText(""),
+    success: { result: "" },
   },
 } as const;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 5. iam-mcp-server — simulate_principal_policy
 //    Captured 2026-03-22 via: uvx awslabs.iam-mcp-server@latest --readonly
+//    Real server wraps payload in { result: {...} } envelope (same as WA Security).
 // ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Wraps a payload in the { result: {...} } envelope that the real
+ * iam-mcp-server returns for simulate_principal_policy.
+ */
+function iamResultEnvelope(payload: Record<string, unknown>): {
+  result: Record<string, unknown>;
+} {
+  return {
+    result: {
+      ...payload,
+      IsTruncated: false,
+      PolicySourceArn: "arn:aws:iam::054125018476:user/assignee-operator",
+    },
+  };
+}
 
 const iamResponses = {
   /** Captured 2026-03-22. All S3 bucket creation actions allowed. */
   s3BucketAllowed: {
-    success: mcpText({
-      EvaluationResults: [
-        {
-          EvalActionName: "cloudcontrol:CreateResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "s3:CreateBucket",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonS3FullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "s3:PutBucketTagging",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonS3FullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-      ],
-    }),
+    success: mcpText(
+      iamResultEnvelope({
+        EvaluationResults: [
+          {
+            EvalActionName: "cloudcontrol:CreateResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "s3:CreateBucket",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonS3FullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "s3:PutBucketTagging",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonS3FullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+        ],
+      }),
+    ),
   },
 
   /** Captured 2026-03-22. EC2 instance — ec2:RunInstances and iam:PassRole denied. */
   ec2InstancePartialDeny: {
-    success: mcpText({
-      EvaluationResults: [
-        {
-          EvalActionName: "cloudcontrol:CreateResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "ec2:RunInstances",
-          EvalResourceName: "*",
-          EvalDecision: "implicitDeny",
-          MatchedStatements: [],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "ec2:CreateTags",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonEC2TaggingAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "iam:PassRole",
-          EvalResourceName: "*",
-          EvalDecision: "implicitDeny",
-          MatchedStatements: [],
-          MissingContextValues: [],
-        },
-      ],
-    }),
+    success: mcpText(
+      iamResultEnvelope({
+        EvaluationResults: [
+          {
+            EvalActionName: "cloudcontrol:CreateResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "ec2:RunInstances",
+            EvalResourceName: "*",
+            EvalDecision: "implicitDeny",
+            MatchedStatements: [],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "ec2:CreateTags",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonEC2TaggingAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "iam:PassRole",
+            EvalResourceName: "*",
+            EvalDecision: "implicitDeny",
+            MatchedStatements: [],
+            MissingContextValues: [],
+          },
+        ],
+      }),
+    ),
   },
 
   /** Captured 2026-03-22. All Lambda function creation actions allowed. */
   lambdaFunctionAllowed: {
-    success: mcpText({
-      EvaluationResults: [
-        {
-          EvalActionName: "cloudcontrol:CreateResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "lambda:CreateFunction",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AWSLambdaFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "lambda:TagResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AWSLambdaFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "iam:PassRole",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "IAMPassRolePolicy",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-      ],
-    }),
+    success: mcpText(
+      iamResultEnvelope({
+        EvaluationResults: [
+          {
+            EvalActionName: "cloudcontrol:CreateResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "lambda:CreateFunction",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AWSLambdaFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "lambda:TagResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AWSLambdaFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "iam:PassRole",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "IAMPassRolePolicy",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+        ],
+      }),
+    ),
   },
 
   /** SSM Parameter — all actions allowed. Input: { actions: [cloudcontrol:CreateResource, ssm:PutParameter, ssm:AddTagsToResource] } */
   ssmParameterAllowed: {
-    success: mcpText({
-      EvaluationResults: [
-        {
-          EvalActionName: "cloudcontrol:CreateResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "ssm:PutParameter",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonSSMFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "ssm:AddTagsToResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonSSMFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-      ],
-    }),
+    success: mcpText(
+      iamResultEnvelope({
+        EvaluationResults: [
+          {
+            EvalActionName: "cloudcontrol:CreateResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "ssm:PutParameter",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonSSMFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "ssm:AddTagsToResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonSSMFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+        ],
+      }),
+    ),
   },
 
   /** SecurityGroup — all creation actions allowed. Input: { actions: [cloudcontrol:CreateResource, ec2:CreateSecurityGroup, ec2:AuthorizeSecurityGroupIngress, ec2:AuthorizeSecurityGroupEgress] } */
   securityGroupAllowed: {
-    success: mcpText({
-      EvaluationResults: [
-        {
-          EvalActionName: "cloudcontrol:CreateResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "ec2:CreateSecurityGroup",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonEC2FullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "ec2:AuthorizeSecurityGroupIngress",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonEC2FullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "ec2:AuthorizeSecurityGroupEgress",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonEC2FullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-      ],
-    }),
+    success: mcpText(
+      iamResultEnvelope({
+        EvaluationResults: [
+          {
+            EvalActionName: "cloudcontrol:CreateResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "ec2:CreateSecurityGroup",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonEC2FullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "ec2:AuthorizeSecurityGroupIngress",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonEC2FullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "ec2:AuthorizeSecurityGroupEgress",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonEC2FullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+        ],
+      }),
+    ),
   },
 
   /** VPC — all creation actions allowed. Input: { actions: [cloudcontrol:CreateResource, ec2:CreateVpc, ec2:ModifyVpcAttribute] } */
   vpcAllowed: {
-    success: mcpText({
-      EvaluationResults: [
-        {
-          EvalActionName: "cloudcontrol:CreateResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "ec2:CreateVpc",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonEC2FullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "ec2:ModifyVpcAttribute",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonEC2FullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-      ],
-    }),
+    success: mcpText(
+      iamResultEnvelope({
+        EvaluationResults: [
+          {
+            EvalActionName: "cloudcontrol:CreateResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "ec2:CreateVpc",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonEC2FullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "ec2:ModifyVpcAttribute",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonEC2FullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+        ],
+      }),
+    ),
   },
 
   /** DynamoDB — all creation actions allowed. Input: { actions: [cloudcontrol:CreateResource, dynamodb:CreateTable, dynamodb:TagResource] } */
   dynamoDbTableAllowed: {
-    success: mcpText({
-      EvaluationResults: [
-        {
-          EvalActionName: "cloudcontrol:CreateResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "dynamodb:CreateTable",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonDynamoDBFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "dynamodb:TagResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "AmazonDynamoDBFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-      ],
-    }),
+    success: mcpText(
+      iamResultEnvelope({
+        EvaluationResults: [
+          {
+            EvalActionName: "cloudcontrol:CreateResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "dynamodb:CreateTable",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonDynamoDBFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "dynamodb:TagResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "AmazonDynamoDBFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+        ],
+      }),
+    ),
   },
 
   /** ELBv2 — all creation actions allowed. Input: { actions: [cloudcontrol:CreateResource, elasticloadbalancing:CreateLoadBalancer] } */
   elbv2LoadBalancerAllowed: {
-    success: mcpText({
-      EvaluationResults: [
-        {
-          EvalActionName: "cloudcontrol:CreateResource",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "cloudcontrol:GetResourceRequestStatus",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "CloudControlFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 10, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "elasticloadbalancing:CreateLoadBalancer",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "ElasticLoadBalancingFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-        {
-          EvalActionName: "elasticloadbalancing:AddTags",
-          EvalResourceName: "*",
-          EvalDecision: "allowed",
-          MatchedStatements: [
-            {
-              SourcePolicyId: "ElasticLoadBalancingFullAccess",
-              SourcePolicyType: "IAM Policy",
-              StartPosition: { Line: 3, Column: 14 },
-              EndPosition: { Line: 8, Column: 5 },
-            },
-          ],
-          MissingContextValues: [],
-        },
-      ],
-    }),
+    success: mcpText(
+      iamResultEnvelope({
+        EvaluationResults: [
+          {
+            EvalActionName: "cloudcontrol:CreateResource",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "cloudcontrol:GetResourceRequestStatus",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "CloudControlFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 10, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "elasticloadbalancing:CreateLoadBalancer",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "ElasticLoadBalancingFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+          {
+            EvalActionName: "elasticloadbalancing:AddTags",
+            EvalResourceName: "*",
+            EvalDecision: "allowed",
+            MatchedStatements: [
+              {
+                SourcePolicyId: "ElasticLoadBalancingFullAccess",
+                SourcePolicyType: "IAM Policy",
+                StartPosition: { Line: 3, Column: 14 },
+                EndPosition: { Line: 8, Column: 5 },
+              },
+            ],
+            MissingContextValues: [],
+          },
+        ],
+      }),
+    ),
   },
 } as const;
 
