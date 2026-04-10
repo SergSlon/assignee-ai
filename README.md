@@ -33,6 +33,21 @@ intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
     → human_approval ─[HITL]─ → resource_provisioner → status_poller → result_formatter
 ```
 
+| Node                   | What it does                                                                                                                  |
+| :--------------------- | :---------------------------------------------------------------------------------------------------------------------------- |
+| `intent_parser`        | Classifies natural language into a resource type + action. Compound keywords ("create a vpc") are matched at zero LLM latency |
+| `schema_fetcher`       | Fetches the CloudFormation schema for the target type via `@aws-sdk/client-cloudformation`                                    |
+| `option_elicitor`      | Interactive wizard — prompts for required and optional fields with live pricing, smart defaults, and `showIf` conditionals    |
+| `compound_dispatcher`  | Expands a compound pattern (e.g. VPC) into a dependency-ordered resource queue with marker-ref cross-references               |
+| `plan_generator`       | LLM (Bedrock) produces a `desiredState` JSON from the schema + user answers. Validates output with Zod                        |
+| `bp_evaluator`         | Evaluates 185 best-practice rules against the plan. Flags violations by severity (CRITICAL / HIGH / MEDIUM / INFO)            |
+| `fix_applicator`       | Auto-patches fixable violations (e.g. enables S3 encryption). Shows "Changed X → Y because BP-### (auto-fixed)" per fix       |
+| `preflight_guard`      | Blocks the plan if any CRITICAL / blocking findings remain unfixed. Runs placeholder-ARN rejection + cost preflight           |
+| `human_approval`       | Renders the plan box and waits for explicit user confirmation before any AWS resource is created (HITL gate)                  |
+| `resource_provisioner` | State Guard (read-before-write) then CloudControl API `createResource`. Tags injected automatically                           |
+| `status_poller`        | Polls CloudControl until terminal state (SUCCESS / FAILED). Extended timeouts for RDS, ELBv2, NAT Gateway                     |
+| `result_formatter`     | Renders success/failure output, writes provision records to memory, runs post-provision security checks                       |
+
 12 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order.
 
 All AI calls stay local — no AWS credentials ever leave your machine.
@@ -100,46 +115,46 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 
 ## Supported resource types
 
-**36 first-class CCAPI types.** As of A10 + A14 + (f) 2026-04-09 Task 4b, every supported type flows through the CloudControl API — there are no remaining SDK-routable write paths in this codebase. The static-website compound (S3 bucket + OriginAccessControl + CloudFront distribution + BucketPolicy) was the last holdout; it was migrated fully to CCAPI after promoting OAC and BucketPolicy to first-class, and the ~430 LOC post-provision SDK hook (`cloudfront-setup.ts`) was deleted. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
+**36 first-class types.** Every supported type flows through the CloudControl API — zero direct SDK write paths. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
 
-| Type                                        | Notes                                                                |
-| :------------------------------------------ | :------------------------------------------------------------------- |
-| `AWS::S3::Bucket`                           | Interactive prompts: encryption, versioning, public access           |
-| `AWS::SSM::Parameter`                       |                                                                      |
-| `AWS::IAM::Role`                            | Cost: Free                                                           |
-| `AWS::EC2::Instance`                        | Interactive prompts: instance type with live $/hr pricing            |
-| `AWS::RDS::DBInstance`                      | Interactive prompts: engine, class with live $/hr pricing            |
-| `AWS::Lambda::Function`                     | Interactive prompts: runtime, handler, memory, timeout               |
-| `AWS::EC2::VPC`                             |                                                                      |
-| `AWS::EC2::Subnet`                          |                                                                      |
-| `AWS::EC2::SecurityGroup`                   |                                                                      |
-| `AWS::DynamoDB::Table`                      |                                                                      |
-| `AWS::SQS::Queue`                           |                                                                      |
-| `AWS::SNS::Topic`                           |                                                                      |
-| `AWS::SNS::Subscription`                    | First-class since A10 (was SDK fallback pre-2026-04-09)              |
-| `AWS::ElasticLoadBalancingV2::LoadBalancer` |                                                                      |
-| `AWS::ECS::Cluster`                         |                                                                      |
-| `AWS::ECR::Repository`                      |                                                                      |
-| `AWS::Logs::LogGroup`                       | Co-provisioned with Lambda and ECS                                   |
-| `AWS::EC2::InternetGateway`                 | Used in VPC Networking pattern                                       |
-| `AWS::EC2::RouteTable`                      | Used in VPC Networking pattern                                       |
-| `AWS::EC2::Route`                           | Used in VPC Networking pattern                                       |
-| `AWS::EC2::NatGateway`                      | Used in VPC Networking pattern                                       |
-| `AWS::ApiGatewayV2::Api`                    | Used in Serverless API pattern                                       |
-| `AWS::CloudWatch::Alarm`                    | Monitoring                                                           |
-| `AWS::SecretsManager::Secret`               | Secret management                                                    |
-| `AWS::EC2::VPCGatewayAttachment`            | VPC compound only (marker-ref)                                       |
-| `AWS::EC2::SubnetRouteTableAssociation`     | VPC compound only (marker-ref)                                       |
-| `AWS::EFS::FileSystem`                      | Used in EFS-with-VPC pattern; provisioned-throughput line            |
-| `AWS::EFS::MountTarget`                     | Used in EFS-with-VPC pattern                                         |
-| `AWS::Events::Rule`                         | Used in Scheduled Lambda pattern                                     |
-| `AWS::Events::EventBus`                     | Custom event bus for cross-account / SaaS partner events             |
-| `AWS::Events::Connection`                   | Outbound HTTP auth store (API key / Basic / OAuth) — A12             |
-| `AWS::Events::ApiDestination`               | Outbound HTTP endpoint (URL + method + rate limit) — A13             |
-| `AWS::KMS::Key`                             | Customer-managed keys; rotation default true — A11                   |
-| `AWS::CloudFront::Distribution`             | Standalone CDN; powers the fully-CCAPI static-website compound — A14 |
-| `AWS::CloudFront::OriginAccessControl`      | Signs CloudFront → S3 origin requests with SigV4 — Task 4b           |
-| `AWS::S3::BucketPolicy`                     | IAM resource policy on a bucket (OAC read grant, TLS) — Task 4b      |
+| Type                                        | Notes                                                                     |
+| :------------------------------------------ | :------------------------------------------------------------------------ |
+| `AWS::S3::Bucket`                           | Wizard: encryption, versioning, lifecycle, CORS, replication. 13 BP rules |
+| `AWS::SSM::Parameter`                       | Wizard: type (String/SecureString), tier (Standard/Advanced)              |
+| `AWS::IAM::Role`                            | Wizard: trust policy, managed policies. Cost: Free                        |
+| `AWS::EC2::Instance`                        | Wizard: instance type with live $/hr, AMI, key pair, UserData auto-encode |
+| `AWS::RDS::DBInstance`                      | Wizard: engine, class with live $/hr, Multi-AZ, encryption                |
+| `AWS::Lambda::Function`                     | Wizard: runtime, memory, timeout, env vars (reserved-prefix guard)        |
+| `AWS::EC2::VPC`                             | Wizard: CIDR block, DNS settings. Used in VPC + EFS compounds             |
+| `AWS::EC2::Subnet`                          | Wizard: AZ, CIDR, public IP auto-assign. Used in VPC + EFS compounds      |
+| `AWS::EC2::SecurityGroup`                   | Wizard: ingress/egress rules. Auto-created as EC2 companion               |
+| `AWS::DynamoDB::Table`                      | Wizard: key schema, billing mode (on-demand/provisioned), PITR            |
+| `AWS::SQS::Queue`                           | Wizard: FIFO, visibility timeout, DLQ. Used in Message Processing         |
+| `AWS::SNS::Topic`                           | Wizard: FIFO, KMS encryption, display name                                |
+| `AWS::SNS::Subscription`                    | Wizard: protocol, endpoint, filter policy, DLQ                            |
+| `AWS::ElasticLoadBalancingV2::LoadBalancer` | Wizard: ALB vs NLB, scheme (internet/internal), subnets                   |
+| `AWS::ECS::Cluster`                         | Wizard: Fargate capacity providers, Container Insights. Cost: Free        |
+| `AWS::ECR::Repository`                      | Wizard: image scanning, tag immutability, encryption                      |
+| `AWS::Logs::LogGroup`                       | Wizard: retention (days), KMS key. Auto-created with Lambda and ECS       |
+| `AWS::EC2::InternetGateway`                 | VPC compound: auto-attached via VPCGatewayAttachment                      |
+| `AWS::EC2::RouteTable`                      | VPC compound: public + private tables with associated routes              |
+| `AWS::EC2::Route`                           | VPC compound: 0.0.0.0/0 → IGW (public) or NAT (private)                   |
+| `AWS::EC2::NatGateway`                      | VPC compound: ~$32/mo dominant cost driver, auto-allocates EIP            |
+| `AWS::ApiGatewayV2::Api`                    | Serverless API compound: HTTP API with CORS, Lambda integration           |
+| `AWS::CloudWatch::Alarm`                    | Wizard: metric, threshold, comparison, evaluation periods                 |
+| `AWS::SecretsManager::Secret`               | Wizard: auto-generate or manual secret string, KMS key                    |
+| `AWS::EC2::VPCGatewayAttachment`            | VPC compound only: attaches IGW to VPC (non-taggable, cascade delete)     |
+| `AWS::EC2::SubnetRouteTableAssociation`     | VPC compound only: links subnets to route tables (cascade delete)         |
+| `AWS::EFS::FileSystem`                      | Wizard: throughput mode, encryption, backups. Used in EFS compound        |
+| `AWS::EFS::MountTarget`                     | EFS compound: one per AZ, NFS security group auto-configured              |
+| `AWS::Events::Rule`                         | Wizard: schedule expression, targets. Used in Scheduled Lambda            |
+| `AWS::Events::EventBus`                     | Custom event bus for cross-account or SaaS partner integrations           |
+| `AWS::Events::Connection`                   | Outbound HTTP auth (API key / Basic / OAuth) for API destinations         |
+| `AWS::Events::ApiDestination`               | Outbound HTTP endpoint with URL, method, and rate limiting                |
+| `AWS::KMS::Key`                             | Customer-managed encryption key; auto-rotation enabled by default         |
+| `AWS::CloudFront::Distribution`             | CDN with HTTPS redirect, caching policy. Powers static-website compound   |
+| `AWS::CloudFront::OriginAccessControl`      | SigV4-signed CloudFront → S3 origin requests (replaces legacy OAI)        |
+| `AWS::S3::BucketPolicy`                     | IAM resource policy: OAC read grant, TLS enforcement                      |
 
 The only remaining entries in `CCAPI_FALLBACK_TYPES` are **pure redirect types** with no SDK write path — they are rejected at plan time with a friendly alternative:
 
