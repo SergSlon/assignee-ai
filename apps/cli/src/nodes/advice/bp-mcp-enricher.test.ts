@@ -290,3 +290,174 @@ describe("enrichBpWithMcp", () => {
     }
   });
 });
+
+// ── CheckStorageEncryption + CheckNetworkSecurity (Story 45.4) ─────────
+
+describe("enrichBpWithMcp — CheckStorageEncryption", () => {
+  it("returns storage encryption findings for S3 bucket", async () => {
+    const storageTool = makeTool(ToolName.CHECK_STORAGE_ENCRYPTION, async () =>
+      JSON.stringify({
+        result: {
+          resource_details: [
+            {
+              resource_arn: "arn:aws:s3:::test-bucket",
+              compliant: false,
+              issues: ["Default encryption not enabled"],
+              recommendations: ["Enable SSE-S3 or SSE-KMS encryption"],
+            },
+          ],
+        },
+      }),
+    );
+
+    const extras = await enrichBpWithMcp(
+      "AWS::S3::Bucket",
+      { BucketName: "test-bucket" },
+      [],
+      [storageTool],
+    );
+
+    expect(extras).toHaveLength(1);
+    expect(extras[0]!.title).toBe("Default encryption not enabled");
+    expect(extras[0]!.practiceId).toMatch(/^MCP-STOR-/);
+    expect(extras[0]!.category).toBe("security");
+    expect(extras[0]!.message).toBe("Enable SSE-S3 or SSE-KMS encryption");
+  });
+
+  it("skips storage check for non-storage resource types (Lambda)", async () => {
+    const storageTool = makeTool(
+      ToolName.CHECK_STORAGE_ENCRYPTION,
+      async () => {
+        throw new Error("should not be called");
+      },
+    );
+
+    const extras = await enrichBpWithMcp(
+      "AWS::Lambda::Function",
+      { FunctionName: "my-fn" },
+      [],
+      [storageTool],
+    );
+
+    expect(storageTool.invoke).not.toHaveBeenCalled();
+    expect(extras).toEqual([]);
+  });
+
+  it("gracefully handles missing storage encryption tool", async () => {
+    const extras = await enrichBpWithMcp(
+      "AWS::S3::Bucket",
+      { BucketName: "test" },
+      [],
+      [], // no tools
+    );
+    expect(extras).toEqual([]);
+  });
+
+  it("gracefully handles error from storage encryption tool", async () => {
+    const failingTool = makeTool(
+      ToolName.CHECK_STORAGE_ENCRYPTION,
+      async () => {
+        throw new Error("MCP server unreachable");
+      },
+    );
+
+    const extras = await enrichBpWithMcp(
+      "AWS::S3::Bucket",
+      { BucketName: "test" },
+      [],
+      [failingTool],
+    );
+    expect(extras).toEqual([]);
+  });
+});
+
+describe("enrichBpWithMcp — CheckNetworkSecurity", () => {
+  it("returns network security findings for ELBv2", async () => {
+    const networkTool = makeTool(ToolName.CHECK_NETWORK_SECURITY, async () =>
+      JSON.stringify({
+        result: {
+          resource_details: [
+            {
+              resource_arn:
+                "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/app/my-alb",
+              compliant: false,
+              issues: [
+                "HTTPS listener not configured",
+                "SSL/TLS policy outdated",
+              ],
+              recommendations: [
+                "Add HTTPS listener on port 443",
+                "Update to TLS 1.3 security policy",
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    const extras = await enrichBpWithMcp(
+      "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      { Name: "my-alb" },
+      [],
+      [networkTool],
+    );
+
+    expect(extras).toHaveLength(2);
+    expect(extras[0]!.title).toBe("HTTPS listener not configured");
+    expect(extras[0]!.practiceId).toMatch(/^MCP-NET-/);
+    expect(extras[1]!.title).toBe("SSL/TLS policy outdated");
+  });
+
+  it("skips network check for non-network resource types (DynamoDB)", async () => {
+    const networkTool = makeTool(ToolName.CHECK_NETWORK_SECURITY, async () => {
+      throw new Error("should not be called");
+    });
+
+    const extras = await enrichBpWithMcp(
+      "AWS::DynamoDB::Table",
+      { TableName: "test" },
+      [],
+      [networkTool],
+    );
+
+    expect(networkTool.invoke).not.toHaveBeenCalled();
+    expect(extras).toEqual([]);
+  });
+
+  it("deduplicates findings already in static rules", async () => {
+    const networkTool = makeTool(ToolName.CHECK_NETWORK_SECURITY, async () =>
+      JSON.stringify({
+        result: {
+          findings: [
+            {
+              severity: "HIGH",
+              title: "HTTPS required",
+              recommendation: "Enable HTTPS",
+              property: undefined,
+            },
+          ],
+        },
+      }),
+    );
+
+    const staticRule: BPFinding = {
+      practiceId: "MCP-NET-HTTPS-required",
+      title: "HTTPS required",
+      severity: "HIGH",
+      category: "security",
+      message: "Enable HTTPS",
+      remediation: "Enable HTTPS",
+      blocking: false,
+    };
+
+    const extras = await enrichBpWithMcp(
+      "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      { Name: "my-alb" },
+      [staticRule],
+      [networkTool],
+    );
+
+    // Deduplicated by practiceId
+    expect(extras).toEqual([]);
+  });
+});
