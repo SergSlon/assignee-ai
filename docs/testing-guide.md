@@ -7,7 +7,7 @@
 ## Quick reference
 
 ```bash
-pnpm test                                    # ~4591 unit tests across 207 files, ~37s, no AWS needed
+pnpm test                                    # ~6367 tests across 256 files, ~20s, no AWS needed
 pnpm check-types                             # TypeScript type check
 pnpm --filter @assignee/mcp-server test:e2e  # MCP E2E against real AWS (~43 min)
 RUN_E2E=1 pnpm --filter assignee test        # CLI graph E2E against real AWS (opt-in gate)
@@ -27,7 +27,7 @@ const describeE2E = RUN_E2E ? describe : describe.skip;
 ```
 
 Plain `pnpm test` (and any CI job without `RUN_E2E=1`) will always skip the
-19 E2E cases — no real provisioning happens. To opt in:
+31 E2E cases — no real provisioning happens. To opt in:
 
 ```bash
 # Make sure .env contains ASSIGNEE_OPERATOR_ACCESS_KEY_ID / SECRET and AWS_REGION
@@ -161,7 +161,7 @@ Most resources are free-tier or cost <$0.01. RDS and ELB are the most expensive 
 ## Unit tests
 
 ```bash
-pnpm test          # ~4591 tests across 207 files (107 CLI + 74 core + 9 BP + 17 MCP)
+pnpm test          # ~6367 tests across 256 files (129 CLI + 94 core + 11 BP + 22 MCP)
 pnpm check-types   # TypeScript type check
 ```
 
@@ -291,12 +291,14 @@ node build-fixture-ts.mjs           # generates final mcp-mock-responses.ts
 | `list-managed-resources.test.ts`      | —     | MCP list-managed-resources tool handler                                              |
 | `estimate-cost.test.ts` (MCP)         | —     | MCP estimate-cost tool handler                                                       |
 | Plugin tests (core)                   | ~100+ | S3, EC2, RDS, Lambda, generic plugin config hints                                    |
-| `bp-all-rules-audit.test.ts`          | 266   | All 133 BP rules fire correctly (was 18/142)                                         |
+| `bp-all-rules-audit.test.ts`          | 266   | All 185 BP rules fire correctly                                                      |
 | `bp-auto-fix-audit.test.ts`           | 55    | All 27 auto-fixable rules verified end-to-end                                        |
-| `compound-provisioning-audit.test.ts` | 69    | All 6 compound patterns through dispatcher+provisioner                               |
+| `compound-provisioning-audit.test.ts` | 69    | All 9 compound patterns through dispatcher+provisioner                               |
+| `compound-failure-injector.test.ts`   | 12    | Failure-injection harness: in-memory port, tracker, synthetic error at index N       |
+| `compound-cleanup-matrix.test.ts`     | 19    | VPC 17-position reverse-edge cleanup invariant (parameterized)                       |
+| `compound-smoke-trace.test.ts`        | 21    | Happy-path smoke + marker-ref validation for 6 compound patterns                     |
 | `apply-mode-audit.test.ts`            | 5     | Full apply mode: plan->bp->fix->approval->provision->result                          |
 | `destroy-service.test.ts`             | 16    | destroySingleResource: CloudControl, SDK fallback, CloudFront                        |
-| `cloudfront-setup.test.ts`            | 9     | CloudFront distribution + OAC creation                                               |
 | `s3-upload.test.ts`                   | 19    | S3 file upload with MIME types, progress, error handling                             |
 | `bulk-destroy.test.ts`                | 21    | Tier ordering, IAM exclusion, pattern filtering                                      |
 | `decomposer-integration.test.ts`      | —     | Decomposer integration across all resource types                                     |
@@ -307,7 +309,7 @@ node build-fixture-ts.mjs           # generates final mcp-mock-responses.ts
 
 ### Pricing decomposer tests (Epic 39)
 
-All 23 resource types have pricing decomposers registered in `packages/core/src/pricing/index.ts`. Each decomposer breaks a resource into billable line items (e.g., EC2 → compute + storage + IPv4 + data transfer) with real AWS Pricing API `serviceCode` and `productFamily` filter values.
+All supported resource types have pricing decomposers registered in `packages/core/src/pricing/index.ts`. Each decomposer breaks a resource into billable line items (e.g., EC2 → compute + storage + IPv4 + data transfer) with real AWS Pricing API `serviceCode` and `productFamily` filter values.
 
 **Test files** in `packages/core/src/pricing/decomposers/`:
 
@@ -351,11 +353,14 @@ All 23 resource types have pricing decomposers registered in `packages/core/src/
 
 The same lifecycle coverage now lives in code:
 
-- **CLI E2E gate** — `apps/cli/src/e2e/e2e-plan.test.ts` (22 specs, run via
+- **CLI E2E gate** — `apps/cli/src/e2e/e2e-plan.test.ts` (31 specs, run via
   `RUN_E2E=1 pnpm --filter @assignee/cli test`). Each spec exercises the
   full plan → apply → list → destroy → list lifecycle against real AWS for
-  one resource type or compound pattern, including the Wave 13 lambda-with-
-  exec-role auto-create and the compound VPC EIP-leak regression.
+  one resource type or compound pattern. All 9 first-class compounds are
+  covered (VPC, lambda-with-exec-role, efs-with-vpc, static-website,
+  scheduled-lambda, serverless-api, message-processing, container-service,
+  three-tier-web) plus the VPC EIP-leak regression and SSM single-resource
+  apply.
 - **MCP Server E2E** — `apps/mcp-server/src/e2e/` (see the section above for
   the `RUN_E2E_MCP=1` gate, mirrors the CLI lifecycle through the MCP API).
 - **Plan-only / dry-run coverage** — the unit suite under

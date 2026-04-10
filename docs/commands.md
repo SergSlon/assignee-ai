@@ -775,7 +775,7 @@ Doctor summary (assignee.ai 0.1.0):
 [✓] Config
     • ✓ ./assignee.yaml → valid YAML
 [✓] Best practices
-    • ✓ manifest → 158 rules, hash 6045cd194ef5… matches
+    • ✓ manifest → 185 rules, hash 636a1827cc85… matches
 
 ! 1 failures found.
 ```

@@ -102,7 +102,7 @@ interface ResourcePlugin {
 }
 ```
 
-24 registered plugins (23 resource types + 1 generic fallback). Plugins provide:
+36 registered plugins (35 resource types + 1 generic fallback). Plugins provide:
 
 - Interactive wizard field definitions (type, label, options, validation, showIf conditions)
 - toCfn transforms (boolean answers -> CloudFormation structures)
@@ -132,7 +132,7 @@ Two registries:
 
 ### Best Practices Engine (`packages/best-practices/`)
 
-- 136 YAML rules organized by AWS service directory (s3/, ec2/, rds/, etc.)
+- 185 YAML rules organized by AWS service directory (s3/, ec2/, rds/, etc.)
 - `loader.ts` reads YAML files, validates with Zod schema
 - `evaluate.ts` runs trigger checks against `EvalContext` (resourceType + desiredState + userIntent + patternId)
 - Check types: equals, not_equals, exists, not_exists, contains, not_contains, regex, comparison, nested_array_check, any_of, custom

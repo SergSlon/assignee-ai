@@ -134,7 +134,7 @@ flowchart LR
 
     subgraph LOCAL["Hardcoded / Embedded"]
         direction TB
-        PLUGINS["Resource Plugins<br/>23 plugins × fields<br/>Labels, hints, validators<br/>toCfn transforms"]
+        PLUGINS["Resource Plugins<br/>35 plugins × fields<br/>Labels, hints, validators<br/>toCfn transforms"]
         BPYAML["Best Practices<br/>YAML rules<br/>Severity + remediation"]
         PATTERNS["Intent Patterns<br/>Regex matchers<br/>Zero-latency shortcut"]
         LOCALP["Local Pricing Registry<br/>Fallback estimates"]
