@@ -75,7 +75,7 @@ async function querySecurityPosture(
   desiredState: Record<string, unknown>,
   tools: StructuredTool[],
 ): Promise<BPFinding[]> {
-  const tool = tools.find((t) => t.name === ToolName.ANALYZE_SECURITY_POSTURE);
+  const tool = tools.find((t) => t.name === ToolName.CHECK_SECURITY_SERVICES);
   if (!tool) return [];
 
   const result = await withTimeout(

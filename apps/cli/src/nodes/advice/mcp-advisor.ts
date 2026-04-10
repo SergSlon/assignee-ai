@@ -96,7 +96,7 @@ async function fetchSecurityContext(
   desiredState: Record<string, unknown>,
   tools: StructuredTool[],
 ): Promise<string | undefined> {
-  const tool = tools.find((t) => t.name === ToolName.ANALYZE_SECURITY_POSTURE);
+  const tool = tools.find((t) => t.name === ToolName.CHECK_SECURITY_SERVICES);
   if (!tool) return undefined;
 
   const result = await withTimeout(

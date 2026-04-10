@@ -111,7 +111,7 @@ flowchart LR
     PRICING -->|"get_pricing"| PF2
     DOCS -->|"search_documentation<br/>read_sections"| OE2
     IAM -->|"simulate_principal_policy"| PF2
-    SEC -->|"AnalyzeSecurityPosture"| RF2
+    SEC -->|"GetSecurityFindings"| RF2
     BILL -->|"get_cost_and_usage"| DS2
 
     subgraph SDK["Direct AWS SDK Calls"]

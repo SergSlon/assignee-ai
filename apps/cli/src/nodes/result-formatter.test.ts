@@ -839,7 +839,7 @@ describe("resultFormatterNode — Story 19.2 graceful degradation", () => {
       .spyOn(process.stderr, "write")
       .mockImplementation((() => true) as never);
     const tool = {
-      name: "AnalyzeSecurityPosture",
+      name: "GetSecurityFindings",
       invoke: vi.fn().mockRejectedValue(new Error("Connection refused")),
     } as unknown as StructuredTool;
     const state = makeState({

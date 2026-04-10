@@ -53,22 +53,24 @@ async function queryBillingMcp(
   resources: ManagedResource[],
   mcpTools: StructuredTool[],
 ): Promise<BillingCostData[]> {
-  const costTool = mcpTools.find((t) => t.name === ToolName.GET_COST_AND_USAGE);
+  const costTool = mcpTools.find((t) => t.name === ToolName.COST_EXPLORER);
   if (!costTool) return [];
 
   const arns = resources.map((r) => r.arn);
   const { start, end } = currentMonthRange();
 
   const response = await costTool.invoke({
-    time_period: { Start: start, End: end },
+    operation: "getCostAndUsage",
+    start_date: start,
+    end_date: end,
     granularity: "MONTHLY",
-    filter: {
+    filter: JSON.stringify({
       Dimensions: {
         Key: "RESOURCE_ID",
         Values: arns,
       },
-    },
-    metrics: ["UnblendedCost"],
+    }),
+    metrics: JSON.stringify(["UnblendedCost"]),
   });
 
   const text = unwrapMcpText(response);

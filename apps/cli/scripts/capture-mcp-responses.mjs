@@ -55,11 +55,11 @@ const MCP_ENV = {
 // never contains @latest. When bumping a pin in mcp-servers.ts, also bump
 // the matching value here.
 const MCP_PINS = {
-  AWS_PRICING: "awslabs.aws-pricing-mcp-server@1.0.6",
-  AWS_DOCUMENTATION: "awslabs.aws-documentation-mcp-server@1.1.1",
-  AWS_IAM: "awslabs.iam-mcp-server@1.0.2",
-  AWS_WA_SECURITY: "awslabs.well-architected-security-mcp-server@1.0.2",
-  AWS_COST_MANAGEMENT: "awslabs.cost-management-mcp-server@1.0.2",
+  AWS_PRICING: "awslabs.aws-pricing-mcp-server@1.0.27",
+  AWS_DOCUMENTATION: "awslabs.aws-documentation-mcp-server@1.1.20",
+  AWS_IAM: "awslabs.iam-mcp-server@1.0.17",
+  AWS_WA_SECURITY: "awslabs.well-architected-security-mcp-server@0.1.7",
+  AWS_COST_MANAGEMENT: "awslabs.billing-cost-management-mcp-server@0.0.17",
   // CFN server isn't part of the runtime CLI MCP_PINS (it's only used to
   // refresh fixtures here) but we still pin it for the same supply-chain
   // reason. Bump deliberately after reviewing upstream release notes.
@@ -549,12 +549,12 @@ async function captureWellArchitectedSecurity() {
   const calls = [
     {
       key: "s3BucketPosture",
-      tool: "AnalyzeSecurityPosture",
+      tool: "GetSecurityFindings",
       args: { resource_arn: "arn:aws:s3:::assignee-test-capture-bucket" },
     },
     {
       key: "noFindings",
-      tool: "AnalyzeSecurityPosture",
+      tool: "GetSecurityFindings",
       args: { resource_arn: "arn:aws:s3:::nonexistent-bucket-for-test" },
     },
   ];

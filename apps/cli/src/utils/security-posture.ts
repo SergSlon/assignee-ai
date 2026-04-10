@@ -20,7 +20,7 @@ export async function checkSecurityPosture(
   runId: string,
 ): Promise<void> {
   const securityTool = tools.find(
-    (t) => t.name === ToolName.ANALYZE_SECURITY_POSTURE,
+    (t) => t.name === ToolName.GET_SECURITY_FINDINGS,
   );
   if (!securityTool) return;
 
