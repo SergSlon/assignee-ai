@@ -136,7 +136,7 @@ async function queryDocsBestPractices(
   const result = await withTimeout(
     tool.invoke({
       search_phrase: `${shortType} security best practices 2026`,
-      max_results: 3,
+      limit: 3,
     }),
     MCP_BP_TIMEOUT_MS,
   );

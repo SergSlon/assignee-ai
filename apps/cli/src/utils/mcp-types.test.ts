@@ -36,6 +36,25 @@ describe("isMcpSearchResponse", () => {
     };
     expect(isMcpSearchResponse(response)).toBe(false);
   });
+
+  it("returns true for top-level search_results (real documentation MCP format)", () => {
+    const response = {
+      query_id: "q-001",
+      search_results: [{ url: "https://docs.aws.amazon.com/s3" }],
+      facets: {},
+    };
+    expect(isMcpSearchResponse(response)).toBe(true);
+  });
+
+  it("returns true for top-level empty search_results", () => {
+    const response = { search_results: [] };
+    expect(isMcpSearchResponse(response)).toBe(true);
+  });
+
+  it("returns false for top-level search_results with invalid items", () => {
+    const response = { search_results: [{ title: "no url" }] };
+    expect(isMcpSearchResponse(response)).toBe(false);
+  });
 });
 
 describe("extractFirstUrl", () => {
@@ -47,6 +66,19 @@ describe("extractFirstUrl", () => {
     };
     expect(extractFirstUrl(response)).toBe(
       "https://docs.aws.amazon.com/s3/latest",
+    );
+  });
+
+  it("extracts URL from top-level search_results (real documentation MCP format)", () => {
+    const response = {
+      query_id: "q-001",
+      search_results: [
+        { url: "https://docs.aws.amazon.com/lambda/latest/dg/welcome.html" },
+      ],
+      facets: {},
+    };
+    expect(extractFirstUrl(response)).toBe(
+      "https://docs.aws.amazon.com/lambda/latest/dg/welcome.html",
     );
   });
 

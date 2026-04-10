@@ -10,6 +10,14 @@ import {
   createMockTool,
 } from "../test-fixtures/mcp-mock-responses.js";
 
+// Mock getOperatorCallerArn — preflight-guard uses it to supply
+// policy_source_arn to the IAM MCP server. Default: return a valid ARN
+// so IAM pre-check actually runs. Individual tests can override.
+const mockGetOperatorCallerArn = vi.fn<() => Promise<string | undefined>>();
+vi.mock("../utils/resolve-arn.js", () => ({
+  getOperatorCallerArn: () => mockGetOperatorCallerArn(),
+}));
+
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
     userIntent: "Create an S3 bucket",
@@ -34,6 +42,10 @@ function makeState(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: operator ARN available so IAM pre-check runs
+  mockGetOperatorCallerArn.mockResolvedValue(
+    "arn:aws:iam::112233445566:user/assignee-operator",
+  );
 });
 
 describe("preflightGuardNode", () => {
@@ -937,6 +949,30 @@ describe("preflightGuardNode — IAM permission check (Story 19.1)", () => {
     expect(result.preflightPassed).toBe(true);
     // IAM tool should not have been called
     expect(iamTool.invoke).not.toHaveBeenCalled();
+  });
+
+  it("skips check gracefully when operator ARN is unavailable (no credentials)", async () => {
+    mockGetOperatorCallerArn.mockResolvedValue(undefined);
+    const iamTool = createIamMockTool();
+
+    const result = await preflightGuardNode(makeState(), [iamTool]);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.preflightPassed).toBe(true);
+    // IAM tool should NOT have been called — no ARN means skip
+    expect(iamTool.invoke).not.toHaveBeenCalled();
+  });
+
+  it("passes policy_source_arn to the IAM tool invocation", async () => {
+    const iamTool = createIamMockTool(McpMocks.iam.s3BucketAllowed.success);
+
+    await preflightGuardNode(makeState(), [iamTool]);
+
+    expect(iamTool.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({
+        policy_source_arn: "arn:aws:iam::112233445566:user/assignee-operator",
+      }),
+    );
   });
 });
 

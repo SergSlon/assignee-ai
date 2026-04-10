@@ -30,6 +30,7 @@ vi.mock("@aws-sdk/client-sts", () => {
 import {
   resolveResourceArn,
   getOperatorAccountId,
+  getOperatorCallerArn,
   resetAccountIdCache,
 } from "./resolve-arn.js";
 
@@ -164,6 +165,55 @@ describe("getOperatorAccountId", () => {
     const second = await getOperatorAccountId();
     expect(second).toBe(REAL_ACCOUNT);
     expect(mockStsSend).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("getOperatorCallerArn", () => {
+  it("returns the full caller ARN from STS GetCallerIdentity", async () => {
+    mockStsSend.mockResolvedValueOnce({
+      Account: REAL_ACCOUNT,
+      Arn: `arn:aws:iam::${REAL_ACCOUNT}:user/assignee-operator`,
+    });
+
+    const arn = await getOperatorCallerArn();
+
+    expect(arn).toBe(`arn:aws:iam::${REAL_ACCOUNT}:user/assignee-operator`);
+    // Only one STS call (piggybacks on getOperatorAccountId)
+    expect(mockStsSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns undefined when STS fails", async () => {
+    mockStsSend.mockRejectedValueOnce(new Error("network failure"));
+
+    const arn = await getOperatorCallerArn();
+
+    expect(arn).toBeUndefined();
+  });
+
+  it("returns undefined when operator credentials are missing", async () => {
+    delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+    delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+
+    const arn = await getOperatorCallerArn();
+
+    expect(arn).toBeUndefined();
+    expect(mockStsSend).not.toHaveBeenCalled();
+  });
+
+  it("caches the ARN alongside the account ID", async () => {
+    mockStsSend.mockResolvedValueOnce({
+      Account: REAL_ACCOUNT,
+      Arn: `arn:aws:iam::${REAL_ACCOUNT}:user/assignee-operator`,
+    });
+
+    // First call triggers the STS lookup
+    const accountId = await getOperatorAccountId();
+    expect(accountId).toBe(REAL_ACCOUNT);
+
+    // Second call returns cached ARN without another STS call
+    const arn = await getOperatorCallerArn();
+    expect(arn).toBe(`arn:aws:iam::${REAL_ACCOUNT}:user/assignee-operator`);
+    expect(mockStsSend).toHaveBeenCalledTimes(1);
   });
 });
 

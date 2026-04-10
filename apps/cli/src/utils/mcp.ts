@@ -1,25 +1,32 @@
 /**
  * MCP response utilities.
  *
- * All active MCP servers (aws-iac-mcp-server, aws-pricing-mcp-server,
- * aws-knowledge-mcp-server, aws-documentation-mcp-server) return responses
- * in the { type: "text", text: "<json>" } content block format.
+ * Active MCP servers return responses in two formats:
+ * - { type: "text", text: "<json>" } — content block wrapper (pricing, schema, knowledge)
+ * - { result: "<content>" } — direct result wrapper (documentation read_sections, read_documentation)
  *
  * unwrapMcpText() extracts the text content ready for JSON.parse().
  */
 
 /**
  * Extracts the text content from an MCP tool response.
- * Handles { type: "text", text: "<json>" } content block wrappers.
+ * Handles both { type: "text", text: "<json>" } content block wrappers
+ * and { result: "<content>" } direct result wrappers (aws-documentation-mcp-server).
  */
 export function unwrapMcpText(response: unknown): string {
-  if (
-    typeof response === "object" &&
-    response !== null &&
-    "text" in response &&
-    typeof (response as { text: unknown }).text === "string"
-  ) {
-    return (response as { text: string }).text;
+  if (typeof response === "object" && response !== null) {
+    if (
+      "text" in response &&
+      typeof (response as { text: unknown }).text === "string"
+    ) {
+      return (response as { text: string }).text;
+    }
+    if (
+      "result" in response &&
+      typeof (response as { result: unknown }).result === "string"
+    ) {
+      return (response as { result: string }).result;
+    }
   }
   return JSON.stringify(response);
 }
