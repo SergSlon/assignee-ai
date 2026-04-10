@@ -265,14 +265,13 @@ describe("EC2 full flow — user provides values", () => {
       .mockResolvedValueOnce("t3.medium") // instance type
       .mockResolvedValueOnce("amazon-linux-2023"); // ImageId (static fallback option)
 
-    // Text fields: KeyName, SubnetId, SecurityGroupIds (multi→string fallback), Tags
+    // Text fields: KeyName, SubnetId, SecurityGroupIds (multi→string fallback)
     vi.mocked(text)
       .mockResolvedValueOnce("my-ssh-key") // KeyName
       .mockResolvedValueOnce("subnet-abc123def") // SubnetId
-      .mockResolvedValueOnce("sg-abc123") // SecurityGroupIds (falls back to string)
-      .mockResolvedValueOnce("env:production, team:backend"); // Tags
+      .mockResolvedValueOnce("sg-abc123"); // SecurityGroupIds (falls back to string)
 
-    // Advanced = no
+    // Advanced = no (Tags is now in advancedFields, so it won't be prompted)
     vi.mocked(confirm).mockResolvedValueOnce(false);
 
     const result = await optionElicitorNode(makeElicitorState());
@@ -281,9 +280,8 @@ describe("EC2 full flow — user provides values", () => {
     expect(result.elicitedOptions?.["ImageId"]).toBe("amazon-linux-2023");
     expect(result.elicitedOptions?.["KeyName"]).toBe("my-ssh-key");
     expect(result.elicitedOptions?.["SubnetId"]).toBe("subnet-abc123def");
-    expect(result.elicitedOptions?.["Tags"]).toBe(
-      "env:production, team:backend",
-    );
+    // Tags not prompted when advanced options declined
+    expect(result.elicitedOptions?.["Tags"]).toBeUndefined();
   });
 });
 

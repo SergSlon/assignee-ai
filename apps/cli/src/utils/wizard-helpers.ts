@@ -721,6 +721,9 @@ export function injectBPHints(
   return fields.map((field) => {
     // Check if any BP references this field's name as a property_path segment
     const matchingBP = relevantBPs.find((bp) => {
+      // Skip resource-level awareness BPs (e.g., "should have a backup strategy")
+      // — these apply to the resource as a whole, not to a specific field.
+      if (bp.check_type === "awareness") return false;
       const segments = bp.property_path.split(".");
       return segments.includes(field.name) || bp.property_path === field.name;
     });

@@ -350,11 +350,13 @@ export const ec2InstancePlugin: ResourcePlugin = {
       question: {
         type: "multi",
         label: "Security Groups",
-        hint: "Firewall rules controlling inbound/outbound traffic. Select existing groups or leave blank to use the VPC default.",
+        hint: "Firewall rules controlling inbound/outbound traffic. Select existing groups or leave blank \u2014 for SSH, a security group with port 22 will be auto-created.",
         options: [],
         fetcher: "discover-security-groups",
       },
     },
+  ],
+  advancedFields: [
     {
       name: CfnKey.TAGS,
       question: {
@@ -376,8 +378,6 @@ export const ec2InstancePlugin: ResourcePlugin = {
         return tags.length > 0 ? tags : undefined;
       },
     },
-  ],
-  advancedFields: [
     {
       name: CfnKey.IAM_INSTANCE_PROFILE,
       question: {

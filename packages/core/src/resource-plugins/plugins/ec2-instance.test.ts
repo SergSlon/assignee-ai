@@ -14,8 +14,8 @@ describe("ec2InstancePlugin", () => {
     expect(ec2InstancePlugin.commonFields.length).toBeLessThanOrEqual(10);
   });
 
-  it("commonFields count is 6", () => {
-    expect(ec2InstancePlugin.commonFields.length).toBe(6);
+  it("commonFields count is 5 (Tags moved to advancedFields)", () => {
+    expect(ec2InstancePlugin.commonFields.length).toBe(5);
   });
 
   it("all commonField question types are valid QuestionType values", () => {
@@ -85,16 +85,17 @@ describe("ec2InstancePlugin", () => {
     expect(field?.question.type).toBe("multi");
   });
 
-  it("Tags field is string type with toCfn transform", () => {
-    const field = ec2InstancePlugin.commonFields.find((f) => f.name === "Tags");
-    // Wave 16: strengthened — assert by name + that toCfn is callable.
+  it("Tags field is in advancedFields with string type and toCfn transform", () => {
+    const field = ec2InstancePlugin.advancedFields.find(
+      (f) => f.name === "Tags",
+    );
     expect(field?.name).toBe("Tags");
     expect(field?.question.type).toBe("string");
     expect(typeof field?.toCfn).toBe("function");
   });
 
   describe("Tags toCfn transform", () => {
-    const field = ec2InstancePlugin.commonFields.find(
+    const field = ec2InstancePlugin.advancedFields.find(
       (f) => f.name === "Tags",
     )!;
 
