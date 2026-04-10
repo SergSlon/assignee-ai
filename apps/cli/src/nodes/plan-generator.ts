@@ -35,6 +35,10 @@ import { sanitizeDesiredState } from "../services/desired-state-sanitizer.js";
 import { repairRequiredFields } from "../services/required-field-repairer.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { tryAssigneeCredentials } from "../config/aws-credentials.js";
+import {
+  PLACEHOLDER_AWS_ACCOUNT_IDS,
+  ARN_ACCOUNT_REGEX,
+} from "../constants/placeholder-accounts.js";
 
 /**
  * Transforms elicited options using plugin toCfn mappers.
@@ -388,6 +392,39 @@ function stripEmpty(
     }
   }
   return out;
+}
+
+/**
+ * Strips placeholder ARNs from array fields in desiredState.
+ * The LLM frequently hallucinates ARNs with canonical AWS docs account IDs
+ * (e.g., 123456789012) in array fields like AlarmActions, OKActions, etc.
+ * Removes placeholder elements; deletes the field if the array becomes empty.
+ *
+ * Operates on ALL top-level array fields containing strings — generic enough
+ * to catch any ARN-bearing array, not just CloudWatch Alarm fields.
+ */
+export function stripPlaceholderArns(
+  desiredState: Record<string, unknown>,
+): Record<string, unknown> {
+  for (const [key, value] of Object.entries(desiredState)) {
+    if (!Array.isArray(value)) continue;
+    // Only process arrays that contain at least one string element
+    if (!value.some((item) => typeof item === "string")) continue;
+
+    const cleaned = value.filter((item) => {
+      if (typeof item !== "string") return true;
+      const match = ARN_ACCOUNT_REGEX.exec(item);
+      if (!match) return true; // not an ARN — keep
+      return !PLACEHOLDER_AWS_ACCOUNT_IDS.has(match[1]!);
+    });
+
+    if (cleaned.length === 0) {
+      delete desiredState[key];
+    } else if (cleaned.length < value.length) {
+      desiredState[key] = cleaned;
+    }
+  }
+  return desiredState;
 }
 
 /**
@@ -1142,6 +1179,9 @@ export function createPlanGeneratorNode({
       state.resourceType ?? "",
     );
     desiredState = stripEmpty(desiredState, pluginPlaceholders);
+
+    // Strip placeholder ARNs from array fields (e.g., AlarmActions with 123456789012)
+    stripPlaceholderArns(desiredState);
 
     // Merge elicited options — user-confirmed values override LLM-generated values.
     // Apply toCfn transforms to convert boolean answers to valid CFN structures.
