@@ -15,6 +15,9 @@ import {
   getCostSavingsEstimate,
   extractResultsByTime,
   arnToServiceSlug,
+  queryCostAnomalies,
+  queryCostOptimization,
+  queryComputeOptimizer,
 } from "./billing.js";
 import {
   McpMocks,
@@ -509,5 +512,175 @@ describe("fetchBillingData — cost distribution", () => {
     // ARN_SERVICE_TO_CE_SERVICE, so it can't be matched to the S3
     // cost data → no entry in the result map.
     expect(result.size).toBe(0);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────
+// New billing tools (Story 45.3)
+// ────────────────────────────────────────────────────────────────────
+
+function makeBillingTool(
+  name: string,
+  response: unknown,
+): { name: string; invoke: ReturnType<typeof vi.fn> } {
+  return {
+    name,
+    invoke: vi.fn().mockResolvedValue(response),
+  };
+}
+
+function makeBillingSessionResponse(
+  key: string,
+  data: unknown,
+): {
+  status: string;
+  data: { preview: Array<{ key: string; value: string }> };
+} {
+  return {
+    status: "success",
+    data: {
+      preview: [{ key, value: JSON.stringify(data) }],
+    },
+  };
+}
+
+describe("queryCostAnomalies (Story 45.3)", () => {
+  it("returns parsed anomalies from session-based response", async () => {
+    const anomalies = [
+      {
+        AnomalyId: "a-123",
+        DimensionValue: "Amazon EC2",
+        MaxImpact: "$45.00",
+        AnomalyStartDate: "2026-04-05",
+        AnomalyEndDate: "2026-04-07",
+        Severity: "HIGH",
+      },
+    ];
+    const tool = makeBillingTool(
+      ToolName.COST_ANOMALY,
+      makeBillingSessionResponse("Anomalies", anomalies),
+    );
+
+    const result = await queryCostAnomalies([tool as never]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.anomalyId).toBe("a-123");
+    expect(result[0]!.service).toBe("Amazon EC2");
+    expect(result[0]!.severity).toBe("HIGH");
+    expect(result[0]!.impact).toBe("$45.00");
+  });
+
+  it("returns empty array when tool is missing", async () => {
+    const result = await queryCostAnomalies([]);
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when tool throws", async () => {
+    const tool = {
+      name: ToolName.COST_ANOMALY,
+      invoke: vi.fn().mockRejectedValue(new Error("server down")),
+    };
+
+    const result = await queryCostAnomalies([tool as never]);
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when response has no Anomalies key", async () => {
+    const tool = makeBillingTool(
+      ToolName.COST_ANOMALY,
+      makeBillingSessionResponse("SomethingElse", []),
+    );
+
+    const result = await queryCostAnomalies([tool as never]);
+    expect(result).toEqual([]);
+  });
+});
+
+describe("queryCostOptimization (Story 45.3)", () => {
+  it("returns parsed recommendations from session-based response", async () => {
+    const recs = [
+      {
+        RecommendationId: "r-456",
+        ResourceArn: "arn:aws:ec2:us-east-1:987654321098:instance/i-abc",
+        ResourceType: "EC2 Instance",
+        Finding: "Right-size to t3.small",
+        EstimatedMonthlySavings: "25.00",
+        Currency: "USD",
+      },
+    ];
+    const tool = makeBillingTool(
+      ToolName.COST_OPTIMIZATION,
+      makeBillingSessionResponse("Recommendations", recs),
+    );
+
+    const result = await queryCostOptimization([tool as never]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe("r-456");
+    expect(result[0]!.resourceArn).toBe(
+      "arn:aws:ec2:us-east-1:987654321098:instance/i-abc",
+    );
+    expect(result[0]!.finding).toBe("Right-size to t3.small");
+    expect(result[0]!.estimatedSavings).toBe("25.00");
+  });
+
+  it("returns empty array when tool is missing", async () => {
+    const result = await queryCostOptimization([]);
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when tool throws", async () => {
+    const tool = {
+      name: ToolName.COST_OPTIMIZATION,
+      invoke: vi.fn().mockRejectedValue(new Error("timeout")),
+    };
+
+    const result = await queryCostOptimization([tool as never]);
+    expect(result).toEqual([]);
+  });
+});
+
+describe("queryComputeOptimizer (Story 45.3)", () => {
+  it("returns parsed rightsizing recommendations", async () => {
+    const recs = [
+      {
+        ResourceArn: "arn:aws:ec2:us-east-1:987654321098:instance/i-xyz",
+        ResourceType: "EC2 Instance",
+        Finding: "OVER_PROVISIONED",
+        CurrentInstanceType: "m5.xlarge",
+        RecommendedInstanceType: "m5.large",
+        EstimatedMonthlySavings: "62.50",
+      },
+    ];
+    const tool = makeBillingTool(
+      ToolName.COMPUTE_OPTIMIZER,
+      makeBillingSessionResponse("Recommendations", recs),
+    );
+
+    const result = await queryComputeOptimizer([tool as never]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.resourceArn).toBe(
+      "arn:aws:ec2:us-east-1:987654321098:instance/i-xyz",
+    );
+    expect(result[0]!.finding).toBe("OVER_PROVISIONED");
+    expect(result[0]!.currentConfig).toBe("m5.xlarge");
+    expect(result[0]!.recommendedConfig).toBe("m5.large");
+    expect(result[0]!.estimatedSavings).toBe("62.50");
+  });
+
+  it("returns empty array when tool is missing", async () => {
+    const result = await queryComputeOptimizer([]);
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when response is malformed", async () => {
+    const tool = makeBillingTool(ToolName.COMPUTE_OPTIMIZER, {
+      status: "success",
+      data: { preview: "not-an-array" },
+    });
+
+    const result = await queryComputeOptimizer([tool as never]);
+    expect(result).toEqual([]);
   });
 });

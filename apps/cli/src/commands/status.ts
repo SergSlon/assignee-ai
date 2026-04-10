@@ -23,6 +23,8 @@ import {
   renderError,
 } from "../utils/display.js";
 import { buildStatusData } from "../services/status-aggregator.js";
+import { queryCostAnomalies, type CostAnomaly } from "../services/billing.js";
+import { getBillingMcpToolsAsync } from "../services/mcp-client.js";
 import {
   computeBPCoverage,
   renderBPCoverage,
@@ -109,14 +111,40 @@ export const statusCommand = new Command(CommandName.STATUS)
           return;
         }
 
-        const statusData = await buildStatusData(resources);
+        // Fetch status data and cost anomalies in parallel
+        const billingTools = await getBillingMcpToolsAsync();
+        const [statusData, anomalies] = await Promise.all([
+          buildStatusData(resources),
+          billingTools
+            ? queryCostAnomalies(billingTools)
+            : ([] as CostAnomaly[]),
+        ]);
 
         if (opts.json) {
-          process.stdout.write(JSON.stringify(statusData, null, 2) + "\n");
+          process.stdout.write(
+            JSON.stringify(
+              {
+                ...statusData,
+                ...(anomalies.length > 0 ? { costAnomalies: anomalies } : {}),
+              },
+              null,
+              2,
+            ) + "\n",
+          );
           return;
         }
 
         renderStatusSummary(statusData);
+
+        // Render cost anomalies inline (non-blocking enhancement)
+        if (anomalies.length > 0) {
+          process.stdout.write("\nCost Anomalies:\n");
+          for (const a of anomalies) {
+            process.stdout.write(
+              `  ${a.severity} | ${a.service} | impact: ${a.impact} | ${a.startDate}\n`,
+            );
+          }
+        }
       } catch (error: unknown) {
         const err = error instanceof Error ? error : new Error(String(error));
         renderError(

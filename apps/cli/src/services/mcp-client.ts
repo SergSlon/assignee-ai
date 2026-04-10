@@ -219,7 +219,12 @@ export async function getBillingMcpToolsAsync(): Promise<
 
   try {
     const allTools = await optionalClient.getTools();
-    const billingToolNames = new Set<string>([ToolName.COST_EXPLORER]);
+    const billingToolNames = new Set<string>([
+      ToolName.COST_EXPLORER,
+      ToolName.COMPUTE_OPTIMIZER,
+      ToolName.COST_ANOMALY,
+      ToolName.COST_OPTIMIZATION,
+    ]);
     const billingTools = allTools.filter((t) => billingToolNames.has(t.name));
     return billingTools.length > 0 ? billingTools : undefined;
   } catch {

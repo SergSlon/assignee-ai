@@ -34,6 +34,13 @@ import {
 import { runCommand } from "../utils/command-runner.js";
 import { LOG_ACTIONS } from "../utils/logger.js";
 import { AWS_REGION } from "../config/constants.js";
+import {
+  queryCostOptimization,
+  queryComputeOptimizer,
+  type CostOptimizationRecommendation,
+  type ComputeOptimizerRecommendation,
+} from "../services/billing.js";
+import { getBillingMcpToolsAsync } from "../services/mcp-client.js";
 
 /**
  * Render the recommendation table to stdout. Non-TTY (CI) output
@@ -260,6 +267,62 @@ export const optimizeCommand = new Command("optimize")
               ctx.tools,
             );
             if (recommendation) allRecommendations.push(recommendation);
+          }
+
+          // Enrich with Billing MCP recommendations (parallel, non-blocking).
+          // compute-optimizer provides utilization-based rightsizing;
+          // cost-optimization provides cross-service savings opportunities.
+          const billingTools = await getBillingMcpToolsAsync();
+          if (billingTools) {
+            const [costOptRecs, computeOptRecs] = await Promise.allSettled([
+              queryCostOptimization(billingTools),
+              queryComputeOptimizer(billingTools),
+            ]);
+
+            // Merge compute-optimizer findings into the recommendation list.
+            // Convert to CostOptRecommendation format for unified display.
+            const coRecs =
+              computeOptRecs.status === "fulfilled" ? computeOptRecs.value : [];
+            for (const rec of coRecs) {
+              if (!rec.resourceArn || !rec.recommendedConfig) continue;
+              const savings = parseFloat(rec.estimatedSavings) || 0;
+              allRecommendations.push({
+                resourceArn: rec.resourceArn,
+                resourceType: rec.resourceType,
+                currentConfig: rec.currentConfig,
+                recommendedConfig: rec.recommendedConfig,
+                currentHourly: "N/A",
+                recommendedHourly: "N/A",
+                monthlySavings:
+                  savings > 0 ? `$${savings.toFixed(2)}/mo` : "N/A",
+                savingsPercent: 0,
+                savingsAbsoluteUsd: savings,
+                rationale: `Compute Optimizer: ${rec.finding}`,
+                confidence: "high",
+              });
+            }
+
+            // Append cost-optimization cross-service findings as supplementary info
+            const csRecs =
+              costOptRecs.status === "fulfilled" ? costOptRecs.value : [];
+            for (const rec of csRecs) {
+              if (!rec.resourceArn) continue;
+              const savings = parseFloat(rec.estimatedSavings) || 0;
+              allRecommendations.push({
+                resourceArn: rec.resourceArn,
+                resourceType: rec.resourceType,
+                currentConfig: "(current)",
+                recommendedConfig: rec.finding,
+                currentHourly: "N/A",
+                recommendedHourly: "N/A",
+                monthlySavings:
+                  savings > 0 ? `$${savings.toFixed(2)}/mo` : "N/A",
+                savingsPercent: 0,
+                savingsAbsoluteUsd: savings,
+                rationale: `Cost Optimization Hub: ${rec.finding}`,
+                confidence: "medium",
+              });
+            }
           }
 
           // Drop sub-threshold recommendations when --min-savings is

@@ -298,6 +298,197 @@ export async function fetchBillingData(
  *
  * @returns Formatted string like "$X.XX/month saved" or "N/A" on failure
  */
+// ── New billing tool types (Story 45.3) ────────────────────────────────────
+
+export interface CostAnomaly {
+  anomalyId: string;
+  service: string;
+  impact: string;
+  startDate: string;
+  endDate: string;
+  severity: string;
+}
+
+export interface CostOptimizationRecommendation {
+  id: string;
+  resourceArn: string;
+  resourceType: string;
+  finding: string;
+  estimatedSavings: string;
+  currency: string;
+}
+
+export interface ComputeOptimizerRecommendation {
+  resourceArn: string;
+  resourceType: string;
+  finding: string;
+  currentConfig: string;
+  recommendedConfig: string;
+  estimatedSavings: string;
+}
+
+/**
+ * Extracts preview data from session-based Billing MCP response.
+ * Handles the standard wrapper: {status:"success", data:{preview:[{key,value}]}}
+ */
+function extractPreviewData(response: unknown): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (typeof response !== "object" || response === null) return result;
+
+  let resp = response as Record<string, unknown>;
+  if ("text" in resp && typeof resp["text"] === "string") {
+    try {
+      resp = JSON.parse(resp["text"] as string) as Record<string, unknown>;
+    } catch {
+      return result;
+    }
+  }
+
+  const data = resp["data"] as Record<string, unknown> | undefined;
+  const preview = data?.["preview"];
+  if (Array.isArray(preview)) {
+    for (const entry of preview as Array<{ key: string; value: string }>) {
+      if (entry.key && entry.value) {
+        result[entry.key] = entry.value;
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Queries the Billing MCP cost-anomaly tool for unusual spending patterns.
+ * Returns anomalies from the last 30 days.
+ */
+export async function queryCostAnomalies(
+  mcpTools: StructuredTool[],
+): Promise<CostAnomaly[]> {
+  const tool = mcpTools.find((t) => t.name === ToolName.COST_ANOMALY);
+  if (!tool) return [];
+
+  try {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const response = await tool.invoke({
+      start_date: thirtyDaysAgo.toISOString().slice(0, 10),
+      end_date: now.toISOString().slice(0, 10),
+    });
+
+    const preview = extractPreviewData(response);
+    const anomaliesStr = preview["Anomalies"] ?? preview["anomalies"];
+    if (!anomaliesStr) return [];
+
+    const parsed = JSON.parse(anomaliesStr);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.map(
+      (a: Record<string, unknown>) =>
+        ({
+          anomalyId: String(a["AnomalyId"] ?? a["anomalyId"] ?? ""),
+          service: String(
+            a["DimensionValue"] ?? a["service"] ?? "Unknown Service",
+          ),
+          impact: String(
+            a["MaxImpact"] ?? a["impact"] ?? a["TotalImpact"] ?? "Unknown",
+          ),
+          startDate: String(a["AnomalyStartDate"] ?? a["startDate"] ?? ""),
+          endDate: String(a["AnomalyEndDate"] ?? a["endDate"] ?? ""),
+          severity: String(a["Severity"] ?? a["severity"] ?? "MEDIUM"),
+        }) as CostAnomaly,
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Queries the Billing MCP cost-optimization tool for savings recommendations.
+ * Returns cross-service optimization opportunities.
+ */
+export async function queryCostOptimization(
+  mcpTools: StructuredTool[],
+): Promise<CostOptimizationRecommendation[]> {
+  const tool = mcpTools.find((t) => t.name === ToolName.COST_OPTIMIZATION);
+  if (!tool) return [];
+
+  try {
+    const response = await tool.invoke({});
+
+    const preview = extractPreviewData(response);
+    const recsStr = preview["Recommendations"] ?? preview["recommendations"];
+    if (!recsStr) return [];
+
+    const parsed = JSON.parse(recsStr);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.map(
+      (r: Record<string, unknown>) =>
+        ({
+          id: String(r["RecommendationId"] ?? r["id"] ?? ""),
+          resourceArn: String(r["ResourceArn"] ?? r["resourceArn"] ?? ""),
+          resourceType: String(r["ResourceType"] ?? r["resourceType"] ?? ""),
+          finding: String(
+            r["Finding"] ?? r["finding"] ?? r["Description"] ?? "",
+          ),
+          estimatedSavings: String(
+            r["EstimatedMonthlySavings"] ?? r["estimatedSavings"] ?? "N/A",
+          ),
+          currency: String(r["Currency"] ?? r["currency"] ?? "USD"),
+        }) as CostOptimizationRecommendation,
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Queries the Billing MCP compute-optimizer tool for rightsizing recommendations.
+ * Returns utilization-based recommendations for EC2, Lambda, RDS, ECS.
+ */
+export async function queryComputeOptimizer(
+  mcpTools: StructuredTool[],
+): Promise<ComputeOptimizerRecommendation[]> {
+  const tool = mcpTools.find((t) => t.name === ToolName.COMPUTE_OPTIMIZER);
+  if (!tool) return [];
+
+  try {
+    const response = await tool.invoke({});
+
+    const preview = extractPreviewData(response);
+    const recsStr = preview["Recommendations"] ?? preview["recommendations"];
+    if (!recsStr) return [];
+
+    const parsed = JSON.parse(recsStr);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.map(
+      (r: Record<string, unknown>) =>
+        ({
+          resourceArn: String(r["ResourceArn"] ?? r["resourceArn"] ?? ""),
+          resourceType: String(r["ResourceType"] ?? r["resourceType"] ?? ""),
+          finding: String(r["Finding"] ?? r["finding"] ?? ""),
+          currentConfig: String(
+            r["CurrentInstanceType"] ??
+              r["currentConfig"] ??
+              r["CurrentConfiguration"] ??
+              "",
+          ),
+          recommendedConfig: String(
+            r["RecommendedInstanceType"] ??
+              r["recommendedConfig"] ??
+              r["RecommendedConfiguration"] ??
+              "",
+          ),
+          estimatedSavings: String(
+            r["EstimatedMonthlySavings"] ?? r["estimatedSavings"] ?? "N/A",
+          ),
+        }) as ComputeOptimizerRecommendation,
+    );
+  } catch {
+    return [];
+  }
+}
+
 export async function getCostSavingsEstimate(
   arn: string,
   mcpTools?: StructuredTool[],

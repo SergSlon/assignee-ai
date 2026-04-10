@@ -29,6 +29,9 @@ export const ToolName = {
 
   // ── billing-cost-management-mcp-server ──────────────────────────────────
   COST_EXPLORER: "cost-explorer",
+  COMPUTE_OPTIMIZER: "compute-optimizer",
+  COST_ANOMALY: "cost-anomaly",
+  COST_OPTIMIZATION: "cost-optimization",
 } as const;
 
 export type ToolNameType = (typeof ToolName)[keyof typeof ToolName];
