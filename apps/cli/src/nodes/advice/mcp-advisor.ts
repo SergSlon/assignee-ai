@@ -113,7 +113,9 @@ async function fetchSecurityContext(
   // Extract a text summary for the LLM advice context.
   try {
     const raw = typeof result === "string" ? result : JSON.stringify(result);
-    const parsed = JSON.parse(raw) as {
+    const outer = JSON.parse(raw) as Record<string, unknown>;
+    // v0.1.7: real server wraps payload in { result: {...} }
+    const parsed = (outer?.["result"] ?? outer) as {
       all_enabled?: boolean;
       service_statuses?: Record<string, { enabled: boolean; details?: string }>;
     };

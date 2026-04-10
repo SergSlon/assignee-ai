@@ -3848,10 +3848,18 @@ const iamResponses = {
 //    Captured 2026-03-22 via: uvx awslabs.well-architected-security-mcp-server@0.1.7
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Wraps a payload in the { result: {...} } envelope that the real
+ * well-architected-security-mcp-server v0.1.7 returns.
+ */
+function securityResultEnvelope(payload: unknown): unknown {
+  return { result: payload };
+}
+
 const securityPostureResponses = {
   /** Captured 2026-04-10. S3 bucket with CRITICAL + HIGH + MEDIUM findings (v0.1.7 envelope). */
   s3BucketPosture: {
-    success: mcpText({
+    success: securityResultEnvelope({
       service: "securityhub",
       enabled: true,
       findings: [
@@ -3899,7 +3907,7 @@ const securityPostureResponses = {
 
   /** Captured 2026-04-10. No findings — clean security posture (v0.1.7 envelope). */
   noFindings: {
-    success: mcpText({
+    success: securityResultEnvelope({
       service: "securityhub",
       enabled: true,
       findings: [],
@@ -3916,7 +3924,7 @@ const securityPostureResponses = {
 
   /** Captured 2026-04-10. Security Hub not enabled in region (v0.1.7 envelope). */
   serviceDisabled: {
-    success: mcpText({
+    success: securityResultEnvelope({
       service: "securityhub",
       enabled: false,
       message:
@@ -3926,7 +3934,7 @@ const securityPostureResponses = {
 
   /** Captured 2026-04-10. CheckSecurityServices response (v0.1.7 envelope). */
   checkServicesAllEnabled: {
-    success: mcpText({
+    success: securityResultEnvelope({
       region: "us-east-1",
       services_checked: ["securityhub"],
       all_enabled: true,
@@ -3938,7 +3946,7 @@ const securityPostureResponses = {
 
   /** Captured 2026-04-10. CheckSecurityServices — service disabled (v0.1.7 envelope). */
   checkServicesDisabled: {
-    success: mcpText({
+    success: securityResultEnvelope({
       region: "us-east-1",
       services_checked: ["securityhub"],
       all_enabled: false,

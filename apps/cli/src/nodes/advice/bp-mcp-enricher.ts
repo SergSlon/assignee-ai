@@ -92,7 +92,9 @@ async function querySecurityPosture(
 
   try {
     const text = typeof result === "string" ? result : JSON.stringify(result);
-    const parsed = JSON.parse(text) as {
+    const outer = JSON.parse(text) as Record<string, unknown>;
+    // v0.1.7: real server wraps payload in { result: {...} }
+    const parsed = (outer?.["result"] ?? outer) as {
       enabled?: boolean;
       findings?: Array<{
         severity?: string;
