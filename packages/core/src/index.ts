@@ -98,6 +98,7 @@ export type {
   ConfigDefaults,
   ConfigPreferences,
   ConfigBudget,
+  ConfigLlm,
   ConfigNaming,
   AutoFixModeType,
 } from "./config/index.js";

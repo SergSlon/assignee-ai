@@ -162,6 +162,43 @@ bestPractices:
 
 Pass-through section for organization-wide policies. Keys are domain-specific (e.g., `security`, `cost`). No deep validation -- the policy engine interprets them at runtime.
 
+### `llm` Section (Story 44.1)
+
+Per-node LLM model routing. By default, all pipeline nodes use the same model (`ASSIGNEE_MODEL` or the built-in default `bedrock/amazon.nova-lite-v1:0`). The `llm` section lets you assign different models to different pipeline stages — for example, a smart model for plan generation and a cheap/fast model for intent classification.
+
+```yaml
+# .assignee/config.yaml
+llm:
+  default: bedrock/us.amazon.nova-lite-v1:0 # fallback for unconfigured callsites
+  plan_generator: anthropic/claude-sonnet-4-5 # smart model for CFN JSON generation
+  intent_parser: bedrock/us.amazon.nova-micro-v1:0 # fast model for classification
+  advice_generator: bedrock/us.amazon.nova-micro-v1:0
+  workload_classifier: bedrock/us.amazon.nova-micro-v1:0
+```
+
+| Key                       | Type   | Default                      | Description                                   |
+| ------------------------- | ------ | ---------------------------- | --------------------------------------------- |
+| `llm.default`             | string | `ASSIGNEE_MODEL` or built-in | Fallback model for callsites not listed below |
+| `llm.plan_generator`      | string | falls back to `llm.default`  | Model for CloudFormation plan generation      |
+| `llm.intent_parser`       | string | falls back to `llm.default`  | Model for resource type classification        |
+| `llm.advice_generator`    | string | falls back to `llm.default`  | Model for inline advice hints                 |
+| `llm.workload_classifier` | string | falls back to `llm.default`  | Model for workload profile classification     |
+
+Each value must be in `provider/model-id` format. Supported providers: `bedrock`, `anthropic`, `openai`, `google`, `ollama`.
+
+**Precedence:** The `llm` section follows the same precedence rules as all other config sections: env vars > project config > user config. Each key merges independently, so a user-level `llm.default` and a project-level `llm.plan_generator` both take effect.
+
+**Environment variable overrides:** Each callsite can be overridden via `ASSIGNEE_LLM_<CALLSITE>` (uppercased):
+
+```bash
+ASSIGNEE_LLM_PLAN_GENERATOR=anthropic/claude-sonnet-4-5 assignee plan "Create an EC2 instance"
+ASSIGNEE_LLM_DEFAULT=openai/gpt-4o assignee plan "Create an S3 bucket"
+```
+
+**Lazy adapter creation:** Each distinct model string creates one LLM adapter instance, shared across all callsites that map to the same model. If `intent_parser` and `advice_generator` both point to `bedrock/us.amazon.nova-micro-v1:0`, they share a single adapter.
+
+**Diagnostics:** Run `assignee doctor` to see the resolved routing table when `llm.*` config is present.
+
 ## Environment Variables
 
 | Variable                              | Description                                                                                                                                                                                                                                                      | Default                          |
@@ -174,6 +211,11 @@ Pass-through section for organization-wide policies. Keys are domain-specific (e
 | `ASSIGNEE_READER_SECRET_ACCESS_KEY`   | Secret key for the reader IAM user (MCP)                                                                                                                                                                                                                         | -                                |
 | `ASSIGNEE_AUDITOR_ACCESS_KEY_ID`      | Access key for the auditor IAM user (MCP)                                                                                                                                                                                                                        | -                                |
 | `ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY`  | Secret key for the auditor IAM user (MCP)                                                                                                                                                                                                                        | -                                |
+| `ASSIGNEE_LLM_DEFAULT`                | Override the default LLM model for all callsites (see `llm` section)                                                                                                                                                                                             | -                                |
+| `ASSIGNEE_LLM_PLAN_GENERATOR`         | Override the LLM model for plan generation                                                                                                                                                                                                                       | -                                |
+| `ASSIGNEE_LLM_INTENT_PARSER`          | Override the LLM model for intent parsing                                                                                                                                                                                                                        | -                                |
+| `ASSIGNEE_LLM_ADVICE_GENERATOR`       | Override the LLM model for advice generation                                                                                                                                                                                                                     | -                                |
+| `ASSIGNEE_LLM_WORKLOAD_CLASSIFIER`    | Override the LLM model for workload classification                                                                                                                                                                                                               | -                                |
 | `ASSIGNEE_VERBOSITY`                  | Set to `verbose` to enable structured log output                                                                                                                                                                                                                 | -                                |
 | `ASSIGNEE_LOG_LEVEL`                  | Set to `debug` to enable structured log output                                                                                                                                                                                                                   | -                                |
 | `ASSIGNEE_SAAS_URL`                   | SaaS API base URL for org policy fetch                                                                                                                                                                                                                           | `https://app.assignee.ai`        |

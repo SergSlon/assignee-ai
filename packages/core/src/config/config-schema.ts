@@ -39,6 +39,20 @@ export interface ConfigPreferences {
   verbosity?: "quiet" | "normal" | "verbose";
 }
 
+/**
+ * Per-node LLM model routing configuration.
+ * Maps callsite names to model strings (e.g. "anthropic/claude-sonnet-4-5").
+ * The "default" key is the fallback for callsites not explicitly configured.
+ *
+ * @see Story 44.1 — Per-node LLM routing adapter
+ */
+export interface ConfigLlm {
+  /** Default model for all callsites not explicitly listed. */
+  default?: string;
+  /** Per-callsite model overrides, e.g. plan_generator, intent_parser. */
+  [callsite: string]: string | undefined;
+}
+
 /** Budget / cost safety settings (FR-09 — panic limit). */
 export interface ConfigBudget {
   /** Maximum allowed estimated monthly cost in USD. Apply is blocked if exceeded. */
@@ -59,6 +73,8 @@ export interface AssigneeConfig {
   preferences?: ConfigPreferences;
   /** Budget safety (monthly cost cap) */
   budget?: ConfigBudget;
+  /** Per-node LLM model routing (Story 44.1) */
+  llm?: ConfigLlm;
   /** Org policy section (for local-only org files) */
   org_policy?: Record<string, Record<string, unknown>>;
 }
@@ -214,6 +230,37 @@ export function validateConfig(raw: unknown): AssigneeConfig {
   }
 
   result.preferences = prefs;
+
+  // ── Validate llm section (Story 44.1) ──
+  if (obj["llm"] !== undefined) {
+    if (
+      typeof obj["llm"] !== "object" ||
+      obj["llm"] === null ||
+      Array.isArray(obj["llm"])
+    ) {
+      throw new ConfigurationError("llm: must be an object");
+    }
+    const llmRaw = obj["llm"] as Record<string, unknown>;
+    const llm: ConfigLlm = {};
+    for (const [key, val] of Object.entries(llmRaw)) {
+      if (val === undefined || val === null) continue;
+      if (typeof val !== "string") {
+        throw new ConfigurationError(
+          `llm.${key}: must be a string in "provider/model-id" format`,
+        );
+      }
+      const slashIdx = val.indexOf("/");
+      if (slashIdx === -1 || slashIdx === 0 || slashIdx === val.length - 1) {
+        throw new ConfigurationError(
+          `llm.${key}: invalid model format "${val}" — expected "provider/model-id" (e.g. "anthropic/claude-sonnet-4-5")`,
+        );
+      }
+      llm[key] = val;
+    }
+    if (Object.keys(llm).length > 0) {
+      result.llm = llm;
+    }
+  }
 
   // ── Org policy (pass-through, no deep validation) ──
   if (obj["org_policy"] !== undefined) {

@@ -35,10 +35,10 @@ import { fixApplicatorNode } from "../nodes/fix-applicator.js";
 import { createCloudControlClient } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 import { SDKFallbackDispatcher } from "./sdk-fallback-dispatcher.js";
-import { LlmAdapter } from "./llm-adapter.js";
+import { LlmAdapter, RoutingLlmAdapter } from "./llm-adapter.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { EnvVar } from "../constants/env-vars.js";
-import type { LlmPort } from "@assignee/core";
+import type { LlmPort, ResolvedGlobalConfig } from "@assignee/core";
 import {
   isRecordingEnabled,
   addRecordingMiddleware,
@@ -50,6 +50,8 @@ export interface CreateGraphOptions {
   llmClient?: LlmPort;
   /** Optional recording interceptor for SDK middleware. */
   recorder?: RecordingInterceptor;
+  /** Resolved global config — used for per-node LLM routing (Story 44.1). */
+  resolvedConfig?: ResolvedGlobalConfig;
 }
 
 export function createGraph(
@@ -75,13 +77,23 @@ export function createGraph(
   // remaining CCAPI-gap types (Lambda::Permission, ElastiCache::RG).
   const fallbackDispatcher: SDKFallbackDispatcher = new SDKFallbackDispatcher();
 
+  // Story 44.1: when resolvedConfig.llm has entries, use RoutingLlmAdapter
+  // so each callsite (intent_parser, plan_generator, etc.) can target a
+  // different provider/model. Falls back to plain LlmAdapter when no
+  // routing config is present — fully backward compatible.
+  const llmBaseConfig = {
+    guardrailId: process.env[EnvVar.BEDROCK_GUARDRAIL_ID],
+    guardrailVersion: process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION],
+  };
+  const llmRouting = options.resolvedConfig?.llm;
   const llmAdapter: LlmPort =
     options.llmClient ??
-    new LlmAdapter({
-      modelString: process.env[EnvVar.ASSIGNEE_MODEL],
-      guardrailId: process.env[EnvVar.BEDROCK_GUARDRAIL_ID],
-      guardrailVersion: process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION],
-    });
+    (llmRouting && Object.keys(llmRouting).length > 0
+      ? new RoutingLlmAdapter(llmRouting, llmBaseConfig)
+      : new LlmAdapter({
+          modelString: process.env[EnvVar.ASSIGNEE_MODEL],
+          ...llmBaseConfig,
+        }));
 
   const intentParserNode = createIntentParserNode({ llmClient: llmAdapter });
   const planGeneratorNode = createPlanGeneratorNode({ llmClient: llmAdapter });
