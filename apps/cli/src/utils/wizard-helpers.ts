@@ -50,6 +50,7 @@ import {
   discoverKeyPairs,
   discoverRdsEngineVersions,
   discoverRdsInstanceClasses,
+  discoverLambdaRuntimes,
   searchAmis,
 } from "../utils/aws-resource-discovery.js";
 import { ResourceFieldName } from "../constants/resource-fields.js";
@@ -343,6 +344,7 @@ const fetcherMap: Record<
   [DiscoveryCacheKey.KEY_PAIRS]: discoverKeyPairs,
   [DiscoveryCacheKey.RDS_ENGINE_VERSIONS]: discoverRdsEngineVersions,
   [DiscoveryCacheKey.RDS_INSTANCE_CLASSES]: discoverRdsInstanceClasses,
+  [DiscoveryCacheKey.LAMBDA_RUNTIMES]: discoverLambdaRuntimes,
 };
 
 /** Human-readable spinner messages per fetcher ID. */
@@ -355,6 +357,7 @@ const fetcherSpinnerMessages: Record<string, string> = {
     "Fetching available database engine versions from AWS...",
   [DiscoveryCacheKey.RDS_INSTANCE_CLASSES]:
     "Fetching available database instance classes from AWS...",
+  [DiscoveryCacheKey.LAMBDA_RUNTIMES]: "Loading Lambda runtime options...",
 };
 
 /**

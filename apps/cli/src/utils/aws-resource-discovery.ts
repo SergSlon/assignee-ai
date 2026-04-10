@@ -704,3 +704,25 @@ export async function searchAmis(query: string): Promise<DiscoveryOption[]> {
       }));
   });
 }
+
+// ── Lambda runtimes (Story 44.4) ─────────────────────────────────────────
+
+/**
+ * Returns the canonical Lambda runtime list for the fetcher system.
+ *
+ * AWS does not expose a ListRuntimes API, so this returns the plugin's
+ * runtime list via the fetcher pattern. This wiring means:
+ *   (a) the option-elicitor treats runtimes the same as AMIs/subnets
+ *   (b) when AWS eventually adds a runtime discovery API, only this
+ *       function needs to change — the plugin and wizard stay untouched
+ *   (c) the 15-minute cache TTL (DISCOVERY_TTL_MS) applies
+ */
+export async function discoverLambdaRuntimes(): Promise<DiscoveryOption[]> {
+  return cachedDiscover(DiscoveryCacheKey.LAMBDA_RUNTIMES, async () => {
+    const { lambdaRuntimes } = await import("@assignee/core");
+    return lambdaRuntimes.map((r: { value: string; label: string }) => ({
+      value: r.value,
+      label: r.label,
+    }));
+  });
+}
