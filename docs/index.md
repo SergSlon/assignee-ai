@@ -26,14 +26,6 @@ These documents were already present in the `docs/` directory:
 | [resource-types.md](resource-types.md)         | Supported resource types            |
 | [testing-guide.md](testing-guide.md)           | Testing guide                       |
 
-## Assessments & Delta Scorecards
-
-| Document                                                                 | Description                                                                     |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [nfr-assessment-2026-04-08.md](nfr-assessment-2026-04-08.md)             | Full 29-criterion NFR scorecard (96.6/29, 27 PASS + 1 sanctioned FAIL P-8.3)    |
-| [nfr-rescore-delta-2026-04-10.md](nfr-rescore-delta-2026-04-10.md)       | Delta vs 2026-04-08: confidence sharpened on S-3.4 (~85%→~97%), test counts +97 |
-| [session-N+1/owner-dogfood-notes.md](session-N+1/owner-dogfood-notes.md) | Stopwatch dogfood: plan 10s, apply 24s, destroy 5s, 0 orphans                   |
-
 ## Key Metrics (as of 2026-04-10)
 
 | Metric                         | Count                                    |
