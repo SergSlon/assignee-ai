@@ -1,9 +1,10 @@
 /**
  * Cost alternative advisor — suggests cheaper resource configurations.
- * All prices come from Pricing MCP at runtime (zero hardcoded amounts).
- * When MCP is unavailable, returns structural hints without prices.
+ * Advisory prices are sourced from named constants (Story 46.1).
+ * Future Story 46.3 will enrich these at runtime with live MCP data.
  *
  * @see Story 40.4 — Cost Alternative Advisor
+ * @see Story 46.1 — Zero magic strings in advisory hints
  */
 
 import { RESOURCE_TYPES, CfnKey } from "@assignee/core";
@@ -15,6 +16,24 @@ import {
   LAMBDA_MEMORY_OPTIMIZATION_THRESHOLD_MB,
   AdviceIcon,
 } from "./constants.js";
+import {
+  NAT_GATEWAY_MONTHLY_APPROX,
+  ALB_MONTHLY_APPROX,
+  CW_ALARM_PER_MONTH,
+  CW_HIGH_RES_ALARM_MULTIPLIER,
+  CW_LOGS_INGESTION_PER_GB,
+  CF_INVALIDATION_EACH,
+  CF_INVALIDATION_FREE_TIER,
+  EVENTBRIDGE_CUSTOM_PER_MILLION,
+  EFS_PROVISIONED_PER_MIBS_MONTH,
+  EFS_ONE_ZONE_SAVINGS_PCT,
+  ARM_GRAVITON_SAVINGS_PCT,
+  S3_INTELLIGENT_TIERING_SAVINGS_PCT,
+  SPOT_SAVINGS_UP_TO_PCT,
+  DYNAMODB_PROVISIONED_SAVINGS_PCT,
+  SQS_FIFO_SURCHARGE_PCT,
+  EFS_LIFECYCLE_SAVINGS_PCT,
+} from "../../constants/advisory-prices.js";
 
 /**
  * Generates cost optimization hints based on the resource configuration.
@@ -39,17 +58,17 @@ export function costAlternatives(
     dynamodbCostHints(desiredState, hints);
   } else if (resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY) {
     hints.push(
-      `${AdviceIcon.COST} NAT Gateway costs ~$32/mo fixed + data processing fees \u2014 consider VPC endpoints for S3/DynamoDB to reduce data transfer through NAT`,
+      `${AdviceIcon.COST} NAT Gateway costs ~$${NAT_GATEWAY_MONTHLY_APPROX}/mo fixed + data processing fees \u2014 consider VPC endpoints for S3/DynamoDB to reduce data transfer through NAT`,
     );
   } else if (resourceType === RESOURCE_TYPES.ELBV2_LOAD_BALANCER) {
     hints.push(
-      `${AdviceIcon.COST} ALB costs ~$16/mo fixed + LCU charges \u2014 for simple routing, consider using API Gateway instead`,
+      `${AdviceIcon.COST} ALB costs ~$${ALB_MONTHLY_APPROX}/mo fixed + LCU charges \u2014 for simple routing, consider using API Gateway instead`,
     );
   } else if (resourceType === RESOURCE_TYPES.SQS_QUEUE) {
     sqsCostHints(desiredState, hints);
   } else if (resourceType === RESOURCE_TYPES.CLOUDWATCH_ALARM) {
     hints.push(
-      `${AdviceIcon.COST} Standard alarms cost $0.10/alarm/month \u2014 high-resolution alarms (period < 60s) cost 3x more`,
+      `${AdviceIcon.COST} Standard alarms cost $${CW_ALARM_PER_MONTH.toFixed(2)}/alarm/month \u2014 high-resolution alarms (period < 60s) cost ${CW_HIGH_RES_ALARM_MULTIPLIER}x more`,
     );
   } else if (resourceType === RESOURCE_TYPES.ECS_CLUSTER) {
     hints.push(
@@ -57,7 +76,7 @@ export function costAlternatives(
     );
   } else if (resourceType === RESOURCE_TYPES.LOGS_LOG_GROUP) {
     hints.push(
-      `${AdviceIcon.COST} CloudWatch Logs ingestion costs $0.50/GB \u2014 set a retention period to avoid unbounded storage costs`,
+      `${AdviceIcon.COST} CloudWatch Logs ingestion costs $${CW_LOGS_INGESTION_PER_GB.toFixed(2)}/GB \u2014 set a retention period to avoid unbounded storage costs`,
     );
   } else if (resourceType === RESOURCE_TYPES.EFS_FILE_SYSTEM) {
     efsCostHints(desiredState, hints);
@@ -86,7 +105,7 @@ export function costAlternatives(
  */
 function cloudFrontCostHints(hints: string[]): void {
   hints.push(
-    `${AdviceIcon.COST} First 1,000 invalidation paths/month are free; $0.005 each after that. Aggressive per-deploy invalidations can turn into real cost \u2014 prefer cache-busting filenames.`,
+    `${AdviceIcon.COST} First ${CF_INVALIDATION_FREE_TIER.toLocaleString("en-US")} invalidation paths/month are free; $${CF_INVALIDATION_EACH.toFixed(3)} each after that. Aggressive per-deploy invalidations can turn into real cost \u2014 prefer cache-busting filenames.`,
   );
 }
 
@@ -113,7 +132,7 @@ function eventsRuleCostHints(
     );
   } else {
     hints.push(
-      `${AdviceIcon.COST} Custom event bus "${bus}" bills $1.00 per million events published (on top of target invocation fees). Confirm the volume estimate before shipping a high-throughput source.`,
+      `${AdviceIcon.COST} Custom event bus "${bus}" bills $${EVENTBRIDGE_CUSTOM_PER_MILLION.toFixed(2)} per million events published (on top of target invocation fees). Confirm the volume estimate before shipping a high-throughput source.`,
     );
   }
 
@@ -133,7 +152,7 @@ function eventsRuleCostHints(
       else if (unit === "day") perMonth = Math.round(30.44 / n);
       if (perMonth > 0) {
         hints.push(
-          `${AdviceIcon.COST} ${schedule} fires approximately ${perMonth.toLocaleString()} times per month — budget the target invocation cost against this rate before shipping.`,
+          `${AdviceIcon.COST} ${schedule} fires approximately ${perMonth.toLocaleString("en-US")} times per month — budget the target invocation cost against this rate before shipping.`,
         );
       }
     }
@@ -180,24 +199,24 @@ function efsCostHints(ds: Record<string, unknown>, hints: string[]): void {
         ? `ThroughputMode=provisioned with ${provisionedNum} MiB/s`
         : `ThroughputMode=provisioned`;
     hints.push(
-      `${AdviceIcon.COST} ${prefix} \u2014 $6/MiB-s-month baseline; the committed rate bills regardless of usage. Switch back to bursting / elastic if steady-state throughput is below ~50 MiB/s.`,
+      `${AdviceIcon.COST} ${prefix} \u2014 $${EFS_PROVISIONED_PER_MIBS_MONTH.toFixed(0)}/MiB-s-month baseline; the committed rate bills regardless of usage. Switch back to bursting / elastic if steady-state throughput is below ~50 MiB/s.`,
     );
   }
 
   // One Zone mode — dramatically cheaper for non-critical data.
   if (typeof azName === "string" && azName.length > 0) {
     hints.push(
-      `${AdviceIcon.COST} One Zone EFS (AvailabilityZoneName=${azName}) is ~47% cheaper per GB-month than Regional, but has zero multi-AZ redundancy — only use for reproducible or easily-recoverable data.`,
+      `${AdviceIcon.COST} One Zone EFS (AvailabilityZoneName=${azName}) is ~${EFS_ONE_ZONE_SAVINGS_PCT}% cheaper per GB-month than Regional, but has zero multi-AZ redundancy — only use for reproducible or easily-recoverable data.`,
     );
   } else {
     hints.push(
-      `${AdviceIcon.COST} Regional EFS (default) stores data across 3 AZs. For non-critical workloads, consider One Zone (AvailabilityZoneName) to save ~47% per GB-month.`,
+      `${AdviceIcon.COST} Regional EFS (default) stores data across 3 AZs. For non-critical workloads, consider One Zone (AvailabilityZoneName) to save ~${EFS_ONE_ZONE_SAVINGS_PCT}% per GB-month.`,
     );
   }
 
   // Lifecycle tiering — big lever for cold data.
   hints.push(
-    `${AdviceIcon.COST} Enable EFS Lifecycle Management (IA after 30d, Archive after 90d) to move cold data to cheaper tiers automatically — can cut storage bill by 80%+ for write-once-read-rarely workloads.`,
+    `${AdviceIcon.COST} Enable EFS Lifecycle Management (IA after 30d, Archive after 90d) to move cold data to cheaper tiers automatically — can cut storage bill by ${EFS_LIFECYCLE_SAVINGS_PCT}%+ for write-once-read-rarely workloads.`,
   );
 }
 
@@ -210,7 +229,7 @@ function ec2CostHints(ds: Record<string, unknown>, hints: string[]): void {
     if (instanceType.startsWith(x86Prefix)) {
       const armEquivalent = instanceType.replace(x86Prefix, armPrefix);
       hints.push(
-        `${AdviceIcon.COST} Consider ${armEquivalent} (ARM/Graviton) instead of ${instanceType} \u2014 typically ~20% cheaper with comparable performance`,
+        `${AdviceIcon.COST} Consider ${armEquivalent} (ARM/Graviton) instead of ${instanceType} \u2014 typically ~${ARM_GRAVITON_SAVINGS_PCT}% cheaper with comparable performance`,
       );
       break;
     }
@@ -219,7 +238,7 @@ function ec2CostHints(ds: Record<string, unknown>, hints: string[]): void {
   // Suggest spot for dev/test workloads
   if (SPOT_ELIGIBLE_PREFIXES.some((p) => instanceType.startsWith(p))) {
     hints.push(
-      `${AdviceIcon.COST} For dev/test workloads, consider Spot Instances \u2014 up to 90% cheaper (but can be interrupted)`,
+      `${AdviceIcon.COST} For dev/test workloads, consider Spot Instances \u2014 up to ${SPOT_SAVINGS_UP_TO_PCT}% cheaper (but can be interrupted)`,
     );
   }
 }
@@ -264,7 +283,7 @@ function s3CostHints(ds: Record<string, unknown>, hints: string[]): void {
   const itConfigs = ds["IntelligentTieringConfigurations"];
   if (Array.isArray(itConfigs) && itConfigs.length > 0) {
     hints.push(
-      `${AdviceIcon.COST} Intelligent-Tiering saves ~45% vs Standard for access patterns >128KB; breaks even around 30 days per object. Worse than Standard for objects accessed <1/month due to the monitoring fee.`,
+      `${AdviceIcon.COST} Intelligent-Tiering saves ~${S3_INTELLIGENT_TIERING_SAVINGS_PCT}% vs Standard for access patterns >128KB; breaks even around 30 days per object. Worse than Standard for objects accessed <1/month due to the monitoring fee.`,
     );
   }
 
@@ -303,7 +322,7 @@ function dynamodbCostHints(ds: Record<string, unknown>, hints: string[]): void {
     );
   } else {
     hints.push(
-      `${AdviceIcon.COST} Using on-demand capacity \u2014 for steady workloads, provisioned capacity with auto-scaling can be 70% cheaper`,
+      `${AdviceIcon.COST} Using on-demand capacity \u2014 for steady workloads, provisioned capacity with auto-scaling can be ${DYNAMODB_PROVISIONED_SAVINGS_PCT}% cheaper`,
     );
   }
 }
@@ -312,7 +331,7 @@ function sqsCostHints(ds: Record<string, unknown>, hints: string[]): void {
   const isFifo = ds["FifoQueue"] === true;
   if (isFifo) {
     hints.push(
-      `${AdviceIcon.COST} FIFO queues cost 25% more than standard \u2014 use only when message ordering and exactly-once delivery are required`,
+      `${AdviceIcon.COST} FIFO queues cost ${SQS_FIFO_SURCHARGE_PCT}% more than standard \u2014 use only when message ordering and exactly-once delivery are required`,
     );
   }
   // SQS data-transfer-out reminder — the decomposer emits a DTO line item
