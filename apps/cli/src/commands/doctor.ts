@@ -49,6 +49,8 @@ import { EnvVar } from "../constants/env-vars.js";
 import { ProcessExitCode } from "../constants/errors.js";
 import { AWS_REGION } from "../config/constants.js";
 import { LlmAdapter, DEFAULT_MODEL } from "../services/llm-adapter.js";
+import { loadGlobalConfig } from "../config/load-global-config.js";
+import { loadUserConfig } from "../config/user-config-loader.js";
 import {
   getMcpServerConfigs,
   getOptionalMcpServerConfigs,
@@ -817,6 +819,53 @@ export function checkBestPractices(deps: BpCheckDeps = {}): DoctorSection {
   };
 }
 
+// ── 7. LLM routing (Story 44.1) ──────────────────────────────────────────
+
+/**
+ * Surface the per-node LLM routing table when `llm.*` config is present.
+ * Informational only — always `ok` (routing misconfiguration is caught at
+ * runtime by parseModelString). If no routing config exists, returns null
+ * so the section is omitted from the report entirely.
+ */
+export async function checkLlmRouting(): Promise<DoctorSection | null> {
+  try {
+    const userConfig = await loadUserConfig();
+    const resolvedConfig = await loadGlobalConfig(userConfig);
+    const llm = resolvedConfig?.llm;
+    if (!llm || Object.keys(llm).length === 0) return null;
+
+    const subs: DoctorSubCheck[] = [];
+    for (const [callsite, model] of Object.entries(llm)) {
+      if (model) {
+        subs.push({
+          label: callsite.padEnd(24, " "),
+          status: "ok",
+          detail: model,
+        });
+      }
+    }
+
+    // Show what unmatched callsites will fall back to
+    const fallback =
+      llm["default"] ?? process.env[EnvVar.ASSIGNEE_MODEL] ?? DEFAULT_MODEL;
+    if (!llm["default"]) {
+      subs.push({
+        label: "(fallback)".padEnd(24, " "),
+        status: "ok",
+        detail: `${fallback} (from ${process.env[EnvVar.ASSIGNEE_MODEL] ? "ASSIGNEE_MODEL" : "built-in default"})`,
+      });
+    }
+
+    return {
+      name: `LLM routing (${Object.keys(llm).length} callsite${Object.keys(llm).length === 1 ? "" : "s"})`,
+      status: "ok",
+      subs,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── Render ────────────────────────────────────────────────────────────────
 
 /** Convert a status to its terminal exit code (0 / 1 / 2). */
@@ -910,9 +959,13 @@ export async function runDoctor(
   const config = checkConfig(deps.configDeps);
   const bp = checkBestPractices(deps.bpDeps);
 
+  // Story 44.1: show routing table when per-node LLM config exists
+  const llmRouting = await checkLlmRouting();
+
   const sections: DoctorSection[] = [
     credentials,
     bedrock,
+    ...(llmRouting ? [llmRouting] : []),
     mcp,
     cache,
     config,

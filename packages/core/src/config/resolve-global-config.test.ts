@@ -167,4 +167,88 @@ describe("resolveGlobalConfig", () => {
       expect(result.preferences.auto_fix).toBe(AutoFixMode.APPLY);
     });
   });
+
+  // ── Story 44.1: llm section merge ─────────────────────────────────────
+  describe("llm section merge (Story 44.1)", () => {
+    it("omits llm from result when no source provides it", () => {
+      const result = resolveGlobalConfig({});
+      expect(result.llm).toBeUndefined();
+    });
+
+    it("passes through llm from a single source", () => {
+      const result = resolveGlobalConfig({
+        projectConfig: {
+          llm: {
+            default: "bedrock/amazon.nova-lite-v1:0",
+            plan_generator: "anthropic/claude-sonnet-4-5",
+          },
+        },
+      });
+      expect(result.llm).toEqual({
+        default: "bedrock/amazon.nova-lite-v1:0",
+        plan_generator: "anthropic/claude-sonnet-4-5",
+      });
+    });
+
+    it("merges llm key-by-key across sources — higher priority wins per key", () => {
+      const result = resolveGlobalConfig({
+        userConfig: {
+          llm: {
+            default: "bedrock/amazon.nova-lite-v1:0",
+            advice_generator: "bedrock/us.amazon.nova-micro-v1:0",
+          },
+        },
+        projectConfig: {
+          llm: {
+            plan_generator: "anthropic/claude-sonnet-4-5",
+          },
+        },
+        envOverrides: {
+          llm: {
+            plan_generator: "openai/gpt-4o", // overrides project
+          },
+        },
+      });
+      expect(result.llm).toEqual({
+        default: "bedrock/amazon.nova-lite-v1:0",
+        advice_generator: "bedrock/us.amazon.nova-micro-v1:0",
+        plan_generator: "openai/gpt-4o", // env wins over project
+      });
+    });
+
+    it("env override for specific callsite overrides project default", () => {
+      const result = resolveGlobalConfig({
+        projectConfig: {
+          llm: {
+            default: "bedrock/amazon.nova-lite-v1:0",
+          },
+        },
+        envOverrides: {
+          llm: {
+            default: "anthropic/claude-sonnet-4-5",
+          },
+        },
+      });
+      expect(result.llm?.["default"]).toBe("anthropic/claude-sonnet-4-5");
+    });
+
+    it("user llm keys survive when project config adds different keys", () => {
+      const result = resolveGlobalConfig({
+        userConfig: {
+          llm: {
+            default: "bedrock/amazon.nova-lite-v1:0",
+          },
+        },
+        projectConfig: {
+          llm: {
+            plan_generator: "anthropic/claude-sonnet-4-5",
+          },
+        },
+      });
+      expect(result.llm).toEqual({
+        default: "bedrock/amazon.nova-lite-v1:0",
+        plan_generator: "anthropic/claude-sonnet-4-5",
+      });
+    });
+  });
 });

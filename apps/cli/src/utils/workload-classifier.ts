@@ -75,7 +75,7 @@ export async function classifyWorkload(
     const [err, result] = await llmClient.generateStructured(
       prompt,
       WorkloadProfileSchema,
-      { maxTokens: 128 },
+      { maxTokens: 128, callsite: "workload_classifier" },
     );
 
     if (err || !result) {

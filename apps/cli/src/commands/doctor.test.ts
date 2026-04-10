@@ -30,6 +30,7 @@ import {
   checkCache,
   checkConfig,
   checkBestPractices,
+  checkLlmRouting,
   runDoctor,
   renderReport,
   renderSection,
@@ -694,5 +695,14 @@ describe("runDoctor", () => {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+// ── Story 44.1: checkLlmRouting ─────────────────────────────────────────
+describe("checkLlmRouting (Story 44.1)", () => {
+  it("returns null when no llm config is present", async () => {
+    // Default config has no llm section
+    const result = await checkLlmRouting();
+    expect(result).toBeNull();
   });
 });

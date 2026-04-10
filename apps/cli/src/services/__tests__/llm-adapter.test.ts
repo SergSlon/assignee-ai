@@ -26,6 +26,7 @@ vi.mock("ai", () => ({
 import {
   parseModelString,
   LlmAdapter,
+  RoutingLlmAdapter,
   DEFAULT_MODEL,
   DEFAULT_MAX_TOKENS,
   detectBedrockRegionError,
@@ -507,5 +508,206 @@ describe("LlmAdapter", () => {
       expect(err!.message).toContain("Text LLM call failed");
       expect(err!.message).not.toContain("AWS_REGION");
     });
+  });
+});
+
+// ── Story 44.1: RoutingLlmAdapter ─────────────────────────────────────────
+describe("RoutingLlmAdapter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(generateText).mockResolvedValue({
+      text: "mock text",
+      output: { resourceType: "AWS::S3::Bucket" },
+    } as never);
+    process.env["ANTHROPIC_API_KEY"] = "test-key";
+    process.env["OPENAI_API_KEY"] = "test-key";
+    process.env["GOOGLE_GENERATIVE_AI_API_KEY"] = "test-key";
+  });
+
+  afterEach(() => {
+    process.env = { ...savedEnv };
+  });
+
+  it("routes generateText to the correct model based on callsite", async () => {
+    const router = new RoutingLlmAdapter({
+      default: "bedrock/amazon.nova-lite-v1:0",
+      plan_generator: "anthropic/claude-sonnet-4-5",
+    });
+
+    // plan_generator callsite → anthropic
+    const [err, text] = await router.generateText("Hello", {
+      callsite: "plan_generator",
+    });
+    expect(err).toBeNull();
+    expect(text).toBe("mock text");
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes generateStructured to the correct model based on callsite", async () => {
+    const schema = z.object({ resourceType: z.string() });
+    const router = new RoutingLlmAdapter({
+      default: "bedrock/amazon.nova-lite-v1:0",
+      intent_parser: "bedrock/us.amazon.nova-micro-v1:0",
+    });
+
+    const [err, result] = await router.generateStructured("Parse", schema, {
+      callsite: "intent_parser",
+    });
+    expect(err).toBeNull();
+    expect(result).toEqual({ resourceType: "AWS::S3::Bucket" });
+  });
+
+  it("falls back to default key when callsite not in config", async () => {
+    const router = new RoutingLlmAdapter({
+      default: "bedrock/amazon.nova-lite-v1:0",
+      plan_generator: "anthropic/claude-sonnet-4-5",
+    });
+
+    // advice_generator not in config → falls back to default
+    const [err] = await router.generateText("Hello", {
+      callsite: "advice_generator",
+    });
+    expect(err).toBeNull();
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to ASSIGNEE_MODEL when no default key and callsite not found", async () => {
+    process.env["ASSIGNEE_MODEL"] = "openai/gpt-4o";
+    const router = new RoutingLlmAdapter({
+      plan_generator: "anthropic/claude-sonnet-4-5",
+    });
+
+    // unknown callsite, no "default" key → ASSIGNEE_MODEL env var
+    const [err] = await router.generateText("Hello", {
+      callsite: "advice_generator",
+    });
+    expect(err).toBeNull();
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to DEFAULT_MODEL when no config match and no ASSIGNEE_MODEL", async () => {
+    delete process.env["ASSIGNEE_MODEL"];
+    const router = new RoutingLlmAdapter({
+      plan_generator: "anthropic/claude-sonnet-4-5",
+    });
+
+    const [err] = await router.generateText("Hello", {
+      callsite: "advice_generator",
+    });
+    expect(err).toBeNull();
+    // Should use DEFAULT_MODEL (bedrock/amazon.nova-lite-v1:0)
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to default when callsite is undefined", async () => {
+    const router = new RoutingLlmAdapter({
+      default: "bedrock/amazon.nova-lite-v1:0",
+      plan_generator: "anthropic/claude-sonnet-4-5",
+    });
+
+    // No callsite in options → falls back to default
+    const [err] = await router.generateText("Hello");
+    expect(err).toBeNull();
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("lazily caches adapters by model string — same model reuses same adapter", async () => {
+    const router = new RoutingLlmAdapter({
+      default: "bedrock/amazon.nova-lite-v1:0",
+      intent_parser: "bedrock/amazon.nova-lite-v1:0", // same as default
+      plan_generator: "anthropic/claude-sonnet-4-5", // different
+    });
+
+    // Call three different callsites
+    await router.generateText("A", { callsite: "intent_parser" });
+    await router.generateText("B", { callsite: "plan_generator" });
+    await router.generateText("C", { callsite: "intent_parser" });
+
+    // 3 calls total, but only 2 distinct adapters created (bedrock + anthropic)
+    expect(generateText).toHaveBeenCalledTimes(3);
+
+    // Access private cache to verify sharing (white-box test)
+    const cache = (
+      router as unknown as { adapterCache: Map<string, LlmAdapter> }
+    ).adapterCache;
+    expect(cache.size).toBe(2);
+    expect(cache.has("bedrock/amazon.nova-lite-v1:0")).toBe(true);
+    expect(cache.has("anthropic/claude-sonnet-4-5")).toBe(true);
+  });
+
+  it("passes through options (callsite, runId, maxTokens) to inner adapter", async () => {
+    const router = new RoutingLlmAdapter({
+      default: "bedrock/amazon.nova-lite-v1:0",
+    });
+
+    await router.generateText("Hello", {
+      callsite: "plan_generator",
+      runId: "test-run-123",
+      maxTokens: 2048,
+    });
+
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxOutputTokens: 2048,
+      }),
+    );
+  });
+
+  it("passes guardrail config through to inner adapters", async () => {
+    const router = new RoutingLlmAdapter(
+      { default: "bedrock/amazon.nova-lite-v1:0" },
+      { guardrailId: "my-guardrail", guardrailVersion: "2" },
+    );
+
+    await router.generateText("Hello", { callsite: "plan_generator" });
+
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        guardrailIdentifier: "my-guardrail",
+        guardrailVersion: "2",
+      }),
+    );
+  });
+
+  it("strips undefined values from routing config", async () => {
+    const router = new RoutingLlmAdapter({
+      default: "bedrock/amazon.nova-lite-v1:0",
+      plan_generator: undefined, // should be ignored
+      intent_parser: "anthropic/claude-sonnet-4-5",
+    });
+
+    // plan_generator is undefined → falls back to default
+    await router.generateText("Hello", { callsite: "plan_generator" });
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("handles all known callsites in a realistic routing config", async () => {
+    const router = new RoutingLlmAdapter({
+      default: "bedrock/us.amazon.nova-lite-v1:0",
+      plan_generator: "anthropic/claude-sonnet-4-5",
+      intent_parser: "bedrock/us.amazon.nova-micro-v1:0",
+      advice_generator: "bedrock/us.amazon.nova-micro-v1:0",
+      workload_classifier: "bedrock/us.amazon.nova-micro-v1:0",
+    });
+
+    const callsites = [
+      "intent_parser",
+      "plan_generator",
+      "advice_generator",
+      "workload_classifier",
+    ];
+
+    for (const cs of callsites) {
+      const [err] = await router.generateText("Hello", { callsite: cs });
+      expect(err).toBeNull();
+    }
+
+    expect(generateText).toHaveBeenCalledTimes(4);
+
+    // 3 distinct models: nova-lite (default), claude-sonnet (plan), nova-micro (intent+advice+workload)
+    const cache = (
+      router as unknown as { adapterCache: Map<string, LlmAdapter> }
+    ).adapterCache;
+    expect(cache.size).toBe(2); // claude-sonnet + nova-micro (default not called)
   });
 });

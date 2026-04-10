@@ -49,6 +49,8 @@ import {
 import { runAutoCleanup } from "../services/cleanup.js";
 import { defaultMemoryService } from "../services/memory.js";
 import { EnvVar } from "../constants/env-vars.js";
+import { loadGlobalConfig } from "../config/load-global-config.js";
+import { loadUserConfig } from "../config/user-config-loader.js";
 import { CHECKPOINT_DIR, MAX_PROVISION_LOOPS } from "../config/constants.js";
 import {
   startTimer,
@@ -189,13 +191,29 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
           tools = tools.map((t) => wrapToolWithRecorder(t, recorder));
         }
 
+        // Story 44.1: load config early so per-node LLM routing is
+        // available for adapter construction. Includes user config so the
+        // full precedence chain (env > project > user > defaults) is
+        // honored. plan.ts / apply.ts re-load for graph state anyway.
+        const userConfig = await loadUserConfig();
+        const resolvedConfig = await loadGlobalConfig(userConfig);
+
         // Story 9.7: Wrap LLM adapter with recorder when recording enabled
-        const { LlmAdapter } = await import("../services/llm-adapter.js");
-        const baseLlm = new LlmAdapter({
-          modelString: process.env[EnvVar.ASSIGNEE_MODEL],
+        // Story 44.1: use RoutingLlmAdapter when routing config is present
+        const { LlmAdapter, RoutingLlmAdapter } =
+          await import("../services/llm-adapter.js");
+        const llmBaseConfig = {
           guardrailId: process.env[EnvVar.BEDROCK_GUARDRAIL_ID],
           guardrailVersion: process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION],
-        });
+        };
+        const llmRouting = resolvedConfig?.llm;
+        const baseLlm =
+          llmRouting && Object.keys(llmRouting).length > 0
+            ? new RoutingLlmAdapter(llmRouting, llmBaseConfig)
+            : new LlmAdapter({
+                modelString: process.env[EnvVar.ASSIGNEE_MODEL],
+                ...llmBaseConfig,
+              });
         const llmClient = recorder
           ? new RecordingLlmAdapter(
               baseLlm,
@@ -208,6 +226,7 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
         const graph = createGraph(tools, {
           llmClient,
           recorder: recorder ?? undefined,
+          resolvedConfig,
         });
 
         const result = await opts.run({

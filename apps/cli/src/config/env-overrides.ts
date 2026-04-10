@@ -172,5 +172,35 @@ export function loadEnvOverrides(
     }
   }
 
+  // ASSIGNEE_LLM_DEFAULT, ASSIGNEE_LLM_PLAN_GENERATOR, etc. → llm.*
+  // Pattern: ASSIGNEE_LLM_{CALLSITE} where callsite is uppercased.
+  const LLM_PREFIX = "ASSIGNEE_LLM_";
+  const llmEntries: Record<string, string> = {};
+  for (const [key, val] of Object.entries(env)) {
+    if (key.startsWith(LLM_PREFIX) && val !== undefined && val !== "") {
+      const callsite = key.slice(LLM_PREFIX.length).toLowerCase();
+      if (callsite) {
+        // Lightweight format check — full validation at adapter construction
+        const slashIdx = val.indexOf("/");
+        if (slashIdx === -1 || slashIdx === 0 || slashIdx === val.length - 1) {
+          log({
+            ts: new Date().toISOString(),
+            runId: "system",
+            level: "warn",
+            action: LOG_ACTIONS.CONFIG_LOADED,
+            extras: {
+              reason: `Ignoring ${key}='${val}' — expected "provider/model-id" format`,
+            },
+          });
+          continue;
+        }
+        llmEntries[callsite] = val;
+      }
+    }
+  }
+  if (Object.keys(llmEntries).length > 0) {
+    result.llm = llmEntries;
+  }
+
   return result;
 }

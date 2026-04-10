@@ -7,6 +7,7 @@ export type {
   ConfigDefaults,
   ConfigPreferences,
   ConfigBudget,
+  ConfigLlm,
   ConfigNaming,
   AutoFixModeType,
 } from "./config-schema.js";

@@ -30,6 +30,7 @@ import {
   type ConfigPreferences,
   type ConfigDefaults,
   type ConfigBudget,
+  type ConfigLlm,
 } from "./config-schema.js";
 
 /** Per-level source container passed to resolveGlobalConfig. */
@@ -139,11 +140,24 @@ export function resolveGlobalConfig(
     sources.projectConfig?.org_policy ??
     sources.userConfig?.org_policy;
 
+  // Story 44.1: llm section — merge key-by-key like defaults.tags so
+  // a user-level llm.default and a project-level llm.plan_generator
+  // both survive.
+  const userLlm = sources.userConfig?.llm;
+  const projectLlm = sources.projectConfig?.llm;
+  const envLlm = sources.envOverrides?.llm;
+  const cliLlm = sources.cliFlags?.llm;
+  const llm: ConfigLlm | undefined =
+    userLlm || projectLlm || envLlm || cliLlm
+      ? { ...userLlm, ...projectLlm, ...envLlm, ...cliLlm }
+      : undefined;
+
   const hasDefaults = Object.keys(defaults).length > 0;
 
   const result: ResolvedGlobalConfig = { preferences };
   if (hasDefaults) result.defaults = defaults;
   if (budget) result.budget = budget;
+  if (llm) result.llm = llm;
   if (orgPolicy) result.org_policy = orgPolicy;
   return result;
 }
