@@ -35,41 +35,10 @@ import { getCachedPrice, setCachedPrice } from "../services/price-cache.js";
 import type { AgentState } from "../services/graph.js";
 import { PromiseStatus } from "../config/constants.js";
 import { getOperatorCallerArn } from "../utils/resolve-arn.js";
-
-/**
- * Placeholder AWS account IDs that show up in AWS documentation examples.
- * Any ARN containing one of these is almost certainly a hallucination from
- * the LLM (which has seen them thousands of times in training data) rather
- * than a real cross-account ARN the user intended. Reject at preflight so
- * the user gets a clear actionable message instead of an opaque "Cross-
- * account pass role is not allowed" error from CloudControl/IAM.
- *
- * The list is intentionally AWS-canonical:
- *   - `123456789012` — the universal AWS docs example
- *   - `111122223333`, `444455556666` — cross-account walkthroughs
- *   - `222222222222`, `333333333333`, `555555555555` — multi-account IAM examples
- *   - `999999999999` — appears in IAM policy reference docs as the
- *     "alternative account" example
- *   - `000000000000` — unit-test fixtures
- *
- * Wave 11 P2-7 added `222222222222`, `333333333333`, `555555555555`,
- * `999999999999` per the Wave 5-9 review's edge-finding #7 ("placeholder
- * regex blind spots"). Adding more requires the value to be (a) demonstrably
- * an AWS docs placeholder and (b) implausible as a real account ID — we
- * deliberately do NOT block all-same-digit IDs that AWS could legitimately
- * issue (4xxxx, 6xxxx, 7xxxx, 8xxxx) since the LLM-hallucination rate on
- * those is much lower than on the canonical ones above.
- */
-const PLACEHOLDER_AWS_ACCOUNT_IDS = new Set([
-  "123456789012",
-  "111122223333",
-  "222222222222",
-  "333333333333",
-  "444455556666",
-  "555555555555",
-  "999999999999",
-  "000000000000",
-]);
+import {
+  PLACEHOLDER_AWS_ACCOUNT_IDS,
+  ARN_ACCOUNT_REGEX,
+} from "../constants/placeholder-accounts.js";
 
 /**
  * Maximum recursion depth for the placeholder-ARN walker. CCAPI desired
@@ -95,8 +64,6 @@ const PLACEHOLDER_WALK_MAX_DEPTH = 32;
 function detectPlaceholderArn(
   desiredState: Record<string, unknown>,
 ): string | undefined {
-  const arnAccountRegex = /^arn:aws[\w-]*:[\w-]*:[\w-]*:(\d{12}):/;
-
   function walk(
     value: unknown,
     path: string,
@@ -104,7 +71,7 @@ function detectPlaceholderArn(
   ): { field: string; arn: string; account: string } | undefined {
     if (depth > PLACEHOLDER_WALK_MAX_DEPTH) return undefined;
     if (typeof value === "string") {
-      const match = arnAccountRegex.exec(value);
+      const match = ARN_ACCOUNT_REGEX.exec(value);
       if (match && PLACEHOLDER_AWS_ACCOUNT_IDS.has(match[1]!)) {
         return { field: path, arn: value, account: match[1]! };
       }

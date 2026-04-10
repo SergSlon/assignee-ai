@@ -12,6 +12,7 @@ import {
   __resetAzCacheForTests,
   isTemplatePlaceholder,
   collectPluginPlaceholders,
+  stripPlaceholderArns,
 } from "./plan-generator.js";
 import {
   markerRef,
@@ -1813,6 +1814,95 @@ describe("compound plan-generator branch — marker resolution integration", () 
     expect(result.errorMessage).toMatch(
       /no completed resource with resourceId "vpc"/,
     );
+  });
+});
+
+// ── stripPlaceholderArns (bug-cw-alarm-placeholder-arn) ─────────────────────
+
+describe("stripPlaceholderArns", () => {
+  it("removes all placeholder ARNs from AlarmActions and deletes the field", () => {
+    const ds: Record<string, unknown> = {
+      AlarmName: "cpu-alarm",
+      AlarmActions: [
+        "arn:aws:sns:us-east-1:123456789012:my-topic",
+        "arn:aws:sns:us-east-1:111122223333:other-topic",
+      ],
+      MetricName: "CPUUtilization",
+    };
+    stripPlaceholderArns(ds);
+    expect(ds["AlarmActions"]).toBeUndefined();
+    expect(ds["AlarmName"]).toBe("cpu-alarm");
+    expect(ds["MetricName"]).toBe("CPUUtilization");
+  });
+
+  it("keeps real ARNs and removes only placeholders from mixed arrays", () => {
+    const ds: Record<string, unknown> = {
+      AlarmActions: [
+        "arn:aws:sns:us-east-1:123456789012:placeholder-topic",
+        "arn:aws:sns:us-east-1:987654321098:real-topic",
+      ],
+    };
+    stripPlaceholderArns(ds);
+    expect(ds["AlarmActions"]).toEqual([
+      "arn:aws:sns:us-east-1:987654321098:real-topic",
+    ]);
+  });
+
+  it("does not affect non-ARN array fields", () => {
+    const ds: Record<string, unknown> = {
+      Tags: [
+        { Key: "Name", Value: "test" },
+        { Key: "Env", Value: "prod" },
+      ],
+      SecurityGroupIds: ["sg-12345678", "sg-abcdef01"],
+    };
+    stripPlaceholderArns(ds);
+    expect(ds["Tags"]).toHaveLength(2);
+    expect(ds["SecurityGroupIds"]).toEqual(["sg-12345678", "sg-abcdef01"]);
+  });
+
+  it("does not affect scalar ARN fields (preflight-guard handles those)", () => {
+    const ds: Record<string, unknown> = {
+      Role: "arn:aws:iam::123456789012:role/my-role",
+      AlarmName: "cpu-alarm",
+    };
+    stripPlaceholderArns(ds);
+    // Scalar ARN is NOT stripped — preflight-guard catches it
+    expect(ds["Role"]).toBe("arn:aws:iam::123456789012:role/my-role");
+  });
+
+  it("handles OKActions and InsufficientDataActions the same way", () => {
+    const ds: Record<string, unknown> = {
+      OKActions: ["arn:aws:sns:us-east-1:123456789012:ok-topic"],
+      InsufficientDataActions: [
+        "arn:aws:sns:us-east-1:444455556666:insuffdata-topic",
+      ],
+    };
+    stripPlaceholderArns(ds);
+    expect(ds["OKActions"]).toBeUndefined();
+    expect(ds["InsufficientDataActions"]).toBeUndefined();
+  });
+
+  it("handles GovCloud partition ARNs", () => {
+    const ds: Record<string, unknown> = {
+      AlarmActions: ["arn:aws-us-gov:sns:us-gov-west-1:123456789012:topic"],
+    };
+    stripPlaceholderArns(ds);
+    expect(ds["AlarmActions"]).toBeUndefined();
+  });
+
+  it("preserves arrays with all real ARNs unchanged", () => {
+    const ds: Record<string, unknown> = {
+      AlarmActions: [
+        "arn:aws:sns:us-east-1:987654321098:real-topic",
+        "arn:aws:sns:us-east-1:112233445566:other-real-topic",
+      ],
+    };
+    stripPlaceholderArns(ds);
+    expect(ds["AlarmActions"]).toEqual([
+      "arn:aws:sns:us-east-1:987654321098:real-topic",
+      "arn:aws:sns:us-east-1:112233445566:other-real-topic",
+    ]);
   });
 });
 
