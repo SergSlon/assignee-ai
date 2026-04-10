@@ -15,7 +15,6 @@
 
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
-import { unwrapMcpText } from "../utils/mcp.js";
 import { defaultMemoryService } from "./memory.js";
 import { AWS_REGION, UNKNOWN_FALLBACK } from "../config/constants.js";
 import type { ManagedResource } from "./list-resources.js";
@@ -78,7 +77,8 @@ const ARN_SERVICE_TO_CE_SERVICE: Record<string, string> = {
  * e.g. "arn:aws:s3:::my-bucket" -> "s3"
  *      "arn:aws:lambda:us-east-1:123:function:foo" -> "lambda"
  */
-function arnToServiceSlug(arn: string): string | undefined {
+/** @internal */
+export function arnToServiceSlug(arn: string): string | undefined {
   // ARN format: arn:partition:service:region:account:resource
   const match = /^arn:aws[\w-]*:([^:]+):/.exec(arn);
   if (match) return match[1];
@@ -99,7 +99,8 @@ function arnToServiceSlug(arn: string): string | undefined {
  *   }
  * }
  */
-function extractResultsByTime(response: unknown): unknown[] {
+/** @internal */
+export function extractResultsByTime(response: unknown): unknown[] {
   if (typeof response !== "object" || response === null) return [];
 
   // Unwrap MCP text wrapper ({ type: "text", text: "<JSON>" }) if present
