@@ -24,9 +24,34 @@ import { withTimeout } from "../../utils/timeout.js";
 
 const MCP_BP_TIMEOUT_MS = 3_000;
 
+/** Resource types that should trigger CheckStorageEncryption. */
+const STORAGE_RESOURCE_TYPES = new Set([
+  "AWS::S3::Bucket",
+  "AWS::RDS::DBInstance",
+  "AWS::DynamoDB::Table",
+  "AWS::EFS::FileSystem",
+  "AWS::Logs::LogGroup",
+  "AWS::SQS::Queue",
+  "AWS::SNS::Topic",
+  "AWS::SecretsManager::Secret",
+  "AWS::ECR::Repository",
+]);
+
+/** Resource types that should trigger CheckNetworkSecurity. */
+const NETWORK_RESOURCE_TYPES = new Set([
+  "AWS::ElasticLoadBalancingV2::LoadBalancer",
+  "AWS::ApiGatewayV2::Api",
+  "AWS::CloudFront::Distribution",
+  "AWS::EC2::Instance",
+  "AWS::EC2::SecurityGroup",
+  "AWS::RDS::DBInstance",
+]);
+
 /**
  * Enriches static BP findings with live MCP data.
  * - Queries Well-Architected Security MCP for real-time posture analysis
+ * - Queries CheckStorageEncryption for storage resource types
+ * - Queries CheckNetworkSecurity for network resource types
  * - Queries Documentation MCP for latest best practice guidance
  * - Returns additional findings discovered by MCP that static rules missed
  */
@@ -38,35 +63,40 @@ export async function enrichBpWithMcp(
 ): Promise<BPFinding[]> {
   const additionalFindings: BPFinding[] = [];
 
-  const [securityResult, docsResult] = await Promise.allSettled([
-    querySecurityPosture(resourceType, desiredState, tools),
-    queryDocsBestPractices(resourceType, tools),
-  ]);
+  const [securityResult, storageResult, networkResult, docsResult] =
+    await Promise.allSettled([
+      querySecurityPosture(resourceType, desiredState, tools),
+      STORAGE_RESOURCE_TYPES.has(resourceType)
+        ? queryStorageEncryption(tools)
+        : Promise.resolve([]),
+      NETWORK_RESOURCE_TYPES.has(resourceType)
+        ? queryNetworkSecurity(tools)
+        : Promise.resolve([]),
+      queryDocsBestPractices(resourceType, tools),
+    ]);
 
-  // Merge security posture findings (from WA-Security MCP)
-  if (securityResult.status === "fulfilled" && securityResult.value) {
-    for (const finding of securityResult.value) {
-      // Skip if static rules already cover this
-      const alreadyCovered = staticFindings.some(
-        (sf) => sf.propertyPath === finding.propertyPath,
-      );
+  // Helper: merge findings from a settled result into the output list
+  function mergeFindings(
+    result: PromiseSettledResult<BPFinding[]>,
+    dedupBy: "propertyPath" | "practiceId",
+  ): void {
+    if (result.status !== "fulfilled" || !result.value) return;
+    for (const finding of result.value) {
+      const key = finding[dedupBy];
+      const alreadyCovered =
+        key !== undefined &&
+        (staticFindings.some((sf) => sf[dedupBy] === key) ||
+          additionalFindings.some((af) => af[dedupBy] === key));
       if (!alreadyCovered) {
         additionalFindings.push(finding);
       }
     }
   }
 
-  // Merge documentation-based findings (from AWS Docs MCP)
-  if (docsResult.status === "fulfilled" && docsResult.value) {
-    for (const finding of docsResult.value) {
-      const alreadyCovered = staticFindings.some(
-        (sf) => sf.practiceId === finding.practiceId,
-      );
-      if (!alreadyCovered) {
-        additionalFindings.push(finding);
-      }
-    }
-  }
+  mergeFindings(securityResult, "propertyPath");
+  mergeFindings(storageResult, "practiceId");
+  mergeFindings(networkResult, "practiceId");
+  mergeFindings(docsResult, "practiceId");
 
   return additionalFindings;
 }
@@ -120,6 +150,111 @@ async function querySecurityPosture(
         propertyPath: f.property,
       }),
     );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Queries WA Security CheckStorageEncryption for data-at-rest findings.
+ * Only called for storage resource types (S3, RDS, DynamoDB, etc.).
+ */
+async function queryStorageEncryption(
+  tools: StructuredTool[],
+): Promise<BPFinding[]> {
+  const tool = tools.find((t) => t.name === ToolName.CHECK_STORAGE_ENCRYPTION);
+  if (!tool) return [];
+
+  const result = await withTimeout(
+    tool.invoke({ region: AWS_REGION }),
+    MCP_BP_TIMEOUT_MS,
+  );
+  if (!result) return [];
+
+  return parseWaSecurityFindings(result, "MCP-STOR");
+}
+
+/**
+ * Queries WA Security CheckNetworkSecurity for data-in-transit findings.
+ * Only called for network resource types (ELBv2, API Gateway, CloudFront, etc.).
+ */
+async function queryNetworkSecurity(
+  tools: StructuredTool[],
+): Promise<BPFinding[]> {
+  const tool = tools.find((t) => t.name === ToolName.CHECK_NETWORK_SECURITY);
+  if (!tool) return [];
+
+  const result = await withTimeout(
+    tool.invoke({ region: AWS_REGION }),
+    MCP_BP_TIMEOUT_MS,
+  );
+  if (!result) return [];
+
+  return parseWaSecurityFindings(result, "MCP-NET");
+}
+
+/**
+ * Shared parser for WA Security findings from CheckStorageEncryption
+ * and CheckNetworkSecurity. Handles both `findings` and `resource_details` arrays.
+ */
+function parseWaSecurityFindings(
+  result: unknown,
+  practicePrefix: string,
+): BPFinding[] {
+  try {
+    const text = typeof result === "string" ? result : JSON.stringify(result);
+    const outer = JSON.parse(text) as Record<string, unknown>;
+    const parsed = (outer?.["result"] ?? outer) as Record<string, unknown>;
+
+    // Handle both formats: findings[] or resource_details[]
+    const items =
+      (parsed["findings"] as unknown[]) ??
+      (parsed["resource_details"] as unknown[]) ??
+      [];
+    if (!Array.isArray(items)) return [];
+
+    return items
+      .filter(
+        (item): item is Record<string, unknown> =>
+          item !== null && typeof item === "object",
+      )
+      .flatMap((item) => {
+        // resource_details format: {resource_arn, compliant, issues[], recommendations[]}
+        const issues = item["issues"] as string[] | undefined;
+        const recommendations = item["recommendations"] as string[] | undefined;
+        if (issues && Array.isArray(issues)) {
+          return issues.map(
+            (issue, i): BPFinding => ({
+              practiceId: `${practicePrefix}-${issue.replace(/\s+/g, "-").slice(0, 25)}`,
+              title: issue,
+              severity: mapMcpSeverity(item["severity"] as string | undefined),
+              category: "security" as BPCategory,
+              message: recommendations?.[i] ?? issue,
+              remediation: recommendations?.[i] ?? "",
+              blocking: false,
+            }),
+          );
+        }
+
+        // findings format: {severity, title, recommendation, property}
+        const title = item["title"] as string | undefined;
+        if (title) {
+          return [
+            {
+              practiceId: `${practicePrefix}-${title.replace(/\s+/g, "-").slice(0, 25)}`,
+              title,
+              severity: mapMcpSeverity(item["severity"] as string | undefined),
+              category: "security" as BPCategory,
+              message: (item["recommendation"] as string) ?? "",
+              remediation: (item["recommendation"] as string) ?? "",
+              blocking: false,
+              propertyPath: item["property"] as string | undefined,
+            },
+          ];
+        }
+
+        return [];
+      });
   } catch {
     return [];
   }
