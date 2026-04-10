@@ -673,11 +673,13 @@ export async function resultFormatterNode(
               { currentResourceIndex: state.resourceQueue.length };
 
         if (fixResult) {
+          // Spread advance FIRST so fixResult fields win (advance.desiredState
+          // is undefined which would overwrite the user's applied fix).
           return {
+            ...advance,
             desiredState: fixResult.desiredState,
             bpFindings: fixResult.bpFindings,
             appliedFixes: fixResult.appliedFixes,
-            ...advance,
           };
         }
         return advance;

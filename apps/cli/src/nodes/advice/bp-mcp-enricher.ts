@@ -220,12 +220,19 @@ function parseWaSecurityFindings(
       )
       .flatMap((item) => {
         // resource_details format: {resource_arn, compliant, issues[], recommendations[]}
+        if (item["compliant"] === true) return []; // Skip compliant resources
         const issues = item["issues"] as string[] | undefined;
         const recommendations = item["recommendations"] as string[] | undefined;
+        // Include resource ARN suffix in practiceId to avoid collisions when
+        // multiple resources have the same issue text.
+        const arnSuffix =
+          String(item["resource_arn"] ?? "")
+            .split(/[:/]/)
+            .pop() ?? "";
         if (issues && Array.isArray(issues)) {
           return issues.map(
             (issue, i): BPFinding => ({
-              practiceId: `${practicePrefix}-${issue.replace(/\s+/g, "-").slice(0, 25)}`,
+              practiceId: `${practicePrefix}-${arnSuffix ? arnSuffix + "-" : ""}${issue.replace(/\s+/g, "-").slice(0, 25)}`,
               title: issue,
               severity: mapMcpSeverity(item["severity"] as string | undefined),
               category: "security" as BPCategory,
