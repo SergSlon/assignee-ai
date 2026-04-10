@@ -246,7 +246,12 @@ describe("gatherMcpAdviceContext", () => {
         doc: "EC2 instance guide",
       }),
       makeMockTool(ToolName.CHECK_SECURITY_SERVICES, {
-        findings: ["open-to-world SG"],
+        region: "us-east-1",
+        services_checked: ["securityhub"],
+        all_enabled: true,
+        service_statuses: {
+          securityhub: { enabled: true, details: "open-to-world SG detected" },
+        },
       }),
     ];
 
@@ -258,7 +263,7 @@ describe("gatherMcpAdviceContext", () => {
 
     expect(ctx.pricingSnippet).toMatch(/0\.05\/hour/);
     expect(ctx.docSnippet).toMatch(/EC2 instance guide/);
-    expect(ctx.securitySnippet).toMatch(/open-to-world SG/);
+    expect(ctx.securitySnippet).toMatch(/open-to-world SG detected/);
   });
 
   it("skips pricing when the resource type has no service code (free wiring)", async () => {
@@ -332,8 +337,13 @@ describe("gatherMcpAdviceContext", () => {
     expect(ctx.pricingSnippet!).toMatch(/\.\.\.$/);
   });
 
-  it("passes resource type + config to the security analyzer verbatim", async () => {
-    const securityInvoke = vi.fn(async () => ({ safe: true }));
+  it("passes region + services to the CheckSecurityServices tool (v0.1.7 API)", async () => {
+    const securityInvoke = vi.fn(async () =>
+      JSON.stringify({
+        all_enabled: true,
+        service_statuses: { securityhub: { enabled: true } },
+      }),
+    );
     const tools = [
       {
         name: ToolName.CHECK_SECURITY_SERVICES,
@@ -351,10 +361,34 @@ describe("gatherMcpAdviceContext", () => {
 
     expect(securityInvoke).toHaveBeenCalledWith(
       expect.objectContaining({
-        resource_type: "AWS::S3::Bucket",
-        configuration: config,
+        region: expect.any(String),
+        services: ["securityhub"],
       }),
     );
+  });
+
+  it("returns undefined securitySnippet when CheckSecurityServices reports all_enabled=false", async () => {
+    const tools = [
+      makeMockTool(
+        ToolName.CHECK_SECURITY_SERVICES,
+        JSON.stringify({
+          region: "us-east-1",
+          services_checked: ["securityhub"],
+          all_enabled: false,
+          service_statuses: {
+            securityhub: { enabled: false, details: "Not enabled" },
+          },
+        }),
+      ),
+    ];
+
+    const ctx = await gatherMcpAdviceContext(
+      "AWS::S3::Bucket",
+      { BucketName: "test" },
+      tools,
+    );
+
+    expect(ctx.securitySnippet).toBeUndefined();
   });
 
   it("searches documentation using the short type name", async () => {

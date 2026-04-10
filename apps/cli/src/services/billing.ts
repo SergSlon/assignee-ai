@@ -2,9 +2,13 @@
  * Billing data service — fetches live cost data from the AWS Cost Management MCP server.
  *
  * Graceful degradation chain:
- *   1. Billing MCP (live) — get_cost_and_usage tool
+ *   1. Billing MCP (live) — cost-explorer tool (getCostAndUsage grouped by SERVICE)
  *   2. Provision log memory (historical estimates)
  *   3. Empty map (cost shows "N/A")
+ *
+ * Note: RESOURCE_ID grouping is only available via getCostAndUsageWithResources
+ * (limited to last 14 days). We use SERVICE grouping for reliable monthly data
+ * and distribute costs across resources of the same service.
  *
  * @see Story 19.7
  */
@@ -12,7 +16,6 @@
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../constants/tools.js";
 import { defaultMemoryService } from "./memory.js";
-import { unwrapMcpText } from "../utils/mcp.js";
 import { AWS_REGION, UNKNOWN_FALLBACK } from "../config/constants.js";
 import type { ManagedResource } from "./list-resources.js";
 import { CostEstimateLabel } from "@assignee/core";
@@ -46,7 +49,86 @@ function currentMonthRange(): { start: string; end: string } {
 }
 
 /**
- * Queries the Billing MCP server's get_cost_and_usage tool for resource costs.
+ * Maps an ARN to its AWS service name as used in Cost Explorer SERVICE dimension.
+ * e.g. "arn:aws:s3:::my-bucket" -> "Amazon Simple Storage Service"
+ *
+ * This is a best-effort mapping — unknown services return undefined.
+ */
+const ARN_SERVICE_TO_CE_SERVICE: Record<string, string> = {
+  s3: "Amazon Simple Storage Service",
+  lambda: "AWS Lambda",
+  ec2: "Amazon Elastic Compute Cloud - Compute",
+  rds: "Amazon Relational Database Service",
+  dynamodb: "Amazon DynamoDB",
+  sqs: "Amazon Simple Queue Service",
+  sns: "Amazon Simple Notification Service",
+  ecs: "Amazon Elastic Container Service",
+  elasticloadbalancing: "Amazon Elastic Load Balancing",
+  cloudfront: "Amazon CloudFront",
+  iam: "AWS Identity and Access Management",
+  logs: "Amazon CloudWatch Logs",
+  events: "Amazon EventBridge",
+  secretsmanager: "AWS Secrets Manager",
+  kms: "AWS Key Management Service",
+};
+
+/**
+ * Extracts the AWS service slug from an ARN.
+ * e.g. "arn:aws:s3:::my-bucket" -> "s3"
+ *      "arn:aws:lambda:us-east-1:123:function:foo" -> "lambda"
+ */
+function arnToServiceSlug(arn: string): string | undefined {
+  // ARN format: arn:partition:service:region:account:resource
+  const match = /^arn:aws[\w-]*:([^:]+):/.exec(arn);
+  if (match) return match[1];
+  // S3 ARNs may have empty region/account: arn:aws:s3:::bucket
+  if (/^arn:aws[\w-]*:s3:/.test(arn)) return "s3";
+  return undefined;
+}
+
+/**
+ * Extracts ResultsByTime from the new session-based MCP response format.
+ *
+ * The billing-cost-management-mcp-server@0.0.17+ returns:
+ * {
+ *   status: "success",
+ *   data: {
+ *     ...,
+ *     preview: [{ key: "ResultsByTime", value: "<JSON string>" }, ...]
+ *   }
+ * }
+ */
+function extractResultsByTime(response: unknown): unknown[] {
+  if (typeof response !== "object" || response === null) return [];
+
+  const resp = response as Record<string, unknown>;
+
+  // New session-based format: data.preview contains key-value pairs
+  const data = resp["data"] as Record<string, unknown> | undefined;
+  const preview = data?.["preview"];
+  if (Array.isArray(preview)) {
+    const rtEntry = (preview as Array<{ key: string; value: string }>).find(
+      (p) => p.key === "ResultsByTime",
+    );
+    if (rtEntry) {
+      try {
+        const parsed = JSON.parse(rtEntry.value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  return [];
+}
+
+/**
+ * Queries the Billing MCP server's cost-explorer tool for service-level costs.
+ * Groups by SERVICE dimension (RESOURCE_ID requires getCostAndUsageWithResources
+ * which is limited to 14 days). Distributes service costs across resources of
+ * that service type.
+ *
  * Returns an array of BillingCostData entries. Returns empty array on any error.
  */
 async function queryBillingMcp(
@@ -56,47 +138,89 @@ async function queryBillingMcp(
   const costTool = mcpTools.find((t) => t.name === ToolName.COST_EXPLORER);
   if (!costTool) return [];
 
-  const arns = resources.map((r) => r.arn);
   const { start, end } = currentMonthRange();
+
+  // Collect unique service names from the resource ARNs
+  const serviceNames = new Set<string>();
+  for (const r of resources) {
+    const slug = arnToServiceSlug(r.arn);
+    const ceName = slug ? ARN_SERVICE_TO_CE_SERVICE[slug] : undefined;
+    if (ceName) serviceNames.add(ceName);
+  }
 
   const response = await costTool.invoke({
     operation: "getCostAndUsage",
     start_date: start,
     end_date: end,
     granularity: "MONTHLY",
-    filter: JSON.stringify({
-      Dimensions: {
-        Key: "RESOURCE_ID",
-        Values: arns,
-      },
-    }),
     metrics: JSON.stringify(["UnblendedCost"]),
+    group_by: JSON.stringify([{ Type: "DIMENSION", Key: "SERVICE" }]),
+    filter:
+      serviceNames.size > 0
+        ? JSON.stringify({
+            Dimensions: {
+              Key: "SERVICE",
+              Values: [...serviceNames],
+            },
+          })
+        : undefined,
   });
 
-  const text = unwrapMcpText(response);
-  const parsed = JSON.parse(text);
-
+  const resultsByTime = extractResultsByTime(response);
   const results: BillingCostData[] = [];
 
-  // Parse Cost Explorer response format
-  if (parsed?.ResultsByTime) {
-    for (const timePeriod of parsed.ResultsByTime) {
-      if (timePeriod?.Groups) {
-        for (const group of timePeriod.Groups) {
-          const arn = group?.Keys?.[0];
-          const amount = group?.Metrics?.UnblendedCost?.Amount;
-          const unit = group?.Metrics?.UnblendedCost?.Unit ?? "USD";
-          if (arn && amount !== undefined) {
-            results.push({
-              arn,
-              actualMonthlyCost: `$${parseFloat(amount).toFixed(2)}/month`,
-              forecastedMonthlyCost: `$${parseFloat(amount).toFixed(2)}/month`,
-              currency: unit,
-              lastUpdated: new Date().toISOString(),
-            });
-          }
+  // Build a map of service name -> total cost from the response
+  const serviceCosts = new Map<string, { amount: number; unit: string }>();
+  for (const timePeriod of resultsByTime as Array<{
+    Groups?: Array<{
+      Keys?: string[];
+      Metrics?: Record<string, { Amount?: string; Unit?: string }>;
+    }>;
+  }>) {
+    if (timePeriod?.Groups) {
+      for (const group of timePeriod.Groups) {
+        const serviceName = group?.Keys?.[0];
+        const ubCost = group?.Metrics?.["UnblendedCost"] as
+          | { Amount?: string; Unit?: string }
+          | undefined;
+        const amount = ubCost?.Amount;
+        const unit = ubCost?.Unit ?? "USD";
+        if (serviceName && amount !== undefined) {
+          const existing = serviceCosts.get(serviceName);
+          const newAmount = parseFloat(amount) + (existing?.amount ?? 0);
+          serviceCosts.set(serviceName, { amount: newAmount, unit });
         }
       }
+    }
+  }
+
+  // Distribute service costs across resources of the same service
+  // Group resources by their CE service name
+  const resourcesByService = new Map<string, ManagedResource[]>();
+  for (const r of resources) {
+    const slug = arnToServiceSlug(r.arn);
+    const ceName = slug ? ARN_SERVICE_TO_CE_SERVICE[slug] : undefined;
+    if (ceName) {
+      const list = resourcesByService.get(ceName) ?? [];
+      list.push(r);
+      resourcesByService.set(ceName, list);
+    }
+  }
+
+  for (const [serviceName, serviceResources] of resourcesByService) {
+    const cost = serviceCosts.get(serviceName);
+    if (!cost) continue;
+
+    // Split cost evenly among resources of this service type
+    const perResourceCost = cost.amount / serviceResources.length;
+    for (const r of serviceResources) {
+      results.push({
+        arn: r.arn,
+        actualMonthlyCost: `$${perResourceCost.toFixed(2)}/month`,
+        forecastedMonthlyCost: `$${perResourceCost.toFixed(2)}/month`,
+        currency: cost.unit,
+        lastUpdated: new Date().toISOString(),
+      });
     }
   }
 

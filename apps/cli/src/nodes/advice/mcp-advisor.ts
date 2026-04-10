@@ -92,8 +92,8 @@ async function fetchDocContext(
 }
 
 async function fetchSecurityContext(
-  resourceType: string,
-  desiredState: Record<string, unknown>,
+  _resourceType: string,
+  _desiredState: Record<string, unknown>,
   tools: StructuredTool[],
 ): Promise<string | undefined> {
   const tool = tools.find((t) => t.name === ToolName.CHECK_SECURITY_SERVICES);
@@ -101,15 +101,29 @@ async function fetchSecurityContext(
 
   const result = await withTimeout(
     tool.invoke({
-      resource_type: resourceType,
-      configuration: desiredState,
+      region: AWS_REGION,
+      services: ["securityhub"],
     }),
     MCP_ADVICE_TIMEOUT_MS,
   );
 
   if (!result) return undefined;
-  const text = typeof result === "string" ? result : JSON.stringify(result);
-  return text.length > 500 ? text.slice(0, 500) + "..." : text;
+
+  // v0.1.7 response: { region, services_checked, all_enabled, service_statuses }
+  // Extract a text summary for the LLM advice context.
+  try {
+    const raw = typeof result === "string" ? result : JSON.stringify(result);
+    const parsed = JSON.parse(raw) as {
+      all_enabled?: boolean;
+      service_statuses?: Record<string, { enabled: boolean; details?: string }>;
+    };
+    if (parsed.all_enabled === false) return undefined;
+    const text = raw.length > 500 ? raw.slice(0, 500) + "..." : raw;
+    return text;
+  } catch {
+    const text = typeof result === "string" ? result : JSON.stringify(result);
+    return text.length > 500 ? text.slice(0, 500) + "..." : text;
+  }
 }
 
 /**

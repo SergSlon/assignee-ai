@@ -19,6 +19,7 @@ import type {
   BPCategory,
 } from "@assignee/best-practices";
 import { ToolName } from "../../constants/tools.js";
+import { AWS_REGION } from "../../config/constants.js";
 import { withTimeout } from "../../utils/timeout.js";
 
 const MCP_BP_TIMEOUT_MS = 3_000;
@@ -71,17 +72,18 @@ export async function enrichBpWithMcp(
 }
 
 async function querySecurityPosture(
-  resourceType: string,
-  desiredState: Record<string, unknown>,
+  _resourceType: string,
+  _desiredState: Record<string, unknown>,
   tools: StructuredTool[],
 ): Promise<BPFinding[]> {
-  const tool = tools.find((t) => t.name === ToolName.CHECK_SECURITY_SERVICES);
+  const tool = tools.find((t) => t.name === ToolName.GET_SECURITY_FINDINGS);
   if (!tool) return [];
 
   const result = await withTimeout(
     tool.invoke({
-      resource_type: resourceType,
-      configuration: desiredState,
+      service: "securityhub",
+      region: AWS_REGION,
+      max_findings: 20,
     }),
     MCP_BP_TIMEOUT_MS,
   );
@@ -91,6 +93,7 @@ async function querySecurityPosture(
   try {
     const text = typeof result === "string" ? result : JSON.stringify(result);
     const parsed = JSON.parse(text) as {
+      enabled?: boolean;
       findings?: Array<{
         severity?: string;
         title?: string;
@@ -99,6 +102,8 @@ async function querySecurityPosture(
       }>;
     };
 
+    // v0.1.7: gracefully return empty when security service is disabled.
+    if (parsed.enabled === false) return [];
     if (!parsed.findings || !Array.isArray(parsed.findings)) return [];
 
     return parsed.findings.map(
