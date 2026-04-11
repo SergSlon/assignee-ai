@@ -23,8 +23,13 @@ vi.mock("@clack/prompts", () => ({
 }));
 
 const { select, text, multiselect, confirm } = await import("@clack/prompts");
-const { renderOptionPrompt, BACK_SENTINEL, HELP_SENTINEL } =
-  await import("./display-prompts.js");
+const {
+  renderOptionPrompt,
+  BACK_SENTINEL,
+  HELP_SENTINEL,
+  SKIP_SENTINEL,
+  ENTER_VALUE_SENTINEL,
+} = await import("./display-prompts.js");
 
 function setTTY(value: boolean): void {
   Object.defineProperty(process.stdin, "isTTY", { value, configurable: true });
@@ -33,8 +38,9 @@ function setTTY(value: boolean): void {
 
 const defaultResolved: ResolvedFieldConfig = {
   value: undefined,
-  source: "none",
-};
+  source: "plugin_default",
+  policy: "none",
+} as unknown as ResolvedFieldConfig;
 
 function textField(overrides: Partial<ResourceField> = {}): ResourceField {
   return {
@@ -86,6 +92,32 @@ function booleanField(): ResourceField {
   } as ResourceField;
 }
 
+function categorySelectField(): ResourceField {
+  return {
+    name: "InstanceType",
+    question: {
+      type: "categorySelect",
+      label: "Instance type",
+      initialValue: "t3.micro",
+      categories: [
+        {
+          key: "burstable",
+          label: "Burstable (t3/t4g)",
+          options: [
+            { value: "t3.micro", label: "t3.micro (2 vCPU, 1 GiB)" },
+            { value: "t3.small", label: "t3.small (2 vCPU, 2 GiB)" },
+          ],
+        },
+        {
+          key: "general",
+          label: "General Purpose (m5/m6i)",
+          options: [{ value: "m5.large", label: "m5.large (2 vCPU, 8 GiB)" }],
+        },
+      ],
+    },
+  } as unknown as ResourceField;
+}
+
 describe("renderOptionPrompt — back navigation visibility", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -130,7 +162,7 @@ describe("renderOptionPrompt — back navigation visibility", () => {
     });
 
     it("shows Skip option only for optional fields", async () => {
-      vi.mocked(select).mockResolvedValueOnce("__skip__" as never);
+      vi.mocked(select).mockResolvedValueOnce(SKIP_SENTINEL as never);
 
       const optional = textField({ required: false });
       const result = await renderOptionPrompt(optional, defaultResolved, true);
@@ -139,12 +171,12 @@ describe("renderOptionPrompt — back navigation visibility", () => {
       const call = vi.mocked(select).mock.calls[0]![0] as {
         options: Array<{ value: string }>;
       };
-      const skipOpt = call.options.find((o) => o.value === "__skip__");
+      const skipOpt = call.options.find((o) => o.value === SKIP_SENTINEL);
       expect(skipOpt).toBeDefined();
     });
 
     it("hides Skip option for required fields", async () => {
-      vi.mocked(select).mockResolvedValueOnce("enter" as never);
+      vi.mocked(select).mockResolvedValueOnce(ENTER_VALUE_SENTINEL as never);
       vi.mocked(text).mockResolvedValueOnce("required-value" as never);
 
       const required = textField({ required: true });
@@ -153,12 +185,12 @@ describe("renderOptionPrompt — back navigation visibility", () => {
       const call = vi.mocked(select).mock.calls[0]![0] as {
         options: Array<{ value: string }>;
       };
-      const skipOpt = call.options.find((o) => o.value === "__skip__");
+      const skipOpt = call.options.find((o) => o.value === SKIP_SENTINEL);
       expect(skipOpt).toBeUndefined();
     });
 
     it("selecting Enter value proceeds to text input", async () => {
-      vi.mocked(select).mockResolvedValueOnce("enter" as never);
+      vi.mocked(select).mockResolvedValueOnce(ENTER_VALUE_SENTINEL as never);
       vi.mocked(text).mockResolvedValueOnce("entered-value" as never);
 
       const result = await renderOptionPrompt(
@@ -173,7 +205,7 @@ describe("renderOptionPrompt — back navigation visibility", () => {
     });
 
     it("typing 'back' in text input still returns BACK_SENTINEL (backcompat)", async () => {
-      vi.mocked(select).mockResolvedValueOnce("enter" as never);
+      vi.mocked(select).mockResolvedValueOnce(ENTER_VALUE_SENTINEL as never);
       vi.mocked(text).mockResolvedValueOnce("back" as never);
 
       const result = await renderOptionPrompt(
@@ -276,13 +308,109 @@ describe("renderOptionPrompt — back navigation visibility", () => {
     });
   });
 
+  describe("multi fields (additional coverage)", () => {
+    it("omits ← Back option when showBack=false", async () => {
+      vi.mocked(multiselect).mockResolvedValueOnce(["sg-1"] as never);
+
+      await renderOptionPrompt(multiField(), defaultResolved, false);
+
+      const call = vi.mocked(multiselect).mock.calls[0]![0] as {
+        options: Array<{ value: string }>;
+      };
+      expect(call.options.some((o) => o.value === BACK_SENTINEL)).toBe(false);
+    });
+  });
+
+  describe("categorySelect fields (Story wizard-back-navigation-ux AC #1)", () => {
+    it("includes ← Back in Step 1 (category selection) when showBack=true", async () => {
+      // User selects Back from the category menu
+      vi.mocked(select).mockResolvedValueOnce(BACK_SENTINEL as never);
+
+      const result = await renderOptionPrompt(
+        categorySelectField(),
+        defaultResolved,
+        true,
+      );
+
+      expect(result).toBe(BACK_SENTINEL);
+      // First select call is the category step — verify Back option present
+      const call = vi.mocked(select).mock.calls[0]![0] as {
+        options: Array<{ value: string; label: string }>;
+      };
+      expect(call.options.some((o) => o.value === BACK_SENTINEL)).toBe(true);
+    });
+
+    it("omits ← Back in Step 1 when showBack=false (first field)", async () => {
+      vi.mocked(select)
+        .mockResolvedValueOnce("burstable" as never) // category
+        .mockResolvedValueOnce("t3.micro" as never); // size
+
+      await renderOptionPrompt(categorySelectField(), defaultResolved, false);
+
+      const categoryCall = vi.mocked(select).mock.calls[0]![0] as {
+        options: Array<{ value: string }>;
+      };
+      expect(categoryCall.options.some((o) => o.value === BACK_SENTINEL)).toBe(
+        false,
+      );
+    });
+
+    it("Back in Step 2 (size selection) loops back to Step 1 (category)", async () => {
+      vi.mocked(select)
+        .mockResolvedValueOnce("burstable" as never) // Step 1: category
+        .mockResolvedValueOnce(BACK_SENTINEL as never) // Step 2: Back → loop
+        .mockResolvedValueOnce("general" as never) // Step 1 again: different category
+        .mockResolvedValueOnce("m5.large" as never); // Step 2: final selection
+
+      const result = await renderOptionPrompt(
+        categorySelectField(),
+        defaultResolved,
+        true,
+      );
+
+      expect(result).toBe("m5.large");
+      // Expect 4 select calls (1 category, 2 size, 1 category re-show, 1 size)
+      // Actually: category1 → size1(back) → category2 → size2 = 4 calls
+      expect(vi.mocked(select)).toHaveBeenCalledTimes(4);
+    });
+
+    it("normal selection without Back returns the chosen value", async () => {
+      vi.mocked(select)
+        .mockResolvedValueOnce("general" as never) // category
+        .mockResolvedValueOnce("m5.large" as never); // size
+
+      const result = await renderOptionPrompt(
+        categorySelectField(),
+        defaultResolved,
+        true,
+      );
+
+      expect(result).toBe("m5.large");
+    });
+  });
+
+  describe("cancel handling (Ctrl+C)", () => {
+    it("throws UserCancelledError when action menu is cancelled", async () => {
+      const cancelSym = Symbol("cancel");
+      vi.mocked(select).mockResolvedValueOnce(cancelSym as never);
+      // Mock isCancel to return true for this symbol
+      const clack = await import("@clack/prompts");
+      vi.mocked(clack.isCancel).mockReturnValueOnce(true);
+
+      await expect(
+        renderOptionPrompt(textField(), defaultResolved, true),
+      ).rejects.toThrow();
+    });
+  });
+
   describe("non-TTY mode", () => {
     it("skips all prompts and returns resolved default", async () => {
       setTTY(false);
-      const resolved: ResolvedFieldConfig = {
+      const resolved = {
         value: "default",
-        source: "plugin",
-      };
+        source: "plugin_default",
+        policy: "none",
+      } as unknown as ResolvedFieldConfig;
 
       const result = await renderOptionPrompt(textField(), resolved, true);
 

@@ -198,35 +198,29 @@ function containsPlaceholder(obj: unknown): string | null {
  * before this change provide select mocks for real selects only, not for
  * action menus. This helper bridges that gap without rewriting every test.
  */
+/** Detect the text-field action menu by its __enter_value__ sentinel. */
+const ENTER_VALUE = "__enter_value__";
 function isActionMenu(opts: unknown): boolean {
   if (!opts || typeof opts !== "object") return false;
   const options = (opts as { options?: Array<{ value?: unknown }> }).options;
-  return Array.isArray(options) && options.some((o) => o?.value === "enter");
+  return (
+    Array.isArray(options) && options.some((o) => o?.value === ENTER_VALUE)
+  );
 }
 
 function installActionMenuAutoHandler(): void {
   const originalSelect = vi.mocked(select);
-  // Use mockImplementation as the fallback: if the call is an action menu,
-  // return "enter" immediately; otherwise, fall through to the queued
-  // mockResolvedValueOnce responses. Vitest consumes Once values first,
-  // so the queue is preserved for non-action-menu calls.
-  //
-  // We achieve this by saving the original queue behavior and wrapping.
   const queue: Array<unknown> = [];
-  const realOnce = originalSelect.mockResolvedValueOnce.bind(originalSelect);
   originalSelect.mockResolvedValueOnce = ((value: unknown) => {
     queue.push(value);
     return originalSelect;
   }) as typeof originalSelect.mockResolvedValueOnce;
 
   originalSelect.mockImplementation(async (opts: unknown) => {
-    if (isActionMenu(opts)) return "enter" as never;
+    if (isActionMenu(opts)) return ENTER_VALUE as never;
     if (queue.length > 0) return queue.shift() as never;
     return undefined as never;
   });
-
-  // Suppress unused warning
-  void realOnce;
 }
 
 beforeEach(() => {

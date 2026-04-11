@@ -300,7 +300,7 @@ describe("optionElicitorNode", () => {
   it("shows advanced tier when user confirms", async () => {
     vi.mocked(text).mockResolvedValueOnce("my-resource");
     vi.mocked(select).mockResolvedValueOnce(true); // Encrypt
-    vi.mocked(select).mockResolvedValueOnce("enter"); // KmsKey action menu
+    vi.mocked(select).mockResolvedValueOnce("__enter_value__"); // KmsKey action menu
     vi.mocked(text).mockResolvedValueOnce(""); // KmsKey value
     vi.mocked(select).mockResolvedValueOnce("sm");
     vi.mocked(confirm).mockResolvedValueOnce(true); // advanced confirm
@@ -331,7 +331,7 @@ describe("optionElicitorNode", () => {
     // Field 1 (ResourceName): showBack=false → direct text
     vi.mocked(text).mockResolvedValueOnce("my-resource");
     // Field 2 (Tags): showBack=true → 2-step select-then-text
-    vi.mocked(select).mockResolvedValueOnce("enter");
+    vi.mocked(select).mockResolvedValueOnce("__enter_value__");
     vi.mocked(text).mockResolvedValueOnce("env:prod");
 
     const result = await optionElicitorNode(
@@ -419,6 +419,72 @@ describe("optionElicitorNode — ? help flow (Story 7.5)", () => {
     // Prompt was re-presented after renderDocHelp returned — valid answer stored
     expect(result.elicitedOptions?.["Name"]).toBe("my-bucket");
     expect(text).toHaveBeenCalledTimes(2); // Called twice: once for '?', once for valid answer
+  });
+});
+
+describe("optionElicitorNode — back navigation integration (wizard-back-navigation-ux)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setTTY(true);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("user navigates back 2 steps from Size → Encrypt, then forward again to completion", async () => {
+    // Flow:
+    //   1. Name (text, showBack=false) → "my-resource"
+    //   2. Encrypt (boolean, showBack=true) → "true"
+    //   3. KmsKey (text, showBack=true, shown because Encrypt=true) → skip (select __skip__)
+    //   4. Size (enum, showBack=true) → BACK → returns to KmsKey
+    //   5. KmsKey again → BACK → returns to Encrypt
+    //   6. Encrypt again → "false" (KmsKey now hidden by showIf)
+    //   7. Size → "sm" (forward past KmsKey which is now hidden)
+    //   8. advanced confirm → no
+    //
+    // Key assertions:
+    //   - Final elicitedOptions.Name is still "my-resource" (preserved across backs)
+    //   - Encrypt changed from true → false
+    //   - KmsKey is not in elicitedOptions (cleared because showIf no longer met)
+    //   - Size is "sm"
+
+    vi.mocked(text).mockResolvedValueOnce("my-resource"); // Step 1: Name
+    vi.mocked(select)
+      .mockResolvedValueOnce("true") // Step 2: Encrypt=true
+      .mockResolvedValueOnce("__skip__") // Step 3: KmsKey action → skip
+      .mockResolvedValueOnce("__back__") // Step 4: Size → Back
+      .mockResolvedValueOnce("__back__") // Step 5: KmsKey action → Back
+      .mockResolvedValueOnce("false") // Step 6: Encrypt=false (KmsKey hidden)
+      .mockResolvedValueOnce("sm"); // Step 7: Size=sm
+    vi.mocked(confirm).mockResolvedValueOnce(false); // advanced=no
+
+    const result = await optionElicitorNode(makeState());
+
+    expect(result.elicitedOptions?.["Name"]).toBe("my-resource");
+    expect(result.elicitedOptions?.["Encrypt"]).toBe(false);
+    expect(result.elicitedOptions?.["KmsKey"]).toBeUndefined();
+    expect(result.elicitedOptions?.["Size"]).toBe("sm");
+  });
+
+  it("Back from first field does not crash (no history to pop)", async () => {
+    // The first field (Name, showBack=false) should not have Back as an option.
+    // Even if mocked to return BACK_SENTINEL somehow, option-elicitor should
+    // handle gracefully (stay on field 1 or advance, never throw).
+    //
+    // Since showBack=false for the first field, renderOptionPrompt won't
+    // offer the Back option. The text prompt is called directly with a value.
+    vi.mocked(text).mockResolvedValueOnce("my-resource"); // Step 1: Name
+    vi.mocked(select)
+      .mockResolvedValueOnce("false") // Encrypt=false
+      .mockResolvedValueOnce("sm"); // Size
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    const result = await optionElicitorNode(makeState());
+    expect(result.elicitedOptions?.["Name"]).toBe("my-resource");
   });
 });
 
