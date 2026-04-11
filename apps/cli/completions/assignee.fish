@@ -106,3 +106,4 @@ complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l auto-reconcil
 complete -c assignee -n "__fish_seen_subcommand_from doctor" -l json -d 'Emit the report as JSON instead of formatted text'
 complete -c assignee -n "__fish_seen_subcommand_from doctor" -l skip-bedrock -d 'Skip the Bedrock LLM invoke check'
 complete -c assignee -n "__fish_seen_subcommand_from doctor" -l skip-mcp -d 'Skip the MCP server launch probe'
+complete -c assignee -n "__fish_seen_subcommand_from doctor" -l skip-mcp-version-check -d 'Skip the PyPI version drift check (offline / fast path)'

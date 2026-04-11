@@ -57,7 +57,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "" -- "${cur}") )
       ;;
     doctor)
-      COMPREPLY=( $(compgen -W "--json --skip-bedrock --skip-mcp" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--json --skip-bedrock --skip-mcp --skip-mcp-version-check" -- "${cur}") )
       ;;
     whoami)
       COMPREPLY=( $(compgen -W "" -- "${cur}") )
