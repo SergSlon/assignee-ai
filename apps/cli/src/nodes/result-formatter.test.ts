@@ -220,7 +220,10 @@ describe("resultFormatterNode — single-resource SUCCESS", () => {
   // into child VpcId/SubnetId/InternetGatewayId fields where AWS
   // requires the BARE identifier — the mutation broke every VPC
   // compound apply at step 2/17. This regression test pins the
-  // invariant: result-formatter must NEVER mutate state.resourceArn.
+  // invariant: result-formatter must NEVER mutate state.resourceArn
+  // in-place (the mutation path), AND must not leak a resolved ARN
+  // back into state.resourceArn via the partial-update return when
+  // in compound mode.
   it("does NOT mutate state.resourceArn when resolving the display ARN", async () => {
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
@@ -229,7 +232,7 @@ describe("resultFormatterNode — single-resource SUCCESS", () => {
       resourceArn: "my-smoke-bucket-1775000000",
     });
     const before = state.resourceArn;
-    await resultFormatterNode(state);
+    const result = await resultFormatterNode(state);
 
     // Even though resolveResourceArn would synthesize
     // "arn:aws:s3:::my-smoke-bucket-1775000000" (or fall back to the
@@ -239,6 +242,71 @@ describe("resultFormatterNode — single-resource SUCCESS", () => {
     expect(state.resourceArn).toBe(before);
     expect(state.resourceArn).toBe("my-smoke-bucket-1775000000");
     expect(state.resourceArn).not.toMatch(/^arn:/);
+
+    // 2026-04-11 strengthened invariant: in unit-test environment STS is
+    // unavailable, so resolveResourceArn returns undefined, displayArn
+    // falls back to state.resourceArn, and the surgical propagation
+    // branch (displayArn !== state.resourceArn) must NOT fire. The partial
+    // update must therefore NOT contain resourceArn — otherwise the
+    // LangGraph reducer would merge a stray bare identifier back over
+    // itself, and the `resolution-changed` guard that protects compound
+    // flow would be meaningless in unit tests.
+    expect((result as { resourceArn?: unknown }).resourceArn).toBeUndefined();
+  });
+
+  // Compound-flow guard: if a future refactor moves the partial-update
+  // return above the compound early-return, the compound marker resolver
+  // would re-read a full ARN from state.resourceArn on the next iteration,
+  // re-breaking the Wave 8 P0 bug. This test pins "compound flow never
+  // returns { resourceArn: <full ARN> } from the SUCCESS branch" so any
+  // reordering surfaces as a test failure.
+  it("compound SUCCESS path does not return a full ARN in the partial update", async () => {
+    const state = makeState({
+      executionStatus: ExecutionStatus.SUCCESS,
+      resourceType: "AWS::S3::Bucket",
+      resourceArn: "compound-bucket-1775000000",
+      resourcePattern: {
+        patternId: "vpc-networking",
+        displayName: "VPC",
+        keywords: [],
+        resourceList: [
+          {
+            resourceType: "AWS::S3::Bucket",
+            resourceId: "bucket",
+            displayName: "S3 Bucket",
+          },
+          {
+            resourceType: "AWS::EC2::VPC",
+            resourceId: "vpc",
+            displayName: "VPC",
+          },
+        ],
+        dependencyOrder: [["bucket"], ["vpc"]],
+        defaultOptions: {},
+      },
+      resourceQueue: [
+        {
+          resourceType: "AWS::S3::Bucket",
+          resourceId: "bucket",
+          displayName: "S3 Bucket",
+        },
+        {
+          resourceType: "AWS::EC2::VPC",
+          resourceId: "vpc",
+          displayName: "VPC",
+        },
+      ],
+      currentResourceIndex: 0,
+    });
+    const result = (await resultFormatterNode(state)) as {
+      resourceArn?: unknown;
+    };
+
+    // The compound-more-resources branch returns resourceArn: undefined to
+    // reset for the next iteration. It must NEVER return a resolved full
+    // ARN — the next iteration's compound marker resolver would substitute
+    // that ARN into VpcId / SubnetId / IgwId fields and break apply.
+    expect(result.resourceArn).toBeUndefined();
   });
 });
 

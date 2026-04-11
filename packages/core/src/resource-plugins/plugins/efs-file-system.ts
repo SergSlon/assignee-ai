@@ -2,13 +2,11 @@ import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import { ArnPrefix, KMS_ALIAS_PREFIX } from "../../config/aws-arns.js";
 import type { ResourcePlugin } from "../types.js";
-import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
-import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::EFS::FileSystem.
  *
- * commonFields: Name (tag), PerformanceMode, ThroughputMode, Encrypted, Tags.
+ * commonFields: Name (via FileSystemTags), PerformanceMode, ThroughputMode, Encrypted.
  * advancedFields: ProvisionedThroughputInMibps (conditional), KmsKeyId,
  *   BackupPolicy.Status, AvailabilityZoneName (One Zone mode).
  *
@@ -32,7 +30,18 @@ export const efsFileSystemPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.EFS_FILE_SYSTEM,
   commonFields: [
     {
-      name: CfnKey.NAME,
+      // 2026-04-11: field name is deliberately CfnKey.FILE_SYSTEM_TAGS, NOT
+      // CfnKey.NAME. plan-generator writes `transformed[field.name] =
+      // field.toCfn(answer)` — i.e. the field name IS the output property
+      // key. EFS has no top-level Name property (AWS::EFS::FileSystem uses
+      // FileSystemTags for identification); a previous implementation stored
+      // the toCfn output at `Name` key, which CCAPI rejected as
+      // `extraneous key [Name] is not permitted`. By giving the field a name
+      // of FILE_SYSTEM_TAGS, the output lands directly at the correct
+      // property. injectMandatoryTags (apps/cli/src/utils/tags.ts) then
+      // merges the mandatory assignee-run-id / managed-by / environment tags
+      // into the same FileSystemTags array via ALTERNATE_TAG_KEY_TYPES.
+      name: CfnKey.FILE_SYSTEM_TAGS,
       required: true,
       question: {
         type: "string",
@@ -49,8 +58,9 @@ export const efsFileSystemPlugin: ResourcePlugin = {
           return undefined;
         },
       },
-      // toCfn: promote the Name into FileSystemTags (EFS has no FileSystemName
-      // property — naming is done via the Name tag).
+      // toCfn: promote the user-entered string into a single-element
+      // FileSystemTags array with a "Name" key. injectMandatoryTags will
+      // merge additional mandatory tags into this array at apply time.
       toCfn: (answer: unknown) => {
         if (typeof answer !== "string" || !answer.trim()) return undefined;
         return [{ Key: "Name", Value: answer.trim() }];
@@ -119,27 +129,19 @@ export const efsFileSystemPlugin: ResourcePlugin = {
         hint: "AWS strongly recommends encryption at rest. Uses the default AWS-managed key (aws/elasticfilesystem) unless a customer-managed KMS key is provided in advanced options. Cannot be changed after creation.",
       },
     },
-    {
-      name: CfnKey.TAGS,
-      question: {
-        type: "string",
-        label: FieldLabel.TAGS,
-        placeholder: "env:production, team:backend",
-        hint: TAGS_HINT,
-        validate: TAGS_VALIDATE,
-      },
-      toCfn: (answer: unknown) => {
-        if (typeof answer !== "string" || !answer.trim()) return undefined;
-        const tags = answer
-          .split(",")
-          .filter((p) => p.includes(":"))
-          .map((pair) => {
-            const [Key, ...rest] = pair.trim().split(":");
-            return { Key: Key!.trim(), Value: rest.join(":").trim() };
-          });
-        return tags.length > 0 ? tags : undefined;
-      },
-    },
+    // 2026-04-11: the EFS plugin previously had a separate `CfnKey.TAGS`
+    // common field that wrote to `desiredState.Tags`. sanitizeDesiredState
+    // strips that key before resource-provisioner runs because the EFS
+    // CCAPI schema has no top-level `Tags` property (FileSystemTags is the
+    // correct key) — meaning any tags the user typed were silently
+    // dropped. Deleting the redundant field eliminates the data-loss
+    // surface. Users can still name the file system via the required
+    // FILE_SYSTEM_TAGS field above, and the mandatory traceability tags
+    // (managed-by, assignee-run-id, environment) are merged in by
+    // injectMandatoryTags via the ALTERNATE_TAG_KEY_TYPES map in tags.ts.
+    // A richer multi-tag wizard experience is deferred until the plugin
+    // framework supports multiple fields writing to a single merged
+    // output key.
   ],
   advancedFields: [
     {
@@ -230,6 +232,17 @@ export const efsFileSystemPlugin: ResourcePlugin = {
     [CfnKey.BACKUP_POLICY]: {
       [CfnKey.BACKUP_POLICY_STATUS]: AwsDefault.EFS_BACKUP_ENABLED,
     },
+    // 2026-04-11: required-field default for compound mode. The
+    // FILE_SYSTEM_TAGS field is marked `required: true` so the user sees
+    // a wizard prompt in standalone mode, but compound mode skips the
+    // wizard and relies on plugin.defaults to satisfy required fields
+    // (plan-generator.ts:902-915). Without this entry, the efs-with-vpc
+    // compound applies without a Name tag. Storing the raw string answer
+    // here rather than the tag-array output lets the field's toCfn
+    // transform it into `[{Key:"Name", Value:"assignee-efs"}]` via the
+    // same path the wizard uses — keeping the default shape consistent
+    // with the required-field injection code path.
+    [CfnKey.FILE_SYSTEM_TAGS]: "assignee-efs",
   },
   configHints: [
     "EFS has NO FileSystemName property — to name a file system, add a Name key to the FileSystemTags array, not a top-level property.",

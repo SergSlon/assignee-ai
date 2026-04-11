@@ -791,7 +791,26 @@ export function createPlanGeneratorNode({
       // In PLAN mode, skip full resolution — resources aren't provisioned yet
       // so Ref markers have no targets, and AZ lookups may lack credentials.
       // Instead, replace markers with human-readable placeholders for display.
-      if (state.executionMode === ExecutionMode.PLAN) {
+      //
+      // 2026-04-11 fix for serverless-api nightly failure: non-provisionable
+      // companion resources (provisionable: false) never go through CCAPI at
+      // all — resource-provisioner short-circuits them to SUCCESS with
+      // undefined resourceArn (see resource-provisioner.ts + test at
+      // resource-provisioner.test.ts:790). Their desiredState is plan-only
+      // (for display/cost/documentation), so marker resolution must use
+      // placeholders. Without this branch, serverless-api's LAMBDA_INTEGRATION
+      // resource (provisionable:false, defaultOptions references
+      // markerRef(HTTP_API)) threw "Compound marker resolution failed at
+      // 'ApiId': dependency 'http-api' completed without a physical
+      // identifier — this is a CloudControl adapter bug" because HTTP_API
+      // itself is also provisionable:false and never populates
+      // completedResources[].resourceArn.
+      const isNonProvisionableCompanion =
+        currentResource.provisionable === false;
+      if (
+        state.executionMode === ExecutionMode.PLAN ||
+        isNonProvisionableCompanion
+      ) {
         resolvePlaceholderMarkers(desiredState, AWS_REGION);
       } else {
         try {

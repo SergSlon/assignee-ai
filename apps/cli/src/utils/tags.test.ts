@@ -97,4 +97,110 @@ describe("injectMandatoryTags", () => {
     expect(result["BucketName"]).toBe("keep-me");
     expect(result["AccessControl"]).toBe("Private");
   });
+
+  // ── ALTERNATE_TAG_KEY_TYPES — EFS FileSystemTags (2026-04-11 fix) ──
+  //
+  // EFS::FileSystem rejects `Tags` with `extraneous key [Tags] is not
+  // permitted` because its CCAPI schema uses FileSystemTags. These tests
+  // pin the alternate-key path that injectMandatoryTags takes for EFS.
+  describe("AWS::EFS::FileSystem — alternate FileSystemTags key", () => {
+    it("writes mandatory tags to FileSystemTags, not Tags", () => {
+      const result = injectMandatoryTags(
+        {
+          Encrypted: true,
+          ThroughputMode: "elastic",
+        },
+        runId,
+        "AWS::EFS::FileSystem",
+      );
+      // FileSystemTags must be an array containing all 3 mandatory tags.
+      const fsTags = result["FileSystemTags"] as CfnTag[];
+      expect(Array.isArray(fsTags)).toBe(true);
+      expect(findTag(fsTags, "managed-by")?.Value).toBe("assignee-ai");
+      expect(findTag(fsTags, "assignee-run-id")?.Value).toBe(runId);
+      expect(findTag(fsTags, "environment")?.Value).toBe("poc");
+      // Top-level "Tags" must be completely absent — its presence would
+      // trigger the CCAPI `extraneous key [Tags]` rejection that caused
+      // the efs-with-vpc nightly failure.
+      expect(result["Tags"]).toBeUndefined();
+      expect("Tags" in result).toBe(false);
+    });
+
+    it("migrates a stray Tags array into FileSystemTags then deletes Tags", () => {
+      const result = injectMandatoryTags(
+        {
+          Encrypted: true,
+          Tags: [{ Key: "team", Value: "platform" }],
+        },
+        runId,
+        "AWS::EFS::FileSystem",
+      );
+      const fsTags = result["FileSystemTags"] as CfnTag[];
+      // User's "team" tag must be preserved via migration from Tags.
+      expect(findTag(fsTags, "team")?.Value).toBe("platform");
+      // Mandatory tags present alongside user tag.
+      expect(findTag(fsTags, "managed-by")?.Value).toBe("assignee-ai");
+      // Stray Tags key is stripped.
+      expect(result["Tags"]).toBeUndefined();
+    });
+
+    it("merges existing FileSystemTags with mandatory — keeps user-entered Name tag", () => {
+      const result = injectMandatoryTags(
+        {
+          Encrypted: true,
+          // The EFS plugin's Name field writes directly to FileSystemTags
+          // via `name: CfnKey.FILE_SYSTEM_TAGS`. This pre-existing tag
+          // array must not be clobbered by the tag injection.
+          FileSystemTags: [{ Key: "Name", Value: "shared-efs" }],
+        },
+        runId,
+        "AWS::EFS::FileSystem",
+      );
+      const fsTags = result["FileSystemTags"] as CfnTag[];
+      expect(findTag(fsTags, "Name")?.Value).toBe("shared-efs");
+      expect(findTag(fsTags, "managed-by")?.Value).toBe("assignee-ai");
+      expect(findTag(fsTags, "assignee-run-id")?.Value).toBe(runId);
+    });
+
+    it("merges both existing FileSystemTags AND stray Tags into a single deduped array", () => {
+      const result = injectMandatoryTags(
+        {
+          Encrypted: true,
+          FileSystemTags: [{ Key: "Name", Value: "hybrid-efs" }],
+          Tags: [{ Key: "env", Value: "prod" }],
+        },
+        runId,
+        "AWS::EFS::FileSystem",
+      );
+      const fsTags = result["FileSystemTags"] as CfnTag[];
+      // Both inputs landed in FileSystemTags.
+      expect(findTag(fsTags, "Name")?.Value).toBe("hybrid-efs");
+      expect(findTag(fsTags, "env")?.Value).toBe("prod");
+      // Mandatory tags also merged.
+      expect(findTag(fsTags, "managed-by")?.Value).toBe("assignee-ai");
+      // No duplicate entries for any key.
+      const keys = fsTags.map((t) => t.Key);
+      expect(new Set(keys).size).toBe(keys.length);
+      // Stray Tags key stripped.
+      expect(result["Tags"]).toBeUndefined();
+    });
+
+    it("mandatory tags overwrite user-supplied mandatory-key duplicates", () => {
+      const result = injectMandatoryTags(
+        {
+          FileSystemTags: [
+            { Key: "managed-by", Value: "someone-else" },
+            { Key: "environment", Value: "staging" },
+          ],
+        },
+        runId,
+        "AWS::EFS::FileSystem",
+      );
+      const fsTags = result["FileSystemTags"] as CfnTag[];
+      // Mandatory precedence — user's attempt to set managed-by is
+      // overridden by the runtime's assignee-ai value.
+      expect(findTag(fsTags, "managed-by")?.Value).toBe("assignee-ai");
+      expect(findTag(fsTags, "environment")?.Value).toBe("poc");
+    });
+  });
 });
