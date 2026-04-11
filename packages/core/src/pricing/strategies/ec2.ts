@@ -17,7 +17,7 @@ import { PriceUnit } from "../price-units.js";
 
 export const ec2PricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: CostEstimateLabel.NA };
+    return { perMonth: null, label: CostEstimateLabel.NA, source: "fallback" };
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
     const instanceType =

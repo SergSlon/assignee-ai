@@ -74,7 +74,7 @@ import type { FreeTierNote } from "./free-tier.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { AppliedFix } from "../services/graph-state.js";
 import { CfnKey, AwsDefault, RESOURCE_TYPES } from "@assignee/core";
-import type { PricingBreakdown } from "@assignee/core";
+import type { PricingBreakdown, DataSource } from "@assignee/core";
 
 /**
  * Minimal compound-pattern shape for plan-box rendering. Mirrors the
@@ -95,6 +95,13 @@ export interface RenderableState {
   resourceType: string;
   desiredState?: Record<string, unknown>;
   estimatedMonthlyCost?: string;
+  /**
+   * Story 46.2: provenance tag for `estimatedMonthlyCost`. When present,
+   * `formatCostLine` appends a "(live)" / "(cached)" / "(estimated)" /
+   * "(from log)" suffix so the user can tell where the dollar amount came
+   * from. Free-tier resources tag `"free"` and get no suffix.
+   */
+  estimatedMonthlyCostSource?: DataSource;
   runId: string;
   resourceArn?: string;
   executionMode?: string;

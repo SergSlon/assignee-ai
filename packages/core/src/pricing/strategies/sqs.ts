@@ -22,6 +22,7 @@ export const sqsPricingStrategy: PricingStrategy = {
     return {
       perMonth: null,
       label: `Per-request pricing (${queueKind})`,
+      source: "fallback",
     };
   },
   mcpConfig(): McpPricingConfig {

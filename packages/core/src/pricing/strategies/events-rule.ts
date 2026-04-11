@@ -31,13 +31,18 @@ export const eventsRulePricingStrategy: PricingStrategy = {
     // default-bus charge. The user's spend comes entirely from the
     // downstream target workload.
     if (!bus || bus === "default") {
-      return { perMonth: 0, label: CostEstimateLabel.FREE, isFree: true };
+      return {
+        perMonth: 0,
+        label: CostEstimateLabel.FREE,
+        isFree: true,
+        source: "free",
+      };
     }
 
     // Custom event bus — billing depends on publish volume.
     // We intentionally do NOT call Pricing MCP here because the per-
     // month cost is a function of runtime publish rate, which is not
     // knowable at plan time.
-    return { perMonth: null, label: CostEstimateLabel.NA };
+    return { perMonth: null, label: CostEstimateLabel.NA, source: "fallback" };
   },
 };

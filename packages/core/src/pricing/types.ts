@@ -54,13 +54,71 @@ export interface McpPricingConfig {
 }
 
 /**
+ * Provenance tag for any user-facing dollar amount, security finding, or
+ * pricing hint. Lets the display layer tell the user where a number came
+ * from instead of presenting "$32.85/mo" identically whether it was just
+ * fetched from AWS or hand-coded as an estimate.
+ *
+ * - `mcp`      → fetched live from a Model Context Protocol server (AWS
+ *                Pricing, Cost Explorer, Well-Architected Security, etc.)
+ *                during this command invocation. Authoritative.
+ * - `cached`   → fetched live during an earlier command and replayed from
+ *                a session/disk cache. Recent but not "right now".
+ * - `fallback` → produced by a local heuristic / hand-coded constant /
+ *                `estimateLocal()`. No live AWS data involved. May be stale.
+ * - `offline`  → replayed from a persisted log entry (e.g. previous
+ *                `assignee plan` output) when the live MCP path was
+ *                unreachable. Historic.
+ * - `free`     → the resource is authoritatively free of charge (IAM role,
+ *                EC2 internet gateway, ECS cluster control plane, etc.).
+ *                Distinct from `fallback` because we KNOW the cost is zero.
+ *
+ * @see Story 46.2 — DataSource tagging for all user-facing values
+ */
+export type DataSource = "mcp" | "cached" | "fallback" | "offline" | "free";
+
+/** Display suffix shown after a label for each non-free source. */
+const SOURCE_SUFFIX: Record<DataSource, string> = {
+  mcp: " (live)",
+  cached: " (cached)",
+  fallback: " (estimated)",
+  offline: " (from log)",
+  free: "",
+};
+
+/**
+ * Append the source-specific suffix to a label.
+ *
+ * @example
+ *   formatLabelWithSource("~$32.85/mo", "mcp")      // "~$32.85/mo (live)"
+ *   formatLabelWithSource("Free",       "free")     // "Free"
+ *   formatLabelWithSource("~$0.5/mo",   "fallback") // "~$0.5/mo (estimated)"
+ */
+export function formatLabelWithSource(
+  label: string,
+  source: DataSource,
+): string {
+  return `${label}${SOURCE_SUFFIX[source]}`;
+}
+
+/**
  * Structured cost estimate returned by a PricingStrategy.
  * `label` is the human-readable display string used directly in the plan box.
+ *
+ * Story 46.2: every estimate MUST carry a `source` so the display layer
+ * can tell the user whether the dollar amount is live MCP data, a local
+ * fallback heuristic, or an authoritatively-free resource.
  */
 export interface PricingEstimate {
   perMonth: number | null;
   label: string;
   isFree?: boolean;
+  /**
+   * Where this estimate came from. Required so the TypeScript compiler
+   * forces every strategy / fetch path to declare its provenance.
+   * @see DataSource
+   */
+  source: DataSource;
 }
 
 /**

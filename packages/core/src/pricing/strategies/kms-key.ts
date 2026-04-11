@@ -35,7 +35,7 @@ export const kmsKeyPricingStrategy: PricingStrategy = {
     // Pricing MCP like every other type so a future rate change
     // propagates automatically. estimateLocal returns N/A; the
     // decomposer + advisor do the real work.
-    return { perMonth: null, label: CostEstimateLabel.NA };
+    return { perMonth: null, label: CostEstimateLabel.NA, source: "fallback" };
   },
   mcpConfig(): McpPricingConfig {
     return {

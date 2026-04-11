@@ -43,9 +43,21 @@ export async function checkSecurityPosture(
       const rawFindings = Array.isArray(posture.findings)
         ? posture.findings
         : [];
-      const criticalHighFindings = (rawFindings as SecurityFinding[]).filter(
-        (f) => f.severity === Severity.CRITICAL || f.severity === Severity.HIGH,
-      );
+      // Story 46.2: tag every WA Security MCP response "mcp" so the
+      // display layer can render the provenance suffix. The current MCP
+      // server payload doesn't carry a `source` field of its own, so we
+      // add one at this boundary — but defer to a server-supplied
+      // `source` if a future MCP version starts emitting richer
+      // provenance (per Edge F8 / Blind 5: don't blindly clobber).
+      const criticalHighFindings = (rawFindings as SecurityFinding[])
+        .filter(
+          (f) =>
+            f.severity === Severity.CRITICAL || f.severity === Severity.HIGH,
+        )
+        .map(
+          (f) =>
+            ({ ...f, source: f.source ?? "mcp" }) satisfies SecurityFinding,
+        );
       if (criticalHighFindings.length > 0) {
         renderSecurityWarnings(resourceArn, criticalHighFindings);
       }

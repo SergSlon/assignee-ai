@@ -15,7 +15,12 @@ import {
   BoxenBorderColor,
 } from "../config/constants.js";
 import type { AppliedFix } from "../services/graph-state.js";
-import { CostEstimateLabel, type PricingBreakdown } from "@assignee/core";
+import {
+  CostEstimateLabel,
+  formatLabelWithSource,
+  type PricingBreakdown,
+  type DataSource,
+} from "@assignee/core";
 import { countAutoFixable } from "./fix-command-resolver.js";
 import { formatDesiredState } from "./display.js";
 import type { RenderableState } from "./display.js";
@@ -42,15 +47,32 @@ export function regionLabel(): string {
 
 /**
  * Formats the estimated cost display. When a pricing breakdown is available
- * (from decomposer), it is rendered separately. This function just returns
- * the base estimate label from Pricing MCP (no hardcoded rates).
+ * (from decomposer), it is rendered separately. This function returns
+ * the base estimate label from Pricing MCP (no hardcoded rates), with a
+ * source-provenance suffix appended when known (Story 46.2).
+ *
+ * Examples:
+ *   - `formatCostLine("~$32.85/mo", "mcp")`      → `"~$32.85/mo (live)"`
+ *   - `formatCostLine("~$32/mo",    "fallback")` → `"~$32/mo (estimated)"`
+ *   - `formatCostLine("Free",       "free")`     → `"Free"` (no suffix)
+ *   - `formatCostLine(undefined, "mcp")`          → `"N/A"` (no suffix —
+ *      "(live)" on a missing value is contradictory; flagged by the
+ *      adversarial review F7)
+ *   - `formatCostLine(undefined)`                  → `"N/A"`
  *
  * @see Story 23.5 — zero hardcoded dollar amounts
+ * @see Story 46.2 — source attribution
  */
 export function formatCostLine(
   estimatedMonthlyCost: string | undefined,
+  source?: DataSource,
 ): string {
-  return estimatedMonthlyCost ?? CostEstimateLabel.NA;
+  // Missing cost → "N/A" with no suffix. The provenance only applies to
+  // a real dollar amount; "(live)" tagged onto "N/A" misleads users into
+  // thinking the system fetched something authoritative.
+  if (estimatedMonthlyCost === undefined) return CostEstimateLabel.NA;
+  if (source === undefined) return estimatedMonthlyCost;
+  return formatLabelWithSource(estimatedMonthlyCost, source);
 }
 
 export function renderPlanBox(state: RenderableState): void {
@@ -76,7 +98,11 @@ export function renderPlanBox(state: RenderableState): void {
     : "(none)";
 
   // Story 23.5: Cost from Pricing MCP (no hardcoded rates)
-  const costLine = formatCostLine(state.estimatedMonthlyCost);
+  // Story 46.2: source-provenance suffix appended when present
+  const costLine = formatCostLine(
+    state.estimatedMonthlyCost,
+    state.estimatedMonthlyCostSource,
+  );
 
   // Story 23.6: Pricing breakdown from decomposers (if available)
   const breakdownLines = state.pricingBreakdown

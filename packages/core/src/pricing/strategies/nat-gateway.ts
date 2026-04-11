@@ -22,7 +22,11 @@ import { PriceUnit } from "../price-units.js";
  */
 export const natGatewayPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: "Hourly + per-GB data processing" };
+    return {
+      perMonth: null,
+      label: "Hourly + per-GB data processing",
+      source: "fallback",
+    };
   },
   mcpConfig(): McpPricingConfig {
     return {

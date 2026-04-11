@@ -8,6 +8,7 @@ describe("ecrPricingStrategy", () => {
       expect(result).toEqual({
         perMonth: null,
         label: "Per-GB monthly storage",
+        source: "fallback",
       });
     });
   });

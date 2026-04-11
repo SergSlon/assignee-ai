@@ -18,7 +18,11 @@ import { PriceUnit } from "../price-units.js";
  */
 export const efsPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: "Per-GB monthly storage" };
+    return {
+      perMonth: null,
+      label: "Per-GB monthly storage",
+      source: "fallback",
+    };
   },
   mcpConfig(): McpPricingConfig {
     return {

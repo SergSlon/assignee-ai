@@ -13,6 +13,6 @@ import { CostEstimateLabel } from "../filter-constants.js";
  */
 export const s3BucketPolicyPricingStrategy: PricingStrategy = {
   estimateLocal(_desiredState?: Record<string, unknown>): PricingEstimate {
-    return { perMonth: null, label: CostEstimateLabel.NA };
+    return { perMonth: null, label: CostEstimateLabel.NA, source: "fallback" };
   },
 };

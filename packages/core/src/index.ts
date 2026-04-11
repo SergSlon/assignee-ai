@@ -233,10 +233,12 @@ export {
   PricingStrategyRegistry,
   PricingDecomposerRegistry,
   extractFirstTierPrice,
+  formatLabelWithSource,
 } from "./pricing/index.js";
 export type {
   PricingStrategy,
   PricingEstimate,
+  DataSource,
   McpPricingConfig,
   McpPricingFilter,
   AwsPricingResponse,

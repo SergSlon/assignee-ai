@@ -5,7 +5,12 @@ describe("ecsClusterPricingStrategy", () => {
   describe("estimateLocal", () => {
     it("returns free estimate", () => {
       const result = ecsClusterPricingStrategy.estimateLocal();
-      expect(result).toEqual({ perMonth: 0, label: "Free", isFree: true });
+      expect(result).toEqual({
+        perMonth: 0,
+        label: "Free",
+        isFree: true,
+        source: "free",
+      });
     });
   });
 

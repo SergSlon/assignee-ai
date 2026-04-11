@@ -17,6 +17,7 @@ describe("ssmPricingStrategy", () => {
         perMonth: 0,
         label: CostEstimateLabel.FREE,
         isFree: true,
+        source: "free",
       });
     });
 
@@ -32,6 +33,7 @@ describe("ssmPricingStrategy", () => {
         perMonth: 0,
         label: CostEstimateLabel.FREE,
         isFree: true,
+        source: "free",
       });
     });
 
@@ -54,6 +56,7 @@ describe("ssmPricingStrategy", () => {
       expect(result).toEqual({
         perMonth: null,
         label: CostEstimateLabel.NA,
+        source: "fallback",
       });
     });
 
@@ -71,6 +74,7 @@ describe("ssmPricingStrategy", () => {
         perMonth: 0,
         label: CostEstimateLabel.FREE,
         isFree: true,
+        source: "free",
       });
     });
   });

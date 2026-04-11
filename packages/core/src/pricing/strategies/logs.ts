@@ -20,7 +20,7 @@ import {
  */
 export const logsPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: CostEstimateLabel.NA };
+    return { perMonth: null, label: CostEstimateLabel.NA, source: "fallback" };
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
     const logGroupClass =

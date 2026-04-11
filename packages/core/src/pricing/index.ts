@@ -303,9 +303,11 @@ defaultDecomposerRegistry.register(s3BucketPolicyPricingDecomposer);
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";
 export { extractFirstTierPrice } from "./mcp-parser.js";
+export { formatLabelWithSource } from "./types.js";
 export type {
   PricingStrategy,
   PricingEstimate,
+  DataSource,
   McpPricingConfig,
   McpPricingFilter,
   AwsPricingResponse,

@@ -23,7 +23,11 @@ export const lambdaPricingStrategy: PricingStrategy = {
       typeof desiredState?.[CfnKey.MEMORY_SIZE] === "number"
         ? (desiredState[CfnKey.MEMORY_SIZE] as number)
         : DEFAULT_MEMORY_MB;
-    return { perMonth: null, label: computeLambdaLabel(memoryMb) };
+    return {
+      perMonth: null,
+      label: computeLambdaLabel(memoryMb),
+      source: "fallback",
+    };
   },
   // No mcpConfig — Lambda pricing is computed locally from MemorySize
 };

@@ -3,7 +3,12 @@ import { CostEstimateLabel } from "../filter-constants.js";
 
 export const securityGroupPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: 0, label: CostEstimateLabel.FREE, isFree: true };
+    return {
+      perMonth: 0,
+      label: CostEstimateLabel.FREE,
+      isFree: true,
+      source: "free",
+    };
   },
   // No mcpConfig — security groups are always free, no MCP query needed
 };

@@ -5,7 +5,11 @@ describe("ec2PricingStrategy", () => {
   describe("estimateLocal", () => {
     it("returns null perMonth and N/A label", () => {
       const result = ec2PricingStrategy.estimateLocal();
-      expect(result).toEqual({ perMonth: null, label: "N/A" });
+      expect(result).toEqual({
+        perMonth: null,
+        label: "N/A",
+        source: "fallback",
+      });
     });
   });
 

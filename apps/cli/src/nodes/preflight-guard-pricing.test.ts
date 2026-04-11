@@ -745,3 +745,82 @@ describe("Price cache — filter-based key differentiation", () => {
     expect(putKey).not.toBe(getKey);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Story 46.2 — DataSource attribution flowing through preflightGuardNode
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("preflightGuardNode — DataSource attribution (Story 46.2)", () => {
+  it('tags state.estimatedMonthlyCostSource = "mcp" when the live Pricing tool resolves a price', async () => {
+    // Use the same filter-dispatched tool as the canonical S3 test above —
+    // it returns real captured Pricing API responses, so the extracted
+    // price is non-null and the source MUST be "mcp".
+    const pricingTool = createFilterDispatchedPricingTool();
+
+    const result = await preflightGuardNode(
+      makeState({ resourceType: "AWS::S3::Bucket" }),
+      [pricingTool],
+    );
+
+    // estimatedMonthlyCost is the headline string; estimatedMonthlyCostSource
+    // tells the display layer whether to render "(live)" or "(estimated)".
+    expect(result.estimatedMonthlyCost).toBeDefined();
+    expect(result.estimatedMonthlyCostSource).toBe("mcp");
+    // Blind Hunter wave-2 finding #11: assert the label is a real dollar
+    // amount, not "N/A". A regression that flips the extractFirstTierPrice
+    // null branch to return "mcp" would fool the previous source-only
+    // assertion, but the dollar-amount check catches it.
+    expect(result.estimatedMonthlyCost).toMatch(/^\$\d/);
+  });
+
+  it('tags estimatedMonthlyCostSource = "fallback" when the Pricing tool is missing entirely', async () => {
+    // No tool array → preflight has no way to call the Pricing MCP, so
+    // it must fall back to localEstimate which carries source "fallback"
+    // for the S3 strategy (not "mcp").
+    const result = await preflightGuardNode(
+      makeState({ resourceType: "AWS::S3::Bucket" }),
+      undefined,
+    );
+
+    expect(result.estimatedMonthlyCostSource).toBe("fallback");
+  });
+
+  it('tags estimatedMonthlyCostSource = "fallback" when the Pricing tool throws', async () => {
+    // Blind Hunter wave-2 finding #3: the previous test couldn't tell
+    // "tool was called and threw" apart from "tool was never called". We
+    // now spy on `invoke` and assert it was actually invoked, so a
+    // regression that bypasses the catch block (e.g. by short-circuiting
+    // when mcpConfig is missing earlier) fails this test.
+    const invokeSpy = vi.fn().mockRejectedValue(new Error("MCP unavailable"));
+    const failingTool = {
+      name: ToolName.GET_PRICING,
+      description: "",
+      invoke: invokeSpy,
+    } as unknown as StructuredTool;
+
+    const result = await preflightGuardNode(
+      makeState({ resourceType: "AWS::S3::Bucket" }),
+      [failingTool],
+    );
+
+    // The error path falls back to localEstimate which is "fallback".
+    expect(result.estimatedMonthlyCostSource).toBe("fallback");
+    // The catch block MUST have run — invokeSpy was called at least once.
+    expect(invokeSpy).toHaveBeenCalled();
+  });
+
+  it('tags estimatedMonthlyCostSource = "free" for a free-tier resource type (IAM Role)', async () => {
+    // IAM Role has no MCP query (mcpConfig undefined) and the local
+    // strategy returns source: "free". The preflight result must
+    // preserve that — never "fallback", never "mcp".
+    const result = await preflightGuardNode(
+      makeState({
+        resourceType: "AWS::IAM::Role",
+        userIntent: "Create an IAM role",
+      }),
+      undefined,
+    );
+
+    expect(result.estimatedMonthlyCostSource).toBe("free");
+  });
+});
