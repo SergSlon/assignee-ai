@@ -106,7 +106,18 @@ export const snsTopicPlugin: ResourcePlugin = {
       },
     },
   ],
-  advancedFields: [],
+  advancedFields: [
+    {
+      name: CfnKey.CONTENT_BASED_DEDUP,
+      question: {
+        type: "boolean",
+        label: "Enable content-based deduplication?",
+        initialValue: false,
+        hint: "When enabled, SNS computes a SHA-256 hash of the message body and treats messages with the same hash as duplicates within the 5-minute deduplication window. FIFO topics only — ignored on standard topics.",
+        showIf: { field: CfnKey.FIFO_TOPIC, value: true },
+      },
+    },
+  ],
   defaults: {},
   configHints: [
     "SNS KmsMasterKeyId: Consider setting to 'alias/aws/sns' for server-side encryption at rest using the AWS-managed SNS key.",

@@ -99,8 +99,16 @@ describe("snsTopicPlugin", () => {
     });
   });
 
-  it("advancedFields is empty", () => {
-    expect(snsTopicPlugin.advancedFields).toHaveLength(0);
+  it("advancedFields exposes ContentBasedDeduplication gated on FifoTopic=true", () => {
+    // wizard-interaction-matrix (2026-04-11): the SNS "fifo" intent rule
+    // pre-populates ContentBasedDeduplication, which requires the field to
+    // exist as a user-facing advanced field. It's gated on FifoTopic=true
+    // because AWS rejects ContentBasedDeduplication on standard topics.
+    expect(snsTopicPlugin.advancedFields).toHaveLength(1);
+    const cbd = snsTopicPlugin.advancedFields[0]!;
+    expect(cbd.name).toBe("ContentBasedDeduplication");
+    expect(cbd.question.type).toBe("boolean");
+    expect(cbd.question.showIf).toEqual({ field: "FifoTopic", value: true });
   });
 
   describe("KmsMasterKeyId validation", () => {

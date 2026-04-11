@@ -294,14 +294,17 @@ describe("applyIntentOverrides", () => {
   // ── ECS Cluster: "fargate" → containerInsights enabled ─────────────────
 
   it('ECS Cluster "fargate" intent returns containerInsights enabled', () => {
+    // wizard-interaction-matrix (2026-04-11): rule now targets the
+    // user-facing ContainerInsights boolean field; the ECS plugin's
+    // toCfn transform emits the ClusterSettings array shape downstream.
     const overrides = getIntentDefaults(
       "create a fargate cluster",
       RESOURCE_TYPES.ECS_CLUSTER,
     );
     expect(overrides).toContainEqual(
       expect.objectContaining({
-        fieldName: "ClusterSettings",
-        value: [{ Name: "containerInsights", Value: "enabled" }],
+        fieldName: "ContainerInsights",
+        value: true,
       }),
     );
   });
