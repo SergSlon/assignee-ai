@@ -1,5 +1,5 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
+import { CfnKey, ResourceDefault, AwsDefault } from "../../config/cfn-keys.js";
 import type { ArchitecturePattern } from "../types.js";
 import { ThreeTierWebResourceId as R } from "../pattern-resource-ids.js";
 import { PatternId } from "../pattern-ids.js";
@@ -54,6 +54,22 @@ export const threeTierWebPattern: ArchitecturePattern = {
     [R.EC2_INSTANCE],
   ],
   defaultOptions: {
+    // AWS::EC2::SecurityGroup requires GroupDescription at the CCAPI layer
+    // (see security-group plugin commonFields[0]). Compound patterns skip
+    // the wizard, so defaultOptions must populate every required field.
+    // Without these entries, three-tier-web apply failed nightly with
+    // "required key [GroupDescription] not found" before the compound
+    // provisioner ever reached the ingress/egress rules. VpcId is omitted
+    // — default VPC is used when absent, matching the pattern's intent of
+    // not provisioning a new VPC (unlike efs-with-vpc / vpc-networking).
+    [R.ALB_SG]: {
+      [CfnKey.GROUP_DESCRIPTION]:
+        "Public HTTPS/HTTP ingress for the three-tier-web ALB",
+    },
+    [R.APP_SG]: {
+      [CfnKey.GROUP_DESCRIPTION]:
+        "Application tier ingress from the ALB for three-tier-web",
+    },
     [R.RDS_INSTANCE]: {
       Engine: ResourceDefault.RDS_ENGINE_POSTGRES,
       MultiAZ: false,

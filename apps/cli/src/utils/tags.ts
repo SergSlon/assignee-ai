@@ -33,6 +33,25 @@ const TAG_VALUE_ENVIRONMENT = "poc";
 const FLAT_MAP_TAG_TYPES: Set<string> = new Set([RESOURCE_TYPES.SSM_PARAMETER]);
 
 /**
+ * Resource types whose CCAPI schema uses a tag property name other than "Tags".
+ * When listed here, injectMandatoryTags writes the merged tag array to the
+ * mapped property name instead of `CfnKey.TAGS` and refuses to leave a stray
+ * top-level "Tags" property behind (EFS rejects it with `extraneous key [Tags]
+ * is not permitted`). Values must still use the standard
+ * [{ Key, Value }] array shape.
+ *
+ * 2026-04-11 fix for efs-with-vpc nightly failure: the EFS plugin's own
+ * configHints (efs-file-system.ts:236) explicitly document that EFS has NO
+ * top-level Tags property — "FileSystemTags" is the correct key. The
+ * compound-flow traceability tag injection previously wrote Tags anyway,
+ * causing CCAPI schema rejection the moment the efs-with-vpc compound
+ * reached its EFS::FileSystem resource.
+ */
+const ALTERNATE_TAG_KEY_TYPES: ReadonlyMap<string, string> = new Map([
+  [RESOURCE_TYPES.EFS_FILE_SYSTEM, "FileSystemTags"],
+]);
+
+/**
  * Resource types that do NOT support Tags at all.
  * Tag injection is skipped entirely for these types.
  * @see AWS::EC2::Route — CloudControl rejects Tags property.
@@ -111,9 +130,25 @@ export function injectMandatoryTags(
     ([Key, Value]) => ({ Key, Value }),
   );
 
-  const existingTags = Array.isArray(desiredState[CfnKey.TAGS])
+  // Resource types with a non-standard tag property name (EFS →
+  // FileSystemTags) write to that key and strip any stray "Tags" key
+  // the wizard or a pattern may have injected. See ALTERNATE_TAG_KEY_TYPES.
+  const alternateTagKey =
+    resourceType && ALTERNATE_TAG_KEY_TYPES.get(resourceType);
+  const tagPropertyKey = alternateTagKey ?? CfnKey.TAGS;
+
+  // Merge existing tags from BOTH the standard "Tags" key and the
+  // alternate key (in case the plugin's field-level toCfn already
+  // started populating it). Alternate-key resources end up with a
+  // single merged array at the correct property and no stray "Tags".
+  const existingFromStandard = Array.isArray(desiredState[CfnKey.TAGS])
     ? (desiredState[CfnKey.TAGS] as CfnTag[])
     : [];
+  const existingFromAlternate =
+    alternateTagKey && Array.isArray(desiredState[alternateTagKey])
+      ? (desiredState[alternateTagKey] as CfnTag[])
+      : [];
+  const existingTags = [...existingFromStandard, ...existingFromAlternate];
 
   // Map keyed by tag Key — mandatory tags OVERWRITE duplicates.
   const tagMap = new Map<string, string>();
@@ -124,5 +159,17 @@ export function injectMandatoryTags(
     ([Key, Value]) => ({ Key, Value }),
   );
 
-  return { ...desiredState, [CfnKey.TAGS]: mergedTags };
+  const output: Record<string, unknown> = {
+    ...desiredState,
+    [tagPropertyKey]: mergedTags,
+  };
+  // When using an alternate key, ensure no stray "Tags" property remains —
+  // EFS rejects `extraneous key [Tags] is not permitted` even when
+  // FileSystemTags is also present. Guard against a future ALTERNATE_TAG
+  // entry accidentally mapping a resource BACK to `Tags` (which would
+  // cause this delete to discard the merge we just wrote).
+  if (alternateTagKey && alternateTagKey !== CfnKey.TAGS) {
+    delete output[CfnKey.TAGS];
+  }
+  return output;
 }

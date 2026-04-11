@@ -464,6 +464,25 @@ export async function resultFormatterNode(
         await checkSecurityPosture(displayArn, tools, state.runId);
       }
 
+      // 2026-04-11 fix for nightly SSM apply+destroy failure: propagate
+      // the resolved full ARN into the final graph state ONLY when
+      // resolution actually transformed the identifier (e.g. SSM Parameter
+      // "/app/env/key" → "arn:aws:ssm:us-east-1:<acct>:parameter/app/env/key"
+      // via arn-builder.ts:164-172). When displayArn === state.resourceArn
+      // (input was already an ARN, STS lookup failed, or resolveResourceArn
+      // returned undefined and we fell back), return the empty partial
+      // update — preserving the "no mutation" invariant the compound
+      // regression test at result-formatter.test.ts:224 protects AND
+      // keeping every existing `expect(result).toEqual({})` unit test
+      // green. This is the terminal node for single-resource applies, so
+      // the compound marker resolver never re-reads state.resourceArn;
+      // the partial update only affects downstream callers that read the
+      // final graph state (e2e tests, API consumers, apply success stdout
+      // capture).
+      if (displayArn && displayArn !== state.resourceArn) {
+        return { resourceArn: displayArn };
+      }
+
       break;
     }
 

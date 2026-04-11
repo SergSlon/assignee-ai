@@ -13,7 +13,7 @@ describe("efsFileSystemPlugin", () => {
 
   it("marks Name as required (promoted into FileSystemTags)", () => {
     const field = efsFileSystemPlugin.commonFields.find(
-      (f) => f.name === CfnKey.NAME,
+      (f) => f.name === CfnKey.FILE_SYSTEM_TAGS,
     );
     expect(field?.required).toBe(true);
   });
@@ -42,7 +42,7 @@ describe("efsFileSystemPlugin", () => {
 
   describe("Name validation", () => {
     const field = efsFileSystemPlugin.commonFields.find(
-      (f) => f.name === CfnKey.NAME,
+      (f) => f.name === CfnKey.FILE_SYSTEM_TAGS,
     )!;
     const validate = field.question.validate!;
 
@@ -76,7 +76,7 @@ describe("efsFileSystemPlugin", () => {
 
   describe("Name toCfn — promotes into FileSystemTags", () => {
     const field = efsFileSystemPlugin.commonFields.find(
-      (f) => f.name === CfnKey.NAME,
+      (f) => f.name === CfnKey.FILE_SYSTEM_TAGS,
     )!;
     const toCfn = field.toCfn!;
 
