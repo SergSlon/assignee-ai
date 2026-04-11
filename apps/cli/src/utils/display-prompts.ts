@@ -21,6 +21,9 @@ import { UserMessage } from "../config/constants.js";
 export const BACK_SENTINEL = "__back__" as const;
 export const HELP_SENTINEL = "?" as const;
 export const OTHER_SENTINEL = "__other__" as const;
+export const SKIP_SENTINEL = "__skip__" as const;
+/** Sentinel used inside the text-field action menu for the "Enter value" option. */
+export const ENTER_VALUE_SENTINEL = "__enter_value__" as const;
 
 export async function renderHitlConfirm(
   state: RenderableState,
@@ -216,7 +219,7 @@ export async function renderOptionPrompt(
       // power users (backward compatible).
       if (showBack) {
         const actionOptions: Array<{ value: string; label: string }> = [
-          { value: "enter", label: "Enter value" },
+          { value: ENTER_VALUE_SENTINEL, label: "Enter value" },
           {
             value: BACK_SENTINEL,
             label: "\u2190 Back \u2014 return to previous field",
@@ -228,7 +231,7 @@ export async function renderOptionPrompt(
         ];
         if (!field.required) {
           actionOptions.push({
-            value: "__skip__",
+            value: SKIP_SENTINEL,
             label: "Skip (leave empty)",
           });
         }
@@ -236,7 +239,7 @@ export async function renderOptionPrompt(
         const action = await clack.select({
           message: question.label,
           options: actionOptions,
-          initialValue: "enter",
+          initialValue: ENTER_VALUE_SENTINEL,
         });
 
         if (clack.isCancel(action)) {
@@ -245,17 +248,18 @@ export async function renderOptionPrompt(
         }
         if (action === BACK_SENTINEL) return BACK_SENTINEL;
         if (action === HELP_SENTINEL) return HELP_SENTINEL;
-        if (action === "__skip__") return undefined;
-        // action === "enter" — fall through to clack.text()
+        if (action === SKIP_SENTINEL) return undefined;
+        // action === ENTER_VALUE_SENTINEL — fall through to clack.text()
       }
 
+      // Fix: don't leak the back hint into the placeholder when there's no
+      // real placeholder. The action menu already told the user Back is an
+      // option; showing " (or type 'back' to go back)" as a standalone
+      // placeholder would be noisy and confusing.
       const placeholder = question.placeholder ?? "";
-      const backHint = showBack ? " (or type 'back' to go back)" : "";
       result = await clack.text({
         message: question.label,
-        placeholder: placeholder
-          ? `${placeholder}${backHint}`
-          : backHint.trim(),
+        placeholder,
         initialValue:
           typeof defaultValue === "string" ? defaultValue : undefined,
         validate: (value) => {
