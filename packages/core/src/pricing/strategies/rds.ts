@@ -21,7 +21,7 @@ const DEFAULT_ENGINE = AwsDefault.RDS_ENGINE_MYSQL;
 
 export const rdsPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: CostEstimateLabel.NA };
+    return { perMonth: null, label: CostEstimateLabel.NA, source: "fallback" };
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {
     const instanceClass =

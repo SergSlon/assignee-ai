@@ -20,6 +20,7 @@ import {
   type UserResourceConfig,
   type PricingBreakdown,
   type ResolvedGlobalConfig,
+  type DataSource,
   AssigneeError,
 } from "@assignee/core";
 import type { BPFinding } from "@assignee/best-practices";
@@ -31,6 +32,13 @@ export interface SecurityFinding {
   title: string;
   recommendation: string;
   service: string;
+  /**
+   * Story 46.2: provenance.
+   *  - "mcp"      → live response from the Well-Architected Security MCP
+   *  - "fallback" → produced by a local heuristic (not currently used,
+   *                  reserved for future degradation path)
+   */
+  source: DataSource;
 }
 
 /** Record of a best practice finding that was automatically fixed (Story 22.2). */
@@ -60,6 +68,13 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
   }),
   estimatedMonthlyCost: Annotation<string | undefined>({
+    reducer: (_, b) => b,
+  }),
+  // Story 46.2: provenance tag for the headline cost. Display layer reads
+  // both fields and appends "(live)" / "(estimated)" / "(from log)" so the
+  // user can tell at a glance whether a number came from AWS or from a
+  // local fallback heuristic.
+  estimatedMonthlyCostSource: Annotation<DataSource | undefined>({
     reducer: (_, b) => b,
   }),
   preflightPassed: Annotation<boolean>({

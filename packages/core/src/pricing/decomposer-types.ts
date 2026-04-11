@@ -67,6 +67,14 @@ export interface PricingBreakdown {
   fetchedAt: string;
   /** Whether any line item pricing failed */
   hasPartialFailure: boolean;
+  /**
+   * Story 46.2: provenance signal for callers that summarize the breakdown
+   * into a single headline cost. `true` if at least one line item came
+   * from `getCachedPrice()`, in which case the headline source should be
+   * `"cached"` rather than `"mcp"`. `false` when every priced item came
+   * from a fresh MCP fetch.
+   */
+  hasCacheHits: boolean;
 }
 
 /**

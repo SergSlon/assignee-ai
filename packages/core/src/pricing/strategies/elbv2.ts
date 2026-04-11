@@ -13,7 +13,11 @@ import { PriceUnit } from "../price-units.js";
 
 export const elbv2PricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: "Hourly rate + LCU-based charges" };
+    return {
+      perMonth: null,
+      label: "Hourly rate + LCU-based charges",
+      source: "fallback",
+    };
   },
   mcpConfig(): McpPricingConfig {
     return {

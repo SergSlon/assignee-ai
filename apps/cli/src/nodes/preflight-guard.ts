@@ -15,6 +15,7 @@ import {
   extractFirstTierPrice,
   getRequiredIamActions,
   type AwsPricingResponse,
+  type DataSource,
   type PricingLineItem,
   type PricingLineItemResult,
   type PricingBreakdown,
@@ -268,10 +269,17 @@ export async function preflightGuardNode(
     state.resourceType,
     desiredState,
   );
-  const localEstimate = defaultPricingRegistry.estimate(
+  // Story 46.2: track both label and source so the display layer can tag
+  // the headline cost with where the number came from. Local strategies
+  // already declare their own source ("free" for free-tier resources,
+  // "fallback" for everything else); we keep that intact and only override
+  // it to "mcp" when the live Pricing API path actually returns a value.
+  const localPricing = defaultPricingRegistry.estimate(
     state.resourceType,
     desiredState,
-  ).label;
+  );
+  const localEstimate = localPricing.label;
+  const localSource = localPricing.source;
 
   // Story 18.10: Blocking BP findings (replaces old guardrail engine + CRITICAL BP check)
   // BP evaluation is synchronous (<1ms) — run before the parallel block.
@@ -360,11 +368,13 @@ export async function preflightGuardNode(
   // Uses Promise.allSettled so one failure doesn't cancel the other.
   const startMs = Date.now();
   const [pricingSettled, iamSettled] = await Promise.allSettled([
-    // Pricing query
-    (async (): Promise<string> => {
-      if (!mcpConfig || !tools) return localEstimate;
+    // Pricing query — returns BOTH the label and where it came from so the
+    // display layer can tell the user "live" vs "estimated".
+    (async (): Promise<{ label: string; source: DataSource }> => {
+      if (!mcpConfig || !tools)
+        return { label: localEstimate, source: localSource };
       const pricingTool = tools.find((t) => t.name === ToolName.GET_PRICING);
-      if (!pricingTool) return localEstimate;
+      if (!pricingTool) return { label: localEstimate, source: localSource };
       try {
         const timeoutMs = mcpConfig.timeoutMs ?? PRICING_TIMEOUT_MS;
         const result = await withTimeout(
@@ -384,13 +394,25 @@ export async function preflightGuardNode(
             action: LOG_ACTIONS.PRICING_TIMEOUT,
             extras: { resourceType: state.resourceType, timeoutMs },
           });
-          return localEstimate;
+          return { label: localEstimate, source: localSource };
         }
         const data = JSON.parse(unwrapMcpText(result)) as AwsPricingResponse;
-        return (
-          extractFirstTierPrice(data, mcpConfig.unit, mcpConfig.scale) ??
-          CostEstimateLabel.NA
+        const extracted = extractFirstTierPrice(
+          data,
+          mcpConfig.unit,
+          mcpConfig.scale,
         );
+        if (extracted !== null) {
+          // Live AWS Pricing API response — authoritative.
+          return { label: extracted, source: "mcp" };
+        }
+        // MCP returned a payload but we couldn't extract a usable price
+        // from it (e.g. high-tier-only response, missing tiers). Fall
+        // back to the local estimate so the user sees the strategy's
+        // human-readable label, not "N/A". Source carries the strategy's
+        // own provenance — usually "fallback", but "free" for free-tier
+        // resources where the local strategy authoritatively says zero.
+        return { label: localEstimate, source: localSource };
       } catch {
         log({
           ts: new Date().toISOString(),
@@ -399,7 +421,7 @@ export async function preflightGuardNode(
           action: LOG_ACTIONS.PRICING_UNAVAILABLE,
           extras: { resourceType: state.resourceType },
         });
-        return localEstimate;
+        return { label: localEstimate, source: localSource };
       }
     })(),
 
@@ -471,10 +493,12 @@ export async function preflightGuardNode(
     })(),
   ]);
 
-  const costEstimate =
+  const pricingResult =
     pricingSettled.status === PromiseStatus.FULFILLED
       ? pricingSettled.value
-      : localEstimate;
+      : { label: localEstimate, source: localSource };
+  const costEstimate = pricingResult.label;
+  let costEstimateSource: DataSource = pricingResult.source;
 
   const iamResult =
     iamSettled.status === PromiseStatus.FULFILLED
@@ -553,6 +577,12 @@ export async function preflightGuardNode(
 
   // If the single-line pricing query returned "N/A" but the decomposer
   // produced a valid fixedSubtotal, use the decomposer's total as the headline.
+  // Story 46.2: derive the headline source from breakdown provenance —
+  // "cached" if any line item was served from disk cache, "mcp" otherwise.
+  // Free-tier strategies with source="free" never reach this branch
+  // because their localEstimate label is "Free", not "N/A".
+  const breakdownSource = (b: PricingBreakdown): DataSource =>
+    b.hasCacheHits ? "cached" : "mcp";
   let headlineCost = costEstimate;
   if (
     headlineCost === CostEstimateLabel.NA &&
@@ -560,6 +590,7 @@ export async function preflightGuardNode(
     pricingBreakdown.fixedSubtotal > 0
   ) {
     headlineCost = `$${pricingBreakdown.fixedSubtotal.toFixed(2)}/mo`;
+    costEstimateSource = breakdownSource(pricingBreakdown);
   }
 
   // If headline is still "N/A" but the breakdown has usage-based items with valid
@@ -579,6 +610,7 @@ export async function preflightGuardNode(
     );
     if (firstPriced) {
       headlineCost = firstPriced.displayPrice;
+      costEstimateSource = breakdownSource(pricingBreakdown);
     }
   }
 
@@ -589,10 +621,12 @@ export async function preflightGuardNode(
   // a different state and a misleading display. Show "Free" instead.
   if (headlineCost === CostEstimateLabel.NA && decomposerReportedFree) {
     headlineCost = CostEstimateLabel.FREE;
+    costEstimateSource = "free";
   }
 
   return {
     estimatedMonthlyCost: headlineCost,
+    estimatedMonthlyCostSource: costEstimateSource,
     preflightPassed: !bpBlocked,
     freeTierNote: freeTierNote ?? undefined,
     ...(perResourceCosts !== undefined ? { perResourceCosts } : {}),
@@ -613,6 +647,9 @@ async function queryLineItemPrices(
   const pricingTool = tools.find((t) => t.name === ToolName.GET_PRICING);
   const fetchedAt = new Date().toISOString().split("T")[0]!;
   let hasPartialFailure = false;
+  // Story 46.2: track whether any line item was served from cache so the
+  // headline-cost rewrite can pick "cached" vs "mcp" honestly.
+  let hasCacheHits = false;
 
   const results: PricingLineItemResult[] = await Promise.all(
     lineItems.map(async (item): Promise<PricingLineItemResult> => {
@@ -643,6 +680,7 @@ async function queryLineItemPrices(
 
         if (cached) {
           data = cached as AwsPricingResponse;
+          hasCacheHits = true;
         } else {
           const timeoutMs = item.timeoutMs ?? PRICING_TIMEOUT_MS;
           const result = await withTimeout(
@@ -756,5 +794,6 @@ async function queryLineItemPrices(
     fixedSubtotal,
     fetchedAt,
     hasPartialFailure,
+    hasCacheHits,
   };
 }

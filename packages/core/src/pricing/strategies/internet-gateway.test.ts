@@ -9,6 +9,7 @@ describe("internetGatewayPricingStrategy", () => {
         perMonth: null,
         label: "No charge",
         isFree: true,
+        source: "free",
       });
     });
   });

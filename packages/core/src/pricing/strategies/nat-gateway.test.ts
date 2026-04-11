@@ -8,6 +8,7 @@ describe("natGatewayPricingStrategy", () => {
       expect(result).toEqual({
         perMonth: null,
         label: "Hourly + per-GB data processing",
+        source: "fallback",
       });
     });
   });

@@ -23,7 +23,7 @@ import {
  */
 export const secretsManagerPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: CostEstimateLabel.NA };
+    return { perMonth: null, label: CostEstimateLabel.NA, source: "fallback" };
   },
   mcpConfig(): McpPricingConfig {
     return {

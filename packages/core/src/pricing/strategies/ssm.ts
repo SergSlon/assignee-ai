@@ -27,11 +27,16 @@ export const ssmPricingStrategy: PricingStrategy = {
         : AwsDefault.SSM_TIER_STANDARD.toLowerCase();
 
     if (tierStr === AwsDefault.SSM_TIER_STANDARD.toLowerCase()) {
-      return { perMonth: 0, label: CostEstimateLabel.FREE, isFree: true };
+      return {
+        perMonth: 0,
+        label: CostEstimateLabel.FREE,
+        isFree: true,
+        source: "free",
+      };
     }
 
     // Advanced (or any non-standard tier) — defer to the decomposer / MCP query.
-    return { perMonth: null, label: CostEstimateLabel.NA };
+    return { perMonth: null, label: CostEstimateLabel.NA, source: "fallback" };
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig | null {
     // Standard tier is always free — no need to query the Pricing API.

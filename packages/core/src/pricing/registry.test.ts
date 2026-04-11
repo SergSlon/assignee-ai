@@ -82,6 +82,7 @@ describe("PricingStrategyRegistry", () => {
         perMonth: 0.05,
         label: "$0.05/unit",
         isFree: false,
+        source: "fallback",
       }),
     };
     registry.register("AWS::Custom::Resource", newStrategy);

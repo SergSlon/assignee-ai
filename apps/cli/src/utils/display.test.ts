@@ -1566,6 +1566,7 @@ describe("renderSecurityWarnings", () => {
         title: "S3 bucket has public read access",
         recommendation: "Block public access",
         service: "SecurityHub",
+        source: "mcp",
       },
     ]);
 
@@ -1584,12 +1585,14 @@ describe("renderSecurityWarnings", () => {
         title: "Public access enabled",
         recommendation: "Disable public access",
         service: "SecurityHub",
+        source: "mcp",
       },
       {
         severity: "HIGH",
         title: "No encryption",
         recommendation: "Enable SSE-S3",
         service: "SecurityHub",
+        source: "mcp",
       },
     ]);
 
@@ -2067,12 +2070,14 @@ describe("renderSecurityWarnings", () => {
         title: "Public bucket",
         recommendation: "Block public access",
         service: "s3",
+        source: "mcp",
       },
       {
         severity: "HIGH",
         title: "No encryption",
         recommendation: "Enable SSE",
         service: "s3",
+        source: "mcp",
       },
     ]);
     const output = stdoutSpy.mock.calls.map((c) => String(c[0])).join("");

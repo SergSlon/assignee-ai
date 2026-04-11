@@ -7,7 +7,11 @@ import type {
 /** Fallback for resource types with no registered strategy. */
 const unknownPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: "Pricing unavailable" };
+    return {
+      perMonth: null,
+      label: "Pricing unavailable",
+      source: "fallback",
+    };
   },
 };
 
@@ -33,6 +37,17 @@ export class PricingStrategyRegistry {
    */
   has(resourceType: string): boolean {
     return this.strategies.has(resourceType);
+  }
+
+  /**
+   * Returns every CloudFormation resource type currently registered with
+   * a strategy, in registration order. Used by Story 46.2's parametrized
+   * source-attribution test to walk the actual registry instead of a
+   * hand-maintained snapshot — so a new strategy added to `index.ts` is
+   * automatically enrolled in the matrix without a fixture update.
+   */
+  registeredTypes(): string[] {
+    return [...this.strategies.keys()];
   }
 
   private getStrategy(resourceType: string): PricingStrategy {

@@ -31,11 +31,13 @@ export const apiGatewayV2PricingStrategy: PricingStrategy = {
         perMonth: null,
         label:
           "WebSocket — per-connection-minute + per-message pricing (query Pricing MCP)",
+        source: "fallback",
       };
     }
     return {
       perMonth: null,
       label: "HTTP API — per-request pricing (query Pricing MCP)",
+      source: "fallback",
     };
   },
 

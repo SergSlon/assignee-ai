@@ -9,7 +9,12 @@ import { CostEstimateLabel } from "../filter-constants.js";
  */
 export const routePricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: CostEstimateLabel.NO_CHARGE, isFree: true };
+    return {
+      perMonth: null,
+      label: CostEstimateLabel.NO_CHARGE,
+      isFree: true,
+      source: "free",
+    };
   },
   // No mcpConfig — Routes are free AWS resources
 };

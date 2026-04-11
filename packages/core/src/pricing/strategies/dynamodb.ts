@@ -27,7 +27,7 @@ export const dynamodbPricingStrategy: PricingStrategy = {
       billingMode === AwsDefault.BILLING_PROVISIONED
         ? "Provisioned (per RCU/WCU-hour)"
         : "On-demand (per-request)";
-    return { perMonth: null, label };
+    return { perMonth: null, label, source: "fallback" };
   },
 
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig | null {

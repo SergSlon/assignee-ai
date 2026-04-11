@@ -31,6 +31,7 @@ export const cloudWatchAlarmPricingStrategy: PricingStrategy = {
       label: isHighRes
         ? "Per-alarm/month (high resolution)"
         : "Per-alarm/month (standard, 10 free tier)",
+      source: "fallback",
     };
   },
   mcpConfig(desiredState?: Record<string, unknown>): McpPricingConfig {

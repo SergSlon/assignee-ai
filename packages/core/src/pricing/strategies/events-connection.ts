@@ -14,6 +14,11 @@ import { CostEstimateLabel } from "../filter-constants.js";
  */
 export const eventsConnectionPricingStrategy: PricingStrategy = {
   estimateLocal(_desiredState?: Record<string, unknown>): PricingEstimate {
-    return { perMonth: 0, label: CostEstimateLabel.FREE };
+    return {
+      perMonth: 0,
+      label: CostEstimateLabel.FREE,
+      isFree: true,
+      source: "free",
+    };
   },
 };

@@ -8,6 +8,7 @@ describe("elbv2PricingStrategy", () => {
       expect(result).toEqual({
         perMonth: null,
         label: "Hourly rate + LCU-based charges",
+        source: "fallback",
       });
     });
   });

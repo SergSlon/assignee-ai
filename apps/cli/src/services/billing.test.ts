@@ -75,6 +75,8 @@ describe("fetchBillingData", () => {
     const entry = result.get(sampleResource.arn)!;
     expect(entry.actualMonthlyCost).toBe("$0.02/month");
     expect(entry.currency).toBe("USD");
+    // Story 46.2: live MCP cost-explorer responses tag source "mcp".
+    expect(entry.source).toBe("mcp");
   });
 
   it("returns multiple resources from MCP tools", async () => {
@@ -116,6 +118,10 @@ describe("fetchBillingData", () => {
     const entry = result.get(sampleResource.arn)!;
     expect(entry.actualMonthlyCost).toBe("$0.05/month");
     expect(entry.forecastedMonthlyCost).toBe("$0.05/month");
+    // Story 46.2: provision-log fallback rows must tag source "offline"
+    // so the display layer can render "(from log)" — the user MUST be
+    // able to tell stale log replay from live AWS data.
+    expect(entry.source).toBe("offline");
   });
 
   it("falls back to provision log when MCP tools fail", async () => {
@@ -139,9 +145,11 @@ describe("fetchBillingData", () => {
     const result = await fetchBillingData([sampleResource], [failingTool]);
 
     expect(result.size).toBe(1);
-    expect(result.get(sampleResource.arn)!.actualMonthlyCost).toBe(
-      "$0.05/month",
-    );
+    const entry = result.get(sampleResource.arn)!;
+    expect(entry.actualMonthlyCost).toBe("$0.05/month");
+    // Story 46.2: provision-log fallback rows MUST tag source "offline"
+    // even when triggered by an MCP failure (not just an empty cost map).
+    expect(entry.source).toBe("offline");
   });
 
   it("falls back to provision log when MCP returns empty cost data", async () => {
@@ -163,9 +171,9 @@ describe("fetchBillingData", () => {
 
     // Empty MCP result -> falls through to provision log
     expect(result.size).toBe(1);
-    expect(result.get(sampleResource.arn)!.actualMonthlyCost).toBe(
-      "$0.05/month",
-    );
+    const entry = result.get(sampleResource.arn)!;
+    expect(entry.actualMonthlyCost).toBe("$0.05/month");
+    expect(entry.source).toBe("offline");
   });
 
   it("returns empty map when both MCP and provision log have no data", async () => {
@@ -568,6 +576,9 @@ describe("queryCostAnomalies (Story 45.3)", () => {
     expect(result[0]!.service).toBe("Amazon EC2");
     expect(result[0]!.severity).toBe("HIGH");
     expect(result[0]!.impact).toBe("$45.00");
+    // Story 46.2: live billing MCP responses must be tagged "mcp" so the
+    // display layer can render the (live) suffix.
+    expect(result[0]!.source).toBe("mcp");
   });
 
   it("returns empty array when tool is missing", async () => {
@@ -622,6 +633,8 @@ describe("queryCostOptimization (Story 45.3)", () => {
     );
     expect(result[0]!.finding).toBe("Right-size to t3.small");
     expect(result[0]!.estimatedSavings).toBe("25.00");
+    // Story 46.2: live billing MCP responses must be tagged "mcp".
+    expect(result[0]!.source).toBe("mcp");
   });
 
   it("returns empty array when tool is missing", async () => {
@@ -667,6 +680,8 @@ describe("queryComputeOptimizer (Story 45.3)", () => {
     expect(result[0]!.currentConfig).toBe("m5.xlarge");
     expect(result[0]!.recommendedConfig).toBe("m5.large");
     expect(result[0]!.estimatedSavings).toBe("62.50");
+    // Story 46.2: live billing MCP responses must be tagged "mcp".
+    expect(result[0]!.source).toBe("mcp");
   });
 
   it("returns empty array when tool is missing", async () => {

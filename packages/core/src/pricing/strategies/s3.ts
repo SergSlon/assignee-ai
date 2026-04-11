@@ -15,7 +15,7 @@ import { PriceUnit } from "../price-units.js";
 
 export const s3PricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: CostEstimateLabel.NA };
+    return { perMonth: null, label: CostEstimateLabel.NA, source: "fallback" };
   },
   mcpConfig(): McpPricingConfig {
     return {

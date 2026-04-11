@@ -10,6 +10,7 @@ import {
   UserCancelledError,
   QuestionTypeName,
   CostEstimateLabel,
+  formatLabelWithSource,
   type ResourceField,
   type ResolvedFieldConfig,
   type ArchitecturePattern,
@@ -102,8 +103,21 @@ export async function renderApplyNowConfirm(
 ): Promise<boolean> {
   if (!process.stdin.isTTY) return false;
 
+  // Story 46.2: include the source-provenance suffix so the user sees
+  // (live)/(estimated)/(from log) on the apply-now prompt too.
+  //
+  // The strategy labels almost always already carry a unit ("~$32.85/mo",
+  // "$0.0230/GB-mo", "Free", "N/A", "Per-GB monthly storage"), so the
+  // pre-46.2 template's trailing `/mo` was already producing
+  // `est. ~$32.85/mo/mo`. After 46.2 the suffix made it worse:
+  // `est. ~$32.85/mo (live)/mo`. Drop the trailing `/mo` here — the label
+  // is the canonical, unit-bearing display string.
+  const baseLabel = state.estimatedMonthlyCost ?? CostEstimateLabel.NA;
+  const costLabel = state.estimatedMonthlyCostSource
+    ? formatLabelWithSource(baseLabel, state.estimatedMonthlyCostSource)
+    : baseLabel;
   const result = await clack.confirm({
-    message: `Apply now? (${state.resourceType}, est. ${state.estimatedMonthlyCost ?? CostEstimateLabel.NA}/mo)`,
+    message: `Apply now? (${state.resourceType}, est. ${costLabel})`,
     initialValue: true,
   });
 

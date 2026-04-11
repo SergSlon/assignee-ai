@@ -18,7 +18,7 @@ import { ToolName } from "../constants/tools.js";
 import { defaultMemoryService } from "./memory.js";
 import { AWS_REGION, UNKNOWN_FALLBACK } from "../config/constants.js";
 import type { ManagedResource } from "./list-resources.js";
-import { CostEstimateLabel } from "@assignee/core";
+import { CostEstimateLabel, type DataSource } from "@assignee/core";
 
 export interface BillingCostData {
   arn: string;
@@ -26,6 +26,13 @@ export interface BillingCostData {
   forecastedMonthlyCost: string;
   currency: string;
   lastUpdated: string;
+  /**
+   * Story 46.2: provenance tag.
+   *  - "mcp"     → fresh from the Billing MCP cost-explorer call
+   *  - "offline" → replayed from the local provision log because the
+   *                Billing MCP was unreachable / returned no rows
+   */
+  source: DataSource;
 }
 
 /**
@@ -241,6 +248,8 @@ async function queryBillingMcp(
           forecastedMonthlyCost: `$${perResourceCost.toFixed(2)}/month`,
           currency: cost.unit,
           lastUpdated: new Date().toISOString(),
+          // Story 46.2: live cost-explorer response
+          source: "mcp",
         });
       }
     }
@@ -276,6 +285,8 @@ export async function fetchBillingData(
   }
 
   // Fallback: provision log memory
+  // Story 46.2: tag every fallback row "offline" so the user can tell at a
+  // glance that they're looking at log replay, not live AWS data.
   const provisions = await defaultMemoryService.readProvisions();
   for (const p of provisions) {
     if (p.resourceArn && p.estimatedMonthlyCost) {
@@ -285,6 +296,7 @@ export async function fetchBillingData(
         forecastedMonthlyCost: p.estimatedMonthlyCost,
         currency: "USD",
         lastUpdated: p.timestamp,
+        source: "offline",
       });
     }
   }
@@ -307,6 +319,8 @@ export interface CostAnomaly {
   startDate: string;
   endDate: string;
   severity: string;
+  /** Story 46.2: provenance — always "mcp" for live billing responses. */
+  source: DataSource;
 }
 
 export interface CostOptimizationRecommendation {
@@ -316,6 +330,8 @@ export interface CostOptimizationRecommendation {
   finding: string;
   estimatedSavings: string;
   currency: string;
+  /** Story 46.2: provenance — always "mcp" for live billing responses. */
+  source: DataSource;
 }
 
 export interface ComputeOptimizerRecommendation {
@@ -325,6 +341,8 @@ export interface ComputeOptimizerRecommendation {
   currentConfig: string;
   recommendedConfig: string;
   estimatedSavings: string;
+  /** Story 46.2: provenance — always "mcp" for live billing responses. */
+  source: DataSource;
 }
 
 /**
@@ -394,6 +412,7 @@ export async function queryCostAnomalies(
           startDate: String(a["AnomalyStartDate"] ?? a["startDate"] ?? ""),
           endDate: String(a["AnomalyEndDate"] ?? a["endDate"] ?? ""),
           severity: String(a["Severity"] ?? a["severity"] ?? "MEDIUM"),
+          source: "mcp",
         }) as CostAnomaly,
     );
   } catch {
@@ -434,6 +453,7 @@ export async function queryCostOptimization(
             r["EstimatedMonthlySavings"] ?? r["estimatedSavings"] ?? "N/A",
           ),
           currency: String(r["Currency"] ?? r["currency"] ?? "USD"),
+          source: "mcp",
         }) as CostOptimizationRecommendation,
     );
   } catch {
@@ -482,6 +502,7 @@ export async function queryComputeOptimizer(
           estimatedSavings: String(
             r["EstimatedMonthlySavings"] ?? r["estimatedSavings"] ?? "N/A",
           ),
+          source: "mcp",
         }) as ComputeOptimizerRecommendation,
     );
   } catch {

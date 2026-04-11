@@ -12,7 +12,11 @@ import {
 
 export const snsPricingStrategy: PricingStrategy = {
   estimateLocal(): PricingEstimate {
-    return { perMonth: null, label: "Per-publish pricing (per million)" };
+    return {
+      perMonth: null,
+      label: "Per-publish pricing (per million)",
+      source: "fallback",
+    };
   },
   mcpConfig(): McpPricingConfig {
     return {

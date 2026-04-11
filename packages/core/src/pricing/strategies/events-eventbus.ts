@@ -23,6 +23,6 @@ export const eventsEventBusPricingStrategy: PricingStrategy = {
   estimateLocal(_desiredState?: Record<string, unknown>): PricingEstimate {
     // Always N/A — workload-dependent. The cost-advisor surfaces
     // a $1/M warning for visibility.
-    return { perMonth: null, label: CostEstimateLabel.NA };
+    return { perMonth: null, label: CostEstimateLabel.NA, source: "fallback" };
   },
 };

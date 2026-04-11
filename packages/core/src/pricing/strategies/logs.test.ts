@@ -5,7 +5,11 @@ describe("logsPricingStrategy", () => {
   describe("estimateLocal", () => {
     it("returns null perMonth and N/A label", () => {
       const result = logsPricingStrategy.estimateLocal();
-      expect(result).toEqual({ perMonth: null, label: "N/A" });
+      expect(result).toEqual({
+        perMonth: null,
+        label: "N/A",
+        source: "fallback",
+      });
     });
   });
 
