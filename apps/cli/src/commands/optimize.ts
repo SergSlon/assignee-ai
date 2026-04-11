@@ -37,8 +37,6 @@ import { AWS_REGION } from "../config/constants.js";
 import {
   queryCostOptimization,
   queryComputeOptimizer,
-  type CostOptimizationRecommendation,
-  type ComputeOptimizerRecommendation,
 } from "../services/billing.js";
 import { getBillingMcpToolsAsync } from "../services/mcp-client.js";
 
