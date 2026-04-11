@@ -9,6 +9,7 @@
     "test:coverage": "turbo run test:coverage",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
+    "check-mcp-versions": "npx tsx apps/cli/scripts/check-mcp-versions.ts",
     "prepare": "husky"
   },
   "devDependencies": {

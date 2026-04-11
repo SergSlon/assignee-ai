@@ -56,6 +56,10 @@ import {
   getOptionalMcpServerConfigs,
   MCP_PINS,
 } from "../config/mcp-servers.js";
+import {
+  checkMcpVersions,
+  type McpVersionCheckResult,
+} from "../services/mcp-version-check.js";
 
 /** Per-check deadline. Spec constraint #6: <10s total, 5s per check. */
 export const DEFAULT_CHECK_TIMEOUT_MS = 5000;
@@ -470,6 +474,92 @@ export async function checkMcpServers(
   const okCount = subs.filter((s) => s.status === "ok").length;
   return {
     name: `MCP servers (${okCount}/${subs.length} ok)`,
+    status: rollup(subs),
+    subs,
+  };
+}
+
+// ── 3b. MCP version drift ──────────────────────────────────────────────────
+
+/** Injection seam so doctor tests don't hit PyPI. */
+export interface McpVersionCheckDeps {
+  /** Override the version-check function (test injection). */
+  checkVersionsImpl?: () => Promise<McpVersionCheckResult[]>;
+}
+
+/**
+ * Check every pinned MCP server against PyPI and report drift.
+ *
+ * Runs after the liveness check (Section 3) so a network failure here
+ * never masks a more serious "MCP server won't even start" problem. Status
+ * rollup:
+ *   - `ok` if every pinned MCP equals its PyPI latest
+ *   - `warn` if any MCP is `behind` or `fetch-failed` (drift is informative,
+ *     not blocking — bumping pins is a deliberate human decision)
+ *   - We never return `fail` from this section; doctor still exits non-zero
+ *     for hard failures elsewhere (credentials, BP manifest, etc.).
+ *
+ * @see Story 45.6
+ */
+export async function checkMcpVersionDrift(
+  deps: McpVersionCheckDeps = {},
+): Promise<DoctorSection> {
+  const checkFn = deps.checkVersionsImpl ?? checkMcpVersions;
+
+  // Doctor command spec: each section must finish within 5s so the full
+  // run stays under the 10s budget. Each per-MCP fetch already has its
+  // own 5s AbortController inside the service, but Promise.allSettled
+  // means the *worst* case is one slow fetch dragging the whole section
+  // out — and on offline runners with broken DNS, AbortController doesn't
+  // always unblock pre-connect lookups in time. Wrap the whole call in a
+  // section-level deadline so the section never blows the budget.
+  let results: McpVersionCheckResult[];
+  try {
+    results = await withTimeout(
+      checkFn(),
+      DEFAULT_CHECK_TIMEOUT_MS,
+      "MCP version drift check timed out",
+    );
+  } catch (err) {
+    // Defensive: checkMcpVersions is built to never throw, but the
+    // timeout wrapper above DOES throw on overall section deadline. Both
+    // paths funnel here so the doctor command never crashes from this
+    // section.
+    return {
+      name: "MCP version drift",
+      status: "warn",
+      subs: [
+        {
+          label: "version check failed",
+          status: "warn",
+          detail: err instanceof Error ? err.message : String(err),
+        },
+      ],
+    };
+  }
+
+  const subs: DoctorSubCheck[] = results.map((r) => {
+    const label = padPin(`${r.packageName}@${r.pinnedVersion}`);
+    if (r.status === "up-to-date") {
+      return { label, status: "ok", detail: "latest" };
+    }
+    if (r.status === "behind") {
+      return {
+        label,
+        status: "warn",
+        detail: `latest: ${r.latestVersion ?? "unknown"} (drift — review release notes and bump deliberately)`,
+      };
+    }
+    return {
+      label,
+      status: "warn",
+      detail: `version check failed: ${r.error ?? "unknown error"}`,
+    };
+  });
+
+  const upToDateCount = subs.filter((s) => s.status === "ok").length;
+  return {
+    name: `MCP version drift (${upToDateCount}/${subs.length} up-to-date)`,
     status: rollup(subs),
     subs,
   };
@@ -920,10 +1010,14 @@ export interface RunDoctorDeps {
   cacheDeps?: CacheCheckDeps;
   configDeps?: ConfigCheckDeps;
   bpDeps?: BpCheckDeps;
+  /** Override the MCP version drift check (test injection). */
+  mcpVersionDeps?: McpVersionCheckDeps;
   /** Skip the Bedrock invoke (fast path used by tests / CI smoke). */
   skipBedrock?: boolean;
   /** Skip the MCP launch probe (fast path used by tests). */
   skipMcp?: boolean;
+  /** Skip the MCP version drift check (fast path used by tests). */
+  skipMcpVersionCheck?: boolean;
 }
 
 /**
@@ -935,7 +1029,7 @@ export async function runDoctor(
 ): Promise<DoctorReport> {
   const version = deps.version ?? "0.0.0";
 
-  const [credentials, bedrock, mcp] = await Promise.all([
+  const [credentials, bedrock, mcp, mcpVersionDrift] = await Promise.all([
     checkCredentials(deps.credentialsDeps),
     deps.skipBedrock
       ? Promise.resolve<DoctorSection>({
@@ -953,6 +1047,19 @@ export async function runDoctor(
           subs: [{ label: "skipped", status: "warn", detail: "skipMcp=true" }],
         })
       : checkMcpServers(deps.mcpDeps),
+    deps.skipMcpVersionCheck
+      ? Promise.resolve<DoctorSection>({
+          name: `MCP version drift (skipped)`,
+          status: "warn",
+          subs: [
+            {
+              label: "skipped",
+              status: "warn",
+              detail: "skipMcpVersionCheck=true",
+            },
+          ],
+        })
+      : checkMcpVersionDrift(deps.mcpVersionDeps),
   ]);
 
   const cache = checkCache(deps.cacheDeps);
@@ -967,6 +1074,7 @@ export async function runDoctor(
     bedrock,
     ...(llmRouting ? [llmRouting] : []),
     mcp,
+    mcpVersionDrift,
     cache,
     config,
     bp,
@@ -1004,16 +1112,22 @@ export const doctorCommand = new Command(CommandName.DOCTOR)
   .option("--json", "Emit the report as JSON instead of formatted text")
   .option("--skip-bedrock", "Skip the Bedrock LLM invoke check")
   .option("--skip-mcp", "Skip the MCP server launch probe")
+  .option(
+    "--skip-mcp-version-check",
+    "Skip the PyPI version drift check (offline / fast path)",
+  )
   .action(
     async (opts: {
       json?: boolean;
       skipBedrock?: boolean;
       skipMcp?: boolean;
+      skipMcpVersionCheck?: boolean;
     }) => {
       const report = await runDoctor({
         version: readPackageVersion(),
         ...(opts.skipBedrock ? { skipBedrock: true } : {}),
         ...(opts.skipMcp ? { skipMcp: true } : {}),
+        ...(opts.skipMcpVersionCheck ? { skipMcpVersionCheck: true } : {}),
       });
 
       if (opts.json) {

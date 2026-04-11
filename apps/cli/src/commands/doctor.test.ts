@@ -27,6 +27,7 @@ import {
   checkCredentials,
   checkBedrock,
   checkMcpServers,
+  checkMcpVersionDrift,
   checkCache,
   checkConfig,
   checkBestPractices,
@@ -36,6 +37,7 @@ import {
   renderSection,
   type DoctorReport,
 } from "./doctor.js";
+import type { McpVersionCheckResult } from "../services/mcp-version-check.js";
 
 const ENV_KEYS = [
   "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
@@ -467,6 +469,170 @@ describe("checkMcpServers", () => {
   });
 });
 
+// ── MCP version drift check (Story 45.6) ─────────────────────────────────
+
+describe("checkMcpVersionDrift", () => {
+  /** Build a fake McpVersionCheckResult — used to drive the section. */
+  function row(
+    overrides: Partial<McpVersionCheckResult>,
+  ): McpVersionCheckResult {
+    return {
+      packageName: "awslabs.aws-pricing-mcp-server",
+      pinnedVersion: "1.0.27",
+      latestVersion: "1.0.27",
+      status: "up-to-date",
+      ...overrides,
+    };
+  }
+
+  it("renders an ok row for every up-to-date MCP", async () => {
+    const section = await checkMcpVersionDrift({
+      checkVersionsImpl: async () => [
+        row({ packageName: "awslabs.aws-pricing-mcp-server" }),
+        row({
+          packageName: "awslabs.aws-documentation-mcp-server",
+          pinnedVersion: "1.1.20",
+          latestVersion: "1.1.20",
+        }),
+      ],
+    });
+
+    expect(section.status).toBe("ok");
+    expect(section.subs).toHaveLength(2);
+    expect(section.subs.every((s) => s.status === "ok")).toBe(true);
+    expect(section.subs[0]?.detail).toBe("latest");
+    expect(section.name).toContain("2/2 up-to-date");
+  });
+
+  it("renders a warn row when an MCP is behind, with the latest version in the detail", async () => {
+    const section = await checkMcpVersionDrift({
+      checkVersionsImpl: async () => [
+        row({
+          packageName: "awslabs.aws-pricing-mcp-server",
+          pinnedVersion: "1.0.27",
+          latestVersion: "1.0.30",
+          status: "behind",
+        }),
+      ],
+    });
+
+    expect(section.status).toBe("warn");
+    expect(section.subs[0]?.status).toBe("warn");
+    expect(section.subs[0]?.detail).toContain("latest: 1.0.30");
+    expect(section.subs[0]?.detail).toContain("review release notes");
+  });
+
+  it("renders a warn row with the error detail when a fetch failed", async () => {
+    const section = await checkMcpVersionDrift({
+      checkVersionsImpl: async () => [
+        row({
+          packageName: "awslabs.aws-pricing-mcp-server",
+          pinnedVersion: "1.0.27",
+          latestVersion: null,
+          status: "fetch-failed",
+          error: "DNS resolution failed",
+        }),
+      ],
+    });
+
+    expect(section.status).toBe("warn");
+    expect(section.subs[0]?.status).toBe("warn");
+    expect(section.subs[0]?.detail).toContain("version check failed");
+    expect(section.subs[0]?.detail).toContain("DNS resolution failed");
+  });
+
+  it("rolls up to warn when one MCP is behind even if others are ok", async () => {
+    const section = await checkMcpVersionDrift({
+      checkVersionsImpl: async () => [
+        row({}),
+        row({
+          packageName: "awslabs.iam-mcp-server",
+          pinnedVersion: "1.0.17",
+          latestVersion: "1.0.18",
+          status: "behind",
+        }),
+        row({
+          packageName: "awslabs.aws-documentation-mcp-server",
+          pinnedVersion: "1.1.20",
+          latestVersion: "1.1.20",
+        }),
+      ],
+    });
+
+    expect(section.status).toBe("warn");
+    expect(section.name).toContain("2/3 up-to-date");
+  });
+
+  it("never throws — a thrown injected impl produces a single warn row", async () => {
+    const section = await checkMcpVersionDrift({
+      checkVersionsImpl: async () => {
+        throw new Error("totally broken");
+      },
+    });
+
+    expect(section.status).toBe("warn");
+    expect(section.subs).toHaveLength(1);
+    expect(section.subs[0]?.detail).toContain("totally broken");
+  });
+
+  it("uses the real checkMcpVersions service when no impl is injected — and never hits the network in the test (mocked fetch)", async () => {
+    // Drive the path-of-least-resistance default. We mock global.fetch
+    // here to avoid touching PyPI; the goal is to assert that omitting
+    // checkVersionsImpl resolves to the real service shape, not that we
+    // re-test the service itself (its own test file covers that).
+    const originalFetch = globalThis.fetch;
+    // mockImplementation (not mockResolvedValue) — Response bodies can only
+    // be read once, so we MUST construct a fresh Response per call. The
+    // service makes one fetch per pinned MCP, so 5 calls in parallel.
+    globalThis.fetch = vi.fn().mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ info: { version: "999.999.999" } }), {
+          status: 200,
+        }),
+    ) as unknown as typeof globalThis.fetch;
+
+    try {
+      const section = await checkMcpVersionDrift();
+      // Every pinned MCP got a row, all "behind" because we returned a
+      // version higher than every pinned. Assert per-row sub status —
+      // checking only `section.status === "warn"` would let a regression
+      // that flips every row to "fetch-failed" pass silently (both roll
+      // up to warn).
+      expect(section.subs.length).toBeGreaterThan(0);
+      expect(section.status).toBe("warn");
+      for (const sub of section.subs) {
+        expect(sub.status).toBe("warn");
+        // The drift detail format is "latest: <version> (drift — review …)".
+        // fetch-failed details start with "version check failed:".
+        expect(sub.detail).toMatch(/^latest: 999\.999\.999/);
+        expect(sub.detail).not.toContain("version check failed");
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("returns a single warn row when the section-level timeout fires", async () => {
+    // Drive the section's withTimeout() wrapper directly — checkVersionsImpl
+    // returns a Promise that never resolves. The doctor section should
+    // hit its 5s budget, catch the timeout error, and return a single
+    // "version check failed: ... timed out" row instead of crashing.
+    vi.useFakeTimers();
+    try {
+      const promise = checkMcpVersionDrift({
+        checkVersionsImpl: () => new Promise(() => {}), // never resolves
+      });
+      await vi.advanceTimersByTimeAsync(5001);
+      const section = await promise;
+      expect(section.status).toBe("warn");
+      expect(section.subs).toHaveLength(1);
+      expect(section.subs[0]?.detail).toMatch(/timed out/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 // ── Cache check ──────────────────────────────────────────────────────────
 
 describe("checkCache", () => {
@@ -654,6 +820,7 @@ describe("runDoctor", () => {
         version: "9.9.9",
         skipBedrock: true,
         skipMcp: true,
+        skipMcpVersionCheck: true,
         credentialsDeps: {
           stsClientFactory: () => ({ send }),
         },
@@ -662,7 +829,8 @@ describe("runDoctor", () => {
       });
 
       expect(report.version).toBe("9.9.9");
-      expect(report.sections).toHaveLength(6);
+      // Story 45.6 added the MCP version drift section → 7 sections total.
+      expect(report.sections).toHaveLength(7);
       // Skip flags should produce 'warn' rather than 0/SUCCESS — they're
       // unverified, not "ok".
       expect(report.exitCode).toBe(2);
@@ -684,6 +852,7 @@ describe("runDoctor", () => {
         version: "1.0.0",
         skipBedrock: true,
         skipMcp: true,
+        skipMcpVersionCheck: true,
         credentialsDeps: {
           stsClientFactory: () => ({ send: vi.fn() }),
         },

@@ -134,7 +134,8 @@ _assignee() {
           _arguments \
             '--json[Emit the report as JSON instead of formatted text]' \
             '--skip-bedrock[Skip the Bedrock LLM invoke check]' \
-            '--skip-mcp[Skip the MCP server launch probe]'
+            '--skip-mcp[Skip the MCP server launch probe]' \
+            '--skip-mcp-version-check[Skip the PyPI version drift check (offline / fast path)]'
           ;;
         whoami)
           ;;
