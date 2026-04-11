@@ -1,26 +1,25 @@
 /**
  * Constants for advice advisors — no magic strings or numbers.
  *
- * @see Story 40.4, 40.5, 40.6
+ * Story 46.6 (2026-04-12): the instance-family tables (ARM equivalents,
+ * Spot eligibility, RDS large-class detection, RDS budget alternatives)
+ * moved to their own registry at `../../constants/instance-family-registry.ts`
+ * so new AWS instance families can be added without editing this advisor
+ * module. Re-exported here for backward compatibility — every existing
+ * import of these four symbols continues to resolve through this file.
+ *
+ * @see Story 40.4, 40.5, 40.6 — original advisor introductions
+ * @see Story 46.6 — registry extraction
  */
 
 // ── Cost advisor constants ──────────────────────────────────────────────────
 
-/** Instance type family prefix → ARM (Graviton) equivalent prefix. */
-export const ARM_EQUIVALENTS: Record<string, string> = {
-  "t3.": "t4g.",
-  "m5.": "m6g.",
-  "c5.": "c6g.",
-};
-
-/** Instance type prefixes eligible for Spot Instance suggestion. */
-export const SPOT_ELIGIBLE_PREFIXES = ["t3.", "t4g."] as const;
-
-/** RDS instance class prefixes considered "large" (suggest downgrade for non-prod). */
-export const RDS_LARGE_CLASS_PREFIXES = ["db.r5.", "db.r6g."] as const;
-
-/** RDS instance class suggested as cheaper alternative. */
-export const RDS_BUDGET_ALTERNATIVES = "db.t3.medium or db.t4g.medium";
+export {
+  ARM_EQUIVALENTS,
+  SPOT_ELIGIBLE_PREFIXES,
+  RDS_LARGE_CLASS_PREFIXES,
+  RDS_BUDGET_ALTERNATIVES,
+} from "../../constants/instance-family-registry.js";
 
 /** Lambda memory threshold (MB) above which we suggest optimization. */
 export const LAMBDA_MEMORY_OPTIMIZATION_THRESHOLD_MB = 512;

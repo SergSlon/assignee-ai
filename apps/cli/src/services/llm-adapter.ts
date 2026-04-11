@@ -20,6 +20,7 @@ import type { ZodSchema } from "zod";
 import { LlmError, safeTry } from "@assignee/core";
 import type { LlmPort, LlmCallOptions, Result } from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
+import { KNOWN_BEDROCK_REGIONS } from "../constants/bedrock-regions.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { LlmProvider, type LlmProviderType } from "../constants/errors.js";
 import { recordTokenUsage, type RawLlmUsage } from "../utils/token-usage.js";
@@ -38,30 +39,14 @@ export const DEFAULT_MODEL = `${LlmProvider.BEDROCK}/amazon.nova-lite-v1:0`;
 /** Default maxOutputTokens per NFR-15. */
 export const DEFAULT_MAX_TOKENS = 1024;
 
-/**
- * Wave 12 P2: AWS regions where Bedrock + the canonical Anthropic
- * Claude / Amazon Nova models are confirmed enabled and available
- * (snapshot 2026-04). When a user runs `assignee` from a region NOT
- * on this list, the wrap-friendly error in `wrapBedrockRegionError`
- * suggests setting AWS_REGION to one of these.
- *
- * This is intentionally a SHORT list (the canonical "everyone uses these"
- * regions) rather than the exhaustive AWS region availability matrix —
- * the goal is "give the user a working AWS_REGION value", not "document
- * AWS service availability".
- */
-export const KNOWN_BEDROCK_REGIONS: readonly string[] = [
-  "us-east-1",
-  "us-east-2",
-  "us-west-2",
-  "eu-central-1",
-  "eu-west-1",
-  "eu-west-3",
-  "ap-northeast-1",
-  "ap-northeast-2",
-  "ap-southeast-1",
-  "ap-southeast-2",
-] as const;
+// Story 46.5 (2026-04-12): the KNOWN_BEDROCK_REGIONS list moved to its
+// own module under constants/bedrock-regions.ts so it's trivially
+// overridable for the Phase 2 config-driven path. We re-export it here
+// to preserve the public symbol — existing consumers (and the
+// llm-adapter test at `services/__tests__/llm-adapter.test.ts:33`)
+// continue to import `KNOWN_BEDROCK_REGIONS` from this module without
+// modification.
+export { KNOWN_BEDROCK_REGIONS };
 
 /**
  * Wave 12 P2: detect a Bedrock region/availability error and return

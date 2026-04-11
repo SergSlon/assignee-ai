@@ -82,21 +82,28 @@ export { AwsDefault as PricingDefault } from "@assignee/core";
 export { CostEstimateLabel as CostEstimate } from "@assignee/core";
 
 /**
- * Lambda pricing rates — LOCAL FALLBACK ONLY (stable since 2014 — verified 2025).
- * Production code uses the Lambda PricingDecomposer (Story 23.3) which queries
- * Pricing MCP at runtime. These constants are retained only as offline fallback
- * for the legacy lambdaPricingStrategy.estimateLocal().
+ * Lambda wizard defaults — NOT pricing rates.
  *
- * @see Story 23.5 — zero hardcoded prices in display paths
- * @see https://aws.amazon.com/lambda/pricing/
+ * Story 46.7 (2026-04-12): this module previously exported duplicate Lambda
+ * pricing-rate constants (USD_PER_MILLION_REQUESTS, USD_PER_GB_SECOND,
+ * ASSUMED_AVG_DURATION_SEC) that NO display path read. The live fallback
+ * rates consumed by `lambdaPricingStrategy.estimateLocal()` live in
+ * `packages/core/src/pricing/strategies/lambda.ts`, and that strategy
+ * already tags its output with `source: "fallback"` — the DataSource
+ * attribution requested by Story 46.7 is therefore already wired where it
+ * matters. The duplicate constants here were dead weight that drifted
+ * from the real ones, so they are removed rather than tagged.
+ *
+ * Only `DEFAULT_MEMORY_MB` is retained — it is consumed by the
+ * preflight-guard test suite as the canonical "no memory specified →
+ * default to 128MB" assumption that drives the cost-estimate preview
+ * when the user's intent does not set MemorySize.
+ *
+ * @see packages/core/src/pricing/strategies/lambda.ts — real fallback rates
+ * @see Story 46.2 — DataSource tagging (already applied to the live path)
+ * @see Story 46.7 — ghost constant cleanup
  */
 export const LambdaPricing = {
-  /** USD per million invocation requests */
-  USD_PER_MILLION_REQUESTS: 0.2,
-  /** USD per GB-second of compute duration */
-  USD_PER_GB_SECOND: 0.0000166667,
-  /** Assumed average invocation duration in seconds (used for estimate display) */
-  ASSUMED_AVG_DURATION_SEC: 0.1,
   /** Default memory when MemorySize not specified in desiredState */
   DEFAULT_MEMORY_MB: 128,
 } as const;
