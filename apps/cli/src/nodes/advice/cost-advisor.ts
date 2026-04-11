@@ -1,13 +1,19 @@
 /**
  * Cost alternative advisor — suggests cheaper resource configurations.
- * Advisory prices are sourced from named constants (Story 46.1).
- * Future Story 46.3 will enrich these at runtime with live MCP data.
+ * Advisory prices are sourced from named constants (Story 46.1) and can
+ * be enriched at runtime with live AWS Pricing API data via the
+ * `services/advisory-price-enricher.ts` registry (Story 46.3). When the
+ * enricher is not provided (legacy callers, unit-test paths) the function
+ * synthesizes a fallback-only map internally, so every callsite gets the
+ * "(estimated)" suffix without needing to know how enrichment works.
  *
  * @see Story 40.4 — Cost Alternative Advisor
  * @see Story 46.1 — Zero magic strings in advisory hints
+ * @see Story 46.2 — DataSource provenance tagging
+ * @see Story 46.3 — Runtime advisory price enrichment
  */
 
-import { RESOURCE_TYPES, CfnKey } from "@assignee/core";
+import { RESOURCE_TYPES, CfnKey, formatLabelWithSource } from "@assignee/core";
 import {
   ARM_EQUIVALENTS,
   SPOT_ELIGIBLE_PREFIXES,
@@ -17,6 +23,7 @@ import {
   AdviceIcon,
 } from "./constants.js";
 import {
+  AdvisoryPriceId,
   NAT_GATEWAY_MONTHLY_APPROX,
   ALB_MONTHLY_APPROX,
   CW_ALARM_PER_MONTH,
@@ -33,16 +40,38 @@ import {
   DYNAMODB_PROVISIONED_SAVINGS_PCT,
   SQS_FIFO_SURCHARGE_PCT,
   EFS_LIFECYCLE_SAVINGS_PCT,
+  type EnrichedPriceMap,
 } from "../../constants/advisory-prices.js";
 
 /**
+ * Read the enriched label for an advisory price ID. When the supplied
+ * map is missing the entry (e.g. a legacy test that doesn't run the
+ * enricher), synthesize a `(estimated)`-tagged fallback from the
+ * hand-coded constant + the same formatter the enricher would use. This
+ * keeps every code path in `costAlternatives` reading a single shape:
+ * `${enrichedLabel(enriched, AdvisoryPriceId.X, fallback, format)}`.
+ */
+function enrichedLabel(
+  enriched: EnrichedPriceMap | undefined,
+  id: AdvisoryPriceId,
+  fallbackValue: number,
+  formatter: (v: number) => string,
+): string {
+  const hit = enriched?.get(id);
+  if (hit) return hit.label;
+  return formatLabelWithSource(formatter(fallbackValue), "fallback");
+}
+
+/**
  * Generates cost optimization hints based on the resource configuration.
- * Does NOT call Pricing MCP directly — that's Story 40.2 (MCP enrichment).
- * For now, returns structural cost advice that doesn't need runtime prices.
+ * When `enriched` is supplied (from `enrichAdvisoryPrices`) the hints
+ * carry live "(live)" suffixes; otherwise every advisory price falls
+ * back to its hand-coded constant tagged "(estimated)".
  */
 export function costAlternatives(
   resourceType: string,
   desiredState: Record<string, unknown>,
+  enriched?: EnrichedPriceMap,
 ): string[] {
   const hints: string[] = [];
 
@@ -57,37 +86,61 @@ export function costAlternatives(
   } else if (resourceType === RESOURCE_TYPES.DYNAMODB_TABLE) {
     dynamodbCostHints(desiredState, hints);
   } else if (resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY) {
+    const natLabel = enrichedLabel(
+      enriched,
+      AdvisoryPriceId.NAT_GATEWAY_MONTHLY,
+      NAT_GATEWAY_MONTHLY_APPROX,
+      (v) => `~$${v.toFixed(2)}/mo`,
+    );
     hints.push(
-      `${AdviceIcon.COST} NAT Gateway costs ~$${NAT_GATEWAY_MONTHLY_APPROX}/mo fixed + data processing fees \u2014 consider VPC endpoints for S3/DynamoDB to reduce data transfer through NAT`,
+      `${AdviceIcon.COST} NAT Gateway costs ${natLabel} fixed + data processing fees \u2014 consider VPC endpoints for S3/DynamoDB to reduce data transfer through NAT`,
     );
   } else if (resourceType === RESOURCE_TYPES.ELBV2_LOAD_BALANCER) {
+    const albLabel = enrichedLabel(
+      enriched,
+      AdvisoryPriceId.ALB_MONTHLY,
+      ALB_MONTHLY_APPROX,
+      (v) => `~$${v.toFixed(2)}/mo`,
+    );
     hints.push(
-      `${AdviceIcon.COST} ALB costs ~$${ALB_MONTHLY_APPROX}/mo fixed + LCU charges \u2014 for simple routing, consider using API Gateway instead`,
+      `${AdviceIcon.COST} ALB costs ${albLabel} fixed + LCU charges \u2014 for simple routing, consider using API Gateway instead`,
     );
   } else if (resourceType === RESOURCE_TYPES.SQS_QUEUE) {
     sqsCostHints(desiredState, hints);
   } else if (resourceType === RESOURCE_TYPES.CLOUDWATCH_ALARM) {
+    const alarmLabel = enrichedLabel(
+      enriched,
+      AdvisoryPriceId.CW_ALARM_PER_MONTH,
+      CW_ALARM_PER_MONTH,
+      (v) => `$${v.toFixed(2)}/alarm/month`,
+    );
     hints.push(
-      `${AdviceIcon.COST} Standard alarms cost $${CW_ALARM_PER_MONTH.toFixed(2)}/alarm/month \u2014 high-resolution alarms (period < 60s) cost ${CW_HIGH_RES_ALARM_MULTIPLIER}x more`,
+      `${AdviceIcon.COST} Standard alarms cost ${alarmLabel} \u2014 high-resolution alarms (period < 60s) cost ${CW_HIGH_RES_ALARM_MULTIPLIER}x more`,
     );
   } else if (resourceType === RESOURCE_TYPES.ECS_CLUSTER) {
     hints.push(
       `${AdviceIcon.COST} ECS cluster itself is free \u2014 costs come from the underlying EC2 instances or Fargate tasks`,
     );
   } else if (resourceType === RESOURCE_TYPES.LOGS_LOG_GROUP) {
+    const logsLabel = enrichedLabel(
+      enriched,
+      AdvisoryPriceId.CW_LOGS_INGESTION_PER_GB,
+      CW_LOGS_INGESTION_PER_GB,
+      (v) => `$${v.toFixed(2)}/GB`,
+    );
     hints.push(
-      `${AdviceIcon.COST} CloudWatch Logs ingestion costs $${CW_LOGS_INGESTION_PER_GB.toFixed(2)}/GB \u2014 set a retention period to avoid unbounded storage costs`,
+      `${AdviceIcon.COST} CloudWatch Logs ingestion costs ${logsLabel} \u2014 set a retention period to avoid unbounded storage costs`,
     );
   } else if (resourceType === RESOURCE_TYPES.EFS_FILE_SYSTEM) {
-    efsCostHints(desiredState, hints);
+    efsCostHints(desiredState, hints, enriched);
   } else if (resourceType === RESOURCE_TYPES.EFS_MOUNT_TARGET) {
     hints.push(
       `${AdviceIcon.COST} EFS mount targets are free \u2014 storage and NFS data transfer are billed on the parent AWS::EFS::FileSystem. One mount target per AZ is required for multi-AZ access.`,
     );
   } else if (resourceType === RESOURCE_TYPES.EVENTS_RULE) {
-    eventsRuleCostHints(desiredState, hints);
+    eventsRuleCostHints(desiredState, hints, enriched);
   } else if (resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION) {
-    cloudFrontCostHints(hints);
+    cloudFrontCostHints(hints, enriched);
   }
 
   return hints;
@@ -103,9 +156,18 @@ export function costAlternatives(
  * @see A14 (2026-04-09) — CloudFront::Distribution first-class
  * @see (f) 2026-04-09 — wired from decomposer reminder list
  */
-function cloudFrontCostHints(hints: string[]): void {
+function cloudFrontCostHints(
+  hints: string[],
+  enriched?: EnrichedPriceMap,
+): void {
+  const invalidationLabel = enrichedLabel(
+    enriched,
+    AdvisoryPriceId.CF_INVALIDATION_EACH,
+    CF_INVALIDATION_EACH,
+    (v) => `$${v.toFixed(3)}`,
+  );
   hints.push(
-    `${AdviceIcon.COST} First ${CF_INVALIDATION_FREE_TIER.toLocaleString("en-US")} invalidation paths/month are free; $${CF_INVALIDATION_EACH.toFixed(3)} each after that. Aggressive per-deploy invalidations can turn into real cost \u2014 prefer cache-busting filenames.`,
+    `${AdviceIcon.COST} First ${CF_INVALIDATION_FREE_TIER.toLocaleString("en-US")} invalidation paths/month are free; ${invalidationLabel} each after that. Aggressive per-deploy invalidations can turn into real cost \u2014 prefer cache-busting filenames.`,
   );
 }
 
@@ -118,6 +180,7 @@ function cloudFrontCostHints(hints: string[]): void {
 function eventsRuleCostHints(
   ds: Record<string, unknown>,
   hints: string[],
+  enriched?: EnrichedPriceMap,
 ): void {
   const schedule = ds["ScheduleExpression"];
   const eventBusName = ds["EventBusName"];
@@ -131,8 +194,14 @@ function eventsRuleCostHints(
       `${AdviceIcon.COST} EventBridge rule evaluation on the default bus is free — the cost you pay is the target's invocation cost (Lambda per-ms, SQS per-request, etc.) multiplied by the schedule frequency.`,
     );
   } else {
+    const customBusLabel = enrichedLabel(
+      enriched,
+      AdvisoryPriceId.EVENTBRIDGE_CUSTOM_PER_MILLION,
+      EVENTBRIDGE_CUSTOM_PER_MILLION,
+      (v) => `$${v.toFixed(2)}`,
+    );
     hints.push(
-      `${AdviceIcon.COST} Custom event bus "${bus}" bills $${EVENTBRIDGE_CUSTOM_PER_MILLION.toFixed(2)} per million events published (on top of target invocation fees). Confirm the volume estimate before shipping a high-throughput source.`,
+      `${AdviceIcon.COST} Custom event bus "${bus}" bills ${customBusLabel} per million events published (on top of target invocation fees). Confirm the volume estimate before shipping a high-throughput source.`,
     );
   }
 
@@ -174,7 +243,11 @@ function eventsRuleCostHints(
  * hint should be the one most likely to save money on the user's
  * workload.
  */
-function efsCostHints(ds: Record<string, unknown>, hints: string[]): void {
+function efsCostHints(
+  ds: Record<string, unknown>,
+  hints: string[],
+  enriched?: EnrichedPriceMap,
+): void {
   const throughputMode = ds[CfnKey.THROUGHPUT_MODE] as string | undefined;
   const provisionedMiBps = ds[CfnKey.PROVISIONED_THROUGHPUT_IN_MIBPS] as
     | number
@@ -198,8 +271,14 @@ function efsCostHints(ds: Record<string, unknown>, hints: string[]): void {
       provisionedNum && provisionedNum > 0
         ? `ThroughputMode=provisioned with ${provisionedNum} MiB/s`
         : `ThroughputMode=provisioned`;
+    const efsLabel = enrichedLabel(
+      enriched,
+      AdvisoryPriceId.EFS_PROVISIONED_PER_MIBS_MONTH,
+      EFS_PROVISIONED_PER_MIBS_MONTH,
+      (v) => `$${v.toFixed(0)}/MiB-s-month`,
+    );
     hints.push(
-      `${AdviceIcon.COST} ${prefix} \u2014 $${EFS_PROVISIONED_PER_MIBS_MONTH.toFixed(0)}/MiB-s-month baseline; the committed rate bills regardless of usage. Switch back to bursting / elastic if steady-state throughput is below ~50 MiB/s.`,
+      `${AdviceIcon.COST} ${prefix} \u2014 ${efsLabel} baseline; the committed rate bills regardless of usage. Switch back to bursting / elastic if steady-state throughput is below ~50 MiB/s.`,
     );
   }
 

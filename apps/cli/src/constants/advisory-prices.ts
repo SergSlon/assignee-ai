@@ -4,19 +4,25 @@
  * Architecture (Epic 46):
  *   - Cost CALCULATIONS use Pricing MCP at runtime (zero hardcoded amounts)
  *   - Cost ADVISORY HINTS use these constants as fallbacks, enriched with
- *     live MCP data when available (Story 46.3). Displayed with "~" prefix
- *     and "(estimated)" suffix when not MCP-enriched.
+ *     live MCP data via {@link AdvisoryPriceId} +
+ *     `services/advisory-price-enricher.ts` (Story 46.3). When live data
+ *     is available the hint shows "$X.XX/mo (live)"; otherwise the hint
+ *     falls back to the constant tagged "(estimated)".
  *   - This is the SINGLE SOURCE OF TRUTH for advisory fallback values.
- *     Update here when AWS changes fixed-rate pricing — all hints update.
+ *     Update here when AWS changes fixed-rate pricing — every hint that
+ *     references the constant via the enrichment registry updates.
  *
- * These constants exist because advisory hints run in a synchronous code
- * path (cost-advisor.ts) that cannot make async MCP calls today. Story 46.3
- * will make the advisory path async and enrich these with live prices.
+ * Story 46.1 extracted the magic numbers; Story 46.2 added the
+ * `DataSource` provenance tag; Story 46.3 wires the two together via the
+ * enricher so each hint can render "(live)" or "(estimated)" honestly.
  *
  * @see Story 46.1 — Extract price constants from template literals
+ * @see Story 46.2 — DataSource provenance tagging
  * @see Story 46.3 — Runtime enrichment with live MCP data
  * @see docs/mcp-intelligence-audit.md §3.1 — Hardcoded price inventory
  */
+
+import type { DataSource } from "@assignee/core";
 
 // ── Fixed monthly costs ─────────────────────────────────────────────────────
 
@@ -71,3 +77,49 @@ export const SQS_FIFO_SURCHARGE_PCT = 25;
 
 /** EFS Lifecycle Management savings for cold data. */
 export const EFS_LIFECYCLE_SAVINGS_PCT = 80;
+
+// ── Story 46.3: enrichment registry (live MCP → fallback constant) ─────────
+
+/**
+ * Stable identifiers for every advisory price that can be enriched with
+ * live AWS Pricing API data. The enricher service
+ * (`services/advisory-price-enricher.ts`) keys its query registry by
+ * these IDs, and `cost-advisor.ts` reads `enriched.get(id).label` to
+ * format hints. Adding a new enrichable price means: (1) add an enum
+ * entry here, (2) add a query spec in the enricher, (3) reference the
+ * enum in the relevant hint string. The TypeScript compiler enforces
+ * step #2 because the enricher's query record is keyed by this enum.
+ *
+ * Percentage / ratio constants (ARM_GRAVITON_SAVINGS_PCT, etc.) are
+ * intentionally absent — they're behavioral, not directly fetchable
+ * from the AWS Pricing API.
+ *
+ * @see Story 46.3
+ */
+export enum AdvisoryPriceId {
+  NAT_GATEWAY_MONTHLY = "nat-gateway-monthly",
+  ALB_MONTHLY = "alb-monthly",
+  EFS_PROVISIONED_PER_MIBS_MONTH = "efs-provisioned-per-mibs-month",
+  CW_ALARM_PER_MONTH = "cw-alarm-per-month",
+  CW_LOGS_INGESTION_PER_GB = "cw-logs-ingestion-per-gb",
+  CF_INVALIDATION_EACH = "cf-invalidation-each",
+  EVENTBRIDGE_CUSTOM_PER_MILLION = "eventbridge-custom-per-million",
+}
+
+/**
+ * Per-price enrichment outcome. The `label` is the formatted display
+ * string that already carries the source-provenance suffix from
+ * `formatLabelWithSource` — `cost-advisor.ts` interpolates `.label`
+ * directly into hint strings.
+ */
+export interface EnrichedPrice {
+  /** Numeric rate (e.g. 32.85 for $32.85/mo). */
+  value: number;
+  /** Pre-formatted display label, e.g. `"~$32.85/mo (live)"`. */
+  label: string;
+  /** Provenance tag — `"mcp"` when live, `"fallback"` when constant. */
+  source: DataSource;
+}
+
+/** Map type returned by the enricher. */
+export type EnrichedPriceMap = Map<AdvisoryPriceId, EnrichedPrice>;

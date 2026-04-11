@@ -370,4 +370,57 @@ describe("costAlternatives", () => {
       ).toBe(true);
     });
   });
+
+  // ── Story 46.3: enriched price labels ────────────────────────────────────
+
+  describe("enriched advisory prices", () => {
+    it('renders "(live)" suffix when an enriched price map is supplied', async () => {
+      const { AdvisoryPriceId } =
+        await import("../../constants/advisory-prices.js");
+      // Synthesize an enriched map with a live NAT Gateway price.
+      const enriched = new Map([
+        [
+          AdvisoryPriceId.NAT_GATEWAY_MONTHLY,
+          {
+            value: 32.85,
+            label: "~$32.85/mo (live)",
+            source: "mcp" as const,
+          },
+        ],
+      ]);
+
+      const hints = costAlternatives("AWS::EC2::NatGateway", {}, enriched);
+
+      // The hint should now embed the "(live)"-tagged label, not the
+      // bare constant.
+      expect(
+        hints.some(
+          (h) => h.includes("~$32.85/mo (live)") && h.includes("NAT Gateway"),
+        ),
+      ).toBe(true);
+    });
+
+    it('falls back to "(estimated)" suffix when the enriched map is empty', async () => {
+      const enriched = new Map();
+      const hints = costAlternatives("AWS::EC2::NatGateway", {}, enriched);
+
+      // Empty map → enrichedLabel synthesizes the fallback formatter,
+      // producing "~$X.XX/mo (estimated)" via formatLabelWithSource.
+      expect(
+        hints.some(
+          (h) => h.includes("(estimated)") && h.includes("NAT Gateway"),
+        ),
+      ).toBe(true);
+    });
+
+    it("falls back consistently when enriched map is omitted entirely (legacy callsite)", () => {
+      const hints = costAlternatives("AWS::EC2::NatGateway", {});
+      // Should not throw, should produce the (estimated) suffix.
+      expect(
+        hints.some(
+          (h) => h.includes("(estimated)") && h.includes("NAT Gateway"),
+        ),
+      ).toBe(true);
+    });
+  });
 });
