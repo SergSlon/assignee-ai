@@ -18,6 +18,7 @@ import {
   type McpAdviceContext,
 } from "./advice/mcp-advisor.js";
 import { MAX_ADVICE_HINTS, ADVICE_LLM_MAX_TOKENS } from "./advice/constants.js";
+import { enrichAdvisoryPrices } from "../services/advisory-price-enricher.js";
 
 /**
  * Factory for the advice_generator LangGraph node.
@@ -71,28 +72,44 @@ export function createAdviceGeneratorNode({
 
     const startedAt = Date.now();
     const hints: string[] = [];
-
-    // Phase 1: Rule-based advisors (instant, no LLM cost)
     const ds = state.desiredState!;
+
+    // Phase 1: Run rule-based advisors AND MCP-backed enrichers in
+    // parallel. The advisory price enricher (Story 46.3) fetches live
+    // rates for the fixed-price constants used by `costAlternatives`,
+    // and `gatherMcpAdviceContext` pulls additional context for the LLM
+    // phase. Both are non-blocking — Promise.allSettled isolates per-
+    // task failure so one MCP timeout never poisons the rest.
+    let mcpContext: McpAdviceContext = {};
+    // enrichAdvisoryPrices is built to NEVER throw — every error path
+    // resolves to a fulfilled all-fallback map. We still wrap it in
+    // Promise.allSettled so a future regression that breaks that
+    // contract doesn't poison the parallel block. The `rejected` branch
+    // is intentionally minimal — fall back to an empty map and let
+    // cost-advisor's `enrichedLabel` helper synthesize "(estimated)"
+    // labels per-ID. We do NOT re-invoke the enricher (Edge Hunter F8).
+    const [enrichedSettled, mcpContextSettled] = await Promise.allSettled([
+      enrichAdvisoryPrices(tools, state.runId),
+      tools && tools.length > 0
+        ? gatherMcpAdviceContext(state.resourceType, ds, tools)
+        : Promise.resolve<McpAdviceContext>({}),
+    ]);
+    const enrichedPrices =
+      enrichedSettled.status === "fulfilled"
+        ? enrichedSettled.value
+        : new Map();
+    if (mcpContextSettled.status === "fulfilled") {
+      mcpContext = mcpContextSettled.value;
+    }
+
+    // Rule-based advisors run sync after the parallel block has resolved.
+    // costAlternatives reads `enrichedPrices` so its hints carry the
+    // live "(live)" suffix when the MCP path succeeded.
     hints.push(...securityPosture(state.resourceType, ds, state.userIntent));
-    hints.push(...costAlternatives(state.resourceType, ds));
+    hints.push(...costAlternatives(state.resourceType, ds, enrichedPrices));
     hints.push(
       ...architectureAdvisor(state.resourcePattern, state.resourceQueue),
     );
-
-    // Phase 2: MCP-powered context (parallel, 3s timeout, non-blocking)
-    let mcpContext: McpAdviceContext = {};
-    if (tools && tools.length > 0) {
-      try {
-        mcpContext = await gatherMcpAdviceContext(
-          state.resourceType,
-          ds,
-          tools,
-        );
-      } catch {
-        // MCP failure is non-blocking
-      }
-    }
 
     // Phase 3: LLM-generated hints enriched with MCP data (if rule-based didn't produce enough)
     if (hints.length < MAX_ADVICE_HINTS) {

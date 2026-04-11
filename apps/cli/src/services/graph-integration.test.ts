@@ -434,8 +434,24 @@ describe("Graph integration — plan mode", () => {
     expect(result.resourceType).toBe("AWS::IAM::Role");
     expect(result.estimatedMonthlyCost).toBe("Free");
     expect(result.preflightPassed).toBe(true);
-    // Pricing tool should NOT have been called for IAM (free-tier, no mcpConfig)
-    expect(pricingTool.invoke).not.toHaveBeenCalled();
+    // Story 46.3: the pricing tool IS called by the advisory price
+    // enricher (7 fixed-rate constants get refreshed regardless of the
+    // resource being planned). What this test originally proved was that
+    // the preflight-guard NEVER queries pricing for IAM Role (free-tier,
+    // no mcpConfig) — assert the same intent more precisely now: none of
+    // the calls reference an IAM filter, because IAM is not in the
+    // enricher's registry.
+    const invokeCalls = (
+      pricingTool.invoke as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    for (const call of invokeCalls) {
+      const args = call[0] as { service_code?: string };
+      // The enricher only queries EC2/ELB/CloudWatch/CloudFront/EFS/Events
+      // service codes — never IAM. If a future regression makes the
+      // preflight-guard issue an IAM pricing query, this assertion fails.
+      expect(args.service_code).not.toContain("IAM");
+      expect(args.service_code).not.toBe("AWSIdentityAccess");
+    }
   });
 
   it("RDS instance: multi-engine pricing path", async () => {
