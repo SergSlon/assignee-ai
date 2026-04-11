@@ -206,8 +206,51 @@ export async function renderOptionPrompt(
       break;
     }
     case "string": {
+      // Two-step flow in --wizard mode with showBack:
+      // 1. Select: [Enter value] [← Back] [? Help] [Skip]
+      // 2. If user picks "Enter value", fall through to clack.text()
+      //
+      // This makes Back a visible, discoverable option instead of a hidden
+      // "type 'back'" keyword. Skip is offered only for optional fields.
+      // Keyboard shortcut: typing "back" in the text input still works for
+      // power users (backward compatible).
+      if (showBack) {
+        const actionOptions: Array<{ value: string; label: string }> = [
+          { value: "enter", label: "Enter value" },
+          {
+            value: BACK_SENTINEL,
+            label: "\u2190 Back \u2014 return to previous field",
+          },
+          {
+            value: HELP_SENTINEL,
+            label: "\u2753 ? \u2014 explain this field",
+          },
+        ];
+        if (!field.required) {
+          actionOptions.push({
+            value: "__skip__",
+            label: "Skip (leave empty)",
+          });
+        }
+
+        const action = await clack.select({
+          message: question.label,
+          options: actionOptions,
+          initialValue: "enter",
+        });
+
+        if (clack.isCancel(action)) {
+          clack.cancel(UserMessage.WIZARD_CANCELLED);
+          throw new UserCancelledError();
+        }
+        if (action === BACK_SENTINEL) return BACK_SENTINEL;
+        if (action === HELP_SENTINEL) return HELP_SENTINEL;
+        if (action === "__skip__") return undefined;
+        // action === "enter" — fall through to clack.text()
+      }
+
       const placeholder = question.placeholder ?? "";
-      const backHint = showBack ? " (type 'back' to go back)" : "";
+      const backHint = showBack ? " (or type 'back' to go back)" : "";
       result = await clack.text({
         message: question.label,
         placeholder: placeholder
@@ -221,7 +264,7 @@ export async function renderOptionPrompt(
           return question.validate?.(value, answers);
         },
       });
-      // Handle "back" typed in text field
+      // Backcompat: typed "back" in text field returns BACK_SENTINEL
       if (
         showBack &&
         typeof result === "string" &&

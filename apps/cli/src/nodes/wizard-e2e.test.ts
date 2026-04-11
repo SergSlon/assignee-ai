@@ -188,9 +188,51 @@ function containsPlaceholder(obj: unknown): string | null {
 
 // ── Setup / teardown ─────────────────────────────────────────────────────────
 
+/**
+ * Wraps `vi.mocked(select).mockResolvedValueOnce` values so that any call
+ * to the action-menu select (text-field back/help/skip) auto-returns "enter"
+ * and doesn't consume from the queue.
+ *
+ * Story: wizard-back-navigation-ux — text fields now show a select action menu
+ * before the actual text input when showBack=true. Tests that were written
+ * before this change provide select mocks for real selects only, not for
+ * action menus. This helper bridges that gap without rewriting every test.
+ */
+function isActionMenu(opts: unknown): boolean {
+  if (!opts || typeof opts !== "object") return false;
+  const options = (opts as { options?: Array<{ value?: unknown }> }).options;
+  return Array.isArray(options) && options.some((o) => o?.value === "enter");
+}
+
+function installActionMenuAutoHandler(): void {
+  const originalSelect = vi.mocked(select);
+  // Use mockImplementation as the fallback: if the call is an action menu,
+  // return "enter" immediately; otherwise, fall through to the queued
+  // mockResolvedValueOnce responses. Vitest consumes Once values first,
+  // so the queue is preserved for non-action-menu calls.
+  //
+  // We achieve this by saving the original queue behavior and wrapping.
+  const queue: Array<unknown> = [];
+  const realOnce = originalSelect.mockResolvedValueOnce.bind(originalSelect);
+  originalSelect.mockResolvedValueOnce = ((value: unknown) => {
+    queue.push(value);
+    return originalSelect;
+  }) as typeof originalSelect.mockResolvedValueOnce;
+
+  originalSelect.mockImplementation(async (opts: unknown) => {
+    if (isActionMenu(opts)) return "enter" as never;
+    if (queue.length > 0) return queue.shift() as never;
+    return undefined as never;
+  });
+
+  // Suppress unused warning
+  void realOnce;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   setTTY(true);
+  installActionMenuAutoHandler();
 });
 
 afterEach(() => {

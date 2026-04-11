@@ -266,10 +266,15 @@ describe("optionElicitorNode", () => {
   });
 
   it("prompts for ask_if_not_set field and stores answer", async () => {
+    // Field 1: Name (text, showBack=false → direct text prompt)
     vi.mocked(text).mockResolvedValueOnce("my-resource");
-    vi.mocked(select).mockResolvedValueOnce("true"); // Encrypt
-    vi.mocked(text).mockResolvedValueOnce(""); // KmsKey (shown because Encrypt=true)
-    vi.mocked(select).mockResolvedValueOnce("sm"); // Size
+    // Field 2: Encrypt (boolean with showBack → select)
+    vi.mocked(select).mockResolvedValueOnce("true");
+    // Field 3: KmsKey (text with showBack → 2-step select-then-text)
+    vi.mocked(select).mockResolvedValueOnce("enter"); // action menu: "Enter value"
+    vi.mocked(text).mockResolvedValueOnce(""); // empty value
+    // Field 4: Size (enum with showBack → select)
+    vi.mocked(select).mockResolvedValueOnce("sm");
     vi.mocked(confirm).mockResolvedValueOnce(false); // advanced confirm
 
     const result = await optionElicitorNode(makeState());
@@ -295,7 +300,8 @@ describe("optionElicitorNode", () => {
   it("shows advanced tier when user confirms", async () => {
     vi.mocked(text).mockResolvedValueOnce("my-resource");
     vi.mocked(select).mockResolvedValueOnce(true); // Encrypt
-    vi.mocked(text).mockResolvedValueOnce(""); // KmsKey
+    vi.mocked(select).mockResolvedValueOnce("enter"); // KmsKey action menu
+    vi.mocked(text).mockResolvedValueOnce(""); // KmsKey value
     vi.mocked(select).mockResolvedValueOnce("sm");
     vi.mocked(confirm).mockResolvedValueOnce(true); // advanced confirm
     vi.mocked(multiselect).mockResolvedValueOnce([]); // Tags
@@ -322,8 +328,11 @@ describe("optionElicitorNode", () => {
 
   it("uses generic fallback plugin for unknown resource type", async () => {
     // generic plugin has 2 commonFields, no advancedFields
-    vi.mocked(text).mockResolvedValueOnce("my-resource"); // ResourceName
-    vi.mocked(text).mockResolvedValueOnce("env:prod"); // Tags (now string type)
+    // Field 1 (ResourceName): showBack=false → direct text
+    vi.mocked(text).mockResolvedValueOnce("my-resource");
+    // Field 2 (Tags): showBack=true → 2-step select-then-text
+    vi.mocked(select).mockResolvedValueOnce("enter");
+    vi.mocked(text).mockResolvedValueOnce("env:prod");
 
     const result = await optionElicitorNode(
       makeState({ resourceType: "AWS::Unknown::Type" }),
