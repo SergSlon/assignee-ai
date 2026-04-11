@@ -28,14 +28,15 @@ export interface IntentDefaultOverride {
   categoryHint?: string;
 }
 
-/** Internal rule definition for keyword-to-override mapping. */
-interface IntentRule {
+/** Rule definition for keyword-to-override mapping. Exported for matrix tests. */
+export interface IntentRule {
   resourceType: string;
   keywords: string[];
   overrides: IntentDefaultOverride[];
 }
 
-const INTENT_RULES: IntentRule[] = [
+/** Full keyword → override ruleset. Exported for matrix tests (read-only usage). */
+export const INTENT_RULES: IntentRule[] = [
   // EC2 — Web server
   {
     resourceType: RESOURCE_TYPES.EC2_INSTANCE,
@@ -565,13 +566,15 @@ const INTENT_RULES: IntentRule[] = [
     ],
   },
   // ECS Cluster — Fargate
+  // Targets the user-facing ContainerInsights boolean field; the plugin's
+  // toCfn transform emits the ClusterSettings array shape at plan time.
   {
     resourceType: RESOURCE_TYPES.ECS_CLUSTER,
     keywords: ["fargate", "serverless"],
     overrides: [
       {
-        fieldName: CfnKey.CLUSTER_SETTINGS,
-        value: [{ Name: "containerInsights", Value: "enabled" }],
+        fieldName: CfnKey.CONTAINER_INSIGHTS,
+        value: true,
         reason: "Container Insights enabled for Fargate observability",
       },
     ],
