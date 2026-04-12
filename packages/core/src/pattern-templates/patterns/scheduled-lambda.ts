@@ -151,16 +151,20 @@ export const scheduledLambdaPattern: ArchitecturePattern = {
     [R.SCHEDULE_RULE]: {
       // Default: fire every hour. The user can override via
       // `--set ScheduleExpression="rate(5 minutes)"` or `cron(...)`.
+      // Name is injected by plan-generator's NAME_FIELDS with runId
+      // suffix for uniqueness — do not set a static Name here.
       ScheduleExpression: "rate(1 hour)",
       State: "ENABLED",
       Description:
         "Scheduled invocation rule for the assignee-managed Lambda function",
-      Targets: [
-        {
-          Id: "lambda-target",
-          Arn: markerGetAtt(R.LAMBDA_FN, "Arn"),
-        },
-      ],
+      // 2026-04-12: Targets removed from compound defaultOptions.
+      // EventBridge CCAPI CreateResource passes Name as a
+      // CharSequence internally — a null Name caused a Java NPE
+      // (`"this.text" is null`). Adding an explicit Name field fixes
+      // the NPE. Targets are removed because they require the full
+      // Lambda ARN but compound completedResources stores bare
+      // function names; a future story can add SDK-based PutTargets
+      // as a post-apply hook (same pattern as Lambda Permission).
     },
     [R.INVOKE_PERMISSION]: {
       // Display-only — not provisioned. Documents the post-apply
