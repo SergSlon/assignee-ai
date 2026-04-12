@@ -77,6 +77,11 @@ const NO_TAG_TYPES: Set<string> = new Set([
   // tagging.taggable=false (OAC is a CloudFront sub-resource; the
   // parent distribution is what carries tags).
   RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL,
+  // 2026-04-12: AWS::EFS::MountTarget — tagging.taggable=false per
+  // CCAPI schema. Tags live on the parent EFS::FileSystem via
+  // FileSystemTags, not on individual mount targets. Injecting Tags
+  // here triggers "extraneous key [Tags] is not permitted".
+  RESOURCE_TYPES.EFS_MOUNT_TARGET,
   // (f) 2026-04-09 Task 4b: AWS::S3::BucketPolicy — tagging.taggable
   // =false (the policy IS an attribute of the bucket; tags live on
   // the parent AWS::S3::Bucket resource).

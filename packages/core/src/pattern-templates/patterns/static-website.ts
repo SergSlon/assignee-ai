@@ -147,7 +147,9 @@ export const staticWebsitePattern: ArchitecturePattern = {
           {
             ErrorCode: 403,
             ResponsePagePath: "/index.html",
-            ResponseCode: "200",
+            // CCAPI expects integer, not string — "200" triggers
+            // "expected type: Integer, found: String"
+            ResponseCode: 200,
             ErrorCachingMinTTL: 10,
           },
         ],
