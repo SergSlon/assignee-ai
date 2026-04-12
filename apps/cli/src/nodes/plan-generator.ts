@@ -833,7 +833,33 @@ export function createPlanGeneratorNode({
         state.executionMode === ExecutionMode.PLAN ||
         isNonProvisionableCompanion
       ) {
+        // Deep-copy desiredState before placeholder mutation to avoid
+        // corrupting the shared pattern.defaultOptions nested arrays/
+        // objects. resolvePlaceholderMarkers mutates in place (line 529:
+        // obj[i] = walk(obj[i])), and the shallow spread at line 666
+        // shares nested arrays with patternDefaults. Without this deep
+        // copy, a PLAN-mode pass on resource N corrupts the shared
+        // SecurityGroups/Targets arrays, and a subsequent APPLY-mode
+        // pass on resource M sees placeholders instead of markers.
+        const deepCopy = JSON.parse(JSON.stringify(desiredState)) as Record<
+          string,
+          unknown
+        >;
+        for (const k of Object.keys(desiredState)) delete desiredState[k];
+        Object.assign(desiredState, deepCopy);
         resolvePlaceholderMarkers(desiredState, AWS_REGION);
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.PLAN_GENERATED,
+          extras: {
+            phase: "compound_marker_placeholder",
+            resourceId: currentResource.resourceId,
+            executionMode: state.executionMode,
+            provisionable: currentResource.provisionable,
+          },
+        });
       } else {
         try {
           await resolveCompoundMarkers(desiredState, {
