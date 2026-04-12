@@ -63,12 +63,21 @@ export const DESTROY_TIER: Record<string, number> = {
   [RESOURCE_TYPES.S3_BUCKET_POLICY]: 0,
   [RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION]: 1, // Must be disabled/deleted before S3 bucket
   [RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL]: 2,
-  // Tier 2: Service resources
+  // Tier 2: Service resources + leaf dependents that must go before parents
   [RESOURCE_TYPES.LAMBDA_FUNCTION]: 2,
   [RESOURCE_TYPES.SQS_QUEUE]: 2,
   [RESOURCE_TYPES.SNS_TOPIC]: 2,
   [RESOURCE_TYPES.DYNAMODB_TABLE]: 2,
   [RESOURCE_TYPES.APIGATEWAYV2_API]: 2,
+  // 2026-04-12: EFS MountTarget must be deleted BEFORE EFS FileSystem.
+  // MountTargets are leaf resources (no dependents), FileSystem rejects
+  // delete while mount targets exist ("has mount targets" 409 error).
+  [RESOURCE_TYPES.EFS_MOUNT_TARGET]: 2,
+  [RESOURCE_TYPES.EFS_FILE_SYSTEM]: 3,
+  // EventBridge resources
+  [RESOURCE_TYPES.EVENTS_RULE]: 2,
+  [RESOURCE_TYPES.EVENTS_EVENT_BUS]: 3,
+  [RESOURCE_TYPES.KMS_KEY]: 2,
   // Tier 3: Compute/DB/Network services
   [RESOURCE_TYPES.EC2_INSTANCE]: 3,
   [RESOURCE_TYPES.RDS_DB_INSTANCE]: 3,
