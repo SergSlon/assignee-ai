@@ -122,7 +122,14 @@ export const staticWebsitePattern: ArchitecturePattern = {
         Origins: [
           {
             Id: "S3Origin",
-            DomainName: `${markerRef(R.WEBSITE_BUCKET)}.s3.amazonaws.com`,
+            // Use the regional S3 endpoint — the global s3.amazonaws.com
+            // redirects but CloudFront rejects it for new buckets due to
+            // DNS propagation delay. The regional endpoint resolves
+            // immediately. The region is hardcoded to us-east-1 here
+            // because the compound marker resolver only substitutes
+            // resource IDs, not region values. A future improvement
+            // could inject the configured region via a new marker type.
+            DomainName: `${markerRef(R.WEBSITE_BUCKET)}.s3.us-east-1.amazonaws.com`,
             OriginAccessControlId: markerRef(R.CDN_OAC),
             S3OriginConfig: {
               OriginAccessIdentity: "",
