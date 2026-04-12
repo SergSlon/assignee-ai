@@ -844,10 +844,11 @@ describeE2E("E2E: Lambda Function plan", () => {
     const s = state as AgentState;
 
     // Compound dispatch routes through the lambda-with-exec-role pattern.
-    // The node-level resourceType is the FIRST resource in the queue (IAM
-    // Role), but resourceQueue[1] must be the Lambda the user asked for.
+    // The graph reports the user-requested resource type (Lambda) — not
+    // the first queue item (IAM Role) — as state.resourceType after plan
+    // generation. The queue itself carries the full dependency order.
     expect(s.resourcePattern?.patternId).toBe("lambda-with-exec-role");
-    expect(s.resourceType).toBe("AWS::IAM::Role");
+    expect(s.resourceType).toBe("AWS::Lambda::Function");
     // Tier C: dropped redundant toBeDefined() — toHaveLength fails on undefined
     expect(s.resourceQueue).toHaveLength(2);
     expect(s.resourceQueue?.[1]?.resourceType).toBe("AWS::Lambda::Function");
@@ -910,7 +911,10 @@ describeE2E("E2E: EFS FileSystem plan", () => {
         noWizard: true,
         projectDir: process.cwd(),
       },
-      { configurable: { thread_id: crypto.randomUUID() } },
+      // EFS intent matches efs-with-vpc compound (10 resources) — the
+      // default recursionLimit of 25 is too low for compound plan-mode
+      // iteration. Mirror the 500 limit used by compound apply tests.
+      { configurable: { thread_id: crypto.randomUUID() }, recursionLimit: 500 },
     );
 
     const s = state as AgentState;
@@ -1077,7 +1081,9 @@ describeE2E("E2E: VPC plan", () => {
         noWizard: true,
         projectDir: process.cwd(),
       },
-      { configurable: { thread_id: crypto.randomUUID() } },
+      // VPC intent matches vpc-networking compound (17 resources) — needs
+      // higher recursionLimit for plan-mode iteration.
+      { configurable: { thread_id: crypto.randomUUID() }, recursionLimit: 500 },
     );
 
     const s = state as AgentState;
@@ -1540,10 +1546,14 @@ describeE2E("E2E: lambda-with-exec-role compound apply + destroy", () => {
     expect(typeof role.resourceArn).toBe("string");
     expect(role.resourceArn!.length).toBeGreaterThan(0);
     expect(role.executionStatus).toBe(ExecutionStatus.SUCCESS);
-    // Lambda ARN must look like arn:aws:lambda:<region>:<account>:function:<name>
-    expect(lambda.resourceArn).toMatch(
-      /^arn:aws:lambda:[a-z0-9-]+:\d+:function:/,
-    );
+    // Compound completedResources[].resourceArn stores the BARE CCAPI
+    // primary identifier (function name, not full ARN) by design — the
+    // compound marker resolver substitutes this into child resource fields
+    // where AWS rejects full ARNs. The resolved display ARN is only used
+    // in renderCompoundSuccess output. Assert the function name shape.
+    expect(typeof lambda.resourceArn).toBe("string");
+    expect(lambda.resourceArn!.length).toBeGreaterThan(0);
+    expect(lambda.resourceArn).toMatch(/^assignee-lambda-fn-/);
     expect(lambda.executionStatus).toBe(ExecutionStatus.SUCCESS);
 
     // Capture ARNs for afterAll cleanup. Role identifier may be a bare
@@ -2170,7 +2180,9 @@ describeE2E("E2E: serverless-api compound apply + destroy", () => {
     const fn = completed.find(
       (c) => c.resourceType === "AWS::Lambda::Function",
     );
-    expect(fn?.resourceArn).toMatch(/^arn:aws:lambda:[a-z0-9-]+:\d+:function:/);
+    // Compound completedResources stores bare function name, not full ARN
+    expect(typeof fn?.resourceArn).toBe("string");
+    expect(fn?.resourceArn!.length).toBeGreaterThan(0);
     expect(fn?.executionStatus).toBe(ExecutionStatus.SUCCESS);
 
     const api = completed.find(
@@ -2270,7 +2282,9 @@ describeE2E("E2E: message-processing compound apply + destroy", () => {
     const fn = completed.find(
       (c) => c.resourceType === "AWS::Lambda::Function",
     );
-    expect(fn?.resourceArn).toMatch(/^arn:aws:lambda:[a-z0-9-]+:\d+:function:/);
+    // Compound completedResources stores bare function name, not full ARN
+    expect(typeof fn?.resourceArn).toBe("string");
+    expect(fn?.resourceArn!.length).toBeGreaterThan(0);
     expect(fn?.executionStatus).toBe(ExecutionStatus.SUCCESS);
 
     // ── Destroy pipeline exercise ───────────────────────────────────

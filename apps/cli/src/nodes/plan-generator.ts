@@ -686,6 +686,23 @@ export function createPlanGeneratorNode({
           `assignee-${resourceId}-${shortId}`.toLowerCase();
       }
 
+      // CloudFront OAC has its name nested inside
+      // OriginAccessControlConfig.Name — the flat NAME_FIELDS map can't
+      // reach it. Without a unique suffix, repeated test runs collide on
+      // the static "assignee-static-website-oac" name and CCAPI rejects
+      // with "already exists". Inject the shortId so each run is unique.
+      if (
+        currentResource.resourceType ===
+        RESOURCE_TYPES.CLOUDFRONT_ORIGIN_ACCESS_CONTROL
+      ) {
+        const oac = desiredState["OriginAccessControlConfig"] as
+          | Record<string, unknown>
+          | undefined;
+        if (oac && typeof oac["Name"] === "string") {
+          oac["Name"] = `assignee-${resourceId}-${shortId}`;
+        }
+      }
+
       // Compound cross-reference: inject ARNs from previously completed resources
       // e.g., Lambda needs the IAM Role ARN from a prior step.
       //
