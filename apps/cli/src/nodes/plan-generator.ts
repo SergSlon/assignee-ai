@@ -679,6 +679,11 @@ export function createPlanGeneratorNode({
         [RESOURCE_TYPES.LAMBDA_FUNCTION]: CfnKey.FUNCTION_NAME,
         [RESOURCE_TYPES.S3_BUCKET]: CfnKey.BUCKET_NAME,
         [RESOURCE_TYPES.SNS_TOPIC]: CfnKey.TOPIC_NAME,
+        // 2026-04-12: EventBridge Rule uses "Name" as its naming
+        // property (createOnly). Without a unique name, CCAPI's Java
+        // backend throws a NPE on the null Name field. Adding it here
+        // so compound scheduled-lambda gets `assignee-schedule-rule-<shortId>`.
+        [RESOURCE_TYPES.EVENTS_RULE]: CfnKey.NAME,
       };
       const nameField = NAME_FIELDS[currentResource.resourceType];
       if (nameField && !desiredState[nameField]) {

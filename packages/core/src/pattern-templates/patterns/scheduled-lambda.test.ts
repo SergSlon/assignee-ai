@@ -135,14 +135,13 @@ describe("scheduledLambdaPattern — marker token wiring", () => {
     expect(opts[R.SCHEDULE_RULE]?.["State"]).toBe("ENABLED");
   });
 
-  it("Rule Targets reference the Lambda ARN via markerGetAtt", () => {
-    const targets = opts[R.SCHEDULE_RULE]?.["Targets"] as Array<
-      Record<string, unknown>
-    >;
-    expect(Array.isArray(targets)).toBe(true);
-    expect(targets).toHaveLength(1);
-    expect(targets[0]?.["Id"]).toBe("lambda-target");
-    expect(targets[0]?.["Arn"]).toBe(markerGetAtt(R.LAMBDA_FN, "Arn"));
+  // 2026-04-12: Targets removed from compound defaultOptions — CCAPI
+  // resolves markerGetAtt(Lambda, "Arn") to the bare function name but
+  // EventBridge PutTargets requires a full ARN. Targets will be added
+  // via a post-apply SDK hook in a future story. The rule is created
+  // target-less (valid per CCAPI) and the user adds targets manually.
+  it("Rule has no inline Targets (handled via post-apply)", () => {
+    expect(opts[R.SCHEDULE_RULE]?.["Targets"]).toBeUndefined();
   });
 
   it("Permission grants lambda:InvokeFunction to events.amazonaws.com", () => {
