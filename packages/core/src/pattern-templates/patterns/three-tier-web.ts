@@ -364,6 +364,7 @@ export const threeTierWebPattern: ArchitecturePattern = {
       SubnetIds: [markerRef(R.PRIVATE_SUBNET_1), markerRef(R.PRIVATE_SUBNET_2)],
     },
     [R.ALB]: {
+      Name: "assignee-alb",
       Type: AwsDefault.LB_TYPE_APPLICATION,
       Scheme: AwsDefault.LB_SCHEME_INTERNET_FACING,
       Subnets: [markerRef(R.PUBLIC_SUBNET_1), markerRef(R.PUBLIC_SUBNET_2)],
