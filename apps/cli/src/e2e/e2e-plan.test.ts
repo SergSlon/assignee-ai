@@ -1349,6 +1349,7 @@ describeE2E("E2E: VPC compound apply + destroy", () => {
         DetachInternetGatewayCommand,
         DeleteInternetGatewayCommand,
         DescribeRouteTablesCommand,
+        DisassociateRouteTableCommand,
         DeleteRouteTableCommand,
         DescribeNatGatewaysCommand,
         DeleteNatGatewayCommand,
@@ -1435,7 +1436,7 @@ describeE2E("E2E: VPC compound apply + destroy", () => {
             }
           }
 
-          // 4. Route tables (skip the main one)
+          // 4. Route tables: disassociate non-main associations, then delete
           const rts = await ec2.send(
             new DescribeRouteTablesCommand({
               Filters: [{ Name: "vpc-id", Values: [vpcId] }],
@@ -1444,6 +1445,18 @@ describeE2E("E2E: VPC compound apply + destroy", () => {
           for (const rt of rts.RouteTables ?? []) {
             const isMain = rt.Associations?.some((a) => a.Main);
             if (rt.RouteTableId && !isMain) {
+              // Disassociate all non-main associations first
+              for (const assoc of rt.Associations ?? []) {
+                if (assoc.RouteTableAssociationId && !assoc.Main) {
+                  await ec2
+                    .send(
+                      new DisassociateRouteTableCommand({
+                        AssociationId: assoc.RouteTableAssociationId,
+                      }),
+                    )
+                    .catch(() => {});
+                }
+              }
               await ec2
                 .send(
                   new DeleteRouteTableCommand({
@@ -2668,7 +2681,54 @@ describeE2E("E2E: container-service compound apply + destroy", () => {
       console.warn(`E2E ECR cleanup import failure: ${String(err)}`);
     }
 
-    // 4. Delete Security Groups matching assignee-* (non-default)
+    // 4. Delete IAM Roles matching assignee-task-role-*
+    try {
+      const {
+        IAMClient,
+        ListAttachedRolePoliciesCommand,
+        DetachRolePolicyCommand,
+        DeleteRoleCommand,
+      } = await import("@aws-sdk/client-iam");
+      const { ListRolesCommand } = await import("@aws-sdk/client-iam");
+      const iam = new IAMClient({ region, credentials: creds });
+      const roles = await iam.send(new ListRolesCommand({}));
+      for (const role of roles.Roles ?? []) {
+        if (role.RoleName?.startsWith("assignee-task-role-")) {
+          try {
+            // Detach all managed policies before deletion
+            const attached = await iam.send(
+              new ListAttachedRolePoliciesCommand({
+                RoleName: role.RoleName,
+              }),
+            );
+            for (const p of attached.AttachedPolicies ?? []) {
+              if (p.PolicyArn) {
+                await iam
+                  .send(
+                    new DetachRolePolicyCommand({
+                      RoleName: role.RoleName,
+                      PolicyArn: p.PolicyArn,
+                    }),
+                  )
+                  .catch(() => {});
+              }
+            }
+            await iam.send(new DeleteRoleCommand({ RoleName: role.RoleName }));
+            console.log(`E2E cleanup: deleted IAM Role ${role.RoleName}`);
+          } catch (err) {
+            const errName = (err as { name?: string })?.name ?? "";
+            if (errName === "NoSuchEntityException") continue;
+            console.warn(
+              `E2E IAM Role cleanup failed for ${role.RoleName}: ${String(err)}`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`E2E IAM cleanup import failure: ${String(err)}`);
+    }
+
+    // 5. Delete Security Groups matching assignee-* (non-default)
     try {
       const {
         EC2Client,
@@ -2692,7 +2752,7 @@ describeE2E("E2E: container-service compound apply + destroy", () => {
       // best-effort
     }
 
-    // 5. VPC cleanup (same pattern as the vpc-networking afterAll)
+    // 6. VPC cleanup (same pattern as the vpc-networking afterAll)
     try {
       const {
         EC2Client,
@@ -2703,6 +2763,7 @@ describeE2E("E2E: container-service compound apply + destroy", () => {
         DetachInternetGatewayCommand,
         DeleteInternetGatewayCommand,
         DescribeRouteTablesCommand,
+        DisassociateRouteTableCommand,
         DeleteRouteTableCommand,
         DeleteVpcCommand,
       } = await import("@aws-sdk/client-ec2");
@@ -2730,7 +2791,7 @@ describeE2E("E2E: container-service compound apply + destroy", () => {
                 .catch(() => {});
             }
           }
-          // Route tables (skip main)
+          // Route tables: disassociate non-main associations, then delete
           const rts = await ec2.send(
             new DescribeRouteTablesCommand({
               Filters: [{ Name: "vpc-id", Values: [vpcId] }],
@@ -2739,6 +2800,18 @@ describeE2E("E2E: container-service compound apply + destroy", () => {
           for (const rt of rts.RouteTables ?? []) {
             const isMain = rt.Associations?.some((a) => a.Main);
             if (rt.RouteTableId && !isMain) {
+              // Disassociate all non-main associations first
+              for (const assoc of rt.Associations ?? []) {
+                if (assoc.RouteTableAssociationId && !assoc.Main) {
+                  await ec2
+                    .send(
+                      new DisassociateRouteTableCommand({
+                        AssociationId: assoc.RouteTableAssociationId,
+                      }),
+                    )
+                    .catch(() => {});
+                }
+              }
               await ec2
                 .send(
                   new DeleteRouteTableCommand({
@@ -2950,16 +3023,67 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
           }
         }
       }
-      // Wait for RDS deletions to propagate before deleting DB subnet groups
-      // (RDS deletion can take 5-10 min; we wait 3 min as best-effort)
-      const hasRdsToDelete = (instances.DBInstances ?? []).some(
-        (db) =>
-          db.DBInstanceIdentifier?.startsWith("assignee-") &&
-          db.DBInstanceStatus !== "deleting",
-      );
-      if (hasRdsToDelete) {
-        console.log("E2E cleanup: waiting 180s for RDS deletion...");
-        await new Promise((r) => setTimeout(r, 180_000));
+      // Poll until all assignee-* RDS instances are fully deleted before
+      // proceeding to DB Subnet Group cleanup (RDS deletion takes 5-15 min).
+      const rdsIdsToWait = (instances.DBInstances ?? [])
+        .filter(
+          (db) =>
+            db.DBInstanceIdentifier?.startsWith("assignee-") &&
+            db.DBInstanceStatus !== "deleted",
+        )
+        .map((db) => db.DBInstanceIdentifier!);
+
+      if (rdsIdsToWait.length > 0) {
+        const {
+          RDSClient: RDSPollClient,
+          DescribeDBInstancesCommand: DescDBCmd,
+        } = await import("@aws-sdk/client-rds");
+        const rdsPoll = new RDSPollClient({ region, credentials: creds });
+        const maxPolls = 80; // 80 * 15s = 20 min max
+        const pollIntervalMs = 15_000;
+
+        for (const dbId of rdsIdsToWait) {
+          console.log(
+            `E2E cleanup: polling for RDS ${dbId} deletion (max 20 min)...`,
+          );
+          for (let i = 0; i < maxPolls; i++) {
+            await new Promise((r) => setTimeout(r, pollIntervalMs));
+            try {
+              const resp = await rdsPoll.send(
+                new DescDBCmd({
+                  DBInstanceIdentifier: dbId,
+                }),
+              );
+              const status = resp.DBInstances?.[0]?.DBInstanceStatus;
+              if (status === "deleting") {
+                if (i % 4 === 0) {
+                  console.log(
+                    `E2E cleanup: RDS ${dbId} still deleting (${(i + 1) * 15}s)...`,
+                  );
+                }
+                continue;
+              }
+              // Any other status means something unexpected — break out
+              console.warn(
+                `E2E cleanup: RDS ${dbId} unexpected status "${status}" — proceeding`,
+              );
+              break;
+            } catch (pollErr) {
+              const errName = (pollErr as { name?: string })?.name ?? "";
+              if (
+                errName === "DBInstanceNotFoundFault" ||
+                errName === "DBInstanceNotFoundException"
+              ) {
+                console.log(`E2E cleanup: RDS ${dbId} confirmed deleted`);
+                break;
+              }
+              // Transient error — keep polling
+              console.warn(
+                `E2E cleanup: RDS poll error for ${dbId}: ${String(pollErr)}`,
+              );
+            }
+          }
+        }
       }
     } catch (err) {
       console.warn(`E2E RDS cleanup import failure: ${String(err)}`);
@@ -3070,7 +3194,54 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
       console.warn(`E2E EC2 instance cleanup failure: ${String(err)}`);
     }
 
-    // 5. Security groups, VPC cleanup (same pattern as container-service)
+    // 5. Delete IAM Roles matching assignee-instance-profile-role-*
+    try {
+      const {
+        IAMClient,
+        ListRolesCommand,
+        ListAttachedRolePoliciesCommand,
+        DetachRolePolicyCommand,
+        DeleteRoleCommand,
+      } = await import("@aws-sdk/client-iam");
+      const iam = new IAMClient({ region, credentials: creds });
+      const roles = await iam.send(new ListRolesCommand({}));
+      for (const role of roles.Roles ?? []) {
+        if (role.RoleName?.startsWith("assignee-instance-profile-role-")) {
+          try {
+            // Detach all managed policies before deletion
+            const attached = await iam.send(
+              new ListAttachedRolePoliciesCommand({
+                RoleName: role.RoleName,
+              }),
+            );
+            for (const p of attached.AttachedPolicies ?? []) {
+              if (p.PolicyArn) {
+                await iam
+                  .send(
+                    new DetachRolePolicyCommand({
+                      RoleName: role.RoleName,
+                      PolicyArn: p.PolicyArn,
+                    }),
+                  )
+                  .catch(() => {});
+              }
+            }
+            await iam.send(new DeleteRoleCommand({ RoleName: role.RoleName }));
+            console.log(`E2E cleanup: deleted IAM Role ${role.RoleName}`);
+          } catch (err) {
+            const errName = (err as { name?: string })?.name ?? "";
+            if (errName === "NoSuchEntityException") continue;
+            console.warn(
+              `E2E IAM Role cleanup failed for ${role.RoleName}: ${String(err)}`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`E2E IAM cleanup import failure: ${String(err)}`);
+    }
+
+    // 6. Security groups, VPC cleanup (same pattern as container-service)
     try {
       const {
         EC2Client,
@@ -3094,7 +3265,7 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
       // best-effort
     }
 
-    // 6. VPC cleanup
+    // 7. VPC cleanup
     try {
       const {
         EC2Client,
@@ -3105,6 +3276,7 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
         DetachInternetGatewayCommand,
         DeleteInternetGatewayCommand,
         DescribeRouteTablesCommand,
+        DisassociateRouteTableCommand,
         DeleteRouteTableCommand,
         DeleteVpcCommand,
       } = await import("@aws-sdk/client-ec2");
@@ -3131,6 +3303,7 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
                 .catch(() => {});
             }
           }
+          // Route tables: disassociate non-main associations, then delete
           const rts = await ec2.send(
             new DescribeRouteTablesCommand({
               Filters: [{ Name: "vpc-id", Values: [vpcId] }],
@@ -3139,6 +3312,18 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
           for (const rt of rts.RouteTables ?? []) {
             const isMain = rt.Associations?.some((a) => a.Main);
             if (rt.RouteTableId && !isMain) {
+              // Disassociate all non-main associations first
+              for (const assoc of rt.Associations ?? []) {
+                if (assoc.RouteTableAssociationId && !assoc.Main) {
+                  await ec2
+                    .send(
+                      new DisassociateRouteTableCommand({
+                        AssociationId: assoc.RouteTableAssociationId,
+                      }),
+                    )
+                    .catch(() => {});
+                }
+              }
               await ec2
                 .send(
                   new DeleteRouteTableCommand({
@@ -3187,5 +3372,5 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
     } catch (err) {
       console.warn(`E2E VPC cleanup import failure: ${String(err)}`);
     }
-  }, 600_000);
+  }, 1_500_000);
 });
