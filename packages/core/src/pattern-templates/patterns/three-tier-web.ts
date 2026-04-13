@@ -364,7 +364,6 @@ export const threeTierWebPattern: ArchitecturePattern = {
       SubnetIds: [markerRef(R.PRIVATE_SUBNET_1), markerRef(R.PRIVATE_SUBNET_2)],
     },
     [R.ALB]: {
-      Name: "assignee-alb",
       Type: AwsDefault.LB_TYPE_APPLICATION,
       Scheme: AwsDefault.LB_SCHEME_INTERNET_FACING,
       Subnets: [markerRef(R.PUBLIC_SUBNET_1), markerRef(R.PUBLIC_SUBNET_2)],
@@ -380,6 +379,9 @@ export const threeTierWebPattern: ArchitecturePattern = {
     },
     [R.RDS_INSTANCE]: {
       Engine: ResourceDefault.RDS_ENGINE_POSTGRES,
+      MasterUsername: "appuser",
+      DBInstanceClass: "db.t3.micro",
+      AllocatedStorage: "20",
       MultiAZ: false,
       StorageEncrypted: true,
       BackupRetentionPeriod: 7,
