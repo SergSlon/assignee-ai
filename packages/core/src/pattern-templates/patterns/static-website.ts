@@ -6,7 +6,7 @@ import {
   IamAction,
   IamPolicy,
 } from "../../config/aws-arns.js";
-import { markerRef } from "../../config/marker-tokens.js";
+import { markerRef, markerRegion } from "../../config/marker-tokens.js";
 import type { ArchitecturePattern } from "../types.js";
 import { StaticWebsiteResourceId as R } from "../pattern-resource-ids.js";
 import { PatternId } from "../pattern-ids.js";
@@ -132,19 +132,11 @@ export const staticWebsitePattern: ArchitecturePattern = {
             Id: "S3Origin",
             // Use the regional S3 endpoint — the global s3.amazonaws.com
             // redirects but CloudFront rejects it for new buckets due to
-            // DNS propagation delay. The regional endpoint resolves
-            // immediately. The region is hardcoded to us-east-1 here
-            // because the compound marker resolver only substitutes
-            // resource IDs, not region values. A future improvement
-            // could inject the configured region via a new marker type.
-            // CloudFront CCAPI validates the S3 origin by bucket name.
-            // The regional REST endpoint format is:
-            //   <bucket>.s3.<region>.amazonaws.com
-            // BUT the CCAPI model resolves the bucket name internally
-            // when OriginAccessControlId is set — use the regional
-            // endpoint WITHOUT the bucket name prefix, letting CCAPI
-            // construct the full domain from the bucket identifier.
-            DomainName: `${markerRef(R.WEBSITE_BUCKET)}.s3.amazonaws.com`,
+            // DNS propagation delay (can take minutes). The regional
+            // endpoint resolves immediately since the bucket was just
+            // created in that region. markerRegion() resolves to the
+            // target AWS region at apply time (e.g. "us-east-1").
+            DomainName: `${markerRef(R.WEBSITE_BUCKET)}.s3.${markerRegion()}.amazonaws.com`,
             OriginAccessControlId: markerRef(R.CDN_OAC),
             S3OriginConfig: {
               OriginAccessIdentity: "",

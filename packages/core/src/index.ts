@@ -73,6 +73,7 @@ export {
   markerRef,
   markerGetAtt,
   markerAz,
+  markerRegion,
   parseMarker,
   isMarker,
   type ParsedMarker,

@@ -64,8 +64,18 @@ export function markerAz(index: number): string {
   return `${MARKER_PREFIX}AZ_${index}${MARKER_SUFFIX}`;
 }
 
+/**
+ * Builds a marker that resolves to the AWS region at apply time
+ * (e.g. "us-east-1"). Used in S3 origin DomainName for CloudFront
+ * where the regional endpoint resolves immediately for new buckets,
+ * unlike the global `.s3.amazonaws.com` which can lag by minutes.
+ */
+export function markerRegion(): string {
+  return `${MARKER_PREFIX}REGION${MARKER_SUFFIX}`;
+}
+
 /** Matches any assignee.ai marker token — used for detection. */
-export const MARKER_PATTERN = /__ASSIGNEE_(REF|GETATT|AZ)_[^\s]+?__/;
+export const MARKER_PATTERN = /__ASSIGNEE_(REF|GETATT|AZ|REGION)_?[^\s]*?__/;
 
 /**
  * Parses a marker string into its structured components.
@@ -74,7 +84,8 @@ export const MARKER_PATTERN = /__ASSIGNEE_(REF|GETATT|AZ)_[^\s]+?__/;
 export type ParsedMarker =
   | { kind: "ref"; resourceId: string }
   | { kind: "getatt"; resourceId: string; attribute: string }
-  | { kind: "az"; index: number };
+  | { kind: "az"; index: number }
+  | { kind: "region" };
 
 export function parseMarker(value: unknown): ParsedMarker | undefined {
   if (typeof value !== "string") return undefined;
@@ -104,6 +115,10 @@ export function parseMarker(value: unknown): ParsedMarker | undefined {
     const index = Number.parseInt(indexStr, 10);
     if (!Number.isInteger(index) || index < 0) return undefined;
     return { kind: "az", index };
+  }
+  // REGION (no suffix — just the bare token)
+  if (inner === "REGION") {
+    return { kind: "region" };
   }
   return undefined;
 }
