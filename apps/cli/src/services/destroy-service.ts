@@ -97,6 +97,17 @@ const CCAPIStatus = {
 const CCAPI_NOT_FOUND_ERROR_CODE = "NotFound";
 
 /**
+ * ALB post-delete ENI drain parameters.
+ * After CCAPI reports SUCCESS for ELBv2::LoadBalancer deletion, AWS takes
+ * 30-120s to release the ALB's ENIs and public IPs. Subsequent tier 4
+ * destroys (IGW detach, SecurityGroup delete, Subnet delete) fail with
+ * DependencyViolation if the ENIs are still in-use. We poll
+ * DescribeNetworkInterfaces until no ALB-related ENIs remain in the VPC.
+ */
+const ALB_ENI_DRAIN_MAX_ATTEMPTS = 24; // 24 * 5s = 120s
+const ALB_ENI_DRAIN_POLL_INTERVAL_MS = 5000;
+
+/**
  * Wave 11 P2-2: extracts the AWS account ID segment from an ARN, or
  * returns undefined when the ARN has no account segment (S3 buckets,
  * for example: `arn:aws:s3:::my-bucket`). Used by the cross-account
@@ -960,6 +971,84 @@ export async function destroySingleResource(
         success: false,
         error: `Destroy failed: ${pollResult.message}`,
       };
+    }
+
+    // ── Post-delete: ALB ENI drain wait ────────────────────────────────
+    // After CCAPI reports SUCCESS for ELBv2::LoadBalancer deletion, AWS
+    // takes 30-120s to fully release the ALB's ENIs and public IPs.
+    // Subsequent tier 4 destroys (IGW detach, SecurityGroup delete,
+    // Subnet delete) fail with DependencyViolation because the ENIs are
+    // still in-use. Poll DescribeNetworkInterfaces until no ALB-related
+    // ENIs remain, or timeout after 120s.
+    if (resourceType === RESOURCE_TYPES.ELBV2_LOAD_BALANCER) {
+      try {
+        const { EC2Client, DescribeNetworkInterfacesCommand } =
+          await import("@aws-sdk/client-ec2");
+        const ec2 = new EC2Client({
+          region: awsConfig.region ?? AWS_REGION,
+          credentials: requireAssigneeCredentials("operator"),
+        });
+
+        // ALB ENIs have a description matching "ELB app/<lb-name>/<hex>"
+        // or similar patterns. Filter by description containing "ELB" and
+        // the load balancer name (extracted from the identifier/ARN).
+        // The identifier for ELBv2::LoadBalancer from CCAPI is the full
+        // ARN: arn:aws:elasticloadbalancing:...:loadbalancer/app/<name>/<id>
+        const lbNameMatch = resource.identifier.match(
+          /loadbalancer\/app\/([^/]+)\//,
+        );
+        const lbName = lbNameMatch?.[1];
+
+        if (lbName) {
+          for (
+            let attempt = 0;
+            attempt < ALB_ENI_DRAIN_MAX_ATTEMPTS;
+            attempt++
+          ) {
+            const enis = await ec2.send(
+              new DescribeNetworkInterfacesCommand({
+                Filters: [
+                  {
+                    Name: "description",
+                    Values: [`ELB app/${lbName}/*`],
+                  },
+                ],
+              }),
+            );
+
+            const remaining = enis.NetworkInterfaces?.length ?? 0;
+            if (remaining === 0) {
+              if (attempt > 0) {
+                options?.onProgress?.(
+                  `ALB ENI drain complete after ${(attempt * ALB_ENI_DRAIN_POLL_INTERVAL_MS) / 1000}s`,
+                );
+              }
+              break;
+            }
+
+            options?.onProgress?.(
+              `Waiting for ${remaining} ALB ENI(s) to release (${((attempt + 1) * ALB_ENI_DRAIN_POLL_INTERVAL_MS) / 1000}s / ${(ALB_ENI_DRAIN_MAX_ATTEMPTS * ALB_ENI_DRAIN_POLL_INTERVAL_MS) / 1000}s max)...`,
+            );
+            await new Promise((r) =>
+              setTimeout(r, ALB_ENI_DRAIN_POLL_INTERVAL_MS),
+            );
+          }
+        } else {
+          // Cannot extract LB name — fall back to a conservative 60s wait
+          options?.onProgress?.(
+            "Waiting 60s for ALB ENI release (cannot determine LB name)...",
+          );
+          await new Promise((r) => setTimeout(r, 60_000));
+        }
+      } catch (err) {
+        // Non-fatal: if ENI polling fails, log and continue. The downstream
+        // tier 4 deletes may still succeed if AWS has released the ENIs, or
+        // they'll surface their own DependencyViolation error.
+        warnDestroy("alb_eni_drain_failed", {
+          identifier: resource.identifier,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     return { ...baseResult, success: true };
