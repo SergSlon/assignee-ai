@@ -136,7 +136,6 @@ export function buildResourceArn(args: BuildResourceArnArgs): string {
     // than to leak a malformed ARN into provision logs and the user-
     // visible apply success line.
     case RESOURCE_TYPES.ELBV2_LOAD_BALANCER:
-    case RESOURCE_TYPES.ECS_CLUSTER:
     case RESOURCE_TYPES.SNS_TOPIC:
       throw new Error(
         `buildResourceArn: ${resourceType} expected a full ARN as identifier ` +
@@ -145,6 +144,11 @@ export function buildResourceArn(args: BuildResourceArnArgs): string {
           `from bare identifier components, or check the CloudControl client ` +
           `version.`,
       );
+
+    // ECS Cluster: CCAPI sometimes returns a full ARN (caught by isArn()
+    // above), sometimes a bare cluster name. Synthesize the ARN when bare.
+    case RESOURCE_TYPES.ECS_CLUSTER:
+      return `arn:${partition}:ecs:${region}:${accountId}:cluster/${identifier}`;
 
     // ── SQS queue uses a special URL/ARN split ────────────────────
     // CloudControl identifier for SQS is the queue URL
@@ -202,6 +206,10 @@ export function buildResourceArn(args: BuildResourceArnArgs): string {
     // attribute). Return the bucket name unchanged.
     case RESOURCE_TYPES.S3_BUCKET_POLICY:
       return identifier;
+
+    // RDS DBSubnetGroup — CCAPI identifier is the group name.
+    case RESOURCE_TYPES.RDS_DB_SUBNET_GROUP:
+      return `arn:${partition}:rds:${region}:${accountId}:subgrp:${identifier}`;
 
     default:
       // Unknown resource type — return the bare identifier rather
