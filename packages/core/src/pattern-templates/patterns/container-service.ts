@@ -265,6 +265,9 @@ export const containerServicePattern: ArchitecturePattern = {
       ClusterSettings: [{ Name: "containerInsights", Value: "enabled" }],
     },
     [R.ALB]: {
+      // Name is required by CCAPI (Java NPE if null). The plan-generator's
+      // compound name-injection branch appends a unique suffix at apply time.
+      Name: "assignee-alb",
       Type: AwsDefault.LB_TYPE_APPLICATION,
       Scheme: AwsDefault.LB_SCHEME_INTERNET_FACING,
       Subnets: [markerRef(R.PUBLIC_SUBNET_1), markerRef(R.PUBLIC_SUBNET_2)],
