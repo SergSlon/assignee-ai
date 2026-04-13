@@ -585,9 +585,9 @@ export async function resourceProvisionerNode(
       runId: state.runId,
       level: "info",
       action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
-      extras: { phase: "cloudfront_s3_dns_wait", delay: 10000 },
+      extras: { phase: "cloudfront_s3_dns_wait", delay: 30000 },
     });
-    await new Promise((r) => setTimeout(r, 10000));
+    await new Promise((r) => setTimeout(r, 30000));
   }
 
   // ── CloudControl async create ─────────────────────────────────────────────
