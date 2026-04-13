@@ -29,6 +29,23 @@ Current state: fixing 3 skipped E2E tests (container-service, three-tier-web, st
 - Explicit DESTROY_TIER entries for VPCGatewayAttachment(1) + SubnetRouteTableAssociation(1)
 - destroyAndAssert: 60s tier-boundary wait + ownedIds checks both r.identifier and r.arn
 
+## BLOCKED ON USER ACTION:
+**AWS IAM policy must be refreshed.** The assignee-operator IAM user's policy
+was generated before we added `rds:CreateDBSubnetGroup` / `rds:DeleteDBSubnetGroup`
+to `packages/core/src/config/iam-actions.ts`. Three-tier-web E2E fails with:
+"User assignee-operator is not authorized to perform: rds:CreateDBSubnetGroup"
+
+**Fix (user runs)**:
+1. `aws login` (session expired)
+2. `assignee setup --reset-policies` OR manually add the RDS permissions:
+```
+
+aws iam put-user-policy --user-name assignee-operator \
+ --policy-name AssigneeOperatorRdsSubnetGroup \
+ --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["rds:CreateDBSubnetGroup","rds:DeleteDBSubnetGroup","rds:DescribeDBSubnetGroups","rds:ModifyDBSubnetGroup","rds:AddTagsToResource","rds:ListTagsForResource"],"Resource":"\*"}]}'
+
+```
+
 ## What's LEFT:
 1. Verify static-website E2E destroy completes (CloudFront disable+delete ~15 min)
 2. Run three-tier-web E2E (22 resources: full VPC + ALB + EC2 + RDS — expect ~35 min)
