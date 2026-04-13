@@ -69,7 +69,15 @@ export const staticWebsitePattern: ArchitecturePattern = {
     },
   ],
   dependencyOrder: [
-    [R.WEBSITE_BUCKET, R.CDN_OAC],
+    // Group 0: S3 bucket first — CloudFront's origin validation runs
+    // immediately at CreateDistribution time, but S3 bucket DNS takes
+    // a few seconds to propagate globally (us-east-1 global namespace).
+    // Separating the bucket into its own group gives it 5-10s of
+    // natural DNS propagation time while the OAC is created in group 1.
+    [R.WEBSITE_BUCKET],
+    // Group 1: OAC creation (~5-10s) acts as an implicit delay for
+    // S3 DNS propagation before the distribution references the bucket.
+    [R.CDN_OAC],
     [R.CDN_DISTRIBUTION],
     [R.BUCKET_POLICY],
   ],
