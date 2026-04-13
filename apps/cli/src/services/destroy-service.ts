@@ -844,6 +844,66 @@ export async function destroySingleResource(
     }
   }
 
+  // EFS FileSystem: delete all mount targets before deleting the file
+  // system. Mount targets are in NO_TAG_TYPES (no managed-by tag) so
+  // they're invisible to the tag-based bulk-destroy discovery. Without
+  // this pre-delete hook, DeleteFileSystem fails with "has mount targets"
+  // (409 FileSystemInUse). Mirrors the IGW detach / RouteTable disassociate
+  // pattern for non-taggable dependent resources.
+  if (resourceType === RESOURCE_TYPES.EFS_FILE_SYSTEM) {
+    try {
+      const {
+        EFSClient,
+        DescribeMountTargetsCommand,
+        DeleteMountTargetCommand,
+      } = await import("@aws-sdk/client-efs");
+      const efs = new EFSClient({
+        region: awsConfig.region ?? AWS_REGION,
+        credentials: requireAssigneeCredentials("operator"),
+      });
+      const desc = await efs.send(
+        new DescribeMountTargetsCommand({
+          FileSystemId: resource.identifier,
+        }),
+      );
+      const mountTargets = desc.MountTargets ?? [];
+      for (const mt of mountTargets) {
+        if (mt.MountTargetId) {
+          try {
+            await efs.send(
+              new DeleteMountTargetCommand({
+                MountTargetId: mt.MountTargetId,
+              }),
+            );
+          } catch (mtErr) {
+            warnDestroy("efs_mount_target_delete_failed", {
+              fileSystemId: resource.identifier,
+              mountTargetId: mt.MountTargetId,
+              error: mtErr instanceof Error ? mtErr.message : String(mtErr),
+            });
+          }
+        }
+      }
+      // Mount target deletion is async — poll until all are gone (max 60s)
+      if (mountTargets.length > 0) {
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const check = await efs.send(
+            new DescribeMountTargetsCommand({
+              FileSystemId: resource.identifier,
+            }),
+          );
+          if (!check.MountTargets || check.MountTargets.length === 0) break;
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      }
+    } catch (err) {
+      warnDestroy("efs_mount_target_cleanup_failed", {
+        identifier: resource.identifier,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // ── Default: CloudControl API ────────────────────────────────────────
   try {
     const ccClient = createCloudControlClient(awsConfig);
