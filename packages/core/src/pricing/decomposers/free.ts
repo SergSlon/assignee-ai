@@ -110,3 +110,10 @@ export const cloudFrontOacPricingDecomposer = createFreeDecomposer(
 export const s3BucketPolicyPricingDecomposer = createFreeDecomposer(
   RESOURCE_TYPES.S3_BUCKET_POLICY,
 );
+// 2026-04-13: AWS::RDS::DBSubnetGroup is free — the subnet group is
+// pure VPC wiring that tells RDS which subnets to place ENIs in. The
+// billable cost lives entirely on the parent RDS::DBInstance (compute,
+// storage, I/O, backups). Decomposer returns [] accordingly.
+export const rdsDbSubnetGroupPricingDecomposer = createFreeDecomposer(
+  RESOURCE_TYPES.RDS_DB_SUBNET_GROUP,
+);

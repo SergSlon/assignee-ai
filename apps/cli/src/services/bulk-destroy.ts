@@ -81,6 +81,10 @@ export const DESTROY_TIER: Record<string, number> = {
   // Tier 3: Compute/DB/Network services
   [RESOURCE_TYPES.EC2_INSTANCE]: 3,
   [RESOURCE_TYPES.RDS_DB_INSTANCE]: 3,
+  // DBSubnetGroup must be deleted AFTER RDS instance (tier 3) — RDS
+  // rejects DBSubnetGroup deletion while an instance references it.
+  // Tier 4 puts it after DB but before VPC (tier 5).
+  [RESOURCE_TYPES.RDS_DB_SUBNET_GROUP]: 4,
   [RESOURCE_TYPES.ELBV2_LOAD_BALANCER]: 3,
   [RESOURCE_TYPES.EC2_NAT_GATEWAY]: 3,
   [RESOURCE_TYPES.ECR_REPOSITORY]: 3,

@@ -285,7 +285,7 @@ describe("Cross-epic: schema fetch -> plan generation", () => {
     // (f) 2026-04-09 Task 4b: CloudFront::OriginAccessControl + S3::BucketPolicy
     //                   promoted to unblock the static-website compound migration
     //                   off the SDK post-provision path, lifting the count to 36.
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(36);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(37);
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::S3::Bucket");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::Lambda::Function");
     expect(SUPPORTED_TYPES_ARRAY).toContain("AWS::EC2::Instance");

@@ -63,6 +63,9 @@ const FREE_TYPES: readonly string[] = [
   // returns [] — the bucket itself carries all storage / request /
   // transfer charges via s3PricingDecomposer.
   RESOURCE_TYPES.S3_BUCKET_POLICY,
+  // 2026-04-13: RDS::DBSubnetGroup is pure VPC wiring — the billable
+  // cost lives entirely on the parent RDS::DBInstance.
+  RESOURCE_TYPES.RDS_DB_SUBNET_GROUP,
   // SSM Standard tier is also free, but the decomposer is registered for
   // Advanced tier too — it is NOT in the "always free" list.
 ] as const;

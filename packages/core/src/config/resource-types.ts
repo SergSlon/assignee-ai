@@ -161,6 +161,16 @@ export const SUPPORTED_TYPES_ARRAY = [
   //
   // Pricing: free (no direct charge; S3 bucket itself is billed).
   "AWS::S3::BucketPolicy",
+  // 2026-04-13: RDS::DBSubnetGroup — required for RDS in non-default VPC.
+  // CCAPI schema:
+  //   - primaryIdentifier: /properties/DBSubnetGroupName
+  //   - required: [DBSubnetGroupDescription, SubnetIds]
+  //   - createOnly: [DBSubnetGroupName]
+  //   - tagging: { taggable: true, tagOnCreate: true }
+  //   - handlers: create, read, update, delete, list (all present)
+  //
+  // Pricing: free (no direct charge; RDS instance itself is billed).
+  "AWS::RDS::DBSubnetGroup",
 ] as const;
 
 /** Union of all supported CloudFormation resource type strings. Derived from SUPPORTED_TYPES_ARRAY. */
@@ -221,6 +231,8 @@ export const RESOURCE_TYPES = {
   // so the static-website compound can wire the CloudFront OAC read
   // grant via CCAPI instead of a post-provision PutBucketPolicy call)
   S3_BUCKET_POLICY: "AWS::S3::BucketPolicy",
+  // 2026-04-13: RDS::DBSubnetGroup for three-tier-web compound
+  RDS_DB_SUBNET_GROUP: "AWS::RDS::DBSubnetGroup",
 } as const satisfies Record<string, ResourceType>;
 
 /** Ordered array of all resource types supported in the POC phase. */

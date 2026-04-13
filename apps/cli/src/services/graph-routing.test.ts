@@ -202,11 +202,24 @@ describe("routeResourceProvisioner", () => {
 // ── routeStatusPoller ───────────────────────────────────────────────────────
 
 describe("routeStatusPoller", () => {
-  it("T6.9: IN_PROGRESS → loops back to STATUS_POLLER", () => {
+  it("T6.9: IN_PROGRESS with requestToken → loops back to STATUS_POLLER", () => {
     const result = routeStatusPoller(
-      makeState({ executionStatus: ExecutionStatus.IN_PROGRESS }),
+      makeState({
+        executionStatus: ExecutionStatus.IN_PROGRESS,
+        requestToken: "tok-abc",
+      }),
     );
     expect(result).toBe(GraphNode.STATUS_POLLER);
+  });
+
+  it("T6.9b: IN_PROGRESS without requestToken → routes to RESOURCE_PROVISIONER (retry)", () => {
+    const result = routeStatusPoller(
+      makeState({
+        executionStatus: ExecutionStatus.IN_PROGRESS,
+        requestToken: undefined,
+      }),
+    );
+    expect(result).toBe(GraphNode.RESOURCE_PROVISIONER);
   });
 
   it("T6.10: SUCCESS → routes to RESULT_FORMATTER", () => {

@@ -255,11 +255,11 @@ describe("compoundDispatcherNode — all 8 patterns", () => {
       expectedFirstResourceId: "iam-execution-role",
     },
     {
-      name: "three-tier-web (6 resources)",
+      name: "three-tier-web (22 resources: full VPC + ALB + EC2 + RDS)",
       pattern: threeTierWebPattern,
-      expectedQueueLength: 6,
-      expectedFirstResourceType: RESOURCE_TYPES.EC2_SECURITY_GROUP,
-      expectedFirstResourceId: "alb-sg",
+      expectedQueueLength: 22,
+      expectedFirstResourceType: RESOURCE_TYPES.EC2_VPC,
+      expectedFirstResourceId: "vpc",
     },
     {
       name: "vpc-networking (17 resources)",
@@ -276,11 +276,11 @@ describe("compoundDispatcherNode — all 8 patterns", () => {
       expectedFirstResourceId: "dlq",
     },
     {
-      name: "container-service (5 resources)",
+      name: "container-service (15 resources: public-only VPC + ECS Fargate)",
       pattern: containerServicePattern,
-      expectedQueueLength: 5,
-      expectedFirstResourceType: RESOURCE_TYPES.ECR_REPOSITORY,
-      expectedFirstResourceId: "ecr-repo",
+      expectedQueueLength: 15,
+      expectedFirstResourceType: RESOURCE_TYPES.EC2_VPC,
+      expectedFirstResourceId: "vpc",
     },
     {
       // (f) 2026-04-09 Task 4b: static-website is now a 4-resource

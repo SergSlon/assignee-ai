@@ -227,6 +227,13 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
     default: () => undefined,
   }),
+  // 2026-04-13: CloudFront S3 retry — tracks retry attempts for transient
+  // CCAPI failures where the S3 origin DNS hasn't propagated yet. Capped
+  // at 3 retries. Reset to 0 for each new resource in the compound loop.
+  retryCount: Annotation<number>({
+    reducer: (_, b) => b,
+    default: () => 0,
+  }),
 });
 
 export type AgentState = typeof graphAnnotation.State;

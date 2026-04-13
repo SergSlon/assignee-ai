@@ -70,13 +70,24 @@ export function routeResourceProvisioner(
     : GraphNode.RESULT_FORMATTER;
 }
 
-/** Routes status_poller self-loop: IN_PROGRESS → self, else → result. */
+/** Routes status_poller: IN_PROGRESS → self, retry → provisioner, else → result.
+ *  Retry path: status_poller signals "retry needed" by staying IN_PROGRESS
+ *  but clearing requestToken. The router detects this and sends the flow
+ *  back to resource_provisioner, which waits 30s then re-creates. */
 export function routeStatusPoller(
   state: AgentState,
-): typeof GraphNode.STATUS_POLLER | typeof GraphNode.RESULT_FORMATTER {
-  return state.executionStatus === ExecutionStatus.IN_PROGRESS
-    ? GraphNode.STATUS_POLLER
-    : GraphNode.RESULT_FORMATTER;
+):
+  | typeof GraphNode.STATUS_POLLER
+  | typeof GraphNode.RESULT_FORMATTER
+  | typeof GraphNode.RESOURCE_PROVISIONER {
+  if (state.executionStatus === ExecutionStatus.IN_PROGRESS) {
+    // Retry path: IN_PROGRESS + no requestToken = need a new provision attempt
+    if (!state.requestToken) {
+      return GraphNode.RESOURCE_PROVISIONER;
+    }
+    return GraphNode.STATUS_POLLER;
+  }
+  return GraphNode.RESULT_FORMATTER;
 }
 
 /** Routes after result_formatter: compound pending → plan_generator loop, else → END.
