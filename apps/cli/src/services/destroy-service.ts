@@ -989,14 +989,13 @@ export async function destroySingleResource(
           credentials: requireAssigneeCredentials("operator"),
         });
 
-        // ALB ENIs have a description matching "ELB app/<lb-name>/<hex>"
-        // or similar patterns. Filter by description containing "ELB" and
-        // the load balancer name (extracted from the identifier/ARN).
-        // The identifier for ELBv2::LoadBalancer from CCAPI is the full
-        // ARN: arn:aws:elasticloadbalancing:...:loadbalancer/app/<name>/<id>
-        const lbNameMatch = resource.identifier.match(
-          /loadbalancer\/app\/([^/]+)\//,
-        );
+        // ALB ENIs have a description matching "ELB app/<lb-name>/<hex>".
+        // Extract the LB name from the ARN (full) or identifier (extracted).
+        // Full ARN: arn:...:loadbalancer/app/<name>/<id>
+        // Extracted identifier from bulk-destroy: app/<name>/<id>
+        const lbNameMatch =
+          resource.arn.match(/loadbalancer\/app\/([^/]+)\//) ??
+          resource.identifier.match(/^app\/([^/]+)\//);
         const lbName = lbNameMatch?.[1];
 
         if (lbName) {
