@@ -530,6 +530,14 @@ export async function bpEvaluatorNode(
       "BP-NAT-003", // NatGateway in public subnet — pattern places NAT in public subnet
     ]),
     "vpc-public-only": new Set(["BP-IGW-001", "BP-IGW-002", "BP-RT-002"]),
+    // 2026-04-13: container-service embeds public-only VPC with IGW + attachment + route + associations
+    "container-service": new Set(["BP-IGW-001", "BP-IGW-002", "BP-RT-002"]),
+    // 2026-04-13: three-tier-web embeds full VPC (public + private, no NAT) with IGW + routes + associations
+    "three-tier-web": new Set([
+      "BP-IGW-001", // IGW attached to a VPC — pattern includes VPCGatewayAttachment
+      "BP-IGW-002", // Route to IGW for public subnets — pattern includes public Route
+      "BP-RT-002", // Explicit subnet-RT association — pattern includes 4 associations
+    ]),
   };
 
   const patternId = state.resourcePattern?.patternId;
