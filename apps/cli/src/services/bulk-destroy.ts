@@ -47,6 +47,8 @@ export interface BulkDestroyOptions {
  */
 export const DESTROY_TIER: Record<string, number> = {
   // Tier 1: Leaf resources and CDN (no dependents, or must be removed before origin)
+  [RESOURCE_TYPES.EC2_VPC_GATEWAY_ATTACHMENT]: 1, // detach before IGW/VPC delete
+  [RESOURCE_TYPES.EC2_SUBNET_ROUTE_TABLE_ASSOCIATION]: 1, // disassociate before RT/subnet delete
   [RESOURCE_TYPES.EC2_ROUTE]: 1,
   [RESOURCE_TYPES.CLOUDWATCH_ALARM]: 1,
   [RESOURCE_TYPES.SECRETSMANAGER_SECRET]: 1,

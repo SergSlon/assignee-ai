@@ -743,6 +743,9 @@ export function createPlanGeneratorNode({
         // backend throws a NPE on the null Name field. Adding it here
         // so compound scheduled-lambda gets `assignee-schedule-rule-<shortId>`.
         [RESOURCE_TYPES.EVENTS_RULE]: CfnKey.NAME,
+        // 2026-04-13: ELBv2 LoadBalancer's Name is createOnly — CCAPI
+        // throws Java NPE if null and collides on repeat runs if static.
+        [RESOURCE_TYPES.ELBV2_LOAD_BALANCER]: CfnKey.NAME,
       };
       const nameField = NAME_FIELDS[currentResource.resourceType];
       if (nameField && !desiredState[nameField]) {

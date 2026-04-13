@@ -122,11 +122,14 @@ async function destroyAndAssert(
     // Wait 30s at tier boundaries to let async deletes propagate
     // (e.g. ALB ENI release before IGW detach, RDS delete before DBSubnetGroup)
     if (r.tier > lastTier && lastTier >= 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 30_000));
+      await new Promise<void>((resolve) => setTimeout(resolve, 60_000));
     }
     lastTier = r.tier;
     const result = await destroySingleResource(r, { region });
-    if (!result.success && ownedIds.has(r.identifier)) {
+    if (
+      !result.success &&
+      (ownedIds.has(r.identifier) || ownedIds.has(r.arn))
+    ) {
       failures.push(
         `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
       );
@@ -2003,7 +2006,7 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
     // the OAC must be deleted before the BucketPolicy (stale OAC
     // reference).
     // Destroy assertions handled by destroyAndAssert() or inline above.
-  }, 1_200_000);
+  }, 2_400_000);
 });
 
 describeE2E("E2E: scheduled-lambda compound apply + destroy", () => {
@@ -2493,5 +2496,5 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
     // destroyed AFTER RDS (tier 4 vs tier 3). VPC compound destroy
     // follows the IGW-detach / RT-disassociate pre-delete hooks.
     await destroyAndAssert(completed);
-  }, 1_800_000);
+  }, 2_400_000);
 });
