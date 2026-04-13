@@ -262,6 +262,7 @@ export const containerServicePattern: ArchitecturePattern = {
         AwsDefault.CAPACITY_FARGATE,
         AwsDefault.CAPACITY_FARGATE_SPOT,
       ],
+      ClusterSettings: [{ Name: "containerInsights", Value: "enabled" }],
     },
     [R.ALB]: {
       Type: AwsDefault.LB_TYPE_APPLICATION,
