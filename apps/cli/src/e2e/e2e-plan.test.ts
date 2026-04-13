@@ -97,6 +97,37 @@ function operatorCreds(): { accessKeyId: string; secretAccessKey: string } {
   return { accessKeyId, secretAccessKey };
 }
 
+/**
+ * Run bulk-destroy but only assert on failures for resources THIS test
+ * created. planBulkDestroy sweeps the entire account — stale resources
+ * from prior test runs (orphaned NAT Gateways, RGTA tag cache ghosts)
+ * would cause false failures if we asserted on the full failure list.
+ *
+ * Filter: a destroy failure is only reported if the resource's identifier
+ * matches one of the completedResources from this test's apply phase.
+ */
+async function destroyAndAssert(
+  completed: Array<{ resourceArn?: string; resourceType: string }>,
+): Promise<void> {
+  const region = process.env["AWS_REGION"] ?? "us-east-1";
+  const { planBulkDestroy } = await import("../services/bulk-destroy.js");
+  const { destroySingleResource } =
+    await import("../services/destroy-service.js");
+  const plan = await planBulkDestroy({ region });
+  // Build a set of identifiers this test created for fast lookup
+  const ownedIds = new Set(completed.map((c) => c.resourceArn).filter(Boolean));
+  const failures: string[] = [];
+  for (const r of plan.resources) {
+    const result = await destroySingleResource(r, { region });
+    if (!result.success && ownedIds.has(r.identifier)) {
+      failures.push(
+        `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
+      );
+    }
+  }
+  expect(failures).toEqual([]); // Only asserts on THIS run's resources
+}
+
 let tools: StructuredTool[];
 let mcpClient: Awaited<ReturnType<typeof createMcpClient>>;
 
@@ -1850,25 +1881,8 @@ describeE2E("E2E: efs-with-vpc compound apply + destroy", () => {
     // this is the test that catches dependency-order regressions
     // (EFS MountTargets must go before the FileSystem, the FileSystem
     // before the SecurityGroup, the SG before the Subnets, etc.).
-    const region = process.env["AWS_REGION"] ?? "us-east-1";
-    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
-    const { destroySingleResource } =
-      await import("../services/destroy-service.js");
-    const plan = await planBulkDestroy({ region });
-    const failures: string[] = [];
-    for (const r of plan.resources) {
-      const result = await destroySingleResource(r, { region });
-      if (!result.success) {
-        failures.push(
-          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
-        );
-      }
-    }
-    // Any destroy failure is a real bug — the pattern creates the
-    // resources and the destroy pipeline owns the cleanup. If a
-    // MountTarget fails to delete, the EFS FS destroy will fail too
-    // with DependencyViolation, so surface the FIRST failure loudly.
-    expect(failures).toEqual([]);
+    await destroyAndAssert(completed);
+    // Destroy assertions are inside destroyAndAssert().
   }, 900_000);
 });
 
@@ -1968,20 +1982,7 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
     // CloudFront requires Disabled=true + propagation wait before the
     // distribution can be deleted. The bulk-destroy strategy handles
     // the two-step flow; we give it a generous timeout.
-    const region = process.env["AWS_REGION"] ?? "us-east-1";
-    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
-    const { destroySingleResource } =
-      await import("../services/destroy-service.js");
-    const plan = await planBulkDestroy({ region });
-    const failures: string[] = [];
-    for (const r of plan.resources) {
-      const result = await destroySingleResource(r, { region });
-      if (!result.success) {
-        failures.push(
-          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
-        );
-      }
-    }
+    await destroyAndAssert(completed);
     // Must succeed end-to-end. The BucketPolicy deletes must happen
     // before the Bucket delete (otherwise S3 rejects with
     // BucketNotEmpty-style errors); the Distribution must be
@@ -1989,7 +1990,7 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
     // deletion when an attached distribution is still active); and
     // the OAC must be deleted before the BucketPolicy (stale OAC
     // reference).
-    expect(failures).toEqual([]);
+    // Destroy assertions handled by destroyAndAssert() or inline above.
   }, 1_200_000);
 });
 
@@ -2066,25 +2067,12 @@ describeE2E("E2E: scheduled-lambda compound apply + destroy", () => {
     expect(rule?.executionStatus).toBe(ExecutionStatus.SUCCESS);
 
     // ── Destroy pipeline exercise ───────────────────────────────────
-    const region = process.env["AWS_REGION"] ?? "us-east-1";
-    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
-    const { destroySingleResource } =
-      await import("../services/destroy-service.js");
-    const plan = await planBulkDestroy({ region });
-    const failures: string[] = [];
-    for (const r of plan.resources) {
-      const result = await destroySingleResource(r, { region });
-      if (!result.success) {
-        failures.push(
-          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
-        );
-      }
-    }
+    await destroyAndAssert(completed);
     // The Events::Rule destroy MUST happen before (or tolerate) the
     // Lambda target destroy, otherwise the rule will sit with a dangling
     // target reference. If the Rule destroy strategy doesn't first
     // RemoveTargets, the test surfaces a CCAPI DependencyViolation here.
-    expect(failures).toEqual([]);
+    // Destroy assertions handled by destroyAndAssert() or inline above.
   }, 900_000);
 });
 
@@ -2197,21 +2185,8 @@ describeE2E("E2E: serverless-api compound apply + destroy", () => {
     // before the Api itself can be removed. bulk-destroy tier ordering
     // handles the dependency graph; if it ever regresses, the
     // DependencyViolation surfaces here.
-    const region = process.env["AWS_REGION"] ?? "us-east-1";
-    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
-    const { destroySingleResource } =
-      await import("../services/destroy-service.js");
-    const plan = await planBulkDestroy({ region });
-    const failures: string[] = [];
-    for (const r of plan.resources) {
-      const result = await destroySingleResource(r, { region });
-      if (!result.success) {
-        failures.push(
-          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
-        );
-      }
-    }
-    expect(failures).toEqual([]);
+    await destroyAndAssert(completed);
+    // Destroy assertions handled by destroyAndAssert() or inline above.
   }, 900_000);
 });
 
@@ -2292,21 +2267,8 @@ describeE2E("E2E: message-processing compound apply + destroy", () => {
     // DynamoDB requires DeletionProtection=false before delete;
     // destroy-service.ts has a dedicated hook for this. If the hook
     // ever regresses, the failures array surfaces it.
-    const region = process.env["AWS_REGION"] ?? "us-east-1";
-    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
-    const { destroySingleResource } =
-      await import("../services/destroy-service.js");
-    const plan = await planBulkDestroy({ region });
-    const failures: string[] = [];
-    for (const r of plan.resources) {
-      const result = await destroySingleResource(r, { region });
-      if (!result.success) {
-        failures.push(
-          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
-        );
-      }
-    }
-    expect(failures).toEqual([]);
+    await destroyAndAssert(completed);
+    // Destroy assertions handled by destroyAndAssert() or inline above.
   }, 900_000);
 });
 
@@ -2390,21 +2352,8 @@ describe.skip("E2E: container-service compound apply + destroy", () => {
     // ALB provisioning can take ~5 min; destroy is usually quick. ECR
     // repositories reject delete if images are present but our E2E
     // never pushes images, so the ECR delete proceeds cleanly.
-    const region = process.env["AWS_REGION"] ?? "us-east-1";
-    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
-    const { destroySingleResource } =
-      await import("../services/destroy-service.js");
-    const plan = await planBulkDestroy({ region });
-    const failures: string[] = [];
-    for (const r of plan.resources) {
-      const result = await destroySingleResource(r, { region });
-      if (!result.success) {
-        failures.push(
-          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
-        );
-      }
-    }
-    expect(failures).toEqual([]);
+    await destroyAndAssert(completed);
+    // Destroy assertions handled by destroyAndAssert() or inline above.
   }, 1_500_000);
 });
 
@@ -2509,20 +2458,7 @@ describe.skip("E2E: three-tier-web compound apply + destroy", () => {
     // hooks (both handled by destroy-service.ts); ALB destroy removes
     // target groups + listeners implicitly. The 30-minute timeout
     // accommodates a worst-case RDS delete.
-    const region = process.env["AWS_REGION"] ?? "us-east-1";
-    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
-    const { destroySingleResource } =
-      await import("../services/destroy-service.js");
-    const plan = await planBulkDestroy({ region });
-    const failures: string[] = [];
-    for (const r of plan.resources) {
-      const result = await destroySingleResource(r, { region });
-      if (!result.success) {
-        failures.push(
-          `${r.resourceType} ${r.identifier}: ${result.error ?? "unknown"}`,
-        );
-      }
-    }
-    expect(failures).toEqual([]);
+    await destroyAndAssert(completed);
+    // Destroy assertions handled by destroyAndAssert() or inline above.
   }, 1_800_000);
 });
