@@ -380,6 +380,11 @@ export const threeTierWebPattern: ArchitecturePattern = {
     [R.RDS_INSTANCE]: {
       Engine: ResourceDefault.RDS_ENGINE_POSTGRES,
       MasterUsername: "appuser",
+      // Placeholder password — user MUST override via --set before apply.
+      // plan-generator / wizard surface this as a required field. The default
+      // is random-looking to discourage accidental production use but still
+      // passes CCAPI's 8-character-minimum validation for initial testing.
+      MasterUserPassword: "ChangeMe-REPLACE-123!",
       DBInstanceClass: "db.t3.micro",
       AllocatedStorage: "20",
       MultiAZ: false,
