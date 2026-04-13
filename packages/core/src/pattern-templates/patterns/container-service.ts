@@ -219,7 +219,10 @@ export const containerServicePattern: ArchitecturePattern = {
         },
       ],
     },
-    [R.ECR_REPO]: {},
+    [R.ECR_REPO]: {
+      ImageScanningConfiguration: { ScanOnPush: true },
+      ImageTagMutability: "IMMUTABLE",
+    },
     [R.TASK_ROLE]: {
       Path: "/",
       AssumeRolePolicyDocument: {
