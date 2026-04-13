@@ -117,7 +117,14 @@ async function destroyAndAssert(
   // Build a set of identifiers this test created for fast lookup
   const ownedIds = new Set(completed.map((c) => c.resourceArn).filter(Boolean));
   const failures: string[] = [];
+  let lastTier = -1;
   for (const r of plan.resources) {
+    // Wait 30s at tier boundaries to let async deletes propagate
+    // (e.g. ALB ENI release before IGW detach, RDS delete before DBSubnetGroup)
+    if (r.tier > lastTier && lastTier >= 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 30_000));
+    }
+    lastTier = r.tier;
     const result = await destroySingleResource(r, { region });
     if (!result.success && ownedIds.has(r.identifier)) {
       failures.push(
