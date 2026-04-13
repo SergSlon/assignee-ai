@@ -10,7 +10,7 @@ The best practices pipeline runs as three nodes in the 12-node LangGraph graph:
 plan_generator -> bp_evaluator -> auto_fix_applier -> preflight_guard
 ```
 
-1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **185 rules** covering all 36 supported resource types across security, cost, reliability, performance, and compliance categories. Completes in <10ms for all rules.
+1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **185 rules** covering 22 service directories across security, cost, reliability, performance, and compliance categories. Completes in <10ms for all rules.
 
 2. **auto_fix_applier**: For findings with `fixType: auto`, patches the `desiredState` directly using `desiredStatePatch`. For findings with `fixType: interactive`, prompts the user with choices. Respects the `preferences.auto_fix` config setting (`ask` / `apply` / `skip`).
 

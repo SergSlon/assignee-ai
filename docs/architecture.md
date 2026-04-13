@@ -36,7 +36,7 @@ packages/best-practices
 
 ## LangGraph Agent Graph
 
-The core computation is a **StateGraph** from `@langchain/langgraph` with 12 nodes.
+The core computation is a **StateGraph** from `@langchain/langgraph` with 13 nodes.
 
 ### State (AgentState)
 
@@ -238,17 +238,17 @@ Defines `AssigneeConfig` with sections:
 
 The CLI spawns MCP servers as child processes via `@langchain/mcp-adapters`:
 
-**Core servers (required):**
+**Core servers (required, 2):**
 
-- `aws-cloudformation-mcp-server` -- Schema fetching (now replaced by direct SDK)
-- `aws-pricing-mcp-server` -- Real-time pricing queries
-- `aws-documentation-mcp-server` -- Documentation references
+- `aws-pricing-mcp-server` -- Real-time pricing queries (reader creds, us-east-1)
+- `aws-documentation-mcp-server` -- Documentation references (no creds, public API)
 
-**Optional servers (lazy-loaded):**
+**Optional servers (graceful degradation, 4):**
 
-- `aws-iam-mcp-server` -- IAM permission simulation
-- `aws-cost-management-mcp-server` -- Billing data
-- `well-architected-security-mcp-server` -- Post-provision security checks
+- `aws-knowledge-mcp-server` -- Remote knowledge API (opt-in via `ASSIGNEE_ENABLE_REMOTE_MCP=1`)
+- `aws-iam-mcp-server` -- IAM permission simulation (auditor creds)
+- `well-architected-security-mcp-server` -- Post-provision security checks (auditor creds)
+- `aws-cost-management-mcp-server` -- Billing data (reader creds)
 
 Each server receives its own credential set (reader or auditor).
 

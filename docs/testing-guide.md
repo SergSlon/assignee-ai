@@ -7,7 +7,7 @@
 ## Quick reference
 
 ```bash
-pnpm test                                    # ~6367 tests across 256 files, ~20s, no AWS needed
+pnpm test                                    # ~7115 tests across 272 files, ~20s, no AWS needed
 pnpm check-types                             # TypeScript type check
 pnpm --filter @assignee/mcp-server test:e2e  # MCP E2E against real AWS (~43 min)
 RUN_E2E=1 pnpm --filter assignee test        # CLI graph E2E against real AWS (opt-in gate)
@@ -19,7 +19,7 @@ RUN_E2E=1 pnpm --filter assignee test        # CLI graph E2E against real AWS (o
 
 The CLI graph E2E suite (`apps/cli/src/e2e/e2e-plan.test.ts`) hits real AWS via the
 full LangGraph pipeline with real MCP servers and operator credentials. It is
-**opt-in only**. The gate is implemented at the top of the file:
+**opt-in only**. The gate is implemented at lines 27-28 of the file:
 
 ```ts
 const RUN_E2E = process.env["RUN_E2E"] === "1";
@@ -159,7 +159,7 @@ Most resources are free-tier or cost <$0.01. RDS and ELB are the most expensive 
 ## Unit tests
 
 ```bash
-pnpm test          # ~6367 tests across 256 files (129 CLI + 94 core + 11 BP + 22 MCP)
+pnpm test          # ~7115 tests across 272 files (142 CLI + 95 core + 11 BP + 22 MCP)
 pnpm check-types   # TypeScript type check
 ```
 
@@ -380,6 +380,26 @@ The following mechanisms were added to improve E2E reliability and isolation:
   destroy lifecycle with post-destroy verification (list confirms the
   resource is gone). This replaces ad-hoc destroy-then-check sequences in
   individual specs and ensures destroy isolation between tests.
+
+  ```ts
+  /**
+   * Run bulk-destroy but only assert on failures for resources THIS test
+   * created. planBulkDestroy sweeps the entire account — stale resources
+   * from prior test runs (orphaned NAT Gateways, RGTA tag cache ghosts)
+   * would cause false failures if we asserted on the full failure list.
+   *
+   * Filter: a destroy failure is only reported if the resource's identifier
+   * matches one of the completedResources from this test's apply phase.
+   */
+  async function destroyAndAssert(
+    completed: Array<{ resourceArn?: string; resourceType: string }>,
+  ): Promise<void>;
+  ```
+
+  The helper imports `planBulkDestroy` and `destroySingleResource` at call
+  time, builds a set of ARNs from the `completed` array, runs bulk destroy
+  across the account, and only fails (via `expect(failures).toEqual([])`)
+  for resources whose identifier matches one the current test created.
 
 - **CloudFront S3 DNS retry mechanism** — the `resource-provisioner`
   retries S3 origin DNS resolution during CloudFront distribution creation.

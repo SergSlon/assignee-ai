@@ -56,12 +56,12 @@ Assignee.ai uses 5 AWS MCP servers (+ 1 optional remote knowledge server) to enr
 
 Upgraded in Story 45.1 from 1.0.2 (single `AnalyzeSecurityPosture` tool) to the multi-tool v0.1.7 API.
 
-| Tool                     | Used By                      | Purpose                                       |
-| ------------------------ | ---------------------------- | --------------------------------------------- |
-| `CheckSecurityServices`  | mcp-advisor, bp-mcp-enricher | Verify security services enabled              |
-| `GetSecurityFindings`    | security-posture.ts          | Post-provision SecurityHub/GuardDuty findings |
-| `CheckStorageEncryption` | (available, not yet wired)   | Data-at-rest protection checks                |
-| `CheckNetworkSecurity`   | (available, not yet wired)   | Data-in-transit protection checks             |
+| Tool                     | Used By                                                                                                   | Purpose                                       |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `CheckSecurityServices`  | mcp-advisor, bp-mcp-enricher                                                                              | Verify security services enabled              |
+| `GetSecurityFindings`    | security-posture.ts                                                                                       | Post-provision SecurityHub/GuardDuty findings |
+| `CheckStorageEncryption` | Wired — used by bp-mcp-enricher.ts for storage encryption and network security BP evaluation (Story 45.4) | Data-at-rest protection checks                |
+| `CheckNetworkSecurity`   | Wired — used by bp-mcp-enricher.ts for storage encryption and network security BP evaluation (Story 45.4) | Data-in-transit protection checks             |
 
 ### Billing (`awslabs.billing-cost-management-mcp-server@0.0.17`)
 
