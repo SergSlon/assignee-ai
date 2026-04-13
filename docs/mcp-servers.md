@@ -10,7 +10,7 @@ Assignee.ai uses 5 AWS MCP servers (+ 1 optional remote knowledge server) to enr
 | Documentation | `awslabs.aws-documentation-mcp-server`         | `1.1.20` | reader     | plan, apply           | Field docs, runtime catalogs   |
 | IAM           | `awslabs.iam-mcp-server`                       | `1.0.17` | auditor    | status                | IAM permission simulation      |
 | WA Security   | `awslabs.well-architected-security-mcp-server` | `0.1.7`  | auditor    | status                | SecurityHub/GuardDuty findings |
-| Billing       | `awslabs.cost-management-mcp-server`           | `1.0.2`  | reader     | status                | Live billing, cost forecast    |
+| Billing       | `awslabs.billing-cost-management-mcp-server`   | `0.0.17` | reader     | status                | Live billing, cost forecast    |
 | Knowledge     | `knowledge-mcp.global.api.aws`                 | remote   | reader     | plan, apply           | Optional remote AWS knowledge  |
 
 **Pin location:** `apps/cli/src/config/mcp-servers.ts` → `MCP_PINS`
@@ -63,14 +63,13 @@ Upgraded in Story 45.1 from 1.0.2 (single `AnalyzeSecurityPosture` tool) to the 
 | `CheckStorageEncryption` | (available, not yet wired)   | Data-at-rest protection checks                |
 | `CheckNetworkSecurity`   | (available, not yet wired)   | Data-in-transit protection checks             |
 
-### Billing (`awslabs.cost-management-mcp-server@1.0.2`)
+### Billing (`awslabs.billing-cost-management-mcp-server@0.0.17`)
 
-**Upgrade blocked:** Newer package (`billing-cost-management-mcp-server`) replaced `get_cost_and_usage`/`get_cost_forecast` with a single `cost-explorer` tool using an `operation` parameter. Requires code changes in billing.ts and list-resources.ts.
+Upgraded in Story 45.2 from `awslabs.cost-management-mcp-server@1.0.2` (separate `get_cost_and_usage`/`get_cost_forecast` tools) to the unified `billing-cost-management-mcp-server@0.0.17` API with a single `cost-explorer` tool.
 
-| Tool                 | Used By                       | Purpose                               |
-| -------------------- | ----------------------------- | ------------------------------------- |
-| `get_cost_and_usage` | billing.ts, list-resources.ts | Live billing for current month        |
-| `get_cost_forecast`  | billing.ts                    | Forecast for destroy savings estimate |
+| Tool            | Used By                       | Purpose                                              |
+| --------------- | ----------------------------- | ---------------------------------------------------- |
+| `cost-explorer` | billing.ts, list-resources.ts | Live billing (getCostAndUsage by SERVICE) + forecast |
 
 ## Credential Model (3-user isolation)
 
@@ -89,6 +88,26 @@ MCP subprocesses receive credentials via env var injection — never via shared 
 - **Graceful degradation:** Optional servers (IAM, WA Security, Billing) fail silently — core pipeline continues.
 - **Timeouts:** 3s per MCP call in advice pipeline, 6s for pricing lookups, 5s for doctor probes.
 - **Remote server gated:** Knowledge MCP (`knowledge-mcp.global.api.aws`) is OFF by default, requires explicit `ASSIGNEE_ENABLE_REMOTE_MCP=1`.
+
+## MCP Version Drift Monitoring (Story 45.6)
+
+`assignee doctor` includes an **MCP version drift** section that checks each pinned MCP server against the latest stable version on PyPI. For each of the 5 servers, the doctor reports one of three statuses:
+
+| Status         | Meaning                                                  |
+| -------------- | -------------------------------------------------------- |
+| `up-to-date`   | Pinned version matches (or exceeds) PyPI latest          |
+| `behind`       | Pinned version is older than PyPI latest — review needed |
+| `fetch-failed` | PyPI unreachable or timed out (5s per fetch)             |
+
+The check runs in parallel across all servers via `Promise.all` with per-server `AbortController` timeouts, so a single slow PyPI response never blocks the other rows. Network failures are isolated — they produce `fetch-failed` rows, not exceptions.
+
+A standalone CI script (`apps/cli/scripts/check-mcp-versions.ts`) wraps the same logic for automated pipelines:
+
+- Any `behind` row exits with code 1 (fail CI — humans must bump deliberately)
+- All `fetch-failed` rows exit 0 with a stderr warning (don't break CI on offline runners)
+- Otherwise exit 0
+
+The drift check can be skipped via `assignee doctor --skip-version-check` for offline or fast-path usage.
 
 ## Updating Pins
 

@@ -201,6 +201,32 @@ ASSIGNEE_LLM_DEFAULT=openai/gpt-4o assignee plan "Create an S3 bucket"
 
 **See also:** [MCP Intelligence Audit](mcp-intelligence-audit.md) for the full MCP server usage matrix and integration opportunities.
 
+### Data Registries (Epic 46)
+
+Several data tables that previously lived inline in source modules have been extracted into dedicated registry files. This gives each table a single source of truth, simplifies updates when AWS adds new instance families or Bedrock regions, and creates a clean seam for future config-driven overrides.
+
+| Registry                 | File                                                           | Purpose                                                       | Consumer(s)                    |
+| ------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------ |
+| Instance type catalog    | `packages/core/src/resource-plugins/instance-type-registry.ts` | EC2 instance types offered in the wizard, grouped by workload | `ec2-instance.ts` (wizard)     |
+| Bedrock region list      | `apps/cli/src/constants/bedrock-regions.ts`                    | Known regions where Bedrock + Claude/Nova are available       | `llm-adapter.ts` (error hints) |
+| Instance family registry | `apps/cli/src/constants/instance-family-registry.ts`           | ARM equivalents, Spot eligibility, RDS class detection tables | `cost-advisor` (advice node)   |
+
+These registries are pure data declarations (no I/O, no imports of heavy modules). To add a new instance family or Bedrock region, edit only the relevant registry file -- no other source changes required.
+
+### DataSource Tagging (Story 46.2)
+
+Every user-facing dollar amount, security finding, or pricing hint carries a `DataSource` provenance tag so the display layer can tell the user where a value came from.
+
+| Tag        | Meaning                                                           | Display suffix |
+| ---------- | ----------------------------------------------------------------- | -------------- |
+| `mcp`      | Fetched live from an MCP server during this command invocation    | `(live)`       |
+| `cached`   | Fetched live during an earlier command, replayed from cache       | `(cached)`     |
+| `fallback` | Produced by a local heuristic or hand-coded constant              | `(estimated)`  |
+| `offline`  | Replayed from a persisted log entry (previous plan/apply output)  | `(from log)`   |
+| `free`     | Authoritatively free of charge (IAM role, IGW, ECS control plane) | _(no suffix)_  |
+
+The `DataSource` type and `formatLabelWithSource()` helper live in `@assignee/core` (`packages/core/src/pricing/types.ts`). Every `PricingEstimate` and `BillingCostData` record requires a `source` field -- the TypeScript compiler enforces this at every code path that produces a cost value.
+
 ## Environment Variables
 
 | Variable                              | Description                                                                                                                                                                                                                                                      | Default                          |
