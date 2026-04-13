@@ -920,9 +920,20 @@ export async function destroySingleResource(
     const ccClient = createCloudControlClient(awsConfig);
     const adapter = new CloudControlAdapter(ccClient);
 
+    // Some resource types use the full ARN as their CCAPI primary identifier
+    // (not an extracted sub-path). If extractIdentifier stripped the ARN prefix,
+    // CCAPI returns NOT_FOUND and the resource silently survives. Use the full
+    // ARN for these types.
+    const ARN_IDENTIFIED_TYPES: ReadonlySet<string> = new Set([
+      RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+    ]);
+    const ccIdentifier = ARN_IDENTIFIED_TYPES.has(resourceType)
+      ? resource.arn
+      : resource.identifier;
+
     const [deleteErr, deleteResult] = await adapter.deleteResource(
       resourceType,
-      resource.identifier,
+      ccIdentifier,
     );
 
     if (deleteErr) {
