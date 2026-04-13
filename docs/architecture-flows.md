@@ -21,7 +21,7 @@ flowchart TD
     CMD -->|"assignee init"| INIT
     CMD -->|"assignee status &lt;token&gt;"| STATUS
 
-    subgraph GRAPH["LangGraph Agent (12 Nodes)"]
+    subgraph GRAPH["LangGraph Agent (13 Nodes)"]
         direction TB
 
         subgraph PHASE1["Phase 1 — Planning"]
@@ -30,20 +30,21 @@ flowchart TD
             OE["3. OPTION_ELICITOR<br/>—————<br/>Interactive wizard<br/>+ live pricing<br/>+ AWS discovery<br/>+ workload classification<br/>+ option ranking<br/>+ --set key=value pre-fills"]
             CD["4. COMPOUND_DISPATCHER<br/>—————<br/>Single vs multi-resource<br/>routing"]
             PG["5. PLAN_GENERATOR<br/>—————<br/>LLM generates CFN JSON<br/>+ toCfn transforms<br/>+ assembleComposites"]
-            BP["6. BP_EVALUATOR<br/>—————<br/>YAML best practices<br/>evaluate findings"]
-            FA["7. FIX_APPLICATOR<br/>—————<br/>Auto-fix autoFixable<br/>BP patches (user consent)"]
-            PF["8. PREFLIGHT_GUARD<br/>—————<br/>Cost estimate<br/>+ IAM pre-check<br/>+ blocking BP check"]
+            AG["6. ADVICE_GENERATOR<br/>—————<br/>LLM advice on<br/>generated plan"]
+            BP["7. BP_EVALUATOR<br/>—————<br/>YAML best practices<br/>evaluate findings"]
+            FA["8. FIX_APPLICATOR<br/>—————<br/>Auto-fix autoFixable<br/>BP patches (user consent)"]
+            PF["9. PREFLIGHT_GUARD<br/>—————<br/>Cost estimate<br/>+ IAM pre-check<br/>+ blocking BP check"]
         end
 
-        HA["9. HUMAN_APPROVAL<br/>—————<br/>Display plan + cost<br/>User confirms / cancels<br/>⚡ LangGraph INTERRUPT<br/>Auto-approve on checkpoint resume<br/>(no double confirm)"]
+        HA["10. HUMAN_APPROVAL<br/>—————<br/>Display plan + cost<br/>User confirms / cancels<br/>⚡ LangGraph INTERRUPT<br/>Auto-approve on checkpoint resume<br/>(no double confirm)"]
 
         subgraph PHASE2["Phase 2 — Provisioning"]
-            RP["10. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>OR SDK fallback<br/>State guard skipped for S3<br/>(globally unique names)<br/>provisionable=false → skip<br/>Post-hooks: S3 upload,<br/>CloudFront creation"]
-            SP["11. STATUS_POLLER<br/>—————<br/>Poll every 2s<br/>MAX_POLL_ITERATIONS=450 guard<br/>Extended timeout for RDS/ELBv2/<br/>NatGateway (15 min)"]
-            RF["12. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
+            RP["11. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>OR SDK fallback<br/>State guard skipped for S3<br/>(globally unique names)<br/>provisionable=false → skip<br/>Post-hooks: S3 upload,<br/>CloudFront creation"]
+            SP["12. STATUS_POLLER<br/>—————<br/>Poll every 2s<br/>MAX_POLL_ITERATIONS=450 guard<br/>Extended timeout for RDS/ELBv2/<br/>NatGateway (15 min)"]
+            RF["13. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
         end
 
-        IP --> SF --> OE --> CD --> PG --> BP --> FA --> PF
+        IP --> SF --> OE --> CD --> PG --> AG --> BP --> FA --> PF
 
         PF -->|"PLAN mode"| RF
         PF -->|"APPLY mode"| HA

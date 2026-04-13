@@ -51,9 +51,15 @@ assignee drift --region us-west-2
 
 # Only drifted resources
 assignee drift --status DRIFTED
+
+# Exclude unadopted resources (CI mode)
+assignee drift --exclude BASELINE_MISSING
+
+# Adopt a pre-existing resource into drift tracking
+assignee drift --baseline arn:aws:s3:::adopted-bucket
 ```
 
-`--resource` and `--region` filter before the CloudControl calls (fewer API calls). `--status` filters after (all resources are still checked).
+`--resource` and `--region` filter before the CloudControl calls (fewer API calls). `--status` and `--exclude` filter after (all resources are still checked).
 
 ### JSON Output
 
@@ -173,10 +179,12 @@ Drift detection is designed to run in CI pipelines as a scheduled check.
 
 ### Exit Codes
 
-| Code | Meaning                            |
-| ---- | ---------------------------------- |
-| `0`  | All resources are in sync          |
-| `1`  | One or more resources have drifted |
+| Code | Meaning                                                                                             |
+| ---- | --------------------------------------------------------------------------------------------------- |
+| `0`  | No resources have `DRIFTED` status (includes `IN_SYNC`, `DELETED`, `ERROR`, and `BASELINE_MISSING`) |
+| `1`  | One or more resources have `DRIFTED` status                                                         |
+
+> **Note:** Only `DRIFTED` triggers exit code 1. Resources with `DELETED`, `ERROR`, or `BASELINE_MISSING` status do **not** cause a non-zero exit. Use `--status DELETED` or `--exclude BASELINE_MISSING` filters to build CI checks for those states.
 
 ### Example: GitHub Actions
 
@@ -229,17 +237,19 @@ fi
 
 ### `assignee drift`
 
-| Flag                | Description                                   | Default |
-| ------------------- | --------------------------------------------- | ------- |
-| `[resource-id]`     | Show field-level detail for one resource      | --      |
-| `--resource <type>` | Filter by CloudFormation resource type        | all     |
-| `--region <region>` | Filter by AWS region                          | all     |
-| `--status <status>` | Filter output by drift status                 | all     |
-| `--json`            | Output as JSON                                | false   |
-| `--output <file>`   | Write JSON report to file (requires `--json`) | stdout  |
-| `--concurrency <n>` | Max parallel drift checks (1-50)              | 10      |
-| `--verbose`         | Show all fields including matching ones       | false   |
-| `--no-color`        | Disable color output                          | false   |
+| Flag                 | Description                                                                                            | Default |
+| -------------------- | ------------------------------------------------------------------------------------------------------ | ------- |
+| `[resource-id]`      | Show field-level detail for one resource                                                               | --      |
+| `--resource <type>`  | Filter by CloudFormation resource type                                                                 | all     |
+| `--region <region>`  | Filter by AWS region                                                                                   | all     |
+| `--status <status>`  | Filter output by drift status                                                                          | all     |
+| `--exclude <status>` | Exclude a drift status from output (e.g. `--exclude BASELINE_MISSING` for CI)                          | none    |
+| `--baseline`         | Adopt the given `[resource-id]` into drift tracking by snapshotting its live CCAPI state as a baseline | false   |
+| `--json`             | Output as JSON                                                                                         | false   |
+| `--output <file>`    | Write JSON report to file (requires `--json`)                                                          | stdout  |
+| `--concurrency <n>`  | Max parallel drift checks (1-50)                                                                       | 10      |
+| `--verbose`          | Show all fields including matching ones                                                                | false   |
+| `--no-color`         | Disable color output                                                                                   | false   |
 
 ### `assignee reconcile`
 

@@ -90,13 +90,13 @@ assignee apply [intent] [options]
 
 **Options:**
 
-| Flag                      | Description                                          | Default |
-| ------------------------- | ---------------------------------------------------- | ------- |
-| `--no-wizard`             | Skip interactive option prompts, use plugin defaults | false   |
-| `-y, --yes`               | Auto-confirm without interactive prompt (CI/CD mode) | false   |
-| `-c, --checkpoint <path>` | Use a saved plan checkpoint instead of re-planning   | -       |
-| `--set <key=value...>`    | Pre-set wizard field values (repeatable)             | -       |
-| `--source <path>`         | Source directory for static website S3 upload        | -       |
+| Flag                      | Description                                                                                           | Default |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- | ------- |
+| `--wizard`                | Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent) | false   |
+| `-y, --yes`               | Auto-confirm without interactive prompt (CI/CD mode)                                                  | false   |
+| `-c, --checkpoint <path>` | Use a saved plan checkpoint instead of re-planning                                                    | -       |
+| `--set <key=value...>`    | Pre-set wizard field values (repeatable)                                                              | -       |
+| `--source <path>`         | Source directory for static website S3 upload                                                         | -       |
 
 **Behavior:**
 
@@ -110,7 +110,7 @@ assignee apply [intent] [options]
 assignee apply "Create an S3 bucket named my-bucket"
 assignee apply --checkpoint .assignee/checkpoint-abc123.json
 assignee apply --yes "Create an S3 bucket named logs-prod"
-assignee apply --no-wizard "Create an EC2 t3.micro instance"
+assignee apply --wizard "Create an EC2 t3.micro instance"
 assignee apply --set InstanceType=t3.small "Create an EC2 instance"
 assignee apply  # auto-detects latest checkpoint
 ```
@@ -679,9 +679,12 @@ assignee types [list|show <type>] [options]
 
 **Options:**
 
-| Flag     | Description    | Default |
-| -------- | -------------- | ------- |
-| `--json` | Output as JSON | false   |
+| Flag                 | Description                                                                             | Default |
+| -------------------- | --------------------------------------------------------------------------------------- | ------- |
+| `--json`             | Output as JSON                                                                          | false   |
+| `--search <keyword>` | Filter types whose resourceType or short name contains the substring (case-insensitive) | -       |
+| `--with-bp`          | Only show types that have at least one BP rule                                          | false   |
+| `--without-bp`       | Only show types that have zero BP rules                                                 | false   |
 
 **Examples:**
 
@@ -690,6 +693,9 @@ assignee types                               # list all 28 supported types
 assignee types show AWS::Events::Rule        # full detail for one type
 assignee types list --json | jq '.[].resourceType'
 assignee types show AWS::Lambda::Function --json
+assignee types list --search lambda           # filter by keyword
+assignee types list --with-bp                 # only types with BP rules
+assignee types list --without-bp              # only types missing BP rules
 ```
 
 ### whoami
@@ -731,11 +737,12 @@ assignee doctor [options]
 
 **Options:**
 
-| Flag             | Description                                              | Default |
-| ---------------- | -------------------------------------------------------- | ------- |
-| `--json`         | Emit the report as JSON instead of formatted text        | false   |
-| `--skip-bedrock` | Skip the LLM invoke check (offline / hermetic CI)        | false   |
-| `--skip-mcp`     | Skip the MCP server launch probe (offline / hermetic CI) | false   |
+| Flag                       | Description                                              | Default |
+| -------------------------- | -------------------------------------------------------- | ------- |
+| `--json`                   | Emit the report as JSON instead of formatted text        | false   |
+| `--skip-bedrock`           | Skip the LLM invoke check (offline / hermetic CI)        | false   |
+| `--skip-mcp`               | Skip the MCP server launch probe (offline / hermetic CI) | false   |
+| `--skip-mcp-version-check` | Skip the PyPI version drift check (offline / fast path)  | false   |
 
 **Checks (each capped at 5 s):**
 

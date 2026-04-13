@@ -73,7 +73,8 @@ profile: default
 tags:
   managed-by: assignee-ai
   environment: development
-autoFixBestPractices: true
+preferences:
+  auto_fix: ask # ask | apply | skip
 ```
 
 ### User Config
@@ -132,12 +133,12 @@ org_policy:
 | `preferences.output_format` | enum | `table`  | Output format: `table` or `json`                       |
 | `preferences.verbosity`     | enum | `normal` | Verbosity: `quiet`, `normal`, or `verbose`             |
 
-### `bestPractices` Section
+### `bestPractices` Section (planned -- not yet implemented)
 
-Controls how best practice rules are evaluated and enforced.
+> **Note:** The `bestPractices` config section is planned but does not exist in the current config schema (`packages/core/src/config/config-schema.ts`). Best-practice enforcement is currently controlled via `preferences.auto_fix` and the `ASSIGNEE_BP_INTEGRITY` env var. The fields below describe the intended future design.
 
 ```yaml
-# .assignee/config.yaml
+# .assignee/config.yaml (planned)
 bestPractices:
   enforcement: enforce # enforce | warn | skip (default: enforce)
   autoFix: true # auto-fix best-practice violations when possible

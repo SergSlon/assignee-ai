@@ -13,18 +13,20 @@ These documents were generated from a deep scan of the source code to provide a 
 
 These documents were already present in the `docs/` directory:
 
-| Document                                       | Description                         |
-| ---------------------------------------------- | ----------------------------------- |
-| [architecture-flows.md](architecture-flows.md) | Architecture flow diagrams          |
-| [aws-bootstrap.md](aws-bootstrap.md)           | AWS account bootstrapping guide     |
-| [best-practices.md](best-practices.md)         | Best practices engine documentation |
-| [commands.md](commands.md)                     | CLI command reference               |
-| [configuration.md](configuration.md)           | Configuration system documentation  |
-| [drift-detection.md](drift-detection.md)       | Drift detection and reconciliation  |
-| [mcp-server.md](mcp-server.md)                 | MCP server documentation            |
-| [quickstart.md](quickstart.md)                 | Quick start guide                   |
-| [resource-types.md](resource-types.md)         | Supported resource types            |
-| [testing-guide.md](testing-guide.md)           | Testing guide                       |
+| Document                                               | Description                         |
+| ------------------------------------------------------ | ----------------------------------- |
+| [architecture-flows.md](architecture-flows.md)         | Architecture flow diagrams          |
+| [aws-bootstrap.md](aws-bootstrap.md)                   | AWS account bootstrapping guide     |
+| [best-practices.md](best-practices.md)                 | Best practices engine documentation |
+| [commands.md](commands.md)                             | CLI command reference               |
+| [configuration.md](configuration.md)                   | Configuration system documentation  |
+| [drift-detection.md](drift-detection.md)               | Drift detection and reconciliation  |
+| [mcp-server.md](mcp-server.md)                         | MCP server documentation            |
+| [quickstart.md](quickstart.md)                         | Quick start guide                   |
+| [resource-types.md](resource-types.md)                 | Supported resource types            |
+| [testing-guide.md](testing-guide.md)                   | Testing guide                       |
+| [mcp-intelligence-audit.md](mcp-intelligence-audit.md) | MCP intelligence audit              |
+| [mcp-servers.md](mcp-servers.md)                       | MCP servers overview                |
 
 ## Key Metrics (as of 2026-04-10)
 
@@ -32,7 +34,7 @@ These documents were already present in the `docs/` directory:
 | ------------------------------ | ---------------------------------------- |
 | Supported AWS resource types   | 36                                       |
 | Compound architecture patterns | 9 first-class + 1 variant                |
-| LangGraph pipeline nodes       | 12                                       |
+| LangGraph pipeline nodes       | 13                                       |
 | CLI commands                   | 12                                       |
 | MCP server tools               | 5                                        |
 | Resource plugins               | 36 (35 + generic)                        |

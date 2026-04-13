@@ -1,5 +1,7 @@
 # MCP Intelligence Maximization Audit
 
+> **Snapshot from 2026-04-10.** MCP server versions and tool APIs have since been updated — see [mcp-servers.md](./mcp-servers.md) for current pins.
+
 **Date:** 2026-04-10
 **Epic:** 44 — Dynamic Data & LLM Routing
 **Story:** 44.6
@@ -33,6 +35,8 @@ All servers are supply-chain pinned (never `@latest`). Optional servers degrade 
 | `GetSecurityFindings`       | WA Security     | security-posture.ts                                                              | Post-provision SecurityHub/GuardDuty findings                  |
 | `get_cost_and_usage`        | Cost Management | billing.ts, list-resources.ts                                                    | Live billing for current month                                 |
 | `get_cost_forecast`         | Cost Management | billing.ts                                                                       | Forecast for destroy savings estimate                          |
+
+> **Update (Story 45.2):** `get_cost_and_usage` and `get_cost_forecast` were replaced by a single `cost-explorer` tool with an `operation` parameter on the new `billing-cost-management-mcp-server`. See [mcp-servers.md](./mcp-servers.md) Billing section for current API.
 
 ### 1.3 Pipeline Node Inventory
 
@@ -177,6 +181,8 @@ All servers are supply-chain pinned (never `@latest`). Optional servers degrade 
 | RDS_BUDGET_ALTERNATIVES                  | constants.ts      | **Keep as-is** — recommendation, not catalog       |
 
 ### 3.3 Lambda Pricing Fallback (constants/pricing.ts)
+
+> **Update (Story 46.7):** Dead constants from `constants/pricing.ts` were removed. The live Lambda pricing fallback now lives in `packages/core/src/pricing/strategies/lambda.ts`.
 
 | Data                     | Value        | Recommendation                                         |
 | ------------------------ | ------------ | ------------------------------------------------------ |
