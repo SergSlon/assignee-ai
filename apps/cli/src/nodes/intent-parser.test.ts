@@ -103,6 +103,6 @@ describe("intentParserNode", () => {
     // first-class to unblock the static-website compound migration, count 36.
     expect(SUPPORTED_TYPES).toContain("AWS::CloudFront::OriginAccessControl");
     expect(SUPPORTED_TYPES).toContain("AWS::S3::BucketPolicy");
-    expect(SUPPORTED_TYPES).toHaveLength(36);
+    expect(SUPPORTED_TYPES).toHaveLength(37);
   });
 });

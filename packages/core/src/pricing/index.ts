@@ -40,6 +40,8 @@ import { eventsEventBusPricingStrategy } from "./strategies/events-eventbus.js";
 import { snsSubscriptionPricingStrategy } from "./strategies/sns-subscription.js";
 import { cloudFrontOacPricingStrategy } from "./strategies/cloudfront-origin-access-control.js";
 import { s3BucketPolicyPricingStrategy } from "./strategies/s3-bucket-policy.js";
+// 2026-04-13: RDS::DBSubnetGroup (free — cost on parent RDS instance)
+import { rdsDbSubnetGroupPricingStrategy } from "./strategies/rds-db-subnet-group.js";
 // A11 (2026-04-09) — KMS::Key first-class (customer-managed keys)
 import { kmsKeyPricingStrategy } from "./strategies/kms-key.js";
 import { kmsKeyPricingDecomposer } from "./decomposers/kms-key.js";
@@ -94,6 +96,8 @@ import {
   // (f) 2026-04-09 Task 4b: CloudFront OAC + S3 BucketPolicy — both free
   cloudFrontOacPricingDecomposer,
   s3BucketPolicyPricingDecomposer,
+  // 2026-04-13: RDS::DBSubnetGroup
+  rdsDbSubnetGroupPricingDecomposer,
 } from "./decomposers/free.js";
 
 /**
@@ -245,6 +249,11 @@ defaultPricingRegistry.register(
   RESOURCE_TYPES.S3_BUCKET_POLICY,
   s3BucketPolicyPricingStrategy,
 );
+// 2026-04-13: RDS::DBSubnetGroup (free — cost on parent RDS instance)
+defaultPricingRegistry.register(
+  RESOURCE_TYPES.RDS_DB_SUBNET_GROUP,
+  rdsDbSubnetGroupPricingStrategy,
+);
 
 /**
  * The default pre-populated pricing decomposer registry (Story 23.1).
@@ -299,6 +308,8 @@ defaultDecomposerRegistry.register(cloudFrontDistributionPricingDecomposer);
 // (both free — cost lives on parent CloudFront distribution and S3 bucket)
 defaultDecomposerRegistry.register(cloudFrontOacPricingDecomposer);
 defaultDecomposerRegistry.register(s3BucketPolicyPricingDecomposer);
+// 2026-04-13: RDS::DBSubnetGroup
+defaultDecomposerRegistry.register(rdsDbSubnetGroupPricingDecomposer);
 
 export { PricingStrategyRegistry };
 export { PricingDecomposerRegistry } from "./decomposer-registry.js";

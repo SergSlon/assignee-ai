@@ -65,6 +65,7 @@ export const CfnKey = {
   PUBLICLY_ACCESSIBLE: "PubliclyAccessible",
   STORAGE_ENCRYPTED: "StorageEncrypted",
   DB_SUBNET_GROUP_NAME: "DBSubnetGroupName",
+  DB_SUBNET_GROUP_DESCRIPTION: "DBSubnetGroupDescription",
   VPC_SECURITY_GROUP_IDS: "VpcSecurityGroupIds",
   PORT: "Port",
   ENABLE_CW_LOGS_EXPORTS: "EnableCloudwatchLogsExports",

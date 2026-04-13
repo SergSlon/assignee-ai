@@ -158,6 +158,8 @@ export function createGraph(
     .addConditionalEdges(GraphNode.STATUS_POLLER, routeStatusPoller, {
       [GraphNode.STATUS_POLLER]: GraphNode.STATUS_POLLER,
       [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,
+      // Retry path: CloudFront S3 origin DNS propagation failure
+      [GraphNode.RESOURCE_PROVISIONER]: GraphNode.RESOURCE_PROVISIONER,
     })
     .addConditionalEdges(GraphNode.RESULT_FORMATTER, routeResultFormatter, {
       [GraphNode.PLAN_GENERATOR]: GraphNode.PLAN_GENERATOR,

@@ -111,6 +111,11 @@ export const RESOURCE_IDENTIFIER_KEYS: Record<ResourceType, string> = {
   // Write against the resolved bucket name to catch existing-policy
   // collisions before CCAPI throws AlreadyExists.
   [RESOURCE_TYPES.S3_BUCKET_POLICY]: "Bucket",
+  // 2026-04-13: AWS::RDS::DBSubnetGroup primary identifier is the
+  // user-supplied (or auto-generated) DBSubnetGroupName. State guard
+  // can Read-Before-Write against the name if it's present in
+  // desiredState — otherwise skips like other auto-ID types.
+  [RESOURCE_TYPES.RDS_DB_SUBNET_GROUP]: "DBSubnetGroupName",
 } as const;
 
 /**

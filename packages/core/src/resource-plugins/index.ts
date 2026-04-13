@@ -45,6 +45,8 @@ import { cloudFrontDistributionPlugin } from "./plugins/cloudfront-distribution.
 // first-class (unblocks static-website compound migration off SDK)
 import { cloudFrontOriginAccessControlPlugin } from "./plugins/cloudfront-origin-access-control.js";
 import { s3BucketPolicyPlugin } from "./plugins/s3-bucket-policy.js";
+// 2026-04-13: RDS::DBSubnetGroup for three-tier-web compound
+import { rdsDbSubnetGroupPlugin } from "./plugins/rds-db-subnet-group.js";
 import { genericPlugin } from "./plugins/generic.js";
 
 /**
@@ -102,6 +104,8 @@ defaultPluginRegistry.register(cloudFrontDistributionPlugin);
 // (f) 2026-04-09 Task 4b: OAC + BucketPolicy for static-website compound
 defaultPluginRegistry.register(cloudFrontOriginAccessControlPlugin);
 defaultPluginRegistry.register(s3BucketPolicyPlugin);
+// 2026-04-13: RDS::DBSubnetGroup for three-tier-web compound
+defaultPluginRegistry.register(rdsDbSubnetGroupPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
 export { PluginRegistry };
@@ -153,6 +157,8 @@ export { cloudFrontDistributionPlugin } from "./plugins/cloudfront-distribution.
 // (f) 2026-04-09 Task 4b: OAC + BucketPolicy for static-website compound
 export { cloudFrontOriginAccessControlPlugin } from "./plugins/cloudfront-origin-access-control.js";
 export { s3BucketPolicyPlugin } from "./plugins/s3-bucket-policy.js";
+// 2026-04-13: RDS::DBSubnetGroup for three-tier-web compound
+export { rdsDbSubnetGroupPlugin } from "./plugins/rds-db-subnet-group.js";
 export { genericPlugin } from "./plugins/generic.js";
 export type {
   ResourcePlugin,

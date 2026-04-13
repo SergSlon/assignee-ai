@@ -26,18 +26,55 @@ export const MessageProcessingResourceId = {
   PROCESSOR_FN: "processor-fn",
 } as const;
 
-/** Resource IDs for the Three-Tier Web pattern. */
+/** Resource IDs for the Three-Tier Web pattern.
+ * VPC resource IDs mirror VpcResourceId in vpc-networking.ts so the
+ * compound-provisioner's marker resolution treats the patterns identically.
+ * No NAT gateway — private subnets host only RDS (no internet needed).
+ */
 export const ThreeTierWebResourceId = {
+  // VPC topology (public + private, no NAT)
+  VPC: "vpc",
+  PUBLIC_SUBNET_1: "public-subnet-1",
+  PUBLIC_SUBNET_2: "public-subnet-2",
+  PRIVATE_SUBNET_1: "private-subnet-1",
+  PRIVATE_SUBNET_2: "private-subnet-2",
+  IGW: "igw",
+  IGW_ATTACHMENT: "igw-attachment",
+  PUBLIC_ROUTE_TABLE: "public-route-table",
+  PRIVATE_ROUTE_TABLE: "private-route-table",
+  PUBLIC_ROUTE: "public-route",
+  PUBLIC_SUBNET_1_RT_ASSOC: "public-subnet-1-rt-assoc",
+  PUBLIC_SUBNET_2_RT_ASSOC: "public-subnet-2-rt-assoc",
+  PRIVATE_SUBNET_1_RT_ASSOC: "private-subnet-1-rt-assoc",
+  PRIVATE_SUBNET_2_RT_ASSOC: "private-subnet-2-rt-assoc",
+  // Application layer
   ALB_SG: "alb-sg",
   APP_SG: "app-sg",
+  DB_SG: "db-sg",
   INSTANCE_PROFILE_ROLE: "instance-profile-role",
+  DB_SUBNET_GROUP: "db-subnet-group",
   ALB: "alb",
   EC2_INSTANCE: "ec2-instance",
   RDS_INSTANCE: "rds-instance",
 } as const;
 
-/** Resource IDs for the Container Service pattern. */
+/** Resource IDs for the Container Service pattern.
+ * VPC resource IDs mirror VpcResourceId in vpc-networking.ts so the
+ * compound-provisioner's marker resolution treats both patterns identically.
+ */
 export const ContainerServiceResourceId = {
+  // VPC topology (mirrors VpcResourceId — public-only variant)
+  VPC: "vpc",
+  PUBLIC_SUBNET_1: "public-subnet-1",
+  PUBLIC_SUBNET_2: "public-subnet-2",
+  IGW: "igw",
+  IGW_ATTACHMENT: "igw-attachment",
+  PUBLIC_ROUTE_TABLE: "public-route-table",
+  PUBLIC_ROUTE: "public-route",
+  PUBLIC_SUBNET_1_RT_ASSOC: "public-subnet-1-rt-assoc",
+  PUBLIC_SUBNET_2_RT_ASSOC: "public-subnet-2-rt-assoc",
+  // Container-service-specific
+  ALB_SG: "alb-sg",
   ECR_REPO: "ecr-repo",
   TASK_ROLE: "task-role",
   ECS_SG: "ecs-sg",

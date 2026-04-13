@@ -169,7 +169,7 @@ describe("Secure defaults audit — all wizard defaults pass blocking BP rules",
   // A14 (2026-04-09): CloudFront::Distribution first-class, count 34.
   // (f) 2026-04-09 Task 4b: OriginAccessControl + S3::BucketPolicy, count 36.
   it(`covers all ${SUPPORTED_TYPES_ARRAY.length} supported resource types`, () => {
-    expect(SUPPORTED_TYPES_ARRAY.length).toBe(36);
+    expect(SUPPORTED_TYPES_ARRAY.length).toBe(37);
   });
 
   for (const resourceType of SUPPORTED_TYPES_ARRAY) {

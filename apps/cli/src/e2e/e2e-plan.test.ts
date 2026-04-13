@@ -1909,12 +1909,11 @@ describeE2E("E2E: efs-with-vpc compound apply + destroy", () => {
 // and rely on the bulk-destroy tier ordering (CLOUDFRONT_DISTRIBUTION
 // must be disabled + deleted BEFORE the bucket is emptied).
 //
-// 2026-04-13: static-website consistently fails — CCAPI CloudFront async
-// validator rejects S3 origin DomainName even after 30s pre-create delay.
-// The bucket IS created but CloudFront's backend doesn't see new us-east-1
-// buckets reliably within 60s. AWS infrastructure timing issue — needs
-// graph-level retry (separate story). Pattern schema IS correct.
-describe.skip("E2E: static-website compound apply + destroy", () => {
+// 2026-04-13: static-website now has graph-level CloudFront S3 retry —
+// status_poller detects the transient S3 origin DNS failure and routes
+// back to resource_provisioner with a 30s delay per retry (max 3).
+// Pattern schema is correct; the retry handles AWS infrastructure timing.
+describeE2E("E2E: static-website compound apply + destroy", () => {
   const staticSuffix = `${Date.now()}`;
 
   it("plans, applies, and bulk-destroys a CCAPI static-website (S3 + OAC + CF + BucketPolicy)", async () => {
@@ -2278,11 +2277,10 @@ describeE2E("E2E: message-processing compound apply + destroy", () => {
   }, 900_000);
 });
 
-// 2026-04-12: container-service pattern is a skeleton — ALB has no Subnets
-// (requires VPC with 2+ AZ public subnets, same gap as three-tier-web).
-// IAM Role + SG defaults added in this commit but the ALB gap blocks
-// apply. Skipping until the pattern is redesigned with embedded VPC.
-describe.skip("E2E: container-service compound apply + destroy", () => {
+// 2026-04-13: container-service pattern now embeds a public-only VPC
+// (9 resources: VPC + 2 subnets + IGW + attachment + RT + route + 2 assocs)
+// plus ALB_SG, wiring the ALB Subnets + SecurityGroups. Total: 15 resources.
+describeE2E("E2E: container-service compound apply + destroy", () => {
   const csSuffix = `${Date.now()}`;
 
   it("plans, applies, and bulk-destroys an ECS Fargate container service with ALB", async () => {
@@ -2329,6 +2327,19 @@ describe.skip("E2E: container-service compound apply + destroy", () => {
 
     const completed = finalState.completedResources ?? [];
 
+    // 15 resources: 9 VPC + ALB_SG + ECR + Task Role + ECS_SG + Cluster + ALB
+    expect(completed.length).toBeGreaterThanOrEqual(15);
+
+    // VPC foundation
+    const vpc = completed.find((c) => c.resourceType === "AWS::EC2::VPC");
+    expect(typeof vpc?.resourceArn).toBe("string");
+    expect(vpc?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const subnets = completed.filter(
+      (c) => c.resourceType === "AWS::EC2::Subnet",
+    );
+    expect(subnets.length).toBeGreaterThanOrEqual(2);
+
     // Hero resources: ECR repository, IAM task role, ECS cluster, ALB.
     const ecr = completed.find(
       (c) => c.resourceType === "AWS::ECR::Repository",
@@ -2339,6 +2350,11 @@ describe.skip("E2E: container-service compound apply + destroy", () => {
     const role = completed.find((c) => c.resourceType === "AWS::IAM::Role");
     expect(typeof role?.resourceArn).toBe("string");
     expect(role?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const sgs = completed.filter(
+      (c) => c.resourceType === "AWS::EC2::SecurityGroup",
+    );
+    expect(sgs.length).toBeGreaterThanOrEqual(2); // ALB_SG + ECS_SG
 
     const cluster = completed.find(
       (c) => c.resourceType === "AWS::ECS::Cluster",
@@ -2355,30 +2371,18 @@ describe.skip("E2E: container-service compound apply + destroy", () => {
     expect(alb?.executionStatus).toBe(ExecutionStatus.SUCCESS);
 
     // ── Destroy pipeline exercise ───────────────────────────────────
-    // ALB provisioning can take ~5 min; destroy is usually quick. ECR
-    // repositories reject delete if images are present but our E2E
-    // never pushes images, so the ECR delete proceeds cleanly.
+    // VPC compound destroy follows the same IGW-detach / RT-disassociate
+    // pre-delete hooks as the vpc-networking E2E. ALB provisioning can
+    // take ~5 min; destroy is usually quick. ECR repositories reject
+    // delete if images are present but our E2E never pushes images.
     await destroyAndAssert(completed);
-    // Destroy assertions handled by destroyAndAssert() or inline above.
   }, 1_500_000);
 });
 
-// 2026-04-11: three-tier-web pattern is a skeleton — it lists ALB/EC2/RDS/SGs
-// but does not wire them into a functional stack. It has no VPC resource, so
-// the ALB has no Subnets, EC2 has no SubnetId/ImageId, and the APP_SG has no
-// ingress from the ALB_SG. This test was failing nightly on the first
-// required-field error from the ALB step; the partial fix in this commit
-// populates the SG GroupDescription (first error) so the pattern no longer
-// throws there, but downstream required-field errors remain. Completing this
-// pattern is a pattern-redesign task of ~150 lines (VPC + 2 public subnets +
-// 2 private subnets + IGW + route tables + RDS subnet group + full SG
-// ingress wiring + EC2 AMI lookup) that is out of scope for the current
-// fix wave. Skipping with describe.skip keeps the test file compilable and
-// the scope honest until a dedicated follow-up rewrites three-tier-web.ts
-// into a working compound like vpc-networking.ts or efs-with-vpc.ts. See
-// packages/core/src/pattern-templates/patterns/three-tier-web.ts for the
-// existing resource list.
-describe.skip("E2E: three-tier-web compound apply + destroy", () => {
+// 2026-04-13: three-tier-web now embeds a full VPC (public + private subnets,
+// no NAT) with 3 SGs, DBSubnetGroup, ALB wired to public subnets, EC2 with
+// AMI resolution, and RDS with DBSubnetGroup + VPC SG. Total: 22 resources.
+describeE2E("E2E: three-tier-web compound apply + destroy", () => {
   const ttSuffix = `${Date.now()}`;
 
   it("plans, applies, and bulk-destroys a three-tier web app (ALB + EC2 + RDS)", async () => {
@@ -2425,12 +2429,24 @@ describe.skip("E2E: three-tier-web compound apply + destroy", () => {
 
     const completed = finalState.completedResources ?? [];
 
-    // Hero resources: two SGs (ALB + App), instance profile role, ALB,
-    // EC2 instance, RDS instance.
+    // 22 resources: 14 VPC + 3 SGs + Role + DBSubnetGroup + ALB + EC2 + RDS
+    expect(completed.length).toBeGreaterThanOrEqual(22);
+
+    // VPC foundation
+    const vpc = completed.find((c) => c.resourceType === "AWS::EC2::VPC");
+    expect(typeof vpc?.resourceArn).toBe("string");
+    expect(vpc?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    const subnets = completed.filter(
+      (c) => c.resourceType === "AWS::EC2::Subnet",
+    );
+    expect(subnets.length).toBeGreaterThanOrEqual(4); // 2 public + 2 private
+
+    // Security groups: ALB + App + DB
     const sgs = completed.filter(
       (c) => c.resourceType === "AWS::EC2::SecurityGroup",
     );
-    expect(sgs.length).toBeGreaterThanOrEqual(2);
+    expect(sgs.length).toBeGreaterThanOrEqual(3);
     for (const sg of sgs) {
       expect(typeof sg.resourceArn).toBe("string");
       expect(sg.executionStatus).toBe(ExecutionStatus.SUCCESS);
@@ -2439,6 +2455,13 @@ describe.skip("E2E: three-tier-web compound apply + destroy", () => {
     const role = completed.find((c) => c.resourceType === "AWS::IAM::Role");
     expect(typeof role?.resourceArn).toBe("string");
     expect(role?.executionStatus).toBe(ExecutionStatus.SUCCESS);
+
+    // DB Subnet Group
+    const dbSubnetGroup = completed.find(
+      (c) => c.resourceType === "AWS::RDS::DBSubnetGroup",
+    );
+    expect(typeof dbSubnetGroup?.resourceArn).toBe("string");
+    expect(dbSubnetGroup?.executionStatus).toBe(ExecutionStatus.SUCCESS);
 
     const alb = completed.find(
       (c) => c.resourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer",
@@ -2459,12 +2482,9 @@ describe.skip("E2E: three-tier-web compound apply + destroy", () => {
     expect(rds?.executionStatus).toBe(ExecutionStatus.SUCCESS);
 
     // ── Destroy pipeline exercise ───────────────────────────────────
-    // RDS + ALB are the long-poll resources in this compound. RDS needs
-    // DeletionProtection=false + SkipFinalSnapshot=true pre-delete
-    // hooks (both handled by destroy-service.ts); ALB destroy removes
-    // target groups + listeners implicitly. The 30-minute timeout
-    // accommodates a worst-case RDS delete.
+    // RDS + ALB are the long-poll resources. DBSubnetGroup must be
+    // destroyed AFTER RDS (tier 4 vs tier 3). VPC compound destroy
+    // follows the IGW-detach / RT-disassociate pre-delete hooks.
     await destroyAndAssert(completed);
-    // Destroy assertions handled by destroyAndAssert() or inline above.
   }, 1_800_000);
 });

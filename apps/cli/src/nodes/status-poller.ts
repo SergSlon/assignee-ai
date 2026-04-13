@@ -54,6 +54,34 @@ const ProvisioningStatus = {
   CANCEL_COMPLETE: "CANCEL_COMPLETE",
 } as const;
 
+/** Maximum CloudFront S3 origin retry attempts before hard failure. */
+const MAX_CLOUDFRONT_RETRIES = 3;
+
+/**
+ * Detects transient CloudFront S3 origin DNS propagation failures.
+ * These occur when CCAPI's async CloudFront validator can't reach a
+ * just-created S3 bucket because global DNS hasn't propagated yet.
+ * Returns true only for S3-origin-related failures, NOT for config errors.
+ *
+ * Exported for unit testing.
+ */
+export function isRetryableCloudFrontS3Error(statusMessage: string): boolean {
+  if (!statusMessage) return false;
+  const lower = statusMessage.toLowerCase();
+  // CCAPI CloudFront errors for S3 origin not found:
+  // - "One or more of your origins ... does not exist"
+  // - "The S3 bucket ... does not exist"
+  // - "NoSuchBucket"
+  // - "InvalidOrigin" (generic origin validation failure)
+  return (
+    lower.includes("does not exist") ||
+    lower.includes("nosuchbucket") ||
+    lower.includes("invalidorigin") ||
+    lower.includes("s3 origin") ||
+    (lower.includes("origin") && lower.includes("not found"))
+  );
+}
+
 export async function statusPollerNode(
   state: AgentState,
   provisioner: ProvisioningPort,
@@ -128,6 +156,43 @@ export async function statusPollerNode(
     durationMs,
     extras: { status },
   });
+
+  // ── CloudFront S3 retry: transient origin DNS propagation failure ──────
+  // CCAPI CloudFront::Distribution creation may fail asynchronously when the
+  // S3 origin bucket was just created in the same compound — the bucket
+  // exists but its global DNS hasn't propagated to CloudFront's validation
+  // backend yet. This is a known AWS timing issue, not a configuration
+  // error. Signal a retry by staying IN_PROGRESS with a cleared
+  // requestToken (the router detects this and sends us back to
+  // resource_provisioner, which waits 30s then re-creates).
+  if (
+    status === ProvisioningStatus.FAILED &&
+    state.resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION &&
+    isRetryableCloudFrontS3Error(
+      typeof result.statusMessage === "string" ? result.statusMessage : "",
+    ) &&
+    (state.retryCount ?? 0) < MAX_CLOUDFRONT_RETRIES
+  ) {
+    const newRetryCount = (state.retryCount ?? 0) + 1;
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "warn",
+      action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
+      durationMs,
+      extras: {
+        status,
+        retryCount: newRetryCount,
+        message: `CloudFront S3 origin DNS propagation failure — retrying (${newRetryCount}/${MAX_CLOUDFRONT_RETRIES})`,
+        originalError: result.statusMessage,
+      },
+    });
+    return {
+      executionStatus: ExecutionStatus.IN_PROGRESS,
+      retryCount: newRetryCount,
+      requestToken: undefined, // clear stale token to signal retry
+    };
+  }
 
   if (
     status === ProvisioningStatus.FAILED ||

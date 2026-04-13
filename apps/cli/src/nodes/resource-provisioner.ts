@@ -84,6 +84,32 @@ export async function resourceProvisionerNode(
 ): Promise<Partial<AgentState>> {
   if (state.executionStatus === ExecutionStatus.CANCELLED) return {};
 
+  // ── CloudFront S3 retry: wait for DNS propagation before re-creating ─────
+  // When status_poller detects a transient S3 origin DNS failure, it clears
+  // requestToken and increments retryCount, then the graph routes us back
+  // here. We wait 30s to give S3 global DNS more propagation time before
+  // attempting the createResource call again.
+  const RETRY_DELAY_MS = 30_000;
+  if (
+    (state.retryCount ?? 0) > 0 &&
+    state.resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION &&
+    !state.requestToken
+  ) {
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+      extras: {
+        phase: "cloudfront_s3_retry_wait",
+        retryCount: state.retryCount,
+        delayMs: RETRY_DELAY_MS,
+        message: `Waiting ${RETRY_DELAY_MS / 1000}s for S3 DNS propagation before retry ${state.retryCount}/3`,
+      },
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  }
+
   // ── Skip non-provisionable resources (companion/post-provision) ──────────
   // Resources like CloudFront Distribution and OAC are created post-provision
   // via SDK, not through CloudControl. Mark them as SUCCESS and advance the loop.

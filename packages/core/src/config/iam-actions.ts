@@ -197,6 +197,14 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "rds:AddTagsToResource",
       "rds:ListTagsForResource",
     ],
+    [RESOURCE_TYPES.RDS_DB_SUBNET_GROUP]: [
+      "rds:CreateDBSubnetGroup",
+      "rds:DeleteDBSubnetGroup",
+      "rds:DescribeDBSubnetGroups",
+      "rds:ModifyDBSubnetGroup",
+      "rds:AddTagsToResource",
+      "rds:ListTagsForResource",
+    ],
     [RESOURCE_TYPES.EC2_SECURITY_GROUP]: [
       "ec2:CreateSecurityGroup",
       "ec2:DeleteSecurityGroup",

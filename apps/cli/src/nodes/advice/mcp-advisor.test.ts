@@ -75,6 +75,8 @@ const FREE_WIRING_TYPES = new Set<string>([
   // respectively. Neither has its own meter.
   "AWS::CloudFront::OriginAccessControl",
   "AWS::S3::BucketPolicy",
+  // 2026-04-13: DBSubnetGroup is free wiring — cost on parent RDS instance
+  "AWS::RDS::DBSubnetGroup",
 ]);
 
 // ────────────────────────────────────────────────────────────────────
