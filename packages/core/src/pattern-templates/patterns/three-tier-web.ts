@@ -298,7 +298,7 @@ export const threeTierWebPattern: ArchitecturePattern = {
     },
     [R.APP_SG]: {
       [CfnKey.GROUP_DESCRIPTION]:
-        "Application tier — HTTP from VPC (ALB → EC2)",
+        "Application tier - HTTP from VPC (ALB to EC2)",
       [CfnKey.VPC_ID]: markerRef(R.VPC),
       [CfnKey.SG_INGRESS]: [
         {
@@ -326,7 +326,7 @@ export const threeTierWebPattern: ArchitecturePattern = {
     },
     [R.DB_SG]: {
       [CfnKey.GROUP_DESCRIPTION]:
-        "Database tier — PostgreSQL from application tier",
+        "Database tier - PostgreSQL from application tier",
       [CfnKey.VPC_ID]: markerRef(R.VPC),
       [CfnKey.SG_INGRESS]: [
         {

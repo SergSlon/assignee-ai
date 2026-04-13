@@ -238,7 +238,7 @@ export const containerServicePattern: ArchitecturePattern = {
     },
     [R.ECS_SG]: {
       [CfnKey.GROUP_DESCRIPTION]:
-        "ECS Fargate service traffic — container-service compound pattern",
+        "ECS Fargate service traffic - container-service compound pattern",
       [CfnKey.VPC_ID]: markerRef(R.VPC),
       [CfnKey.SG_INGRESS]: [
         {
@@ -246,7 +246,7 @@ export const containerServicePattern: ArchitecturePattern = {
           FromPort: 80,
           ToPort: 80,
           CidrIp: VPC_CIDR,
-          Description: "HTTP from VPC (ALB → ECS)",
+          Description: "HTTP from VPC (ALB to ECS)",
         },
       ],
       [CfnKey.SG_EGRESS]: [
