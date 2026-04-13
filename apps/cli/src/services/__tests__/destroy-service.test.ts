@@ -171,12 +171,16 @@ vi.mock("@aws-sdk/client-ec2", () => {
   function DisassociateRouteTableCommand(input: Record<string, unknown>) {
     return { _type: "DisassociateRouteTable", ...input };
   }
+  function DescribeNetworkInterfacesCommand(input: Record<string, unknown>) {
+    return { _type: "DescribeNetworkInterfaces", ...input };
+  }
   return {
     EC2Client: MockEC2Client,
     DescribeInternetGatewaysCommand,
     DetachInternetGatewayCommand,
     DescribeRouteTablesCommand,
     DisassociateRouteTableCommand,
+    DescribeNetworkInterfacesCommand,
   };
 });
 
@@ -1622,6 +1626,129 @@ describe("destroySingleResource", () => {
         (c) => (c[0] as { _type: string })._type === "ListObjectVersions",
       );
       expect(listCalls).toHaveLength(1);
+    });
+  });
+
+  // ── ALB ENI drain post-delete ─────────────────────────────────────────
+  describe("ALB post-delete ENI drain", () => {
+    const ALB_ARN =
+      "arn:aws:elasticloadbalancing:us-east-1:054125018476:loadbalancer/app/assignee-alb-test/abc123def456";
+
+    it("polls DescribeNetworkInterfaces until ALB ENIs are gone", async () => {
+      // CCAPI delete succeeds
+      mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-alb" }]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      // First poll: 1 ENI still present
+      mockEc2Send.mockResolvedValueOnce({
+        NetworkInterfaces: [
+          {
+            NetworkInterfaceId: "eni-0abc123",
+            Description: "ELB app/assignee-alb-test/abc123def456",
+          },
+        ],
+      });
+      // Second poll: ENIs gone
+      mockEc2Send.mockResolvedValueOnce({
+        NetworkInterfaces: [],
+      });
+
+      const result = await destroySingleResource({
+        arn: ALB_ARN,
+        resourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        identifier: ALB_ARN,
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      // Should have called DescribeNetworkInterfaces twice
+      const eniCalls = mockEc2Send.mock.calls.filter(
+        (c) =>
+          (c[0] as { _type: string })._type === "DescribeNetworkInterfaces",
+      );
+      expect(eniCalls).toHaveLength(2);
+    });
+
+    it("succeeds even if ENI drain polling fails (non-fatal)", async () => {
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-alb2" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      // ENI poll throws
+      mockEc2Send.mockRejectedValueOnce(new Error("RequestLimitExceeded"));
+
+      const result = await destroySingleResource({
+        arn: ALB_ARN,
+        resourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        identifier: ALB_ARN,
+        region: "us-east-1",
+      });
+
+      // Delete still reported as success — ENI drain is non-fatal
+      expect(result.success).toBe(true);
+    });
+
+    it("skips ENI drain immediately when no ENIs are present", async () => {
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-alb3" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      // No ENIs from the start
+      mockEc2Send.mockResolvedValueOnce({
+        NetworkInterfaces: [],
+      });
+
+      const result = await destroySingleResource({
+        arn: ALB_ARN,
+        resourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        identifier: ALB_ARN,
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(true);
+      const eniCalls = mockEc2Send.mock.calls.filter(
+        (c) =>
+          (c[0] as { _type: string })._type === "DescribeNetworkInterfaces",
+      );
+      expect(eniCalls).toHaveLength(1);
+    });
+
+    it("returns MissingAssigneeCredentialsError as non-fatal when creds are missing", async () => {
+      // Clear the env vars that provide operator credentials
+      delete process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"];
+      delete process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"];
+
+      mockDeleteResource.mockResolvedValue([
+        null,
+        { requestToken: "tok-alb4" },
+      ]);
+      mockGetRequestStatus.mockResolvedValue([
+        null,
+        { operationStatus: "SUCCESS" },
+      ]);
+
+      const result = await destroySingleResource({
+        arn: ALB_ARN,
+        resourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        identifier: ALB_ARN,
+        region: "us-east-1",
+      });
+
+      // Delete still succeeds — ENI drain is non-fatal
+      expect(result.success).toBe(true);
     });
   });
 });

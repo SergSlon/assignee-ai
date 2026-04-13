@@ -2007,6 +2007,189 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
     // reference).
     // Destroy assertions handled by destroyAndAssert() or inline above.
   }, 2_400_000);
+
+  afterAll(async () => {
+    if (!RUN_E2E) return;
+    if (skipIfNoCreds()) return;
+
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const creds = operatorCreds();
+
+    // Best-effort cleanup of static-website resources.
+
+    // 1. Disable + delete CloudFront distributions matching assignee-*
+    try {
+      const {
+        CloudFrontClient,
+        ListDistributionsCommand,
+        GetDistributionCommand,
+        UpdateDistributionCommand,
+        DeleteDistributionCommand,
+      } = await import("@aws-sdk/client-cloudfront");
+      const cf = new CloudFrontClient({
+        region: "us-east-1", // CloudFront is global
+        credentials: creds,
+      });
+      const dists = await cf.send(new ListDistributionsCommand({}));
+      for (const d of dists.DistributionList?.Items ?? []) {
+        // Match on origin containing "assignee-" bucket name
+        const hasAssigneeOrigin = d.Origins?.Items?.some((o) =>
+          o.DomainName?.includes("assignee-"),
+        );
+        if (!hasAssigneeOrigin || !d.Id) continue;
+        try {
+          const getResp = await cf.send(
+            new GetDistributionCommand({ Id: d.Id }),
+          );
+          const config = getResp.Distribution?.DistributionConfig;
+          const etag = getResp.ETag;
+          if (!config || !etag) continue;
+
+          if (config.Enabled) {
+            config.Enabled = false;
+            const updateResp = await cf.send(
+              new UpdateDistributionCommand({
+                Id: d.Id,
+                DistributionConfig: config,
+                IfMatch: etag,
+              }),
+            );
+            // Wait for disable to propagate (up to 10 min)
+            for (let i = 0; i < 120; i++) {
+              await new Promise((r) => setTimeout(r, 5000));
+              const status = await cf.send(
+                new GetDistributionCommand({ Id: d.Id }),
+              );
+              if (status.Distribution?.Status === "Deployed") {
+                await cf.send(
+                  new DeleteDistributionCommand({
+                    Id: d.Id,
+                    IfMatch: status.ETag!,
+                  }),
+                );
+                console.log(`E2E cleanup: deleted CloudFront ${d.Id}`);
+                break;
+              }
+            }
+          } else {
+            await cf.send(
+              new DeleteDistributionCommand({ Id: d.Id, IfMatch: etag }),
+            );
+            console.log(`E2E cleanup: deleted CloudFront ${d.Id}`);
+          }
+        } catch (err) {
+          console.warn(
+            `E2E CloudFront cleanup failed for ${d.Id}: ${String(err)}`,
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(`E2E CloudFront cleanup import failure: ${String(err)}`);
+    }
+
+    // 2. Delete OACs matching assignee-*
+    try {
+      const {
+        CloudFrontClient,
+        ListOriginAccessControlsCommand,
+        GetOriginAccessControlCommand,
+        DeleteOriginAccessControlCommand,
+      } = await import("@aws-sdk/client-cloudfront");
+      const cf = new CloudFrontClient({
+        region: "us-east-1",
+        credentials: creds,
+      });
+      const oacs = await cf.send(new ListOriginAccessControlsCommand({}));
+      for (const oac of oacs.OriginAccessControlList?.Items ?? []) {
+        if (oac.Name?.startsWith("assignee-") && oac.Id) {
+          try {
+            const getResp = await cf.send(
+              new GetOriginAccessControlCommand({ Id: oac.Id }),
+            );
+            await cf.send(
+              new DeleteOriginAccessControlCommand({
+                Id: oac.Id,
+                IfMatch: getResp.ETag!,
+              }),
+            );
+            console.log(`E2E cleanup: deleted OAC ${oac.Name}`);
+          } catch (err) {
+            console.warn(
+              `E2E OAC cleanup failed for ${oac.Name}: ${String(err)}`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`E2E OAC cleanup import failure: ${String(err)}`);
+    }
+
+    // 3. Empty and delete S3 buckets matching assignee-*
+    try {
+      const {
+        S3Client,
+        ListBucketsCommand,
+        ListObjectVersionsCommand,
+        DeleteObjectsCommand,
+        DeleteBucketPolicyCommand,
+        DeleteBucketCommand,
+      } = await import("@aws-sdk/client-s3");
+      const s3 = new S3Client({ region, credentials: creds });
+      const { Buckets } = await s3.send(new ListBucketsCommand({}));
+      for (const b of Buckets ?? []) {
+        if (!b.Name?.startsWith("assignee-")) continue;
+        try {
+          // Delete bucket policy first
+          await s3
+            .send(new DeleteBucketPolicyCommand({ Bucket: b.Name }))
+            .catch(() => {});
+
+          // Empty bucket (all versions + delete markers)
+          let isTruncated = true;
+          let keyMarker: string | undefined;
+          let versionIdMarker: string | undefined;
+          while (isTruncated) {
+            const versions = await s3.send(
+              new ListObjectVersionsCommand({
+                Bucket: b.Name,
+                KeyMarker: keyMarker,
+                VersionIdMarker: versionIdMarker,
+              }),
+            );
+            const objects = [
+              ...(versions.Versions ?? []).map((v) => ({
+                Key: v.Key!,
+                VersionId: v.VersionId,
+              })),
+              ...(versions.DeleteMarkers ?? []).map((m) => ({
+                Key: m.Key!,
+                VersionId: m.VersionId,
+              })),
+            ].filter((o) => o.Key);
+            if (objects.length > 0) {
+              await s3.send(
+                new DeleteObjectsCommand({
+                  Bucket: b.Name,
+                  Delete: { Objects: objects },
+                }),
+              );
+            }
+            isTruncated = versions.IsTruncated ?? false;
+            keyMarker = versions.NextKeyMarker;
+            versionIdMarker = versions.NextVersionIdMarker;
+            if (isTruncated && !keyMarker && !versionIdMarker) break;
+          }
+
+          await s3.send(new DeleteBucketCommand({ Bucket: b.Name }));
+          console.log(`E2E cleanup: deleted S3 bucket ${b.Name}`);
+        } catch (err) {
+          console.warn(`E2E S3 cleanup failed for ${b.Name}: ${String(err)}`);
+        }
+      }
+    } catch (err) {
+      console.warn(`E2E S3 cleanup import failure: ${String(err)}`);
+    }
+  }, 900_000);
 });
 
 describeE2E("E2E: scheduled-lambda compound apply + destroy", () => {
@@ -2387,6 +2570,226 @@ describeE2E("E2E: container-service compound apply + destroy", () => {
     // delete if images are present but our E2E never pushes images.
     await destroyAndAssert(completed);
   }, 1_500_000);
+
+  afterAll(async () => {
+    if (!RUN_E2E) return;
+    if (skipIfNoCreds()) return;
+
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const creds = operatorCreds();
+
+    // Best-effort cleanup of container-service compound resources.
+    // Runs even when the test fails so we don't leak AWS resources.
+
+    // 1. Delete ALBs matching assignee-alb-*
+    try {
+      const {
+        ElasticLoadBalancingV2Client,
+        DescribeLoadBalancersCommand,
+        DeleteLoadBalancerCommand,
+      } = await import("@aws-sdk/client-elastic-load-balancing-v2");
+      const elbv2 = new ElasticLoadBalancingV2Client({
+        region,
+        credentials: creds,
+      });
+      const lbs = await elbv2.send(new DescribeLoadBalancersCommand({}));
+      for (const lb of lbs.LoadBalancers ?? []) {
+        if (
+          lb.LoadBalancerName?.startsWith("assignee-alb-") &&
+          lb.LoadBalancerArn
+        ) {
+          try {
+            await elbv2.send(
+              new DeleteLoadBalancerCommand({
+                LoadBalancerArn: lb.LoadBalancerArn,
+              }),
+            );
+            console.log(`E2E cleanup: deleted ALB ${lb.LoadBalancerName}`);
+          } catch (err) {
+            console.warn(
+              `E2E ALB cleanup failed for ${lb.LoadBalancerName}: ${String(err)}`,
+            );
+          }
+        }
+      }
+      // Wait for ALB ENIs to drain before VPC cleanup
+      await new Promise((r) => setTimeout(r, 60_000));
+    } catch (err) {
+      console.warn(`E2E ALB cleanup import failure: ${String(err)}`);
+    }
+
+    // 2. Delete ECS clusters matching assignee-*
+    try {
+      const { ECSClient, ListClustersCommand, DeleteClusterCommand } =
+        await import("@aws-sdk/client-ecs");
+      const ecs = new ECSClient({ region, credentials: creds });
+      const clusters = await ecs.send(new ListClustersCommand({}));
+      for (const arn of clusters.clusterArns ?? []) {
+        if (arn.includes("assignee-")) {
+          try {
+            await ecs.send(new DeleteClusterCommand({ cluster: arn }));
+            console.log(`E2E cleanup: deleted ECS cluster ${arn}`);
+          } catch (err) {
+            console.warn(`E2E ECS cleanup failed for ${arn}: ${String(err)}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`E2E ECS cleanup import failure: ${String(err)}`);
+    }
+
+    // 3. Delete ECR repos matching assignee-*
+    try {
+      const {
+        ECRClient,
+        DescribeRepositoriesCommand,
+        DeleteRepositoryCommand,
+      } = await import("@aws-sdk/client-ecr");
+      const ecr = new ECRClient({ region, credentials: creds });
+      const repos = await ecr.send(new DescribeRepositoriesCommand({}));
+      for (const repo of repos.repositories ?? []) {
+        if (repo.repositoryName?.startsWith("assignee-")) {
+          try {
+            await ecr.send(
+              new DeleteRepositoryCommand({
+                repositoryName: repo.repositoryName,
+                force: true,
+              }),
+            );
+            console.log(`E2E cleanup: deleted ECR repo ${repo.repositoryName}`);
+          } catch (err) {
+            console.warn(
+              `E2E ECR cleanup failed for ${repo.repositoryName}: ${String(err)}`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`E2E ECR cleanup import failure: ${String(err)}`);
+    }
+
+    // 4. Delete Security Groups matching assignee-* (non-default)
+    try {
+      const {
+        EC2Client,
+        DescribeSecurityGroupsCommand,
+        DeleteSecurityGroupCommand,
+      } = await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({ region, credentials: creds });
+      const sgs = await ec2.send(
+        new DescribeSecurityGroupsCommand({
+          Filters: [{ Name: "tag:Name", Values: ["assignee-*"] }],
+        }),
+      );
+      for (const sg of sgs.SecurityGroups ?? []) {
+        if (sg.GroupId && sg.GroupName !== "default") {
+          await ec2
+            .send(new DeleteSecurityGroupCommand({ GroupId: sg.GroupId }))
+            .catch(() => {});
+        }
+      }
+    } catch {
+      // best-effort
+    }
+
+    // 5. VPC cleanup (same pattern as the vpc-networking afterAll)
+    try {
+      const {
+        EC2Client,
+        DescribeVpcsCommand,
+        DescribeSubnetsCommand,
+        DeleteSubnetCommand,
+        DescribeInternetGatewaysCommand,
+        DetachInternetGatewayCommand,
+        DeleteInternetGatewayCommand,
+        DescribeRouteTablesCommand,
+        DeleteRouteTableCommand,
+        DeleteVpcCommand,
+      } = await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({ region, credentials: creds });
+
+      const vpcs = await ec2.send(
+        new DescribeVpcsCommand({
+          Filters: [{ Name: "tag:Name", Values: ["assignee-vpc-*"] }],
+        }),
+      );
+      for (const vpc of vpcs.Vpcs ?? []) {
+        const vpcId = vpc.VpcId;
+        if (!vpcId) continue;
+        try {
+          // Subnets
+          const subnets = await ec2.send(
+            new DescribeSubnetsCommand({
+              Filters: [{ Name: "vpc-id", Values: [vpcId] }],
+            }),
+          );
+          for (const s of subnets.Subnets ?? []) {
+            if (s.SubnetId) {
+              await ec2
+                .send(new DeleteSubnetCommand({ SubnetId: s.SubnetId }))
+                .catch(() => {});
+            }
+          }
+          // Route tables (skip main)
+          const rts = await ec2.send(
+            new DescribeRouteTablesCommand({
+              Filters: [{ Name: "vpc-id", Values: [vpcId] }],
+            }),
+          );
+          for (const rt of rts.RouteTables ?? []) {
+            const isMain = rt.Associations?.some((a) => a.Main);
+            if (rt.RouteTableId && !isMain) {
+              await ec2
+                .send(
+                  new DeleteRouteTableCommand({
+                    RouteTableId: rt.RouteTableId,
+                  }),
+                )
+                .catch(() => {});
+            }
+          }
+          // IGW detach + delete
+          const igws = await ec2.send(
+            new DescribeInternetGatewaysCommand({
+              Filters: [{ Name: "attachment.vpc-id", Values: [vpcId] }],
+            }),
+          );
+          for (const igw of igws.InternetGateways ?? []) {
+            if (igw.InternetGatewayId) {
+              await ec2
+                .send(
+                  new DetachInternetGatewayCommand({
+                    InternetGatewayId: igw.InternetGatewayId,
+                    VpcId: vpcId,
+                  }),
+                )
+                .catch(() => {});
+              await ec2
+                .send(
+                  new DeleteInternetGatewayCommand({
+                    InternetGatewayId: igw.InternetGatewayId,
+                  }),
+                )
+                .catch(() => {});
+            }
+          }
+          // VPC
+          await ec2
+            .send(new DeleteVpcCommand({ VpcId: vpcId }))
+            .catch((err) => {
+              console.warn(
+                `E2E VPC cleanup: DeleteVpc ${vpcId} failed: ${String(err)}`,
+              );
+            });
+          console.log(`E2E cleanup: deleted VPC ${vpcId}`);
+        } catch (err) {
+          console.warn(`E2E VPC cleanup failed for ${vpcId}: ${String(err)}`);
+        }
+      }
+    } catch (err) {
+      console.warn(`E2E VPC cleanup import failure: ${String(err)}`);
+    }
+  }, 300_000);
 });
 
 // 2026-04-13: three-tier-web now embeds a full VPC (public + private subnets,
@@ -2497,4 +2900,292 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
     // follows the IGW-detach / RT-disassociate pre-delete hooks.
     await destroyAndAssert(completed);
   }, 2_400_000);
+
+  afterAll(async () => {
+    if (!RUN_E2E) return;
+    if (skipIfNoCreds()) return;
+
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const creds = operatorCreds();
+
+    // Best-effort cleanup of three-tier-web resources.
+
+    // 1. Delete RDS instances (SkipFinalSnapshot, disable DeletionProtection)
+    try {
+      const {
+        RDSClient,
+        DescribeDBInstancesCommand,
+        ModifyDBInstanceCommand,
+        DeleteDBInstanceCommand,
+      } = await import("@aws-sdk/client-rds");
+      const rds = new RDSClient({ region, credentials: creds });
+      const instances = await rds.send(new DescribeDBInstancesCommand({}));
+      for (const db of instances.DBInstances ?? []) {
+        if (
+          db.DBInstanceIdentifier?.startsWith("assignee-") &&
+          db.DBInstanceStatus !== "deleting"
+        ) {
+          try {
+            // Disable deletion protection if enabled
+            if (db.DeletionProtection) {
+              await rds.send(
+                new ModifyDBInstanceCommand({
+                  DBInstanceIdentifier: db.DBInstanceIdentifier,
+                  DeletionProtection: false,
+                }),
+              );
+            }
+            await rds.send(
+              new DeleteDBInstanceCommand({
+                DBInstanceIdentifier: db.DBInstanceIdentifier,
+                SkipFinalSnapshot: true,
+                DeleteAutomatedBackups: true,
+              }),
+            );
+            console.log(`E2E cleanup: deleting RDS ${db.DBInstanceIdentifier}`);
+          } catch (err) {
+            console.warn(
+              `E2E RDS cleanup failed for ${db.DBInstanceIdentifier}: ${String(err)}`,
+            );
+          }
+        }
+      }
+      // Wait for RDS deletions to propagate before deleting DB subnet groups
+      // (RDS deletion can take 5-10 min; we wait 3 min as best-effort)
+      const hasRdsToDelete = (instances.DBInstances ?? []).some(
+        (db) =>
+          db.DBInstanceIdentifier?.startsWith("assignee-") &&
+          db.DBInstanceStatus !== "deleting",
+      );
+      if (hasRdsToDelete) {
+        console.log("E2E cleanup: waiting 180s for RDS deletion...");
+        await new Promise((r) => setTimeout(r, 180_000));
+      }
+    } catch (err) {
+      console.warn(`E2E RDS cleanup import failure: ${String(err)}`);
+    }
+
+    // 2. Delete DB Subnet Groups
+    try {
+      const {
+        RDSClient,
+        DescribeDBSubnetGroupsCommand,
+        DeleteDBSubnetGroupCommand,
+      } = await import("@aws-sdk/client-rds");
+      const rds = new RDSClient({ region, credentials: creds });
+      const groups = await rds.send(new DescribeDBSubnetGroupsCommand({}));
+      for (const g of groups.DBSubnetGroups ?? []) {
+        if (g.DBSubnetGroupName?.startsWith("assignee-")) {
+          try {
+            await rds.send(
+              new DeleteDBSubnetGroupCommand({
+                DBSubnetGroupName: g.DBSubnetGroupName,
+              }),
+            );
+            console.log(
+              `E2E cleanup: deleted DB Subnet Group ${g.DBSubnetGroupName}`,
+            );
+          } catch (err) {
+            console.warn(
+              `E2E DB Subnet Group cleanup failed for ${g.DBSubnetGroupName}: ${String(err)}`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `E2E DB Subnet Group cleanup import failure: ${String(err)}`,
+      );
+    }
+
+    // 3. Delete ALBs
+    try {
+      const {
+        ElasticLoadBalancingV2Client,
+        DescribeLoadBalancersCommand,
+        DeleteLoadBalancerCommand,
+      } = await import("@aws-sdk/client-elastic-load-balancing-v2");
+      const elbv2 = new ElasticLoadBalancingV2Client({
+        region,
+        credentials: creds,
+      });
+      const lbs = await elbv2.send(new DescribeLoadBalancersCommand({}));
+      for (const lb of lbs.LoadBalancers ?? []) {
+        if (
+          lb.LoadBalancerName?.startsWith("assignee-alb-") &&
+          lb.LoadBalancerArn
+        ) {
+          try {
+            await elbv2.send(
+              new DeleteLoadBalancerCommand({
+                LoadBalancerArn: lb.LoadBalancerArn,
+              }),
+            );
+            console.log(`E2E cleanup: deleted ALB ${lb.LoadBalancerName}`);
+          } catch (err) {
+            console.warn(
+              `E2E ALB cleanup failed for ${lb.LoadBalancerName}: ${String(err)}`,
+            );
+          }
+        }
+      }
+      await new Promise((r) => setTimeout(r, 60_000));
+    } catch (err) {
+      console.warn(`E2E ALB cleanup import failure: ${String(err)}`);
+    }
+
+    // 4. Terminate EC2 instances
+    try {
+      const { EC2Client, DescribeInstancesCommand, TerminateInstancesCommand } =
+        await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({ region, credentials: creds });
+      const reservations = await ec2.send(
+        new DescribeInstancesCommand({
+          Filters: [
+            { Name: "tag:Name", Values: ["assignee-*"] },
+            {
+              Name: "instance-state-name",
+              Values: ["running", "stopped", "pending"],
+            },
+          ],
+        }),
+      );
+      const instanceIds: string[] = [];
+      for (const r of reservations.Reservations ?? []) {
+        for (const i of r.Instances ?? []) {
+          if (i.InstanceId) instanceIds.push(i.InstanceId);
+        }
+      }
+      if (instanceIds.length > 0) {
+        await ec2.send(
+          new TerminateInstancesCommand({ InstanceIds: instanceIds }),
+        );
+        console.log(
+          `E2E cleanup: terminated instances ${instanceIds.join(", ")}`,
+        );
+        // Wait for instances to terminate before SG/subnet cleanup
+        await new Promise((r) => setTimeout(r, 60_000));
+      }
+    } catch (err) {
+      console.warn(`E2E EC2 instance cleanup failure: ${String(err)}`);
+    }
+
+    // 5. Security groups, VPC cleanup (same pattern as container-service)
+    try {
+      const {
+        EC2Client,
+        DescribeSecurityGroupsCommand,
+        DeleteSecurityGroupCommand,
+      } = await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({ region, credentials: creds });
+      const sgs = await ec2.send(
+        new DescribeSecurityGroupsCommand({
+          Filters: [{ Name: "tag:Name", Values: ["assignee-*"] }],
+        }),
+      );
+      for (const sg of sgs.SecurityGroups ?? []) {
+        if (sg.GroupId && sg.GroupName !== "default") {
+          await ec2
+            .send(new DeleteSecurityGroupCommand({ GroupId: sg.GroupId }))
+            .catch(() => {});
+        }
+      }
+    } catch {
+      // best-effort
+    }
+
+    // 6. VPC cleanup
+    try {
+      const {
+        EC2Client,
+        DescribeVpcsCommand,
+        DescribeSubnetsCommand,
+        DeleteSubnetCommand,
+        DescribeInternetGatewaysCommand,
+        DetachInternetGatewayCommand,
+        DeleteInternetGatewayCommand,
+        DescribeRouteTablesCommand,
+        DeleteRouteTableCommand,
+        DeleteVpcCommand,
+      } = await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({ region, credentials: creds });
+
+      const vpcs = await ec2.send(
+        new DescribeVpcsCommand({
+          Filters: [{ Name: "tag:Name", Values: ["assignee-vpc-*"] }],
+        }),
+      );
+      for (const vpc of vpcs.Vpcs ?? []) {
+        const vpcId = vpc.VpcId;
+        if (!vpcId) continue;
+        try {
+          const subnets = await ec2.send(
+            new DescribeSubnetsCommand({
+              Filters: [{ Name: "vpc-id", Values: [vpcId] }],
+            }),
+          );
+          for (const s of subnets.Subnets ?? []) {
+            if (s.SubnetId) {
+              await ec2
+                .send(new DeleteSubnetCommand({ SubnetId: s.SubnetId }))
+                .catch(() => {});
+            }
+          }
+          const rts = await ec2.send(
+            new DescribeRouteTablesCommand({
+              Filters: [{ Name: "vpc-id", Values: [vpcId] }],
+            }),
+          );
+          for (const rt of rts.RouteTables ?? []) {
+            const isMain = rt.Associations?.some((a) => a.Main);
+            if (rt.RouteTableId && !isMain) {
+              await ec2
+                .send(
+                  new DeleteRouteTableCommand({
+                    RouteTableId: rt.RouteTableId,
+                  }),
+                )
+                .catch(() => {});
+            }
+          }
+          const igws = await ec2.send(
+            new DescribeInternetGatewaysCommand({
+              Filters: [{ Name: "attachment.vpc-id", Values: [vpcId] }],
+            }),
+          );
+          for (const igw of igws.InternetGateways ?? []) {
+            if (igw.InternetGatewayId) {
+              await ec2
+                .send(
+                  new DetachInternetGatewayCommand({
+                    InternetGatewayId: igw.InternetGatewayId,
+                    VpcId: vpcId,
+                  }),
+                )
+                .catch(() => {});
+              await ec2
+                .send(
+                  new DeleteInternetGatewayCommand({
+                    InternetGatewayId: igw.InternetGatewayId,
+                  }),
+                )
+                .catch(() => {});
+            }
+          }
+          await ec2
+            .send(new DeleteVpcCommand({ VpcId: vpcId }))
+            .catch((err) => {
+              console.warn(
+                `E2E VPC cleanup: DeleteVpc ${vpcId} failed: ${String(err)}`,
+              );
+            });
+          console.log(`E2E cleanup: deleted VPC ${vpcId}`);
+        } catch (err) {
+          console.warn(`E2E VPC cleanup failed for ${vpcId}: ${String(err)}`);
+        }
+      }
+    } catch (err) {
+      console.warn(`E2E VPC cleanup import failure: ${String(err)}`);
+    }
+  }, 600_000);
 });
