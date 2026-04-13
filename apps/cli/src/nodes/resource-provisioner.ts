@@ -585,11 +585,49 @@ export async function resourceProvisionerNode(
       : "";
   const clientToken = `${state.runId}${indexSuffix}-${attemptSuffix}`;
 
-  const [createErr, createResult] = await provisioner.createResource(
+  let [createErr, createResult] = await provisioner.createResource(
     state.resourceType,
     JSON.stringify(propertiesWithTags),
     clientToken,
   );
+
+  // CloudFront Distribution: retry on S3 origin DNS propagation delay.
+  // CloudFront validates the S3 bucket DomainName immediately at create
+  // time, but S3 bucket DNS in us-east-1 takes up to 30s to propagate
+  // globally. When the distribution is in a compound pattern where the
+  // S3 bucket was just created seconds ago, the first create attempt
+  // fails with "does not refer to a valid S3 bucket". Retry with
+  // exponential backoff (5s, 10s, 20s) to wait for DNS propagation.
+  if (
+    createErr &&
+    state.resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION &&
+    createErr.message?.includes("does not refer to a valid S3 bucket")
+  ) {
+    const retryDelays = [5000, 10000, 20000];
+    for (const delay of retryDelays) {
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
+        extras: {
+          phase: "cloudfront_s3_dns_retry",
+          delay,
+          attempt: retryDelays.indexOf(delay) + 1,
+        },
+      });
+      await new Promise((r) => setTimeout(r, delay));
+      const retryToken = `${state.runId}${indexSuffix}-${(await import("node:crypto")).randomUUID().replace(/-/g, "").slice(0, 12)}`;
+      [createErr, createResult] = await provisioner.createResource(
+        state.resourceType,
+        JSON.stringify(propertiesWithTags),
+        retryToken,
+      );
+      if (!createErr) break;
+      if (!createErr.message?.includes("does not refer to a valid S3 bucket"))
+        break;
+    }
+  }
 
   if (createErr) {
     const isBucketAlreadyExists =
@@ -699,13 +737,13 @@ export async function resourceProvisionerNode(
     level: "info",
     action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
     extras: {
-      requestToken: createResult.requestToken,
+      requestToken: createResult!.requestToken,
       resourceType: state.resourceType,
     },
   });
 
   return {
-    requestToken: createResult.requestToken,
+    requestToken: createResult!.requestToken,
     executionStatus: ExecutionStatus.IN_PROGRESS,
     startedAt: Date.now(),
     // Item F: surface the (possibly mutated) clone via the reducer instead
