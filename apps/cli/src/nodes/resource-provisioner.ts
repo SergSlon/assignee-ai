@@ -566,6 +566,30 @@ export async function resourceProvisionerNode(
     state.resourceType,
   );
 
+  // CloudFront Distribution: wait for S3 bucket DNS propagation before
+  // creating. CCAPI accepts the CreateResource call synchronously but the
+  // async status check validates the S3 origin DomainName — if DNS hasn't
+  // propagated yet, the poll returns FAILED with "does not refer to a
+  // valid S3 bucket". Since the failure is ASYNC (status-poller, not
+  // createResource), a create-level retry doesn't help. A pre-create
+  // delay of 10s gives S3 DNS time to propagate in us-east-1 before
+  // CCAPI's validator runs.
+  if (
+    state.resourceType === RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION &&
+    state.completedResources?.some(
+      (r) => r.resourceType === RESOURCE_TYPES.S3_BUCKET,
+    )
+  ) {
+    log({
+      ts: new Date().toISOString(),
+      runId: state.runId,
+      level: "info",
+      action: LOG_ACTIONS.PROVISIONING_STATUS_CHECKED,
+      extras: { phase: "cloudfront_s3_dns_wait", delay: 10000 },
+    });
+    await new Promise((r) => setTimeout(r, 10000));
+  }
+
   // ── CloudControl async create ─────────────────────────────────────────────
   // Compound patterns reuse runId across resources — append index for unique
   // ClientToken. H11: ALSO append a random per-attempt suffix so retrying the
