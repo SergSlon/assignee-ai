@@ -16,6 +16,7 @@ import {
   ResourceDefault,
   AwsDefault,
   parseMarker,
+  MARKER_PREFIX,
   type ProvisionRecord,
   type FailureRecord,
   type ResourceResult,
@@ -513,10 +514,28 @@ function resolvePlaceholderMarkers(
   }
 
   function resolveValue(value: string): string {
+    // Fast path: entire string is a single marker
     const parsed = parseMarker(value);
-    if (!parsed) return value;
+    if (parsed) {
+      return resolveSinglePlaceholder(parsed);
+    }
+    // Embedded markers: replace each token in the string
+    if (!value.includes(MARKER_PREFIX)) return value;
+    const markerRegex = /__ASSIGNEE_(REF|GETATT|AZ|REGION)_?[^\s]*?__/g;
+    return value.replace(markerRegex, (token) => {
+      const p = parseMarker(token);
+      return p ? resolveSinglePlaceholder(p) : token;
+    });
+  }
+
+  function resolveSinglePlaceholder(
+    parsed: NonNullable<ReturnType<typeof parseMarker>>,
+  ): string {
     if (parsed.kind === "ref" || parsed.kind === "getatt") {
       return `(from ${parsed.resourceId})`;
+    }
+    if (parsed.kind === "region") {
+      return region;
     }
     return azPlaceholder(parsed.index);
   }
@@ -557,9 +576,45 @@ export async function resolveCompoundMarkers(
   const lookup = options.azLookup ?? defaultAzLookup;
   let azCache: string[] | undefined;
 
+  /**
+   * Resolves a single marker token (full string or embedded in a larger string).
+   * Handles both cases:
+   *   - Full marker: `"__ASSIGNEE_REF_vpc__"` → `"vpc-0abc123"`
+   *   - Embedded:    `"__ASSIGNEE_REF_bucket__.s3.__ASSIGNEE_REGION__.amazonaws.com"`
+   *                  → `"my-bucket.s3.us-east-1.amazonaws.com"`
+   */
   async function resolveString(value: string, path: string): Promise<string> {
+    // Fast path: entire string is a single marker
     const parsed = parseMarker(value);
-    if (!parsed) return value;
+    if (parsed) {
+      return resolveSingleMarker(parsed, path);
+    }
+    // Embedded markers: replace each __ASSIGNEE_...___ token in the string
+    if (!value.includes(MARKER_PREFIX)) return value;
+    const markerRegex = /__ASSIGNEE_(REF|GETATT|AZ|REGION)_?[^\s]*?__/g;
+    let result = value;
+    let match: RegExpExecArray | null;
+    // Collect all matches first (avoid mutating during iteration)
+    const matches: Array<{
+      token: string;
+      parsed: NonNullable<ReturnType<typeof parseMarker>>;
+    }> = [];
+    while ((match = markerRegex.exec(value)) !== null) {
+      const token = match[0];
+      const p = parseMarker(token);
+      if (p) matches.push({ token, parsed: p });
+    }
+    for (const m of matches) {
+      const resolved = await resolveSingleMarker(m.parsed, path);
+      result = result.replace(m.token, resolved);
+    }
+    return result;
+  }
+
+  async function resolveSingleMarker(
+    parsed: NonNullable<ReturnType<typeof parseMarker>>,
+    path: string,
+  ): Promise<string> {
     if (parsed.kind === "ref" || parsed.kind === "getatt") {
       const match = options.completedResources.find(
         (r) => r.resourceId === parsed.resourceId,
@@ -582,6 +637,10 @@ export async function resolveCompoundMarkers(
         );
       }
       return String(match.resourceArn);
+    }
+    // Region marker — resolves to the target AWS region string
+    if (parsed.kind === "region") {
+      return options.region;
     }
     // AZ marker
     if (!azCache) {
