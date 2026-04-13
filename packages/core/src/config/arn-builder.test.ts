@@ -98,15 +98,15 @@ describe("buildResourceArn", () => {
       ).toThrow(/expected a full ARN as identifier/);
     });
 
-    it("throws when ECS Cluster is given a bare identifier", () => {
-      expect(() =>
+    it("synthesizes ARN when ECS Cluster returns a bare cluster name", () => {
+      expect(
         buildResourceArn({
           resourceType: RESOURCE_TYPES.ECS_CLUSTER,
           identifier: "my-cluster",
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toThrow(/expected a full ARN as identifier/);
+      ).toBe(`arn:aws:ecs:${REGION}:${ACCOUNT}:cluster/my-cluster`);
     });
 
     it("throws when SNS Topic is given a bare identifier", () => {
