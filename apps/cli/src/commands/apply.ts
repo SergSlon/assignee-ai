@@ -334,7 +334,7 @@ export const applyCommand = new Command(CommandName.APPLY)
 
           const config = {
             configurable: { thread_id: ctx.runId },
-            recursionLimit: 500, // Compound patterns + RDS polling need many graph cycles
+            recursionLimit: 1000, // Compound patterns (up to 22 resources) × ~25 graph nodes each + RDS polling
           };
 
           // ── Phase 1: plan + HITL confirmation ────────────────────────────────
