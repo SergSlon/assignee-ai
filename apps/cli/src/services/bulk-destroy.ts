@@ -116,6 +116,15 @@ export const DESTROY_TIER: Record<string, number> = {
 /** Default tier for resource types not in the DESTROY_TIER map. */
 const DEFAULT_TIER = 3;
 
+/**
+ * CloudControl API typeName validation pattern — matches the CCAPI constraint:
+ * `[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}`
+ * RGTA returns non-conforming types (e.g. "AWS::Backup::Recovery-point" with
+ * lowercase hyphen) that must be filtered before reaching CCAPI delete calls.
+ */
+const CCAPI_TYPE_PATTERN =
+  /^[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}$/;
+
 /** IAM resource type prefixes — used to identify IAM resources for opt-in filtering. */
 const IAM_TYPE_PREFIX = "AWS::IAM::";
 
@@ -268,6 +277,15 @@ export function buildPlanFromResources(
 
   for (const fetched of fetchedResources) {
     const { arn, resourceType, region } = fetched;
+
+    // RGTA returns non-CCAPI resource types like "AWS::Backup::Recovery-point"
+    // (lowercase hyphen) that fail CloudControl's typeName regex. Filter them
+    // out before they reach destroySingleResource and produce noisy errors.
+    if (!CCAPI_TYPE_PATTERN.test(resourceType)) {
+      excludedCount++;
+      continue;
+    }
+
     const identifier = extractIdentifier(arn);
     const tier = DESTROY_TIER[resourceType] ?? DEFAULT_TIER;
     const iam = isIamType(resourceType);

@@ -174,7 +174,7 @@ export const planCommand = new Command(CommandName.PLAN)
               ...(Object.keys(presetFields).length > 0 ? { presetFields } : {}),
               ...(outputFormat !== "text" ? { outputFormat } : {}),
             },
-            { configurable: { thread_id: ctx.runId }, recursionLimit: 500 },
+            { configurable: { thread_id: ctx.runId }, recursionLimit: 1000 },
           );
 
           if (outputFormat !== "json") stopSpinner();

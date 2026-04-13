@@ -68,17 +68,23 @@ const MAX_CLOUDFRONT_RETRIES = 3;
 export function isRetryableCloudFrontS3Error(statusMessage: string): boolean {
   if (!statusMessage) return false;
   const lower = statusMessage.toLowerCase();
-  // CCAPI CloudFront errors for S3 origin not found:
+  // CCAPI CloudFront errors for S3 origin validation failure:
+  // - "The parameter Origin DomainName does not refer to a valid S3 bucket"
+  //   (synchronous 400 — CCAPI wraps it as async FAILED in poll response)
   // - "One or more of your origins ... does not exist"
   // - "The S3 bucket ... does not exist"
   // - "NoSuchBucket"
   // - "InvalidOrigin" (generic origin validation failure)
   return (
+    lower.includes("does not refer to a valid s3 bucket") ||
     lower.includes("does not exist") ||
     lower.includes("nosuchbucket") ||
     lower.includes("invalidorigin") ||
     lower.includes("s3 origin") ||
-    (lower.includes("origin") && lower.includes("not found"))
+    (lower.includes("origin") && lower.includes("not found")) ||
+    (lower.includes("origin") &&
+      lower.includes("domainname") &&
+      lower.includes("s3"))
   );
 }
 

@@ -1265,7 +1265,7 @@ describeE2E("E2E: VPC compound apply + destroy", () => {
     // the marker-resolver fix it was written to verify.
     const config = {
       configurable: { thread_id: threadId },
-      recursionLimit: 500,
+      recursionLimit: 1000,
     };
 
     const initialState = await graph.invoke(
@@ -1516,7 +1516,7 @@ describeE2E("E2E: lambda-with-exec-role compound apply + destroy", () => {
     // mirror the production apply.ts override.
     const config = {
       configurable: { thread_id: threadId },
-      recursionLimit: 500,
+      recursionLimit: 1000,
     };
 
     await graph.invoke(
@@ -1697,7 +1697,7 @@ describeE2E("E2E: compound VPC EIP leak regression (Wave 19 Bug #6)", () => {
     const graph = createGraph(tools);
     const config = {
       configurable: { thread_id: crypto.randomUUID() },
-      recursionLimit: 500,
+      recursionLimit: 1000,
     };
     const runId = crypto.randomUUID();
     await graph.invoke(
@@ -1791,7 +1791,7 @@ describeE2E("E2E: efs-with-vpc compound apply + destroy", () => {
     // apply.ts override.
     const config = {
       configurable: { thread_id: threadId },
-      recursionLimit: 500,
+      recursionLimit: 1000,
     };
 
     await graph.invoke(
@@ -1921,7 +1921,7 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
     const threadId = crypto.randomUUID();
     const config = {
       configurable: { thread_id: threadId },
-      recursionLimit: 500,
+      recursionLimit: 1000,
     };
 
     await graph.invoke(
@@ -2007,7 +2007,7 @@ describeE2E("E2E: scheduled-lambda compound apply + destroy", () => {
     const threadId = crypto.randomUUID();
     const config = {
       configurable: { thread_id: threadId },
-      recursionLimit: 500,
+      recursionLimit: 1000,
     };
 
     await graph.invoke(
@@ -2119,7 +2119,7 @@ describeE2E("E2E: serverless-api compound apply + destroy", () => {
     const threadId = crypto.randomUUID();
     const config = {
       configurable: { thread_id: threadId },
-      recursionLimit: 500,
+      recursionLimit: 1000,
     };
 
     await graph.invoke(
@@ -2203,7 +2203,7 @@ describeE2E("E2E: message-processing compound apply + destroy", () => {
     const threadId = crypto.randomUUID();
     const config = {
       configurable: { thread_id: threadId },
-      recursionLimit: 500,
+      recursionLimit: 1000,
     };
 
     await graph.invoke(
@@ -2288,7 +2288,7 @@ describeE2E("E2E: container-service compound apply + destroy", () => {
     const threadId = crypto.randomUUID();
     const config = {
       configurable: { thread_id: threadId },
-      recursionLimit: 500,
+      recursionLimit: 1000,
     };
 
     await graph.invoke(
@@ -2390,7 +2390,7 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
     const threadId = crypto.randomUUID();
     const config = {
       configurable: { thread_id: threadId },
-      recursionLimit: 500,
+      recursionLimit: 1000,
     };
 
     await graph.invoke(
