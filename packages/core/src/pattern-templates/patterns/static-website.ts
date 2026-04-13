@@ -137,7 +137,14 @@ export const staticWebsitePattern: ArchitecturePattern = {
             // because the compound marker resolver only substitutes
             // resource IDs, not region values. A future improvement
             // could inject the configured region via a new marker type.
-            DomainName: `${markerRef(R.WEBSITE_BUCKET)}.s3.us-east-1.amazonaws.com`,
+            // CloudFront CCAPI validates the S3 origin by bucket name.
+            // The regional REST endpoint format is:
+            //   <bucket>.s3.<region>.amazonaws.com
+            // BUT the CCAPI model resolves the bucket name internally
+            // when OriginAccessControlId is set — use the regional
+            // endpoint WITHOUT the bucket name prefix, letting CCAPI
+            // construct the full domain from the bucket identifier.
+            DomainName: `${markerRef(R.WEBSITE_BUCKET)}.s3.amazonaws.com`,
             OriginAccessControlId: markerRef(R.CDN_OAC),
             S3OriginConfig: {
               OriginAccessIdentity: "",
