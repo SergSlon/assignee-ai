@@ -2045,11 +2045,13 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
       });
       const dists = await cf.send(new ListDistributionsCommand({}));
       for (const d of dists.DistributionList?.Items ?? []) {
-        // Match on origin containing "assignee-" bucket name
-        const hasAssigneeOrigin = d.Origins?.Items?.some((o) =>
-          o.DomainName?.includes("assignee-"),
+        // Match ONLY this test run's distribution (scoped by staticSuffix).
+        // Previous failed runs may leak distributions; those require manual
+        // cleanup via `assignee destroy`. The afterAll is NOT a global sweep.
+        const hasThisRunOrigin = d.Origins?.Items?.some((o) =>
+          o.DomainName?.includes(`assignee-website-bucket-${staticSuffix}`),
         );
-        if (!hasAssigneeOrigin || !d.Id) continue;
+        if (!hasThisRunOrigin || !d.Id) continue;
         try {
           const getResp = await cf.send(
             new GetDistributionCommand({ Id: d.Id }),
@@ -2114,7 +2116,11 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
       });
       const oacs = await cf.send(new ListOriginAccessControlsCommand({}));
       for (const oac of oacs.OriginAccessControlList?.Items ?? []) {
-        if (oac.Name?.startsWith("assignee-") && oac.Id) {
+        // Scope to THIS run's OAC only. The plan-generator injects the runId
+        // suffix (assignee-static-website-oac-<shortId>). Previous failed
+        // runs' OACs are handled by manual `assignee destroy`.
+        const runIdSuffix = staticSuffix.slice(-8).toLowerCase();
+        if (oac.Name?.includes(runIdSuffix) && oac.Id) {
           try {
             const getResp = await cf.send(
               new GetOriginAccessControlCommand({ Id: oac.Id }),
@@ -2150,7 +2156,9 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
       const s3 = new S3Client({ region, credentials: creds });
       const { Buckets } = await s3.send(new ListBucketsCommand({}));
       for (const b of Buckets ?? []) {
-        if (!b.Name?.startsWith("assignee-")) continue;
+        // Scope to THIS run only (staticSuffix). Previous runs' buckets
+        // are handled by manual `assignee destroy` or pre-sweep.
+        if (!b.Name?.includes(staticSuffix)) continue;
         try {
           // Delete bucket policy first
           await s3
@@ -2606,10 +2614,15 @@ describeE2E("E2E: container-service compound apply + destroy", () => {
         credentials: creds,
       });
       const lbs = await elbv2.send(new DescribeLoadBalancersCommand({}));
+      // Only clean up recent ALBs (< 2 hours old) to avoid processing
+      // orphans from prior days/runs which slow the afterAll to a crawl.
+      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
       for (const lb of lbs.LoadBalancers ?? []) {
+        const lbCreated = lb.CreatedTime?.getTime() ?? 0;
         if (
           lb.LoadBalancerName?.startsWith("assignee-alb-") &&
-          lb.LoadBalancerArn
+          lb.LoadBalancerArn &&
+          lbCreated > twoHoursAgo
         ) {
           try {
             await elbv2.send(
@@ -3134,10 +3147,15 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
         credentials: creds,
       });
       const lbs = await elbv2.send(new DescribeLoadBalancersCommand({}));
+      // Only clean up recent ALBs (< 2 hours old) to avoid processing
+      // orphans from prior days/runs which slow the afterAll to a crawl.
+      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
       for (const lb of lbs.LoadBalancers ?? []) {
+        const lbCreated = lb.CreatedTime?.getTime() ?? 0;
         if (
           lb.LoadBalancerName?.startsWith("assignee-alb-") &&
-          lb.LoadBalancerArn
+          lb.LoadBalancerArn &&
+          lbCreated > twoHoursAgo
         ) {
           try {
             await elbv2.send(
