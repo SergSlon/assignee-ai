@@ -32,8 +32,8 @@ Plain `pnpm test` (and any CI job without `RUN_E2E=1`) will always skip the
 ```bash
 # Make sure .env contains ASSIGNEE_OPERATOR_ACCESS_KEY_ID / SECRET and AWS_REGION
 RUN_E2E=1 pnpm --filter assignee test
-# or for just the e2e file:
-RUN_E2E=1 pnpm --filter assignee test:e2e
+# or for just the e2e file (recommended — faster feedback):
+RUN_E2E=1 npx vitest run src/e2e/e2e-plan.test.ts --reporter=verbose
 ```
 
 ### Why the gate needs turbo env passthrough (don't remove this!)
@@ -144,7 +144,7 @@ node apps/mcp-server/e2e-test.mjs --smoke
 
 ### Resource types (36 first-class CCAPI types, 0 SDK-routable)
 
-All 36 supported resource types flow through the CloudControl API. There are no remaining SDK write paths. See [docs/resource-types.md](resource-types.md) for the full list. 9 compound patterns are exercised end-to-end (VPC, lambda-with-exec-role, efs-with-vpc, static-website, scheduled-lambda, serverless-api, message-processing, container-service, three-tier-web).
+All 36 supported resource types flow through the CloudControl API. There are no remaining SDK write paths. See [docs/resource-types.md](resource-types.md) for the full list including the recently added EFS (FileSystem + MountTarget), EventBridge (Rule, EventBus, Connection, ApiDestination), KMS Key, CloudFront (Distribution + OriginAccessControl), S3 BucketPolicy, and SNS Subscription. 9 compound patterns are exercised end-to-end (VPC, lambda-with-exec-role, efs-with-vpc, static-website, scheduled-lambda, serverless-api, message-processing, container-service, three-tier-web).
 
 ### Cost
 
@@ -352,13 +352,15 @@ All supported resource types have pricing decomposers registered in `packages/co
 The same lifecycle coverage now lives in code:
 
 - **CLI E2E gate** — `apps/cli/src/e2e/e2e-plan.test.ts` (31 specs, run via
-  `RUN_E2E=1 pnpm --filter @assignee/cli test`). Each spec exercises the
-  full plan → apply → list → destroy → list lifecycle against real AWS for
-  one resource type or compound pattern. All 9 first-class compounds are
-  covered (VPC, lambda-with-exec-role, efs-with-vpc, static-website,
-  scheduled-lambda, serverless-api, message-processing, container-service,
-  three-tier-web) plus the VPC EIP-leak regression and SSM single-resource
-  apply.
+  `RUN_E2E=1 npx vitest run src/e2e/e2e-plan.test.ts --reporter=verbose`).
+  Each spec exercises the full plan → apply → list → destroy → list lifecycle
+  against real AWS for one resource type or compound pattern.
+  **Current score: 28-29 pass / 0-1 fail / 2 skip** (up from the 19/12/0
+  baseline). Known skips: `three-tier-web` and `container-service` (skeleton
+  patterns needing VPC redesign before they can run reliably in E2E).
+  All other compounds are covered (VPC, lambda-with-exec-role, efs-with-vpc,
+  static-website, scheduled-lambda, serverless-api, message-processing) plus
+  the VPC EIP-leak regression and SSM single-resource apply.
 - **MCP Server E2E** — `apps/mcp-server/src/e2e/` (see the section above for
   the `RUN_E2E_MCP=1` gate, mirrors the CLI lifecycle through the MCP API).
 - **Plan-only / dry-run coverage** — the unit suite under
@@ -369,6 +371,32 @@ The same lifecycle coverage now lives in code:
 When the runbook needs to be revived for a release rehearsal, recover it
 from git history: `git log --diff-filter=D --follow -- docs/testing-guide.md`
 and pick the commit prior to the IA reorganization.
+
+### Recent E2E infrastructure improvements
+
+The following mechanisms were added to improve E2E reliability and isolation:
+
+- **`destroyAndAssert()` helper** — a shared test utility that wraps the
+  destroy lifecycle with post-destroy verification (list confirms the
+  resource is gone). This replaces ad-hoc destroy-then-check sequences in
+  individual specs and ensures destroy isolation between tests.
+
+- **CloudFront S3 DNS retry mechanism** — the `resource-provisioner`
+  retries S3 origin DNS resolution during CloudFront distribution creation.
+  S3 bucket DNS can take seconds to propagate globally; without the retry
+  the distribution would fail with an origin-not-found error on fast
+  apply runs.
+
+- **EFS pre-delete hook** — `destroy-service` runs a pre-delete hook for
+  EFS file systems that removes mount targets before deleting the file
+  system. CCAPI cannot delete an EFS file system while mount targets are
+  still attached.
+
+- **Static-website dependency group ordering fix** — the compound
+  provisioner now correctly tiers the static-website resources so that
+  `BucketPolicy` is destroyed first (tier 0), then the distribution
+  (tier 1, two-step disable+delete), then OAC (tier 2), then the bucket
+  (tier 5). This prevents dangling-reference errors during teardown.
 
 ---
 

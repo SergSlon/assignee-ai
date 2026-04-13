@@ -286,11 +286,12 @@ Cost: ~$0 for the networking layer (VPC + private subnets + route tables are fre
 | Resource                   | Type                                   |
 | -------------------------- | -------------------------------------- |
 | S3 Website Bucket          | `AWS::S3::Bucket`                      |
-| CloudFront Distribution    | `AWS::CloudFront::Distribution`        |
 | CloudFront OAC             | `AWS::CloudFront::OriginAccessControl` |
+| CloudFront Distribution    | `AWS::CloudFront::Distribution`        |
+| S3 Bucket Policy           | `AWS::S3::BucketPolicy`                |
 | S3 Upload (post-provision) | SDK: S3 PutObject                      |
 
-All public access on S3 is blocked by default. CloudFront serves content via Origin Access Control (OAC). When `--source <path>` is provided, files are uploaded to S3 after provisioning as a post-provision hook.
+All four CCAPI resources are provisioned in dependency order (see "Static Website Compound" section above for the full marker-ref wiring and destroy tier ordering). All public access on S3 is blocked by default. CloudFront serves content via Origin Access Control (OAC). When `--source <path>` is provided, files are uploaded to S3 after provisioning as a post-provision hook.
 
 ## Usage
 
