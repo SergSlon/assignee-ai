@@ -1226,7 +1226,10 @@ describeE2E("E2E: SNS Topic plan", () => {
     );
     const s = state as AgentState;
     expect(s.resourceType).toBe("AWS::SNS::Topic");
-    expect(s.desiredState).toBeInstanceOf(Object);
+    // AC #1 requires "non-empty desiredState" — reject {} that
+    // toBeInstanceOf(Object) would silently accept (review Low fix).
+    expect(Object.keys(s.desiredState ?? {}).length).toBeGreaterThan(0);
+    expect(s.desiredState?.["TopicName"]).toBe("e2e-sns-topic");
     expect(s.bpFindings).toBeInstanceOf(Array);
   }, 60_000);
 });
@@ -1248,7 +1251,8 @@ describeE2E("E2E: SNS Subscription plan", () => {
     );
     const s = state as AgentState;
     expect(s.resourceType).toBe("AWS::SNS::Subscription");
-    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(Object.keys(s.desiredState ?? {}).length).toBeGreaterThan(0);
+    expect(s.desiredState?.["Protocol"]).toBe("email");
     expect(s.bpFindings).toBeInstanceOf(Array);
   }, 60_000);
 });
@@ -1270,7 +1274,8 @@ describeE2E("E2E: ECR Repository plan", () => {
     );
     const s = state as AgentState;
     expect(s.resourceType).toBe("AWS::ECR::Repository");
-    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(Object.keys(s.desiredState ?? {}).length).toBeGreaterThan(0);
+    expect(s.desiredState?.["RepositoryName"]).toBe("e2e-ecr-repo");
     expect(s.bpFindings).toBeInstanceOf(Array);
   }, 60_000);
 });
@@ -1288,7 +1293,13 @@ describeE2E("E2E: ECS Cluster plan", () => {
         noWizard: true,
         projectDir: process.cwd(),
       },
-      { configurable: { thread_id: crypto.randomUUID() } },
+      // ECS intents can compound-dispatch to container-service (7+
+      // resources) which exceeds LangGraph's default recursionLimit of
+      // 25. Match ALB/RDS/CloudFront blocks (code-review Medium fix).
+      {
+        configurable: { thread_id: crypto.randomUUID() },
+        recursionLimit: 500,
+      },
     );
     const s = state as AgentState;
     // "container" phrasing may route through container-service compound;
@@ -1437,7 +1448,9 @@ describeE2E("E2E: KMS Key plan", () => {
     );
     const s = state as AgentState;
     expect(s.resourceType).toBe("AWS::KMS::Key");
-    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(Object.keys(s.desiredState ?? {}).length).toBeGreaterThan(0);
+    // KeyPolicy is load-bearing — without it CCAPI rejects the create.
+    expect(s.desiredState?.["KeyPolicy"]).toBeTruthy();
     expect(s.bpFindings).toBeInstanceOf(Array);
   }, 60_000);
 });
@@ -1459,7 +1472,8 @@ describeE2E("E2E: CloudWatch LogGroup plan", () => {
     );
     const s = state as AgentState;
     expect(s.resourceType).toBe("AWS::Logs::LogGroup");
-    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(Object.keys(s.desiredState ?? {}).length).toBeGreaterThan(0);
+    expect(s.desiredState?.["LogGroupName"]).toBe("/aws/assignee/e2e-logs");
     expect(s.bpFindings).toBeInstanceOf(Array);
   }, 60_000);
 });
@@ -1481,7 +1495,8 @@ describeE2E("E2E: EventBridge EventBus plan", () => {
     );
     const s = state as AgentState;
     expect(s.resourceType).toBe("AWS::Events::EventBus");
-    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(Object.keys(s.desiredState ?? {}).length).toBeGreaterThan(0);
+    expect(s.desiredState?.["Name"]).toBe("e2e-event-bus");
     expect(s.bpFindings).toBeInstanceOf(Array);
   }, 60_000);
 });
