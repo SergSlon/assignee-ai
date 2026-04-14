@@ -924,8 +924,16 @@ export async function destroySingleResource(
     // (not an extracted sub-path). If extractIdentifier stripped the ARN prefix,
     // CCAPI returns NOT_FOUND and the resource silently survives. Use the full
     // ARN for these types.
+    //
+    // Derived from RESOURCE_IDENTIFIER_KEYS entries whose value is "Arn",
+    // "TopicArn", "LoadBalancerArn" etc. — the CCAPI schemas for these types
+    // require the full ARN (not the extracted last segment).
     const ARN_IDENTIFIED_TYPES: ReadonlySet<string> = new Set([
-      RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+      RESOURCE_TYPES.ELBV2_LOAD_BALANCER, // LoadBalancerArn
+      RESOURCE_TYPES.SNS_TOPIC, // TopicArn
+      RESOURCE_TYPES.ECS_CLUSTER, // Arn
+      RESOURCE_TYPES.EVENTS_RULE, // Arn
+      RESOURCE_TYPES.SNS_SUBSCRIPTION, // Arn
     ]);
     const ccIdentifier = ARN_IDENTIFIED_TYPES.has(resourceType)
       ? resource.arn
