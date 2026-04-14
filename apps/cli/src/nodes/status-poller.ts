@@ -26,8 +26,10 @@ const EXTENDED_TIMEOUT_TYPES: Set<string> = new Set([
   LIST_RESOURCE_TYPES.RDS_DB_CLUSTER,
   RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
   RESOURCE_TYPES.EC2_NAT_GATEWAY,
+  // CloudFront deployments take 10-15 min worldwide
+  RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
 ]);
-const EXTENDED_POLL_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const EXTENDED_POLL_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes (CloudFront + RDS can hit 15)
 
 // NOTE (H10 fix): A previous "MAX_POLL_ITERATIONS" guard divided wall-clock by
 // POLL_INTERVAL_MS to estimate iterations, but each iteration actually waits
