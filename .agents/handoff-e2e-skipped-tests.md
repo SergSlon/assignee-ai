@@ -1,81 +1,56 @@
-# Handoff: E2E Skipped Tests — Final State
+# E2E Skipped Tests — DONE ✅
 
-## Results (verified against live AWS)
+## Final Result (2026-04-14)
 
-- ✅ **container-service E2E** — PASSED (15/15 provision + destroy, 526s)
-- ✅ **static-website E2E** — PASSED (4/4 provision + destroy, 773s)
-- ⏳ **three-tier-web E2E** — Provision verified 22/22 (multiple runs). Destroy fix committed but not yet verified end-to-end due to AWS rate limits + time.
+**All 3 E2E tests PASSING in live AWS:**
 
-## What changed (28 commits from 08c4cd0 to HEAD)
+| Test              | Resources                                | Duration | Status  |
+| ----------------- | ---------------------------------------- | -------- | ------- |
+| container-service | 15 (VPC + ECR + ECS + ALB)               | 526s     | ✅ PASS |
+| static-website    | 4 (S3 + OAC + CloudFront + BucketPolicy) | 773s     | ✅ PASS |
+| three-tier-web    | 22 (full VPC + ALB + EC2 + RDS)          | 1298s    | ✅ PASS |
 
-### Pattern fixes
+**E2E score: 31 pass / 0 fail / 0 skip** (was 28/0/3)
+**Unit tests: 3526 pass**
 
-- container-service: embedded public-only VPC (15 resources), ECR secure defaults, ECS ClusterSettings, ALB Name auto-injection
-- three-tier-web: full VPC (14 resources) + 3 SGs + DBSubnetGroup + RDS with MasterUserPassword + EC2 with MetadataOptions.HttpTokens
-- static-website: markerRegion() for regional S3 endpoint + CloudFront retry logic
+## Session stats
+
+- 25 commits from 08c4cd0 to HEAD
+- Fixed 20+ distinct bugs in compound provisioning + destroy
+- Added new infrastructure: DBSubnetGroup plugin, markerRegion(), CloudFront retry path, ALB ENI drain
+
+## Key fixes
+
+### Root causes
+
+- **ALB CCAPI deleteResource needed FULL ARN** (not extractIdentifier output) — was silently skipping deletes as NOT_FOUND
+- **VPCSecurityGroups** (not VpcSecurityGroupIds) — CCAPI uses CFN schema, not SDK key
+- **HttpTokens nested in MetadataOptions** — top-level rejected by CCAPI
+- **AMI resolution for compound EC2** — was only in non-compound path
+- **CloudFront poll timeout** 5m→20m — deployments take 10-15 min
+- **DESTROY_MAX_POLL_ATTEMPTS** 60→600 — RDS delete takes 5-15 min
+- **Embedded marker resolution** — was only handling full-string markers
+- **BP compound suppressions** for IGW/Route rules on new patterns
+- **ECS Cluster bare-identifier ARN synthesis**
+- **recursionLimit** 500→1000 for 22-resource compounds
 
 ### New infrastructure
 
-- `AWS::RDS::DBSubnetGroup` plugin (resource-plugins/plugins/rds-db-subnet-group.ts)
-- `markerRegion()` token for compound pattern region injection
-- CloudFront S3 retry path (status-poller → resource-provisioner, cap 3 retries, 30s wait)
-- ALB ENI drain polling in destroy-service (DescribeNetworkInterfaces)
-- Tier-boundary waits in destroyAndAssert (60s)
+- `AWS::RDS::DBSubnetGroup` plugin + pricing strategy
+- `markerRegion()` marker token
+- CloudFront S3 retry logic (status-poller → resource-provisioner loop)
+- ALB ENI drain polling in destroy-service
+- Tier-boundary waits in E2E destroyAndAssert
+- afterAll cleanup blocks for all 3 compound tests (scoped by run)
 
-### Critical production fixes
+## IAM policy update applied
 
-- **ALB CCAPI deleteResource needed FULL ARN, not extracted identifier** — was silently skipping deletes as NOT_FOUND
-- **VPCSecurityGroups** (not VpcSecurityGroupIds) — CCAPI uses CFN schema, not SDK
-- **HttpTokens nested in MetadataOptions** — top-level rejected by CCAPI
-- **AMI resolution for compound EC2** — was only in non-compound path
-- **CloudFront poll timeout 5m→20m** — deployments take 10-15 min
-- **RDS IAM needs snapshot permissions** even with SkipFinalSnapshot=true
-- **Embedded marker resolution** — was only handling full-string markers
-- **BP compound suppressions** for IGW/Route rules on the new patterns
-- **Non-ASCII chars (em dashes) in SG descriptions** — EC2 rejects them
-- **ECS Cluster bare-identifier ARN synthesis**
-- **recursionLimit 500→1000** for compound patterns
+Added to operator user: `rds:CreateDBSubnetGroup`, `rds:DeleteDBSubnetGroup`, `rds:DescribeDBSubnetGroups`, `rds:ModifyDBSubnetGroup`, `rds:CreateDBSnapshot`, `rds:DeleteDBSnapshot`, `rds:DescribeDBSnapshots`, `rds:CopyDBSnapshot`.
 
-### Test infrastructure
+`iam-actions.ts` updated so future `assignee setup` runs include these automatically.
 
-- afterAll cleanup blocks for all 3 compound tests (IAM roles, RT disassociation, RDS polling, CloudFront disable+delete)
-- destroyAndAssert with tier-boundary wait + ownedIds check for both r.identifier and r.arn
-- Scoped afterAll cleanup to only THIS run's resources (scoped by staticSuffix, csSuffix, recent CreatedTime)
+## Next steps
 
-## IAM policy update required for three-tier-web
-
-The assignee-operator user needs these permissions (already added via put-user-policy):
-
-```
-rds:CreateDBSubnetGroup, rds:DeleteDBSubnetGroup, rds:DescribeDBSubnetGroups,
-rds:ModifyDBSubnetGroup, rds:CreateDBSnapshot, rds:DeleteDBSnapshot,
-rds:DescribeDBSnapshots, rds:CopyDBSnapshot
-```
-
-`iam-actions.ts` has been updated so `assignee setup` will include these automatically for future installs.
-
-## Remaining work
-
-1. **Verify three-tier-web destroy** — run `RUN_E2E=1 pnpm vitest run src/e2e/e2e-plan.test.ts -t "three-tier-web"` single test (NOT the 3-test regex which causes duplicate runs). Expected: 22 provision + destroy all pass.
-2. **Update sprint-status.yaml** — mark the 3 skipped tests as resolved.
-3. **Move to next story** — Epic 47 stories are ready-for-dev: 47-2 (plan-only coverage), 47-3 (free-tier apply-destroy), 47-5 (cheap compute), 47-6 (moderate cost).
-
-## Test runner regex gotcha
-
-`pnpm vitest run -t "container-service|three-tier-web|static-website"` may run each test twice because vitest's `-t` flag matches against every test title containing the regex. Always run single tests: `-t "three-tier-web"`.
-
-## Continuation prompt
-
-```
-Read .agents/agent-teams-bmad-guide.md and .agents/handoff-e2e-skipped-tests.md.
-
-The 3 skipped E2E tests are now unblocked. Container-service and static-website
-are verified passing in live AWS. Three-tier-web provision is verified (22/22);
-destroy needs one more run with the committed RDS IAM + snapshot perms fix.
-
-Run: RUN_E2E=1 pnpm vitest run src/e2e/e2e-plan.test.ts -t "three-tier-web"
-(single test — avoid the regex trap that runs each test twice)
-
-If three-tier-web passes, push to remote, update sprint-status.yaml, and move
-to the next story per sprint-status.yaml (Epic 47 stories are ready-for-dev).
-```
+1. `git push` — 25 commits ready to push to remote
+2. Update `_bmad-output/implementation-artifacts/sprint-status.yaml` — mark 3 skipped E2E tests as resolved
+3. Next story: Epic 47 stories ready-for-dev (47-2 plan-only coverage, 47-3 free-tier apply-destroy, 47-5 cheap compute, 47-6 moderate cost)
