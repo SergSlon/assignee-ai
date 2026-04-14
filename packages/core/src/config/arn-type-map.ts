@@ -35,6 +35,10 @@ export const SERVICE_TYPE_MAP: Readonly<Record<string, string>> = {
   elasticache: LIST_RESOURCE_TYPES.ELASTICACHE_CACHE_CLUSTER,
   kinesis: LIST_RESOURCE_TYPES.KINESIS_STREAM,
   secretsmanager: RESOURCE_TYPES.SECRETSMANAGER_SECRET,
+  // KMS must be explicitly mapped — the fallback path at line 123
+  // would emit "AWS::Kms::Key" (title-case) which CCAPI rejects with
+  // "The type 'AWS::Kms::Key' cannot be found." Live-AWS 2026-04-14.
+  kms: RESOURCE_TYPES.KMS_KEY,
   stepfunctions: LIST_RESOURCE_TYPES.STEPFUNCTIONS_STATE_MACHINE,
   states: LIST_RESOURCE_TYPES.STEPFUNCTIONS_STATE_MACHINE,
 } as const;
