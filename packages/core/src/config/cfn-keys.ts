@@ -66,7 +66,10 @@ export const CfnKey = {
   STORAGE_ENCRYPTED: "StorageEncrypted",
   DB_SUBNET_GROUP_NAME: "DBSubnetGroupName",
   DB_SUBNET_GROUP_DESCRIPTION: "DBSubnetGroupDescription",
-  VPC_SECURITY_GROUP_IDS: "VpcSecurityGroupIds",
+  // CCAPI schema uses "VPCSecurityGroups" (all caps VPC), NOT
+  // "VpcSecurityGroupIds" (which is the RDS SDK API key, not CFN/CCAPI).
+  // Verified via: aws cloudformation describe-type --type-name AWS::RDS::DBInstance
+  VPC_SECURITY_GROUP_IDS: "VPCSecurityGroups",
   PORT: "Port",
   ENABLE_CW_LOGS_EXPORTS: "EnableCloudwatchLogsExports",
   PERFORMANCE_INSIGHTS: "PerformanceInsightsEnabled",

@@ -507,7 +507,7 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
     "If the user did not provide a DBName, OMIT it — no initial database will be created",
     "EngineVersion MUST be a valid version number for the selected Engine (e.g., '16' for postgres, '8.4' for mysql). NEVER use deprecated versions.",
     "PubliclyAccessible SHOULD be false for production. If a DBSubnetGroupName is provided, the instance is placed in that VPC subnet group.",
-    "VpcSecurityGroupIds control network access — at least one security group allowing ingress on the database Port is required for connectivity.",
+    "VPCSecurityGroups control network access — at least one security group allowing ingress on the database Port is required for connectivity.",
     "EnableCloudwatchLogsExports and PerformanceInsightsEnabled are strongly recommended for production observability. Available log types vary by engine.",
     "StorageEncrypted SHOULD always be true. Encryption at rest is an AWS security best practice with no significant performance impact.",
   ],
