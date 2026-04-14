@@ -1201,6 +1201,313 @@ describeE2E("E2E: SecretsManager Secret plan", () => {
   }, 60_000);
 });
 
+// ── Story 47.2: Plan-only coverage gaps ──────────────────────────────────
+//
+// Every resource type below previously lacked an E2E plan test; intent
+// parsing + plan generation was only exercised through unit tests. These
+// describeE2E blocks run in plan mode only (zero AWS cost) and assert
+// either the compound pattern id + resourceQueue (for intents that
+// compound-dispatch) or state.resourceType + desiredState (for single
+// resource intents). RUN_E2E=1 gates the whole suite.
+
+describeE2E("E2E: SNS Topic plan", () => {
+  it("generates a plan with topic configuration", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent: "Create an SNS topic named e2e-sns-topic for notifications",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+    const s = state as AgentState;
+    expect(s.resourceType).toBe("AWS::SNS::Topic");
+    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
+});
+
+describeE2E("E2E: SNS Subscription plan", () => {
+  it("generates a plan with subscription protocol and endpoint", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create an SNS email subscription to arn:aws:sns:us-east-1:054125018476:e2e-topic for test@example.com",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+    const s = state as AgentState;
+    expect(s.resourceType).toBe("AWS::SNS::Subscription");
+    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
+});
+
+describeE2E("E2E: ECR Repository plan", () => {
+  it("generates a plan with repository configuration", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create an ECR repository named e2e-ecr-repo for docker images",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+    const s = state as AgentState;
+    expect(s.resourceType).toBe("AWS::ECR::Repository");
+    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
+});
+
+describeE2E("E2E: ECS Cluster plan", () => {
+  it("generates a plan with cluster configuration", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create an ECS cluster named e2e-ecs-cluster for containers",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+    const s = state as AgentState;
+    // "container" phrasing may route through container-service compound;
+    // either single-resource or compound dispatch is acceptable for this
+    // smoke test. Assert via the pattern OR resourceType (compound sets
+    // resourceType to the current-iteration resource, so we accept any
+    // of the types that live in the container-service queue).
+    const acceptableTypes = new Set([
+      "AWS::ECS::Cluster",
+      "AWS::EC2::VPC",
+      "AWS::EC2::Subnet",
+      "AWS::EC2::SecurityGroup",
+      "AWS::IAM::Role",
+      "AWS::ECR::Repository",
+      "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    ]);
+    if (s.resourcePattern?.patternId === "container-service") {
+      expect(s.resourceQueue).toBeInstanceOf(Array);
+      expect(
+        s.resourceQueue!.some((r) => r.resourceType === "AWS::ECS::Cluster"),
+      ).toBe(true);
+    } else {
+      expect(acceptableTypes.has(s.resourceType ?? "")).toBe(true);
+    }
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
+});
+
+describeE2E("E2E: ELBv2 LoadBalancer plan", () => {
+  it("generates a plan with ALB configuration (compound or single)", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create an application load balancer named e2e-alb for my service",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      // ALB often compound-dispatches to three-tier-web or container-service —
+      // both need the larger recursionLimit for plan-mode iteration.
+      {
+        configurable: { thread_id: crypto.randomUUID() },
+        recursionLimit: 500,
+      },
+    );
+    const s = state as AgentState;
+    if (s.resourcePattern?.patternId) {
+      expect(s.resourceQueue).toBeInstanceOf(Array);
+      expect(
+        s.resourceQueue!.some(
+          (r) => r.resourceType === "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        ),
+      ).toBe(true);
+    } else {
+      expect(s.resourceType).toBe("AWS::ElasticLoadBalancingV2::LoadBalancer");
+    }
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
+});
+
+describeE2E("E2E: RDS DB Instance plan", () => {
+  it("generates a plan with database configuration (compound or single)", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create a PostgreSQL database named e2e-rds-test with db.t3.micro",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      // RDS often compound-dispatches to three-tier-web (22 resources) —
+      // needs 500 recursion limit.
+      {
+        configurable: { thread_id: crypto.randomUUID() },
+        recursionLimit: 500,
+      },
+    );
+    const s = state as AgentState;
+    if (s.resourcePattern?.patternId) {
+      expect(s.resourceQueue).toBeInstanceOf(Array);
+      expect(
+        s.resourceQueue!.some((r) => r.resourceType === "AWS::RDS::DBInstance"),
+      ).toBe(true);
+    } else {
+      expect(s.resourceType).toBe("AWS::RDS::DBInstance");
+    }
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
+});
+
+describeE2E("E2E: CloudFront Distribution plan", () => {
+  it("generates a plan with distribution configuration (compound or single)", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create a CloudFront distribution serving static content from S3",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      // static-website compound can fire here (CloudFront + S3 + OAC) —
+      // needs the 500 recursionLimit.
+      {
+        configurable: { thread_id: crypto.randomUUID() },
+        recursionLimit: 500,
+      },
+    );
+    const s = state as AgentState;
+    if (s.resourcePattern?.patternId) {
+      expect(s.resourceQueue).toBeInstanceOf(Array);
+      expect(
+        s.resourceQueue!.some(
+          (r) => r.resourceType === "AWS::CloudFront::Distribution",
+        ),
+      ).toBe(true);
+    } else {
+      expect(s.resourceType).toBe("AWS::CloudFront::Distribution");
+    }
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
+});
+
+describeE2E("E2E: KMS Key plan", () => {
+  it("generates a plan with key policy", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create a KMS encryption key for application-level data encryption",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+    const s = state as AgentState;
+    expect(s.resourceType).toBe("AWS::KMS::Key");
+    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
+});
+
+describeE2E("E2E: CloudWatch LogGroup plan", () => {
+  it("generates a plan with log group configuration", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create a CloudWatch log group named /aws/assignee/e2e-logs",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+    const s = state as AgentState;
+    expect(s.resourceType).toBe("AWS::Logs::LogGroup");
+    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
+});
+
+describeE2E("E2E: EventBridge EventBus plan", () => {
+  it("generates a plan with event bus configuration", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create an EventBridge event bus named e2e-event-bus for cross-account events",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+    const s = state as AgentState;
+    expect(s.resourceType).toBe("AWS::Events::EventBus");
+    expect(s.desiredState).toBeInstanceOf(Object);
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
+});
+
+// NOTE: Events::Connection + Events::ApiDestination are covered as
+// single-resource plan types once the intent parser learns to surface
+// them as standalone types. They're included in the plugin catalog but
+// real-world usage is almost always embedded in a Connection + ApiDest
+// + Rule trio that the LLM currently routes through ApiDestination.
+// TODO(Epic 47 follow-up): drop these skips once the intent parser is
+// retrained to recognize the bare-Connection / bare-ApiDestination case.
+describe.skip("E2E: Events Connection plan (unsupported as standalone)", () => {
+  it("TODO: supports standalone AWS::Events::Connection plan", () => {
+    // Intent parser currently routes "Create an EventBridge connection"
+    // through ApiDestination or returns UnsupportedResourceType. Will
+    // be enabled once intent parsing surfaces the bare Connection type.
+  });
+});
+
+describe.skip("E2E: Events ApiDestination plan (unsupported as standalone)", () => {
+  it("TODO: supports standalone AWS::Events::ApiDestination plan", () => {
+    // Intent parser currently requires a Connection ARN to dispatch this
+    // type; bare "Create an API destination" returns UnsupportedResourceType.
+  });
+});
+
 describeE2E("E2E: Error handling", () => {
   it("rejects unsupported resource type with clear error", async () => {
     const graph = createGraph(tools);
