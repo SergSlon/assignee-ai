@@ -939,6 +939,28 @@ export function createPlanGeneratorNode({
                 : String(resolveErr),
           };
         }
+
+        // Compound EC2 AMI resolution: defaultOptions.ImageId may contain
+        // an OS name (e.g. "amazon-linux-2023") that must be resolved to a
+        // real ami-* id via SSM before CCAPI is called. The non-compound
+        // (LLM) path does this at line ~1373; mirror it here so compound
+        // patterns like three-tier-web also get a working AMI.
+        if (
+          currentResource.resourceType === RESOURCE_TYPES.EC2_INSTANCE &&
+          typeof desiredState[CfnKey.IMAGE_ID] === "string" &&
+          !String(desiredState[CfnKey.IMAGE_ID]).startsWith("ami-")
+        ) {
+          const osName = String(desiredState[CfnKey.IMAGE_ID]);
+          const resolvedAmi = await resolveAmiFromOsName(osName);
+          if (resolvedAmi) {
+            desiredState[CfnKey.IMAGE_ID] = resolvedAmi;
+          } else {
+            return {
+              executionStatus: ExecutionStatus.FAILED,
+              errorMessage: `Cannot resolve "${osName}" to a real AMI ID for compound EC2 instance "${currentResource.resourceId}". Check AWS credentials and SSM access.`,
+            };
+          }
+        }
       }
 
       // Story 19.5: Read pattern memory for compound mode hints
