@@ -77,6 +77,10 @@ export function isRetryableCloudFrontS3Error(statusMessage: string): boolean {
   // - "The S3 bucket ... does not exist"
   // - "NoSuchBucket"
   // - "InvalidOrigin" (generic origin validation failure)
+  // - "Resource of type 'AWS::CloudFront::Distribution' ... was not found"
+  //   (CCAPI rolled back create due to async validation failure —
+  //    typically S3 origin DNS lag. The distribution ID is reported but
+  //    the resource doesn't actually exist in CloudFront.)
   return (
     lower.includes("does not refer to a valid s3 bucket") ||
     lower.includes("does not exist") ||
@@ -86,7 +90,10 @@ export function isRetryableCloudFrontS3Error(statusMessage: string): boolean {
     (lower.includes("origin") && lower.includes("not found")) ||
     (lower.includes("origin") &&
       lower.includes("domainname") &&
-      lower.includes("s3"))
+      lower.includes("s3")) ||
+    // CCAPI rollback "was not found" — retry after more S3 DNS propagation
+    (lower.includes("cloudfront::distribution") &&
+      lower.includes("was not found"))
   );
 }
 
