@@ -21,6 +21,15 @@ import {
   COMPANION_RESOURCE_TYPES,
   RESOURCE_TYPES,
 } from "@assignee/core";
+// Hoisted from the hot-path inside destroySingleResource (architect
+// WARNING #8). `await import("@aws-sdk/client-ec2")` inside the ALB ENI
+// drain loop fired on every destroy and blocked the poll cycle on module
+// resolution for ~10-30ms per iteration. Static import pays the cost
+// once at module load and keeps the poll loop tight.
+import {
+  EC2Client,
+  DescribeNetworkInterfacesCommand,
+} from "@aws-sdk/client-ec2";
 import { createCloudControlClient } from "./cloudcontrol-client.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
@@ -1001,21 +1010,25 @@ export async function destroySingleResource(
     // ENIs remain, or timeout after 120s.
     if (resourceType === RESOURCE_TYPES.ELBV2_LOAD_BALANCER) {
       try {
-        const { EC2Client, DescribeNetworkInterfacesCommand } =
-          await import("@aws-sdk/client-ec2");
         const ec2 = new EC2Client({
           region: awsConfig.region ?? AWS_REGION,
           credentials: requireAssigneeCredentials("operator"),
         });
 
-        // ALB ENIs have a description matching "ELB app/<lb-name>/<hex>".
-        // Extract the LB name from the ARN (full) or identifier (extracted).
-        // Full ARN: arn:...:loadbalancer/app/<name>/<id>
-        // Extracted identifier from bulk-destroy: app/<name>/<id>
+        // ELBv2 ENIs carry a description of the form
+        //   "ELB <scheme>/<name>/<hex>"
+        // where <scheme> is "app" (ALB), "net" (NLB) or "gwy" (GWLB).
+        // Architect WARNING #9: the prior regex only matched "app/" and
+        // silently fell through to a 60s blind sleep for NLB/GWLB. Match
+        // all three schemes so the drain poll fires for any ELBv2 kind.
         const lbNameMatch =
-          resource.arn.match(/loadbalancer\/app\/([^/]+)\//) ??
-          resource.identifier.match(/^app\/([^/]+)\//);
+          resource.arn.match(/loadbalancer\/(?:app|net|gwy)\/([^/]+)\//) ??
+          resource.identifier.match(/^(?:app|net|gwy)\/([^/]+)\//);
         const lbName = lbNameMatch?.[1];
+        const schemeMatch =
+          resource.arn.match(/loadbalancer\/(app|net|gwy)\//) ??
+          resource.identifier.match(/^(app|net|gwy)\//);
+        const scheme = schemeMatch?.[1] ?? "app";
 
         if (lbName) {
           for (
@@ -1028,7 +1041,10 @@ export async function destroySingleResource(
                 Filters: [
                   {
                     Name: "description",
-                    Values: [`ELB app/${lbName}/*`],
+                    // Filter on the detected scheme (app/net/gwy) so
+                    // NLB/GWLB ENIs also match instead of falling
+                    // through to the 60s blind sleep fallback.
+                    Values: [`ELB ${scheme}/${lbName}/*`],
                   },
                 ],
               }),
