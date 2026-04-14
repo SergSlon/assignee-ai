@@ -16,6 +16,7 @@ import {
   COMPANION_RESOURCE_TYPES,
 } from "@assignee/core";
 import { fetchManagedResources } from "./list-resources.js";
+import { log, LOG_ACTIONS } from "../utils/logger.js";
 
 /** A managed resource enriched with destruction-ordering metadata. */
 export interface ManagedResource {
@@ -83,10 +84,15 @@ export const DESTROY_TIER: Record<string, number> = {
   // Tier 3: Compute/DB/Network services
   [RESOURCE_TYPES.EC2_INSTANCE]: 3,
   [RESOURCE_TYPES.RDS_DB_INSTANCE]: 3,
-  // DBSubnetGroup must be deleted AFTER RDS instance (tier 3) — RDS
-  // rejects DBSubnetGroup deletion while an instance references it.
-  // Tier 4 puts it after DB but before VPC (tier 5).
-  [RESOURCE_TYPES.RDS_DB_SUBNET_GROUP]: 4,
+  // DBSubnetGroup must be deleted AFTER RDS instance (tier 3) AND BEFORE
+  // subnets (tier 4) — RDS rejects DBSubnetGroup deletion while an
+  // instance references it, and subnet deletion fails with
+  // DependencyViolation if a DBSubnetGroup still references it.
+  // Architect WARNING #3: previously DBSubnetGroup and subnets shared
+  // tier 4, letting parallel-destroy race subnets ahead of the group.
+  // Decimal tier sits between the two integer tiers without renumbering
+  // everything after it.
+  [RESOURCE_TYPES.RDS_DB_SUBNET_GROUP]: 3.5,
   [RESOURCE_TYPES.ELBV2_LOAD_BALANCER]: 3,
   [RESOURCE_TYPES.EC2_NAT_GATEWAY]: 3,
   [RESOURCE_TYPES.ECR_REPOSITORY]: 3,
@@ -285,8 +291,17 @@ export function buildPlanFromResources(
     // RGTA returns non-CCAPI resource types like "AWS::Backup::Recovery-point"
     // (lowercase hyphen) that fail CloudControl's typeName regex. Filter them
     // out before they reach destroySingleResource and produce noisy errors.
+    // Log at INFO (architect WARNING #5) so users can see why a given
+    // resource was skipped rather than wondering why it survived destroy.
     if (!CCAPI_TYPE_PATTERN.test(resourceType)) {
       excludedCount++;
+      log({
+        ts: new Date().toISOString(),
+        runId: "bulk-destroy",
+        level: "info",
+        action: LOG_ACTIONS.CCAPI_TYPE_DROPPED,
+        extras: { arn, resourceType, region },
+      });
       continue;
     }
 

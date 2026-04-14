@@ -77,6 +77,14 @@ export const LOG_ACTIONS = {
    * to answer "what does ONE assignee command cost in tokens".
    */
   TOKEN_USAGE_SUMMARY: "token_usage_summary",
+  /**
+   * Architect WARNING #5: bulk-destroy silently drops RGTA-returned types
+   * that don't match CloudControl's typeName regex (e.g.
+   * "AWS::Backup::Recovery-point" with a lowercase hyphen). Logging at
+   * INFO surfaces which types were skipped so users can reason about
+   * why a given resource wasn't deleted.
+   */
+  CCAPI_TYPE_DROPPED: "ccapi_type_dropped",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

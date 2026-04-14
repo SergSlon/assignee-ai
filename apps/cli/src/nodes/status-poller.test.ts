@@ -424,6 +424,36 @@ describe("isRetryableCloudFrontS3Error", () => {
     ).toBe(false);
   });
 
+  it("does NOT retry a bare 'does not exist' without S3-origin context (architect W2)", () => {
+    // Previously `.includes("does not exist")` alone was sufficient to
+    // flip retry=true, which matched IAM/KMS error strings unrelated to
+    // CloudFront S3 origins. Architect WARNING #2: scope the substring
+    // with a bucket/origin/s3 co-occurrence guard.
+    expect(
+      isRetryableCloudFrontS3Error(
+        "The IAM role arn:aws:iam::054125018476:role/my-role does not exist",
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableCloudFrontS3Error(
+        "The KMS key alias alias/my-key does not exist",
+      ),
+    ).toBe(false);
+  });
+
+  it("still retries when 'does not exist' co-occurs with bucket/origin/s3", () => {
+    // Positive side of the W2 guard: the legitimate S3 DNS-propagation
+    // errors must still trigger retry.
+    expect(
+      isRetryableCloudFrontS3Error(
+        "The S3 bucket assignee-ci-static does not exist",
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableCloudFrontS3Error("Origin assignee-ci-static does not exist"),
+    ).toBe(true);
+  });
+
   it("returns false for an empty CCAPI 200 response", () => {
     // Defensive: the poller occasionally sees empty statusMessage on
     // success — must never classify as retryable.
