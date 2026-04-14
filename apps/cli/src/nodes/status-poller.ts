@@ -97,8 +97,15 @@ export function isRetryableCloudFrontS3Error(statusMessage: string): boolean {
     lower.includes("bucket") ||
     lower.includes("origin") ||
     lower.includes("s3");
+  // Edge-hunter M2 (epic47-final): added "origin shield" to catch
+  // "Invalid origin shield region" and similar config errors that
+  // mention "origin" but are not recoverable. "origin group" stays
+  // OUT of this list — an origin group can still reference an S3
+  // bucket mid-DNS-propagation.
   const isFatalCloudFrontConfigError =
-    lower.includes("access identity") || lower.includes("request policy");
+    lower.includes("access identity") ||
+    lower.includes("request policy") ||
+    lower.includes("origin shield");
   const hasS3Context = !isFatalCloudFrontConfigError && hasS3Token;
   return (
     lower.includes("does not refer to a valid s3 bucket") ||

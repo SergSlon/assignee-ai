@@ -1036,10 +1036,18 @@ export async function destroySingleResource(
         // Edge-hunter M3: the prior `?? "app"` silently masked future
         // ELBv2 schemes by defaulting to ALB-shaped ENI filters.
         // Fail closed instead: null scheme skips the drain poll and
-        // falls through to the 60s blind-sleep fallback below, which
-        // is correct behaviour for an unknown scheme (we can't filter
-        // for ENIs we don't know how to identify).
+        // falls through to the 60s blind-sleep fallback below. Emit
+        // a structured WARN log so an unknown scheme is observable
+        // (blind M4 on epic47-final: "fail closed" without signal
+        // == silent skip of the safety check).
         const scheme = schemeMatch?.[1] ?? null;
+        if (scheme === null) {
+          warnDestroy("elbv2_scheme_unknown", {
+            identifier: resource.identifier,
+            arn: resource.arn,
+            hint: "ELBv2 scheme regex matched neither app|net|gwy — falling through to 60s blind-sleep fallback. Add the new scheme to the regex in destroy-service.ts.",
+          });
+        }
 
         if (lbName && scheme) {
           for (
