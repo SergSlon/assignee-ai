@@ -196,6 +196,13 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "rds:ModifyDBInstance",
       "rds:AddTagsToResource",
       "rds:ListTagsForResource",
+      // Snapshot permissions — RDS DeleteDBInstance validates these even
+      // when SkipFinalSnapshot=true (AWS may take a final snapshot in some
+      // failure modes; without these perms the delete fails with 403).
+      "rds:CreateDBSnapshot",
+      "rds:DeleteDBSnapshot",
+      "rds:DescribeDBSnapshots",
+      "rds:CopyDBSnapshot",
     ],
     [RESOURCE_TYPES.RDS_DB_SUBNET_GROUP]: [
       "rds:CreateDBSubnetGroup",
