@@ -56,6 +56,15 @@ describe("marker-tokens", () => {
     it("throws when attribute is empty", () => {
       expect(() => markerGetAtt("igw", "")).toThrow(/non-empty/);
     });
+
+    it("throws when attribute contains '_' (parser uses lastIndexOf split)", () => {
+      // The parser uses lastIndexOf("_") to split resourceId from
+      // attribute, so an attribute containing '_' would silently
+      // truncate on round-trip. Fail loudly at construction time.
+      expect(() => markerGetAtt("my-res", "Access_Key")).toThrow(
+        /must not contain '_'/,
+      );
+    });
   });
 
   describe("markerAz", () => {
@@ -151,6 +160,14 @@ describe("marker-tokens", () => {
 
     it("returns undefined for GETATT without an attribute segment", () => {
       expect(parseMarker("__ASSIGNEE_GETATT_igw__")).toBeUndefined();
+    });
+
+    it("returns undefined for GETATT with empty resourceId (rest starts with '_')", () => {
+      // Edge-hunter follow-up: pin the parser's handling of the pathological
+      // "__ASSIGNEE_GETATT__attr__" shape. rest="_attr", lastIndexOf("_")=0,
+      // guard `lastUnderscore <= 0` → undefined. Without this test, a parser
+      // change that relaxed the guard could silently accept empty-id markers.
+      expect(parseMarker("__ASSIGNEE_GETATT__attr__")).toBeUndefined();
     });
 
     it("parses an AZ marker into { kind: 'az', index }", () => {
