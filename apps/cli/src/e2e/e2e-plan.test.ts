@@ -2647,10 +2647,20 @@ describeE2E("E2E: efs-with-vpc compound apply + destroy", () => {
 // Pattern schema is correct; the retry handles AWS infrastructure timing.
 describeE2E("E2E: static-website compound apply + destroy", () => {
   const staticSuffix = `${Date.now()}`;
+  // QA WARNING W3 from qa-expert-e2e-fixes.md: the afterAll used to
+  // match OACs via `staticSuffix.slice(-8)`, but the plan-generator
+  // actually injects `state.runId.slice(0, 8)` into OAC names
+  // (plan-generator.ts:749 + :786). Those two values are unrelated —
+  // the match never fired, so afterAll never reliably cleaned up OACs
+  // from failed runs. Capture the runId up-front and expose its short
+  // form to afterAll so the scoping matches what the plan-generator
+  // actually writes.
+  let capturedRunId: string | undefined;
 
   it("plans, applies, and bulk-destroys a CCAPI static-website (S3 + OAC + CF + BucketPolicy)", async () => {
     const graph = createGraph(tools);
     const threadId = crypto.randomUUID();
+    capturedRunId = crypto.randomUUID();
     const config = {
       configurable: { thread_id: threadId },
       recursionLimit: 1000,
@@ -2659,7 +2669,7 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
     await graph.invoke(
       {
         userIntent: `Create a static website with CloudFront CDN for e2e test ${staticSuffix}`,
-        runId: crypto.randomUUID(),
+        runId: capturedRunId,
         executionMode: ExecutionMode.APPLY,
         startedAt: Date.now(),
         noWizard: true,
@@ -2825,11 +2835,15 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
       });
       const oacs = await cf.send(new ListOriginAccessControlsCommand({}));
       for (const oac of oacs.OriginAccessControlList?.Items ?? []) {
-        // Scope to THIS run's OAC only. The plan-generator injects the runId
-        // suffix (assignee-static-website-oac-<shortId>). Previous failed
-        // runs' OACs are handled by manual `assignee destroy`.
-        const runIdSuffix = staticSuffix.slice(-8).toLowerCase();
-        if (oac.Name?.includes(runIdSuffix) && oac.Id) {
+        // Scope to THIS run's OAC only. plan-generator.ts injects
+        // `state.runId.slice(0, 8)` into the OAC name at line 786
+        // (`assignee-<resourceId>-<shortId>`). Match on that exact
+        // 8-char prefix of the captured runId; if capturedRunId is
+        // undefined (apply threw before setting it) the match is
+        // impossible by design — afterAll becomes a no-op rather
+        // than accidentally deleting other runs' OACs.
+        const runIdSuffix = capturedRunId?.slice(0, 8).toLowerCase();
+        if (runIdSuffix && oac.Name?.includes(runIdSuffix) && oac.Id) {
           try {
             const getResp = await cf.send(
               new GetOriginAccessControlCommand({ Id: oac.Id }),
