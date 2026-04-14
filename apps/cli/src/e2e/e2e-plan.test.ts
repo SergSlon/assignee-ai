@@ -596,9 +596,13 @@ describeE2E("E2E: EC2 t3.micro apply + destroy", () => {
         autoApprove: true,
         projectDir: process.cwd(),
         // Override the instance type via --set semantics. The plan-generator
-        // respects user overrides over the plugin default.
-        userOverrides: { InstanceType: "t3.micro" },
-      } as Parameters<typeof graph.invoke>[0],
+        // reads `presetFields` (the canonical graph-state field — values
+        // are strings like CLI `--set` produces). A prior version of this
+        // block used a fabricated `userOverrides` field that AgentState
+        // dropped silently, leaving instance type to the LLM (non-free-
+        // tier risk). Corrected per code-review edge-hunter H1.
+        presetFields: { InstanceType: "t3.micro" },
+      },
       config,
     );
 
@@ -683,24 +687,30 @@ describeE2E("E2E: RDS db.t3.micro apply + destroy (time-boxed)", () => {
         noWizard: true,
         autoApprove: true,
         projectDir: process.cwd(),
-        userOverrides: {
+        // `presetFields` is the canonical graph-state field (values are
+        // strings like CLI `--set` produces). Prior version of this
+        // block used a fabricated `userOverrides` field that AgentState
+        // dropped silently — LLM could have picked db.m5.large at
+        // $0.35/hr instead of db.t3.micro ($0.017/hr). Edge-hunter H1.
+        presetFields: {
           DBInstanceClass: "db.t3.micro",
-          MultiAZ: false,
-          AllocatedStorage: 20,
+          MultiAZ: "false",
+          AllocatedStorage: "20",
           StorageType: "gp3",
           Engine: "postgres",
-          DeletionProtection: false,
-          // SkipFinalSnapshot must be true so destroy doesn't leak a
-          // snapshot that survives teardown and bills indefinitely.
-          // The RDS CCAPI delete handler reads this from the
-          // resource's own properties at destroy time.
+          DeletionProtection: "false",
+          // SkipFinalSnapshot: "true" — without this the RDS CCAPI
+          // delete path tries to snapshot the instance, which (a)
+          // blows the 600s time-box and (b) leaks a snapshot that
+          // bills indefinitely. QA auditor blocker #2.
+          SkipFinalSnapshot: "true",
           MasterUsername: "appuser",
           // Password must pass the preflight sentinel guard added in
-          // P1a — use a clearly-synthetic-but-non-sentinel value that
-          // satisfies RDS's 8+ char / no reserved-chars rule.
+          // P1a — non-sentinel value satisfying RDS's 8+ char /
+          // no-reserved-chars rule.
           MasterUserPassword: "E2eAssigneeRds2026",
         },
-      } as Parameters<typeof graph.invoke>[0],
+      },
       config,
     );
 
@@ -768,7 +778,7 @@ describeE2E("E2E: RDS db.t3.micro apply + destroy (time-boxed)", () => {
 // that shares HITL interrupt-resume loop, resourceArn regex assertion,
 // and destroyAndAssert cleanup across all blocks. Each caller only
 // supplies the intent, expected resourceType, resourceArn regex, and
-// optional userOverrides.
+// optional presetFields (equivalent to CLI `--set key=value`).
 interface FreeTierLifecycleCase {
   /** vitest describe block label */
   label: string;
@@ -778,8 +788,13 @@ interface FreeTierLifecycleCase {
   resourceType: string;
   /** regex asserted against finalState.resourceArn */
   arnRegex: RegExp;
-  /** optional userOverrides (e.g. wizard-injected field values) */
-  userOverrides?: Record<string, unknown>;
+  /**
+   * Optional CLI-style `--set` overrides. Maps to AgentState.presetFields
+   * (canonical graph-state field). A prior version of this helper used a
+   * fabricated `userOverrides` field that AgentState dropped silently;
+   * edge-hunter H1 caught it.
+   */
+  presetFields?: Record<string, string>;
   /** vitest timeout (ms). Defaults to 120s — most free-tier resources
    *  apply in 10-30s; CloudWatch Alarm and EventBridge Rule can take
    *  up to 60s. 120s leaves headroom without encouraging flakes. */
@@ -808,8 +823,8 @@ async function runFreeTierLifecycle(
       noWizard: true,
       autoApprove: true,
       projectDir: process.cwd(),
-      ...(kase.userOverrides ? { userOverrides: kase.userOverrides } : {}),
-    } as Parameters<typeof graph.invoke>[0],
+      ...(kase.presetFields ? { presetFields: kase.presetFields } : {}),
+    },
     config,
   );
 
@@ -892,7 +907,9 @@ const FREE_TIER_LIFECYCLE_CASES: FreeTierLifecycleCase[] = [
     resourceType: "AWS::SecretsManager::Secret",
     arnRegex:
       /^(arn:aws[\w-]*:secretsmanager:[a-z0-9-]+:\d+:secret:[A-Za-z0-9/_+=.@\-]+|[A-Za-z0-9/_+=.@\-]+)$/,
-    skipCostAssertion: true, // SecretsManager has $0.40/secret/mo but free tier eligible 1st month — headline may show $0.40
+    // No skipCostAssertion — QA auditor flagged the previous skip as a
+    // missed regression signal. $0.40/secret/mo IS a valid truthy
+    // headline; only "N/A" / undefined should trip the assertion.
   },
   {
     label: "E2E: SNS Topic apply + destroy",

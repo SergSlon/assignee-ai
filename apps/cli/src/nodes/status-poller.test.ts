@@ -449,8 +449,38 @@ describe("isRetryableCloudFrontS3Error", () => {
         "The S3 bucket assignee-ci-static does not exist",
       ),
     ).toBe(true);
+    // "origin" alone is not enough — must co-occur with s3/bucket.
+    // Edge-hunter M1: was accepting any of bucket|origin|s3, which
+    // false-positived on OAI and origin-request-policy errors.
     expect(
-      isRetryableCloudFrontS3Error("Origin assignee-ci-static does not exist"),
+      isRetryableCloudFrontS3Error(
+        "Origin for S3 bucket assignee-ci-static does not exist",
+      ),
+    ).toBe(true);
+  });
+
+  it("does NOT retry CloudFront OAI 'does not exist' errors (unrelated to S3 DNS lag)", () => {
+    // Edge-hunter M1: "origin" alone was matching. OAI error is fatal
+    // config (not a propagation issue) and should NOT burn the 3-retry
+    // budget. Added explicit exclusion of "access identity" / "request
+    // policy" / "origin group" tokens.
+    expect(
+      isRetryableCloudFrontS3Error(
+        "The origin access identity E1ABC does not exist",
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableCloudFrontS3Error(
+        "The origin request policy abc-123 does not exist",
+      ),
+    ).toBe(false);
+    // "origin group" is intentionally NOT excluded — an origin group
+    // can reference an S3 bucket whose DNS hasn't propagated yet.
+    // Bias toward retry when ambiguous.
+    expect(
+      isRetryableCloudFrontS3Error(
+        "One or more of your origins or origin groups does not exist",
+      ),
     ).toBe(true);
   });
 

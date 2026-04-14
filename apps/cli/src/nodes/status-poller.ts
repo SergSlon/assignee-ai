@@ -82,15 +82,24 @@ export function isRetryableCloudFrontS3Error(statusMessage: string): boolean {
   //    typically S3 origin DNS lag. The distribution ID is reported but
   //    the resource doesn't actually exist in CloudFront.)
   // The "does not exist" substring must co-occur with an S3-origin-shaped
-  // token (bucket / origin / s3) — architect WARNING #2 flagged that a
-  // bare `.includes("does not exist")` would match unrelated CCAPI errors
-  // (IAM role, KMS key, etc) and burn the 3-retry budget on guaranteed-
-  // fatal configuration problems.
+  // token. Architect WARNING #2 flagged bare `.includes("does not exist")`
+  // matching unrelated IAM/KMS errors. Accept bucket/origin/s3 (matches
+  // the architect's literal guidance and preserves the "one or more of
+  // your origins does not exist" retry case from the original test
+  // suite). Explicitly exclude fatal-config shapes that reuse "origin"
+  // in non-S3 contexts: CloudFront OriginAccessIdentity ("access
+  // identity") and CachePolicy / OriginRequestPolicy ("request policy")
+  // errors never self-heal, so retrying them only burns the 3 × 5s
+  // poll budget. Edge-hunter M1 from
+  // .agents/reviews/unreviewed-p2-p3/edge-case-hunter.md.
   const hasDoesNotExist = lower.includes("does not exist");
-  const hasS3Context =
+  const hasS3Token =
     lower.includes("bucket") ||
     lower.includes("origin") ||
     lower.includes("s3");
+  const isFatalCloudFrontConfigError =
+    lower.includes("access identity") || lower.includes("request policy");
+  const hasS3Context = !isFatalCloudFrontConfigError && hasS3Token;
   return (
     lower.includes("does not refer to a valid s3 bucket") ||
     (hasDoesNotExist && hasS3Context) ||
