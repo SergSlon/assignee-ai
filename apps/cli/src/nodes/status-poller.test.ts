@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ExecutionStatus } from "@assignee/core";
-import { statusPollerNode } from "./status-poller.js";
+import {
+  statusPollerNode,
+  isRetryableCloudFrontS3Error,
+} from "./status-poller.js";
 import {
   ProvisioningErrorKind,
   type ProvisioningPort,
@@ -312,5 +315,118 @@ describe("statusPollerNode", () => {
 
     expect(result.executionStatus).toBe(ExecutionStatus.SUCCESS);
     expect(result.resourceArn).toBe("/app/config/env");
+  });
+});
+
+// ── isRetryableCloudFrontS3Error helper ───────────────────────────────────
+//
+// CCAPI's async CloudFront origin validator can fail when a just-created S3
+// bucket hasn't propagated through global DNS yet. The helper classifies
+// the FAILED statusMessage so the poller can retry up to MAX_CLOUDFRONT_RETRIES
+// instead of surfacing a confusing 30s "no such bucket" failure to the
+// user. Closes QA BLOCKER B2: the helper landed in commit 8c658eb /
+// 6a3f6b5 with no unit coverage; a regex regression here would silently
+// turn every CloudFront-with-S3-origin into a one-shot failure.
+//
+// Each pattern below corresponds to a real CCAPI response observed in the
+// 2026-04 e2e runs — see the inline comments in status-poller.ts for the
+// raw error strings.
+describe("isRetryableCloudFrontS3Error", () => {
+  it("returns false for an empty status message", () => {
+    expect(isRetryableCloudFrontS3Error("")).toBe(false);
+  });
+
+  it("matches the synchronous 'does not refer to a valid S3 bucket' shape", () => {
+    expect(
+      isRetryableCloudFrontS3Error(
+        "The parameter Origin DomainName does not refer to a valid S3 bucket",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches the 'one or more of your origins ... does not exist' shape", () => {
+    expect(
+      isRetryableCloudFrontS3Error(
+        "One or more of your origins or origin groups does not exist",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches the 'S3 bucket ... does not exist' shape", () => {
+    expect(
+      isRetryableCloudFrontS3Error(
+        "The S3 bucket assignee-ci-1712948112-static does not exist",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches the bare 'NoSuchBucket' AWS error code", () => {
+    expect(isRetryableCloudFrontS3Error("NoSuchBucket")).toBe(true);
+  });
+
+  it("matches the case-insensitive variant", () => {
+    // The helper lower-cases the input, so an upper-case error code
+    // from a CCAPI rollback should still classify as retryable.
+    expect(isRetryableCloudFrontS3Error("NOSUCHBUCKET")).toBe(true);
+  });
+
+  it("matches the 'InvalidOrigin' generic origin validation failure", () => {
+    expect(isRetryableCloudFrontS3Error("InvalidOrigin")).toBe(true);
+  });
+
+  it("matches the 's3 origin' substring path", () => {
+    expect(
+      isRetryableCloudFrontS3Error(
+        "S3 origin returned an unexpected error code",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches the 'origin ... not found' co-occurrence path", () => {
+    expect(
+      isRetryableCloudFrontS3Error(
+        "The origin assignee-ci-1712948112-static.s3.amazonaws.com was not found",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches origin+domainname+s3 co-occurrence", () => {
+    expect(
+      isRetryableCloudFrontS3Error(
+        "Origin DomainName must be a valid s3 endpoint",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches the CCAPI rollback 'CloudFront::Distribution ... was not found' shape", () => {
+    expect(
+      isRetryableCloudFrontS3Error(
+        "Resource of type 'AWS::CloudFront::Distribution' with identifier 'E12ABCDEF34GHI' was not found.",
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false for an unrelated CloudFront config error (no retry)", () => {
+    // Config errors must NOT be retried — they would never resolve and
+    // would burn the 3-attempt retry budget on a guaranteed failure.
+    expect(
+      isRetryableCloudFrontS3Error(
+        "InvalidArgument: The default cache behavior is missing required field TargetOriginId",
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false for an unrelated AccessDenied error", () => {
+    expect(
+      isRetryableCloudFrontS3Error(
+        "AccessDenied: User is not authorized to perform cloudfront:CreateDistribution",
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false for an empty CCAPI 200 response", () => {
+    // Defensive: the poller occasionally sees empty statusMessage on
+    // success — must never classify as retryable.
+    expect(isRetryableCloudFrontS3Error(" ")).toBe(false);
   });
 });
