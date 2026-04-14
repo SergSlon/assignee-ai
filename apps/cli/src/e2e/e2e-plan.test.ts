@@ -2062,7 +2062,7 @@ describeE2E("E2E: static-website compound apply + destroy", () => {
 
           if (config.Enabled) {
             config.Enabled = false;
-            const updateResp = await cf.send(
+            await cf.send(
               new UpdateDistributionCommand({
                 Id: d.Id,
                 DistributionConfig: config,

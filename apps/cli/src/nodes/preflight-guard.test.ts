@@ -299,6 +299,107 @@ describe("preflightGuardNode", () => {
     });
   });
 
+  // ── Placeholder password sentinel rejection ───────────────────────────
+  // Mirrors detectPlaceholderArn. The three-tier-web pattern emits
+  // `MasterUserPassword: "ChangeMe-REPLACE-123!"` as a deterministic
+  // placeholder so users can run plan without supplying a real password
+  // (CCAPI's 8-char minimum is satisfied). If the user forgets to
+  // --set MasterUserPassword=<real>, this guard rejects the apply with
+  // an actionable error BEFORE the known-public sentinel reaches AWS.
+  describe("placeholder MasterUserPassword rejection", () => {
+    const SENTINEL = "ChangeMe-REPLACE-123!";
+
+    it("rejects AWS::RDS::DBInstance with the placeholder MasterUserPassword sentinel", async () => {
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::RDS::DBInstance",
+          resourceSchema: { required: ["DBInstanceClass", "Engine"] },
+          desiredState: {
+            DBInstanceClass: "db.t3.micro",
+            Engine: "postgres",
+            MasterUsername: "appuser",
+            MasterUserPassword: SENTINEL,
+          },
+        }),
+      );
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toContain("MasterUserPassword");
+      expect(result.errorMessage).toContain("placeholder password");
+      expect(result.errorMessage).toContain("--set MasterUserPassword=");
+    });
+
+    it("rejects AWS::RDS::DBCluster with the placeholder MasterUserPassword sentinel", async () => {
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::RDS::DBCluster",
+          resourceSchema: { required: ["Engine"] },
+          desiredState: {
+            Engine: "aurora-postgresql",
+            MasterUsername: "appuser",
+            MasterUserPassword: SENTINEL,
+          },
+        }),
+      );
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toContain("MasterUserPassword");
+    });
+
+    it("passes when MasterUserPassword is a real (non-sentinel) value", async () => {
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::RDS::DBInstance",
+          resourceSchema: { required: ["DBInstanceClass", "Engine"] },
+          desiredState: {
+            DBInstanceClass: "db.t3.micro",
+            Engine: "postgres",
+            MasterUsername: "appuser",
+            // Real-looking, generated value — not the sentinel.
+            MasterUserPassword: "Tr0ub4dor-correct-horse-battery-staple",
+          },
+        }),
+      );
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    });
+
+    it("does NOT scan non-RDS resource types (out of scope)", async () => {
+      // The sentinel string is RDS-specific; a Lambda environment
+      // variable that happens to contain the same string must not
+      // trigger the guard, otherwise the rule is too broad.
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Role: "arn:aws:iam::112233445566:role/my-role",
+            // Field name doesn't match RDS_PASSWORD_FIELDS AND the
+            // resource type is out of scope — must pass through.
+            MasterUserPassword: SENTINEL,
+          },
+        }),
+      );
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    });
+
+    it("passes when MasterUserPassword is absent from desiredState", async () => {
+      // Plan stage where the user hasn't filled the password yet —
+      // the schema-required check handles the missing-field path. The
+      // sentinel guard must not synthesise a failure on its own.
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::RDS::DBInstance",
+          resourceSchema: { required: ["DBInstanceClass", "Engine"] },
+          desiredState: {
+            DBInstanceClass: "db.t3.micro",
+            Engine: "postgres",
+          },
+        }),
+      );
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+    });
+  });
+
   // Wave 19 Bug #8: the LLM was observed inventing AWS managed policy ARNs
   // (e.g. AmazonEC2RoleforAWSServiceAccess, AmazonEC2RoleforAWSCodeDeployRole)
   // that don't exist. CCAPI 404s with a confusing
