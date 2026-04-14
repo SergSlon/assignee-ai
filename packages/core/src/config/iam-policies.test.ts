@@ -241,6 +241,62 @@ describe("IAM Policy Generators", () => {
       expect(tagStatement.Action).toContain("tag:GetResources");
     });
 
+    // Security MEDIUM (security-expert-e2e-fixes.md #2): RDS snapshot
+    // actions previously shipped with `Resource: *` and no Condition,
+    // letting a compromised operator wipe any account snapshot.
+    describe("RdsSnapshotsTagScoped statement", () => {
+      it("exists and carries the aws:ResourceTag/managed-by=assignee-ai condition", () => {
+        const policy = operatorPolicy();
+        const snapStatement = policy.Statement.find(
+          (s) => s.Sid === "RdsSnapshotsTagScoped",
+        );
+        expect(snapStatement).toBeDefined();
+        expect(snapStatement!.Effect).toBe("Allow");
+        expect(snapStatement!.Resource).toBe("*");
+        expect(snapStatement!.Condition).toEqual({
+          StringEquals: {
+            "aws:ResourceTag/managed-by": "assignee-ai",
+          },
+        });
+      });
+
+      it("covers all three RDS snapshot mutate actions", () => {
+        const policy = operatorPolicy();
+        const snapStatement = policy.Statement.find(
+          (s) => s.Sid === "RdsSnapshotsTagScoped",
+        )!;
+        expect(snapStatement.Action).toEqual(
+          expect.arrayContaining([
+            "rds:CreateDBSnapshot",
+            "rds:DeleteDBSnapshot",
+            "rds:CopyDBSnapshot",
+          ]),
+        );
+      });
+
+      it("removes the scoped actions from the unscoped service sweep", () => {
+        // The scoped actions must NOT also appear in operatorServicesA/B
+        // policies with Resource: * — otherwise IAM's union semantics
+        // would let the unscoped allow win and defeat the condition.
+        const scopedActions = new Set([
+          "rds:CreateDBSnapshot",
+          "rds:DeleteDBSnapshot",
+          "rds:CopyDBSnapshot",
+        ]);
+        for (const policyFn of [
+          operatorServicesAPolicy,
+          operatorServicesBPolicy,
+        ]) {
+          const doc = policyFn();
+          for (const statement of doc.Statement) {
+            for (const action of statement.Action) {
+              expect(scopedActions.has(action)).toBe(false);
+            }
+          }
+        }
+      });
+    });
+
     it("has no full-service wildcard actions (NFR-13 compliance)", () => {
       const policy = operatorPolicy();
       for (const statement of policy.Statement) {

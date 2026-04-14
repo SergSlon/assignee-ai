@@ -155,6 +155,28 @@ function collapseToWildcards(actions: readonly string[]): string[] {
  * (to know what to OMIT — those go in the services policy) and
  * `operatorServicesPolicy()` (which emits them).
  */
+/**
+ * Security MEDIUM from .agents/reviews/security-expert-e2e-fixes.md:
+ * these RDS snapshot actions were previously emitted with `Resource: *`
+ * and no Condition, meaning a compromised operator could wipe / copy
+ * ANY snapshot in the account. Extract them from the generic service
+ * sweep so operatorPolicy() can re-emit them in a dedicated statement
+ * scoped by `aws:ResourceTag/managed-by = assignee-ai`.
+ *
+ * CreateDBSnapshot creates a new resource so the ResourceTag condition
+ * evaluates against the source DBInstance, which resource-provisioner
+ * tags at create time. DeleteDBSnapshot and CopyDBSnapshot evaluate
+ * against the snapshot itself, which inherits the tag from its parent
+ * instance via RDS's automatic tag propagation for manual snapshots
+ * (the operator has `rds:AddTagsToResource` so the fallback path is
+ * also covered).
+ */
+const TAG_SCOPED_RDS_SNAPSHOT_ACTIONS = new Set([
+  "rds:CreateDBSnapshot",
+  "rds:DeleteDBSnapshot",
+  "rds:CopyDBSnapshot",
+]);
+
 function collectServiceActions(): {
   ccapiActions: string[];
   serviceActions: string[];
@@ -171,6 +193,11 @@ function collectServiceActions(): {
   for (const action of allActions) {
     if (action.startsWith("cloudcontrol:")) {
       ccapiActions.push(action);
+    } else if (TAG_SCOPED_RDS_SNAPSHOT_ACTIONS.has(action)) {
+      // Skip — emitted separately in operatorPolicy() with a
+      // ResourceTag-scoped Condition (security MEDIUM from the
+      // e2e expert review).
+      continue;
     } else {
       serviceActionsRaw.push(action);
     }
@@ -264,6 +291,25 @@ export function operatorPolicy(
         Effect: IamEffect.ALLOW,
         Action: [IamAction.TAG_TAG_RESOURCES, IamAction.TAG_GET_RESOURCES],
         Resource: "*",
+      },
+      {
+        // Security MEDIUM (security-expert-e2e-fixes.md #2). RDS snapshot
+        // actions were previously granted unscoped, letting a compromised
+        // operator wipe any account snapshot. Scope to resources tagged
+        // `managed-by=assignee-ai`, which resource-provisioner applies at
+        // create time and RDS propagates to manual snapshots. Kept in
+        // operatorPolicy() (core) so the ~200-byte statement lives with
+        // the other unscoped-but-narrow privileges rather than in the
+        // size-balanced services split.
+        Sid: "RdsSnapshotsTagScoped",
+        Effect: IamEffect.ALLOW,
+        Action: [...TAG_SCOPED_RDS_SNAPSHOT_ACTIONS].sort(),
+        Resource: "*",
+        Condition: {
+          StringEquals: {
+            "aws:ResourceTag/managed-by": "assignee-ai",
+          },
+        },
       },
     ],
   };
