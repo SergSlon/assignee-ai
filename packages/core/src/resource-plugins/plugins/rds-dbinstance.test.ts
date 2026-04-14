@@ -232,7 +232,7 @@ describe("rdsDbInstancePlugin", () => {
     it("includes guidance about PubliclyAccessible and VPC", () => {
       const hints = rdsDbInstancePlugin.configHints!.join(" ");
       expect(hints).toMatch(/PubliclyAccessible/i);
-      expect(hints).toMatch(/VpcSecurityGroupIds/i);
+      expect(hints).toMatch(/VPCSecurityGroups/i);
     });
 
     it("includes guidance about observability", () => {
@@ -268,17 +268,14 @@ describe("rdsDbInstancePlugin", () => {
       expect(ingress.some((r) => r.FromPort === 3306)).toBe(true);
     });
 
-    it("returns empty when VpcSecurityGroupIds already specified", () => {
-      rdsDbInstancePlugin.companionResources!({
+    it("returns empty when VPCSecurityGroups already specified", () => {
+      // CCAPI/CFN uses "VPCSecurityGroups" (verified via describe-type),
+      // not the legacy SDK-style "VpcSecurityGroupIds".
+      const companions = rdsDbInstancePlugin.companionResources!({
         VPCSecurityGroups: ["sg-abc123"],
         Engine: "postgres",
       });
-      // VPCSecurityGroups is not the right key; check with VpcSecurityGroupIds
-      const companions2 = rdsDbInstancePlugin.companionResources!({
-        VpcSecurityGroupIds: ["sg-abc123"],
-        Engine: "postgres",
-      });
-      expect(companions2).toHaveLength(0);
+      expect(companions).toHaveLength(0);
     });
 
     it("SG allows 10.0.0.0/8 (private network)", () => {
