@@ -81,9 +81,19 @@ export function isRetryableCloudFrontS3Error(statusMessage: string): boolean {
   //   (CCAPI rolled back create due to async validation failure —
   //    typically S3 origin DNS lag. The distribution ID is reported but
   //    the resource doesn't actually exist in CloudFront.)
+  // The "does not exist" substring must co-occur with an S3-origin-shaped
+  // token (bucket / origin / s3) — architect WARNING #2 flagged that a
+  // bare `.includes("does not exist")` would match unrelated CCAPI errors
+  // (IAM role, KMS key, etc) and burn the 3-retry budget on guaranteed-
+  // fatal configuration problems.
+  const hasDoesNotExist = lower.includes("does not exist");
+  const hasS3Context =
+    lower.includes("bucket") ||
+    lower.includes("origin") ||
+    lower.includes("s3");
   return (
     lower.includes("does not refer to a valid s3 bucket") ||
-    lower.includes("does not exist") ||
+    (hasDoesNotExist && hasS3Context) ||
     lower.includes("nosuchbucket") ||
     lower.includes("invalidorigin") ||
     lower.includes("s3 origin") ||
