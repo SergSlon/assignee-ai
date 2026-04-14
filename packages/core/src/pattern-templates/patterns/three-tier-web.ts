@@ -34,6 +34,7 @@ import {
 import { IamEffect } from "../../config/iam-effects.js";
 import { IamPolicy, AwsServicePrincipal } from "../../config/aws-arns.js";
 import { markerRef, markerAz } from "../../config/marker-tokens.js";
+import { RDS_PLACEHOLDER_PASSWORD } from "../../config/placeholder-passwords.js";
 import type { ArchitecturePattern } from "../types.js";
 import { ThreeTierWebResourceId as R } from "../pattern-resource-ids.js";
 import { PatternId } from "../pattern-ids.js";
@@ -386,10 +387,12 @@ export const threeTierWebPattern: ArchitecturePattern = {
       Engine: ResourceDefault.RDS_ENGINE_POSTGRES,
       MasterUsername: "appuser",
       // Placeholder password — user MUST override via --set before apply.
-      // plan-generator / wizard surface this as a required field. The default
-      // is random-looking to discourage accidental production use but still
-      // passes CCAPI's 8-character-minimum validation for initial testing.
-      MasterUserPassword: "ChangeMe-REPLACE-123!",
+      // The CLI's preflight-guard hard-rejects any plan whose
+      // MasterUserPassword is still this sentinel (see
+      // detectSentinelPassword in apps/cli/src/nodes/preflight-guard.ts),
+      // so the value below can never reach AWS by accident. Sourced from
+      // the shared constant so the guard and the template can never drift.
+      MasterUserPassword: RDS_PLACEHOLDER_PASSWORD,
       DBInstanceClass: "db.t3.micro",
       AllocatedStorage: "20",
       MultiAZ: false,

@@ -79,6 +79,13 @@ export {
   type ParsedMarker,
 } from "./config/marker-tokens.js";
 
+// Config — placeholder passwords for preflight rejection
+export {
+  RDS_PLACEHOLDER_PASSWORD,
+  PLACEHOLDER_DB_PASSWORDS,
+  RDS_PASSWORD_FIELDS,
+} from "./config/placeholder-passwords.js";
+
 // Config — ARN-to-CloudFormation type mapping
 export {
   SERVICE_TYPE_MAP,

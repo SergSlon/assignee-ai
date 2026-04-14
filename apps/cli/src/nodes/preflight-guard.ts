@@ -14,6 +14,8 @@ import {
   defaultDecomposerRegistry,
   extractFirstTierPrice,
   getRequiredIamActions,
+  PLACEHOLDER_DB_PASSWORDS,
+  RDS_PASSWORD_FIELDS,
   type AwsPricingResponse,
   type DataSource,
   type PricingLineItem,
@@ -102,6 +104,49 @@ function detectPlaceholderArn(
     `not a real account. Provide a real ARN with --set ${hit.field}=arn:aws:... ` +
     `or omit the field entirely if the resource type allows it.`
   );
+}
+
+/**
+ * RDS resource types whose desiredState is screened for placeholder
+ * MasterUserPassword sentinels. Kept narrow so the guard never fires on
+ * unrelated services that happen to expose a "Password" field.
+ */
+const RDS_PASSWORD_GUARDED_TYPES: ReadonlySet<string> = new Set([
+  "AWS::RDS::DBInstance",
+  "AWS::RDS::DBCluster",
+]);
+
+/**
+ * Returns an actionable error when the desiredState of an RDS resource
+ * still carries one of the known placeholder MasterUserPassword sentinels
+ * (see PLACEHOLDER_DB_PASSWORDS). Returns undefined when the state is
+ * clean or the resource type is out of scope.
+ *
+ * Mirrors detectPlaceholderArn — same shape, same surfacing. The guard is
+ * intentionally scoped to RDS_PASSWORD_GUARDED_TYPES instead of walking
+ * arbitrary nested objects: the pattern template emits the sentinel
+ * directly on the top-level desiredState of the RDS resource, and a
+ * deeper walk would risk false positives on unrelated services that
+ * happen to expose a Password-named field.
+ */
+function detectSentinelPassword(
+  resourceType: string,
+  desiredState: Record<string, unknown>,
+): string | undefined {
+  if (!RDS_PASSWORD_GUARDED_TYPES.has(resourceType)) return undefined;
+  for (const field of RDS_PASSWORD_FIELDS) {
+    const value = desiredState[field];
+    if (typeof value === "string" && PLACEHOLDER_DB_PASSWORDS.has(value)) {
+      return (
+        `Field "${field}" is still the placeholder password baked into the ` +
+        `pattern template. Override it before apply with: ` +
+        `--set ${field}=<a-real-password>. ` +
+        `Requirements: 8+ characters; cannot contain '/', '@', '"', or spaces. ` +
+        `For automation, generate one with: openssl rand -base64 24 | tr -d '/+=@\"'.`
+      );
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -236,6 +281,25 @@ export async function preflightGuardNode(
     return {
       executionStatus: ExecutionStatus.FAILED,
       errorMessage: placeholderArnError,
+    };
+  }
+
+  // Reject RDS plans that still carry the placeholder MasterUserPassword
+  // baked into the three-tier-web pattern. The pattern emits a
+  // deterministic sentinel string so this guard can positively identify
+  // it and stop a known-public password from reaching CCAPI. Without
+  // this, a user who forgets to --set MasterUserPassword=... would deploy
+  // an RDS instance whose master password is in source control. See
+  // packages/core/src/config/placeholder-passwords.ts for the sentinel
+  // set; mirrors detectPlaceholderArn for consistency.
+  const sentinelPasswordError = detectSentinelPassword(
+    state.resourceType ?? "",
+    desiredState,
+  );
+  if (sentinelPasswordError) {
+    return {
+      executionStatus: ExecutionStatus.FAILED,
+      errorMessage: sentinelPasswordError,
     };
   }
 
