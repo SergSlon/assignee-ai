@@ -124,7 +124,9 @@ const DEFAULT_TIER = 3;
  * RGTA returns non-conforming types (e.g. "AWS::Backup::Recovery-point" with
  * lowercase hyphen) that must be filtered before reaching CCAPI delete calls.
  */
-const CCAPI_TYPE_PATTERN =
+// Exported for unit testing — buildPlanFromResources uses this to drop
+// non-conforming RGTA types before they reach CCAPI delete calls.
+export const CCAPI_TYPE_PATTERN =
   /^[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}$/;
 
 /** IAM resource type prefixes — used to identify IAM resources for opt-in filtering. */
