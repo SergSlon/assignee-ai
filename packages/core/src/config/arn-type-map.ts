@@ -95,6 +95,70 @@ export const SERVICE_SUBTYPE_MAP: Readonly<
 } as const;
 
 /**
+ * Services whose correct CloudFormation type CANNOT be derived from
+ * `service.charAt(0).toUpperCase() + service.slice(1)`. The one-line
+ * fallback below would produce e.g. `AWS::Kms::Key` (wrong) instead
+ * of `AWS::KMS::Key` (correct). These need explicit capitalization.
+ *
+ * Epic 47 edge-hunter H1 call-out: the KMS fix in c269379 only
+ * patched the single case that surfaced in live-AWS runs; the
+ * structural bug still affected IoT, FSx, WAFv2, CodeBuild,
+ * CodePipeline, MediaConvert, etc. Listing every known miscapitalized
+ * AWS service keeps the fallback path safe for those too.
+ *
+ * When a new service appears in production traffic that isn't here,
+ * the fallback path will produce a wrong-cased type and CCAPI will
+ * reject it — that's visible failure, not silent data loss. Add
+ * the entry here with the correct casing.
+ */
+const SERVICE_CASING_OVERRIDES: Readonly<Record<string, string>> = {
+  kms: "KMS",
+  iot: "IoT",
+  fsx: "FSx",
+  wafv2: "WAFv2",
+  waf: "WAF",
+  ram: "RAM",
+  sqs: "SQS",
+  sns: "SNS",
+  sts: "STS",
+  vpc: "VPC",
+  ssm: "SSM",
+  ses: "SES",
+  mq: "AmazonMQ",
+  ec2: "EC2",
+  ecs: "ECS",
+  eks: "EKS",
+  ecr: "ECR",
+  rds: "RDS",
+  iam: "IAM",
+  s3: "S3",
+  codebuild: "CodeBuild",
+  codecommit: "CodeCommit",
+  codedeploy: "CodeDeploy",
+  codepipeline: "CodePipeline",
+  mediaconvert: "MediaConvert",
+  medialive: "MediaLive",
+  mediapackage: "MediaPackage",
+  mediastore: "MediaStore",
+  appstream: "AppStream",
+  apprunner: "AppRunner",
+  appmesh: "AppMesh",
+  appconfig: "AppConfig",
+  appsync: "AppSync",
+  elasticbeanstalk: "ElasticBeanstalk",
+  elastictranscoder: "ElasticTranscoder",
+  stepfunctions: "StepFunctions",
+  secretsmanager: "SecretsManager",
+  cloudwatch: "CloudWatch",
+  cloudfront: "CloudFront",
+  cloudformation: "CloudFormation",
+  cloudtrail: "CloudTrail",
+  dynamodb: "DynamoDB",
+  apigateway: "ApiGateway",
+  apigatewayv2: "ApiGatewayV2",
+};
+
+/**
  * Converts an AWS service name and resource component from an ARN
  * into a CloudFormation-style type string.
  *
@@ -123,8 +187,13 @@ export function arnToCloudFormationType(
   const mapped = SERVICE_TYPE_MAP[service];
   if (mapped) return mapped;
 
-  // Fallback: construct from service + resource
-  const capitalizedService = service.charAt(0).toUpperCase() + service.slice(1);
+  // Fallback: construct from service + resource. Use the explicit
+  // casing override table when available — `service.charAt(0).
+  // toUpperCase()` would emit `AWS::Kms::Key` / `AWS::Iot::Thing` /
+  // etc., which CCAPI rejects. Epic 47 edge-hunter H1.
+  const capitalizedService =
+    SERVICE_CASING_OVERRIDES[service] ??
+    service.charAt(0).toUpperCase() + service.slice(1);
   const resourceType = resourcePart.split(/[:/]/)[0] ?? "Resource";
   const capitalizedResource =
     resourceType.charAt(0).toUpperCase() + resourceType.slice(1);

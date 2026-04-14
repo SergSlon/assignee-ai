@@ -241,14 +241,11 @@ describe("IAM Policy Generators", () => {
       expect(tagStatement.Action).toContain("tag:GetResources");
     });
 
-    // Security MEDIUM (security-expert-e2e-fixes.md #2). Scoped set is
-    // DeleteDBSnapshot + CopyDBSnapshot only — CreateDBSnapshot stays
-    // unscoped in the service sweep because `aws:ResourceTag`
-    // evaluates against the new snapshot (no tag at create time) and
-    // scoping it would deny the legitimate auto-snapshot RDS takes
-    // during DeleteDBInstance with SkipFinalSnapshot=false. Edge-
-    // hunter H2 from .agents/reviews/unreviewed-p2-p3/edge-case-hunter.md.
-    describe("RdsSnapshotMutateTagScoped statement", () => {
+    // Security MEDIUM (security-expert #2) + epic47-final blind S2.
+    // Delete + Copy scoped by aws:ResourceTag; Create scoped by
+    // aws:RequestTag (closes the previously-open cross-account exfil
+    // path via Create → ModifyDBSnapshotAttribute → share).
+    describe("RdsSnapshotMutateTagScoped statement (Delete + Copy)", () => {
       it("exists and carries the aws:ResourceTag/managed-by=assignee-ai condition", () => {
         const policy = operatorPolicy();
         const snapStatement = policy.Statement.find(
@@ -277,39 +274,66 @@ describe("IAM Policy Generators", () => {
         );
       });
 
-      it("deliberately does NOT cover CreateDBSnapshot (prevents auto-snapshot lockout)", () => {
+      it("does NOT cover CreateDBSnapshot (handled by its own request-tag block)", () => {
         const policy = operatorPolicy();
         const snapStatement = policy.Statement.find(
           (s) => s.Sid === "RdsSnapshotMutateTagScoped",
         )!;
         expect(snapStatement.Action).not.toContain("rds:CreateDBSnapshot");
       });
+    });
 
-      it("removes only Delete+Copy from the unscoped service sweep — Create stays in sweep", () => {
-        // Delete + Copy must NOT also appear in operatorServicesA/B
-        // policies with Resource: * — otherwise IAM's union semantics
-        // would let the unscoped allow win and defeat the condition.
-        // Create, by contrast, MUST appear in the service sweep
-        // (unscoped) so the legitimate auto-snapshot flow works.
-        const scopedActions = new Set([
-          "rds:DeleteDBSnapshot",
-          "rds:CopyDBSnapshot",
-        ]);
-        let createFoundInSweep = false;
-        for (const policyFn of [
-          operatorServicesAPolicy,
-          operatorServicesBPolicy,
-        ]) {
-          const doc = policyFn();
-          for (const statement of doc.Statement) {
-            for (const action of statement.Action) {
-              expect(scopedActions.has(action)).toBe(false);
-              if (action === "rds:CreateDBSnapshot") createFoundInSweep = true;
-            }
+    describe("RdsSnapshotCreateRequestTagScoped statement (Create)", () => {
+      it("exists and carries the aws:RequestTag/managed-by=assignee-ai condition", () => {
+        const policy = operatorPolicy();
+        const snapStatement = policy.Statement.find(
+          (s) => s.Sid === "RdsSnapshotCreateRequestTagScoped",
+        );
+        expect(snapStatement).toBeDefined();
+        expect(snapStatement!.Effect).toBe("Allow");
+        expect(snapStatement!.Resource).toBe("*");
+        // RequestTag (tag being applied at create time), NOT ResourceTag
+        // — aws:ResourceTag on a create action would evaluate against
+        // the new-resource with no tags and deny every legitimate
+        // create. RequestTag closes the exfil path (operator must tag
+        // managed-by at create) without breaking legit flows.
+        expect(snapStatement!.Condition).toEqual({
+          StringEquals: {
+            "aws:RequestTag/managed-by": "assignee-ai",
+          },
+        });
+      });
+
+      it("covers CreateDBSnapshot only", () => {
+        const policy = operatorPolicy();
+        const snapStatement = policy.Statement.find(
+          (s) => s.Sid === "RdsSnapshotCreateRequestTagScoped",
+        )!;
+        expect(snapStatement.Action).toEqual(["rds:CreateDBSnapshot"]);
+      });
+    });
+
+    it("removes ALL snapshot mutate actions from the unscoped service sweep", () => {
+      // All three (Delete + Copy + Create) must be absent from
+      // operatorServicesA/B policies — IAM union semantics would
+      // otherwise let the unscoped allow win and defeat both
+      // conditions.
+      const scopedActions = new Set([
+        "rds:DeleteDBSnapshot",
+        "rds:CopyDBSnapshot",
+        "rds:CreateDBSnapshot",
+      ]);
+      for (const policyFn of [
+        operatorServicesAPolicy,
+        operatorServicesBPolicy,
+      ]) {
+        const doc = policyFn();
+        for (const statement of doc.Statement) {
+          for (const action of statement.Action) {
+            expect(scopedActions.has(action)).toBe(false);
           }
         }
-        expect(createFoundInSweep).toBe(true);
-      });
+      }
     });
 
     it("has no full-service wildcard actions (NFR-13 compliance)", () => {

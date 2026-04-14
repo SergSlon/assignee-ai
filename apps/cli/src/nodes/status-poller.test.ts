@@ -474,6 +474,12 @@ describe("isRetryableCloudFrontS3Error", () => {
         "The origin request policy abc-123 does not exist",
       ),
     ).toBe(false);
+    // Edge-hunter M2: origin shield is CloudFront config, not DNS lag.
+    expect(
+      isRetryableCloudFrontS3Error(
+        "Invalid origin shield region: does not exist",
+      ),
+    ).toBe(false);
     // "origin group" is intentionally NOT excluded — an origin group
     // can reference an S3 bucket whose DNS hasn't propagated yet.
     // Bias toward retry when ambiguous.

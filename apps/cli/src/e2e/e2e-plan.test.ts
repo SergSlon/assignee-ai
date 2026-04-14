@@ -893,17 +893,29 @@ async function runFreeTierLifecycle(
   expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
   expect(finalState.resourceArn).toMatch(kase.arnRegex);
   if (!kase.skipCostAssertion) {
+    // Blind-hunter M3: bare `.toBeTruthy()` accepts "N/A" (truthy
+    // string). Pricing regression to "N/A" for paid resources must
+    // trip the test. Per-case `skipCostAssertion` escape hatch is
+    // honored for genuinely-free types (IAM Role) and SecretsManager
+    // (which was itself dropped in cf55d7d — $0.40 is a valid headline).
+    expect(finalState.estimatedMonthlyCost).not.toBe("N/A");
     expect(finalState.estimatedMonthlyCost).toBeTruthy();
   }
 
+  // Blind-hunter M2: `?? []` fires only on null/undefined, not on
+  // an empty array. `completedResources: []` meant "apply failed
+  // mid-flight after state reset" and would silently no-op
+  // destroyAndAssert, hiding the real failure. Use `?.length` so
+  // an empty array also falls through to the single-resource fallback.
   const completed =
-    finalState.completedResources ??
-    ([
-      {
-        resourceArn: finalState.resourceArn,
-        resourceType: finalState.resourceType,
-      },
-    ] as Array<{ resourceArn?: string; resourceType: string }>);
+    finalState.completedResources && finalState.completedResources.length > 0
+      ? finalState.completedResources
+      : ([
+          {
+            resourceArn: finalState.resourceArn,
+            resourceType: finalState.resourceType,
+          },
+        ] as Array<{ resourceArn?: string; resourceType: string }>);
   await destroyAndAssert(completed);
 }
 
@@ -994,9 +1006,11 @@ const FREE_TIER_LIFECYCLE_CASES: FreeTierLifecycleCase[] = [
     resourceType: "AWS::Logs::LogGroup",
     // Real observed ARN: "arn:aws:logs:us-east-1:<acct>:log-group:/aws/assignee/e2e-<ts>".
     // Accept optional `:*` suffix (CloudWatch canonical form) and bare
-    // identifier (log-group name) as fallback.
+    // identifier (log-group name) as fallback. Edge-hunter H3: tighten
+    // bare branch to require first char after `/` be alphanumeric —
+    // old pattern allowed garbage like `/./` or `/_/`.
     arnRegex:
-      /^(arn:aws[\w-]*:logs:[a-z0-9-]+:\d+:log-group:[A-Za-z0-9/_.#\-]+(?::\*)?|\/[A-Za-z0-9/_.#\-]+)$/,
+      /^(arn:aws[\w-]*:logs:[a-z0-9-]+:\d+:log-group:[A-Za-z0-9/_.#\-]+(?::\*)?|\/[A-Za-z0-9][A-Za-z0-9/_.#\-]*)$/,
   },
   // EventBridge Rule standalone apply deferred — the rule requires at
   // least one Target per BP-EVENTS-001, but the LLM reliably emits a
@@ -1727,27 +1741,15 @@ describeE2E("E2E: SNS Subscription plan", () => {
     const s = state as AgentState;
     expect(s.resourceType).toBe("AWS::SNS::Subscription");
     expect(Object.keys(s.desiredState ?? {}).length).toBeGreaterThan(0);
-    // Protocol depends on the LLM's intent parse. Assert it's a valid
-    // SNS subscription protocol (the plugin defines an enum) — prior
-    // strict `.toBe("email")` was too tight because the LLM sometimes
-    // picks "sqs" / "lambda" for ambiguous phrasings. Story 47.2 AC:
-    // "state.desiredState is a non-empty object" — the spec doesn't
-    // mandate a specific protocol.
-    const protocol = s.desiredState?.["Protocol"];
-    expect(typeof protocol).toBe("string");
-    expect(
-      [
-        "email",
-        "email-json",
-        "sms",
-        "sqs",
-        "lambda",
-        "http",
-        "https",
-        "application",
-        "firehose",
-      ].includes(protocol as string),
-    ).toBe(true);
+    // Intent explicitly says "Protocol=email and Endpoint=test@example.com".
+    // If the LLM picks anything else, that is a real intent-parser or
+    // plan-generator regression and the test must catch it.
+    // Reviewers (blind H1 + QA #2 on cf55d7d..c269379) flagged an
+    // earlier 9-protocol wildcard as weakening — restored strict
+    // contract + added Endpoint pair check so (email, arn:aws:sqs:...)
+    // doesn't silently pass.
+    expect(s.desiredState?.["Protocol"]).toBe("email");
+    expect(s.desiredState?.["Endpoint"]).toBe("test@example.com");
     expect(s.bpFindings).toBeInstanceOf(Array);
   }, 60_000);
 });
@@ -1944,15 +1946,21 @@ describeE2E("E2E: KMS Key plan", () => {
     const s = state as AgentState;
     expect(s.resourceType).toBe("AWS::KMS::Key");
     expect(Object.keys(s.desiredState ?? {}).length).toBeGreaterThan(0);
-    // KeyPolicy may be injected as a plugin default at apply time rather
-    // than surfaced in plan-mode desiredState — the plugin defaults
-    // mechanism is separate from user-visible state. Assert the core
-    // KMS contract instead: KeyUsage and KeySpec, both of which the
-    // plugin + LLM path reliably populate.
-    const keyUsage = s.desiredState?.["KeyUsage"];
-    const keySpec = s.desiredState?.["KeySpec"];
-    expect(typeof keyUsage).toBe("string");
-    expect(typeof keySpec).toBe("string");
+    // KeyPolicy is the load-bearing security-critical field — without
+    // it CCAPI rejects the create. Reviewers (blind H2 + QA #1 on
+    // cf55d7d..c269379) flagged dropping this assertion as weakening
+    // on a security-critical field. Restored .toBeTruthy() — if the
+    // plan-generator regresses to omitting KeyPolicy, the plan the
+    // user approves is incomplete and the test must catch it.
+    expect(s.desiredState?.["KeyPolicy"]).toBeTruthy();
+    // KeyUsage + KeySpec as enum-bounded sanity checks (the real
+    // KMS contract; CCAPI rejects arbitrary strings here).
+    expect(s.desiredState?.["KeyUsage"]).toMatch(
+      /^(ENCRYPT_DECRYPT|SIGN_VERIFY|GENERATE_VERIFY_MAC|KEY_AGREEMENT)$/,
+    );
+    expect(s.desiredState?.["KeySpec"]).toMatch(
+      /^(SYMMETRIC_DEFAULT|RSA_|ECC_|HMAC_|SM2)/,
+    );
     expect(s.bpFindings).toBeInstanceOf(Array);
   }, 60_000);
 });

@@ -156,30 +156,33 @@ function collapseToWildcards(actions: readonly string[]): string[] {
  * `operatorServicesPolicy()` (which emits them).
  */
 /**
- * Security MEDIUM from .agents/reviews/security-expert-e2e-fixes.md:
- * these RDS snapshot MUTATE actions were previously emitted with
- * `Resource: *` and no Condition, meaning a compromised operator could
- * wipe / copy ANY snapshot in the account.
+ * Security MEDIUM from .agents/reviews/security-expert-e2e-fixes.md #2,
+ * re-scoped after review of unreviewed-p2-p3 + epic47-final.
  *
- * Scope ONLY `DeleteDBSnapshot` and `CopyDBSnapshot` via
- * `aws:ResourceTag/managed-by=assignee-ai` — both evaluate the
- * condition against an existing snapshot that inherits the tag from
- * its parent DBInstance via RDS's automatic tag propagation.
+ * DeleteDBSnapshot + CopyDBSnapshot scoped via `aws:ResourceTag/managed-by
+ * = assignee-ai` — both evaluate against an existing snapshot that
+ * inherits the tag from its parent DBInstance via RDS tag propagation.
  *
- * `CreateDBSnapshot` is deliberately LEFT UNSCOPED because per AWS
- * IAM docs it evaluates `aws:ResourceTag` against the new snapshot
- * resource (which has no tags at create time) — scoping it with
- * `aws:ResourceTag` would deny every legitimate create including the
- * auto-snapshot RDS takes when DeleteDBInstance runs with
- * `SkipFinalSnapshot=false`. Create is non-destructive and the new
- * snapshot inherits the `managed-by` tag from its source instance
- * automatically, so the Delete/Copy scope still prevents cross-tenant
- * tampering — the actual security concern the review flagged.
- * Edge-hunter H2 from .agents/reviews/unreviewed-p2-p3/edge-case-hunter.md.
+ * CreateDBSnapshot scoped via `aws:RequestTag/managed-by = assignee-ai`
+ * — evaluates the tag being applied AT CREATE TIME, not the resource's
+ * prior (nonexistent) tag. This closes the gap flagged by blind-hunter
+ * S2 on Epic 47 final review: unscoped Create allowed a compromised
+ * operator to create arbitrary snapshots + combine with
+ * ModifyDBSnapshotAttribute for cross-account exfiltration. Forcing
+ * every operator-initiated create to tag the snapshot closes that
+ * path without breaking the legitimate DeleteDBInstance auto-snapshot
+ * flow (RDS propagates parent tags to auto-snapshots, and
+ * rds:AddTagsToResource remains available for post-create tagging
+ * if needed).
  */
-const TAG_SCOPED_RDS_SNAPSHOT_ACTIONS = new Set([
+const RESOURCE_TAG_SCOPED_SNAPSHOT_ACTIONS = new Set([
   "rds:DeleteDBSnapshot",
   "rds:CopyDBSnapshot",
+]);
+const REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS = new Set(["rds:CreateDBSnapshot"]);
+const TAG_SCOPED_RDS_SNAPSHOT_ACTIONS = new Set([
+  ...RESOURCE_TAG_SCOPED_SNAPSHOT_ACTIONS,
+  ...REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS,
 ]);
 
 function collectServiceActions(): {
@@ -299,27 +302,38 @@ export function operatorPolicy(
       },
       {
         // Security MEDIUM (security-expert-e2e-fixes.md #2). RDS
-        // DeleteDBSnapshot + CopyDBSnapshot were previously granted
-        // unscoped, letting a compromised operator wipe / copy any
-        // account snapshot. Scope to resources tagged
-        // `managed-by=assignee-ai` which RDS automatically propagates
-        // from parent DBInstance to manual snapshots.
-        //
-        // CreateDBSnapshot intentionally NOT included here — per AWS
-        // IAM docs the condition evaluates against the new snapshot
-        // resource (no tag at create time), so scoping Create with
-        // `aws:ResourceTag` would deny every legitimate create
-        // including the auto-snapshot RDS takes when DeleteDBInstance
-        // runs with SkipFinalSnapshot=false. Create stays in the
-        // generic service sweep (unscoped). The actual attack surface
-        // (cross-tenant destroy/copy) is still closed by this block.
+        // DeleteDBSnapshot + CopyDBSnapshot evaluated against an
+        // existing snapshot — scope via `aws:ResourceTag/managed-by
+        // = assignee-ai`. RDS propagates the parent DBInstance's
+        // tag to manual snapshots so legitimate flows pass.
         Sid: "RdsSnapshotMutateTagScoped",
         Effect: IamEffect.ALLOW,
-        Action: [...TAG_SCOPED_RDS_SNAPSHOT_ACTIONS].sort(),
+        Action: [...RESOURCE_TAG_SCOPED_SNAPSHOT_ACTIONS].sort(),
         Resource: "*",
         Condition: {
           StringEquals: {
             "aws:ResourceTag/managed-by": "assignee-ai",
+          },
+        },
+      },
+      {
+        // Security follow-up (epic47-final blind-hunter S2). Earlier
+        // version left CreateDBSnapshot unscoped — attacker could
+        // create arbitrary snapshots + ModifyDBSnapshotAttribute to
+        // share cross-account. Scope via `aws:RequestTag/managed-by
+        // = assignee-ai` — evaluates the tag being APPLIED at create
+        // time (vs aws:ResourceTag which would deny the initial
+        // create on an untagged new resource). Forces every
+        // operator-initiated create to tag the snapshot. RDS
+        // propagates parent-instance tags to its auto-snapshots
+        // (DeleteDBInstance flow) so that path is still covered.
+        Sid: "RdsSnapshotCreateRequestTagScoped",
+        Effect: IamEffect.ALLOW,
+        Action: [...REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS].sort(),
+        Resource: "*",
+        Condition: {
+          StringEquals: {
+            "aws:RequestTag/managed-by": "assignee-ai",
           },
         },
       },
