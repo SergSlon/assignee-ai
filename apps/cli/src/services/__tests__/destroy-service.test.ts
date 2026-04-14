@@ -247,7 +247,7 @@ describe("destroySingleResource", () => {
         { requestToken: "tok-timeout" },
       ]);
       // Always return IN_PROGRESS — with setTimeout stubbed to 0ms,
-      // all 60 poll iterations complete instantly.
+      // all DESTROY_MAX_POLL_ATTEMPTS iterations complete instantly.
       mockGetRequestStatus.mockResolvedValue([
         null,
         { operationStatus: "IN_PROGRESS" },
@@ -262,9 +262,9 @@ describe("destroySingleResource", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("timed out");
-      // Verify all 60 poll attempts were made
-      expect(mockGetRequestStatus).toHaveBeenCalledTimes(60);
-    });
+      // Verify all poll attempts were made (was 60; bumped to 600 for RDS/CloudFront)
+      expect(mockGetRequestStatus).toHaveBeenCalledTimes(600);
+    }, 30_000);
 
     it("returns failure when poll returns FAILED status", async () => {
       mockDeleteResource.mockResolvedValue([
