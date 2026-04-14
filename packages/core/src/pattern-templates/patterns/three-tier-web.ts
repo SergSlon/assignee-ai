@@ -371,7 +371,12 @@ export const threeTierWebPattern: ArchitecturePattern = {
     },
     [R.EC2_INSTANCE]: {
       InstanceType: AwsDefault.INSTANCE_TYPE,
-      HttpTokens: "required",
+      // CCAPI nests HttpTokens inside MetadataOptions (not top-level).
+      // Top-level HttpTokens fails with "extraneous key not permitted".
+      MetadataOptions: {
+        HttpTokens: "required",
+        HttpEndpoint: "enabled",
+      },
       // OS name — plan-generator resolves to a real AMI ID via SSM
       ImageId: AmiOs.AMAZON_LINUX_2023,
       SubnetId: markerRef(R.PUBLIC_SUBNET_1),
