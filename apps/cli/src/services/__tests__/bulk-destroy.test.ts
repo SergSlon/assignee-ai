@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildPlanFromResources,
+  CCAPI_TYPE_PATTERN,
   DESTROY_TIER,
   isAssigneeInfraResource,
   type ManagedResource,
@@ -728,6 +729,102 @@ describe("BulkDestroyService — buildPlanFromResources", () => {
       // The other region's resource shows up as excluded (not included)
       expect(usPlan.excludedCount).toBe(1);
       expect(euPlan.excludedCount).toBe(1);
+    });
+  });
+
+  // ── CCAPI_TYPE_PATTERN ──────────────────────────────────────────────────
+  //
+  // RGTA returns resource types whose stringified form does not match
+  // CloudControl's typeName regex (e.g. "AWS::Backup::Recovery-point" with
+  // a lowercase hyphen). Submitting these to deleteResource crashes with
+  // a confusing typeName-validation error — buildPlanFromResources must
+  // drop them and increment excludedCount instead. Closes QA BLOCKER B3.
+  describe("CCAPI_TYPE_PATTERN", () => {
+    it("accepts the canonical AWS::<Service>::<Resource> shape", () => {
+      // Real CCAPI types observed in production fleets.
+      expect(CCAPI_TYPE_PATTERN.test("AWS::EC2::VPC")).toBe(true);
+      expect(CCAPI_TYPE_PATTERN.test("AWS::RDS::DBInstance")).toBe(true);
+      expect(CCAPI_TYPE_PATTERN.test("AWS::Lambda::Function")).toBe(true);
+      expect(CCAPI_TYPE_PATTERN.test("AWS::CloudFront::Distribution")).toBe(
+        true,
+      );
+      expect(CCAPI_TYPE_PATTERN.test("AWS::IAM::Role")).toBe(true);
+    });
+
+    it("accepts mixed-case service and resource segments", () => {
+      // CCAPI casing is not strictly UpperCamelCase — both segments
+      // can include digits and any case.
+      expect(CCAPI_TYPE_PATTERN.test("AWS::EC2::SecurityGroup")).toBe(true);
+      expect(CCAPI_TYPE_PATTERN.test("AWS::ApiGatewayV2::Api")).toBe(true);
+      expect(
+        CCAPI_TYPE_PATTERN.test("AWS::ElasticLoadBalancingV2::LoadBalancer"),
+      ).toBe(true);
+    });
+
+    it("rejects RGTA's lowercase-hyphen 'AWS::Backup::Recovery-point'", () => {
+      // The actual RGTA-returned string that motivated the pattern. A
+      // regression here would re-introduce the CCAPI typeName crash
+      // observed in 2026-03 destroy runs.
+      expect(CCAPI_TYPE_PATTERN.test("AWS::Backup::Recovery-point")).toBe(
+        false,
+      );
+    });
+
+    it("accepts all-lowercase segments (CCAPI typeName regex is case-insensitive)", () => {
+      // Pin the actual contract: CloudControl typeName is case-insensitive
+      // per its [A-Za-z0-9]{2,64} schema — RGTA's "AWS::Backup::Recovery-point"
+      // is rejected for the hyphen, NOT for casing. This test prevents a
+      // future "let's enforce UpperCamelCase" tightening from rejecting
+      // legitimate lowercased customer types.
+      expect(CCAPI_TYPE_PATTERN.test("aws::ec2::vpc")).toBe(true);
+    });
+
+    it("rejects malformed types missing one of the three segments", () => {
+      expect(CCAPI_TYPE_PATTERN.test("AWS::EC2")).toBe(false);
+      expect(CCAPI_TYPE_PATTERN.test("EC2::VPC")).toBe(false);
+      expect(CCAPI_TYPE_PATTERN.test("AWS::EC2::")).toBe(false);
+      expect(CCAPI_TYPE_PATTERN.test("::EC2::VPC")).toBe(false);
+    });
+
+    it("rejects empty / whitespace input", () => {
+      expect(CCAPI_TYPE_PATTERN.test("")).toBe(false);
+      expect(CCAPI_TYPE_PATTERN.test("   ")).toBe(false);
+    });
+
+    it("rejects types containing other special characters", () => {
+      expect(CCAPI_TYPE_PATTERN.test("AWS::EC2::VPC.Endpoint")).toBe(false);
+      expect(CCAPI_TYPE_PATTERN.test("AWS::EC2::VPC Endpoint")).toBe(false);
+      expect(CCAPI_TYPE_PATTERN.test("AWS::EC2::VPC_Endpoint")).toBe(false);
+    });
+
+    it("rejects single-character segments (under the 2-char minimum)", () => {
+      // The pattern requires {2,64} per segment — pin the floor.
+      expect(CCAPI_TYPE_PATTERN.test("A::EC2::VPC")).toBe(false);
+      expect(CCAPI_TYPE_PATTERN.test("AWS::E::VPC")).toBe(false);
+    });
+
+    it("buildPlanFromResources excludes RGTA's 'Recovery-point' shape", () => {
+      // End-to-end check: the pattern fires from inside buildPlanFromResources
+      // and surfaces as excludedCount, not as a thrown error. Pin both the
+      // exclusion and the count so a future typeguard refactor can't
+      // silently let the bad type through.
+      const inventory: ManagedResource[] = [
+        {
+          arn: "arn:aws:backup:us-east-1:123456789012:recovery-point:abc",
+          resourceType: "AWS::Backup::Recovery-point",
+          region: "us-east-1",
+        },
+        {
+          arn: "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-abc123",
+          resourceType: "AWS::EC2::VPC",
+          region: "us-east-1",
+        },
+      ];
+      const plan = buildPlanFromResources(inventory, { region: "us-east-1" });
+      expect(plan.resources.map((r) => r.resourceType)).toEqual([
+        "AWS::EC2::VPC",
+      ]);
+      expect(plan.excludedCount).toBeGreaterThanOrEqual(1);
     });
   });
 });
