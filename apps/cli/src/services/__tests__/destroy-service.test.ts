@@ -652,9 +652,12 @@ describe("destroySingleResource", () => {
       });
 
       expect(result.success).toBe(true);
+      // 2026-04-14: SNS Topic is now in ARN_IDENTIFIED_TYPES — destroy-service
+      // passes resource.arn (full ARN) to CCAPI, not the extracted identifier.
+      // This matches CCAPI's schema (primary identifier is TopicArn).
       expect(mockDeleteResource).toHaveBeenCalledWith(
         "AWS::SNS::Topic",
-        "my-topic",
+        "arn:aws:sns:us-east-1:123456:my-topic",
       );
     });
   });
