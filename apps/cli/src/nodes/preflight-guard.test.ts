@@ -715,7 +715,19 @@ describe("preflightGuardNode", () => {
     }
   });
 
-  it("computes Lambda estimate from default memory without calling pricing API", async () => {
+  it("computes Lambda estimate from default memory — headline is the local strategy's output even when the pricing spy errors", async () => {
+    // `vi.fn()` returns undefined when called; preflight's MCP and
+    // decomposer paths both call `JSON.parse(unwrapMcpText(undefined))`
+    // which throws, and each call site catches the throw and falls
+    // back to the local pricing strategy. The test used to assert
+    // `pricingTool.invoke not called` — that was accurate before the
+    // Lambda decomposer (Story 23.3) landed; the decomposer now
+    // unconditionally emits 3 line items and calls the tool per item.
+    // Locally this somehow still squeaked by but CI caught it under
+    // `test:coverage` parallelism (~3 calls observed). Re-anchor the
+    // test on its original intent: the HEADLINE cost and preflight
+    // gate must come from the local Lambda pricing strategy, not from
+    // the MCP path or the decomposer breakdown.
     const pricingTool = {
       name: "get_pricing",
       invoke: vi.fn(),
@@ -731,7 +743,6 @@ describe("preflightGuardNode", () => {
       `${LambdaPricing.DEFAULT_MEMORY_MB}MB`,
     );
     expect(result.preflightPassed).toBe(true);
-    expect(pricingTool.invoke).not.toHaveBeenCalled();
   });
 
   it("computes Lambda estimate using MemorySize from desiredState", async () => {
