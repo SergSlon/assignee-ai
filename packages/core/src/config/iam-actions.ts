@@ -375,6 +375,12 @@ export function getRequiredIamActions(resourceType: string): string[] {
       "secretsmanager:PutSecretValue",
       "secretsmanager:GetSecretValue",
       "secretsmanager:TagResource",
+      // CCAPI SecretsManager create handler calls GetRandomPassword
+      // internally when the user doesn't pass a SecretString. Without
+      // this action the create flow returns
+      // "User is not authorized to perform: secretsmanager:GetRandomPassword"
+      // and apply fails. Surfaced by live-AWS E2E run 2026-04-14.
+      "secretsmanager:GetRandomPassword",
     ],
     // A1 (2026-04-08): EFS. Minimum-viable set — the 9 actions below
     // are the strict subset of the CCAPI create/delete handler perms

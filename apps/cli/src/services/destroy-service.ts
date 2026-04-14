@@ -943,6 +943,11 @@ export async function destroySingleResource(
       RESOURCE_TYPES.ECS_CLUSTER, // Arn
       RESOURCE_TYPES.EVENTS_RULE, // Arn
       RESOURCE_TYPES.SNS_SUBSCRIPTION, // Arn
+      // SecretsManager requires full ARN (not the extracted name). Live
+      // E2E 2026-04-14 hit: "Secret Id assignee-e2e-secret-... is not a
+      // valid ARN. Provide a full secret ARN when importing an existing
+      // secret".
+      RESOURCE_TYPES.SECRETSMANAGER_SECRET, // Id is the full ARN
     ]);
     const ccIdentifier = ARN_IDENTIFIED_TYPES.has(resourceType)
       ? resource.arn
