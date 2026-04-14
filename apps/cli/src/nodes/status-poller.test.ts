@@ -122,16 +122,16 @@ describe("statusPollerNode", () => {
     expect(mockProvisioner.getRequestStatus).toHaveBeenCalled();
   });
 
-  it("times out RDS after 15 minutes", async () => {
+  it("times out RDS after 20 minutes", async () => {
     const result = await statusPollerNode(
       makeState({
         resourceType: "AWS::RDS::DBInstance",
-        startedAt: Date.now() - 16 * 60 * 1000,
+        startedAt: Date.now() - 21 * 60 * 1000,
       }),
       mockProvisioner,
     );
     expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-    expect(result.errorMessage).toMatch(/timed out after 15 minutes/);
+    expect(result.errorMessage).toMatch(/timed out after 20 minutes/);
     expect(mockProvisioner.getRequestStatus).not.toHaveBeenCalled();
   });
 
