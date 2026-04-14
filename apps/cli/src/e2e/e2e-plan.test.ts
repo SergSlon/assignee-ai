@@ -571,6 +571,85 @@ describeE2E("E2E: SSM Parameter plan + apply + destroy", () => {
   }, 30_000);
 });
 
+// ── Story 47.5: EC2 t3.micro apply + destroy lifecycle ────────────────────
+//
+// Lambda (AC #1) and EFS (AC #3) already have apply+destroy coverage via the
+// existing lambda-with-exec-role and efs-with-vpc compound blocks. AC #2
+// (EC2 t3.micro single-resource) is the only new lifecycle block the story
+// asks for. t3.micro is free-tier-eligible (750 hrs/mo) so running this
+// under RUN_E2E=1 costs zero dollars as long as pre- and post-cleanup
+// succeed. Block uses destroyAndAssert for the teardown check, matching
+// the compound-pattern blocks.
+describeE2E("E2E: EC2 t3.micro apply + destroy", () => {
+  it("launches a t3.micro, verifies the instance-id, and destroys it", async () => {
+    const graph = createGraph(tools);
+    const threadId = crypto.randomUUID();
+    const config = { configurable: { thread_id: threadId } };
+
+    await graph.invoke(
+      {
+        userIntent: "Create an EC2 instance for e2e lifecycle testing",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.APPLY,
+        startedAt: Date.now(),
+        noWizard: true,
+        autoApprove: true,
+        projectDir: process.cwd(),
+        // Override the instance type via --set semantics. The plan-generator
+        // respects user overrides over the plugin default.
+        userOverrides: { InstanceType: "t3.micro" },
+      } as Parameters<typeof graph.invoke>[0],
+      config,
+    );
+
+    // Resume through the HITL interrupt (auto-approved)
+    let graphState = await graph.getState(config);
+    while (graphState.next.length > 0) {
+      await graph.invoke(null, config);
+      graphState = await graph.getState(config);
+    }
+    const finalState = graphState.values as AgentState;
+
+    if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+      console.error("EC2 E2E FAILED:", {
+        status: finalState.executionStatus,
+        error: finalState.errorMessage,
+        preflightPassed: finalState.preflightPassed,
+      });
+    }
+
+    expect(finalState.resourceType).toBe("AWS::EC2::Instance");
+    expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
+    // EC2 instance IDs are always `i-<17-hex-chars>` (legacy `i-<8-hex>`
+    // pre-2016 is long deprecated). Anchoring on the 17-char modern form
+    // so a regression that returns the request token / ARN instead of
+    // the bare instance ID trips the assertion.
+    expect(finalState.resourceArn).toMatch(/^i-[0-9a-f]{17}$/);
+    // t3.micro with default 8 GB gp3 EBS runs $0.0104/hr compute +
+    // $0.08/GB-mo storage — headline cost should surface ~$7-8/mo,
+    // never "N/A" (would indicate pricing regression).
+    expect(finalState.estimatedMonthlyCost).not.toBe("N/A");
+    expect(finalState.estimatedMonthlyCost).toBeTruthy();
+
+    // destroyAndAssert exercises the full bulk-destroy pipeline (same
+    // code path as `assignee destroy --all`): tag discovery, tier
+    // ordering, per-resource destroy. Required per the story's
+    // "destroy removes the instance" AC.
+    const completed =
+      finalState.completedResources ??
+      ([
+        {
+          resourceArn: finalState.resourceArn,
+          resourceType: "AWS::EC2::Instance",
+        },
+      ] as Array<{ resourceArn?: string; resourceType: string }>);
+    await destroyAndAssert(completed);
+    // Story AC: "total wall-clock < 5 minutes" — the vitest timeout
+    // below enforces a hard 300s cap. t3.micro typically launches in
+    // ~45s and terminates in ~30-60s so this leaves comfortable margin.
+  }, 300_000);
+});
+
 describeE2E("E2E: Epic 35 — Actionable Findings", () => {
   it("all findings have propertyPath set (Story 35.5)", async () => {
     const graph = createGraph(tools);
