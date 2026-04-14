@@ -757,6 +757,205 @@ describeE2E("E2E: RDS db.t3.micro apply + destroy (time-boxed)", () => {
   }, 600_000);
 });
 
+// ── Story 47.3: Free-tier apply+destroy lifecycle for 12 resources ────────
+//
+// Each block below runs the full `plan → apply (autoApprove) → verify →
+// destroy` cycle against a single free-tier resource. Together they cover
+// the cheapest lane of the resource plugin catalog so the E2E suite
+// exercises every tier without the cost footprint of RDS / NAT / EC2.
+//
+// Helper extracted to avoid 12× boilerplate — pure `describeE2E` wrapper
+// that shares HITL interrupt-resume loop, resourceArn regex assertion,
+// and destroyAndAssert cleanup across all blocks. Each caller only
+// supplies the intent, expected resourceType, resourceArn regex, and
+// optional userOverrides.
+interface FreeTierLifecycleCase {
+  /** vitest describe block label */
+  label: string;
+  /** natural-language userIntent sent to the graph */
+  userIntent: string;
+  /** expected state.resourceType after apply */
+  resourceType: string;
+  /** regex asserted against finalState.resourceArn */
+  arnRegex: RegExp;
+  /** optional userOverrides (e.g. wizard-injected field values) */
+  userOverrides?: Record<string, unknown>;
+  /** vitest timeout (ms). Defaults to 120s — most free-tier resources
+   *  apply in 10-30s; CloudWatch Alarm and EventBridge Rule can take
+   *  up to 60s. 120s leaves headroom without encouraging flakes. */
+  timeoutMs?: number;
+  /**
+   * Optional per-case escape hatch for non-"N/A" cost assertion. Some
+   * free-tier resources legitimately report "Free" or "N/A" because no
+   * pricing strategy exists (e.g. IAM Role is authoritatively Free).
+   */
+  skipCostAssertion?: boolean;
+}
+
+async function runFreeTierLifecycle(
+  kase: FreeTierLifecycleCase,
+): Promise<void> {
+  const graph = createGraph(tools);
+  const threadId = crypto.randomUUID();
+  const config = { configurable: { thread_id: threadId } };
+
+  await graph.invoke(
+    {
+      userIntent: kase.userIntent,
+      runId: crypto.randomUUID(),
+      executionMode: ExecutionMode.APPLY,
+      startedAt: Date.now(),
+      noWizard: true,
+      autoApprove: true,
+      projectDir: process.cwd(),
+      ...(kase.userOverrides ? { userOverrides: kase.userOverrides } : {}),
+    } as Parameters<typeof graph.invoke>[0],
+    config,
+  );
+
+  let graphState = await graph.getState(config);
+  while (graphState.next.length > 0) {
+    await graph.invoke(null, config);
+    graphState = await graph.getState(config);
+  }
+  const finalState = graphState.values as AgentState;
+
+  if (finalState.executionStatus !== ExecutionStatus.SUCCESS) {
+    console.error(`${kase.label} FAILED:`, {
+      status: finalState.executionStatus,
+      error: finalState.errorMessage,
+      preflightPassed: finalState.preflightPassed,
+      resourcePattern: finalState.resourcePattern?.patternId,
+    });
+  }
+
+  expect(finalState.resourceType).toBe(kase.resourceType);
+  expect(finalState.executionStatus).toBe(ExecutionStatus.SUCCESS);
+  expect(finalState.resourceArn).toMatch(kase.arnRegex);
+  if (!kase.skipCostAssertion) {
+    expect(finalState.estimatedMonthlyCost).toBeTruthy();
+  }
+
+  const completed =
+    finalState.completedResources ??
+    ([
+      {
+        resourceArn: finalState.resourceArn,
+        resourceType: finalState.resourceType,
+      },
+    ] as Array<{ resourceArn?: string; resourceType: string }>);
+  await destroyAndAssert(completed);
+}
+
+const FREE_TIER_LIFECYCLE_CASES: FreeTierLifecycleCase[] = [
+  {
+    label: "E2E: S3 Bucket apply + destroy",
+    userIntent: `Create an S3 bucket named assignee-e2e-s3-${Date.now()} for test storage`,
+    resourceType: "AWS::S3::Bucket",
+    // S3 bucket identifier is the bucket name, ARN is arn:aws:s3:::<name>.
+    // Accept either because arn-builder may surface either shape.
+    arnRegex: /^(arn:aws[\w-]*:s3:::[a-z0-9.\-]{3,63}|[a-z0-9.\-]{3,63})$/,
+  },
+  {
+    label: "E2E: IAM Role apply + destroy",
+    userIntent: `Create an IAM role named assignee-e2e-role-${Date.now()} for Lambda execution`,
+    resourceType: "AWS::IAM::Role",
+    arnRegex:
+      /^(arn:aws[\w-]*:iam::\d+:role\/[A-Za-z0-9+=,.@_\-/]+|[A-Za-z0-9+=,.@_\-]+)$/,
+    skipCostAssertion: true, // IAM Role is authoritatively Free — headline is "Free", not numeric
+  },
+  {
+    label: "E2E: SQS Queue apply + destroy",
+    userIntent: `Create an SQS queue named assignee-e2e-sqs-${Date.now()} for message processing`,
+    resourceType: "AWS::SQS::Queue",
+    // SQS queue identifier is the URL. ARN may also surface via arn-builder.
+    arnRegex:
+      /^(https:\/\/sqs\.[a-z0-9-]+\.amazonaws\.com\/\d+\/[A-Za-z0-9_-]+|arn:aws[\w-]*:sqs:[a-z0-9-]+:\d+:[A-Za-z0-9_-]+)$/,
+  },
+  {
+    label: "E2E: DynamoDB Table apply + destroy",
+    userIntent: `Create a DynamoDB table named assignee-e2e-ddb-${Date.now()} with partition key id of type S`,
+    resourceType: "AWS::DynamoDB::Table",
+    arnRegex:
+      /^(arn:aws[\w-]*:dynamodb:[a-z0-9-]+:\d+:table\/[A-Za-z0-9_.\-]+|[A-Za-z0-9_.\-]+)$/,
+  },
+  {
+    label: "E2E: CloudWatch Alarm apply + destroy",
+    userIntent: `Create a CloudWatch alarm named assignee-e2e-alarm-${Date.now()} that fires when EC2 CPUUtilization exceeds 80 for 5 minutes`,
+    resourceType: "AWS::CloudWatch::Alarm",
+    arnRegex:
+      /^(arn:aws[\w-]*:cloudwatch:[a-z0-9-]+:\d+:alarm:[A-Za-z0-9._\-]+|[A-Za-z0-9._\-]+)$/,
+  },
+  {
+    label: "E2E: SecretsManager Secret apply + destroy",
+    userIntent: `Create a Secrets Manager secret named assignee-e2e-secret-${Date.now()} for database credentials`,
+    resourceType: "AWS::SecretsManager::Secret",
+    arnRegex:
+      /^(arn:aws[\w-]*:secretsmanager:[a-z0-9-]+:\d+:secret:[A-Za-z0-9/_+=.@\-]+|[A-Za-z0-9/_+=.@\-]+)$/,
+    skipCostAssertion: true, // SecretsManager has $0.40/secret/mo but free tier eligible 1st month — headline may show $0.40
+  },
+  {
+    label: "E2E: SNS Topic apply + destroy",
+    userIntent: `Create an SNS topic named assignee-e2e-sns-${Date.now()} for alerts`,
+    resourceType: "AWS::SNS::Topic",
+    arnRegex: /^arn:aws[\w-]*:sns:[a-z0-9-]+:\d+:[A-Za-z0-9_.\-]+$/,
+  },
+  {
+    label: "E2E: ECR Repository apply + destroy",
+    userIntent: `Create an ECR repository named assignee-e2e-ecr-${Date.now()} for docker images`,
+    resourceType: "AWS::ECR::Repository",
+    arnRegex:
+      /^(arn:aws[\w-]*:ecr:[a-z0-9-]+:\d+:repository\/[a-z0-9_.\-/]+|[a-z0-9_.\-/]+)$/,
+  },
+  {
+    label: "E2E: ECS Cluster apply + destroy",
+    userIntent: `Create an ECS cluster named assignee-e2e-ecs-${Date.now()}. Just the cluster control plane — no services or tasks.`,
+    resourceType: "AWS::ECS::Cluster",
+    arnRegex:
+      /^(arn:aws[\w-]*:ecs:[a-z0-9-]+:\d+:cluster\/[A-Za-z0-9_\-]+|[A-Za-z0-9_\-]+)$/,
+  },
+  {
+    label: "E2E: CloudWatch LogGroup apply + destroy",
+    userIntent: `Create a CloudWatch log group named /aws/assignee/e2e-${Date.now()}`,
+    resourceType: "AWS::Logs::LogGroup",
+    arnRegex:
+      /^(arn:aws[\w-]*:logs:[a-z0-9-]+:\d+:log-group:[A-Za-z0-9/_.#\-]+:\*?|[A-Za-z0-9/_.#\-]+)$/,
+  },
+  {
+    label: "E2E: EventBridge Rule apply + destroy",
+    userIntent: `Create an EventBridge rule named assignee-e2e-rule-${Date.now()} that runs every 1 hour`,
+    resourceType: "AWS::Events::Rule",
+    arnRegex:
+      /^(arn:aws[\w-]*:events:[a-z0-9-]+:\d+:rule\/[A-Za-z0-9_.\-/]+|[A-Za-z0-9_.\-]+)$/,
+  },
+  {
+    label: "E2E: KMS Key apply + destroy (schedule deletion)",
+    userIntent: `Create a customer-managed KMS encryption key for assignee e2e test ${Date.now()}`,
+    resourceType: "AWS::KMS::Key",
+    // KMS KeyId is a UUID; the full ARN is arn:aws:kms:<region>:<account>:key/<uuid>.
+    arnRegex:
+      /^(arn:aws[\w-]*:kms:[a-z0-9-]+:\d+:key\/[0-9a-f-]{36}|[0-9a-f-]{36})$/,
+    // KMS ScheduleKeyDeletion has a 7-day minimum waiting period — the
+    // CCAPI delete call returns success immediately (schedules deletion)
+    // but the key stays in PendingDeletion for 7 days. destroyAndAssert
+    // only fails on "this run's resources still present", which
+    // PendingDeletion satisfies (not active), so the assertion passes.
+    timeoutMs: 180_000,
+  },
+];
+
+for (const kase of FREE_TIER_LIFECYCLE_CASES) {
+  describeE2E(kase.label, () => {
+    it(
+      `applies and destroys the resource`,
+      async () => {
+        await runFreeTierLifecycle(kase);
+      },
+      kase.timeoutMs ?? 120_000,
+    );
+  });
+}
+
 describeE2E("E2E: Epic 35 — Actionable Findings", () => {
   it("all findings have propertyPath set (Story 35.5)", async () => {
     const graph = createGraph(tools);
