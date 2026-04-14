@@ -1028,9 +1028,15 @@ export async function destroySingleResource(
         const schemeMatch =
           resource.arn.match(/loadbalancer\/(app|net|gwy)\//) ??
           resource.identifier.match(/^(app|net|gwy)\//);
-        const scheme = schemeMatch?.[1] ?? "app";
+        // Edge-hunter M3: the prior `?? "app"` silently masked future
+        // ELBv2 schemes by defaulting to ALB-shaped ENI filters.
+        // Fail closed instead: null scheme skips the drain poll and
+        // falls through to the 60s blind-sleep fallback below, which
+        // is correct behaviour for an unknown scheme (we can't filter
+        // for ENIs we don't know how to identify).
+        const scheme = schemeMatch?.[1] ?? null;
 
-        if (lbName) {
+        if (lbName && scheme) {
           for (
             let attempt = 0;
             attempt < ALB_ENI_DRAIN_MAX_ATTEMPTS;
