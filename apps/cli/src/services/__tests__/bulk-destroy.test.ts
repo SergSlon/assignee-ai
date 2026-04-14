@@ -808,7 +808,10 @@ describe("BulkDestroyService — buildPlanFromResources", () => {
       // and surfaces as excludedCount, not as a thrown error. Pin both the
       // exclusion and the count so a future typeguard refactor can't
       // silently let the bad type through.
-      const inventory: ManagedResource[] = [
+      // buildPlanFromResources accepts the raw RGTA-shaped triple
+      // (arn / resourceType / region) and synthesises identifier + tier
+      // internally — we don't need to provide them here.
+      const inventory = [
         {
           arn: "arn:aws:backup:us-east-1:123456789012:recovery-point:abc",
           resourceType: "AWS::Backup::Recovery-point",
