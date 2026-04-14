@@ -70,6 +70,7 @@ export {
   MARKER_PREFIX,
   MARKER_SUFFIX,
   MARKER_PATTERN,
+  MARKER_PATTERN_GLOBAL,
   markerRef,
   markerGetAtt,
   markerAz,

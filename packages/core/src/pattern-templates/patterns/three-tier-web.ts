@@ -387,11 +387,14 @@ export const threeTierWebPattern: ArchitecturePattern = {
       Engine: ResourceDefault.RDS_ENGINE_POSTGRES,
       MasterUsername: "appuser",
       // Placeholder password — user MUST override via --set before apply.
-      // The CLI's preflight-guard hard-rejects any plan whose
+      // The CLI's default apply path hard-rejects any plan whose
       // MasterUserPassword is still this sentinel (see
       // detectSentinelPassword in apps/cli/src/nodes/preflight-guard.ts),
-      // so the value below can never reach AWS by accident. Sourced from
-      // the shared constant so the guard and the template can never drift.
+      // which closes the "forgot to --set" foot-gun. Direct-apply paths
+      // that bypass preflight (e.g. a future cached-plan feature) would
+      // not be protected, so plan-time rejection is the guarantee —
+      // not a universal one. Sourced from the shared constant so the
+      // guard and the template can never drift.
       MasterUserPassword: RDS_PLACEHOLDER_PASSWORD,
       DBInstanceClass: "db.t3.micro",
       AllocatedStorage: "20",

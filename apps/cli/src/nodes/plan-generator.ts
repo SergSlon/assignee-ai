@@ -17,6 +17,7 @@ import {
   AwsDefault,
   parseMarker,
   MARKER_PREFIX,
+  MARKER_PATTERN_GLOBAL,
   type ProvisionRecord,
   type FailureRecord,
   type ResourceResult,
@@ -519,9 +520,18 @@ function resolvePlaceholderMarkers(
     if (parsed) {
       return resolveSinglePlaceholder(parsed);
     }
-    // Embedded markers: replace each token in the string
+    // Embedded markers: replace each token in the string. Regex is
+    // imported from @assignee/core so this call site and resolveString
+    // share one source of truth — architect WARNING #6 (duplicate
+    // regex) from .agents/reviews/architect-expert-e2e-fixes.md.
     if (!value.includes(MARKER_PREFIX)) return value;
-    const markerRegex = /__ASSIGNEE_(REF|GETATT|AZ|REGION)_?[^\s]*?__/g;
+    // Spawn a per-call RegExp from the exported global pattern so each
+    // invocation gets its own lastIndex state (shared stateful regexes
+    // trip up `replace` callers that run concurrently).
+    const markerRegex = new RegExp(
+      MARKER_PATTERN_GLOBAL.source,
+      MARKER_PATTERN_GLOBAL.flags,
+    );
     return value.replace(markerRegex, (token) => {
       const p = parseMarker(token);
       return p ? resolveSinglePlaceholder(p) : token;
@@ -589,9 +599,16 @@ export async function resolveCompoundMarkers(
     if (parsed) {
       return resolveSingleMarker(parsed, path);
     }
-    // Embedded markers: replace each __ASSIGNEE_...___ token in the string
+    // Embedded markers: replace each __ASSIGNEE_...___ token in the string.
+    // Regex is imported from @assignee/core so this and resolveValue share
+    // one source of truth (architect WARNING #6).
     if (!value.includes(MARKER_PREFIX)) return value;
-    const markerRegex = /__ASSIGNEE_(REF|GETATT|AZ|REGION)_?[^\s]*?__/g;
+    // Per-call RegExp: exec() advances lastIndex, so each invocation needs
+    // its own instance to avoid cross-call state leaks.
+    const markerRegex = new RegExp(
+      MARKER_PATTERN_GLOBAL.source,
+      MARKER_PATTERN_GLOBAL.flags,
+    );
     let result = value;
     let match: RegExpExecArray | null;
     // Collect all matches first (avoid mutating during iteration)

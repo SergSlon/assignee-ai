@@ -47,6 +47,17 @@ export function markerGetAtt(resourceId: string, attribute: string): string {
   if (!resourceId || !attribute) {
     throw new Error("markerGetAtt: resourceId and attribute must be non-empty");
   }
+  // `parseMarker` uses `lastIndexOf("_")` to split resourceId from
+  // attribute, which means the attribute segment must not contain
+  // underscores — otherwise the round-trip silently slices the attribute
+  // name. Pin this invariant at construction time so a future pattern
+  // that emits (e.g.) "Access_Key" fails loudly instead of producing an
+  // unresolvable marker at apply time.
+  if (attribute.includes("_")) {
+    throw new Error(
+      `markerGetAtt: attribute must not contain '_' (parser splits on lastIndexOf). Got ${attribute}`,
+    );
+  }
   return `${MARKER_PREFIX}GETATT_${resourceId}_${attribute}${MARKER_SUFFIX}`;
 }
 
@@ -74,8 +85,19 @@ export function markerRegion(): string {
   return `${MARKER_PREFIX}REGION${MARKER_SUFFIX}`;
 }
 
-/** Matches any assignee.ai marker token — used for detection. */
+/** Matches any assignee.ai marker token — used for bare-string detection. */
 export const MARKER_PATTERN = /__ASSIGNEE_(REF|GETATT|AZ|REGION)_?[^\s]*?__/;
+
+/**
+ * Global-flag variant of {@link MARKER_PATTERN} — used by plan-generator's
+ * `resolveValue` and `resolveString` to find every marker embedded in a
+ * longer string (e.g. `"<bucket>.s3.__ASSIGNEE_REGION__.amazonaws.com"`).
+ * Exported so the two call sites share a single source of truth; prior
+ * code duplicated the regex literal, which meant a tightening fix had to
+ * land in both places or risk drift.
+ */
+export const MARKER_PATTERN_GLOBAL =
+  /__ASSIGNEE_(REF|GETATT|AZ|REGION)_?[^\s]*?__/g;
 
 /**
  * Parses a marker string into its structured components.
