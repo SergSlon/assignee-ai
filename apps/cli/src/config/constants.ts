@@ -171,8 +171,10 @@ export const UserMessage = {
 
 // ── Destroy Polling Constants ────────────────────────────────────────────────
 
-/** Maximum number of polls before giving up on delete status. */
-export const DESTROY_MAX_POLL_ATTEMPTS = 60;
+/** Maximum number of polls before giving up on delete status.
+ * 600 × 2s = 1200s = 20 min. Accommodates RDS (5-15 min), CloudFront
+ * (10-15 min), and NAT Gateway (~3 min) deletion timings. */
+export const DESTROY_MAX_POLL_ATTEMPTS = 600;
 
 /** Delay between destroy status polls in milliseconds. */
 export const DESTROY_POLL_INTERVAL_MS = 2000;
