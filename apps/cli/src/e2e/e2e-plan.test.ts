@@ -119,8 +119,10 @@ async function destroyAndAssert(
   const failures: string[] = [];
   let lastTier = -1;
   for (const r of plan.resources) {
-    // Wait 30s at tier boundaries to let async deletes propagate
-    // (e.g. ALB ENI release before IGW detach, RDS delete before DBSubnetGroup)
+    // Wait 60s at tier boundaries to let async deletes propagate
+    // (e.g. ALB ENI release before IGW detach, RDS delete before DBSubnetGroup).
+    // QA WARNING W1 from qa-expert-e2e-fixes.md: comment previously said
+    // "30s" but code slept for 60s — align the comment to reality.
     if (r.tier > lastTier && lastTier >= 0) {
       await new Promise<void>((resolve) => setTimeout(resolve, 60_000));
     }
@@ -2541,8 +2543,11 @@ describeE2E("E2E: container-service compound apply + destroy", () => {
 
     const completed = finalState.completedResources ?? [];
 
-    // 15 resources: 9 VPC + ALB_SG + ECR + Task Role + ECS_SG + Cluster + ALB
-    expect(completed.length).toBeGreaterThanOrEqual(15);
+    // 15 resources: 9 VPC + ALB_SG + ECR + Task Role + ECS_SG + Cluster + ALB.
+    // QA WARNING W2: assert exact count so a future pattern change that
+    // drops or adds a resource trips the test instead of passing
+    // silently. Per-type coverage is verified below.
+    expect(completed.length).toBe(15);
 
     // VPC foundation
     const vpc = completed.find((c) => c.resourceType === "AWS::EC2::VPC");
@@ -2928,8 +2933,10 @@ describeE2E("E2E: three-tier-web compound apply + destroy", () => {
 
     const completed = finalState.completedResources ?? [];
 
-    // 22 resources: 14 VPC + 3 SGs + Role + DBSubnetGroup + ALB + EC2 + RDS
-    expect(completed.length).toBeGreaterThanOrEqual(22);
+    // 22 resources: 14 VPC + 3 SGs + Role + DBSubnetGroup + ALB + EC2 + RDS.
+    // QA WARNING W2: assert exact count (see container-service above for
+    // rationale). Per-type coverage is verified below.
+    expect(completed.length).toBe(22);
 
     // VPC foundation
     const vpc = completed.find((c) => c.resourceType === "AWS::EC2::VPC");
