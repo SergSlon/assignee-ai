@@ -47,7 +47,7 @@ describe("EC2::NatGateway — toCfn() emits an EIP companion when public", () =>
   const plugin = mustGet(RESOURCE_TYPES.EC2_NAT_GATEWAY);
 
   it("public connectivity → NatGateway + EIP both produced", () => {
-    expect(plugin.toCfn).toBeDefined();
+    expect(typeof plugin.toCfn).toBe("function");
     const outputs: CfnOutput[] = plugin.toCfn!({
       ConnectivityType: "public",
       SubnetId: "subnet-0a1b2c3d4e5f6789a",
@@ -92,7 +92,7 @@ describe("EC2::RouteTable — toCfn() emits a SubnetRouteTableAssociation compan
   const plugin = mustGet(RESOURCE_TYPES.EC2_ROUTE_TABLE);
 
   it("with SubnetId → RouteTable + SubnetRouteTableAssociation produced", () => {
-    expect(plugin.toCfn).toBeDefined();
+    expect(typeof plugin.toCfn).toBe("function");
     const outputs: CfnOutput[] = plugin.toCfn!({
       VpcId: "vpc-0123456789abcdef0",
       SubnetId: "subnet-0a1b2c3d4e5f6789a",
@@ -120,7 +120,7 @@ describe("ECS::Cluster — companionResources() emits a LogGroup", () => {
   const plugin = mustGet(RESOURCE_TYPES.ECS_CLUSTER);
 
   it("with ClusterName → LogGroup is generated under /ecs/<name>", () => {
-    expect(plugin.companionResources).toBeDefined();
+    expect(typeof plugin.companionResources).toBe("function");
     const outputs = plugin.companionResources!({
       ClusterName: "my-test-cluster",
     });
