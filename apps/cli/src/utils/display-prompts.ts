@@ -203,8 +203,11 @@ export async function renderOptionPrompt(
         { value: OTHER_SENTINEL, label: "Other \u2014 enter manually" },
         { value: HELP_SENTINEL, label: "\u2753 ? \u2014 explain this field" },
       ];
-      // Use searchable autocomplete for large option lists (>10 items)
-      if (enumOptions.length > 12) {
+      // Wave-2 P1 (team-C #14): policy is ">10" but threshold was off-by-two
+      // at 12, so 11-12 option lists (e.g., 11-entry EC2 InstanceType
+      // shortlist) rendered as a bare `select` without search. Lowered to
+      // match `feedback_long_lists_ux` (>10 → filter/search/autocomplete).
+      if (enumOptions.length > 10) {
         result = await clack.autocomplete({
           message: `${question.label} (type to search)`,
           options: enumOptions,
@@ -313,7 +316,8 @@ export async function renderOptionPrompt(
         { value: OTHER_SENTINEL, label: "Other \u2014 enter manually" },
       ];
       // Use searchable autocomplete multiselect for large lists
-      if (multiOptions.length > 12) {
+      // (Wave-2 P1: aligned with >10 policy, see note above)
+      if (multiOptions.length > 10) {
         result = await clack.autocompleteMultiselect({
           message: `${question.label} (type to search)`,
           options: multiOptions,

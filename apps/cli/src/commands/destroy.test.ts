@@ -287,10 +287,10 @@ describe("assignee destroy", () => {
     });
   });
 
-  describe("confirmation prompt", () => {
-    it('exact "yes" input proceeds with delete', async () => {
+  describe("confirmation prompt (typed-name — Wave-2 P1-6)", () => {
+    it("exact identifier match proceeds with delete", async () => {
       mockResolveResource.mockResolvedValue(mockResource);
-      mockText.mockResolvedValue("yes");
+      mockText.mockResolvedValue("test-bucket");
       mockDestroySingleResource.mockResolvedValue({
         success: true,
         resourceType: "AWS::S3::Bucket",
@@ -300,6 +300,22 @@ describe("assignee destroy", () => {
 
       await destroyAction("test-bucket", {});
       expect(stdoutOutput).toContain("Resource destroyed");
+      // Verify the prompt message now quotes the identifier, not "yes"
+      expect(mockText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining("'test-bucket'"),
+        }),
+      );
+    });
+
+    it('legacy "yes" input aborts (typed-name gate is strict)', async () => {
+      mockResolveResource.mockResolvedValue(mockResource);
+      mockText.mockResolvedValue("yes");
+
+      await expect(destroyAction("test-bucket", {})).rejects.toThrow(
+        "Destroy cancelled.",
+      );
+      expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
     });
 
     it('"y" input aborts', async () => {
@@ -312,19 +328,9 @@ describe("assignee destroy", () => {
       expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
     });
 
-    it('"Y" input aborts', async () => {
+    it("identifier match is case-insensitive (TEST-BUCKET)", async () => {
       mockResolveResource.mockResolvedValue(mockResource);
-      mockText.mockResolvedValue("Y");
-
-      await expect(destroyAction("test-bucket", {})).rejects.toThrow(
-        "Destroy cancelled.",
-      );
-      expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
-    });
-
-    it('"YES" (uppercase) is accepted — confirmation is case-insensitive', async () => {
-      mockResolveResource.mockResolvedValue(mockResource);
-      mockText.mockResolvedValue("YES");
+      mockText.mockResolvedValue("TEST-BUCKET");
       mockDestroySingleResource.mockResolvedValue({
         success: true,
         identifier: mockResource.identifier,
@@ -335,9 +341,9 @@ describe("assignee destroy", () => {
       expect(mockDestroySingleResource).toHaveBeenCalled();
     });
 
-    it('"Yes" (mixed case) is accepted', async () => {
+    it("identifier match is case-insensitive (Test-Bucket)", async () => {
       mockResolveResource.mockResolvedValue(mockResource);
-      mockText.mockResolvedValue("Yes");
+      mockText.mockResolvedValue("Test-Bucket");
       mockDestroySingleResource.mockResolvedValue({
         success: true,
         identifier: mockResource.identifier,
@@ -348,9 +354,9 @@ describe("assignee destroy", () => {
       expect(mockDestroySingleResource).toHaveBeenCalled();
     });
 
-    it('whitespace-padded "yes" is accepted (trimmed)', async () => {
+    it("whitespace-padded identifier is accepted (trimmed)", async () => {
       mockResolveResource.mockResolvedValue(mockResource);
-      mockText.mockResolvedValue("  yes  ");
+      mockText.mockResolvedValue("  test-bucket  ");
       mockDestroySingleResource.mockResolvedValue({
         success: true,
         identifier: mockResource.identifier,
@@ -369,6 +375,33 @@ describe("assignee destroy", () => {
         "Destroy cancelled.",
       );
       expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
+    });
+
+    it("wrong identifier aborts (catches copy-paste errors)", async () => {
+      mockResolveResource.mockResolvedValue(mockResource);
+      mockText.mockResolvedValue("other-bucket");
+
+      await expect(destroyAction("test-bucket", {})).rejects.toThrow(
+        "Destroy cancelled.",
+      );
+      expect(mockOutro).toHaveBeenCalledWith("Destroy cancelled.");
+    });
+
+    it("falls back to last ARN segment when identifier is empty", async () => {
+      const arnOnlyResource = {
+        ...mockResource,
+        identifier: "",
+      };
+      mockResolveResource.mockResolvedValue(arnOnlyResource);
+      mockText.mockResolvedValue("test-bucket");
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        identifier: "",
+        resourceType: mockResource.resourceType,
+      });
+
+      await destroyAction("test-bucket", {});
+      expect(mockDestroySingleResource).toHaveBeenCalled();
     });
 
     it("empty string input aborts", async () => {

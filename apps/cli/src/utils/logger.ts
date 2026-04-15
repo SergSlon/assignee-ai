@@ -85,6 +85,14 @@ export const LOG_ACTIONS = {
    * why a given resource wasn't deleted.
    */
   CCAPI_TYPE_DROPPED: "ccapi_type_dropped",
+  /**
+   * Wave 3 F9 P2-3b: emitted by billing.ts when a Billing MCP tool invocation
+   * or JSON parse throws. Previously these failures fell into bare `catch {}`
+   * blocks and were silently swallowed (H19 silent-error-drop pattern). Now
+   * logged at warn level so users running with --verbose can diagnose why
+   * cost data is missing without crashing the plan/apply flow.
+   */
+  BILLING_MCP_QUERY_FAILED: "billing_mcp_query_failed",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];
