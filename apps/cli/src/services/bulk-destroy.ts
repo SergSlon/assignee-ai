@@ -165,8 +165,22 @@ const IAM_TYPE_PREFIX = "AWS::IAM::";
 // so existing installations are still protected during the upgrade
 // window. The trailing `$` anchor means Clone/Backup suffixes are
 // still NOT protected — substring spoofing requires an exact match.
+//
+// W5-F3 L4 (2026-04-14, R3-D P3): tightened the Bedrock arm. The
+// previous `Bedrock\w*` subpattern allowed ANY word-char suffix,
+// i.e. `AssigneeBedrockEvilUser` would have landed in the allowlist
+// and evaded `--include-iam` sweeps. An attacker with write access
+// to IAM could squat the allowlist namespace to pin a persistence
+// role against the operator's own destroy broom. Tightened to an
+// explicit whitelist of known Bedrock role suffixes —
+// `BedrockLoggingRole` is the only one `assignee setup` creates
+// today; new ones must be added here intentionally, NOT absorbed
+// silently by `\w*`. Anchors (`^`, `$`) already provide exact-name
+// match on the ARN's last `/` segment; see test suite for coverage
+// of `AssigneeOperator-evil` / `AssigneeOperator2` / `bedrock-evil`
+// rejection paths.
 const ASSIGNEE_INFRA_NAME_PATTERN =
-  /^Assignee(Ai)?(Operator|Reader|Auditor|Bedrock\w*)?(Services[AB]?)?(Policy|Role|User|Group)?$/;
+  /^(?:Assignee(?:Ai)?(?:Operator|Reader|Auditor)?(?:Services[AB]?)?(?:Policy|Role|User|Group)?|AssigneeAiBedrockLoggingRole)$/;
 
 /**
  * Returns true when the given ARN points at one of assignee.ai's own

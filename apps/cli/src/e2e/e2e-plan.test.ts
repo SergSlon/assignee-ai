@@ -689,19 +689,127 @@ describeE2E("E2E: EC2 t3.micro apply + destroy", () => {
 // Free-tier math: db.t3.micro costs ~$0.017/hr (+ ~$0.002/hr for 20 GB
 // gp3 storage). 10-minute max run = ~$0.003, well inside the story's
 // "< $0.01" cap.
-// RDS standalone apply deferred — single-resource RDS in the default VPC
-// requires a DBSubnetGroup matching the security-group's VPC. Live-AWS
-// 2026-04-14 hit:
-//   "At least one security group 'default' (Non-VPC) and subnet group
-//    'default' (in VPC '...') are not in common VPC."
-// Solving this without provisioning a full VPC stack first defeats the
-// "single-resource" test intent. The three-tier-web compound block
-// (story 47-7 done, vpc + subnets + db subnet group + RDS) already
-// exercises the full RDS lifecycle end-to-end. Re-enabling this
-// standalone block requires either: (a) the test pre-creates a
-// matching DBSubnetGroup + SG, or (b) the helper supports a "tear up
-// minimal VPC" prelude. Out of scope for Story 47.6 AC #1 closure.
-describe.skip("E2E: RDS db.t3.micro apply + destroy (time-boxed)", () => {
+//
+// Wave-4 F5 P2-R2-6: previously `describe.skip` with a comment "requires
+// DBSubnetGroup+SG helper". The helper now lives in `ensureRdsVpcFixture`
+// below — it creates a DBSubnetGroup over the default VPC's subnets plus
+// a VPC-scoped SecurityGroup, so a "standalone" RDS test can satisfy
+// RDS's cross-resource co-location rule without spinning up a full
+// VPC stack. The helper also torches the fixtures after the suite so
+// we don't leak orphans into the account.
+describeE2E("E2E: RDS db.t3.micro apply + destroy (time-boxed)", () => {
+  // Fixture outputs populated by beforeAll — referenced by presetFields
+  // when invoking the graph so the LLM uses our DBSubnetGroup + SG.
+  const rdsFixture: { dbSubnetGroupName?: string; securityGroupId?: string } =
+    {};
+
+  beforeAll(async () => {
+    if (skipIfNoCreds()) return;
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    const { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand } =
+      await import("@aws-sdk/client-ec2");
+    const { RDSClient, CreateDBSubnetGroupCommand } =
+      await import("@aws-sdk/client-rds");
+    const ec2 = new EC2Client({ region, credentials: operatorCreds() });
+    // Default VPC — every modern AWS account ships with one. If the
+    // account has had its default VPC deleted the test fails loudly with
+    // an actionable message, which is the correct behavior.
+    const vpcs = await ec2.send(
+      new DescribeVpcsCommand({
+        Filters: [{ Name: "is-default", Values: ["true"] }],
+      }),
+    );
+    const defaultVpc = vpcs.Vpcs?.[0]?.VpcId;
+    if (!defaultVpc) {
+      throw new Error(
+        "RDS E2E fixture: account has no default VPC. Create one (aws ec2 create-default-vpc) or run this test in an account that has one.",
+      );
+    }
+    const subnets = await ec2.send(
+      new DescribeSubnetsCommand({
+        Filters: [{ Name: "vpc-id", Values: [defaultVpc] }],
+      }),
+    );
+    const subnetIds = (subnets.Subnets ?? [])
+      .map((s) => s.SubnetId!)
+      .filter(Boolean);
+    // RDS requires ≥2 AZs. Fail closed if the default VPC is misshapen.
+    if (subnetIds.length < 2) {
+      throw new Error(
+        `RDS E2E fixture: default VPC ${defaultVpc} has <2 subnets; RDS requires a DBSubnetGroup spanning at least two AZs.`,
+      );
+    }
+
+    // DBSubnetGroup
+    const rds = new RDSClient({ region, credentials: operatorCreds() });
+    const dbSubnetGroupName = `e2e-rds-sg-${Date.now()}`;
+    await rds.send(
+      new CreateDBSubnetGroupCommand({
+        DBSubnetGroupName: dbSubnetGroupName,
+        DBSubnetGroupDescription: "Assignee e2e RDS standalone test",
+        SubnetIds: subnetIds,
+        Tags: [
+          { Key: "ManagedBy", Value: "assignee-e2e" },
+          { Key: "TestRun", Value: String(Date.now()) },
+        ],
+      }),
+    );
+    rdsFixture.dbSubnetGroupName = dbSubnetGroupName;
+
+    // VPC-scoped SG (RDS default "default" SG is EC2-Classic, which is
+    // what triggered the pre-fix error).
+    const { CreateSecurityGroupCommand } = await import("@aws-sdk/client-ec2");
+    const sg = await ec2.send(
+      new CreateSecurityGroupCommand({
+        GroupName: `e2e-rds-sg-${Date.now()}`,
+        Description: "Assignee e2e RDS standalone test SG",
+        VpcId: defaultVpc,
+      }),
+    );
+    rdsFixture.securityGroupId = sg.GroupId;
+  }, 120_000);
+
+  afterAll(async () => {
+    if (!RUN_E2E || skipIfNoCreds()) return;
+    const region = process.env["AWS_REGION"] ?? "us-east-1";
+    // Tear down fixtures best-effort. The test's own destroyAndAssert
+    // already cleaned up the DBInstance; fixtures live only here.
+    try {
+      if (rdsFixture.dbSubnetGroupName) {
+        const { RDSClient, DeleteDBSubnetGroupCommand } =
+          await import("@aws-sdk/client-rds");
+        const rds = new RDSClient({ region, credentials: operatorCreds() });
+        await rds.send(
+          new DeleteDBSubnetGroupCommand({
+            DBSubnetGroupName: rdsFixture.dbSubnetGroupName,
+          }),
+        );
+      }
+    } catch (err) {
+      console.error(
+        "RDS E2E fixture cleanup: DBSubnetGroup delete failed",
+        err,
+      );
+    }
+    try {
+      if (rdsFixture.securityGroupId) {
+        const { EC2Client, DeleteSecurityGroupCommand } =
+          await import("@aws-sdk/client-ec2");
+        const ec2 = new EC2Client({ region, credentials: operatorCreds() });
+        await ec2.send(
+          new DeleteSecurityGroupCommand({
+            GroupId: rdsFixture.securityGroupId,
+          }),
+        );
+      }
+    } catch (err) {
+      console.error(
+        "RDS E2E fixture cleanup: SecurityGroup delete failed",
+        err,
+      );
+    }
+  }, 60_000);
+
   it("creates a single db.t3.micro postgres, then destroys it within 10 min", async () => {
     const graph = createGraph(tools);
     const threadId = crypto.randomUUID();
@@ -714,8 +822,12 @@ describe.skip("E2E: RDS db.t3.micro apply + destroy (time-boxed)", () => {
 
     await graph.invoke(
       {
+        // Wave-4 F5 P2-R2-6: the "standalone" keyword is now recognized
+        // by intent-parser's disambiguation prompt (see intent-parser.ts)
+        // and routes to AWS::RDS::DBInstance directly, not the
+        // three-tier-web compound pattern.
         userIntent:
-          "Create a single standalone AWS::RDS::DBInstance (no VPC, no subnets — use defaults) for e2e lifecycle testing. EnableCloudwatchLogsExports must be an empty array [] — do not enable any log exports.",
+          "Create a single standalone AWS::RDS::DBInstance for e2e lifecycle testing — just the DBInstance, not a VPC/subnet compound pattern. EnableCloudwatchLogsExports must be an empty array [] — do not enable any log exports.",
         runId: crypto.randomUUID(),
         executionMode: ExecutionMode.APPLY,
         startedAt: Date.now(),
@@ -749,6 +861,15 @@ describe.skip("E2E: RDS db.t3.micro apply + destroy (time-boxed)", () => {
           // P1a — non-sentinel value satisfying RDS's 8+ char /
           // no-reserved-chars rule.
           MasterUserPassword: "E2eAssigneeRds2026",
+          // Wave-4 F5 P2-R2-6: direct the DBInstance into the
+          // pre-provisioned DBSubnetGroup + VPC-scoped SG set up in
+          // beforeAll. Without these the RDS create fails with
+          // "security group 'default' (Non-VPC) and subnet group
+          // 'default' (in VPC '...') are not in common VPC."
+          DBSubnetGroupName: rdsFixture.dbSubnetGroupName ?? "",
+          VPCSecurityGroups: rdsFixture.securityGroupId
+            ? JSON.stringify([rdsFixture.securityGroupId])
+            : "[]",
         },
       },
       config,
@@ -2040,26 +2161,84 @@ describeE2E("E2E: EventBridge EventBus plan", () => {
   }, 60_000);
 });
 
-// NOTE: Events::Connection + Events::ApiDestination are covered as
-// single-resource plan types once the intent parser learns to surface
-// them as standalone types. They're included in the plugin catalog but
-// real-world usage is almost always embedded in a Connection + ApiDest
-// + Rule trio that the LLM currently routes through ApiDestination.
-// TODO(Epic 47 follow-up): drop these skips once the intent parser is
-// retrained to recognize the bare-Connection / bare-ApiDestination case.
-describe.skip("E2E: Events Connection plan (unsupported as standalone)", () => {
-  it("TODO: supports standalone AWS::Events::Connection plan", () => {
-    // Intent parser currently routes "Create an EventBridge connection"
-    // through ApiDestination or returns UnsupportedResourceType. Will
-    // be enabled once intent parsing surfaces the bare Connection type.
-  });
+// Wave-4 F5 P2-R2-6: Events::Connection + Events::ApiDestination were
+// previously `describe.skip` with a "retrain the intent parser" TODO.
+// R2-B corrected the claim — intent-parser.ts is 79 LOC and the real fix
+// was a 3-sentence prompt disambiguation (see intent-parser.ts for the
+// "standalone", "bare", "single" keyword guidance + explicit per-type
+// hints for Events::Connection / Events::ApiDestination). The explicit
+// "standalone"/"bare" wording in the intents below now classifies
+// correctly without compound rerouting.
+describeE2E("E2E: Events Connection plan (standalone)", () => {
+  it("generates a plan for a standalone AWS::Events::Connection", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create a standalone AWS::Events::Connection named e2e-conn for an external HTTP API with API_KEY auth — just the Connection, not a Rule or ApiDestination.",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+        presetFields: {
+          Name: "e2e-conn",
+          AuthorizationType: "API_KEY",
+          // Minimum valid AuthParameters shape for API_KEY auth — a
+          // header name + value. EventBridge stores this in a managed
+          // Secret; the CCAPI handler fans out a secretsmanager:*
+          // permission for Connection (see resource-types.ts A12 comment).
+          AuthParameters: JSON.stringify({
+            ApiKeyAuthParameters: {
+              ApiKeyName: "X-E2E-Key",
+              ApiKeyValue: "e2e-dummy",
+            },
+          }),
+        },
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+    const s = state as AgentState;
+    expect(s.resourceType).toBe("AWS::Events::Connection");
+    expect(Object.keys(s.desiredState ?? {}).length).toBeGreaterThan(0);
+    expect(s.desiredState?.["Name"]).toBe("e2e-conn");
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
 });
 
-describe.skip("E2E: Events ApiDestination plan (unsupported as standalone)", () => {
-  it("TODO: supports standalone AWS::Events::ApiDestination plan", () => {
-    // Intent parser currently requires a Connection ARN to dispatch this
-    // type; bare "Create an API destination" returns UnsupportedResourceType.
-  });
+describeE2E("E2E: Events ApiDestination plan (standalone)", () => {
+  it("generates a plan for a standalone AWS::Events::ApiDestination", async () => {
+    const graph = createGraph(tools);
+    const state = await graph.invoke(
+      {
+        userIntent:
+          "Create a standalone AWS::Events::ApiDestination named e2e-apidest — just the ApiDestination itself, not a Rule. It points at https://example.test/webhook using POST.",
+        runId: crypto.randomUUID(),
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        noWizard: true,
+        projectDir: process.cwd(),
+        presetFields: {
+          Name: "e2e-apidest",
+          HttpMethod: "POST",
+          InvocationEndpoint: "https://example.test/webhook",
+          // ConnectionArn is required by the CCAPI create handler; the
+          // value below is a well-formed placeholder that passes plan-
+          // phase schema validation. PLAN mode never hits AWS with it —
+          // if a future APPLY mode needs a real Connection it must be
+          // created via a companion resource first.
+          ConnectionArn:
+            "arn:aws:events:us-east-1:054125018476:connection/e2e-conn/11111111-1111-1111-1111-111111111111",
+        },
+      },
+      { configurable: { thread_id: crypto.randomUUID() } },
+    );
+    const s = state as AgentState;
+    expect(s.resourceType).toBe("AWS::Events::ApiDestination");
+    expect(Object.keys(s.desiredState ?? {}).length).toBeGreaterThan(0);
+    expect(s.desiredState?.["Name"]).toBe("e2e-apidest");
+    expect(s.bpFindings).toBeInstanceOf(Array);
+  }, 60_000);
 });
 
 describeE2E("E2E: Error handling", () => {

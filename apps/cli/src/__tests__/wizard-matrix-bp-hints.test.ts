@@ -47,6 +47,90 @@ describe("BP hint accuracy — invariants", () => {
   // walk as soon as we clear the threshold — a regression that drops the
   // count below 21 would still be caught, but we no longer spend ~1 min
   // under coverage instrumentation walking every remaining plugin.
+  // Wave-4 F5 P2-R2 memo-invariant: R2-B visually verified that
+  // `injectBPHints` returns fresh references via `fields.map(f => ({...f,
+  // question: {...f.question, hint}}))` — nothing is mutated on the
+  // input. Bake that invariant into CI so a future refactor that swaps
+  // the map to an in-place update (e.g. `fields.forEach(f => f.question.hint = ...)`)
+  // gets caught immediately instead of silently cross-contaminating
+  // every consumer that caches the plugin's fields array.
+  it("injectBPHints does not mutate its input fields or the plugin's question object", () => {
+    // Pick a plugin known to have BPs that match field names. S3 Bucket
+    // is ideal because multiple BPs attach property_paths like
+    // "VersioningConfiguration" / "PublicAccessBlockConfiguration".
+    const plugin =
+      ALL_PLUGINS.find((p) => p.resourceType === "AWS::S3::Bucket") ??
+      ALL_PLUGINS[0]!;
+
+    // Snapshot the mutation-sensitive subset of each field (name +
+    // question.hint). ResourceField carries function values (showIf /
+    // fetcher / companionRules) that structuredClone cannot handle,
+    // so compare the flat hint-and-name projection instead — this is
+    // the surface `injectBPHints` is allowed to touch.
+    type HintSnapshot = { name: string; hint: string | undefined };
+    const snapshot = (fs: typeof plugin.commonFields): HintSnapshot[] =>
+      fs.map((f) => ({ name: f.name, hint: f.question.hint }));
+    const originalCommon = snapshot(plugin.commonFields);
+    const originalAdvanced = snapshot(plugin.advancedFields);
+
+    // Record reference identity of each field object + its question
+    // subobject. A correct implementation must return NEW objects for
+    // any field it changed AND leave the original field objects
+    // untouched.
+    const commonRefs = plugin.commonFields.map((f) => ({
+      field: f,
+      question: f.question,
+    }));
+
+    const hintedCommon = injectBPHints(
+      plugin.commonFields,
+      plugin.resourceType,
+    );
+    const hintedAdvanced = injectBPHints(
+      plugin.advancedFields,
+      plugin.resourceType,
+    );
+
+    // 1. Input arrays unchanged by reference identity of nested members.
+    expect(plugin.commonFields).toHaveLength(originalCommon.length);
+    for (let i = 0; i < plugin.commonFields.length; i++) {
+      expect(plugin.commonFields[i]).toBe(commonRefs[i]!.field);
+      expect(plugin.commonFields[i]!.question).toBe(commonRefs[i]!.question);
+    }
+
+    // 2. Hint+name projection is byte-equal to the pre-call snapshot —
+    //    proves no in-place hint mutation slipped through.
+    expect(snapshot(plugin.commonFields)).toStrictEqual(originalCommon);
+    expect(snapshot(plugin.advancedFields)).toStrictEqual(originalAdvanced);
+
+    // 3. Output returns a FRESH top-level array (never the same array
+    //    object the caller passed in). If a future refactor returns
+    //    the input array directly on the "no matching BP" fast path,
+    //    that's still correct; but for the main path it must be new.
+    //    Assert on the main plugin which we know produces matches.
+    expect(hintedCommon).not.toBe(plugin.commonFields);
+    // hintedCommon members that got new hints must be NEW objects.
+    let foundChangedField = false;
+    for (let i = 0; i < hintedCommon.length; i++) {
+      const origHint = originalCommon[i]!.hint;
+      const newHint = hintedCommon[i]!.question.hint;
+      if (newHint !== origHint) {
+        foundChangedField = true;
+        // New field object (shallow clone).
+        expect(hintedCommon[i]).not.toBe(plugin.commonFields[i]);
+        // New question object (shallow clone inside the field).
+        expect(hintedCommon[i]!.question).not.toBe(
+          plugin.commonFields[i]!.question,
+        );
+      }
+    }
+    // We expect at least one field to pick up a hint on the canonical
+    // S3 plugin — if this drops to zero it means either the BP catalog
+    // stopped matching S3 field names (regression) or the test picked
+    // the wrong canonical plugin. Either is loud and fixable.
+    expect(foundChangedField).toBe(true);
+  });
+
   it("injectBPHints actually injects hints into at least one field per plugin", () => {
     // Failsafe: if a regression made injectBPHints a no-op, the per-plugin
     // "no awareness" and "matched property_path" tests would all silently

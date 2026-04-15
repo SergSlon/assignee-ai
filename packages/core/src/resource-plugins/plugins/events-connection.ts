@@ -1,5 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
-import { ArnPrefix, KMS_ALIAS_PREFIX } from "../../config/aws-arns.js";
+import { KMS_ALIAS_PREFIX } from "../../config/aws-arns.js";
+import { isArnOfService } from "../../config/aws-partition.js";
 import type { ResourcePlugin } from "../types.js";
 import { KMS_ARN_VALIDATION_MSG } from "../shared-fields.js";
 
@@ -153,7 +154,7 @@ export const eventsConnectionPlugin: ResourcePlugin = {
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);
-          if (s.startsWith(KMS_ALIAS_PREFIX) || s.startsWith(ArnPrefix.KMS))
+          if (s.startsWith(KMS_ALIAS_PREFIX) || isArnOfService(s, "kms"))
             return undefined;
           return KMS_ARN_VALIDATION_MSG;
         },

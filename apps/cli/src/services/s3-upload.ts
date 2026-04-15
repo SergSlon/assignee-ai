@@ -14,7 +14,11 @@ import {
 } from "@aws-sdk/client-s3";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, extname } from "node:path";
-import { ConfigurationError, IamEffect } from "@assignee/core";
+import {
+  ConfigurationError,
+  IamEffect,
+  getPartitionFromRegion,
+} from "@assignee/core";
 import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 import { EnvVar } from "../constants/env-vars.js";
 import { ContentType } from "../constants/errors.js";
@@ -126,6 +130,15 @@ export async function configureBucketPolicy(
 ): Promise<void> {
   const client = createS3Client(options?.region);
 
+  // Partition-aware ARN: S3 bucket policies in GovCloud/China reject
+  // `arn:aws:` resource ARNs because IAM evaluates the partition literal
+  // against the caller's partition. Resolve from the caller's region
+  // (options.region > AWS_REGION env var) so GovCloud/China operators
+  // emit `arn:aws-us-gov:s3:::...` / `arn:aws-cn:s3:::...` policies.
+  const resolvedRegion =
+    options?.region ?? process.env[EnvVar.AWS_REGION]?.trim() ?? "";
+  const partition = getPartitionFromRegion(resolvedRegion);
+
   const policy = {
     Version: "2012-10-17",
     Statement: [
@@ -134,7 +147,7 @@ export async function configureBucketPolicy(
         Effect: IamEffect.ALLOW,
         Principal: "*",
         Action: "s3:GetObject",
-        Resource: `arn:aws:s3:::${bucketName}/*`,
+        Resource: `arn:${partition}:s3:::${bucketName}/*`,
       },
     ],
   };

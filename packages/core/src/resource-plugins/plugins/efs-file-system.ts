@@ -1,6 +1,7 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
-import { ArnPrefix, KMS_ALIAS_PREFIX } from "../../config/aws-arns.js";
+import { KMS_ALIAS_PREFIX } from "../../config/aws-arns.js";
+import { isArnOfService } from "../../config/aws-partition.js";
 import type { ResourcePlugin } from "../types.js";
 
 /**
@@ -185,7 +186,7 @@ export const efsFileSystemPlugin: ResourcePlugin = {
           if (!value) return undefined;
           const s = String(value);
           if (
-            s.startsWith(ArnPrefix.KMS) ||
+            isArnOfService(s, "kms") ||
             s.startsWith(KMS_ALIAS_PREFIX) ||
             /^[a-f0-9-]{36}$/i.test(s)
           )

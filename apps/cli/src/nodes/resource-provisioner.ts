@@ -18,6 +18,7 @@ import {
   CfnKey,
   EIP_AUTO_ALLOCATE,
   ResourceDefault,
+  isAccessDeniedError,
 } from "@assignee/core";
 import type { ProvisioningPort } from "../services/provisioning-port.js";
 import { ProvisioningErrorKind } from "../services/provisioning-port.js";
@@ -31,6 +32,7 @@ import { log, LOG_ACTIONS } from "../utils/logger.js";
 import { AWS_REGION, ASSIGNEE_DIR } from "../config/constants.js";
 import { requireAssigneeCredentials } from "../config/aws-credentials.js";
 import type { AgentState } from "../services/graph-state.js";
+import { safeCloneDesiredState } from "./plan-generator.js";
 
 function isResourceType(s: string): s is ResourceType {
   return (SUPPORTED_TYPES_ARRAY as readonly string[]).includes(s);
@@ -75,6 +77,104 @@ export function sanitizeKeyName(name: string): string {
     cleaned = "assignee_key";
   }
   return cleaned;
+}
+
+/**
+ * Best-effort cleanup for side-resources that `resourceProvisionerNode`
+ * allocates BEFORE the CloudControl `createResource` call (fresh EIPs
+ * for NAT Gateways, freshly-imported SSH key pairs for EC2 instances).
+ *
+ * When the create fails we must release them so we don't leak — but
+ * silently, since the primary failure is what the caller already
+ * reports. Any cleanup error is logged at info-level so operators can
+ * diagnose leaks without masking the real error.
+ *
+ * `eipReleased` is the set of AllocationIds freshly allocated in this
+ * invocation (pre-existing reused EIPs are deliberately excluded by
+ * the caller — see C1 comment near the EIP allocation block).
+ * `sshDeleted` is the name of an SSH key pair created by this node,
+ * or undefined if none was created.
+ */
+async function cleanupAllocatedResources(
+  state: AgentState,
+  {
+    eipReleased,
+    sshDeleted,
+  }: { eipReleased: Set<string>; sshDeleted: string | undefined },
+): Promise<void> {
+  // Release EIPs if we allocated any for NatGateway — best-effort cleanup.
+  // C1: ONLY release EIPs that were freshly allocated in this invocation.
+  // Reused EIPs (found via DescribeAddresses from a prior attempt) must
+  // survive so the NEXT retry can also reuse them — otherwise the retry
+  // loop defeats the reuse design and we leak one EIP per failure.
+  if (
+    state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
+    eipReleased.size > 0
+  ) {
+    try {
+      const { EC2Client, ReleaseAddressCommand } =
+        await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({
+        region: AWS_REGION,
+        credentials: requireAssigneeCredentials("operator"),
+      });
+      for (const freshId of eipReleased) {
+        try {
+          await ec2.send(new ReleaseAddressCommand({ AllocationId: freshId }));
+        } catch (err) {
+          // best-effort cleanup — surface so operators can diagnose leaks
+          log({
+            ts: new Date().toISOString(),
+            runId: state.runId,
+            level: "info",
+            action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+            extras: {
+              phase: "release_eip_after_failure",
+              allocationId: freshId,
+              error: formatErrorForLog(err),
+            },
+          });
+        }
+      }
+    } catch (err) {
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+        extras: {
+          phase: "release_eip_client_init_failed",
+          error: formatErrorForLog(err),
+        },
+      });
+    }
+  }
+
+  // Delete SSH key pair if we created one — best-effort cleanup
+  if (sshDeleted) {
+    try {
+      const { EC2Client, DeleteKeyPairCommand } =
+        await import("@aws-sdk/client-ec2");
+      const ec2 = new EC2Client({
+        region: AWS_REGION,
+        credentials: requireAssigneeCredentials("operator"),
+      });
+      await ec2.send(new DeleteKeyPairCommand({ KeyName: sshDeleted }));
+    } catch (err) {
+      // best-effort cleanup — surface as info so operators can diagnose key leaks
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "info",
+        action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+        extras: {
+          phase: "delete_ssh_key_after_failure",
+          sshKeyName: sshDeleted,
+          error: formatErrorForLog(err),
+        },
+      });
+    }
+  }
 }
 
 export async function resourceProvisionerNode(
@@ -146,10 +246,18 @@ export async function resourceProvisionerNode(
   // H8: shallow clone (`{...state.desiredState}`) leaves nested objects like
   // Properties.Tags / Properties.PolicyDocument / Properties.UserData shared
   // with the original state, so `injectMandatoryTags` would mutate the
-  // caller's nested arrays. Use `structuredClone` to fully isolate.
-  const desiredState: Record<string, unknown> = structuredClone(
+  // caller's nested arrays. Use `safeCloneDesiredState` to fully isolate
+  // AND enforce the plain-object contract + actionable DataCloneError hint
+  // (P1-R2-8 — same guard plan-generator uses when producing desiredState).
+  const cloneResourceId =
+    currentResource?.resourceId ??
+    currentResource?.displayName ??
+    state.resourceType ??
+    "unknown";
+  const desiredState: Record<string, unknown> = safeCloneDesiredState(
     state.desiredState,
-  ) as Record<string, unknown>;
+    cloneResourceId,
+  );
 
   // ── SDK Fallback Dispatch (Story 7.7) ────────────────────────────────────
   // Check for CCAPI gap types BEFORE the CloudControl path.
@@ -414,10 +522,11 @@ export async function resourceProvisionerNode(
         // a new EIP so the user's intent succeeds), but the log is now
         // greppable at warn level and names the remediation.
         const errMsg = err instanceof Error ? err.message : String(err);
-        const isAccessDenied =
-          errMsg.includes("not authorized") ||
-          errMsg.includes("UnauthorizedOperation") ||
-          errMsg.includes("AccessDenied");
+        // Wave 4 F2: structured classifier (err.name / err.Code /
+        // $metadata.httpStatusCode === 403). Previously a substring match
+        // on "AccessDenied" / "not authorized" which false-matched on
+        // localized error strings and on resource names.
+        const isAccessDenied = isAccessDeniedError(err);
         log({
           ts: new Date().toISOString(),
           runId: state.runId,
@@ -750,82 +859,10 @@ export async function resourceProvisionerNode(
         : createErr.kind === ProvisioningErrorKind.THROTTLED
           ? "Request throttled by AWS. Please wait and retry."
           : createErr.message;
-    // Release EIP if we allocated one for NatGateway — best-effort cleanup.
-    // C1: ONLY release EIPs that were freshly allocated in this invocation.
-    // Reused EIPs (found via DescribeAddresses from a prior attempt) must
-    // survive so the NEXT retry can also reuse them — otherwise the retry
-    // loop defeats the reuse design and we leak one EIP per failure.
-    if (
-      state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
-      freshlyAllocatedEipIds.size > 0
-    ) {
-      try {
-        const { EC2Client, ReleaseAddressCommand } =
-          await import("@aws-sdk/client-ec2");
-        const ec2 = new EC2Client({
-          region: AWS_REGION,
-          credentials: requireAssigneeCredentials("operator"),
-        });
-        for (const freshId of freshlyAllocatedEipIds) {
-          try {
-            await ec2.send(
-              new ReleaseAddressCommand({ AllocationId: freshId }),
-            );
-          } catch (err) {
-            // best-effort cleanup — surface so operators can diagnose leaks
-            log({
-              ts: new Date().toISOString(),
-              runId: state.runId,
-              level: "info",
-              action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
-              extras: {
-                phase: "release_eip_after_failure",
-                allocationId: freshId,
-                error: formatErrorForLog(err),
-              },
-            });
-          }
-        }
-      } catch (err) {
-        log({
-          ts: new Date().toISOString(),
-          runId: state.runId,
-          level: "info",
-          action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
-          extras: {
-            phase: "release_eip_client_init_failed",
-            error: formatErrorForLog(err),
-          },
-        });
-      }
-    }
-    // Delete SSH key pair if we created one — best-effort cleanup
-    if (sshKeyCreatedName) {
-      try {
-        const { EC2Client, DeleteKeyPairCommand } =
-          await import("@aws-sdk/client-ec2");
-        const ec2 = new EC2Client({
-          region: AWS_REGION,
-          credentials: requireAssigneeCredentials("operator"),
-        });
-        await ec2.send(
-          new DeleteKeyPairCommand({ KeyName: sshKeyCreatedName }),
-        );
-      } catch (err) {
-        // best-effort cleanup — surface as info so operators can diagnose key leaks
-        log({
-          ts: new Date().toISOString(),
-          runId: state.runId,
-          level: "info",
-          action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
-          extras: {
-            phase: "delete_ssh_key_after_failure",
-            sshKeyName: sshKeyCreatedName,
-            error: formatErrorForLog(err),
-          },
-        });
-      }
-    }
+    await cleanupAllocatedResources(state, {
+      eipReleased: freshlyAllocatedEipIds,
+      sshDeleted: sshKeyCreatedName,
+    });
 
     return {
       executionStatus: ExecutionStatus.FAILED,

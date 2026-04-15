@@ -1,6 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, CloudWatchStatistic } from "../../config/cfn-keys.js";
-import { ArnPrefix } from "../../config/aws-arns.js";
+import { isArnOfService } from "../../config/aws-partition.js";
 import type { ResourcePlugin } from "../types.js";
 
 /**
@@ -137,8 +137,8 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
           if (s.trim() === "") return undefined;
           const arns = s.split(",").map((a) => a.trim());
           for (const arn of arns) {
-            if (arn && !arn.startsWith(ArnPrefix.SNS))
-              return `Invalid SNS topic ARN: ${arn}. Must start with arn:aws:sns:`;
+            if (arn && !isArnOfService(arn, "sns"))
+              return `Invalid SNS topic ARN: ${arn}. Must be an SNS topic ARN (e.g. arn:aws:sns:<region>:<account>:<topic>)`;
           }
           return undefined;
         },
@@ -231,8 +231,8 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
           if (s.trim() === "") return undefined;
           const arns = s.split(",").map((a) => a.trim());
           for (const arn of arns) {
-            if (arn && !arn.startsWith(ArnPrefix.SNS))
-              return `Invalid SNS topic ARN: ${arn}. Must start with arn:aws:sns:`;
+            if (arn && !isArnOfService(arn, "sns"))
+              return `Invalid SNS topic ARN: ${arn}. Must be an SNS topic ARN (e.g. arn:aws:sns:<region>:<account>:<topic>)`;
           }
           return undefined;
         },
@@ -252,8 +252,8 @@ export const cloudWatchAlarmPlugin: ResourcePlugin = {
           if (s.trim() === "") return undefined;
           const arns = s.split(",").map((a) => a.trim());
           for (const arn of arns) {
-            if (arn && !arn.startsWith(ArnPrefix.SNS))
-              return `Invalid SNS topic ARN: ${arn}. Must start with arn:aws:sns:`;
+            if (arn && !isArnOfService(arn, "sns"))
+              return `Invalid SNS topic ARN: ${arn}. Must be an SNS topic ARN (e.g. arn:aws:sns:<region>:<account>:<topic>)`;
           }
           return undefined;
         },

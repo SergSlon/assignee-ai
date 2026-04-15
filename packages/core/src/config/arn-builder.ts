@@ -17,17 +17,20 @@
  */
 
 import { RESOURCE_TYPES } from "./resource-types.js";
-import { ARN_PATTERN } from "./aws-partition.js";
+import { ARN_PATTERN, getPartitionFromRegion } from "./aws-partition.js";
 
 /**
- * AWS partition detected from the region. Callers usually pass the
- * operator's region and let this helper pick the right partition so
- * GovCloud and China deployments produce valid ARNs.
+ * AWS partition detected from the region. Thin re-export of
+ * `getPartitionFromRegion` kept for backward compatibility with code
+ * that imports from `arn-builder.js`. Both return the same value
+ * (`aws`, `aws-us-gov`, `aws-cn`, `aws-iso`, `aws-iso-b`).
+ *
+ * Previously this helper inlined a 3-branch partition check that
+ * defaulted ISO regions to `aws` — silently producing wrong-partition
+ * ARNs. Wave 4 F1 consolidates both into the single source of truth.
  */
 export function partitionForRegion(region: string): string {
-  if (region.startsWith("us-gov-")) return "aws-us-gov";
-  if (region.startsWith("cn-")) return "aws-cn";
-  return "aws";
+  return getPartitionFromRegion(region);
 }
 
 /**

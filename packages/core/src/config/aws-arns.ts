@@ -1,45 +1,58 @@
 /**
- * AWS ARN prefixes and managed policy ARNs — single source of truth.
- * Use instead of raw "arn:aws:..." strings in validation and policy definitions.
+ * AWS ARN constants and managed policy ARNs — single source of truth.
+ *
+ * Validators (`startsWith(ArnPrefix.X)` pattern) were REMOVED in Wave 4
+ * because they silently rejected GovCloud, China, and ISO ARNs. All
+ * service-segment checks now go through the partition-aware
+ * `isArnOfService(value, "iam")` helper in `aws-partition.ts`.
+ *
+ * @see feedback_partition_aware_arn_matching (operator memory)
  */
-
-/** ARN prefix for validation (e.g., `value.startsWith(ArnPrefix.IAM)`) */
-export const ArnPrefix = {
-  /** Generic AWS ARN prefix */
-  AWS: "arn:aws:",
-  /** IAM policy/role/user ARNs */
-  IAM: "arn:aws:iam:",
-  /** KMS key ARNs */
-  KMS: "arn:aws:kms:",
-  /** SNS topic ARNs */
-  SNS: "arn:aws:sns:",
-  /** SQS queue ARNs */
-  SQS: "arn:aws:sqs:",
-  /** S3 bucket ARNs */
-  S3: "arn:aws:s3:",
-  /** Lambda function ARNs */
-  LAMBDA: "arn:aws:lambda:",
-  /** EC2 resource ARNs */
-  EC2: "arn:aws:ec2:",
-  /** CloudWatch Logs ARNs */
-  LOGS: "arn:aws:logs:",
-  /** Bedrock model ARNs */
-  BEDROCK: "arn:aws:bedrock:",
-} as const;
 
 /** KMS key alias prefix */
 export const KMS_ALIAS_PREFIX = "alias/" as const;
 
-/** AWS managed policy ARNs used in pattern templates and IAM configs. */
+/**
+ * AWS-managed policy ARNs. These are AWS's own policies; in IAM policy
+ * documents they use the partition of the caller's account (which
+ * CloudFormation/IAM auto-matches), but for construction we always
+ * embed the literal `arn:aws:iam::aws:policy/...` form because that IS
+ * the ARN AWS publishes for commercial. For GovCloud/China/ISO
+ * deployments, callers constructing IAM policy documents with these
+ * constants should prefer `awsManagedPolicyArn(partition, path)` below.
+ *
+ * These string constants are retained for backward compatibility with
+ * pattern templates that hardcode the commercial partition. Consumers
+ * targeting non-commercial partitions MUST use `awsManagedPolicyArn`.
+ */
 export const AwsManagedPolicy = {
   LAMBDA_BASIC_EXECUTION:
     "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
   POWER_USER_ACCESS: "arn:aws:iam::aws:policy/PowerUserAccess",
 } as const;
 
-/** Default Bedrock foundation model ARN wildcard for IAM policies. */
+/**
+ * Builds a partition-aware AWS-managed policy ARN.
+ *
+ * @example
+ *   awsManagedPolicyArn("aws-us-gov", "service-role/AWSLambdaBasicExecutionRole")
+ *     // → "arn:aws-us-gov:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+ */
+export function awsManagedPolicyArn(
+  partition: string,
+  policyPath: string,
+): string {
+  return `arn:${partition}:iam::aws:policy/${policyPath}`;
+}
+
+/**
+ * Default Bedrock foundation model ARN wildcard for IAM policies. The
+ * partition segment is `*` so the wildcard matches across commercial,
+ * GovCloud, China, and ISO partitions — IAM accepts `*` in the
+ * partition segment of Resource ARNs.
+ */
 export const BEDROCK_MODEL_ARN_WILDCARD =
-  "arn:aws:bedrock:*::foundation-model/*" as const;
+  "arn:*:bedrock:*::foundation-model/*" as const;
 
 /** IAM policy document constants. */
 export const IamPolicy = {
