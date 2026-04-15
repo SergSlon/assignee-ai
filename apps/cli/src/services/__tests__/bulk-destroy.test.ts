@@ -324,6 +324,92 @@ describe("BulkDestroyService — buildPlanFromResources", () => {
       ).toBe(false);
     });
 
+    // ── W5-F3 L4 (R3-D P3) — namespace-squat / prefix-attack hardening ───
+    // Concern: if the allowlist had been prefix-match (startsWith /
+    // greedy wildcard) an attacker with IAM write could squat the
+    // allowlist namespace (e.g. AssigneeOperator-evil) to pin a
+    // persistence role against the operator's own destroy broom.
+    // `ASSIGNEE_INFRA_NAME_PATTERN` is anchored (`^`, `$`) on the
+    // ARN's last `/` segment and has an explicit whitelist of known
+    // Bedrock role suffixes — these tests pin both properties so a
+    // regression to `Bedrock\w*` / unanchored form fails CI.
+    describe("L4 — allowlist is exact-name match, not prefix or greedy wildcard", () => {
+      it("matches AssigneeOperatorPolicy exactly (canonical case)", () => {
+        expect(
+          isAssigneeInfraResource(
+            "arn:aws:iam::112233445566:policy/AssigneeOperatorPolicy",
+          ),
+        ).toBe(true);
+      });
+
+      it("rejects AssigneeOperator-evil (dash-squat attack)", () => {
+        expect(
+          isAssigneeInfraResource(
+            "arn:aws:iam::112233445566:policy/AssigneeOperator-evil",
+          ),
+        ).toBe(false);
+      });
+
+      it("rejects AssigneeOperator2 (digit-suffix squat attack)", () => {
+        expect(
+          isAssigneeInfraResource(
+            "arn:aws:iam::112233445566:policy/AssigneeOperator2",
+          ),
+        ).toBe(false);
+      });
+
+      it("rejects AssigneeOperatorPolicyClone (suffix-clone attack)", () => {
+        expect(
+          isAssigneeInfraResource(
+            "arn:aws:iam::112233445566:policy/AssigneeOperatorPolicyClone",
+          ),
+        ).toBe(false);
+      });
+
+      it("matches the canonical AssigneeAiBedrockLoggingRole exactly", () => {
+        expect(
+          isAssigneeInfraResource(
+            "arn:aws:iam::112233445566:role/AssigneeAiBedrockLoggingRole",
+          ),
+        ).toBe(true);
+      });
+
+      it("rejects AssigneeAiBedrockEvilRole (was allowed under old `Bedrock\\w*` arm)", () => {
+        // Pre-W5-F3 the `Bedrock\w*` subpattern would have accepted
+        // `AssigneeAiBedrockEvilRole` — an attacker with IAM write
+        // could squat the allowlist. Tightened to explicit whitelist.
+        expect(
+          isAssigneeInfraResource(
+            "arn:aws:iam::112233445566:role/AssigneeAiBedrockEvilRole",
+          ),
+        ).toBe(false);
+      });
+
+      it("rejects AssigneeAiBedrockLoggingRoleShadow (suffix-clone on Bedrock arm)", () => {
+        expect(
+          isAssigneeInfraResource(
+            "arn:aws:iam::112233445566:role/AssigneeAiBedrockLoggingRoleShadow",
+          ),
+        ).toBe(false);
+      });
+
+      it("rejects bare 'bedrock-evil' — not prefixed with Assignee", () => {
+        expect(
+          isAssigneeInfraResource(
+            "arn:aws:iam::112233445566:role/bedrock-evil",
+          ),
+        ).toBe(false);
+      });
+
+      it("rejects BedrockExecutionRole — not prefixed with Assignee", () => {
+        expect(
+          isAssigneeInfraResource(
+            "arn:aws:iam::112233445566:role/BedrockExecutionRole",
+          ),
+        ).toBe(false);
+      });
+    });
+
     it("excludes GovCloud assignee infra from --include-iam plan", () => {
       const govOperatorPolicy = res(
         "arn:aws-us-gov:iam::112233445566:policy/AssigneeOperatorPolicy",

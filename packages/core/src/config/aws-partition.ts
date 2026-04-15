@@ -29,13 +29,23 @@
  * @see feedback_partition_aware_arn_matching (operator memory)
  */
 
-/** Partitions this codebase has been tested against. */
+/**
+ * Partitions this codebase has been tested against.
+ *
+ * `aws-iso-e` / `aws-iso-f` are AWS-announced secret-region partitions
+ * whose region-prefix mapping is not yet public in the SDK. They are
+ * included in the union and in `ARN_PATTERN` so ARNs handed to us by
+ * downstream systems (billing records, CloudTrail, etc.) parse correctly
+ * even before we add a region→partition mapping for them.
+ */
 export type AwsPartition =
   | "aws"
   | "aws-cn"
   | "aws-us-gov"
   | "aws-iso"
-  | "aws-iso-b";
+  | "aws-iso-b"
+  | "aws-iso-e"
+  | "aws-iso-f";
 
 /**
  * Derives the ARN partition for a given AWS region.
@@ -64,20 +74,44 @@ export function getPartitionFromRegion(region: string): AwsPartition {
  * hardcode `arn:aws:` literals in regex or startsWith checks because
  * that silently drops GovCloud, China, and ISO ARNs.
  *
- * The trailing `[\w-]*` covers `aws`, `aws-cn`, `aws-us-gov`, `aws-iso`,
- * `aws-iso-b`, and any future partitions AWS adds that follow the
- * `aws[-suffix]` naming convention.
+ * Shape: `arn:aws` + zero-or-more lowercase-letter-only suffix segments
+ * (each prefixed by `-`). This matches the current 5 partitions AND the
+ * announced `aws-iso-e` / `aws-iso-f` but rejects malformed partitions
+ * like `arn:aws_x:` (underscore) or `arn:aws1:` (digit) that the older
+ * `[\w-]*` pattern would have accepted.
  *
  * NOTE: This constant is anchored (`^`) because we primarily use it to
  * detect whether a string IS an ARN. For scanning ARNs embedded in free
  * text (e.g. redaction), compose with the `ARN_PATTERN_SOURCE` string
  * below so `/g` flag + non-anchored start can be applied.
  */
-export const ARN_PATTERN = /^arn:aws[\w-]*:/;
+export const ARN_PATTERN = /^arn:aws(?:-[a-z]+)*:/;
 
 /**
  * Non-anchored source form of `ARN_PATTERN`, for composing into larger
  * patterns (e.g. global-scan ARN redaction regexes). Does NOT include
  * the leading `^` anchor.
  */
-export const ARN_PATTERN_SOURCE = "arn:aws[\\w-]*:";
+export const ARN_PATTERN_SOURCE = "arn:aws(?:-[a-z]+)*:";
+
+/**
+ * Returns true when `value` is an ARN whose service segment matches
+ * `service`, regardless of partition. Prefer this over
+ * `value.startsWith("arn:aws:<service>:")` (which silently rejects
+ * GovCloud, China, and ISO ARNs).
+ *
+ * @example
+ *   isArnOfService("arn:aws:iam::123:role/x", "iam")           // true
+ *   isArnOfService("arn:aws-us-gov:iam::123:role/x", "iam")    // true
+ *   isArnOfService("arn:aws-cn:sqs:cn-north-1:0:q", "sqs")     // true
+ *   isArnOfService("arn:aws:iam::123:role/x", "sqs")           // false
+ *   isArnOfService("not-an-arn", "iam")                        // false
+ */
+export function isArnOfService(value: string, service: string): boolean {
+  if (!ARN_PATTERN.test(value)) return false;
+  // ARN shape: arn:<partition>:<service>:<region>:<account>:<resource>
+  // Split at most 4 times so `value.split(":", 4)` gives [arn, partition,
+  // service, region-or-start-of-resource]. Index 2 is the service segment.
+  const parts = value.split(":", 4);
+  return parts[2] === service;
+}

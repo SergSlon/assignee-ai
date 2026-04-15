@@ -12,6 +12,7 @@ import {
 } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
+import { isArnOfService } from "../../config/aws-partition.js";
 
 // Story 46.4 (2026-04-12): the INSTANCE_CATEGORIES constant moved to its
 // own module at `../instance-type-registry.ts` so future config-driven
@@ -210,9 +211,10 @@ export const ec2InstancePlugin: ResourcePlugin = {
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);
-          if (s.startsWith("arn:aws:iam::")) return undefined;
+          // Accept any partition (aws, aws-us-gov, aws-cn, aws-iso, aws-iso-b, aws-iso-e/f)
+          if (isArnOfService(s, "iam")) return undefined;
           if (!/^[a-zA-Z0-9+=,.@_-]+$/.test(s))
-            return "Must be a valid IAM instance profile name or ARN (arn:aws:iam::...)";
+            return "Must be a valid IAM instance profile name or ARN (e.g. arn:aws:iam::...)";
           return undefined;
         },
       },

@@ -35,6 +35,20 @@ vi.mock("./memory.js", () => ({
   },
 }));
 
+// Mock the logger so we can assert warn-level emissions from the 6 catch
+// sites in billing.ts (P1-R2-3 regression — no more bare `catch {}`).
+const mockLog = vi.fn();
+vi.mock("../utils/logger.js", async () => {
+  const actual =
+    await vi.importActual<typeof import("../utils/logger.js")>(
+      "../utils/logger.js",
+    );
+  return {
+    ...actual,
+    log: (...args: unknown[]) => mockLog(...args),
+  };
+});
+
 // Import the mocked memory service for test manipulation
 import { defaultMemoryService } from "./memory.js";
 
@@ -697,5 +711,103 @@ describe("queryComputeOptimizer (Story 45.3)", () => {
 
     const result = await queryComputeOptimizer([tool as never]);
     expect(result).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P1-R2-3 regression — every former bare `catch {}` now emits a structured
+// warn-level log event. Six sites: extractResultsByTime (3x),
+// queryBillingMcp (1x), fetchBillingData (1x), extractPreviewData (1x).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("billing.ts structured-log emission on catch (P1-R2-3)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadProvisions.mockResolvedValue([]);
+  });
+
+  function assertBillingWarn(action: string): void {
+    expect(mockLog).toHaveBeenCalled();
+    const events = mockLog.mock.calls
+      .map((c) => c[0] as Record<string, unknown>)
+      .filter(
+        (ev) =>
+          ev &&
+          ev["runId"] === "billing-mcp" &&
+          ev["level"] === "warn" &&
+          ev["action"] === "billing_mcp_query_failed",
+      );
+    expect(
+      events.some(
+        (ev) =>
+          (ev["extras"] as Record<string, unknown>)?.["billingAction"] ===
+          action,
+      ),
+    ).toBe(true);
+  }
+
+  it("extractResultsByTime.parseTextWrapper — emits warn on bad wrapper JSON", () => {
+    // Realistic malformed MCP wrapper — a text body that isn't valid JSON.
+    const r = extractResultsByTime({ text: "{malformed-json" });
+    expect(r).toEqual([]);
+    assertBillingWarn("extractResultsByTime.parseTextWrapper");
+  });
+
+  it("extractResultsByTime.parseResultsByTime — emits warn on bad ResultsByTime JSON", () => {
+    const response = {
+      status: "success",
+      data: {
+        preview: [{ key: "ResultsByTime", value: "{not-json" }],
+      },
+    };
+    const r = extractResultsByTime(response);
+    expect(r).toEqual([]);
+    assertBillingWarn("extractResultsByTime.parseResultsByTime");
+  });
+
+  it("queryBillingMcp.getCostAndUsage — emits warn on tool.invoke rejection", async () => {
+    const failingTool = createFailingMockTool(
+      ToolName.COST_EXPLORER,
+      new Error("AccessDeniedException: not authorized for ce:GetCostAndUsage"),
+    );
+    const result = await fetchBillingData([sampleResource], [failingTool]);
+    expect(result.size).toBe(0);
+    assertBillingWarn("queryBillingMcp.getCostAndUsage");
+  });
+
+  it("fetchBillingData.queryBillingMcp — emits warn when the inner query throws", async () => {
+    // Force queryBillingMcp itself to throw by returning a tool whose invoke
+    // rejects AFTER the outer try — simulated via a tool that throws
+    // synchronously during .invoke() lookup. The inner catch already logs;
+    // the outer catch requires a synchronous throw from find(). Instead we
+    // assert the inner log fires in the non-fallback path above. For the
+    // OUTER catch we induce a throw via a tool whose .name getter throws.
+    const throwingTool = {
+      get name(): string {
+        throw new Error("boom during tool.name access");
+      },
+      invoke: async () => ({}),
+    };
+    const result = await fetchBillingData(
+      [sampleResource],
+      [throwingTool as never],
+    );
+    // Fell through to provision-log fallback (empty -> size 0).
+    expect(result.size).toBe(0);
+    assertBillingWarn("fetchBillingData.queryBillingMcp");
+  });
+
+  it("extractPreviewData.parseTextWrapper — emits warn via queryCostAnomalies path", async () => {
+    // queryCostAnomalies -> extractPreviewData is the real call site.
+    // Force the text-wrapper parse to fail with unparseable JSON.
+    const tool = {
+      name: ToolName.COST_ANOMALY,
+      description: "",
+      schema: {},
+      invoke: async () => ({ text: "{broken-json-in-text-wrapper" }),
+    };
+    const result = await queryCostAnomalies([tool as never]);
+    expect(result).toEqual([]);
+    assertBillingWarn("extractPreviewData.parseTextWrapper");
   });
 });

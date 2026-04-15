@@ -17,10 +17,10 @@ import {
 } from "./iam-role-inventory.js";
 import type { AwsConfig } from "./cloudcontrol-client.js";
 import {
-  ArnPrefix,
   ConfigurationError,
   RESOURCE_TYPES,
   isArn,
+  isArnOfService,
   arnToResourceType,
   extractIdentifierFromArn,
   extractRegionFromArn,
@@ -223,11 +223,9 @@ async function resolveSqsQueueUrl(
       const arn = mapping.ResourceARN;
       if (!arn) continue;
 
-      // Match SQS ARN: arn:aws:sqs:{region}:{account}:{queue-name}
-      if (
-        arn.startsWith(ArnPrefix.SQS) &&
-        arn.endsWith(":" + parsed.queueName)
-      ) {
+      // Match SQS ARN across all partitions (aws, aws-us-gov, aws-cn, aws-iso*).
+      // ARN shape: arn:<partition>:sqs:{region}:{account}:{queue-name}
+      if (isArnOfService(arn, "sqs") && arn.endsWith(":" + parsed.queueName)) {
         return {
           arn,
           resourceType: RESOURCE_TYPES.SQS_QUEUE,

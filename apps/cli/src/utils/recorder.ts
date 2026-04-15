@@ -101,7 +101,12 @@ const REDACTED_KEYS = new Set([
  * @see SECURITY-AUDIT.md — M-S2
  */
 const ACCESS_KEY_PATTERN = /(AKIA|ASIA)[0-9A-Z]{16}/g;
-const IAM_ARN_ACCOUNT_PATTERN = /arn:aws:iam::\d{12}:/g;
+// Partition-aware: `arn:aws:`, `arn:aws-us-gov:`, `arn:aws-cn:`, and
+// `arn:aws-iso[-b|-e|-f]:` IAM ARNs all embed 12-digit account IDs we
+// must redact. Previously `arn:aws:iam::\d{12}:` leaked GovCloud/China/
+// ISO account IDs into replay fixtures. Capture the partition so the
+// replacement preserves it for debugging without exposing the account.
+const IAM_ARN_ACCOUNT_PATTERN = /arn:(aws(?:-[a-z]+)*):iam::\d{12}:/g;
 
 /**
  * Scrub credential-shaped substrings from a single string value.
@@ -110,7 +115,7 @@ const IAM_ARN_ACCOUNT_PATTERN = /arn:aws:iam::\d{12}:/g;
 export function redactStringValue(value: string): string {
   return value
     .replace(ACCESS_KEY_PATTERN, "[REDACTED-AKIA]")
-    .replace(IAM_ARN_ACCOUNT_PATTERN, "arn:aws:iam::[REDACTED]:");
+    .replace(IAM_ARN_ACCOUNT_PATTERN, "arn:$1:iam::[REDACTED]:");
 }
 
 /**

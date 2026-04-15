@@ -195,8 +195,11 @@ export const staticWebsitePattern: ArchitecturePattern = {
             // S3 object ARN — uses the resolved bucket name as the
             // resource segment. The compound resolver substitutes
             // markerRef(R.WEBSITE_BUCKET) with the real bucket name
-            // before the policy hits CCAPI.
-            Resource: `arn:aws:s3:::${markerRef(R.WEBSITE_BUCKET)}/*`,
+            // before the policy hits CCAPI. The `arn:*:s3:::` partition
+            // wildcard lets the same pattern deploy in commercial,
+            // GovCloud, China, and ISO partitions — IAM accepts `*` in
+            // the partition segment of Resource ARNs.
+            Resource: `arn:*:s3:::${markerRef(R.WEBSITE_BUCKET)}/*`,
             Condition: {
               StringEquals: {
                 "aws:SourceArn": markerRef(R.CDN_DISTRIBUTION),

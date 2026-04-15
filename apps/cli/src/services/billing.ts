@@ -139,7 +139,8 @@ export function extractResultsByTime(response: unknown): unknown[] {
   if ("text" in resp && typeof resp["text"] === "string") {
     try {
       resp = JSON.parse(resp["text"] as string) as Record<string, unknown>;
-    } catch {
+    } catch (err) {
+      logBillingMcpFailure("extractResultsByTime.parseTextWrapper", err);
       return [];
     }
   }
@@ -147,7 +148,8 @@ export function extractResultsByTime(response: unknown): unknown[] {
   if (typeof resp === "string") {
     try {
       resp = JSON.parse(resp) as Record<string, unknown>;
-    } catch {
+    } catch (err) {
+      logBillingMcpFailure("extractResultsByTime.parseStringResponse", err);
       return [];
     }
   }
@@ -163,7 +165,8 @@ export function extractResultsByTime(response: unknown): unknown[] {
       try {
         const parsed = JSON.parse(rtEntry.value);
         return Array.isArray(parsed) ? parsed : [];
-      } catch {
+      } catch (err) {
+        logBillingMcpFailure("extractResultsByTime.parseResultsByTime", err);
         return [];
       }
     }
@@ -279,8 +282,10 @@ async function queryBillingMcp(
     }
 
     return results;
-  } catch {
-    // Graceful degradation: billing is non-blocking — return empty on any error
+  } catch (err) {
+    // Graceful degradation: billing is non-blocking — return empty on any error.
+    // Surface the reason under --verbose so operators can diagnose silent N/A.
+    logBillingMcpFailure("queryBillingMcp.getCostAndUsage", err);
     return [];
   }
 }
@@ -303,8 +308,10 @@ export async function fetchBillingData(
         costMap.set(entry.arn, entry);
       }
       if (costMap.size > 0) return costMap;
-    } catch {
-      // MCP unavailable — fall through to memory fallback
+    } catch (err) {
+      // MCP unavailable — fall through to memory fallback. Log at warn so
+      // operators can correlate "offline" provenance rows with the root cause.
+      logBillingMcpFailure("fetchBillingData.queryBillingMcp", err);
     }
   }
 
@@ -381,7 +388,8 @@ function extractPreviewData(response: unknown): Record<string, string> {
   if ("text" in resp && typeof resp["text"] === "string") {
     try {
       resp = JSON.parse(resp["text"] as string) as Record<string, unknown>;
-    } catch {
+    } catch (err) {
+      logBillingMcpFailure("extractPreviewData.parseTextWrapper", err);
       return result;
     }
   }

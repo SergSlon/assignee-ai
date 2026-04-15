@@ -42,8 +42,20 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
       return { userIntent: safeIntent, resourcePattern: detectedPattern };
     }
 
-    // Bedrock classification — uses sanitized intent
-    const prompt = `Classify this AWS infrastructure request into one of these types: ${SUPPORTED_TYPES.join(", ")} or UNSUPPORTED.\n\nRequest: "${safeIntent}"`;
+    // Bedrock classification — uses sanitized intent.
+    // Wave-4 F5 P2-R2-6: three disambiguation sentences were added so that
+    // "Create a standalone X" / "Create an X on its own" always classifies
+    // as the bare X type instead of being rerouted through a compound
+    // pattern. Needed to unblock three previously-skipped E2E plan tests
+    // for bare RDS DBInstance / Events Connection / Events ApiDestination
+    // — each is first-class in SUPPORTED_TYPES but the LLM defaulted to
+    // compound-style routing without explicit guidance.
+    const prompt = `Classify this AWS infrastructure request into one of these types: ${SUPPORTED_TYPES.join(", ")} or UNSUPPORTED.
+If the request says "standalone", "bare", "single", "on its own", or "just the X" (or otherwise explicitly asks for one resource in isolation), classify it as that exact type — do NOT reroute to a compound / multi-resource pattern even if the resource is usually deployed alongside others.
+Events::Connection and Events::ApiDestination ARE first-class types in this list — classify as those when the intent is to create the Connection or ApiDestination itself, even without an accompanying Rule or EventBus.
+RDS::DBInstance is first-class and MUST be classified as AWS::RDS::DBInstance when the request asks for a standalone database, regardless of whether a VPC / subnet group is mentioned.
+
+Request: "${safeIntent}"`;
     const [err, output] = await llmClient.generateStructured(
       prompt,
       intentParserSchema,

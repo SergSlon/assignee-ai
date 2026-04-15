@@ -20,6 +20,8 @@ import {
   CCAPI_REDIRECT_TYPES,
   COMPANION_RESOURCE_TYPES,
   RESOURCE_TYPES,
+  extractAccountIdFromArn,
+  isAccessDeniedError,
 } from "@assignee/core";
 // Hoisted from the hot-path inside destroySingleResource (architect
 // WARNING #8). `await import("@aws-sdk/client-ec2")` inside the ALB ENI
@@ -115,22 +117,6 @@ const CCAPI_NOT_FOUND_ERROR_CODE = "NotFound";
  */
 const ALB_ENI_DRAIN_MAX_ATTEMPTS = 24; // 24 * 5s = 120s
 const ALB_ENI_DRAIN_POLL_INTERVAL_MS = 5000;
-
-/**
- * Wave 11 P2-2: extracts the AWS account ID segment from an ARN, or
- * returns undefined when the ARN has no account segment (S3 buckets,
- * for example: `arn:aws:s3:::my-bucket`). Used by the cross-account
- * sanity check on CCAPI NotFound short-circuits.
- *
- * ARN structure: `arn:partition:service:region:account-id:resource`
- * — account-id is the 5th colon-separated segment (index 4).
- */
-function extractAccountIdFromArn(arn: string): string | undefined {
-  const parts = arn.split(":");
-  if (parts.length < 5) return undefined;
-  const account = parts[4];
-  return account && /^\d{12}$/.test(account) ? account : undefined;
-}
 
 /**
  * Wave 11 P2-2: cross-account sanity check before treating a CCAPI
@@ -689,10 +675,10 @@ export async function destroySingleResource(
       // are already in iam-actions.ts for S3_BUCKET; if the deployed
       // AssigneeOperatorPolicy lacks them, re-run `assignee setup`.
       const errMsg = err instanceof Error ? err.message : String(err);
-      const isAccessDenied =
-        errMsg.includes("AccessDenied") ||
-        errMsg.includes("not authorized") ||
-        errMsg.includes("UnauthorizedOperation");
+      // Wave 4 F2: structured classifier (err.name / err.Code /
+      // $metadata.httpStatusCode === 403). Previously three parallel
+      // substring matches which false-matched on localized error strings.
+      const isAccessDenied = isAccessDeniedError(err);
       if (isAccessDenied) {
         return {
           ...baseResult,

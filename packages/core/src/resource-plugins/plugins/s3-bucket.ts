@@ -241,8 +241,11 @@ export const s3BucketPlugin: ResourcePlugin = {
           if (!value || !String(value).trim())
             return "Destination bucket ARN is required when replication is enabled";
           const s = String(value);
-          if (!s.match(/^arn:aws(-us-gov|-cn)?:s3:::/))
-            return "Must be an S3 bucket ARN (arn:aws:s3:::bucket-name)";
+          // Partition-aware S3 bucket ARN check — covers commercial,
+          // GovCloud, China, and ISO partitions. Resource section must
+          // start empty-region / empty-account (S3 bucket ARN shape).
+          if (!/^arn:aws(?:-[a-z]+)*:s3:::/.test(s))
+            return "Must be an S3 bucket ARN (e.g. arn:aws:s3:::bucket-name)";
           return undefined;
         },
       },

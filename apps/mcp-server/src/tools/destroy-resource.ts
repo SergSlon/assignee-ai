@@ -33,6 +33,7 @@ import {
   arnToResourceType as coreArnToResourceType,
   extractIdentifierFromArn as coreExtractIdentifierFromArn,
   extractRegionFromArn as coreExtractRegionFromArn,
+  extractAccountIdFromArn,
 } from "@assignee/core";
 import { destroyRegistry } from "../services/destroy-strategies/index.js";
 
@@ -291,28 +292,39 @@ async function resolveResource(
 /** CloudControl HandlerErrorCode for "resource does not exist". */
 const CCAPI_NOT_FOUND_ERROR_CODE = "NotFound";
 
-/**
- * Extract the 12-digit AWS account segment from an ARN, or undefined
- * when the ARN has no account segment (e.g. `arn:aws:s3:::bucket`).
- */
-function extractAccountIdFromArn(arn: string): string | undefined {
-  const parts = arn.split(":");
-  if (parts.length < 5) return undefined;
-  const account = parts[4];
-  return account && /^\d{12}$/.test(account) ? account : undefined;
-}
-
-/** Module-level cache: one STS lookup per MCP process. */
+/** Module-level cache: one STS lookup per MCP process (success only). */
 let cachedOperatorAccountId: string | undefined;
 let cachedOperatorAccountLookup: Promise<string | undefined> | undefined;
 
 /**
  * Returns the AWS account ID for the configured operator credentials.
  * Used by the cross-account sanity check on NotFound short-circuits.
- * Returns undefined on any failure (missing creds, STS error, timeout) —
- * the caller treats undefined as "cannot classify" and falls through to
- * the conservative safe-shortcircuit behavior.
+ *
+ * Caching policy:
+ * - On success, the resolved account ID is cached for the MCP process lifetime.
+ * - On failure (missing creds, STS error, timeout, undefined Account), nothing
+ *   is cached — the next call retries fresh. We deliberately avoid caching the
+ *   Promise across failures because a single transient STS hiccup would
+ *   otherwise permanently disable the cross-account guard (P1-R2-1).
+ * - `cachedOperatorAccountLookup` de-dupes concurrent in-flight lookups; it is
+ *   cleared in `finally` so any subsequent call re-attempts on failure.
+ *
+ * Returns undefined on any failure — the caller treats undefined as "cannot
+ * classify" and falls through to the conservative safe-shortcircuit behavior.
  */
+/** @internal test-only: resets the STS account cache between tests. */
+export function __resetOperatorAccountCacheForTests(): void {
+  cachedOperatorAccountId = undefined;
+  cachedOperatorAccountLookup = undefined;
+}
+
+/** @internal exported for unit tests — see P1-R2-1 cache-poison regression. */
+export async function __getOperatorAccountIdForTests(
+  region: string,
+): Promise<string | undefined> {
+  return getOperatorAccountId(region);
+}
+
 async function getOperatorAccountId(
   region: string,
 ): Promise<string | undefined> {
@@ -339,6 +351,10 @@ async function getOperatorAccountId(
       return undefined;
     } catch {
       return undefined;
+    } finally {
+      // Clear the in-flight promise so failures don't poison subsequent
+      // calls. Successful lookups are still served from cachedOperatorAccountId.
+      cachedOperatorAccountLookup = undefined;
     }
   })();
 

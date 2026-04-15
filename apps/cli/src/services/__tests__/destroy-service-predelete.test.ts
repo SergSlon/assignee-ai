@@ -10,216 +10,23 @@
  *
  * @see Story 36.1
  */
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  afterAll,
-} from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { MissingAssigneeCredentialsError } from "@assignee/core";
 import { requireAssigneeCredentials } from "../../config/aws-credentials.js";
-
-// ── Hoisted mocks ─────────────────────────────────────────────────────────────
-// A6  (2026-04-08): mockDeleteEventSourceMapping and mockDeleteTopic were
-//                   removed after Lambda ESM and SNS Topic delete were
-//                   migrated from SDK fallback to CCAPI. Both types now go
-//                   through mockDeleteResource.
-// A10 (2026-04-09): mockUnsubscribe was removed after SNS::Subscription was
-//                   promoted to first-class; destroy now routes through
-//                   mockDeleteResource too.
-const {
+// Wave-4 F5 P2-R2-16: shared mock harness (see destroy-service-mocks.ts).
+import {
   mockDeleteResource,
   mockGetRequestStatus,
-  mockCfSend,
   mockDdbSend,
   mockS3Send,
   mockEc2Send,
-} = vi.hoisted(() => ({
-  mockDeleteResource: vi.fn(),
-  mockGetRequestStatus: vi.fn(),
-  mockCfSend: vi.fn(),
-  mockDdbSend: vi.fn(),
-  mockS3Send: vi.fn(),
-  mockEc2Send: vi.fn(),
-}));
-
-// NOTE: Plain functions/classes (not vi.fn) so impls survive vitest's
-// mockReset:true between tests.
-
-// ── Mock operator credentials ─────────────────────────────────────────────────
-vi.mock("../../config/operator-credentials.js", () => ({
-  operatorCredentials: () => ({
-    accessKeyId: "AKIAIOSFODNN7EXAMPLE",
-    secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-    region: "us-east-1",
-  }),
-}));
-
-// ── Mock resolve-arn (Wave 11 P2-2 cross-account guard) ─────────────────
-// classifyNotFoundShortCircuit dynamic-imports getOperatorAccountId from
-// resolve-arn.js when a CCAPI NotFound fires. The default mock returns
-// undefined so existing tests get the legacy behavior (NotFound treated
-// as success regardless of cross-account threat). Cross-account tests
-// override this via mockGetOperatorAccountId.mockResolvedValueOnce.
-const { mockGetOperatorAccountId } = vi.hoisted(() => ({
-  mockGetOperatorAccountId: vi.fn<() => Promise<string | undefined>>(),
-}));
-vi.mock("../../utils/resolve-arn.js", () => ({
-  getOperatorAccountId: mockGetOperatorAccountId,
-  resolveResourceArn: vi.fn(),
-  resetAccountIdCache: vi.fn(),
-}));
-
-// ── Mock CloudControlAdapter ──────────────────────────────────────────────────
-vi.mock("../cloudcontrol-adapter.js", () => {
-  class CloudControlAdapter {
-    deleteResource = mockDeleteResource;
-    getRequestStatus = mockGetRequestStatus;
-  }
-  return { CloudControlAdapter };
-});
-
-// ── Mock createCloudControlClient ─────────────────────────────────────────────
-vi.mock("../cloudcontrol-client.js", () => ({
-  createCloudControlClient: () => ({}),
-}));
-
-// ── Mock SDKFallbackDispatcher ────────────────────────────────────────────────
-// A10 (2026-04-09): after SNS Subscription promotion the dispatcher is a
-// redirect-only classifier with no SDK write paths. destroy-service no
-// longer constructs the dispatcher at all, but keeping a trivial mock
-// here guarantees any future regression that re-introduces a dispatcher
-// import surfaces immediately.
-vi.mock("../sdk-fallback-dispatcher.js", () => {
-  class SDKFallbackDispatcher {
-    canHandle = () => false;
-    canDelete = () => false;
-    isRedirect = () => null;
-  }
-  return { SDKFallbackDispatcher };
-});
-
-// ── Mock @aws-sdk/client-cloudfront ───────────────────────────────────────────
-vi.mock("@aws-sdk/client-cloudfront", () => {
-  class MockCloudFrontClient {
-    send = mockCfSend;
-  }
-  function GetDistributionCommand(input: Record<string, unknown>) {
-    return { _type: "GetDistribution", ...input };
-  }
-  function UpdateDistributionCommand(input: Record<string, unknown>) {
-    return { _type: "UpdateDistribution", ...input };
-  }
-  function DeleteDistributionCommand(input: Record<string, unknown>) {
-    return { _type: "DeleteDistribution", ...input };
-  }
-  return {
-    CloudFrontClient: MockCloudFrontClient,
-    GetDistributionCommand,
-    UpdateDistributionCommand,
-    DeleteDistributionCommand,
-  };
-});
-
-// ── Mock @aws-sdk/client-dynamodb ─────────────────────────────────────────────
-vi.mock("@aws-sdk/client-dynamodb", () => {
-  class MockDynamoDBClient {
-    send = mockDdbSend;
-  }
-  function UpdateTableCommand(input: Record<string, unknown>) {
-    return { _type: "UpdateTable", ...input };
-  }
-  function DescribeTableCommand(input: Record<string, unknown>) {
-    return { _type: "DescribeTable", ...input };
-  }
-  return {
-    DynamoDBClient: MockDynamoDBClient,
-    UpdateTableCommand,
-    DescribeTableCommand,
-  };
-});
-
-// ── Mock @aws-sdk/client-s3 ───────────────────────────────────────────────────
-vi.mock("@aws-sdk/client-s3", () => {
-  class MockS3Client {
-    send = mockS3Send;
-  }
-  function ListObjectVersionsCommand(input: Record<string, unknown>) {
-    return { _type: "ListObjectVersions", ...input };
-  }
-  function DeleteObjectsCommand(input: Record<string, unknown>) {
-    return { _type: "DeleteObjects", ...input };
-  }
-  return {
-    S3Client: MockS3Client,
-    ListObjectVersionsCommand,
-    DeleteObjectsCommand,
-  };
-});
-
-// ── Mock @aws-sdk/client-ec2 ──────────────────────────────────────────────────
-vi.mock("@aws-sdk/client-ec2", () => {
-  class MockEC2Client {
-    send = mockEc2Send;
-  }
-  function DescribeInternetGatewaysCommand(input: Record<string, unknown>) {
-    return { _type: "DescribeInternetGateways", ...input };
-  }
-  function DetachInternetGatewayCommand(input: Record<string, unknown>) {
-    return { _type: "DetachInternetGateway", ...input };
-  }
-  function DescribeRouteTablesCommand(input: Record<string, unknown>) {
-    return { _type: "DescribeRouteTables", ...input };
-  }
-  function DisassociateRouteTableCommand(input: Record<string, unknown>) {
-    return { _type: "DisassociateRouteTable", ...input };
-  }
-  function DescribeNetworkInterfacesCommand(input: Record<string, unknown>) {
-    return { _type: "DescribeNetworkInterfaces", ...input };
-  }
-  return {
-    EC2Client: MockEC2Client,
-    DescribeInternetGatewaysCommand,
-    DetachInternetGatewayCommand,
-    DescribeRouteTablesCommand,
-    DisassociateRouteTableCommand,
-    DescribeNetworkInterfacesCommand,
-  };
-});
+  setupDestroyServiceMocks,
+} from "./destroy-service-mocks.js";
 
 // ── Import after mocks ────────────────────────────────────────────────────────
 import { destroySingleResource } from "../destroy-service.js";
 
-// Stub global setTimeout to resolve immediately — avoids real timer waits in
-// pollDeleteStatus and the CloudFront disable-then-delete polling loop.
-const originalSetTimeout = globalThis.setTimeout;
-const ORIGINAL_ENV = { ...process.env };
-beforeEach(() => {
-  vi.clearAllMocks();
-  // Default: operator account is undefined → classifyNotFoundShortCircuit
-  // returns "safe-shortcircuit" → NotFound treated as success (the legacy
-  // Wave 5 behavior). Specific cross-account tests override this via
-  // mockGetOperatorAccountId.mockResolvedValueOnce. Must be set AFTER
-  // clearAllMocks or the default would be wiped.
-  mockGetOperatorAccountId.mockResolvedValue(undefined);
-  // @ts-expect-error — simplified stub for test purposes
-  globalThis.setTimeout = (fn: () => void) => originalSetTimeout(fn, 0);
-  // destroy-service now uses requireAssigneeCredentials("operator") for the
-  // DynamoDB and S3 pre-delete hooks. Provide realistic-shaped credentials
-  // so the hooks construct their SDK clients and exercise the mocked send().
-  process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
-  process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
-    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
-});
-afterEach(() => {
-  process.env = { ...ORIGINAL_ENV };
-});
-afterAll(() => {
-  globalThis.setTimeout = originalSetTimeout;
-});
+setupDestroyServiceMocks();
 
 describe("destroySingleResource", () => {
   describe("DynamoDB pre-delete hook", () => {
@@ -953,6 +760,62 @@ describe("destroySingleResource", () => {
         (c) => (c[0] as { _type: string })._type === "ListObjectVersions",
       );
       expect(listCalls).toHaveLength(1);
+    });
+  });
+
+  // Wave 4 F2 (P1-R2-2): destroy-service previously used a 3-way substring
+  // match on err.message (includes "AccessDenied" || "not authorized" ||
+  // "UnauthorizedOperation"). This test proves the structured classifier
+  // has replaced it: an AccessDenied error whose MESSAGE does not contain
+  // any of those keywords (only the structured err.name does) must still
+  // trigger the hard-fail IAM-remediation path.
+  describe("Wave 4 F2: S3 empty-bucket AccessDenied uses structured classifier", () => {
+    it("fails with IAM remediation message when ListObjectVersions throws an error with structured name only", async () => {
+      // Realistic shape: SDK v3 wraps AccessDenied in an error whose
+      // message is the localized server text (no English keywords) but
+      // whose name field carries the canonical code.
+      const denied = Object.assign(
+        new Error("Operación no autorizada"), // intentionally non-English
+        {
+          name: "AccessDeniedException",
+          $metadata: { httpStatusCode: 403 },
+        },
+      );
+      mockS3Send.mockRejectedValueOnce(denied);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:s3:::prod-i18n-bucket",
+        resourceType: "AWS::S3::Bucket",
+        identifier: "prod-i18n-bucket",
+        region: "us-east-1",
+      });
+
+      // Pre-fix regression: the substring match would have missed this
+      // and fallen into the "continue with DeleteBucket" branch, causing
+      // a downstream BucketNotEmpty on non-empty buckets.
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("empty S3 bucket");
+      expect(result.error).toContain("assignee setup");
+      // CloudControl delete MUST NOT have been attempted
+      expect(mockDeleteResource).not.toHaveBeenCalled();
+    });
+
+    it("matches on HTTP 403 even when err.name is generic", async () => {
+      const denied = Object.assign(new Error("forbidden"), {
+        name: "S3ServiceException",
+        $metadata: { httpStatusCode: 403 },
+      });
+      mockS3Send.mockRejectedValueOnce(denied);
+
+      const result = await destroySingleResource({
+        arn: "arn:aws:s3:::prod-403-bucket",
+        resourceType: "AWS::S3::Bucket",
+        identifier: "prod-403-bucket",
+        region: "us-east-1",
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("empty S3 bucket");
     });
   });
 });

@@ -281,8 +281,10 @@ describe("cloudWatchAlarmPlugin", () => {
       // Tier C: strengthened from toBeDefined() — assert the error names
       // the bad value so users can find it in long ARN lists.
       const result = field.question.validate?.("not-an-arn");
+      // Partition-aware validation: message now shows the canonical
+      // ARN shape (any partition) rather than a commercial-only prefix.
       expect(result).toBe(
-        "Invalid SNS topic ARN: not-an-arn. Must start with arn:aws:sns:",
+        "Invalid SNS topic ARN: not-an-arn. Must be an SNS topic ARN (e.g. arn:aws:sns:<region>:<account>:<topic>)",
       );
     });
   });

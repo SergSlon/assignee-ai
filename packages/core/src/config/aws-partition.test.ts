@@ -3,6 +3,7 @@ import {
   getPartitionFromRegion,
   ARN_PATTERN,
   ARN_PATTERN_SOURCE,
+  isArnOfService,
   type AwsPartition,
 } from "./aws-partition.js";
 
@@ -71,9 +72,15 @@ describe("getPartitionFromRegion", () => {
     it("is one of the AwsPartition union members", () => {
       const p: AwsPartition = getPartitionFromRegion("us-east-1");
       // compile-time check via assignability; runtime sanity:
-      expect(["aws", "aws-cn", "aws-us-gov", "aws-iso", "aws-iso-b"]).toContain(
-        p,
-      );
+      expect([
+        "aws",
+        "aws-cn",
+        "aws-us-gov",
+        "aws-iso",
+        "aws-iso-b",
+        "aws-iso-e",
+        "aws-iso-f",
+      ]).toContain(p);
     });
   });
 });
@@ -97,8 +104,58 @@ describe("ARN_PATTERN", () => {
     ["arn:azure:iam::123:role/foo", false],
     ["arn:AWS:iam::123:role/foo", false], // case-sensitive
     ["prefix arn:aws:iam::123:role/foo", false], // anchored
+    // Previously the `[\w-]*` pattern would have accepted these malformed
+    // partitions — the tightened `(?:-[a-z]+)*` now rejects them.
+    ["arn:aws_x:iam::123:role/foo", false], // underscore (not a real partition)
+    ["arn:aws1:iam::123:role/foo", false], // digits (not a real partition)
+    ["arn:aws-US-GOV:iam::123:role/foo", false], // wrong case in suffix
   ])("rejects %s", (input, expected) => {
     expect(ARN_PATTERN.test(input)).toBe(expected);
+  });
+});
+
+describe("isArnOfService", () => {
+  it.each([
+    // commercial + all 5 current + 2 announced partitions, all services
+    ["arn:aws:iam::123456789012:role/foo", "iam", true],
+    ["arn:aws-us-gov:iam::123456789012:role/foo", "iam", true],
+    ["arn:aws-cn:iam::123456789012:role/foo", "iam", true],
+    ["arn:aws-iso:iam::123456789012:role/foo", "iam", true],
+    ["arn:aws-iso-b:iam::123456789012:role/foo", "iam", true],
+    ["arn:aws-iso-e:iam::123456789012:role/foo", "iam", true],
+    ["arn:aws-iso-f:iam::123456789012:role/foo", "iam", true],
+    // S3 (no region/account segments)
+    ["arn:aws:s3:::my-bucket", "s3", true],
+    ["arn:aws-cn:s3:::my-bucket", "s3", true],
+    // SQS / SNS / KMS / LAMBDA / LOGS / BEDROCK / EC2 across partitions
+    ["arn:aws-us-gov:sqs:us-gov-west-1:123456789012:q", "sqs", true],
+    ["arn:aws-cn:sns:cn-north-1:123456789012:t", "sns", true],
+    ["arn:aws-iso:kms:us-iso-east-1:123456789012:key/k", "kms", true],
+    [
+      "arn:aws-us-gov:lambda:us-gov-west-1:123456789012:function:f",
+      "lambda",
+      true,
+    ],
+    ["arn:aws-cn:logs:cn-north-1:123456789012:log-group:g", "logs", true],
+    [
+      "arn:aws-us-gov:bedrock:us-gov-west-1::foundation-model/x",
+      "bedrock",
+      true,
+    ],
+    ["arn:aws-cn:ec2:cn-north-1:123456789012:vpc/vpc-abc", "ec2", true],
+  ])("accepts %s for service %s", (input, service, expected) => {
+    expect(isArnOfService(input, service)).toBe(expected);
+  });
+
+  it.each([
+    ["arn:aws:iam::123:role/foo", "sqs", false], // service mismatch
+    ["arn:aws:s3:::bucket", "sns", false],
+    ["not-an-arn", "iam", false],
+    ["", "iam", false],
+    ["arn:aws_x:iam::123:role/foo", "iam", false], // malformed partition
+    ["arn:azure:iam::123:role/foo", "iam", false],
+  ])("rejects %s for service %s", (input, service, expected) => {
+    expect(isArnOfService(input, service)).toBe(expected);
   });
 });
 

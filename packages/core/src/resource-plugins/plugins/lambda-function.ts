@@ -1,6 +1,6 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, AwsDefault, SizeLabel } from "../../config/cfn-keys.js";
-import { ArnPrefix } from "../../config/aws-arns.js";
+import { isArnOfService } from "../../config/aws-partition.js";
 import { DiscoveryCacheKey } from "../../config/discovery-keys.js";
 import type { ResourcePlugin, OptionMetadata, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
@@ -241,7 +241,7 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
         hint: "IAM role that grants the function permissions to access AWS services (S3, DynamoDB, etc.). If omitted, assignee will create a minimal-privilege role for you.",
         validate: (value: unknown) => {
           if (!value) return undefined; // Optional field
-          return typeof value === "string" && value.startsWith(ArnPrefix.IAM)
+          return typeof value === "string" && isArnOfService(value, "iam")
             ? undefined
             : "Must be a valid IAM role ARN";
         },
@@ -490,8 +490,8 @@ export const lambdaFunctionPlugin: ResourcePlugin = {
             .filter(Boolean);
           if (arns.length > 5) return "Maximum 5 Lambda Layers allowed";
           for (const arn of arns) {
-            if (!arn.startsWith("arn:aws:lambda:"))
-              return `Invalid layer ARN "${arn}" — must start with arn:aws:lambda:`;
+            if (!isArnOfService(arn, "lambda"))
+              return `Invalid layer ARN "${arn}" — must be a Lambda layer ARN (e.g. arn:aws:lambda:<region>:<account>:layer:<name>:<ver>)`;
           }
           return undefined;
         },

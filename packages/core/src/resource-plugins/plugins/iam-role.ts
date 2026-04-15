@@ -1,10 +1,7 @@
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
-import {
-  ArnPrefix,
-  IamPolicy,
-  AwsServicePrincipal,
-} from "../../config/aws-arns.js";
+import { IamPolicy, AwsServicePrincipal } from "../../config/aws-arns.js";
+import { isArnOfService } from "../../config/aws-partition.js";
 import { IamEffect } from "../../config/iam-effects.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
@@ -238,7 +235,7 @@ export const iamRolePlugin: ResourcePlugin = {
         validate: (value: unknown) => {
           if (!value) return undefined;
           const s = String(value);
-          if (!s.startsWith(ArnPrefix.IAM)) return "Must be an IAM policy ARN";
+          if (!isArnOfService(s, "iam")) return "Must be an IAM policy ARN";
           return undefined;
         },
       },
@@ -259,7 +256,7 @@ export const iamRolePlugin: ResourcePlugin = {
             .map((a) => a.trim())
             .filter(Boolean);
           for (const arn of arns) {
-            if (!arn.startsWith(ArnPrefix.IAM)) return `Invalid ARN: ${arn}`;
+            if (!isArnOfService(arn, "iam")) return `Invalid ARN: ${arn}`;
             if (arn.includes("AdministratorAccess"))
               return "AdministratorAccess policy is not allowed. Use least-privilege policies instead.";
           }
@@ -292,9 +289,15 @@ export const iamRolePlugin: ResourcePlugin = {
     // need a managed policy attachment, OMIT ManagedPolicyArns entirely
     // rather than inventing one — the role will still work via inline
     // policies (PolicyDocument under Policies) or a permissions boundary.
+    // Partition note: this list embeds `arn:aws:` (commercial) — LLM
+    // callers must rewrite the partition segment to match the target
+    // region when planning for GovCloud (`arn:aws-us-gov:`) or China
+    // (`arn:aws-cn:`). The managed-policy names themselves are stable
+    // across partitions; only the partition literal changes.
     "ManagedPolicyArns: ONLY use ARNs from this verified list of common AWS-managed policies. " +
+      "For GovCloud use arn:aws-us-gov:... and for China use arn:aws-cn:... with the same policy names. " +
       "If the user's intent does not clearly require any of these, OMIT ManagedPolicyArns (do NOT invent ARNs). " +
-      "Verified list: " +
+      "Verified list (commercial partition shown — swap `aws` for the target partition): " +
       [
         "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
         "arn:aws:iam::aws:policy/AmazonS3FullAccess",

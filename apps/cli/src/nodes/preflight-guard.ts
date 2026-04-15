@@ -16,6 +16,9 @@ import {
   getRequiredIamActions,
   PLACEHOLDER_DB_PASSWORDS,
   RDS_PASSWORD_FIELDS,
+  isAccessDeniedError,
+  isAuthFailureError,
+  isThrottlingError,
   type AwsPricingResponse,
   type DataSource,
   type PricingLineItem,
@@ -187,57 +190,88 @@ async function verifyManagedPolicyArns(
 
     const invalidArns: { arn: string; reason: string }[] = [];
     const unverifiedArns: { arn: string; reason: string }[] = [];
+    // Wave 4 F2 (P0-R2-1): the classifier for AccessDenied now comes from
+    // the shared @assignee/core helper, and we ALSO distinguish session-
+    // auth failures (ExpiredToken, InvalidClientTokenId, SignatureDoesNotMatch,
+    // TokenRefreshRequired, HTTP 401) which MUST fail the whole preflight
+    // closed — a hallucinated managed-policy ARN slipping past preflight
+    // just because the user's STS session expired is exactly the regression
+    // R2 Team D flagged. Throttling is retried with backoff before giving
+    // up and marking the ARN unverified.
+    //
     // P1-1: verify per-ARN — a single AccessDenied on one ARN must NOT
-    // abort verification of the rest. We also use proper structured error
-    // codes (err.name / err.Code) rather than substring-matching on the
-    // message text, which false-matches on resource names like
-    // "user-not-authorized-policy".
-    const ACCESS_DENIED_CODES = new Set([
-      "AccessDenied",
-      "AccessDeniedException",
-      "UnauthorizedOperation",
-      "AuthFailure",
-      "Forbidden",
-    ]);
+    // abort verification of the rest.
+    const THROTTLE_BACKOFF_MS = [200, 500, 1200];
     for (const arn of arns) {
-      try {
-        await iam.send(new GetPolicyCommand({ PolicyArn: arn }));
-      } catch (err) {
-        const e = err as {
-          name?: string;
-          Code?: string;
-          $metadata?: { httpStatusCode?: number };
-        };
-        const errName = e?.name ?? "";
-        const errCode = e?.Code ?? "";
-        const httpStatus = e?.$metadata?.httpStatusCode;
-        const errMsg = err instanceof Error ? err.message : String(err);
-        if (errName === "NoSuchEntityException" || errCode === "NoSuchEntity") {
-          invalidArns.push({
-            arn,
-            reason: "policy does not exist in IAM",
-          });
-        } else if (
-          ACCESS_DENIED_CODES.has(errName) ||
-          ACCESS_DENIED_CODES.has(errCode) ||
-          httpStatus === 403
-        ) {
-          // Operator role lacks iam:GetPolicy for this specific ARN — skip
-          // it and continue with the rest. CCAPI will still reject bad ARNs
-          // at provision time, but we want to catch as many hallucinated
-          // ARNs as we can given current permissions.
-          unverifiedArns.push({
-            arn,
-            reason: "access denied (iam:GetPolicy) — unverified",
-          });
-        } else {
-          // Unknown error — network blip, throttling, etc. Treat as
-          // unverified rather than failing the plan.
-          unverifiedArns.push({
-            arn,
-            reason: `verification failed: ${errMsg}`,
-          });
+      let verifyErr: unknown;
+      let attempt = 0;
+      // Inline retry loop: up to 4 attempts (initial + 3 backoff retries)
+      // when the failure is a throttle. Any non-throttle error breaks out
+      // immediately so the classifier below decides what to do.
+      for (;;) {
+        try {
+          await iam.send(new GetPolicyCommand({ PolicyArn: arn }));
+          verifyErr = undefined;
+          break;
+        } catch (err) {
+          verifyErr = err;
+          if (isThrottlingError(err) && attempt < THROTTLE_BACKOFF_MS.length) {
+            await new Promise((r) =>
+              setTimeout(r, THROTTLE_BACKOFF_MS[attempt]!),
+            );
+            attempt += 1;
+            continue;
+          }
+          break;
         }
+      }
+      if (verifyErr === undefined) continue;
+      const err = verifyErr;
+      const e = err as {
+        name?: string;
+        Code?: string;
+      };
+      const errName = e?.name ?? "";
+      const errCode = e?.Code ?? "";
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errName === "NoSuchEntityException" || errCode === "NoSuchEntity") {
+        invalidArns.push({
+          arn,
+          reason: "policy does not exist in IAM",
+        });
+      } else if (isAuthFailureError(err)) {
+        // Session-level auth failure — no subsequent AWS call from this
+        // process will succeed. Fail CLOSED so the user can't proceed to
+        // apply with a plan built on unverified assumptions.
+        return (
+          `AWS credentials expired or invalid while verifying ` +
+          `ManagedPolicyArns (${errName || errCode || "auth failure"}: ${errMsg}). ` +
+          `Preflight cannot validate the plan without working credentials. ` +
+          `Run \`assignee setup\` or refresh your AWS session (e.g. ` +
+          `\`aws sso login\`, renew SAML assertion, or rotate the access key) ` +
+          `and re-run the command.`
+        );
+      } else if (isAccessDeniedError(err)) {
+        // Operator role lacks iam:GetPolicy for this specific ARN — skip
+        // it and continue with the rest. CCAPI will still reject bad ARNs
+        // at provision time, but we want to catch as many hallucinated
+        // ARNs as we can given current permissions.
+        unverifiedArns.push({
+          arn,
+          reason: "access denied (iam:GetPolicy) — unverified",
+        });
+      } else if (isThrottlingError(err)) {
+        // Retries exhausted — treat as unverified rather than blocking.
+        unverifiedArns.push({
+          arn,
+          reason: `throttled after ${attempt + 1} attempts — unverified`,
+        });
+      } else {
+        // Truly-unknown error (network blip, etc.). Proceed with WARN.
+        unverifiedArns.push({
+          arn,
+          reason: `verification failed: ${errMsg}`,
+        });
       }
     }
 
@@ -270,7 +304,19 @@ async function verifyManagedPolicyArns(
     }
     return null;
   } catch (err) {
-    // Import or client construction failed — don't block, fall through
+    // Wave 4 F2 (P0-R2-1): if client construction itself surfaced a
+    // session-auth failure (expired token on initial credential probe),
+    // fail closed — consistent with the per-ARN loop above.
+    if (isAuthFailureError(err)) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return (
+        `AWS credentials expired or invalid — unable to construct IAM client ` +
+        `for ManagedPolicyArn verification (${errMsg}). ` +
+        `Run \`assignee setup\` or refresh your AWS session and re-run.`
+      );
+    }
+    // Import or client construction failed for a non-auth reason (missing
+    // module, network) — don't block, fall through with a WARN.
     log({
       ts: new Date().toISOString(),
       runId: "system",

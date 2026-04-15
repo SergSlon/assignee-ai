@@ -583,6 +583,124 @@ describe("preflightGuardNode", () => {
       expect(sendMock).not.toHaveBeenCalled();
     });
 
+    it("Wave 4 F2 P0-R2-1: fails CLOSED on ExpiredToken (session-auth failure)", async () => {
+      // Pre-fix regression: the else-branch in verifyManagedPolicyArns
+      // lumped ExpiredToken / InvalidClientTokenId / SignatureDoesNotMatch
+      // into the "unverified → continue" bucket. With stale creds, no
+      // hallucinated ARN could ever be caught and apply would proceed
+      // against CCAPI with a plan built on unverified assumptions.
+      sendMock.mockImplementation(() => {
+        const err = new Error(
+          "The security token included in the request is expired",
+        ) as Error & { name: string };
+        err.name = "ExpiredToken";
+        return Promise.reject(err);
+      });
+
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          resourceSchema: { required: ["AssumeRolePolicyDocument"] },
+          desiredState: {
+            RoleName: "expired-creds-case",
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            },
+            ManagedPolicyArns: [
+              "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+            ],
+          },
+        }),
+      );
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(/expired|invalid/i);
+      // Actionable remediation: the user must know how to unblock.
+      expect(result.errorMessage).toMatch(/assignee setup|refresh/i);
+    });
+
+    it("Wave 4 F2: fails CLOSED on InvalidClientTokenId", async () => {
+      sendMock.mockImplementation(() => {
+        const err = new Error(
+          "The security token included in the request is invalid",
+        ) as Error & { name: string };
+        err.name = "InvalidClientTokenId";
+        return Promise.reject(err);
+      });
+
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          resourceSchema: { required: ["AssumeRolePolicyDocument"] },
+          desiredState: {
+            RoleName: "bad-key-case",
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            },
+            ManagedPolicyArns: [
+              "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+            ],
+          },
+        }),
+      );
+
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toMatch(/expired|invalid/i);
+    });
+
+    it("Wave 4 F2: retries on throttling then proceeds unverified", async () => {
+      // ThrottlingException should trigger backoff retries, then treat
+      // the ARN as unverified (NOT fail closed, NOT fail blocked).
+      let calls = 0;
+      sendMock.mockImplementation(() => {
+        calls += 1;
+        const err = new Error("Rate exceeded") as Error & { name: string };
+        err.name = "ThrottlingException";
+        return Promise.reject(err);
+      });
+
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::IAM::Role",
+          resourceSchema: { required: ["AssumeRolePolicyDocument"] },
+          desiredState: {
+            RoleName: "throttled-case",
+            AssumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            },
+            ManagedPolicyArns: [
+              "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+            ],
+          },
+        }),
+      );
+
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+      // Must retry: initial + 3 backoffs = 4 total attempts
+      expect(calls).toBe(4);
+    });
+
     it("does not run verification for non-IAM-Role resource types", async () => {
       // Verifier is scoped to AWS::IAM::Role only — Lambda, EC2, etc.
       // may also have ManagedPolicyArns-shaped fields but those aren't

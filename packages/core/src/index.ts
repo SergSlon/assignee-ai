@@ -106,8 +106,19 @@ export {
   getPartitionFromRegion,
   ARN_PATTERN,
   ARN_PATTERN_SOURCE,
+  isArnOfService,
   type AwsPartition,
 } from "./config/aws-partition.js";
+
+// Config — structured AWS SDK error classifiers (Wave 4 F2: replaces
+// substring matching at 3 CLI sites + promotes the 5-code AccessDenied set
+// from preflight to a shared helper; adds auth-failure and throttling
+// classifiers so preflight can fail-closed on session errors).
+export {
+  isAccessDeniedError,
+  isAuthFailureError,
+  isThrottlingError,
+} from "./config/aws-errors.js";
 
 // Config — shared ARN parsing helpers (Wave 3 P2-2 dedup: CLI resource-resolver
 // and MCP destroy-resource previously had divergent inline copies).
@@ -334,9 +345,9 @@ export {
 } from "./services/schema-cache-warmer.js";
 
 export {
-  ArnPrefix,
   KMS_ALIAS_PREFIX,
   AwsManagedPolicy,
+  awsManagedPolicyArn,
   BEDROCK_MODEL_ARN_WILDCARD,
   IamPolicy,
   IamAction,

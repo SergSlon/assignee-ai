@@ -14,6 +14,7 @@ import {
   CfnKey,
   ResourceDefault,
   QuestionTypeName,
+  isAccessDeniedError,
 } from "@assignee/core";
 import {
   PRICING_LOOKUP_TIMEOUT_MS,
@@ -464,10 +465,13 @@ export async function resolveDynamicFields(
         const options = await fetch(fieldContext);
         fetchResults.set(key, options);
       } catch (err: unknown) {
+        // Wave 4 F2: structured classifier for AccessDenied. Timeout is
+        // still message-matched because there is no SDK error code for it
+        // (the fetcher layer throws a plain Error with "timed out" text).
         const reason =
           err instanceof Error && err.message.includes("timed out")
             ? " (timed out — your account may have many resources)"
-            : err instanceof Error && err.message.includes("not authorized")
+            : isAccessDeniedError(err)
               ? " (missing IAM permission)"
               : "";
         clack.log.warn(
