@@ -1,0 +1,173 @@
+/**
+ * Guard: verify every ManagedPolicyArn on an IAM::Role plan actually
+ * exists in IAM (Wave 19 Bug #8).
+ *
+ * Behaviour preserved verbatim from the original preflight-guard.ts:
+ *
+ * - Fail-CLOSED when an AWS session-auth failure is seen (ExpiredToken,
+ *   InvalidClientTokenId, SignatureDoesNotMatch, TokenRefreshRequired,
+ *   HTTP 401). Wave 4 F2 P0-R2-1: a hallucinated ARN slipping past
+ *   preflight just because STS expired is exactly the regression we must
+ *   not re-introduce.
+ * - Per-ARN AccessDenied does NOT abort the sweep — the ARN is marked
+ *   "unverified" and the rest continue.
+ * - Throttling is retried up to 3× with 200/500/1200ms backoff; if the
+ *   retries exhaust, the ARN is marked unverified rather than blocking.
+ * - Truly unknown errors → unverified + WARN log.
+ * - If client construction itself surfaces an auth failure, fail closed.
+ *   Any other construction failure → WARN + fall through (no block).
+ *
+ * IAM is global; us-east-1 is the canonical control-plane region.
+ */
+import {
+  isAccessDeniedError,
+  isAuthFailureError,
+  isThrottlingError,
+} from "@assignee/core";
+import { log, LOG_ACTIONS } from "../../../utils/logger.js";
+import type { GuardContext, GuardResult, PreflightGuard } from "../types.js";
+import { failResult, passResult, skipResult } from "../types.js";
+
+const THROTTLE_BACKOFF_MS = [200, 500, 1200] as const;
+
+export async function verifyManagedPolicyArns(
+  arns: readonly string[],
+): Promise<string | null> {
+  if (arns.length === 0) return null;
+  try {
+    const { IAMClient, GetPolicyCommand } = await import("@aws-sdk/client-iam");
+    const { operatorCredentials } =
+      await import("../../../config/operator-credentials.js");
+    const creds = operatorCredentials();
+    const iam = new IAMClient({
+      region: "us-east-1",
+      ...(creds.accessKeyId && creds.secretAccessKey
+        ? {
+            credentials: {
+              accessKeyId: creds.accessKeyId,
+              secretAccessKey: creds.secretAccessKey,
+            },
+          }
+        : {}),
+    });
+
+    const invalidArns: { arn: string; reason: string }[] = [];
+    const unverifiedArns: { arn: string; reason: string }[] = [];
+
+    for (const arn of arns) {
+      let verifyErr: unknown;
+      let attempt = 0;
+      for (;;) {
+        try {
+          await iam.send(new GetPolicyCommand({ PolicyArn: arn }));
+          verifyErr = undefined;
+          break;
+        } catch (err) {
+          verifyErr = err;
+          if (isThrottlingError(err) && attempt < THROTTLE_BACKOFF_MS.length) {
+            await new Promise((r) =>
+              setTimeout(r, THROTTLE_BACKOFF_MS[attempt]!),
+            );
+            attempt += 1;
+            continue;
+          }
+          break;
+        }
+      }
+      if (verifyErr === undefined) continue;
+      const err = verifyErr;
+      const e = err as { name?: string; Code?: string };
+      const errName = e?.name ?? "";
+      const errCode = e?.Code ?? "";
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errName === "NoSuchEntityException" || errCode === "NoSuchEntity") {
+        invalidArns.push({ arn, reason: "policy does not exist in IAM" });
+      } else if (isAuthFailureError(err)) {
+        return (
+          `AWS credentials expired or invalid while verifying ` +
+          `ManagedPolicyArns (${errName || errCode || "auth failure"}: ${errMsg}). ` +
+          `Preflight cannot validate the plan without working credentials. ` +
+          `Run \`assignee setup\` or refresh your AWS session (e.g. ` +
+          `\`aws sso login\`, renew SAML assertion, or rotate the access key) ` +
+          `and re-run the command.`
+        );
+      } else if (isAccessDeniedError(err)) {
+        unverifiedArns.push({
+          arn,
+          reason: "access denied (iam:GetPolicy) — unverified",
+        });
+      } else if (isThrottlingError(err)) {
+        unverifiedArns.push({
+          arn,
+          reason: `throttled after ${attempt + 1} attempts — unverified`,
+        });
+      } else {
+        unverifiedArns.push({ arn, reason: `verification failed: ${errMsg}` });
+      }
+    }
+
+    if (unverifiedArns.length > 0) {
+      log({
+        ts: new Date().toISOString(),
+        runId: "system",
+        level: "warn",
+        action: LOG_ACTIONS.PREFLIGHT_COMPLETED,
+        extras: {
+          phase: "managed_policy_verification_partial",
+          unverifiedCount: unverifiedArns.length,
+          unverifiedArns: unverifiedArns.map((u) => `${u.arn}: ${u.reason}`),
+        },
+      });
+    }
+
+    if (invalidArns.length > 0) {
+      const lines = invalidArns
+        .map((x) => `  - ${x.arn} → ${x.reason}`)
+        .join("\n");
+      return (
+        `One or more ManagedPolicyArns do not exist in IAM:\n${lines}\n\n` +
+        `These ARNs were likely hallucinated by the LLM. Either:\n` +
+        `  1. Remove them: \`assignee apply <intent> --set ManagedPolicyArns=\`\n` +
+        `  2. Replace with a verified ARN: see iam-role.ts configHints for the verified list\n` +
+        `  3. Specify the policies you want explicitly in your intent (e.g. ` +
+        `"... attach the AmazonS3ReadOnlyAccess policy")`
+      );
+    }
+    return null;
+  } catch (err) {
+    if (isAuthFailureError(err)) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return (
+        `AWS credentials expired or invalid — unable to construct IAM client ` +
+        `for ManagedPolicyArn verification (${errMsg}). ` +
+        `Run \`assignee setup\` or refresh your AWS session and re-run.`
+      );
+    }
+    log({
+      ts: new Date().toISOString(),
+      runId: "system",
+      level: "warn",
+      action: LOG_ACTIONS.PREFLIGHT_COMPLETED,
+      extras: {
+        phase: "managed_policy_verification_skipped",
+        error: err instanceof Error ? err.message : String(err),
+      },
+    });
+    return null;
+  }
+}
+
+export const managedPolicyGuard: PreflightGuard = {
+  id: "managed-policy",
+  async run(ctx: GuardContext): Promise<GuardResult> {
+    if (ctx.state.resourceType !== "AWS::IAM::Role")
+      return skipResult("not an IAM::Role");
+    const arns = ctx.desiredState["ManagedPolicyArns"];
+    if (!Array.isArray(arns) || arns.length === 0)
+      return skipResult("no ManagedPolicyArns");
+    const err = await verifyManagedPolicyArns(
+      arns.filter((a): a is string => typeof a === "string"),
+    );
+    return err ? failResult(err) : passResult;
+  },
+};
