@@ -1,34 +1,63 @@
-# Assignee.ai -- Documentation Index
+# Assignee.ai — Documentation
 
-## Reverse-Engineered Documentation (Deep Scan, April 2026)
+Docs organized by the [Diátaxis](https://diataxis.fr/) framework. Pick the
+quadrant that matches what you want to do.
 
-These documents were generated from a deep scan of the source code to provide a comprehensive understanding of what the codebase actually implements.
+> Note on the two MCP docs: `mcp-server.md` covers how to **expose** the
+> assignee CLI as an MCP server for IDEs (Cursor, Claude Code, Windsurf).
+> `mcp-servers.md` is a **reference** for the AWS MCP servers that assignee
+> itself consumes internally (Pricing, Documentation, IAM, Security, Billing).
+> Different topics — both are canonical.
 
-| Document                                                   | Description                                                                                                                        |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| [architecture.md](architecture.md)                         | Technical architecture: monorepo structure, LangGraph graph, plugin system, hexagonal ports/adapters, AWS SDK, MCP, error handling |
-| [integration-architecture.md](integration-architecture.md) | How CLI, MCP server, and core package integrate; shared vs. unique code; external service dependencies                             |
+---
 
-## Existing Documentation
+## Tutorials — learning-oriented
 
-These documents were already present in the `docs/` directory:
+Step-by-step lessons to get you from zero to a working setup. Read these first
+if you are new to assignee.ai.
 
-| Document                                               | Description                         |
-| ------------------------------------------------------ | ----------------------------------- |
-| [architecture-flows.md](architecture-flows.md)         | Architecture flow diagrams          |
-| [aws-bootstrap.md](aws-bootstrap.md)                   | AWS account bootstrapping guide     |
-| [best-practices.md](best-practices.md)                 | Best practices engine documentation |
-| [commands.md](commands.md)                             | CLI command reference               |
-| [configuration.md](configuration.md)                   | Configuration system documentation  |
-| [drift-detection.md](drift-detection.md)               | Drift detection and reconciliation  |
-| [mcp-server.md](mcp-server.md)                         | MCP server documentation            |
-| [quickstart.md](quickstart.md)                         | Quick start guide                   |
-| [resource-types.md](resource-types.md)                 | Supported resource types            |
-| [testing-guide.md](testing-guide.md)                   | Testing guide                       |
-| [mcp-intelligence-audit.md](mcp-intelligence-audit.md) | MCP intelligence audit              |
-| [mcp-servers.md](mcp-servers.md)                       | MCP servers overview                |
+| Doc                                  | What you'll learn                                                  |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| [quickstart.md](quickstart.md)       | Install the CLI, bootstrap AWS, plan and apply your first resource |
+| [aws-bootstrap.md](aws-bootstrap.md) | Set up an AWS account and IAM users end-to-end for assignee.ai     |
 
-## Key Metrics (as of 2026-04-10)
+## How-to guides — task-oriented
+
+Recipes for accomplishing specific goals. Assume you already know the basics.
+
+| Doc                                      | Goal                                                             |
+| ---------------------------------------- | ---------------------------------------------------------------- |
+| [commands.md](commands.md)               | Run each CLI command (plan, apply, destroy, drift, list, ...)    |
+| [drift-detection.md](drift-detection.md) | Detect and reconcile config drift between desired and live state |
+| [mcp-server.md](mcp-server.md)           | Expose assignee.ai as an MCP server to your IDE                  |
+| [testing-guide.md](testing-guide.md)     | Run the project's test suite and add new tests                   |
+
+## Reference — information-oriented
+
+Dry, precise, lookup-style information. Skim the tables; search for specifics.
+
+| Doc                                    | What it catalogs                                         |
+| -------------------------------------- | -------------------------------------------------------- |
+| [resource-types.md](resource-types.md) | Every supported AWS resource type and its plugin         |
+| [configuration.md](configuration.md)   | Full config precedence chain, env vars, and file formats |
+| [mcp-servers.md](mcp-servers.md)       | AWS MCP servers consumed by the pipeline (pins + tools)  |
+| [best-practices.md](best-practices.md) | Best-practice rule engine and the 185 shipped rules      |
+
+## Explanation — understanding-oriented
+
+Background, design rationale, and the "why" behind the system. Read these
+when you want to understand how assignee.ai thinks.
+
+| Doc                                                        | Topic                                                         |
+| ---------------------------------------------------------- | ------------------------------------------------------------- |
+| [architecture.md](architecture.md)                         | Monorepo layout, 13-node LangGraph pipeline, hexagonal ports  |
+| [architecture-flows.md](architecture-flows.md)             | End-to-end flow diagrams for plan / apply / destroy / drift   |
+| [integration-architecture.md](integration-architecture.md) | How CLI, MCP server, and `@assignee/core` fit together        |
+| [mcp-intelligence-audit.md](mcp-intelligence-audit.md)     | 2026-04-10 audit of how the pipeline exploits each MCP server |
+
+---
+
+## Key metrics (as of 2026-04-10)
 
 | Metric                         | Count                                    |
 | ------------------------------ | ---------------------------------------- |

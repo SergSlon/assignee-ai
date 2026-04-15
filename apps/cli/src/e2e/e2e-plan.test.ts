@@ -645,9 +645,13 @@ describeE2E("E2E: EC2 t3.micro apply + destroy", () => {
     );
     // t3.micro with default 8 GB gp3 EBS runs $0.0104/hr compute +
     // $0.08/GB-mo storage — headline cost should surface ~$7-8/mo,
-    // never "N/A" (would indicate pricing regression).
+    // never "N/A" (would indicate pricing regression). Shape check:
+    // must contain a `$` (currency marker) AND one of /mo|/month|/hr
+    // (cadence marker). `toBeTruthy()` would accept "whatever" — this
+    // pattern pins the canonical `~$X.YZ/month` shape emitted by the
+    // pricing decomposer pipeline.
     expect(finalState.estimatedMonthlyCost).not.toBe("N/A");
-    expect(finalState.estimatedMonthlyCost).toBeTruthy();
+    expect(finalState.estimatedMonthlyCost).toMatch(/\$.*(\/mo|\/month|\/hr)/);
 
     // destroyAndAssert exercises the full bulk-destroy pipeline (same
     // code path as `assignee destroy --all`): tag discovery, tier
@@ -782,9 +786,11 @@ describe.skip("E2E: RDS db.t3.micro apply + destroy (time-boxed)", () => {
       /^(arn:aws[\w-]*:rds:[a-z0-9-]+:\d+:db:[a-z][a-z0-9-]{0,62}|[a-z][a-z0-9-]{0,62})$/,
     );
     // Headline cost must be non-"N/A" — RDS decomposer + live pricing
-    // should produce a monthly figure. Regression guard.
+    // should produce a monthly figure. Regression guard. Shape-check
+    // the canonical `~$X.YZ/month` emission so a degenerate "$" or ""
+    // cannot pass as truthy.
     expect(finalState.estimatedMonthlyCost).not.toBe("N/A");
-    expect(finalState.estimatedMonthlyCost).toBeTruthy();
+    expect(finalState.estimatedMonthlyCost).toMatch(/\$.*(\/mo|\/month|\/hr)/);
 
     const completed =
       finalState.completedResources ??
@@ -898,8 +904,11 @@ async function runFreeTierLifecycle(
     // trip the test. Per-case `skipCostAssertion` escape hatch is
     // honored for genuinely-free types (IAM Role) and SecretsManager
     // (which was itself dropped in cf55d7d — $0.40 is a valid headline).
+    // Wave-3 F7: tightened from `.toBeTruthy()` to a regex pin on the
+    // canonical `~$X.YZ/month` shape so a degenerate string like "$"
+    // or "Free" (without a cadence marker) cannot slip through.
     expect(finalState.estimatedMonthlyCost).not.toBe("N/A");
-    expect(finalState.estimatedMonthlyCost).toBeTruthy();
+    expect(finalState.estimatedMonthlyCost).toMatch(/\$.*(\/mo|\/month|\/hr)/);
   }
 
   // Blind-hunter M2: `?? []` fires only on null/undefined, not on
@@ -1949,10 +1958,30 @@ describeE2E("E2E: KMS Key plan", () => {
     // KeyPolicy is the load-bearing security-critical field — without
     // it CCAPI rejects the create. Reviewers (blind H2 + QA #1 on
     // cf55d7d..c269379) flagged dropping this assertion as weakening
-    // on a security-critical field. Restored .toBeTruthy() — if the
-    // plan-generator regresses to omitting KeyPolicy, the plan the
-    // user approves is incomplete and the test must catch it.
-    expect(s.desiredState?.["KeyPolicy"]).toBeTruthy();
+    // on a security-critical field. If the plan-generator regresses
+    // to omitting KeyPolicy, the plan the user approves is incomplete
+    // and the test must catch it.
+    //
+    // Wave-3 F7: tightened from `.toBeTruthy()` (which accepts the
+    // stringified `"{}"` or any non-empty string) to a shape check on
+    // { Version, Statement } — the two mandatory IAM policy fields.
+    // CCAPI accepts KeyPolicy as either a JSON object OR a JSON-
+    // encoded string, so we parse strings before shape-checking.
+    const keyPolicyRaw = s.desiredState?.["KeyPolicy"];
+    expect(keyPolicyRaw).toBeDefined();
+    const keyPolicy =
+      typeof keyPolicyRaw === "string"
+        ? JSON.parse(keyPolicyRaw)
+        : keyPolicyRaw;
+    expect(keyPolicy).toEqual(
+      expect.objectContaining({
+        Version: expect.any(String),
+        Statement: expect.any(Array),
+      }),
+    );
+    expect(
+      (keyPolicy as { Statement: unknown[] }).Statement.length,
+    ).toBeGreaterThan(0);
     // KeyUsage + KeySpec as enum-bounded sanity checks (the real
     // KMS contract; CCAPI rejects arbitrary strings here).
     expect(s.desiredState?.["KeyUsage"]).toMatch(

@@ -16,8 +16,8 @@ Assignee.ai has three primary packages that integrate with each other:
                       /               \
           +-----------+           +------------------+
           |  apps/cli |           | apps/mcp-server  |
-          | (12 cmds, |           | (5 MCP tools,    |
-          |  12 nodes)|           |  stdio transport) |
+          | (17 cmds, |           | (5 MCP tools,    |
+          |  13 nodes)|           |  stdio transport) |
           +-----------+           +------------------+
                |                         |
                |  depends on             |  depends on
@@ -60,9 +60,9 @@ The primary user-facing application. Contains all business logic.
 
 **Unique to CLI:**
 
-- 12-node LangGraph pipeline (graph.ts + all nodes)
+- 13-node LangGraph pipeline (graph.ts + all nodes)
 - Interactive wizard (option-elicitor with clack prompts)
-- 12 Commander.js commands
+- 17 Commander.js commands
 - MCP server process management (spawn/lifecycle)
 - AWS SDK integration (Bedrock, CloudControl, CloudFront, CloudWatch Logs, DynamoDB, EC2, IAM, Lambda, RDS, Resource Groups Tagging API, S3, SNS, SSM, STS)
 - 6-level configuration precedence system
@@ -130,7 +130,7 @@ MCP tool handler -> createGraphContext() -> graph.invoke(initialState)
 
 The MCP server has a `"assignee": "workspace:*"` dependency, giving it access to:
 
-- `createGraph()` function and all 12 nodes
+- `createGraph()` function and all 13 nodes
 - `CloudControlAdapter` and `SDKFallbackDispatcher`
 - `MemoryService` for provision/failure recording
 - `fetchManagedResources()` for resource listing
