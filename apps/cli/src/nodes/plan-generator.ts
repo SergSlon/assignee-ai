@@ -18,6 +18,7 @@ import {
   parseMarker,
   MARKER_PREFIX,
   MARKER_PATTERN_GLOBAL,
+  getPartitionFromRegion,
   type ProvisionRecord,
   type FailureRecord,
   type ResourceResult,
@@ -854,13 +855,10 @@ export function createPlanGeneratorNode({
                   const identity = await sts.send(
                     new GetCallerIdentityCommand({}),
                   );
-                  // Detect partition from region: aws-us-gov for GovCloud,
-                  // aws-cn for China, aws for everything else.
-                  const partition = region.startsWith("us-gov-")
-                    ? "aws-us-gov"
-                    : region.startsWith("cn-")
-                      ? "aws-cn"
-                      : "aws";
+                  // Detect partition from region — covers commercial,
+                  // GovCloud, China, ISO (us-iso-*) and ISOB (us-isob-*).
+                  // See packages/core/src/config/aws-partition.ts.
+                  const partition = getPartitionFromRegion(region);
                   desiredState[CfnKey.ROLE] =
                     `arn:${partition}:iam::${identity.Account}:role/${roleName}`;
                 } catch (err) {
@@ -920,7 +918,7 @@ export function createPlanGeneratorNode({
         // copy, a PLAN-mode pass on resource N corrupts the shared
         // SecurityGroups/Targets arrays, and a subsequent APPLY-mode
         // pass on resource M sees placeholders instead of markers.
-        const deepCopy = JSON.parse(JSON.stringify(desiredState)) as Record<
+        const deepCopy = structuredClone(desiredState) as Record<
           string,
           unknown
         >;

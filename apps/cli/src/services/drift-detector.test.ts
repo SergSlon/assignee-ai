@@ -319,6 +319,63 @@ describe("DriftDetectorService", () => {
       expect(normalizeValue(null, undefined)).toBeUndefined();
       expect(normalizeValue(undefined, null)).toBeUndefined();
     });
+
+    describe("P1-2: strict decimal number coercion", () => {
+      // Real AWS never returns hex, whitespace-padded, scientific, or empty
+      // strings for numeric fields. Relaxed Number() coercion hid genuine
+      // drift by silently normalizing these to valid numbers.
+      it("rejects hex-prefixed strings (e.g. '0x10' from a broken serializer)", () => {
+        // Must preserve as string so the diff flags it rather than treating
+        // it as equal to 16.
+        expect(normalizeValue("0x10", 16)).toBe("0x10");
+      });
+
+      it("rejects whitespace-padded strings (e.g. ' 5 ')", () => {
+        expect(normalizeValue(" 5 ", 5)).toBe(" 5 ");
+        expect(normalizeValue("5\n", 5)).toBe("5\n");
+        expect(normalizeValue("\t42", 42)).toBe("\t42");
+      });
+
+      it("rejects empty strings (Number('') → 0 trap)", () => {
+        // Empty must NOT coerce to 0 — that would mask a missing-value drift.
+        expect(normalizeValue("", 0)).toBe("");
+        expect(normalizeValue("", 42)).toBe("");
+      });
+
+      it("rejects scientific notation ('1e3') — AWS never emits it", () => {
+        expect(normalizeValue("1e3", 1000)).toBe("1e3");
+        expect(normalizeValue("1.5e2", 150)).toBe("1.5e2");
+      });
+
+      it("rejects octal/binary prefixes", () => {
+        expect(normalizeValue("0o10", 8)).toBe("0o10");
+        expect(normalizeValue("0b10", 2)).toBe("0b10");
+      });
+
+      it("handles null / undefined without coercion", () => {
+        // null and undefined collapse to undefined regardless of desired type.
+        expect(normalizeValue(null, 5)).toBeUndefined();
+        expect(normalizeValue(undefined, 5)).toBeUndefined();
+      });
+
+      it("still accepts clean decimal integers and floats", () => {
+        expect(normalizeValue("42", 42)).toBe(42);
+        expect(normalizeValue("-7", -7)).toBe(-7);
+        expect(normalizeValue("3.14", 3.14)).toBe(3.14);
+        expect(normalizeValue("0", 0)).toBe(0);
+        expect(normalizeValue(".5", 0.5)).toBe(0.5);
+      });
+
+      it("boolean coercion accepts ONLY exact 'true'/'false' literals", () => {
+        expect(normalizeValue("true", true)).toBe(true);
+        expect(normalizeValue("false", false)).toBe(false);
+        // Not-exact literals fall through as strings.
+        expect(normalizeValue("True", true)).toBe("True");
+        expect(normalizeValue("TRUE", true)).toBe("TRUE");
+        expect(normalizeValue("1", true)).toBe("1");
+        expect(normalizeValue(" true ", true)).toBe(" true ");
+      });
+    });
   });
 
   describe("checkAll (batch mode — Story 28.6)", () => {

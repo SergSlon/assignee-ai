@@ -87,7 +87,7 @@ vi.mock("../services/memory.js", () => ({
 
 // ── Dynamic imports (after mocks) ────────────────────────────────────────────
 
-const { confirm, select, text } = await import("@clack/prompts");
+const { confirm, select, text, autocomplete } = await import("@clack/prompts");
 const { optionElicitorNode } = await import("./option-elicitor.js");
 const { createPlanGeneratorNode, applyToCfnTransforms } =
   await import("./plan-generator.js");
@@ -514,9 +514,11 @@ describe("Lambda full flow", () => {
       .mockResolvedValueOnce("DB_HOST=localhost") // Environment
       .mockResolvedValueOnce(""); // Tags (skipped)
 
-    vi.mocked(select)
-      .mockResolvedValueOnce("nodejs22.x") // Runtime
-      .mockResolvedValueOnce("256"); // MemorySize
+    // Wave-2 P1 (team-C #14): autocomplete threshold lowered from >12 to >10.
+    // Lambda Runtime renders 11 entries (8 runtimes + Back + Other + Help) so
+    // it now goes through clack.autocomplete rather than clack.select.
+    vi.mocked(autocomplete).mockResolvedValueOnce("nodejs22.x"); // Runtime
+    vi.mocked(select).mockResolvedValueOnce("256"); // MemorySize
 
     // Advanced = no
     vi.mocked(confirm).mockResolvedValueOnce(false);

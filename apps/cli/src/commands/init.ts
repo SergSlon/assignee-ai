@@ -87,7 +87,10 @@ export interface ProjectConfig {
   autoFixBestPractices?: boolean;
   /** Nested AssigneeConfig shape consumed by project-config-loader */
   defaults?: { region?: string; tags?: Record<string, string> };
-  preferences?: { auto_fix?: string };
+  preferences?: {
+    /** One of AutoFixMode: "ask" | "apply" | "skip". */
+    auto_fix?: (typeof AutoFixMode)[keyof typeof AutoFixMode];
+  };
   priceCacheTtlMinutes?: number;
 }
 
@@ -409,10 +412,24 @@ export const initCommand = new Command(CommandName.INIT)
       return;
     }
 
-    const autoFix = await clack.confirm({
+    // P1-4 (Wave-2 F6, 2026-04-14): Project init previously collapsed the
+    // three-way `ask|apply|skip` choice used by `init --global` into a
+    // boolean yes/no, silently mapping `yes → apply` and `no → ask`. That
+    // violated the `feedback_autofix_user_decides` memory: the user MUST
+    // be able to pick `skip`. Match the global init's 3-way select exactly
+    // so the behaviour is consistent across project and global scopes.
+    const autoFix = await clack.select({
       message:
-        "Auto-apply security best practices? (encryption, IMDSv2, public access blocking, etc.)",
-      initialValue: true,
+        "Auto-fix security best-practice violations? (encryption, IMDSv2, public access blocking, etc.)",
+      options: [
+        {
+          value: AutoFixMode.ASK,
+          label: "ask — prompt before each fix (default)",
+        },
+        { value: AutoFixMode.APPLY, label: "apply — fix automatically" },
+        { value: AutoFixMode.SKIP, label: "skip — never auto-fix" },
+      ],
+      initialValue: AutoFixMode.ASK,
     });
 
     if (clack.isCancel(autoFix)) {
@@ -421,6 +438,8 @@ export const initCommand = new Command(CommandName.INIT)
     }
 
     // ── Write config file ─────────────────────────────────────────────
+    const autoFixMode =
+      autoFix as (typeof AutoFixMode)[keyof typeof AutoFixMode];
     const config: ProjectConfig = {
       region: region as string,
       profile: profile as string,
@@ -428,7 +447,11 @@ export const initCommand = new Command(CommandName.INIT)
         [AssigneeTag.KEY]: AssigneeTag.VALUE,
         environment: environment as string,
       },
-      autoFixBestPractices: autoFix as boolean,
+      // Retain the legacy boolean shape for back-compat with older code
+      // paths that still read `autoFixBestPractices`: `apply` → true,
+      // `ask`/`skip` → false. The authoritative value lives in
+      // `preferences.auto_fix` below.
+      autoFixBestPractices: autoFixMode === AutoFixMode.APPLY,
       // Nested AssigneeConfig shape consumed by project-config-loader
       defaults: {
         region: region as string,
@@ -438,7 +461,10 @@ export const initCommand = new Command(CommandName.INIT)
         },
       },
       preferences: {
-        auto_fix: (autoFix as boolean) ? "apply" : "ask",
+        // Persist the 3-mode user decision straight to the project config
+        // (not just env). `user-config-loader` reads this key when
+        // resolving auto-fix behavior.
+        auto_fix: autoFixMode,
       },
     };
 

@@ -186,34 +186,73 @@ async function verifyManagedPolicyArns(
     });
 
     const invalidArns: { arn: string; reason: string }[] = [];
+    const unverifiedArns: { arn: string; reason: string }[] = [];
+    // P1-1: verify per-ARN — a single AccessDenied on one ARN must NOT
+    // abort verification of the rest. We also use proper structured error
+    // codes (err.name / err.Code) rather than substring-matching on the
+    // message text, which false-matches on resource names like
+    // "user-not-authorized-policy".
+    const ACCESS_DENIED_CODES = new Set([
+      "AccessDenied",
+      "AccessDeniedException",
+      "UnauthorizedOperation",
+      "AuthFailure",
+      "Forbidden",
+    ]);
     for (const arn of arns) {
       try {
         await iam.send(new GetPolicyCommand({ PolicyArn: arn }));
       } catch (err) {
-        const errName = (err as { name?: string })?.name ?? "";
+        const e = err as {
+          name?: string;
+          Code?: string;
+          $metadata?: { httpStatusCode?: number };
+        };
+        const errName = e?.name ?? "";
+        const errCode = e?.Code ?? "";
+        const httpStatus = e?.$metadata?.httpStatusCode;
         const errMsg = err instanceof Error ? err.message : String(err);
-        if (errName === "NoSuchEntityException") {
+        if (errName === "NoSuchEntityException" || errCode === "NoSuchEntity") {
           invalidArns.push({
             arn,
             reason: "policy does not exist in IAM",
           });
         } else if (
-          errName === "AccessDenied" ||
-          errMsg.includes("not authorized")
+          ACCESS_DENIED_CODES.has(errName) ||
+          ACCESS_DENIED_CODES.has(errCode) ||
+          httpStatus === 403
         ) {
-          // Operator role lacks iam:GetPolicy — fail open. CCAPI will still
-          // reject bad ARNs at provision time. Don't block on a permission
-          // gap that's separate from the bug we're trying to catch.
-          return null;
+          // Operator role lacks iam:GetPolicy for this specific ARN — skip
+          // it and continue with the rest. CCAPI will still reject bad ARNs
+          // at provision time, but we want to catch as many hallucinated
+          // ARNs as we can given current permissions.
+          unverifiedArns.push({
+            arn,
+            reason: "access denied (iam:GetPolicy) — unverified",
+          });
         } else {
-          // Unknown error — log to extras but don't block. Network blip,
-          // throttling, etc.
-          invalidArns.push({
+          // Unknown error — network blip, throttling, etc. Treat as
+          // unverified rather than failing the plan.
+          unverifiedArns.push({
             arn,
             reason: `verification failed: ${errMsg}`,
           });
         }
       }
+    }
+
+    if (unverifiedArns.length > 0) {
+      log({
+        ts: new Date().toISOString(),
+        runId: "system",
+        level: "warn",
+        action: LOG_ACTIONS.PREFLIGHT_COMPLETED,
+        extras: {
+          phase: "managed_policy_verification_partial",
+          unverifiedCount: unverifiedArns.length,
+          unverifiedArns: unverifiedArns.map((u) => `${u.arn}: ${u.reason}`),
+        },
+      });
     }
 
     if (invalidArns.length > 0) {

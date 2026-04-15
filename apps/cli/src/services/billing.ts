@@ -19,6 +19,30 @@ import { defaultMemoryService } from "./memory.js";
 import { AWS_REGION, UNKNOWN_FALLBACK } from "../config/constants.js";
 import type { ManagedResource } from "./list-resources.js";
 import { CostEstimateLabel, type DataSource } from "@assignee/core";
+import { log, LOG_ACTIONS, LogLevel } from "../utils/logger.js";
+
+/**
+ * Wave 3 F9 P2-3b: shared helper that replaces four bare `catch {}` blocks
+ * in this file. Emits a structured warn-level event so the failure surfaces
+ * under --verbose / ASSIGNEE_VERBOSITY=verbose and is persisted to the
+ * rotating daily log file (error/warn are always persisted).
+ *
+ * Kept local to billing.ts because the "billing-mcp" runId + action tuple
+ * is specific to this file's graceful-degradation chain (see SECURITY-AUDIT
+ * H19 — silent error drop).
+ */
+function logBillingMcpFailure(action: string, err: unknown): void {
+  log({
+    ts: new Date().toISOString(),
+    runId: "billing-mcp",
+    level: LogLevel.WARN,
+    action: LOG_ACTIONS.BILLING_MCP_QUERY_FAILED,
+    extras: {
+      billingAction: action,
+      error: err instanceof Error ? err.message : String(err),
+    },
+  });
+}
 
 export interface BillingCostData {
   arn: string;
@@ -415,7 +439,8 @@ export async function queryCostAnomalies(
           source: "mcp",
         }) as CostAnomaly,
     );
-  } catch {
+  } catch (err) {
+    logBillingMcpFailure("queryCostAnomalies", err);
     return [];
   }
 }
@@ -456,7 +481,8 @@ export async function queryCostOptimization(
           source: "mcp",
         }) as CostOptimizationRecommendation,
     );
-  } catch {
+  } catch (err) {
+    logBillingMcpFailure("queryCostOptimization", err);
     return [];
   }
 }
@@ -505,7 +531,8 @@ export async function queryComputeOptimizer(
           source: "mcp",
         }) as ComputeOptimizerRecommendation,
     );
-  } catch {
+  } catch (err) {
+    logBillingMcpFailure("queryComputeOptimizer", err);
     return [];
   }
 }
@@ -528,7 +555,8 @@ export async function getCostSavingsEstimate(
     if (data) {
       return `${data.actualMonthlyCost} saved`;
     }
-  } catch {
+  } catch (err) {
+    logBillingMcpFailure("getCostSavingsEstimate", err);
     // Graceful degradation
   }
 

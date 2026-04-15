@@ -49,6 +49,26 @@ import {
 } from "../services/bulk-destroy.js";
 
 /**
+ * Computes the typed-confirmation token for a single-resource destroy.
+ *
+ * Wave-2 P1-6: returns the resource's own identifier (or the last
+ * ARN segment after `/` or `:`) so the user has to re-type the thing
+ * they are deleting. Prefers `identifier` when present (CloudControl
+ * primary identifier, already human-readable for most types), falling
+ * back to `arn.split(/[/:]/).pop()` for edge cases where identifier
+ * is empty. Matching is performed case-insensitively by the caller.
+ */
+export function resourceConfirmationToken(resource: {
+  identifier?: string;
+  arn: string;
+}): string {
+  const id = (resource.identifier ?? "").trim();
+  if (id) return id;
+  const tail = resource.arn.split(/[/:]/).pop() ?? "";
+  return tail.trim() || resource.arn;
+}
+
+/**
  * Renders a resource details box before confirmation.
  */
 function renderDestroyBox(resource: {
@@ -475,15 +495,22 @@ export async function destroyAction(
       );
     }
 
-    // Strict confirmation: require "yes" (case-insensitive — accept Yes/YES/yes)
+    // Wave-2 P1-6 (2026-04-14): typed-name confirmation.
+    // Bulk destroy already requires typing "destroy all"; single-resource
+    // used to accept "yes" which is trivial to muscle-memory into a
+    // deletion. Now the user must type the resource's identifier
+    // (the short name / last ARN segment) to confirm. This matches the
+    // typed-phrase safety bar of `--all` without making it tediously long
+    // for a single target.
+    const confirmToken = resourceConfirmationToken(resolved);
     const answer = await clack.text({
-      message: 'Type "yes" to destroy this resource',
+      message: `Type '${confirmToken}' to confirm destruction, or anything else to cancel:`,
     });
 
     if (
       clack.isCancel(answer) ||
       typeof answer !== "string" ||
-      answer.trim().toLowerCase() !== "yes"
+      answer.trim().toLowerCase() !== confirmToken.toLowerCase()
     ) {
       clack.outro(UserMessage.DESTROY_CANCELLED);
       throw new UserCancelledError(UserMessage.DESTROY_CANCELLED);

@@ -284,10 +284,16 @@ export async function resourceProvisionerNode(
   // P0 FIX: On retry after a failed NAT Gateway provisioning, reuse any
   // previously-allocated EIP tagged with this runId instead of leaking a new one.
   //
-  // C1: Track whether the EIP was allocated fresh in THIS invocation. The
+  // C1: Track which EIPs were allocated fresh in THIS invocation. The
   // failure-path cleanup must only release EIPs we just allocated — never
   // EIPs reused from a prior attempt, or the retry-reuse design is defeated.
-  let eipAllocatedThisInvocation = false;
+  //
+  // P1-3: track per-EIP rather than a single boolean. A multi-path flow
+  // could set `true` from a reuse-success, then later allocate a fresh EIP
+  // in a follow-up branch — the fresh EIP would then be invisible to
+  // failure cleanup and leak. A Set of fresh AllocationIds is unambiguous:
+  // we release exactly what we allocated, regardless of path.
+  const freshlyAllocatedEipIds = new Set<string>();
   if (
     state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
     desiredState[CfnKey.ALLOCATION_ID] === EIP_AUTO_ALLOCATE
@@ -328,13 +334,56 @@ export async function resourceProvisionerNode(
               message: `Reusing existing EIP ${allocationId} from previous attempt`,
             },
           });
-          // L-A6: DescribeAddresses may return multiple EIPs tagged with the
-          // same runId from prior leaked attempts. We reuse the first one but
-          // emit a warn-level log so operators can manually clean up the rest.
+          // L-A6 / P1-3: DescribeAddresses may return multiple EIPs tagged
+          // with the same runId from prior leaked attempts. We reuse the
+          // first one and auto-release the rest IF they are orphans (not
+          // currently associated with a NAT Gateway / ENI / Instance). This
+          // prevents the per-retry EIP leak that the original "manual
+          // cleanup" path produced. Associated EIPs are left alone — they
+          // belong to a concurrent success path and releasing them would
+          // break live infrastructure.
           if (existing.Addresses.length > 1) {
+            const { ReleaseAddressCommand } =
+              await import("@aws-sdk/client-ec2");
             const allAllocationIds = existing.Addresses.map(
               (a) => a.AllocationId,
             ).filter((id): id is string => typeof id === "string");
+            const orphanIds: string[] = [];
+            const keptIds: string[] = [];
+            for (const addr of existing.Addresses) {
+              if (!addr.AllocationId || addr.AllocationId === allocationId) {
+                continue;
+              }
+              const isOrphan =
+                !addr.AssociationId &&
+                !addr.InstanceId &&
+                !addr.NetworkInterfaceId;
+              if (!isOrphan) {
+                keptIds.push(addr.AllocationId);
+                continue;
+              }
+              try {
+                await ec2.send(
+                  new ReleaseAddressCommand({
+                    AllocationId: addr.AllocationId,
+                  }),
+                );
+                orphanIds.push(addr.AllocationId);
+              } catch (relErr) {
+                keptIds.push(addr.AllocationId);
+                log({
+                  ts: new Date().toISOString(),
+                  runId: state.runId,
+                  level: "warn",
+                  action: LOG_ACTIONS.STATE_GUARD_SKIPPED,
+                  extras: {
+                    phase: "release_orphan_eip",
+                    allocationId: addr.AllocationId,
+                    error: formatErrorForLog(relErr),
+                  },
+                });
+              }
+            }
             log({
               ts: new Date().toISOString(),
               runId: state.runId,
@@ -345,10 +394,13 @@ export async function resourceProvisionerNode(
                 count: existing.Addresses.length,
                 reusedAllocationId: allocationId,
                 allAllocationIds,
+                releasedOrphanIds: orphanIds,
+                keptAssociatedIds: keptIds,
                 message:
                   `Found ${existing.Addresses.length} EIPs tagged with runId ${state.runId} ` +
-                  `from previous attempts. Reusing ${allocationId}; the rest are leaked and ` +
-                  `require manual cleanup via 'aws ec2 release-address'.`,
+                  `from previous attempts. Reusing ${allocationId}; auto-released ` +
+                  `${orphanIds.length} orphan EIP(s); ` +
+                  `${keptIds.length} remain associated and were left intact.`,
               },
             });
           }
@@ -399,10 +451,12 @@ export async function resourceProvisionerNode(
             desiredState,
           };
         }
-        // C1: Mark this EIP as fresh-allocated so cleanup releases it on
-        // failure. Reused EIPs (found via DescribeAddresses above) must NOT
-        // be released on failure — they belong to a previous attempt.
-        eipAllocatedThisInvocation = true;
+        // C1 / P1-3: Mark this EIP as fresh-allocated so cleanup releases
+        // it on failure. Reused EIPs (found via DescribeAddresses above)
+        // must NOT be released on failure — they belong to a previous
+        // attempt. Tracking per-id (not per-invocation) prevents leaks on
+        // any multi-path flow that both reuses AND allocates.
+        freshlyAllocatedEipIds.add(allocationId);
         // Tag the EIP with runId AND the standard managed-by tag.
         //
         // Wave 19 Bug #6: before this fix, EIPs were tagged ONLY with
@@ -703,9 +757,7 @@ export async function resourceProvisionerNode(
     // loop defeats the reuse design and we leak one EIP per failure.
     if (
       state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
-      eipAllocatedThisInvocation &&
-      desiredState[CfnKey.ALLOCATION_ID] &&
-      desiredState[CfnKey.ALLOCATION_ID] !== EIP_AUTO_ALLOCATE
+      freshlyAllocatedEipIds.size > 0
     ) {
       try {
         const { EC2Client, ReleaseAddressCommand } =
@@ -714,21 +766,34 @@ export async function resourceProvisionerNode(
           region: AWS_REGION,
           credentials: requireAssigneeCredentials("operator"),
         });
-        await ec2.send(
-          new ReleaseAddressCommand({
-            AllocationId: desiredState[CfnKey.ALLOCATION_ID] as string,
-          }),
-        );
+        for (const freshId of freshlyAllocatedEipIds) {
+          try {
+            await ec2.send(
+              new ReleaseAddressCommand({ AllocationId: freshId }),
+            );
+          } catch (err) {
+            // best-effort cleanup — surface so operators can diagnose leaks
+            log({
+              ts: new Date().toISOString(),
+              runId: state.runId,
+              level: "info",
+              action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
+              extras: {
+                phase: "release_eip_after_failure",
+                allocationId: freshId,
+                error: formatErrorForLog(err),
+              },
+            });
+          }
+        }
       } catch (err) {
-        // best-effort cleanup — surface as info so operators can diagnose EIP leaks
         log({
           ts: new Date().toISOString(),
           runId: state.runId,
           level: "info",
           action: LOG_ACTIONS.RESOURCE_PROVISION_STARTED,
           extras: {
-            phase: "release_eip_after_failure",
-            allocationId: desiredState[CfnKey.ALLOCATION_ID],
+            phase: "release_eip_client_init_failed",
             error: formatErrorForLog(err),
           },
         });

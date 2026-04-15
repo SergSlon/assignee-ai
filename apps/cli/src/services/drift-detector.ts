@@ -116,10 +116,22 @@ export function normalizeValue(actual: unknown, desired: unknown): unknown {
     if (actual === "false") return false;
   }
 
-  // Coerce stringified numbers
+  // Coerce stringified numbers — STRICT decimal parse.
+  // P1-2: `Number()` accepts "0x10" (hex), " 5 " (whitespace),
+  // "" (→0), "1e3" → silently passing drift checks that should flag.
+  // We require a plain decimal integer or float with no whitespace,
+  // no hex/octal/binary prefixes, and no empty string.
   if (typeof actual === "string" && typeof desired === "number") {
-    const num = Number(actual);
-    if (!isNaN(num)) return num;
+    // Strict decimal: optional minus, digits, optional .digits.
+    // Reject empty, whitespace, hex (0x), octal (0o), bin (0b),
+    // scientific notation ("1e3"). AWS never returns scientific
+    // notation for numeric fields, so this is a strong hallucination
+    // signal when it appears.
+    if (/^-?(?:\d+\.?\d*|\.\d+)$/.test(actual)) {
+      const num = Number(actual);
+      if (Number.isFinite(num)) return num;
+    }
+    // Fall through: leave as original string so diff flags it.
   }
 
   return actual;

@@ -85,9 +85,11 @@ function mockPrompts(opts: {
   vi.mocked(clack.text)
     .mockResolvedValueOnce(opts.region ?? "us-east-1")
     .mockResolvedValueOnce(opts.profile ?? "default");
-  vi.mocked(clack.select).mockResolvedValueOnce(
-    opts.environment ?? "development",
-  );
+  vi.mocked(clack.select)
+    // 1st select: environment
+    .mockResolvedValueOnce(opts.environment ?? "development")
+    // 2nd select: auto_fix (Wave-2 F6 P1-4 — 3-mode restored)
+    .mockResolvedValueOnce("ask");
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────
@@ -162,6 +164,10 @@ describe("assignee init command", () => {
         "managed-by": "assignee-ai",
         environment: "production",
       },
+      // Legacy boolean shape kept for back-compat (Wave-2 F6 P1-4):
+      // `apply` → true; `ask`/`skip` → false. Authoritative value is
+      // `preferences.auto_fix`.
+      autoFixBestPractices: false,
       defaults: {
         region: "us-west-2",
         tags: {
