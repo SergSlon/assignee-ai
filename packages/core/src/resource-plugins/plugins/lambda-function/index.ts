@@ -4,7 +4,6 @@ import { commonFields, advancedFields } from "./fields.js";
 import { defaults, companionResources, configHints } from "./config.js";
 
 export {
-  LAMBDA_USD_PER_GB_SECOND,
   sortedRuntimes,
   runtimeOptions,
   memoryLabel,
