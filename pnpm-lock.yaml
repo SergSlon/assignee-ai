@@ -23,6 +23,9 @@ importers:
 
   .:
     devDependencies:
+      '@aws-sdk/client-cloudformation':
+        specifier: ^3.1015.0
+        version: 3.1017.0
       '@vitest/coverage-v8':
         specifier: ^3.2.4
         version: 3.2.4(vitest@3.2.4(@types/node@25.5.0)(yaml@2.8.3))

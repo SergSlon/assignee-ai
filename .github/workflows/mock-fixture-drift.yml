@@ -1,0 +1,195 @@
+name: Mock Fixture Drift (CFN schemas)
+
+# Story 48.2: detective control for mock fixture drift.
+#
+# Purpose: nightly compare the frozen
+# `apps/cli/src/test-fixtures/mcp-mock-responses.ts` fixture
+# (snapshotted 2026-03-22) against live AWS CloudFormation
+# `DescribeType` responses for the top-20 supported resource types.
+# Without this, schema changes in production silently diverge from
+# the fixture-backed tests until a real user hits the gap.
+#
+# Credential strategy (pick one when provisioning the test account):
+#   OPTION A (preferred) — GitHub OIDC + IAM role assume.
+#     Set `AWS_DRIFT_READER_ROLE_ARN` as a repo variable
+#     (`vars.AWS_DRIFT_READER_ROLE_ARN`). The role's trust policy
+#     must allow the GH OIDC provider + the
+#     `cloudformation:DescribeType` / `ListTypes` IAM permissions.
+#
+#   OPTION B (fallback) — scoped IAM-user secrets:
+#     ASSIGNEE_DRIFT_READER_ACCESS_KEY_ID
+#     ASSIGNEE_DRIFT_READER_SECRET_ACCESS_KEY
+#   Names are intentionally DISTINCT from `ASSIGNEE_NIGHTLY_*`
+#   so a misconfigured drift account cannot cross-leak into the
+#   nightly-e2e workflow's account.
+#
+# The IAM principal only needs the read-only actions
+# `cloudformation:DescribeType` and `cloudformation:ListTypes` —
+# zero AWS cost, zero mutation, per Epic 48's "zero AWS cost" framing.
+#
+# Local invocation parity:
+#   pnpm check:mock-fixture-drift
+# (exits 0 with "skipped: no AWS credentials" log if creds are unset,
+#  so local devs aren't blocked.)
+#
+# Baseline / re-baseline procedure is documented in
+# `scripts/check-mock-fixture-drift.ts` header.
+
+on:
+  schedule:
+    # 06:00 UTC daily — between nightly-e2e (03:00 UTC) and Europe
+    # morning so drift surfaces before US standup.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual ad-hoc runs from the Actions UI.
+
+concurrency:
+  group: mock-fixture-drift
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write       # required for OIDC aws-actions/configure-aws-credentials
+  issues: write         # drift failure opens / updates a tracking issue
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    # Fast job: 20 DescribeType calls + setup, typically <5 min.
+    timeout-minutes: 15
+
+    env:
+      AWS_REGION: us-east-1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build core package (provides SUPPORTED_TYPES_ARRAY)
+        # The drift script imports from packages/core/dist — same
+        # pattern sibling scripts use (audit-iam-policies.ts).
+        run: npx turbo build --filter=@assignee/core
+
+      - name: Configure AWS credentials (OIDC preferred, secrets fallback)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # OIDC path — only activates when the role ARN variable is set.
+          role-to-assume: ${{ vars.AWS_DRIFT_READER_ROLE_ARN }}
+          # Static-secrets fallback — both ignored if role-to-assume is
+          # set AND non-empty, so OIDC takes precedence automatically.
+          aws-access-key-id: ${{ secrets.ASSIGNEE_DRIFT_READER_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.ASSIGNEE_DRIFT_READER_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          # When role-to-assume is empty AND secrets are missing, this
+          # step fails — the drift script's "no creds → skip" path is
+          # for local devs, not for CI.
+
+      - name: Verify drift credentials are configured
+        # Defence-in-depth: if AWS creds ended up unset for any reason
+        # (wrong secret name, missing OIDC role), fail loudly rather
+        # than letting the script exit 0 via its skip-no-creds path
+        # and producing a silently-passing nightly.
+        run: |
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] && [ -z "${AWS_WEB_IDENTITY_TOKEN_FILE:-}" ]; then
+            echo "::error::Neither OIDC nor static drift-reader secrets are configured."
+            echo "::error::Set vars.AWS_DRIFT_READER_ROLE_ARN (OIDC) or the"
+            echo "::error::ASSIGNEE_DRIFT_READER_ACCESS_KEY_ID / _SECRET_ACCESS_KEY secret pair."
+            echo "::error::See .github/workflows/mock-fixture-drift.yml for setup instructions."
+            exit 1
+          fi
+          echo "AWS credentials resolved (OIDC or static)."
+
+      - name: Run mock-fixture drift check
+        id: drift
+        # Exit code policy from the script:
+        #   0 = clean
+        #   1 = runtime / AWS error
+        #   2 = drift detected (report file written)
+        run: pnpm check:mock-fixture-drift
+
+      - name: Upload drift report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mock-fixture-drift-report-${{ github.run_number }}
+          path: mock-fixture-drift-report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Write job summary on drift
+        if: failure() && hashFiles('mock-fixture-drift-report.json') != ''
+        run: |
+          {
+            echo "## Mock fixture drift detected"
+            echo ""
+            count=$(node -e "console.log(JSON.parse(require('fs').readFileSync('mock-fixture-drift-report.json','utf-8')).driftedTypeCount)")
+            echo "**${count} resource type(s) drifted** vs \`apps/cli/src/test-fixtures/mcp-mock-responses.ts\`."
+            echo ""
+            echo "### Drifted types"
+            node -e "
+              const r = JSON.parse(require('fs').readFileSync('mock-fixture-drift-report.json','utf-8'));
+              for (const d of r.drifts) {
+                console.log('- **' + d.type + '** — ' + d.missingProperties.length + ' missing, ' + d.typeChangedProperties.length + ' type-changed');
+              }
+            "
+            echo ""
+            echo "Download the \`mock-fixture-drift-report-${{ github.run_number }}\` artifact for the full diff."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or update tracking issue
+        if: failure() && hashFiles('mock-fixture-drift-report.json') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Mock fixture drift detected (CFN schemas)"
+          label="mock-fixture-drift"
+          # Build the comment body from the drift report.
+          body_file=$(mktemp)
+          {
+            echo "Nightly drift check failed on run ${{ github.run_number }}."
+            echo ""
+            echo "Commit: \`${{ github.sha }}\`"
+            echo ""
+            node -e "
+              const r = JSON.parse(require('fs').readFileSync('mock-fixture-drift-report.json','utf-8'));
+              console.log('**' + r.driftedTypeCount + ' type(s) drifted**');
+              console.log('');
+              for (const d of r.drifts) {
+                console.log('### ' + d.type);
+                if (d.missingProperties.length) {
+                  console.log('Missing in live schema: ' + d.missingProperties.map(p => '\`' + p + '\`').join(', '));
+                }
+                if (d.typeChangedProperties.length) {
+                  console.log('Type-changed:');
+                  for (const t of d.typeChangedProperties) {
+                    console.log('  - \`' + t.property + '\`: fixture=' + JSON.stringify(t.fixtureType) + ', live=' + JSON.stringify(t.liveType));
+                  }
+                }
+                console.log('');
+              }
+            "
+            echo ""
+            echo "Artifact: \`mock-fixture-drift-report-${{ github.run_number }}\` on this workflow run."
+          } > "$body_file"
+
+          # Dedupe: if an open issue with the label exists, comment; else create.
+          existing=$(gh issue list --label "$label" --state open --json number --jq '.[0].number' || echo "")
+          if [ -n "$existing" ]; then
+            echo "Updating existing drift issue #$existing"
+            gh issue comment "$existing" --body-file "$body_file"
+          else
+            echo "Opening new drift issue"
+            gh issue create --title "$title" --label "$label" --body-file "$body_file"
+          fi
