@@ -1,6 +1,6 @@
 # Supported Resource Types
 
-assignee.ai supports 36 AWS resource types via CloudFormation CloudControl API, plus additional auxiliary types used in compound patterns.
+assignee.ai supports 37 AWS resource types end-to-end via the CloudFormation CloudControl API. 35 have dedicated plugins; 2 (`AWS::EC2::VPCGatewayAttachment`, `AWS::EC2::SubnetRouteTableAssociation`) are **compound-only** — they are emitted from compound patterns (vpc-networking, three-tier-web) via the marker-token resolver and never directly from a user intent, so they share the generic fallback plugin rather than getting a dedicated one. Additional auxiliary types are used in compound patterns.
 
 ## Resource Type Table
 
@@ -177,9 +177,9 @@ Provisioning order (6 groups):
 5. Private Route
 6. Subnet-RT Associations (parallel)
 
-Cost: ~$32/month (NAT Gateway is the dominant cost driver).
+Cost: dominated by the NAT Gateway hourly + data-processing fee. Run `assignee cost` for the live monthly estimate in your region.
 
-**Public-only variant**: "simple vpc", "vpc public only" -- creates 9 resources (no NAT, no private subnets). Cost: ~$0/month.
+**Public-only variant**: "simple vpc", "vpc public only" -- creates 9 resources (no NAT, no private subnets). All components are free-tier (VPC, subnets, IGW, route tables); run `assignee cost` to confirm against current AWS pricing.
 
 ### Serverless API (8 resources)
 
@@ -277,7 +277,7 @@ Provisioning order (4 groups):
 
 **Why private-only?** Public subnets + lax SGs are the canonical "open NFS to the world" misconfiguration. If you need outbound internet from the EFS-mounting workload, combine with the full `vpc-networking` pattern (`"create a vpc with EFS"` — matches vpc-networking first and EFS is added separately).
 
-Cost: ~$0 for the networking layer (VPC + private subnets + route tables are free). EFS storage bills at the per-GB/month rate from the Pricing MCP.
+Cost: the networking layer (VPC + private subnets + route tables) is free-tier. EFS storage is billed per GB-month — run `assignee cost` for the live rate from the Pricing MCP in your region.
 
 ### Static Website
 

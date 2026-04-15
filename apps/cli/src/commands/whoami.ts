@@ -206,6 +206,18 @@ export async function runWhoami(deps: WhoamiDeps = {}): Promise<number> {
 
 export const whoamiCommand = new Command(CommandName.WHOAMI)
   .description(CommandDescription.WHOAMI)
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee whoami
+        Show resolved AWS identity (account, region, profile) and
+        which credential path assignee is using
+
+whoami is read-only — it only calls STS GetCallerIdentity. No --yes
+flag is required.
+`,
+  )
   .action(async () => {
     const code = await runWhoami();
     if (code !== ProcessExitCode.SUCCESS) {

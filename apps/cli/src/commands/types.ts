@@ -162,6 +162,22 @@ export const typesCommand = new Command("types")
   .alias("type")
   .description(
     "List and inspect the CloudFormation resource types assignee can provision",
+  )
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee types list
+        Show every supported resource type with field and BP rule counts
+  $ assignee types list --with-bp
+        Only types that have ≥1 best-practice rule attached
+  $ assignee types list --search s3
+        Filter to types matching "s3"
+  $ assignee types show AWS::S3::Bucket
+        Detailed view for one type (fields, BP rules, patterns)
+
+types is read-only — no AWS calls, no --yes required.
+`,
   );
 
 typesCommand

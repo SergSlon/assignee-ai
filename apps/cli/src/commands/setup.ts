@@ -41,16 +41,17 @@ import {
   type PolicyDocument,
 } from "@assignee/core";
 import { CommandName, CommandDescription } from "../constants/commands.js";
+import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { ConfigurationError, AssigneeTag } from "@assignee/core";
 import { mergeEnvFile } from "../utils/env-writer.js";
 import { AWS_REGION, PromiseStatus, UserMessage } from "../config/constants.js";
 import { AwsErrorName } from "../constants/aws-errors.js";
 import {
-  ArnPrefix,
   IamAction,
   IamEffect,
   IamPolicy,
   AwsServicePrincipal,
+  getPartitionFromRegion,
 } from "@assignee/core";
 
 /**
@@ -130,7 +131,11 @@ async function ensurePolicy(
   policyName: string,
   policyDoc: PolicyDocument,
 ): Promise<string> {
-  const policyArn = `arn:aws:iam::${accountId}:policy/${policyName}`;
+  // Partition-aware: setup runs in the caller's region so GovCloud/China
+  // operators get `arn:aws-us-gov:` / `arn:aws-cn:` policy ARNs (which IAM
+  // requires — mismatched partition ARNs are rejected by CreatePolicy).
+  const partition = getPartitionFromRegion(AWS_REGION);
+  const policyArn = `arn:${partition}:iam::${accountId}:policy/${policyName}`;
   const policyJson = JSON.stringify(policyDoc);
 
   try {
@@ -281,6 +286,20 @@ export const setupCommand = new Command(CommandName.SETUP)
     "Print the plan of resources that WOULD be created without invoking any AWS APIs",
     false,
   )
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee setup --profile admin
+        Interactive wizard (creates Operator/Reader/Auditor IAM users)
+  $ assignee setup --profile admin --yes
+        Non-interactive setup (skips all confirmations, for CI bootstrap)
+  $ assignee setup --profile admin --dry-run
+        Print the plan without calling any IAM APIs
+  $ assignee setup --profile admin --disable-llm-logging
+        Turn off Bedrock invocation text logging (idempotent)
+`,
+  )
   .action(
     async (options: {
       profile?: string;
@@ -299,7 +318,31 @@ export const setupCommand = new Command(CommandName.SETUP)
         );
       }
 
-      clack.intro("Assignee.ai — IAM Setup");
+      // L2 (Wave 5): render the resolved AWS admin context up front so the
+      // operator sees WHICH account/region/profile this setup will mutate.
+      // resolveIntroContext honors AWS_REGION / AWS_DEFAULT_REGION /
+      // AWS_PROFILE and (outside --dry-run) pulls the account id via STS
+      // with a 2s timeout. Under --dry-run / --disable-llm-logging we MUST
+      // NOT touch AWS at all (tests assert zero STS/IAM/Bedrock calls), so
+      // we synthesize an env-only context — no GetCallerIdentity. If
+      // --profile was passed, show that instead of the env profile so the
+      // intro reflects the admin credential set `setup` will actually use.
+      const displayProfile =
+        options.profile ?? process.env["AWS_PROFILE"] ?? undefined;
+      const suppressSts = options.dryRun === true;
+      const introCtx = suppressSts
+        ? {
+            region: AWS_REGION,
+            ...(displayProfile ? { profile: displayProfile } : {}),
+          }
+        : await resolveIntroContext();
+      clack.intro(
+        `Assignee.ai — IAM Setup  [${formatIntroContext({
+          region: introCtx.region,
+          ...(introCtx.account ? { account: introCtx.account } : {}),
+          ...(displayProfile ? { profile: displayProfile } : {}),
+        })}]`,
+      );
 
       // ── Disable-only fast path ───────────────────────────────────────
       // Sally UX fix: the CLI previously exposed --enable-llm-logging but no
@@ -356,6 +399,7 @@ export const setupCommand = new Command(CommandName.SETUP)
         }
 
         const region = AWS_REGION;
+        const partition = getPartitionFromRegion(region);
         const { BedrockClient, PutModelInvocationLoggingConfigurationCommand } =
           await import("@aws-sdk/client-bedrock");
         const bedrock = new BedrockClient({ ...clientConfig, region });
@@ -367,7 +411,7 @@ export const setupCommand = new Command(CommandName.SETUP)
               loggingConfig: {
                 cloudWatchConfig: {
                   logGroupName: BEDROCK_LOG_GROUP_NAME,
-                  roleArn: `${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
+                  roleArn: `arn:${partition}:iam::${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
                 },
                 textDataDeliveryEnabled: false,
                 imageDataDeliveryEnabled: false,
@@ -688,6 +732,7 @@ export const setupCommand = new Command(CommandName.SETUP)
       // spinner cleanly instead of leaving the terminal stuck.
       // @see SECURITY-AUDIT.md — M-S10
       const region = AWS_REGION;
+      const partition = getPartitionFromRegion(region);
       const logSp = clack.spinner();
       logSp.start("Setting up Bedrock invocation logging...");
       let bedrockLoggingOk = false;
@@ -752,7 +797,7 @@ export const setupCommand = new Command(CommandName.SETUP)
                     IamAction.LOGS_PUT_LOG_EVENTS,
                     IamAction.LOGS_DESCRIBE_LOG_GROUPS,
                   ],
-                  Resource: `${ArnPrefix.LOGS}${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
+                  Resource: `arn:${partition}:logs:${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
                 },
               ],
             }),
@@ -800,7 +845,7 @@ export const setupCommand = new Command(CommandName.SETUP)
             clack.log.warn(
               "⚠ All LLM prompts/responses will be logged to CloudWatch — " +
                 `disable later via: aws bedrock put-model-invocation-logging-configuration ` +
-                `--logging-config '{"cloudWatchConfig":{"logGroupName":"${BEDROCK_LOG_GROUP_NAME}","roleArn":"${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}"},"textDataDeliveryEnabled":false}'`,
+                `--logging-config '{"cloudWatchConfig":{"logGroupName":"${BEDROCK_LOG_GROUP_NAME}","roleArn":"arn:${partition}:iam::${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}"},"textDataDeliveryEnabled":false}'`,
             );
           }
           await bedrock.send(
@@ -808,7 +853,7 @@ export const setupCommand = new Command(CommandName.SETUP)
               loggingConfig: {
                 cloudWatchConfig: {
                   logGroupName: BEDROCK_LOG_GROUP_NAME,
-                  roleArn: `${ArnPrefix.IAM}:${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
+                  roleArn: `arn:${partition}:iam::${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
                 },
                 textDataDeliveryEnabled: textLogging,
                 imageDataDeliveryEnabled: false,

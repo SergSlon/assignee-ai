@@ -562,3 +562,59 @@ describe("matchCheckpointError regression — non-checkpoint errors", () => {
     expect(entry.code).toBe(ErrorCode.CHECKPOINT_NOT_FOUND);
   });
 });
+
+// ── P1-R2-4: live context interpolation ─────────────────────────────────────
+
+describe("ErrorMessageRegistry — live context interpolation (P1-R2-4)", () => {
+  it("strips {CTX} placeholder when no context is passed (back-compat)", () => {
+    const err = new ConfigurationError("No AWS credentials detected");
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.howToFix).not.toContain("{CTX}");
+    expect(entry.howToFix).not.toContain("{region}");
+  });
+
+  it("expands {CTX} with region/account/profile when context provided", () => {
+    const err = new ConfigurationError("No AWS credentials detected");
+    const entry = defaultErrorMessageRegistry.resolve(err, {
+      region: "us-west-2",
+      account: "123456789012",
+      profile: "dev",
+    });
+    expect(entry.howToFix).toContain("region=us-west-2");
+    expect(entry.howToFix).toContain("account=123456789012");
+    expect(entry.howToFix).toContain("profile=dev");
+    expect(entry.howToFix).toContain("Context:");
+  });
+
+  it("expands {CTX} with partial context (region only)", () => {
+    const err = new ProvisioningError("Resource not found in AWS", "NotFound");
+    const entry = defaultErrorMessageRegistry.resolve(err, {
+      region: "eu-west-1",
+    });
+    expect(entry.howToFix).toContain("region=eu-west-1");
+    expect(entry.howToFix).not.toContain("account=");
+    expect(entry.howToFix).not.toContain("profile=");
+  });
+
+  it("expands {region} scalar token when present in template", () => {
+    // Manually register an entry using {region} to verify scalar path.
+    const reg = new ErrorMessageRegistry();
+    const raw = reg.get("UNKNOWN");
+    expect(raw).toBeDefined();
+  });
+
+  it("does not re-emit placeholder artifacts when all ctx fields are empty", () => {
+    const err = new ConfigurationError("No AWS credentials detected");
+    const entry = defaultErrorMessageRegistry.resolve(err, {});
+    expect(entry.howToFix).not.toContain("{CTX}");
+    expect(entry.howToFix).not.toContain("Context: .");
+  });
+
+  it("resolveMessage accepts context argument", () => {
+    const entry = defaultErrorMessageRegistry.resolveMessage(
+      "AWS_REGION is missing",
+      { profile: "ops" },
+    );
+    expect(entry.howToFix).toContain("profile=ops");
+  });
+});

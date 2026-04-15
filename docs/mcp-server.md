@@ -109,7 +109,7 @@ Generate an infrastructure plan from a natural language description. Returns a d
       "RestrictPublicBuckets": true
     }
   },
-  "estimatedMonthlyCost": "$0.023/GB",
+  "estimatedMonthlyCost": "<live rate from Pricing MCP; run `assignee cost` for the current figure>",
   "bpFindings": [],
   "checkpointPath": "/tmp/assignee-mcp/checkpoint-abc123.json",
   "runId": "abc123"
@@ -136,7 +136,7 @@ Apply a previously generated infrastructure plan. Provisions the resource via Cl
   "status": "SUCCESS",
   "resourceArn": "arn:aws:s3:::my-static-site",
   "resourceType": "AWS::S3::Bucket",
-  "estimatedMonthlyCost": "$0.023/GB",
+  "estimatedMonthlyCost": "<live rate from Pricing MCP; run `assignee cost` for the current figure>",
   "securityFindings": [],
   "completedResources": [],
   "runId": "abc123"
@@ -192,7 +192,7 @@ Estimate the monthly cost of an AWS resource without creating a full plan. Fast 
 ```json
 {
   "resourceType": "AWS::RDS::DBInstance",
-  "estimatedMonthlyCost": "$12.41",
+  "estimatedMonthlyCost": "<live monthly estimate from Pricing MCP; run `assignee cost` for the current figure>",
   "description": "RDS PostgreSQL db.t3.micro in us-east-1",
   "region": "us-east-1",
   "note": "This is a baseline estimate. Use plan_resource for more accurate cost quotes that consider full resource configuration."
@@ -292,7 +292,7 @@ Check the server logs in your IDE's MCP output panel.
 
 ### "Unsupported resource type" from `plan_resource`
 
-Not all CloudFormation types are supported yet. The 36 supported types include S3, SSM Parameter, IAM Role, EC2, RDS, Lambda, VPC, Subnet, Security Group, DynamoDB, SQS, SNS, SNS Subscription, ELBv2 (ALB/NLB), ECS Cluster, ECR Repository, CloudWatch Logs, Internet Gateway, Route Table, Route, NAT Gateway, API Gateway V2, CloudWatch Alarm, Secrets Manager, EFS FileSystem, EFS MountTarget, EventBridge Rule, EventBridge EventBus, EventBridge Connection, EventBridge ApiDestination, KMS Key, CloudFront Distribution, CloudFront OAC, S3 BucketPolicy, and compound-only types (VPCGatewayAttachment, SubnetRouteTableAssociation). See [resource-types.md](./resource-types.md) for the full list.
+Not all CloudFormation types are supported yet. The 37 user-addressable types include S3, SSM Parameter, IAM Role, EC2, RDS, Lambda, VPC, Subnet, Security Group, DynamoDB, SQS, SNS, SNS Subscription, ELBv2 (ALB/NLB), ECS Cluster, ECR Repository, CloudWatch Logs, Internet Gateway, Route Table, Route, NAT Gateway, API Gateway V2, CloudWatch Alarm, Secrets Manager, EFS FileSystem, EFS MountTarget, EventBridge Rule, EventBridge EventBus, EventBridge Connection, EventBridge ApiDestination, KMS Key, CloudFront Distribution, CloudFront OAC, S3 BucketPolicy, plus 2 compound-only types (`AWS::EC2::VPCGatewayAttachment`, `AWS::EC2::SubnetRouteTableAssociation`) that fall through to the generic plugin. See [resource-types.md](./resource-types.md) for the full list.
 
 ### "SDK fallback deletion not supported" from `destroy_resource`
 

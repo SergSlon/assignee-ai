@@ -62,10 +62,21 @@ export function resourceConfirmationToken(resource: {
   identifier?: string;
   arn: string;
 }): string {
-  const id = (resource.identifier ?? "").trim();
+  // R2-C N1 + P2-R2-5: normalize whitespace AND trailing slashes (common in
+  // CFN Exports / nested ARNs). If the identifier collapses to empty after
+  // normalization, fall back to the ARN tail. If THAT also collapses (e.g.
+  // identifier is "   /" and ARN ends in "/"), fall back to the full ARN so
+  // the user still has an unambiguous, copy-pasteable token.
+  const normalize = (s: string): string => s.trim().replace(/\/+$/, "").trim();
+
+  const id = normalize(resource.identifier ?? "");
   if (id) return id;
-  const tail = resource.arn.split(/[/:]/).pop() ?? "";
-  return tail.trim() || resource.arn;
+
+  const arnTail = resource.arn.split(/[/:]/).pop() ?? "";
+  const tailNorm = normalize(arnTail);
+  if (tailNorm) return tailNorm;
+
+  return resource.arn;
 }
 
 /**
@@ -555,4 +566,22 @@ export const destroyCommand = new Command(CommandName.DESTROY)
     "Include IAM policies/roles (excluded by default with --all)",
   )
   .option("--dry-run", "Show what would be destroyed without doing it")
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee destroy arn:aws:s3:::my-bucket
+        Destroy a single resource (typed-name confirmation required)
+  $ assignee destroy my-bucket --yes
+        Non-interactive destroy for CI/CD (skips typed confirmation)
+  $ assignee destroy --all --dry-run
+        Preview every managed resource that would be destroyed
+  $ assignee destroy --all --include-iam --yes
+        Sweep every managed resource including IAM roles/policies (CI)
+
+Safety: typed-name confirmation is required for single-resource
+destroys without --yes, and the literal phrase "destroy all" is
+required for --all (regardless of --yes).
+`,
+  )
   .action(destroyAction);

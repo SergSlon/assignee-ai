@@ -364,7 +364,7 @@ export function createCleanCommand(): Command {
     )
     .option("--dry-run", "Preview cleanup without making changes (default)")
     .option("--confirm", "Execute cleanup (default is dry-run preview)")
-    .option("--yes", "Alias for --confirm (CI-friendly)")
+    .option("-y, --yes", "Alias for --confirm (CI-friendly, canonical)")
     .option("--checkpoints", "Only clean checkpoint files")
     .option("--cache", "Only clean price cache")
     .option("--memory", "Only rotate memory files")
@@ -378,6 +378,17 @@ export function createCleanCommand(): Command {
       "Remove all baseline files adopted via `assignee drift --baseline`",
     )
     .option("--json", "Output results as JSON")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  $ assignee clean                      Preview cleanup actions (dry-run)
+  $ assignee clean --yes                Execute full cleanup in CI (canonical flag)
+  $ assignee clean --confirm --cache    Delete only the price cache
+  $ assignee clean --yes --checkpoints  Delete expired plan checkpoints
+  $ assignee clean --yes --resources    Destroy tagged e2e/test AWS resources
+`,
+    )
     .action(cleanAction);
 }
 

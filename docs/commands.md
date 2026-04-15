@@ -429,13 +429,13 @@ assignee optimize --json --reconcile --no-color
 │                                                                     │
 │  Resource ID                          Type                  Current       Recommended       Savings            Confidence │
 │  ────────────────────────────────────────────────────────────────── │
-│  i-0abc...                            AWS::EC2::Instance   t3.large     t4g.large         $11.68/mo (19%)    high       │
-│  prod-primary                         AWS::RDS::DBInstance db.r5.large  db.r6g.large      $17.52/mo (10%)    medium     │
-│  prod-handler                         AWS::Lambda::Function x86_64      arm64             $33.33/mo* (20%)   medium     │
+│  i-0abc...                            AWS::EC2::Instance   t3.large     t4g.large         <live savings from Pricing MCP> (19%)    high       │
+│  prod-primary                         AWS::RDS::DBInstance db.r5.large  db.r6g.large      <live savings from Pricing MCP> (10%)    medium     │
+│  prod-handler                         AWS::Lambda::Function x86_64      arm64             <live savings from Pricing MCP>* (20%)   medium     │
 │                                                                     │
 ╰─────────────────────────────────────────────────────────────────────╯
 
-3 of 3 resources analyzed, 3 recommendations. Est. total monthly savings: $62.53/mo
+3 of 3 resources analyzed, 3 recommendations. Est. total monthly savings: <sum of live Pricing MCP savings — run `assignee cost` for current numbers>
 
 Suggested reconcile commands (copy/paste):
   assignee plan "Change AWS::EC2::Instance i-0abc... from t3.large to t4g.large"
@@ -782,7 +782,7 @@ Doctor summary (assignee.ai 0.1.0):
 [✓] Config
     • ✓ ./assignee.yaml → valid YAML
 [✓] Best practices
-    • ✓ manifest → 185 rules, hash 636a1827cc85… matches
+    • ✓ manifest → 185 rules tracked (186 YAML files on disk; 1 pending re-manifest), hash 636a1827cc85… matches
 
 ! 1 failures found.
 ```

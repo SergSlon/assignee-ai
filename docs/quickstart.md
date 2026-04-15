@@ -59,7 +59,7 @@ What happens:
 2. **Schema Fetcher** -- fetches the CloudFormation schema for S3 buckets
 3. **Option Elicitor** -- prompts for any required fields not inferred from your intent
 4. **Plan Generator** -- Bedrock produces a desired-state JSON with all fields populated
-5. **BP Evaluator** -- evaluates 185 best practice rules (security, cost, reliability)
+5. **BP Evaluator** -- evaluates 186 best practice rules (security, cost, reliability)
 6. **Auto-Fix** -- patches fixable violations (e.g., enables S3 public access blocking, versioning, encryption, lifecycle policies)
 7. **Preflight Guard** -- blocks the plan if critical violations remain
 8. **Cost Estimator** -- fetches real-time pricing via the Pricing MCP

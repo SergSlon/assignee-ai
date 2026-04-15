@@ -52,6 +52,7 @@ import {
   loadCheckpointFromPath,
 } from "../services/checkpoint.js";
 import { checkBudget } from "../services/budget-guard.js";
+import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { countSourceFiles } from "../utils/count-source-files.js";
 import {
   loadUserConfig,
@@ -222,6 +223,14 @@ export const applyCommand = new Command(CommandName.APPLY)
         set?: string[];
       },
     ) => {
+      // P2-R2-4: print resolved AWS context as the very first line so the
+      // operator sees WHICH account/region/profile is about to be mutated
+      // before any spinner / prompt / LLM call runs.
+      const introCtx = await resolveIntroContext();
+      process.stderr.write(
+        `assignee apply  [${formatIntroContext(introCtx)}]\n`,
+      );
+
       // ── Resolve checkpoint source ──────────────────────────────────────
       let resolvedCheckpoint: PlanCheckpoint | null = null;
 

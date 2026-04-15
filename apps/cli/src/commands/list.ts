@@ -59,6 +59,23 @@ export const listCommand = new Command(CommandName.LIST)
     "--total-cost",
     "After the table, print a total estimated monthly cost across all resources (skips Free / N/A / unparseable entries)",
   )
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee list
+        Table of every assignee-managed resource in the default region
+  $ assignee list --region us-east-1
+        Only resources in us-east-1
+  $ assignee list --total-cost
+        Include a total-monthly-cost footer
+  $ assignee list --json | jq .
+        Machine-readable output for scripts
+
+list is read-only — it only reads local provision records + live tags.
+No --yes flag is required.
+`,
+  )
   .action(
     async (opts: { json?: boolean; region?: string; totalCost?: boolean }) => {
       try {

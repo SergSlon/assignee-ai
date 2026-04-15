@@ -113,7 +113,23 @@ export function renderPatternDetail(detail: PatternDetail): string {
 
 export const patternsCommand = new Command("patterns")
   .alias("pattern")
-  .description("List and inspect compound architecture patterns");
+  .description("List and inspect compound architecture patterns")
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee patterns list
+        Show every registered compound architecture pattern
+  $ assignee patterns list --search static
+        Filter to patterns matching "static" (id, name, or keyword)
+  $ assignee patterns detect "static website with HTTPS"
+        Show which pattern the classifier would select for an intent
+  $ assignee patterns show static-website
+        Full resource list + dependency order for one pattern
+
+patterns is read-only — no AWS calls, no --yes required.
+`,
+  );
 
 patternsCommand
   .command("list", { isDefault: true })

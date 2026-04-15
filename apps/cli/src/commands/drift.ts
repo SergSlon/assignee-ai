@@ -138,6 +138,30 @@ export const driftCommand = new Command("drift")
   .option("--concurrency <n>", "Max parallel drift checks (default 10, max 50)")
   .option("--no-color", "Disable color output")
   .option("--verbose", "Show all fields including matching ones")
+  .option(
+    "-y, --yes",
+    "Accepted for CI wrapper compatibility; drift is read-only and does not mutate.",
+  )
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee drift
+        Scan all managed resources for configuration drift
+  $ assignee drift --resource AWS::S3::Bucket
+        Only check S3 buckets
+  $ assignee drift --exclude BASELINE_MISSING --json > drift.json
+        CI-friendly report without false positives for unadopted resources
+  $ assignee drift <arn> --baseline
+        Adopt a resource's current state as its drift baseline
+  $ assignee drift <arn>
+        Detailed diff for a single resource
+
+drift is read-only (it never mutates AWS state except when --baseline is
+used, which only writes a local snapshot). No --yes flag is needed — use
+\`assignee reconcile --yes\` to auto-apply drift corrections.
+`,
+  )
   .action(
     async (
       resourceId: string | undefined,
@@ -152,6 +176,7 @@ export const driftCommand = new Command("drift")
         concurrency?: string;
         color?: boolean;
         verbose?: boolean;
+        yes?: boolean;
       },
     ) => {
       // ── --baseline mode: adopt a single resource into tracking ─────

@@ -16,9 +16,21 @@ import {
   SUPPORTED_TYPES_ARRAY,
 } from "@assignee/core";
 
-export const cacheCommand = new Command("cache").description(
-  "Manage the CloudFormation schema cache",
-);
+export const cacheCommand = new Command("cache")
+  .description("Manage the CloudFormation schema cache")
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee cache clear
+        Delete every cached CloudFormation resource schema
+  $ assignee cache refresh
+        Clear and re-fetch schemas for all supported resource types
+
+cache only touches ~/.assignee/cache/ (local disk). No AWS mutation, no
+--yes required.
+`,
+  );
 
 cacheCommand
   .command("clear")

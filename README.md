@@ -33,20 +33,20 @@ intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
     → human_approval ─[HITL]─ → resource_provisioner → status_poller → result_formatter
 ```
 
-| Node                   | What it does                                                                                                                  |
-| :--------------------- | :---------------------------------------------------------------------------------------------------------------------------- |
-| `intent_parser`        | Classifies natural language into a resource type + action. Compound keywords ("create a vpc") are matched at zero LLM latency |
-| `schema_fetcher`       | Fetches the CloudFormation schema for the target type via `@aws-sdk/client-cloudformation`                                    |
-| `option_elicitor`      | Interactive wizard — prompts for required and optional fields with live pricing, smart defaults, and `showIf` conditionals    |
-| `compound_dispatcher`  | Expands a compound pattern (e.g. VPC) into a dependency-ordered resource queue with marker-ref cross-references               |
-| `plan_generator`       | LLM (Bedrock) produces a `desiredState` JSON from the schema + user answers. Validates output with Zod                        |
-| `bp_evaluator`         | Evaluates 185 best-practice rules against the plan. Flags violations by severity (CRITICAL / HIGH / MEDIUM / INFO)            |
-| `fix_applicator`       | Auto-patches fixable violations (e.g. enables S3 encryption). Shows "Changed X → Y because BP-### (auto-fixed)" per fix       |
-| `preflight_guard`      | Blocks the plan if any CRITICAL / blocking findings remain unfixed. Runs placeholder-ARN rejection + cost preflight           |
-| `human_approval`       | Renders the plan box and waits for explicit user confirmation before any AWS resource is created (HITL gate)                  |
-| `resource_provisioner` | State Guard (read-before-write) then CloudControl API `createResource`. Tags injected automatically                           |
-| `status_poller`        | Polls CloudControl until terminal state (SUCCESS / FAILED). Extended timeouts for RDS, ELBv2, NAT Gateway                     |
-| `result_formatter`     | Renders success/failure output, writes provision records to memory, runs post-provision security checks                       |
+| Node                   | What it does                                                                                                                                                              |
+| :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `intent_parser`        | Classifies natural language into a resource type + action. Compound keywords ("create a vpc") are matched at zero LLM latency                                             |
+| `schema_fetcher`       | Fetches the CloudFormation schema for the target type via `@aws-sdk/client-cloudformation`                                                                                |
+| `option_elicitor`      | Interactive wizard — prompts for required and optional fields with live pricing, smart defaults, and `showIf` conditionals                                                |
+| `compound_dispatcher`  | Expands a compound pattern (e.g. VPC) into a dependency-ordered resource queue with marker-ref cross-references                                                           |
+| `plan_generator`       | LLM (Bedrock) produces a `desiredState` JSON from the schema + user answers. Validates output with Zod                                                                    |
+| `bp_evaluator`         | Evaluates 186 best-practice rules against the plan (185 tracked in manifest.json + 1 pending re-manifest). Flags violations by severity (CRITICAL / HIGH / MEDIUM / INFO) |
+| `fix_applicator`       | Auto-patches fixable violations (e.g. enables S3 encryption). Shows "Changed X → Y because BP-### (auto-fixed)" per fix                                                   |
+| `preflight_guard`      | Blocks the plan if any CRITICAL / blocking findings remain unfixed. Runs placeholder-ARN rejection + cost preflight                                                       |
+| `human_approval`       | Renders the plan box and waits for explicit user confirmation before any AWS resource is created (HITL gate)                                                              |
+| `resource_provisioner` | State Guard (read-before-write) then CloudControl API `createResource`. Tags injected automatically                                                                       |
+| `status_poller`        | Polls CloudControl until terminal state (SUCCESS / FAILED). Extended timeouts for RDS, ELBv2, NAT Gateway                                                                 |
+| `result_formatter`     | Renders success/failure output, writes provision records to memory, runs post-provision security checks                                                                   |
 
 13 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order. Source of truth: `apps/cli/src/services/graph.ts` (`.addNode` calls) and the 13 `*.ts` sources under `apps/cli/src/nodes/`.
 
@@ -122,7 +122,7 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 
 ## Supported resource types
 
-**36 first-class types.** Every supported type flows through the CloudControl API — zero direct SDK write paths. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
+**37 first-class types.** Every supported type flows through the CloudControl API — zero direct SDK write paths. 35 types have dedicated plugins; 2 (`EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) are compound-only and share the generic fallback plugin. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
 
 | Type                                        | Notes                                                                     |
 | :------------------------------------------ | :------------------------------------------------------------------------ |
@@ -306,7 +306,7 @@ node build-fixture-ts.mjs
 | **9**  | Architecture Hardening (type safety, error handling, prompt injection guard)      | Done                       |
 | **10** | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)           | Done                       |
 | **11** | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                        | Done                       |
-| **12** | Best Practices Library (YAML schema, trigger engine, 130 rules, FSBP)             | Done (12.4, 12.6 deferred) |
+| **12** | Best Practices Library (YAML schema, trigger engine, 186 rules today, FSBP)       | Done (12.4, 12.6 deferred) |
 | **14** | LiteLLM Provider Gateway (multi-provider LLM support)                             | Done (14.2-14.4 deferred)  |
 | **18** | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action) | Done                       |
 | **19** | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)     | Done                       |
