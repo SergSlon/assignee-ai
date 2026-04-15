@@ -13,8 +13,13 @@
  * @see Story 18.5
  */
 
-export type { ResolvedResource } from "./resource-resolver/index.js";
+export type {
+  AmbiguousResolution,
+  Resolution,
+  ResolvedResource,
+} from "./resource-resolver/index.js";
 export {
   createTaggingClient,
+  isAmbiguousResolution,
   resolveResource,
 } from "./resource-resolver/index.js";

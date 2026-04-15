@@ -24,11 +24,16 @@ export async function resolveSqsQueueUrl(
   queueUrl: string,
   taggingClient: ResourceGroupsTaggingAPIClient,
   defaultRegion: string,
-): Promise<ResolvedResource | null> {
+): Promise<ResolvedResource[]> {
   const parsed = parseSqsQueueUrl(queueUrl);
-  if (!parsed) return null;
+  if (!parsed) return [];
 
-  // Search managed resources for an SQS queue with a matching name
+  const matches: ResolvedResource[] = [];
+
+  // Search managed resources for an SQS queue with a matching name.
+  // Story 48.6: full pagination; caller decides 0/1/≥2 semantics.
+  // Realistically always 0 or 1, but keep the signature uniform so the
+  // disambiguator's union-narrowing stays clean.
   let paginationToken: string | undefined;
   do {
     const response = await taggingClient.send(
@@ -47,18 +52,18 @@ export async function resolveSqsQueueUrl(
       // Match SQS ARN across all partitions (aws, aws-us-gov, aws-cn, aws-iso*).
       // ARN shape: arn:<partition>:sqs:{region}:{account}:{queue-name}
       if (isArnOfService(arn, "sqs") && arn.endsWith(":" + parsed.queueName)) {
-        return {
+        matches.push({
           arn,
           resourceType: RESOURCE_TYPES.SQS_QUEUE,
           region: parsed.region || defaultRegion,
           tags: tagsToRecord(mapping),
           identifier: queueUrl, // CloudControl identifier for SQS is the queue URL
-        };
+        });
       }
     }
 
     paginationToken = response.PaginationToken;
   } while (paginationToken);
 
-  return null;
+  return matches;
 }

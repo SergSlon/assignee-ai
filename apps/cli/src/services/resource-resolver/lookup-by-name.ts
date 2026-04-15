@@ -26,13 +26,22 @@ import { matchesName } from "./name-matcher.js";
 import { tagsToRecord, type ResolvedResource } from "./types.js";
 
 /**
- * Resolves a resource by name — searches all managed resources for a matching identifier.
+ * Resolves a resource by name — searches all managed resources for a
+ * matching identifier.
+ *
+ * Story 48.6: returns ALL matches (not just the first). Callers decide
+ * 0/1/≥2 semantics — the resolver no longer silently first-picks when
+ * a name is ambiguous. RGTA pagination now runs to completion so every
+ * page is scanned; the IAM-role fallback still only fires when RGTA
+ * returned zero matches (preserves the Wave 10 P1-5 perf fix).
  */
 export async function resolveByName(
   name: string,
   taggingClient: ResourceGroupsTaggingAPIClient,
   defaultRegion: string,
-): Promise<ResolvedResource | null> {
+): Promise<ResolvedResource[]> {
+  const matches: ResolvedResource[] = [];
+
   // ── Phase 1: scan RGTA first (covers every non-IAM-Role type) ────
   let paginationToken: string | undefined;
   do {
@@ -51,18 +60,20 @@ export async function resolveByName(
 
       if (matchesName(arn, name)) {
         const resourceType = arnToResourceType(arn);
-        return {
+        matches.push({
           arn,
           resourceType: resourceType ?? "Unknown",
           region: extractRegionFromArn(arn, defaultRegion),
           tags: tagsToRecord(mapping),
           identifier: getCloudControlIdentifier(arn, resourceType),
-        };
+        });
       }
     }
 
     paginationToken = response.PaginationToken;
   } while (paginationToken);
+
+  if (matches.length > 0) return matches;
 
   // ── Phase 2: IAM::Role fallback (RGTA doesn't return IAM roles) ──
   // Only walk iam:ListRoles when RGTA found nothing — this preserves
@@ -72,19 +83,19 @@ export async function resolveByName(
     const iamRoles = await fetchManagedIamRoles();
     for (const role of iamRoles) {
       if (role.roleName === name || role.arn === name) {
-        return {
+        matches.push({
           arn: role.arn,
           resourceType: RESOURCE_TYPES.IAM_ROLE,
           region: defaultRegion,
           tags: role.tags,
           identifier: role.roleName,
-        };
+        });
       }
     }
   } catch {
-    // Non-fatal: caller treats null as "not found". The list command
+    // Non-fatal: caller treats [] as "not found". The list command
     // emits a clearer warning when iam:ListRoles is missing.
   }
 
-  return null;
+  return matches;
 }
