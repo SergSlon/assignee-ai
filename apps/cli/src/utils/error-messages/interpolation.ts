@@ -10,6 +10,11 @@
  * result never shows "{region}" to users; `{CTX}` collapses to empty
  * string when no context is supplied — keeping legacy single-arg
  * `resolve(error)` callsites byte-identical (preserving old tests).
+ *
+ * Conditional-segment syntax (Story 48.5): `{?key: literal segment with {key}}`
+ * emits the entire segment ONLY if `key` resolves non-empty. This lets
+ * templates weave inline tokens (e.g. " in region {region}") without
+ * leaving orphan filler like "in region ." when context is absent.
  */
 
 import type { ErrorMessageEntry, ErrorResolveContext } from "./types.js";
@@ -24,7 +29,19 @@ export function interpolateContext(
     return typeof v === "string" && v.length > 0 ? v : "";
   };
 
-  let out = template.replace(/\{(region|account|profile|arn)\}/g, (_, key) =>
+  // Process conditional segments FIRST so inner {key} tokens inside the
+  // segment are handled correctly. The segment body allows one level of
+  // nested `{key}` token (e.g. `{?region: in region {region}}`).
+  let out = template.replace(
+    /\{\?(region|account|profile|arn):((?:[^{}]|\{[^{}]*\})*)\}/g,
+    (_, key: string, segment: string) => {
+      const v = scalar(key as keyof ErrorResolveContext);
+      if (!v) return "";
+      return segment.replace(`{${key}}`, v);
+    },
+  );
+
+  out = out.replace(/\{(region|account|profile|arn)\}/g, (_, key) =>
     scalar(key as keyof ErrorResolveContext),
   );
 

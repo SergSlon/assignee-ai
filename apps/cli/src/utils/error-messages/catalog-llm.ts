@@ -30,7 +30,7 @@ export const LLM_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "Cannot connect to AWS Bedrock.",
     why: "The connection to AWS Bedrock failed. This could be a network issue, incorrect region, or missing Bedrock model access.",
     howToFix:
-      "Verify that:\n  1) Your AWS_REGION supports Bedrock (e.g., us-east-1, us-west-2)\n  2) The Bedrock model is enabled in your account (check AWS Console > Bedrock > Model access)\n  3) Your IAM credentials have bedrock:InvokeModel permission{CTX}",
+      "Verify that:\n  1) Your AWS_REGION{?region: ({region})} supports Bedrock (e.g., us-east-1, us-west-2)\n  2) The Bedrock model is enabled in your account{?account: ({account})} (check AWS Console > Bedrock > Model access)\n  3) Your IAM credentials{?profile: for profile {profile}} have bedrock:InvokeModel permission.",
   },
   [ErrorCode.LLM_API_KEY_INVALID]: {
     code: ErrorCode.LLM_API_KEY_INVALID,
