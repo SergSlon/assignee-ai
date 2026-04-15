@@ -1074,6 +1074,196 @@ describe("destroy_resource tool", () => {
     }, 30000);
   });
 
+  describe("TOCTOU mitigation (story 48.4)", () => {
+    // The destroy path now re-verifies the managed-by tag immediately
+    // before dispatching DeleteResource, to close the resolve→delete race
+    // (see docs/explanation/invariants.md "Destroy TOCTOU window").
+    //
+    // These tests use account id 111122223333 (the AWS-recommended example
+    // account that is NOT preflight-rejected, unlike 123456789012 used in
+    // older tests — see feedback_placeholder_arn_preflight_guard).
+
+    it("happy path — tag intact at second verify, delete proceeds; exactly 2 RGTA calls (resolve + pre-delete re-verify)", async () => {
+      const arn = "arn:aws:s3:::toctou-happy-bucket";
+      // mockResolvedValue applies to BOTH first (resolve-time) and
+      // second (pre-delete) verifies — tag stays intact.
+      mockTaggingSend.mockResolvedValue(makeManagedResourceResponse(arn));
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-toctou-happy" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: { resource_identifier: arn, confirmed: true },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+      // Pre-refactor: 1 RGTA call (resolve only). After story 48.4:
+      // 1 resolve + 1 pre-delete re-verify = exactly 2 GetResources calls.
+      // This upward update reflects the new invariant; do NOT weaken.
+      expect(mockTaggingSend).toHaveBeenCalledTimes(2);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it("tag-removed-mid-flight — second verify returns empty Tags, delete aborts with DESTROY_TOCTOU_TAG_MISSING and one SECURITY warn", async () => {
+      const arn = "arn:aws:s3:::toctou-stripped-bucket";
+      mockTaggingSend
+        // First verify (resolve-time): managed-by tag present.
+        .mockResolvedValueOnce({
+          ResourceTagMappingList: [
+            {
+              ResourceARN: arn,
+              Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+            },
+          ],
+          PaginationToken: undefined,
+        })
+        // Second verify (pre-delete): attacker stripped the tag. RGTA
+        // still returns a mapping but with no managed-by tag. The
+        // resolver retries MAX_RESOLVE_RETRIES times — return the same
+        // "stripped" mapping for every subsequent retry.
+        .mockResolvedValue({
+          ResourceTagMappingList: [
+            {
+              ResourceARN: arn,
+              Tags: [{ Key: "Owner", Value: "attacker" }],
+            },
+          ],
+          PaginationToken: undefined,
+        });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: { resource_identifier: arn, confirmed: true },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = parseResult(result);
+      expect(body.error).toBe(true);
+      expect(body.code).toBe("DESTROY_TOCTOU_TAG_MISSING");
+      expect(body.message).toContain("stripped between resolve and delete");
+      // CRITICAL: DeleteResource must NOT have been called.
+      expect(mockCloudControlSend).not.toHaveBeenCalled();
+      // Exactly one SECURITY warn line, containing the ARN.
+      const toctouLines = warnSpy.mock.calls
+        .map((c) => String(c[0]))
+        .filter((s) => s.includes("[SECURITY] toctou-tag-missing"));
+      expect(toctouLines).toHaveLength(1);
+      expect(toctouLines[0]).toContain(arn);
+      expect(toctouLines[0]).toContain("firstVerify=managed");
+      expect(toctouLines[0]).toContain("secondVerify=unmanaged");
+      warnSpy.mockRestore();
+    }, 30000);
+
+    it("composite identifier (AWS::EC2::Route) bypasses second verify — zero RGTA calls, delete dispatches normally", async () => {
+      mockCloudControlSend
+        .mockResolvedValueOnce({
+          ProgressEvent: { RequestToken: "tok-toctou-route" },
+        })
+        .mockResolvedValueOnce({
+          ProgressEvent: { OperationStatus: "SUCCESS" },
+        });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: "rtb-toctou1|192.168.0.0/16",
+          confirmed: true,
+        },
+      });
+
+      const body = parseResult(result);
+      expect(body.status).toBe("SUCCESS");
+      // Composite-id resources have no ARN and no tag — RGTA must NOT
+      // be called, and the SECURITY line must NOT fire.
+      expect(mockTaggingSend).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it("RGTA failure at second verify fails closed — no delete, actionable hint", async () => {
+      const arn = "arn:aws:s3:::toctou-rgta-fail";
+      let callCount = 0;
+      mockTaggingSend.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // First verify (resolve-time) succeeds with managed tag.
+          return makeManagedResourceResponse(arn);
+        }
+        // All subsequent verifies (pre-delete + its retries) throw.
+        throw new Error("RGTA unavailable: service disruption");
+      });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: { resource_identifier: arn, confirmed: true },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = parseResult(result);
+      expect(body.error).toBe(true);
+      expect(body.message).toContain("Pre-delete tag re-verification failed");
+      expect(body.message).toContain("RGTA unavailable");
+      expect(body.hint).toContain("Resource Groups Tagging API");
+      // Must NOT have reached DeleteResource.
+      expect(mockCloudControlSend).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    }, 30000);
+
+    it("Wave 4 F1 preserved — AccessDenied at FIRST verify still refuses at resolve time (second-verify unreachable)", async () => {
+      // The resolver's first verify swallows failures and returns null;
+      // the tool entrypoint surfaces "managed by assignee.ai" refusal.
+      // The second-verify path is structurally unreachable because
+      // dispatcher-path only runs after a successful ResolvedResource.
+      mockTaggingSend.mockRejectedValue(
+        new Error("AccessDeniedException: user not authorized"),
+      );
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const { client } = await createTestClient();
+
+      const result = await client.callTool({
+        name: "destroy_resource",
+        arguments: {
+          resource_identifier: "arn:aws:s3:::f1-access-denied-bucket",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = parseResult(result);
+      // The SUT wraps thrown errors from the resolver into "Failed to
+      // resolve resource" — NOT the TOCTOU path.
+      expect(body.message).toContain("Failed to resolve resource");
+      expect(body.code).toBeUndefined();
+      expect(mockCloudControlSend).not.toHaveBeenCalled();
+      // No SECURITY line — we never got past first verify.
+      const toctouLines = warnSpy.mock.calls
+        .map((c) => String(c[0]))
+        .filter((s) => s.includes("[SECURITY] toctou-tag-missing"));
+      expect(toctouLines).toHaveLength(0);
+      warnSpy.mockRestore();
+    });
+  });
+
   describe("dry-run with composite identifier", () => {
     it("should return PENDING_CONFIRMATION for composite Route identifier when not confirmed", async () => {
       const { client } = await createTestClient();

@@ -34,6 +34,7 @@ import {
 import {
   buildErrorResponse,
   buildSuccessResponse,
+  DESTROY_ERROR_CODES,
 } from "./destroy-resource/error-envelope.js";
 import {
   isArn,
@@ -49,6 +50,7 @@ import {
   classifyNotFoundShortCircuit,
   pollDeleteStatus,
   runPreDestroyHook,
+  verifyTagBeforeDelete,
 } from "./destroy-resource/dispatcher.js";
 import type { ResolvedResource } from "./destroy-resource/types.js";
 
@@ -132,6 +134,9 @@ export function registerDestroyResource(server: McpServer): void {
         );
       }
 
+      // Capture start time before resolve so the TOCTOU SECURITY log line
+      // reflects the full resolve→delete window observed by the operator.
+      const resolveStartMs = Date.now();
       let resolved: ResolvedResource | null;
       try {
         resolved = await resolveResource(
@@ -210,6 +215,39 @@ export function registerDestroyResource(server: McpServer): void {
         resolved.identifier,
         resolved.region,
       );
+
+      // ── TOCTOU mitigation: re-verify managed-by tag immediately before
+      //    DeleteResource dispatch. Closes the resolve→delete race where
+      //    an attacker with tag:UntagResources could strip the tag after
+      //    we resolved. See story 48.4 and invariants.md "Destroy TOCTOU
+      //    window". Composite-identifier resources (no ARN) bypass.
+      try {
+        const recheck = await verifyTagBeforeDelete(
+          resolved,
+          taggingClient,
+          resolveStartMs,
+          resolved.region,
+        );
+        if (!recheck.ok) {
+          // Intentionally unredacted: operator owns the ARN by virtue of
+          // the first verify passing, and the SOC needs it for forensic
+          // CloudTrail correlation. See feedback_redaction_allowlist_not_denylist.
+          console.warn(recheck.warnLine);
+          return buildErrorResponse(
+            `Destroy refused: the managed-by=assignee-ai tag on ${resolved.arn} was stripped between resolve and delete. The resource was NOT deleted.`,
+            "Investigate immediately — an external principal removed the managed-by tag mid-flight. Check CloudTrail for UntagResources events on this ARN and review IAM policies granting tag:UntagResources.",
+            DESTROY_ERROR_CODES.TOCTOU_TAG_MISSING,
+          );
+        }
+      } catch (err) {
+        // Fail-closed: if the second verify throws (RGTA error), we cannot
+        // prove the tag is still present, so refuse the delete rather than
+        // racing on a best-effort guess.
+        return buildErrorResponse(
+          `Pre-delete tag re-verification failed: ${err instanceof Error ? err.message : String(err)}. The resource was NOT deleted.`,
+          "RGTA was unreachable at the pre-delete check. Retry once the Resource Groups Tagging API is healthy.",
+        );
+      }
 
       // ── Delete via CloudControl API ───────────────────────────────────
       try {
