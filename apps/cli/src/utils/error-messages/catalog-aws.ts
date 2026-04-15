@@ -17,7 +17,7 @@ export const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "The target resource was not found in AWS.",
     why: "The resource was deleted or never created. This can happen if the plan is stale or the resource was removed outside of assignee.ai.",
     howToFix:
-      "Re-run `assignee plan` to generate a fresh plan against the current state of your AWS account.{CTX}",
+      "Re-run `assignee plan` to generate a fresh plan against the current state of your AWS account{?account: (account {account})}{?region: in region {region}}.",
   },
   [PROVISIONING_ERROR_CODES.THROTTLED]: {
     code: PROVISIONING_ERROR_CODES.THROTTLED,
@@ -58,7 +58,7 @@ export const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "AWS denied access to perform this operation.",
     why: "The IAM credentials used by assignee.ai lack the required permissions for this resource type or action.",
     howToFix:
-      "Verify that the ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY credentials have the necessary IAM permissions for this action.{CTX} Run `assignee setup` to create properly scoped IAM users.",
+      "Verify that the ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY credentials{?profile: for profile {profile}} have the necessary IAM permissions for this action{?account: in account {account}}. Run `assignee setup` to create properly scoped IAM users.",
   },
   [AwsErrorName.INVALID_PARAMETER_VALUE]: {
     code: AwsErrorName.INVALID_PARAMETER_VALUE,
@@ -79,7 +79,7 @@ export const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "The referenced AWS resource does not exist.",
     why: "A resource ARN or identifier in your plan refers to a resource that has been deleted or was never created.",
     howToFix:
-      "Verify that all referenced resources (IAM roles, VPCs, subnets, etc.) exist in your AWS account and region.{CTX} Re-run `assignee plan` to refresh.",
+      "Verify that all referenced resources (IAM roles, VPCs, subnets, etc.) exist in your AWS account{?account: ({account})} and region{?region: ({region})}. Re-run `assignee plan` to refresh.",
   },
   [AwsErrorName.VALIDATION_EXCEPTION]: {
     code: AwsErrorName.VALIDATION_EXCEPTION,

@@ -23,7 +23,7 @@ export const CONFIG_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "AWS region is not configured.",
     why: "The AWS_REGION environment variable is missing or empty. Assignee.ai needs to know which region to provision resources in.",
     howToFix:
-      "Set the AWS_REGION environment variable:\n  export AWS_REGION=us-east-1\nOr run `assignee init` to configure your region.{CTX}",
+      "Set the AWS_REGION environment variable:\n  export AWS_REGION=us-east-1\nOr run `assignee init` to configure your region{?profile: for profile {profile}}.",
   },
   INVALID_YAML: {
     code: ErrorCode.INVALID_YAML,
@@ -37,6 +37,6 @@ export const CONFIG_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "No AWS credentials detected.",
     why: "Assignee.ai could not find operator credentials from ASSIGNEE_OPERATOR_* environment variables.",
     howToFix:
-      "Configure credentials via one of:\n  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n  2) Run `assignee setup` to create IAM users and credentials\nThen run `assignee init` to verify.{CTX}",
+      "Configure credentials via one of:\n  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n  2) Run `assignee setup` to create IAM users and credentials\nThen run `assignee init` to verify{?profile: profile {profile}}.",
   },
 };

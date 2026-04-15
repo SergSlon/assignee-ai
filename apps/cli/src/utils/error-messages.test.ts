@@ -566,38 +566,40 @@ describe("matchCheckpointError regression — non-checkpoint errors", () => {
 // ── P1-R2-4: live context interpolation ─────────────────────────────────────
 
 describe("ErrorMessageRegistry — live context interpolation (P1-R2-4)", () => {
-  it("strips {CTX} placeholder when no context is passed (back-compat)", () => {
+  it("strips placeholder tokens when no context is passed (back-compat)", () => {
     const err = new ConfigurationError("No AWS credentials detected");
     const entry = defaultErrorMessageRegistry.resolve(err);
     expect(entry.howToFix).not.toContain("{CTX}");
     expect(entry.howToFix).not.toContain("{region}");
+    expect(entry.howToFix).not.toContain("{profile}");
+    expect(entry.howToFix).not.toContain("{?");
   });
 
-  it("expands {CTX} with region/account/profile when context provided", () => {
+  it("weaves profile inline when context provided (MISSING_CREDENTIALS)", () => {
     const err = new ConfigurationError("No AWS credentials detected");
     const entry = defaultErrorMessageRegistry.resolve(err, {
       region: "us-west-2",
       account: "123456789012",
       profile: "dev",
     });
-    expect(entry.howToFix).toContain("region=us-west-2");
-    expect(entry.howToFix).toContain("account=123456789012");
-    expect(entry.howToFix).toContain("profile=dev");
-    expect(entry.howToFix).toContain("Context:");
+    expect(entry.howToFix).toContain("profile dev");
+    expect(entry.howToFix).not.toContain("{");
+    expect(entry.howToFix).not.toContain("}");
   });
 
-  it("expands {CTX} with partial context (region only)", () => {
+  it("weaves region inline with partial context (NOT_FOUND)", () => {
     const err = new ProvisioningError("Resource not found in AWS", "NotFound");
     const entry = defaultErrorMessageRegistry.resolve(err, {
       region: "eu-west-1",
     });
-    expect(entry.howToFix).toContain("region=eu-west-1");
-    expect(entry.howToFix).not.toContain("account=");
-    expect(entry.howToFix).not.toContain("profile=");
+    expect(entry.howToFix).toContain("in region eu-west-1");
+    // Conditional {?account: (account {account})} segment dropped when
+    // account is absent — only the literal "AWS account" prefix remains.
+    expect(entry.howToFix).not.toContain("(account ");
+    expect(entry.howToFix).not.toContain("{");
   });
 
-  it("expands {region} scalar token when present in template", () => {
-    // Manually register an entry using {region} to verify scalar path.
+  it("exposes UNKNOWN fallback entry in a fresh registry", () => {
     const reg = new ErrorMessageRegistry();
     const raw = reg.get("UNKNOWN");
     expect(raw).toBeDefined();
@@ -607,14 +609,157 @@ describe("ErrorMessageRegistry — live context interpolation (P1-R2-4)", () => 
     const err = new ConfigurationError("No AWS credentials detected");
     const entry = defaultErrorMessageRegistry.resolve(err, {});
     expect(entry.howToFix).not.toContain("{CTX}");
+    expect(entry.howToFix).not.toContain("{?");
     expect(entry.howToFix).not.toContain("Context: .");
   });
 
-  it("resolveMessage accepts context argument", () => {
+  it("resolveMessage accepts context argument and interpolates inline", () => {
     const entry = defaultErrorMessageRegistry.resolveMessage(
       "AWS_REGION is missing",
       { profile: "ops" },
     );
-    expect(entry.howToFix).toContain("profile=ops");
+    expect(entry.howToFix).toContain("profile ops");
+    expect(entry.howToFix).not.toContain("{");
+  });
+});
+
+// ── Story 48.5: inline context tokens (replaces {CTX} aggregate) ────────────
+
+describe("inline context tokens (Story 48.5)", () => {
+  const realCtx = {
+    region: "us-east-1",
+    account: "123456789012",
+    profile: "dev",
+  };
+
+  // Helper: assert no orphan filler (placeholders, conditional syntax,
+  // double-spaces, dangling " in region ." etc.) remains after interpolation.
+  const assertClean = (out: string): void => {
+    expect(out).not.toContain("{");
+    expect(out).not.toContain("}");
+    // no mid-line double-spaces (newline-indentation with 2 spaces is fine)
+    expect(out).not.toMatch(/[^\n ]  /);
+    expect(out).not.toMatch(/\bin region \./);
+    expect(out).not.toMatch(/\bin account \./);
+    expect(out).not.toMatch(/\bfor profile \./);
+    expect(out).not.toMatch(/\(\)/); // no empty parens
+  };
+
+  // ── NOT_FOUND (catalog-aws.ts) ────────────────────────────────────────────
+  it("NOT_FOUND: interpolates account + region inline with context", () => {
+    const err = new ProvisioningError("Not found", "NotFound");
+    const entry = defaultErrorMessageRegistry.resolve(err, realCtx);
+    expect(entry.howToFix).toContain("(account 123456789012)");
+    expect(entry.howToFix).toContain("in region us-east-1");
+    assertClean(entry.howToFix);
+  });
+
+  it("NOT_FOUND: degrades cleanly with empty context", () => {
+    const err = new ProvisioningError("Not found", "NotFound");
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.howToFix).toContain("current state of your AWS account.");
+    assertClean(entry.howToFix);
+  });
+
+  // ── ACCESS_DENIED_SHORT (catalog-aws.ts) ─────────────────────────────────
+  it("ACCESS_DENIED_SHORT: interpolates profile + account inline with context", () => {
+    const err = new ProvisioningError("Not authorized", "AccessDenied");
+    const entry = defaultErrorMessageRegistry.resolve(err, realCtx);
+    expect(entry.howToFix).toContain("for profile dev");
+    expect(entry.howToFix).toContain("in account 123456789012");
+    assertClean(entry.howToFix);
+  });
+
+  it("ACCESS_DENIED_SHORT: degrades cleanly with empty context", () => {
+    const err = new ProvisioningError("Not authorized", "AccessDenied");
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.howToFix).toContain(
+      "credentials have the necessary IAM permissions for this action.",
+    );
+    expect(entry.howToFix).toContain("Run `assignee setup`");
+    assertClean(entry.howToFix);
+  });
+
+  // ── RESOURCE_NOT_FOUND (catalog-aws.ts) ───────────────────────────────────
+  it("RESOURCE_NOT_FOUND: interpolates account + region inline with context", () => {
+    const entry = defaultErrorMessageRegistry.resolveMessage(
+      "ResourceNotFoundException: Role not found",
+      realCtx,
+    );
+    expect(entry.howToFix).toContain("AWS account (123456789012)");
+    expect(entry.howToFix).toContain("region (us-east-1)");
+    assertClean(entry.howToFix);
+  });
+
+  it("RESOURCE_NOT_FOUND: degrades cleanly with empty context", () => {
+    const entry = defaultErrorMessageRegistry.resolveMessage(
+      "ResourceNotFoundException: Role not found",
+    );
+    expect(entry.howToFix).toContain("in your AWS account and region.");
+    expect(entry.howToFix).toContain("Re-run `assignee plan`");
+    assertClean(entry.howToFix);
+  });
+
+  // ── MISSING_REGION (catalog-config.ts) ────────────────────────────────────
+  it("MISSING_REGION: interpolates profile (never region) inline with context", () => {
+    const err = new ConfigurationError("AWS_REGION is missing or empty");
+    const entry = defaultErrorMessageRegistry.resolve(err, realCtx);
+    expect(entry.howToFix).toContain("for profile dev");
+    // MISSING_REGION must NOT inject {region} — the user lacks one.
+    expect(entry.howToFix).not.toMatch(/in region us-east-1/);
+    assertClean(entry.howToFix);
+  });
+
+  it("MISSING_REGION: degrades cleanly with empty context", () => {
+    const err = new ConfigurationError("AWS_REGION is missing or empty");
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.howToFix).toContain("to configure your region.");
+    assertClean(entry.howToFix);
+  });
+
+  // ── MISSING_CREDENTIALS (catalog-config.ts) ───────────────────────────────
+  it("MISSING_CREDENTIALS: interpolates profile inline with context", () => {
+    const err = new ConfigurationError("No AWS credentials detected");
+    const entry = defaultErrorMessageRegistry.resolve(err, realCtx);
+    expect(entry.howToFix).toContain("profile dev");
+    assertClean(entry.howToFix);
+  });
+
+  it("MISSING_CREDENTIALS: degrades cleanly with empty context", () => {
+    const err = new ConfigurationError("No AWS credentials detected");
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.howToFix).toContain("Then run `assignee init` to verify.");
+    assertClean(entry.howToFix);
+  });
+
+  // ── BEDROCK_CONNECTIVITY (catalog-llm.ts) ─────────────────────────────────
+  it("BEDROCK_CONNECTIVITY: interpolates region + account + profile inline with context", () => {
+    const err = new BedrockError("Failed to connect to Bedrock endpoint");
+    const entry = defaultErrorMessageRegistry.resolve(err, realCtx);
+    expect(entry.howToFix).toContain("Your AWS_REGION (us-east-1)");
+    expect(entry.howToFix).toContain("your account (123456789012)");
+    expect(entry.howToFix).toContain("Your IAM credentials for profile dev");
+    assertClean(entry.howToFix);
+  });
+
+  it("BEDROCK_CONNECTIVITY: degrades cleanly with empty context", () => {
+    const err = new BedrockError("Failed to connect to Bedrock endpoint");
+    const entry = defaultErrorMessageRegistry.resolve(err);
+    expect(entry.howToFix).toContain("Your AWS_REGION supports Bedrock");
+    expect(entry.howToFix).toContain(
+      "The Bedrock model is enabled in your account (check AWS Console",
+    );
+    expect(entry.howToFix).toContain(
+      "Your IAM credentials have bedrock:InvokeModel permission.",
+    );
+    assertClean(entry.howToFix);
+  });
+
+  // ── Global guarantees ─────────────────────────────────────────────────────
+  it("no catalog template emits {CTX} after refactor", () => {
+    const allEntries = defaultErrorMessageRegistry.allEntries();
+    for (const entry of allEntries) {
+      expect(entry.howToFix).not.toContain("{CTX}");
+    }
   });
 });
