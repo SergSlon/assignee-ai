@@ -27,7 +27,8 @@ import { FieldLabel } from "../field-labels.js";
  *   - optional: EventSourceName, Tags, Description, KmsKeyIdentifier,
  *     Policy, DeadLetterConfig, LogConfig
  *
- * Pricing: $1.00 per million events published to a custom bus.
+ * Pricing: custom buses bill a per-million-events rate for events
+ * published TO the bus (run `assignee cost` for live Pricing-MCP rates).
  * The default bus has no per-event charge for AWS-service events.
  * Cross-account event delivery is billed to the publishing account
  * at the standard rate.
@@ -199,8 +200,8 @@ export const eventsEventBusPlugin: ResourcePlugin = {
   defaults: {},
   configHints: [
     "Name is createOnly + required — pick a stable, descriptive name (e.g. `orders-events`, `inventory-events`). Renaming requires replacing the bus, which loses every rule + subscriber wired to it.",
-    "Custom event buses bill $1.00 per million events PUBLISHED to the bus. Rule evaluation + target invocation are billed separately by their own service rates. The default bus has no per-event charge for AWS-service events.",
-    "KmsKeyIdentifier: customer-managed KMS keys give you key rotation control + CloudTrail audit on every encrypt/decrypt operation. Use the alias 'alias/aws/events' for the AWS-managed EventBridge key (free, no rotation control).",
+    "Custom event buses bill a per-million-events rate for events PUBLISHED to the bus. Rule evaluation + target invocation are billed separately by their own service rates. The default bus has no per-event charge for AWS-service events. Run `assignee cost` for live Pricing-MCP rates.",
+    "KmsKeyIdentifier: customer-managed KMS keys give you key rotation control + CloudTrail audit on every encrypt/decrypt operation. Use the alias 'alias/aws/events' for the AWS-managed EventBridge key (no rotation control, no extra charge).",
     "Cross-account event publishing requires BOTH the Policy field on this bus (Allow events:PutEvents from the source account) AND a matching events:PutEvents permission on the source account's IAM role.",
     "DeadLetterConfig captures events that fail rule processing OR have no matching rule. Wire a same-account SQS queue here so dropped events are recoverable instead of silently lost.",
     "For SaaS partner integration (Stripe, Auth0, etc.), set EventSourceName to the partner-issued source ARN. Without it, the SaaS partner cannot publish to this bus.",

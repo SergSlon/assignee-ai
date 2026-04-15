@@ -21,13 +21,18 @@ import {
   DeleteResourceCommand,
   GetResourceRequestStatusCommand,
 } from "@aws-sdk/client-cloudcontrol";
+import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import {
   CCAPI_FALLBACK_TYPES,
   CCAPI_REDIRECT_TYPES,
   DEFAULT_AWS_REGION,
   AssigneeTag,
-  SERVICE_TYPE_MAP,
-  SERVICE_SUBTYPE_MAP,
+  requireAssigneeCredentials,
+  MissingAssigneeCredentialsError,
+  isArn as coreIsArn,
+  arnToResourceType as coreArnToResourceType,
+  extractIdentifierFromArn as coreExtractIdentifierFromArn,
+  extractRegionFromArn as coreExtractRegionFromArn,
 } from "@assignee/core";
 import { destroyRegistry } from "../services/destroy-strategies/index.js";
 
@@ -58,119 +63,29 @@ export const destroyResourceParams = {
 };
 
 // ── ARN helpers ─────────────────────────────────────────────────────────────
+//
+// Wave 3 P2-2: ARN parsing helpers previously duplicated here and in
+// `apps/cli/src/services/resource-resolver.ts` now live in
+// `packages/core/src/config/arn-helpers.ts`. We re-export them from this
+// module so existing consumers (`destroy-arn-resolution.test.ts`) keep
+// importing from the same path. The implementation is identical across
+// packages and partition-aware (accepts aws/aws-cn/aws-us-gov/aws-iso/
+// aws-iso-b).
 
-/**
- * Wave 10 P0-1: partition-aware ARN check. The previous
- * `input.startsWith(ArnPrefix.AWS)` (= "arn:aws:") rejected GovCloud
- * (`arn:aws-us-gov:`) and China (`arn:aws-cn:`) ARNs and routed them
- * down the byName path, where they would never resolve. Mirrors the
- * canonical pattern in `packages/core/src/config/arn-builder.ts`.
- */
-function isArn(input: string): boolean {
-  return /^arn:aws[\w-]*:/.test(input);
-}
+const isArn = coreIsArn;
 
 /**
  * Resolves an ARN to a known CloudFormation resource type.
  * Returns null if the service/resource combination is not recognized
- * (unlike arnToCloudFormationType which produces a best-guess fallback).
- *
- * Uses SERVICE_TYPE_MAP and SERVICE_SUBTYPE_MAP from @assignee/core.
+ * (unlike `arnToCloudFormationType` which produces a best-guess fallback).
  * @internal Exported for testing only.
  */
-export function arnToResourceType(arn: string): string | null {
-  const parts = arn.split(":");
-  if (parts.length < 6) return null;
-  const service = parts[2];
-  const resourcePart = parts[5] ?? "";
-  if (!service) return null;
-
-  // Check subtype map first (ec2, iam, apigateway, etc.)
-  const subtypes = SERVICE_SUBTYPE_MAP[service];
-  if (subtypes) {
-    const segments = resourcePart.split(/[:/]/).filter(Boolean);
-    const resourceSeg = segments[0] ?? "";
-    if (resourcePart.startsWith("/")) {
-      const prefixed = "/" + resourceSeg;
-      if (subtypes[prefixed]) return subtypes[prefixed]!;
-    }
-    if (subtypes[resourceSeg]) return subtypes[resourceSeg]!;
-    if (subtypes[""]) return subtypes[""]!;
-  }
-
-  // Simple service→type map
-  const mapped = SERVICE_TYPE_MAP[service];
-  if (mapped) return mapped;
-
-  // Unlike arnToCloudFormationType, return null for unknown services
-  return null;
-}
+export const arnToResourceType = coreArnToResourceType;
 
 /** @internal Exported for testing only. */
-export function extractIdentifierFromArn(arn: string): string {
-  const parts = arn.split(":");
-  if (parts.length < 6) return arn;
+export const extractIdentifierFromArn = coreExtractIdentifierFromArn;
 
-  // Rejoin everything after the 5th colon (resource section may contain colons)
-  const resourceSection = parts.slice(5).join(":");
-
-  // ARN resource formats:
-  //  "type/id"              → ec2:instance/i-abc → "i-abc"
-  //  "type:id"              → rds:db:my-db → "my-db", cloudwatch:alarm:my-alarm → "my-alarm"
-  //  "id" (no separator)    → sqs:my-queue, sns:my-topic → "my-queue"
-  //  "parameter/path/name"  → ssm:parameter/app/db → "app/db" (full path after "parameter/")
-  //  "log-group:/path"      → logs:log-group:/aws/fn → "/aws/fn" (preserve leading /)
-  //  "secret:name/suffix"   → secretsmanager:secret:app/db-AbC → "app/db-AbC"
-  //  "/apis/id"             → apigateway:/apis/abc → "abc"
-
-  // Detect colon-separated format: "type:identifier" (rds:db:name, cloudwatch:alarm:name, etc.)
-  const colonParts = resourceSection.split(":");
-  if (colonParts.length >= 2) {
-    const resourceType = colonParts[0]!;
-    const afterType = colonParts.slice(1).join(":");
-
-    // SSM parameter: "parameter/path/to/name" — but uses slash, not colon, for type separator
-    if (resourceType === "parameter") {
-      // Everything after "parameter/" is the identifier
-      return resourceSection.slice("parameter/".length);
-    }
-
-    // Log group: "log-group:/path/name" or "log-group:simple-name"
-    if (resourceType === "log-group") {
-      return afterType;
-    }
-
-    // Secret: "secret:name-with-suffix" or "secret:path/name-suffix"
-    if (resourceType === "secret") {
-      return afterType;
-    }
-
-    // Generic colon-separated: "db:my-db", "alarm:my-alarm", etc.
-    if (afterType && !resourceType.includes("/")) {
-      return afterType;
-    }
-  }
-
-  // Detect slash-separated: "type/identifier" or "/apis/id"
-  const slashIdx = resourceSection.indexOf("/");
-  if (slashIdx !== -1) {
-    const afterSlash = resourceSection.slice(slashIdx + 1);
-    // API Gateway: "/apis/abc123" — extract last segment
-    if (resourceSection.startsWith("/")) {
-      const segments = resourceSection.split("/").filter(Boolean);
-      return segments[segments.length - 1] ?? arn;
-    }
-    return afterSlash || arn;
-  }
-
-  // No separator — the resource section IS the identifier (SQS queue name, SNS topic name)
-  return resourceSection || arn;
-}
-
-function extractRegionFromArn(arn: string, defaultRegion: string): string {
-  const parts = arn.split(":");
-  return parts[3] || defaultRegion;
-}
+const extractRegionFromArn = coreExtractRegionFromArn;
 
 /**
  * Returns the correct CloudControl Identifier for a resource given its ARN and type.
@@ -232,16 +147,60 @@ function tryResolveCompositeIdentifier(
 const MAX_RESOLVE_RETRIES = 4;
 const RESOLVE_RETRY_DELAY_MS = 5_000;
 
-async function resolveResource(
+/**
+ * Returns true when the RGTA mapping has the required managed-by tag.
+ * Never trust an ARN match alone — the tagging API could return a resource
+ * that happens to have a different tag filter hit (none should, but defense
+ * in depth) or a resource we don't own in a shared account.
+ */
+function hasManagedByTag(
+  tags: Array<{ Key?: string; Value?: string }>,
+): boolean {
+  return tags.some(
+    (t) => t.Key === TAG_KEY_MANAGED_BY && t.Value === TAG_VALUE_MANAGED_BY,
+  );
+}
+
+/**
+ * Targeted tag verification for a specific ARN. Uses the ResourceARNList
+ * parameter so RGTA returns tags for that exact ARN (or an empty list if
+ * it isn't indexed yet). Much faster than paginating the full managed
+ * resource set when the caller already has an ARN.
+ */
+async function verifyArnIsManaged(
+  arn: string,
+  taggingClient: ResourceGroupsTaggingAPIClient,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < MAX_RESOLVE_RETRIES; attempt++) {
+    const response = await taggingClient.send(
+      new GetResourcesCommand({
+        ResourceARNList: [arn],
+      }),
+    );
+    for (const mapping of response.ResourceTagMappingList ?? []) {
+      if (mapping.ResourceARN !== arn) continue;
+      if (hasManagedByTag(mapping.Tags ?? [])) return true;
+    }
+    // RGTA may lag (especially IAM). Retry with backoff before giving up.
+    if (attempt < MAX_RESOLVE_RETRIES - 1) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, RESOLVE_RETRY_DELAY_MS),
+      );
+    }
+  }
+  return false;
+}
+
+/**
+ * Paginates the full managed resource set looking for a match by ARN or
+ * by bare identifier. Used when the caller provided a non-ARN name.
+ */
+async function resolveByNameOrArn(
   input: string,
   taggingClient: ResourceGroupsTaggingAPIClient,
   region: string,
 ): Promise<ResolvedResource | null> {
-  // Check for composite identifiers first (no Tagging API needed)
-  const composite = tryResolveCompositeIdentifier(input, region);
-  if (composite) return composite;
-
-  // Retry loop for Tagging API eventual consistency (especially IAM)
+  const inputIsArn = isArn(input);
   for (let attempt = 0; attempt < MAX_RESOLVE_RETRIES; attempt++) {
     let paginationToken: string | undefined;
 
@@ -258,10 +217,14 @@ async function resolveResource(
       for (const mapping of response.ResourceTagMappingList ?? []) {
         const arn = mapping.ResourceARN;
         if (!arn) continue;
+        // Defense in depth: the TagFilters above should guarantee this,
+        // but verify explicitly so we never destroy something whose
+        // managed-by tag was modified mid-request.
+        if (!hasManagedByTag(mapping.Tags ?? [])) continue;
 
         const identifier = extractIdentifierFromArn(arn);
-        const matchesArn = isArn(input) && arn === input;
-        const matchesName = !isArn(input) && identifier === input;
+        const matchesArn = inputIsArn && arn === input;
+        const matchesName = !inputIsArn && identifier === input;
 
         if (matchesArn || matchesName) {
           const resourceType = arnToResourceType(arn) ?? "Unknown";
@@ -292,12 +255,122 @@ async function resolveResource(
   return null;
 }
 
+async function resolveResource(
+  input: string,
+  taggingClient: ResourceGroupsTaggingAPIClient,
+  region: string,
+): Promise<ResolvedResource | null> {
+  // Check for composite identifiers first (no Tagging API needed)
+  const composite = tryResolveCompositeIdentifier(input, region);
+  if (composite) return composite;
+
+  // ARN input: targeted tag verification. This is both faster AND safer
+  // than scanning the whole managed set — RGTA returns tags for the exact
+  // ARN and we explicitly require managed-by=assignee-ai. If the tag is
+  // missing we return null (the caller will surface a clear error) —
+  // there is NO "ARN fallback that bypasses tag verification" path.
+  if (isArn(input)) {
+    const isManaged = await verifyArnIsManaged(input, taggingClient);
+    if (!isManaged) return null;
+    const resourceType = arnToResourceType(input) ?? "Unknown";
+    const identifier = extractIdentifierFromArn(input);
+    return {
+      arn: input,
+      resourceType,
+      region: extractRegionFromArn(input, region),
+      identifier: getCloudControlIdentifier(input, resourceType, identifier),
+    };
+  }
+
+  // Name input: paginate the full managed set.
+  return resolveByNameOrArn(input, taggingClient, region);
+}
+
+// ── NotFound short-circuit (cross-account sanity) ────────────────────────────
+
+/** CloudControl HandlerErrorCode for "resource does not exist". */
+const CCAPI_NOT_FOUND_ERROR_CODE = "NotFound";
+
+/**
+ * Extract the 12-digit AWS account segment from an ARN, or undefined
+ * when the ARN has no account segment (e.g. `arn:aws:s3:::bucket`).
+ */
+function extractAccountIdFromArn(arn: string): string | undefined {
+  const parts = arn.split(":");
+  if (parts.length < 5) return undefined;
+  const account = parts[4];
+  return account && /^\d{12}$/.test(account) ? account : undefined;
+}
+
+/** Module-level cache: one STS lookup per MCP process. */
+let cachedOperatorAccountId: string | undefined;
+let cachedOperatorAccountLookup: Promise<string | undefined> | undefined;
+
+/**
+ * Returns the AWS account ID for the configured operator credentials.
+ * Used by the cross-account sanity check on NotFound short-circuits.
+ * Returns undefined on any failure (missing creds, STS error, timeout) —
+ * the caller treats undefined as "cannot classify" and falls through to
+ * the conservative safe-shortcircuit behavior.
+ */
+async function getOperatorAccountId(
+  region: string,
+): Promise<string | undefined> {
+  if (cachedOperatorAccountId !== undefined) return cachedOperatorAccountId;
+  if (cachedOperatorAccountLookup) return cachedOperatorAccountLookup;
+
+  cachedOperatorAccountLookup = (async () => {
+    try {
+      const sts = new STSClient({
+        region,
+        credentials: requireAssigneeCredentials("operator"),
+      });
+      const result = await Promise.race([
+        sts.send(new GetCallerIdentityCommand({})),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("STS timeout")), 5_000),
+        ),
+      ]);
+      const account = result.Account;
+      if (account) {
+        cachedOperatorAccountId = account;
+        return account;
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+
+  return cachedOperatorAccountLookup;
+}
+
+/**
+ * Classifies a CCAPI NotFound response by comparing the resource ARN's
+ * account to the operator's account. If they match (or account info is
+ * unavailable), treat NotFound as success — the tag API commonly caches
+ * deleted resources for ~1h. If they differ, the operator is almost
+ * certainly pointing at the wrong account and we surface a real error.
+ */
+async function classifyNotFoundShortCircuit(
+  resourceArn: string,
+  region: string,
+): Promise<"safe-shortcircuit" | "cross-account"> {
+  const arnAccount = extractAccountIdFromArn(resourceArn);
+  if (!arnAccount) return "safe-shortcircuit";
+  const operatorAccount = await getOperatorAccountId(region);
+  if (!operatorAccount) return "safe-shortcircuit";
+  return arnAccount === operatorAccount ? "safe-shortcircuit" : "cross-account";
+}
+
 // ── Delete polling ───────────────────────────────────────────────────────────
 
 async function pollDeleteStatus(
   ccClient: CloudControlClient,
   requestToken: string,
   resourceType?: string,
+  resourceArn?: string,
+  region?: string,
 ): Promise<{ success: boolean; message?: string }> {
   const MAX_TRANSIENT_ERRORS = 3;
   let transientErrors = 0;
@@ -311,9 +384,30 @@ async function pollDeleteStatus(
         new GetResourceRequestStatusCommand({ RequestToken: requestToken }),
       );
       const status = result.ProgressEvent?.OperationStatus;
+      const errorCode = result.ProgressEvent?.ErrorCode;
 
       if (status === "SUCCESS") return { success: true };
       if (status === "FAILED") {
+        // NotFound short-circuit: RGTA caches deleted resources for ~1h,
+        // so bulk-destroy commonly re-submits an already-deleted resource.
+        // Treat NotFound as success UNLESS the operator credentials point
+        // at a different account than the resource ARN — in that case
+        // NotFound is almost certainly a misconfiguration, not success.
+        if (errorCode === CCAPI_NOT_FOUND_ERROR_CODE) {
+          if (resourceArn && region) {
+            const classification = await classifyNotFoundShortCircuit(
+              resourceArn,
+              region,
+            );
+            if (classification === "cross-account") {
+              return {
+                success: false,
+                message: `CloudControl reported NotFound for ${resourceArn}, but the operator credentials are configured for a different AWS account. Verify ASSIGNEE_OPERATOR_ACCESS_KEY_ID points at the correct account before retrying.`,
+              };
+            }
+          }
+          return { success: true };
+        }
         return {
           success: false,
           message:
@@ -346,11 +440,44 @@ export function registerDestroyResource(server: McpServer): void {
     "Destroy a managed AWS resource by ARN or name. REQUIRES confirmed: true as a safety mechanism — the AI agent must present resource details and get explicit user approval before destroying.",
     destroyResourceParams,
     async ({ resource_identifier, confirmed }) => {
-      // ── Resolve the resource ──────────────────────────────────────────
+      // ── Lazy operator credential resolution ───────────────────────────
+      // P0-1 fix: never fall through to the host's default credential
+      // chain. Both AWS clients below are constructed with explicit
+      // ASSIGNEE_OPERATOR_* credentials. If they're missing we fail
+      // fast with an actionable hint instead of silently deleting
+      // resources under the MCP host's profile.
       const region = DEFAULT_REGION;
+      let operatorCreds;
+      try {
+        operatorCreds = requireAssigneeCredentials("operator");
+      } catch (err) {
+        const message =
+          err instanceof MissingAssigneeCredentialsError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                error: true,
+                message: `Operator credentials are required to destroy resources: ${message}`,
+                hint: "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY in the MCP server environment, or run 'assignee setup' to create the IAM users.",
+              }),
+            },
+          ],
+          isError: true,
+        };
+      }
+
       let taggingClient: ResourceGroupsTaggingAPIClient;
       try {
-        taggingClient = new ResourceGroupsTaggingAPIClient({ region });
+        taggingClient = new ResourceGroupsTaggingAPIClient({
+          region,
+          credentials: operatorCreds,
+        });
       } catch (err) {
         return {
           content: [
@@ -359,7 +486,7 @@ export function registerDestroyResource(server: McpServer): void {
               text: JSON.stringify({
                 error: true,
                 message: `Failed to initialize AWS client: ${err instanceof Error ? err.message : String(err)}`,
-                hint: "Check that AWS credentials are configured (ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables).",
+                hint: "Check that ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY are set.",
               }),
             },
           ],
@@ -390,46 +517,32 @@ export function registerDestroyResource(server: McpServer): void {
       }
 
       if (!resolved) {
-        // Fallback: if input is an ARN, attempt direct CloudControl delete
-        // without Tagging API verification. This handles IAM and other resources
-        // where Tagging API eventual consistency causes lookup failures.
-        if (isArn(resource_identifier)) {
-          const resourceType = arnToResourceType(resource_identifier);
-          if (resourceType && resourceType !== "Unknown") {
-            const extractedId = extractIdentifierFromArn(resource_identifier);
-            resolved = {
-              arn: resource_identifier,
-              resourceType,
-              region: extractRegionFromArn(resource_identifier, region),
-              identifier: getCloudControlIdentifier(
-                resource_identifier,
-                resourceType,
-                extractedId,
-              ),
-            };
-            // SAFETY NOTE: This bypasses managed-by tag verification.
-            // Only used when Tagging API hasn't indexed the resource yet.
-            // CloudControl will reject if the resource doesn't exist.
-            console.error(
-              `[destroy_resource] ARN fallback (Tagging API miss): ${resource_identifier}`,
-            );
-          }
-        }
-
-        if (!resolved) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify({
-                  error: true,
-                  message: `No managed resource found matching "${resource_identifier}". Use list_managed_resources to see available resources.`,
-                }),
-              },
-            ],
-            isError: true,
-          };
-        }
+        // P0-1 fix: NO ARN fallback that bypasses tag verification.
+        // If the tagging API cannot prove the resource carries
+        // managed-by=assignee-ai, we refuse to delete — the previous
+        // "direct CloudControl delete" path would happily destroy any
+        // resource the operator credentials could reach, including
+        // unmanaged production resources.
+        const isArnInput = isArn(resource_identifier);
+        const message = isArnInput
+          ? `Could not verify "${resource_identifier}" is managed by assignee.ai. The Resource Groups Tagging API did not return this ARN with a managed-by=assignee-ai tag after retries. Destroy was refused for safety.`
+          : `No managed resource found matching "${resource_identifier}". Use list_managed_resources to see available resources.`;
+        const hint = isArnInput
+          ? "Only resources tagged managed-by=assignee-ai can be destroyed via this tool. If the resource was just created, the tagging API may not have indexed it yet — wait a minute and retry. If the resource is not managed by assignee.ai, delete it through the AWS Console or CLI."
+          : undefined;
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                error: true,
+                message,
+                ...(hint ? { hint } : {}),
+              }),
+            },
+          ],
+          isError: true,
+        };
       }
 
       // ── Dry-run: return resource details without deleting ─────────────
@@ -493,7 +606,10 @@ export function registerDestroyResource(server: McpServer): void {
       // ── Delete via CloudControl API ───────────────────────────────────
       let ccClient: CloudControlClient;
       try {
-        ccClient = new CloudControlClient({ region: resolved.region });
+        ccClient = new CloudControlClient({
+          region: resolved.region,
+          credentials: operatorCreds,
+        });
       } catch (err) {
         return {
           content: [
@@ -559,6 +675,8 @@ export function registerDestroyResource(server: McpServer): void {
           ccClient,
           requestToken,
           resolved.resourceType,
+          resolved.arn,
+          resolved.region,
         );
 
         if (!pollResult.success) {
@@ -594,13 +712,60 @@ export function registerDestroyResource(server: McpServer): void {
           ],
         };
       } catch (err) {
+        // NotFound short-circuit on the DeleteResource call itself —
+        // mirrors the CLI's behavior for tag-ghost cleanup. CCAPI can
+        // throw ResourceNotFoundException synchronously when the
+        // resource is already gone. Apply the cross-account sanity
+        // check so we don't silently succeed under the wrong account.
+        const errName = err instanceof Error ? err.name : "";
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const isNotFound =
+          errName === "ResourceNotFoundException" ||
+          /ResourceNotFoundException|NotFound/.test(errMsg);
+        if (isNotFound) {
+          const classification = await classifyNotFoundShortCircuit(
+            resolved.arn,
+            resolved.region,
+          );
+          if (classification === "cross-account") {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({
+                    error: true,
+                    message: `CloudControl reported NotFound for ${resolved.arn}, but the operator credentials are configured for a different AWS account. Verify ASSIGNEE_OPERATOR_ACCESS_KEY_ID points at the correct account before retrying.`,
+                  }),
+                },
+              ],
+              isError: true,
+            };
+          }
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify({
+                  status: "SUCCESS",
+                  message: `Resource ${resolved.arn} was already deleted (NotFound).`,
+                  resource: {
+                    arn: resolved.arn,
+                    resourceType: resolved.resourceType,
+                    region: resolved.region,
+                    identifier: resolved.identifier,
+                  },
+                }),
+              },
+            ],
+          };
+        }
         return {
           content: [
             {
               type: "text" as const,
               text: JSON.stringify({
                 error: true,
-                message: `Failed to destroy resource: ${err instanceof Error ? err.message : String(err)}`,
+                message: `Failed to destroy resource: ${errMsg}`,
               }),
             },
           ],

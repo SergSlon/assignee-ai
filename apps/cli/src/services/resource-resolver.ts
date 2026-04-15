@@ -20,13 +20,13 @@ import {
   ArnPrefix,
   ConfigurationError,
   RESOURCE_TYPES,
-  LIST_RESOURCE_TYPES,
+  isArn,
+  arnToResourceType,
+  extractIdentifierFromArn,
+  extractRegionFromArn,
+  getCloudControlIdentifier,
 } from "@assignee/core";
-import {
-  AWS_REGION,
-  AWS_SERVICE_EXECUTE_API,
-  CredentialError,
-} from "../config/constants.js";
+import { AWS_REGION, CredentialError } from "../config/constants.js";
 
 /** Resolved resource returned by the resource resolver. */
 export interface ResolvedResource {
@@ -37,21 +37,12 @@ export interface ResolvedResource {
   identifier: string;
 }
 
-/**
- * Checks if a string looks like an ARN.
- *
- * Wave 10 P0-1: this used to call `input.startsWith(ArnPrefix.AWS)`
- * where `ArnPrefix.AWS === "arn:aws:"` — commercial-only. GovCloud
- * (`arn:aws-us-gov:`) and China (`arn:aws-cn:`) ARNs returned false
- * here and fell through to `resolveByName`, which then attempted to
- * scan RGTA for a literal name match against an ARN string and
- * silently failed to resolve any IAM role / S3 bucket / etc on those
- * partitions. The same partition-aware regex pattern as
- * `isArn()` in `packages/core/src/config/arn-builder.ts`.
- */
-function isArn(input: string): boolean {
-  return /^arn:aws[\w-]*:/.test(input);
-}
+// ARN helpers (`isArn`, `arnToResourceType`, `extractIdentifierFromArn`,
+// `extractRegionFromArn`, `getCloudControlIdentifier`) live in
+// `packages/core/src/config/arn-helpers.ts` and are imported above.
+// Wave 3 P2-2: previously duplicated with destroy-resource.ts in MCP
+// server — the inline copies used divergent service maps and a
+// non-partition-aware `startsWith("arn:aws:")` check.
 
 /**
  * Checks if a string is an SQS queue URL.
@@ -80,172 +71,6 @@ function parseSqsQueueUrl(url: string): {
     accountId: match[2]!,
     queueName: match[3]!,
   };
-}
-
-/**
- * Extracts the CloudFormation resource type from an ARN.
- * e.g. "arn:aws:s3:::my-bucket" → RESOURCE_TYPES.S3_BUCKET
- *
- * Returns null if the ARN service is not recognized.
- */
-function arnToResourceType(arn: string): string | null {
-  const parts = arn.split(":");
-  if (parts.length < 6) return null;
-
-  const service = parts[2] ?? "";
-  const resourcePart = parts[5] ?? "";
-  const segments = resourcePart.split("/").filter(Boolean);
-  const resourceType = segments[0] ?? "";
-
-  const serviceMap: Record<string, Record<string, string>> = {
-    // Tier 0
-    s3: { "": RESOURCE_TYPES.S3_BUCKET },
-    ssm: { parameter: RESOURCE_TYPES.SSM_PARAMETER },
-    iam: {
-      role: RESOURCE_TYPES.IAM_ROLE,
-      policy: LIST_RESOURCE_TYPES.IAM_MANAGED_POLICY,
-      user: LIST_RESOURCE_TYPES.IAM_USER,
-      group: LIST_RESOURCE_TYPES.IAM_GROUP,
-      "instance-profile": LIST_RESOURCE_TYPES.IAM_INSTANCE_PROFILE,
-    },
-    ec2: {
-      instance: RESOURCE_TYPES.EC2_INSTANCE,
-      vpc: RESOURCE_TYPES.EC2_VPC,
-      subnet: RESOURCE_TYPES.EC2_SUBNET,
-      "security-group": RESOURCE_TYPES.EC2_SECURITY_GROUP,
-      // Tier 1 networking
-      "internet-gateway": RESOURCE_TYPES.EC2_INTERNET_GATEWAY,
-      "route-table": RESOURCE_TYPES.EC2_ROUTE_TABLE,
-      natgateway: RESOURCE_TYPES.EC2_NAT_GATEWAY,
-    },
-    rds: { db: RESOURCE_TYPES.RDS_DB_INSTANCE },
-    lambda: {
-      function: RESOURCE_TYPES.LAMBDA_FUNCTION,
-      "event-source-mapping": LIST_RESOURCE_TYPES.LAMBDA_EVENT_SOURCE_MAPPING,
-    },
-    dynamodb: { table: RESOURCE_TYPES.DYNAMODB_TABLE },
-    sqs: { "": RESOURCE_TYPES.SQS_QUEUE },
-    sns: { "": RESOURCE_TYPES.SNS_TOPIC },
-    elasticloadbalancing: {
-      loadbalancer: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
-    },
-    ecs: { cluster: RESOURCE_TYPES.ECS_CLUSTER },
-    ecr: { repository: RESOURCE_TYPES.ECR_REPOSITORY },
-    // Tier 1
-    logs: { "log-group": RESOURCE_TYPES.LOGS_LOG_GROUP },
-    // Tier 2
-    cloudwatch: { alarm: RESOURCE_TYPES.CLOUDWATCH_ALARM },
-    secretsmanager: { secret: RESOURCE_TYPES.SECRETSMANAGER_SECRET },
-    apigateway: { apis: RESOURCE_TYPES.APIGATEWAYV2_API },
-    [AWS_SERVICE_EXECUTE_API]: { "": RESOURCE_TYPES.APIGATEWAYV2_API },
-  };
-
-  if (!service) return null;
-  const serviceTypes = serviceMap[service];
-  if (!serviceTypes) return null;
-
-  return serviceTypes[resourceType] ?? serviceTypes[""] ?? null;
-}
-
-/**
- * Extracts the identifier (name/id) from an ARN.
- * e.g. "arn:aws:s3:::my-bucket" → "my-bucket"
- * e.g. "arn:aws:lambda:us-east-1:123:function:my-func" → "my-func"
- */
-function extractIdentifierFromArn(arn: string): string {
-  const parts = arn.split(":");
-  if (parts.length < 6) return arn;
-
-  const service = parts[2] ?? "";
-  const resourceSection = parts.slice(5).join(":");
-
-  // SSM parameters use "parameter/<name>" which has no colon separator, so
-  // the generic slash branch below would strip the "parameter/" prefix and
-  // lose the canonical leading "/" that SSM and CloudControl require for
-  // nested parameter names (e.g. "/myapp/db/host"). Handle it explicitly.
-  if (service === "ssm" && resourceSection.startsWith("parameter/")) {
-    return "/" + resourceSection.slice("parameter/".length);
-  }
-
-  // Colon-separated: "type:identifier" (rds:db:name, cloudwatch:alarm:name, etc.)
-  const colonParts = resourceSection.split(":");
-  if (colonParts.length >= 2) {
-    const resourceType = colonParts[0]!;
-    const afterType = colonParts.slice(1).join(":");
-
-    if (resourceType === "log-group") {
-      return afterType;
-    }
-    if (resourceType === "secret") {
-      return afterType;
-    }
-    if (afterType && !resourceType.includes("/")) {
-      return afterType;
-    }
-  }
-
-  // Slash-separated: "type/identifier"
-  const slashIdx = resourceSection.indexOf("/");
-  if (slashIdx !== -1) {
-    if (resourceSection.startsWith("/")) {
-      const segments = resourceSection.split("/").filter(Boolean);
-      return segments[segments.length - 1] ?? arn;
-    }
-    return resourceSection.slice(slashIdx + 1) || arn;
-  }
-
-  return resourceSection || arn;
-}
-
-/**
- * Returns the correct CloudControl identifier for a given ARN and resource type.
- *
- * Most resource types use the extracted name/id from the ARN, but some types
- * require specific identifier formats:
- * - AWS::SNS::Topic uses the full TopicArn as identifier
- * - AWS::SQS::Queue uses the queue URL as identifier
- * - AWS::ElasticLoadBalancingV2::LoadBalancer uses the full ARN as identifier
- * - AWS::ECS::Cluster uses the full ARN as identifier
- */
-function getCloudControlIdentifier(
-  arn: string,
-  resourceType: string | null,
-): string {
-  // SNS Topics: CloudControl identifier is the full TopicArn
-  if (resourceType === RESOURCE_TYPES.SNS_TOPIC) {
-    return arn;
-  }
-
-  // SQS Queues: CloudControl identifier is the queue URL
-  if (resourceType === RESOURCE_TYPES.SQS_QUEUE) {
-    const parts = arn.split(":");
-    const region = parts[3] ?? "";
-    const accountId = parts[4] ?? "";
-    const queueName = parts[5] ?? "";
-    return `https://sqs.${region}.amazonaws.com/${accountId}/${queueName}`;
-  }
-
-  // ELBv2 LoadBalancer: CloudControl identifier is the full ARN
-  if (resourceType === RESOURCE_TYPES.ELBV2_LOAD_BALANCER) {
-    return arn;
-  }
-
-  // ECS Cluster: CloudControl identifier is the full ARN
-  if (resourceType === RESOURCE_TYPES.ECS_CLUSTER) {
-    return arn;
-  }
-
-  // Default: extract the name/id from the ARN
-  return extractIdentifierFromArn(arn);
-}
-
-/**
- * Extracts the region from an ARN.
- * Returns the provided default if the ARN has no region (e.g. S3, IAM).
- */
-function extractRegionFromArn(arn: string, defaultRegion: string): string {
-  const parts = arn.split(":");
-  return parts[3] || defaultRegion;
 }
 
 /**

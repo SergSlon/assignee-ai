@@ -35,12 +35,14 @@ import { FieldLabel } from "../field-labels.js";
  *     cannot satisfy. Users who need those paths should provision
  *     the key out-of-band and paste the ARN as a Ref.
  *
- * Pricing: $1.00 per key per month (symmetric + asymmetric), prorated
- * by the hour. Each 10,000 requests cost $0.03 (symmetric encrypt/
- * decrypt) or $0.10 (asymmetric / data-key generation). Multi-region
- * keys bill once per region. Customer-managed keys with rotation
- * enabled keep old key material around at no extra cost — AWS bills
- * only the current month's storage + request volume.
+ * Pricing: customer-managed KMS keys bill a per-key monthly charge
+ * (prorated by the hour) plus per-API-request charges that differ for
+ * symmetric encrypt/decrypt vs. asymmetric / data-key generation.
+ * Multi-region keys bill once per region. Customer-managed keys with
+ * rotation enabled keep old key material around at no extra cost —
+ * AWS bills only the current month's storage + request volume.
+ * Run `assignee cost` for live Pricing-MCP rates — this plugin does
+ * not hardcode dollar amounts (see `feedback_no_hardcoded_prices`).
  */
 export const kmsKeyPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.KMS_KEY,
@@ -215,7 +217,7 @@ export const kmsKeyPlugin: ResourcePlugin = {
     "EnableKeyRotation applies only to SYMMETRIC_DEFAULT keys. For asymmetric and HMAC keys, CCAPI silently ignores the field — manual rotation is done by creating a new key and updating consumers.",
     "Omitting KeyPolicy is the right default — KMS attaches a root-account-full-control policy that the root user can then delegate via IAM. Only override when you need strict least-privilege scoping, and be careful: a malformed policy can lock the key (use BypassPolicyLockoutSafetyCheck=false so CCAPI refuses lockouts at create time).",
     "PendingWindowInDays defaults to 30 (the maximum) for safety. Schedule-for-deletion is reversible during this window — a lower value speeds cleanup for throwaway keys but removes the safety net for long-lived encryption material.",
-    "Multi-region keys bill $1/month PER REGION and need a separate AWS::KMS::ReplicaKey resource in each target region. Default false — only enable if you've actually modeled the cross-region decrypt path.",
-    "KMS keys are charged $1.00 per key per month regardless of usage, prorated to the hour. Each 10,000 API requests cost $0.03 (symmetric) or $0.10 (asymmetric / GenerateDataKey). Delete throwaway keys promptly to avoid idle charges.",
+    "Multi-region keys bill the per-key monthly rate PER REGION and need a separate AWS::KMS::ReplicaKey resource in each target region. Default false — only enable if you've actually modeled the cross-region decrypt path. Run `assignee cost` for live Pricing-MCP rates.",
+    "KMS keys are charged a per-key monthly rate regardless of usage (prorated to the hour) plus per-request API charges (symmetric encrypt/decrypt is cheaper than asymmetric / GenerateDataKey). Delete throwaway keys promptly to avoid idle charges. Run `assignee cost` for live Pricing-MCP rates.",
   ],
 };

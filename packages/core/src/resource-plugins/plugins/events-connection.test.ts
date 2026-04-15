@@ -231,10 +231,13 @@ describe("eventsConnectionPlugin", () => {
       expect(hints).toMatch(/replac|cascad/i);
     });
 
-    it("documents Connection is free; cost lives on ApiDestination", () => {
+    it("documents Connection has no per-hour/per-request charge; cost lives on ApiDestination", () => {
       const hints = eventsConnectionPlugin.configHints!.join(" ");
-      expect(hints).toMatch(/free/i);
+      // No hardcoded dollar amounts — billing shape routes through the
+      // Pricing MCP. See `feedback_no_hardcoded_prices`.
+      expect(hints).toMatch(/no per-hour|no per-request|no extra charge/i);
       expect(hints).toMatch(/ApiDestination/);
+      expect(hints).not.toMatch(/\$\d/);
     });
   });
 });

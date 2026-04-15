@@ -42,7 +42,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         type: "boolean",
         label: "Enable server-side encryption?",
         initialValue: true,
-        hint: "SSE-S3 is free. KMS adds ~$1/mo per 10K requests. Recommended for production.",
+        hint: "SSE-S3 is included at no extra charge. SSE-KMS adds per-key monthly + per-request charges (run `assignee cost` for live Pricing-MCP rates). Recommended for production.",
       },
     },
     {
@@ -51,7 +51,7 @@ export const s3BucketPlugin: ResourcePlugin = {
         type: "string",
         label: "KMS Key ID (leave blank for SSE-S3)",
         placeholder: "arn:aws:kms:...",
-        hint: "ARN of a KMS key for server-side encryption. Leave blank to use the free SSE-S3 (AES-256). KMS adds ~$1/month per key plus ~$0.03 per 10K requests. Use KMS when you need key rotation or audit trails.",
+        hint: "ARN of a KMS key for server-side encryption. Leave blank to use SSE-S3 (AES-256) at no extra charge. KMS adds per-key monthly + per-request charges — run `assignee cost` for live Pricing-MCP rates. Use KMS when you need key rotation or audit trails.",
         showIf: { field: CfnKey.BUCKET_ENCRYPTION, value: true },
         validate: (value: unknown) => {
           if (!value) return undefined;

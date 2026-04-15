@@ -179,10 +179,16 @@ describe("kmsKeyPlugin", () => {
       expect(hints).toMatch(/EFS|S3|RDS|service integration/i);
     });
 
-    it("documents the $1/key/month cost and prorating", () => {
+    it("documents per-key monthly billing + prorating WITHOUT hardcoded prices", () => {
       const hints = kmsKeyPlugin.configHints!.join(" ");
-      expect(hints).toMatch(/\$1/);
-      expect(hints).toMatch(/per key per month|key per month/i);
+      // Price guidance MUST describe the billing shape but route users to
+      // the Pricing MCP (`assignee cost`) for live rates — see
+      // `feedback_no_hardcoded_prices`.
+      expect(hints).toMatch(/per-key monthly|per key per month/i);
+      expect(hints).toMatch(/prorat/i);
+      expect(hints).toMatch(/assignee cost|Pricing.MCP/i);
+      // Hard invariant: no hardcoded dollar amounts anywhere in configHints.
+      expect(hints).not.toMatch(/\$\d/);
     });
 
     it("flags the multi-region per-region billing multiplier", () => {

@@ -42,9 +42,12 @@ import { FieldLabel } from "../field-labels.js";
  *
  * Pricing: CloudFront bills on (a) data transfer out to the public
  * internet (tiered per-GB rates by geography), (b) HTTPS requests
- * ($0.01 per 10k), (c) cache invalidation requests (first 1000
- * paths free, $0.005 each thereafter), (d) optional Field-Level
- * Encryption and Real-Time Logs add-ons. All usage-dependent.
+ * (per-10k-requests rate), (c) cache invalidation requests (first
+ * 1000 paths per month at no extra charge, per-path rate thereafter),
+ * (d) optional Field-Level Encryption and Real-Time Logs add-ons.
+ * All usage-dependent — run `assignee cost` for live Pricing-MCP
+ * rates. No dollar amounts are hardcoded in this plugin (see
+ * `feedback_no_hardcoded_prices`).
  *
  * @see A14 (2026-04-09)
  */
@@ -128,7 +131,7 @@ export const cloudFrontDistributionPlugin: ResourcePlugin = {
     "For SPA / static-site CloudFronts, use the static-website compound pattern instead (`assignee patterns show static-website`). It provisions S3 + OAC + Distribution + the correct ViewerProtocolPolicy=redirect-to-https default in one intent.",
     "Set DefaultCacheBehavior.ViewerProtocolPolicy to 'redirect-to-https' — never 'allow-all' or 'https-only' alone. redirect-to-https handles both HTTP clients (redirected) and HTTPS clients (served directly) with one config.",
     "For custom-domain CloudFronts (Aliases), the ACM certificate MUST be in us-east-1 — CloudFront is a global service but its ACM lookup is regional and pinned to us-east-1. A cert in any other region will be silently rejected.",
-    "CloudFront invalidations are 1000-free-per-month per account, $0.005 each thereafter. Aggressive automated invalidations on every deploy can turn into a real cost — prefer cache-busting filenames.",
+    "CloudFront invalidations are included for the first 1000 paths per account per month; additional paths bill at a per-path rate (run `assignee cost` for live Pricing-MCP rates). Aggressive automated invalidations on every deploy can turn into a real cost — prefer cache-busting filenames.",
     "Distribution destroy requires the Enabled flag to be set to false first, then a propagation wait, then delete. The CCAPI delete handler does NOT auto-disable — users must either pre-disable via a separate update, or use the bulk-destroy strategy which handles the two-step flow.",
   ],
 };

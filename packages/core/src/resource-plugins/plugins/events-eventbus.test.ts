@@ -273,10 +273,13 @@ describe("eventsEventBusPlugin", () => {
       expect(hints).toMatch(/replac/i);
     });
 
-    it("documents the $1/M events bus-level billing", () => {
+    it("documents per-million-events bus-level billing WITHOUT hardcoded prices", () => {
       const hints = eventsEventBusPlugin.configHints!.join(" ");
-      expect(hints).toMatch(/\$1/);
-      expect(hints).toMatch(/million events/i);
+      // Billing shape must be described but live rates route through the
+      // Pricing MCP — see `feedback_no_hardcoded_prices`.
+      expect(hints).toMatch(/per-million-events|million events/i);
+      expect(hints).toMatch(/assignee cost|Pricing.MCP/i);
+      expect(hints).not.toMatch(/\$\d/);
     });
 
     it("explains the DeadLetterConfig silent-drop failure mode", () => {

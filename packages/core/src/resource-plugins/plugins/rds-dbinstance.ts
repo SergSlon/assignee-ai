@@ -23,42 +23,42 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "DB instance class",
-        hint: "Determines CPU, memory, and network capacity. db.t3 = burstable (dev/test). db.m5 = general-purpose (production). Larger classes cost significantly more per hour.",
+        hint: "Determines CPU, memory, and network capacity. db.t3 = burstable (dev/test). db.m5 = general-purpose (production). Larger classes cost significantly more per hour — run `assignee cost` for live Pricing-MCP rates.",
         options: [
           {
             value: "db.t3.micro",
-            label: "db.t3.micro  (2 vCPU,  1 GiB) — ~$0.017/hr",
+            label: "db.t3.micro  (2 vCPU,  1 GiB)",
             fitHint: "Dev/test",
           },
           {
             value: "db.t3.small",
-            label: "db.t3.small  (2 vCPU,  2 GiB) — ~$0.034/hr",
+            label: "db.t3.small  (2 vCPU,  2 GiB)",
             fitHint: SizeLabel.SMALL_PRODUCTION,
             recommended: true,
           },
           {
             value: "db.t3.medium",
-            label: "db.t3.medium (2 vCPU,  4 GiB) — ~$0.068/hr",
+            label: "db.t3.medium (2 vCPU,  4 GiB)",
             fitHint: SizeLabel.MEDIUM_PRODUCTION,
           },
           {
             value: "db.m5.large",
-            label: "db.m5.large  (2 vCPU,  8 GiB) — ~$0.171/hr",
+            label: "db.m5.large  (2 vCPU,  8 GiB)",
             fitHint: "High-performance production",
           },
           {
             value: "db.r5.large",
-            label: "db.r5.large  (2 vCPU, 16 GiB) — ~$0.240/hr",
+            label: "db.r5.large  (2 vCPU, 16 GiB)",
             fitHint: "Memory-optimized",
           },
           {
             value: "db.r6g.large",
-            label: "db.r6g.large (2 vCPU, 16 GiB) — ~$0.208/hr",
-            fitHint: "Memory-optimized, Graviton",
+            label: "db.r6g.large (2 vCPU, 16 GiB)",
+            fitHint: "Memory-optimized, Graviton (cheaper than m5/r5)",
           },
           {
             value: "db.r6g.xlarge",
-            label: "db.r6g.xlarge (4 vCPU, 32 GiB) — ~$0.416/hr",
+            label: "db.r6g.xlarge (4 vCPU, 32 GiB)",
             fitHint: "Memory-optimized, Graviton",
           },
         ],
@@ -274,24 +274,23 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Storage type",
-        hint: "gp3 is the best price-performance for most workloads. io1 is for high-IOPS needs (thousands of transactions/sec). gp2 is legacy -- prefer gp3 for new databases.",
+        hint: "gp3 is the best price-performance for most workloads. io1 is for high-IOPS needs (thousands of transactions/sec). gp2 is legacy -- prefer gp3 for new databases. Run `assignee cost` for live Pricing-MCP rates.",
         options: [
           {
             value: AwsDefault.EBS_VOLUME_TYPE,
-            label: "gp3 (General Purpose SSD v3) — ~$0.023/GB-month",
+            label: "gp3 (General Purpose SSD v3)",
             fitHint: SizeLabel.BEST_PRICE_PERFORMANCE,
             recommended: true,
           },
           {
             value: "gp2",
-            label: "gp2 (General Purpose SSD v2) — ~$0.023/GB-month",
+            label: "gp2 (General Purpose SSD v2)",
             fitHint: "Legacy, prefer gp3",
           },
           {
             value: "io1",
-            label:
-              "io1 (Provisioned IOPS SSD)   — ~$0.125/GB-month + ~$0.10/IOPS",
-            fitHint: "High-IOPS workloads",
+            label: "io1 (Provisioned IOPS SSD)",
+            fitHint: "High-IOPS workloads (per-IOPS charges apply)",
           },
         ],
         initialValue: ResourceDefault.EBS_VOLUME_TYPE,
@@ -302,27 +301,27 @@ export const rdsDbInstancePlugin: ResourcePlugin = {
       question: {
         type: "enum",
         label: "Storage size (GB)",
-        hint: "Minimum 20 GB for gp3/gp2. Storage cannot be decreased after creation. gp3 costs ~$0.023/GB-month. 20 GB = ~$0.46/mo, 100 GB = ~$2.30/mo.",
+        hint: "Minimum 20 GB for gp3/gp2. Storage cannot be decreased after creation. Run `assignee cost` for live per-GB-month rates from the Pricing MCP.",
         options: [
           {
             value: "20",
-            label: "20 GB (~$0.46/mo)",
+            label: "20 GB",
             fitHint: "Dev/test minimum",
             recommended: true,
           },
           {
             value: "50",
-            label: "50 GB (~$1.15/mo)",
+            label: "50 GB",
             fitHint: SizeLabel.SMALL_PRODUCTION,
           },
           {
             value: "100",
-            label: "100 GB (~$2.30/mo)",
+            label: "100 GB",
             fitHint: SizeLabel.MEDIUM_PRODUCTION,
           },
           {
             value: "200",
-            label: "200 GB (~$4.60/mo)",
+            label: "200 GB",
             fitHint: "Large production",
           },
         ],

@@ -228,10 +228,14 @@ describe("eventsApiDestinationPlugin", () => {
       expect(hints).toMatch(/http:\/\/|insecure/i);
     });
 
-    it("documents the $0.20 per 1M invocation fee", () => {
+    it("documents per-million-invocations billing WITHOUT hardcoded prices", () => {
       const hints = eventsApiDestinationPlugin.configHints!.join(" ");
-      expect(hints).toMatch(/0\.20/);
-      expect(hints).toMatch(/1M|million/i);
+      // Billing shape must be documented so users understand the pricing
+      // model, but live rates route through the Pricing MCP — see
+      // `feedback_no_hardcoded_prices`.
+      expect(hints).toMatch(/per-million-invocations|per 1M|per million/i);
+      expect(hints).toMatch(/assignee cost|Pricing.MCP/i);
+      expect(hints).not.toMatch(/\$\d/);
     });
 
     it("explains the 300 rate limit cap", () => {

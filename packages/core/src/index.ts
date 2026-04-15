@@ -101,6 +101,27 @@ export {
   type BuildResourceArnArgs,
 } from "./config/arn-builder.js";
 
+// Config — partition-aware region/ARN helpers (P0-2: GovCloud/China/ISO/ISOB)
+export {
+  getPartitionFromRegion,
+  ARN_PATTERN,
+  ARN_PATTERN_SOURCE,
+  type AwsPartition,
+} from "./config/aws-partition.js";
+
+// Config — shared ARN parsing helpers (Wave 3 P2-2 dedup: CLI resource-resolver
+// and MCP destroy-resource previously had divergent inline copies).
+// NOTE: `isArn` is ALSO exported from `./config/arn-builder.js` above for
+// backward compatibility — both exports resolve to the same implementation.
+export {
+  arnToResourceType,
+  extractIdentifierFromArn,
+  extractRegionFromArn,
+  extractAccountIdFromArn,
+  getCloudControlIdentifier,
+  ARN_IDENTIFIED_RESOURCE_TYPES,
+} from "./config/arn-helpers.js";
+
 // Config — AssigneeConfig schema and validation (Story 27.1)
 export type {
   AssigneeConfig,

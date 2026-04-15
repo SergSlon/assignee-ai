@@ -6,18 +6,31 @@ import type { ResourcePlugin, OptionMetadata, CfnOutput } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
 
-/** Lambda duration pricing rate ($/GB-second) — stable since 2014. Exported for test use. */
+/**
+ * Lambda duration pricing fallback rate ($/GB-second).
+ *
+ * IMPORTANT: This constant is a **fallback only** for the Pricing strategy
+ * (`core/src/pricing/strategies/lambda.ts`) when the Pricing MCP is
+ * unavailable. It MUST NOT be used to render user-facing prices in this
+ * plugin's option labels or hints — all price display must go through the
+ * Pricing MCP at runtime (see `feedback_no_hardcoded_prices`). The rate
+ * has been stable since 2014; keeping it here as a fallback avoids hard
+ * failures when the Pricing MCP is offline.
+ *
+ * TODO(pricing-fallback-relocation): Move this constant out of the
+ * resource-plugin layer into `pricing/strategies/lambda.ts` so the plugin
+ * carries zero pricing data.
+ */
 export const LAMBDA_USD_PER_GB_SECOND = 0.0000166667;
 
 /**
- * Computes the cost per 100ms for a given Lambda memory size.
- * Formula: (memoryMb / 1024 GB) × $USD_PER_GB_SECOND/GB-s × 0.1s
+ * Formats a Lambda memory option label. Dollar amounts are intentionally
+ * omitted here — all price rendering must go through the Pricing MCP at
+ * runtime. Option labels surface capacity only so the wizard stays sync.
  */
 function memoryLabel(memoryMb: number): string {
-  const costPer100ms = (memoryMb / 1024) * LAMBDA_USD_PER_GB_SECOND * 0.1;
-  const decimals = Math.ceil(-Math.log10(costPer100ms)) + 1;
   const mb = String(memoryMb).padStart(4);
-  return `${mb} MB — ~$${costPer100ms.toFixed(decimals)}/100ms`;
+  return `${mb} MB`;
 }
 
 /** Runtime option definition with optional deprecation flag. */
