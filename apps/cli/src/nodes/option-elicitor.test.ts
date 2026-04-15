@@ -488,6 +488,180 @@ describe("optionElicitorNode — back navigation integration (wizard-back-naviga
   });
 });
 
+describe("optionElicitorNode — mid-wizard review-answers affordance (Story 48.7)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setTTY(true);
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  // T1: Review → edit → continue. Edit changes Name; downstream Size/Encrypt
+  // unaffected because the review re-walk skips fields whose values are
+  // already set (ASK_IF_NOT_SET).
+  it("T1: review → pick index → enter new value → continue: edited field is updated, unaffected fields not re-prompted", async () => {
+    // Flow:
+    //   1. Name (text, showBack=false) → "initial-name"
+    //   2. Encrypt (boolean, showBack=true) → select "__review__"
+    //      → review screen picks index 0 (Name)
+    //      → re-prompt Name (text, no showBack on targeted re-prompt) → "corrected-name"
+    //   3. Encrypt prompt re-shown → "false"
+    //   4. Size (enum, showBack=true) → "sm"
+    //   5. advanced confirm → no
+
+    vi.mocked(text)
+      .mockResolvedValueOnce("initial-name") // Step 1: Name
+      .mockResolvedValueOnce("corrected-name"); // Step 2b: re-prompt Name via review-edit
+    vi.mocked(select)
+      .mockResolvedValueOnce("__review__") // Step 2: Encrypt → review (via select, showBack=true)
+      .mockResolvedValueOnce("0") // review pick: index 0 (Name is the only answered field)
+      .mockResolvedValueOnce("sm"); // Step 4: Size (select with showBack, after history rebuild)
+    // After review-edit of Name, history is truncated → Encrypt is re-asked
+    // via confirm() (showBack=false → boolean uses clack.confirm), then Size
+    // is asked via select (which does support showBack once history.length>0).
+    vi.mocked(confirm)
+      .mockResolvedValueOnce(false) // Encrypt re-prompt via confirm (showBack=false)
+      .mockResolvedValueOnce(false); // advanced=no
+
+    const result = await optionElicitorNode(makeState());
+
+    expect(result.elicitedOptions?.["Name"]).toBe("corrected-name");
+    expect(result.elicitedOptions?.["Encrypt"]).toBe(false);
+    expect(result.elicitedOptions?.["Size"]).toBe("sm");
+    // KmsKey hidden because Encrypt=false
+    expect(result.elicitedOptions?.["KmsKey"]).toBeUndefined();
+  });
+
+  // T2: Review → edit a field whose change makes a downstream showIf newly
+  // visible: the newly-visible field IS prompted.
+  it("T2: review-edit makes downstream showIf newly-visible → newly-visible field is prompted", async () => {
+    // Flow:
+    //   1. Name (text, showBack=false) → "my-resource"
+    //   2. Encrypt (boolean, showBack=true) → "false" (KmsKey hidden)
+    //   3. Size (enum, showBack=true) → select "__review__"
+    //      → review pick index 1 (Encrypt, 2nd answered field)
+    //      → re-prompt Encrypt → "true" (now KmsKey becomes visible)
+    //   4. KmsKey (text, showBack=true, newly visible) → "Enter value" then "my-key"
+    //   5. Size prompt re-shown → "sm"
+    //   6. advanced confirm → no
+
+    vi.mocked(text)
+      .mockResolvedValueOnce("my-resource") // Name
+      .mockResolvedValueOnce("my-key"); // KmsKey value (after Enter value action)
+    vi.mocked(select)
+      .mockResolvedValueOnce("false") // Encrypt=false (first visit, select because showBack=true)
+      .mockResolvedValueOnce("__review__") // Size → review
+      .mockResolvedValueOnce("1") // review pick: index 1 = Encrypt
+      .mockResolvedValueOnce("__enter_value__") // KmsKey action after review (showBack=true)
+      .mockResolvedValueOnce("sm"); // Size (select, showBack=true)
+    // Encrypt re-prompt via review uses showBack=false → boolean falls back to confirm
+    vi.mocked(confirm)
+      .mockResolvedValueOnce(true) // re-prompt Encrypt → true (KmsKey becomes visible)
+      .mockResolvedValueOnce(false); // advanced=no
+
+    const result = await optionElicitorNode(makeState());
+
+    expect(result.elicitedOptions?.["Name"]).toBe("my-resource");
+    expect(result.elicitedOptions?.["Encrypt"]).toBe(true);
+    expect(result.elicitedOptions?.["KmsKey"]).toBe("my-key");
+    expect(result.elicitedOptions?.["Size"]).toBe("sm");
+  });
+
+  // T3: Review-edit removes a previously-visible field → that answer is cleared.
+  it("T3: review-edit hides a previously-visible field → its value is cleared from elicitedOptions", async () => {
+    // Flow:
+    //   1. Name → "my-resource"
+    //   2. Encrypt → "true" (KmsKey visible)
+    //   3. KmsKey → Enter value → "k-123"
+    //   4. Size → review → pick index 1 (Encrypt) → set to "false" (KmsKey hidden)
+    //   5. Size re-prompted → "sm"
+
+    vi.mocked(text)
+      .mockResolvedValueOnce("my-resource") // Name
+      .mockResolvedValueOnce("k-123"); // KmsKey value
+    vi.mocked(select)
+      .mockResolvedValueOnce("true") // Encrypt=true (showBack=true → select)
+      .mockResolvedValueOnce("__enter_value__") // KmsKey action
+      .mockResolvedValueOnce("__review__") // Size → review
+      .mockResolvedValueOnce("1") // pick Encrypt (row index 1 among answered)
+      .mockResolvedValueOnce("sm"); // Size (select, showBack=true)
+    vi.mocked(confirm)
+      .mockResolvedValueOnce(false) // re-prompt Encrypt → false (via confirm, showBack=false)
+      .mockResolvedValueOnce(false); // advanced=no
+
+    const result = await optionElicitorNode(makeState());
+
+    expect(result.elicitedOptions?.["Encrypt"]).toBe(false);
+    // AC3: KmsKey must be removed because showIf no longer holds
+    expect(result.elicitedOptions?.["KmsKey"]).toBeUndefined();
+    expect(result.elicitedOptions?.["Size"]).toBe("sm");
+  });
+
+  // T4: Review → cancel: returns to originating prompt, no mutation.
+  it("T4: review → cancel → returns to current prompt unchanged", async () => {
+    vi.mocked(text).mockResolvedValueOnce("my-resource");
+    vi.mocked(select)
+      .mockResolvedValueOnce("__review__") // Encrypt → review
+      .mockResolvedValueOnce("__cancel__") // review UI cancel
+      .mockResolvedValueOnce("false") // Encrypt re-prompt → false
+      .mockResolvedValueOnce("sm"); // Size
+    vi.mocked(confirm).mockResolvedValueOnce(false);
+
+    const result = await optionElicitorNode(makeState());
+
+    expect(result.elicitedOptions?.["Name"]).toBe("my-resource");
+    expect(result.elicitedOptions?.["Encrypt"]).toBe(false);
+    expect(result.elicitedOptions?.["Size"]).toBe("sm");
+  });
+
+  // T7: Back still works after a review-edit. history is consistent so a
+  // subsequent Back from a normal prompt pops to the slot BEFORE the edited
+  // field (not after).
+  it("T7: Back after review-edit pops to slot before the edited field", async () => {
+    // Flow:
+    //   1. Name → "n1"
+    //   2. Encrypt → review → pick Name (row 0) → re-prompt Name → "n2"
+    //   3. Encrypt re-shown → "false"
+    //   4. Size → Back → should return to Encrypt (not to KmsKey/phantom slot)
+    //   5. Encrypt → "false" (re-entered)
+    //   6. Size → "sm"
+
+    vi.mocked(text)
+      .mockResolvedValueOnce("n1") // Name
+      .mockResolvedValueOnce("n2"); // Name (re-prompt via review, showBack=false → text)
+    vi.mocked(select)
+      .mockResolvedValueOnce("__review__") // Encrypt → review (showBack=true)
+      .mockResolvedValueOnce("0") // review pick: Name
+      .mockResolvedValueOnce("__back__") // Size → Back (pops Encrypt from history)
+      .mockResolvedValueOnce("sm"); // Size after Encrypt re-ask
+    vi.mocked(confirm)
+      .mockResolvedValueOnce(false) // Encrypt after review (showBack=false → confirm)
+      .mockResolvedValueOnce(false) // Encrypt after Back (still showBack=false)
+      .mockResolvedValueOnce(false); // advanced=no
+
+    const result = await optionElicitorNode(makeState());
+
+    expect(result.elicitedOptions?.["Name"]).toBe("n2");
+    expect(result.elicitedOptions?.["Encrypt"]).toBe(false);
+    expect(result.elicitedOptions?.["Size"]).toBe("sm");
+  });
+
+  // T8: In --no-wizard mode, review affordance is never reached.
+  it("T8: --no-wizard mode never invokes review UI", async () => {
+    const result = await optionElicitorNode(makeState({ noWizard: true }));
+
+    // No prompts at all — the expert path builds options without runPromptLoop
+    expect(select).not.toHaveBeenCalled();
+    expect(text).not.toHaveBeenCalled();
+    expect(result.elicitedOptions?.["Name"]).toBe("default-name");
+  });
+});
+
 describe("optionElicitorNode — --no-wizard bypass (Story 11.1)", () => {
   beforeEach(() => {
     vi.clearAllMocks();

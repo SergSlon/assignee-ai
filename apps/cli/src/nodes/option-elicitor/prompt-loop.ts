@@ -21,7 +21,11 @@ import type {
   LlmPort,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
-import { BACK_SENTINEL } from "../../utils/display.js";
+import {
+  BACK_SENTINEL,
+  REVIEW_SENTINEL,
+  runReviewAnswers,
+} from "../../utils/display.js";
 import { FieldPolicy } from "../../constants/field-policy.js";
 import {
   fieldFetchKey,
@@ -131,6 +135,100 @@ export async function runPromptLoop(params: PromptLoopParams): Promise<void> {
         i = prevIndex;
         if (visibleIndex > 0) visibleIndex--;
       }
+      continue;
+    }
+
+    // Story 48.7: mid-wizard review-answers affordance.
+    // The user picked "Review answers so far" from the current prompt's
+    // action menu. Open the review UI, then either cancel (re-show current
+    // prompt, byte-identical no-op) or edit-by-index (re-prompt the chosen
+    // field with its current value as default, then re-walk the tier from
+    // that slot so downstream showIf branches re-evaluate correctly).
+    if (answer === REVIEW_SENTINEL) {
+      const review = await runReviewAnswers({ fields, elicitedOptions });
+      if (review.action === "cancel") {
+        // No state mutation — loop iteration re-prompts the same `i`.
+        continue;
+      }
+      const editIdx = review.fieldIndex;
+      const editField = fields[editIdx]!;
+      const editRes = resolved[fieldFetchKey(editField)];
+      if (!editRes) {
+        // Defensive: if the picked field has no resolved config, cancel.
+        continue;
+      }
+
+      // Re-prompt the picked field with current value as default. Build a
+      // temporary resolved config with `value` overridden to the current
+      // answer so the clack primitive's initialValue reflects what the
+      // user already chose.
+      const priorAnswer = elicitedOptions[editField.name];
+      const editResWithCurrent: ResolvedFieldConfig = {
+        ...editRes,
+        value: priorAnswer ?? editRes.value,
+      };
+
+      // Remove the prior answer + every downstream answer whose showIf
+      // depends on the edited field (mirrors BACK cleanup pattern).
+      delete elicitedOptions[editField.name];
+      for (const f of fields) {
+        if (f.question.showIf?.field === editField.name) {
+          delete elicitedOptions[f.name];
+        }
+      }
+
+      const newAnswer = await promptWithHelp(
+        editField,
+        editResWithCurrent,
+        resourceType,
+        tools,
+        llmClient,
+        userIntent,
+        // showBack:false on the targeted re-prompt — BACK from here means
+        // "cancel edit" and is treated as a no-op (we restore prior value).
+        false,
+        elicitedOptions,
+      );
+
+      if (
+        newAnswer === BACK_SENTINEL ||
+        newAnswer === REVIEW_SENTINEL ||
+        newAnswer === undefined ||
+        newAnswer === ""
+      ) {
+        // User cancelled the edit — restore prior answer + re-walk so the
+        // rest of the tier is unchanged.
+        if (priorAnswer !== undefined) {
+          elicitedOptions[editField.name] = priorAnswer;
+        }
+      } else {
+        elicitedOptions[editField.name] = newAnswer;
+      }
+
+      // Truncate history to the slot before editIdx and restart the forward
+      // walk from editIdx + 1. The while-loop naturally re-evaluates every
+      // downstream field's showIf and only re-prompts fields without a value
+      // (ASK_IF_NOT_SET skips already-answered fields).
+      while (history.length > 0 && history[history.length - 1]! >= editIdx) {
+        history.pop();
+      }
+      i = editIdx + 1;
+      total = countVisible();
+      // Recompute visible position: count visible fields at indices 0..editIdx.
+      let vis = 0;
+      for (let j = 0; j <= editIdx && j < fields.length; j++) {
+        const f = fields[j]!;
+        const r = resolved[fieldFetchKey(f)];
+        if (!r) continue;
+        if (r.policy === FieldPolicy.NEVER_ASK) continue;
+        if (
+          f.question.showIf &&
+          !evaluateShowIf(f.question.showIf, elicitedOptions)
+        )
+          continue;
+        vis++;
+      }
+      visibleIndex = vis;
       continue;
     }
 

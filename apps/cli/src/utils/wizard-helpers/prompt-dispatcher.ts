@@ -22,6 +22,7 @@ import {
   BACK_SENTINEL,
   HELP_SENTINEL,
   OTHER_SENTINEL,
+  REVIEW_SENTINEL,
 } from "../display.js";
 import { searchAmis } from "../aws-resource-discovery.js";
 import { fetchSuggestionPrice } from "./pricing-hints.js";
@@ -74,6 +75,15 @@ export async function promptWithHelp(
       (Array.isArray(answer) && answer.includes(BACK_SENTINEL))
     ) {
       return BACK_SENTINEL;
+    }
+
+    // Review-answers affordance — same propagation shape as BACK. Handled at
+    // `runPromptLoop` level (opens review UI). See Story 48.7.
+    if (
+      answer === REVIEW_SENTINEL ||
+      (Array.isArray(answer) && answer.includes(REVIEW_SENTINEL))
+    ) {
+      return REVIEW_SENTINEL;
     }
 
     // Multi fields: when user selects only '?', trigger help

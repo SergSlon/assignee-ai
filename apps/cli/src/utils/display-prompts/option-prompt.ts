@@ -15,8 +15,12 @@ import {
   type ResolvedFieldConfig,
 } from "@assignee/core";
 import { UserMessage } from "../../config/constants.js";
-import { BACK_SENTINEL, HELP_SENTINEL } from "./sentinels.js";
-import { buildBackOption, maybeShowHint } from "./shared-helpers.js";
+import { BACK_SENTINEL, HELP_SENTINEL, REVIEW_SENTINEL } from "./sentinels.js";
+import {
+  buildBackOption,
+  buildReviewOption,
+  maybeShowHint,
+} from "./shared-helpers.js";
 import { promptBoolean } from "./option-boolean.js";
 import { promptEnum } from "./option-enum.js";
 import { promptString } from "./option-string.js";
@@ -34,6 +38,9 @@ export async function renderOptionPrompt(
   if (!process.stdin.isTTY) return defaultValue;
 
   const backOption = buildBackOption(showBack);
+  const hasAnswers = !!answers && Object.keys(answers).length > 0;
+  const reviewOption = buildReviewOption(showBack, hasAnswers);
+  const menuExtras = [...backOption, ...reviewOption];
   maybeShowHint(field);
 
   const { question } = field;
@@ -41,10 +48,10 @@ export async function renderOptionPrompt(
 
   switch (question.type) {
     case "boolean":
-      result = await promptBoolean(field, defaultValue, backOption, showBack);
+      result = await promptBoolean(field, defaultValue, menuExtras, showBack);
       break;
     case "enum":
-      result = await promptEnum(field, defaultValue, backOption);
+      result = await promptEnum(field, defaultValue, menuExtras);
       break;
     case "string": {
       const stringResult = await promptString(
@@ -52,10 +59,12 @@ export async function renderOptionPrompt(
         defaultValue,
         showBack,
         answers,
+        hasAnswers,
       );
       // promptString may short-circuit with sentinel values — return them directly.
       if (
         stringResult === BACK_SENTINEL ||
+        stringResult === REVIEW_SENTINEL ||
         stringResult === HELP_SENTINEL ||
         stringResult === undefined
       ) {
@@ -65,7 +74,7 @@ export async function renderOptionPrompt(
       break;
     }
     case "multi": {
-      const multiResult = await promptMulti(field, backOption);
+      const multiResult = await promptMulti(field, menuExtras);
       if (multiResult === undefined) return undefined;
       // "__other__" branch resolves inside promptMulti and may already be
       // the final array — return it here so sentinel post-processing below
@@ -79,7 +88,7 @@ export async function renderOptionPrompt(
         field,
         resolved,
         defaultValue,
-        backOption,
+        menuExtras,
       );
       break;
     default: {
@@ -102,6 +111,7 @@ export async function renderOptionPrompt(
   if (question.type === "boolean") {
     if (result === HELP_SENTINEL) return HELP_SENTINEL;
     if (result === BACK_SENTINEL) return BACK_SENTINEL;
+    if (result === REVIEW_SENTINEL) return REVIEW_SENTINEL;
     return result === "true";
   }
 

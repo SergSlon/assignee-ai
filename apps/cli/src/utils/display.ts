@@ -35,6 +35,8 @@ export {
   BACK_SENTINEL,
   HELP_SENTINEL,
   OTHER_SENTINEL,
+  REVIEW_SENTINEL,
+  runReviewAnswers,
 } from "./display-prompts.js";
 
 export {
