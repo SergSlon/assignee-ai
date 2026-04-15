@@ -18,7 +18,9 @@ import { startSpinner, stopSpinner } from "../../utils/display.js";
 import {
   resolveResource,
   createTaggingClient,
+  isAmbiguousResolution,
 } from "../../services/resource-resolver.js";
+import { pickFromMatches } from "./multi-match-prompt.js";
 import { operatorCredentials } from "../../config/operator-credentials.js";
 import { AWS_REGION, UserMessage } from "../../config/constants.js";
 import { ErrorCode } from "../../constants/errors.js";
@@ -45,7 +47,7 @@ export async function singleDestroyAction(
   // ── Resolve resource ────────────────────────────────────────────
   startSpinner("Resolving resource...");
 
-  const resolved = await resolveResource(
+  const resolution = await resolveResource(
     resource,
     taggingClient,
     awsConfig.region || AWS_REGION,
@@ -53,12 +55,19 @@ export async function singleDestroyAction(
 
   stopSpinner();
 
-  if (!resolved) {
+  if (!resolution) {
     throw new AssigneeError(
       `No managed resource found matching "${resource}". Run 'assignee list' to see managed resources.`,
       ErrorCode.DESTROY_ERROR,
     );
   }
+
+  // Story 48.6: multi-match disambiguation — user picks one, or --yes /
+  // non-TTY stdin fails fast with an actionable error. Zero AWS mutation
+  // calls fire before disambiguation completes.
+  const resolved = isAmbiguousResolution(resolution)
+    ? await pickFromMatches(resolution, { yes: opts.yes })
+    : resolution;
 
   // ── Estimate cost savings (Story 19.7) ──────────────────────────
   const billingTools = await getBillingMcpToolsAsync();

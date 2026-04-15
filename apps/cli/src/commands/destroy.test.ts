@@ -137,6 +137,12 @@ vi.mock("@aws-sdk/client-sns", () => {
 vi.mock("../services/resource-resolver.js", () => ({
   resolveResource: (...args: unknown[]) => mockResolveResource(...args),
   createTaggingClient: (...args: unknown[]) => mockCreateTaggingClient(...args),
+  // Story 48.6: single-flow uses this guard to route multi-match through
+  // the disambiguation picker. Keep in sync with real implementation.
+  isAmbiguousResolution: (value: unknown): boolean =>
+    value !== null &&
+    typeof value === "object" &&
+    (value as { kind?: unknown }).kind === "ambiguous",
 }));
 
 vi.mock("../services/cloudcontrol-client.js", () => ({
@@ -501,6 +507,145 @@ describe("assignee destroy", () => {
       await expect(destroyAction("test-bucket", { yes: true })).rejects.toThrow(
         "Destroy failed: BucketNotEmpty",
       );
+    });
+  });
+
+  // ─── Story 48.6: multi-match disambiguation ────────────────────────────
+  describe("multi-match disambiguation (Story 48.6)", () => {
+    const ambiguousMatchA = {
+      arn: "arn:aws:s3:::my-bucket-prod",
+      resourceType: "AWS::S3::Bucket",
+      region: "us-east-1",
+      tags: { "managed-by": "assignee-ai", env: "prod" },
+      identifier: "my-bucket-prod",
+    };
+    const ambiguousMatchB = {
+      arn: "arn:aws:s3:::my-bucket-prod-replica",
+      resourceType: "AWS::S3::Bucket",
+      region: "us-west-2",
+      tags: { "managed-by": "assignee-ai", env: "prod" },
+      identifier: "my-bucket-prod-replica",
+    };
+    const ambiguousResolution = {
+      kind: "ambiguous" as const,
+      input: "my-bucket",
+      matches: [ambiguousMatchA, ambiguousMatchB],
+    };
+
+    it("single match → no disambiguation prompt, straight to typed-confirm", async () => {
+      // Regression: single match must NOT trigger the multi-match picker.
+      mockResolveResource.mockResolvedValue(mockResource);
+      mockText.mockResolvedValue("test-bucket");
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "AWS::S3::Bucket",
+        identifier: "test-bucket",
+        arn: "arn:aws:s3:::test-bucket",
+      });
+
+      await destroyAction("test-bucket", {});
+
+      // Only ONE clack.text call — the typed-confirm. No picker prompt.
+      expect(mockText).toHaveBeenCalledTimes(1);
+      expect(mockText).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining("'test-bucket'"),
+        }),
+      );
+    });
+
+    it("multi-match → user picks by index → that resource flows through typed-confirm", async () => {
+      mockResolveResource.mockResolvedValue(ambiguousResolution);
+      // First clack.text: picker ("2"); second: typed-confirm (identifier).
+      mockText
+        .mockResolvedValueOnce("2")
+        .mockResolvedValueOnce("my-bucket-prod-replica");
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "AWS::S3::Bucket",
+        identifier: "my-bucket-prod-replica",
+        arn: ambiguousMatchB.arn,
+      });
+
+      await destroyAction("my-bucket", {});
+
+      expect(stdoutOutput).toContain(
+        'Multiple managed resources match "my-bucket"',
+      );
+      expect(stdoutOutput).toContain("[1] " + ambiguousMatchA.arn);
+      expect(stdoutOutput).toContain("[2] " + ambiguousMatchB.arn);
+      expect(mockDestroySingleResource).toHaveBeenCalledTimes(1);
+      expect(mockDestroySingleResource).toHaveBeenCalledWith(
+        expect.objectContaining({ arn: ambiguousMatchB.arn }),
+        expect.anything(),
+      );
+    });
+
+    it("multi-match → user pastes an ARN from the list → that resource flows through typed-confirm", async () => {
+      mockResolveResource.mockResolvedValue(ambiguousResolution);
+      mockText
+        .mockResolvedValueOnce(ambiguousMatchA.arn)
+        .mockResolvedValueOnce("my-bucket-prod");
+      mockDestroySingleResource.mockResolvedValue({
+        success: true,
+        resourceType: "AWS::S3::Bucket",
+        identifier: "my-bucket-prod",
+        arn: ambiguousMatchA.arn,
+      });
+
+      await destroyAction("my-bucket", {});
+
+      expect(mockDestroySingleResource).toHaveBeenCalledWith(
+        expect.objectContaining({ arn: ambiguousMatchA.arn }),
+        expect.anything(),
+      );
+    });
+
+    it("multi-match → user types 'cancel' → UserCancelledError, zero destroy calls", async () => {
+      mockResolveResource.mockResolvedValue(ambiguousResolution);
+      mockText.mockResolvedValueOnce("cancel");
+
+      await expect(destroyAction("my-bucket", {})).rejects.toThrow(
+        "Destroy cancelled.",
+      );
+      expect(mockDestroySingleResource).not.toHaveBeenCalled();
+    });
+
+    it("multi-match → Ctrl-C → UserCancelledError, zero destroy calls", async () => {
+      mockResolveResource.mockResolvedValue(ambiguousResolution);
+      const cancelSymbol = Symbol("cancel");
+      mockText.mockResolvedValueOnce(cancelSymbol);
+      mockIsCancel.mockReturnValueOnce(true);
+
+      await expect(destroyAction("my-bucket", {})).rejects.toThrow(
+        "Destroy cancelled.",
+      );
+      expect(mockDestroySingleResource).not.toHaveBeenCalled();
+    });
+
+    it("multi-match + --yes → AssigneeError with actionable message, zero destroy calls", async () => {
+      mockResolveResource.mockResolvedValue(ambiguousResolution);
+
+      await expect(destroyAction("my-bucket", { yes: true })).rejects.toThrow(
+        /Multiple managed resources match "my-bucket"; pass an explicit ARN\. Matches: arn:aws:s3:::my-bucket-prod, arn:aws:s3:::my-bucket-prod-replica/,
+      );
+      expect(mockText).not.toHaveBeenCalled();
+      expect(mockDestroySingleResource).not.toHaveBeenCalled();
+    });
+
+    it("multi-match + non-TTY stdin (no --yes) → AssigneeError with actionable message", async () => {
+      Object.defineProperty(process.stdin, "isTTY", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      mockResolveResource.mockResolvedValue(ambiguousResolution);
+
+      await expect(destroyAction("my-bucket", {})).rejects.toThrow(
+        /Multiple managed resources match "my-bucket"; pass an explicit ARN\. Matches: /,
+      );
+      expect(mockText).not.toHaveBeenCalled();
+      expect(mockDestroySingleResource).not.toHaveBeenCalled();
     });
   });
 

@@ -16,6 +16,30 @@ export interface ResolvedResource {
 }
 
 /**
+ * Multi-match resolution: caller MUST disambiguate before proceeding.
+ *
+ * Produced when a by-name or by-SQS-URL lookup finds ≥2 managed resources
+ * matching the user's input. The caller (destroy single-flow) either
+ * prompts the user to pick one (interactive) or fails fast with an
+ * actionable error (--yes / non-TTY), per Story 48.6.
+ */
+export interface AmbiguousResolution {
+  readonly kind: "ambiguous";
+  readonly input: string;
+  readonly matches: readonly ResolvedResource[];
+}
+
+/** Discriminated-union result of resolveResource. */
+export type Resolution = ResolvedResource | AmbiguousResolution | null;
+
+/** Type-guard: AmbiguousResolution discriminator check. */
+export function isAmbiguousResolution(
+  value: Resolution,
+): value is AmbiguousResolution {
+  return value !== null && "kind" in value && value.kind === "ambiguous";
+}
+
+/**
  * Converts a ResourceTagMapping's tag list to a flat key-value record.
  */
 export function tagsToRecord(

@@ -36,7 +36,31 @@ vi.mock("./iam-role-inventory.js", () => ({
   IAM_ROLE_RESOURCE_TYPE: "AWS::IAM::Role",
 }));
 
-import { resolveResource } from "./resource-resolver.js";
+import {
+  resolveResource,
+  type ResolvedResource,
+  type Resolution,
+} from "./resource-resolver.js";
+
+/**
+ * Story 48.6: resolveResource now returns a discriminated union
+ * (`ResolvedResource | AmbiguousResolution | null`). The legacy suite
+ * below only exercises single-match and null paths; this helper narrows
+ * the union to a concrete ResolvedResource so existing `.arn` / `.identifier`
+ * assertions type-check. Asserts loudly on an unexpected ambiguous result
+ * (protects against silent regressions in the single-match contract).
+ */
+function expectSingle(result: Resolution): ResolvedResource {
+  if (result === null) {
+    throw new Error("expected a ResolvedResource, got null");
+  }
+  if ("kind" in result && result.kind === "ambiguous") {
+    throw new Error(
+      `expected a single match, got ambiguous with ${result.matches.length} matches`,
+    );
+  }
+  return result as ResolvedResource;
+}
 
 // Create a mock tagging client (the constructor is mocked, so it uses mockSend)
 const taggingClient = new (
@@ -72,11 +96,11 @@ describe("resolveResource", () => {
         "us-east-1",
       );
 
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe("arn:aws:s3:::my-bucket");
-      expect(result!.resourceType).toBe("AWS::S3::Bucket");
-      expect(result!.identifier).toBe("my-bucket");
-      expect(result!.tags["managed-by"]).toBe("assignee-ai");
+      const single = expectSingle(result);
+      expect(single.arn).toBe("arn:aws:s3:::my-bucket");
+      expect(single.resourceType).toBe("AWS::S3::Bucket");
+      expect(single.identifier).toBe("my-bucket");
+      expect(single.tags["managed-by"]).toBe("assignee-ai");
     });
 
     it("resolves a Lambda function by ARN", async () => {
@@ -96,10 +120,10 @@ describe("resolveResource", () => {
         "us-east-1",
       );
 
-      expect(result).not.toBeNull();
-      expect(result!.resourceType).toBe("AWS::Lambda::Function");
-      expect(result!.identifier).toBe("my-func");
-      expect(result!.region).toBe("us-east-1");
+      const single = expectSingle(result);
+      expect(single.resourceType).toBe("AWS::Lambda::Function");
+      expect(single.identifier).toBe("my-func");
+      expect(single.region).toBe("us-east-1");
     });
 
     it("returns null for ARN not tagged as managed", async () => {
@@ -137,10 +161,10 @@ describe("resolveResource", () => {
       expect(mockGetManagedIamRoleByArn).toHaveBeenCalledWith(iamArn);
       // IAM short-circuit must NOT fall through to RGTA scan.
       expect(mockSend).not.toHaveBeenCalled();
-      expect(result).not.toBeNull();
-      expect(result!.resourceType).toBe("AWS::IAM::Role");
-      expect(result!.identifier).toBe("my-app-role");
-      expect(result!.arn).toBe(iamArn);
+      const single = expectSingle(result);
+      expect(single.resourceType).toBe("AWS::IAM::Role");
+      expect(single.identifier).toBe("my-app-role");
+      expect(single.arn).toBe(iamArn);
     });
 
     it("returns null when IAM role ARN does not resolve to a managed role", async () => {
@@ -183,8 +207,8 @@ describe("resolveResource", () => {
 
       expect(mockGetManagedIamRoleByArn).toHaveBeenCalledWith(govArn);
       expect(mockSend).not.toHaveBeenCalled();
-      expect(result).not.toBeNull();
-      expect(result!.resourceType).toBe("AWS::IAM::Role");
+      const single = expectSingle(result);
+      expect(single.resourceType).toBe("AWS::IAM::Role");
     });
 
     it("routes a China (aws-cn) IAM role ARN to the IAM helper", async () => {
@@ -200,8 +224,8 @@ describe("resolveResource", () => {
 
       expect(mockGetManagedIamRoleByArn).toHaveBeenCalledWith(cnArn);
       expect(mockSend).not.toHaveBeenCalled();
-      expect(result).not.toBeNull();
-      expect(result!.resourceType).toBe("AWS::IAM::Role");
+      const single = expectSingle(result);
+      expect(single.resourceType).toBe("AWS::IAM::Role");
     });
   });
 
@@ -227,9 +251,9 @@ describe("resolveResource", () => {
         "us-east-1",
       );
 
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe("arn:aws:s3:::my-bucket");
-      expect(result!.identifier).toBe("my-bucket");
+      const single = expectSingle(result);
+      expect(single.arn).toBe("arn:aws:s3:::my-bucket");
+      expect(single.identifier).toBe("my-bucket");
     });
 
     it("returns null for non-existent name", async () => {
@@ -278,8 +302,8 @@ describe("resolveResource", () => {
         "us-east-1",
       );
 
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe("arn:aws:s3:::target-bucket");
+      const single = expectSingle(result);
+      expect(single.arn).toBe("arn:aws:s3:::target-bucket");
       expect(mockSend).toHaveBeenCalledTimes(2);
     });
   });
@@ -311,11 +335,11 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe(bareArn);
-      expect(result!.resourceType).toBe("AWS::SSM::Parameter");
+      const single = expectSingle(result);
+      expect(single.arn).toBe(bareArn);
+      expect(single.resourceType).toBe("AWS::SSM::Parameter");
       // Canonical SSM identifier has a leading slash — CloudControl requires it.
-      expect(result!.identifier).toBe("/smoke-test-x");
+      expect(single.identifier).toBe("/smoke-test-x");
     });
 
     it("resolves SSM parameter with leading slash (canonical form)", async () => {
@@ -325,9 +349,9 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe(bareArn);
-      expect(result!.identifier).toBe("/smoke-test-x");
+      const single = expectSingle(result);
+      expect(single.arn).toBe(bareArn);
+      expect(single.identifier).toBe("/smoke-test-x");
     });
 
     it("resolves nested SSM parameter path with leading slash", async () => {
@@ -337,9 +361,9 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe(nestedArn);
-      expect(result!.identifier).toBe("/myapp/database/host");
+      const single = expectSingle(result);
+      expect(single.arn).toBe(nestedArn);
+      expect(single.identifier).toBe("/myapp/database/host");
     });
 
     it("resolves nested SSM parameter path without leading slash", async () => {
@@ -349,19 +373,19 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe(nestedArn);
-      expect(result!.identifier).toBe("/myapp/database/host");
+      const single = expectSingle(result);
+      expect(single.arn).toBe(nestedArn);
+      expect(single.identifier).toBe("/myapp/database/host");
     });
 
     it("resolves SSM parameter by full ARN", async () => {
       mockTagging([bareArn]);
       const result = await resolveResource(bareArn, taggingClient, "us-east-1");
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe(bareArn);
-      expect(result!.resourceType).toBe("AWS::SSM::Parameter");
-      expect(result!.identifier).toBe("/smoke-test-x");
-      expect(result!.region).toBe("us-east-1");
+      const single = expectSingle(result);
+      expect(single.arn).toBe(bareArn);
+      expect(single.resourceType).toBe("AWS::SSM::Parameter");
+      expect(single.identifier).toBe("/smoke-test-x");
+      expect(single.region).toBe("us-east-1");
     });
 
     it("resolves nested SSM parameter by full ARN", async () => {
@@ -371,8 +395,8 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.identifier).toBe("/myapp/database/host");
+      const single = expectSingle(result);
+      expect(single.identifier).toBe("/myapp/database/host");
     });
 
     it("returns null when bare name has no matching managed resource", async () => {
@@ -406,8 +430,8 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe(bareArn);
+      const single = expectSingle(result);
+      expect(single.arn).toBe(bareArn);
     });
 
     it("resolves SSM parameter across pagination", async () => {
@@ -430,8 +454,8 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe(nestedArn);
+      const single = expectSingle(result);
+      expect(single.arn).toBe(nestedArn);
       expect(mockSend).toHaveBeenCalledTimes(2);
     });
 
@@ -455,10 +479,10 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.arn).toBe(secretArn);
-      expect(result!.identifier).toBe("/myapp/secret-token");
-      expect(result!.tags["ParameterType"]).toBe("SecureString");
+      const single = expectSingle(result);
+      expect(single.arn).toBe(secretArn);
+      expect(single.identifier).toBe("/myapp/secret-token");
+      expect(single.tags["ParameterType"]).toBe("SecureString");
     });
 
     it("SecureString variant resolves by bare name", async () => {
@@ -468,8 +492,8 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.identifier).toBe("/myapp/secret-token");
+      const single = expectSingle(result);
+      expect(single.identifier).toBe("/myapp/secret-token");
     });
 
     it("StringList variant resolves by bare name", async () => {
@@ -492,9 +516,9 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.identifier).toBe("/app/feature-flags");
-      expect(result!.tags["ParameterType"]).toBe("StringList");
+      const single = expectSingle(result);
+      expect(single.identifier).toBe("/app/feature-flags");
+      expect(single.tags["ParameterType"]).toBe("StringList");
     });
 
     it("returns the SSM region extracted from the ARN", async () => {
@@ -506,8 +530,8 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.region).toBe("eu-west-1");
+      const single = expectSingle(result);
+      expect(single.region).toBe("eu-west-1");
     });
 
     it("does not confuse SSM parameter with an unrelated S3 bucket of the same basename", async () => {
@@ -521,8 +545,8 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
-      expect(result).not.toBeNull();
-      expect(result!.resourceType).toBe("AWS::SSM::Parameter");
+      const single = expectSingle(result);
+      expect(single.resourceType).toBe("AWS::SSM::Parameter");
     });
 
     it("does not match a slash-prefixed query against a non-SSM resource", async () => {
@@ -545,8 +569,119 @@ describe("resolveResource", () => {
         taggingClient,
         "us-east-1",
       );
+      const single = expectSingle(result);
+      expect(single.identifier).toBe("/company/team/service/env/var");
+    });
+  });
+
+  // ─── Story 48.6: multi-match disambiguation ───────────────────────────────
+  describe("multi-match by name (Story 48.6)", () => {
+    it("returns AmbiguousResolution when two managed resources share a name", async () => {
+      // Real-shaped RGTA payload: two S3 buckets, both named via the
+      // matchesName helper via extractIdentifierFromArn. Both are valid
+      // candidates — the resolver MUST surface both, not silently first-pick.
+      mockSend.mockResolvedValueOnce({
+        ResourceTagMappingList: [
+          {
+            ResourceARN: "arn:aws:s3:::my-bucket",
+            Tags: [
+              { Key: "managed-by", Value: "assignee-ai" },
+              { Key: "env", Value: "prod" },
+            ],
+          },
+          {
+            ResourceARN: "arn:aws:s3:::my-bucket",
+            Tags: [
+              { Key: "managed-by", Value: "assignee-ai" },
+              { Key: "env", Value: "staging" },
+            ],
+          },
+        ],
+        PaginationToken: undefined,
+      });
+
+      const result = await resolveResource(
+        "my-bucket",
+        taggingClient,
+        "us-east-1",
+      );
+
       expect(result).not.toBeNull();
-      expect(result!.identifier).toBe("/company/team/service/env/var");
+      expect(result && "kind" in result && result.kind).toBe("ambiguous");
+      if (result && "kind" in result && result.kind === "ambiguous") {
+        expect(result.input).toBe("my-bucket");
+        expect(result.matches).toHaveLength(2);
+        expect(result.matches[0]?.tags["env"]).toBe("prod");
+        expect(result.matches[1]?.tags["env"]).toBe("staging");
+      }
+    });
+
+    it("collects matches across pagination before deciding ambiguity", async () => {
+      // Multi-match spanning pages — the resolver MUST finish pagination
+      // before returning so an early-pagination first-pick bug cannot hide
+      // a late-pagination duplicate. Real RGTA shape with PaginationToken.
+      mockSend.mockResolvedValueOnce({
+        ResourceTagMappingList: [
+          {
+            ResourceARN:
+              "arn:aws:lambda:us-east-1:112233445566:function:my-func",
+            Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+          },
+        ],
+        PaginationToken: "page-2",
+      });
+      mockSend.mockResolvedValueOnce({
+        ResourceTagMappingList: [
+          {
+            ResourceARN:
+              "arn:aws:lambda:us-west-2:112233445566:function:my-func",
+            Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+          },
+        ],
+        PaginationToken: undefined,
+      });
+
+      const result = await resolveResource(
+        "my-func",
+        taggingClient,
+        "us-east-1",
+      );
+
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(result && "kind" in result && result.kind).toBe("ambiguous");
+      if (result && "kind" in result && result.kind === "ambiguous") {
+        expect(result.matches).toHaveLength(2);
+        expect(result.matches.map((m) => m.region).sort()).toEqual([
+          "us-east-1",
+          "us-west-2",
+        ]);
+      }
+    });
+
+    it("returns a single ResolvedResource (not ambiguous) when only one match exists", async () => {
+      // Fast-path regression: single hit must remain a plain ResolvedResource
+      // so legacy callers that predate Story 48.6 don't accidentally take
+      // the new union branch.
+      mockSend.mockResolvedValueOnce({
+        ResourceTagMappingList: [
+          {
+            ResourceARN: "arn:aws:s3:::only-bucket",
+            Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+          },
+        ],
+        PaginationToken: undefined,
+      });
+
+      const result = await resolveResource(
+        "only-bucket",
+        taggingClient,
+        "us-east-1",
+      );
+
+      expect(result).not.toBeNull();
+      expect(result && "kind" in result).toBe(false);
+      const single = expectSingle(result);
+      expect(single.arn).toBe("arn:aws:s3:::only-bucket");
     });
   });
 

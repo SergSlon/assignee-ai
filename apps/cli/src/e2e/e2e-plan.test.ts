@@ -490,7 +490,7 @@ describeE2E("E2E: SSM Parameter plan + apply + destroy", () => {
 
     let resolvedOk = false;
     try {
-      const { createTaggingClient, resolveResource } =
+      const { createTaggingClient, resolveResource, isAmbiguousResolution } =
         await import("../services/resource-resolver.js");
       const { destroySingleResource } =
         await import("../services/destroy-service.js");
@@ -503,7 +503,9 @@ describeE2E("E2E: SSM Parameter plan + apply + destroy", () => {
       // Resolve using the bare name — this is what the bug targeted.
       const resolved = await resolveResource(bareName, taggingClient, region);
 
-      if (resolved) {
+      // Story 48.6: resolveResource now returns a discriminated union; E2E
+      // expects the single-match path for this unique parameter name.
+      if (resolved && !isAmbiguousResolution(resolved)) {
         expect(resolved.resourceType).toBe("AWS::SSM::Parameter");
         // Canonical SSM identifier always starts with "/" and matches paramName.
         expect(resolved.identifier).toBe(paramName);
