@@ -33,7 +33,7 @@ describe("CLI Entrypoint (index.ts) process handlers", () => {
     initialSigtermCount = process.listenerCount("SIGTERM");
   });
 
-  it("registers SIGINT and SIGTERM handlers", { timeout: 15_000 }, async () => {
+  it("registers SIGINT and SIGTERM handlers", async () => {
     // Dynamic import to execute the file
     await import("./index.js");
 
