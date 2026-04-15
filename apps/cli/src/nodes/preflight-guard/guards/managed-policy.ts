@@ -13,7 +13,10 @@
  *   "unverified" and the rest continue.
  * - Throttling is retried up to 3× with 200/500/1200ms backoff; if the
  *   retries exhaust, the ARN is marked unverified rather than blocking.
- * - Truly unknown errors → unverified + WARN log.
+ * - Truly unknown errors → unverified + WARN log (default). Set
+ *   `ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS=1` to escalate unknown errors to
+ *   fail-closed for stricter SaaS / regulated-tenant posture (Story 48.3,
+ *   opt-in). Auth / AccessDenied / Throttling branches are unaffected.
  * - If client construction itself surfaces an auth failure, fail closed.
  *   Any other construction failure → WARN + fall through (no block).
  *
@@ -102,6 +105,23 @@ export async function verifyManagedPolicyArns(
           reason: `throttled after ${attempt + 1} attempts — unverified`,
         });
       } else {
+        // Story 48.3: opt-in strict mode. Unknown errors default to
+        // unverified+WARN (intentional fail-open for local CLI / single-ARN
+        // transient network blips). Operators running a stricter posture
+        // (SaaS multi-tenant, regulated tenants) set
+        // ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS=1 to escalate to fail-closed.
+        // MUST sit inside the else branch (after Auth / NoSuchEntity /
+        // AccessDenied / Throttling) so it can never demote those signals.
+        if (process.env["ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS"] === "1") {
+          return (
+            `Preflight unknown error while verifying ManagedPolicyArn ${arn} ` +
+            `(${errName || errCode || "unknown"}): ${errMsg}. ` +
+            `Strict mode is enabled via ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS=1 — ` +
+            `unset that env var to fall back to WARN-only behaviour. ` +
+            `If credentials or IAM permissions are the root cause, run ` +
+            `\`assignee setup\` or refresh your AWS session and re-run.`
+          );
+        }
         unverifiedArns.push({ arn, reason: `verification failed: ${errMsg}` });
       }
     }

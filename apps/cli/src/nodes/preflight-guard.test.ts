@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ExecutionStatus, CostEstimateLabel } from "@assignee/core";
 import { preflightGuardNode } from "./preflight-guard.js";
 import { LambdaPricing, PricingUnit } from "../constants/pricing.js";
@@ -699,6 +699,140 @@ describe("preflightGuardNode", () => {
       expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
       // Must retry: initial + 3 backoffs = 4 total attempts
       expect(calls).toBe(4);
+    });
+
+    describe("ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS env flag (Story 48.3)", () => {
+      beforeEach(() => {
+        vi.unstubAllEnvs();
+        sendMock.mockReset();
+      });
+
+      afterEach(() => {
+        vi.unstubAllEnvs();
+      });
+
+      const assumeRolePolicy = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { Service: "ec2.amazonaws.com" },
+            Action: "sts:AssumeRole",
+          },
+        ],
+      };
+
+      const realArn = "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess";
+
+      function makeRoleState(name: string) {
+        return makeState({
+          resourceType: "AWS::IAM::Role",
+          resourceSchema: { required: ["AssumeRolePolicyDocument"] },
+          desiredState: {
+            RoleName: name,
+            AssumeRolePolicyDocument: assumeRolePolicy,
+            ManagedPolicyArns: [realArn],
+          },
+        });
+      }
+
+      it("default (flag unset) — unknown error → unverified, no abort", async () => {
+        sendMock.mockImplementation(() => {
+          const err = new Error("read ECONNRESET socket hang up") as Error & {
+            code: string;
+          };
+          err.code = "ECONNRESET";
+          return Promise.reject(err);
+        });
+
+        const result = await preflightGuardNode(
+          makeRoleState("unknown-default-case"),
+        );
+
+        expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+      });
+
+      it("flag=1 — unknown error → fail-closed with actionable message", async () => {
+        vi.stubEnv("ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS", "1");
+        sendMock.mockImplementation(() => {
+          const err = new Error("read ECONNRESET socket hang up") as Error & {
+            code: string;
+          };
+          err.code = "ECONNRESET";
+          return Promise.reject(err);
+        });
+
+        const result = await preflightGuardNode(
+          makeRoleState("unknown-strict-case"),
+        );
+
+        expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+        expect(result.errorMessage).toContain(realArn);
+        expect(result.errorMessage).toContain("ECONNRESET");
+        expect(result.errorMessage).toContain(
+          "ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS",
+        );
+        expect(result.errorMessage).toMatch(/unset.*fall back/i);
+        expect(result.errorMessage).toMatch(/assignee setup|refresh/i);
+      });
+
+      it("flag=1 — per-ARN auth failure still fail-closed with unchanged message", async () => {
+        vi.stubEnv("ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS", "1");
+        sendMock.mockImplementation(() => {
+          const err = new Error(
+            "The security token included in the request is expired",
+          ) as Error & { name: string };
+          err.name = "ExpiredToken";
+          return Promise.reject(err);
+        });
+
+        const result = await preflightGuardNode(
+          makeRoleState("expired-creds-strict"),
+        );
+
+        expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+        expect(result.errorMessage).toContain(
+          "AWS credentials expired or invalid while verifying",
+        );
+        expect(result.errorMessage).not.toContain(
+          "ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS",
+        );
+      });
+
+      it("flag=1 — throttling exhausted still goes to unverified, NOT fail-closed", async () => {
+        vi.stubEnv("ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS", "1");
+        let calls = 0;
+        sendMock.mockImplementation(() => {
+          calls += 1;
+          const err = new Error("Rate exceeded") as Error & { name: string };
+          err.name = "ThrottlingException";
+          return Promise.reject(err);
+        });
+
+        const result = await preflightGuardNode(
+          makeRoleState("throttled-strict-case"),
+        );
+
+        expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+        expect(calls).toBe(4);
+      });
+
+      it("flag set to a value other than '1' behaves as unset (fail-open)", async () => {
+        vi.stubEnv("ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS", "true");
+        sendMock.mockImplementation(() => {
+          const err = new Error("read ECONNRESET socket hang up") as Error & {
+            code: string;
+          };
+          err.code = "ECONNRESET";
+          return Promise.reject(err);
+        });
+
+        const result = await preflightGuardNode(
+          makeRoleState("unknown-loose-flag"),
+        );
+
+        expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+      });
     });
 
     it("does not run verification for non-IAM-Role resource types", async () => {

@@ -76,6 +76,42 @@ errors.
 
 ---
 
+## Preflight fail-closed on auth (with opt-in unknown-error escalation)
+
+**Rule.** ManagedPolicyArn verification (preflight for `AWS::IAM::Role`)
+is **always fail-closed** on AWS session-auth failures (ExpiredToken,
+InvalidClientTokenId, SignatureDoesNotMatch, TokenRefreshRequired, HTTP 401) — both on the per-ARN `iam:GetPolicy` call and on IAM-client
+construction itself. Truly unknown errors (e.g. transient network
+blips) default to **unverified + WARN** (fail-open) so a single ARN's
+network hiccup cannot abort an entire plan for local CLI users.
+Operators running a stricter posture (SaaS multi-tenant, regulated
+tenants) can opt in by setting `ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS=1` to
+escalate unknown errors to fail-closed. Throttling retry-3× and
+per-ARN `AccessDenied` paths are **unaffected** by the flag — they are
+rate-limit / permission signals, not verification anomalies.
+
+**Why.** Wave 4 F2 P0-R2-1: stale credentials must never let a
+hallucinated ARN slip past preflight just because STS expired. The
+fail-open default for unknown errors is intentional — a one-off
+network blip on a single ARN should not kill a plan a local user is
+actively iterating on. SaaS tenants, however, want the strictest
+possible posture on any verification anomaly; the env flag gives them
+that without forcing it on everyone.
+
+**Where it's enforced.**
+
+- `apps/cli/src/nodes/preflight-guard/guards/managed-policy.ts` —
+  per-ARN auth / AccessDenied / Throttling / unknown branches and the
+  outer client-construction auth branch. The
+  `ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS=1` check sits inside the unknown
+  (`else`) branch _after_ auth / NoSuchEntity / AccessDenied /
+  Throttling so strict mode can never demote those signals.
+
+**Source memory.** `feedback_placeholder_arn_preflight_guard.md`
+(context). Story 48.3 added the opt-in escalation flag.
+
+---
+
 ## IAM role RGTA gap
 
 **Rule.** Always enumerate IAM roles via `iam:ListRoles` +
@@ -180,6 +216,49 @@ process lifetime.
 - `apps/mcp-server/src/tools/destroy-resource.ts` (STS cache)
 
 **Source memory (wave 2 R2 finding).** P1-R2-1.
+
+---
+
+## Destroy TOCTOU window
+
+**Rule.** The MCP destroy path re-verifies the `managed-by=assignee-ai`
+tag immediately before dispatching `DeleteResource`. The pre-delete
+re-verify sits _between_ the pre-destroy hook and the CloudControl
+`DeleteResource` call. If the second verify returns unmanaged, the
+delete is refused with a structured `DESTROY_TOCTOU_TAG_MISSING` error
+and a single `[destroy_resource][SECURITY] toctou-tag-missing`
+`console.warn` line (intentionally unredacted — the ARN is operator-
+owned and SOC needs it for CloudTrail correlation). If the second
+verify throws (RGTA error), the destroy fails closed with a distinct
+"Pre-delete tag re-verification failed" error; we never fail open.
+Composite-identifier resources (e.g. `AWS::EC2::Route`, no ARN, no
+tag) bypass the second verify.
+
+**Why.** A co-tenant principal with `tag:UntagResources` (but not
+`cloudcontrol:DeleteResource`) could otherwise strip the managed-by
+tag in the ~tens-of-ms window between resolve-time verify and the
+CCAPI delete, tricking the operator into deleting an unmanaged
+resource. Option (a) "ETag fencing" is rejected because CloudControl
+silently ignores stale fencing tokens for most `AWS::*` types. The
+re-verify closes the bulk of the window at a cost of one extra RGTA
+`GetResources` call per destroy (~50–150 ms). Residual window is the
+sub-ms gap between the second `GetResources` call and the
+`DeleteResource` dispatch — accepted as not exploitable in practice;
+forensic CloudTrail correlation on `UntagResources` events catches
+any exploitation of the residual.
+
+**Where it's enforced.**
+
+- `apps/mcp-server/src/tools/destroy-resource.ts` (re-verify call site
+  - SECURITY warn emission)
+- `apps/mcp-server/src/tools/destroy-resource/dispatcher.ts`
+  (`verifyTagBeforeDelete`)
+- `apps/mcp-server/src/tools/destroy-resource/error-envelope.ts`
+  (`DESTROY_ERROR_CODES.TOCTOU_TAG_MISSING`)
+- `docs/troubleshooting.md` — operator-facing SECURITY warning docs
+  and CloudTrail Lake query.
+
+**Source memory.** Story 48.4 (Epic 48 — Session Leftover Cleanups).
 
 ---
 
