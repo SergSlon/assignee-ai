@@ -1,23 +1,6 @@
 import type { OptionMetadata } from "../../types.js";
 
 /**
- * Lambda duration pricing fallback rate ($/GB-second).
- *
- * IMPORTANT: This constant is a **fallback only** for the Pricing strategy
- * (`core/src/pricing/strategies/lambda.ts`) when the Pricing MCP is
- * unavailable. It MUST NOT be used to render user-facing prices in this
- * plugin's option labels or hints — all price display must go through the
- * Pricing MCP at runtime (see `feedback_no_hardcoded_prices`). The rate
- * has been stable since 2014; keeping it here as a fallback avoids hard
- * failures when the Pricing MCP is offline.
- *
- * TODO(pricing-fallback-relocation): Move this constant out of the
- * resource-plugin layer into `pricing/strategies/lambda.ts` so the plugin
- * carries zero pricing data.
- */
-export const LAMBDA_USD_PER_GB_SECOND = 0.0000166667;
-
-/**
  * Formats a Lambda memory option label. Dollar amounts are intentionally
  * omitted here — all price rendering must go through the Pricing MCP at
  * runtime. Option labels surface capacity only so the wizard stays sync.
