@@ -29,11 +29,15 @@ vi.mock("../utils/command-runner.js", () => ({
   runProvisioningLoop: vi.fn(),
 }));
 
-vi.mock("../utils/display.js", () => ({
-  renderError: vi.fn(),
-  startSpinner: vi.fn(),
-  stopSpinner: vi.fn(),
-}));
+vi.mock("../utils/display.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/display.js")>();
+  return {
+    ...actual,
+    renderError: vi.fn(),
+    startSpinner: vi.fn(),
+    stopSpinner: vi.fn(),
+  };
+});
 
 vi.mock("../utils/logger.js", () => ({
   log: vi.fn(),
