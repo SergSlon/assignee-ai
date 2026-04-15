@@ -200,7 +200,7 @@ export const efsFileSystemPlugin: ResourcePlugin = {
         type: "boolean",
         label: "Enable automatic backups? (BP-EFS-002)",
         initialValue: true,
-        hint: "Recommended for production. Backups are managed by AWS Backup and billed separately (~$0.05/GB-mo for warm storage). Disabling this triggers the BP-EFS-002 best practice warning.",
+        hint: "Recommended for production. Backups are managed by AWS Backup and billed separately (per-GB-month for warm storage — run `assignee cost` for live Pricing-MCP rates). Disabling this triggers the BP-EFS-002 best practice warning.",
       },
       toCfn: (answer: unknown) =>
         answer

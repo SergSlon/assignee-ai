@@ -19,9 +19,11 @@ import type { ResourcePlugin } from "../types.js";
  *   - tagging.taggable = false (NO_TAG_TYPES)
  *   - handlers: create, read, update, delete, list (all present)
  *
- * Pricing: $0.20 per 1M ApiDestination invocations. The invoked
+ * Pricing: ApiDestinations bill a per-million-invocations rate
+ * (run `assignee cost` for live Pricing-MCP rates). The invoked
  * target bears its own outbound cost (Data Transfer Out on the
- * request body). Connection credentials usage is free.
+ * request body). Connection credentials usage is included at no
+ * extra charge.
  *
  * @see A13 (2026-04-09)
  */
@@ -156,7 +158,7 @@ export const eventsApiDestinationPlugin: ResourcePlugin = {
     "InvocationEndpoint MUST be HTTPS. EventBridge rejects http:// at the service layer — there is no insecure option even for testing.",
     "Match HttpMethod to the target API. Webhooks are almost always POST. REST APIs may need PUT/PATCH/DELETE. EventBridge does not auto-detect or fall back.",
     "InvocationRateLimitPerSecond defaults to 300 — lower it when the target API has tight rate limits (Slack webhooks are 1/sec/channel) or when the downstream is latency-sensitive. Higher values are NOT supported; AWS caps at 300.",
-    "Pricing: $0.20 per 1M ApiDestination invocations. Cheap enough to ignore for most workloads, but not free — scheduled fan-out patterns can accumulate quickly.",
+    "Pricing: ApiDestinations bill a per-million-invocations rate — cheap per call, but scheduled fan-out patterns can accumulate quickly. Run `assignee cost` for live Pricing-MCP rates.",
     "The ConnectionArn must point at an already-existing Connection (or one earlier in the same plan). The Connection provides the auth credentials; this destination provides the URL.",
   ],
 };

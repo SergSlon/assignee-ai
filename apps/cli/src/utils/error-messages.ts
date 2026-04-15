@@ -24,6 +24,7 @@ import {
   StateGuardError,
   MissingRequiredFieldsError,
   PROVISIONING_ERROR_CODES,
+  ARN_PATTERN_SOURCE,
 } from "@assignee/core";
 
 /* Error codes are now imported from ../constants/errors.js */
@@ -678,7 +679,14 @@ export const defaultErrorMessageRegistry = new ErrorMessageRegistry();
 
 // ── Sensitive-data redaction (M-S5) ─────────────────────────────────────────
 
-const ARN_PATTERN = /arn:aws:[a-z0-9-]+:[a-z0-9-]*:\d{12}:[^\s]*/g;
+// Partition-aware ARN redaction pattern — accepts aws, aws-cn, aws-us-gov,
+// aws-iso, aws-iso-b (via ARN_PATTERN_SOURCE = "arn:aws[\\w-]*:"). See
+// feedback_partition_aware_arn_matching memory and the canonical helper in
+// packages/core/src/config/aws-partition.ts.
+const ARN_PATTERN = new RegExp(
+  `${ARN_PATTERN_SOURCE}[a-z0-9-]+:[a-z0-9-]*:\\d{12}:[^\\s]*`,
+  "g",
+);
 const ACCOUNT_ID_PATTERN = /\b\d{12}\b/g;
 
 /**

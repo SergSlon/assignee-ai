@@ -187,12 +187,18 @@ describe("extractIdentifierFromArn — correct identifiers for CloudControl", ()
     ).toBe("i-abc");
   });
 
-  it("SSM parameter with hierarchical path", () => {
+  it("SSM parameter with hierarchical path preserves canonical leading slash", () => {
+    // Wave 3 P2-2: the shared ARN helper in @assignee/core matches the
+    // CLI's `resource-resolver.test.ts` contract — canonical SSM parameter
+    // identifiers start with "/" because CloudControl's GetParameter/
+    // PutParameter require the fully-qualified "/a/b/c" form. The previous
+    // MCP inline impl stripped the leading "/", which would have caused
+    // CCAPI DeleteResource to fail on nested parameters.
     expect(
       extractIdentifierFromArn(
         "arn:aws:ssm:us-east-1:123:parameter/app/config/db-url",
       ),
-    ).toBe("app/config/db-url");
+    ).toBe("/app/config/db-url");
   });
 
   it("LogGroup with path (including colons in ARN)", () => {

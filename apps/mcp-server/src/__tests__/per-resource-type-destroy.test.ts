@@ -216,6 +216,13 @@ const DESTROY_FIXTURES: Array<{
 describe("destroy_resource success for all resource types (Story E2E.2 AC1)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // P0-1 fix: destroy_resource now requires explicit operator
+    // credentials instead of the host default chain. Provide
+    // realistic-shaped env vars so every fixture exercises the
+    // full tag-verified delete path.
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
   });
 
   for (const fixture of DESTROY_FIXTURES) {

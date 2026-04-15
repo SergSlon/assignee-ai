@@ -169,6 +169,6 @@ export const eventsConnectionPlugin: ResourcePlugin = {
     "AuthParameters credentials are stored in a managed Secrets Manager secret on your behalf. You CANNOT reference the secret ARN directly — EventBridge manages its lifecycle. The secret's KMS envelope encryption is controlled by KmsKeyIdentifier.",
     "For API_KEY auth, the ApiKeyName is the HTTP HEADER the key lands in (e.g. 'X-Api-Key', 'Authorization'), not the key's display name. Check your target API's docs.",
     "OAUTH_CLIENT_CREDENTIALS triggers an outbound call to AuthorizationEndpoint during create — the endpoint must be reachable from the AWS EventBridge service IP range, not from your VPC. Private OAuth servers need EventBridge PrivateLink support (separate resource).",
-    "Connections are free. The cost is on the ApiDestination that uses the Connection — $0.20 per 1M invocations of the destination.",
+    "Connections themselves have no per-hour or per-request charge. The cost lands on the ApiDestination that uses the Connection (per-million-invocations billing). Run `assignee cost` for live Pricing-MCP rates.",
   ],
 };

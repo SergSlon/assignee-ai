@@ -17,6 +17,7 @@
  */
 
 import { RESOURCE_TYPES } from "./resource-types.js";
+import { ARN_PATTERN } from "./aws-partition.js";
 
 /**
  * AWS partition detected from the region. Callers usually pass the
@@ -49,7 +50,7 @@ export interface BuildResourceArnArgs {
  * we don't re-synthesize.
  */
 export function isArn(value: string): boolean {
-  return /^arn:aws[\w-]*:/.test(value);
+  return ARN_PATTERN.test(value);
 }
 
 /**

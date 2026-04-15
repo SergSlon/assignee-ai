@@ -20,11 +20,13 @@ import { FieldLabel } from "../field-labels.js";
  *     OR EventPattern plus at least one Target are needed — enforced by the
  *     BP rules BP-EVENTS-001 and BP-EVENTS-002).
  *
- * Pricing: $1.00 per million custom events published to EventBridge.
- * Rule evaluation + target invocation from the default bus are free. The
- * overwhelming common case (a single-target scheduled Lambda or a simple
- * event-pattern filter on the default bus) bills $0 for the rule itself;
- * the workload fees (Lambda invocation, SQS message, etc.) dominate.
+ * Pricing: custom events published to EventBridge bill a per-million-events
+ * rate (run `assignee cost` for live Pricing-MCP rates). Rule evaluation +
+ * target invocation from the default bus are included at no extra charge.
+ * The overwhelming common case (a single-target scheduled Lambda or a
+ * simple event-pattern filter on the default bus) bills nothing for the
+ * rule itself; the workload fees (Lambda invocation, SQS message, etc.)
+ * dominate.
  */
 export const eventsRulePlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.EVENTS_RULE,
@@ -158,7 +160,7 @@ export const eventsRulePlugin: ResourcePlugin = {
         label: "Event bus name",
         placeholder: "default",
         initialValue: "default",
-        hint: "Name of the event bus this rule listens on. 'default' is the per-account built-in bus. Custom buses (for cross-account or SaaS partner events) cost $1 per million events on top of the standard rule pricing.",
+        hint: "Name of the event bus this rule listens on. 'default' is the per-account built-in bus. Custom buses (for cross-account or SaaS partner events) bill a per-million-events rate on top of the standard rule pricing — run `assignee cost` for live Pricing-MCP rates.",
       },
     },
     {
@@ -187,7 +189,7 @@ export const eventsRulePlugin: ResourcePlugin = {
     "ScheduleExpression rate() granularity is minutes: the shortest usable interval is rate(1 minute). For sub-minute polling, use a Lambda with a self-rescheduling invocation instead.",
     "For async targets (Lambda, SQS, Step Functions), set DeadLetterConfig on the Target so failed events are captured instead of silently dropped after the default 185-retry exhaustion.",
     "Target.RetryPolicy defaults to 185 retries over 24 hours — often too many for idempotent handlers and not enough for non-idempotent ones. Tune both MaximumRetryAttempts and MaximumEventAgeInSeconds per target.",
-    "Custom event buses bill $1.00 per million events published TO the bus, in addition to the per-rule evaluation costs. The 'default' bus is free for AWS service events.",
+    "Custom event buses bill a per-million-events rate for events published TO the bus, in addition to the per-rule evaluation costs. The 'default' bus has no per-event charge for AWS service events. Run `assignee cost` for live Pricing-MCP rates.",
     "Rule Name is createOnly — renaming a rule requires replacing it. Prefer descriptive names that won't need to change.",
   ],
 };
