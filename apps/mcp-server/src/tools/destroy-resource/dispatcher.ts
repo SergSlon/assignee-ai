@@ -13,9 +13,12 @@ import {
   CloudControlClient,
   GetResourceRequestStatusCommand,
 } from "@aws-sdk/client-cloudcontrol";
+import type { ResourceGroupsTaggingAPIClient } from "@aws-sdk/client-resource-groups-tagging-api";
 import { extractAccountIdFromArn } from "@assignee/core";
 import { destroyRegistry } from "../../services/destroy-strategies/index.js";
 import { getOperatorAccountId } from "./sts-cache.js";
+import { isArn, verifyArnIsManaged } from "./resolve.js";
+import type { ResolvedResource } from "./types.js";
 import {
   CCAPI_NOT_FOUND_ERROR_CODE,
   EXTENDED_POLL_ATTEMPTS,
@@ -39,6 +42,59 @@ export async function classifyNotFoundShortCircuit(
   const operatorAccount = await getOperatorAccountId(region);
   if (!operatorAccount) return "safe-shortcircuit";
   return arnAccount === operatorAccount ? "safe-shortcircuit" : "cross-account";
+}
+
+/**
+ * Pre-delete re-verification — closes the verify-to-delete TOCTOU window.
+ *
+ * `resolveResource` calls `verifyArnIsManaged` at resolve time; this call
+ * re-verifies the tag **immediately before** we dispatch `DeleteResource`
+ * so an attacker holding `tag:UntagResources` (but not
+ * `cloudcontrol:DeleteResource`) cannot strip the `managed-by=assignee-ai`
+ * tag between resolve and delete and trick us into deleting an unmanaged
+ * resource.
+ *
+ * Composite-identifier resources (e.g. `AWS::EC2::Route`) have no ARN and
+ * no tag, so the second verify is meaningless for them — bypass cleanly.
+ *
+ * Does NOT swallow RGTA errors. If the second verify throws, the caller
+ * must abort (fail-closed) — there's no way to prove the tag is intact
+ * so we cannot proceed safely. See story 48.4 Dev Notes.
+ *
+ * @see docs/explanation/invariants.md "Destroy TOCTOU window"
+ */
+export async function verifyTagBeforeDelete(
+  resolved: ResolvedResource,
+  taggingClient: ResourceGroupsTaggingAPIClient,
+  startTimeMs: number,
+  region: string,
+): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "tag-missing";
+      warnLine: string;
+      accountMatch: boolean;
+    }
+> {
+  // Composite-identifier resources (e.g. Route "rtb-xxx|0.0.0.0/0") have
+  // no ARN and no managed-by tag — second verify is meaningless.
+  if (!isArn(resolved.arn)) return { ok: true };
+
+  const stillManaged = await verifyArnIsManaged(resolved.arn, taggingClient);
+  if (stillManaged) return { ok: true };
+
+  // Compute accountMatch for the SECURITY log line. Re-use the STS cache
+  // (no extra STS call per destroy). If either side is unknown, log false.
+  const operatorAccount = await getOperatorAccountId(region);
+  const arnAccount = extractAccountIdFromArn(resolved.arn);
+  const accountMatch = Boolean(
+    operatorAccount && arnAccount && operatorAccount === arnAccount,
+  );
+  const elapsedMs = Date.now() - startTimeMs;
+  const warnLine = `[destroy_resource][SECURITY] toctou-tag-missing arn=${resolved.arn} firstVerify=managed secondVerify=unmanaged accountMatch=${accountMatch} elapsedMs=${elapsedMs}`;
+
+  return { ok: false, reason: "tag-missing", warnLine, accountMatch };
 }
 
 export async function pollDeleteStatus(

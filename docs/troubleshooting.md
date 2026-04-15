@@ -210,6 +210,54 @@ missing runtime; check `~/.assignee/logs/` for the child stderr.
 action is free and idempotent. See `setup.ts` for the canonical policy
 template.
 
+### `DESTROY_TOCTOU_TAG_MISSING` security warning
+
+**Symptom.** The `destroy_resource` MCP tool returned an error with
+`code: "DESTROY_TOCTOU_TAG_MISSING"` and an accompanying stderr line
+of the form:
+
+```
+[destroy_resource][SECURITY] toctou-tag-missing arn=<arn> firstVerify=managed secondVerify=unmanaged accountMatch=<bool> elapsedMs=<n>
+```
+
+**Cause.** The `managed-by=assignee-ai` tag was present when the
+resource was resolved but **gone** by the time the pre-delete
+re-verify ran. An external principal holding `tag:UntagResources` (but
+not `cloudcontrol:DeleteResource`) stripped the tag mid-flight to
+trick the operator into deleting an unmanaged resource. The delete
+was **refused** — the resource was NOT deleted. See
+[invariants.md `Destroy TOCTOU window`](explanation/invariants.md#destroy-toctou-window)
+for the enforcement detail.
+
+**Fix (operator action).** Investigate immediately. The SOC should:
+
+1. Grep MCP server logs for `[SECURITY] toctou-tag-missing` to recover
+   the affected ARN and the `elapsedMs` window.
+2. Run the following CloudTrail Lake query (or the Athena equivalent
+   against the CUR-partitioned CloudTrail export) against the tight
+   time window `[eventTime - elapsedMs - 60s, eventTime]`:
+
+   ```sql
+   SELECT eventTime, userIdentity.arn, requestParameters
+   FROM cloudtrail_logs
+   WHERE eventName IN ('UntagResources', 'RemoveTagsFromResource', 'UntagRole', 'UntagUser')
+     AND eventTime BETWEEN <T_minus_5min> AND <T_now>
+     AND requestParameters LIKE '%managed-by%assignee-ai%'
+     AND recipientAccountId = '<operator-account>'
+   ORDER BY eventTime DESC;
+   ```
+
+   Join the returned `userIdentity.arn` values against MCP server logs
+   grepped for `[SECURITY] toctou-tag-missing` to identify the
+   attacking principal.
+
+3. Audit IAM policies for any principal granted
+   `tag:UntagResources` / `iam:UntagRole` / `iam:UntagUser` on
+   resources tagged `managed-by=assignee-ai`. Revoke or scope down.
+4. No action is needed on the resource itself — the destroy was
+   refused and the resource (including its original tags if the tag
+   was re-applied) is intact.
+
 ---
 
 ## Checkpoint error classes

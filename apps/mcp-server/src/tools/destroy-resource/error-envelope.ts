@@ -12,9 +12,26 @@ export interface McpToolResponse {
   isError?: boolean;
 }
 
+/**
+ * Structured error codes surfaced by the destroy_resource tool. Keep in
+ * sync with the troubleshooting doc under "MCP server error classes".
+ */
+export const DESTROY_ERROR_CODES = {
+  /**
+   * The pre-delete re-verification found the managed-by tag gone after
+   * resolve.time verification succeeded. Indicates a TOCTOU attack (or an
+   * operator concurrently untagging). Delete was refused.
+   */
+  TOCTOU_TAG_MISSING: "DESTROY_TOCTOU_TAG_MISSING",
+} as const;
+
+export type DestroyErrorCode =
+  (typeof DESTROY_ERROR_CODES)[keyof typeof DESTROY_ERROR_CODES];
+
 export function buildErrorResponse(
   message: string,
   hint?: string,
+  code?: DestroyErrorCode,
 ): McpToolResponse {
   return {
     content: [
@@ -24,6 +41,7 @@ export function buildErrorResponse(
           error: true,
           message,
           ...(hint ? { hint } : {}),
+          ...(code ? { code } : {}),
         }),
       },
     ],

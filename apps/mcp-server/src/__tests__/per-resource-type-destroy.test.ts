@@ -66,7 +66,9 @@ function parseResult(result: Record<string, unknown>) {
 }
 
 function mockTagResolution(arn: string) {
-  mockTaggingSend.mockResolvedValueOnce({
+  // Two RGTA calls per destroy: (1) resolve-time verify and (2) pre-delete
+  // re-verify (TOCTOU mitigation, story 48.4). Both return the tag intact.
+  const payload = {
     ResourceTagMappingList: [
       {
         ResourceARN: arn,
@@ -77,7 +79,8 @@ function mockTagResolution(arn: string) {
       },
     ],
     PaginationToken: undefined,
-  });
+  };
+  mockTaggingSend.mockResolvedValueOnce(payload).mockResolvedValueOnce(payload);
 }
 
 function mockDeleteSuccess() {
