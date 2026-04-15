@@ -29,6 +29,7 @@ complete -c assignee -n "__fish_seen_subcommand_from plan" -l no-apply -d 'Skip 
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l no-advice -d 'Skip inline contextual advice generation'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l source -s s -r -d 'Path to local files to upload after provisioning (e.g., static site)'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l set -r -d 'Pre-set field values, supports human names (e.g., --set size=t3.medium)'
+complete -c assignee -n "__fish_seen_subcommand_from plan" -l yes -s y -d 'Accepted for CI wrapper compatibility; plan is read-only and does not mutate.'
 
 # Options for 'apply'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l wizard -d 'Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)'
@@ -58,6 +59,7 @@ complete -c assignee -n "__fish_seen_subcommand_from drift" -l output -r -d 'Wri
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l concurrency -r -d 'Max parallel drift checks (default 10, max 50)'
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l no-color -d 'Disable color output'
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l verbose -d 'Show all fields including matching ones'
+complete -c assignee -n "__fish_seen_subcommand_from drift" -l yes -s y -d 'Accepted for CI wrapper compatibility; drift is read-only and does not mutate.'
 
 # Options for 'optimize'
 complete -c assignee -n "__fish_seen_subcommand_from optimize" -l region -r -d 'AWS region to scan (defaults to AWS_REGION env var)'
@@ -88,7 +90,7 @@ complete -c assignee -n "__fish_seen_subcommand_from status" -l include-structur
 # Options for 'clean'
 complete -c assignee -n "__fish_seen_subcommand_from clean" -l dry-run -d 'Preview cleanup without making changes (default)'
 complete -c assignee -n "__fish_seen_subcommand_from clean" -l confirm -d 'Execute cleanup (default is dry-run preview)'
-complete -c assignee -n "__fish_seen_subcommand_from clean" -l yes -d 'Alias for --confirm (CI-friendly)'
+complete -c assignee -n "__fish_seen_subcommand_from clean" -l yes -s y -d 'Alias for --confirm (CI-friendly, canonical)'
 complete -c assignee -n "__fish_seen_subcommand_from clean" -l checkpoints -d 'Only clean checkpoint files'
 complete -c assignee -n "__fish_seen_subcommand_from clean" -l cache -d 'Only clean price cache'
 complete -c assignee -n "__fish_seen_subcommand_from clean" -l memory -d 'Only rotate memory files'
@@ -101,6 +103,7 @@ complete -c assignee -n "__fish_seen_subcommand_from clean" -l json -d 'Output r
 complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l resource -r -d 'Filter by resource type'
 complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l dry-run -d 'Show what would be reconciled without making changes'
 complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l auto-reconcile -d 'Reconcile all drifted resources without prompting'
+complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l yes -s y -d 'Non-interactive mode — reconcile every drifted resource without prompting (alias for --auto-reconcile; canonical CI flag)'
 
 # Options for 'doctor'
 complete -c assignee -n "__fish_seen_subcommand_from doctor" -l json -d 'Emit the report as JSON instead of formatted text'

@@ -42,7 +42,8 @@ _assignee() {
             '--no-apply[Skip the apply prompt after plan display]' \
             '--no-advice[Skip inline contextual advice generation]' \
             '--source[Path to local files to upload after provisioning (e.g., static site)]:path:' \
-            '--set[Pre-set field values, supports human names (e.g., --set size=t3.medium)]:key=value...:'
+            '--set[Pre-set field values, supports human names (e.g., --set size=t3.medium)]:key=value...:' \
+            '--yes[Accepted for CI wrapper compatibility; plan is read-only and does not mutate.]'
           ;;
         apply)
           _arguments \
@@ -77,7 +78,8 @@ _assignee() {
             '--output[Write JSON report to file (requires --json)]:file:' \
             '--concurrency[Max parallel drift checks (default 10, max 50)]:n:' \
             '--no-color[Disable color output]' \
-            '--verbose[Show all fields including matching ones]'
+            '--verbose[Show all fields including matching ones]' \
+            '--yes[Accepted for CI wrapper compatibility; drift is read-only and does not mutate.]'
           ;;
         optimize)
           _arguments \
@@ -113,7 +115,7 @@ _assignee() {
           _arguments \
             '--dry-run[Preview cleanup without making changes (default)]' \
             '--confirm[Execute cleanup (default is dry-run preview)]' \
-            '--yes[Alias for --confirm (CI-friendly)]' \
+            '--yes[Alias for --confirm (CI-friendly, canonical)]' \
             '--checkpoints[Only clean checkpoint files]' \
             '--cache[Only clean price cache]' \
             '--memory[Only rotate memory files]' \
@@ -126,7 +128,8 @@ _assignee() {
           _arguments \
             '--resource[Filter by resource type]:type:' \
             '--dry-run[Show what would be reconciled without making changes]' \
-            '--auto-reconcile[Reconcile all drifted resources without prompting]'
+            '--auto-reconcile[Reconcile all drifted resources without prompting]' \
+            '--yes[Non-interactive mode — reconcile every drifted resource without prompting (alias for --auto-reconcile; canonical CI flag)]'
           ;;
         cache)
           ;;

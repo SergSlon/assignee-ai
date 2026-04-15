@@ -10,7 +10,7 @@ The best practices pipeline runs as three nodes in the 13-node LangGraph graph:
 plan_generator -> bp_evaluator -> auto_fix_applier -> preflight_guard
 ```
 
-1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **185 rules** covering 22 service directories across security, cost, reliability, performance, and compliance categories. Completes in <10ms for all rules.
+1. **bp_evaluator**: Loads all YAML rules from `packages/best-practices/`, matches them by resource type and triggers, then evaluates each rule's `check_type` against the plan's `desiredState`. Produces a list of `BPFinding` objects. The library contains **186 BP rule YAML files** on disk (of which 185 are tracked in `manifest.json` — the 1-file gap is a recent addition not yet re-manifested) covering 22 service directories across security, cost, reliability, performance, and compliance categories. Completes in <10ms for all rules.
 
 2. **auto_fix_applier**: For findings with `fixType: auto`, patches the `desiredState` directly using `desiredStatePatch`. For findings with `fixType: interactive`, prompts the user with choices. Respects the `preferences.auto_fix` config setting (`ask` / `apply` / `skip`).
 
@@ -194,7 +194,7 @@ AWS::RDS::DBInstance                          10        6           1      3    
 AWS::ECS::Service                              9        5           1      3    2026-03-22
 ...
 
-Summary: 185 rules | 40 auto-fixable (22%) | 13 interactive | 132 manual
+Summary: 186 rules (185 manifest-tracked + 1 pending re-manifest) | 40 auto-fixable (22%) | 13 interactive | 132 manual
 ```
 
 ## Excluding Rules

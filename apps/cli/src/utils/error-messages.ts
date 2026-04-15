@@ -44,6 +44,82 @@ export interface ErrorMessageEntry {
   docLink?: string;
 }
 
+/**
+ * Live operational context available when an error is being rendered.
+ * Fields left undefined are rendered as empty strings so old tests
+ * (which call `resolve(err)` with no context) continue to pass — the
+ * interpolation is a no-op on absent tokens.
+ *
+ * See R2-C "N5" / P1-R2-4: error messages were 100% generic — users
+ * could not tell which account / region / profile the error came from.
+ */
+export interface ErrorResolveContext {
+  /** Resolved AWS region (e.g. us-east-1). Usually `process.env.AWS_REGION`. */
+  region?: string;
+  /** 12-digit AWS account ID, if detected via STS GetCallerIdentity. */
+  account?: string;
+  /** Named profile in use, if AWS_PROFILE is set. */
+  profile?: string;
+  /** ARN the error relates to, when the caller has resolved one. */
+  arn?: string;
+  /**
+   * True when assignee is running with ASSIGNEE_OPERATOR_* credentials
+   * (not AWS_ACCESS_KEY_ID). Some fix hints change wording depending on
+   * which credential path the user took.
+   */
+  operatorCreds?: boolean;
+}
+
+/**
+ * Interpolates `{region}` / `{account}` / `{profile}` / `{arn}` tokens
+ * in a howToFix string with live context, and optionally expands the
+ * compound `{CTX}` token into a human-friendly "Context: …" sentence
+ * when any context is available.
+ *
+ * Unknown/absent individual tokens collapse to empty string so the
+ * result never shows "{region}" to users; `{CTX}` collapses to empty
+ * string when no context is supplied — keeping legacy single-arg
+ * `resolve(error)` callsites byte-identical (preserving old tests).
+ */
+function interpolateContext(
+  template: string,
+  ctx: ErrorResolveContext | undefined,
+): string {
+  const scalar = (key: keyof ErrorResolveContext): string => {
+    if (!ctx) return "";
+    const v = ctx[key];
+    return typeof v === "string" && v.length > 0 ? v : "";
+  };
+
+  let out = template.replace(/\{(region|account|profile|arn)\}/g, (_, key) =>
+    scalar(key as keyof ErrorResolveContext),
+  );
+
+  if (out.includes("{CTX}")) {
+    const parts: string[] = [];
+    const region = scalar("region");
+    const account = scalar("account");
+    const profile = scalar("profile");
+    if (region) parts.push(`region=${region}`);
+    if (account) parts.push(`account=${account}`);
+    if (profile) parts.push(`profile=${profile}`);
+    const replacement = parts.length > 0 ? ` Context: ${parts.join(" ")}.` : "";
+    out = out.replace(/\{CTX\}/g, replacement);
+  }
+
+  return out;
+}
+
+/** Apply live-context interpolation to every context-aware field of an entry. */
+function applyContext(
+  entry: ErrorMessageEntry,
+  ctx: ErrorResolveContext | undefined,
+): ErrorMessageEntry {
+  const howToFix = interpolateContext(entry.howToFix, ctx);
+  if (howToFix === entry.howToFix) return entry;
+  return { ...entry, howToFix };
+}
+
 // ── AWS Provisioning Error Messages ──────────────────────────────────────────
 
 const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
@@ -58,7 +134,7 @@ const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "The target resource was not found in AWS.",
     why: "The resource was deleted or never created. This can happen if the plan is stale or the resource was removed outside of assignee.ai.",
     howToFix:
-      "Re-run `assignee plan` to generate a fresh plan against the current state of your AWS account.",
+      "Re-run `assignee plan` to generate a fresh plan against the current state of your AWS account.{CTX}",
   },
   [PROVISIONING_ERROR_CODES.THROTTLED]: {
     code: PROVISIONING_ERROR_CODES.THROTTLED,
@@ -99,7 +175,7 @@ const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "AWS denied access to perform this operation.",
     why: "The IAM credentials used by assignee.ai lack the required permissions for this resource type or action.",
     howToFix:
-      "Verify that the ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY credentials have the necessary IAM permissions. Run `assignee setup` to create properly scoped IAM users.",
+      "Verify that the ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY credentials have the necessary IAM permissions for this action.{CTX} Run `assignee setup` to create properly scoped IAM users.",
   },
   [AwsErrorName.INVALID_PARAMETER_VALUE]: {
     code: AwsErrorName.INVALID_PARAMETER_VALUE,
@@ -120,7 +196,7 @@ const AWS_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "The referenced AWS resource does not exist.",
     why: "A resource ARN or identifier in your plan refers to a resource that has been deleted or was never created.",
     howToFix:
-      "Verify that all referenced resources (IAM roles, VPCs, subnets, etc.) exist in your AWS account and region. Re-run `assignee plan` to refresh.",
+      "Verify that all referenced resources (IAM roles, VPCs, subnets, etc.) exist in your AWS account and region.{CTX} Re-run `assignee plan` to refresh.",
   },
   [AwsErrorName.VALIDATION_EXCEPTION]: {
     code: AwsErrorName.VALIDATION_EXCEPTION,
@@ -153,7 +229,7 @@ const CONFIG_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "AWS region is not configured.",
     why: "The AWS_REGION environment variable is missing or empty. Assignee.ai needs to know which region to provision resources in.",
     howToFix:
-      "Set the AWS_REGION environment variable:\n  export AWS_REGION=us-east-1\nOr run `assignee init` to configure your region.",
+      "Set the AWS_REGION environment variable:\n  export AWS_REGION=us-east-1\nOr run `assignee init` to configure your region.{CTX}",
   },
   INVALID_YAML: {
     code: ErrorCode.INVALID_YAML,
@@ -167,7 +243,7 @@ const CONFIG_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "No AWS credentials detected.",
     why: "Assignee.ai could not find operator credentials from ASSIGNEE_OPERATOR_* environment variables.",
     howToFix:
-      "Configure credentials via one of:\n  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n  2) Run `assignee setup` to create IAM users and credentials\nThen run `assignee init` to verify.",
+      "Configure credentials via one of:\n  1) ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY environment variables\n  2) Run `assignee setup` to create IAM users and credentials\nThen run `assignee init` to verify.{CTX}",
   },
 };
 
@@ -200,7 +276,7 @@ const LLM_ERROR_MESSAGES: Record<string, ErrorMessageEntry> = {
     what: "Cannot connect to AWS Bedrock.",
     why: "The connection to AWS Bedrock failed. This could be a network issue, incorrect region, or missing Bedrock model access.",
     howToFix:
-      "Verify that:\n  1) Your AWS_REGION supports Bedrock (e.g., us-east-1, us-west-2)\n  2) The Bedrock model is enabled in your account (check AWS Console > Bedrock > Model access)\n  3) Your IAM credentials have bedrock:InvokeModel permission",
+      "Verify that:\n  1) Your AWS_REGION supports Bedrock (e.g., us-east-1, us-west-2)\n  2) The Bedrock model is enabled in your account (check AWS Console > Bedrock > Model access)\n  3) Your IAM credentials have bedrock:InvokeModel permission{CTX}",
   },
   [ErrorCode.LLM_API_KEY_INVALID]: {
     code: ErrorCode.LLM_API_KEY_INVALID,
@@ -356,7 +432,12 @@ export class ErrorMessageRegistry {
    * structured ErrorMessageEntry. Always returns a valid entry — falls
    * back to a generic helpful message for unknown errors.
    */
-  resolve(error: unknown): ErrorMessageEntry {
+  resolve(error: unknown, context?: ErrorResolveContext): ErrorMessageEntry {
+    const entry = this.resolveRaw(error);
+    return applyContext(entry, context);
+  }
+
+  private resolveRaw(error: unknown): ErrorMessageEntry {
     if (error instanceof ProvisioningError) {
       // Try provisioning code first
       const entry = this.entries.get(error.provisioningCode);
@@ -438,7 +519,14 @@ export class ErrorMessageRegistry {
    * Resolves an errorMessage string (from graph state) into a structured
    * ErrorMessageEntry. Attempts pattern matching against known error messages.
    */
-  resolveMessage(errorMessage: string): ErrorMessageEntry {
+  resolveMessage(
+    errorMessage: string,
+    context?: ErrorResolveContext,
+  ): ErrorMessageEntry {
+    return applyContext(this.resolveMessageRaw(errorMessage), context);
+  }
+
+  private resolveMessageRaw(errorMessage: string): ErrorMessageEntry {
     // Try AWS error patterns
     const awsMatch = this.matchAwsErrorName(errorMessage);
     if (awsMatch) return awsMatch;

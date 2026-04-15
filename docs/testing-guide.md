@@ -142,13 +142,13 @@ node apps/mcp-server/e2e-test.mjs --smoke
 | destroy  | CloudControl + pre-delete hooks            | Resource deleted, dependencies handled      |
 | verify   | Confirm resource absent                    | Tagging API de-index or AWS API state check |
 
-### Resource types (36 first-class CCAPI types, 0 SDK-routable)
+### Resource types (37 first-class CCAPI types, 0 SDK-routable)
 
-All 36 supported resource types flow through the CloudControl API. There are no remaining SDK write paths. See [docs/resource-types.md](resource-types.md) for the full list including the recently added EFS (FileSystem + MountTarget), EventBridge (Rule, EventBus, Connection, ApiDestination), KMS Key, CloudFront (Distribution + OriginAccessControl), S3 BucketPolicy, and SNS Subscription. 9 compound patterns are exercised end-to-end (VPC, lambda-with-exec-role, efs-with-vpc, static-website, scheduled-lambda, serverless-api, message-processing, container-service, three-tier-web).
+All 37 supported resource types flow through the CloudControl API (35 with dedicated plugins + 2 compound-only types — `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation` — that share the generic fallback plugin). There are no remaining SDK write paths. See [docs/resource-types.md](resource-types.md) for the full list including the recently added EFS (FileSystem + MountTarget), EventBridge (Rule, EventBus, Connection, ApiDestination), KMS Key, CloudFront (Distribution + OriginAccessControl), S3 BucketPolicy, and SNS Subscription. 9 compound patterns are exercised end-to-end (VPC, lambda-with-exec-role, efs-with-vpc, static-website, scheduled-lambda, serverless-api, message-processing, container-service, three-tier-web).
 
 ### Cost
 
-Most resources are free-tier or cost <$0.01. RDS and ELB are the most expensive (~$0.10 total for a run). NatGateway allocates an EIP (free when attached, cleaned up after). Total cost per full run: **~$0.15**.
+Actual AWS costs for a full end-to-end run vary by region and pricing changes. Most resources are free-tier; RDS, ELB, and NAT Gateway are the usual cost drivers. Run `assignee cost` for live pricing before invoking the suite if cost visibility matters.
 
 ### Duration
 
@@ -289,7 +289,7 @@ node build-fixture-ts.mjs           # generates final mcp-mock-responses.ts
 | `list-managed-resources.test.ts`      | —     | MCP list-managed-resources tool handler                                              |
 | `estimate-cost.test.ts` (MCP)         | —     | MCP estimate-cost tool handler                                                       |
 | Plugin tests (core)                   | ~100+ | S3, EC2, RDS, Lambda, generic plugin config hints                                    |
-| `bp-all-rules-audit.test.ts`          | 266   | All 185 BP rules fire correctly                                                      |
+| `bp-all-rules-audit.test.ts`          | 266   | All 186 BP rules fire correctly (185 manifest-tracked + 1 pending re-manifest)       |
 | `bp-auto-fix-audit.test.ts`           | 55    | All 27 auto-fixable rules verified end-to-end                                        |
 | `compound-provisioning-audit.test.ts` | 69    | All 9 compound patterns through dispatcher+provisioner                               |
 | `compound-failure-injector.test.ts`   | 12    | Failure-injection harness: in-memory port, tracker, synthetic error at index N       |
@@ -424,62 +424,62 @@ The following mechanisms were added to improve E2E reliability and isolation:
 
 Run all tests and mark pass/fail:
 
-| #   | Test                                                                    | Result |
-| --- | ----------------------------------------------------------------------- | ------ |
-| 1   | `plan` renders box in <3s                                               | ⬜     |
-| 2   | `apply` + approve → S3 bucket created with 3 tags                       | ⬜     |
-| 3   | `apply` + decline → exits 0, no resource                                | ⬜     |
-| 4   | State Guard — second apply aborts with "Stale Plan"                     | ⬜     |
-| 5   | Unsupported type → actionable error with all 15 supported types         | ⬜     |
-| 6   | SSM Parameter provisioning                                              | ⬜     |
-| 7   | IAM Role provisioning, cost shows Free                                  | ⬜     |
-| 8   | Non-TTY / pipe → no ANSI codes                                          | ⬜     |
-| 9   | S3 option elicitation — prompts for BucketName, encryption, versioning  | ⬜     |
-| 10  | EC2 option elicitation — InstanceType enum with live $/hr prices        | ⬜     |
-| 11  | RDS option elicitation — DBInstanceClass enum with live $/hr prices     | ⬜     |
-| 12  | Option elicitation — CI mode (non-TTY) skips all prompts                | ⬜     |
-| 13  | Compound plan — `create a serverless api` shows IAM Role plan box       | ⬜     |
-| 14  | Compound apply — `deploy a static website` → S3 + compound success box  | ⬜     |
-| 15  | Compound apply — message processing → partial failure + cleanup warning | ⬜     |
-| 16  | Compound apply — full success (5 resources) with valid Lambda zip       | ⬜     |
-| 17  | Prompt injection — null bytes, `${`, unicode overrides stripped safely  | ⬜     |
-| 18  | Credential fail-fast — invalid creds error in <5s                       | ⬜     |
-| 19  | Lambda Function single-resource plan with elicitation                   | ⬜     |
-| 20  | DynamoDB Table single-resource plan                                     | ⬜     |
-| 21  | Pattern detection logged — no Bedrock call for compound intents         | ⬜     |
-| 22  | `assignee list` — shows managed resources                               | ⬜     |
-| 23  | `assignee destroy` — safe teardown with "yes" confirmation              | ⬜     |
-| 24  | `assignee status` — summary with cost totals                            | ⬜     |
-| 25  | `assignee init` — project setup                                         | ⬜     |
-| 26  | `assignee plan --no-wizard` — non-interactive plan                      | ⬜     |
-| 27  | `assignee apply --yes --checkpoint` — CI mode auto-confirm              | ⬜     |
-| 28  | Best practices findings in plan output                                  | ⬜     |
-| 29  | Memory hints ("Previous provision: $X/month") in plan output            | ⬜     |
-| 30  | Static Website Deploy — S3 + CloudFront + file upload via `--source`    | ⬜     |
-| 31  | Bulk Destroy — `destroy --all` with tier ordering and IAM exclusion     | ⬜     |
-| 32  | Clean Resources — `clean --resources` removes e2e/test leftovers        | ⬜     |
-| 33  | VPC Networking pattern — 17 resources, dependency ordering, NAT+EIP     | ⬜     |
-| 34  | SQS Queue plan — encryption + DLQ best practices                        | ⬜     |
-| 35  | SNS Topic plan — KMS encryption best practice                           | ⬜     |
-| 36  | DynamoDB Table plan — key schema, PITR, deletion protection             | ⬜     |
-| 37  | EC2 Instance plan — instance type, pricing breakdown, IMDSv2            | ⬜     |
-| 38  | RDS DBInstance plan — engine selection, encryption, Multi-AZ            | ⬜     |
-| 39  | ECS Cluster plan — free cost estimate                                   | ⬜     |
-| 40  | ECR Repository plan — image scanning, tag immutability                  | ⬜     |
-| 41  | Lambda Function plan — runtime, memory, DLQ, arm64                      | ⬜     |
-| 42  | CloudWatch Alarm plan — metric, threshold, alarm actions                | ⬜     |
-| 43  | SecretsManager Secret plan — KMS, rotation schedule                     | ⬜     |
-| 44  | ApiGatewayV2 API plan — access logging, CORS, authorization             | ⬜     |
-| 45  | Logs LogGroup plan — retention auto-fix, KMS encryption                 | ⬜     |
-| 46  | SecurityGroup plan — SSH restriction, ingress rules                     | ⬜     |
-| 47  | VPC plan (single) — CIDR, DNS hostnames, flow logs                      | ⬜     |
-| 48  | Static website --source — S3 + CloudFront + file upload E2E             | ⬜     |
-| 49  | --source single S3 — no CloudFront, public-read policy                  | ⬜     |
-| 50  | Container Service pattern — ECR + ECS + IAM                             | ⬜     |
-| 51  | Three-Tier Web pattern — EC2 + RDS + SecurityGroup                      | ⬜     |
-| 52  | Drift detection — detect + reconcile flow                               | ⬜     |
-| 53  | SDK Fallback types — EventSourceMapping, SNS Subscription               | ⬜     |
-| 54  | Bulk destroy all types — create, list, dry-run, destroy, verify         | ⬜     |
+| #   | Test                                                                                         | Result |
+| --- | -------------------------------------------------------------------------------------------- | ------ |
+| 1   | `plan` renders box in <3s                                                                    | ⬜     |
+| 2   | `apply` + approve → S3 bucket created with 3 tags                                            | ⬜     |
+| 3   | `apply` + decline → exits 0, no resource                                                     | ⬜     |
+| 4   | State Guard — second apply aborts with "Stale Plan"                                          | ⬜     |
+| 5   | Unsupported type → actionable error with all 15 supported types                              | ⬜     |
+| 6   | SSM Parameter provisioning                                                                   | ⬜     |
+| 7   | IAM Role provisioning, cost shows Free                                                       | ⬜     |
+| 8   | Non-TTY / pipe → no ANSI codes                                                               | ⬜     |
+| 9   | S3 option elicitation — prompts for BucketName, encryption, versioning                       | ⬜     |
+| 10  | EC2 option elicitation — InstanceType enum with live per-hour prices from the Pricing MCP    | ⬜     |
+| 11  | RDS option elicitation — DBInstanceClass enum with live per-hour prices from the Pricing MCP | ⬜     |
+| 12  | Option elicitation — CI mode (non-TTY) skips all prompts                                     | ⬜     |
+| 13  | Compound plan — `create a serverless api` shows IAM Role plan box                            | ⬜     |
+| 14  | Compound apply — `deploy a static website` → S3 + compound success box                       | ⬜     |
+| 15  | Compound apply — message processing → partial failure + cleanup warning                      | ⬜     |
+| 16  | Compound apply — full success (5 resources) with valid Lambda zip                            | ⬜     |
+| 17  | Prompt injection — null bytes, `${`, unicode overrides stripped safely                       | ⬜     |
+| 18  | Credential fail-fast — invalid creds error in <5s                                            | ⬜     |
+| 19  | Lambda Function single-resource plan with elicitation                                        | ⬜     |
+| 20  | DynamoDB Table single-resource plan                                                          | ⬜     |
+| 21  | Pattern detection logged — no Bedrock call for compound intents                              | ⬜     |
+| 22  | `assignee list` — shows managed resources                                                    | ⬜     |
+| 23  | `assignee destroy` — safe teardown with "yes" confirmation                                   | ⬜     |
+| 24  | `assignee status` — summary with cost totals                                                 | ⬜     |
+| 25  | `assignee init` — project setup                                                              | ⬜     |
+| 26  | `assignee plan --no-wizard` — non-interactive plan                                           | ⬜     |
+| 27  | `assignee apply --yes --checkpoint` — CI mode auto-confirm                                   | ⬜     |
+| 28  | Best practices findings in plan output                                                       | ⬜     |
+| 29  | Memory hints ("Previous provision: <live monthly cost from Pricing MCP>") in plan output     | ⬜     |
+| 30  | Static Website Deploy — S3 + CloudFront + file upload via `--source`                         | ⬜     |
+| 31  | Bulk Destroy — `destroy --all` with tier ordering and IAM exclusion                          | ⬜     |
+| 32  | Clean Resources — `clean --resources` removes e2e/test leftovers                             | ⬜     |
+| 33  | VPC Networking pattern — 17 resources, dependency ordering, NAT+EIP                          | ⬜     |
+| 34  | SQS Queue plan — encryption + DLQ best practices                                             | ⬜     |
+| 35  | SNS Topic plan — KMS encryption best practice                                                | ⬜     |
+| 36  | DynamoDB Table plan — key schema, PITR, deletion protection                                  | ⬜     |
+| 37  | EC2 Instance plan — instance type, pricing breakdown, IMDSv2                                 | ⬜     |
+| 38  | RDS DBInstance plan — engine selection, encryption, Multi-AZ                                 | ⬜     |
+| 39  | ECS Cluster plan — free cost estimate                                                        | ⬜     |
+| 40  | ECR Repository plan — image scanning, tag immutability                                       | ⬜     |
+| 41  | Lambda Function plan — runtime, memory, DLQ, arm64                                           | ⬜     |
+| 42  | CloudWatch Alarm plan — metric, threshold, alarm actions                                     | ⬜     |
+| 43  | SecretsManager Secret plan — KMS, rotation schedule                                          | ⬜     |
+| 44  | ApiGatewayV2 API plan — access logging, CORS, authorization                                  | ⬜     |
+| 45  | Logs LogGroup plan — retention auto-fix, KMS encryption                                      | ⬜     |
+| 46  | SecurityGroup plan — SSH restriction, ingress rules                                          | ⬜     |
+| 47  | VPC plan (single) — CIDR, DNS hostnames, flow logs                                           | ⬜     |
+| 48  | Static website --source — S3 + CloudFront + file upload E2E                                  | ⬜     |
+| 49  | --source single S3 — no CloudFront, public-read policy                                       | ⬜     |
+| 50  | Container Service pattern — ECR + ECS + IAM                                                  | ⬜     |
+| 51  | Three-Tier Web pattern — EC2 + RDS + SecurityGroup                                           | ⬜     |
+| 52  | Drift detection — detect + reconcile flow                                                    | ⬜     |
+| 53  | SDK Fallback types — EventSourceMapping, SNS Subscription                                    | ⬜     |
+| 54  | Bulk destroy all types — create, list, dry-run, destroy, verify                              | ⬜     |
 
 Tests 1–8 passing = Core demo-ready.
 Tests 9–12 passing = Option elicitation (Story 7.3) verified.

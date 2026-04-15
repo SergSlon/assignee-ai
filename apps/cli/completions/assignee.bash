@@ -18,7 +18,7 @@ _assignee_completions() {
   local command="${COMP_WORDS[1]}"
   case "${command}" in
     plan)
-      COMPREPLY=( $(compgen -W "--output --no-apply --no-advice --source --set" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--output --no-apply --no-advice --source --set --yes" -- "${cur}") )
       ;;
     apply)
       COMPREPLY=( $(compgen -W "--wizard --no-advice --yes --checkpoint --source --set" -- "${cur}") )
@@ -33,7 +33,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--yes --all --include-iam --dry-run" -- "${cur}") )
       ;;
     drift)
-      COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --json --output --concurrency --no-color --verbose" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --json --output --concurrency --no-color --verbose --yes" -- "${cur}") )
       ;;
     optimize)
       COMPREPLY=( $(compgen -W "--region --json --reconcile --min-savings --no-color" -- "${cur}") )
@@ -51,7 +51,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--dry-run --confirm --yes --checkpoints --cache --memory --resources --logs --baselines --json" -- "${cur}") )
       ;;
     reconcile)
-      COMPREPLY=( $(compgen -W "--resource --dry-run --auto-reconcile" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--resource --dry-run --auto-reconcile --yes" -- "${cur}") )
       ;;
     cache)
       COMPREPLY=( $(compgen -W "" -- "${cur}") )

@@ -35,6 +35,61 @@ import { resolveConfigPath } from "../config/user-config-loader.js";
 import { UserMessage, CHECKPOINT_DIR, FileName } from "../config/constants.js";
 
 /**
+ * Best-effort resolve of account + region + profile for the clack.intro
+ * banner. STS is called with a short timeout; any failure (no creds,
+ * network, throttling) collapses to region/profile-only output so a
+ * mutating command's first line still tells the operator WHICH account
+ * they're about to touch.
+ *
+ * @see R2-C N5 / P2-R2-4
+ */
+export async function resolveIntroContext(): Promise<{
+  region: string;
+  account?: string;
+  profile?: string;
+}> {
+  const region =
+    process.env["AWS_REGION"] ??
+    process.env["AWS_DEFAULT_REGION"] ??
+    DEFAULT_AWS_REGION;
+  const profile = process.env["AWS_PROFILE"];
+
+  // Lazy STS import — avoids pulling the SDK into init.ts's module graph
+  // when the user only runs `--help`.
+  try {
+    const { STSClient, GetCallerIdentityCommand } =
+      await import("@aws-sdk/client-sts");
+    const client = new STSClient({ region });
+    const timeoutMs = 2000;
+    const identity = (await Promise.race([
+      client.send(new GetCallerIdentityCommand({})),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("STS timeout")), timeoutMs),
+      ),
+    ])) as { Account?: string };
+    return {
+      region,
+      ...(identity.Account ? { account: identity.Account } : {}),
+      ...(profile ? { profile } : {}),
+    };
+  } catch {
+    return { region, ...(profile ? { profile } : {}) };
+  }
+}
+
+/** Render the standard context line for mutating commands. */
+export function formatIntroContext(ctx: {
+  region: string;
+  account?: string;
+  profile?: string;
+}): string {
+  const bits = [`region=${ctx.region}`];
+  if (ctx.account) bits.push(`account=${ctx.account}`);
+  if (ctx.profile) bits.push(`profile=${ctx.profile}`);
+  return bits.join("  ");
+}
+
+/**
  * Detect which Assignee IAM roles have credentials configured via environment.
  *
  * Delegates to `@assignee/core` (envVarsForRole) for the role → env var
@@ -256,13 +311,29 @@ export const initCommand = new Command(CommandName.INIT)
     "--global",
     "Create global user config (~/.config/assignee/config.yaml) instead of project config",
   )
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee init
+        Create a project config in ./assignee/ (interactive, asks auto-fix mode)
+  $ assignee init --global
+        Create/update ~/.config/assignee/config.yaml for the current user
+
+The wizard offers three auto-fix modes (ask / apply / skip) that persist
+to preferences.auto_fix and control how \`assignee plan\` reacts to best
+-practice findings. Re-run \`assignee init\` to change the mode later.
+`,
+  )
   .action(async (options: { global?: boolean }) => {
     const isGlobal = options.global === true;
 
+    const introCtx = await resolveIntroContext();
     clack.intro(
-      isGlobal
+      (isGlobal
         ? "Assignee.ai — Global User Config Setup"
-        : "Assignee.ai — Project Initialization",
+        : "Assignee.ai — Project Initialization") +
+        `  [${formatIntroContext(introCtx)}]`,
     );
 
     if (isGlobal) {

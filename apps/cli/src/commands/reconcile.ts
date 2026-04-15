@@ -288,12 +288,32 @@ export const reconcileCommand = new Command(CommandName.RECONCILE)
     "--auto-reconcile",
     "Reconcile all drifted resources without prompting",
   )
+  .option(
+    "-y, --yes",
+    "Non-interactive mode — reconcile every drifted resource without prompting (alias for --auto-reconcile; canonical CI flag)",
+  )
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee reconcile
+        Detect drift and prompt per-resource (interactive)
+  $ assignee reconcile --dry-run
+        Preview reconcile decisions without calling AWS
+  $ assignee reconcile --yes
+        Reconcile every drifted resource (CI-friendly, same as --auto-reconcile)
+  $ assignee reconcile --resource AWS::S3::Bucket --yes
+        Reconcile only S3 buckets, non-interactive
+`,
+  )
   .action(
     async (opts: {
       resource?: string;
       dryRun?: boolean;
       autoReconcile?: boolean;
+      yes?: boolean;
     }) => {
+      if (opts.yes) opts.autoReconcile = true;
       const memory = new MemoryService();
       const provisions = await memory.readProvisions();
 

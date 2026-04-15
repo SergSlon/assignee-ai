@@ -38,6 +38,7 @@ import {
 
 import { closeMcpClient } from "./services/mcp-client.js";
 import { bootstrapFirstRun } from "./utils/first-run.js";
+import { stopSpinner } from "./utils/display.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -133,16 +134,53 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
   if (err.code === "EPIPE") process.exit(ProcessExitCode.SUCCESS);
 });
 
-// Graceful shutdown handlers for MCP servers
-process.on("SIGINT", async () => {
-  await closeMcpClient();
-  process.exit(128 + 2); // SIGINT = 130
-});
-
-process.on("SIGTERM", async () => {
-  await closeMcpClient();
-  process.exit(128 + 15); // SIGTERM = 143
-});
+// Graceful shutdown handlers (P2-R2-3).
+//
+// The SIGINT handler MUST:
+//   1. Stop any active clack spinner first — otherwise the cursor stays
+//      hidden on some terminals and the label line stays partially drawn.
+//   2. Print a visible "Cancelled." marker to stderr so the user sees
+//      that their Ctrl-C was honored (prior behavior dropped silently
+//      while MCP clients closed in background).
+//   3. Close MCP child processes so no orphans remain.
+//   4. Flush stderr (async writes from the structured logger) before
+//      exiting, otherwise the last log line is lost on fast-exit.
+//   5. Exit with the conventional 128 + signum code.
+//
+// Re-entrancy: second Ctrl-C during teardown bypasses cleanup and hard
+// exits — a stuck MCP close must not trap the user.
+let shuttingDown = false;
+function installSignalHandler(signal: "SIGINT" | "SIGTERM", code: number) {
+  process.on(signal, async () => {
+    if (shuttingDown) {
+      // Second signal during teardown — abandon cleanup.
+      process.exit(code);
+    }
+    shuttingDown = true;
+    try {
+      stopSpinner();
+    } catch {
+      /* spinner may not exist — non-fatal */
+    }
+    process.stderr.write(`\nCancelled (${signal}).\n`);
+    try {
+      await closeMcpClient();
+    } catch {
+      /* child processes may already be gone */
+    }
+    // Best-effort stderr flush so structured log lines are not dropped.
+    await new Promise<void>((resolve) => {
+      if (process.stderr.writableNeedDrain) {
+        process.stderr.once("drain", () => resolve());
+      } else {
+        resolve();
+      }
+    });
+    process.exit(code);
+  });
+}
+installSignalHandler("SIGINT", 128 + 2); // 130
+installSignalHandler("SIGTERM", 128 + 15); // 143
 
 program.parseAsync(process.argv).catch((err) => {
   process.stderr.write(

@@ -46,6 +46,22 @@ export const statusCommand = new Command(CommandName.STATUS)
     "--include-structural-gaps",
     "With --gaps-only: include structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS::MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.",
   )
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee status
+        Summary of managed resources and recent runs
+  $ assignee status --json
+        Machine-readable status payload
+  $ assignee status --bp-coverage
+        Best-practice rule coverage dashboard
+  $ assignee status --bp-coverage --gaps-only
+        CI mode: exit non-zero if any resource type has zero BP rules
+
+status is read-only. No --yes required.
+`,
+  )
   .action(
     async (opts: {
       json?: boolean;

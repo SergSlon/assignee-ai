@@ -192,6 +192,24 @@ export const optimizeCommand = new Command("optimize")
     "Drop recommendations whose projected monthly savings are below this USD threshold (e.g. 10 for ≥$10/mo)",
   )
   .option("--no-color", "Disable color output")
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee optimize
+        Scan all managed resources for rightsizing opportunities
+  $ assignee optimize --region us-east-1 --min-savings 10
+        Only show recommendations projecting ≥$10/mo savings
+  $ assignee optimize <arn> --json
+        Machine-readable output for a single resource
+  $ assignee optimize --reconcile
+        Print the \`assignee plan\` commands that would implement each recommendation
+
+optimize is read-only — it prints recommendations but never mutates AWS
+state. Apply changes via \`assignee plan\` / \`assignee apply\`; no --yes
+flag is needed here.
+`,
+  )
   .action(
     async (
       resourceId: string | undefined,

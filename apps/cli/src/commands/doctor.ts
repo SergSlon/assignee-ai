@@ -1116,6 +1116,20 @@ export const doctorCommand = new Command(CommandName.DOCTOR)
     "--skip-mcp-version-check",
     "Skip the PyPI version drift check (offline / fast path)",
   )
+  .addHelpText(
+    "after",
+    `
+Examples:
+  $ assignee doctor
+        Run every pre-flight check (credentials, region, Bedrock, MCP probes)
+  $ assignee doctor --json > report.json
+        Emit a structured report (useful for CI and bug reports)
+  $ assignee doctor --skip-bedrock --skip-mcp
+        Fast offline check: credentials + config only
+
+doctor is read-only — it never mutates AWS state, so no --yes is needed.
+`,
+  )
   .action(
     async (opts: {
       json?: boolean;

@@ -4,7 +4,7 @@ YAML-defined best-practice rules for AWS resources, plus the loader, schema, eva
 
 ## What this package is
 
-A self-contained rules library with **185 rules** across 22 AWS service directories (`apigateway/`, `autoscaling/`, `cloudfront/`, `cloudwatch/`, `dynamodb/`, `ec2/`, `ecr/`, `ecs/`, `efs/`, `elbv2/`, `events/`, `iam/`, `kms/`, `lambda/`, `logs/`, `rds/`, `s3/`, `secretsmanager/`, `sns/`, `sqs/`, `ssm/`, `vpc/`). Each directory contains YAML files — one per best practice. The `src/` directory ships the tiny TypeScript runtime that loads, validates, and evaluates those files.
+A self-contained rules library with **186 BP rule YAML files** across 22 AWS service directories (185 tracked in `manifest.json` + 1 pending re-manifest) (`apigateway/`, `autoscaling/`, `cloudfront/`, `cloudwatch/`, `dynamodb/`, `ec2/`, `ecr/`, `ecs/`, `efs/`, `elbv2/`, `events/`, `iam/`, `kms/`, `lambda/`, `logs/`, `rds/`, `s3/`, `secretsmanager/`, `sns/`, `sqs/`, `ssm/`, `vpc/`). Each directory contains YAML files — one per best practice. The `src/` directory ships the tiny TypeScript runtime that loads, validates, and evaluates those files.
 
 ## Architectural role
 

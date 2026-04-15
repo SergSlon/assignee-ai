@@ -45,6 +45,7 @@ import { checkBudget } from "../services/budget-guard.js";
 import { loadUserConfig } from "../config/user-config-loader.js";
 import { loadGlobalConfig } from "../config/load-global-config.js";
 import { fetchOrgPolicy, readAuthToken } from "../config/org-policy-cache.js";
+import { resolveIntroContext, formatIntroContext } from "./init.js";
 
 export const planCommand = new Command(CommandName.PLAN)
   .description(CommandDescription.PLAN)
@@ -62,6 +63,10 @@ export const planCommand = new Command(CommandName.PLAN)
     (val: string, prev: string[]) => [...prev, val],
     [] as string[],
   )
+  .option(
+    "-y, --yes",
+    "Accepted for CI wrapper compatibility; plan is read-only and does not mutate.",
+  )
   .addHelpText(
     "after",
     `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee plan "${EXAMPLE_S3_INTENT}"\n  assignee plan "Create an EC2 t3.micro instance"\n  assignee plan "Create a Lambda function for image processing"`,
@@ -75,6 +80,7 @@ export const planCommand = new Command(CommandName.PLAN)
         source?: string;
         set?: string[];
         output?: string;
+        yes?: boolean;
       },
     ) => {
       const noApply = opts.apply === false;
@@ -129,6 +135,14 @@ export const planCommand = new Command(CommandName.PLAN)
           `Missing intent. Usage: assignee plan "${EXAMPLE_S3_INTENT}"`,
           "MISSING_INTENT",
         );
+      }
+
+      // P2-R2-4: print resolved AWS context before any mutation-capable
+      // step so the operator always sees which account/region/profile the
+      // plan will target. Suppressed in JSON mode to keep stdout clean.
+      if (outputFormat !== "json") {
+        const ctx = await resolveIntroContext();
+        process.stderr.write(`assignee plan  [${formatIntroContext(ctx)}]\n`);
       }
 
       await runCommand({

@@ -663,3 +663,57 @@ describe("assignee destroy", () => {
     });
   });
 });
+
+// ── P2-R2-5: resourceConfirmationToken edge cases ───────────────────────────
+
+describe("resourceConfirmationToken — edge cases (P2-R2-5)", () => {
+  // Lazy-import so it picks up the mocked module graph once.
+  const load = async () =>
+    (await import("./destroy.js")).resourceConfirmationToken;
+
+  it("returns the raw identifier when present (happy path)", async () => {
+    const fn = await load();
+    expect(fn({ identifier: "my-bucket", arn: "arn:aws:s3:::my-bucket" })).toBe(
+      "my-bucket",
+    );
+  });
+
+  it("preserves internal spaces in identifier (case-insensitive paste)", async () => {
+    const fn = await load();
+    expect(
+      fn({ identifier: "my bucket 1", arn: "arn:aws:s3:::my bucket 1" }),
+    ).toBe("my bucket 1");
+  });
+
+  it("strips trailing slash from identifier (CFN Export edge case)", async () => {
+    const fn = await load();
+    expect(
+      fn({
+        identifier: "my-cluster/",
+        arn: "arn:aws:ecs:us-east-1:111111111111:cluster/my-cluster",
+      }),
+    ).toBe("my-cluster");
+  });
+
+  it("falls back to ARN tail when identifier is pure whitespace", async () => {
+    const fn = await load();
+    expect(
+      fn({
+        identifier: "   ",
+        arn: "arn:aws:s3:::my-bucket",
+      }),
+    ).toBe("my-bucket");
+  });
+
+  it("falls back to full ARN when identifier and tail both collapse to empty", async () => {
+    const fn = await load();
+    const arn = "arn:aws:s3:::my-bucket/";
+    // identifier "   /" trims to empty; ARN tail pops to "" (because ARN ends in "/")
+    expect(fn({ identifier: "   /", arn })).toBe(arn);
+  });
+
+  it("handles ARN-only input (no identifier) by using ARN tail", async () => {
+    const fn = await load();
+    expect(fn({ arn: "arn:aws:iam::111111111111:role/MyRole" })).toBe("MyRole");
+  });
+});
