@@ -45,3 +45,14 @@ apps/cli/scripts/processed-responses/
 
 # Recording session output (transient, not committed)
 apps/cli/src/test-fixtures/recordings/
+
+# Agent-session artifacts — handoff notes, per-epic expert review reports.
+# These are point-in-time snapshots that become stale fast; keeping them in
+# the repo creates noise for clones and tempts new contributors to read
+# obsolete findings instead of current code / commit messages.
+.agents/
+
+# Local Claude Code project state — auto-memory, session context, personal
+# operating preferences. Normally lives at ~/.claude/projects/... but stray
+# copies have landed in this tree. Never belongs in a shared repo.
+.claude/
