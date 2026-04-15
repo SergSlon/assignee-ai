@@ -10,14 +10,14 @@ assignee status
 assignee destroy my-bucket
 assignee init
 assignee completions
+assignee doctor
 ```
+
+See [`docs/commands.md`](docs/commands.md) for the full reference of all 17 commands (plus `assignee version`).
 
 Also available as an [MCP server](#mcp-server) for AI coding agents (Claude Code, Cursor, Windsurf).
 
-[![CI](https://github.com/SergSlon/assignee-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/SergSlon/assignee-ai/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/SergSlon/f9d960dd5a1defd7b8fbd4656df40915/raw/assignee-ai-coverage.json)](https://github.com/SergSlon/assignee-ai/actions)
-
-> **Note:** Both packages (`@assignee/cli` and `@assignee/mcp-server`) are `private: true` and not yet published to npm.
+> **Note:** Both packages (`@assignee/cli` and `@assignee/mcp-server`) are `private: true` and not yet published to npm. Public CI and coverage badges are intentionally omitted until the project is released — see the internal pipeline for live status.
 
 ---
 
@@ -48,7 +48,7 @@ intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
 | `status_poller`        | Polls CloudControl until terminal state (SUCCESS / FAILED). Extended timeouts for RDS, ELBv2, NAT Gateway                     |
 | `result_formatter`     | Renders success/failure output, writes provision records to memory, runs post-provision security checks                       |
 
-12 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order.
+13 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order. Source of truth: `apps/cli/src/services/graph.ts` (`.addNode` calls) and the 13 `*.ts` sources under `apps/cli/src/nodes/`.
 
 All AI calls stay local — no AWS credentials ever leave your machine.
 
@@ -56,19 +56,26 @@ All AI calls stay local — no AWS credentials ever leave your machine.
 
 ## Commands
 
-| Command                        | Description                                    | Key flags                                                          |
-| :----------------------------- | :--------------------------------------------- | :----------------------------------------------------------------- |
-| `assignee plan <intent>`       | Generate infrastructure plan                   | `--source`, `-o json\|text`, `--no-apply`, `--no-advice`, `--set`  |
-| `assignee apply <intent>`      | Plan + provision with HITL approval            | `--source`, `--yes`, `--wizard`, `--checkpoint`, `--set`           |
-| `assignee init`                | Initialize `.assignee/` project directory      | `--global`                                                         |
-| `assignee list`                | Show managed resources with cost               | `--region`, `--json`                                               |
-| `assignee destroy <resource>`  | Safe teardown with confirmation                | `--yes`, `--all`, `--include-iam`, `--dry-run`                     |
-| `assignee drift [resource-id]` | Check resources for configuration drift        | `--resource`, `--region`, `--status`, `--json`, `--concurrency`    |
-| `assignee reconcile`           | Reconcile drifted resources to desired state   | `--resource`, `--dry-run`, `--auto-reconcile`                      |
-| `assignee clean`               | Remove stale checkpoints, cache, memory        | `--resources`, `--checkpoints`, `--cache`, `--memory`, `--confirm` |
-| `assignee status`              | Intelligence summary (memory, findings, costs) | `--json`, `--region`, `--bp-coverage`                              |
-| `assignee setup`               | Automate IAM role/policy creation              | `--profile`, `--yes`                                               |
-| `assignee completions <shell>` | Generate shell completions (bash/zsh/fish)     | —                                                                  |
+| Command                        | Description                                     | Key flags                                                           |
+| :----------------------------- | :---------------------------------------------- | :------------------------------------------------------------------ |
+| `assignee plan <intent>`       | Generate infrastructure plan                    | `--source`, `-o json\|text`, `--no-apply`, `--no-advice`, `--set`   |
+| `assignee apply <intent>`      | Plan + provision with HITL approval             | `--source`, `--yes`, `--wizard`, `--checkpoint`, `--set`            |
+| `assignee init`                | Initialize `.assignee/` project directory       | `--global`                                                          |
+| `assignee list`                | Show managed resources with cost                | `--region`, `--json`                                                |
+| `assignee destroy <resource>`  | Safe teardown with confirmation                 | `--yes`, `--all`, `--include-iam`, `--dry-run`                      |
+| `assignee drift [resource-id]` | Check resources for configuration drift         | `--resource`, `--region`, `--status`, `--json`, `--concurrency`     |
+| `assignee reconcile`           | Reconcile drifted resources to desired state    | `--resource`, `--dry-run`, `--auto-reconcile`                       |
+| `assignee clean`               | Remove stale checkpoints, cache, memory         | `--resources`, `--checkpoints`, `--cache`, `--memory`, `--confirm`  |
+| `assignee status`              | Intelligence summary (memory, findings, costs)  | `--json`, `--region`, `--bp-coverage`                               |
+| `assignee setup`               | Automate IAM role/policy creation               | `--profile`, `--yes`                                                |
+| `assignee completions <shell>` | Generate shell completions (bash/zsh/fish)      | —                                                                   |
+| `assignee optimize`            | Cost-optimization recommendations per resource  | `--resource`, `--region`, `--json`, `--apply`                       |
+| `assignee doctor`              | Diagnose local environment (Node, creds, MCP)   | `--json`, `--fix`                                                   |
+| `assignee cache <subcommand>`  | Manage CloudFormation schema cache              | `clear`, `refresh`                                                  |
+| `assignee whoami`              | Show active IAM identity + region + profile     | `--json`                                                            |
+| `assignee patterns [subcmd]`   | List/show/detect compound architecture patterns | `list`, `show <patternId>`, `detect <intent>`, `--json`, `--search` |
+| `assignee types [subcmd]`      | List supported resource types with BP coverage  | `list`, `show <type>`, `--json`                                     |
+| `assignee version`             | Print version + Node/platform + MCP server pins | —                                                                   |
 
 ---
 

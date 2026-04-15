@@ -4,7 +4,7 @@ Expose assignee.ai as [Model Context Protocol](https://modelcontextprotocol.io/)
 
 ## What This Does
 
-The MCP server wraps the same 12-node LangGraph pipeline that powers the CLI into 5 MCP tools. Any MCP-compatible client (Cursor, Claude Code, Windsurf, etc.) can call these tools to manage AWS resources without leaving the editor.
+The MCP server wraps the same 13-node LangGraph pipeline that powers the CLI into 5 MCP tools. Any MCP-compatible client (Cursor, Claude Code, Windsurf, etc.) can call these tools to manage AWS resources without leaving the editor.
 
 ## Prerequisites
 

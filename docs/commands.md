@@ -52,7 +52,7 @@ assignee plan [intent] [options]
 
 **Behavior:**
 
-- Runs the 12-node pipeline in plan mode (stops before provisioning)
+- Runs the 13-node pipeline in plan mode (stops before provisioning)
 - Saves a checkpoint to `.assignee/checkpoint-<runId>.json` (valid 72h)
 - `-o json` outputs structured JSON to stdout (suppresses spinners, prompts, and the "Apply now?" prompt)
 - If preflight passes and `--no-apply` is not set, prompts "Apply now?"

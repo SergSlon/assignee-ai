@@ -43,6 +43,10 @@ describe("BP hint accuracy — invariants", () => {
     expect(awareness.length).toBeGreaterThan(0);
   });
 
+  // The invariant is a floor (`> 20`), not an exact count. Exit the matrix
+  // walk as soon as we clear the threshold — a regression that drops the
+  // count below 21 would still be caught, but we no longer spend ~1 min
+  // under coverage instrumentation walking every remaining plugin.
   it("injectBPHints actually injects hints into at least one field per plugin", () => {
     // Failsafe: if a regression made injectBPHints a no-op, the per-plugin
     // "no awareness" and "matched property_path" tests would all silently
@@ -51,8 +55,9 @@ describe("BP hint accuracy — invariants", () => {
     // floor — picking a number that's well below today's count but well
     // above zero so it catches regressions without flapping on minor BP
     // catalog edits.
+    const THRESHOLD = 20;
     let totalInjected = 0;
-    for (const plugin of ALL_PLUGINS) {
+    outer: for (const plugin of ALL_PLUGINS) {
       const hintedCommon = injectBPHints(
         plugin.commonFields,
         plugin.resourceType,
@@ -75,6 +80,7 @@ describe("BP hint accuracy — invariants", () => {
           f.question.hint.includes(BP_HINT_MARKER)
         ) {
           totalInjected++;
+          if (totalInjected > THRESHOLD) break outer;
         }
       }
     }
@@ -85,6 +91,31 @@ describe("BP hint accuracy — invariants", () => {
   });
 });
 
+// Memoize `injectBPHints` output per plugin — the matrix below runs two tests
+// per plugin, both of which called injectBPHints independently. Under coverage
+// instrumentation that doubled wall time and triggered vitest RPC worker
+// timeouts. Compute once at module load; reuse across tests.
+const HINTED_BY_PLUGIN = new Map<
+  string,
+  {
+    hintedCommon: ReturnType<typeof injectBPHints>;
+    hintedAdvanced: ReturnType<typeof injectBPHints>;
+    hintedAll: ReturnType<typeof injectBPHints>;
+  }
+>();
+for (const plugin of ALL_PLUGINS) {
+  const hintedCommon = injectBPHints(plugin.commonFields, plugin.resourceType);
+  const hintedAdvanced = injectBPHints(
+    plugin.advancedFields,
+    plugin.resourceType,
+  );
+  HINTED_BY_PLUGIN.set(plugin.resourceType, {
+    hintedCommon,
+    hintedAdvanced,
+    hintedAll: [...hintedCommon, ...hintedAdvanced],
+  });
+}
+
 describe.each(ALL_PLUGINS.map((p) => [p.resourceType, p] as const))(
   "BP hints — %s",
   (_resourceType, plugin) => {
@@ -92,17 +123,10 @@ describe.each(ALL_PLUGINS.map((p) => [p.resourceType, p] as const))(
     const relevantBPs = ALL_BPS.filter(
       (bp) => bp.resource_type === plugin.resourceType,
     );
+    const memo = HINTED_BY_PLUGIN.get(plugin.resourceType)!;
 
     it("never injects an awareness BP as a field hint", () => {
-      const hintedCommon = injectBPHints(
-        plugin.commonFields,
-        plugin.resourceType,
-      );
-      const hintedAdvanced = injectBPHints(
-        plugin.advancedFields,
-        plugin.resourceType,
-      );
-      const hintedAll = [...hintedCommon, ...hintedAdvanced];
+      const hintedAll = memo.hintedAll;
 
       const awarenessBPs = relevantBPs.filter(
         (bp) => bp.check_type === "awareness",
@@ -123,15 +147,7 @@ describe.each(ALL_PLUGINS.map((p) => [p.resourceType, p] as const))(
     });
 
     it("every BP-sourced hint matches a BP whose property_path contains the field name", () => {
-      const hintedCommon = injectBPHints(
-        plugin.commonFields,
-        plugin.resourceType,
-      );
-      const hintedAdvanced = injectBPHints(
-        plugin.advancedFields,
-        plugin.resourceType,
-      );
-      const hintedAll = [...hintedCommon, ...hintedAdvanced];
+      const hintedAll = memo.hintedAll;
 
       // Build (originalField → hintedField) so we can detect *new* hints
       // injected by injectBPHints (vs hints that were already present).

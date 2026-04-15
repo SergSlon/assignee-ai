@@ -550,7 +550,7 @@ flowchart TD
     WIND --> MCP_SERVER
 
     subgraph INTERNAL["Internal: Reuses CLI Graph"]
-        GRAPH["LangGraph Agent<br/>(same 12 nodes)"]
+        GRAPH["LangGraph Agent<br/>(same 13 nodes)"]
         MCPS["Core MCP Servers<br/>(cfn, pricing, docs, knowledge)"]
         AWS["AWS CloudControl<br/>+ SDK fallbacks"]
     end
