@@ -17,10 +17,12 @@ import {
   HELP_SENTINEL,
   SKIP_SENTINEL,
   ENTER_VALUE_SENTINEL,
+  REVIEW_SENTINEL,
 } from "./sentinels.js";
 
 async function runActionMenu(
   field: ResourceField,
+  hasAnswers: boolean,
 ): Promise<string | symbol | undefined> {
   const actionOptions: Array<{ value: string; label: string }> = [
     { value: ENTER_VALUE_SENTINEL, label: "Enter value" },
@@ -28,11 +30,17 @@ async function runActionMenu(
       value: BACK_SENTINEL,
       label: "\u2190 Back \u2014 return to previous field",
     },
-    {
-      value: HELP_SENTINEL,
-      label: "\u2753 ? \u2014 explain this field",
-    },
   ];
+  if (hasAnswers) {
+    actionOptions.push({
+      value: REVIEW_SENTINEL,
+      label: "\ud83d\udccb Review answers so far",
+    });
+  }
+  actionOptions.push({
+    value: HELP_SENTINEL,
+    label: "\u2753 ? \u2014 explain this field",
+  });
   if (!field.required) {
     actionOptions.push({
       value: SKIP_SENTINEL,
@@ -58,12 +66,14 @@ export async function promptString(
   defaultValue: unknown,
   showBack: boolean,
   answers?: Record<string, unknown>,
+  hasAnswers = false,
 ): Promise<unknown> {
   const { question } = field;
 
   if (showBack) {
-    const action = await runActionMenu(field);
+    const action = await runActionMenu(field, hasAnswers);
     if (action === BACK_SENTINEL) return BACK_SENTINEL;
+    if (action === REVIEW_SENTINEL) return REVIEW_SENTINEL;
     if (action === HELP_SENTINEL) return HELP_SENTINEL;
     if (action === SKIP_SENTINEL) return undefined;
     // action === ENTER_VALUE_SENTINEL — fall through to clack.text()

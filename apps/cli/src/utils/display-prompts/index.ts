@@ -11,7 +11,9 @@ export {
   OTHER_SENTINEL,
   SKIP_SENTINEL,
   ENTER_VALUE_SENTINEL,
+  REVIEW_SENTINEL,
 } from "./sentinels.js";
+export { runReviewAnswers } from "./review-answers.js";
 export {
   renderHitlConfirm,
   renderHitlCompoundConfirm,
