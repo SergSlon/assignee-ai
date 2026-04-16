@@ -19,6 +19,13 @@ export const PRICING_TIMEOUT_MS = 3000;
 /** Timeout for post-provision security posture checks (ms). */
 export const SECURITY_CHECK_TIMEOUT_MS = 5000;
 
+/**
+ * Maximum wall-clock for any STS GetCallerIdentity call. Used by the
+ * operator-account cache (MCP) and the CLI ARN resolver + whoami flow
+ * so all three agree on the same bound (Story 49.8, M8).
+ */
+export const STS_TIMEOUT_MS = 5000;
+
 /** 24 hours in ms — used for failure record staleness checks. */
 export const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 

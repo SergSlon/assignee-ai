@@ -28,6 +28,7 @@ import {
   isThrottlingError,
 } from "@assignee/core";
 import { log, LOG_ACTIONS } from "../../../utils/logger.js";
+import { EnvVar } from "../../../constants/env-vars.js";
 import type { GuardContext, GuardResult, PreflightGuard } from "../types.js";
 import { failResult, passResult, skipResult } from "../types.js";
 
@@ -112,7 +113,7 @@ export async function verifyManagedPolicyArns(
         // ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS=1 to escalate to fail-closed.
         // MUST sit inside the else branch (after Auth / NoSuchEntity /
         // AccessDenied / Throttling) so it can never demote those signals.
-        if (process.env["ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS"] === "1") {
+        if (process.env[EnvVar.ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS] === "1") {
           return (
             `Preflight unknown error while verifying ManagedPolicyArn ${arn} ` +
             `(${errName || errCode || "unknown"}): ${errMsg}. ` +
