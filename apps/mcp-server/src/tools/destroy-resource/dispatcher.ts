@@ -16,6 +16,7 @@ import {
 import type { ResourceGroupsTaggingAPIClient } from "@aws-sdk/client-resource-groups-tagging-api";
 import {
   extractAccountIdFromArn,
+  MissingAssigneeCredentialsError,
   requireAssigneeCredentials,
   type DestroyContext,
 } from "@assignee/core";
@@ -198,7 +199,14 @@ function buildDestroyContext(
 
 /**
  * Executes the pre-destroy hook registered for a resource type, if any.
- * Non-fatal — CloudControl will surface a clearer error if the hook fails.
+ * Most hook failures are non-fatal — CloudControl will surface a clearer
+ * error afterward. But a `MissingAssigneeCredentialsError` is fatal:
+ * if operator creds are unset, IGW/RouteTable/DynamoDB pre-hooks are
+ * skipped silently and the CCAPI delete downstream fails with a
+ * cryptic "DependencyViolation" that hides the real cause. Propagate
+ * it so the tool entrypoint can abort with an actionable message.
+ *
+ * @see Epic 49 review HIGH-2 — silent credential failure in pre-hook
  */
 export async function runPreDestroyHook(
   resourceType: string,
@@ -207,8 +215,22 @@ export async function runPreDestroyHook(
 ): Promise<void> {
   const strategy = destroyRegistry.get(resourceType);
   if (!strategy?.preDestroy) return;
+  let ctx: DestroyContext;
   try {
-    const ctx = buildDestroyContext(resourceType, identifier, region);
+    ctx = buildDestroyContext(resourceType, identifier, region);
+  } catch (ctxErr: unknown) {
+    // Credential errors are operator misconfiguration — re-throw so the
+    // caller aborts the destroy with an actionable message instead of
+    // silently skipping the pre-hook and confusing CCAPI downstream.
+    if (ctxErr instanceof MissingAssigneeCredentialsError) throw ctxErr;
+    mcpLogError("destroy-resource", "pre_destroy_context_failed", {
+      resourceType,
+      identifier,
+      error: ctxErr instanceof Error ? ctxErr.message : String(ctxErr),
+    });
+    return;
+  }
+  try {
     await strategy.preDestroy(ctx);
   } catch (preErr: unknown) {
     mcpLogError("destroy-resource", "pre_destroy_hook_failed", {

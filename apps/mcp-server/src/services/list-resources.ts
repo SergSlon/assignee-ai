@@ -23,6 +23,7 @@ import {
   DEFAULT_AWS_REGION,
   loadProvisionData,
   parseArn,
+  requireAssigneeCredentials,
   type ManagedResource,
 } from "@assignee/core";
 
@@ -49,8 +50,12 @@ export async function fetchManagedResources(
   resourceType?: string,
 ): Promise<ManagedResource[]> {
   const resolvedRegion = region ?? DEFAULT_REGION;
+  // Story 49-HIGH-1: never fall through to the default AWS credential chain.
+  // MCP clients must resolve ASSIGNEE_OPERATOR_* explicitly or fail fast.
+  // @see feedback_lazy_credential_resolution_in_mcp
   const client = new ResourceGroupsTaggingAPIClient({
     region: resolvedRegion,
+    credentials: requireAssigneeCredentials("operator"),
   });
 
   try {
