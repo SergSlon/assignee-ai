@@ -5,7 +5,7 @@
  *
  * @see Story 19.2, AC #2
  */
-import type { SecurityFinding } from "../../services/graph-state.js";
+import type { SecurityFinding } from "../../types/fix-finding.js";
 
 export function renderSecurityWarnings(
   resourceArn: string,

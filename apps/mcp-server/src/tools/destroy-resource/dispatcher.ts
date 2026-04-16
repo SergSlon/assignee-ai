@@ -20,6 +20,7 @@ import {
   type DestroyContext,
 } from "@assignee/core";
 import { destroyRegistry } from "../../services/destroy-strategies/index.js";
+import { mcpLog, mcpLogError } from "../../utils/structured-log.js";
 import { getOperatorAccountId } from "./sts-cache.js";
 import { isArn, verifyArnIsManaged } from "./resolve.js";
 import type { ResolvedResource } from "./types.js";
@@ -187,24 +188,11 @@ function buildDestroyContext(
       region,
     },
     effectiveRegion: region,
-    warn: (action, extras) => {
-      // Structured stderr warn — matches the CLI `warnDestroy` shape
-      // so log scrapers can normalize across both surfaces.
-      try {
-        process.stderr.write(
-          JSON.stringify({
-            ts: new Date().toISOString(),
-            level: "warn",
-            source: "destroy-resource",
-            action,
-            extras,
-          }) + "\n",
-        );
-      } catch {
-        // stderr write failures are swallowed — never let logging
-        // break the destroy path.
-      }
-    },
+    warn: (action, extras) =>
+      // Structured JSON-line on stderr — mirrors the CLI `warnDestroy`
+      // shape so log scrapers can normalize across both surfaces
+      // (Story 49.7).
+      mcpLog({ level: "warn", source: "destroy-resource", action, extras }),
   };
 }
 
@@ -223,9 +211,10 @@ export async function runPreDestroyHook(
     const ctx = buildDestroyContext(resourceType, identifier, region);
     await strategy.preDestroy(ctx);
   } catch (preErr: unknown) {
-    const msg = preErr instanceof Error ? preErr.message : String(preErr);
-    console.error(
-      `[destroy_resource] pre-destroy warning for ${resourceType} ${identifier}: ${msg}`,
-    );
+    mcpLogError("destroy-resource", "pre_destroy_hook_failed", {
+      resourceType,
+      identifier,
+      error: preErr instanceof Error ? preErr.message : String(preErr),
+    });
   }
 }

@@ -5,7 +5,7 @@
  */
 import type { FreeTierNote } from "../free-tier.js";
 import type { BPFinding } from "@assignee/best-practices";
-import type { AppliedFix } from "../../services/graph-state.js";
+import type { AppliedFix } from "../../types/fix-finding.js";
 import type { PricingBreakdown, DataSource } from "@assignee/core";
 
 /**
