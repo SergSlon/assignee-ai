@@ -186,9 +186,9 @@ gh secret set BEDROCK_LOGGING_VERIFIED --body "true"
 
 ## References
 
-- Story 0.5 spec: `_bmad-output/implementation-artifacts/0-5-aws-account-bootstrap-and-bedrock-logging-setup.md`
-- Story 2.5 spec: `_bmad-output/implementation-artifacts/2-5-implement-iam-least-privilege-policy-and-mandatory-resource-tagging.md`
-- Story 18.8 spec: `_bmad-output/implementation-artifacts/18-8-iam-security-overhaul-assignee-setup.md`
+- Story 0.5 spec: see `_bmad-output/implementation-artifacts/_archive/done-stories/` at workspace root
+- Story 2.5 spec: same archive directory
+- Story 18.8 spec: same archive directory
 - NFR-10: All Bedrock invocations must be logged for auditability
 - NFR-13: No wildcard IAM permissions
 - NFR-14: All provisioned resources must carry mandatory traceability tags
