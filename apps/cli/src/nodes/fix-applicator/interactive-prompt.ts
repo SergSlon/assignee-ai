@@ -28,7 +28,7 @@ export async function runInteractiveFixes(params: {
   state: AgentState;
 }): Promise<InteractiveResult> {
   const { findings, state } = params;
-  let { patchedState } = params;
+  const { patchedState } = params;
   const appliedFixes = [...params.appliedFixes];
   const fixedPracticeIds = new Set(params.fixedPracticeIds);
   const skippedPracticeIds = new Set<string>();

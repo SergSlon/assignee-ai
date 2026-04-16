@@ -22,7 +22,7 @@ import {
   CommandDescription,
   CommandArgs,
 } from "../constants/commands.js";
-import { log, LOG_ACTIONS } from "../utils/logger.js";
+import { LOG_ACTIONS } from "../utils/logger.js";
 import { runCommand } from "../utils/command-runner.js";
 import {
   SUPPORTED_TYPES_HINT,
