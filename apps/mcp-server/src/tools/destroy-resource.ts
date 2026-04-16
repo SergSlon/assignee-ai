@@ -28,6 +28,7 @@ import {
   CCAPI_FALLBACK_TYPES,
   CCAPI_REDIRECT_TYPES,
   DEFAULT_AWS_REGION,
+  MissingAssigneeCredentialsError,
 } from "@assignee/core";
 import {
   buildErrorResponse,
@@ -185,11 +186,26 @@ export function registerDestroyResource(server: McpServer): void {
         }
 
         // ── Pre-delete hooks (delegated to strategy registry) ─────────────
-        await runPreDestroyHook(
-          resolved.resourceType,
-          resolved.identifier,
-          resolved.region,
-        );
+        try {
+          await runPreDestroyHook(
+            resolved.resourceType,
+            resolved.identifier,
+            resolved.region,
+          );
+        } catch (preHookErr: unknown) {
+          // Epic 49 review HIGH-2: `runPreDestroyHook` only rethrows
+          // `MissingAssigneeCredentialsError` — operator misconfig.
+          // Every other hook failure is swallowed + logged inside the
+          // dispatcher. Abort the destroy with an actionable message so
+          // the user isn't left chasing a downstream DependencyViolation.
+          if (preHookErr instanceof MissingAssigneeCredentialsError) {
+            return buildErrorResponse(
+              `Pre-destroy hook for ${resolved.resourceType} needs operator credentials: ${preHookErr.message}`,
+              "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY in the MCP server environment, or run 'assignee setup' to create the IAM users, then retry the destroy.",
+            );
+          }
+          throw preHookErr;
+        }
 
         // ── TOCTOU mitigation: re-verify managed-by tag immediately before
         //    DeleteResource dispatch. Closes the resolve→delete race where

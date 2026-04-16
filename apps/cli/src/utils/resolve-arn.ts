@@ -87,20 +87,31 @@ export async function getOperatorAccountId(): Promise<string | undefined> {
       // regional outages would otherwise stall the display step
       // indefinitely because the SDK's default retry strategy can
       // wait minutes before giving up.
-      const identity = await Promise.race([
-        sts.send(new GetCallerIdentityCommand({})),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(
-                  `STS GetCallerIdentity timed out after ${STS_TIMEOUT_MS}ms`,
-                ),
+      //
+      // Epic 49 review HIGH-3 (EX-7 pattern from whoami.ts): the
+      // timer handle must be cleared when STS wins the race so the
+      // event loop isn't pinned for the remaining ~5s.
+      let timeoutHandle: NodeJS.Timeout | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `STS GetCallerIdentity timed out after ${STS_TIMEOUT_MS}ms`,
               ),
-            STS_TIMEOUT_MS,
-          ),
-        ),
-      ]);
+            ),
+          STS_TIMEOUT_MS,
+        );
+      });
+      let identity;
+      try {
+        identity = await Promise.race([
+          sts.send(new GetCallerIdentityCommand({})),
+          timeoutPromise,
+        ]);
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      }
 
       if (identity.Account) {
         cachedAccountId = identity.Account;

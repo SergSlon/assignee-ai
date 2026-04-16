@@ -90,6 +90,10 @@ describe("list_managed_resources tool (MCP client level)", () => {
     vi.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error("File not found");
     });
+    // Story 49-HIGH-1: list-resources now requires ASSIGNEE_OPERATOR_*.
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
   });
 
   it("should return formatted list with count and resources array", async () => {

@@ -42,16 +42,24 @@ export async function getOperatorAccountId(
 
   cachedOperatorAccountLookup = (async () => {
     let sts: STSClient | undefined;
+    // Epic 49 review HIGH-3 (EX-7 pattern): the timer must be cleared
+    // when STS wins the race, or the 5-second handle keeps the
+    // long-running MCP server's event loop ref-alive per call.
+    let timeoutHandle: NodeJS.Timeout | undefined;
     try {
       sts = new STSClient({
         region,
         credentials: requireAssigneeCredentials("operator"),
       });
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(
+          () => reject(new Error("STS timeout")),
+          STS_TIMEOUT_MS,
+        );
+      });
       const result = await Promise.race([
         sts.send(new GetCallerIdentityCommand({})),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("STS timeout")), STS_TIMEOUT_MS),
-        ),
+        timeoutPromise,
       ]);
       const account = result.Account;
       if (account) {
@@ -62,6 +70,7 @@ export async function getOperatorAccountId(
     } catch {
       return undefined;
     } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
       // Clear the in-flight promise so failures don't poison subsequent
       // calls. Successful lookups are still served from cachedOperatorAccountId.
       cachedOperatorAccountLookup = undefined;
