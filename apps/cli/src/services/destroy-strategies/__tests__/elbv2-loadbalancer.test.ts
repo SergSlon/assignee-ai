@@ -19,7 +19,7 @@ vi.mock("@aws-sdk/client-ec2", () => {
 });
 
 import { elbv2LoadBalancerStrategy } from "../elbv2-loadbalancer.js";
-import type { DestroyContext } from "../types.js";
+import type { DestroyContext } from "@assignee/core";
 
 const originalSetTimeout = globalThis.setTimeout;
 beforeEach(() => {

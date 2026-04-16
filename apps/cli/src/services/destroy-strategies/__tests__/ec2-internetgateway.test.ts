@@ -25,7 +25,7 @@ vi.mock("@aws-sdk/client-ec2", () => {
 });
 
 import { ec2InternetGatewayStrategy } from "../ec2-internetgateway.js";
-import type { DestroyContext } from "../types.js";
+import type { DestroyContext } from "@assignee/core";
 
 beforeEach(() => {
   vi.clearAllMocks();

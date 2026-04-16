@@ -1,30 +1,37 @@
 /**
  * Destroy strategy for AWS::DynamoDB::Table.
  *
- * DynamoDB tables may have deletion protection enabled. The preDestroy hook
- * disables it before the CloudControl delete call. Failure is non-fatal
- * since the table may not have protection enabled.
+ * DynamoDB tables may have deletion protection enabled. The preDestroy
+ * hook disables it before the CloudControl delete call. Failure is
+ * non-fatal since the table may not have protection enabled.
  *
- * Uses the centralized `requireAssigneeCredentials("operator")` helper from
- * @assignee/core — never falls through to the default AWS credential chain.
+ * Uses the centralized `requireAssigneeCredentials("operator")` helper
+ * from @assignee/core — never falls through to the default AWS
+ * credential chain.
+ *
+ * @see Story 49.1 — migrated to the shared DestroyContext interface.
  */
 
-import { requireAssigneeCredentials } from "@assignee/core";
-import type { DestroyStrategy } from "./types.js";
+import {
+  RESOURCE_TYPES,
+  requireAssigneeCredentials,
+  type DestroyStrategy,
+} from "@assignee/core";
 
 export const dynamodbStrategy: DestroyStrategy = {
-  resourceType: "AWS::DynamoDB::Table",
+  resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
 
-  async preDestroy(identifier: string, region: string): Promise<void> {
+  async preDestroy(ctx): Promise<void> {
+    const { resource, effectiveRegion } = ctx;
     const { DynamoDBClient, UpdateTableCommand } =
       await import("@aws-sdk/client-dynamodb");
     const ddb = new DynamoDBClient({
-      region,
+      region: effectiveRegion,
       credentials: requireAssigneeCredentials("operator"),
     });
     await ddb.send(
       new UpdateTableCommand({
-        TableName: identifier,
+        TableName: resource.identifier,
         DeletionProtectionEnabled: false,
       }),
     );

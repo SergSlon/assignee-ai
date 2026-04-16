@@ -1,29 +1,36 @@
 /**
- * Destroy strategy interface for CLI resource-type-specific destroy behavior.
+ * Shared destroy-strategy types consumed by both `apps/cli` and
+ * `apps/mcp-server`. Originally lived as parallel copies in each app's
+ * `services/destroy-strategies/types.ts` — consolidated here by
+ * Story 49.1 (Epic 49 code audit remediation).
  *
- * Mirrors the shape used in
- * `apps/mcp-server/src/services/destroy-strategies/types.ts` so the two
- * codebases stay consistent. F1b extended the interface with a full
- * replacement `destroy` hook (for EIP/CloudFront which bypass CCAPI
- * entirely) and a `postDestroy` hook (for ALB ENI drain).
- *
- * Each strategy encapsulates:
- * - CloudControl identifier resolution (ARN vs extracted name vs custom)
- * - Pre-destroy actions (detach, disable protection, empty bucket, etc.)
- * - Full custom destroy (EIP ReleaseAddress, CloudFront disable+delete)
- * - Post-destroy actions (ENI drain, propagation waits)
- * - Polling configuration hints (`isSlow` — extended polling cap)
- *
- * @see Wave-6 F1a — CLI destroy-service SOLID refactor (part 1)
- * @see Wave-6 F1b — hooks migration (part 2)
+ * The interface intentionally uses the richer CLI signature
+ * (`DestroyContext` with `onProgress`/`warn` callbacks, plus
+ * `destroy`/`postDestroy` hooks) so every caller can express the same
+ * behavior. The MCP dispatcher builds a `DestroyContext` from its
+ * resolved identifier + operator credentials before invoking the
+ * registered strategy hook.
  */
 
-import type { AwsConfig } from "../cloudcontrol-client.js";
+/** Minimal AWS credential + region bundle passed into every hook. */
+export interface AwsConfig {
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
+}
+
+/** AWS CloudControl API operation status values. */
+export const CCAPIStatus = {
+  SUCCESS: "SUCCESS",
+  FAILED: "FAILED",
+} as const;
+
+/** CloudControl HandlerErrorCode for "resource does not exist". */
+export const CCAPI_NOT_FOUND_ERROR_CODE = "NotFound";
 
 /**
  * Minimal view of the resource being destroyed, visible to every
- * strategy hook. Sourced directly from the caller's input to
- * `destroySingleResource(...)`.
+ * strategy hook. Sourced directly from the dispatcher's input.
  */
 export interface DestroyResourceInput {
   arn: string;
@@ -35,9 +42,9 @@ export interface DestroyResourceInput {
 }
 
 /**
- * Lightweight partial-result shape returned by the full-destroy hook.
- * The dispatcher combines this with resource metadata to produce the
- * final `DestroyResult`.
+ * Partial-result shape returned by the full-destroy hook. The
+ * dispatcher combines this with resource metadata to produce the final
+ * caller-visible result.
  */
 export interface DestroyHookOutcome {
   success: boolean;
@@ -47,8 +54,8 @@ export interface DestroyHookOutcome {
 /**
  * Execution context passed to every strategy hook. Contains the
  * resolved AWS region, operator credentials, user-facing progress
- * callback, and a structured warn logger so strategies don't depend
- * on private destroy-service helpers.
+ * callback, and a structured warn logger so strategies don't depend on
+ * private dispatcher helpers.
  */
 export interface DestroyContext {
   resource: DestroyResourceInput;
@@ -71,15 +78,16 @@ export interface DestroyStrategy {
   resourceType: string;
 
   /**
-   * Whether to use the full ARN as the CloudControl Identifier
-   * (vs the extracted name/id). Mirrors MCP's `usesArnIdentifier`.
+   * Whether to use the full ARN as the CloudControl Identifier (vs the
+   * extracted name/id). Some CCAPI types require the ARN (TopicArn,
+   * LoadBalancerArn, Arn, etc.) — passing a bare name returns NotFound.
    */
   usesArnIdentifier?: boolean;
 
   /**
    * Whether this resource takes longer to delete. Dispatcher callers
-   * may use this to extend polling caps. Currently advisory — F1b will
-   * promote this to an effective poll-cap override.
+   * use this to extend polling caps (e.g. ELBv2 LoadBalancer ENI
+   * drain, RDS instance deletion).
    */
   isSlow?: boolean;
 
@@ -95,8 +103,9 @@ export interface DestroyStrategy {
    * Pre-destroy hook executed before the CloudControl DeleteResource
    * call. Examples: IGW VPC detach, DynamoDB deletion-protection
    * disable, S3 bucket empty. A resolved `DestroyHookOutcome` with
-   * `success: false` aborts the destroy and is returned to the caller;
-   * `undefined` or `{ success: true }` proceeds to the CCAPI path.
+   * `success: false` aborts the destroy and is returned to the
+   * caller; `undefined` or `{ success: true }` proceeds to the CCAPI
+   * path.
    */
   preDestroy?(context: DestroyContext): Promise<DestroyHookOutcome | void>;
 

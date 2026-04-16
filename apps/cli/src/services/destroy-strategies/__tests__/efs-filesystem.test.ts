@@ -25,7 +25,7 @@ vi.mock("@aws-sdk/client-efs", () => {
 });
 
 import { efsFileSystemStrategy } from "../efs-filesystem.js";
-import type { DestroyContext } from "../types.js";
+import type { DestroyContext } from "@assignee/core";
 
 const originalSetTimeout = globalThis.setTimeout;
 beforeEach(() => {

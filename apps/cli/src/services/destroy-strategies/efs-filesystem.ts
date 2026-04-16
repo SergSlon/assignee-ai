@@ -11,7 +11,7 @@
  */
 
 import { RESOURCE_TYPES } from "@assignee/core";
-import type { DestroyStrategy } from "./types.js";
+import type { DestroyStrategy } from "@assignee/core";
 import { requireAssigneeCredentials } from "../../config/aws-credentials.js";
 import { AWS_REGION } from "../../config/constants.js";
 import { warnDestroy } from "./helpers.js";

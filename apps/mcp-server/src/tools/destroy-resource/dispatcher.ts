@@ -14,7 +14,11 @@ import {
   GetResourceRequestStatusCommand,
 } from "@aws-sdk/client-cloudcontrol";
 import type { ResourceGroupsTaggingAPIClient } from "@aws-sdk/client-resource-groups-tagging-api";
-import { extractAccountIdFromArn } from "@assignee/core";
+import {
+  extractAccountIdFromArn,
+  requireAssigneeCredentials,
+  type DestroyContext,
+} from "@assignee/core";
 import { destroyRegistry } from "../../services/destroy-strategies/index.js";
 import { getOperatorAccountId } from "./sts-cache.js";
 import { isArn, verifyArnIsManaged } from "./resolve.js";
@@ -159,6 +163,52 @@ export async function pollDeleteStatus(
 }
 
 /**
+ * Builds a shared-interface `DestroyContext` for an MCP pre-destroy
+ * hook invocation. Operator credentials are resolved lazily — if they
+ * are missing the caller already routed through
+ * `bootstrapOperatorCredentials`, so this is defensive.
+ */
+function buildDestroyContext(
+  resourceType: string,
+  identifier: string,
+  region: string,
+): DestroyContext {
+  const operatorCreds = requireAssigneeCredentials("operator");
+  return {
+    resource: {
+      arn: identifier,
+      resourceType,
+      identifier,
+      region,
+    },
+    awsConfig: {
+      accessKeyId: operatorCreds.accessKeyId,
+      secretAccessKey: operatorCreds.secretAccessKey,
+      region,
+    },
+    effectiveRegion: region,
+    warn: (action, extras) => {
+      // Structured stderr warn — matches the CLI `warnDestroy` shape
+      // so log scrapers can normalize across both surfaces.
+      try {
+        process.stderr.write(
+          JSON.stringify({
+            ts: new Date().toISOString(),
+            level: "warn",
+            source: "destroy-resource",
+            action,
+            extras,
+          }) + "\n",
+        );
+      } catch {
+        // stderr write failures are swallowed — never let logging
+        // break the destroy path.
+      }
+    },
+  };
+}
+
+/**
  * Executes the pre-destroy hook registered for a resource type, if any.
  * Non-fatal — CloudControl will surface a clearer error if the hook fails.
  */
@@ -170,7 +220,8 @@ export async function runPreDestroyHook(
   const strategy = destroyRegistry.get(resourceType);
   if (!strategy?.preDestroy) return;
   try {
-    await strategy.preDestroy(identifier, region);
+    const ctx = buildDestroyContext(resourceType, identifier, region);
+    await strategy.preDestroy(ctx);
   } catch (preErr: unknown) {
     const msg = preErr instanceof Error ? preErr.message : String(preErr);
     console.error(

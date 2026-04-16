@@ -16,7 +16,7 @@
  */
 
 import { COMPANION_RESOURCE_TYPES } from "@assignee/core";
-import type { DestroyStrategy } from "./types.js";
+import type { DestroyStrategy } from "@assignee/core";
 
 export const ec2EipStrategy: DestroyStrategy = {
   resourceType: COMPANION_RESOURCE_TYPES.EC2_EIP,

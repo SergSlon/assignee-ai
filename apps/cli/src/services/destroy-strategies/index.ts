@@ -1,11 +1,12 @@
 /**
  * Destroy strategy registry — single entry point for all CLI
- * resource-type-specific destroy behavior. Replaces the hard-coded
- * per-type branches and `ARN_IDENTIFIED_TYPES` Set previously in
- * `destroy-service.ts`.
+ * resource-type-specific destroy behavior. Delegates to the shared
+ * `@assignee/core` registry + types; registers CLI-specific complex
+ * strategies on top of the core flag-only defaults.
  *
- * @see Wave-6 F1a — scaffolding + flag-only strategies
+ * @see Wave-6 F1a — original scaffolding
  * @see Wave-6 F1b — complex strategies (preDestroy / destroy / postDestroy)
+ * @see Story 49.1 — extraction of interface + registry + defaults to core
  */
 
 export type {
@@ -13,8 +14,9 @@ export type {
   DestroyContext,
   DestroyHookOutcome,
   DestroyResourceInput,
-} from "./types.js";
-export { DestroyStrategyRegistry } from "./registry.js";
+  AwsConfig,
+} from "@assignee/core";
+export { DestroyStrategyRegistry } from "@assignee/core";
 export {
   warnDestroy,
   pollDeleteStatus,
@@ -23,11 +25,11 @@ export {
   CCAPI_NOT_FOUND_ERROR_CODE,
 } from "./helpers.js";
 
-import { DestroyStrategyRegistry } from "./registry.js";
 import {
+  DestroyStrategyRegistry,
   arnIdentifierStrategies,
   slowDeleteStrategies,
-} from "./default-strategies.js";
+} from "@assignee/core";
 import { ec2EipStrategy } from "./ec2-eip.js";
 import { cloudfrontDistributionStrategy } from "./cloudfront-distribution.js";
 import { dynamodbTableStrategy } from "./dynamodb-table.js";

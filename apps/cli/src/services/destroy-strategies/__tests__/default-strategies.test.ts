@@ -11,16 +11,16 @@
 
 import { describe, it, expect } from "vitest";
 import { RESOURCE_TYPES } from "@assignee/core";
+import type { DestroyStrategy } from "@assignee/core";
 
-import {
-  arnIdentifierStrategies,
-  slowDeleteStrategies,
-} from "../default-strategies.js";
+import { arnIdentifierStrategies, slowDeleteStrategies } from "@assignee/core";
 import { createDestroyRegistry, destroyRegistry } from "../index.js";
 
 describe("arnIdentifierStrategies", () => {
-  it("contains exactly the flag-only ARN-identified CCAPI types (ELBv2 promoted to dedicated strategy in F1b)", () => {
-    const types = arnIdentifierStrategies.map((s) => s.resourceType).sort();
+  it("contains the union of CLI + MCP ARN-identified CCAPI types (shared defaults from @assignee/core per Story 49.1)", () => {
+    const types = arnIdentifierStrategies
+      .map((s: DestroyStrategy) => s.resourceType)
+      .sort();
     expect(types).toEqual(
       [
         RESOURCE_TYPES.SNS_TOPIC,
@@ -28,6 +28,7 @@ describe("arnIdentifierStrategies", () => {
         RESOURCE_TYPES.SECRETSMANAGER_SECRET,
         RESOURCE_TYPES.ECS_CLUSTER,
         RESOURCE_TYPES.EVENTS_RULE,
+        RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
       ].sort(),
     );
   });
@@ -38,7 +39,7 @@ describe("arnIdentifierStrategies", () => {
     }
   });
 
-  it("registry still exposes ELBv2 LoadBalancer as both ARN-identified AND slow (via its dedicated strategy file)", () => {
+  it("registry still exposes ELBv2 LoadBalancer as both ARN-identified AND slow (dedicated CLI strategy overrides the shared default, keeping the postDestroy ENI-drain hook)", () => {
     const registry = createDestroyRegistry();
     const lb = registry.get(RESOURCE_TYPES.ELBV2_LOAD_BALANCER);
     expect(lb).toBeDefined();
@@ -50,8 +51,10 @@ describe("arnIdentifierStrategies", () => {
 });
 
 describe("slowDeleteStrategies", () => {
-  it("covers the CLI slow-delete types that don't also need ARN identifiers", () => {
-    const types = slowDeleteStrategies.map((s) => s.resourceType).sort();
+  it("covers the slow-delete types that don't also need ARN identifiers", () => {
+    const types = slowDeleteStrategies
+      .map((s: DestroyStrategy) => s.resourceType)
+      .sort();
     expect(types).toEqual(
       [RESOURCE_TYPES.RDS_DB_INSTANCE, RESOURCE_TYPES.EC2_NAT_GATEWAY].sort(),
     );

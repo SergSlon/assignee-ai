@@ -1,10 +1,10 @@
 /**
- * Registry for CLI destroy strategies keyed by CloudFormation resource
- * type. Replaces the hard-coded `ARN_IDENTIFIED_TYPES` Set (and, in
- * F1b, the inline if/else pre-delete hook chain) in `destroy-service.ts`
- * with a single lookup point.
+ * Registry for destroy strategies keyed by CloudFormation resource
+ * type. Single lookup point used by both the CLI destroy-service
+ * dispatcher and the MCP destroy-resource dispatcher.
  *
- * @see Wave-6 F1a
+ * Consolidated into `@assignee/core` by Story 49.1 (Epic 49) — formerly
+ * duplicated across `apps/cli` and `apps/mcp-server`.
  */
 
 import type { DestroyStrategy } from "./types.js";

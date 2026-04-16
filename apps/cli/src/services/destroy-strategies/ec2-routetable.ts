@@ -15,7 +15,7 @@
  */
 
 import { RESOURCE_TYPES } from "@assignee/core";
-import type { DestroyStrategy } from "./types.js";
+import type { DestroyStrategy } from "@assignee/core";
 import {
   requireAssigneeCredentials,
   MissingAssigneeCredentialsError,

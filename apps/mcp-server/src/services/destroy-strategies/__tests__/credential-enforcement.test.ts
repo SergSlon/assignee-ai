@@ -54,6 +54,7 @@ vi.mock("@aws-sdk/client-ec2", () => {
 
 import { dynamodbStrategy } from "../dynamodb-strategy.js";
 import { igwStrategy } from "../igw-strategy.js";
+import { makeDestroyContext } from "./test-helpers.js";
 
 // ── Env-var isolation ───────────────────────────────────────────────────────
 // REG-N11: Use vi.stubEnv / vi.unstubAllEnvs instead of mutating process.env
@@ -87,7 +88,9 @@ describe("dynamodbStrategy.preDestroy", () => {
     it("constructs the SDK client and sends UpdateTable to disable deletion protection", async () => {
       mockDdbSend.mockResolvedValueOnce({});
 
-      await dynamodbStrategy.preDestroy!("orders-prod", "us-east-1");
+      await dynamodbStrategy.preDestroy!(
+        makeDestroyContext("orders-prod", "us-east-1"),
+      );
 
       expect(mockDdbSend).toHaveBeenCalledTimes(1);
       const cmd = mockDdbSend.mock.calls[0]![0] as {
@@ -114,14 +117,18 @@ describe("dynamodbStrategy.preDestroy", () => {
 
     it("throws MissingAssigneeCredentialsError and never calls the SDK", async () => {
       await expect(
-        dynamodbStrategy.preDestroy!("orders-prod", "us-east-1"),
+        dynamodbStrategy.preDestroy!(
+          makeDestroyContext("orders-prod", "us-east-1"),
+        ),
       ).rejects.toBeInstanceOf(MissingAssigneeCredentialsError);
       expect(mockDdbSend).not.toHaveBeenCalled();
     });
 
     it("error names both required env vars", async () => {
       try {
-        await dynamodbStrategy.preDestroy!("orders-prod", "us-east-1");
+        await dynamodbStrategy.preDestroy!(
+          makeDestroyContext("orders-prod", "us-east-1"),
+        );
         throw new Error("expected throw");
       } catch (err) {
         expect(err).toBeInstanceOf(MissingAssigneeCredentialsError);
@@ -161,7 +168,9 @@ describe("igwStrategy.preDestroy", () => {
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({});
 
-      await igwStrategy.preDestroy!("igw-0123456789abcdef0", "us-east-1");
+      await igwStrategy.preDestroy!(
+        makeDestroyContext("igw-0123456789abcdef0", "us-east-1"),
+      );
 
       // 1 describe + 2 detaches
       expect(mockEc2Send).toHaveBeenCalledTimes(3);
@@ -184,7 +193,9 @@ describe("igwStrategy.preDestroy", () => {
         ],
       });
 
-      await igwStrategy.preDestroy!("igw-0123456789abcdef0", "us-east-1");
+      await igwStrategy.preDestroy!(
+        makeDestroyContext("igw-0123456789abcdef0", "us-east-1"),
+      );
 
       // Only the describe — no detach for already-detached attachments
       expect(mockEc2Send).toHaveBeenCalledTimes(1);
@@ -201,7 +212,9 @@ describe("igwStrategy.preDestroy", () => {
 
     it("throws MissingAssigneeCredentialsError and never calls the SDK", async () => {
       await expect(
-        igwStrategy.preDestroy!("igw-0123456789abcdef0", "us-east-1"),
+        igwStrategy.preDestroy!(
+          makeDestroyContext("igw-0123456789abcdef0", "us-east-1"),
+        ),
       ).rejects.toBeInstanceOf(MissingAssigneeCredentialsError);
       expect(mockEc2Send).not.toHaveBeenCalled();
     });

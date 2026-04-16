@@ -7,8 +7,8 @@
 
 import { describe, it, expect } from "vitest";
 
-import { DestroyStrategyRegistry } from "../registry.js";
-import type { DestroyStrategy } from "../types.js";
+import { DestroyStrategyRegistry } from "@assignee/core";
+import type { DestroyStrategy } from "@assignee/core";
 
 const topicStrategy: DestroyStrategy = {
   resourceType: "AWS::SNS::Topic",
