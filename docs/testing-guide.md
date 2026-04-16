@@ -7,7 +7,7 @@
 ## Quick reference
 
 ```bash
-pnpm test                                    # ~7115 tests across 272 files, ~20s, no AWS needed
+pnpm test                                    # ~7595 tests across 303 files, ~20s, no AWS needed
 pnpm check-types                             # TypeScript type check
 pnpm --filter @assignee/mcp-server test:e2e  # MCP E2E against real AWS (~43 min)
 RUN_E2E=1 pnpm --filter assignee test        # CLI graph E2E against real AWS (opt-in gate)
@@ -105,7 +105,7 @@ silently ineffective.
 
 ## MCP Server E2E Tests (real AWS)
 
-Full lifecycle tests for all 25 resource types through the MCP server: plan → estimate → apply → list → destroy → verify.
+Full lifecycle tests for all 37 resource types through the MCP server: plan → estimate → apply → list → destroy → verify.
 
 ### Prerequisites
 
@@ -159,28 +159,28 @@ Actual AWS costs for a full end-to-end run vary by region and pricing changes. M
 ## Unit tests
 
 ```bash
-pnpm test          # ~7115 tests across 272 files (142 CLI + 95 core + 11 BP + 22 MCP)
+pnpm test          # ~7595 tests across 303 files (168 CLI + 100 core + 11 BP + 24 MCP)
 pnpm check-types   # TypeScript type check
 ```
 
 ### Test fixtures — real MCP mock responses
 
-All MCP mock responses in `apps/cli/src/test-fixtures/mcp-mock-responses.ts` are captured from **live MCP servers** (`aws-pricing-mcp-server`, `aws-documentation-mcp-server`, `iam-mcp-server`, `well-architected-security-mcp-server`, `cost-management-mcp-server`). No fabricated data.
+All MCP mock responses in `apps/cli/src/test-fixtures/mcp-mock-responses.ts` are captured from **live MCP servers** (`aws-pricing-mcp-server`, `aws-documentation-mcp-server`, `iam-mcp-server`, `well-architected-security-mcp-server`, `billing-cost-management-mcp-server`). No fabricated data.
 
 > **Historical note:** the CFN schema fixtures were originally captured from the now-removed `awslabs.cfn-mcp-server` (Story 7.6 migrated CloudFormation schema access to `@aws-sdk/client-cloudformation`). The cached JSON fixtures remain valid because they shape-match what the SDK returns; they are no longer regenerated. See `apps/cli/scripts/capture-mcp-responses.mjs` for the legacy capture path.
 
 **What's included:**
 
-| Category                  | Count | Source                                                                                           |
-| ------------------------- | ----- | ------------------------------------------------------------------------------------------------ |
-| CFN schemas               | 8     | historical capture from `awslabs.cfn-mcp-server` (now via `@aws-sdk/client-cloudformation`)      |
-| Pricing                   | 11    | `awslabs.aws-pricing-mcp-server`                                                                 |
-| Doc search                | 4     | `awslabs.aws-documentation-mcp-server`                                                           |
-| Doc read sections         | 5     | `awslabs.aws-documentation-mcp-server`                                                           |
-| Doc read full             | 2     | `awslabs.aws-documentation-mcp-server`                                                           |
-| IAM                       | 3     | `awslabs.iam-mcp-server` (s3BucketAllowed, ec2InstancePartialDeny, lambdaFunctionAllowed)        |
-| Well-Architected Security | 2     | `awslabs.well-architected-security-mcp-server` (s3BucketPosture, noFindings)                     |
-| Billing                   | 4     | `awslabs.cost-management-mcp-server` (s3BucketCost, multiResourceCost, noCostData, costForecast) |
+| Category                  | Count | Source                                                                                                   |
+| ------------------------- | ----- | -------------------------------------------------------------------------------------------------------- |
+| CFN schemas               | 8     | historical capture from `awslabs.cfn-mcp-server` (now via `@aws-sdk/client-cloudformation`)              |
+| Pricing                   | 11    | `awslabs.aws-pricing-mcp-server`                                                                         |
+| Doc search                | 4     | `awslabs.aws-documentation-mcp-server`                                                                   |
+| Doc read sections         | 5     | `awslabs.aws-documentation-mcp-server`                                                                   |
+| Doc read full             | 2     | `awslabs.aws-documentation-mcp-server`                                                                   |
+| IAM                       | 3     | `awslabs.iam-mcp-server` (s3BucketAllowed, ec2InstancePartialDeny, lambdaFunctionAllowed)                |
+| Well-Architected Security | 2     | `awslabs.well-architected-security-mcp-server` (s3BucketPosture, noFindings)                             |
+| Billing                   | 4     | `awslabs.billing-cost-management-mcp-server` (s3BucketCost, multiResourceCost, noCostData, costForecast) |
 
 Total: ~39 captured responses, plus synthetic edge cases (empty responses, malformed JSON, null, errors) for boundary testing.
 
@@ -435,7 +435,7 @@ Run all tests and mark pass/fail:
 | 2   | `apply` + approve → S3 bucket created with 3 tags                                            | ⬜     |
 | 3   | `apply` + decline → exits 0, no resource                                                     | ⬜     |
 | 4   | State Guard — second apply aborts with "Stale Plan"                                          | ⬜     |
-| 5   | Unsupported type → actionable error with all 15 supported types                              | ⬜     |
+| 5   | Unsupported type → actionable error with all 37 supported types                              | ⬜     |
 | 6   | SSM Parameter provisioning                                                                   | ⬜     |
 | 7   | IAM Role provisioning, cost shows Free                                                       | ⬜     |
 | 8   | Non-TTY / pipe → no ANSI codes                                                               | ⬜     |
@@ -483,7 +483,7 @@ Run all tests and mark pass/fail:
 | 50  | Container Service pattern — ECR + ECS + IAM                                                  | ⬜     |
 | 51  | Three-Tier Web pattern — EC2 + RDS + SecurityGroup                                           | ⬜     |
 | 52  | Drift detection — detect + reconcile flow                                                    | ⬜     |
-| 53  | SDK Fallback types — EventSourceMapping, SNS Subscription                                    | ⬜     |
+| 53  | CCAPI redirect types — Lambda Permission, ElastiCache ReplicationGroup                       | ⬜     |
 | 54  | Bulk destroy all types — create, list, dry-run, destroy, verify                              | ⬜     |
 
 Tests 1–8 passing = Core demo-ready.
@@ -500,5 +500,5 @@ Tests 34–47f passing = All 23 individual resource type plans verified (includi
 Tests 48–49 passing = File upload with --source flag verified.
 Tests 50–51 passing = Compound patterns (container, three-tier) verified.
 Tests 52 passing = Drift detection and reconciliation verified.
-Tests 53 passing = SDK fallback provisioning verified.
+Tests 53 passing = CCAPI redirect types verified.
 Tests 54 passing = Full lifecycle bulk operations verified.

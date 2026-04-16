@@ -123,7 +123,7 @@ MCP tool handler -> createGraphContext() -> graph.invoke(initialState)
 | **Checkpoints**      | `.assignee/` project directory           | Separate MCP checkpoint directory        |
 | **Process model**    | Short-lived (one command)                | Long-lived (persistent stdio)            |
 | **Cost estimation**  | Full pipeline (MCP pricing + decomposer) | Lightweight keyword-based classification |
-| **Destroy**          | CloudControl + SDK fallback              | Strategy registry pattern                |
+| **Destroy**          | CloudControl + pre-delete hooks          | Strategy registry pattern                |
 | **Drift**            | Full drift detection + reconciliation    | Not exposed as MCP tool                  |
 
 ### What MCP Server Reuses from CLI
@@ -158,7 +158,7 @@ The CLI spawns MCP server child processes for external data:
 | `aws-pricing-mcp-server`               | uvx     | Reader     | Real-time AWS pricing data                                 |
 | `aws-documentation-mcp-server`         | uvx     | None       | AWS documentation references                               |
 | `iam-mcp-server`                       | uvx     | Auditor    | IAM permission simulation                                  |
-| `aws-cost-management-mcp-server`       | uvx     | Reader     | Live billing data                                          |
+| `billing-cost-management-mcp-server`   | uvx     | Reader     | Live billing data                                          |
 | `well-architected-security-mcp-server` | uvx     | Auditor    | Post-provision security checks                             |
 | `aws-knowledge-mcp-server`             | uvx     | None       | Remote knowledge (opt-in via ASSIGNEE_ENABLE_REMOTE_MCP=1) |
 
@@ -185,15 +185,15 @@ Direct SDK calls (not via MCP):
 - Bedrock -- LLM inference (intent parsing, plan generation)
 - CloudControl API -- resource CRUD + polling
 - CloudFormation Registry -- schema DescribeType
-- CloudFront -- distribution creation (post-provision)
+- CloudFront -- distribution configuration (via CCAPI; legacy SDK post-provision hook deleted)
 - CloudWatch Logs -- log group operations
 - DynamoDB -- table operations
 - EC2 -- AMI/VPC/subnet/SG/instance type discovery, EIP allocation, key pair management
 - IAM -- setup command (user/policy/role creation)
-- Lambda -- EventSourceMapping creation (CCAPI fallback)
+- Lambda -- EventSourceMapping creation (via CCAPI; A6 migration removed SDK fallback)
 - RDS -- database instance operations
 - Resource Groups Tagging API -- resource listing
 - S3 -- static site upload
-- SNS -- Subscription creation (CCAPI fallback)
+- SNS -- Subscription creation (via CCAPI; A10 migration removed SDK fallback)
 - SSM -- Parameter Store operations
 - STS -- account identity for ARN construction

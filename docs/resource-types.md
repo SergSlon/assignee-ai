@@ -65,7 +65,7 @@ Before provisioning, the resource provisioner performs a "state guard" check (Re
 
 ### Tags Format
 
-All 22 resource plugins accept tags in `Key:Value` format (comma-separated). Tags are validated at input time via a shared `TAGS_VALIDATE` function -- invalid formats (missing colon separator) are rejected with an error message:
+All 35 resource plugins accept tags in `Key:Value` format (comma-separated). Tags are validated at input time via a shared `TAGS_VALIDATE` function -- invalid formats (missing colon separator) are rejected with an error message:
 
 ```
 Invalid tag format. Use Key:Value pairs separated by commas (e.g. env:production, team:backend)

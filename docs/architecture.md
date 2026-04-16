@@ -248,7 +248,7 @@ The CLI spawns MCP servers as child processes via `@langchain/mcp-adapters`:
 - `aws-knowledge-mcp-server` -- Remote knowledge API (opt-in via `ASSIGNEE_ENABLE_REMOTE_MCP=1`)
 - `aws-iam-mcp-server` -- IAM permission simulation (auditor creds)
 - `well-architected-security-mcp-server` -- Post-provision security checks (auditor creds)
-- `aws-cost-management-mcp-server` -- Billing data (reader creds)
+- `billing-cost-management-mcp-server` -- Billing data (reader creds)
 
 Each server receives its own credential set (reader or auditor).
 

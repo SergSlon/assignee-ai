@@ -214,7 +214,7 @@ assignee destroy --all [options]
 
 - **Single resource**: Resolves the resource via the Resource Groups Tagging API, displays resource details (type, ARN, region, estimated cost savings), requires typing "yes" for confirmation (strict confirmation, not Y/n), deletes via CloudControl API and polls for completion
 - **Bulk destroy (`--all`)**: Lists all managed resources, orders by tier (compute/storage first, networking/IAM last), destroys in reverse-dependency order. IAM roles are excluded by default (use `--include-iam` to include them). `--dry-run` previews the destruction plan without executing it
-- Uses SDK fallback for types with known CloudControl gaps (EventSourceMapping, SNS Subscription)
+- Uses SDK fallback for types that CloudControl cannot model (see [resource-types.md](./resource-types.md#ccapi-fallback-types) for the current redirect list)
 
 **Examples:**
 
@@ -689,7 +689,7 @@ assignee types [list|show <type>] [options]
 **Examples:**
 
 ```bash
-assignee types                               # list all 28 supported types
+assignee types                               # list all 37 supported types
 assignee types show AWS::Events::Rule        # full detail for one type
 assignee types list --json | jq '.[].resourceType'
 assignee types show AWS::Lambda::Function --json
@@ -776,7 +776,7 @@ Doctor summary (assignee.ai 0.1.0):
     • ✓ awslabs.aws-documentation-mcp-server@1.1.1 → launched (uvx)
     • ✓ awslabs.iam-mcp-server@1.0.2             → launched (uvx)
     • ✗ awslabs.well-architected-security-mcp-server@0.1.7 → uvx exited with code 127
-    • ✓ awslabs.cost-management-mcp-server@1.0.2 → launched (uvx)
+    • ✓ awslabs.billing-cost-management-mcp-server@0.0.17 → launched (uvx)
 [✓] Cache
     • ✓ /home/u/.assignee → 3.4 MB, 0 stale checkpoints, 14 log files
 [✓] Config
