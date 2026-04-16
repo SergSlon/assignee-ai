@@ -34,19 +34,12 @@ import {
   MissingAssigneeCredentialsError,
 } from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
+import { STS_TIMEOUT_MS } from "../config/constants/timeouts.js";
 
 /** Module-level cache: one STS lookup per CLI process. */
 let cachedAccountId: string | undefined;
 let cachedCallerArn: string | undefined;
 let cachedAccountIdLookup: Promise<string | undefined> | undefined;
-
-/**
- * Hard ceiling on the STS GetCallerIdentity call. STS regional outages
- * historically stalled the entire `assignee apply` display step
- * indefinitely because there was no timeout — this is the Wave 10 P1-3
- * fix. 5 seconds is generous (typical p99 is < 200ms) but bounded.
- */
-const STS_TIMEOUT_MS = 5000;
 
 /**
  * Returns the account ID associated with the operator credentials.

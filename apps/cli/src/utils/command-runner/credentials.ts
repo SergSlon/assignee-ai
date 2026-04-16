@@ -29,7 +29,7 @@ export function resolveCredentials(silent: boolean): void {
     process.env[EnvVar.OPERATOR_SECRET_KEY] =
       process.env["AWS_SECRET_ACCESS_KEY"];
     if (process.env["AWS_SESSION_TOKEN"]) {
-      process.env["ASSIGNEE_OPERATOR_SESSION_TOKEN"] =
+      process.env[EnvVar.OPERATOR_SESSION_TOKEN] =
         process.env["AWS_SESSION_TOKEN"];
     }
     if (!silent) {

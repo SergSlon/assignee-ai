@@ -26,9 +26,7 @@ import { EnvVar } from "../constants/env-vars.js";
 import { ProcessExitCode } from "../constants/errors.js";
 import { loadGlobalConfig } from "../config/load-global-config.js";
 import { loadUserConfig } from "../config/user-config-loader.js";
-
-/** Per-call STS deadline. Doctor's <10s budget => 5s per check. */
-const STS_TIMEOUT_MS = 5000;
+import { STS_TIMEOUT_MS } from "../config/constants/timeouts.js";
 
 /** Internal injection seam — tests override these to mock the STS client. */
 export interface WhoamiDeps {

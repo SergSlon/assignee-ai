@@ -17,6 +17,15 @@
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import { requireAssigneeCredentials } from "@assignee/core";
 
+/**
+ * STS GetCallerIdentity deadline (ms). Story 49.8 M8: kept in sync
+ * with the CLI's `STS_TIMEOUT_MS` so both surfaces agree on the
+ * bound. The MCP server is a separate package and cannot import the
+ * CLI-local constant, so the value is duplicated here with a
+ * cross-reference comment.
+ */
+const STS_TIMEOUT_MS = 5_000;
+
 let cachedOperatorAccountId: string | undefined;
 let cachedOperatorAccountLookup: Promise<string | undefined> | undefined;
 
@@ -41,7 +50,7 @@ export async function getOperatorAccountId(
       const result = await Promise.race([
         sts.send(new GetCallerIdentityCommand({})),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("STS timeout")), 5_000),
+          setTimeout(() => reject(new Error("STS timeout")), STS_TIMEOUT_MS),
         ),
       ]);
       const account = result.Account;

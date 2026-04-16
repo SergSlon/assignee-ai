@@ -8,6 +8,7 @@ export const EnvVar = {
   // ── Operator credentials ──────────────────────────────────────
   OPERATOR_ACCESS_KEY: "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
   OPERATOR_SECRET_KEY: "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY",
+  OPERATOR_SESSION_TOKEN: "ASSIGNEE_OPERATOR_SESSION_TOKEN",
 
   // ── Reader credentials ────────────────────────────────────────
   READER_ACCESS_KEY: "ASSIGNEE_READER_ACCESS_KEY_ID",
@@ -76,4 +77,13 @@ export const EnvVar = {
    * record. Defaults to "assignee-cli" when unset.
    */
   ASSIGNEE_OTEL_SERVICE_NAME: "ASSIGNEE_OTEL_SERVICE_NAME",
+
+  // ── Preflight escalation flags (Story 48.3) ──────────────────
+  /**
+   * Opt-in strict mode: when set to `"1"`, the managed-policy
+   * preflight guard treats unknown verification errors as
+   * fail-closed instead of the default fail-open+WARN. Useful for
+   * SaaS tenants that want to abort on any verification anomaly.
+   */
+  ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS: "ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS",
 } as const;
