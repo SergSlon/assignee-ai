@@ -46,6 +46,7 @@ const ENV_KEYS = [
   "ASSIGNEE_READER_SECRET_ACCESS_KEY",
   "ASSIGNEE_AUDITOR_ACCESS_KEY_ID",
   "ASSIGNEE_AUDITOR_SECRET_ACCESS_KEY",
+  "ASSIGNEE_LLM_DEFAULT",
   "ASSIGNEE_MODEL",
   "BEDROCK_GUARDRAIL_ID",
   "BEDROCK_GUARDRAIL_VERSION",
@@ -296,7 +297,7 @@ describe("checkBedrock", () => {
   });
 
   it("reports fail without invoking the LLM when bedrock provider has no operator creds", async () => {
-    process.env["ASSIGNEE_MODEL"] = "bedrock/amazon.nova-lite-v1:0";
+    process.env["ASSIGNEE_LLM_DEFAULT"] = "bedrock/amazon.nova-lite-v1:0";
     // No llmFactory injected — the production guard fires and short-circuits
     // before any provider package is loaded.
     const section = await checkBedrock();
@@ -319,13 +320,13 @@ describe("checkBedrock", () => {
   });
 
   // Tier S #2: pre-fix the doctor header always showed BEDROCK_MODEL_ID
-  // (the default model) even when ASSIGNEE_MODEL was set to override it.
+  // (the default model) even when ASSIGNEE_LLM_DEFAULT was set to override it.
   // Observed in 2026-04-08 live smoke when forcing the Wave 12 region-error
-  // hint via `ASSIGNEE_MODEL=bedrock/bogus-model-...` — the header still
+  // hint via `ASSIGNEE_LLM_DEFAULT=bedrock/bogus-model-...` — the header still
   // displayed `model us.amazon.nova-lite-v1:0` despite the actual call
   // using the bogus model. The header now reflects modelString.
-  it("Tier S #2: header reflects ASSIGNEE_MODEL override, not the default", async () => {
-    process.env["ASSIGNEE_MODEL"] = "bedrock/anthropic.claude-3-5-sonnet";
+  it("Tier S #2: header reflects ASSIGNEE_LLM_DEFAULT override, not the default", async () => {
+    process.env["ASSIGNEE_LLM_DEFAULT"] = "bedrock/anthropic.claude-3-5-sonnet";
     const section = await checkBedrock({
       llmFactory: () => ({
         generateText: vi.fn().mockResolvedValue([null, "ok"] as const),
@@ -336,7 +337,7 @@ describe("checkBedrock", () => {
   });
 
   it("Tier S #2: header strips the bedrock/ provider prefix from the model display", async () => {
-    process.env["ASSIGNEE_MODEL"] = "bedrock/amazon.nova-lite-v1:0";
+    process.env["ASSIGNEE_LLM_DEFAULT"] = "bedrock/amazon.nova-lite-v1:0";
     const section = await checkBedrock({
       llmFactory: () => ({
         generateText: vi.fn().mockResolvedValue([null, "ok"] as const),

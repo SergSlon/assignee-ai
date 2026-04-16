@@ -2,8 +2,9 @@
  * Doctor check #2 — LLM / Bedrock reachability.
  *
  * Sends a tiny "hello" prompt via `LlmAdapter` so doctor honours the
- * same env vars (`ASSIGNEE_MODEL`, guardrails) as the rest of the CLI —
- * no separate code path that could mask provider misconfiguration.
+ * same env vars (`ASSIGNEE_LLM_DEFAULT` / deprecated `ASSIGNEE_MODEL`,
+ * guardrails) as the rest of the CLI — no separate code path that could
+ * mask provider misconfiguration.
  */
 
 import { tryAssigneeCredentials } from "@assignee/core";
@@ -46,7 +47,10 @@ export async function checkBedrock(
   deps: BedrockCheckDeps = {},
 ): Promise<DoctorSection> {
   const subs: DoctorSubCheck[] = [];
-  const modelString = process.env[EnvVar.ASSIGNEE_MODEL] ?? DEFAULT_MODEL;
+  const modelString =
+    process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
+    process.env[EnvVar.ASSIGNEE_MODEL] ??
+    DEFAULT_MODEL;
   const guardrailId = process.env[EnvVar.BEDROCK_GUARDRAIL_ID];
   const guardrailVersion = process.env[EnvVar.BEDROCK_GUARDRAIL_VERSION];
   const timeoutMs = deps.timeoutMs ?? DEFAULT_CHECK_TIMEOUT_MS;

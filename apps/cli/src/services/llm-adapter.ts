@@ -2,7 +2,7 @@
  * Universal LLM adapter — Wave 6d F5 barrel.
  *
  * Routes requests to any provider via Vercel AI SDK. Provider is driven
- * by the ASSIGNEE_MODEL env var (e.g. `anthropic/claude-sonnet-4-5`,
+ * by the ASSIGNEE_LLM_DEFAULT env var (e.g. `anthropic/claude-sonnet-4-5`,
  * `openai/gpt-4o`, `bedrock/amazon.nova-lite-v1:0`, `ollama/llama3`,
  * `google/gemini-2.0-flash`). NFR-15: maxOutputTokens capped at 1024
  * by default.

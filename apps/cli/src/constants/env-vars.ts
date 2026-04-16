@@ -35,6 +35,7 @@ export const EnvVar = {
   ASSIGNEE_LLM_WORKLOAD_CLASSIFIER: "ASSIGNEE_LLM_WORKLOAD_CLASSIFIER",
 
   // ── CLI configuration ─────────────────────────────────────────
+  /** @deprecated Use {@link ASSIGNEE_LLM_DEFAULT} instead. Kept for back-compat. */
   ASSIGNEE_MODEL: "ASSIGNEE_MODEL",
   ASSIGNEE_VERBOSITY: "ASSIGNEE_VERBOSITY",
   ASSIGNEE_LOG_LEVEL: "ASSIGNEE_LOG_LEVEL",

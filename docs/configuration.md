@@ -165,7 +165,7 @@ Pass-through section for organization-wide policies. Keys are domain-specific (e
 
 ### `llm` Section (Story 44.1)
 
-Per-node LLM model routing. By default, all pipeline nodes use the same model (`ASSIGNEE_MODEL` or the built-in default `bedrock/amazon.nova-lite-v1:0`). The `llm` section lets you assign different models to different pipeline stages — for example, a smart model for plan generation and a cheap/fast model for intent classification.
+Per-node LLM model routing. By default, all pipeline nodes use the same model (`ASSIGNEE_LLM_DEFAULT` or the built-in default `bedrock/amazon.nova-lite-v1:0`). The `llm` section lets you assign different models to different pipeline stages — for example, a smart model for plan generation and a cheap/fast model for intent classification.
 
 ```yaml
 # .assignee/config.yaml
@@ -177,13 +177,13 @@ llm:
   workload_classifier: bedrock/us.amazon.nova-micro-v1:0
 ```
 
-| Key                       | Type   | Default                      | Description                                   |
-| ------------------------- | ------ | ---------------------------- | --------------------------------------------- |
-| `llm.default`             | string | `ASSIGNEE_MODEL` or built-in | Fallback model for callsites not listed below |
-| `llm.plan_generator`      | string | falls back to `llm.default`  | Model for CloudFormation plan generation      |
-| `llm.intent_parser`       | string | falls back to `llm.default`  | Model for resource type classification        |
-| `llm.advice_generator`    | string | falls back to `llm.default`  | Model for inline advice hints                 |
-| `llm.workload_classifier` | string | falls back to `llm.default`  | Model for workload profile classification     |
+| Key                       | Type   | Default                            | Description                                   |
+| ------------------------- | ------ | ---------------------------------- | --------------------------------------------- |
+| `llm.default`             | string | `ASSIGNEE_LLM_DEFAULT` or built-in | Fallback model for callsites not listed below |
+| `llm.plan_generator`      | string | falls back to `llm.default`        | Model for CloudFormation plan generation      |
+| `llm.intent_parser`       | string | falls back to `llm.default`        | Model for resource type classification        |
+| `llm.advice_generator`    | string | falls back to `llm.default`        | Model for inline advice hints                 |
+| `llm.workload_classifier` | string | falls back to `llm.default`        | Model for workload profile classification     |
 
 Each value must be in `provider/model-id` format. Supported providers: `bedrock`, `anthropic`, `openai`, `google`, `ollama`.
 

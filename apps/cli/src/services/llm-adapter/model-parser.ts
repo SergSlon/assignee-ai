@@ -1,5 +1,5 @@
 /**
- * Parse ASSIGNEE_MODEL strings (`provider/model-id`) and validate the provider
+ * Parse ASSIGNEE_LLM_DEFAULT strings (`provider/model-id`) and validate the provider
  * is on the supported list.
  *
  * Extracted from llm-adapter.ts (Wave 6d F5).
@@ -14,7 +14,7 @@ export interface ParsedModel {
   modelId: string;
 }
 
-/** Default model when ASSIGNEE_MODEL is unset — backward compatible. */
+/** Default model when ASSIGNEE_LLM_DEFAULT (and deprecated ASSIGNEE_MODEL) is unset. */
 export const DEFAULT_MODEL = `${LlmProvider.BEDROCK}/amazon.nova-lite-v1:0`;
 
 /** Default maxOutputTokens per NFR-15. */
@@ -32,7 +32,7 @@ export function parseModelString(modelString: string): ParsedModel {
   const slashIndex = modelString.indexOf("/");
   if (slashIndex === -1) {
     throw new LlmError(
-      `Invalid ASSIGNEE_MODEL format: "${modelString}". Expected "provider/model-id" (e.g. "anthropic/claude-sonnet-4-5").`,
+      `Invalid ASSIGNEE_LLM_DEFAULT format: "${modelString}". Expected "provider/model-id" (e.g. "anthropic/claude-sonnet-4-5"). (Also applies to deprecated ASSIGNEE_MODEL.)`,
     );
   }
 
@@ -41,13 +41,13 @@ export function parseModelString(modelString: string): ParsedModel {
 
   if (!modelId) {
     throw new LlmError(
-      `Invalid ASSIGNEE_MODEL format: "${modelString}". Model ID is empty after provider prefix.`,
+      `Invalid ASSIGNEE_LLM_DEFAULT format: "${modelString}". Model ID is empty after provider prefix. (Also applies to deprecated ASSIGNEE_MODEL.)`,
     );
   }
 
   if (!VALID_PROVIDERS.has(provider)) {
     throw new LlmError(
-      `Unsupported provider "${provider}" in ASSIGNEE_MODEL. Supported: ${[...VALID_PROVIDERS].join(", ")}.`,
+      `Unsupported provider "${provider}" in ASSIGNEE_LLM_DEFAULT (or deprecated ASSIGNEE_MODEL). Supported: ${[...VALID_PROVIDERS].join(", ")}.`,
     );
   }
 
