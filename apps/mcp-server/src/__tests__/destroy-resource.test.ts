@@ -57,6 +57,7 @@ const mockTaggingSend = vi.fn();
 vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
   class ResourceGroupsTaggingAPIClient {
     send = mockTaggingSend;
+    destroy = vi.fn();
   }
   function GetResourcesCommand(input: Record<string, unknown>) {
     return { ...input, _type: "GetResourcesCommand" };
@@ -69,6 +70,7 @@ const mockCloudControlSend = vi.fn();
 vi.mock("@aws-sdk/client-cloudcontrol", () => {
   class CloudControlClient {
     send = mockCloudControlSend;
+    destroy = vi.fn();
   }
   function DeleteResourceCommand(input: Record<string, unknown>) {
     return { ...input, _type: "DeleteResourceCommand" };
@@ -88,6 +90,7 @@ const mockEc2Send = vi.fn();
 vi.mock("@aws-sdk/client-ec2", () => {
   class EC2Client {
     send = mockEc2Send;
+    destroy = vi.fn();
   }
   function DescribeInternetGatewaysCommand(input: Record<string, unknown>) {
     return { ...input, _type: "DescribeInternetGatewaysCommand" };

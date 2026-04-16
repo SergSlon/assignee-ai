@@ -13,6 +13,7 @@ const { mockEc2Send } = vi.hoisted(() => ({ mockEc2Send: vi.fn() }));
 vi.mock("@aws-sdk/client-ec2", () => {
   class EC2Client {
     send = mockEc2Send;
+    destroy = vi.fn();
   }
   function AllocateAddressCommand(input: unknown) {
     return { _type: "AllocateAddressCommand", input };

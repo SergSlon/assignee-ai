@@ -10,6 +10,7 @@ const hoisted = vi.hoisted(() => ({ mockS3Send: vi.fn() }));
 vi.mock("@aws-sdk/client-s3", () => {
   class S3Client {
     send = hoisted.mockS3Send;
+    destroy = vi.fn();
   }
   function ListObjectVersionsCommand(i: Record<string, unknown>) {
     return { _type: "ListObjectVersions", ...i };

@@ -30,6 +30,7 @@ import {
   EIP_AUTO_ALLOCATE,
   ExecutionStatus,
   RESOURCE_TYPES,
+  createEC2Client,
   isAccessDeniedError,
 } from "@assignee/core";
 import type { AgentState } from "../../services/graph-state.js";
@@ -69,14 +70,14 @@ export async function allocateNatGatewayEip(
     return { ok: true, freshlyAllocated: freshlyAllocatedEipIds };
   }
 
+  let ec2: ReturnType<typeof createEC2Client> | undefined;
   try {
     const {
-      EC2Client,
       AllocateAddressCommand,
       DescribeAddressesCommand,
       CreateTagsCommand,
     } = await import("@aws-sdk/client-ec2");
-    const ec2 = new EC2Client({
+    ec2 = createEC2Client({
       region: AWS_REGION,
       credentials: requireAssigneeCredentials("operator"),
     });
@@ -256,5 +257,7 @@ export async function allocateNatGatewayEip(
         desiredState,
       },
     };
+  } finally {
+    ec2?.destroy();
   }
 }

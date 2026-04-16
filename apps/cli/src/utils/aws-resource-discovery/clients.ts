@@ -18,7 +18,7 @@
  * honored.
  */
 
-import { EC2Client } from "@aws-sdk/client-ec2";
+import { createEC2Client, type EC2Client } from "@assignee/core";
 import { RDSClient } from "@aws-sdk/client-rds";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { AWS_REGION } from "../../config/constants.js";
@@ -34,7 +34,7 @@ function readerCredsOrUndefined(): ExplicitAwsCredentials | undefined {
 export function createEc2Client(): EC2Client | undefined {
   const creds = readerCredsOrUndefined();
   if (!creds) return undefined;
-  return new EC2Client({
+  return createEC2Client({
     region: AWS_REGION,
     credentials: creds,
   });

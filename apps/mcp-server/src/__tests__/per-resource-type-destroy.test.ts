@@ -20,6 +20,7 @@ const mockCCSend = vi.fn();
 vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
   class ResourceGroupsTaggingAPIClient {
     send = mockTaggingSend;
+    destroy = vi.fn();
   }
   return {
     ResourceGroupsTaggingAPIClient,
@@ -30,6 +31,7 @@ vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
 vi.mock("@aws-sdk/client-cloudcontrol", () => {
   class CloudControlClient {
     send = mockCCSend;
+    destroy = vi.fn();
   }
   return {
     CloudControlClient,

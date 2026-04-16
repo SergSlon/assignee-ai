@@ -10,6 +10,7 @@
  *     AZ placeholders ("us-east-1a") — no AWS calls.
  */
 import {
+  createEC2Client,
   parseMarker,
   MARKER_PREFIX,
   MARKER_PATTERN_GLOBAL,
@@ -42,25 +43,29 @@ export async function defaultAzLookup(region: string): Promise<string[]> {
         `Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY.`,
     );
   }
-  const { EC2Client, DescribeAvailabilityZonesCommand } =
+  const { DescribeAvailabilityZonesCommand } =
     await import("@aws-sdk/client-ec2");
-  const ec2 = new EC2Client({ region, credentials: operatorCreds });
-  const result = await ec2.send(
-    new DescribeAvailabilityZonesCommand({
-      Filters: [{ Name: "state", Values: ["available"] }],
-    }),
-  );
-  const zones = (result.AvailabilityZones ?? [])
-    .map((z) => z.ZoneName)
-    .filter((z): z is string => typeof z === "string" && z.length > 0)
-    .sort();
-  if (zones.length === 0) {
-    throw new Error(
-      `DescribeAvailabilityZones returned no zones for region "${region}".`,
+  const ec2 = createEC2Client({ region, credentials: operatorCreds });
+  try {
+    const result = await ec2.send(
+      new DescribeAvailabilityZonesCommand({
+        Filters: [{ Name: "state", Values: ["available"] }],
+      }),
     );
+    const zones = (result.AvailabilityZones ?? [])
+      .map((z) => z.ZoneName)
+      .filter((z): z is string => typeof z === "string" && z.length > 0)
+      .sort();
+    if (zones.length === 0) {
+      throw new Error(
+        `DescribeAvailabilityZones returned no zones for region "${region}".`,
+      );
+    }
+    AZ_CACHE.set(region, zones);
+    return zones;
+  } finally {
+    ec2.destroy();
   }
-  AZ_CACHE.set(region, zones);
-  return zones;
 }
 
 /** Test-only hook: clears the region→AZ cache so fixtures don't leak between tests. */

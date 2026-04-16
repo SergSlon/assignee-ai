@@ -12,3 +12,4 @@ export * from "./barrels/errors.js";
 export * from "./barrels/ports-services.js";
 export * from "./barrels/destroy-strategies.js";
 export * from "./barrels/list-resources.js";
+export * from "./barrels/aws.js";

@@ -29,11 +29,15 @@ export const dynamodbStrategy: DestroyStrategy = {
       region: effectiveRegion,
       credentials: requireAssigneeCredentials("operator"),
     });
-    await ddb.send(
-      new UpdateTableCommand({
-        TableName: resource.identifier,
-        DeletionProtectionEnabled: false,
-      }),
-    );
+    try {
+      await ddb.send(
+        new UpdateTableCommand({
+          TableName: resource.identifier,
+          DeletionProtectionEnabled: false,
+        }),
+      );
+    } finally {
+      ddb.destroy();
+    }
   },
 };

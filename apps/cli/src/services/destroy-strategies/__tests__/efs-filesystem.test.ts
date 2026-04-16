@@ -10,6 +10,7 @@ const hoisted = vi.hoisted(() => ({ mockEfsSend: vi.fn() }));
 vi.mock("@aws-sdk/client-efs", () => {
   class EFSClient {
     send = hoisted.mockEfsSend;
+    destroy = vi.fn();
   }
   function DescribeMountTargetsCommand(i: Record<string, unknown>) {
     return { _type: "DescribeMountTargets", ...i };

@@ -53,50 +53,58 @@ export async function fetchManagedResources(
     region: resolvedRegion,
   });
 
-  const { costMap } = loadProvisionData();
-  const resources: ManagedResource[] = [];
-  let paginationToken: string | undefined;
+  try {
+    const { costMap } = loadProvisionData();
+    const resources: ManagedResource[] = [];
+    let paginationToken: string | undefined;
 
-  do {
-    const command = new GetResourcesCommand({
-      TagFilters: [
-        {
-          Key: TAG_KEY_MANAGED_BY,
-          Values: [TAG_VALUE_MANAGED_BY],
-        },
-      ],
-      ...(paginationToken ? { PaginationToken: paginationToken } : {}),
-    });
-
-    const response: GetResourcesOutput = await client.send(command);
-
-    for (const mapping of response.ResourceTagMappingList ?? []) {
-      const arn = mapping.ResourceARN ?? "";
-      const parsed = parseArn(arn);
-
-      // Look for created date from tags.
-      const createdTag = mapping.Tags?.find((t) => t.Key === "assignee-run-id");
-
-      resources.push({
-        resourceType: parsed.resourceType,
-        arn,
-        region: parsed.region || resolvedRegion,
-        createdDate: createdTag?.Value ?? CostEstimateLabel.NA,
-        estimatedMonthlyCost:
-          costMap.get(arn) ??
-          costMap.get(arn.split("/").pop() ?? "") ??
-          costMap.get(arn.split(":").pop() ?? "") ??
-          CostEstimateLabel.NA,
+    do {
+      const command = new GetResourcesCommand({
+        TagFilters: [
+          {
+            Key: TAG_KEY_MANAGED_BY,
+            Values: [TAG_VALUE_MANAGED_BY],
+          },
+        ],
+        ...(paginationToken ? { PaginationToken: paginationToken } : {}),
       });
+
+      const response: GetResourcesOutput = await client.send(command);
+
+      for (const mapping of response.ResourceTagMappingList ?? []) {
+        const arn = mapping.ResourceARN ?? "";
+        const parsed = parseArn(arn);
+
+        // Look for created date from tags.
+        const createdTag = mapping.Tags?.find(
+          (t) => t.Key === "assignee-run-id",
+        );
+
+        resources.push({
+          resourceType: parsed.resourceType,
+          arn,
+          region: parsed.region || resolvedRegion,
+          createdDate: createdTag?.Value ?? CostEstimateLabel.NA,
+          estimatedMonthlyCost:
+            costMap.get(arn) ??
+            costMap.get(arn.split("/").pop() ?? "") ??
+            costMap.get(arn.split(":").pop() ?? "") ??
+            CostEstimateLabel.NA,
+        });
+      }
+
+      paginationToken = response.PaginationToken;
+    } while (paginationToken);
+
+    // Filter by resource type if specified.
+    if (resourceType) {
+      return resources.filter((r) => r.resourceType === resourceType);
     }
 
-    paginationToken = response.PaginationToken;
-  } while (paginationToken);
-
-  // Filter by resource type if specified.
-  if (resourceType) {
-    return resources.filter((r) => r.resourceType === resourceType);
+    return resources;
+  } finally {
+    // Story 49.3: dispose the RGTA client — long-running MCP server
+    // must not leak sockets per invocation.
+    client.destroy();
   }
-
-  return resources;
 }

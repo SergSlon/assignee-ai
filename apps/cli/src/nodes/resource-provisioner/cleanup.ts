@@ -15,7 +15,7 @@
  * SRP: this module changes only when cleanup rules change.
  */
 
-import { RESOURCE_TYPES } from "@assignee/core";
+import { RESOURCE_TYPES, createEC2Client } from "@assignee/core";
 import type { AgentState } from "../../services/graph-state.js";
 import { log, LOG_ACTIONS } from "../../utils/logger.js";
 import { AWS_REGION } from "../../config/constants.js";
@@ -42,10 +42,10 @@ export async function cleanupAllocatedResources(
     state.resourceType === RESOURCE_TYPES.EC2_NAT_GATEWAY &&
     eipReleased.size > 0
   ) {
+    let ec2: ReturnType<typeof createEC2Client> | undefined;
     try {
-      const { EC2Client, ReleaseAddressCommand } =
-        await import("@aws-sdk/client-ec2");
-      const ec2 = new EC2Client({
+      const { ReleaseAddressCommand } = await import("@aws-sdk/client-ec2");
+      ec2 = createEC2Client({
         region: AWS_REGION,
         credentials: requireAssigneeCredentials("operator"),
       });
@@ -78,15 +78,17 @@ export async function cleanupAllocatedResources(
           error: formatErrorForLog(err),
         },
       });
+    } finally {
+      ec2?.destroy();
     }
   }
 
   // Delete SSH key pair if we created one — best-effort cleanup
   if (sshDeleted) {
+    let ec2: ReturnType<typeof createEC2Client> | undefined;
     try {
-      const { EC2Client, DeleteKeyPairCommand } =
-        await import("@aws-sdk/client-ec2");
-      const ec2 = new EC2Client({
+      const { DeleteKeyPairCommand } = await import("@aws-sdk/client-ec2");
+      ec2 = createEC2Client({
         region: AWS_REGION,
         credentials: requireAssigneeCredentials("operator"),
       });
@@ -104,6 +106,8 @@ export async function cleanupAllocatedResources(
           error: formatErrorForLog(err),
         },
       });
+    } finally {
+      ec2?.destroy();
     }
   }
 }

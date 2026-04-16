@@ -32,8 +32,9 @@ export async function getOperatorAccountId(
   if (cachedOperatorAccountLookup) return cachedOperatorAccountLookup;
 
   cachedOperatorAccountLookup = (async () => {
+    let sts: STSClient | undefined;
     try {
-      const sts = new STSClient({
+      sts = new STSClient({
         region,
         credentials: requireAssigneeCredentials("operator"),
       });
@@ -55,6 +56,9 @@ export async function getOperatorAccountId(
       // Clear the in-flight promise so failures don't poison subsequent
       // calls. Successful lookups are still served from cachedOperatorAccountId.
       cachedOperatorAccountLookup = undefined;
+      // Story 49.3: dispose the STS client — long-running MCP server
+      // must not leak sockets per invocation.
+      sts?.destroy();
     }
   })();
 

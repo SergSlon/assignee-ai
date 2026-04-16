@@ -10,6 +10,7 @@ const hoisted = vi.hoisted(() => ({ mockDdbSend: vi.fn() }));
 vi.mock("@aws-sdk/client-dynamodb", () => {
   class DynamoDBClient {
     send = hoisted.mockDdbSend;
+    destroy = vi.fn();
   }
   function UpdateTableCommand(i: Record<string, unknown>) {
     return { _type: "UpdateTable", ...i };

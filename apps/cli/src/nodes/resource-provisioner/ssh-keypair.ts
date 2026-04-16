@@ -31,6 +31,7 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   ResourceDefault,
+  createEC2Client,
 } from "@assignee/core";
 import type { AgentState } from "../../services/graph-state.js";
 import { log, LOG_ACTIONS } from "../../utils/logger.js";
@@ -72,10 +73,11 @@ export async function ensureSshKeypair(
   let sshKeyCreateAttempted = false;
   let sshKeyCreatedName: string | undefined;
 
+  let ec2: ReturnType<typeof createEC2Client> | undefined;
   try {
-    const { EC2Client, CreateKeyPairCommand, DescribeKeyPairsCommand } =
+    const { CreateKeyPairCommand, DescribeKeyPairsCommand } =
       await import("@aws-sdk/client-ec2");
-    const ec2 = new EC2Client({
+    ec2 = createEC2Client({
       region: AWS_REGION,
       credentials: requireAssigneeCredentials("operator"),
     });
@@ -171,6 +173,8 @@ export async function ensureSshKeypair(
       extras: { sshKeyError: errMsg },
     });
     delete desiredState[CfnKey.KEY_NAME];
+  } finally {
+    ec2?.destroy();
   }
 
   return { ok: true, sshKeyCreatedName };
