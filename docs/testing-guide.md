@@ -253,8 +253,13 @@ const tool = createServicePricingDispatchTool({
 cd apps/cli/scripts
 node capture-mcp-responses.mjs      # spawns MCP servers, captures ~39 responses (requires .env)
 node process-captured-responses.mjs  # trims schemas/pricing/docs to fixture size
-node build-fixture-ts.mjs           # generates final mcp-mock-responses.ts
 ```
+
+> `build-fixture-ts.mjs` is **disabled** (exits 2) since story 48-10 split the
+> monolithic fixture into per-resource files under
+> `apps/cli/src/test-fixtures/mcp-mock-responses/`. To add or update fixtures,
+> edit the per-resource files directly — see the directory layout and the facade
+> re-export in `mcp-mock-responses.ts`.
 
 > `captured-responses/` is now tracked in git (committed alongside the TypeScript fixture). `processed-responses/` is still gitignored — only the final TypeScript fixture and the raw captures are committed.
 
