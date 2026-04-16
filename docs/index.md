@@ -66,7 +66,7 @@ when you want to understand how assignee.ai thinks.
 | Supported AWS resource types   | 37 (35 with dedicated plugins + 2 compound-only that fall through to the generic plugin: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) |
 | Compound architecture patterns | 9 first-class + 1 variant                                                                                                                                 |
 | LangGraph pipeline nodes       | 13                                                                                                                                                        |
-| CLI commands                   | 12                                                                                                                                                        |
+| CLI commands                   | 17                                                                                                                                                        |
 | MCP server tools               | 5                                                                                                                                                         |
 | Resource plugins               | 37 registered (35 type-specific + generic fallback; 2 compound-only types share the generic)                                                              |
 | Best practice YAML rules       | 186 (185 tracked in manifest.json + 1 pending re-manifest)                                                                                                |
@@ -75,6 +75,6 @@ when you want to understand how assignee.ai thinks.
 | Config precedence levels       | 6                                                                                                                                                         |
 | LLM providers supported        | 5                                                                                                                                                         |
 | IAM credential users           | 3                                                                                                                                                         |
-| Test cases (passing)           | 6,367                                                                                                                                                     |
-| Test files                     | 256 (129 CLI + 94 core + 11 BP + 22 MCP)                                                                                                                  |
+| Test cases (passing)           | 7,595                                                                                                                                                     |
+| Test files                     | 303 (168 CLI + 100 core + 11 BP + 24 MCP)                                                                                                                 |
 | RUN_E2E compound coverage      | 9/9 first-class compounds                                                                                                                                 |

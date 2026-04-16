@@ -50,11 +50,11 @@ for your real account ID) or let the wizard prompt for it. See
 [invariants.md](explanation/invariants.md#placeholder-arn-preflight)
 for the enforcing code path.
 
-### Symptom: `Refusing to destroy AssigneeOperator / Bedrock* role`
+### Symptom: `Refusing to destroy AssigneeOperator / AssigneeAiBedrockLoggingRole`
 
 **Cause.** `bulk-destroy` has a hard-coded safety allowlist that
 unconditionally excludes the four IAM roles assignee itself relies on
-(`AssigneeOperator`, `AssigneeReader`, `AssigneeAuditor`, `Bedrock*`).
+(`AssigneeOperator`, `AssigneeReader`, `AssigneeAuditor`, `AssigneeAiBedrockLoggingRole`).
 Without the allowlist, `destroy --all --include-iam` would lock the
 operator out of their own tool.
 

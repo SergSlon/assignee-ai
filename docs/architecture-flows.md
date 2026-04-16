@@ -39,7 +39,7 @@ flowchart TD
         HA["10. HUMAN_APPROVAL<br/>—————<br/>Display plan + cost<br/>User confirms / cancels<br/>⚡ LangGraph INTERRUPT<br/>Auto-approve on checkpoint resume<br/>(no double confirm)"]
 
         subgraph PHASE2["Phase 2 — Provisioning"]
-            RP["11. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>OR SDK fallback<br/>State guard skipped for S3<br/>(globally unique names)<br/>provisionable=false → skip<br/>Post-hooks: S3 upload,<br/>CloudFront creation"]
+            RP["11. RESOURCE_PROVISIONER<br/>—————<br/>CloudControl CreateResource<br/>State guard skipped for S3<br/>(globally unique names)<br/>provisionable=false → skip<br/>Post-hooks: S3 upload"]
             SP["12. STATUS_POLLER<br/>—————<br/>Poll every 2s<br/>MAX_POLL_ITERATIONS=450 guard<br/>Extended timeout for RDS/ELBv2/<br/>NatGateway (15 min)"]
             RF["13. RESULT_FORMATTER<br/>—————<br/>SUCCESS / FAILED<br/>+ security posture check"]
         end
@@ -67,7 +67,7 @@ flowchart TD
     APPLY_MODE --> IP
     RESUME -->|"checkpoint loaded"| HA
 
-    DESTROY["DESTROY<br/>—————<br/>Single: Resolve ARN via Tags API<br/>CloudControl DeleteResource<br/>OR SDK fallback<br/>+ Billing MCP cost savings<br/>—————<br/>Bulk (--all): List all managed<br/>resources, tier-ordered destroy<br/>(compute → storage → network → IAM)<br/>--include-iam / --dry-run"]
+    DESTROY["DESTROY<br/>—————<br/>Single: Resolve ARN via Tags API<br/>CloudControl DeleteResource<br/>+ pre-delete hooks<br/>+ Billing MCP cost savings<br/>—————<br/>Bulk (--all): List all managed<br/>resources, tier-ordered destroy<br/>(compute → storage → network → IAM)<br/>--include-iam / --dry-run"]
     LIST["LIST<br/>—————<br/>Resource Groups Tagging API<br/>Filter: managed-by=assignee-ai"]
     SETUP["SETUP<br/>—————<br/>Create 3 IAM users<br/>operator / reader / auditor<br/>Least-privilege policies"]
     INIT["INIT<br/>—————<br/>Detect AWS creds/region<br/>Create .assignee/config.yaml"]
@@ -97,7 +97,7 @@ flowchart LR
         direction TB
         IAM["🔐 iam-mcp-server<br/>uvx --readonly<br/>—————<br/>Creds: AUDITOR"]
         SEC["🛡️ well-architected-security<br/>uvx awslabs server<br/>—————<br/>Creds: AUDITOR"]
-        BILL["📊 cost-management-mcp-server<br/>uvx awslabs server<br/>—————<br/>Creds: READER"]
+        BILL["📊 billing-cost-management-mcp-server<br/>uvx awslabs server<br/>—————<br/>Creds: READER"]
     end
 
     subgraph NODES["Graph Nodes Consuming MCP"]
@@ -470,7 +470,7 @@ flowchart TB
     subgraph OPT_MCP["Optional MCP Servers"]
         IAM_S["iam-mcp-server --readonly"]
         SEC_S["well-architected-security"]
-        BILL_S["cost-management-mcp-server"]
+        BILL_S["billing-cost-management-mcp-server"]
     end
 
     subgraph DIRECT["Direct AWS SDK Calls"]
@@ -551,8 +551,8 @@ flowchart TD
 
     subgraph INTERNAL["Internal: Reuses CLI Graph"]
         GRAPH["LangGraph Agent<br/>(same 13 nodes)"]
-        MCPS["Core MCP Servers<br/>(cfn, pricing, docs, knowledge)"]
-        AWS["AWS CloudControl<br/>+ SDK fallbacks"]
+        MCPS["Core MCP Servers<br/>(pricing, docs, knowledge)"]
+        AWS["AWS CloudControl<br/>+ pre-delete hooks"]
     end
 
     PLAN -->|"ExecutionMode.PLAN"| GRAPH

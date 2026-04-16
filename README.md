@@ -124,44 +124,44 @@ node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.js
 
 **37 first-class types.** Every supported type flows through the CloudControl API — zero direct SDK write paths. 35 types have dedicated plugins; 2 (`EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) are compound-only and share the generic fallback plugin. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
 
-| Type                                        | Notes                                                                     |
-| :------------------------------------------ | :------------------------------------------------------------------------ |
-| `AWS::S3::Bucket`                           | Wizard: encryption, versioning, lifecycle, CORS, replication. 13 BP rules |
-| `AWS::SSM::Parameter`                       | Wizard: type (String/SecureString), tier (Standard/Advanced)              |
-| `AWS::IAM::Role`                            | Wizard: trust policy, managed policies. Cost: Free                        |
-| `AWS::EC2::Instance`                        | Wizard: instance type with live $/hr, AMI, key pair, UserData auto-encode |
-| `AWS::RDS::DBInstance`                      | Wizard: engine, class with live $/hr, Multi-AZ, encryption                |
-| `AWS::Lambda::Function`                     | Wizard: runtime, memory, timeout, env vars (reserved-prefix guard)        |
-| `AWS::EC2::VPC`                             | Wizard: CIDR block, DNS settings. Used in VPC + EFS compounds             |
-| `AWS::EC2::Subnet`                          | Wizard: AZ, CIDR, public IP auto-assign. Used in VPC + EFS compounds      |
-| `AWS::EC2::SecurityGroup`                   | Wizard: ingress/egress rules. Auto-created as EC2 companion               |
-| `AWS::DynamoDB::Table`                      | Wizard: key schema, billing mode (on-demand/provisioned), PITR            |
-| `AWS::SQS::Queue`                           | Wizard: FIFO, visibility timeout, DLQ. Used in Message Processing         |
-| `AWS::SNS::Topic`                           | Wizard: FIFO, KMS encryption, display name                                |
-| `AWS::SNS::Subscription`                    | Wizard: protocol, endpoint, filter policy, DLQ                            |
-| `AWS::ElasticLoadBalancingV2::LoadBalancer` | Wizard: ALB vs NLB, scheme (internet/internal), subnets                   |
-| `AWS::ECS::Cluster`                         | Wizard: Fargate capacity providers, Container Insights. Cost: Free        |
-| `AWS::ECR::Repository`                      | Wizard: image scanning, tag immutability, encryption                      |
-| `AWS::Logs::LogGroup`                       | Wizard: retention (days), KMS key. Auto-created with Lambda and ECS       |
-| `AWS::EC2::InternetGateway`                 | VPC compound: auto-attached via VPCGatewayAttachment                      |
-| `AWS::EC2::RouteTable`                      | VPC compound: public + private tables with associated routes              |
-| `AWS::EC2::Route`                           | VPC compound: 0.0.0.0/0 → IGW (public) or NAT (private)                   |
-| `AWS::EC2::NatGateway`                      | VPC compound: ~$32/mo dominant cost driver, auto-allocates EIP            |
-| `AWS::ApiGatewayV2::Api`                    | Serverless API compound: HTTP API with CORS, Lambda integration           |
-| `AWS::CloudWatch::Alarm`                    | Wizard: metric, threshold, comparison, evaluation periods                 |
-| `AWS::SecretsManager::Secret`               | Wizard: auto-generate or manual secret string, KMS key                    |
-| `AWS::EC2::VPCGatewayAttachment`            | VPC compound only: attaches IGW to VPC (non-taggable, cascade delete)     |
-| `AWS::EC2::SubnetRouteTableAssociation`     | VPC compound only: links subnets to route tables (cascade delete)         |
-| `AWS::EFS::FileSystem`                      | Wizard: throughput mode, encryption, backups. Used in EFS compound        |
-| `AWS::EFS::MountTarget`                     | EFS compound: one per AZ, NFS security group auto-configured              |
-| `AWS::Events::Rule`                         | Wizard: schedule expression, targets. Used in Scheduled Lambda            |
-| `AWS::Events::EventBus`                     | Custom event bus for cross-account or SaaS partner integrations           |
-| `AWS::Events::Connection`                   | Outbound HTTP auth (API key / Basic / OAuth) for API destinations         |
-| `AWS::Events::ApiDestination`               | Outbound HTTP endpoint with URL, method, and rate limiting                |
-| `AWS::KMS::Key`                             | Customer-managed encryption key; auto-rotation enabled by default         |
-| `AWS::CloudFront::Distribution`             | CDN with HTTPS redirect, caching policy. Powers static-website compound   |
-| `AWS::CloudFront::OriginAccessControl`      | SigV4-signed CloudFront → S3 origin requests (replaces legacy OAI)        |
-| `AWS::S3::BucketPolicy`                     | IAM resource policy: OAC read grant, TLS enforcement                      |
+| Type                                        | Notes                                                                        |
+| :------------------------------------------ | :--------------------------------------------------------------------------- |
+| `AWS::S3::Bucket`                           | Wizard: encryption, versioning, lifecycle, CORS, replication. 13 BP rules    |
+| `AWS::SSM::Parameter`                       | Wizard: type (String/SecureString), tier (Standard/Advanced)                 |
+| `AWS::IAM::Role`                            | Wizard: trust policy, managed policies. Cost: Free                           |
+| `AWS::EC2::Instance`                        | Wizard: instance type with live $/hr, AMI, key pair, UserData auto-encode    |
+| `AWS::RDS::DBInstance`                      | Wizard: engine, class with live $/hr, Multi-AZ, encryption                   |
+| `AWS::Lambda::Function`                     | Wizard: runtime, memory, timeout, env vars (reserved-prefix guard)           |
+| `AWS::EC2::VPC`                             | Wizard: CIDR block, DNS settings. Used in VPC + EFS compounds                |
+| `AWS::EC2::Subnet`                          | Wizard: AZ, CIDR, public IP auto-assign. Used in VPC + EFS compounds         |
+| `AWS::EC2::SecurityGroup`                   | Wizard: ingress/egress rules. Auto-created as EC2 companion                  |
+| `AWS::DynamoDB::Table`                      | Wizard: key schema, billing mode (on-demand/provisioned), PITR               |
+| `AWS::SQS::Queue`                           | Wizard: FIFO, visibility timeout, DLQ. Used in Message Processing            |
+| `AWS::SNS::Topic`                           | Wizard: FIFO, KMS encryption, display name                                   |
+| `AWS::SNS::Subscription`                    | Wizard: protocol, endpoint, filter policy, DLQ                               |
+| `AWS::ElasticLoadBalancingV2::LoadBalancer` | Wizard: ALB vs NLB, scheme (internet/internal), subnets                      |
+| `AWS::ECS::Cluster`                         | Wizard: Fargate capacity providers, Container Insights. Cost: Free           |
+| `AWS::ECR::Repository`                      | Wizard: image scanning, tag immutability, encryption                         |
+| `AWS::Logs::LogGroup`                       | Wizard: retention (days), KMS key. Auto-created with Lambda and ECS          |
+| `AWS::EC2::InternetGateway`                 | VPC compound: auto-attached via VPCGatewayAttachment                         |
+| `AWS::EC2::RouteTable`                      | VPC compound: public + private tables with associated routes                 |
+| `AWS::EC2::Route`                           | VPC compound: 0.0.0.0/0 → IGW (public) or NAT (private)                      |
+| `AWS::EC2::NatGateway`                      | VPC compound: dominant cost driver (run `assignee cost`), auto-allocates EIP |
+| `AWS::ApiGatewayV2::Api`                    | Serverless API compound: HTTP API with CORS, Lambda integration              |
+| `AWS::CloudWatch::Alarm`                    | Wizard: metric, threshold, comparison, evaluation periods                    |
+| `AWS::SecretsManager::Secret`               | Wizard: auto-generate or manual secret string, KMS key                       |
+| `AWS::EC2::VPCGatewayAttachment`            | VPC compound only: attaches IGW to VPC (non-taggable, cascade delete)        |
+| `AWS::EC2::SubnetRouteTableAssociation`     | VPC compound only: links subnets to route tables (cascade delete)            |
+| `AWS::EFS::FileSystem`                      | Wizard: throughput mode, encryption, backups. Used in EFS compound           |
+| `AWS::EFS::MountTarget`                     | EFS compound: one per AZ, NFS security group auto-configured                 |
+| `AWS::Events::Rule`                         | Wizard: schedule expression, targets. Used in Scheduled Lambda               |
+| `AWS::Events::EventBus`                     | Custom event bus for cross-account or SaaS partner integrations              |
+| `AWS::Events::Connection`                   | Outbound HTTP auth (API key / Basic / OAuth) for API destinations            |
+| `AWS::Events::ApiDestination`               | Outbound HTTP endpoint with URL, method, and rate limiting                   |
+| `AWS::KMS::Key`                             | Customer-managed encryption key; auto-rotation enabled by default            |
+| `AWS::CloudFront::Distribution`             | CDN with HTTPS redirect, caching policy. Powers static-website compound      |
+| `AWS::CloudFront::OriginAccessControl`      | SigV4-signed CloudFront → S3 origin requests (replaces legacy OAI)           |
+| `AWS::S3::BucketPolicy`                     | IAM resource policy: OAC read grant, TLS enforcement                         |
 
 The only remaining entries in `CCAPI_FALLBACK_TYPES` are **pure redirect types** with no SDK write path — they are rejected at plan time with a friendly alternative:
 
@@ -190,7 +190,7 @@ Multi-resource intents are detected by keyword matching (zero LLM latency) and p
 
 ## MCP Server
 
-The `@assignee/mcp-server` package exposes assignee.ai as an MCP server for AI coding agents. Tools: `plan_resource`, `apply_plan`, `list_managed_resources`, `estimate_cost`.
+The `@assignee/mcp-server` package exposes assignee.ai as an MCP server for AI coding agents. Tools: `plan_resource`, `apply_plan`, `list_managed_resources`, `estimate_cost`, `destroy_resource`.
 
 Works with Claude Code, Cursor, and Windsurf. See [apps/mcp-server/README.md](apps/mcp-server/README.md) for setup instructions.
 
@@ -210,7 +210,7 @@ apps/
                        resource-provisioner · status-poller · result-formatter
       services/        graph.ts (LangGraph) · mcp-client.ts · memory.ts
                        list-resources.ts · resource-resolver.ts · billing.ts
-                       status-aggregator.ts · litellm-adapter.ts · bulk-destroy.ts
+                       status-aggregator.ts · llm-adapter.ts · bulk-destroy.ts
       config/          mcp-servers.ts
       utils/           display.ts · logger.ts · tags.ts · mcp.ts · pricing-lookup.ts
       test-fixtures/   mcp-mock-responses.ts (real MCP captures)
@@ -253,13 +253,13 @@ packages/
 | `awslabs.aws-documentation-mcp-server`         | AWS doc search and reads         | Core     |
 | `awslabs.iam-mcp-server`                       | IAM policy analysis (read-only)  | Optional |
 | `awslabs.well-architected-security-mcp-server` | Well-Architected security pillar | Optional |
-| `awslabs.cost-management-mcp-server`           | Billing and cost management      | Optional |
+| `awslabs.billing-cost-management-mcp-server`   | Billing and cost management      | Optional |
 
 Optional servers (IAM, Well-Architected Security, Billing) are spawned only when the corresponding command requires them.
 
 > **Note:** CloudFormation schemas and CCAPI provisioning are accessed directly via `@aws-sdk/client-cloudformation` and `@aws-sdk/client-cloudcontrol`. The legacy `cfn-mcp-server` and `ccapi-mcp-server` MCP wrappers were removed in Stories 7.6 and 31.4, and their announced replacement `aws-iac-mcp-server` was evaluated and declined. A guardrail test in `apps/cli/src/config/mcp-servers.test.ts` enforces that none of the three can re-appear.
 
-**LLM provider:** Default `us.amazon.nova-lite-v1:0` (Bedrock). Override with `ASSIGNEE_LLM_DEFAULT=anthropic/claude-haiku-4-5` or any LiteLLM-compatible string (OpenAI, Google, Anthropic).
+**LLM provider:** Default `us.amazon.nova-lite-v1:0` (Bedrock). Override with `ASSIGNEE_LLM_DEFAULT=anthropic/claude-haiku-4-5` or any `provider/model-id` string (supported: bedrock, anthropic, openai, google, ollama).
 
 **Credential separation:**
 
@@ -272,7 +272,7 @@ Optional servers (IAM, Well-Architected Security, Billing) are spawned only when
 ## Development
 
 ```bash
-pnpm test          # ~6367 tests across 256 files (129 CLI + 94 core + 11 BP + 22 MCP)
+pnpm test          # ~7595 tests across 303 files (168 CLI + 100 core + 11 BP + 24 MCP)
 pnpm check-types   # TypeScript type check
 pnpm build         # compile all packages
 ```
@@ -287,7 +287,9 @@ All MCP mock responses in `apps/cli/src/test-fixtures/mcp-mock-responses.ts` are
 cd apps/cli/scripts
 node capture-mcp-responses.mjs    # requires .env with ASSIGNEE_READER_* and ASSIGNEE_AUDITOR_* credentials
 node process-captured-responses.mjs
-node build-fixture-ts.mjs
+# Note: build-fixture-ts.mjs is disabled (exits 2) since story 48-10 split the
+# monolithic fixture into per-resource files under apps/cli/src/test-fixtures/mcp-mock-responses/.
+# Edit the per-resource files directly instead.
 ```
 
 ---
@@ -296,37 +298,37 @@ node build-fixture-ts.mjs
 
 ### Completed epics
 
-| Epic   | Description                                                                       | Status                     |
-| :----- | :-------------------------------------------------------------------------------- | :------------------------- |
-| **0**  | Project Foundation & Monorepo Setup                                               | Done                       |
-| **1**  | Plan Command (LangGraph, MCP, intent parsing, plan generation)                    | Done                       |
-| **2**  | Apply Command (HITL, provisioning, status polling, tagging)                       | Done                       |
-| **7**  | Resource Intelligence (23 types, option elicitation, pricing, doc hints)          | Done                       |
-| **8**  | Compound Provisioning (6 architecture patterns, dependency ordering)              | Done                       |
-| **9**  | Architecture Hardening (type safety, error handling, prompt injection guard)      | Done                       |
-| **10** | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)           | Done                       |
-| **11** | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                        | Done                       |
-| **12** | Best Practices Library (YAML schema, trigger engine, 186 rules today, FSBP)       | Done (12.4, 12.6 deferred) |
-| **14** | LiteLLM Provider Gateway (multi-provider LLM support)                             | Done (14.2-14.4 deferred)  |
-| **18** | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action) | Done                       |
-| **19** | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)     | Done                       |
-| **20** | MCP Server (plan, apply, list, estimate tools for AI agents)                      | Done                       |
-| **22** | Auto-Fix Round (apply auto-fixable BP patches with user consent)                  | Done                       |
-| **23** | Real-Time Pricing Breakdown (live pricing via AWS Pricing MCP, zero hardcoded $)  | Done                       |
-| **24** | Instance Type Selection UX (category filters, workload classification)            | Done                       |
-| **25** | Sprint F — Tier 1 Resources (LogGroup, IGW, RouteTable, Route, NatGateway)        | Done                       |
-| **26** | Sprint G — Tier 2 Resources (ApiGatewayV2, CloudWatch Alarm, SecretsManager)      | Done                       |
-| **27** | Config Precedence (user, project, org policy, env overrides, CLI flags)           | Done                       |
-| **28** | Drift Detection (`assignee drift`, `assignee reconcile`)                          | Done                       |
-| **29** | MCP Connection Pre-Warming & Resilience                                           | Done (29.4 deferred)       |
-| **30** | Request/Response Recording & Replay                                               | Done                       |
-| **31** | CloudFormation Schema SDK Migration (direct SDK, no MCP dependency)               | Done                       |
-| **33** | Auto-Cleanup (checkpoints, cache rotation, memory TTL)                            | Done                       |
-| **34** | Quality Hardening (node robustness, code splitting, error compensation)           | Done                       |
-| **35** | Actionable Findings (interactive fix selection, fix hints, fix categories)        | Done                       |
-| **36** | Bulk Destroy (`--all`, `--include-iam`, `--dry-run`, `clean --resources`)         | Done                       |
-| **37** | Static Site Deploy (`--source`, S3 upload, CloudFront + OAC)                      | Done                       |
-| **38** | Full Codebase Hardening (bounds checks, timeout caps, input validation)           | Done                       |
+| Epic   | Description                                                                             | Status                     |
+| :----- | :-------------------------------------------------------------------------------------- | :------------------------- |
+| **0**  | Project Foundation & Monorepo Setup                                                     | Done                       |
+| **1**  | Plan Command (LangGraph, MCP, intent parsing, plan generation)                          | Done                       |
+| **2**  | Apply Command (HITL, provisioning, status polling, tagging)                             | Done                       |
+| **7**  | Resource Intelligence (23 types, option elicitation, pricing, doc hints)                | Done                       |
+| **8**  | Compound Provisioning (6 architecture patterns, dependency ordering)                    | Done                       |
+| **9**  | Architecture Hardening (type safety, error handling, prompt injection guard)            | Done                       |
+| **10** | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)                 | Done                       |
+| **11** | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                              | Done                       |
+| **12** | Best Practices Library (YAML schema, trigger engine, 186 rules today, FSBP)             | Done (12.4, 12.6 deferred) |
+| **14** | Multi-Provider LLM Gateway (Vercel AI SDK — bedrock, anthropic, openai, google, ollama) | Done (14.2-14.4 deferred)  |
+| **18** | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action)       | Done                       |
+| **19** | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)           | Done                       |
+| **20** | MCP Server (plan, apply, list, estimate tools for AI agents)                            | Done                       |
+| **22** | Auto-Fix Round (apply auto-fixable BP patches with user consent)                        | Done                       |
+| **23** | Real-Time Pricing Breakdown (live pricing via AWS Pricing MCP, zero hardcoded $)        | Done                       |
+| **24** | Instance Type Selection UX (category filters, workload classification)                  | Done                       |
+| **25** | Sprint F — Tier 1 Resources (LogGroup, IGW, RouteTable, Route, NatGateway)              | Done                       |
+| **26** | Sprint G — Tier 2 Resources (ApiGatewayV2, CloudWatch Alarm, SecretsManager)            | Done                       |
+| **27** | Config Precedence (user, project, org policy, env overrides, CLI flags)                 | Done                       |
+| **28** | Drift Detection (`assignee drift`, `assignee reconcile`)                                | Done                       |
+| **29** | MCP Connection Pre-Warming & Resilience                                                 | Done (29.4 deferred)       |
+| **30** | Request/Response Recording & Replay                                                     | Done                       |
+| **31** | CloudFormation Schema SDK Migration (direct SDK, no MCP dependency)                     | Done                       |
+| **33** | Auto-Cleanup (checkpoints, cache rotation, memory TTL)                                  | Done                       |
+| **34** | Quality Hardening (node robustness, code splitting, error compensation)                 | Done                       |
+| **35** | Actionable Findings (interactive fix selection, fix hints, fix categories)              | Done                       |
+| **36** | Bulk Destroy (`--all`, `--include-iam`, `--dry-run`, `clean --resources`)               | Done                       |
+| **37** | Static Site Deploy (`--source`, S3 upload, CloudFront + OAC)                            | Done                       |
+| **38** | Full Codebase Hardening (bounds checks, timeout caps, input validation)                 | Done                       |
 
 ### Deferred epics (post-traction / SaaS phase)
 
