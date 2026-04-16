@@ -91,7 +91,9 @@ export function createGraph(
     (llmRouting && Object.keys(llmRouting).length > 0
       ? new RoutingLlmAdapter(llmRouting, llmBaseConfig)
       : new LlmAdapter({
-          modelString: process.env[EnvVar.ASSIGNEE_MODEL],
+          modelString:
+            process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
+            process.env[EnvVar.ASSIGNEE_MODEL],
           ...llmBaseConfig,
         }));
 

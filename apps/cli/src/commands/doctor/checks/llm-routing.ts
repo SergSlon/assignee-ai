@@ -32,12 +32,20 @@ export async function checkLlmRouting(): Promise<DoctorSection | null> {
 
     // Show what unmatched callsites will fall back to
     const fallback =
-      llm["default"] ?? process.env[EnvVar.ASSIGNEE_MODEL] ?? DEFAULT_MODEL;
+      llm["default"] ??
+      process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
+      process.env[EnvVar.ASSIGNEE_MODEL] ??
+      DEFAULT_MODEL;
     if (!llm["default"]) {
+      const source = process.env[EnvVar.ASSIGNEE_LLM_DEFAULT]
+        ? "ASSIGNEE_LLM_DEFAULT"
+        : process.env[EnvVar.ASSIGNEE_MODEL]
+          ? "ASSIGNEE_MODEL (deprecated)"
+          : "built-in default";
       subs.push({
         label: "(fallback)".padEnd(24, " "),
         status: "ok",
-        detail: `${fallback} (from ${process.env[EnvVar.ASSIGNEE_MODEL] ? "ASSIGNEE_MODEL" : "built-in default"})`,
+        detail: `${fallback} (from ${source})`,
       });
     }
 

@@ -38,13 +38,17 @@ export async function buildLlmClient(
     llmRouting && Object.keys(llmRouting).length > 0
       ? new RoutingLlmAdapter(llmRouting, llmBaseConfig)
       : new LlmAdapter({
-          modelString: process.env[EnvVar.ASSIGNEE_MODEL],
+          modelString:
+            process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
+            process.env[EnvVar.ASSIGNEE_MODEL],
           ...llmBaseConfig,
         });
   if (!opts.recorder) return undefined;
   return new RecordingLlmAdapter(
     baseLlm,
     opts.recorder,
-    process.env[EnvVar.ASSIGNEE_MODEL] ?? "bedrock/amazon.nova-lite-v1:0",
+    process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
+      process.env[EnvVar.ASSIGNEE_MODEL] ??
+      "bedrock/amazon.nova-lite-v1:0",
   );
 }

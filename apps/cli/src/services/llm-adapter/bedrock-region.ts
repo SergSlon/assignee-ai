@@ -43,8 +43,8 @@ export function detectBedrockRegionError(
 
   const onKnownRegion = KNOWN_BEDROCK_REGIONS.includes(region);
   const suggestion = onKnownRegion
-    ? `Your account may not be enrolled in this model in ${region}. Open the Bedrock console → Model access → request access to the model, OR set ASSIGNEE_MODEL to a different model that IS enabled in ${region}.`
-    : `${region} is not on the canonical Bedrock-enabled list. Set AWS_REGION to one of: ${KNOWN_BEDROCK_REGIONS.join(", ")}, OR set ASSIGNEE_MODEL to a non-Bedrock provider (e.g. anthropic/claude-sonnet-4-5 with ANTHROPIC_API_KEY).`;
+    ? `Your account may not be enrolled in this model in ${region}. Open the Bedrock console → Model access → request access to the model, OR set ASSIGNEE_LLM_DEFAULT to a different model that IS enabled in ${region}.`
+    : `${region} is not on the canonical Bedrock-enabled list. Set AWS_REGION to one of: ${KNOWN_BEDROCK_REGIONS.join(", ")}, OR set ASSIGNEE_LLM_DEFAULT to a non-Bedrock provider (e.g. anthropic/claude-sonnet-4-5 with ANTHROPIC_API_KEY).`;
 
   return (
     `Bedrock model "${modelString}" is not available in AWS_REGION=${region}. ` +

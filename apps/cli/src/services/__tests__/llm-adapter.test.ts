@@ -74,7 +74,7 @@ describe("parseModelString", () => {
   it("throws LlmError for missing slash", () => {
     expect(() => parseModelString("just-a-model")).toThrow(LlmError);
     expect(() => parseModelString("just-a-model")).toThrow(
-      /Invalid ASSIGNEE_MODEL format/,
+      /Invalid ASSIGNEE_LLM_DEFAULT format/,
     );
   });
 
@@ -571,13 +571,13 @@ describe("RoutingLlmAdapter", () => {
     expect(generateText).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to ASSIGNEE_MODEL when no default key and callsite not found", async () => {
-    process.env["ASSIGNEE_MODEL"] = "openai/gpt-4o";
+  it("falls back to ASSIGNEE_LLM_DEFAULT when no default key and callsite not found", async () => {
+    process.env["ASSIGNEE_LLM_DEFAULT"] = "openai/gpt-4o";
     const router = new RoutingLlmAdapter({
       plan_generator: "anthropic/claude-sonnet-4-5",
     });
 
-    // unknown callsite, no "default" key → ASSIGNEE_MODEL env var
+    // unknown callsite, no "default" key → ASSIGNEE_LLM_DEFAULT env var
     const [err] = await router.generateText("Hello", {
       callsite: "advice_generator",
     });
@@ -585,7 +585,42 @@ describe("RoutingLlmAdapter", () => {
     expect(generateText).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to DEFAULT_MODEL when no config match and no ASSIGNEE_MODEL", async () => {
+  it("falls back to deprecated ASSIGNEE_MODEL when ASSIGNEE_LLM_DEFAULT is unset", async () => {
+    delete process.env["ASSIGNEE_LLM_DEFAULT"];
+    process.env["ASSIGNEE_MODEL"] = "openai/gpt-4o";
+    const router = new RoutingLlmAdapter({
+      plan_generator: "anthropic/claude-sonnet-4-5",
+    });
+
+    // unknown callsite, no "default" key, no ASSIGNEE_LLM_DEFAULT → ASSIGNEE_MODEL
+    const [err] = await router.generateText("Hello", {
+      callsite: "advice_generator",
+    });
+    expect(err).toBeNull();
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("ASSIGNEE_LLM_DEFAULT takes priority over deprecated ASSIGNEE_MODEL", async () => {
+    process.env["ASSIGNEE_LLM_DEFAULT"] = "openai/gpt-4o";
+    process.env["ASSIGNEE_MODEL"] = "anthropic/claude-sonnet-4-5";
+    const router = new RoutingLlmAdapter({});
+
+    const [err] = await router.generateText("Hello", {
+      callsite: "advice_generator",
+    });
+    expect(err).toBeNull();
+    expect(generateText).toHaveBeenCalledTimes(1);
+
+    // Verify it used ASSIGNEE_LLM_DEFAULT (openai), not ASSIGNEE_MODEL (anthropic)
+    const cache = (
+      router as unknown as { adapterCache: Map<string, LlmAdapter> }
+    ).adapterCache;
+    expect(cache.has("openai/gpt-4o")).toBe(true);
+    expect(cache.has("anthropic/claude-sonnet-4-5")).toBe(false);
+  });
+
+  it("falls back to DEFAULT_MODEL when no config match and no ASSIGNEE_LLM_DEFAULT or ASSIGNEE_MODEL", async () => {
+    delete process.env["ASSIGNEE_LLM_DEFAULT"];
     delete process.env["ASSIGNEE_MODEL"];
     const router = new RoutingLlmAdapter({
       plan_generator: "anthropic/claude-sonnet-4-5",

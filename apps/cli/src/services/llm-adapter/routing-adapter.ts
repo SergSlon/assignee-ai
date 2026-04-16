@@ -16,8 +16,8 @@ import { LlmAdapter, type LlmAdapterConfig } from "./adapter.js";
  * Each unique model string shares a single adapter (lazy cache).
  *
  * When no routing config key matches the call's callsite, falls back to
- * "default" → ASSIGNEE_MODEL env var → DEFAULT_MODEL constant, preserving
- * full backward compatibility.
+ * "default" → ASSIGNEE_LLM_DEFAULT env var → ASSIGNEE_MODEL (deprecated)
+ * → DEFAULT_MODEL constant, preserving full backward compatibility.
  */
 export class RoutingLlmAdapter implements LlmPort {
   private readonly routingConfig: Readonly<Record<string, string>>;
@@ -42,7 +42,8 @@ export class RoutingLlmAdapter implements LlmPort {
     const modelString =
       (callsite ? this.routingConfig[callsite] : undefined) ??
       this.routingConfig["default"] ??
-      process.env[EnvVar.ASSIGNEE_MODEL] ??
+      process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??
+      process.env[EnvVar.ASSIGNEE_MODEL] ?? // deprecated fallback
       DEFAULT_MODEL;
 
     let adapter = this.adapterCache.get(modelString);
