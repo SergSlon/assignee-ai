@@ -1143,7 +1143,12 @@ describe("destroy_resource tool", () => {
           ],
           PaginationToken: undefined,
         });
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      // Story 49.7: MCP now routes all warn output through mcpLogWarn
+      // (JSON-line on stderr). Spy on process.stderr.write and parse
+      // JSON payloads to locate the SECURITY toctou-tag-missing line.
+      const stderrSpy = vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
 
       const { client } = await createTestClient();
 
@@ -1159,15 +1164,15 @@ describe("destroy_resource tool", () => {
       expect(body.message).toContain("stripped between resolve and delete");
       // CRITICAL: DeleteResource must NOT have been called.
       expect(mockCloudControlSend).not.toHaveBeenCalled();
-      // Exactly one SECURITY warn line, containing the ARN.
-      const toctouLines = warnSpy.mock.calls
+      // Exactly one JSON-line log with the SECURITY toctou-tag-missing warnLine.
+      const toctouLines = stderrSpy.mock.calls
         .map((c) => String(c[0]))
         .filter((s) => s.includes("[SECURITY] toctou-tag-missing"));
       expect(toctouLines).toHaveLength(1);
       expect(toctouLines[0]).toContain(arn);
       expect(toctouLines[0]).toContain("firstVerify=managed");
       expect(toctouLines[0]).toContain("secondVerify=unmanaged");
-      warnSpy.mockRestore();
+      stderrSpy.mockRestore();
     }, 30000);
 
     it("composite identifier (AWS::EC2::Route) bypasses second verify — zero RGTA calls, delete dispatches normally", async () => {

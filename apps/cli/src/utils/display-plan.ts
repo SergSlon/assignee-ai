@@ -14,7 +14,7 @@ import {
   BoxenAlign,
   BoxenBorderColor,
 } from "../config/constants.js";
-import type { AppliedFix } from "../services/graph-state.js";
+import type { AppliedFix } from "../types/fix-finding.js";
 import {
   CostEstimateLabel,
   formatLabelWithSource,

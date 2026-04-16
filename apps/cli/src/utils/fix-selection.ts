@@ -7,7 +7,7 @@
 
 import * as clack from "@clack/prompts";
 import type { BPFinding } from "@assignee/best-practices";
-import type { AppliedFix } from "../services/graph-state.js";
+import type { AppliedFix } from "../types/fix-finding.js";
 import { resolveAction } from "./fix-command-resolver.js";
 import { PROTO_POLLUTION_KEYS, UNKNOWN_FALLBACK } from "../config/constants.js";
 

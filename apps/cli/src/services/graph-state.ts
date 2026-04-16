@@ -26,29 +26,12 @@ import {
 import type { BPFinding } from "@assignee/best-practices";
 import type { FreeTierNote } from "../utils/free-tier.js";
 
-/** Post-provision security finding from Well-Architected Security MCP server (Story 19.2). */
-export interface SecurityFinding {
-  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFORMATIONAL";
-  title: string;
-  recommendation: string;
-  service: string;
-  /**
-   * Story 46.2: provenance.
-   *  - "mcp"      → live response from the Well-Architected Security MCP
-   *  - "fallback" → produced by a local heuristic (not currently used,
-   *                  reserved for future degradation path)
-   */
-  source: DataSource;
-}
-
-/** Record of a best practice finding that was automatically fixed (Story 22.2). */
-export interface AppliedFix {
-  practiceId: string;
-  title: string;
-  fieldPath: string;
-  oldValue: unknown;
-  newValue: unknown;
-}
+// Story 49.7: SecurityFinding + AppliedFix moved to ../types/fix-finding.ts
+// so utils/ no longer has to import a service-layer type (H8 inversion).
+// Re-exported below for backward compatibility with the agent state graph
+// and every consumer that still imports them from this module.
+import type { AppliedFix, SecurityFinding } from "../types/fix-finding.js";
+export type { AppliedFix, SecurityFinding };
 
 export const graphAnnotation = Annotation.Root({
   userIntent: Annotation<string>({ reducer: (_, b) => b, default: () => "" }),

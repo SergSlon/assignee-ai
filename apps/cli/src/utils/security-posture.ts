@@ -12,7 +12,7 @@ import { AWS_REGION, SECURITY_CHECK_TIMEOUT_MS } from "../config/constants.js";
 import { unwrapMcpText } from "./mcp.js";
 import { withTimeout } from "./timeout.js";
 import { log, LOG_ACTIONS } from "./logger.js";
-import type { SecurityFinding } from "../services/graph-state.js";
+import type { SecurityFinding } from "../types/fix-finding.js";
 
 export async function checkSecurityPosture(
   resourceArn: string,

@@ -7,7 +7,7 @@ import chalk from "chalk";
 import boxen from "boxen";
 import { CostEstimateLabel } from "@assignee/core";
 import { BoxenAlign, BoxenBorderColor } from "../../config/constants.js";
-import type { ManagedResource } from "../../services/list-resources.js";
+import type { ManagedResource } from "@assignee/core";
 
 /** Shorten an ARN to fit terminal: keep account + resource id. */
 function truncateArn(arn: string, maxLen: number): string {

@@ -52,6 +52,7 @@ import {
   verifyTagBeforeDelete,
 } from "./destroy-resource/dispatcher.js";
 import type { ResolvedResource } from "./destroy-resource/types.js";
+import { mcpLogWarn } from "../utils/structured-log.js";
 
 // ── Public re-exports (preserve the pre-refactor import surface) ────────────
 // Existing tests import these from `../tools/destroy-resource.js`.
@@ -206,7 +207,12 @@ export function registerDestroyResource(server: McpServer): void {
             // Intentionally unredacted: operator owns the ARN by virtue of
             // the first verify passing, and the SOC needs it for forensic
             // CloudTrail correlation. See feedback_redaction_allowlist_not_denylist.
-            console.warn(recheck.warnLine);
+            mcpLogWarn(
+              "destroy-resource",
+              "toctou_tag_missing",
+              { warnLine: recheck.warnLine },
+              recheck.warnLine,
+            );
             return buildErrorResponse(
               `Destroy refused: the managed-by=assignee-ai tag on ${resolved.arn} was stripped between resolve and delete. The resource was NOT deleted.`,
               "Investigate immediately — an external principal removed the managed-by tag mid-flight. Check CloudTrail for UntagResources events on this ARN and review IAM policies granting tag:UntagResources.",
