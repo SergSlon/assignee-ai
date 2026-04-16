@@ -14,12 +14,12 @@
  */
 
 import {
-  EC2Client,
   DescribeInternetGatewaysCommand,
   DetachInternetGatewayCommand,
 } from "@aws-sdk/client-ec2";
 import {
   RESOURCE_TYPES,
+  createEC2Client,
   requireAssigneeCredentials,
   type DestroyStrategy,
 } from "@assignee/core";
@@ -30,25 +30,29 @@ export const igwStrategy: DestroyStrategy = {
 
   async preDestroy(ctx): Promise<void> {
     const { resource, effectiveRegion } = ctx;
-    const ec2 = new EC2Client({
+    const ec2 = createEC2Client({
       region: effectiveRegion,
       credentials: requireAssigneeCredentials("operator"),
     });
-    const desc = await ec2.send(
-      new DescribeInternetGatewaysCommand({
-        InternetGatewayIds: [resource.identifier],
-      }),
-    );
-    const attachments = desc.InternetGateways?.[0]?.Attachments ?? [];
-    for (const att of attachments) {
-      if (att.VpcId && att.State !== "detached") {
-        await ec2.send(
-          new DetachInternetGatewayCommand({
-            InternetGatewayId: resource.identifier,
-            VpcId: att.VpcId,
-          }),
-        );
+    try {
+      const desc = await ec2.send(
+        new DescribeInternetGatewaysCommand({
+          InternetGatewayIds: [resource.identifier],
+        }),
+      );
+      const attachments = desc.InternetGateways?.[0]?.Attachments ?? [];
+      for (const att of attachments) {
+        if (att.VpcId && att.State !== "detached") {
+          await ec2.send(
+            new DetachInternetGatewayCommand({
+              InternetGatewayId: resource.identifier,
+              VpcId: att.VpcId,
+            }),
+          );
+        }
       }
+    } finally {
+      ec2.destroy();
     }
   },
 };

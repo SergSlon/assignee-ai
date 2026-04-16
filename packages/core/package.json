@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.1015.0",
+    "@aws-sdk/client-ec2": "^3.1015.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

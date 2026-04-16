@@ -49,8 +49,9 @@ export const elbv2LoadBalancerStrategy: DestroyStrategy = {
   isSlow: true,
   async postDestroy(ctx) {
     const { resource, awsConfig, onProgress } = ctx;
+    let ec2: EC2Client | undefined;
     try {
-      const ec2 = new EC2Client({
+      ec2 = new EC2Client({
         region: awsConfig.region ?? AWS_REGION,
         credentials: requireAssigneeCredentials("operator"),
       });
@@ -123,6 +124,8 @@ export const elbv2LoadBalancerStrategy: DestroyStrategy = {
         identifier: resource.identifier,
         error: err instanceof Error ? err.message : String(err),
       });
+    } finally {
+      ec2?.destroy();
     }
   },
 };

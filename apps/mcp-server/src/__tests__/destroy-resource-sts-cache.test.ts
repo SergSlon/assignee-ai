@@ -16,6 +16,7 @@ const mockStsSend = vi.fn();
 vi.mock("@aws-sdk/client-sts", () => {
   class STSClient {
     send = mockStsSend;
+    destroy = vi.fn();
   }
   function GetCallerIdentityCommand(input: Record<string, unknown>) {
     return { ...input, _type: "GetCallerIdentityCommand" };
@@ -28,6 +29,7 @@ vi.mock("@aws-sdk/client-sts", () => {
 vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
   class ResourceGroupsTaggingAPIClient {
     send = vi.fn();
+    destroy = vi.fn();
   }
   function GetResourcesCommand(input: Record<string, unknown>) {
     return { ...input };
@@ -37,6 +39,7 @@ vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
 vi.mock("@aws-sdk/client-cloudcontrol", () => {
   class CloudControlClient {
     send = vi.fn();
+    destroy = vi.fn();
   }
   return {
     CloudControlClient,

@@ -11,6 +11,7 @@ const hoisted = vi.hoisted(() => ({
 vi.mock("@aws-sdk/client-ec2", () => {
   class EC2Client {
     send = hoisted.mockSend;
+    destroy = vi.fn();
   }
   function ReleaseAddressCommand(input: Record<string, unknown>) {
     return { _type: "ReleaseAddress", ...input };

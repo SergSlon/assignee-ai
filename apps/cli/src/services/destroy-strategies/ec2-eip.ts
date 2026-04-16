@@ -54,6 +54,8 @@ export const ec2EipStrategy: DestroyStrategy = {
         success: false,
         error: `Failed to release EIP ${resource.identifier}: ${errMsg}`,
       };
+    } finally {
+      ec2.destroy();
     }
   },
 };

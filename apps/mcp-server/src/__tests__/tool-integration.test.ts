@@ -23,6 +23,7 @@ const mockSend = vi.fn();
 vi.mock("@aws-sdk/client-resource-groups-tagging-api", () => {
   class ResourceGroupsTaggingAPIClient {
     send = mockSend;
+    destroy = vi.fn();
   }
   return {
     ResourceGroupsTaggingAPIClient,

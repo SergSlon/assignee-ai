@@ -11,6 +11,7 @@ const hoisted = vi.hoisted(() => ({ mockCfSend: vi.fn() }));
 vi.mock("@aws-sdk/client-cloudfront", () => {
   class CloudFrontClient {
     send = hoisted.mockCfSend;
+    destroy = vi.fn();
   }
   function GetDistributionCommand(i: Record<string, unknown>) {
     return { _type: "GetDistribution", ...i };

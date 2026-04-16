@@ -23,15 +23,16 @@
  */
 
 import {
-  EC2Client,
   DescribeRouteTablesCommand,
   DisassociateRouteTableCommand,
 } from "@aws-sdk/client-ec2";
 import {
   RESOURCE_TYPES,
   MissingAssigneeCredentialsError,
+  createEC2Client,
   requireAssigneeCredentials,
   type DestroyStrategy,
+  type EC2Client,
 } from "@assignee/core";
 
 export const routeTableStrategy: DestroyStrategy = {
@@ -42,7 +43,7 @@ export const routeTableStrategy: DestroyStrategy = {
     const { resource, effectiveRegion, warn } = ctx;
     let ec2: EC2Client;
     try {
-      ec2 = new EC2Client({
+      ec2 = createEC2Client({
         region: effectiveRegion,
         credentials: requireAssigneeCredentials("operator"),
       });
@@ -98,6 +99,8 @@ export const routeTableStrategy: DestroyStrategy = {
         identifier: resource.identifier,
         error: descErr instanceof Error ? descErr.message : String(descErr),
       });
+    } finally {
+      ec2.destroy();
     }
   },
 };

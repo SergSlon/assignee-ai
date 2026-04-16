@@ -27,13 +27,14 @@ export const ec2RouteTableStrategy: DestroyStrategy = {
   resourceType: RESOURCE_TYPES.EC2_ROUTE_TABLE,
   async preDestroy(ctx) {
     const { resource, awsConfig } = ctx;
+    let ec2: import("@aws-sdk/client-ec2").EC2Client | undefined;
     try {
       const {
         EC2Client,
         DescribeRouteTablesCommand,
         DisassociateRouteTableCommand,
       } = await import("@aws-sdk/client-ec2");
-      const ec2 = new EC2Client({
+      ec2 = new EC2Client({
         region: awsConfig.region ?? AWS_REGION,
         credentials: requireAssigneeCredentials("operator"),
       });
@@ -67,6 +68,8 @@ export const ec2RouteTableStrategy: DestroyStrategy = {
         identifier: resource.identifier,
         error: err instanceof Error ? err.message : String(err),
       });
+    } finally {
+      ec2?.destroy();
     }
   },
 };

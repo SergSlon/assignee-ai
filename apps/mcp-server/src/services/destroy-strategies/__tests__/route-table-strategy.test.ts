@@ -23,6 +23,7 @@ const { mockEc2Send } = vi.hoisted(() => ({
 vi.mock("@aws-sdk/client-ec2", () => {
   class EC2Client {
     send = mockEc2Send;
+    destroy = vi.fn();
   }
   function DescribeRouteTablesCommand(input: unknown) {
     return { _type: "DescribeRouteTables", input };

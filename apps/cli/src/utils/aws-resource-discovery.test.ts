@@ -16,6 +16,7 @@ const { mockEc2Send, mockSsmSend, mockRdsSend, mockWithTimeout } = vi.hoisted(
 vi.mock("@aws-sdk/client-ec2", () => {
   class EC2Client {
     send = mockEc2Send;
+    destroy = vi.fn();
   }
   return {
     EC2Client,

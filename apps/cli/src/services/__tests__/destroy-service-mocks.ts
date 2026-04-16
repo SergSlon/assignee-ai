@@ -126,6 +126,7 @@ vi.mock("../sdk-fallback-dispatcher.js", () => {
 vi.mock("@aws-sdk/client-cloudfront", () => {
   class MockCloudFrontClient {
     send = mockCfSend;
+    destroy = vi.fn();
   }
   function GetDistributionCommand(input: Record<string, unknown>) {
     return { _type: "GetDistribution", ...input };
@@ -148,6 +149,7 @@ vi.mock("@aws-sdk/client-cloudfront", () => {
 vi.mock("@aws-sdk/client-dynamodb", () => {
   class MockDynamoDBClient {
     send = mockDdbSend;
+    destroy = vi.fn();
   }
   function UpdateTableCommand(input: Record<string, unknown>) {
     return { _type: "UpdateTable", ...input };
@@ -166,6 +168,7 @@ vi.mock("@aws-sdk/client-dynamodb", () => {
 vi.mock("@aws-sdk/client-s3", () => {
   class MockS3Client {
     send = mockS3Send;
+    destroy = vi.fn();
   }
   function ListObjectVersionsCommand(input: Record<string, unknown>) {
     return { _type: "ListObjectVersions", ...input };
@@ -184,6 +187,7 @@ vi.mock("@aws-sdk/client-s3", () => {
 vi.mock("@aws-sdk/client-ec2", () => {
   class MockEC2Client {
     send = mockEc2Send;
+    destroy = vi.fn();
   }
   function DescribeInternetGatewaysCommand(input: Record<string, unknown>) {
     return { _type: "DescribeInternetGateways", ...input };

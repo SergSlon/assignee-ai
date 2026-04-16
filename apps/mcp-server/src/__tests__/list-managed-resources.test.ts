@@ -33,7 +33,11 @@ const getMockSend = () => mockSend;
 // block (mockReset:true wipes it between tests).
 beforeEach(() => {
   vi.mocked(ResourceGroupsTaggingAPIClient).mockImplementation(
-    () => ({ send: mockSend }) as unknown as ResourceGroupsTaggingAPIClient,
+    () =>
+      ({
+        send: mockSend,
+        destroy: vi.fn(),
+      }) as unknown as ResourceGroupsTaggingAPIClient,
   );
   vi.mocked(fs.readFileSync).mockImplementation(() => {
     throw new Error("File not found");
