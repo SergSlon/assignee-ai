@@ -14,18 +14,12 @@
  * Uses the centralized `requireAssigneeCredentials("operator")` helper
  * from @assignee/core — never falls through to the default AWS chain.
  *
- * Wave 11 P2-4: error-contract consistency with the CLI hook in
- * `apps/cli/src/services/destroy-service.ts`. Previously this strategy
- * threw hard on any DescribeRouteTables / DisassociateRouteTable error
- * while the CLI hook warned-and-continued on the same errors (only
- * `MissingAssigneeCredentialsError` was treated as fatal). Match the
- * CLI behavior so MCP `destroy_resource` and CLI `destroy` produce the
- * same outcome for the same conditions. The "let CCAPI surface
- * authoritative errors" philosophy: if a per-association disassociate
- * fails for a benign reason (already disassociated by parallel cleanup,
- * race with another operator), the CCAPI delete attempt that follows
- * will produce a clean DependencyViolation if the residual attachment
- * actually still matters. If it doesn't, we shouldn't have aborted.
+ * Wave 11 P2-4: error-contract consistency with the CLI hook —
+ * per-association disassociate failures warn-and-continue; only
+ * `MissingAssigneeCredentialsError` aborts. CCAPI produces the
+ * authoritative DependencyViolation if residual attachments matter.
+ *
+ * @see Story 49.1 — migrated to the shared DestroyContext interface.
  */
 
 import {
@@ -34,20 +28,22 @@ import {
   DisassociateRouteTableCommand,
 } from "@aws-sdk/client-ec2";
 import {
-  requireAssigneeCredentials,
+  RESOURCE_TYPES,
   MissingAssigneeCredentialsError,
+  requireAssigneeCredentials,
+  type DestroyStrategy,
 } from "@assignee/core";
-import type { DestroyStrategy } from "./types.js";
 
 export const routeTableStrategy: DestroyStrategy = {
-  resourceType: "AWS::EC2::RouteTable",
+  resourceType: RESOURCE_TYPES.EC2_ROUTE_TABLE,
   isSlow: true, // disassociate + delete can exceed 1min for compound VPCs
 
-  async preDestroy(identifier: string, region: string): Promise<void> {
+  async preDestroy(ctx): Promise<void> {
+    const { resource, effectiveRegion, warn } = ctx;
     let ec2: EC2Client;
     try {
       ec2 = new EC2Client({
-        region,
+        region: effectiveRegion,
         credentials: requireAssigneeCredentials("operator"),
       });
     } catch (err) {
@@ -62,7 +58,7 @@ export const routeTableStrategy: DestroyStrategy = {
     try {
       const desc = await ec2.send(
         new DescribeRouteTablesCommand({
-          RouteTableIds: [identifier],
+          RouteTableIds: [resource.identifier],
         }),
       );
       const associations = desc.RouteTables?.[0]?.Associations ?? [];
@@ -80,24 +76,28 @@ export const routeTableStrategy: DestroyStrategy = {
             );
           } catch (perAssocErr) {
             // Per-association best-effort: a single failed disassociate
-            // shouldn't abort the whole destroy. Log to stderr (the MCP
-            // server's diagnostic channel) and continue with the rest.
-            // CCAPI will surface a clean DependencyViolation later if
-            // the residual association actually blocks the delete.
-            process.stderr.write(
-              `[route-table-strategy] warning: failed to disassociate ${assoc.RouteTableAssociationId} from ${identifier}: ${perAssocErr instanceof Error ? perAssocErr.message : String(perAssocErr)}. Continuing — CCAPI will report DependencyViolation if the residual attachment matters.\n`,
-            );
+            // shouldn't abort the whole destroy. CCAPI will surface a
+            // clean DependencyViolation later if the residual
+            // association actually blocks the delete.
+            warn("route_table_disassociate_partial", {
+              identifier: resource.identifier,
+              associationId: assoc.RouteTableAssociationId,
+              error:
+                perAssocErr instanceof Error
+                  ? perAssocErr.message
+                  : String(perAssocErr),
+            });
           }
         }
       }
     } catch (descErr) {
-      // DescribeRouteTables failed entirely (the route table was
-      // deleted out-of-band, or the operator policy is missing
-      // ec2:DescribeRouteTables). Warn and continue — the CCAPI delete
-      // will produce the authoritative error.
-      process.stderr.write(
-        `[route-table-strategy] warning: DescribeRouteTables failed for ${identifier}: ${descErr instanceof Error ? descErr.message : String(descErr)}. Continuing without pre-disassociate.\n`,
-      );
+      // DescribeRouteTables failed entirely (deleted out-of-band, or
+      // missing ec2:DescribeRouteTables). Warn and continue — the
+      // CCAPI delete will produce the authoritative error.
+      warn("route_table_describe_failed", {
+        identifier: resource.identifier,
+        error: descErr instanceof Error ? descErr.message : String(descErr),
+      });
     }
   },
 };

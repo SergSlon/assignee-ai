@@ -35,6 +35,7 @@ vi.mock("@aws-sdk/client-ec2", () => {
 });
 
 import { igwStrategy } from "../igw-strategy.js";
+import { makeDestroyContext } from "./test-helpers.js";
 
 const IGW_ID = "igw-0123456789abcdef0";
 const VPC_ID_1 = "vpc-0aa1bb2cc3dd4ee5f";
@@ -74,9 +75,9 @@ describe("igwStrategy.preDestroy — failure modes", () => {
       })
       .mockRejectedValueOnce(dependencyErr);
 
-    await expect(igwStrategy.preDestroy!(IGW_ID, REGION)).rejects.toMatchObject(
-      { name: "DependencyViolation" },
-    );
+    await expect(
+      igwStrategy.preDestroy!(makeDestroyContext(IGW_ID, REGION)),
+    ).rejects.toMatchObject({ name: "DependencyViolation" });
 
     // Describe + one attempted detach
     expect(mockEc2Send).toHaveBeenCalledTimes(2);
@@ -93,7 +94,7 @@ describe("igwStrategy.preDestroy — failure modes", () => {
     mockEc2Send.mockResolvedValueOnce({ InternetGateways: [] });
 
     await expect(
-      igwStrategy.preDestroy!(IGW_ID, REGION),
+      igwStrategy.preDestroy!(makeDestroyContext(IGW_ID, REGION)),
     ).resolves.toBeUndefined();
 
     // Only the describe call — no detach attempts
@@ -112,7 +113,7 @@ describe("igwStrategy.preDestroy — failure modes", () => {
     });
 
     await expect(
-      igwStrategy.preDestroy!(IGW_ID, REGION),
+      igwStrategy.preDestroy!(makeDestroyContext(IGW_ID, REGION)),
     ).resolves.toBeUndefined();
     expect(mockEc2Send).toHaveBeenCalledTimes(1);
   });
@@ -123,7 +124,7 @@ describe("igwStrategy.preDestroy — failure modes", () => {
     });
 
     await expect(
-      igwStrategy.preDestroy!(IGW_ID, REGION),
+      igwStrategy.preDestroy!(makeDestroyContext(IGW_ID, REGION)),
     ).resolves.toBeUndefined();
     expect(mockEc2Send).toHaveBeenCalledTimes(1);
   });
@@ -143,7 +144,7 @@ describe("igwStrategy.preDestroy — failure modes", () => {
       })
       .mockResolvedValueOnce({});
 
-    await igwStrategy.preDestroy!(IGW_ID, REGION);
+    await igwStrategy.preDestroy!(makeDestroyContext(IGW_ID, REGION));
 
     // Describe + exactly one detach (for the attached VPC)
     expect(mockEc2Send).toHaveBeenCalledTimes(2);
@@ -166,7 +167,7 @@ describe("igwStrategy.preDestroy — failure modes", () => {
     });
 
     await expect(
-      igwStrategy.preDestroy!(IGW_ID, REGION),
+      igwStrategy.preDestroy!(makeDestroyContext(IGW_ID, REGION)),
     ).resolves.toBeUndefined();
     expect(mockEc2Send).toHaveBeenCalledTimes(1);
   });

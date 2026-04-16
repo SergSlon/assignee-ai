@@ -48,6 +48,7 @@ export function getCloudControlIdentifier(
   if (strategy?.extractIdentifier) {
     return strategy.extractIdentifier(
       arn,
+      extractedId,
       extractRegionFromArn(arn, defaultRegion),
     );
   }

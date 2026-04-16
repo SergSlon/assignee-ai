@@ -38,6 +38,7 @@ vi.mock("@aws-sdk/client-ec2", () => {
 });
 
 import { routeTableStrategy } from "../route-table-strategy.js";
+import { makeDestroyContext } from "./test-helpers.js";
 
 const RT_ID = "rtb-0123456789abcdef0";
 const ASSOC_ID_1 = "rtbassoc-0aa1bb2cc3dd4ee5f";
@@ -92,7 +93,7 @@ describe("routeTableStrategy.preDestroy — failure modes", () => {
     // logged to stderr. Pre-Wave-11 the test asserted .rejects with
     // matchObject; that contract is gone.
     await expect(
-      routeTableStrategy.preDestroy!(RT_ID, REGION),
+      routeTableStrategy.preDestroy!(makeDestroyContext(RT_ID, REGION)),
     ).resolves.toBeUndefined();
 
     expect(mockEc2Send).toHaveBeenCalledTimes(2);
@@ -149,7 +150,7 @@ describe("routeTableStrategy.preDestroy — failure modes", () => {
       .mockResolvedValueOnce({});
 
     await expect(
-      routeTableStrategy.preDestroy!(RT_ID, REGION),
+      routeTableStrategy.preDestroy!(makeDestroyContext(RT_ID, REGION)),
     ).resolves.toBeUndefined();
 
     // 1 describe + 3 disassoc = 4 calls
@@ -174,7 +175,7 @@ describe("routeTableStrategy.preDestroy — failure modes", () => {
     );
 
     await expect(
-      routeTableStrategy.preDestroy!(RT_ID, REGION),
+      routeTableStrategy.preDestroy!(makeDestroyContext(RT_ID, REGION)),
     ).resolves.toBeUndefined();
 
     // Only the describe was attempted
@@ -185,7 +186,7 @@ describe("routeTableStrategy.preDestroy — failure modes", () => {
     mockEc2Send.mockResolvedValueOnce({ RouteTables: [] });
 
     await expect(
-      routeTableStrategy.preDestroy!(RT_ID, REGION),
+      routeTableStrategy.preDestroy!(makeDestroyContext(RT_ID, REGION)),
     ).resolves.toBeUndefined();
 
     expect(mockEc2Send).toHaveBeenCalledTimes(1);
@@ -203,7 +204,7 @@ describe("routeTableStrategy.preDestroy — failure modes", () => {
     });
 
     await expect(
-      routeTableStrategy.preDestroy!(RT_ID, REGION),
+      routeTableStrategy.preDestroy!(makeDestroyContext(RT_ID, REGION)),
     ).resolves.toBeUndefined();
     expect(mockEc2Send).toHaveBeenCalledTimes(1);
   });
@@ -225,7 +226,7 @@ describe("routeTableStrategy.preDestroy — failure modes", () => {
     });
 
     await expect(
-      routeTableStrategy.preDestroy!(RT_ID, REGION),
+      routeTableStrategy.preDestroy!(makeDestroyContext(RT_ID, REGION)),
     ).resolves.toBeUndefined();
     // Only describe — no disassociate attempts on the main association
     expect(mockEc2Send).toHaveBeenCalledTimes(1);
@@ -254,7 +255,7 @@ describe("routeTableStrategy.preDestroy — failure modes", () => {
       })
       .mockResolvedValueOnce({});
 
-    await routeTableStrategy.preDestroy!(RT_ID, REGION);
+    await routeTableStrategy.preDestroy!(makeDestroyContext(RT_ID, REGION));
 
     // Describe + exactly one disassociate (the non-Main one)
     expect(mockEc2Send).toHaveBeenCalledTimes(2);
@@ -283,7 +284,7 @@ describe("routeTableStrategy.preDestroy — failure modes", () => {
     });
 
     await expect(
-      routeTableStrategy.preDestroy!(RT_ID, REGION),
+      routeTableStrategy.preDestroy!(makeDestroyContext(RT_ID, REGION)),
     ).resolves.toBeUndefined();
     // Only describe — disassociated entries are skipped
     expect(mockEc2Send).toHaveBeenCalledTimes(1);
@@ -302,7 +303,7 @@ describe("routeTableStrategy.preDestroy — failure modes", () => {
     });
 
     await expect(
-      routeTableStrategy.preDestroy!(RT_ID, REGION),
+      routeTableStrategy.preDestroy!(makeDestroyContext(RT_ID, REGION)),
     ).resolves.toBeUndefined();
     expect(mockEc2Send).toHaveBeenCalledTimes(1);
   });

@@ -32,7 +32,7 @@ describe("sqsStrategy.resourceType", () => {
 describe("sqsStrategy.extractIdentifier", () => {
   it("converts a standard us-east-1 ARN into the canonical queue URL", () => {
     const arn = "arn:aws:sqs:us-east-1:123456789012:assignee-orders";
-    const url = sqsStrategy.extractIdentifier!(arn, "us-east-1");
+    const url = sqsStrategy.extractIdentifier!(arn, "", "us-east-1");
     expect(url).toBe(
       "https://sqs.us-east-1.amazonaws.com/123456789012/assignee-orders",
     );
@@ -43,7 +43,7 @@ describe("sqsStrategy.extractIdentifier", () => {
     // calls would route to the wrong endpoint. Lock in the current behavior:
     // the URL must be derived from the ARN region.
     const arn = "arn:aws:sqs:eu-west-1:123456789012:payments-dlq";
-    const url = sqsStrategy.extractIdentifier!(arn, "us-east-1");
+    const url = sqsStrategy.extractIdentifier!(arn, "", "us-east-1");
     expect(url).toBe(
       "https://sqs.eu-west-1.amazonaws.com/123456789012/payments-dlq",
     );
@@ -51,7 +51,7 @@ describe("sqsStrategy.extractIdentifier", () => {
 
   it("preserves the .fifo suffix on FIFO queues", () => {
     const arn = "arn:aws:sqs:us-west-2:123456789012:billing-events.fifo";
-    const url = sqsStrategy.extractIdentifier!(arn, "us-west-2");
+    const url = sqsStrategy.extractIdentifier!(arn, "", "us-west-2");
     expect(url).toBe(
       "https://sqs.us-west-2.amazonaws.com/123456789012/billing-events.fifo",
     );
@@ -59,7 +59,7 @@ describe("sqsStrategy.extractIdentifier", () => {
 
   it("handles ap-southeast-2 region correctly", () => {
     const arn = "arn:aws:sqs:ap-southeast-2:123456789012:assignee-sydney-queue";
-    const url = sqsStrategy.extractIdentifier!(arn, "ap-southeast-2");
+    const url = sqsStrategy.extractIdentifier!(arn, "", "ap-southeast-2");
     expect(url).toBe(
       "https://sqs.ap-southeast-2.amazonaws.com/123456789012/assignee-sydney-queue",
     );
@@ -68,7 +68,7 @@ describe("sqsStrategy.extractIdentifier", () => {
   it("falls back to default region placeholder when ARN region is missing", () => {
     // Malformed ARN — region slot empty. Should degrade gracefully, not throw.
     const arn = "arn:aws:sqs::123456789012:orphan-queue";
-    const url = sqsStrategy.extractIdentifier!(arn, "us-east-1");
+    const url = sqsStrategy.extractIdentifier!(arn, "", "us-east-1");
     expect(url).toMatch(
       /^https:\/\/sqs\.[a-z0-9-]+\.amazonaws\.com\/123456789012\/orphan-queue$/,
     );
@@ -78,21 +78,21 @@ describe("sqsStrategy.extractIdentifier", () => {
     // Pathological input — caller will see an obviously-broken URL rather
     // than a thrown error. Guards against regressions to throwing behavior.
     const arn = "arn:aws:sqs:us-east-1::malformed";
-    const url = sqsStrategy.extractIdentifier!(arn, "us-east-1");
+    const url = sqsStrategy.extractIdentifier!(arn, "", "us-east-1");
     expect(url).toBe("https://sqs.us-east-1.amazonaws.com//malformed");
   });
 
   it("produces an empty-name URL for ARNs missing a queue name segment", () => {
     const arn = "arn:aws:sqs:us-east-1:123456789012:";
-    const url = sqsStrategy.extractIdentifier!(arn, "us-east-1");
+    const url = sqsStrategy.extractIdentifier!(arn, "", "us-east-1");
     expect(url).toBe("https://sqs.us-east-1.amazonaws.com/123456789012/");
   });
 
   it("is a pure function (safe to call repeatedly with identical output)", () => {
     const arn = "arn:aws:sqs:us-east-1:123456789012:idempotent-queue";
-    const a = sqsStrategy.extractIdentifier!(arn, "us-east-1");
-    const b = sqsStrategy.extractIdentifier!(arn, "us-east-1");
-    const c = sqsStrategy.extractIdentifier!(arn, "us-east-1");
+    const a = sqsStrategy.extractIdentifier!(arn, "", "us-east-1");
+    const b = sqsStrategy.extractIdentifier!(arn, "", "us-east-1");
+    const c = sqsStrategy.extractIdentifier!(arn, "", "us-east-1");
     expect(a).toBe(b);
     expect(b).toBe(c);
   });

@@ -25,7 +25,7 @@ vi.mock("@aws-sdk/client-ec2", () => {
 });
 
 import { ec2RouteTableStrategy } from "../ec2-routetable.js";
-import type { DestroyContext } from "../types.js";
+import type { DestroyContext } from "@assignee/core";
 
 beforeEach(() => {
   vi.clearAllMocks();

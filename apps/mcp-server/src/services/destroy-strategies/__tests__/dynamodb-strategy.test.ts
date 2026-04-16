@@ -27,6 +27,7 @@ vi.mock("@aws-sdk/client-dynamodb", () => {
 });
 
 import { dynamodbStrategy } from "../dynamodb-strategy.js";
+import { makeDestroyContext } from "./test-helpers.js";
 
 const TABLE_NAME = "assignee-orders-prod";
 const REGION = "us-east-1";
@@ -54,7 +55,7 @@ describe("dynamodbStrategy.preDestroy — success + failure modes", () => {
       },
     });
 
-    await dynamodbStrategy.preDestroy!(TABLE_NAME, REGION);
+    await dynamodbStrategy.preDestroy!(makeDestroyContext(TABLE_NAME, REGION));
 
     expect(mockDdbSend).toHaveBeenCalledTimes(1);
     const cmd = mockDdbSend.mock.calls[0]![0] as {
@@ -76,7 +77,7 @@ describe("dynamodbStrategy.preDestroy — success + failure modes", () => {
     mockDdbSend.mockRejectedValueOnce(err);
 
     await expect(
-      dynamodbStrategy.preDestroy!(TABLE_NAME, REGION),
+      dynamodbStrategy.preDestroy!(makeDestroyContext(TABLE_NAME, REGION)),
     ).rejects.toMatchObject({ name: "ValidationException" });
     expect(mockDdbSend).toHaveBeenCalledTimes(1);
   });
@@ -89,7 +90,7 @@ describe("dynamodbStrategy.preDestroy — success + failure modes", () => {
     mockDdbSend.mockRejectedValueOnce(err);
 
     await expect(
-      dynamodbStrategy.preDestroy!(TABLE_NAME, REGION),
+      dynamodbStrategy.preDestroy!(makeDestroyContext(TABLE_NAME, REGION)),
     ).rejects.toMatchObject({ name: "ResourceNotFoundException" });
     expect(mockDdbSend).toHaveBeenCalledTimes(1);
   });
@@ -102,13 +103,15 @@ describe("dynamodbStrategy.preDestroy — success + failure modes", () => {
     mockDdbSend.mockRejectedValueOnce(err);
 
     await expect(
-      dynamodbStrategy.preDestroy!(TABLE_NAME, REGION),
+      dynamodbStrategy.preDestroy!(makeDestroyContext(TABLE_NAME, REGION)),
     ).rejects.toMatchObject({ name: "ThrottlingException" });
   });
 
   it("passes the caller-provided region into the SDK client construction", async () => {
     mockDdbSend.mockResolvedValueOnce({});
-    await dynamodbStrategy.preDestroy!(TABLE_NAME, "eu-west-1");
+    await dynamodbStrategy.preDestroy!(
+      makeDestroyContext(TABLE_NAME, "eu-west-1"),
+    );
     // Only indirect evidence — send was called with correct TableName
     const cmd = mockDdbSend.mock.calls[0]![0] as {
       _type: string;
