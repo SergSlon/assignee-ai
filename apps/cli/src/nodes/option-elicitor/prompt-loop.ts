@@ -33,6 +33,28 @@ import {
   promptWithHelp,
 } from "../../utils/wizard-helpers.js";
 
+/**
+ * BFS cleanup of transitive showIf dependents. When field A is edited/reverted
+ * and B depends on A (B.showIf.field === A.name), B's value is deleted. Then
+ * any field C that depends on B is also deleted, and so on.
+ */
+function cleanDependents(
+  rootName: string,
+  fields: ResourceField[],
+  elicitedOptions: Record<string, unknown>,
+): void {
+  const queue = [rootName];
+  while (queue.length > 0) {
+    const parent = queue.shift()!;
+    for (const f of fields) {
+      if (f.question.showIf?.field === parent && f.name in elicitedOptions) {
+        delete elicitedOptions[f.name];
+        queue.push(f.name);
+      }
+    }
+  }
+}
+
 export interface PromptLoopParams {
   fields: ResourceField[];
   resolved: Record<string, ResolvedFieldConfig>;
@@ -126,12 +148,8 @@ export async function runPromptLoop(params: PromptLoopParams): Promise<void> {
         const prevField = fields[prevIndex]!;
         delete elicitedOptions[field.name];
         delete elicitedOptions[prevField.name];
-        // Clean up showIf-dependent values that depended on the reverted field
-        for (const f of fields) {
-          if (f.question.showIf?.field === prevField.name) {
-            delete elicitedOptions[f.name];
-          }
-        }
+        // Clean up showIf-dependent values transitively (A→B→C chain).
+        cleanDependents(prevField.name, fields, elicitedOptions);
         i = prevIndex;
         if (visibleIndex > 0) visibleIndex--;
       }
@@ -169,13 +187,9 @@ export async function runPromptLoop(params: PromptLoopParams): Promise<void> {
       };
 
       // Remove the prior answer + every downstream answer whose showIf
-      // depends on the edited field (mirrors BACK cleanup pattern).
+      // depends on the edited field (transitive BFS, mirrors BACK path).
       delete elicitedOptions[editField.name];
-      for (const f of fields) {
-        if (f.question.showIf?.field === editField.name) {
-          delete elicitedOptions[f.name];
-        }
-      }
+      cleanDependents(editField.name, fields, elicitedOptions);
 
       const newAnswer = await promptWithHelp(
         editField,

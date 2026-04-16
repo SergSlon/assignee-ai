@@ -112,6 +112,10 @@ export async function verifyArnIsManaged(
 /**
  * Paginates the full managed resource set looking for a match by ARN or
  * by bare identifier. Used when the caller provided a non-ARN name.
+ *
+ * Multi-match guard (Story 48-11 #76): when a non-ARN name matches more
+ * than one managed resource, throws a descriptive error instead of
+ * silently picking the first. Zero CCAPI calls fire on multi-match.
  */
 async function resolveByNameOrArn(
   input: string,
@@ -121,6 +125,7 @@ async function resolveByNameOrArn(
   const inputIsArn = isArn(input);
   for (let attempt = 0; attempt < MAX_RESOLVE_RETRIES; attempt++) {
     let paginationToken: string | undefined;
+    const matches: ResolvedResource[] = [];
 
     do {
       const response = await taggingClient.send(
@@ -143,7 +148,7 @@ async function resolveByNameOrArn(
 
         if (matchesArn || matchesName) {
           const resourceType = arnToResourceType(arn) ?? "Unknown";
-          return {
+          const resolved: ResolvedResource = {
             arn,
             resourceType,
             region: extractRegionFromArn(arn, region),
@@ -154,11 +159,23 @@ async function resolveByNameOrArn(
               region,
             ),
           };
+
+          // ARN lookups are unique by construction — return immediately.
+          if (inputIsArn) return resolved;
+          matches.push(resolved);
         }
       }
 
       paginationToken = response.PaginationToken;
     } while (paginationToken);
+
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length > 1) {
+      const arnList = matches.map((m) => m.arn).join(", ");
+      throw new MultiMatchError(
+        `Multiple managed resources match '${input}'; specify ARN explicitly. Matches: ${arnList}`,
+      );
+    }
 
     if (attempt < MAX_RESOLVE_RETRIES - 1) {
       await new Promise((resolve) =>
@@ -168,6 +185,18 @@ async function resolveByNameOrArn(
   }
 
   return null;
+}
+
+/**
+ * Thrown when a name-based lookup matches more than one managed resource.
+ * The caller should surface the message to the user without issuing any
+ * CCAPI mutation calls.
+ */
+export class MultiMatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MultiMatchError";
+  }
 }
 
 export async function resolveResource(

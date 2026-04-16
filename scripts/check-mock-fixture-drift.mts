@@ -70,6 +70,8 @@ interface DriftEntry {
     fixtureType: unknown;
     liveType: unknown;
   }>;
+  /** Fields present in fixture's `required` array but absent in live's. */
+  requiredDropped: string[];
 }
 
 function hasAwsCredentials(): boolean {
@@ -127,6 +129,18 @@ function diffSchemas(
   const missingProperties: string[] = [];
   const typeChangedProperties: DriftEntry["typeChangedProperties"] = [];
 
+  // Detect fields that the fixture marks as required but live no longer does.
+  const fixtureRequired = new Set(
+    Array.isArray(f.required) ? (f.required as string[]) : [],
+  );
+  const liveRequired = new Set(
+    Array.isArray(l.required) ? (l.required as string[]) : [],
+  );
+  const requiredDropped: string[] = [];
+  for (const field of fixtureRequired) {
+    if (!liveRequired.has(field)) requiredDropped.push(field);
+  }
+
   for (const [propName, propDef] of Object.entries(fixtureProps)) {
     if (!(propName in liveProps)) {
       // Property recorded in the fixture no longer exists live — drift.
@@ -146,10 +160,14 @@ function diffSchemas(
     }
   }
 
-  if (missingProperties.length === 0 && typeChangedProperties.length === 0) {
+  if (
+    missingProperties.length === 0 &&
+    typeChangedProperties.length === 0 &&
+    requiredDropped.length === 0
+  ) {
     return null;
   }
-  return { type, missingProperties, typeChangedProperties };
+  return { type, missingProperties, typeChangedProperties, requiredDropped };
 }
 
 async function describeLiveSchema(
@@ -196,7 +214,7 @@ async function main(): Promise<number> {
       if (drift) {
         drifts.push(drift);
         console.log(
-          `  ✗ ${type} — ${drift.missingProperties.length} missing, ${drift.typeChangedProperties.length} type-changed`,
+          `  ✗ ${type} — ${drift.missingProperties.length} missing, ${drift.typeChangedProperties.length} type-changed, ${drift.requiredDropped.length} required-dropped`,
         );
       } else {
         console.log(`  ✓ ${type}`);

@@ -13,13 +13,13 @@
  *   - sts-cache.ts       — operator account-id cache (poison-proof per Wave 4)
  *   - dispatcher.ts      — poll + NotFound classification + pre-destroy hook
  *   - error-envelope.ts  — MCP response shape
+ *   - credentials.ts     — operator credential bootstrap + RGTA client init
  *
  * @see Story 18.5 (CLI destroy), Epic 20 (MCP tools)
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ResourceGroupsTaggingAPIClient } from "@aws-sdk/client-resource-groups-tagging-api";
 import {
   CloudControlClient,
   DeleteResourceCommand,
@@ -28,14 +28,13 @@ import {
   CCAPI_FALLBACK_TYPES,
   CCAPI_REDIRECT_TYPES,
   DEFAULT_AWS_REGION,
-  requireAssigneeCredentials,
-  MissingAssigneeCredentialsError,
 } from "@assignee/core";
 import {
   buildErrorResponse,
   buildSuccessResponse,
   DESTROY_ERROR_CODES,
 } from "./destroy-resource/error-envelope.js";
+import { bootstrapOperatorCredentials } from "./destroy-resource/credentials.js";
 import {
   isArn,
   resolveResource,
@@ -99,40 +98,10 @@ export function registerDestroyResource(server: McpServer): void {
     destroyResourceParams,
     async ({ resource_identifier, confirmed }) => {
       // ── Lazy operator credential resolution (P0-1) ───────────────────
-      // Never fall through to the host's default credential chain. Both
-      // AWS clients below are constructed with explicit ASSIGNEE_OPERATOR_*
-      // credentials. If they're missing we fail fast with an actionable
-      // hint instead of silently deleting resources under the MCP host's
-      // profile.
       const region = DEFAULT_REGION;
-      let operatorCreds;
-      try {
-        operatorCreds = requireAssigneeCredentials("operator");
-      } catch (err) {
-        const message =
-          err instanceof MissingAssigneeCredentialsError
-            ? err.message
-            : err instanceof Error
-              ? err.message
-              : String(err);
-        return buildErrorResponse(
-          `Operator credentials are required to destroy resources: ${message}`,
-          "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY in the MCP server environment, or run 'assignee setup' to create the IAM users.",
-        );
-      }
-
-      let taggingClient: ResourceGroupsTaggingAPIClient;
-      try {
-        taggingClient = new ResourceGroupsTaggingAPIClient({
-          region,
-          credentials: operatorCreds,
-        });
-      } catch (err) {
-        return buildErrorResponse(
-          `Failed to initialize AWS client: ${err instanceof Error ? err.message : String(err)}`,
-          "Check that ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY are set.",
-        );
-      }
+      const bootstrap = bootstrapOperatorCredentials(region);
+      if (!bootstrap.ok) return bootstrap.error;
+      const { operatorCreds, taggingClient } = bootstrap.result;
 
       // Capture start time before resolve so the TOCTOU SECURITY log line
       // reflects the full resolve→delete window observed by the operator.

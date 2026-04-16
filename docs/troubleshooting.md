@@ -240,7 +240,7 @@ for the enforcement detail.
    ```sql
    SELECT eventTime, userIdentity.arn, requestParameters
    FROM cloudtrail_logs
-   WHERE eventName IN ('UntagResources', 'RemoveTagsFromResource', 'UntagRole', 'UntagUser')
+   WHERE eventName IN ('UntagResources', 'RemoveTagsFromResource', 'UntagRole', 'UntagUser', 'DeleteTags')
      AND eventTime BETWEEN <T_minus_5min> AND <T_now>
      AND requestParameters LIKE '%managed-by%assignee-ai%'
      AND recipientAccountId = '<operator-account>'

@@ -8,3 +8,4 @@ export * from "./error-envelope.js";
 export * from "./resolve.js";
 export * from "./sts-cache.js";
 export * from "./dispatcher.js";
+export * from "./credentials.js";
