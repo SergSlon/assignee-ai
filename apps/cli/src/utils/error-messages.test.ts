@@ -638,7 +638,7 @@ describe("inline context tokens (Story 48.5)", () => {
     expect(out).not.toContain("{");
     expect(out).not.toContain("}");
     // no mid-line double-spaces (newline-indentation with 2 spaces is fine)
-    expect(out).not.toMatch(/[^\n ]  /);
+    expect(out).not.toMatch(/[^\n ] {2}/);
     expect(out).not.toMatch(/\bin region \./);
     expect(out).not.toMatch(/\bin account \./);
     expect(out).not.toMatch(/\bfor profile \./);

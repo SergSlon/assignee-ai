@@ -86,10 +86,10 @@ describe("BP hint accuracy — invariants", () => {
       plugin.commonFields,
       plugin.resourceType,
     );
-    const hintedAdvanced = injectBPHints(
-      plugin.advancedFields,
-      plugin.resourceType,
-    );
+    // Call with advancedFields to exercise the mutation-check (assertions
+    // below verify `plugin.advancedFields` unchanged via `originalAdvanced`
+    // snapshot comparison; return value not inspected).
+    void injectBPHints(plugin.advancedFields, plugin.resourceType);
 
     // 1. Input arrays unchanged by reference identity of nested members.
     expect(plugin.commonFields).toHaveLength(originalCommon.length);

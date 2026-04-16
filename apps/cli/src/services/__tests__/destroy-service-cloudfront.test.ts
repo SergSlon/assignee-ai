@@ -13,8 +13,6 @@ import { describe, it, expect } from "vitest";
 // Wave-4 F5 P2-R2-8: dropped dead `MissingAssigneeCredentialsError` import
 // — this suite never constructs / catches it directly.
 import {
-  mockDeleteResource,
-  mockGetRequestStatus,
   mockCfSend,
   setupDestroyServiceMocks,
 } from "./destroy-service-mocks.js";
