@@ -5,12 +5,15 @@
  * parallel, and returns a populated map. Missing/empty `tools`
  * short-circuits to an all-fallback map without any MCP traffic.
  *
+ * Lifted from apps/cli/src/services/advisory-price-enricher/orchestrator.ts
+ * in Story 50-4 Wave 5 Pass G.
+ *
  * @see Story 46.3
  */
 
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../../constants/tools.js";
-import type { EnrichedPriceMap } from "../../constants/advisory-prices.js";
+import type { EnrichedPriceMap } from "../../pricing/advisory-prices.js";
 import { buildFallback } from "./fallback.js";
 import { enrichOne } from "./pricing-query.js";
 import { ADVISORY_PRICE_QUERIES, ENRICHABLE_PRICE_IDS } from "./types.js";

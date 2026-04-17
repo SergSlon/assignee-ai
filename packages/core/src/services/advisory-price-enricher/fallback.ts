@@ -3,11 +3,14 @@
  *
  * Tagged `source: "fallback"` so the display layer renders `(estimated)`.
  *
+ * Lifted from apps/cli/src/services/advisory-price-enricher/fallback.ts
+ * in Story 50-4 Wave 5 Pass G.
+ *
  * @see Story 46.3
  */
 
-import { formatLabelWithSource } from "@assignee/core";
-import type { EnrichedPrice } from "../../constants/advisory-prices.js";
+import { formatLabelWithSource } from "../../pricing/index.js";
+import type { EnrichedPrice } from "../../pricing/advisory-prices.js";
 import type { AdvisoryPriceQuery } from "./types.js";
 
 /**

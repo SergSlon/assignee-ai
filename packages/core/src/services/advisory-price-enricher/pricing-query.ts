@@ -4,6 +4,9 @@
  * Never throws — every failure path resolves to a fulfilled fallback so
  * `Promise.allSettled` at the orchestrator level sees consistent values.
  *
+ * Lifted from apps/cli/src/services/advisory-price-enricher/pricing-query.ts
+ * in Story 50-4 Wave 5 Pass G.
+ *
  * @see Story 46.3
  */
 
@@ -11,17 +14,17 @@ import {
   formatLabelWithSource,
   extractFirstTierPrice,
   type AwsPricingResponse,
-} from "@assignee/core";
+} from "../../pricing/index.js";
 import type { StructuredTool } from "@langchain/core/tools";
-import { AWS_REGION } from "../../config/constants.js";
-import { PricingTerm } from "../../constants/pricing.js";
+import { AWS_REGION } from "../../config/constants/aws.js";
+import { PricingTerm } from "../../constants/pricing-api.js";
 import { withTimeout } from "../../utils/timeout.js";
 import { unwrapMcpText } from "../../utils/mcp.js";
-import { log, LOG_ACTIONS } from "../../utils/logger.js";
+import { log, LOG_ACTIONS } from "../../utils/logger/index.js";
 import {
   AdvisoryPriceId,
   type EnrichedPrice,
-} from "../../constants/advisory-prices.js";
+} from "../../pricing/advisory-prices.js";
 import { buildFallback } from "./fallback.js";
 import { ADVISORY_PRICE_QUERIES, ENRICHMENT_TIMEOUT_MS } from "./types.js";
 

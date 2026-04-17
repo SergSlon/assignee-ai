@@ -10,9 +10,13 @@
  * file header for the 4 IDs intentionally left unenriched.
  *
  * feedback_no_hardcoded_prices.md: the fallback values are the existing
- * *_APPROX constants from `constants/advisory-prices.ts`. Registry
+ * *_APPROX constants from `pricing/advisory-prices.ts`. Registry
  * additions must route through the Pricing MCP — do NOT bake new dollar
  * amounts into this file.
+ *
+ * Lifted from apps/cli/src/services/advisory-price-enricher/types.ts in
+ * Story 50-4 Wave 5 Pass G so the in-core advice-generator node can
+ * use the enricher without reaching back into the CLI app.
  *
  * @see Story 46.3
  */
@@ -24,19 +28,19 @@ import {
   PricingServiceCode as SC,
   PricingFilterValue as FV,
   type McpPricingFilter,
-} from "@assignee/core";
-import { HOURS_PER_MONTH } from "../../config/constants.js";
+} from "../../pricing/index.js";
+import { HOURS_PER_MONTH } from "../../config/constants/limits.js";
 import {
   AdvisoryPriceId,
   NAT_GATEWAY_MONTHLY_APPROX,
   ALB_MONTHLY_APPROX,
   CW_ALARM_PER_MONTH,
-} from "../../constants/advisory-prices.js";
+} from "../../pricing/advisory-prices.js";
 
 /**
  * Internal spec for one enrichable advisory price. Adding a new ID
  * requires:
- *   1. Add an enum entry in `constants/advisory-prices.ts`
+ *   1. Add an enum entry in `pricing/advisory-prices.ts`
  *   2. Add a query spec here AND verify the filter set produces the
  *      right `extractFirstTierPrice` row against a captured response
  *   3. Reference `enriched.get(id).label` in the relevant hint

@@ -8,7 +8,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 
-vi.mock("../utils/logger.js", () => ({
+vi.mock("../utils/logger/index.js", () => ({
   log: vi.fn(),
   LOG_ACTIONS: { CONFIG_LOADED: "config_loaded" },
 }));
