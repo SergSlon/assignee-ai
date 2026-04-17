@@ -102,6 +102,82 @@ signing or hook enforcement without a maintainer's sign-off.
   consistency checks (e.g. `TYPE_TO_KEYWORD` ↔ `SUPPORTED_TYPES_ARRAY`
   in `@assignee/mcp-server`) only fire under coverage.
 
+## Continuous integration
+
+The repo has three workflow files under `.github/workflows/`:
+
+| File                    | Trigger                         | Matrix                                       |
+| ----------------------- | ------------------------------- | -------------------------------------------- |
+| `ci.yml`                | every push to `main` + every PR | ubuntu-latest × node 22 only                 |
+| `ci-cross-platform.yml` | manual (button in Actions UI)   | ubuntu + macOS + windows × configurable node |
+| `ci-core.yml`           | reusable (`workflow_call` only) | whatever the caller passes in                |
+
+The split exists for a billing reason: on GitHub's Free plan for
+private repos, macOS minutes are billed **10×** Linux and Windows
+**2×**. A full 6-cell matrix burns ~390 minutes per push — about 5
+pushes exhaust the 2 000 min/month budget. `ci.yml` runs only
+ubuntu-latest + node 22 (~15 billed minutes per push, ~130 pushes per
+month) and is the authoritative gate. `ci-cross-platform.yml` is for
+on-demand sweeps before a release or when a PR touches
+cross-platform-sensitive code.
+
+### Running the cross-platform matrix
+
+Use this before releases or when you've touched anything path- /
+signal- / shell-dependent (e.g. `s3-upload` backslash handling,
+`price-cache` `HOME` vs `USERPROFILE`, `index.ts` signal handlers).
+
+**From the GitHub UI (recommended)**:
+
+1. Navigate to **Actions → CI — cross-platform (manual)**.
+2. Click **Run workflow**.
+3. Pick the branch (usually `main` or your PR branch).
+4. Leave `node-versions` at its default `"22"` for a 3-cell sweep
+   (ubuntu + macOS + windows × node 22 — the standard check, ~180
+   billed minutes). Change it to `"20,22"` for a full 6-cell sweep
+   (~390 billed minutes) when you specifically need to test both
+   Node majors.
+5. Click **Run workflow**.
+
+**From the CLI**:
+
+```bash
+# 3-cell default (node 22)
+gh workflow run ci-cross-platform.yml --ref main
+
+# 6-cell sweep (node 20 + 22)
+gh workflow run ci-cross-platform.yml --ref main -f node-versions=20,22
+
+# Same on a PR branch
+gh workflow run ci-cross-platform.yml --ref your/branch
+```
+
+Check status and logs:
+
+```bash
+gh run list --workflow ci-cross-platform.yml --limit 5
+gh run view <run-id>
+gh run watch <run-id>
+```
+
+**Cost estimate per run**:
+
+- 3-cell default (node 22): ubuntu 15 min + macOS 15 × 10 = 150 min +
+  windows 15 × 2 = 30 min → **~195 billed minutes**.
+- 6-cell (node 20 + 22): double that → **~390 billed minutes**.
+
+Check remaining budget: **Settings → Billing → Actions usage** on
+your GitHub account page (the API endpoint
+`/user/settings/billing/actions` also returns it if your token has
+the `read:billing` scope).
+
+### Adjusting the default gate
+
+If you need the default `ci.yml` to include another permutation —
+e.g. `node 20` for downstream-consumer parity — bump its `jobs`
+section to call `ci-core.yml` twice. Do NOT re-add the full matrix
+to the default gate; keep the billing discipline.
+
 ## Documentation
 
 - User-facing docs live under `docs/` and follow the
