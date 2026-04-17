@@ -9,7 +9,7 @@ import {
 } from "vitest";
 import * as fs from "node:fs/promises";
 import { fetchOrgPolicy } from "./org-policy-cache.js";
-import type { OrgResourceConfig } from "@assignee/core";
+import type { OrgResourceConfig } from "./resource-policy.js";
 
 vi.mock("node:fs/promises");
 

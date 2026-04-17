@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { ConfigurationError } from "@assignee/core";
+import { ConfigurationError } from "../errors.js";
 
 vi.mock("@aws-sdk/client-cloudcontrol", () => {
   // Use class declaration so vitest mockReset cannot strip the

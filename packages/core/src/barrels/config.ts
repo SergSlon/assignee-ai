@@ -204,6 +204,41 @@ export {
 // Config constants — AWS region/credential helpers (Story 50-4 Wave 5 Pass A)
 export { AWS_REGION, CredentialError } from "../config/constants/aws.js";
 
+// Config — operator credential reader (Story 50-4 Wave 5 Pass G)
+export { operatorCredentials } from "../config/operator-credentials.js";
+
+// Config — user config loader (Story 50-4 Wave 5 Pass G)
+export {
+  loadUserConfig,
+  resolveConfigPath,
+  validateUserConfig,
+  type UserConfig,
+} from "../config/user-config-loader.js";
+
+// Config — org policy local loader (Story 50-4 Wave 5 Pass G)
+export {
+  loadLocalOrgPolicy,
+  mergeOrgPolicies,
+  findProjectPolicyPath,
+  resolveUserPolicyPath,
+} from "../config/org-policy-loader.js";
+
+// Config — org policy SaaS-cached fetcher (Story 50-4 Wave 5 Pass G)
+export { fetchOrgPolicy, readAuthToken } from "../config/org-policy-cache.js";
+
+// Config — project-level config loader (Story 50-4 Wave 5 Pass G)
+export { loadProjectConfig } from "../config/project-config-loader.js";
+
+// Config constants — size limits / pricing-calc helpers (Story 50-4 Wave 5 Pass G)
+export {
+  SCHEMA_EXCERPT_MAX_CHARS,
+  CHECKPOINT_DEFAULT_TTL_HOURS,
+  MEMORY_MAX_PROVISIONS,
+  MEMORY_MAX_FAILURES,
+  MEMORY_MAX_PATTERNS,
+  HOURS_PER_MONTH,
+} from "../config/constants/limits.js";
+
 // Config — shared ARN parsing helpers (Wave 3 P2-2 dedup).
 // NOTE: `isArn` is ALSO exported from `./config/arn-builder.js` above for
 // backward compatibility — both exports resolve to the same implementation.

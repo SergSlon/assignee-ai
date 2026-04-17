@@ -9,16 +9,17 @@
  *
  * Mock responses use the actual `{type:"text", text: JSON}` shape that
  * the Pricing MCP server emits, parsed by `extractFirstTierPrice`.
+ *
+ * Lifted from apps/cli/src/services/__tests__/advisory-price-enricher.test.ts
+ * in Story 50-4 Wave 5 Pass G — assertions byte-identical to CLI version.
  */
 
 import { describe, it, expect, vi } from "vitest";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../../constants/tools.js";
-import { AdvisoryPriceId } from "../../constants/advisory-prices.js";
-import {
-  enrichAdvisoryPrices,
-  ENRICHABLE_PRICE_IDS,
-} from "../advisory-price-enricher.js";
+import { AdvisoryPriceId } from "../../pricing/advisory-prices.js";
+import { enrichAdvisoryPrices } from "./orchestrator.js";
+import { ENRICHABLE_PRICE_IDS } from "./types.js";
 
 /**
  * Build a captured-shape Pricing MCP response. The structure here mirrors
