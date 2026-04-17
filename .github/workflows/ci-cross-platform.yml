@@ -1,15 +1,36 @@
-name: CI — cross-platform (manual)
+name: CI — cross-platform (manual + weekly)
 
-# Manual-only cross-platform sweep. Runs the full lint + build + test +
-# coverage pipeline on macOS and Windows in addition to the default
-# Linux gate, so path-handling and shell-dependent code (s3-upload
-# backslashes, price-cache HOME vs USERPROFILE, signal handlers) get
-# exercised when it matters — before a release, or after a change
-# touching cross-platform surface area.
+# Cross-platform sweep: runs the full lint + build + test + coverage
+# pipeline on macOS and Windows in addition to the default Linux gate,
+# so path-handling and shell-dependent code (s3-upload backslashes,
+# price-cache HOME vs USERPROFILE, signal handlers) gets exercised
+# when it matters — before a release, or after a change touching
+# cross-platform surface area.
+#
+# L9-H4 mitigation (split-workflow CI downgrade): when we moved the
+# matrix out of the default `push`/`pull_request` gate to save minutes,
+# nothing automatically exercised macOS/Windows, so regressions could
+# sit for weeks until someone hit "Run workflow". A weekly cron keeps
+# the full matrix green without manual intervention.
+#
+# Schedule: every Monday at 07:00 UTC (02:00 CT / 03:00 ET). Weekly is
+# enough because iteration cadence is multi-day, and any change touching
+# cross-platform surface area is already covered by the release workflow's
+# `cross-platform-build` job and/or ad-hoc manual dispatch before merge.
+#
+# Cost envelope:
+#   - One full matrix run ≈ 15 min wall clock × 6 job-slots = ~90 compute
+#     minutes, but GitHub bills by runner minutes with platform multipliers:
+#     macOS 10×, Windows 2×, Linux 1×. Per run ≈ 150 Linux-equivalent
+#     minutes ≈ 4 runs/month ≈ 600 Linux-equivalent minutes/month —
+#     well under the 2 000/mo free-tier budget with room for a
+#     release cycle.
+#   - If the budget starts pinching, either drop Windows from the weekly
+#     and run it only on release, or switch the cron to "first Monday of
+#     the month" by adjusting the schedule below.
 #
 # Private-repo billing note: macOS minutes cost 10× Linux, Windows 2×.
-# A single full-matrix run burns ~390 minutes. Free tier gets 2 000/mo,
-# so use sparingly. Click "Run workflow" in the Actions tab.
+# Click "Run workflow" in the Actions tab to trigger on demand.
 
 on:
   workflow_dispatch:
@@ -19,6 +40,9 @@ on:
         required: false
         type: string
         default: "22"
+  schedule:
+    # Weekly: Mondays 07:00 UTC. See cost envelope above.
+    - cron: "0 7 * * 1"
 
 jobs:
   # Compute the matrix from the dispatch input. Converting "20,22" → ["20","22"]
@@ -31,7 +55,13 @@ jobs:
     steps:
       - id: nodes
         run: |
+          # inputs.node-versions is only populated on workflow_dispatch.
+          # On schedule triggers it's empty — fall back to the default "22"
+          # so the scheduled weekly run matches the workflow_dispatch default.
           raw="${{ inputs.node-versions }}"
+          if [ -z "$raw" ]; then
+            raw="22"
+          fi
           json="$(echo "$raw" | tr ',' '\n' | awk 'NF {print "  " $1}' | jq -R . | jq -cs .)"
           echo "json=$json" >> "$GITHUB_OUTPUT"
 

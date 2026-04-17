@@ -39,6 +39,17 @@ class Assignee < Formula
   end
 
   def install
+    # The release tarball is produced by `pnpm deploy --prod` in the
+    # package-binaries job. That means it already contains a self-contained
+    # `node_modules/` with @ai-sdk/*, @aws-sdk/*, @langchain/*, etc. —
+    # everything the CLI needs at runtime. `Dir["*"]` is a glob against
+    # the untarred top-level, so `node_modules/` ships into `libexec`
+    # alongside `dist/`, `package.json`, `completions/`, etc.
+    #
+    # If the tarball ever shrinks back to "dist only", the wrapper below
+    # will crash on first `@ai-sdk/*` import. The release workflow's
+    # smoke-test job catches that before users ever run brew install —
+    # see .github/workflows/release.yml.disabled (L9-B1 / L9-H5).
     libexec.install Dir["*"]
 
     # Create wrapper that uses the formula's Node
