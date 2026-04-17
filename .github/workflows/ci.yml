@@ -5,12 +5,15 @@ on:
     branches: [main]
   pull_request:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.os || 'default' }}-${{ matrix.node || 'default' }}
-  cancel-in-progress: true
-
 jobs:
   ci:
+    # Cancel previous runs of the same matrix cell on the same ref when a
+    # new push arrives. Matrix context is only valid inside the job, so the
+    # concurrency block must live here (not at the workflow level).
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.os }}-${{ matrix.node }}
+      cancel-in-progress: true
+
     # ── Cross-platform CI matrix ─────────────────────────────────────────────
     # Linux is the historical target and drives all gating steps (coverage
     # badge, artifact upload). macOS and Windows run the same lint + build +
