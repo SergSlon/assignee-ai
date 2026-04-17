@@ -219,7 +219,7 @@ Human contributors can ignore the BMAD workflow and open standard PRs.
 
 ## Contributing a Best-Practice Rule
 
-The 186 shipped BP rules ([`packages/best-practices/`](packages/best-practices))
+The 185 shipped BP rules ([`packages/best-practices/`](packages/best-practices))
 are YAML files, not TypeScript. That means you can add a new rule with no
 build step and no schema class — drop a file in the right directory, the
 CI gate validates it.
