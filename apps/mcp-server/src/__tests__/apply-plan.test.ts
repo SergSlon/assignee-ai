@@ -15,6 +15,17 @@ import {
   _resetBPCache,
 } from "../tools/apply-plan.js";
 import type { GraphContext } from "../services/graph-init.js";
+// Story 50-5 B-2: the HMAC signature for a saved checkpoint lives in
+// an in-process map. These tests bypass `saveCheckpoint` (they mock
+// `fs.readFile` to feed a synthetic JSON body), so they must register
+// the HMAC manually via `signCheckpoint` + `canonicalizeCheckpointPath`
+// to simulate what `saveCheckpoint` would have done on a legitimate run.
+import {
+  canonicalizeCheckpointPath,
+  computeDesiredStateHash,
+  signCheckpoint,
+  _resetSignaturesForTests,
+} from "../services/checkpoint-hmac.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -110,9 +121,58 @@ vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
 }));
 
-async function setCheckpointFile(content: string) {
+/**
+ * Preloads the mocked fs.readFile with the given checkpoint JSON body
+ * AND registers the HMAC for every path the test calls apply_plan
+ * with. The HMAC is a function of (canonical-path, desiredState-hash);
+ * if the test doesn't pre-seed it, `loadCheckpointFromPath` rejects
+ * the load as an integrity failure (Story 50-5 B-2).
+ *
+ * Accepts an optional `paths` array so a single test can exercise
+ * multiple checkpointPath values against the same body.
+ */
+async function setCheckpointFile(
+  content: string,
+  paths: string[] = [
+    "/tmp/checkpoint.json",
+    "/tmp/no-preflight.json",
+    "/tmp/empty-state.json",
+    "/tmp/corrupt.json",
+    "/tmp/expired.json",
+    "/tmp/nonexistent.json",
+    "/tmp/string-error.json",
+    "/tmp/compound-checkpoint.json",
+    "/tmp/compound-3-resources.json",
+    "/tmp/timeout-checkpoint.json",
+    "/tmp/partial-success.json",
+    "/tmp/queue-checkpoint.json",
+    "/tmp/options-checkpoint.json",
+    "/tmp/bad-schema.json",
+    "/tmp/missing.json",
+    "/var/assignee/checkpoint.json",
+    "/home/user/.assignee/checkpoints/cp.json",
+    "/home/user/malicious.json",
+  ],
+) {
   const { readFile } = await import("node:fs/promises");
   (readFile as ReturnType<typeof vi.fn>).mockResolvedValue(content);
+  // Parse the body to compute the desiredState hash — lets us register
+  // HMACs for all candidate paths so the integrity check passes once
+  // the load+TTL+preflight guards are satisfied.
+  try {
+    const parsed = JSON.parse(content) as {
+      desiredState?: Record<string, unknown>;
+    };
+    const desiredState = parsed.desiredState ?? {};
+    const hash = computeDesiredStateHash(desiredState);
+    for (const p of paths) {
+      signCheckpoint(canonicalizeCheckpointPath(p), hash);
+    }
+  } catch {
+    // Corrupt-JSON tests deliberately supply invalid content; no HMAC
+    // to register for those — they should reject at the JSON.parse
+    // stage inside loadCheckpointFromPath, BEFORE the HMAC check.
+  }
 }
 
 async function setCheckpointFileNotFound() {
@@ -129,6 +189,7 @@ describe("apply_plan tool", () => {
     vi.clearAllMocks();
     _resetActiveApplies();
     _resetBPCache();
+    _resetSignaturesForTests();
     const bp = await import("@assignee/best-practices");
     vi.mocked(bp.loadBestPractices).mockReturnValue([]);
     vi.mocked(bp.evaluateTriggers).mockReturnValue([]);
@@ -957,7 +1018,43 @@ describe("apply_plan tool", () => {
       expect(body.message).toContain("Invalid checkpoint path");
     });
 
-    it("should reject path outside allowed directories", async () => {
+    // Story 50-5 B-2: the pre-Story-50-5 behaviour was "accept any path
+    // containing /tmp/ or /var/ or the substring 'assignee'" — an
+    // attacker-planted file under /tmp/ bypassed the guard. The new
+    // security model replaces the substring allowlist with an
+    // in-process HMAC over (canonical-path, desiredState-hash); only
+    // paths this process actually wrote via `saveCheckpoint` are
+    // accepted, regardless of directory. The assertions below lock in
+    // the new behaviour.
+    it("should reject attacker-planted /tmp path that was never signed", async () => {
+      await setCheckpointFile(
+        makeCheckpointJSON({ runId: "22222222-2222-2222-2222-222222222222" }),
+        // Deliberately DO NOT register the HMAC for this path — the
+        // default paths list in setCheckpointFile does NOT include
+        // "/tmp/evil.json", so the integrity check fails.
+        [],
+      );
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/evil.json",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      expect(body.message).toContain("integrity check failed");
+    });
+
+    it("should reject path outside allowed directories (HMAC miss)", async () => {
+      // No HMAC registered for /home/user/malicious.json → rejected.
+      await setCheckpointFile(makeCheckpointJSON(), []);
       const ctx = makeMockGraphContext();
       const { client } = await createTestClient(ctx);
 
@@ -973,10 +1070,11 @@ describe("apply_plan tool", () => {
       const body = JSON.parse(
         (result.content as Array<{ type: string; text: string }>)[0]!.text,
       );
-      expect(body.message).toContain("Invalid checkpoint path");
+      // New security model rejects via HMAC, not a path-shape message.
+      expect(body.message).toContain("integrity check failed");
     });
 
-    it("should accept path under /var/", async () => {
+    it("should accept path under /var/ when signed by saveCheckpoint", async () => {
       await setCheckpointFile(makeCheckpointJSON());
       const ctx = makeMockGraphContext();
       const { client } = await createTestClient(ctx);
@@ -992,11 +1090,12 @@ describe("apply_plan tool", () => {
       const body = JSON.parse(
         (result.content as Array<{ type: string; text: string }>)[0]!.text,
       );
-      // Should succeed (path is valid), so no "Invalid checkpoint path" error
+      // HMAC was registered for /var/assignee/checkpoint.json via
+      // setCheckpointFile's default paths list — load succeeds.
       expect(body.status).toBe("SUCCESS");
     });
 
-    it("should accept path containing 'assignee' anywhere", async () => {
+    it("should accept any directory when signed by saveCheckpoint", async () => {
       await setCheckpointFile(makeCheckpointJSON());
       const ctx = makeMockGraphContext();
       const { client } = await createTestClient(ctx);
@@ -1012,8 +1111,41 @@ describe("apply_plan tool", () => {
       const body = JSON.parse(
         (result.content as Array<{ type: string; text: string }>)[0]!.text,
       );
-      // Should succeed (path contains 'assignee'), so no path validation error
+      // Story 50-5 B-2: directory location no longer gates access —
+      // only the in-process HMAC does. This path was pre-registered
+      // via setCheckpointFile so the load succeeds.
       expect(body.status).toBe("SUCCESS");
+    });
+
+    it("should reject tampered checkpoint (same path, mutated desiredState)", async () => {
+      // Register HMAC for the ORIGINAL body, then feed a body with
+      // a different desiredState. The hash mismatch must reject.
+      const originalBody = makeCheckpointJSON();
+      await setCheckpointFile(originalBody);
+      // Swap the fs mock to return a tampered body with the SAME runId
+      // but a different BucketName → different desiredState hash.
+      const tamperedBody = makeCheckpointJSON({
+        desiredState: { BucketName: "attacker-controlled-bucket" },
+      });
+      const { readFile } = await import("node:fs/promises");
+      (readFile as ReturnType<typeof vi.fn>).mockResolvedValue(tamperedBody);
+
+      const ctx = makeMockGraphContext();
+      const { client } = await createTestClient(ctx);
+
+      const result = await client.callTool({
+        name: "apply_plan",
+        arguments: {
+          checkpointPath: "/tmp/checkpoint.json",
+          confirmed: true,
+        },
+      });
+
+      expect(result.isError).toBe(true);
+      const body = JSON.parse(
+        (result.content as Array<{ type: string; text: string }>)[0]!.text,
+      );
+      expect(body.message).toContain("integrity check failed");
     });
   });
 

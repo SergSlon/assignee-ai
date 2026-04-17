@@ -23,6 +23,7 @@ import {
   TagRoleCommand,
 } from "@aws-sdk/client-iam";
 import {
+  IAM_USER_NAMES,
   IamAction,
   IamEffect,
   IamPolicy,
@@ -38,6 +39,61 @@ import {
   MANAGED_TAG,
 } from "./constants.js";
 import type { AdminClientConfig } from "./credentials.js";
+
+/**
+ * Name of the Bedrock log-group resource-policy created in Task 3.5.
+ * Matching the `AssigneeAi*` naming convention for discoverability.
+ */
+export const BEDROCK_LOG_GROUP_RESOURCE_POLICY_NAME =
+  "AssigneeAiBedrockLoggingReadRestriction";
+
+/**
+ * Builds the CloudWatch Logs resource policy JSON that restricts read
+ * access to the Bedrock invocation log group. Story 50-5 H-2.
+ *
+ * Least-privilege read surface:
+ *   - `arn:<partition>:iam::<account>:user/assignee-operator` — the
+ *     sole CLI principal that needs to tail these logs.
+ *   - `arn:<partition>:iam::<account>:root` — AWS best-practice
+ *     escape hatch so the account owner can never be locked out
+ *     of their own log group.
+ *
+ * All other principals are denied `logs:GetLogEvents` +
+ * `logs:FilterLogEvents` + `logs:StartQuery` (the three read actions
+ * that can leak prompt/response text). Writes (CreateLogStream /
+ * PutLogEvents) are handled by the separate IAM role policy.
+ */
+export function buildBedrockLogReadRestriction(opts: {
+  partition: string;
+  accountId: string;
+  region: string;
+}): string {
+  const { partition, accountId, region } = opts;
+  const logGroupArn = `arn:${partition}:logs:${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`;
+  const operatorUserArn = `arn:${partition}:iam::${accountId}:user/${IAM_USER_NAMES.operator}`;
+  const rootArn = `arn:${partition}:iam::${accountId}:root`;
+  return JSON.stringify({
+    Version: IamPolicy.VERSION,
+    Statement: [
+      {
+        Sid: "DenyBedrockLogReadExceptOperatorAndRoot",
+        Effect: IamEffect.DENY,
+        Principal: "*",
+        Action: [
+          "logs:GetLogEvents",
+          "logs:FilterLogEvents",
+          "logs:StartQuery",
+        ],
+        Resource: logGroupArn,
+        Condition: {
+          StringNotEquals: {
+            "aws:PrincipalArn": [operatorUserArn, rootArn],
+          },
+        },
+      },
+    ],
+  });
+}
 
 export async function setupBedrockLogging(opts: {
   iam: IAMClient;
@@ -120,8 +176,11 @@ export async function setupBedrockLogging(opts: {
 
     // Task 3: CloudWatch log group
     {
-      const { CloudWatchLogsClient, CreateLogGroupCommand } =
-        await import("@aws-sdk/client-cloudwatch-logs");
+      const {
+        CloudWatchLogsClient,
+        CreateLogGroupCommand,
+        PutResourcePolicyCommand,
+      } = await import("@aws-sdk/client-cloudwatch-logs");
       const cwl = new CloudWatchLogsClient({ ...clientConfig, region });
       try {
         await cwl.send(
@@ -138,6 +197,24 @@ export async function setupBedrockLogging(opts: {
           throw err;
         }
       }
+
+      // Task 3.5 (Story 50-5 H-2): restrict who can read the Bedrock
+      // invocation log group. PutResourcePolicy is idempotent — AWS
+      // overwrites by policyName, matching the "idempotent reapply on
+      // setup re-run" requirement in the story spec.
+      await cwl.send(
+        new PutResourcePolicyCommand({
+          policyName: BEDROCK_LOG_GROUP_RESOURCE_POLICY_NAME,
+          policyDocument: buildBedrockLogReadRestriction({
+            partition,
+            accountId,
+            region,
+          }),
+        }),
+      );
+      clack.log.step(
+        `Log group read-restriction policy ${BEDROCK_LOG_GROUP_RESOURCE_POLICY_NAME} — applied`,
+      );
     }
 
     // Task 4: PutModelInvocationLoggingConfiguration

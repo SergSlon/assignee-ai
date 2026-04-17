@@ -13,10 +13,10 @@
  * Precedence (highest wins):
  *
  *   1. CLI flags              — `--auto-fix=apply` etc.
- *   2. Environment variables  — `ASSIGNEE_AUTO_FIX`, `ASSIGNEE_VERBOSITY`, ...
+ *   2. Environment variables  — `ASSIGNEE_AUTO_FIX`, ...
  *   3. Project config         — `./.assignee/config.yaml`
  *   4. User config            — `~/.config/assignee/config.yaml`
- *   5. CONFIG_DEFAULTS        — `{auto_fix: "ask", output_format: "table", ...}`
+ *   5. CONFIG_DEFAULTS        — `{auto_fix: "ask"}`
  *
  * Missing sources are fine; the helper is safe to call with an empty
  * object and will return CONFIG_DEFAULTS-only preferences.
@@ -30,7 +30,6 @@ import {
   type ConfigPreferences,
   type ConfigDefaults,
   type ConfigBudget,
-  type ConfigLlm,
 } from "./config-schema.js";
 
 /** Per-level source container passed to resolveGlobalConfig. */
@@ -140,24 +139,11 @@ export function resolveGlobalConfig(
     sources.projectConfig?.org_policy ??
     sources.userConfig?.org_policy;
 
-  // Story 44.1: llm section — merge key-by-key like defaults.tags so
-  // a user-level llm.default and a project-level llm.plan_generator
-  // both survive.
-  const userLlm = sources.userConfig?.llm;
-  const projectLlm = sources.projectConfig?.llm;
-  const envLlm = sources.envOverrides?.llm;
-  const cliLlm = sources.cliFlags?.llm;
-  const llm: ConfigLlm | undefined =
-    userLlm || projectLlm || envLlm || cliLlm
-      ? { ...userLlm, ...projectLlm, ...envLlm, ...cliLlm }
-      : undefined;
-
   const hasDefaults = Object.keys(defaults).length > 0;
 
   const result: ResolvedGlobalConfig = { preferences };
   if (hasDefaults) result.defaults = defaults;
   if (budget) result.budget = budget;
-  if (llm) result.llm = llm;
   if (orgPolicy) result.org_policy = orgPolicy;
   return result;
 }

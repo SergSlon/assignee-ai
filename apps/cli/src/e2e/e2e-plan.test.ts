@@ -110,10 +110,10 @@ async function destroyAndAssert(
   completed: Array<{ resourceArn?: string; resourceType: string }>,
 ): Promise<void> {
   const region = process.env["AWS_REGION"] ?? "us-east-1";
-  const { planBulkDestroy } = await import("../services/bulk-destroy.js");
+  const { planBulkSweep } = await import("./bulk-sweep.js");
   const { destroySingleResource } =
     await import("../services/destroy-service.js");
-  const plan = await planBulkDestroy({ region });
+  const plan = await planBulkSweep({ region });
   // Build a set of identifiers this test created for fast lookup
   const ownedIds = new Set(completed.map((c) => c.resourceArn).filter(Boolean));
   const failures: string[] = [];
@@ -2790,10 +2790,10 @@ describeE2E("E2E: compound VPC EIP leak regression (Wave 19 Bug #6)", () => {
     // Bulk-destroy everything created by this run. The Wave 19 fix added
     // EC2_EIP to the DESTROY_TIER table at tier 4, so the EIP allocated
     // by the NAT Gateway branch is now part of the destroy plan.
-    const { planBulkDestroy } = await import("../services/bulk-destroy.js");
+    const { planBulkSweep } = await import("./bulk-sweep.js");
     const { destroySingleResource } =
       await import("../services/destroy-service.js");
-    const plan = await planBulkDestroy({ region });
+    const plan = await planBulkSweep({ region });
     for (const r of plan.resources) {
       const result = await destroySingleResource(r, { region });
       if (!result.success) {

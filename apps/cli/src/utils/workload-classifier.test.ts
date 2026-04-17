@@ -4,7 +4,7 @@ import {
   _clearClassificationCache,
   type WorkloadProfile,
 } from "./workload-classifier.js";
-import { MockLlmAdapter } from "@assignee/core";
+import { MockLlmAdapter } from "@assignee/core/testing";
 
 describe("classifyWorkload", () => {
   beforeEach(() => {

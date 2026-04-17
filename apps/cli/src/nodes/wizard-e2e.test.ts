@@ -7,7 +7,8 @@
  * advanced tier, and plan generation with elicited options.
  */
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-import { ExecutionStatus, MockLlmAdapter } from "@assignee/core";
+import { ExecutionStatus } from "@assignee/core";
+import { MockLlmAdapter } from "@assignee/core/testing";
 
 // ── Module mocks (must be before imports) ────────────────────────────────────
 

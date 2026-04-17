@@ -25,6 +25,8 @@ export interface ApplyOpts {
   checkpoint?: string;
   source?: string;
   set?: string[];
+  /** Story 50-2: --quick wizard mode (skip defaulted prompts). */
+  quick?: boolean;
 }
 
 export interface ResolvedApplyArgs {

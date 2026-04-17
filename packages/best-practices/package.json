@@ -2,6 +2,8 @@
   "name": "@assignee/best-practices",
   "version": "0.1.0",
   "private": true,
+  "description": "YAML-defined AWS best-practice rules plus the loader, schema, evaluator, and integrity checker that power Assignee.ai's BP enforcement.",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,6 +13,42 @@
       "types": "./dist/index.d.ts"
     },
     "./manifest.json": "./manifest.json"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "!dist/**/*.test.*",
+    "manifest.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/assignee-ai/assignee.git",
+    "directory": "packages/best-practices"
+  },
+  "homepage": "https://github.com/assignee-ai/assignee#readme",
+  "bugs": {
+    "url": "https://github.com/assignee-ai/assignee/issues"
+  },
+  "keywords": [
+    "assignee",
+    "aws",
+    "best-practices",
+    "infrastructure",
+    "iac",
+    "security",
+    "compliance",
+    "yaml",
+    "rules-engine",
+    "policy"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",

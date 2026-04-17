@@ -11,6 +11,35 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { registerTools } from "./tools/index.js";
 import { createGraphContext } from "./services/graph-init.js";
 
+// Story 50-2: graceful-shutdown parity with the CLI host. The stdio
+// transport normally exits on stream close, but cloud hosts (tmux, ECS,
+// nohup) deliver SIGHUP/SIGTERM before closing pipes, and Windows
+// supervisors deliver SIGBREAK — installing handlers guarantees the
+// child emits a terminal diagnostic before Node tears the event loop
+// down. Re-entrancy guard mirrors the CLI.
+let mcpShuttingDown = false;
+type McpShutdownSignal = "SIGINT" | "SIGTERM" | "SIGHUP" | "SIGBREAK";
+function installMcpSignalHandler(signal: McpShutdownSignal, code: number) {
+  process.on(signal, () => {
+    if (mcpShuttingDown) {
+      process.exit(code);
+    }
+    mcpShuttingDown = true;
+    try {
+      process.stderr.write(`assignee-mcp-server: shutting down (${signal}).\n`);
+    } catch {
+      /* stderr may already be gone */
+    }
+    process.exit(code);
+  });
+}
+installMcpSignalHandler("SIGINT", 128 + 2);
+installMcpSignalHandler("SIGTERM", 128 + 15);
+installMcpSignalHandler("SIGHUP", 128 + 1);
+if (process.platform === "win32") {
+  installMcpSignalHandler("SIGBREAK", 128 + 21);
+}
+
 async function main() {
   const server = new McpServer({
     name: "assignee-ai",

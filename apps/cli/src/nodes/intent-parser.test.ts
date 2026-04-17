@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { ExecutionStatus, MockLlmAdapter } from "@assignee/core";
+import { ExecutionStatus } from "@assignee/core";
+import { MockLlmAdapter } from "@assignee/core/testing";
 import type { AgentState } from "../services/graph.js";
 import { SUPPORTED_TYPES, SUPPORTED_TYPES_HINT } from "../config/constants.js";
 import { createIntentParserNode } from "./intent-parser.js";

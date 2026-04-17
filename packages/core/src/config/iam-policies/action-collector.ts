@@ -34,6 +34,22 @@ export const TAG_SCOPED_RDS_SNAPSHOT_ACTIONS = new Set([
   ...REQUEST_TAG_SCOPED_SNAPSHOT_ACTIONS,
 ]);
 
+/**
+ * IAM role-lifecycle actions that must be excluded from the unscoped
+ * service sweep so the dedicated `IamRoleManagementAssigneeScoped`
+ * statement in operatorPolicy() is the sole grant path.
+ *
+ * Story 50-5 B-3: leaving these in operatorServicesA/B would allow
+ * IAM union semantics to bypass the `role/assignee-*` scoping. See
+ * operator.ts `IAM_ROLE_MANAGEMENT_ACTIONS` — kept in lock-step.
+ */
+export const PRIV_ESC_SCOPED_IAM_ACTIONS = new Set<string>([
+  "iam:CreateRole",
+  "iam:PassRole",
+  "iam:AttachRolePolicy",
+  "iam:PutRolePolicy",
+]);
+
 export function collectServiceActions(): {
   ccapiActions: string[];
   serviceActions: string[];
@@ -54,6 +70,13 @@ export function collectServiceActions(): {
       // Skip — emitted separately in operatorPolicy() with a
       // ResourceTag-scoped Condition (security MEDIUM from the
       // e2e expert review).
+      continue;
+    } else if (PRIV_ESC_SCOPED_IAM_ACTIONS.has(action)) {
+      // Story 50-5 B-3: emitted separately in operatorPolicy() via
+      // the IamRoleManagementAssigneeScoped statement with
+      // `role/assignee-*` resource scope + iam:PassedToService
+      // allowlist. Leaving them in the unscoped sweep would let
+      // IAM union semantics bypass the scope.
       continue;
     } else {
       serviceActionsRaw.push(action);

@@ -1,21 +1,54 @@
 name: Release
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Release / publish workflow.
+#
+# STATUS: DISABLED (owner decision — all packages stay `"private": true` until
+# the tool is approved for public distribution). This file is kept as
+# `release.yml.disabled` so GitHub Actions never picks it up. To enable:
+#
+#   1. Remove `"private": true` from every package.json that should ship.
+#   2. Rename this file to `release.yml`.
+#   3. Publish is gated on `workflow_dispatch` + an explicit `confirm=YES_PUBLISH`
+#      input (see `jobs.<job>.if` below). Even after renaming, nothing happens
+#      on tag push alone — a human still has to trigger it manually.
+#
+# Tooling notes:
+#   - Uses `pnpm -r publish` so `workspace:*` deps are rewritten to real
+#     versions at publish time. `npm publish` cannot resolve `workspace:*`.
+#   - Uses OIDC provenance (`permissions: id-token: write`). No long-lived
+#     NPM_TOKEN secret is required; npm picks up the OIDC identity.
+#   - Runs `npm pack --dry-run` per publishable package first so metadata
+#     regressions (missing description/license/files) abort the run BEFORE
+#     anything hits the registry.
+# ──────────────────────────────────────────────────────────────────────────────
+
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type YES_PUBLISH to actually publish to npm. Any other value is a dry-run.'
+        required: true
+        default: 'DRY_RUN'
+      tag:
+        description: 'Git tag to release (e.g. v0.1.0). Must already exist and point at the commit to publish.'
+        required: true
 
 permissions:
   contents: write
+  # Required for npm provenance — replaces the legacy NPM_TOKEN secret.
+  id-token: write
 
 jobs:
   # --------------------------------------------------------------------------
-  # Build and test
+  # Build and test — gate the whole pipeline on a green full-matrix build.
   # --------------------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -47,13 +80,17 @@ jobs:
             apps/cli/LICENSE
 
   # --------------------------------------------------------------------------
-  # Publish to npm
+  # Publish dry-run — runs `npm pack --dry-run` per publishable package so
+  # metadata regressions (missing description, license, repository, files)
+  # fail BEFORE the real publish step. Always runs, even for confirm=DRY_RUN.
   # --------------------------------------------------------------------------
-  publish-npm:
+  publish-dry-run:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -71,17 +108,75 @@ jobs:
       - name: Build all packages
         run: npx turbo build
 
-      - name: Publish to npm
-        working-directory: apps/cli
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Copy root LICENSE into each publishable package
+        # npm attaches LICENSE to each tarball only if the file exists in the
+        # package directory. We keep a single source-of-truth LICENSE at repo
+        # root and copy it in at publish time to avoid duplicate-file drift.
+        run: |
+          for dir in apps/cli apps/mcp-server packages/core packages/best-practices; do
+            cp LICENSE "$dir/LICENSE"
+          done
+
+      - name: Dry-run npm pack per package (metadata audit)
+        run: |
+          set -euo pipefail
+          for dir in apps/cli apps/mcp-server packages/core packages/best-practices; do
+            echo "────────────────────────────────────────"
+            echo "npm pack --dry-run for $dir"
+            echo "────────────────────────────────────────"
+            (cd "$dir" && npm pack --dry-run)
+          done
+
+  # --------------------------------------------------------------------------
+  # Publish to npm — gated on confirm=YES_PUBLISH. Uses `pnpm -r publish` so
+  # `workspace:*` specs are rewritten to real versions. Provenance is attached
+  # automatically because `id-token: write` is in permissions.
+  # --------------------------------------------------------------------------
+  publish-npm:
+    needs: publish-dry-run
+    if: inputs.confirm == 'YES_PUBLISH'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: npx turbo build
+
+      - name: Copy root LICENSE into each publishable package
+        run: |
+          for dir in apps/cli apps/mcp-server packages/core packages/best-practices; do
+            cp LICENSE "$dir/LICENSE"
+          done
+
+      - name: Publish all packages (workspace-aware, with provenance)
+        # pnpm publishes each non-private package in dependency order and
+        # rewrites workspace:* specs into concrete versions in the tarball.
+        # --no-git-checks: we're on a CI runner without a clean work tree.
+        # --access public: required for scoped packages.
+        # --provenance: attaches sigstore attestation via OIDC id-token.
+        run: pnpm -r publish --access public --provenance --no-git-checks
 
   # --------------------------------------------------------------------------
   # Create platform tarballs for GitHub release
   # --------------------------------------------------------------------------
   package-binaries:
     needs: build
+    if: inputs.confirm == 'YES_PUBLISH'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -98,7 +193,7 @@ jobs:
 
       - name: Create platform tarball
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${{ inputs.tag }}"
           TARBALL="assignee-${VERSION}-${{ matrix.platform }}.tar.gz"
           tar -czf "${TARBALL}" -C staging .
           echo "TARBALL=${TARBALL}" >> "$GITHUB_ENV"
@@ -109,7 +204,7 @@ jobs:
         with:
           # Use the canonical filename (assignee-${VERSION}-${platform}.tar.gz)
           # as the artifact name so downstream jobs can locate it deterministically.
-          name: assignee-${{ github.ref_name }}-${{ matrix.platform }}.tar.gz
+          name: assignee-${{ inputs.tag }}-${{ matrix.platform }}.tar.gz
           path: ${{ env.TARBALL }}
 
   # --------------------------------------------------------------------------
@@ -117,16 +212,18 @@ jobs:
   # --------------------------------------------------------------------------
   github-release:
     needs: [publish-npm, package-binaries]
+    if: inputs.confirm == 'YES_PUBLISH'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.tag }}
 
       - name: Download all tarballs
         uses: actions/download-artifact@v4
         with:
-          pattern: assignee-${{ github.ref_name }}-*.tar.gz
+          pattern: assignee-${{ inputs.tag }}-*.tar.gz
           merge-multiple: true
           path: release-assets/
 
@@ -146,6 +243,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag }}
           body_path: changelog.txt
           files: release-assets/*
           generate_release_notes: true
@@ -153,49 +251,81 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # --------------------------------------------------------------------------
-  # Update Homebrew formula
+  # Update Homebrew formula — computes sha256 per arch and patches the tap.
   # --------------------------------------------------------------------------
   update-homebrew:
     needs: github-release
+    if: inputs.confirm == 'YES_PUBLISH'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
 
-      - name: Download darwin-arm64 tarball for sha256
+      - name: Download darwin-arm64 tarball
         uses: actions/download-artifact@v4
         with:
-          name: assignee-${{ github.ref_name }}-darwin-arm64.tar.gz
+          name: assignee-${{ inputs.tag }}-darwin-arm64.tar.gz
           path: release-assets/
 
-      - name: Compute sha256
+      - name: Download darwin-x64 tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: assignee-${{ inputs.tag }}-darwin-x64.tar.gz
+          path: release-assets/
+
+      - name: Download linux-x64 tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: assignee-${{ inputs.tag }}-linux-x64.tar.gz
+          path: release-assets/
+
+      - name: Download linux-arm64 tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: assignee-${{ inputs.tag }}-linux-arm64.tar.gz
+          path: release-assets/
+
+      - name: Compute sha256 per platform
         id: sha
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          TARBALL="release-assets/assignee-${VERSION}-darwin-arm64.tar.gz"
-          if [ ! -f "$TARBALL" ]; then
-            echo "Expected tarball not found: $TARBALL" >&2
-            ls -la release-assets/ >&2
-            exit 1
-          fi
-          SHA=$(shasum -a 256 "$TARBALL" | awk '{print $1}')
-          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          VERSION="${{ inputs.tag }}"
+          declare -A PLATFORMS=( \
+            [darwin_arm64]="darwin-arm64" \
+            [darwin_x64]="darwin-x64" \
+            [linux_x64]="linux-x64" \
+            [linux_arm64]="linux-arm64" \
+          )
+          for key in "${!PLATFORMS[@]}"; do
+            platform="${PLATFORMS[$key]}"
+            TARBALL="release-assets/assignee-${VERSION}-${platform}.tar.gz"
+            if [ ! -f "$TARBALL" ]; then
+              echo "Expected tarball not found: $TARBALL" >&2
+              ls -la release-assets/ >&2
+              exit 1
+            fi
+            SHA=$(shasum -a 256 "$TARBALL" | awk '{print $1}')
+            echo "sha_${key}=$SHA" >> "$GITHUB_OUTPUT"
+          done
 
       - name: Update Homebrew formula
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          SHA="${{ steps.sha.outputs.sha256 }}"
+          VERSION="${{ inputs.tag }}"
+          SHA_DARWIN_ARM64="${{ steps.sha.outputs.sha_darwin_arm64 }}"
+          SHA_DARWIN_X64="${{ steps.sha.outputs.sha_darwin_x64 }}"
+          SHA_LINUX_X64="${{ steps.sha.outputs.sha_linux_x64 }}"
+          SHA_LINUX_ARM64="${{ steps.sha.outputs.sha_linux_arm64 }}"
 
           # Clone the tap repo
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/assignee-ai/homebrew-assignee.git" tap
 
-          # Update formula. Use `sed -i.bak` so the same command works on both
-          # GNU sed (Linux runners) and BSD sed (macOS runners) — BSD sed
-          # requires an explicit backup suffix after -i. Delete the .bak after.
-          sed -i.bak "s|url \".*\"|url \"https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}-darwin-arm64.tar.gz\"|" tap/Formula/assignee.rb
-          sed -i.bak "s|sha256 \".*\"|sha256 \"${SHA}\"|" tap/Formula/assignee.rb
-          rm -f tap/Formula/assignee.rb.bak
+          # Render the multi-platform formula from the repo's template copy
+          # (homebrew/assignee.rb) and drop it into the tap. We use envsubst
+          # so per-arch url/sha256 blocks stay declarative.
+          export VERSION SHA_DARWIN_ARM64 SHA_DARWIN_X64 SHA_LINUX_X64 SHA_LINUX_ARM64
+          envsubst < homebrew/assignee.rb > tap/Formula/assignee.rb
 
           # Commit and push
           cd tap

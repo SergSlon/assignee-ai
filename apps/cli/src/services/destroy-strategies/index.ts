@@ -1,12 +1,13 @@
 /**
  * Destroy strategy registry — single entry point for all CLI
  * resource-type-specific destroy behavior. Delegates to the shared
- * `@assignee/core` registry + types; registers CLI-specific complex
- * strategies on top of the core flag-only defaults.
+ * `@assignee/core` registry + types and pulls concrete per-type
+ * strategies from core's strategies sub-tree (Story 50-4).
  *
  * @see Wave-6 F1a — original scaffolding
  * @see Wave-6 F1b — complex strategies (preDestroy / destroy / postDestroy)
  * @see Story 49.1 — extraction of interface + registry + defaults to core
+ * @see Story 50-4 — extraction of concrete strategy bodies to core
  */
 
 export type {
@@ -19,32 +20,31 @@ export type {
 export { DestroyStrategyRegistry } from "@assignee/core";
 export {
   warnDestroy,
-  pollDeleteStatus,
-  classifyNotFoundShortCircuit,
   CCAPIStatus,
   CCAPI_NOT_FOUND_ERROR_CODE,
-} from "./helpers.js";
+} from "@assignee/core";
+export { pollDeleteStatus, classifyNotFoundShortCircuit } from "./helpers.js";
 
 import {
   DestroyStrategyRegistry,
   arnIdentifierStrategies,
   slowDeleteStrategies,
+  ec2EipStrategy,
+  cloudfrontDistributionStrategy,
+  dynamodbTableStrategy,
+  s3BucketStrategy,
+  ec2InternetGatewayStrategy,
+  ec2RouteTableStrategy,
+  efsFileSystemStrategy,
+  elbv2LoadBalancerStrategy,
 } from "@assignee/core";
-import { ec2EipStrategy } from "./ec2-eip.js";
-import { cloudfrontDistributionStrategy } from "./cloudfront-distribution.js";
-import { dynamodbTableStrategy } from "./dynamodb-table.js";
-import { s3BucketStrategy } from "./s3-bucket.js";
-import { ec2InternetGatewayStrategy } from "./ec2-internetgateway.js";
-import { ec2RouteTableStrategy } from "./ec2-routetable.js";
-import { efsFileSystemStrategy } from "./efs-filesystem.js";
-import { elbv2LoadBalancerStrategy } from "./elbv2-loadbalancer.js";
 
 /** Pre-built registry with every destroy strategy. */
 export function createDestroyRegistry(): DestroyStrategyRegistry {
   const registry = new DestroyStrategyRegistry();
   registry.registerAll(arnIdentifierStrategies);
   registry.registerAll(slowDeleteStrategies);
-  // Complex strategies (Wave-6 F1b).
+  // Complex strategies (Wave-6 F1b; lifted to core by Story 50-4).
   registry.registerAll([
     ec2EipStrategy,
     cloudfrontDistributionStrategy,

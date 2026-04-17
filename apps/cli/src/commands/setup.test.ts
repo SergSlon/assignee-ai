@@ -58,6 +58,9 @@ vi.mock("@aws-sdk/client-cloudwatch-logs", () => {
   return {
     CloudWatchLogsClient,
     CreateLogGroupCommand: makeCommandClass("CreateLogGroup"),
+    // Story 50-5 H-2: bedrock-logging.ts now calls PutResourcePolicy
+    // to restrict Bedrock log-group reads to operator + root.
+    PutResourcePolicyCommand: makeCommandClass("PutResourcePolicy"),
   };
 });
 

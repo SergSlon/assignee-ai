@@ -3,12 +3,18 @@
  * Detects when no ~/.assignee/ directory exists and provides
  * a smooth first-run experience.
  *
+ * Story 50-2: raw ANSI escape codes (\u001B[...) were replaced with
+ * `chalk` calls for consistency with the rest of the CLI (display-plan,
+ * display-prompts, etc.). chalk@5 honors `NO_COLOR` natively — when
+ * `NO_COLOR` is set the output degrades to plain text automatically.
+ *
  * @see Story 29.6 — Single-Command Quick Start (npx)
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import chalk from "chalk";
 import { ASSIGNEE_DIR } from "../config/constants.js";
 
 /** Path to the assignee state directory. */
@@ -95,8 +101,10 @@ export function showFirstRunWelcome(version: string): void {
   const creds = detectCredentialStatus();
   const lines: string[] = [
     "",
-    `\u001B[36m✦ Welcome to Assignee.ai v${version}\u001B[0m`,
-    "\u001B[90m  AI-Native Cloud Operator — natural language → AWS infrastructure\u001B[0m",
+    chalk.cyan(`✦ Welcome to Assignee.ai v${version}`),
+    chalk.gray(
+      "  AI-Native Cloud Operator — natural language → AWS infrastructure",
+    ),
     "",
     `  ${creds.hint}`,
     "",
@@ -104,27 +112,27 @@ export function showFirstRunWelcome(version: string): void {
 
   if (creds.status === "none") {
     lines.push(
-      "\u001B[33m  Get started in 2 minutes:\u001B[0m",
+      chalk.yellow("  Get started in 2 minutes:"),
       "",
-      "  \u001B[1m1.\u001B[0m Set AWS credentials (easiest):",
-      "       \u001B[36mexport AWS_ACCESS_KEY_ID=<your-key>\u001B[0m",
-      "       \u001B[36mexport AWS_SECRET_ACCESS_KEY=<your-secret>\u001B[0m",
+      `  ${chalk.bold("1.")} Set AWS credentials (easiest):`,
+      `       ${chalk.cyan("export AWS_ACCESS_KEY_ID=<your-key>")}`,
+      `       ${chalk.cyan("export AWS_SECRET_ACCESS_KEY=<your-secret>")}`,
       "",
-      "  \u001B[1m2.\u001B[0m \u001B[1mOr\u001B[0m create least-privilege IAM users (recommended):",
-      "       \u001B[36massignee setup\u001B[0m",
+      `  ${chalk.bold("2.")} ${chalk.bold("Or")} create least-privilege IAM users (recommended):`,
+      `       ${chalk.cyan("assignee setup")}`,
       "",
-      "  \u001B[1m3.\u001B[0m Try your first plan:",
-      '       \u001B[36massignee plan "Create an S3 bucket for my static site"\u001B[0m',
+      `  ${chalk.bold("3.")} Try your first plan:`,
+      `       ${chalk.cyan('assignee plan "Create an S3 bucket for my static site"')}`,
       "",
-      "\u001B[90m  More: https://github.com/SergSlon/assignee-ai\u001B[0m",
+      chalk.gray("  More: https://github.com/SergSlon/assignee-ai"),
       "",
     );
   } else if (creds.status === "profile") {
     lines.push(
-      "\u001B[33m  Next steps:\u001B[0m",
+      chalk.yellow("  Next steps:"),
       "",
       "  • Export your AWS credentials directly:",
-      "       \u001B[36mexport AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...\u001B[0m",
+      `       ${chalk.cyan("export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...")}`,
       "",
       "  • Or run `assignee setup` to create least-privilege IAM users",
       "",
@@ -132,19 +140,18 @@ export function showFirstRunWelcome(version: string): void {
   } else {
     // operator or standard — credentials work, just show next step
     lines.push(
-      "\u001B[90m  Try:\u001B[0m",
-      '  \u001B[36m  assignee plan "Create an S3 bucket for my static site"\u001B[0m',
+      chalk.gray("  Try:"),
+      `  ${chalk.cyan('  assignee plan "Create an S3 bucket for my static site"')}`,
       "",
     );
   }
 
-  // Discoverability hints for first-time users — point at the
-  // listing commands so new users can explore the surface area
-  // without having to read docs.
+  // Discoverability hints for first-time users. Story 50-3 removed the
+  // dedicated `patterns` / `types` listing commands — their content is
+  // folded into `assignee plan --help`, so that is the right pointer.
   lines.push(
-    "\u001B[90m  Discover what assignee can build:\u001B[0m",
-    "  \u001B[36m  assignee patterns\u001B[0m          \u001B[90m# list all compound architecture patterns\u001B[0m",
-    "  \u001B[36m  assignee types\u001B[0m             \u001B[90m# list all supported resource types\u001B[0m",
+    chalk.gray("  Discover what assignee can build:"),
+    `  ${chalk.cyan("  assignee plan --help")}    ${chalk.gray("# list supported resource types + compound patterns")}`,
     "",
   );
 

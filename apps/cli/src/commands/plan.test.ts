@@ -30,9 +30,19 @@ vi.mock("../utils/command-runner.js", () => ({
   runProvisioningLoop: vi.fn(),
 }));
 
+// Story 50-2: renderApplyNowConfirm was collapsed into renderHitlConfirm.
+// Both identifiers point at the SAME vi.fn so legacy tests that assert
+// `renderApplyNowConfirm` and new tests that assert `renderHitlConfirm`
+// share a single call log — the underlying implementation is one function.
+// Uses vi.hoisted so the shared mock reference is available to the
+// (also-hoisted) vi.mock factory above any subsequent `import`.
+const { sharedApprovalConfirm } = vi.hoisted(() => ({
+  sharedApprovalConfirm: vi.fn(),
+}));
 vi.mock("../utils/display.js", () => ({
   renderError: vi.fn(),
-  renderApplyNowConfirm: vi.fn(),
+  renderApplyNowConfirm: sharedApprovalConfirm,
+  renderHitlConfirm: sharedApprovalConfirm,
   startSpinner: vi.fn(),
   stopSpinner: vi.fn(),
 }));
@@ -73,8 +83,13 @@ vi.mock("@clack/prompts", () => ({
 }));
 
 const { runProvisioningLoop } = await import("../utils/command-runner.js");
-const { renderError, renderApplyNowConfirm } =
-  await import("../utils/display.js");
+// Story 50-2: orchestrator now calls renderHitlConfirm (unified confirm);
+// renderApplyNowConfirm is a deprecated alias. Import both so legacy tests
+// can reference either — they point to the same underlying mock instance.
+const { renderError, renderHitlConfirm } = await import("../utils/display.js");
+// Back-compat: keep the old identifier wired to the same vi.fn so older
+// test bodies that assert `renderApplyNowConfirm` still read the call log.
+const renderApplyNowConfirm = renderHitlConfirm;
 const { log } = await import("../utils/logger.js");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

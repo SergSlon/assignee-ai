@@ -213,3 +213,79 @@ describe("price-cache hash function (L-A3)", () => {
     expect(got).toEqual(data);
   });
 });
+
+// Story 50-2: Windows-path coverage. `os.homedir()` prefers `USERPROFILE`
+// on win32 and `HOME` on POSIX. The `HOME`-only tests above cover the
+// POSIX branch; this block exercises the win32 branch by stubbing
+// `os.platform` to "win32" and seeding `USERPROFILE` so the path
+// resolution code is actually exercised on non-Windows CI hosts.
+describe("price-cache Windows HOME resolution", () => {
+  let userProfileDir: string;
+  let originalUserProfile: string | undefined;
+  let originalHome: string | undefined;
+
+  beforeEach(async () => {
+    userProfileDir = await fsPromises.mkdtemp(
+      path.join(os.tmpdir(), "assignee-pricecache-winhome-"),
+    );
+    originalUserProfile = process.env["USERPROFILE"];
+    originalHome = process.env["HOME"];
+    // Seed the Windows home var; clear the POSIX one so os.homedir()
+    // cannot silently fall through to HOME on the test host.
+    process.env["USERPROFILE"] = userProfileDir;
+    delete process.env["HOME"];
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    if (originalUserProfile === undefined) {
+      delete process.env["USERPROFILE"];
+    } else {
+      process.env["USERPROFILE"] = originalUserProfile;
+    }
+    if (originalHome === undefined) {
+      delete process.env["HOME"];
+    } else {
+      process.env["HOME"] = originalHome;
+    }
+    await fsPromises
+      .rm(userProfileDir, { recursive: true, force: true })
+      .catch(() => {});
+  });
+
+  it("resolves the cache dir under USERPROFILE when os.homedir() returns it", async () => {
+    // We cannot spy on os.platform directly under ESM (Module namespace
+    // is non-configurable), so instead we stub `os.homedir()` to mirror
+    // what Node does natively on win32: return the USERPROFILE env var.
+    // This exercises the USERPROFILE env-var path so a Windows host
+    // running the test under GitBash/WSL cannot accidentally break it.
+    //
+    // vi.doMock() patches the module loader before price-cache imports it.
+    vi.doMock("node:os", async () => {
+      const actual = await vi.importActual<typeof import("node:os")>("node:os");
+      return {
+        ...actual,
+        homedir: () => process.env["USERPROFILE"] ?? "",
+      };
+    });
+
+    vi.resetModules();
+    const { setCachedPrice: setCached } = await import("./price-cache.js");
+
+    const serviceCode = "AmazonS3";
+    const filters = [{ Type: "TERM_MATCH", Field: "location", Value: "EU" }];
+    const data = { PriceList: ['{"product":{"sku":"winprofile"},"terms":{}}'] };
+
+    setCached(serviceCode, filters, data);
+
+    const cacheDir = path.join(userProfileDir, ".assignee", "cache", "pricing");
+    const files = fs.readdirSync(cacheDir);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(
+      new RegExp(`^${serviceCode}-[0-9a-f]{12}\\.json$`),
+    );
+
+    vi.doUnmock("node:os");
+  });
+});

@@ -21,11 +21,9 @@ import type { AgentState } from "../services/graph.js";
 import { PromiseStatus } from "../config/constants.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 
-import {
-  defaultPreflightGuards,
-  runGuards,
-  type GuardContext,
-} from "./preflight-guard/index.js";
+import { defaultPreflightGuards } from "./preflight-guard/registry.js";
+import { runGuards } from "./preflight-guard/runner.js";
+import type { GuardContext } from "./preflight-guard/types.js";
 import {
   runIamPermissionsCheck,
   type IamCheckResult,

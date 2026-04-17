@@ -1,37 +1,28 @@
 /**
- * Best-practice rule cache + re-evaluation for apply_plan.
+ * Best-practice rule re-evaluation for apply_plan.
  *
  * Story 41.4: BP rules are re-evaluated against the checkpoint's
  * desiredState before provisioning so rules added or modified after
  * the original plan was generated still block the apply.
  *
- * The cache is module-level and explicit-reset only — the MCP server
- * is long-lived so loading rules once per process is cheap and
- * correct.
+ * Story 50-4 (D): the previous module-level cache violated the
+ * "BP re-eval on every apply" contract — rules edited between applies
+ * in the same MCP process lifetime were silently ignored. Now BP YAML
+ * is loaded on every call (CLI already does this per apply; cost is
+ * negligible because `loadBestPractices()` reads a handful of small
+ * YAML files under `packages/best-practices/rules/`).
+ *
+ * `_resetBPCache` is retained as a no-op so existing test imports
+ * keep compiling; it will be removed when tests are updated to drop
+ * the stale reset call.
  */
 
 import {
   loadBestPractices,
   evaluateTriggers,
-  type BestPractice,
   type BPFinding,
   type EvalContext,
 } from "@assignee/best-practices";
-
-let cachedPractices: BestPractice[] | undefined;
-
-/** Lazy loader — reads from disk on first call, serves from memory after. */
-export function loadCachedPractices(): BestPractice[] {
-  if (cachedPractices === undefined) {
-    cachedPractices = loadBestPractices();
-  }
-  return cachedPractices;
-}
-
-/** Exported for testing — resets the BP cache. */
-export function _resetBPCache(): void {
-  cachedPractices = undefined;
-}
 
 /** Result of BP re-evaluation. */
 export interface BPEvaluationResult {
@@ -42,17 +33,26 @@ export interface BPEvaluationResult {
 }
 
 /**
- * Re-evaluates BP rules against a checkpoint's context. Splits
- * findings into blocking vs. non-blocking so the caller can decide
- * whether to abort before invoking the graph.
+ * Re-evaluates BP rules against a checkpoint's context. Reloads the
+ * BP rule pack from disk on every call so edits between applies are
+ * picked up immediately (Story 50-4).
  */
 export function evaluateCheckpointBPs(
   context: EvalContext,
 ): BPEvaluationResult {
-  const findings = evaluateTriggers(context, loadCachedPractices());
+  const findings = evaluateTriggers(context, loadBestPractices());
   const blocking = findings.filter((f) => f.blocking);
   return {
     findings: findings.length > 0 ? findings : undefined,
     blocking,
   };
+}
+
+/**
+ * Retained no-op for backwards compatibility with tests that reset
+ * the (now-removed) cache between cases. New code should not call
+ * this — BP rules are reloaded on every apply.
+ */
+export function _resetBPCache(): void {
+  // no-op: cache removed in Story 50-4.
 }

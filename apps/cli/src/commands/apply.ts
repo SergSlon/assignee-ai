@@ -39,6 +39,10 @@ export const applyCommand = new Command(CommandName.APPLY)
     "--wizard",
     "Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)",
   )
+  .option(
+    "--quick",
+    "Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before provisioning.",
+  )
   .option("--no-advice", "Skip inline contextual advice generation")
   .option(
     "-y, --yes",

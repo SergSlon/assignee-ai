@@ -3,7 +3,7 @@
  *
  * Wave 6d F5: barrel after decomposition into ./command-runner/*:
  *   - credentials.ts     — early credential detection + auto-promotion
- *   - llm-factory.ts     — LlmAdapter / RoutingLlmAdapter / recorder wrap
+ *   - llm-factory.ts     — LlmAdapter + recorder wrap (Story 50-7: RoutingLlmAdapter deleted)
  *   - runner.ts          — bootstrap (MCP + graph + intro/outro/error)
  *   - provision-loop.ts  — Phase 2 provisioning loop
  *

@@ -5,10 +5,12 @@
  * mocking at the AWS/MCP boundary. Each test validates the command handler logic
  * without requiring actual AWS connections or MCP servers.
  *
+ * Story 50-3 cut the `clean`, `cache`, `patterns`, `types`, `whoami` commands
+ * plus `destroy --all` / `--include-iam` — their tests went with them.
+ *
  * We test:
  *   - destroyAction (exported handler for destroy)
  *   - buildPatchDocument (reconcile patch generation)
- *   - createCleanCommand (factory for fresh Commander instances)
  *   - Command option/argument definitions for all registered commands
  *
  * For commands that use runCommand() (plan, apply), we validate the graph invocation
@@ -233,55 +235,13 @@ describe("destroyAction", () => {
     restoreOutput();
   });
 
-  it("rejects --include-iam without --all", async () => {
-    const { destroyAction } = await import("../commands/destroy.js");
-    // Item 4b (2026-04-10): flag-conflict errors rewritten to
-    // guide-the-user messages with concrete example commands.
-    await expect(
-      destroyAction("some-resource", { includeIam: true }),
-    ).rejects.toThrow(/--include-iam only works in bulk-destroy mode/);
-  });
-
-  it("rejects --dry-run without --all", async () => {
-    const { destroyAction } = await import("../commands/destroy.js");
-    await expect(
-      destroyAction("some-resource", { dryRun: true }),
-    ).rejects.toThrow(/--dry-run only works in bulk-destroy mode/);
-  });
-
-  it("rejects missing resource when --all not set", async () => {
+  // Story 50-3: --include-iam / --dry-run / --all flags were removed.
+  // destroyAction now only rejects missing-resource invocations.
+  it("rejects missing resource", async () => {
     const { destroyAction } = await import("../commands/destroy.js");
     await expect(destroyAction(undefined, {})).rejects.toThrow(
       /needs to know what to destroy/,
     );
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════════════
-// CLEAN COMMAND — fresh Commander instances
-// ═════════════════════════════════════════════════════════════════════════════
-
-describe("clean command factory", () => {
-  it("createCleanCommand returns fresh Commander instance each time", async () => {
-    const { createCleanCommand } = await import("../commands/clean.js");
-    const cmd1 = createCleanCommand();
-    const cmd2 = createCleanCommand();
-    expect(cmd1).not.toBe(cmd2);
-    expect(cmd1.name()).toBe("clean");
-    expect(cmd2.name()).toBe("clean");
-  });
-
-  it("clean command has all expected options", async () => {
-    const { createCleanCommand } = await import("../commands/clean.js");
-    const cmd = createCleanCommand();
-    const optionNames = cmd.options.map((o) => o.long);
-    expect(optionNames).toContain("--dry-run");
-    expect(optionNames).toContain("--confirm");
-    expect(optionNames).toContain("--yes");
-    expect(optionNames).toContain("--checkpoints");
-    expect(optionNames).toContain("--cache");
-    expect(optionNames).toContain("--memory");
-    expect(optionNames).toContain("--json");
   });
 });
 
@@ -941,38 +901,19 @@ describe("destroy command definition", () => {
     });
   });
 
-  it("has optional [resource] argument (optional for --all mode)", async () => {
+  it("has required <resource> argument (Story 50-3 made it mandatory)", async () => {
     const { destroyCommand } = await import("../commands/destroy.js");
     expect(destroyCommand.registeredArguments.length).toBeGreaterThanOrEqual(1);
     expect(destroyCommand.registeredArguments[0]!.name()).toBe("resource");
-    expect(destroyCommand.registeredArguments[0]!.required).toBe(false);
+    expect(destroyCommand.registeredArguments[0]!.required).toBe(true);
   });
 
-  it("has --all option", async () => {
+  it("no longer exposes bulk-destroy flags (--all / --include-iam / --dry-run)", async () => {
     const { destroyCommand } = await import("../commands/destroy.js");
-    const opt = destroyCommand.options.find((o) => o.long === "--all");
-    expect(opt).toMatchObject({
-      long: "--all",
-      description: expect.stringMatching(/.+/),
-    });
-  });
-
-  it("has --include-iam option", async () => {
-    const { destroyCommand } = await import("../commands/destroy.js");
-    const opt = destroyCommand.options.find((o) => o.long === "--include-iam");
-    expect(opt).toMatchObject({
-      long: "--include-iam",
-      description: expect.stringMatching(/.+/),
-    });
-  });
-
-  it("has --dry-run option", async () => {
-    const { destroyCommand } = await import("../commands/destroy.js");
-    const opt = destroyCommand.options.find((o) => o.long === "--dry-run");
-    expect(opt).toMatchObject({
-      long: "--dry-run",
-      description: expect.stringMatching(/.+/),
-    });
+    const longs = destroyCommand.options.map((o) => o.long);
+    expect(longs).not.toContain("--all");
+    expect(longs).not.toContain("--include-iam");
+    expect(longs).not.toContain("--dry-run");
   });
 });
 
@@ -1094,112 +1035,8 @@ describe("setup command definition", () => {
   });
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// CACHE COMMAND — subcommand validation
-// ═════════════════════════════════════════════════════════════════════════════
-
-describe("cache command definition", () => {
-  it("has clear subcommand", async () => {
-    const { cacheCommand } = await import("../commands/cache.js");
-    const sub = cacheCommand.commands.find((c) => c.name() === "clear");
-    expect(sub, "clear subcommand must exist on cache").not.toBeUndefined();
-    expect(sub!.name()).toBe("clear");
-    expect(sub!.description()).toContain("Delete");
-  });
-
-  it("has refresh subcommand", async () => {
-    const { cacheCommand } = await import("../commands/cache.js");
-    const sub = cacheCommand.commands.find((c) => c.name() === "refresh");
-    expect(sub, "refresh subcommand must exist on cache").not.toBeUndefined();
-    expect(sub!.name()).toBe("refresh");
-    expect(sub!.description()).toContain("re-fetch");
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════════════
-// PATTERNS COMMAND — subcommand validation
-// ═════════════════════════════════════════════════════════════════════════════
-
-describe("patterns command definition", () => {
-  it("has list subcommand (default)", async () => {
-    const { patternsCommand } = await import("../commands/patterns.js");
-    const sub = patternsCommand.commands.find((c) => c.name() === "list");
-    expect(sub, "list subcommand must exist on patterns").not.toBeUndefined();
-    expect(sub!.name()).toBe("list");
-  });
-
-  it("has show subcommand with <patternId> arg", async () => {
-    const { patternsCommand } = await import("../commands/patterns.js");
-    const sub = patternsCommand.commands.find((c) => c.name() === "show");
-    expect(sub, "show subcommand must exist on patterns").not.toBeUndefined();
-    expect(sub!.description()).toContain("resource list");
-  });
-
-  it("list subcommand has --json option", async () => {
-    const { patternsCommand } = await import("../commands/patterns.js");
-    const sub = patternsCommand.commands.find((c) => c.name() === "list");
-    const jsonOpt = sub!.options.find((o) => o.long === "--json");
-    expect(jsonOpt, "list must expose --json").not.toBeUndefined();
-  });
-
-  it("show subcommand has --json option", async () => {
-    const { patternsCommand } = await import("../commands/patterns.js");
-    const sub = patternsCommand.commands.find((c) => c.name() === "show");
-    const jsonOpt = sub!.options.find((o) => o.long === "--json");
-    expect(jsonOpt, "show must expose --json").not.toBeUndefined();
-  });
-
-  it("has detect subcommand with --json and <intent...> variadic arg", async () => {
-    const { patternsCommand } = await import("../commands/patterns.js");
-    const sub = patternsCommand.commands.find((c) => c.name() === "detect");
-    expect(sub, "detect subcommand must exist on patterns").not.toBeUndefined();
-    expect(sub!.description()).toContain("keyword classifier");
-    const jsonOpt = sub!.options.find((o) => o.long === "--json");
-    expect(jsonOpt, "detect must expose --json").not.toBeUndefined();
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════════════
-// TYPES COMMAND — subcommand validation
-// ═════════════════════════════════════════════════════════════════════════════
-
-describe("types command definition", () => {
-  it("has list subcommand (default)", async () => {
-    const { typesCommand } = await import("../commands/types.js");
-    const sub = typesCommand.commands.find((c) => c.name() === "list");
-    expect(sub, "list subcommand must exist on types").not.toBeUndefined();
-  });
-
-  it("has show subcommand with <type> arg", async () => {
-    const { typesCommand } = await import("../commands/types.js");
-    const sub = typesCommand.commands.find((c) => c.name() === "show");
-    expect(sub, "show subcommand must exist on types").not.toBeUndefined();
-    expect(sub!.description()).toContain("BP rules");
-  });
-
-  it("both subcommands expose --json", async () => {
-    const { typesCommand } = await import("../commands/types.js");
-    for (const name of ["list", "show"]) {
-      const sub = typesCommand.commands.find((c) => c.name() === name);
-      const jsonOpt = sub!.options.find((o) => o.long === "--json");
-      expect(jsonOpt, `${name} must expose --json`).not.toBeUndefined();
-    }
-  });
-
-  it("types list exposes --search for grep-like filtering", async () => {
-    const { typesCommand } = await import("../commands/types.js");
-    const sub = typesCommand.commands.find((c) => c.name() === "list");
-    const searchOpt = sub!.options.find((o) => o.long === "--search");
-    expect(searchOpt, "list must expose --search").not.toBeUndefined();
-  });
-
-  it("patterns list exposes --search for grep-like filtering", async () => {
-    const { patternsCommand } = await import("../commands/patterns.js");
-    const sub = patternsCommand.commands.find((c) => c.name() === "list");
-    const searchOpt = sub!.options.find((o) => o.long === "--search");
-    expect(searchOpt, "list must expose --search").not.toBeUndefined();
-  });
-});
+// Story 50-3: `cache`, `patterns`, `types` commands were removed.
+// Their content folded into silent TTL schema cache / `plan --help` discovery.
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SUPPORTED TYPES — core exports

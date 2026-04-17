@@ -3,11 +3,15 @@
  *
  * Runs every diagnostic in parallel (within the 10s budget), composes a
  * `DoctorReport`, and computes the exit code. Skip flags preserve the
- * `--skip-bedrock` / `--skip-mcp` / `--skip-mcp-version-check` UX.
+ * `--skip-bedrock` / `--skip-mcp` UX.
  *
  * The runner depends only on the check interfaces — not on concrete
  * check implementations (DIP). Tests inject fakes through the *Deps
  * parameters on each check.
+ *
+ * Story 50-3 removed the MCP version drift check (PyPI ping during
+ * doctor was supply-chain theatre; pin freshness is an out-of-band
+ * concern).
  */
 
 import {
@@ -16,17 +20,12 @@ import {
 } from "./checks/credentials.js";
 import { checkBedrock, type BedrockCheckDeps } from "./checks/bedrock.js";
 import { checkMcpServers, type McpCheckDeps } from "./checks/mcp-servers.js";
-import {
-  checkMcpVersionDrift,
-  type McpVersionCheckDeps,
-} from "./checks/mcp-version-drift.js";
 import { checkCache, type CacheCheckDeps } from "./checks/cache.js";
 import { checkConfig, type ConfigCheckDeps } from "./checks/config.js";
 import {
   checkBestPractices,
   type BpCheckDeps,
 } from "./checks/best-practices.js";
-import { checkLlmRouting } from "./checks/llm-routing.js";
 import type { CheckStatus, DoctorReport, DoctorSection } from "./types.js";
 import { buildSummary, statusToExit } from "./formatter.js";
 import { worse } from "./util.js";
@@ -39,14 +38,10 @@ export interface RunDoctorDeps {
   cacheDeps?: CacheCheckDeps;
   configDeps?: ConfigCheckDeps;
   bpDeps?: BpCheckDeps;
-  /** Override the MCP version drift check (test injection). */
-  mcpVersionDeps?: McpVersionCheckDeps;
   /** Skip the Bedrock invoke (fast path used by tests / CI smoke). */
   skipBedrock?: boolean;
   /** Skip the MCP launch probe (fast path used by tests). */
   skipMcp?: boolean;
-  /** Skip the MCP version drift check (fast path used by tests). */
-  skipMcpVersionCheck?: boolean;
 }
 
 /** Build a standard "section skipped" placeholder. */
@@ -67,7 +62,7 @@ export async function runDoctor(
 ): Promise<DoctorReport> {
   const version = deps.version ?? "0.0.0";
 
-  const [credentials, bedrock, mcp, mcpVersionDrift] = await Promise.all([
+  const [credentials, bedrock, mcp] = await Promise.all([
     checkCredentials(deps.credentialsDeps),
     deps.skipBedrock
       ? Promise.resolve(skippedSection("Bedrock (skipped)", "skipBedrock=true"))
@@ -75,29 +70,19 @@ export async function runDoctor(
     deps.skipMcp
       ? Promise.resolve(skippedSection("MCP servers (skipped)", "skipMcp=true"))
       : checkMcpServers(deps.mcpDeps),
-    deps.skipMcpVersionCheck
-      ? Promise.resolve(
-          skippedSection(
-            "MCP version drift (skipped)",
-            "skipMcpVersionCheck=true",
-          ),
-        )
-      : checkMcpVersionDrift(deps.mcpVersionDeps),
   ]);
 
   const cache = checkCache(deps.cacheDeps);
   const config = checkConfig(deps.configDeps);
   const bp = checkBestPractices(deps.bpDeps);
 
-  // Story 44.1: show routing table when per-node LLM config exists.
-  const llmRouting = await checkLlmRouting();
+  // Story 50-7: Story 44.1's checkLlmRouting section was removed along
+  // with the RoutingLlmAdapter (no in-repo YAML used the `llm:` key).
 
   const sections: DoctorSection[] = [
     credentials,
     bedrock,
-    ...(llmRouting ? [llmRouting] : []),
     mcp,
-    mcpVersionDrift,
     cache,
     config,
     bp,

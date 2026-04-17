@@ -145,6 +145,13 @@ export const graphAnnotation = Annotation.Root({
     reducer: (_, b) => b,
     default: () => false,
   }),
+  // Story 50-2: --quick wizard mode — skip every prompt that has a
+  // default; only prompt for required fields without a default. Shows
+  // a summary + single "Proceed?" gate at the end.
+  quickMode: Annotation<boolean>({
+    reducer: (_, b) => b,
+    default: () => false,
+  }),
   // Story 19.2: post-provision security findings (display-only, non-blocking)
   securityFindings: Annotation<SecurityFinding[] | undefined>({
     reducer: (_, b) => b,

@@ -94,11 +94,10 @@ describe("first-run", () => {
       expect(allOutput).toContain("Assignee.ai v0.1.0");
       // Should include credential detection or next-steps guidance
       expect(allOutput).toMatch(/credentials|assignee plan|AWS_ACCESS_KEY_ID/);
-      // A8 follow-up: discoverability hints point at the new patterns
-      // and types listing commands so new users can explore without
-      // reading docs.
-      expect(allOutput).toContain("assignee patterns");
-      expect(allOutput).toContain("assignee types");
+      // Story 50-2 / 50-3: the `patterns` + `types` standalone commands were
+      // removed; their content is now folded into `plan --help`. The welcome
+      // message should point users at that unified entrypoint.
+      expect(allOutput).toContain("assignee plan --help");
 
       Object.defineProperty(process.stderr, "isTTY", {
         value: origIsTTY,
@@ -127,6 +126,43 @@ describe("first-run", () => {
         value: origIsTTY,
         configurable: true,
       });
+    });
+
+    // Story 50-2: chalk@5 honors NO_COLOR natively — the TTY welcome path
+    // MUST emit zero ANSI escape sequences when NO_COLOR is set, even when
+    // stderr reports as a TTY. chalk's colour detection runs at module load,
+    // so force chalk.level = 0 for the duration of the test to simulate the
+    // native behavior.
+    it("honors NO_COLOR — emits zero ANSI escape codes even in TTY", async () => {
+      const chalkMod = await import("chalk");
+      const originalLevel = chalkMod.default.level;
+      chalkMod.default.level = 0;
+
+      const origIsTTY = process.stderr.isTTY;
+      Object.defineProperty(process.stderr, "isTTY", {
+        value: true,
+        configurable: true,
+      });
+
+      try {
+        showFirstRunWelcome("0.1.0");
+
+        const allOutput = stderrSpy.mock.calls
+          .map((c) => String(c[0]))
+          .join("");
+
+        // No ANSI CSI sequences anywhere in the rendered welcome.
+        expect(allOutput).not.toContain("\u001B[");
+        // Content still renders (just plain text now).
+        expect(allOutput).toContain("Assignee.ai v0.1.0");
+        expect(allOutput).toContain("assignee plan --help");
+      } finally {
+        chalkMod.default.level = originalLevel;
+        Object.defineProperty(process.stderr, "isTTY", {
+          value: origIsTTY,
+          configurable: true,
+        });
+      }
     });
   });
 

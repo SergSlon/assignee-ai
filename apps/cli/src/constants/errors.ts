@@ -1,7 +1,9 @@
 export const ProcessExitCode = {
   SUCCESS: 0,
   GENERIC_ERROR: 1,
-  MCP_STARTUP_FAILED: 10,
+  DOCTOR_WARNINGS: 2,
+  POLICY_SAFETY_ABORT: 10,
+  MCP_STARTUP_FAILED: 11,
 } as const;
 
 /**

@@ -149,13 +149,12 @@ Two registries:
 
 ### Adapters
 
-| Adapter                 | Implements       | Purpose                         |
-| ----------------------- | ---------------- | ------------------------------- |
-| `LlmAdapter`            | LlmPort          | Universal LLM via Vercel AI SDK |
-| `BedrockLlmAdapter`     | LlmPort          | Direct Bedrock adapter          |
-| `MockLlmAdapter`        | LlmPort          | Testing adapter                 |
-| `CloudControlAdapter`   | ProvisioningPort | AWS CloudControl API wrapper    |
-| `SDKFallbackDispatcher` | --               | SDK calls for CCAPI gap types   |
+| Adapter               | Implements       | Purpose                         |
+| --------------------- | ---------------- | ------------------------------- |
+| `LlmAdapter`          | LlmPort          | Universal LLM via Vercel AI SDK |
+| `BedrockLlmAdapter`   | LlmPort          | Direct Bedrock adapter          |
+| `MockLlmAdapter`      | LlmPort          | Testing adapter                 |
+| `CloudControlAdapter` | ProvisioningPort | AWS CloudControl API wrapper    |
 
 ### Key Services
 
@@ -179,7 +178,6 @@ Two registries:
 | `status-aggregator.ts`       | services/ | Aggregate resources for status command       |
 | `cloudcontrol-client.ts`     | services/ | CloudControl SDK client factory              |
 | `cloudcontrol-adapter.ts`    | services/ | ProvisioningPort implementation              |
-| `sdk-fallback-dispatcher.ts` | services/ | SDK fallback for CCAPI gaps                  |
 | `credential-detector.ts`     | services/ | AWS credential auto-detection                |
 | `completion-generator.ts`    | services/ | Shell completion generation                  |
 | `desired-state-sanitizer.ts` | services/ | Strip extraneous keys, coerce types          |

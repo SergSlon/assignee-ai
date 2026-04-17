@@ -57,7 +57,12 @@ afterEach(() => {
 });
 
 describe("igwStrategy.preDestroy — failure modes", () => {
-  it("propagates DependencyViolation when DetachInternetGateway fails", async () => {
+  it("warns-and-continues when DetachInternetGateway fails with DependencyViolation", async () => {
+    // Story 50-4: CLI-canonical half-state invariant — a single
+    // DetachInternetGateway failure is logged via warnDestroy and the
+    // loop proceeds. The downstream CCAPI DeleteInternetGateway
+    // produces the authoritative DependencyViolation if the residual
+    // attachment still blocks.
     const dependencyErr = Object.assign(
       new Error(
         "Network vpc-0aa1bb2cc3dd4ee5f has some mapped public address(es). Please unmap those public address(es) before detaching the gateway.",
@@ -78,7 +83,7 @@ describe("igwStrategy.preDestroy — failure modes", () => {
 
     await expect(
       igwStrategy.preDestroy!(makeDestroyContext(IGW_ID, REGION)),
-    ).rejects.toMatchObject({ name: "DependencyViolation" });
+    ).resolves.toBeUndefined();
 
     // Describe + one attempted detach
     expect(mockEc2Send).toHaveBeenCalledTimes(2);

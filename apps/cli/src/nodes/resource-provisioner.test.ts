@@ -17,7 +17,6 @@ import {
   ProvisioningErrorKind,
   type ProvisioningPort,
 } from "../services/provisioning-port.js";
-import type { SDKFallbackDispatcher } from "../services/sdk-fallback-dispatcher.js";
 
 // ── EC2 SDK mock for EIP allocation tests ─────────────────────────────────
 const { mockEc2Send } = vi.hoisted(() => ({
@@ -570,40 +569,24 @@ describe("resourceProvisionerNode", () => {
     });
   });
 
-  // ── SDK Fallback Dispatcher Tests (Story 7.7; narrowed by A6) ─────────────
-  // A6 (2026-04-08): Lambda EventSourceMapping was migrated to CCAPI. The
-  // only SDK-routed create type is now AWS::SNS::Subscription. The tests
-  // below still exercise the redirect-type branches and the standard-type
-  // pass-through which remain in effect.
+  // ── Inline CCAPI redirect classifier (Story 7.7; inlined Story 50-7) ──────
+  // A6 (2026-04-08): Lambda EventSourceMapping was migrated to CCAPI.
+  // A10 (2026-04-09): SNS Subscription promoted to first-class.
+  // Story 50-7 (2026-04-16): the SDKFallbackDispatcher class was deleted;
+  // the redirect classifier now lives inline in resource-provisioner.ts.
+  //
+  // These tests exercise the inline classifier — the two remaining
+  // redirect-only types (Lambda::Permission, ElastiCache::ReplicationGroup)
+  // short-circuit with a friendly "use X instead" message, and every
+  // other type falls through to the standard CCAPI path.
 
-  describe("SDK fallback dispatch (Story 7.7)", () => {
-    function createMockFallbackDispatcher(): {
-      canHandle: ReturnType<typeof vi.fn>;
-      isRedirect: ReturnType<typeof vi.fn>;
-      subscribe: ReturnType<typeof vi.fn>;
-    } {
-      return {
-        canHandle: vi.fn().mockReturnValue(false),
-        isRedirect: vi.fn().mockReturnValue(null),
-        subscribe: vi.fn(),
-      };
-    }
-
-    let mockFallback: ReturnType<typeof createMockFallbackDispatcher>;
-
-    beforeEach(() => {
-      mockFallback = createMockFallbackDispatcher();
-    });
-
+  describe("inline CCAPI redirect classifier", () => {
     it("does NOT dispatch Lambda EventSourceMapping via SDK fallback (A6 — migrated to CCAPI)", async () => {
-      // After A6, the SDK dispatcher must refuse to canHandle Lambda ESM.
       // ESM has no plugin / pattern / intent path, so it is deliberately
       // absent from SUPPORTED_TYPES_ARRAY; the provisioner's state guard
-      // will reject any ESM create request as an unsupported type. The
+      // rejects any ESM create request as an unsupported type. The
       // destroy-by-ARN path (covered in destroy-service.test.ts) remains
       // the only reachable ESM code path.
-      mockFallback.canHandle.mockReturnValue(false);
-
       const result = await resourceProvisionerNode(
         makeState({
           resourceType: "AWS::Lambda::EventSourceMapping",
@@ -613,29 +596,22 @@ describe("resourceProvisionerNode", () => {
           },
         }),
         mockProvisioner,
-        mockFallback as unknown as SDKFallbackDispatcher,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
       expect(result.errorMessage).toMatch(
         /unsupported or missing resourceType/,
       );
-      expect(mockFallback.subscribe).not.toHaveBeenCalled();
-      // Neither the SDK fallback NOR the CloudControl path should have run.
+      // Neither the CCAPI path should have run.
       expect(mockProvisioner.createResource).not.toHaveBeenCalled();
       expect(mockProvisioner.getResource).not.toHaveBeenCalled();
     });
 
     it("routes SNS Subscription through the standard CCAPI path (A10 — promoted to first-class)", async () => {
       // A10 (2026-04-09): SNS::Subscription was promoted out of
-      // CCAPI_FALLBACK_TYPES. The SDK Subscribe dispatch path is
-      // removed — the resource must flow through the standard
+      // CCAPI_FALLBACK_TYPES. It flows through the standard
       // CloudControl CreateResource path, same as every other
-      // first-class type. canHandle() returns false and the normal
-      // provisioner.createResource() call happens.
-      mockFallback.canHandle.mockReturnValue(false);
-      mockFallback.isRedirect.mockReturnValue(null);
-
+      // first-class type.
       mockProvisioner.getResource.mockResolvedValueOnce([
         { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
         null,
@@ -655,22 +631,14 @@ describe("resourceProvisionerNode", () => {
           },
         }),
         mockProvisioner,
-        mockFallback as unknown as SDKFallbackDispatcher,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
       expect(result.requestToken).toBe("sns-sub-token");
-      expect(mockFallback.subscribe).not.toHaveBeenCalled();
       expect(mockProvisioner.createResource).toHaveBeenCalled();
     });
 
     it("returns FAILED with redirect message for Lambda::Permission", async () => {
-      mockFallback.isRedirect.mockReturnValue({
-        redirect: true,
-        message:
-          "AWS::Lambda::Permission is not supported by CCAPI. Use AWS::Lambda::PermissionPolicy instead.",
-      });
-
       const result = await resourceProvisionerNode(
         makeState({
           resourceType: "AWS::Lambda::Permission",
@@ -681,7 +649,6 @@ describe("resourceProvisionerNode", () => {
           },
         }),
         mockProvisioner,
-        mockFallback as unknown as SDKFallbackDispatcher,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
@@ -693,12 +660,6 @@ describe("resourceProvisionerNode", () => {
     });
 
     it("returns FAILED with redirect message for ElastiCache::ReplicationGroup", async () => {
-      mockFallback.isRedirect.mockReturnValue({
-        redirect: true,
-        message:
-          "ElastiCache ReplicationGroup is not supported. Use AWS::ElastiCache::ServerlessCache for Redis/Memcached.",
-      });
-
       const result = await resourceProvisionerNode(
         makeState({
           resourceType: "AWS::ElastiCache::ReplicationGroup",
@@ -707,7 +668,6 @@ describe("resourceProvisionerNode", () => {
           },
         }),
         mockProvisioner,
-        mockFallback as unknown as SDKFallbackDispatcher,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
@@ -718,10 +678,7 @@ describe("resourceProvisionerNode", () => {
       expect(mockProvisioner.getResource).not.toHaveBeenCalled();
     });
 
-    it("falls through to CloudControl path for standard types when fallback dispatcher present", async () => {
-      mockFallback.canHandle.mockReturnValue(false);
-      mockFallback.isRedirect.mockReturnValue(null);
-
+    it("falls through to CloudControl path for standard types", async () => {
       mockProvisioner.getResource.mockResolvedValueOnce([
         { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
         null,
@@ -740,7 +697,6 @@ describe("resourceProvisionerNode", () => {
           },
         }),
         mockProvisioner,
-        mockFallback as unknown as SDKFallbackDispatcher,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.IN_PROGRESS);
@@ -751,12 +707,7 @@ describe("resourceProvisionerNode", () => {
     it("surfaces CCAPI NOT_FOUND on SNS Subscription TopicArn mistakes (A10 path)", async () => {
       // A10 follow-up: when the referenced topic does not exist,
       // CCAPI CreateResource surfaces a validation error through
-      // the standard provisioner path. Previously the SDK dispatcher
-      // classified this to NOT_FOUND; now it bubbles through
-      // createResource like every other type.
-      mockFallback.canHandle.mockReturnValue(false);
-      mockFallback.isRedirect.mockReturnValue(null);
-
+      // the standard provisioner path.
       mockProvisioner.getResource.mockResolvedValueOnce([
         { kind: ProvisioningErrorKind.NOT_FOUND, message: "Not found" },
         null,
@@ -780,11 +731,9 @@ describe("resourceProvisionerNode", () => {
           },
         }),
         mockProvisioner,
-        mockFallback as unknown as SDKFallbackDispatcher,
       );
 
       expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
-      expect(mockFallback.subscribe).not.toHaveBeenCalled();
     });
   });
 

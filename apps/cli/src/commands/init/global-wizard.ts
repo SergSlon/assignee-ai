@@ -97,35 +97,6 @@ export async function promptGlobalConfig(): Promise<
     return undefined;
   }
 
-  const outputFormat = await clack.select({
-    message: "Output format",
-    options: [
-      { value: "table", label: "table — human-readable tables (default)" },
-      { value: "json", label: "json — machine-readable JSON" },
-    ],
-    initialValue: "table",
-  });
-
-  if (clack.isCancel(outputFormat)) {
-    clack.outro(UserMessage.INIT_CANCELLED);
-    return undefined;
-  }
-
-  const verbosity = await clack.select({
-    message: "Verbosity level",
-    options: [
-      { value: "quiet", label: "quiet — minimal output" },
-      { value: "normal", label: "normal — standard output (default)" },
-      { value: "verbose", label: "verbose — detailed output" },
-    ],
-    initialValue: "normal",
-  });
-
-  if (clack.isCancel(verbosity)) {
-    clack.outro(UserMessage.INIT_CANCELLED);
-    return undefined;
-  }
-
   const config: AssigneeConfig = {
     defaults: {
       region: (region as string) || undefined,
@@ -135,16 +106,6 @@ export async function promptGlobalConfig(): Promise<
     preferences: {
       auto_fix: autoFix as AssigneeConfig["preferences"] extends {
         auto_fix?: infer T;
-      }
-        ? T
-        : never,
-      output_format: outputFormat as AssigneeConfig["preferences"] extends {
-        output_format?: infer T;
-      }
-        ? T
-        : never,
-      verbosity: verbosity as AssigneeConfig["preferences"] extends {
-        verbosity?: infer T;
       }
         ? T
         : never,

@@ -13,7 +13,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { MissingAssigneeCredentialsError } from "@assignee/core";
 
 // ── Hoisted SDK mocks ───────────────────────────────────────────────────────
 
@@ -33,7 +32,14 @@ vi.mock("@aws-sdk/client-dynamodb", () => {
   function UpdateTableCommand(input: unknown) {
     return { _type: "UpdateTable", input };
   }
-  return { DynamoDBClient, UpdateTableCommand };
+  function DescribeTableCommand(input: unknown) {
+    return { _type: "DescribeTable", input };
+  }
+  // Story 50-4: consolidated CLI-canonical strategy also polls
+  // DescribeTable after UpdateTable to confirm DeletionProtection
+  // propagation. Include the command in the mock factory so the
+  // strategy's destructure doesn't trip vitest's "no export" guard.
+  return { DynamoDBClient, UpdateTableCommand, DescribeTableCommand };
 });
 
 vi.mock("@aws-sdk/client-ec2", () => {
@@ -88,20 +94,33 @@ describe("dynamodbStrategy.preDestroy", () => {
     });
 
     it("constructs the SDK client and sends UpdateTable to disable deletion protection", async () => {
-      mockDdbSend.mockResolvedValueOnce({});
+      // Story 50-4: CLI-canonical flow is UpdateTable → poll DescribeTable
+      // until DeletionProtectionEnabled is false. Mock both responses.
+      mockDdbSend.mockImplementation((cmd: { _type: string }) => {
+        if (cmd._type === "UpdateTable") return Promise.resolve({});
+        if (cmd._type === "DescribeTable") {
+          return Promise.resolve({
+            Table: { DeletionProtectionEnabled: false },
+          });
+        }
+        return Promise.resolve({});
+      });
 
       await dynamodbStrategy.preDestroy!(
         makeDestroyContext("orders-prod", "us-east-1"),
       );
 
-      expect(mockDdbSend).toHaveBeenCalledTimes(1);
-      const cmd = mockDdbSend.mock.calls[0]![0] as {
+      const types = mockDdbSend.mock.calls.map(
+        (c) => (c[0] as { _type: string })._type,
+      );
+      expect(types[0]).toBe("UpdateTable");
+      expect(types).toContain("DescribeTable");
+      const updateCmd = mockDdbSend.mock.calls[0]![0] as {
         _type: string;
         input: { TableName: string; DeletionProtectionEnabled: boolean };
       };
-      expect(cmd._type).toBe("UpdateTable");
-      expect(cmd.input.TableName).toBe("orders-prod");
-      expect(cmd.input.DeletionProtectionEnabled).toBe(false);
+      expect(updateCmd.input.TableName).toBe("orders-prod");
+      expect(updateCmd.input.DeletionProtectionEnabled).toBe(false);
     });
   });
 
@@ -117,27 +136,30 @@ describe("dynamodbStrategy.preDestroy", () => {
       vi.stubEnv("AWS_SECRET_ACCESS_KEY", "shell-leak-secret");
     });
 
-    it("throws MissingAssigneeCredentialsError and never calls the SDK", async () => {
-      await expect(
-        dynamodbStrategy.preDestroy!(
-          makeDestroyContext("orders-prod", "us-east-1"),
-        ),
-      ).rejects.toBeInstanceOf(MissingAssigneeCredentialsError);
+    // Story 50-4: the consolidated CLI-canonical strategy CATCHES
+    // MissingAssigneeCredentialsError and returns
+    // `{ success: false, error: "…" }` so the dispatcher can surface
+    // a user-friendly envelope. The invariant the test enforces stays
+    // the same: the SDK must NEVER be called when creds are missing.
+    it("fails closed with a missing-credentials outcome and never calls the SDK", async () => {
+      const outcome = await dynamodbStrategy.preDestroy!(
+        makeDestroyContext("orders-prod", "us-east-1"),
+      );
+      expect(outcome?.success).toBe(false);
+      expect(outcome?.error).toContain(
+        "Cannot disable DynamoDB deletion protection",
+      );
       expect(mockDdbSend).not.toHaveBeenCalled();
     });
 
-    it("error names both required env vars", async () => {
-      try {
-        await dynamodbStrategy.preDestroy!(
-          makeDestroyContext("orders-prod", "us-east-1"),
-        );
-        throw new Error("expected throw");
-      } catch (err) {
-        expect(err).toBeInstanceOf(MissingAssigneeCredentialsError);
-        const msg = (err as Error).message;
-        expect(msg).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
-        expect(msg).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
-      }
+    it("outcome error message names both required env vars", async () => {
+      const outcome = await dynamodbStrategy.preDestroy!(
+        makeDestroyContext("orders-prod", "us-east-1"),
+      );
+      expect(outcome?.success).toBe(false);
+      const msg = outcome?.error ?? "";
+      expect(msg).toContain("ASSIGNEE_OPERATOR_ACCESS_KEY_ID");
+      expect(msg).toContain("ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY");
     });
   });
 });
@@ -212,12 +234,18 @@ describe("igwStrategy.preDestroy", () => {
       vi.stubEnv("AWS_SECRET_ACCESS_KEY", "shell-leak-secret");
     });
 
-    it("throws MissingAssigneeCredentialsError and never calls the SDK", async () => {
-      await expect(
-        igwStrategy.preDestroy!(
-          makeDestroyContext("igw-0123456789abcdef0", "us-east-1"),
-        ),
-      ).rejects.toBeInstanceOf(MissingAssigneeCredentialsError);
+    // Story 50-4: CLI-canonical IGW strategy CATCHES
+    // MissingAssigneeCredentialsError and returns
+    // `{ success: false, error: "…" }`. The SDK must still never be
+    // called when creds are missing.
+    it("fails closed with a missing-credentials outcome and never calls the SDK", async () => {
+      const outcome = await igwStrategy.preDestroy!(
+        makeDestroyContext("igw-0123456789abcdef0", "us-east-1"),
+      );
+      expect(outcome?.success).toBe(false);
+      expect(outcome?.error).toContain(
+        "Cannot detach InternetGateway before delete",
+      );
       expect(mockEc2Send).not.toHaveBeenCalled();
     });
   });

@@ -38,9 +38,12 @@ describe("Distribution package configuration", () => {
     }
   });
 
-  it("has engines.node >= 20", () => {
-    // Tier C: dropped redundant toBeDefined()
-    expect(pkg.engines.node).toBe(">=20.0.0");
+  it("has engines.node >= 20.11 (consistent across monorepo)", () => {
+    // Story 50-9 widened this from >=20.0.0 to >=20.11 so every package in the
+    // workspace (core, best-practices, cli, mcp-server, root) pins the same
+    // minimum Node version. >=20.11 is the LTS floor needed for --import with
+    // ES module tsx loaders used by `pnpm test`.
+    expect(pkg.engines.node).toBe(">=20.11");
   });
 
   it("has repository field", () => {

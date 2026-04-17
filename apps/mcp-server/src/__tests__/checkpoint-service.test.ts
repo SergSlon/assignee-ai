@@ -4,7 +4,7 @@
  * @see Story 20.2, Story 20.3
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import * as path from "node:path";
 import * as os from "node:os";
 import * as crypto from "node:crypto";
@@ -14,12 +14,21 @@ import {
   loadCheckpointFromPath,
   MCP_CHECKPOINT_DIR,
 } from "../services/checkpoint.js";
+import { _resetSignaturesForTests } from "../services/checkpoint-hmac.js";
 import { CHECKPOINT_VERSION, CheckpointError } from "@assignee/core";
 
 // ── Use real fs for integration-style tests ─────────────────────────────────
 
 describe("checkpoint service", () => {
   const tmpDir = path.join(os.tmpdir(), `assignee-mcp-test-${Date.now()}`);
+
+  beforeEach(() => {
+    // Story 50-5 B-2: reset the in-process HMAC map so each test starts
+    // from a clean slate. saveCheckpoint() registers the HMAC inside
+    // this map; without the reset a later test could observe a stale
+    // signature from an earlier test's saveCheckpoint call.
+    _resetSignaturesForTests();
+  });
 
   afterEach(async () => {
     const fs = await import("node:fs/promises");

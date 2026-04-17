@@ -19,7 +19,7 @@ import {
 } from "../../config/constants.js";
 import {
   renderError,
-  renderApplyNowConfirm,
+  renderHitlConfirm,
   startSpinner,
   stopSpinner,
 } from "../../utils/display.js";
@@ -38,7 +38,7 @@ import type { ResolvedPlanArgs } from "./arg-parser.js";
 
 export interface PlanRunArgs extends ResolvedPlanArgs {
   intent: string;
-  opts: { advice?: boolean };
+  opts: { advice?: boolean; quick?: boolean };
 }
 
 export async function runPlan(
@@ -80,6 +80,7 @@ export async function runPlan(
       bpEnforcementLevel:
         userConfig?.bestPractices?.enforcement ?? BPEnforcementLevel.ENFORCE,
       ...(opts.advice === false ? { noAdvice: true } : {}),
+      ...(opts.quick === true ? { quickMode: true } : {}),
       ...(userConfig ? { userConfig } : {}),
       ...(orgConfig ? { orgConfig } : {}),
       resolvedConfig,
@@ -165,7 +166,11 @@ export async function runPlan(
     clack.log.warn(budgetCheck.message);
   }
 
-  const applyNow = await renderApplyNowConfirm({
+  // Story 50-2: single unified confirm — renderApplyNowConfirm was collapsed
+  // into renderHitlConfirm. The second prompt on the apply side is gated by
+  // checkpointResumed=true in runPlanToApply, so the user sees ONE confirm
+  // on the plan→apply happy path.
+  const applyNow = await renderHitlConfirm({
     resourceType: state.resourceType ?? UNKNOWN_FALLBACK,
     desiredState: state.desiredState,
     estimatedMonthlyCost: state.estimatedMonthlyCost,

@@ -109,6 +109,7 @@ function buildFreshPlanState(
     ...(deps.opts.wizard ? { noWizard: false } : {}),
     ...(deps.opts.advice === false ? { noAdvice: true } : {}),
     ...(deps.opts.yes ? { autoApprove: true } : {}),
+    ...(deps.opts.quick === true ? { quickMode: true } : {}),
     ...(deps.userConfig ? { userConfig: deps.userConfig } : {}),
     ...(deps.orgConfig ? { orgConfig: deps.orgConfig } : {}),
     resolvedConfig: deps.resolvedConfig,

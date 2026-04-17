@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { RESOURCE_TYPES } from "@assignee/core";
-import { costAlternatives } from "./cost-advisor.js";
+import { costAlternatives } from "./cost-advisor/orchestrator.js";
 
 describe("costAlternatives", () => {
   describe("EC2", () => {

@@ -33,7 +33,7 @@ vi.mock("../utils/logger.js", () => ({
   },
 }));
 
-import { fixApplicatorNode } from "./fix-applicator.js";
+import { fixApplicatorNode } from "./fix-applicator/orchestrator.js";
 import * as clack from "@clack/prompts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

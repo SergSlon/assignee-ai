@@ -53,12 +53,11 @@ export function adaptUserConfigToAssignee(
   // Opaque passthrough: if the user's YAML already uses the new
   // AssigneeConfig shape, honor it verbatim.
   const raw = uc as unknown as Partial<AssigneeConfig>;
-  if (raw.preferences || raw.defaults || raw.budget || raw.llm) {
+  if (raw.preferences || raw.defaults || raw.budget) {
     const result: Partial<AssigneeConfig> = {};
     if (raw.preferences) result.preferences = raw.preferences;
     if (raw.defaults) result.defaults = raw.defaults;
     if (raw.budget) result.budget = raw.budget;
-    if (raw.llm) result.llm = raw.llm;
     return result;
   }
 

@@ -107,21 +107,6 @@ vi.mock("../cloudcontrol-client.js", () => ({
   createCloudControlClient: () => ({}),
 }));
 
-// ── Mock SDKFallbackDispatcher ────────────────────────────────────────────────
-// A10 (2026-04-09): after SNS Subscription promotion the dispatcher is a
-// redirect-only classifier with no SDK write paths. destroy-service no
-// longer constructs the dispatcher at all, but keeping a trivial mock
-// here guarantees any future regression that re-introduces a dispatcher
-// import surfaces immediately.
-vi.mock("../sdk-fallback-dispatcher.js", () => {
-  class SDKFallbackDispatcher {
-    canHandle = () => false;
-    canDelete = () => false;
-    isRedirect = () => null;
-  }
-  return { SDKFallbackDispatcher };
-});
-
 // ── Mock @aws-sdk/client-cloudfront ───────────────────────────────────────────
 vi.mock("@aws-sdk/client-cloudfront", () => {
   class MockCloudFrontClient {

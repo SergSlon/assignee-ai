@@ -33,13 +33,8 @@ import { optimizeCommand } from "../src/commands/optimize.js";
 import { listCommand } from "../src/commands/list.js";
 import { setupCommand } from "../src/commands/setup.js";
 import { statusCommand } from "../src/commands/status.js";
-import { cleanCommand } from "../src/commands/clean.js";
 import { reconcileCommand } from "../src/commands/reconcile.js";
-import { cacheCommand } from "../src/commands/cache.js";
 import { doctorCommand } from "../src/commands/doctor.js";
-import { whoamiCommand } from "../src/commands/whoami.js";
-import { patternsCommand } from "../src/commands/patterns.js";
-import { typesCommand } from "../src/commands/types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const completionsDir = path.resolve(__dirname, "..", "completions");
@@ -52,12 +47,9 @@ function buildProgram(): Command {
   const program = new Command();
   program.name("assignee").version("0.1.0");
 
-  // A8 follow-up: keep this list in sync with apps/cli/src/index.ts
-  // so shell completions cover every shipping command. Before the
-  // session expansion, only 4 commands were registered here; the
-  // CLI had grown to 17 by the time patterns/types landed and
-  // completions were silently drifting. Adding all of them in one
-  // pass closes the gap.
+  // Keep this list in sync with apps/cli/src/index.ts so shell
+  // completions cover every shipping command. Story 50-3 trimmed the
+  // list from 18 → 13 by removing clean, cache, patterns, types, whoami.
   program.addCommand(planCommand);
   program.addCommand(applyCommand);
   program.addCommand(initCommand);
@@ -68,13 +60,8 @@ function buildProgram(): Command {
   program.addCommand(listCommand);
   program.addCommand(setupCommand);
   program.addCommand(statusCommand);
-  program.addCommand(cleanCommand);
   program.addCommand(reconcileCommand);
-  program.addCommand(cacheCommand);
   program.addCommand(doctorCommand);
-  program.addCommand(whoamiCommand);
-  program.addCommand(patternsCommand);
-  program.addCommand(typesCommand);
 
   return program;
 }

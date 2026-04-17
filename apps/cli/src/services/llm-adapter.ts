@@ -13,11 +13,12 @@
  *   - bedrock-region.ts  — detectBedrockRegionError + KNOWN_BEDROCK_REGIONS re-export
  *                          (feedback_bedrock_region_error_hints)
  *   - adapter.ts         — LlmAdapter (single-model LlmPort)
- *   - routing-adapter.ts — RoutingLlmAdapter (per-callsite routing, Story 44.1)
  *
- * Preserves feedback_token_cost_visibility: every LLM call passes its
- * callsite to recordTokenUsage inside LlmAdapter so per-command token
- * cost stays greppable.
+ * Story 50-7: RoutingLlmAdapter (per-callsite routing, Story 44.1) was
+ * deleted along with its `llm:` config key — no in-repo YAML consumer
+ * ever used it. Callsite tagging still flows through every call via
+ * `LlmCallOptions` (preserved in LlmAdapter), so
+ * feedback_token_cost_visibility continues to hold.
  */
 export {
   DEFAULT_MODEL,
@@ -31,4 +32,3 @@ export {
   KNOWN_BEDROCK_REGIONS,
 } from "./llm-adapter/bedrock-region.js";
 export { LlmAdapter, type LlmAdapterConfig } from "./llm-adapter/adapter.js";
-export { RoutingLlmAdapter } from "./llm-adapter/routing-adapter.js";

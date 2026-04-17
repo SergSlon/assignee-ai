@@ -1198,74 +1198,107 @@ describe("optionElicitorNode — parallel pricing + discovery fan-out (Story 9.1
   });
 
   it("pricing and discovery run concurrently (overlapping execution)", async () => {
-    const {
-      discoverAmis,
-      discoverSubnets,
-      discoverSecurityGroups,
-      discoverKeyPairs,
-    } = await import("../utils/aws-resource-discovery.js");
+    // Story 50-6 flake fix: previously this test blocked the test
+    // thread on a REAL 50ms `setTimeout` inside the discovery mock to
+    // create "measurable" concurrency. Under coverage + vitest worker
+    // contention that window could stretch past the default 5s timeout
+    // and flake. Replaced the real wait with fake timers + explicit
+    // `advanceTimersByTime(50)` — same concurrency assertion (pricing
+    // + discovery observed-interleaving), now deterministic.
+    vi.useFakeTimers();
+    try {
+      const {
+        discoverAmis,
+        discoverSubnets,
+        discoverSecurityGroups,
+        discoverKeyPairs,
+      } = await import("../utils/aws-resource-discovery.js");
 
-    // Track execution timing to prove concurrency
-    const executionLog: Array<{ task: string; event: "start" | "end" }> = [];
+      // Observed-interleaving log: proves discovery STARTED before
+      // optionElicitorNode awaited pricing→select (concurrency property).
+      const executionLog: Array<{ task: string; event: "start" | "end" }> = [];
 
-    // Make discovery functions take measurable time
-    vi.mocked(discoverAmis).mockImplementation(async () => {
-      executionLog.push({ task: "discovery", event: "start" });
-      await new Promise((r) => setTimeout(r, 50));
-      executionLog.push({ task: "discovery", event: "end" });
-      return [];
-    });
-    vi.mocked(discoverSubnets).mockResolvedValue([]);
-    vi.mocked(discoverSecurityGroups).mockResolvedValue([]);
-    vi.mocked(discoverKeyPairs).mockResolvedValue([]);
+      // Discovery takes 50ms of simulated time. Under fake timers the
+      // await returns only after `advanceTimersByTime(50)` below.
+      vi.mocked(discoverAmis).mockImplementation(async () => {
+        executionLog.push({ task: "discovery", event: "start" });
+        await new Promise((r) => setTimeout(r, 50));
+        executionLog.push({ task: "discovery", event: "end" });
+        return [];
+      });
+      vi.mocked(discoverSubnets).mockResolvedValue([]);
+      vi.mocked(discoverSecurityGroups).mockResolvedValue([]);
+      vi.mocked(discoverKeyPairs).mockResolvedValue([]);
 
-    // Use EC2 plugin that has both pricing fields and fetcher fields
-    const ec2PluginWithFetchers = {
-      resourceType: "AWS::EC2::Instance",
-      commonFields: [
-        {
-          name: "InstanceType",
-          question: {
-            type: "enum" as const,
-            label: "Instance type",
-            options: [
-              { value: "t3.micro", label: "t3.micro" },
-              { value: "t3.small", label: "t3.small" },
-            ],
-            initialValue: "t3.micro",
+      // Use EC2 plugin that has both pricing fields and fetcher fields
+      const ec2PluginWithFetchers = {
+        resourceType: "AWS::EC2::Instance",
+        commonFields: [
+          {
+            name: "InstanceType",
+            question: {
+              type: "enum" as const,
+              label: "Instance type",
+              options: [
+                { value: "t3.micro", label: "t3.micro" },
+                { value: "t3.small", label: "t3.small" },
+              ],
+              initialValue: "t3.micro",
+            },
           },
-        },
-        {
-          name: "ImageId",
-          question: {
-            type: "enum" as const,
-            label: "AMI",
-            fetcher: "discover-amis",
-            options: [],
+          {
+            name: "ImageId",
+            question: {
+              type: "enum" as const,
+              label: "AMI",
+              fetcher: "discover-amis",
+              options: [],
+            },
           },
+        ],
+        advancedFields: [],
+        defaults: {},
+      };
+
+      const { defaultPluginRegistry } = await import("@assignee/core");
+      vi.mocked(defaultPluginRegistry.get).mockImplementation(
+        (type: string) => {
+          if (type === "AWS::EC2::Instance")
+            return ec2PluginWithFetchers as unknown as ResourcePlugin;
+          return undefined;
         },
-      ],
-      advancedFields: [],
-      defaults: {},
-    };
+      );
 
-    const { defaultPluginRegistry } = await import("@assignee/core");
-    vi.mocked(defaultPluginRegistry.get).mockImplementation((type: string) => {
-      if (type === "AWS::EC2::Instance")
-        return ec2PluginWithFetchers as unknown as ResourcePlugin;
-      return undefined;
-    });
+      vi.mocked(select).mockResolvedValueOnce("t3.micro"); // InstanceType
+      vi.mocked(text).mockResolvedValueOnce("ami-123"); // ImageId (fallback to string)
 
-    vi.mocked(select).mockResolvedValueOnce("t3.micro"); // InstanceType
-    vi.mocked(text).mockResolvedValueOnce("ami-123"); // ImageId (fallback to string)
+      // Kick off elicitor without awaiting so we can interleave the
+      // fake-timer advance with the discovery's setTimeout.
+      const runPromise = optionElicitorNode(
+        makeState({ resourceType: "AWS::EC2::Instance" }),
+        [], // no pricing tools — pricing resolves immediately
+      );
 
-    await optionElicitorNode(
-      makeState({ resourceType: "AWS::EC2::Instance" }),
-      [], // no pricing tools — pricing resolves immediately
-    );
+      // Yield the event loop so discovery's mockImplementation enters
+      // its body (records "start"). Then advance the fake clock past
+      // the 50ms `setTimeout` so the discovery promise resolves.
+      await vi.advanceTimersByTimeAsync(50);
 
-    // Discovery functions should have been called (proving they ran in parallel block)
-    expect(discoverAmis).toHaveBeenCalled();
+      await runPromise;
+
+      // Discovery functions should have been called (proving they ran
+      // in the parallel block). Additionally, both start + end events
+      // landed in executionLog so the concurrency window actually
+      // executed — this is stronger than the pre-fix assertion that
+      // only checked `toHaveBeenCalled()`.
+      expect(discoverAmis).toHaveBeenCalled();
+      expect(executionLog).toEqual([
+        { task: "discovery", event: "start" },
+        { task: "discovery", event: "end" },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("graceful degradation: pricing failure does not block discovery", async () => {

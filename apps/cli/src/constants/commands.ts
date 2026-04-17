@@ -10,7 +10,6 @@ export const CommandName = {
   RECONCILE: "reconcile",
   SETUP: "setup",
   STATUS: "status",
-  WHOAMI: "whoami",
 } as const;
 
 export type CommandNameType = (typeof CommandName)[keyof typeof CommandName];
@@ -29,8 +28,6 @@ export const CommandDescription = {
   SETUP:
     "Create IAM users and policies for least-privilege credential separation",
   STATUS: "Show summary of managed infrastructure",
-  WHOAMI:
-    "Print the operator AWS identity, region and active config — fast pre-flight check",
 } as const;
 
 export const CommandArgs = {

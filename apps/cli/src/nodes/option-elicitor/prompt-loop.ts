@@ -65,10 +65,43 @@ export interface PromptLoopParams {
   userIntent: string | undefined;
   /** Progress label prefix: "Step" for common, "Advanced step" for advanced. */
   progressLabel: string;
+  /**
+   * Story 50-2: when true, skip every field that has a usable default
+   * (resolved.value OR question.initialValue) and silently accept it.
+   * Only fields that are required AND have no default produce prompts.
+   * Counter-invariants maintained by caller: quickMode does NOT bypass
+   * BP auto-fix confirmation (renderPromptFixSelection runs in
+   * human-approval AFTER option_elicitor).
+   */
+  quickMode?: boolean;
 }
 
-/** Run one tier of the wizard. Mutates `elicitedOptions` in place. */
-export async function runPromptLoop(params: PromptLoopParams): Promise<void> {
+/**
+ * Story 50-2: a field has a usable default if the resolved-config value
+ * is set OR the field carries an `initialValue` on the question shape.
+ * `--set key=value` pre-fills and config-derived values both populate
+ * `resolved.value`; plugin-level initialValue lives on the question.
+ */
+function hasUsableDefault(
+  field: ResourceField,
+  res: ResolvedFieldConfig,
+  elicitedOptions: Record<string, unknown>,
+): boolean {
+  if (elicitedOptions[field.name] !== undefined) return true;
+  if (res.value !== undefined) return true;
+  if (field.question.initialValue !== undefined) return true;
+  return false;
+}
+
+/**
+ * Run one tier of the wizard. Mutates `elicitedOptions` in place.
+ * Returns the number of fields that were accepted silently via defaults
+ * (either quickMode skip-on-default or NEVER_ASK injection), for the
+ * post-wizard summary.
+ */
+export async function runPromptLoop(
+  params: PromptLoopParams,
+): Promise<{ skippedByDefault: number; promptedCount: number }> {
   const {
     fields,
     resolved,
@@ -78,7 +111,11 @@ export async function runPromptLoop(params: PromptLoopParams): Promise<void> {
     llmClient,
     userIntent,
     progressLabel,
+    quickMode,
   } = params;
+
+  let skippedByDefault = 0;
+  let promptedCount = 0;
 
   const history: number[] = [];
 
@@ -115,6 +152,7 @@ export async function runPromptLoop(params: PromptLoopParams): Promise<void> {
 
     if (res.policy === FieldPolicy.NEVER_ASK) {
       if (res.value !== undefined) elicitedOptions[field.name] = res.value;
+      skippedByDefault++;
       i++;
       continue;
     }
@@ -124,6 +162,20 @@ export async function runPromptLoop(params: PromptLoopParams): Promise<void> {
         i++;
         continue;
       }
+    }
+
+    // Story 50-2 --quick: if the field has a usable default, accept it
+    // silently without prompting. Populate elicitedOptions with the
+    // resolved value OR the question's initialValue so downstream
+    // showIf evaluation sees the chosen value.
+    if (quickMode && hasUsableDefault(field, res, elicitedOptions)) {
+      if (elicitedOptions[field.name] === undefined) {
+        elicitedOptions[field.name] =
+          res.value !== undefined ? res.value : field.question.initialValue;
+      }
+      skippedByDefault++;
+      i++;
+      continue;
     }
 
     const clampedIndex = Math.min(visibleIndex, total - 1);
@@ -250,10 +302,13 @@ export async function runPromptLoop(params: PromptLoopParams): Promise<void> {
     if (answer !== undefined && answer !== "") {
       elicitedOptions[field.name] = answer;
     }
+    promptedCount++;
     total = countVisible();
     visibleIndex++;
     i++;
   }
+
+  return { skippedByDefault, promptedCount };
 }
 
 /** Pattern-memory hint (e.g., "(from previous use)") injector factory. */

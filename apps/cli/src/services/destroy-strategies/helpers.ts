@@ -1,57 +1,34 @@
 /**
- * Shared helpers for CLI destroy strategies. Extracted from
- * destroy-service.ts during Wave-6 F1b so individual strategy files
- * can call them without importing from the dispatcher (which would
- * introduce a cycle).
+ * CLI-specific destroy helpers. The `warnDestroy` helper + CCAPI status
+ * constants live in @assignee/core now (Story 50-4) so the concrete
+ * strategy files can be shared with the MCP server; this module retains
+ * the CLI-only helpers that depend on the CLI's cloudcontrol-adapter and
+ * resolve-arn utilities (neither can move into core without dragging
+ * the entire CLI's AWS-SDK surface along).
  *
  * Helpers housed here:
- * - `warnDestroy` — structured stderr warn-level log.
  * - `classifyNotFoundShortCircuit` — Wave-11 P2-2 cross-account guard.
  * - `pollDeleteStatus` — generic CCAPI poll loop (uses the adapter).
  *
- * @see Wave-6 F1b
+ * @see Wave-6 F1b (origin)
+ * @see Story 50-4 — warn/status moved to @assignee/core
  */
 
-import { extractAccountIdFromArn } from "@assignee/core";
+import {
+  extractAccountIdFromArn,
+  CCAPIStatus,
+  CCAPI_NOT_FOUND_ERROR_CODE,
+  warnDestroy,
+} from "@assignee/core";
 import type { CloudControlAdapter } from "../cloudcontrol-adapter.js";
 import {
   DESTROY_MAX_POLL_ATTEMPTS,
   DESTROY_POLL_INTERVAL_MS,
 } from "../../config/constants.js";
 
-/** AWS CloudControl API operation status values. */
-export const CCAPIStatus = {
-  SUCCESS: "SUCCESS",
-  FAILED: "FAILED",
-} as const;
-
-/** CloudControl HandlerErrorCode for "resource does not exist". */
-export const CCAPI_NOT_FOUND_ERROR_CODE = "NotFound";
-
-/**
- * Structured warn-level log line for non-fatal failures inside the destroy
- * pipeline. destroy-service has no LangGraph runId plumbed in, so we emit a
- * plain JSON object on stderr (matching the shape of the main logger) rather
- * than depending on ../utils/logger.ts which requires an action enum value.
- */
-export function warnDestroy(
-  action: string,
-  extras: Record<string, unknown>,
-): void {
-  try {
-    process.stderr.write(
-      JSON.stringify({
-        ts: new Date().toISOString(),
-        level: "warn",
-        source: "destroy-service",
-        action,
-        extras,
-      }) + "\n",
-    );
-  } catch {
-    // stderr write failures are swallowed — never let logging break destroy.
-  }
-}
+// Re-export the shared helpers so existing CLI imports from
+// `./helpers.js` keep resolving.
+export { warnDestroy, CCAPIStatus, CCAPI_NOT_FOUND_ERROR_CODE };
 
 /**
  * Wave 11 P2-2: cross-account sanity check before treating a CCAPI

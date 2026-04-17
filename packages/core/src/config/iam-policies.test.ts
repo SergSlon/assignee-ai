@@ -313,6 +313,145 @@ describe("IAM Policy Generators", () => {
       });
     });
 
+    // Story 50-5 B-3: priv-esc prevention — iam:CreateRole /
+    // iam:PassRole / iam:AttachRolePolicy / iam:PutRolePolicy used to
+    // land in the unscoped ServiceSpecificActionsA/B sweep with
+    // Resource "*". An operator credential leak could then mint a role
+    // with AdministratorAccess and assume it. They now live in a
+    // dedicated statement scoped to `role/assignee-*` under the
+    // caller's partition + account, with an iam:PassedToService
+    // condition restricting PassRole to the services Assignee actually
+    // provisions for.
+    describe("IamRoleManagementAssigneeScoped statement (Story 50-5 B-3)", () => {
+      const PRIVESC_ACTIONS = [
+        "iam:CreateRole",
+        "iam:PassRole",
+        "iam:AttachRolePolicy",
+        "iam:PutRolePolicy",
+      ];
+
+      it("exists as a dedicated statement in the core operator policy", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "IamRoleManagementAssigneeScoped",
+        );
+        expect(stmt).toBeDefined();
+        expect(stmt!.Effect).toBe("Allow");
+      });
+
+      it("scopes the Resource to assignee-* roles under the caller's partition + account", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "IamRoleManagementAssigneeScoped",
+        )!;
+        // Policy variables ${aws:PartitionId} + ${aws:AccountId} are
+        // evaluated at authorization time — the literal ARN in the
+        // JSON contains the unevaluated variables.
+        // feedback_partition_aware_arn_matching: ensure we use the
+        // partition variable, never the literal "aws:" string.
+        expect(stmt.Resource).toBe(
+          "arn:${aws:PartitionId}:iam::${aws:AccountId}:role/assignee-*",
+        );
+        expect(stmt.Resource).not.toBe("*");
+        expect(stmt.Resource).not.toContain("arn:aws:iam");
+      });
+
+      it("covers all four priv-esc IAM actions (and no stray extras)", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "IamRoleManagementAssigneeScoped",
+        )!;
+        const actions = new Set(stmt.Action);
+        for (const a of PRIVESC_ACTIONS) {
+          expect(actions.has(a), `${a} must be in the scoped statement`).toBe(
+            true,
+          );
+        }
+        expect(actions.size).toBe(PRIVESC_ACTIONS.length);
+      });
+
+      it("restricts iam:PassedToService to the services assignee provisions for", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find(
+          (s) => s.Sid === "IamRoleManagementAssigneeScoped",
+        )!;
+        const passedTo =
+          stmt.Condition?.["StringEquals"]?.["iam:PassedToService"];
+        expect(passedTo).toBeInstanceOf(Array);
+        const services = new Set(passedTo as string[]);
+        // Every service listed here is one Assignee provisions a role
+        // for. Expanding this list requires a deliberate policy edit.
+        for (const svc of [
+          "lambda.amazonaws.com",
+          "ecs-tasks.amazonaws.com",
+          "events.amazonaws.com",
+          "rds.amazonaws.com",
+          "ec2.amazonaws.com",
+          "scheduler.amazonaws.com",
+          "states.amazonaws.com",
+        ]) {
+          expect(services.has(svc), `${svc} must be allowlisted`).toBe(true);
+        }
+        // Hard deny: no wildcard "*" service (would re-open the pivot).
+        expect(services.has("*")).toBe(false);
+      });
+
+      it("removes the four priv-esc actions from the unscoped services sweep", () => {
+        // If any of the four actions landed in operatorServicesA/B with
+        // Resource "*", IAM union semantics would let the unscoped
+        // allow win and defeat the scoping entirely.
+        for (const policyFn of [
+          operatorServicesAPolicy,
+          operatorServicesBPolicy,
+        ]) {
+          const doc = policyFn();
+          for (const statement of doc.Statement) {
+            for (const action of statement.Action) {
+              expect(PRIVESC_ACTIONS.includes(action)).toBe(false);
+            }
+          }
+        }
+      });
+    });
+
+    // Story 50-5 H-1: tag:TagResources previously granted Resource "*"
+    // unconditionally — an operator credential leak could strip the
+    // managed-by tag off any resource in the account (breaking the
+    // "destroy TOCTOU tag missing" refusal) or overwrite managed-by
+    // to hijack another principal's tag-scoped IAM grants.
+    describe("ResourceTagging statement (Story 50-5 H-1)", () => {
+      it("carries ForAllValues:StringEquals aws:TagKeys allowlist", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find((s) => s.Sid === "ResourceTagging")!;
+        const tagKeysCondition =
+          stmt.Condition?.["ForAllValues:StringEquals"]?.["aws:TagKeys"];
+        expect(tagKeysCondition).toBeInstanceOf(Array);
+        const keys = new Set(tagKeysCondition as string[]);
+        expect(keys.has("managed-by")).toBe(true);
+        expect(keys.has("assignee-run-id")).toBe(true);
+        expect(keys.has("assignee-environment")).toBe(true);
+        expect(keys.has("Name")).toBe(true);
+        // No wildcard — an operator that tries to mutate an unknown
+        // key fails authorization.
+        expect(keys.has("*")).toBe(false);
+      });
+
+      it("forces aws:RequestTag/managed-by to equal assignee-ai", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find((s) => s.Sid === "ResourceTagging")!;
+        expect(
+          stmt.Condition?.["StringEquals"]?.["aws:RequestTag/managed-by"],
+        ).toBe("assignee-ai");
+      });
+
+      it("still covers tag:TagResources + tag:GetResources", () => {
+        const policy = operatorPolicy();
+        const stmt = policy.Statement.find((s) => s.Sid === "ResourceTagging")!;
+        expect(stmt.Action).toContain("tag:TagResources");
+        expect(stmt.Action).toContain("tag:GetResources");
+      });
+    });
+
     it("removes ALL snapshot mutate actions from the unscoped service sweep", () => {
       // All three (Delete + Copy + Create) must be absent from
       // operatorServicesA/B policies — IAM union semantics would

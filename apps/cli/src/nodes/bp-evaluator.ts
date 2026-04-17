@@ -3,18 +3,15 @@
  * resource configuration and stores findings in graph state.
  *
  * Wave-6c F3: SOLID refactor. Thin façade over SRP sub-modules in
- * `./bp-evaluator/`. All previously-exported names remain accessible
- * here for back-compat with tests and intra-repo imports.
+ * `./bp-evaluator/`.
+ *
+ * Story 50-3: the integrity-enforcement surface
+ * (BpIntegrityError/BpIntegrityMode/resolveBpIntegrityMode/
+ * _listBpManifestCandidates) was removed along with the GPG signing
+ * layer — BP loading is now a straightforward cached load.
  *
  * @see Story 12.3, ADR-009
  */
 
-export {
-  BpIntegrityMode,
-  type BpIntegrityModeType,
-  BpIntegrityError,
-  resolveBpIntegrityMode,
-} from "./bp-evaluator/integrity-mode.js";
-export { _listBpManifestCandidates } from "./bp-evaluator/manifest-path.js";
 export { resetBPCache } from "./bp-evaluator/rule-loader.js";
 export { bpEvaluatorNode } from "./bp-evaluator/orchestrator.js";

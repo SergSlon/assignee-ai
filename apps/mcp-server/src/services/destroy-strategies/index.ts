@@ -6,6 +6,7 @@
  *
  * @see Story 18.5 (CLI destroy), Epic 20 (MCP tools)
  * @see Story 49.1 — extraction of interface + registry + defaults to core
+ * @see Story 50-4 — extraction of concrete strategy bodies to core
  */
 
 export type { DestroyStrategy, DestroyContext } from "@assignee/core";
@@ -15,11 +16,11 @@ import {
   DestroyStrategyRegistry,
   arnIdentifierStrategies,
   slowDeleteStrategies,
+  ec2InternetGatewayStrategy,
+  ec2RouteTableStrategy,
+  sqsQueueStrategy,
+  dynamodbTableStrategy,
 } from "@assignee/core";
-import { igwStrategy } from "./igw-strategy.js";
-import { routeTableStrategy } from "./route-table-strategy.js";
-import { sqsStrategy } from "./sqs-strategy.js";
-import { dynamodbStrategy } from "./dynamodb-strategy.js";
 
 /** Pre-built registry with all known destroy strategies. */
 export function createDestroyRegistry(): DestroyStrategyRegistry {
@@ -29,11 +30,11 @@ export function createDestroyRegistry(): DestroyStrategyRegistry {
   registry.registerAll(arnIdentifierStrategies);
   registry.registerAll(slowDeleteStrategies);
 
-  // Custom-logic strategies.
-  registry.register(igwStrategy);
-  registry.register(routeTableStrategy);
-  registry.register(sqsStrategy);
-  registry.register(dynamodbStrategy);
+  // Custom-logic strategies — now sourced from @assignee/core (Story 50-4).
+  registry.register(ec2InternetGatewayStrategy);
+  registry.register(ec2RouteTableStrategy);
+  registry.register(sqsQueueStrategy);
+  registry.register(dynamodbTableStrategy);
 
   return registry;
 }

@@ -12,13 +12,13 @@
  */
 
 import {
+  CCAPI_REDIRECT_TYPES,
   ExecutionStatus,
   PROVISIONING_ERROR_CODES,
   ProvisioningError,
 } from "@assignee/core";
 import type { ProvisioningPort } from "../services/provisioning-port.js";
 import { ProvisioningErrorKind } from "../services/provisioning-port.js";
-import type { SDKFallbackDispatcher } from "../services/sdk-fallback-dispatcher.js";
 import { injectMandatoryTags } from "../utils/tags.js";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph-state.js";
@@ -44,10 +44,45 @@ import {
 // these by name from "./resource-provisioner.js".
 export { sanitizeKeyName, formatErrorForLog };
 
+/**
+ * Inline classifier for CCAPI-gap resource types.
+ *
+ * Story 50-7: replaces the prior `SDKFallbackDispatcher.isRedirect()` —
+ * after A10 removed all SDK write paths there were only two redirect
+ * entries left (AWS::Lambda::Permission → PermissionPolicy,
+ * AWS::ElastiCache::ReplicationGroup → ServerlessCache). A class with
+ * two always-false hooks was pure ceremony; the map-lookup is the
+ * whole function.
+ */
+function classifyUnsupported(resourceType: string): {
+  redirect: true;
+  message: string;
+} | null {
+  const alternative = CCAPI_REDIRECT_TYPES[resourceType];
+  if (!alternative) return null;
+  if (resourceType === "AWS::Lambda::Permission") {
+    return {
+      redirect: true,
+      message:
+        "AWS::Lambda::Permission is not supported by CCAPI. Use AWS::Lambda::PermissionPolicy instead.",
+    };
+  }
+  if (resourceType === "AWS::ElastiCache::ReplicationGroup") {
+    return {
+      redirect: true,
+      message:
+        "ElastiCache ReplicationGroup is not supported. Use AWS::ElastiCache::ServerlessCache for Redis/Memcached.",
+    };
+  }
+  return {
+    redirect: true,
+    message: `${resourceType} is not supported by CCAPI. Use ${alternative} instead.`,
+  };
+}
+
 export async function resourceProvisionerNode(
   state: AgentState,
   provisioner: ProvisioningPort,
-  fallbackDispatcher?: SDKFallbackDispatcher,
 ): Promise<Partial<AgentState>> {
   if (state.executionStatus === ExecutionStatus.CANCELLED) return {};
 
@@ -94,10 +129,13 @@ export async function resourceProvisionerNode(
     cloneResourceId,
   );
 
-  // SDK Fallback Dispatch (Story 7.7) — redirect unsupported types with
-  // a known alternative before the CCAPI path.
-  if (state.resourceType && fallbackDispatcher) {
-    const redirect = fallbackDispatcher.isRedirect(state.resourceType);
+  // CCAPI-gap redirect (Story 7.7, inlined in Story 50-7) — emit a
+  // friendly "use X instead" message before the CCAPI path for the
+  // two remaining redirect-only types (Lambda::Permission,
+  // ElastiCache::ReplicationGroup). A10 (2026-04-09) removed the
+  // last SDK write path, so this is purely a classifier now.
+  if (state.resourceType) {
+    const redirect = classifyUnsupported(state.resourceType);
     if (redirect) {
       log({
         ts: new Date().toISOString(),
@@ -119,8 +157,6 @@ export async function resourceProvisionerNode(
         ),
       };
     }
-    // A10 (2026-04-09): no SDK-routable CREATE types remain. The
-    // dispatcher survives only for isRedirect().
   }
 
   // Validate resourceType BEFORE any AWS calls.

@@ -27,7 +27,6 @@ Recipes for accomplishing specific goals. Assume you already know the basics.
 
 | Doc                                      | Goal                                                             |
 | ---------------------------------------- | ---------------------------------------------------------------- |
-| [commands.md](commands.md)               | Run each CLI command (plan, apply, destroy, drift, list, ...)    |
 | [drift-detection.md](drift-detection.md) | Detect and reconcile config drift between desired and live state |
 | [mcp-server.md](mcp-server.md)           | Expose assignee.ai as an MCP server to your IDE                  |
 | [testing-guide.md](testing-guide.md)     | Run the project's test suite and add new tests                   |
@@ -38,6 +37,7 @@ Dry, precise, lookup-style information. Skim the tables; search for specifics.
 
 | Doc                                      | What it catalogs                                                                                   |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| [commands.md](commands.md)               | Every CLI command, flag, and exit code (lookup-style reference)                                    |
 | [resource-types.md](resource-types.md)   | Every supported AWS resource type and its plugin                                                   |
 | [configuration.md](configuration.md)     | Full config precedence chain, env vars, and file formats                                           |
 | [mcp-servers.md](mcp-servers.md)         | AWS MCP servers consumed by the pipeline (pins + tools)                                            |
@@ -49,13 +49,16 @@ Dry, precise, lookup-style information. Skim the tables; search for specifics.
 Background, design rationale, and the "why" behind the system. Read these
 when you want to understand how assignee.ai thinks.
 
-| Doc                                                        | Topic                                                                                                                                    |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| [architecture.md](architecture.md)                         | Monorepo layout, 13-node LangGraph pipeline, hexagonal ports                                                                             |
-| [architecture-flows.md](architecture-flows.md)             | End-to-end flow diagrams for plan / apply / destroy / drift                                                                              |
-| [integration-architecture.md](integration-architecture.md) | How CLI, MCP server, and `@assignee/core` fit together                                                                                   |
-| [mcp-intelligence-audit.md](mcp-intelligence-audit.md)     | 2026-04-10 audit of how the pipeline exploits each MCP server                                                                            |
-| [explanation/invariants.md](explanation/invariants.md)     | Load-bearing rules (partition-aware ARN, CCAPI NotFound short-circuit, safety allowlist, …) — read before touching ARN/destroy/cred code |
+| Doc                                                                            | Topic                                                                                                                                    |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| [architecture.md](architecture.md)                                             | Monorepo layout, 13-node LangGraph pipeline, hexagonal ports                                                                             |
+| [architecture-flows.md](architecture-flows.md)                                 | End-to-end flow diagrams for plan / apply / destroy / drift                                                                              |
+| [integration-architecture.md](integration-architecture.md)                     | How CLI, MCP server, and `@assignee/core` fit together                                                                                   |
+| [explanation/invariants.md](explanation/invariants.md)                         | Load-bearing rules (partition-aware ARN, CCAPI NotFound short-circuit, safety allowlist, …) — read before touching ARN/destroy/cred code |
+| [explanation/oss-vs-saas.md](explanation/oss-vs-saas.md)                       | What stays OSS and what monetizes — the trust-credential argument for the split                                                          |
+| [explanation/telemetry-design.md](explanation/telemetry-design.md)             | Opt-in telemetry design + privacy model (no code yet; design doc gating future PRs)                                                      |
+| [explanation/run-ledger-design.md](explanation/run-ledger-design.md)           | Run-ID-based workflow stickiness via tags; why there is no state file                                                                    |
+| [explanation/contributing-a-bp-rule.md](explanation/contributing-a-bp-rule.md) | Worked example walkthrough for contributing a new best-practice rule                                                                     |
 
 ---
 
@@ -66,7 +69,7 @@ when you want to understand how assignee.ai thinks.
 | Supported AWS resource types   | 37 (35 with dedicated plugins + 2 compound-only that fall through to the generic plugin: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) |
 | Compound architecture patterns | 9 first-class + 1 variant                                                                                                                                 |
 | LangGraph pipeline nodes       | 13                                                                                                                                                        |
-| CLI commands                   | 17                                                                                                                                                        |
+| CLI commands                   | 13                                                                                                                                                        |
 | MCP server tools               | 5                                                                                                                                                         |
 | Resource plugins               | 37 registered (35 type-specific + generic fallback; 2 compound-only types share the generic)                                                              |
 | Best practice YAML rules       | 186 (185 tracked in manifest.json + 1 pending re-manifest)                                                                                                |

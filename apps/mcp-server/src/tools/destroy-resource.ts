@@ -54,6 +54,7 @@ import {
 } from "./destroy-resource/dispatcher.js";
 import type { ResolvedResource } from "./destroy-resource/types.js";
 import { mcpLogWarn } from "../utils/structured-log.js";
+import { auditLog } from "../utils/audit-log.js";
 
 // ── Public re-exports (preserve the pre-refactor import surface) ────────────
 // Existing tests import these from `../tools/destroy-resource.js`.
@@ -256,6 +257,14 @@ export function registerDestroyResource(server: McpServer): void {
 
           const requestToken = deleteResult.ProgressEvent?.RequestToken;
           if (!requestToken) {
+            await auditLog({
+              tool: "destroy_resource",
+              runId: "",
+              resourceType: resolved.resourceType,
+              identifier: resolved.arn,
+              success: false,
+              errorClass: "NoRequestToken",
+            });
             return buildErrorResponse(
               "DeleteResource returned no request token — cannot track operation status.",
             );
@@ -270,9 +279,26 @@ export function registerDestroyResource(server: McpServer): void {
           );
 
           if (!pollResult.success) {
+            await auditLog({
+              tool: "destroy_resource",
+              runId: "",
+              resourceType: resolved.resourceType,
+              identifier: resolved.arn,
+              success: false,
+              errorClass: "PollFailure",
+            });
             return buildErrorResponse(`Destroy failed: ${pollResult.message}`);
           }
 
+          // Story 50-5 H-3: persistent audit record for the success path.
+          await auditLog({
+            tool: "destroy_resource",
+            runId: "",
+            resourceType: resolved.resourceType,
+            identifier: resolved.arn,
+            success: true,
+            errorClass: "",
+          });
           return buildSuccessResponse({
             status: "SUCCESS",
             message: `Resource ${resolved.arn} destroyed successfully.`,
@@ -299,10 +325,26 @@ export function registerDestroyResource(server: McpServer): void {
               resolved.region,
             );
             if (classification === "cross-account") {
+              await auditLog({
+                tool: "destroy_resource",
+                runId: "",
+                resourceType: resolved.resourceType,
+                identifier: resolved.arn,
+                success: false,
+                errorClass: "CrossAccountNotFound",
+              });
               return buildErrorResponse(
                 `CloudControl reported NotFound for ${resolved.arn}, but the operator credentials are configured for a different AWS account. Verify ASSIGNEE_OPERATOR_ACCESS_KEY_ID points at the correct account before retrying.`,
               );
             }
+            await auditLog({
+              tool: "destroy_resource",
+              runId: "",
+              resourceType: resolved.resourceType,
+              identifier: resolved.arn,
+              success: true,
+              errorClass: "",
+            });
             return buildSuccessResponse({
               status: "SUCCESS",
               message: `Resource ${resolved.arn} was already deleted (NotFound).`,
@@ -314,6 +356,14 @@ export function registerDestroyResource(server: McpServer): void {
               },
             });
           }
+          await auditLog({
+            tool: "destroy_resource",
+            runId: "",
+            resourceType: resolved.resourceType,
+            identifier: resolved.arn,
+            success: false,
+            errorClass: errName || "DestroyError",
+          });
           return buildErrorResponse(`Failed to destroy resource: ${errMsg}`);
         }
       } finally {
