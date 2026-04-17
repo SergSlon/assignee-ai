@@ -5,6 +5,9 @@
 #
 # Prerequisites:
 #   1. Install assignee.ai: npm install -g assignee
+#      (Requires v0.2+ published tarball — assignee.ai is private pre-publish;
+#      this example activates once `release.yml.disabled` runs and the package
+#      lands on npm. Until then, build from source and use `pnpm link --global`.)
 #   2. Run `assignee init` in your repository
 #   3. Set the following GitHub Actions secrets:
 #      - ASSIGNEE_OPERATOR_ACCESS_KEY_ID
