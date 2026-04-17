@@ -38,10 +38,16 @@ vi.mock("@clack/prompts", () => ({
 }));
 
 // Mock s3-upload service (Story 37.4). Default impls re-installed in beforeEach.
-vi.mock("../services/s3-upload.js", () => ({
+// Story 50-4 Wave 5 Pass H: s3-upload lifted to @assignee/core — mock both
+// the CLI shim and the core path so dynamic imports resolve the same spies.
+const _s3Mocks = vi.hoisted(() => ({
   uploadStaticSite: vi.fn(),
   configureBucketPolicy: vi.fn(),
+  getMimeType: vi.fn((p: string) => "text/plain"),
+  collectFiles: vi.fn(() => []),
 }));
+vi.mock("../services/s3-upload.js", () => _s3Mocks);
+vi.mock("@assignee/core/services/s3-upload.js", () => _s3Mocks);
 
 // (f) 2026-04-09 Task 4b: cloudfront-setup.ts (the SDK post-provision
 // distribution + OAC + bucket-policy hook) was deleted — the same
@@ -53,7 +59,12 @@ vi.mock("../services/s3-upload.js", () => ({
 // distribution's CCAPI primaryIdentifier.
 
 // Suppress display output for all tests. Default impls re-installed in beforeEach.
-vi.mock("../utils/display.js", () => ({
+//
+// Story 50-4 Wave 5 Pass H: security-posture (which calls
+// renderSecurityWarnings) was lifted to @assignee/core in this pass; it
+// imports display via the core-internal path. Mock both the CLI shim and
+// the core display source so both consumer sides see the same spies.
+const displayMocks = vi.hoisted(() => ({
   renderApplySuccess: vi.fn(),
   renderCompoundSuccess: vi.fn(),
   renderCompoundPartialFailure: vi.fn(),
@@ -62,6 +73,8 @@ vi.mock("../utils/display.js", () => ({
   renderSecurityWarnings: vi.fn(),
   promptFixSelection: vi.fn(),
 }));
+vi.mock("../utils/display.js", () => displayMocks);
+vi.mock("@assignee/core/utils/display.js", () => displayMocks);
 
 // Suppress logger output
 vi.mock("../utils/logger.js", () => ({
@@ -76,13 +89,26 @@ vi.mock("../utils/logger.js", () => ({
 
 // Mock memory service (Story 19.3, 19.4, 20.13). Default impls re-installed
 // in beforeEach because mockReset:true wipes vi.fn implementations.
-vi.mock("../services/memory.js", () => ({
-  defaultMemoryService: {
+//
+// Story 50-4 Wave 5 Pass H: MemoryService lifted to @assignee/core. The CLI
+// shim at ../services/memory.js re-exports from core, so the module the
+// memory-recorder util actually imports is the core copy. Mock both the
+// shim (so consumers that import the shim see mocks) and the core source.
+const { mockMemoryService } = vi.hoisted(() => ({
+  mockMemoryService: {
     appendProvision: vi.fn(),
     appendFailure: vi.fn(),
     upsertPattern: vi.fn(),
     clearFailuresForType: vi.fn(),
   },
+}));
+vi.mock("../services/memory.js", () => ({
+  defaultMemoryService: mockMemoryService,
+  MemoryService: vi.fn(() => mockMemoryService),
+}));
+vi.mock("@assignee/core/services/memory.js", () => ({
+  defaultMemoryService: mockMemoryService,
+  MemoryService: vi.fn(() => mockMemoryService),
 }));
 
 import { resultFormatterNode } from "./result-formatter.js";

@@ -35,4 +35,14 @@ export class PluginRegistry {
   has(resourceType: string): boolean {
     return this.plugins.has(resourceType);
   }
+
+  /**
+   * Remove a plugin from the registry. Returns true if a plugin was
+   * registered and has been removed; false otherwise. Used by tests that
+   * register fixture plugins in `beforeEach` and need to clean up in
+   * `afterEach` to avoid leaking across files (Story 50-4 Wave 5 Pass H).
+   */
+  unregister(resourceType: string): boolean {
+    return this.plugins.delete(resourceType);
+  }
 }

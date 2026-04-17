@@ -1,16 +1,12 @@
 /**
  * `@assignee/core/graph` barrel.
  *
- * Story 50-4 Wave 5 finale: re-exports the lifted graph-state + node
- * implementations. `createGraph` and graph-routing still live in the CLI
- * (`apps/cli/src/services/graph.ts` + `graph-routing.ts`) pending the
- * remaining-8-node lift + deep CLI utility lift that would decouple
- * `createGraph` from CLI-specific modules (`operatorCredentials`,
- * `createCloudControlClient`, `LlmAdapter`, etc.).
- *
- * When the remaining nodes land in core, `createGraph` moves here and the
- * MCP server can import it via the static
- * `import { createGraph } from "@assignee/core/graph"` path (Pass F).
+ * Story 50-4 Wave 5 Pass H: all 13 graph nodes + graph-state now live in
+ * `@assignee/core`. `createGraph` and `graph-routing` still live in the
+ * CLI (`apps/cli/src/services/graph.ts` + `graph-routing.ts`); moving
+ * them is the remit of Pass I, which also removes the MCP server's
+ * `workspace:*` dependency on the CLI and switches it to a static
+ * `import { createGraph } from "@assignee/core/graph"`.
  */
 
 export {
@@ -20,9 +16,7 @@ export {
   type SecurityFinding,
 } from "./graph-state.js";
 
-// Node implementations currently lifted to core (Story 50-4 Wave 5 Pass D
-// + this finale). More node re-exports will land here as the lift
-// progresses.
+// All 13 graph-node implementations (Story 50-4 Wave 5 Passes D/E/E.2/H).
 export {
   schemaFetcherNode,
   _resetSchemaService,
@@ -33,3 +27,10 @@ export { compoundDispatcherNode } from "./nodes/compound-dispatcher.js";
 export { createIntentParserNode } from "./nodes/intent-parser.js";
 export { bpEvaluatorNode, resetBPCache } from "./nodes/bp-evaluator.js";
 export { isRetryableCloudFrontS3Error } from "./nodes/status-poller.js";
+export { fixApplicatorNode } from "./nodes/fix-applicator/orchestrator.js";
+export { resultFormatterNode } from "./nodes/result-formatter.js";
+export { preflightGuardNode } from "./nodes/preflight-guard.js";
+export { resourceProvisionerNode } from "./nodes/resource-provisioner.js";
+export { createPlanGeneratorNode } from "./nodes/plan-generator.js";
+export { optionElicitorNode } from "./nodes/option-elicitor.js";
+export { createAdviceGeneratorNode } from "./nodes/advice-generator.js";

@@ -45,7 +45,11 @@ vi.mock("../../utils/logger.js", () => ({
 }));
 
 // Suppress display output
-vi.mock("../../utils/display.js", () => ({
+//
+// Story 50-4 Wave 5 Pass H: result-formatter was lifted to @assignee/core;
+// it imports display from the core-internal path. Hoisted spies are mocked
+// at both the CLI shim path and the core path so both sides see the same spies.
+const _displayMocks = vi.hoisted(() => ({
   renderApplySuccess: vi.fn(),
   renderCompoundSuccess: vi.fn(),
   renderCompoundPartialFailure: vi.fn(),
@@ -54,9 +58,11 @@ vi.mock("../../utils/display.js", () => ({
   renderSecurityWarnings: vi.fn(),
   promptFixSelection: vi.fn().mockResolvedValue(null),
 }));
+vi.mock("../../utils/display.js", () => _displayMocks);
+vi.mock("@assignee/core/utils/display.js", () => _displayMocks);
 
-// Mock memory service
-vi.mock("../../services/memory.js", () => ({
+// Mock memory service (lifted to core in Pass H — hoisted & dual-path mocked)
+const _memoryMocks = vi.hoisted(() => ({
   defaultMemoryService: {
     appendProvision: vi.fn().mockResolvedValue(undefined),
     appendFailure: vi.fn().mockResolvedValue(undefined),
@@ -64,6 +70,8 @@ vi.mock("../../services/memory.js", () => ({
     clearFailuresForType: vi.fn().mockResolvedValue(undefined),
   },
 }));
+vi.mock("../../services/memory.js", () => _memoryMocks);
+vi.mock("@assignee/core/services/memory.js", () => _memoryMocks);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
