@@ -21,7 +21,7 @@ vi.mock("@aws-sdk/client-dynamodb", () => {
   return { DynamoDBClient, UpdateTableCommand, DescribeTableCommand };
 });
 
-import { dynamodbTableStrategy } from "../dynamodb-table.js";
+import { dynamodbTableStrategy } from "@assignee/core";
 import type { DestroyContext } from "@assignee/core";
 
 const originalSetTimeout = globalThis.setTimeout;

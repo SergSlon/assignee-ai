@@ -111,7 +111,7 @@ vi.mock("@assignee/core/services/memory.js", () => ({
   MemoryService: vi.fn(() => mockMemoryService),
 }));
 
-import { resultFormatterNode } from "./result-formatter.js";
+import { resultFormatterNode } from "@assignee/core/graph/nodes/result-formatter.js";
 import {
   renderApplySuccess,
   renderCompoundSuccess,

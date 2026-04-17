@@ -30,7 +30,7 @@ vi.mock("@aws-sdk/client-cloudfront", () => {
   };
 });
 
-import { cloudfrontDistributionStrategy } from "../cloudfront-distribution.js";
+import { cloudfrontDistributionStrategy } from "@assignee/core";
 import type { DestroyContext } from "@assignee/core";
 
 const originalSetTimeout = globalThis.setTimeout;

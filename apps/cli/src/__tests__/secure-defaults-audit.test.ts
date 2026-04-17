@@ -15,7 +15,7 @@ import type { EvalContext } from "@assignee/best-practices";
 import {
   assembleS3Composites,
   assembleEc2Storage,
-} from "../nodes/plan-generator.js";
+} from "@assignee/core/graph/nodes/plan-generator.js";
 
 // ---------------------------------------------------------------------------
 // Load all BP rules once

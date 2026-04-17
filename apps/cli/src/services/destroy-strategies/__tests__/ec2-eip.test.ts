@@ -19,7 +19,7 @@ vi.mock("@aws-sdk/client-ec2", () => {
   return { EC2Client, ReleaseAddressCommand };
 });
 
-import { ec2EipStrategy } from "../ec2-eip.js";
+import { ec2EipStrategy } from "@assignee/core";
 import type { DestroyContext } from "@assignee/core";
 
 function makeCtx(overrides?: Partial<DestroyContext>): DestroyContext {

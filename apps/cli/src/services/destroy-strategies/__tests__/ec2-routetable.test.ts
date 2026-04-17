@@ -25,7 +25,7 @@ vi.mock("@aws-sdk/client-ec2", () => {
   };
 });
 
-import { ec2RouteTableStrategy } from "../ec2-routetable.js";
+import { ec2RouteTableStrategy } from "@assignee/core";
 import type { DestroyContext } from "@assignee/core";
 
 beforeEach(() => {
