@@ -1,0 +1,132 @@
+name: CI Core (reusable)
+
+# Reusable workflow — the single source of truth for the lint / build / test /
+# coverage pipeline. Invoked via `workflow_call` by:
+#   - `ci.yml`              (push / PR, ubuntu-latest + node 22 only)
+#   - `ci-cross-platform.yml` (manual button, full OS × node matrix)
+#
+# Keeping it reusable means the cross-platform sweep is bit-identical to the
+# default gate, and we never drift one copy from the other.
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: "Runner OS (ubuntu-latest / macos-latest / windows-latest)"
+        required: true
+        type: string
+      node:
+        description: "Node major version (e.g. 22)"
+        required: true
+        type: number
+      experimental:
+        description: "If true, the job is allowed to fail without blocking the calling workflow"
+        required: false
+        type: boolean
+        default: false
+      publish-coverage:
+        description: "If true, run the coverage-badge + artifact upload steps. Only set true for the canonical ubuntu-latest + node 22 cell."
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  ci:
+    # Cancel previous runs on the same ref+os+node combo when a new push
+    # arrives. `inputs.*` is resolvable at job-level; `matrix.*` would not
+    # be, since the reusable has no matrix of its own.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.os }}-${{ inputs.node }}
+      cancel-in-progress: true
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 30
+    continue-on-error: ${{ inputs.experimental }}
+    env:
+      BEDROCK_LOGGING_VERIFIED: ${{ secrets.BEDROCK_LOGGING_VERIFIED }}
+    defaults:
+      run:
+        # Force bash on Windows too — our scripts assume POSIX. GitHub's
+        # windows-latest images ship Git-Bash, which handles this fine.
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type-check
+        run: pnpm check-types
+
+      - name: Build all packages
+        run: npx turbo build
+
+      - name: Run tests with coverage
+        run: npx turbo test:coverage
+
+      # ── Coverage aggregation only runs on the canonical cell.
+      # Running it on every matrix cell wastes CI minutes and produces
+      # conflicting badge updates.
+      - name: Merge coverage summaries
+        id: coverage
+        if: inputs.publish-coverage
+        run: |
+          node -e "
+            const fs = require('fs');
+            const dirs = ['apps/cli', 'apps/mcp-server', 'packages/core', 'packages/best-practices'];
+            let tS=0,cS=0,tB=0,cB=0,tF=0,cF=0,tL=0,cL=0;
+            const missing = [];
+            for (const d of dirs) {
+              const p = d + '/coverage/coverage-summary.json';
+              if (!fs.existsSync(p)) { missing.push(p); continue; }
+              const s = JSON.parse(fs.readFileSync(p, 'utf-8')).total;
+              tS+=s.statements.total; cS+=s.statements.covered;
+              tB+=s.branches.total;   cB+=s.branches.covered;
+              tF+=s.functions.total;  cF+=s.functions.covered;
+              tL+=s.lines.total;      cL+=s.lines.covered;
+            }
+            if (missing.length) {
+              console.error('Missing coverage summaries:', missing.join(', '));
+              process.exit(1);
+            }
+            const pct = tL>0?((cL/tL)*100).toFixed(1):'0';
+            console.log('Lines: '+pct+'%');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'lines='+pct+'\n');
+          "
+
+      - name: Update coverage badge
+        if: inputs.publish-coverage && github.ref == 'refs/heads/main' && vars.COVERAGE_GIST_ID != ''
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: ${{ vars.COVERAGE_GIST_ID }}
+          filename: assignee-ai-coverage.json
+          label: coverage
+          message: ${{ steps.coverage.outputs.lines }}%
+          valColorRange: ${{ steps.coverage.outputs.lines }}
+          minColorRange: 50
+          maxColorRange: 90
+          namedLogo: vitest
+
+      - name: Upload coverage HTML reports
+        if: always() && inputs.publish-coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            apps/cli/coverage/
+            apps/mcp-server/coverage/
+            packages/core/coverage/
+            packages/best-practices/coverage/
+          retention-days: 30

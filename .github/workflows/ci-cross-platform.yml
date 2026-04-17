@@ -1,0 +1,62 @@
+name: CI — cross-platform (manual)
+
+# Manual-only cross-platform sweep. Runs the full lint + build + test +
+# coverage pipeline on macOS and Windows in addition to the default
+# Linux gate, so path-handling and shell-dependent code (s3-upload
+# backslashes, price-cache HOME vs USERPROFILE, signal handlers) get
+# exercised when it matters — before a release, or after a change
+# touching cross-platform surface area.
+#
+# Private-repo billing note: macOS minutes cost 10× Linux, Windows 2×.
+# A single full-matrix run burns ~390 minutes. Free tier gets 2 000/mo,
+# so use sparingly. Click "Run workflow" in the Actions tab.
+
+on:
+  workflow_dispatch:
+    inputs:
+      node-versions:
+        description: "Comma-separated list of Node majors to test (default: 22)"
+        required: false
+        type: string
+        default: "22"
+
+jobs:
+  # Compute the matrix from the dispatch input. Converting "20,22" → ["20","22"]
+  # in a tiny setup job keeps the caller simple and lets you restrict to a
+  # single Node version (default) to halve the burn.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      node-json: ${{ steps.nodes.outputs.json }}
+    steps:
+      - id: nodes
+        run: |
+          raw="${{ inputs.node-versions }}"
+          json="$(echo "$raw" | tr ',' '\n' | awk 'NF {print "  " $1}' | jq -R . | jq -cs .)"
+          echo "json=$json" >> "$GITHUB_OUTPUT"
+
+  matrix:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ${{ fromJson(needs.prepare.outputs.node-json) }}
+        include:
+          - os: ubuntu-latest
+            experimental: false
+          - os: macos-latest
+            experimental: false
+          - os: windows-latest
+            experimental: true
+    name: ci (${{ matrix.os }} / node ${{ matrix.node }})
+    uses: ./.github/workflows/ci-core.yml
+    with:
+      os: ${{ matrix.os }}
+      node: ${{ matrix.node }}
+      experimental: ${{ matrix.experimental }}
+      # Coverage badge + artifact upload already handled by the main
+      # `ci.yml` push/PR workflow on ubuntu-latest + node 22. The
+      # cross-platform sweep intentionally does NOT republish.
+      publish-coverage: false
+    secrets: inherit
