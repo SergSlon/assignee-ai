@@ -49,7 +49,7 @@ vi.mock("../utils/logger.js", () => ({
   },
 }));
 
-vi.mock("../services/checkpoint.js", () => ({
+vi.mock("@assignee/core/checkpoint", () => ({
   findNewestValidCheckpoint: vi.fn().mockResolvedValue(null),
   loadCheckpointFromPath: vi.fn(),
 }));
@@ -74,7 +74,7 @@ vi.mock("@clack/prompts", () => ({
 const { runProvisioningLoop } = await import("../utils/command-runner.js");
 const { renderError } = await import("../utils/display.js");
 const { loadCheckpointFromPath, findNewestValidCheckpoint } =
-  await import("../services/checkpoint.js");
+  await import("@assignee/core/checkpoint");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

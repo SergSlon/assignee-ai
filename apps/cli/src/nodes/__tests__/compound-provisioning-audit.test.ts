@@ -20,8 +20,8 @@ import {
   defaultPatternRegistry,
   type ArchitecturePattern,
 } from "@assignee/core";
-import { compoundDispatcherNode } from "../compound-dispatcher.js";
-import { resourceProvisionerNode } from "../resource-provisioner.js";
+import { compoundDispatcherNode } from "@assignee/core/graph/nodes/compound-dispatcher.js";
+import { resourceProvisionerNode } from "@assignee/core/graph/nodes/resource-provisioner.js";
 import {
   ProvisioningErrorKind,
   type ProvisioningPort,
@@ -617,11 +617,11 @@ describe("resourceProvisionerNode — compound context", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("compound queue iteration (result-formatter loop)", () => {
-  let resultFormatterNode: typeof import("../result-formatter.js").resultFormatterNode;
+  let resultFormatterNode: typeof import("@assignee/core/graph/nodes/result-formatter.js").resultFormatterNode;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const mod = await import("../result-formatter.js");
+    const mod = await import("@assignee/core/graph/nodes/result-formatter.js");
     resultFormatterNode = mod.resultFormatterNode;
   });
 
@@ -801,13 +801,13 @@ describe("compound queue iteration (result-formatter loop)", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("compound flow error handling", () => {
-  let resultFormatterNode: typeof import("../result-formatter.js").resultFormatterNode;
+  let resultFormatterNode: typeof import("@assignee/core/graph/nodes/result-formatter.js").resultFormatterNode;
   let mockProvisioner: ReturnType<typeof createMockProvisioner>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     mockProvisioner = createMockProvisioner();
-    const mod = await import("../result-formatter.js");
+    const mod = await import("@assignee/core/graph/nodes/result-formatter.js");
     resultFormatterNode = mod.resultFormatterNode;
   });
 

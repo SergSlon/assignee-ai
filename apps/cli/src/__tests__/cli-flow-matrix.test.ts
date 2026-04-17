@@ -251,7 +251,7 @@ describe("destroyAction", () => {
 
 describe("checkpoint serialization", () => {
   it("serializeCheckpoint extracts correct fields from state", async () => {
-    const { serializeCheckpoint } = await import("../services/checkpoint.js");
+    const { serializeCheckpoint } = await import("@assignee/core/checkpoint");
 
     const mockState = {
       runId: "test-run-123",
@@ -281,7 +281,7 @@ describe("checkpoint serialization", () => {
   });
 
   it("serializeCheckpoint handles compound resources with queue", async () => {
-    const { serializeCheckpoint } = await import("../services/checkpoint.js");
+    const { serializeCheckpoint } = await import("@assignee/core/checkpoint");
 
     const mockState = {
       runId: "compound-run",
@@ -316,7 +316,7 @@ describe("checkpoint serialization", () => {
   });
 
   it("serializeCheckpoint defaults resourceType to unknown when missing", async () => {
-    const { serializeCheckpoint } = await import("../services/checkpoint.js");
+    const { serializeCheckpoint } = await import("@assignee/core/checkpoint");
 
     const mockState = {
       runId: "no-type-run",

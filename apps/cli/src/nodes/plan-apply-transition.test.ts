@@ -41,7 +41,7 @@ vi.mock("@assignee/core/utils/logger/index.js", () => ({
   },
 }));
 
-import { humanApprovalNode } from "./human-approval.js";
+import { humanApprovalNode } from "@assignee/core/graph/nodes/human-approval.js";
 import {
   renderPlanBox,
   renderHitlConfirm,
@@ -49,7 +49,7 @@ import {
 import { log } from "@assignee/core/utils/logger/index.js";
 import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
 import { type ProvisioningPort } from "../services/provisioning-port.js";
-import { resourceProvisionerNode } from "./resource-provisioner.js";
+import { resourceProvisionerNode } from "@assignee/core/graph/nodes/resource-provisioner.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

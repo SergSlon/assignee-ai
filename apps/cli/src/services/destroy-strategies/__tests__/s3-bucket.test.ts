@@ -21,7 +21,7 @@ vi.mock("@aws-sdk/client-s3", () => {
   return { S3Client, ListObjectVersionsCommand, DeleteObjectsCommand };
 });
 
-import { s3BucketStrategy } from "../s3-bucket.js";
+import { s3BucketStrategy } from "@assignee/core";
 import type { DestroyContext } from "@assignee/core";
 
 beforeEach(() => {

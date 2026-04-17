@@ -14,7 +14,7 @@ import { startSpinner } from "../../utils/display.js";
 import { resolveSetKey } from "../../utils/display.js";
 import { log, LOG_ACTIONS } from "../../utils/logger.js";
 import { CHECKPOINT_DIR } from "../../config/constants.js";
-import { findNewestValidCheckpoint } from "../../services/checkpoint.js";
+import { findNewestValidCheckpoint } from "@assignee/core/checkpoint";
 import type { UserConfig } from "../../config/user-config-loader.js";
 import type { CommandContext } from "../../utils/command-runner.js";
 import { buildCheckpointState } from "./checkpoint-state.js";

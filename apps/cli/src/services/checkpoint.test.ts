@@ -9,7 +9,7 @@ import {
   loadCheckpointFromPath,
   findNewestValidCheckpoint,
   pruneExpiredCheckpoints,
-} from "./checkpoint.js";
+} from "@assignee/core/checkpoint";
 import { routeCheckpointEntry } from "./graph-routing.js";
 import type { PlanCheckpoint } from "@assignee/core";
 import type { AgentState } from "./graph-state.js";

@@ -59,7 +59,7 @@ vi.mock("../utils/logger.js", () => ({
   },
 }));
 
-vi.mock("../services/checkpoint.js", () => ({
+vi.mock("@assignee/core/checkpoint", () => ({
   serializeCheckpoint: vi.fn(() => ({
     runId: "test-run",
     ttl_hours: 72,
@@ -220,7 +220,7 @@ describe("planCommand — run callback (no --no-apply)", () => {
 
   it("T2.2: checkpoint — serializeCheckpoint and saveCheckpoint called", async () => {
     const { serializeCheckpoint, saveCheckpoint } =
-      await import("../services/checkpoint.js");
+      await import("@assignee/core/checkpoint");
     const ctx = makeCtx();
     await capturedOpts!.run(ctx);
 
@@ -458,7 +458,7 @@ describe("planCommand — run callback (no --no-apply)", () => {
   });
 
   it("checkpoint save failure — logs warning, still succeeds", async () => {
-    const { saveCheckpoint } = await import("../services/checkpoint.js");
+    const { saveCheckpoint } = await import("@assignee/core/checkpoint");
     vi.mocked(saveCheckpoint).mockRejectedValueOnce(new Error("disk full"));
 
     const ctx = makeCtx();

@@ -5,10 +5,7 @@
 import * as path from "node:path";
 import { safeTry } from "@assignee/core";
 import type { AgentState } from "../../services/graph-state.js";
-import {
-  serializeCheckpoint,
-  saveCheckpoint,
-} from "../../services/checkpoint.js";
+import { serializeCheckpoint, saveCheckpoint } from "@assignee/core/checkpoint";
 import { log, LOG_ACTIONS } from "../../utils/logger.js";
 import { CHECKPOINT_DIR } from "../../config/constants.js";
 

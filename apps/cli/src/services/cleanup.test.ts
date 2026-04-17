@@ -19,7 +19,9 @@ import * as os from "node:os";
 // Mock the primitives before importing the module under test.
 // NOTE: Default impls are re-applied in beforeEach because mockReset:true
 // wipes vi.fn implementations between tests.
-vi.mock("./checkpoint.js", () => ({
+// Story 51-it1 Wave B2: checkpoint primitives live in @assignee/core — mock
+// the package path so the orchestrator's import is intercepted.
+vi.mock("@assignee/core/checkpoint", () => ({
   pruneExpiredCheckpoints: vi.fn(),
 }));
 
@@ -33,7 +35,7 @@ import {
   formatCleanupReport,
   type CleanupReport,
 } from "./cleanup.js";
-import { pruneExpiredCheckpoints } from "./checkpoint.js";
+import { pruneExpiredCheckpoints } from "@assignee/core/checkpoint";
 import { sweepExpiredPrices } from "./price-cache.js";
 
 /** Minimal mock MemoryService that satisfies the orchestrator's needs. */

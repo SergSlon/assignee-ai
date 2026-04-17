@@ -15,7 +15,7 @@ import { ErrorCode } from "../../constants/errors.js";
 import {
   findNewestValidCheckpoint,
   loadCheckpointFromPath,
-} from "../../services/checkpoint.js";
+} from "@assignee/core/checkpoint";
 import { countSourceFiles } from "../../utils/count-source-files.js";
 
 export interface ApplyOpts {

@@ -13,7 +13,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { pruneExpiredCheckpoints } from "../checkpoint.js";
+import { pruneExpiredCheckpoints } from "@assignee/core/checkpoint";
 import { sweepExpiredPrices } from "../price-cache.js";
 import type { MemoryService } from "../memory.js";
 import {
