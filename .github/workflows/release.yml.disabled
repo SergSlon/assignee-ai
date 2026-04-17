@@ -21,6 +21,23 @@ name: Release
 #   - Runs `npm pack --dry-run` per publishable package first so metadata
 #     regressions (missing description/license/files) abort the run BEFORE
 #     anything hits the registry.
+#   - Per-package LICENSE files live at `apps/cli/LICENSE`,
+#     `apps/mcp-server/LICENSE`, `packages/core/LICENSE`,
+#     `packages/best-practices/LICENSE` (byte-for-byte copies of the root).
+#     Local `pnpm -r publish --dry-run` therefore produces identical
+#     tarballs to CI — no more "CI-only LICENSE copy" drift (L9-B2).
+#   - `package-binaries` uses `pnpm deploy --prod --filter=assignee` to
+#     produce a self-contained CLI directory that includes the resolved
+#     production `node_modules`. This is what the Homebrew formula
+#     actually unpacks — users need `@ai-sdk/*` and other runtime deps
+#     present locally or `assignee --version` crashes on first import
+#     (L9-B1).
+#   - `cross-platform-build` runs the full matrix on macOS + Windows
+#     before any publish step. Catches path-handling / shell-dependent
+#     bugs that the ubuntu-only default gate misses (L9-H3).
+#   - `smoke-test` unpacks the CLI tarball and asserts
+#     `node dist/index.js --version` matches the release tag before
+#     users ever see it (L9-H5).
 # ──────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -41,7 +58,9 @@ permissions:
 
 jobs:
   # --------------------------------------------------------------------------
-  # Build and test — gate the whole pipeline on a green full-matrix build.
+  # Build and test — gate the whole pipeline on a green ubuntu build. Runs
+  # first so every downstream job has a cached install. `cross-platform-build`
+  # below re-runs the same suite on macOS + Windows in parallel.
   # --------------------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
@@ -80,12 +99,50 @@ jobs:
             apps/cli/LICENSE
 
   # --------------------------------------------------------------------------
+  # Cross-platform build — re-runs build + test on macOS and Windows so a
+  # platform-specific regression blocks publish. Gated on `needs: build` so
+  # ubuntu runs first and caches pnpm; macOS/Windows then hit warm caches.
+  # fail-fast: false because we want both platforms to report even if one
+  # fails.
+  # --------------------------------------------------------------------------
+  cross-platform-build:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Run all tests
+        run: pnpm test
+
+  # --------------------------------------------------------------------------
   # Publish dry-run — runs `npm pack --dry-run` per publishable package so
   # metadata regressions (missing description, license, repository, files)
-  # fail BEFORE the real publish step. Always runs, even for confirm=DRY_RUN.
+  # fail BEFORE the real publish step. Gated on cross-platform-build so a
+  # macOS-only test failure blocks publish.
   # --------------------------------------------------------------------------
   publish-dry-run:
-    needs: build
+    needs: cross-platform-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,16 +165,10 @@ jobs:
       - name: Build all packages
         run: npx turbo build
 
-      - name: Copy root LICENSE into each publishable package
-        # npm attaches LICENSE to each tarball only if the file exists in the
-        # package directory. We keep a single source-of-truth LICENSE at repo
-        # root and copy it in at publish time to avoid duplicate-file drift.
-        run: |
-          for dir in apps/cli apps/mcp-server packages/core packages/best-practices; do
-            cp LICENSE "$dir/LICENSE"
-          done
-
       - name: Dry-run npm pack per package (metadata audit)
+        # Per-package LICENSE now lives at <pkg>/LICENSE as a real file
+        # (byte-for-byte copy of root LICENSE). No pre-copy step needed —
+        # local `pnpm -r publish --dry-run` produces identical output.
         run: |
           set -euo pipefail
           for dir in apps/cli apps/mcp-server packages/core packages/best-practices; do
@@ -157,12 +208,6 @@ jobs:
       - name: Build all packages
         run: npx turbo build
 
-      - name: Copy root LICENSE into each publishable package
-        run: |
-          for dir in apps/cli apps/mcp-server packages/core packages/best-practices; do
-            cp LICENSE "$dir/LICENSE"
-          done
-
       - name: Publish all packages (workspace-aware, with provenance)
         # pnpm publishes each non-private package in dependency order and
         # rewrites workspace:* specs into concrete versions in the tarball.
@@ -172,10 +217,18 @@ jobs:
         run: pnpm -r publish --access public --provenance --no-git-checks
 
   # --------------------------------------------------------------------------
-  # Create platform tarballs for GitHub release
+  # Create platform tarballs for GitHub release.
+  #
+  # IMPORTANT: we use `pnpm deploy --prod --filter=assignee <dir>` to produce
+  # a self-contained deploy directory that includes the resolved production
+  # `node_modules`. Tarring only `dist/` ships broken bits — users get
+  # `Cannot find package '@ai-sdk/amazon-bedrock'` on first run because
+  # workspace:* deps aren't resolved and runtime deps aren't bundled.
+  # The Homebrew formula relies on `libexec.install Dir["*"]` picking up
+  # `node_modules` from the tarball (L9-B1).
   # --------------------------------------------------------------------------
   package-binaries:
-    needs: build
+    needs: cross-platform-build
     if: inputs.confirm == 'YES_PUBLISH'
     runs-on: ubuntu-latest
     strategy:
@@ -186,16 +239,47 @@ jobs:
           - platform: linux-x64
           - platform: linux-arm64
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          name: cli-dist
-          path: staging/
+          ref: ${{ inputs.tag }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: npx turbo build
+
+      - name: Produce self-contained CLI deploy directory
+        # `pnpm deploy` resolves workspace:* deps to real versions, strips
+        # devDeps, and materialises a standalone node_modules tree. The
+        # resulting apps/cli/deploy/ directory is what Homebrew unpacks.
+        run: pnpm deploy --prod --filter=assignee apps/cli/deploy
+
+      - name: Stage deploy contents for tarball
+        run: |
+          set -euo pipefail
+          # `pnpm deploy` copies package.json and dist/ but does NOT
+          # automatically include the unversioned bits the formula needs
+          # (generated completions, root LICENSE fallback for brew audit).
+          # Copy them explicitly. README is already present via pnpm deploy.
+          cp -r apps/cli/completions apps/cli/deploy/completions
+          test -f apps/cli/deploy/LICENSE || cp apps/cli/LICENSE apps/cli/deploy/LICENSE
+          test -f apps/cli/deploy/README.md || cp apps/cli/README.md apps/cli/deploy/README.md
 
       - name: Create platform tarball
         run: |
           VERSION="${{ inputs.tag }}"
           TARBALL="assignee-${VERSION}-${{ matrix.platform }}.tar.gz"
-          tar -czf "${TARBALL}" -C staging .
+          tar -czf "${TARBALL}" -C apps/cli/deploy .
           echo "TARBALL=${TARBALL}" >> "$GITHUB_ENV"
           echo "TARBALL_NAME=${TARBALL}" >> "$GITHUB_ENV"
 
@@ -251,10 +335,53 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # --------------------------------------------------------------------------
+  # Smoke-test — download the published tarball, extract, and run
+  # `node dist/index.js --version`. Asserts the version string matches the
+  # release tag. Runs on ubuntu only because cross-platform verification is
+  # handled by cross-platform-build above; this is the final tarball-integrity
+  # gate before anyone runs `brew install` (L9-H5).
+  # --------------------------------------------------------------------------
+  smoke-test:
+    needs: github-release
+    if: inputs.confirm == 'YES_PUBLISH'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download linux-x64 tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: assignee-${{ inputs.tag }}-linux-x64.tar.gz
+          path: smoke/
+
+      - name: Extract tarball
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/unpacked
+          tar -xzf smoke/assignee-${{ inputs.tag }}-linux-x64.tar.gz -C smoke/unpacked
+
+      - name: Assert CLI runs and prints the release tag
+        run: |
+          set -euo pipefail
+          EXPECTED="${{ inputs.tag }}"
+          # Strip the leading 'v' if the tag is vX.Y.Z; --version prints the
+          # package.json version which omits the v.
+          EXPECTED_STRIPPED="${EXPECTED#v}"
+          cd smoke/unpacked
+          OUTPUT="$(node dist/index.js --version)"
+          echo "assignee --version → $OUTPUT"
+          if ! echo "$OUTPUT" | grep -qE "(^|[^0-9])${EXPECTED_STRIPPED}([^0-9]|$)"; then
+            echo "::error::Tarball version mismatch. Expected ${EXPECTED_STRIPPED}, got: $OUTPUT" >&2
+            exit 1
+          fi
+
+  # --------------------------------------------------------------------------
   # Update Homebrew formula — computes sha256 per arch and patches the tap.
   # --------------------------------------------------------------------------
   update-homebrew:
-    needs: github-release
+    needs: smoke-test
     if: inputs.confirm == 'YES_PUBLISH'
     runs-on: ubuntu-latest
     steps:
