@@ -1,27 +1,19 @@
 /**
- * Error Message Registry — maps error codes and categories to structured,
- * human-friendly messages with WHAT / WHY / HOW-TO-FIX.
+ * Thin re-export shim — canonical implementation lives in
+ * `@assignee/core/utils/error-messages` (Story 50-4 Wave 5 Pass C-2).
  *
- * Extends the existing ErrorHintRegistry (Story 9.6) with richer context.
- * Every user-facing error should flow through this registry to ensure
- * consistent quality and actionable fix suggestions.
- *
- * @see Story 18.3 — Error Message Quality Audit
- *
- * This file is a thin facade over the decomposed module at
- * ./error-messages/. Catalogs, matchers, the ErrorMessageRegistry class,
- * live-context interpolation, sensitive-data redaction and formatting
- * helpers each live in their own SRP-focused module.
+ * The ErrorMessageRegistry + catalogs + matchers + interpolation + redaction
+ * tree moved into @assignee/core so the node/graph tree can consume them
+ * without reaching back into the CLI app.
  */
-
 export type {
   ErrorMessageEntry,
   ErrorResolveContext,
   FormattedError,
-} from "./error-messages/index.js";
+} from "@assignee/core";
 export {
   ErrorMessageRegistry,
   defaultErrorMessageRegistry,
   redactSensitive,
   formatErrorParts,
-} from "./error-messages/index.js";
+} from "@assignee/core";

@@ -39,3 +39,11 @@ export {
   type WarmResult,
   type WarmOptions,
 } from "../services/schema-cache-warmer.js";
+
+// Services — persistent price cache (Story 50-4 Wave 5 Pass C-2)
+export {
+  getCachedPrice,
+  setCachedPrice,
+  sweepExpiredPrices,
+  clearPriceCache,
+} from "../services/price-cache.js";

@@ -19,3 +19,10 @@ export {
   type WarmResult,
   type WarmOptions,
 } from "./schema-cache-warmer.js";
+
+export {
+  getCachedPrice,
+  setCachedPrice,
+  sweepExpiredPrices,
+  clearPriceCache,
+} from "./price-cache.js";
