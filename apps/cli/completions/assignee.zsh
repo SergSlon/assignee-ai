@@ -79,7 +79,6 @@ _assignee() {
           _arguments \
             '--region[AWS region to scan (defaults to AWS_REGION env var)]:region:' \
             '--json[Emit recommendations as JSON instead of a table]' \
-            '--reconcile[Print suggested `assignee plan` commands for each recommendation (operator still runs them manually)]' \
             '--min-savings[Drop recommendations whose projected monthly savings are below this USD threshold (e.g. 10 for ≥$10/mo)]:usd:' \
             '--no-color[Disable color output]'
           ;;

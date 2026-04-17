@@ -5,7 +5,6 @@
  *
  * - `renderTable`: TTY+color boxen view, or plain (CI) view
  * - `renderSummary`: footer line with three message variants
- * - `renderReconcilePlaybook`: copy/paste `assignee plan` commands
  */
 import chalk from "chalk";
 import boxen from "boxen";
@@ -107,37 +106,4 @@ export function renderSummary(
     `\n${analyzed} of ${totalResourcesScanned} resources analyzed, ${recommendations.length} recommendations. ` +
       `Est. total monthly savings: $${totalMonthly.toFixed(2)}/mo\n`,
   );
-}
-
-/**
- * Render the reconcile playbook — a list of suggested `assignee plan`
- * commands the operator can copy/paste to apply the top recommendations.
- *
- * Deliberately does NOT auto-execute anything. Graviton swaps require
- * rebuilding the AMI (EC2) or restoring a snapshot on the new instance
- * class (RDS), both of which are mutation-heavy interactive flows that
- * go through the normal `assignee plan` → `assignee apply` pipeline.
- */
-export function renderReconcilePlaybook(
-  recommendations: CostOptRecommendation[],
-): void {
-  if (recommendations.length === 0) return;
-  process.stdout.write("\nSuggested reconcile commands (copy/paste):\n");
-  for (const r of recommendations) {
-    const shortId = r.resourceArn.split("/").pop() ?? r.resourceArn;
-    const cmd = `  assignee plan "Change ${r.resourceType} ${shortId} from ${r.currentConfig} to ${r.recommendedConfig}"`;
-    process.stdout.write(cmd + "\n");
-  }
-  process.stdout.write(
-    "\nReview each plan carefully before running `assignee apply` — Graviton swaps require AMI rebuild (EC2) or snapshot restore (RDS).\n",
-  );
-}
-
-export function buildReconcilePlaybookLines(
-  recommendations: CostOptRecommendation[],
-): string[] {
-  return recommendations.map((r) => {
-    const shortId = r.resourceArn.split("/").pop() ?? r.resourceArn;
-    return `assignee plan "Change ${r.resourceType} ${shortId} from ${r.currentConfig} to ${r.recommendedConfig}"`;
-  });
 }
