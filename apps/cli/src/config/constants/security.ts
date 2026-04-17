@@ -1,11 +1,5 @@
 /**
- * Security-sensitive constants. Domain sub-module of the former
- * `config/constants.ts` coupling hub (Story 49.5).
+ * Thin re-export shim — canonical implementation lives in
+ * `@assignee/core/config/constants/security` (Story 50-4 Wave 5 Pass C-2).
  */
-
-/** Prototype pollution keys to reject in deep-merge and patch operations. */
-export const PROTO_POLLUTION_KEYS: ReadonlySet<string> = new Set([
-  "__proto__",
-  "constructor",
-  "prototype",
-]);
+export { PROTO_POLLUTION_KEYS } from "@assignee/core";

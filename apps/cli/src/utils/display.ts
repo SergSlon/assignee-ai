@@ -1,22 +1,17 @@
 /**
- * Terminal display layer for Assignee.ai CLI.
+ * Thin re-export shim — canonical implementations live in
+ * `@assignee/core/utils/display` (Story 50-4 Wave 5 Pass C-2).
+ *
  * Owns ALL terminal formatting — no inline chalk in command files.
- *
- * Non-TTY fallback: plain text without ANSI when !process.stdout.isTTY (CI/pipes).
- *
- * This barrel module re-exports everything from the focused sub-modules
- * so that existing imports (`from "../utils/display.js"`) continue to work.
+ * Non-TTY fallback: plain text without ANSI when !process.stdout.isTTY
+ * (CI/pipes).
  */
-
-// ── Re-exports from sub-modules (barrel) ────────────────────────────────────
-
 export {
+  // findings
   formatFindings,
   formatFreeTierNote,
   formatMemoryHints,
-} from "./display-findings.js";
-
-export {
+  // plan
   renderPlanBox,
   formatCostLine,
   formatPricingBreakdown,
@@ -24,9 +19,7 @@ export {
   formatFixValue,
   formatAutoFixHint,
   regionLabel,
-} from "./display-plan.js";
-
-export {
+  // prompts
   renderHitlConfirm,
   renderHitlCompoundConfirm,
   renderApplyNowConfirm,
@@ -37,9 +30,7 @@ export {
   OTHER_SENTINEL,
   REVIEW_SENTINEL,
   runReviewAnswers,
-} from "./display-prompts.js";
-
-export {
+  // output
   renderIntro,
   renderOutro,
   renderError,
@@ -55,28 +46,15 @@ export {
   startSpinner,
   updateSpinner,
   stopSpinner,
-} from "./display-output.js";
-
-export {
+  // docs
   renderDocHelp,
   renderTradeoffHelp,
   fetchDocText,
   synthesizeDocHint,
-} from "./display-docs.js";
-
-// Re-export promptFixSelection from its own module (Story 35.4)
-export {
+  // fix selection
   promptFixSelection,
   type FixSelectionResult,
-} from "./fix-selection.js";
-
-// ── Types & formatting helpers (public API surface) ─────────────────────────
-
-export type {
-  RenderableState,
-  RenderableCompoundQueue,
-} from "./display-helpers/index.js";
-export {
+  // helpers — formatting
   FRIENDLY_NAMES,
   FRIENDLY_NAMES_BY_TYPE,
   SENSITIVE_FIELDS,
@@ -86,4 +64,6 @@ export {
   formatValue,
   formatSpecialValue,
   formatDesiredState,
-} from "./display-helpers/index.js";
+  type RenderableState,
+  type RenderableCompoundQueue,
+} from "@assignee/core";

@@ -133,6 +133,131 @@ export {
   type OtlpLogPayload,
 } from "../telemetry/otel-exporter.js";
 
+// Utils — Display output (non-interactive renderers: spinner, intro/outro,
+// success/error, compound, security, table, status) (Story 50-4 Wave 5 Pass C-2)
+export {
+  startSpinner,
+  updateSpinner,
+  stopSpinner,
+  renderIntro,
+  renderOutro,
+  renderError,
+  renderApplySuccess,
+  renderCompoundSuccess,
+  renderCompoundPartialFailure,
+  renderSecurityWarnings,
+  renderDependencyPlan,
+  renderResourceTable,
+  renderEmptyList,
+  renderStatusSummary,
+  renderEmptyStatus,
+} from "../utils/display-output/index.js";
+export type { StatusData } from "../utils/display-output/status-summary.js";
+
+// Utils — Display helpers (label/value formatting + render state types) (Story 50-4 Wave 5 Pass C-2)
+export type {
+  RenderableState,
+  RenderableCompoundQueue,
+} from "../utils/display-helpers/index.js";
+export {
+  FRIENDLY_NAMES,
+  FRIENDLY_NAMES_BY_TYPE,
+  SENSITIVE_FIELDS,
+  resolveFieldLabel,
+  resolveSetKey,
+  spacePascalCase,
+  formatValue,
+  formatSpecialValue,
+  formatDesiredState,
+} from "../utils/display-helpers/index.js";
+
+// Utils — Display-plan, findings, docs renderers (Story 50-4 Wave 5 Pass C-2)
+export {
+  renderPlanBox,
+  formatCostLine,
+  formatPricingBreakdown,
+  formatAppliedFixes,
+  formatFixValue,
+  formatAutoFixHint,
+  regionLabel,
+} from "../utils/display-plan.js";
+export {
+  formatFindings,
+  formatFreeTierNote,
+  formatMemoryHints,
+  formatAdviceHints,
+} from "../utils/display-findings.js";
+export {
+  renderDocHelp,
+  renderTradeoffHelp,
+  fetchDocText,
+  synthesizeDocHint,
+} from "../utils/display-docs.js";
+
+// Utils — Display prompts (interactive wizard) (Story 50-4 Wave 5 Pass C-2)
+export {
+  BACK_SENTINEL,
+  HELP_SENTINEL,
+  OTHER_SENTINEL,
+  SKIP_SENTINEL,
+  ENTER_VALUE_SENTINEL,
+  REVIEW_SENTINEL,
+  runReviewAnswers,
+  renderHitlConfirm,
+  renderHitlCompoundConfirm,
+  renderAdvancedConfirm,
+  renderApplyNowConfirm,
+  renderOptionPrompt,
+} from "../utils/display-prompts/index.js";
+
+// Utils — ARN resolver (STS-backed account ID lookup + buildResourceArn wrapper) (Story 50-4 Wave 5 Pass C-2)
+export {
+  getOperatorAccountId,
+  getOperatorCallerArn,
+  resetAccountIdCache,
+  resolveResourceArn,
+} from "../utils/resolve-arn.js";
+
+// NOTE: wizard-helpers + field-resolver stayed in CLI for this pass —
+// their tests rely on vi.mock paths rooted under apps/cli. Re-lift is
+// planned alongside Pass D (13-node lift) so nodes + tests move in the
+// same wave.
+
+// Utils — Pricing-lookup fetchers (EC2/RDS/Lambda/CW-Logs) (Story 50-4 Wave 5 Pass C-2)
+export {
+  fetchEc2InstancePrices,
+  fetchRdsInstancePrices,
+  fetchLambdaArchPrices,
+  fetchCwLogsStoragePrice,
+} from "../utils/pricing-lookup.js";
+
+// Utils — Fix command resolver + selection (Story 50-4 Wave 5 Pass C-2)
+export {
+  FixCategory,
+  type FixCategoryType,
+  type FindingAction,
+  resolveAction,
+  countFixable,
+  countAutoFixable,
+} from "../utils/fix-command-resolver.js";
+export {
+  promptFixSelection,
+  type FixSelectionResult,
+  type FixSelectionState,
+} from "../utils/fix-selection.js";
+
+// Utils — Error message registry + catalogs + redaction (Story 50-4 Wave 5 Pass C-2)
+export type {
+  ErrorMessageEntry,
+  ErrorResolveContext,
+  FormattedError,
+} from "../utils/error-messages/index.js";
+export {
+  ErrorMessageRegistry,
+  defaultErrorMessageRegistry,
+  formatErrorParts,
+} from "../utils/error-messages/index.js";
+
 // Utils — Recording interceptor for external-API fixture capture (Story 50-4 Wave 5 Pass A)
 export type {
   McpRecordedCall,

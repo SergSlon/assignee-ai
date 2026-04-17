@@ -1,0 +1,29 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderDependencyPlan — non-TTY mode > snapshot: 5-resource non-TTY output 1`] = `
+"=== Compound Provisioning Plan ===
+Pattern:  Serverless API
+
+Will provision 5 resources in order:
+
+  [1] AWS::IAM::Role
+       Lambda Execution Role
+       ↓
+  [2] AWS::Lambda::Function
+       Lambda Function
+       ↓
+  [3] AWS::DynamoDB::Table
+       DynamoDB Table
+       ↓
+  [4] AWS::ApiGateway::RestApi
+       API Gateway REST API
+       ↓
+  [5] AWS::CloudWatch::Alarm
+       CloudWatch Alarm
+
+Findings:        PASS All checks passed
+
+Region:   us-east-1 (cross-regional inference: us.*)
+==================================
+"
+`;

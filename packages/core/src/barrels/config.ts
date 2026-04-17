@@ -130,6 +130,31 @@ export {
 // Config constants — SaaS/Bedrock model IDs (Story 50-4 Wave 5 Pass C)
 export { BEDROCK_MODEL_ID, SAAS_API_URL } from "../config/constants/saas.js";
 
+// Config constants — prototype-pollution key denylist (Story 50-4 Wave 5 Pass C-2)
+export { PROTO_POLLUTION_KEYS } from "../config/constants/security.js";
+
+// Config constants — timeouts / polling caps / retry intervals (Story 50-4 Wave 5 Pass C-2)
+export {
+  DESTROY_MAX_POLL_ATTEMPTS,
+  DESTROY_POLL_INTERVAL_MS,
+  PRICING_TIMEOUT_MS,
+  SECURITY_CHECK_TIMEOUT_MS,
+  STS_TIMEOUT_MS,
+  TWENTY_FOUR_HOURS_MS,
+  PRICING_LOOKUP_TIMEOUT_MS,
+  ORG_POLICY_FETCH_TIMEOUT_MS,
+  MCP_SHUTDOWN_DELAY_MS,
+  DRIFT_MAX_RETRIES,
+  DRIFT_RETRY_BASE_DELAY_MS,
+  DRIFT_RETRY_JITTER_MS,
+  CLEANUP_SKIP_RECENT_MINUTES,
+  CLEANUP_MAX_AGE_MS,
+  MEMORY_DEDUP_THRESHOLD_MS,
+  MAX_PROVISION_LOOPS,
+  AUTO_CLEANUP_INTERVAL_MS,
+  ORG_POLICY_TTL_MS,
+} from "../config/constants/timeouts.js";
+
 // Constants — AWS docs section titles (Story 50-4 Wave 5 Pass C)
 export { DOC_SECTION_TITLES } from "../constants/doc-sections.js";
 
@@ -145,6 +170,36 @@ export {
   McpCommand,
   type McpServerNameType,
 } from "../constants/mcp.js";
+
+// Constants — MCP tool name registry (Story 50-4 Wave 5 Pass C-2)
+export { ToolName, type ToolNameType } from "../constants/tools.js";
+
+// Constants — CLI command name registry (Story 50-4 Wave 5 Pass C-2)
+export {
+  CommandName,
+  type CommandNameType,
+  CommandDescription,
+  CommandArgs,
+  CommandOptions,
+} from "../constants/commands.js";
+
+// Constants — Process/Error/Content codes (Story 50-4 Wave 5 Pass C-2)
+export {
+  ProcessExitCode,
+  ErrorCode,
+  type ErrorCodeType,
+  ContentType,
+} from "../constants/errors.js";
+
+// Constants — AWS Pricing API filters/terms (Story 50-4 Wave 5 Pass C-2)
+// NOTE: `PricingServiceCode` already exported from `../barrels/pricing.js`.
+export {
+  PricingFilter,
+  PricingTerm,
+  PricingUnit,
+  PricingScale,
+  LambdaPricing,
+} from "../constants/pricing-api.js";
 
 // Config constants — AWS region/credential helpers (Story 50-4 Wave 5 Pass A)
 export { AWS_REGION, CredentialError } from "../config/constants/aws.js";
