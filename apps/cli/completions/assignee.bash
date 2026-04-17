@@ -36,7 +36,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --json --output --concurrency --no-color --verbose --yes" -- "${cur}") )
       ;;
     optimize)
-      COMPREPLY=( $(compgen -W "--region --json --reconcile --min-savings --no-color" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--region --json --min-savings --no-color" -- "${cur}") )
       ;;
     list)
       COMPREPLY=( $(compgen -W "--json --region --total-cost" -- "${cur}") )

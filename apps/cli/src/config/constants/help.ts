@@ -40,6 +40,4 @@ export const EXAMPLES_HINT = `Examples:
   assignee plan "Create an S3 bucket"             Plan a single resource
   assignee plan "Create a serverless API"          Plan a multi-resource architecture
   assignee apply "Create a Lambda function"        Plan and deploy in one step
-  assignee destroy --all --dry-run                 Preview bulk destruction
-  assignee clean --resources                       Remove stale e2e/test resources
   assignee drift                                   Check all resources for drift`;

@@ -5,7 +5,6 @@
 export interface OptimizeOpts {
   region?: string;
   json?: boolean;
-  reconcile?: boolean;
   minSavings?: string;
   color?: boolean;
 }

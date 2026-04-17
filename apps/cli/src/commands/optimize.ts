@@ -23,10 +23,6 @@ export const optimizeCommand = new Command("optimize")
   )
   .option("--json", "Emit recommendations as JSON instead of a table")
   .option(
-    "--reconcile",
-    "Print suggested `assignee plan` commands for each recommendation (operator still runs them manually)",
-  )
-  .option(
     "--min-savings <usd>",
     "Drop recommendations whose projected monthly savings are below this USD threshold (e.g. 10 for ≥$10/mo)",
   )
@@ -41,8 +37,6 @@ Examples:
         Only show recommendations projecting ≥$10/mo savings
   $ assignee optimize <arn> --json
         Machine-readable output for a single resource
-  $ assignee optimize --reconcile
-        Print the \`assignee plan\` commands that would implement each recommendation
 
 optimize is read-only — it prints recommendations but never mutates AWS
 state. Apply changes via \`assignee plan\` / \`assignee apply\`; no --yes

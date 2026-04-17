@@ -58,7 +58,6 @@ complete -c assignee -n "__fish_seen_subcommand_from drift" -l yes -s y -d 'Acce
 # Options for 'optimize'
 complete -c assignee -n "__fish_seen_subcommand_from optimize" -l region -r -d 'AWS region to scan (defaults to AWS_REGION env var)'
 complete -c assignee -n "__fish_seen_subcommand_from optimize" -l json -d 'Emit recommendations as JSON instead of a table'
-complete -c assignee -n "__fish_seen_subcommand_from optimize" -l reconcile -d 'Print suggested `assignee plan` commands for each recommendation (operator still runs them manually)'
 complete -c assignee -n "__fish_seen_subcommand_from optimize" -l min-savings -r -d 'Drop recommendations whose projected monthly savings are below this USD threshold (e.g. 10 for ≥$10/mo)'
 complete -c assignee -n "__fish_seen_subcommand_from optimize" -l no-color -d 'Disable color output'
 
