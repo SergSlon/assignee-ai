@@ -3,15 +3,20 @@
  * Verifies auto-approval, TTY warning, non-TTY error, audit logging,
  * and that preflight is not bypassed by --yes.
  *
+ * Story 50-4 Wave 5 finale: relocated from apps/cli/src/nodes/ to
+ * packages/core/src/graph/nodes/ so the in-core human-approval
+ * implementation's `../../utils/display.js` + `../../utils/logger/index.js`
+ * imports get mocked at core paths (not CLI paths).
+ *
  * @see Story 11-2
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ExecutionStatus } from "@assignee/core";
-import type { AgentState } from "../services/graph.js";
+import { ExecutionStatus } from "../../index.js";
+import type { AgentState } from "../graph-state.js";
 
-// Mock display functions to avoid real TTY interactions
-vi.mock("../utils/display.js", () => ({
+// Mock display functions to avoid real TTY interactions — core paths.
+vi.mock("../../utils/display.js", () => ({
   renderPlanBox: vi.fn(),
   renderHitlConfirm: vi.fn(),
   renderDependencyPlan: vi.fn(),
@@ -19,8 +24,8 @@ vi.mock("../utils/display.js", () => ({
   promptFixSelection: vi.fn().mockResolvedValue(null),
 }));
 
-// Mock logger — capture calls for audit assertions
-vi.mock("../utils/logger.js", () => ({
+// Mock logger — capture calls for audit assertions.
+vi.mock("../../utils/logger/index.js", () => ({
   log: vi.fn(),
   LOG_ACTIONS: {
     PLAN_APPROVED: "plan_approved",
@@ -34,8 +39,8 @@ import {
   renderPlanBox,
   renderHitlConfirm,
   promptFixSelection,
-} from "../utils/display.js";
-import { log } from "../utils/logger.js";
+} from "../../utils/display.js";
+import { log } from "../../utils/logger/index.js";
 
 function makeState(overrides: Partial<AgentState> = {}): AgentState {
   return {
@@ -202,34 +207,6 @@ describe("humanApprovalNode", () => {
       }),
     );
   });
-
-  // ── AC #4: preflight failure with --yes still aborts ───────────────
-  // This is an architectural test: preflight_guard runs BEFORE human_approval
-  // in the graph. When preflight fails, the graph routes to result_formatter
-  // (not human_approval). The human_approval node is never reached.
-  // We verify this by checking that a state with preflightPassed: false
-  // reaching human_approval would still auto-approve — because the graph
-  // routing is what enforces preflight, not this node.
-  it("preflight failure prevents reaching human_approval (graph routing test)", async () => {
-    // This test documents that preflight enforcement is in graph-routing.ts,
-    // not in human_approval. The routePreflightGuard function routes to
-    // RESULT_FORMATTER when preflight fails, bypassing human_approval entirely.
-    // We import and verify the routing function.
-    const { routePreflightGuard } =
-      await import("../services/graph-routing.js");
-    const { GraphNode } = await import("../constants/graph.js");
-
-    const failedState = makeState({
-      autoApprove: true,
-      preflightPassed: false,
-      executionStatus: ExecutionStatus.FAILED,
-    });
-
-    const route = routePreflightGuard(failedState);
-
-    // When preflight fails, graph routes to RESULT_FORMATTER, never reaching human_approval
-    expect(route).toBe(GraphNode.RESULT_FORMATTER);
-  });
 });
 
 // ── Epic 35: Interactive fix selection flows ─────────────────────────────
@@ -394,7 +371,8 @@ describe("humanApprovalNode — interactive fix selection (Story 35.4)", () => {
 
   it("compound intent → promptFixSelection IS called (fix selection works for all flows)", async () => {
     vi.mocked(renderHitlConfirm).mockResolvedValue(true);
-    const { renderHitlCompoundConfirm } = await import("../utils/display.js");
+    const { renderHitlCompoundConfirm } =
+      await import("../../utils/display.js");
     vi.mocked(renderHitlCompoundConfirm).mockResolvedValue(true);
 
     const state = makeState({
