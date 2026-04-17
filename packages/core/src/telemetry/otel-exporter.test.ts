@@ -14,7 +14,7 @@ import {
   DEFAULT_OTEL_SERVICE_NAME,
   OTLP_LOGS_PATH,
 } from "./otel-exporter.js";
-import type { LogEvent } from "../utils/logger.js";
+import type { LogEvent } from "../utils/logger/index.js";
 
 const ORIGINAL_ENV = { ...process.env };
 

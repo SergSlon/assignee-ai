@@ -1,7 +1,8 @@
 /**
  * RecordingInterceptor — session-store for captured calls.
  *
- * Extracted from recorder.ts (Wave 6d F5). Applies redaction per
+ * Lifted from `apps/cli/src/utils/recorder/session.ts` in Story 50-4
+ * Wave 5 Pass A. Applies redaction per
  * feedback_redaction_allowlist_not_denylist before persisting any call.
  */
 import * as fs from "node:fs";

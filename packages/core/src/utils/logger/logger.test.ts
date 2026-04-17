@@ -22,8 +22,8 @@ import {
   resolveLogRetentionDays,
   DEFAULT_LOG_RETENTION_DAYS,
   LOG_PRUNE_MARKER,
-} from "./logger.js";
-import type { LogEvent } from "./logger.js";
+} from "./index.js";
+import type { LogEvent } from "./index.js";
 
 describe("logger", () => {
   let stderrSpy: MockInstance;

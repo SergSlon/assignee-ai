@@ -1,6 +1,8 @@
 /**
  * Recorded-call shapes + manifest type.
- * Extracted from recorder.ts (Wave 6d F5).
+ *
+ * Lifted from `apps/cli/src/utils/recorder/types.ts` in Story 50-4
+ * Wave 5 Pass A.
  */
 
 export interface McpRecordedCall {

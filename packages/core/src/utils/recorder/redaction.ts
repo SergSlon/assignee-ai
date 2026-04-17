@@ -1,13 +1,21 @@
 /**
  * Sensitive-data redaction for recorded fixtures.
  *
- * Extracted from recorder.ts (Wave 6d F5). Preserves
- * feedback_redaction_allowlist_not_denylist: the key list is an explicit
- * allowlist of known-credential fields, NOT a regex denylist that could
- * over-match innocuous keys. The substring scrubbers (access-key pattern
- * and IAM ARN pattern) are narrowly scoped.
+ * Lifted from `apps/cli/src/utils/recorder/redaction.ts` in Story 50-4
+ * Wave 5 Pass A. Preserves feedback_redaction_allowlist_not_denylist:
+ * the key list is an explicit allowlist of known-credential fields,
+ * NOT a regex denylist that could over-match innocuous keys. The
+ * substring scrubbers (access-key pattern and IAM ARN pattern) are
+ * narrowly scoped.
+ *
+ * NOTE: exports `redactSensitive` — this is the KEY-ALLOWLIST redactor
+ * used by the recorder. The ARN/account-ID redactor (also named
+ * `redactSensitive`) lives in `packages/core/src/utils/redact.ts` and
+ * is re-exported from the root `@assignee/core` barrel. Both functions
+ * share a name but serve orthogonal purposes and never collide because
+ * they are in different sub-modules.
  */
-import { CfnKey } from "@assignee/core";
+import { CfnKey } from "../../config/cfn-keys.js";
 
 /**
  * Keys whose values must be redacted from recorded fixtures.

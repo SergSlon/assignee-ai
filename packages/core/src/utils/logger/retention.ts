@@ -1,6 +1,8 @@
 /**
  * Log retention: prune old daily log files based on a rolling day window.
- * Extracted from logger.ts (Wave 6d F5).
+ *
+ * Lifted from `apps/cli/src/utils/logger/retention.ts` in Story 50-4
+ * Wave 5 Pass A.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";

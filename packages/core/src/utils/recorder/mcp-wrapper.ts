@@ -1,6 +1,8 @@
 /**
  * StructuredTool wrapper that forwards MCP invocations to a RecordingInterceptor.
- * Extracted from recorder.ts (Wave 6d F5).
+ *
+ * Lifted from `apps/cli/src/utils/recorder/mcp-wrapper.ts` in Story 50-4
+ * Wave 5 Pass A.
  */
 import type { StructuredTool } from "@langchain/core/tools";
 import type { RecordingInterceptor } from "./session.js";

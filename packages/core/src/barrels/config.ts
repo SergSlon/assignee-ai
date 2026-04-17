@@ -74,6 +74,12 @@ export {
 // Constants — AWS SDK error name strings (Story 50-4 Wave 5.1)
 export { AwsErrorName } from "../constants/aws-error-names.js";
 
+// Constants — Environment variable name registry (Story 50-4 Wave 5 Pass A)
+export { EnvVar } from "../constants/env-vars.js";
+
+// Config constants — AWS region/credential helpers (Story 50-4 Wave 5 Pass A)
+export { AWS_REGION, CredentialError } from "../config/constants/aws.js";
+
 // Config — shared ARN parsing helpers (Wave 3 P2-2 dedup).
 // NOTE: `isArn` is ALSO exported from `./config/arn-builder.js` above for
 // backward compatibility — both exports resolve to the same implementation.
