@@ -10,7 +10,7 @@ import {
   ThrottlingException,
   GeneralServiceException,
 } from "@aws-sdk/client-cloudcontrol";
-import { ProvisioningErrorKind } from "./provisioning-port.js";
+import { ProvisioningErrorKind } from "../ports/provisioning-port.js";
 import { CloudControlAdapter } from "./cloudcontrol-adapter.js";
 
 function createMockClient() {

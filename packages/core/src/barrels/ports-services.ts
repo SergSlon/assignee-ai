@@ -3,6 +3,27 @@ export type { LlmPort, LlmCallOptions } from "../ports/llm-port.js";
 // NOTE: MockLlmAdapter moved to `@assignee/core/testing` sub-path export
 // (Story 50-4) so production code never pulls in test doubles.
 
+// LLM provider identifiers (Story 50-4 Wave 5.1).
+// Concrete LlmAdapter remains in apps/cli pending future-wave lifts of
+// the dep closure (AWS_REGION, EnvVar, recordTokenUsage, logger). Apps
+// that need to construct an LlmPort instance still reach into the CLI.
+export {
+  LlmProvider,
+  type LlmProviderType,
+} from "../constants/llm-providers.js";
+
+// ProvisioningPort — abstracts CloudControl SDK operations (Story 50-4 Wave 5.1)
+export {
+  ProvisioningErrorKind,
+  type ProvisioningErrorKindType,
+  type ProvisioningPort,
+  type ProvisioningPortError,
+  type CreateResourceResult,
+  type DeleteResourceResult,
+  type UpdateResourceResult,
+  type GetRequestStatusResult,
+} from "../ports/provisioning-port.js";
+
 // Services — CloudFormation schema fetching (Story 31.1, 31.2)
 export {
   CloudFormationSchemaService,

@@ -50,19 +50,17 @@ export const ErrorCode = {
 } as const;
 
 /**
- * LLM provider identifiers used in model string parsing and routing.
+ * LLM provider identifiers — re-exported from `@assignee/core/llm`.
+ *
+ * Lifted in Story 50-4 Wave 5.1 so the in-core LLM model parser /
+ * Bedrock region helper can use them without reaching back into the
+ * CLI app. This file keeps the export so existing CLI code paths
+ * continue to import `LlmProvider` / `LlmProviderType` from
+ * `../constants/errors.js`.
  *
  * @see Story 42.10 — zero magic strings policy
  */
-export const LlmProvider = {
-  BEDROCK: "bedrock",
-  ANTHROPIC: "anthropic",
-  OPENAI: "openai",
-  GOOGLE: "google",
-  OLLAMA: "ollama",
-} as const;
-
-export type LlmProviderType = (typeof LlmProvider)[keyof typeof LlmProvider];
+export { LlmProvider, type LlmProviderType } from "@assignee/core/llm";
 
 /**
  * MIME content type constants used in HTTP headers and S3 uploads.

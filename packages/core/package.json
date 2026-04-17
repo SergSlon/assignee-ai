@@ -19,6 +19,14 @@
     "./checkpoint": {
       "import": "./dist/checkpoint/index.js",
       "types": "./dist/checkpoint/index.d.ts"
+    },
+    "./aws": {
+      "import": "./dist/aws/index.js",
+      "types": "./dist/aws/index.d.ts"
+    },
+    "./llm": {
+      "import": "./dist/llm/index.js",
+      "types": "./dist/llm/index.d.ts"
     }
   },
   "files": [
@@ -66,8 +74,14 @@
     "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
+    "@ai-sdk/amazon-bedrock": "^4.0.77",
+    "@ai-sdk/anthropic": "^3.0.63",
+    "@ai-sdk/google": "^3.0.52",
+    "@ai-sdk/openai": "^3.0.47",
+    "@aws-sdk/client-cloudcontrol": "^3.1009.0",
     "@aws-sdk/client-cloudformation": "^3.1015.0",
     "@aws-sdk/client-ec2": "^3.1015.0",
+    "ai": "^6.0.116",
     "zod": "^3.24.0"
   },
   "devDependencies": {
