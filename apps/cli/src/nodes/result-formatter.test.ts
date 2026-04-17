@@ -43,7 +43,7 @@ vi.mock("@clack/prompts", () => ({
 const _s3Mocks = vi.hoisted(() => ({
   uploadStaticSite: vi.fn(),
   configureBucketPolicy: vi.fn(),
-  getMimeType: vi.fn((p: string) => "text/plain"),
+  getMimeType: vi.fn((_p: string) => "text/plain"),
   collectFiles: vi.fn(() => []),
 }));
 vi.mock("../services/s3-upload.js", () => _s3Mocks);
