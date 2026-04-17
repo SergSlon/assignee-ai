@@ -8,7 +8,7 @@ import {
   DescribeInstanceTypesCommand,
   type InstanceTypeInfo,
 } from "@aws-sdk/client-ec2";
-import { WorkloadProfile as WP } from "../../constants/workload-profiles.js";
+import { WorkloadProfileKey as WP } from "../../config/cfn-keys.js";
 import { withTimeout } from "../timeout.js";
 import { createEc2Client } from "./clients.js";
 import { categorizeFamily } from "./categorize.js";

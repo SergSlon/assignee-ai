@@ -3,8 +3,8 @@
  * the pre-decomposition monolith at apps/cli/src/utils/aws-resource-discovery.ts.
  */
 
-// Re-export DiscoveryCacheKey from core (consumers import it from this module)
-export { DiscoveryCacheKey } from "@assignee/core";
+// Re-export DiscoveryCacheKey so CLI callers can still import from this barrel
+export { DiscoveryCacheKey } from "../../config/discovery-keys.js";
 
 export type { DiscoveryOption, InstanceTypeCategory } from "./types.js";
 

@@ -5,9 +5,10 @@
 
 import { DescribeImagesCommand } from "@aws-sdk/client-ec2";
 import { GetParameterCommand } from "@aws-sdk/client-ssm";
-import { AmiOs, DiscoveryCacheKey } from "@assignee/core";
+import { AmiOs } from "../../config/cfn-keys.js";
+import { DiscoveryCacheKey } from "../../config/discovery-keys.js";
 import { withTimeout } from "../timeout.js";
-import { PromiseStatus } from "../../config/constants.js";
+import { PromiseStatus } from "../../config/constants/enums.js";
 import { cachedDiscover } from "./cache.js";
 import { createEc2Client, createSsmClient } from "./clients.js";
 import { DISCOVERY_TIMEOUT_MS, type DiscoveryOption } from "./types.js";

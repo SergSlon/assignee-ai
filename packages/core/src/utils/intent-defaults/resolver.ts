@@ -3,8 +3,8 @@
  * a resource-type + user-intent pair, producing field overrides.
  */
 
-import { CfnKey } from "@assignee/core";
-import type { ResourceField } from "@assignee/core";
+import { CfnKey } from "../../config/cfn-keys.js";
+import type { ResourceField } from "../../resource-plugins/types.js";
 import type { IntentDefaultOverride } from "./types.js";
 import { INTENT_RULES } from "./registry.js";
 

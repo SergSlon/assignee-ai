@@ -3,7 +3,7 @@
  * category for the two-step category select UX.
  */
 
-import { WorkloadProfile as WP } from "../../constants/workload-profiles.js";
+import { WorkloadProfileKey as WP } from "../../config/cfn-keys.js";
 
 export function categorizeFamily(family: string): {
   key: string;
