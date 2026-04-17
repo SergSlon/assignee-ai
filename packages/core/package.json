@@ -27,6 +27,14 @@
     "./llm": {
       "import": "./dist/llm/index.js",
       "types": "./dist/llm/index.d.ts"
+    },
+    "./graph/graph-state.js": {
+      "import": "./dist/graph/graph-state.js",
+      "types": "./dist/graph/graph-state.d.ts"
+    },
+    "./graph/nodes/*.js": {
+      "import": "./dist/graph/nodes/*.js",
+      "types": "./dist/graph/nodes/*.d.ts"
     }
   },
   "files": [
@@ -87,6 +95,7 @@
     "@aws-sdk/client-sts": "^3.1015.0",
     "@clack/prompts": "^1.1.0",
     "@langchain/core": "^1.1.32",
+    "@langchain/langgraph": "^1.2.2",
     "ai": "^6.0.116",
     "boxen": "^8.0.1",
     "chalk": "^5.6.2",
