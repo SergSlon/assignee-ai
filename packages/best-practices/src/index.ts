@@ -1,17 +1,14 @@
 export { loadBestPractices, BPSchemaError, SKIP_DIRS } from "./loader.js";
+// Story 50-3: GPG signing surface removed (verifyManifest,
+// verifyManifestSignature, ManifestVerifyResult, ManifestSignatureResult).
+// Only the in-tree SHA-256 manifest helpers remain — they power the
+// `scripts/generate-manifest.ts` release tool and doctor's hash check.
 export {
   computeFreshness,
   computeManifest,
-  verifyManifest,
-  verifyManifestSignature,
   DEFAULT_STALE_THRESHOLD_DAYS,
 } from "./integrity.js";
-export type {
-  BPFreshness,
-  BPManifest,
-  ManifestVerifyResult,
-  ManifestSignatureResult,
-} from "./integrity.js";
+export type { BPFreshness, BPManifest } from "./integrity.js";
 export { bestPracticeSchema } from "./schema.js";
 export { evaluateTriggers } from "./evaluate.js";
 export type { EvalContext } from "./evaluate.js";

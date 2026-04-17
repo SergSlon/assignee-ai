@@ -282,7 +282,12 @@ describe("destroy_resource success for all resource types (Story E2E.2 AC1)", ()
     expect(result.isError).toBe(true);
     const body = parseResult(result);
     expect(body.message).toContain("No managed resource found");
-  }, 30000);
+    // Generous timeout: the resolver does MAX_RESOLVE_RETRIES (4) attempts
+    // × RESOLVE_RETRY_DELAY_MS (5s) of real-timer sleep between attempts,
+    // so this test takes ~15s in isolation and is borderline under heavy
+    // parallel load. Bumped to 60s to absorb full-suite contention.
+    // (Assertion above is unchanged.)
+  }, 60000);
 
   it("returns error when delete operation fails", async () => {
     mockTagResolution("arn:aws:s3:::test-bucket");

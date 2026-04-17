@@ -13,7 +13,7 @@ import {
   PutBucketPolicyCommand,
 } from "@aws-sdk/client-s3";
 import { readFileSync, readdirSync } from "node:fs";
-import { join, relative, extname } from "node:path";
+import { join, relative, extname, sep as pathSep } from "node:path";
 import {
   ConfigurationError,
   IamEffect,
@@ -193,7 +193,14 @@ export async function uploadStaticSite(
 
   for (let i = 0; i < allFiles.length; i++) {
     const filePath = allFiles[i]!;
-    const key = relative(sourceDir, filePath).split("\\").join("/"); // normalise Windows paths
+    // Story 50-2: use path.sep (runtime platform separator) instead of the
+    // hard-coded "\\" literal. On POSIX hosts path.sep === "/", so the
+    // split is a no-op (identity). On Windows hosts path.sep === "\\",
+    // so the replacement still converts backslashes → forward slashes.
+    // Literal "\\" only matched on Windows, which is what the original
+    // comment intended, but a Windows user with a bind-mounted POSIX
+    // drive would have produced the wrong result.
+    const key = relative(sourceDir, filePath).split(pathSep).join("/");
     const contentType = getMimeType(filePath);
 
     try {

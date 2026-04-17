@@ -96,8 +96,6 @@ defaults:
     prefix: mycompany-
 preferences:
   auto_fix: ask
-  output_format: table
-  verbosity: normal
 ```
 
 ### Org Policy
@@ -127,11 +125,13 @@ org_policy:
 
 ### `preferences` Section
 
-| Key                         | Type | Default  | Description                                            |
-| --------------------------- | ---- | -------- | ------------------------------------------------------ |
-| `preferences.auto_fix`      | enum | `ask`    | How to handle BP auto-fixes: `ask`, `apply`, or `skip` |
-| `preferences.output_format` | enum | `table`  | Output format: `table` or `json`                       |
-| `preferences.verbosity`     | enum | `normal` | Verbosity: `quiet`, `normal`, or `verbose`             |
+| Key                    | Type | Default | Description                                            |
+| ---------------------- | ---- | ------- | ------------------------------------------------------ |
+| `preferences.auto_fix` | enum | `ask`   | How to handle BP auto-fixes: `ask`, `apply`, or `skip` |
+
+> Story 50-7 removed `preferences.output_format` and `preferences.verbosity`
+> — no CLI command branched on those keys (`ASSIGNEE_VERBOSITY=verbose`
+> still works via the logger's direct env read).
 
 ### `bestPractices` Section (planned -- not yet implemented)
 

@@ -1,25 +1,19 @@
 /**
  * Tests for bp_evaluator node (Story 12.3).
+ *
  * Verifies that the node evaluates best practices against resource config
- * and stores findings in graph state.
+ * and stores findings in graph state. Story 50-3 removed the integrity /
+ * strict-mode enforcement path (GPG signing layer was supply-chain theatre);
+ * those tests moved out with the feature.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  type MockInstance,
-} from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { BestPractice } from "@assignee/best-practices";
 import type { AgentState } from "../services/graph.js";
 
-// Mock loadBestPractices to return controlled fixtures. verifyManifest and
-// computeManifest are also mocked so integrity-mode tests can simulate
-// tampering / TOFU / missing reference scenarios without touching the real
-// packaged manifest.
+// Mock loadBestPractices to return controlled fixtures. computeFreshness
+// is also mocked so the freshness warning path never touches the real
+// packaged manifest in unit tests.
 vi.mock("@assignee/best-practices", async (importOriginal) => {
   const actual =
     (await importOriginal()) as typeof import("@assignee/best-practices");
@@ -33,14 +27,6 @@ vi.mock("@assignee/best-practices", async (importOriginal) => {
       isStale: false,
       staleThresholdDays: 180,
     })),
-    computeManifest: vi.fn(() => ({
-      version: 1 as const,
-      hash: "a".repeat(64),
-      files: { "s3/BP-S3-001.yaml": "a".repeat(64) },
-      count: 1,
-      generatedAt: new Date().toISOString(),
-    })),
-    verifyManifest: vi.fn(() => ({ valid: true })),
   };
 });
 
@@ -54,14 +40,8 @@ vi.mock("../utils/logger.js", () => ({
   },
 }));
 
-import {
-  bpEvaluatorNode,
-  resetBPCache,
-  BpIntegrityError,
-  BpIntegrityMode,
-  resolveBpIntegrityMode,
-} from "./bp-evaluator.js";
-import { loadBestPractices, verifyManifest } from "@assignee/best-practices";
+import { bpEvaluatorNode, resetBPCache } from "./bp-evaluator.js";
+import { loadBestPractices } from "@assignee/best-practices";
 
 const S3_VERSIONING_BP: BestPractice = {
   id: "BP-S3-001",
@@ -149,9 +129,6 @@ describe("bpEvaluatorNode", () => {
 
     const result = await bpEvaluatorNode(state);
 
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
     expect(Array.isArray(result.bpFindings)).toBe(true);
     expect(result.bpFindings).toHaveLength(0);
   });
@@ -171,9 +148,6 @@ describe("bpEvaluatorNode", () => {
 
     const result = await bpEvaluatorNode(state);
 
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
     expect(Array.isArray(result.bpFindings)).toBe(true);
     expect(result.bpFindings).toHaveLength(2);
 
@@ -192,9 +166,6 @@ describe("bpEvaluatorNode", () => {
 
     const result = await bpEvaluatorNode(state);
 
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
     expect(Array.isArray(result.bpFindings)).toBe(true);
     expect(result.bpFindings).toHaveLength(0);
   });
@@ -224,483 +195,5 @@ describe("bpEvaluatorNode", () => {
 
     // Should only load once due to caching
     expect(loadBestPractices).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("BP integrity mode resolution (H18)", () => {
-  const originalEnv = { ...process.env };
-
-  beforeEach(() => {
-    process.env = { ...originalEnv };
-    resetBPCache();
-  });
-
-  it("returns 'enforce' when ASSIGNEE_BP_INTEGRITY=enforce", () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    expect(resolveBpIntegrityMode()).toBe(BpIntegrityMode.ENFORCE);
-  });
-
-  it("returns 'warn' when ASSIGNEE_BP_INTEGRITY=warn", () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "warn";
-    expect(resolveBpIntegrityMode()).toBe(BpIntegrityMode.WARN);
-  });
-
-  it("returns 'disabled' when ASSIGNEE_BP_INTEGRITY=disabled", () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "disabled";
-    expect(resolveBpIntegrityMode()).toBe(BpIntegrityMode.DISABLED);
-  });
-
-  it("defaults to 'warn' when NODE_ENV=test and no explicit override", () => {
-    delete process.env["ASSIGNEE_BP_INTEGRITY"];
-    process.env["NODE_ENV"] = "test";
-    expect(resolveBpIntegrityMode()).toBe(BpIntegrityMode.WARN);
-  });
-
-  it("defaults to 'enforce' when NODE_ENV is production-like", () => {
-    delete process.env["ASSIGNEE_BP_INTEGRITY"];
-    process.env["NODE_ENV"] = "production";
-    expect(resolveBpIntegrityMode()).toBe(BpIntegrityMode.ENFORCE);
-  });
-});
-
-describe("BP integrity enforcement (H18)", () => {
-  const originalEnv = { ...process.env };
-  let stderrSpy: MockInstance;
-
-  beforeEach(() => {
-    process.env = { ...originalEnv };
-    vi.clearAllMocks();
-    resetBPCache();
-    vi.mocked(loadBestPractices).mockReturnValue([S3_VERSIONING_BP]);
-    stderrSpy = vi
-      .spyOn(process.stderr, "write")
-      .mockImplementation(() => true);
-  });
-
-  afterEach(() => {
-    stderrSpy.mockRestore();
-    process.env = { ...originalEnv };
-  });
-
-  it("ENFORCE mode: throws BpIntegrityError on hash mismatch", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: false,
-      reason:
-        "BP library hash mismatch (expected abc…, got def…). 1 file(s) differ.",
-      mismatchedFiles: ["s3/BP-S3-001.yaml"],
-    });
-
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      BpIntegrityError,
-    );
-  });
-
-  it("ENFORCE mode: throws when reference manifest is missing (TOFU)", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: false,
-      reason:
-        "No reference manifest found at /tmp/fake/manifest.json. Refusing to trust BP library in strict mode.",
-      trustOnFirstUse: true,
-    });
-
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      /No reference manifest/,
-    );
-  });
-
-  it("WARN mode: does NOT throw on hash mismatch, writes stderr warning", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "warn";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: false,
-      reason: "BP library hash mismatch",
-      mismatchedFiles: ["s3/BP-S3-001.yaml"],
-    });
-
-    const result = await bpEvaluatorNode(makeState());
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
-    expect(Array.isArray(result.bpFindings)).toBe(true);
-    expect(stderrSpy).toHaveBeenCalled();
-    const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(messages).toContain("BP manifest integrity check failed");
-  });
-
-  it("WARN mode: emits loud TOFU warning when manifest missing", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "warn";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: true,
-      reason: "No reference manifest (trust-on-first-use)",
-      trustOnFirstUse: true,
-    });
-
-    await bpEvaluatorNode(makeState());
-    const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(messages).toContain("trust-on-first-use");
-    expect(messages).toContain("ASSIGNEE_BP_INTEGRITY=enforce");
-  });
-
-  it("DISABLED mode: never calls verifyManifest and never throws", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "disabled";
-    vi.mocked(verifyManifest).mockImplementation(() => {
-      throw new Error("should not be called");
-    });
-
-    const result = await bpEvaluatorNode(makeState());
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
-    expect(Array.isArray(result.bpFindings)).toBe(true);
-    expect(verifyManifest).not.toHaveBeenCalled();
-  });
-
-  it("ENFORCE mode: passes through cleanly when manifest matches", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    vi.mocked(verifyManifest).mockReturnValue({ valid: true });
-
-    const result = await bpEvaluatorNode(makeState());
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
-    expect(Array.isArray(result.bpFindings)).toBe(true);
-  });
-
-  // REG-N3 regression: cache MUST NOT be populated when the integrity check
-  // throws. The previous version assigned `cachedPractices = loadBestPractices()`
-  // BEFORE the integrity check, so a tampered manifest blocked only the FIRST
-  // call in a process — every subsequent call returned the cached, unverified
-  // rules. Defeats enforce mode after the first failure.
-  it("ENFORCE mode: re-throws on every call with a tampered manifest (no cache poisoning)", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: false,
-      reason: "BP library hash mismatch",
-      mismatchedFiles: ["s3/BP-S3-001.yaml"],
-    });
-
-    // Call #1 — must throw
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      BpIntegrityError,
-    );
-    // Call #2 — MUST also throw. If cache was poisoned, the next call would
-    // silently succeed and return unverified rules.
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      BpIntegrityError,
-    );
-    // Call #3 — even after multiple failures, still throws.
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      BpIntegrityError,
-    );
-    // verifyManifest must have been called every time (i.e. the check
-    // actually re-ran rather than being short-circuited by a stale cache).
-    expect(vi.mocked(verifyManifest).mock.calls.length).toBeGreaterThanOrEqual(
-      3,
-    );
-  });
-
-  // ── Part 1: GPG signature enforcement (additive to hash check) ─────
-  //
-  // These tests verify the new ASSIGNEE_BP_REQUIRE_SIGNATURE env var +
-  // signature result wiring in bp-evaluator. They use the existing mocked
-  // verifyManifest to synthesize signature states.
-
-  it("ENFORCE mode: warns once when manifest is unsigned (no REQUIRE_SIGNATURE)", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    delete process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"];
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: true,
-      signature: {
-        verified: false,
-        signedByKey: null,
-        signaturePresent: false,
-        reason: "signature file missing",
-      },
-    });
-
-    const result = await bpEvaluatorNode(makeState());
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
-    expect(Array.isArray(result.bpFindings)).toBe(true);
-    const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(messages).toContain("BP manifest is unsigned");
-    expect(messages).toContain("ASSIGNEE_BP_REQUIRE_SIGNATURE");
-  });
-
-  it("ENFORCE mode + REQUIRE_SIGNATURE: throws when manifest is unsigned", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"] = "1";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: true,
-      signature: {
-        verified: false,
-        signedByKey: null,
-        signaturePresent: false,
-        reason: "signature file missing",
-      },
-    });
-
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      /unsigned but ASSIGNEE_BP_REQUIRE_SIGNATURE/,
-    );
-  });
-
-  it("ENFORCE mode: throws BpIntegrityError when signature is INVALID (always fatal)", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    // Even WITHOUT REQUIRE_SIGNATURE, an invalid signature is always fatal:
-    // it means someone tampered with the manifest after signing.
-    delete process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"];
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: true, // hash matches — attacker also updated manifest.json
-      signature: {
-        verified: false,
-        signedByKey: "AABBCCDDEEFF0011", // real-shaped key id
-        signaturePresent: true,
-        reason: "signature invalid",
-      },
-    });
-
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      /signature is INVALID/,
-    );
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      /AABBCCDDEEFF0011/,
-    );
-  });
-
-  it("ENFORCE mode: accepts a valid signature cleanly", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"] = "1";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: true,
-      signature: {
-        verified: true,
-        signedByKey: "A1B2C3D4E5F60718", // 16-char long key id
-        signaturePresent: true,
-      },
-    });
-
-    const result = await bpEvaluatorNode(makeState());
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
-    expect(Array.isArray(result.bpFindings)).toBe(true);
-  });
-
-  it("ENFORCE mode + REQUIRE_SIGNATURE: throws when gpg is not available", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"] = "1";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: true,
-      signature: {
-        verified: false,
-        signedByKey: null,
-        signaturePresent: true,
-        reason: "gpg not available",
-      },
-    });
-
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      /GPG is not installed/,
-    );
-  });
-
-  it("ENFORCE mode without REQUIRE_SIGNATURE: tolerates missing gpg binary with a warning", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    delete process.env["ASSIGNEE_BP_REQUIRE_SIGNATURE"];
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: true,
-      signature: {
-        verified: false,
-        signedByKey: null,
-        signaturePresent: true,
-        reason: "gpg not available",
-      },
-    });
-
-    const result = await bpEvaluatorNode(makeState());
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
-    expect(Array.isArray(result.bpFindings)).toBe(true);
-    const messages = stderrSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(messages).toContain("GPG is not installed");
-  });
-
-  // REG-N3 regression: once a tampered manifest is "fixed" (verifier
-  // returns valid), the cache should THEN populate and the rules become
-  // available. Verifies the recovery path.
-  it("ENFORCE mode: recovers when manifest is repaired between calls", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: false,
-      reason: "BP library hash mismatch",
-      mismatchedFiles: ["s3/BP-S3-001.yaml"],
-    });
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      BpIntegrityError,
-    );
-
-    // Repair the manifest.
-    vi.mocked(verifyManifest).mockReturnValue({ valid: true });
-    const result = await bpEvaluatorNode(makeState());
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
-    expect(Array.isArray(result.bpFindings)).toBe(true);
-  });
-});
-
-// L-A7 regression: success-path evaluations log with BP_EVALUATED, while
-// failure-path/skipped logging uses the new BP_EVALUATION_SKIPPED action so
-// log scrapers and metrics can distinguish the two cases.
-describe("BP log action separation (L-A7)", () => {
-  let logMock: ReturnType<typeof vi.fn>;
-  let stderrSpy: MockInstance;
-
-  beforeEach(async () => {
-    process.env = { ...process.env };
-    delete process.env["ASSIGNEE_BP_INTEGRITY"];
-    process.env["NODE_ENV"] = "test"; // → WARN mode default
-    vi.clearAllMocks();
-    resetBPCache();
-    vi.mocked(loadBestPractices).mockReturnValue([S3_VERSIONING_BP]);
-    const loggerModule = await import("../utils/logger.js");
-    logMock = vi.mocked(loggerModule.log);
-    stderrSpy = vi
-      .spyOn(process.stderr, "write")
-      .mockImplementation(() => true);
-  });
-
-  afterEach(() => {
-    stderrSpy.mockRestore();
-  });
-
-  it("uses BP_EVALUATED for the successful evaluation summary log", async () => {
-    vi.mocked(verifyManifest).mockReturnValue({ valid: true });
-    const result = await bpEvaluatorNode(
-      makeState({
-        resourceType: "AWS::S3::Bucket",
-        desiredState: {
-          BucketName: "my-bucket",
-          // versioning missing → triggers a finding so the summary log fires
-        },
-      }),
-    );
-    // Wave 17: strengthened — Array.isArray catches null/undefined AND
-    // non-array shapes (e.g. a regression that wraps findings in an
-    // object). Bare `toBeDefined()` would have passed for those.
-    expect(Array.isArray(result.bpFindings)).toBe(true);
-
-    const evaluatedCalls = logMock.mock.calls.filter((args) => {
-      const event = args[0] as { action?: string };
-      return event.action === "bp_evaluated";
-    });
-    expect(evaluatedCalls.length).toBeGreaterThan(0);
-  });
-
-  it("uses BP_EVALUATION_SKIPPED for warn-mode integrity-check failure log", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "warn";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: false,
-      reason: "BP library hash mismatch",
-      mismatchedFiles: ["s3/BP-S3-001.yaml"],
-    });
-
-    await bpEvaluatorNode(makeState());
-
-    const skippedCalls = logMock.mock.calls.filter((args) => {
-      const event = args[0] as {
-        action?: string;
-        extras?: Record<string, unknown>;
-      };
-      return (
-        event.action === "bp_evaluation_skipped" &&
-        event.extras?.["phase"] === "integrity_check"
-      );
-    });
-    expect(skippedCalls.length).toBeGreaterThan(0);
-    // Crucially: this failure-path log must NOT use the BP_EVALUATED action.
-    const wrongAction = logMock.mock.calls.filter((args) => {
-      const event = args[0] as {
-        action?: string;
-        extras?: Record<string, unknown>;
-      };
-      return (
-        event.action === "bp_evaluated" &&
-        event.extras?.["phase"] === "integrity_check"
-      );
-    });
-    expect(wrongAction).toHaveLength(0);
-  });
-
-  it("uses BP_EVALUATION_SKIPPED for enforce-mode integrity-check error log", async () => {
-    process.env["ASSIGNEE_BP_INTEGRITY"] = "enforce";
-    vi.mocked(verifyManifest).mockReturnValue({
-      valid: false,
-      reason: "BP library hash mismatch",
-      mismatchedFiles: ["s3/BP-S3-001.yaml"],
-    });
-
-    await expect(bpEvaluatorNode(makeState())).rejects.toThrow(
-      BpIntegrityError,
-    );
-
-    const skippedCalls = logMock.mock.calls.filter((args) => {
-      const event = args[0] as {
-        action?: string;
-        extras?: Record<string, unknown>;
-      };
-      return (
-        event.action === "bp_evaluation_skipped" &&
-        event.extras?.["phase"] === "integrity_check"
-      );
-    });
-    expect(skippedCalls.length).toBeGreaterThan(0);
-  });
-});
-
-// ── L5 V1 audit (2026-04-06): manifest path normalization ──────────────────
-describe("_listBpManifestCandidates", () => {
-  it("returns candidates that are all path-normalized (no '..' segments)", async () => {
-    const path = await import("node:path");
-    const { _listBpManifestCandidates } = await import("./bp-evaluator.js");
-
-    // Use a real-shaped dirname mirroring the apps/cli/src/nodes layout
-    const fakeDirname = "/repo/assignee.ai/apps/cli/src/nodes";
-    const candidates = _listBpManifestCandidates(fakeDirname);
-
-    expect(candidates.length).toBeGreaterThan(0);
-    for (const candidate of candidates) {
-      expect(candidate).toBe(path.normalize(candidate));
-      // No literal '..' segments should survive normalization for these
-      // candidates because the fake dirname has more than enough depth.
-      const parts = candidate.split(path.sep);
-      expect(parts).not.toContain("..");
-      // Each candidate must end at manifest.json
-      expect(candidate.endsWith("manifest.json")).toBe(true);
-    }
-  });
-
-  it("dist layout candidate stays inside the workspace boundary", async () => {
-    const path = await import("node:path");
-    const { _listBpManifestCandidates } = await import("./bp-evaluator.js");
-
-    // dist layout: apps/cli/dist/nodes
-    const distDirname = "/repo/assignee.ai/apps/cli/dist/nodes";
-    const candidates = _listBpManifestCandidates(distDirname);
-
-    // Workspace root we expect every candidate to live under
-    const workspaceRoot = "/repo/assignee.ai";
-    for (const candidate of candidates) {
-      const rel = path.relative(workspaceRoot, candidate);
-      // path.relative starts with '..' iff the candidate escapes workspaceRoot
-      expect(
-        rel.startsWith(".."),
-        `candidate ${candidate} escaped workspace ${workspaceRoot}`,
-      ).toBe(false);
-    }
   });
 });

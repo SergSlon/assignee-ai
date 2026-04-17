@@ -49,19 +49,6 @@ vi.mock("./recorder.js", () => ({
 
 vi.mock("../services/llm-adapter.js", () => ({
   LlmAdapter: vi.fn(),
-  RoutingLlmAdapter: vi.fn(),
-}));
-
-vi.mock("../config/load-global-config.js", () => ({
-  loadGlobalConfig: vi
-    .fn()
-    .mockResolvedValue({
-      preferences: {
-        auto_fix: "ask",
-        output_format: "table",
-        verbosity: "normal",
-      },
-    }),
 }));
 
 vi.mock("../config/user-config-loader.js", () => ({

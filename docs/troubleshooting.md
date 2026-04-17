@@ -16,6 +16,7 @@ The CLI follows a stable exit-code contract — scripts can branch on it.
 | `1`   | Generic failure — unclassified error; rerun with `ASSIGNEE_LOG_LEVEL=debug`                                                                                                           |
 | `2`   | `assignee doctor` warnings-only — no hard failures, but at least one check returned `!` (e.g. optional role credentials not set, stale checkpoints); non-blocking but worth reviewing |
 | `10`  | Policy / safety abort — state guard, preflight rejection, typed-confirm mismatch, IAM safety allowlist, drift threshold, best-practice block                                          |
+| `11`  | MCP server startup failure — the spawned MCP server (cfn-mcp, aws-pricing, etc.) failed to start; check pin freshness and Python/uv install                                           |
 | `130` | Interrupted via `SIGINT` (Ctrl-C)                                                                                                                                                     |
 | `143` | Terminated via `SIGTERM`                                                                                                                                                              |
 

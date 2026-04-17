@@ -24,17 +24,12 @@ export {
 } from "./checks/credentials.js";
 export { checkBedrock, type BedrockCheckDeps } from "./checks/bedrock.js";
 export { checkMcpServers, type McpCheckDeps } from "./checks/mcp-servers.js";
-export {
-  checkMcpVersionDrift,
-  type McpVersionCheckDeps,
-} from "./checks/mcp-version-drift.js";
 export { checkCache, type CacheCheckDeps } from "./checks/cache.js";
 export { checkConfig, type ConfigCheckDeps } from "./checks/config.js";
 export {
   checkBestPractices,
   type BpCheckDeps,
 } from "./checks/best-practices.js";
-export { checkLlmRouting } from "./checks/llm-routing.js";
 
 export { runDoctor, type RunDoctorDeps } from "./runner.js";
 export {

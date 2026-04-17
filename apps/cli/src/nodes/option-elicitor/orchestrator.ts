@@ -24,11 +24,14 @@ import {
   type ResourceField,
 } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
+import * as clack from "@clack/prompts";
 import {
   renderAdvancedConfirm,
   startSpinner,
   stopSpinner,
 } from "../../utils/display.js";
+import { UserCancelledError } from "@assignee/core";
+import { UserMessage } from "../../config/constants.js";
 import { FieldSource } from "../../constants/field-policy.js";
 import { loadUserConfig } from "../../config/user-config-loader.js";
 import { loadProjectConfig } from "../../config/project-config-loader.js";
@@ -150,7 +153,7 @@ export async function optionElicitorNode(
   const applyPatternHint = makePatternHintApplier(patternHintedFields);
 
   // Common tier
-  await runPromptLoop({
+  const commonStats = await runPromptLoop({
     fields: commonFields.map(applyPatternHint),
     resolved: resolvedCommon,
     elicitedOptions,
@@ -159,11 +162,16 @@ export async function optionElicitorNode(
     llmClient,
     userIntent: state.userIntent,
     progressLabel: "Step",
+    quickMode: state.quickMode === true,
   });
 
-  // Advanced tier (gated)
+  // Advanced tier (gated).
+  // Story 50-2: --quick auto-declines the advanced confirm and applies
+  // secure defaults (same as answering "No" to "Configure advanced
+  // options?"). The user never sees the advanced prompt chain.
+  let advancedStats = { skippedByDefault: 0, promptedCount: 0 };
   if (advancedFields.length > 0) {
-    await runAdvancedTier({
+    advancedStats = await runAdvancedTier({
       advancedFields,
       resolvedAdvanced,
       elicitedOptions,
@@ -171,6 +179,7 @@ export async function optionElicitorNode(
       state,
       tools,
       llmClient,
+      quickMode: state.quickMode === true,
     });
   }
 
@@ -181,9 +190,79 @@ export async function optionElicitorNode(
     runId: state.runId,
   });
 
+  // Story 50-2: in --quick mode, show the summary line + single override
+  // gate so the user can bail into the full wizard if needed.
+  if (state.quickMode === true && process.stdin.isTTY) {
+    const totalSkipped =
+      commonStats.skippedByDefault + advancedStats.skippedByDefault;
+    const totalPrompted =
+      commonStats.promptedCount + advancedStats.promptedCount;
+    if (totalSkipped > 0 || totalPrompted > 0) {
+      const override = await promptQuickModeOverride(
+        totalSkipped,
+        totalPrompted,
+      );
+      if (override) {
+        // User opted out of quick mode — drop into the full wizard by
+        // re-running the common + advanced loops with quickMode=false.
+        // Fields already answered stay (ASK_IF_NOT_SET / resolved), so
+        // the user is only re-prompted for fields that quickMode skipped.
+        await runPromptLoop({
+          fields: commonFields.map(applyPatternHint),
+          resolved: resolvedCommon,
+          elicitedOptions,
+          resourceType: state.resourceType,
+          tools: tools ?? [],
+          llmClient,
+          userIntent: state.userIntent,
+          progressLabel: "Step",
+          quickMode: false,
+        });
+        if (advancedFields.length > 0) {
+          await runAdvancedTier({
+            advancedFields,
+            resolvedAdvanced,
+            elicitedOptions,
+            applyPatternHint,
+            state,
+            tools,
+            llmClient,
+            quickMode: false,
+          });
+        }
+      }
+    }
+  }
+
   startSpinner("Generating your plan...");
 
   return { elicitedOptions };
+}
+
+/**
+ * Story 50-2: --quick summary + single override gate.
+ * Message: "[--quick] Used N defaults. Type 'no' to override."
+ * Non-TTY: never reached (caller guards on process.stdin.isTTY).
+ */
+async function promptQuickModeOverride(
+  skipped: number,
+  prompted: number,
+): Promise<boolean> {
+  const detail =
+    prompted > 0
+      ? `Used ${skipped} default${skipped === 1 ? "" : "s"} (prompted for ${prompted} required field${prompted === 1 ? "" : "s"}).`
+      : `Used ${skipped} default${skipped === 1 ? "" : "s"}.`;
+  const result = await clack.confirm({
+    message: `[--quick] ${detail} Proceed with these values?`,
+    initialValue: true,
+  });
+  if (clack.isCancel(result)) {
+    clack.cancel(UserMessage.CANCELLED);
+    throw new UserCancelledError();
+  }
+  // result === true  → proceed (no override)
+  // result === false → override (drop into full wizard)
+  return result === false;
 }
 
 /**
@@ -223,6 +302,11 @@ function applyPatternMemory(params: {
  * Story 41.2: advanced tier gate.
  * If user skips advanced, apply secure defaults (initialValue) for every
  * showIf-visible advanced field. Otherwise run the prompt loop.
+ *
+ * Story 50-2: in --quick mode, the advanced-gate prompt is auto-declined
+ * (secure defaults applied). Returns stats so the orchestrator can show a
+ * combined summary. The count of fields that received a default in the
+ * skip branch is tallied as `skippedByDefault`.
  */
 async function runAdvancedTier(params: {
   advancedFields: ResourceField[];
@@ -232,7 +316,8 @@ async function runAdvancedTier(params: {
   state: AgentState;
   tools: StructuredTool[] | undefined;
   llmClient: LlmPort | undefined;
-}): Promise<void> {
+  quickMode?: boolean;
+}): Promise<{ skippedByDefault: number; promptedCount: number }> {
   const {
     advancedFields,
     resolvedAdvanced,
@@ -241,10 +326,14 @@ async function runAdvancedTier(params: {
     state,
     tools,
     llmClient,
+    quickMode,
   } = params;
 
-  const showAdvanced = await renderAdvancedConfirm();
+  // Quick mode: auto-decline the advanced prompt; apply secure defaults
+  // without pestering the user.
+  const showAdvanced = quickMode ? false : await renderAdvancedConfirm();
   if (!showAdvanced) {
+    let skipped = 0;
     for (const field of advancedFields) {
       if (
         field.question.showIf &&
@@ -254,12 +343,13 @@ async function runAdvancedTier(params: {
       const iv = field.question.initialValue;
       if (iv !== undefined && elicitedOptions[field.name] === undefined) {
         elicitedOptions[field.name] = iv;
+        skipped++;
       }
     }
-    return;
+    return { skippedByDefault: skipped, promptedCount: 0 };
   }
 
-  await runPromptLoop({
+  return runPromptLoop({
     fields: advancedFields.map(applyPatternHint),
     resolved: resolvedAdvanced,
     elicitedOptions,
@@ -268,5 +358,6 @@ async function runAdvancedTier(params: {
     llmClient,
     userIntent: state.userIntent,
     progressLabel: "Advanced step",
+    quickMode: quickMode === true,
   });
 }

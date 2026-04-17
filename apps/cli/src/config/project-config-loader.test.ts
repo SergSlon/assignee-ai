@@ -133,7 +133,5 @@ preferences:
     expect(result?.defaults?.region).toBe("ap-southeast-1");
     // validateConfig fills in preference defaults
     expect(result?.preferences?.auto_fix).toBe("ask");
-    expect(result?.preferences?.output_format).toBe("table");
-    expect(result?.preferences?.verbosity).toBe("normal");
   });
 });

@@ -1,31 +1,81 @@
 # Assignee.ai
 
-> AI-Native Cloud Operator — convert natural language into AWS infrastructure, safely.
+> Type AWS infrastructure intent in English. Get a real, tagged, cost-estimated AWS resource — no IaC code, no state file, no CDK bootstrap, no Terraform backend. Human approval before every apply.
 
+## 30-second hero
+
+<!-- Real asciinema capture is deferred to v0.2 (see docs/_assets/hero.cast placeholder).
+     Until then, here is a literal transcript of `assignee plan "Create an S3 bucket"`
+     rendered by `renderPlanBox` in apps/cli/src/utils/display-plan.ts. -->
+
+```console
+$ assignee plan "Create an S3 bucket named hero-demo-bucket"
+
+┌──────────────────────────────────────────────────────────────┐
+│  Assignee · Plan                                             │
+│                                                              │
+│  Type:     AWS::S3::Bucket                                   │
+│  Name:     hero-demo-bucket                                  │
+│  Region:   us-east-1                                         │
+│  Cost:     Free (under free tier) (live)                     │
+│                                                              │
+│  Best practices: 13 rules evaluated · 0 CRITICAL · 0 HIGH    │
+│    ✓ BP-S3-001 Block public access           (pass)          │
+│    ✓ BP-S3-004 Encryption at rest (AES-256)  (auto-applied)  │
+│    ✓ BP-S3-007 Versioning                    (pass)          │
+│                                                              │
+│  Proceed with apply?  [y/N]                                  │
+└──────────────────────────────────────────────────────────────┘
+
+? y
+✓ Creating AWS::S3::Bucket hero-demo-bucket … done (2.1s)
+  ARN: arn:aws:s3:::hero-demo-bucket
+  Tags: assignee:managed-by=assignee, assignee:created=2026-04-16T…
 ```
-assignee plan "Create an S3 bucket named my-app-assets"
-assignee apply "Create an S3 bucket named my-app-assets"
-assignee list
-assignee status
-assignee destroy my-bucket
-assignee init
-assignee completions
-assignee doctor
+
+> **Hero status:** placeholder transcript above (real output format). An asciinema cast will land at `docs/_assets/hero.cast` in v0.2.
+
+## Install
+
+```bash
+# v0.2 (npm publish target):
+#   npm install -g assignee
+#
+# Today (source build, MIT-licensed):
+git clone https://github.com/<owner>/assignee.ai.git
+cd assignee.ai && pnpm install && pnpm build
+pnpm link --global        # adds 'assignee' to PATH
+assignee doctor --short   # verify AWS credentials + Bedrock region
 ```
 
-See [`docs/commands.md`](docs/commands.md) for the full reference of all 17 commands (plus `assignee version`).
+See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the IAM policy setup (operator / reader / auditor).
 
-Also available as an [MCP server](#mcp-server) for AI coding agents (Claude Code, Cursor, Windsurf).
+## What this is
 
-> **Note:** Both packages (`@assignee/cli` and `@assignee/mcp-server`) are `private: true` and not yet published to npm. Public CI and coverage badges are intentionally omitted until the project is released — see the internal pipeline for live status.
+- **Plain English in. Real AWS resource out.** CloudControl API + auto-tagging. No generated HCL, TypeScript, or Pulumi to maintain.
+- **No state file, no Pulumi stack, no Terraform backend, no CDK bootstrap.** Desired state is the AWS account itself, read back on every plan.
+- **Human approval gate (HITL) on every plan**; 186 best-practice rules with auto-fix; cost preflight via AWS Pricing MCP; reversible destroy with confirmation.
+
+## What this is NOT
+
+- **Not multi-cloud.** AWS-only by design (Epic 13 deferred; see [project status](#project-status)).
+- **Not a Terraform replacement for platform teams.** If you have a state-file culture and love HCP/Spacelift/env0, keep using them.
+- **Not a Kubernetes operator.** See [kagent](../wiki/competitors/kagent.md) for K8s day-2 ops.
+- **Not for HCL-fluent platform engineers** who already love Cursor + the Terraform MCP.
+
+## Who this is for — "Mara, the solo / small-team AWS operator"
+
+Mara has 2–8 years of experience, writes Python and TypeScript at an intermediate level, and does NOT write HCL or Pulumi day-to-day. She runs a side project or a small production account (1–10 engineers, under $10k/mo AWS bill). She tried Terraform once and got stuck on state backends; tried CDK and got stuck on bootstrap; now she clicks in the AWS Console every six months and regrets it. She uses Claude Code or Cursor, respects "local-first, my credentials never leave the box," and wants to provision a VPC in a terminal without owning a state file.
+
+If that is you, Assignee.ai is for you. If you are a platform engineer at a 500+ engineer company, it is not — use Pulumi / Terraform / Crossplane.
 
 ---
 
 ## How it works
 
 1. **Plan** — Describe your intent in plain English. The LLM parses the intent, fetches the CloudFormation schema, and elicits resource options through an interactive wizard. It then generates a validated `desiredState` JSON, evaluates best-practice rules, and produces a cost estimate.
-2. **Approve** — review the plan in the terminal and confirm (HITL)
-3. **Apply** — Cloud Control API (or SDK fallback) provisions the resource; tags are injected, State Guard prevents stale-plan overwrites, status is polled until terminal state, and results are written to memory
+2. **Approve** — review the plan in the terminal and confirm (HITL).
+3. **Apply** — Cloud Control API (or SDK fallback) provisions the resource; tags are injected, State Guard prevents stale-plan overwrites, status is polled until terminal state, and results are written to memory.
 
 ```
 intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
@@ -50,129 +100,58 @@ intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
 
 13 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order. Source of truth: `apps/cli/src/services/graph.ts` (`.addNode` calls) and the 13 `*.ts` sources under `apps/cli/src/nodes/`.
 
-All AI calls stay local — no AWS credentials ever leave your machine.
+All AWS credentials stay local — they never leave your machine. Bedrock calls run against your own account.
 
 ---
 
 ## Commands
 
-| Command                        | Description                                     | Key flags                                                           |
-| :----------------------------- | :---------------------------------------------- | :------------------------------------------------------------------ |
-| `assignee plan <intent>`       | Generate infrastructure plan                    | `--source`, `-o json\|text`, `--no-apply`, `--no-advice`, `--set`   |
-| `assignee apply <intent>`      | Plan + provision with HITL approval             | `--source`, `--yes`, `--wizard`, `--checkpoint`, `--set`            |
-| `assignee init`                | Initialize `.assignee/` project directory       | `--global`                                                          |
-| `assignee list`                | Show managed resources with cost                | `--region`, `--json`                                                |
-| `assignee destroy <resource>`  | Safe teardown with confirmation                 | `--yes`, `--all`, `--include-iam`, `--dry-run`                      |
-| `assignee drift [resource-id]` | Check resources for configuration drift         | `--resource`, `--region`, `--status`, `--json`, `--concurrency`     |
-| `assignee reconcile`           | Reconcile drifted resources to desired state    | `--resource`, `--dry-run`, `--auto-reconcile`                       |
-| `assignee clean`               | Remove stale checkpoints, cache, memory         | `--resources`, `--checkpoints`, `--cache`, `--memory`, `--confirm`  |
-| `assignee status`              | Intelligence summary (memory, findings, costs)  | `--json`, `--region`, `--bp-coverage`                               |
-| `assignee setup`               | Automate IAM role/policy creation               | `--profile`, `--yes`                                                |
-| `assignee completions <shell>` | Generate shell completions (bash/zsh/fish)      | —                                                                   |
-| `assignee optimize`            | Cost-optimization recommendations per resource  | `--resource`, `--region`, `--json`, `--apply`                       |
-| `assignee doctor`              | Diagnose local environment (Node, creds, MCP)   | `--json`, `--fix`                                                   |
-| `assignee cache <subcommand>`  | Manage CloudFormation schema cache              | `clear`, `refresh`                                                  |
-| `assignee whoami`              | Show active IAM identity + region + profile     | `--json`                                                            |
-| `assignee patterns [subcmd]`   | List/show/detect compound architecture patterns | `list`, `show <patternId>`, `detect <intent>`, `--json`, `--search` |
-| `assignee types [subcmd]`      | List supported resource types with BP coverage  | `list`, `show <type>`, `--json`                                     |
-| `assignee version`             | Print version + Node/platform + MCP server pins | —                                                                   |
+13 top-level commands. Run `assignee <command> --help` for the full flag surface. See [docs/commands.md](docs/commands.md) for the full reference.
+
+| Command                        | Description                                                   | Key flags                                                         |
+| :----------------------------- | :------------------------------------------------------------ | :---------------------------------------------------------------- |
+| `assignee plan <intent>`       | Generate infrastructure plan (no AWS writes)                  | `--source`, `-o json\|text`, `--no-apply`, `--no-advice`, `--set` |
+| `assignee apply <intent>`      | Plan + provision with HITL approval                           | `--source`, `--yes`, `--wizard`, `--checkpoint`, `--set`          |
+| `assignee init`                | Initialize `.assignee/` project directory                     | `--global`                                                        |
+| `assignee list`                | Show managed resources with cost                              | `--region`, `--json`                                              |
+| `assignee destroy <resource>`  | Safe single-resource teardown with confirmation               | `--yes`                                                           |
+| `assignee drift [resource-id]` | Check resources for configuration drift                       | `--resource`, `--region`, `--status`, `--json`, `--concurrency`   |
+| `assignee reconcile`           | Reconcile drifted resources to desired state                  | `--resource`, `--dry-run`, `--auto-reconcile`                     |
+| `assignee status`              | Intelligence summary (memory, findings, costs)                | `--json`, `--region`, `--bp-coverage`                             |
+| `assignee setup`               | Automate IAM role/policy creation                             | `--profile`, `--yes`                                              |
+| `assignee completions <shell>` | Generate shell completions (bash/zsh/fish)                    | —                                                                 |
+| `assignee optimize`            | Cost-optimization recommendations per resource                | `--resource`, `--region`, `--json`, `--apply`                     |
+| `assignee doctor`              | Diagnose local environment (Node, creds, MCP) + identity info | `--json`, `--fix`, `--short`                                      |
+| `assignee version`             | Print version + Node/platform + MCP server pins               | —                                                                 |
+
+Discovery shortcuts live under `plan --help`: supported resource types, compound patterns, and example intents. `doctor --short` replaces the removed `whoami` subcommand and prints the active IAM identity + region.
 
 ---
 
-## Quick start
+## vs the competition
 
-### Prerequisites
+Eight direct / adjacent competitors, archived in the [workspace wiki](../wiki/competitors/):
 
-- Node.js 20.11+
-- pnpm 10+
-- Python 3.10+ with `uvx` (`pip install uv`)
-- Three IAM users with the policies below (full setup: [docs/aws-bootstrap.md](docs/aws-bootstrap.md))
+- **vs [kagent](../wiki/competitors/kagent.md)** — kagent runs day-2 ops INSIDE a Kubernetes cluster (Helm-installed controller, operates on K8s CRDs). Assignee provisions AWS primitives FROM zero, no cluster required. Pick kagent for K8s reconciliation; pick Assignee for greenfield AWS.
+- **vs [Pulumi AI / Neo](../wiki/competitors/pulumi-ai.md)** — Pulumi Neo writes Pulumi code in your language of choice; you still maintain a stack and a state file (local or Pulumi Cloud). Assignee writes nothing — resources live in your AWS account, tagged, with no source file to keep in sync.
+- **vs [Terraform + Claude/Cursor](../wiki/competitors/claude-writes-terraform.md)** — for the HCL-fluent engineer who already loves Terraform MCP + Cursor, that combo is excellent and Assignee does not compete. Assignee targets the engineer who does not want to own HCL.
+- **vs [Terraform AI (HCP + AI)](../wiki/competitors/terraform-ai.md)** — HCP Terraform's AI features (Copilot, plan explain) still produce HCL and a state file on the backend. Sentinel policy is a paid tier. Assignee bundles 186 BP rules on the free path.
+- **vs [CDK + Amazon Q](../wiki/competitors/cdk-ai.md)** — Q Developer's Console-to-Code generates CDK; you still do `cdk bootstrap` and `cdk deploy` and maintain TypeScript / Python. Different modality.
+- **vs [SST Ion](../wiki/competitors/sst.md)** — SST is TypeScript infrastructure-as-code for serverless app developers. Assignee is intent-as-infrastructure for operators — different category, different audience.
+- **vs [Nitric](../wiki/competitors/nitric.md)** — Nitric is code-defines-infra (TypeScript/Python), multi-cloud target. Assignee is English-defines-provisioning, AWS-only, with no code artifact.
+- **vs [Wing](../wiki/competitors/wing.md)** — Wing (shut down April 2025) was a new IaC language. Included here for completeness; no current comparison.
 
-### Install
-
-```bash
-pnpm install
-pnpm build
-```
-
-### Configure
-
-```bash
-cp .env.example .env
-# Fill in AWS credentials — see .env.example for field descriptions
-```
-
-### Run
-
-```bash
-# Plan only (no AWS resources created)
-node apps/cli/dist/index.js plan "Create an S3 bucket named my-test-bucket"
-
-# Plan + apply with HITL confirmation
-node apps/cli/dist/index.js apply "Create an S3 bucket named my-test-bucket"
-
-# Expert mode: skip wizard, auto-approve
-node apps/cli/dist/index.js apply --no-wizard --yes "Create an S3 bucket"
-
-# Resume from checkpoint
-node apps/cli/dist/index.js apply --checkpoint ~/.assignee/checkpoints/abc123.json
-```
+Short answer: if you want a file to commit, pick any of the above. If you want a running AWS resource and a memory record, pick Assignee.
 
 ---
 
 ## Supported resource types
 
-**37 first-class types.** Every supported type flows through the CloudControl API — zero direct SDK write paths. 35 types have dedicated plugins; 2 (`EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) are compound-only and share the generic fallback plugin. Run `assignee types` for the live listing with field counts and BP rule coverage, or see [`docs/resource-types.md`](docs/resource-types.md) for the full reference.
-
-| Type                                        | Notes                                                                        |
-| :------------------------------------------ | :--------------------------------------------------------------------------- |
-| `AWS::S3::Bucket`                           | Wizard: encryption, versioning, lifecycle, CORS, replication. 13 BP rules    |
-| `AWS::SSM::Parameter`                       | Wizard: type (String/SecureString), tier (Standard/Advanced)                 |
-| `AWS::IAM::Role`                            | Wizard: trust policy, managed policies. Cost: Free                           |
-| `AWS::EC2::Instance`                        | Wizard: instance type with live $/hr, AMI, key pair, UserData auto-encode    |
-| `AWS::RDS::DBInstance`                      | Wizard: engine, class with live $/hr, Multi-AZ, encryption                   |
-| `AWS::Lambda::Function`                     | Wizard: runtime, memory, timeout, env vars (reserved-prefix guard)           |
-| `AWS::EC2::VPC`                             | Wizard: CIDR block, DNS settings. Used in VPC + EFS compounds                |
-| `AWS::EC2::Subnet`                          | Wizard: AZ, CIDR, public IP auto-assign. Used in VPC + EFS compounds         |
-| `AWS::EC2::SecurityGroup`                   | Wizard: ingress/egress rules. Auto-created as EC2 companion                  |
-| `AWS::DynamoDB::Table`                      | Wizard: key schema, billing mode (on-demand/provisioned), PITR               |
-| `AWS::SQS::Queue`                           | Wizard: FIFO, visibility timeout, DLQ. Used in Message Processing            |
-| `AWS::SNS::Topic`                           | Wizard: FIFO, KMS encryption, display name                                   |
-| `AWS::SNS::Subscription`                    | Wizard: protocol, endpoint, filter policy, DLQ                               |
-| `AWS::ElasticLoadBalancingV2::LoadBalancer` | Wizard: ALB vs NLB, scheme (internet/internal), subnets                      |
-| `AWS::ECS::Cluster`                         | Wizard: Fargate capacity providers, Container Insights. Cost: Free           |
-| `AWS::ECR::Repository`                      | Wizard: image scanning, tag immutability, encryption                         |
-| `AWS::Logs::LogGroup`                       | Wizard: retention (days), KMS key. Auto-created with Lambda and ECS          |
-| `AWS::EC2::InternetGateway`                 | VPC compound: auto-attached via VPCGatewayAttachment                         |
-| `AWS::EC2::RouteTable`                      | VPC compound: public + private tables with associated routes                 |
-| `AWS::EC2::Route`                           | VPC compound: 0.0.0.0/0 → IGW (public) or NAT (private)                      |
-| `AWS::EC2::NatGateway`                      | VPC compound: dominant cost driver (run `assignee cost`), auto-allocates EIP |
-| `AWS::ApiGatewayV2::Api`                    | Serverless API compound: HTTP API with CORS, Lambda integration              |
-| `AWS::CloudWatch::Alarm`                    | Wizard: metric, threshold, comparison, evaluation periods                    |
-| `AWS::SecretsManager::Secret`               | Wizard: auto-generate or manual secret string, KMS key                       |
-| `AWS::EC2::VPCGatewayAttachment`            | VPC compound only: attaches IGW to VPC (non-taggable, cascade delete)        |
-| `AWS::EC2::SubnetRouteTableAssociation`     | VPC compound only: links subnets to route tables (cascade delete)            |
-| `AWS::EFS::FileSystem`                      | Wizard: throughput mode, encryption, backups. Used in EFS compound           |
-| `AWS::EFS::MountTarget`                     | EFS compound: one per AZ, NFS security group auto-configured                 |
-| `AWS::Events::Rule`                         | Wizard: schedule expression, targets. Used in Scheduled Lambda               |
-| `AWS::Events::EventBus`                     | Custom event bus for cross-account or SaaS partner integrations              |
-| `AWS::Events::Connection`                   | Outbound HTTP auth (API key / Basic / OAuth) for API destinations            |
-| `AWS::Events::ApiDestination`               | Outbound HTTP endpoint with URL, method, and rate limiting                   |
-| `AWS::KMS::Key`                             | Customer-managed encryption key; auto-rotation enabled by default            |
-| `AWS::CloudFront::Distribution`             | CDN with HTTPS redirect, caching policy. Powers static-website compound      |
-| `AWS::CloudFront::OriginAccessControl`      | SigV4-signed CloudFront → S3 origin requests (replaces legacy OAI)           |
-| `AWS::S3::BucketPolicy`                     | IAM resource policy: OAC read grant, TLS enforcement                         |
-
-The only remaining entries in `CCAPI_FALLBACK_TYPES` are **pure redirect types** with no SDK write path — they are rejected at plan time with a friendly alternative:
-
-| Unsupported Type                     | Recommended Alternative             |
-| :----------------------------------- | :---------------------------------- |
-| `AWS::Lambda::Permission`            | `AWS::Lambda::PermissionPolicy`     |
-| `AWS::ElastiCache::ReplicationGroup` | `AWS::ElastiCache::ServerlessCache` |
+**37 first-class types** — curated coverage of the AWS core that 80% of small-team workloads need: S3, IAM, Lambda, RDS, EC2, VPC, DynamoDB, SQS, SNS, ELBv2, ECS, ECR, API Gateway v2, EventBridge, KMS, CloudFront, Secrets Manager, SSM, CloudWatch, plus 18 more. Every type flows through CloudControl API — zero direct SDK write paths. Run `assignee plan --help` for the live listing with field counts and BP rule coverage, or see [docs/resource-types.md](docs/resource-types.md) for the full reference.
 
 ### Compound architecture patterns
 
-Multi-resource intents are detected by keyword matching (zero LLM latency) and provisioned in dependency order. Run `assignee patterns` for the live listing, or `assignee patterns show <patternId>` for the full resource list + dependency groups.
+Multi-resource intents are detected by keyword matching (zero LLM latency) and provisioned in dependency order. Run `assignee plan --help` for the live listing.
 
 | Pattern              | Resources                                              | Trigger keywords                       |
 | :------------------- | :----------------------------------------------------- | :------------------------------------- |
@@ -190,9 +169,9 @@ Multi-resource intents are detected by keyword matching (zero LLM latency) and p
 
 ## MCP Server
 
-The `@assignee/mcp-server` package exposes assignee.ai as an MCP server for AI coding agents. Tools: `plan_resource`, `apply_plan`, `list_managed_resources`, `estimate_cost`, `destroy_resource`.
+The `@assignee/mcp-server` package exposes Assignee.ai as an MCP server for AI coding agents (Claude Code, Cursor, Windsurf). Tools: `plan_resource`, `apply_plan`, `list_managed_resources`, `estimate_cost`, `destroy_resource`.
 
-Works with Claude Code, Cursor, and Windsurf. See [apps/mcp-server/README.md](apps/mcp-server/README.md) for setup instructions.
+See [docs/mcp-server.md](docs/mcp-server.md) and [apps/mcp-server/README.md](apps/mcp-server/README.md) for setup.
 
 ---
 
@@ -203,17 +182,18 @@ apps/
   cli/
     src/
       commands/        plan.ts · apply.ts · init.ts · list.ts · destroy.ts
-                       status.ts · clean.ts · completions.ts
+                       status.ts · completions.ts · doctor.ts · drift.ts
+                       reconcile.ts · optimize.ts · setup.ts
       nodes/           intent-parser · schema-fetcher · option-elicitor
                        compound-dispatcher · plan-generator · bp-evaluator
                        fix-applicator · preflight-guard · human-approval
                        resource-provisioner · status-poller · result-formatter
       services/        graph.ts (LangGraph) · mcp-client.ts · memory.ts
                        list-resources.ts · resource-resolver.ts · billing.ts
-                       status-aggregator.ts · llm-adapter.ts · bulk-destroy.ts
+                       status-aggregator.ts · llm-adapter.ts
       config/          mcp-servers.ts
       utils/           display.ts · logger.ts · tags.ts · mcp.ts · pricing-lookup.ts
-      test-fixtures/   mcp-mock-responses.ts (real MCP captures)
+      test-fixtures/   mcp-mock-responses/ (real MCP captures, per-resource)
     scripts/           capture → process → build fixture pipeline
   mcp-server/
     src/               MCP server entry point, tool handlers
@@ -236,13 +216,11 @@ packages/
     src/               BP YAML schema, trigger engine, rule library
 ```
 
-**Key dependencies:**
+**Implementation stack** (choices, not moat claims — every one is swappable):
 
-- [`@langchain/langgraph`](https://langchain-ai.github.io/langgraphjs/) — agentic workflow orchestration
-- [`ai`](https://sdk.vercel.ai/) + [`@ai-sdk/amazon-bedrock`](https://sdk.vercel.ai/providers/ai-sdk-providers/amazon-bedrock) — Vercel AI SDK
-- [`@ai-sdk/anthropic`](https://sdk.vercel.ai/providers/ai-sdk-providers/anthropic), [`@ai-sdk/openai`](https://sdk.vercel.ai/providers/ai-sdk-providers/openai), [`@ai-sdk/google`](https://sdk.vercel.ai/providers/ai-sdk-providers/google) — multi-provider LLM support
-- [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/sdk) — MCP server SDK
-- [`@langchain/mcp-adapters`](https://github.com/langchain-ai/langchainjs/tree/main/libs/langchain-mcp-adapters) — MCP server bridge
+- [`@langchain/langgraph`](https://langchain-ai.github.io/langgraphjs/) — agentic workflow orchestration for the 13-node pipeline
+- [`ai`](https://sdk.vercel.ai/) + [`@ai-sdk/amazon-bedrock`](https://sdk.vercel.ai/providers/ai-sdk-providers/amazon-bedrock) — Vercel AI SDK with multi-provider support (Bedrock, Anthropic, OpenAI, Google, Ollama)
+- [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/sdk) + [`@langchain/mcp-adapters`](https://github.com/langchain-ai/langchainjs/tree/main/libs/langchain-mcp-adapters) — MCP server integration
 - [`@clack/prompts`](https://github.com/bombshell-dev/clack) + `chalk` + `boxen` — terminal UX
 
 **MCP servers (spawned at runtime via `uvx`):**
@@ -255,11 +233,11 @@ packages/
 | `awslabs.well-architected-security-mcp-server` | Well-Architected security pillar | Optional |
 | `awslabs.billing-cost-management-mcp-server`   | Billing and cost management      | Optional |
 
-Optional servers (IAM, Well-Architected Security, Billing) are spawned only when the corresponding command requires them.
+Optional servers are spawned only when the corresponding command requires them.
 
-> **Note:** CloudFormation schemas and CCAPI provisioning are accessed directly via `@aws-sdk/client-cloudformation` and `@aws-sdk/client-cloudcontrol`. The legacy `cfn-mcp-server` and `ccapi-mcp-server` MCP wrappers were removed in Stories 7.6 and 31.4, and their announced replacement `aws-iac-mcp-server` was evaluated and declined. A guardrail test in `apps/cli/src/config/mcp-servers.test.ts` enforces that none of the three can re-appear.
+> **Note:** CloudFormation schemas and CCAPI provisioning are accessed directly via `@aws-sdk/client-cloudformation` and `@aws-sdk/client-cloudcontrol`. A guardrail test in `apps/cli/src/config/mcp-servers.test.ts` enforces that the legacy `cfn-mcp-server`, `ccapi-mcp-server`, and `aws-iac-mcp-server` wrappers cannot re-appear.
 
-**LLM provider:** Default `us.amazon.nova-lite-v1:0` (Bedrock). Override with `ASSIGNEE_LLM_DEFAULT=anthropic/claude-haiku-4-5` or any `provider/model-id` string (supported: bedrock, anthropic, openai, google, ollama).
+**LLM provider:** Default `us.amazon.nova-lite-v1:0` (Bedrock). Override with `ASSIGNEE_LLM_DEFAULT=anthropic/claude-haiku-4-5` or any `provider/model-id` string.
 
 **Credential separation:**
 
@@ -272,29 +250,30 @@ Optional servers (IAM, Well-Architected Security, Billing) are spawned only when
 ## Development
 
 ```bash
-pnpm test          # ~7595 tests across 303 files (168 CLI + 100 core + 11 BP + 24 MCP)
+pnpm build         # compile all packages (CLI, MCP server, core, best-practices)
+pnpm test          # full unit suite across 4 packages
 pnpm check-types   # TypeScript type check
-pnpm build         # compile all packages
 ```
 
 Pre-commit hook runs: prettier → check-types → test.
 
 ### Test fixtures
 
-All MCP mock responses in `apps/cli/src/test-fixtures/mcp-mock-responses.ts` are captured from live MCP servers (not fabricated). Captured responses are tracked in git. To refresh:
+All MCP mock responses in `apps/cli/src/test-fixtures/mcp-mock-responses/` are captured from live MCP servers (not fabricated). Captured responses are tracked in git. To refresh:
 
 ```bash
 cd apps/cli/scripts
 node capture-mcp-responses.mjs    # requires .env with ASSIGNEE_READER_* and ASSIGNEE_AUDITOR_* credentials
 node process-captured-responses.mjs
-# Note: build-fixture-ts.mjs is disabled (exits 2) since story 48-10 split the
-# monolithic fixture into per-resource files under apps/cli/src/test-fixtures/mcp-mock-responses/.
-# Edit the per-resource files directly instead.
 ```
 
 ---
 
 ## Project status
+
+**Status: pre-public.** Source available under MIT (see [LICENSE](LICENSE)). `npm publish` is deferred until v0.2 — see [CHANGELOG.md](CHANGELOG.md). To track release, watch the repo.
+
+Packages `@assignee/cli` and `@assignee/mcp-server` are `"private": true` and installable only from source today. Public CI and coverage badges are intentionally omitted until first release.
 
 ### Completed epics
 
@@ -326,9 +305,9 @@ node process-captured-responses.mjs
 | **33** | Auto-Cleanup (checkpoints, cache rotation, memory TTL)                                  | Done                       |
 | **34** | Quality Hardening (node robustness, code splitting, error compensation)                 | Done                       |
 | **35** | Actionable Findings (interactive fix selection, fix hints, fix categories)              | Done                       |
-| **36** | Bulk Destroy (`--all`, `--include-iam`, `--dry-run`, `clean --resources`)               | Done                       |
 | **37** | Static Site Deploy (`--source`, S3 upload, CloudFront + OAC)                            | Done                       |
 | **38** | Full Codebase Hardening (bounds checks, timeout caps, input validation)                 | Done                       |
+| **50** | Positioning, Bloat Cut, Publish Prep                                                    | In progress                |
 
 ### Deferred epics (post-traction / SaaS phase)
 
@@ -355,11 +334,21 @@ See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the full IAM policy setup
 
 ## Documentation
 
-| Document              | Scope         | Location                                                 |
-| --------------------- | ------------- | -------------------------------------------------------- |
-| Documentation Index   | CLI (current) | [docs/index.md](docs/index.md)                           |
-| Architecture Flows    | CLI (current) | [docs/architecture-flows.md](docs/architecture-flows.md) |
-| Commands Reference    | CLI (current) | [docs/commands.md](docs/commands.md)                     |
-| Resource Types        | CLI (current) | [docs/resource-types.md](docs/resource-types.md)         |
-| Best Practices Engine | CLI (current) | [docs/best-practices.md](docs/best-practices.md)         |
-| AWS Setup Guide       | CLI (current) | [docs/aws-bootstrap.md](docs/aws-bootstrap.md)           |
+| Document              | Location                                                 |
+| --------------------- | -------------------------------------------------------- |
+| Documentation Index   | [docs/index.md](docs/index.md)                           |
+| Architecture Flows    | [docs/architecture-flows.md](docs/architecture-flows.md) |
+| Commands Reference    | [docs/commands.md](docs/commands.md)                     |
+| Resource Types        | [docs/resource-types.md](docs/resource-types.md)         |
+| Best Practices Engine | [docs/best-practices.md](docs/best-practices.md)         |
+| AWS Setup Guide       | [docs/aws-bootstrap.md](docs/aws-bootstrap.md)           |
+| Troubleshooting       | [docs/troubleshooting.md](docs/troubleshooting.md)       |
+
+---
+
+## License · Contributing · Security
+
+- **License:** MIT — see [LICENSE](LICENSE).
+- **Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md) for the dev loop, pre-commit expectations, and the BMAD story workflow.
+- **Security:** see [SECURITY.md](SECURITY.md) for vulnerability reporting and the supported-versions policy.
+- **Changelog:** see [CHANGELOG.md](CHANGELOG.md). **Code of conduct:** [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

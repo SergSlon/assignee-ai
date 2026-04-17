@@ -27,17 +27,15 @@ import {
   checkCredentials,
   checkBedrock,
   checkMcpServers,
-  checkMcpVersionDrift,
   checkCache,
   checkConfig,
   checkBestPractices,
-  checkLlmRouting,
   runDoctor,
+  runShortDoctor,
   renderReport,
   renderSection,
   type DoctorReport,
 } from "./doctor.js";
-import type { McpVersionCheckResult } from "../services/mcp-version-check.js";
 
 const ENV_KEYS = [
   "ASSIGNEE_OPERATOR_ACCESS_KEY_ID",
@@ -470,169 +468,9 @@ describe("checkMcpServers", () => {
   });
 });
 
-// ── MCP version drift check (Story 45.6) ─────────────────────────────────
-
-describe("checkMcpVersionDrift", () => {
-  /** Build a fake McpVersionCheckResult — used to drive the section. */
-  function row(
-    overrides: Partial<McpVersionCheckResult>,
-  ): McpVersionCheckResult {
-    return {
-      packageName: "awslabs.aws-pricing-mcp-server",
-      pinnedVersion: "1.0.27",
-      latestVersion: "1.0.27",
-      status: "up-to-date",
-      ...overrides,
-    };
-  }
-
-  it("renders an ok row for every up-to-date MCP", async () => {
-    const section = await checkMcpVersionDrift({
-      checkVersionsImpl: async () => [
-        row({ packageName: "awslabs.aws-pricing-mcp-server" }),
-        row({
-          packageName: "awslabs.aws-documentation-mcp-server",
-          pinnedVersion: "1.1.20",
-          latestVersion: "1.1.20",
-        }),
-      ],
-    });
-
-    expect(section.status).toBe("ok");
-    expect(section.subs).toHaveLength(2);
-    expect(section.subs.every((s) => s.status === "ok")).toBe(true);
-    expect(section.subs[0]?.detail).toBe("latest");
-    expect(section.name).toContain("2/2 up-to-date");
-  });
-
-  it("renders a warn row when an MCP is behind, with the latest version in the detail", async () => {
-    const section = await checkMcpVersionDrift({
-      checkVersionsImpl: async () => [
-        row({
-          packageName: "awslabs.aws-pricing-mcp-server",
-          pinnedVersion: "1.0.27",
-          latestVersion: "1.0.30",
-          status: "behind",
-        }),
-      ],
-    });
-
-    expect(section.status).toBe("warn");
-    expect(section.subs[0]?.status).toBe("warn");
-    expect(section.subs[0]?.detail).toContain("latest: 1.0.30");
-    expect(section.subs[0]?.detail).toContain("review release notes");
-  });
-
-  it("renders a warn row with the error detail when a fetch failed", async () => {
-    const section = await checkMcpVersionDrift({
-      checkVersionsImpl: async () => [
-        row({
-          packageName: "awslabs.aws-pricing-mcp-server",
-          pinnedVersion: "1.0.27",
-          latestVersion: null,
-          status: "fetch-failed",
-          error: "DNS resolution failed",
-        }),
-      ],
-    });
-
-    expect(section.status).toBe("warn");
-    expect(section.subs[0]?.status).toBe("warn");
-    expect(section.subs[0]?.detail).toContain("version check failed");
-    expect(section.subs[0]?.detail).toContain("DNS resolution failed");
-  });
-
-  it("rolls up to warn when one MCP is behind even if others are ok", async () => {
-    const section = await checkMcpVersionDrift({
-      checkVersionsImpl: async () => [
-        row({}),
-        row({
-          packageName: "awslabs.iam-mcp-server",
-          pinnedVersion: "1.0.17",
-          latestVersion: "1.0.18",
-          status: "behind",
-        }),
-        row({
-          packageName: "awslabs.aws-documentation-mcp-server",
-          pinnedVersion: "1.1.20",
-          latestVersion: "1.1.20",
-        }),
-      ],
-    });
-
-    expect(section.status).toBe("warn");
-    expect(section.name).toContain("2/3 up-to-date");
-  });
-
-  it("never throws — a thrown injected impl produces a single warn row", async () => {
-    const section = await checkMcpVersionDrift({
-      checkVersionsImpl: async () => {
-        throw new Error("totally broken");
-      },
-    });
-
-    expect(section.status).toBe("warn");
-    expect(section.subs).toHaveLength(1);
-    expect(section.subs[0]?.detail).toContain("totally broken");
-  });
-
-  it("uses the real checkMcpVersions service when no impl is injected — and never hits the network in the test (mocked fetch)", async () => {
-    // Drive the path-of-least-resistance default. We mock global.fetch
-    // here to avoid touching PyPI; the goal is to assert that omitting
-    // checkVersionsImpl resolves to the real service shape, not that we
-    // re-test the service itself (its own test file covers that).
-    const originalFetch = globalThis.fetch;
-    // mockImplementation (not mockResolvedValue) — Response bodies can only
-    // be read once, so we MUST construct a fresh Response per call. The
-    // service makes one fetch per pinned MCP, so 5 calls in parallel.
-    globalThis.fetch = vi.fn().mockImplementation(
-      async () =>
-        new Response(JSON.stringify({ info: { version: "999.999.999" } }), {
-          status: 200,
-        }),
-    ) as unknown as typeof globalThis.fetch;
-
-    try {
-      const section = await checkMcpVersionDrift();
-      // Every pinned MCP got a row, all "behind" because we returned a
-      // version higher than every pinned. Assert per-row sub status —
-      // checking only `section.status === "warn"` would let a regression
-      // that flips every row to "fetch-failed" pass silently (both roll
-      // up to warn).
-      expect(section.subs.length).toBeGreaterThan(0);
-      expect(section.status).toBe("warn");
-      for (const sub of section.subs) {
-        expect(sub.status).toBe("warn");
-        // The drift detail format is "latest: <version> (drift — review …)".
-        // fetch-failed details start with "version check failed:".
-        expect(sub.detail).toMatch(/^latest: 999\.999\.999/);
-        expect(sub.detail).not.toContain("version check failed");
-      }
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("returns a single warn row when the section-level timeout fires", async () => {
-    // Drive the section's withTimeout() wrapper directly — checkVersionsImpl
-    // returns a Promise that never resolves. The doctor section should
-    // hit its 5s budget, catch the timeout error, and return a single
-    // "version check failed: ... timed out" row instead of crashing.
-    vi.useFakeTimers();
-    try {
-      const promise = checkMcpVersionDrift({
-        checkVersionsImpl: () => new Promise(() => {}), // never resolves
-      });
-      await vi.advanceTimersByTimeAsync(5001);
-      const section = await promise;
-      expect(section.status).toBe("warn");
-      expect(section.subs).toHaveLength(1);
-      expect(section.subs[0]?.detail).toMatch(/timed out/);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
+// Story 50-3: `checkMcpVersionDrift` and its PyPI-ping service were
+// removed — version drift is now an out-of-band concern, not a doctor
+// gate. The old tests for the service deleted with it.
 
 // ── Cache check ──────────────────────────────────────────────────────────
 
@@ -821,7 +659,6 @@ describe("runDoctor", () => {
         version: "9.9.9",
         skipBedrock: true,
         skipMcp: true,
-        skipMcpVersionCheck: true,
         credentialsDeps: {
           stsClientFactory: () => ({ send }),
         },
@@ -830,8 +667,9 @@ describe("runDoctor", () => {
       });
 
       expect(report.version).toBe("9.9.9");
-      // Story 45.6 added the MCP version drift section → 7 sections total.
-      expect(report.sections).toHaveLength(7);
+      // Story 50-3 removed the MCP version drift section → 6 sections total
+      // (credentials, bedrock, mcp, cache, config, best-practices).
+      expect(report.sections).toHaveLength(6);
       // Skip flags should produce 'warn' rather than 0/SUCCESS — they're
       // unverified, not "ok".
       expect(report.exitCode).toBe(2);
@@ -853,7 +691,6 @@ describe("runDoctor", () => {
         version: "1.0.0",
         skipBedrock: true,
         skipMcp: true,
-        skipMcpVersionCheck: true,
         credentialsDeps: {
           stsClientFactory: () => ({ send: vi.fn() }),
         },
@@ -868,47 +705,68 @@ describe("runDoctor", () => {
   });
 });
 
-// ── Story 44.1: checkLlmRouting ─────────────────────────────────────────
-describe("checkLlmRouting (Story 44.1)", () => {
-  it("returns null when no llm config is present", async () => {
-    // Default config has no llm section
-    const result = await checkLlmRouting();
-    expect(result).toBeNull();
+// ── doctor --short (Story 50-3) ──────────────────────────────────────────
+// Replaces the removed `assignee whoami` command. Single STS call
+// returning account + ARN + region + config path.
+
+describe("runShortDoctor", () => {
+  it("prints account + ARN + region + config path when creds resolve", async () => {
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+    const stdoutCapture: string[] = [];
+    const stderrCapture: string[] = [];
+    const send = vi.fn().mockResolvedValue({
+      Account: "111111111111",
+      Arn: "arn:aws:iam::111111111111:user/alice",
+    });
+
+    const code = await runShortDoctor({
+      stsClientFactory: () => ({ send }),
+      cwd: () => "/tmp/doctor-short-nowhere",
+      stdout: (m: string) => stdoutCapture.push(m),
+      stderr: (m: string) => stderrCapture.push(m),
+    });
+
+    expect(code).toBe(0);
+    const out = stdoutCapture.join("");
+    expect(out).toContain("Account:  111111111111");
+    expect(out).toContain("User ARN: arn:aws:iam::111111111111:user/alice");
+    expect(out).toMatch(/Region: /);
+    expect(out).toContain("Role:     operator");
+    expect(out).toContain("For full diagnostics");
   });
 
-  it("returns a section with callsite entries when ASSIGNEE_LLM_* env vars are set", async () => {
-    process.env["ASSIGNEE_LLM_DEFAULT"] = "bedrock/amazon.nova-lite-v1:0";
-    process.env["ASSIGNEE_LLM_PLAN_GENERATOR"] = "anthropic/claude-sonnet-4-5";
-    try {
-      const result = await checkLlmRouting();
-      expect(result).not.toBeNull();
-      expect(result!.name).toContain("LLM routing");
-      expect(result!.name).toContain("callsite");
-      expect(result!.status).toBe("ok");
-      expect(result!.subs.length).toBeGreaterThanOrEqual(2);
-      // Verify callsite labels are present
-      const labels = result!.subs.map((s) => s.label.trim());
-      expect(labels).toContain("default");
-      expect(labels).toContain("plan_generator");
-    } finally {
-      delete process.env["ASSIGNEE_LLM_DEFAULT"];
-      delete process.env["ASSIGNEE_LLM_PLAN_GENERATOR"];
-    }
+  it("returns a non-zero exit code + actionable stderr when no creds are set", async () => {
+    const stdoutCapture: string[] = [];
+    const stderrCapture: string[] = [];
+    const code = await runShortDoctor({
+      stdout: (m: string) => stdoutCapture.push(m),
+      stderr: (m: string) => stderrCapture.push(m),
+    });
+    expect(code).not.toBe(0);
+    expect(stderrCapture.join("")).toContain("No AWS credentials configured");
   });
 
-  it("shows fallback info when no default key is configured", async () => {
-    process.env["ASSIGNEE_LLM_PLAN_GENERATOR"] = "anthropic/claude-sonnet-4-5";
-    try {
-      const result = await checkLlmRouting();
-      expect(result).not.toBeNull();
-      // Should include a (fallback) entry
-      const fallback = result!.subs.find(
-        (s) => s.label.trim() === "(fallback)",
-      );
-      expect(fallback).toBeDefined();
-      expect(fallback!.detail).toContain("built-in default");
-    } finally {
-      delete process.env["ASSIGNEE_LLM_PLAN_GENERATOR"];
-    }
+  it("returns non-zero + actionable stderr when STS fails", async () => {
+    process.env["ASSIGNEE_OPERATOR_ACCESS_KEY_ID"] = "AKIAIOSFODNN7EXAMPLE";
+    process.env["ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY"] =
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+
+    const stderrCapture: string[] = [];
+    const send = vi
+      .fn()
+      .mockRejectedValue(new Error("InvalidSignatureException: bad sig"));
+
+    const code = await runShortDoctor({
+      stsClientFactory: () => ({ send }),
+      stdout: () => {},
+      stderr: (m: string) => stderrCapture.push(m),
+    });
+    expect(code).not.toBe(0);
+    expect(stderrCapture.join("")).toContain(
+      "Failed to verify AWS identity via STS",
+    );
   });
 });

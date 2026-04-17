@@ -1,6 +1,7 @@
 {
   "name": "assignee-ai",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -9,7 +10,6 @@
     "test:coverage": "turbo run test:coverage",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "check-mcp-versions": "npx tsx apps/cli/scripts/check-mcp-versions.ts",
     "check:mock-fixture-drift": "npx tsx --import ./scripts/_vitest-shim.mts scripts/check-mock-fixture-drift.mts",
     "prepare": "husky"
   },

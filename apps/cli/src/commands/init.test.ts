@@ -553,18 +553,13 @@ describe("assignee init --global", () => {
     // 3. tag entry empty = done (text)
     // 4. naming prefix (text)
     // 5. auto_fix (select)
-    // 6. output_format (select)
-    // 7. verbosity (select)
     vi.mocked(clack.text)
       .mockResolvedValueOnce("us-west-2") // region
       .mockResolvedValueOnce("team=backend") // tag 1
       .mockResolvedValueOnce("") // done with tags
       .mockResolvedValueOnce("myco-"); // naming prefix
 
-    vi.mocked(clack.select)
-      .mockResolvedValueOnce("ask") // auto_fix
-      .mockResolvedValueOnce("table") // output_format
-      .mockResolvedValueOnce("normal"); // verbosity
+    vi.mocked(clack.select).mockResolvedValueOnce("ask"); // auto_fix
 
     await runInitGlobal();
 
@@ -583,8 +578,6 @@ describe("assignee init --global", () => {
 
     const prefs = parsed["preferences"] as Record<string, unknown>;
     expect(prefs["auto_fix"]).toBe("ask");
-    expect(prefs["output_format"]).toBe("table");
-    expect(prefs["verbosity"]).toBe("normal");
   });
 
   it("auto_fix defaults to 'ask' when user presses Enter", async () => {
@@ -593,10 +586,7 @@ describe("assignee init --global", () => {
       .mockResolvedValueOnce("") // done with tags
       .mockResolvedValueOnce(""); // no prefix
 
-    vi.mocked(clack.select)
-      .mockResolvedValueOnce("ask") // auto_fix — default
-      .mockResolvedValueOnce("table")
-      .mockResolvedValueOnce("normal");
+    vi.mocked(clack.select).mockResolvedValueOnce("ask"); // auto_fix — default
 
     await runInitGlobal();
 
@@ -649,10 +639,7 @@ describe("assignee init --global", () => {
       .mockResolvedValueOnce("environmentdev") // malformed: no `=`
       .mockResolvedValueOnce("") // done with tags
       .mockResolvedValueOnce(""); // no prefix
-    vi.mocked(clack.select)
-      .mockResolvedValueOnce("ask")
-      .mockResolvedValueOnce("table")
-      .mockResolvedValueOnce("normal");
+    vi.mocked(clack.select).mockResolvedValueOnce("ask");
 
     await runInitGlobal();
 
@@ -676,10 +663,7 @@ describe("assignee init --global", () => {
       .mockResolvedValueOnce("=lonely-value")
       .mockResolvedValueOnce("")
       .mockResolvedValueOnce("");
-    vi.mocked(clack.select)
-      .mockResolvedValueOnce("ask")
-      .mockResolvedValueOnce("table")
-      .mockResolvedValueOnce("normal");
+    vi.mocked(clack.select).mockResolvedValueOnce("ask");
 
     await runInitGlobal();
 
@@ -694,10 +678,7 @@ describe("assignee init --global", () => {
       .mockResolvedValueOnce("environment=") // empty value
       .mockResolvedValueOnce("")
       .mockResolvedValueOnce("");
-    vi.mocked(clack.select)
-      .mockResolvedValueOnce("ask")
-      .mockResolvedValueOnce("table")
-      .mockResolvedValueOnce("normal");
+    vi.mocked(clack.select).mockResolvedValueOnce("ask");
 
     await runInitGlobal();
 
@@ -712,10 +693,7 @@ describe("assignee init --global", () => {
       .mockResolvedValueOnce("environment=production")
       .mockResolvedValueOnce("")
       .mockResolvedValueOnce("");
-    vi.mocked(clack.select)
-      .mockResolvedValueOnce("ask")
-      .mockResolvedValueOnce("table")
-      .mockResolvedValueOnce("normal");
+    vi.mocked(clack.select).mockResolvedValueOnce("ask");
 
     await runInitGlobal();
 

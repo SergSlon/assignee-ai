@@ -2,16 +2,41 @@
 # Tap repository: homebrew-assignee
 # Install: brew tap assignee-ai/assignee && brew install assignee
 #
-# NOTE: sha256 and url are updated automatically by the release workflow.
+# NOTE: This file is a TEMPLATE. The release workflow
+# (`.github/workflows/release.yml.disabled`) renders the $VERSION / $SHA_*
+# variables via envsubst at publish time and commits the rendered formula to
+# the tap repo. Do not hand-edit the rendered copy in the tap — edit this
+# template instead.
 
 class Assignee < Formula
   desc "AI-Native Cloud Operator — plan and apply infrastructure with natural language"
   homepage "https://assignee.ai"
-  url "https://github.com/assignee-ai/assignee/releases/download/v0.1.0/assignee-v0.1.0.tar.gz"
-  sha256 "PLACEHOLDER_SHA256"
   license "MIT"
+  version "${VERSION}"
 
   depends_on "node@22"
+
+  on_macos do
+    on_arm do
+      url "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}-darwin-arm64.tar.gz"
+      sha256 "${SHA_DARWIN_ARM64}"
+    end
+    on_intel do
+      url "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}-darwin-x64.tar.gz"
+      sha256 "${SHA_DARWIN_X64}"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}-linux-arm64.tar.gz"
+      sha256 "${SHA_LINUX_ARM64}"
+    end
+    on_intel do
+      url "https://github.com/assignee-ai/assignee/releases/download/${VERSION}/assignee-${VERSION}-linux-x64.tar.gz"
+      sha256 "${SHA_LINUX_X64}"
+    end
+  end
 
   def install
     libexec.install Dir["*"]

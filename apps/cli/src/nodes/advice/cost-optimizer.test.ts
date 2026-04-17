@@ -31,14 +31,12 @@ vi.mock("../../utils/pricing-lookup.js", () => ({
 
 // Import after the mock is installed so the analyzer binds to the
 // mocked pricing module.
-import {
-  analyzeEc2Instance,
-  analyzeRdsInstance,
-  analyzeLambdaFunction,
-  analyzeLogsLogGroup,
-  analyzeResource,
-  buildRecommendation,
-} from "./cost-optimizer.js";
+import { analyzeEc2Instance } from "./cost-optimizer/ec2-analyzer.js";
+import { analyzeRdsInstance } from "./cost-optimizer/rds-analyzer.js";
+import { analyzeLambdaFunction } from "./cost-optimizer/lambda-analyzer.js";
+import { analyzeLogsLogGroup } from "./cost-optimizer/logs-analyzer.js";
+import { analyzeResource } from "./cost-optimizer/orchestrator.js";
+import { buildRecommendation } from "./cost-optimizer/types.js";
 
 const FAKE_EC2_ARN =
   "arn:aws:ec2:us-east-1:123456789012:instance/i-0123456789abcdef0";

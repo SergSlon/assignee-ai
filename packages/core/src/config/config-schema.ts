@@ -33,24 +33,6 @@ export interface ConfigDefaults {
 export interface ConfigPreferences {
   /** How to handle best practice auto-fixes. Default: "ask" */
   auto_fix?: AutoFixModeType;
-  /** Output format for CLI results. Default: "table" */
-  output_format?: "table" | "json";
-  /** Verbosity level. Default: "normal" */
-  verbosity?: "quiet" | "normal" | "verbose";
-}
-
-/**
- * Per-node LLM model routing configuration.
- * Maps callsite names to model strings (e.g. "anthropic/claude-sonnet-4-5").
- * The "default" key is the fallback for callsites not explicitly configured.
- *
- * @see Story 44.1 — Per-node LLM routing adapter
- */
-export interface ConfigLlm {
-  /** Default model for all callsites not explicitly listed. */
-  default?: string;
-  /** Per-callsite model overrides, e.g. plan_generator, intent_parser. */
-  [callsite: string]: string | undefined;
 }
 
 /** Budget / cost safety settings (FR-09 — panic limit). */
@@ -69,12 +51,10 @@ export interface ConfigBudget {
 export interface AssigneeConfig {
   /** Global defaults (region, tags, naming) */
   defaults?: ConfigDefaults;
-  /** User preferences (auto_fix, output_format, verbosity) */
+  /** User preferences (auto_fix) */
   preferences?: ConfigPreferences;
   /** Budget safety (monthly cost cap) */
   budget?: ConfigBudget;
-  /** Per-node LLM model routing (Story 44.1) */
-  llm?: ConfigLlm;
   /** Org policy section (for local-only org files) */
   org_policy?: Record<string, Record<string, unknown>>;
 }
@@ -95,8 +75,6 @@ export const DEFAULT_AWS_REGION = "us-east-1";
 /** Default values for all preference fields. */
 export const CONFIG_DEFAULTS: Required<ConfigPreferences> = {
   auto_fix: AutoFixMode.ASK,
-  output_format: "table",
-  verbosity: "normal",
 } as const;
 
 // ── Enum Validation Sets ─────────────────────────────────────────────────
@@ -106,8 +84,6 @@ const VALID_AUTO_FIX: Set<string> = new Set([
   AutoFixMode.APPLY,
   AutoFixMode.SKIP,
 ]);
-const VALID_OUTPUT_FORMAT = new Set(["table", "json"]);
-const VALID_VERBOSITY = new Set(["quiet", "normal", "verbose"]);
 
 // ── Validation ───────────────────────────────────────────────────────────
 
@@ -205,62 +181,9 @@ export function validateConfig(raw: unknown): AssigneeConfig {
       }
       prefs.auto_fix = String(p["auto_fix"]) as ConfigPreferences["auto_fix"];
     }
-
-    if (p["output_format"] !== undefined) {
-      if (!VALID_OUTPUT_FORMAT.has(String(p["output_format"]))) {
-        throw new ConfigurationError(
-          `preferences.output_format: invalid value '${p["output_format"]}', expected table | json`,
-        );
-      }
-      prefs.output_format = String(
-        p["output_format"],
-      ) as ConfigPreferences["output_format"];
-    }
-
-    if (p["verbosity"] !== undefined) {
-      if (!VALID_VERBOSITY.has(String(p["verbosity"]))) {
-        throw new ConfigurationError(
-          `preferences.verbosity: invalid value '${p["verbosity"]}', expected quiet | normal | verbose`,
-        );
-      }
-      prefs.verbosity = String(
-        p["verbosity"],
-      ) as ConfigPreferences["verbosity"];
-    }
   }
 
   result.preferences = prefs;
-
-  // ── Validate llm section (Story 44.1) ──
-  if (obj["llm"] !== undefined) {
-    if (
-      typeof obj["llm"] !== "object" ||
-      obj["llm"] === null ||
-      Array.isArray(obj["llm"])
-    ) {
-      throw new ConfigurationError("llm: must be an object");
-    }
-    const llmRaw = obj["llm"] as Record<string, unknown>;
-    const llm: ConfigLlm = {};
-    for (const [key, val] of Object.entries(llmRaw)) {
-      if (val === undefined || val === null) continue;
-      if (typeof val !== "string") {
-        throw new ConfigurationError(
-          `llm.${key}: must be a string in "provider/model-id" format`,
-        );
-      }
-      const slashIdx = val.indexOf("/");
-      if (slashIdx === -1 || slashIdx === 0 || slashIdx === val.length - 1) {
-        throw new ConfigurationError(
-          `llm.${key}: invalid model format "${val}" — expected "provider/model-id" (e.g. "anthropic/claude-sonnet-4-5")`,
-        );
-      }
-      llm[key] = val;
-    }
-    if (Object.keys(llm).length > 0) {
-      result.llm = llm;
-    }
-  }
 
   // ── Org policy (pass-through, no deep validation) ──
   if (obj["org_policy"] !== undefined) {

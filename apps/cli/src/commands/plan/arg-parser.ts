@@ -18,6 +18,8 @@ export interface PlanOpts {
   set?: string[];
   output?: string;
   yes?: boolean;
+  /** Story 50-2: --quick wizard mode (skip defaulted prompts). */
+  quick?: boolean;
 }
 
 export interface ResolvedPlanArgs {

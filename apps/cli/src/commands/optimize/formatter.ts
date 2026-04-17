@@ -9,7 +9,7 @@
  */
 import chalk from "chalk";
 import boxen from "boxen";
-import type { CostOptRecommendation } from "../../nodes/advice/cost-optimizer.js";
+import type { CostOptRecommendation } from "../../nodes/advice/cost-optimizer/types.js";
 
 /**
  * Render the recommendation table to stdout. Non-TTY output drops the

@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { Command } from "commander";
+import chalk from "chalk";
 import { planCommand } from "./commands/plan.js";
 import { applyCommand } from "./commands/apply.js";
 import { completionsCommand } from "./commands/completions.js";
@@ -22,14 +23,10 @@ import { optimizeCommand } from "./commands/optimize.js";
 import { listCommand } from "./commands/list.js";
 import { setupCommand } from "./commands/setup.js";
 import { statusCommand } from "./commands/status.js";
-import { cleanCommand } from "./commands/clean.js";
 import { reconcileCommand } from "./commands/reconcile.js";
-import { cacheCommand } from "./commands/cache.js";
 import { doctorCommand } from "./commands/doctor.js";
-import { whoamiCommand } from "./commands/whoami.js";
-import { patternsCommand } from "./commands/patterns.js";
-import { typesCommand } from "./commands/types.js";
 import { ProcessExitCode } from "./constants/errors.js";
+import { errorToExitCode } from "./utils/exit-code.js";
 import {
   SUPPORTED_TYPES_HINT,
   PATTERNS_HINT,
@@ -59,6 +56,15 @@ program
     "--verbose",
     "Enable structured JSON diagnostic logs to stderr (also: ASSIGNEE_LOG_LEVEL=debug, ASSIGNEE_VERBOSITY=verbose)",
   )
+  // Story 50-2: explicit colour control. `chalk@5` honors `NO_COLOR`
+  // natively, but we also expose `--color` / `--no-color` for users who
+  // want to override the heuristic on a per-invocation basis (e.g. log
+  // capture pipelines that want colour, or terminals that mis-report
+  // `isTTY`). The preSubcommand hook reconciles all three inputs
+  // (`NO_COLOR` env var, `--no-color` flag, `--color` flag) into the
+  // single `chalk.level` knob before any subcommand runs.
+  .option("--no-color", "Disable ANSI colour output (also: NO_COLOR env var)")
+  .option("--color", "Force ANSI colour output even when stdout is not a TTY")
   .configureHelp({ showGlobalOptions: true })
   .addHelpText(
     "after",
@@ -70,10 +76,31 @@ program
 // flag takes precedence over the env vars — we set the env var here only when
 // the flag is present, so an unset flag never clobbers an operator-set
 // ASSIGNEE_LOG_LEVEL / ASSIGNEE_VERBOSITY.
+//
+// Story 50-2: also reconcile --color / --no-color with NO_COLOR. Precedence:
+//   1. Explicit --color flag  → force chalk.level ≥ 1 (colour on).
+//   2. Explicit --no-color flag (or `color: false` from commander's
+//      auto-negation) → chalk.level = 0 (colour off).
+//   3. NO_COLOR env var       → chalk.level = 0 (colour off).
+//   4. Otherwise              → leave chalk's auto-detection alone.
 program.hook("preSubcommand", (thisCommand) => {
-  const opts = thisCommand.opts<{ verbose?: boolean }>();
+  const opts = thisCommand.opts<{
+    verbose?: boolean;
+    color?: boolean;
+  }>();
   if (opts.verbose) {
     process.env["ASSIGNEE_LOG_LEVEL"] = "debug";
+  }
+
+  // Commander's `--no-color` surfaces as `opts.color === false`.
+  // `--color` surfaces as `opts.color === true`. Undefined means neither
+  // flag was passed — defer to NO_COLOR env var + chalk auto-detect.
+  if (opts.color === true) {
+    if (chalk.level === 0) chalk.level = 1;
+  } else if (opts.color === false) {
+    chalk.level = 0;
+  } else if (process.env["NO_COLOR"] !== undefined) {
+    chalk.level = 0;
   }
 });
 
@@ -112,13 +139,8 @@ program.addCommand(planCommand);
 program.addCommand(setupCommand);
 program.addCommand(statusCommand);
 program.addCommand(applyCommand);
-program.addCommand(cleanCommand);
 program.addCommand(reconcileCommand);
-program.addCommand(cacheCommand);
 program.addCommand(doctorCommand);
-program.addCommand(whoamiCommand);
-program.addCommand(patternsCommand);
-program.addCommand(typesCommand);
 
 // Propagate `showGlobalOptions: true` to every subcommand so the root-level
 // `--verbose` (and any future global options) appear in `<subcommand> --help`
@@ -136,9 +158,12 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
 
 // Graceful shutdown handlers (P2-R2-3).
 //
-// The SIGINT handler MUST:
+// The signal handler MUST:
 //   1. Stop any active clack spinner first — otherwise the cursor stays
 //      hidden on some terminals and the label line stays partially drawn.
+//      Also emit the DECTCEM "show cursor" sequence as belt-and-suspenders
+//      so a crashed spinner can never leave the terminal with a hidden
+//      caret.
 //   2. Print a visible "Cancelled." marker to stderr so the user sees
 //      that their Ctrl-C was honored (prior behavior dropped silently
 //      while MCP clients closed in background).
@@ -147,10 +172,17 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
 //      exiting, otherwise the last log line is lost on fast-exit.
 //   5. Exit with the conventional 128 + signum code.
 //
-// Re-entrancy: second Ctrl-C during teardown bypasses cleanup and hard
+// Story 50-2: added SIGHUP (nohup / tmux detach / SSH disconnect) and
+// SIGBREAK (Windows Ctrl-Break) handlers so cloud VMs, background
+// workflows and Windows users all get the same graceful teardown as
+// SIGINT / SIGTERM. SIGBREAK is Node-on-Windows-specific and raises a
+// runtime error if registered on non-Windows, so we gate on platform.
+//
+// Re-entrancy: a second signal during teardown bypasses cleanup and hard
 // exits — a stuck MCP close must not trap the user.
 let shuttingDown = false;
-function installSignalHandler(signal: "SIGINT" | "SIGTERM", code: number) {
+type ShutdownSignal = "SIGINT" | "SIGTERM" | "SIGHUP" | "SIGBREAK";
+function installSignalHandler(signal: ShutdownSignal, code: number) {
   process.on(signal, async () => {
     if (shuttingDown) {
       // Second signal during teardown — abandon cleanup.
@@ -161,6 +193,15 @@ function installSignalHandler(signal: "SIGINT" | "SIGTERM", code: number) {
       stopSpinner();
     } catch {
       /* spinner may not exist — non-fatal */
+    }
+    // Belt-and-suspenders: restore the cursor in case a crashed spinner
+    // left it hidden. DECTCEM "show cursor" — harmless if already shown.
+    if (process.stderr.isTTY) {
+      try {
+        process.stderr.write("\x1b[?25h");
+      } catch {
+        /* terminal already closed — non-fatal */
+      }
     }
     process.stderr.write(`\nCancelled (${signal}).\n`);
     try {
@@ -181,10 +222,17 @@ function installSignalHandler(signal: "SIGINT" | "SIGTERM", code: number) {
 }
 installSignalHandler("SIGINT", 128 + 2); // 130
 installSignalHandler("SIGTERM", 128 + 15); // 143
+installSignalHandler("SIGHUP", 128 + 1); // 129
+// SIGBREAK is Windows-only (raised by Ctrl-Break). Installing the
+// handler on POSIX is a no-op in Node but we gate explicitly so the
+// intent is clear.
+if (process.platform === "win32") {
+  installSignalHandler("SIGBREAK", 128 + 21); // 149 (Node's SIGBREAK signum)
+}
 
 program.parseAsync(process.argv).catch((err) => {
   process.stderr.write(
     `Error: ${err instanceof Error ? err.message : String(err)}\n`,
   );
-  process.exitCode = 1;
+  process.exitCode = errorToExitCode(err);
 });

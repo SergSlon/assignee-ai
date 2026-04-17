@@ -13,8 +13,6 @@ describe("validateConfig", () => {
         },
         preferences: {
           auto_fix: "apply",
-          output_format: "json",
-          verbosity: "verbose",
         },
       };
 
@@ -26,8 +24,6 @@ describe("validateConfig", () => {
       });
       expect(result.defaults?.naming?.prefix).toBe("mycompany-");
       expect(result.preferences?.auto_fix).toBe("apply");
-      expect(result.preferences?.output_format).toBe("json");
-      expect(result.preferences?.verbosity).toBe("verbose");
     });
   });
 
@@ -35,8 +31,6 @@ describe("validateConfig", () => {
     it("empty object returns preference defaults", () => {
       const result = validateConfig({});
       expect(result.preferences?.auto_fix).toBe("ask");
-      expect(result.preferences?.output_format).toBe("table");
-      expect(result.preferences?.verbosity).toBe("normal");
       expect(result.defaults).toBeUndefined();
     });
 
@@ -54,7 +48,6 @@ describe("validateConfig", () => {
       });
       expect(result.defaults).toBeUndefined();
       expect(result.preferences?.auto_fix).toBe("skip");
-      expect(result.preferences?.output_format).toBe("table");
     });
   });
 
@@ -69,18 +62,6 @@ describe("validateConfig", () => {
         expect((err as Error).message).toContain("preferences.auto_fix");
         expect((err as Error).message).toContain("ask | apply | skip");
       }
-    });
-
-    it("invalid output_format", () => {
-      expect(() =>
-        validateConfig({ preferences: { output_format: "xml" } }),
-      ).toThrow(ConfigurationError);
-    });
-
-    it("invalid verbosity", () => {
-      expect(() =>
-        validateConfig({ preferences: { verbosity: "debug" } }),
-      ).toThrow(ConfigurationError);
     });
   });
 
@@ -153,86 +134,9 @@ describe("validateConfig", () => {
     });
   });
 
-  // ── Story 44.1: llm section validation ──────────────────────────────
-  describe("llm section (Story 44.1)", () => {
-    it("accepts valid llm config with provider/model format", () => {
-      const result = validateConfig({
-        llm: {
-          default: "bedrock/amazon.nova-lite-v1:0",
-          plan_generator: "anthropic/claude-sonnet-4-5",
-          intent_parser: "bedrock/us.amazon.nova-micro-v1:0",
-        },
-      });
-      expect(result.llm).toEqual({
-        default: "bedrock/amazon.nova-lite-v1:0",
-        plan_generator: "anthropic/claude-sonnet-4-5",
-        intent_parser: "bedrock/us.amazon.nova-micro-v1:0",
-      });
-    });
-
-    it("rejects llm that is not an object", () => {
-      expect(() => validateConfig({ llm: "not-an-object" })).toThrow(
-        "llm: must be an object",
-      );
-    });
-
-    it("rejects llm values that are not strings", () => {
-      expect(() => validateConfig({ llm: { default: 42 } })).toThrow(
-        'llm.default: must be a string in "provider/model-id" format',
-      );
-    });
-
-    it("rejects model strings without slash", () => {
-      expect(() =>
-        validateConfig({ llm: { default: "just-a-model" } }),
-      ).toThrow('llm.default: invalid model format "just-a-model"');
-    });
-
-    it("rejects model strings with empty provider", () => {
-      expect(() => validateConfig({ llm: { default: "/model-id" } })).toThrow(
-        'llm.default: invalid model format "/model-id"',
-      );
-    });
-
-    it("rejects model strings with empty model-id", () => {
-      expect(() => validateConfig({ llm: { default: "anthropic/" } })).toThrow(
-        'llm.default: invalid model format "anthropic/"',
-      );
-    });
-
-    it("skips null/undefined llm values silently", () => {
-      const result = validateConfig({
-        llm: {
-          default: "bedrock/amazon.nova-lite-v1:0",
-          plan_generator: null,
-          intent_parser: undefined,
-        },
-      });
-      expect(result.llm).toEqual({
-        default: "bedrock/amazon.nova-lite-v1:0",
-      });
-    });
-
-    it("omits llm from result when all values are null/undefined", () => {
-      const result = validateConfig({
-        llm: { plan_generator: null },
-      });
-      expect(result.llm).toBeUndefined();
-    });
-
-    it("accepts bedrock model with colons in model-id", () => {
-      const result = validateConfig({
-        llm: { default: "bedrock/amazon.nova-lite-v1:0" },
-      });
-      expect(result.llm?.["default"]).toBe("bedrock/amazon.nova-lite-v1:0");
-    });
-  });
-
   describe("CONFIG_DEFAULTS", () => {
     it("has correct default values", () => {
       expect(CONFIG_DEFAULTS.auto_fix).toBe("ask");
-      expect(CONFIG_DEFAULTS.output_format).toBe("table");
-      expect(CONFIG_DEFAULTS.verbosity).toBe("normal");
     });
   });
 });

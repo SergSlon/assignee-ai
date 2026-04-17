@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   ExecutionStatus,
-  MockLlmAdapter,
   RESOURCE_TYPES,
   ResourceDefault,
 } from "@assignee/core";
+import { MockLlmAdapter } from "@assignee/core/testing";
 import {
   createPlanGeneratorNode,
   applyToCfnTransforms,

@@ -23,7 +23,7 @@ import {
 import type { StructuredTool } from "@langchain/core/tools";
 import { log, LOG_ACTIONS } from "../../utils/logger.js";
 import type { AgentState } from "../../services/graph.js";
-import { enrichBpWithMcp } from "../advice/bp-mcp-enricher.js";
+import { enrichBpWithMcp } from "../advice/bp-mcp-enricher/orchestrator.js";
 import { loadCached } from "./rule-loader.js";
 import { suppressCompoundFindings } from "./compound-suppressor.js";
 

@@ -1,9 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  ExecutionStatus,
-  MockLlmAdapter,
-  RESOURCE_TYPES,
-} from "@assignee/core";
+import { ExecutionStatus, RESOURCE_TYPES } from "@assignee/core";
+import { MockLlmAdapter } from "@assignee/core/testing";
 import { createAdviceGeneratorNode } from "./advice-generator.js";
 import type { AgentState } from "../services/graph.js";
 

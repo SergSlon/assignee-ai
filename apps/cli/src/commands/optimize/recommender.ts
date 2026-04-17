@@ -9,10 +9,8 @@
  * can then sort/filter for display.
  */
 import { resolveDesiredState } from "../../utils/resolve-desired-state.js";
-import {
-  analyzeResource,
-  type CostOptRecommendation,
-} from "../../nodes/advice/cost-optimizer.js";
+import { analyzeResource } from "../../nodes/advice/cost-optimizer/orchestrator.js";
+import type { CostOptRecommendation } from "../../nodes/advice/cost-optimizer/types.js";
 import {
   queryCostOptimization,
   queryComputeOptimizer,

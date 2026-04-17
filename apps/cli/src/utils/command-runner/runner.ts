@@ -30,7 +30,6 @@ import {
 } from "../recorder.js";
 import { runAutoCleanup } from "../../services/cleanup.js";
 import { defaultMemoryService } from "../../services/memory.js";
-import { loadGlobalConfig } from "../../config/load-global-config.js";
 import { loadUserConfig } from "../../config/user-config-loader.js";
 import { CHECKPOINT_DIR } from "../../config/constants.js";
 import {
@@ -119,15 +118,13 @@ export async function runCommand(opts: RunCommandOptions): Promise<void> {
           tools = tools.map((t) => wrapToolWithRecorder(t, recorder));
         }
 
-        const userConfig = await loadUserConfig();
-        const resolvedConfig = await loadGlobalConfig(userConfig);
+        await loadUserConfig();
 
-        const llmClient = await buildLlmClient({ recorder, resolvedConfig });
+        const llmClient = await buildLlmClient({ recorder });
 
         const graph = createGraph(tools, {
           llmClient,
           recorder: recorder ?? undefined,
-          resolvedConfig,
         });
 
         const result = await opts.run({

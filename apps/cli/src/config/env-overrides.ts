@@ -5,11 +5,13 @@
  * Supported variables:
  * - ASSIGNEE_DEFAULT_REGION → defaults.region
  * - ASSIGNEE_AUTO_FIX → preferences.auto_fix (ask|apply|skip)
- * - ASSIGNEE_OUTPUT_FORMAT → preferences.output_format (table|json)
- * - ASSIGNEE_VERBOSITY → preferences.verbosity (quiet|normal|verbose)
  * - ASSIGNEE_DEFAULT_TAGS → defaults.tags (comma-separated key=value)
  *
  * Does NOT touch ASSIGNEE_CONFIG_DIR (handled by user-config-loader.ts).
+ *
+ * Story 50-7: ASSIGNEE_OUTPUT_FORMAT and ASSIGNEE_VERBOSITY bridges
+ * removed along with their schema keys (no runtime branches consumed
+ * them).
  *
  * @see Story 27.7 — Environment Variable Overrides
  */
@@ -26,8 +28,6 @@ const VALID_AUTO_FIX = new Set([
   AutoFixMode.APPLY,
   AutoFixMode.SKIP,
 ]);
-const VALID_OUTPUT_FORMAT = new Set(["table", "json"]);
-const VALID_VERBOSITY = new Set(["quiet", "normal", "verbose"]);
 
 /**
  * Validate an enum env var value against allowed set.
@@ -142,64 +142,6 @@ export function loadEnvOverrides(
       if (!result.preferences) result.preferences = {};
       result.preferences.auto_fix = valid as AutoFixModeType;
     }
-  }
-
-  // ASSIGNEE_OUTPUT_FORMAT → preferences.output_format
-  const outputFormat = env["ASSIGNEE_OUTPUT_FORMAT"];
-  if (outputFormat !== undefined && outputFormat !== "") {
-    const valid = validateEnum(
-      "ASSIGNEE_OUTPUT_FORMAT",
-      outputFormat,
-      VALID_OUTPUT_FORMAT,
-    );
-    if (valid) {
-      if (!result.preferences) result.preferences = {};
-      result.preferences.output_format = valid as "table" | "json";
-    }
-  }
-
-  // ASSIGNEE_VERBOSITY → preferences.verbosity
-  const verbosity = env["ASSIGNEE_VERBOSITY"];
-  if (verbosity !== undefined && verbosity !== "") {
-    const valid = validateEnum(
-      "ASSIGNEE_VERBOSITY",
-      verbosity,
-      VALID_VERBOSITY,
-    );
-    if (valid) {
-      if (!result.preferences) result.preferences = {};
-      result.preferences.verbosity = valid as "quiet" | "normal" | "verbose";
-    }
-  }
-
-  // ASSIGNEE_LLM_DEFAULT, ASSIGNEE_LLM_PLAN_GENERATOR, etc. → llm.*
-  // Pattern: ASSIGNEE_LLM_{CALLSITE} where callsite is uppercased.
-  const LLM_PREFIX = "ASSIGNEE_LLM_";
-  const llmEntries: Record<string, string> = {};
-  for (const [key, val] of Object.entries(env)) {
-    if (key.startsWith(LLM_PREFIX) && val !== undefined && val !== "") {
-      const callsite = key.slice(LLM_PREFIX.length).toLowerCase();
-      if (callsite) {
-        // Lightweight format check — full validation at adapter construction
-        const slashIdx = val.indexOf("/");
-        if (slashIdx === -1 || slashIdx === 0 || slashIdx === val.length - 1) {
-          log({
-            ts: new Date().toISOString(),
-            runId: "system",
-            level: "warn",
-            action: LOG_ACTIONS.CONFIG_LOADED,
-            extras: {
-              reason: `Ignoring ${key}='${val}' — expected "provider/model-id" format`,
-            },
-          });
-          continue;
-        }
-        llmEntries[callsite] = val;
-      }
-    }
-  }
-  if (Object.keys(llmEntries).length > 0) {
-    result.llm = llmEntries;
   }
 
   return result;

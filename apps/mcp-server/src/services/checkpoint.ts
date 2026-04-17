@@ -1,73 +1,38 @@
 /**
  * Checkpoint serialization and loading service for MCP server.
- * Ported from apps/cli/src/services/checkpoint.ts — provides serializeCheckpoint,
- * saveCheckpoint (Story 20.2) and loadCheckpointFromPath (Story 20.3).
  *
- * @see Story 20.2, Story 20.3, Story 10.1
+ * Story 50-4 consolidated the serialize/save/load/redact helpers into
+ * `@assignee/core/checkpoint` so MCP and CLI share one implementation.
+ * This module is now a thin MCP-only wrapper that plugs the per-process
+ * HMAC integrity layer (see ./checkpoint-hmac.ts) into the shared core
+ * via:
+ *   - `saveCheckpoint`: delegates to core, then registers an HMAC over
+ *     `(canonical-path, sha256(desiredState))` under an in-memory map.
+ *   - `loadCheckpointFromPath`: passes a `verifyIntegrity` hook into
+ *     core's loader; the hook fails closed if the file was not written
+ *     by THIS process, or its desiredState has been mutated after save.
+ *
+ * Post-restart resume is refused by design — the HMAC secret is
+ * regenerated per process. Operators re-plan after a server restart.
+ *
+ * @see Story 20.2, Story 20.3, Story 10.1, Story 50-5, Story 50-4
  */
 
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import { CheckpointError, type PlanCheckpoint } from "@assignee/core";
 import {
-  PlanCheckpointSchema,
-  CHECKPOINT_VERSION,
-  CheckpointError,
-  CostEstimateLabel,
-  CfnKey,
-  UNKNOWN_FALLBACK,
-  type PlanCheckpoint,
-} from "@assignee/core";
-
-/**
- * Sensitive desiredState keys that must be redacted before writing to disk.
- * @see SEC-02, apps/cli/src/services/checkpoint.ts — keep in sync
- */
-const SENSITIVE_STATE_KEYS: Set<string> = new Set([
-  CfnKey.MASTER_USER_PASSWORD,
-  CfnKey.SECRET_STRING,
-  CfnKey.PASSWORD,
-  CfnKey.ACCESS_KEY,
-  CfnKey.SECRET_ACCESS_KEY,
-  CfnKey.SESSION_TOKEN,
-]);
-
-/** Recursively redact sensitive keys from a desiredState record. */
-function redactSensitiveFields(
-  state: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(state)) {
-    if (SENSITIVE_STATE_KEYS.has(key)) {
-      result[key] = "[REDACTED]";
-    } else if (value && typeof value === "object" && !Array.isArray(value)) {
-      result[key] = redactSensitiveFields(value as Record<string, unknown>);
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
-
-/** Recursively remove fields with "[REDACTED]" values from a desiredState record. */
-function stripRedactedFields(
-  state: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(state)) {
-    if (value === "[REDACTED]") continue;
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      result[key] = stripRedactedFields(value as Record<string, unknown>);
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
-
-/** Default TTL for checkpoint expiry validation (72 hours).
- * @see apps/cli/src/config/constants.ts CHECKPOINT_DEFAULT_TTL_HOURS — keep in sync */
-const CHECKPOINT_DEFAULT_TTL_HOURS = 72;
+  saveCheckpoint as coreSaveCheckpoint,
+  loadCheckpointFromPath as coreLoadCheckpointFromPath,
+  serializeCheckpoint as coreSerializeCheckpoint,
+  type SerializableGraphState,
+} from "@assignee/core/checkpoint";
+import {
+  canonicalizeCheckpointPath,
+  computeDesiredStateHash,
+  signCheckpoint,
+  verifyCheckpoint,
+} from "./checkpoint-hmac.js";
 
 /** MCP checkpoint directory — uses /tmp to avoid assuming a project directory. */
 export const MCP_CHECKPOINT_DIR = path.join(
@@ -75,62 +40,28 @@ export const MCP_CHECKPOINT_DIR = path.join(
   "assignee-mcp-checkpoints",
 );
 
-/**
- * Serializable state fields extracted from the graph final state.
- * Matches the shape of AgentState from the CLI's graph-state.ts.
- */
-export interface SerializableGraphState {
-  runId: string;
-  userIntent: string;
-  resourceType?: string;
-  desiredState?: Record<string, unknown>;
-  estimatedMonthlyCost?: string;
-  preflightPassed?: boolean;
-  elicitedOptions?: Record<string, unknown>;
-  resourcePattern?: { patternId?: string };
-  resourceQueue?: Array<{
-    resourceId: string;
-    resourceType: string;
-    displayName: string;
-  }>;
-}
+export type { SerializableGraphState };
 
 /**
  * Extracts serializable fields from graph state into a PlanCheckpoint.
- * Mirrors the CLI's serializeCheckpoint but operates on a plain object
- * (the graph invoke result) rather than the typed AgentState.
+ * Delegates to `@assignee/core/checkpoint`.
  */
 export function serializeCheckpoint(
   state: SerializableGraphState,
 ): PlanCheckpoint {
-  return {
-    checkpoint_version: CHECKPOINT_VERSION,
-    created_at: new Date().toISOString(),
-    ttl_hours: CHECKPOINT_DEFAULT_TTL_HOURS,
-    runId: state.runId,
-    userIntent: state.userIntent,
-    resourceType: state.resourceType ?? UNKNOWN_FALLBACK,
-    resourcePatternId: state.resourcePattern?.patternId ?? undefined,
-    resourceQueue: state.resourceQueue
-      ? state.resourceQueue.map((r) => ({
-          resourceId: r.resourceId,
-          resourceType: r.resourceType,
-          displayName: r.displayName,
-          desiredState: {},
-        }))
-      : undefined,
-    desiredState: state.desiredState
-      ? redactSensitiveFields(state.desiredState)
-      : {},
-    estimatedMonthlyCost: state.estimatedMonthlyCost ?? CostEstimateLabel.NA,
-    preflightPassed: state.preflightPassed ?? false,
-    elicitedOptions: state.elicitedOptions,
-  };
+  return coreSerializeCheckpoint(state);
 }
 
 /**
- * Writes a checkpoint to disk as JSON.
- * Creates the directory if it doesn't exist.
+ * Writes a checkpoint to disk and registers its HMAC integrity
+ * signature in-process.
+ *
+ * Security bolts from Story 50-5 (B-1, B-2) preserved:
+ *   - B-1: dir 0o700, file 0o600, atomic temp+rename — enforced by
+ *     `@assignee/core/checkpoint#saveCheckpoint`.
+ *   - B-2: `(canonical-path, sha256(desiredState))` signed with a
+ *     per-process HMAC secret held in ./checkpoint-hmac.ts. Done AFTER
+ *     the atomic rename so a failed write never pollutes the map.
  *
  * @returns The absolute file path written.
  */
@@ -138,76 +69,50 @@ export async function saveCheckpoint(
   checkpoint: PlanCheckpoint,
   dir: string = MCP_CHECKPOINT_DIR,
 ): Promise<string> {
-  await fs.mkdir(dir, { recursive: true });
-  const filePath = path.join(dir, `checkpoint-${checkpoint.runId}.json`);
-  await fs.writeFile(filePath, JSON.stringify(checkpoint, null, 2), "utf-8");
+  const filePath = await coreSaveCheckpoint(checkpoint, dir);
+  // Story 50-5 B-2: register the HMAC AFTER the rename so a failed
+  // write never pollutes the integrity map.
+  const canonical = canonicalizeCheckpointPath(filePath);
+  const desiredStateHash = computeDesiredStateHash(
+    checkpoint.desiredState ?? {},
+  );
+  signCheckpoint(canonical, desiredStateHash);
   return filePath;
 }
 
 /**
- * Loads and validates a checkpoint from an explicit file path.
- * Validates schema, TTL, preflight status, and desiredState presence.
+ * Loads and validates a checkpoint from an explicit file path. Refuses
+ * to load when the in-process HMAC signature does not match — i.e.
+ * when the file was not written by this MCP server process or its
+ * desiredState was modified after writing.
  *
- * @throws CheckpointError on missing file, invalid schema, expired TTL, or incomplete checkpoint.
- * @see Story 11.3
+ * @throws CheckpointError on missing file, invalid schema, expired
+ *   TTL, incomplete checkpoint, or HMAC mismatch.
+ * @see Story 50-5 B-2
  */
 export async function loadCheckpointFromPath(
   filePath: string,
 ): Promise<PlanCheckpoint> {
-  let raw: string;
-  try {
-    raw = await fs.readFile(filePath, "utf-8");
-  } catch {
-    throw new CheckpointError(
-      `Checkpoint file not found: ${filePath}. Run plan_resource first to generate a plan.`,
-    );
-  }
-
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    throw new CheckpointError(
-      `Corrupt checkpoint file (invalid JSON): ${filePath}`,
-    );
-  }
-
-  const parsed = PlanCheckpointSchema.strict().safeParse(json);
-  if (!parsed.success) {
-    throw new CheckpointError(
-      `Invalid checkpoint file: ${parsed.error.message}`,
-    );
-  }
-
-  const cp = parsed.data;
-
-  // TTL validation
-  const ttlHours = cp.ttl_hours ?? CHECKPOINT_DEFAULT_TTL_HOURS;
-  const createdMs = new Date(cp.created_at).getTime();
-  const expiresMs = createdMs + ttlHours * 60 * 60 * 1000;
-  const now = Date.now();
-  if (now > expiresMs) {
-    const createdDate = new Date(cp.created_at).toLocaleString();
-    throw new CheckpointError(
+  return coreLoadCheckpointFromPath(filePath, {
+    missingFileMessage: `Checkpoint file not found: ${filePath}. Run plan_resource first to generate a plan.`,
+    expiredMessage: (createdDate, ttlHours) =>
       `Checkpoint expired: created ${createdDate}, TTL ${ttlHours}h. Run plan_resource to generate a new plan.`,
-    );
-  }
-
-  // Validate checkpoint completeness for provisioning
-  if (!cp.preflightPassed) {
-    throw new CheckpointError(
-      `Checkpoint did not pass preflight validation. Run plan_resource to generate a new plan.`,
-    );
-  }
-
-  if (!cp.desiredState || Object.keys(cp.desiredState).length === 0) {
-    throw new CheckpointError(
-      `Checkpoint has no desiredState. Run plan_resource to generate a new plan.`,
-    );
-  }
-
-  // Strip redacted fields so they are never sent to AWS on resume
-  cp.desiredState = stripRedactedFields(cp.desiredState);
-
-  return cp;
+    preflightFailedMessage:
+      "Checkpoint did not pass preflight validation. Run plan_resource to generate a new plan.",
+    emptyDesiredStateMessage:
+      "Checkpoint has no desiredState. Run plan_resource to generate a new plan.",
+    verifyIntegrity: (file, cp) => {
+      // Story 50-5 B-2: HMAC integrity check over
+      // (canonical-path, sha256(desiredState)). Runs BEFORE
+      // stripRedactedFields (core's loader guarantees this ordering)
+      // so the hash on load matches the hash computed at save time.
+      const canonical = canonicalizeCheckpointPath(file);
+      const desiredStateHash = computeDesiredStateHash(cp.desiredState);
+      if (!verifyCheckpoint(canonical, desiredStateHash)) {
+        throw new CheckpointError(
+          `Checkpoint integrity check failed: ${file}. The file was not produced by this MCP server process, or its contents have been modified after writing. Run plan_resource to generate a new plan. (If the MCP server was restarted between plan and apply, this is expected — in-memory integrity keys are regenerated per process.)`,
+        );
+      }
+    },
+  });
 }

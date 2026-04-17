@@ -20,7 +20,6 @@ const {
   mockSnsSend,
   mockResolveResource,
   mockCreateTaggingClient,
-  mockPlanBulkDestroy,
   mockDestroySingleResource,
 } = vi.hoisted(() => ({
   mockText: vi.fn(),
@@ -31,7 +30,6 @@ const {
   mockSnsSend: vi.fn(),
   mockResolveResource: vi.fn(),
   mockCreateTaggingClient: vi.fn().mockReturnValue({}),
-  mockPlanBulkDestroy: vi.fn(),
   mockDestroySingleResource: vi.fn(),
 }));
 
@@ -154,10 +152,6 @@ vi.mock("../services/destroy-service.js", () => ({
     mockDestroySingleResource(...args),
 }));
 
-vi.mock("../services/bulk-destroy.js", () => ({
-  planBulkDestroy: (...args: unknown[]) => mockPlanBulkDestroy(...args),
-}));
-
 vi.mock("../services/billing.js", () => ({
   getCostSavingsEstimate: vi.fn().mockResolvedValue("$5.00/mo"),
 }));
@@ -252,31 +246,12 @@ const mockResource = {
 };
 
 describe("assignee destroy", () => {
-  describe("--include-iam without --all", () => {
-    it("rejects --include-iam without --all", async () => {
-      // Item 4b (2026-04-10): error text updated to a guide-the-user
-      // message with a concrete `assignee destroy --all --include-iam`
-      // suggestion. Assertion matches on the invariant phrase
-      // "bulk-destroy mode" which anchors the guidance.
-      await expect(
-        destroyAction("some-resource", { includeIam: true }),
-      ).rejects.toThrow(/--include-iam only works in bulk-destroy mode/);
-    });
-  });
-
-  describe("--dry-run without --all", () => {
-    it("rejects --dry-run without --all", async () => {
-      await expect(
-        destroyAction("some-resource", { dryRun: true }),
-      ).rejects.toThrow(/--dry-run only works in bulk-destroy mode/);
-    });
-  });
-
   describe("missing resource argument", () => {
-    it("rejects when no resource and no --all", async () => {
-      // Item 4b (2026-04-10): error rewritten to guide-the-user with
-      // concrete examples. Assertion matches the invariant phrase
-      // "needs to know what to destroy" which anchors the guidance.
+    it("rejects when no resource is passed", async () => {
+      // Story 50-3: bulk destroy (--all) was removed; destroy always
+      // needs a positional resource argument. Assertion matches the
+      // invariant phrase "needs to know what to destroy" anchoring
+      // the guide-the-user error.
       await expect(destroyAction(undefined, {})).rejects.toThrow(
         /needs to know what to destroy/,
       );
@@ -648,166 +623,11 @@ describe("assignee destroy", () => {
       expect(mockDestroySingleResource).not.toHaveBeenCalled();
     });
   });
-
-  // ── Bulk destroy (--all) ──────────────────────────────────────────────────
-  describe("--all bulk destroy", () => {
-    const tier1Resource = {
-      arn: "arn:aws:logs:us-east-1:123456:log-group:my-logs",
-      resourceType: "AWS::Logs::LogGroup",
-      identifier: "my-logs",
-      region: "us-east-1",
-      tier: 1,
-    };
-    const tier2Resource = {
-      arn: "arn:aws:lambda:us-east-1:123456:function:my-func",
-      resourceType: "AWS::Lambda::Function",
-      identifier: "my-func",
-      region: "us-east-1",
-      tier: 2,
-    };
-    const tier5Resource = {
-      arn: "arn:aws:s3:::my-bucket",
-      resourceType: "AWS::S3::Bucket",
-      identifier: "my-bucket",
-      region: "us-east-1",
-      tier: 5,
-    };
-
-    it("calls planBulkDestroy and destroySingleResource for each resource", async () => {
-      mockPlanBulkDestroy.mockResolvedValue({
-        resources: [tier1Resource, tier2Resource],
-        totalCount: 2,
-        iamCount: 0,
-        excludedCount: 0,
-      });
-      mockDestroySingleResource.mockResolvedValue({
-        success: true,
-        resourceType: "AWS::Logs::LogGroup",
-        identifier: "my-logs",
-        arn: "arn:aws:logs:us-east-1:123456:log-group:my-logs",
-      });
-
-      await destroyAction(undefined, { all: true, yes: true });
-
-      expect(mockPlanBulkDestroy).toHaveBeenCalled();
-      expect(mockDestroySingleResource).toHaveBeenCalledTimes(2);
-      expect(stdoutOutput).toContain("2 destroyed");
-    });
-
-    it("--all --dry-run shows plan but never calls destroySingleResource", async () => {
-      mockPlanBulkDestroy.mockResolvedValue({
-        resources: [tier1Resource, tier5Resource],
-        totalCount: 2,
-        iamCount: 0,
-        excludedCount: 0,
-      });
-
-      await destroyAction(undefined, { all: true, dryRun: true });
-
-      expect(mockPlanBulkDestroy).toHaveBeenCalled();
-      expect(mockDestroySingleResource).not.toHaveBeenCalled();
-      expect(stdoutOutput).toContain("Dry run");
-    });
-
-    it("--all with zero resources shows no-resources message", async () => {
-      mockPlanBulkDestroy.mockResolvedValue({
-        resources: [],
-        totalCount: 0,
-        iamCount: 0,
-        excludedCount: 0,
-      });
-
-      await destroyAction(undefined, { all: true, yes: true });
-
-      expect(mockDestroySingleResource).not.toHaveBeenCalled();
-      expect(stdoutOutput).toContain("No managed resources found");
-    });
-
-    it("destroys in tier order (tier 1 before tier 5)", async () => {
-      mockPlanBulkDestroy.mockResolvedValue({
-        resources: [tier1Resource, tier2Resource, tier5Resource],
-        totalCount: 3,
-        iamCount: 0,
-        excludedCount: 0,
-      });
-      mockDestroySingleResource.mockResolvedValue({
-        success: true,
-        resourceType: "test",
-        identifier: "test",
-        arn: "test",
-      });
-
-      await destroyAction(undefined, { all: true, yes: true });
-
-      const calls = mockDestroySingleResource.mock.calls;
-      expect(calls[0]![0].tier).toBe(1);
-      expect(calls[1]![0].tier).toBe(2);
-      expect(calls[2]![0].tier).toBe(5);
-    });
-
-    it("failed destroy continues to next resource", async () => {
-      mockPlanBulkDestroy.mockResolvedValue({
-        resources: [tier1Resource, tier2Resource],
-        totalCount: 2,
-        iamCount: 0,
-        excludedCount: 0,
-      });
-      mockDestroySingleResource
-        .mockResolvedValueOnce({
-          success: false,
-          resourceType: "AWS::Logs::LogGroup",
-          identifier: "my-logs",
-          arn: tier1Resource.arn,
-          error: "Access denied",
-        })
-        .mockResolvedValueOnce({
-          success: true,
-          resourceType: "AWS::Lambda::Function",
-          identifier: "my-func",
-          arn: tier2Resource.arn,
-        });
-
-      await destroyAction(undefined, { all: true, yes: true });
-
-      // Both resources were attempted
-      expect(mockDestroySingleResource).toHaveBeenCalledTimes(2);
-    });
-
-    it("summary shows correct destroyed/failed counts", async () => {
-      mockPlanBulkDestroy.mockResolvedValue({
-        resources: [tier1Resource, tier2Resource, tier5Resource],
-        totalCount: 3,
-        iamCount: 0,
-        excludedCount: 0,
-      });
-      mockDestroySingleResource
-        .mockResolvedValueOnce({
-          success: true,
-          resourceType: tier1Resource.resourceType,
-          identifier: tier1Resource.identifier,
-          arn: tier1Resource.arn,
-        })
-        .mockResolvedValueOnce({
-          success: false,
-          resourceType: tier2Resource.resourceType,
-          identifier: tier2Resource.identifier,
-          arn: tier2Resource.arn,
-          error: "BucketNotEmpty",
-        })
-        .mockResolvedValueOnce({
-          success: true,
-          resourceType: tier5Resource.resourceType,
-          identifier: tier5Resource.identifier,
-          arn: tier5Resource.arn,
-        });
-
-      await destroyAction(undefined, { all: true, yes: true });
-
-      expect(stdoutOutput).toContain("2 destroyed");
-      expect(stdoutOutput).toContain("1 failed");
-    });
-  });
 });
+
+// Story 50-3: the `--all bulk destroy` describe block was deleted along
+// with the `--all` / `--include-iam` flags and the bulk-destroy service
+// subtree. Single-resource destroy is the only mode.
 
 // ── P2-R2-5: resourceConfirmationToken edge cases ───────────────────────────
 

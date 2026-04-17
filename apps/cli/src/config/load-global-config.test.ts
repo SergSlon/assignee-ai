@@ -50,12 +50,11 @@ describe("adaptUserConfigToAssignee (A2)", () => {
     // Some users already maintain a new-shape YAML with preferences:
     // at the top level. The adapter must not wipe that out.
     const uc = {
-      preferences: { auto_fix: AutoFixMode.APPLY, verbosity: "verbose" },
+      preferences: { auto_fix: AutoFixMode.APPLY },
       defaults: { region: "eu-west-1" },
     } as unknown as Parameters<typeof adaptUserConfigToAssignee>[0];
     const result = adaptUserConfigToAssignee(uc);
     expect(result?.preferences?.auto_fix).toBe(AutoFixMode.APPLY);
-    expect(result?.preferences?.verbosity).toBe("verbose");
     expect(result?.defaults?.region).toBe("eu-west-1");
   });
 
@@ -78,8 +77,6 @@ describe("loadGlobalConfig composition (A2 + A5)", () => {
   it("returns CONFIG_DEFAULTS when every source is empty", async () => {
     const result = await loadGlobalConfig(undefined);
     expect(result.preferences.auto_fix).toBe(AutoFixMode.ASK);
-    expect(result.preferences.output_format).toBe("table");
-    expect(result.preferences.verbosity).toBe("normal");
   });
 
   it("env vars beat user config", async () => {
@@ -95,25 +92,22 @@ describe("loadGlobalConfig composition (A2 + A5)", () => {
   });
 
   it("A5: project yaml beats user config, loses to env", async () => {
+    // Only auto_fix lives in preferences after Story 50-7 collapse.
+    // Env > project > user still applies.
     mockLoadEnvOverrides.mockReturnValueOnce({
-      preferences: { verbosity: "verbose" },
+      preferences: { auto_fix: AutoFixMode.APPLY },
     });
     mockLoadProjectConfig.mockResolvedValueOnce({
-      preferences: {
-        verbosity: "quiet",
-        output_format: "json",
-      },
+      preferences: { auto_fix: AutoFixMode.SKIP },
     });
     const userConfig = {
-      preferences: { verbosity: "normal", output_format: "table" },
+      preferences: { auto_fix: AutoFixMode.ASK },
     } as unknown as Parameters<typeof loadGlobalConfig>[0];
 
     const result = await loadGlobalConfig(userConfig);
 
-    // verbosity: env (verbose) > project (quiet) > user (normal) → verbose
-    expect(result.preferences.verbosity).toBe("verbose");
-    // output_format: env has none, project (json) > user (table) → json
-    expect(result.preferences.output_format).toBe("json");
+    // auto_fix: env (apply) > project (skip) > user (ask) → apply
+    expect(result.preferences.auto_fix).toBe(AutoFixMode.APPLY);
   });
 
   it("A5: project yaml supplies fields that env doesn't have", async () => {
@@ -139,40 +133,6 @@ describe("loadGlobalConfig composition (A2 + A5)", () => {
       env: "staging",
       team: "platform",
     });
-  });
-
-  // ── Story 44.1: llm passthrough in adaptUserConfigToAssignee ───────────
-  it("passes llm section through adaptUserConfigToAssignee", () => {
-    const uc = {
-      llm: {
-        default: "bedrock/amazon.nova-lite-v1:0",
-        plan_generator: "anthropic/claude-sonnet-4-5",
-      },
-    } as unknown as Parameters<typeof adaptUserConfigToAssignee>[0];
-    const result = adaptUserConfigToAssignee(uc);
-    expect(result?.llm).toEqual({
-      default: "bedrock/amazon.nova-lite-v1:0",
-      plan_generator: "anthropic/claude-sonnet-4-5",
-    });
-  });
-
-  it("passes llm section even when no preferences/defaults/budget exist", () => {
-    // This was the bug: only llm → guard didn't trigger
-    const uc = {
-      llm: { plan_generator: "anthropic/claude-sonnet-4-5" },
-    } as unknown as Parameters<typeof adaptUserConfigToAssignee>[0];
-    const result = adaptUserConfigToAssignee(uc);
-    expect(result?.llm?.["plan_generator"]).toBe("anthropic/claude-sonnet-4-5");
-  });
-
-  it("user-level llm config flows through loadGlobalConfig to resolved result", async () => {
-    mockLoadEnvOverrides.mockReturnValueOnce({});
-    mockLoadProjectConfig.mockResolvedValueOnce(undefined);
-    const userConfig = {
-      llm: { default: "bedrock/amazon.nova-lite-v1:0" },
-    } as unknown as Parameters<typeof loadGlobalConfig>[0];
-    const result = await loadGlobalConfig(userConfig);
-    expect(result.llm?.["default"]).toBe("bedrock/amazon.nova-lite-v1:0");
   });
 
   it("A5: env var for ASSIGNEE_AUTO_FIX reaches the resolved config (regression guard)", async () => {

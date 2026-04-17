@@ -1,0 +1,109 @@
+name: 'Assignee.ai'
+description: 'Plan or apply AWS infrastructure with natural language in CI. Delegates to the plan/apply composite actions based on the `action` input.'
+author: 'assignee-ai'
+branding:
+  icon: 'cloud'
+  color: 'blue'
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NOTE: This action installs the `assignee` CLI via `npm install -g assignee`
+# inside the underlying composite actions (`.github/actions/plan/`,
+# `.github/actions/apply/`). Those installs will fail until `assignee` is
+# published to npm — which stays gated behind a manual workflow_dispatch +
+# confirm=YES_PUBLISH trigger while packages remain `"private": true`. Once
+# published, `uses: assignee-ai/assignee@v1` from a consumer repo will work
+# end-to-end with no further changes.
+# ──────────────────────────────────────────────────────────────────────────────
+
+inputs:
+  action:
+    description: 'Which subaction to run. Must be either `plan` or `apply`.'
+    required: true
+  assignee-operator-access-key-id:
+    description: 'Operator AWS access key ID for provisioning'
+    required: true
+  assignee-operator-secret-access-key:
+    description: 'Operator AWS secret access key for provisioning'
+    required: true
+  aws-region:
+    description: 'AWS region'
+    required: false
+    default: 'us-east-1'
+  assignee-reader-access-key-id:
+    description: 'AWS access key for reader MCP servers (read-only)'
+    required: false
+  assignee-reader-secret-access-key:
+    description: 'AWS secret access key for reader MCP servers'
+    required: false
+  assignee-auditor-access-key-id:
+    description: 'AWS access key for auditor MCP servers (audit access)'
+    required: false
+  assignee-auditor-secret-access-key:
+    description: 'AWS secret access key for auditor MCP servers'
+    required: false
+  intent-file:
+    description: 'Path to file containing infrastructure intent'
+    required: false
+    default: 'assignee.intent'
+  config-path:
+    description: 'Path to assignee config directory (plan only)'
+    required: false
+    default: '.assignee'
+  checkpoint:
+    description: 'Path to plan checkpoint from PR phase (apply only)'
+    required: false
+
+outputs:
+  plan-json:
+    description: 'The plan output in JSON format (plan action only)'
+    value: ${{ steps.plan.outputs.plan-json }}
+  apply-result:
+    description: 'The apply result: success or failed (apply action only)'
+    value: ${{ steps.apply.outputs.apply-result }}
+  resource-arn:
+    description: 'ARN of the provisioned resource (apply action only)'
+    value: ${{ steps.apply.outputs.resource-arn }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate action input
+      shell: bash
+      run: |
+        case "${{ inputs.action }}" in
+          plan|apply) ;;
+          *)
+            echo "::error::inputs.action must be 'plan' or 'apply' (got '${{ inputs.action }}')"
+            exit 1
+            ;;
+        esac
+
+    - name: Run assignee plan
+      id: plan
+      if: inputs.action == 'plan'
+      uses: ./.github/actions/plan
+      with:
+        assignee-operator-access-key-id: ${{ inputs.assignee-operator-access-key-id }}
+        assignee-operator-secret-access-key: ${{ inputs.assignee-operator-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+        assignee-reader-access-key-id: ${{ inputs.assignee-reader-access-key-id }}
+        assignee-reader-secret-access-key: ${{ inputs.assignee-reader-secret-access-key }}
+        assignee-auditor-access-key-id: ${{ inputs.assignee-auditor-access-key-id }}
+        assignee-auditor-secret-access-key: ${{ inputs.assignee-auditor-secret-access-key }}
+        intent-file: ${{ inputs.intent-file }}
+        config-path: ${{ inputs.config-path }}
+
+    - name: Run assignee apply
+      id: apply
+      if: inputs.action == 'apply'
+      uses: ./.github/actions/apply
+      with:
+        assignee-operator-access-key-id: ${{ inputs.assignee-operator-access-key-id }}
+        assignee-operator-secret-access-key: ${{ inputs.assignee-operator-secret-access-key }}
+        aws-region: ${{ inputs.aws-region }}
+        assignee-reader-access-key-id: ${{ inputs.assignee-reader-access-key-id }}
+        assignee-reader-secret-access-key: ${{ inputs.assignee-reader-secret-access-key }}
+        assignee-auditor-access-key-id: ${{ inputs.assignee-auditor-access-key-id }}
+        assignee-auditor-secret-access-key: ${{ inputs.assignee-auditor-secret-access-key }}
+        intent-file: ${{ inputs.intent-file }}
+        checkpoint: ${{ inputs.checkpoint }}

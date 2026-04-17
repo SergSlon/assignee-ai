@@ -24,13 +24,8 @@ _assignee() {
         'list:List all resources managed by assignee.ai'
         'setup:Create IAM users and policies for least-privilege credential separation The operator role is REQUIRED — setup aborts if it fails.'
         'status:Show summary of managed infrastructure'
-        'clean:Remove stale checkpoints, expired cache, rotate memory files, and destroy test AWS resources'
         'reconcile:Reconcile drifted resources back to desired state'
-        'cache:Manage the CloudFormation schema cache'
         'doctor:Run a non-destructive health check of credentials, Bedrock, MCP servers, cache, config and best-practices'
-        'whoami:Print the operator AWS identity, region and active config — fast pre-flight check'
-        'patterns:List and inspect compound architecture patterns'
-        'types:List and inspect the CloudFormation resource types assignee can provision'
       )
       _describe 'command' commands
       ;;
@@ -43,11 +38,13 @@ _assignee() {
             '--no-advice[Skip inline contextual advice generation]' \
             '--source[Path to local files to upload after provisioning (e.g., static site)]:path:' \
             '--set[Pre-set field values, supports human names (e.g., --set size=t3.medium)]:key=value...:' \
-            '--yes[Accepted for CI wrapper compatibility; plan is read-only and does not mutate.]'
+            '--yes[Accepted for CI wrapper compatibility; plan is read-only and does not mutate.]' \
+            '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.]'
           ;;
         apply)
           _arguments \
             '--wizard[Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)]' \
+            '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before provisioning.]' \
             '--no-advice[Skip inline contextual advice generation]' \
             '--yes[Auto-confirm apply without interactive prompt (for CI/CD)]' \
             '--checkpoint[Use a saved plan checkpoint instead of running Phase 1]:path:' \
@@ -62,10 +59,7 @@ _assignee() {
           ;;
         destroy)
           _arguments \
-            '--yes[Auto-confirm destroy without interactive prompt (for CI/CD)]' \
-            '--all[Destroy all managed resources]' \
-            '--include-iam[Include IAM policies/roles (excluded by default with --all)]' \
-            '--dry-run[Show what would be destroyed without doing it]'
+            '--yes[Auto-confirm destroy without interactive prompt (for CI/CD)]'
           ;;
         drift)
           _arguments \
@@ -111,19 +105,6 @@ _assignee() {
             '--gaps-only[With --bp-coverage\: print only the list of resource types with zero BP rules, and exit non-zero if any gaps are found (CI-friendly). Structural types (RouteTable, VPCGatewayAttachment, etc.) are excluded by default — override with --include-structural-gaps.]' \
             '--include-structural-gaps[With --gaps-only\: include structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS\:\:MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.]'
           ;;
-        clean)
-          _arguments \
-            '--dry-run[Preview cleanup without making changes (default)]' \
-            '--confirm[Execute cleanup (default is dry-run preview)]' \
-            '--yes[Alias for --confirm (CI-friendly, canonical)]' \
-            '--checkpoints[Only clean checkpoint files]' \
-            '--cache[Only clean price cache]' \
-            '--memory[Only rotate memory files]' \
-            '--resources[Destroy stale e2e/test AWS resources]' \
-            '--logs[Prune persistent warn/error log files older than the retention window (ASSIGNEE_LOG_RETENTION_DAYS, default 14 days)]' \
-            '--baselines[Remove all baseline files adopted via `assignee drift --baseline`]' \
-            '--json[Output results as JSON]'
-          ;;
         reconcile)
           _arguments \
             '--resource[Filter by resource type]:type:' \
@@ -131,20 +112,12 @@ _assignee() {
             '--auto-reconcile[Reconcile all drifted resources without prompting]' \
             '--yes[Non-interactive mode — reconcile every drifted resource without prompting (alias for --auto-reconcile; canonical CI flag)]'
           ;;
-        cache)
-          ;;
         doctor)
           _arguments \
             '--json[Emit the report as JSON instead of formatted text]' \
             '--skip-bedrock[Skip the Bedrock LLM invoke check]' \
             '--skip-mcp[Skip the MCP server launch probe]' \
-            '--skip-mcp-version-check[Skip the PyPI version drift check (offline / fast path)]'
-          ;;
-        whoami)
-          ;;
-        patterns)
-          ;;
-        types)
+            '--short[Fast identity-only summary\: STS account + ARN + region + active config (replaces the removed `whoami` command)]'
           ;;
       esac
       ;;

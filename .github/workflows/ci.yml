@@ -6,15 +6,43 @@ on:
   pull_request:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.os || 'default' }}-${{ matrix.node || 'default' }}
   cancel-in-progress: true
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # ── Cross-platform CI matrix ─────────────────────────────────────────────
+    # Linux is the historical target and drives all gating steps (coverage
+    # badge, artifact upload). macOS and Windows run the same lint + build +
+    # test suite so path-handling and shell-dependent code (s3-upload
+    # backslashes, price-cache HOME vs USERPROFILE) actually get exercised.
+    #
+    # Windows is marked `continue-on-error` while shell/pnpm/node version
+    # combos stabilize — its output is visible in the PR checks UI but does
+    # not block merges. Revisit once Windows has been green for ~2 weeks and
+    # flip `experimental` to false below to make it a hard gate.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22]
+        include:
+          - os: ubuntu-latest
+            experimental: false
+          - os: macos-latest
+            experimental: false
+          - os: windows-latest
+            experimental: true
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.experimental }}
     env:
       BEDROCK_LOGGING_VERIFIED: ${{ secrets.BEDROCK_LOGGING_VERIFIED }}
+    defaults:
+      run:
+        # Force bash on Windows too — our scripts assume POSIX. GitHub's
+        # windows-latest images ship Git-Bash, which handles this fine.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +52,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -42,8 +70,12 @@ jobs:
       - name: Run tests with coverage
         run: npx turbo test:coverage
 
+      # ── Coverage aggregation only runs on the canonical Linux+Node22 job.
+      # Running it on every matrix cell wastes CI minutes and produces
+      # conflicting badge updates.
       - name: Merge coverage summaries
         id: coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
         run: |
           node -e "
             const fs = require('fs');
@@ -69,7 +101,7 @@ jobs:
           "
 
       - name: Update coverage badge
-        if: github.ref == 'refs/heads/main' && vars.COVERAGE_GIST_ID != ''
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22 && github.ref == 'refs/heads/main' && vars.COVERAGE_GIST_ID != ''
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_TOKEN }}
@@ -83,7 +115,7 @@ jobs:
           namedLogo: vitest
 
       - name: Upload coverage HTML reports
-        if: always()
+        if: always() && matrix.os == 'ubuntu-latest' && matrix.node == 22
         uses: actions/upload-artifact@v4
         with:
           name: coverage-reports

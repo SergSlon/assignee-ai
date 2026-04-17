@@ -18,3 +18,16 @@ export {
   arnIdentifierStrategies,
   slowDeleteStrategies,
 } from "./default-strategies.js";
+export { warnDestroy } from "./warn.js";
+// Concrete per-resource-type strategies (Story 50-4).
+export {
+  dynamodbTableStrategy,
+  ec2EipStrategy,
+  ec2InternetGatewayStrategy,
+  ec2RouteTableStrategy,
+  efsFileSystemStrategy,
+  elbv2LoadBalancerStrategy,
+  s3BucketStrategy,
+  cloudfrontDistributionStrategy,
+  sqsQueueStrategy,
+} from "./strategies/index.js";

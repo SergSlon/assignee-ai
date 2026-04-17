@@ -10,7 +10,7 @@ import type { LlmPort } from "@assignee/core";
 import type { StructuredTool } from "@langchain/core/tools";
 import { log, LOG_ACTIONS } from "../utils/logger.js";
 import type { AgentState } from "../services/graph.js";
-import { costAlternatives } from "./advice/cost-advisor.js";
+import { costAlternatives } from "./advice/cost-advisor/orchestrator.js";
 import { securityPosture } from "./advice/security-advisor.js";
 import { architectureAdvisor } from "./advice/architecture-advisor.js";
 import {

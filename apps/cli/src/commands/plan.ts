@@ -23,6 +23,7 @@ import {
 } from "../config/constants.js";
 import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { resolvePlanArgs, type PlanOpts } from "./plan/arg-parser.js";
+import { renderDiscoveryBlock } from "./plan/discovery.js";
 import { runPlan } from "./plan/orchestrator.js";
 
 export const planCommand = new Command(CommandName.PLAN)
@@ -45,9 +46,18 @@ export const planCommand = new Command(CommandName.PLAN)
     "-y, --yes",
     "Accepted for CI wrapper compatibility; plan is read-only and does not mutate.",
   )
+  .option(
+    "--quick",
+    "Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.",
+  )
+  // Story 50-3: discovery block folded in from the removed
+  // `patterns` + `types` commands. Lazily rendered via a function so
+  // construction of the Command object has zero runtime cost when
+  // --help is not requested.
   .addHelpText(
     "after",
-    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee plan "${EXAMPLE_S3_INTENT}"\n  assignee plan "Create an EC2 t3.micro instance"\n  assignee plan "Create a Lambda function for image processing"`,
+    () =>
+      `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee plan "${EXAMPLE_S3_INTENT}"\n  assignee plan "Create an EC2 t3.micro instance"\n  assignee plan "Create a Lambda function for image processing"\n\n${renderDiscoveryBlock()}`,
   )
   .action(async (intent: string | undefined, opts: PlanOpts) => {
     const resolved = resolvePlanArgs(intent, opts);
@@ -74,7 +84,7 @@ export const planCommand = new Command(CommandName.PLAN)
         runPlan(ctx, {
           ...resolved,
           intent: intent!,
-          opts: { advice: opts.advice },
+          opts: { advice: opts.advice, quick: opts.quick === true },
         }),
     });
   });

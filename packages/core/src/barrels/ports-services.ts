@@ -1,6 +1,7 @@
 // Ports (hexagonal architecture — Story 9.5)
 export type { LlmPort, LlmCallOptions } from "../ports/llm-port.js";
-export { MockLlmAdapter } from "../ports/mock-llm-adapter.js";
+// NOTE: MockLlmAdapter moved to `@assignee/core/testing` sub-path export
+// (Story 50-4) so production code never pulls in test doubles.
 
 // Services — CloudFormation schema fetching (Story 31.1, 31.2)
 export {

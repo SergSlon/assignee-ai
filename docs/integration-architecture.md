@@ -131,7 +131,7 @@ MCP tool handler -> createGraphContext() -> graph.invoke(initialState)
 The MCP server has a `"assignee": "workspace:*"` dependency, giving it access to:
 
 - `createGraph()` function and all 13 nodes
-- `CloudControlAdapter` and `SDKFallbackDispatcher`
+- `CloudControlAdapter` (Story 50-7 inlined the former SDKFallbackDispatcher redirect classifier)
 - `MemoryService` for provision/failure recording
 - `fetchManagedResources()` for resource listing
 - All display utilities (though it formats differently)

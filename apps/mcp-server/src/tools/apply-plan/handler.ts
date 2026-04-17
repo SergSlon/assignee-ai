@@ -6,7 +6,11 @@
  * accidental provisioning by AI agents. The agent must present the
  * plan to the user and get explicit approval first.
  *
- * @see Epic 20, Story 20.3, ADR-008
+ * Story 50-5 H-3: every successful and failing apply is mirrored to
+ * the persistent audit-log JSONL in addition to the existing stderr
+ * `mcpLog` stream.
+ *
+ * @see Epic 20, Story 20.3, ADR-008, Story 50-5
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -14,6 +18,7 @@ import { CheckpointError } from "@assignee/core";
 import type { EvalContext } from "@assignee/best-practices";
 import type { GraphContext } from "../../services/graph-init.js";
 import { loadCheckpointFromPath } from "../../services/checkpoint.js";
+import { auditLog } from "../../utils/audit-log.js";
 import {
   isApplyActive,
   markApplyActive,
@@ -27,7 +32,24 @@ import {
   checkConfirmedGate,
   checkGraphContext,
 } from "./preflight.js";
-import { errorEnvelope } from "./result-envelope.js";
+import { errorEnvelope, type ToolEnvelope } from "./result-envelope.js";
+
+/**
+ * Extracts an audit-safe identifier from an apply_plan result envelope.
+ * Prefers the ARN from the graph's successful output; falls back to
+ * the empty string so the JSONL schema remains stable.
+ */
+function extractAuditIdentifier(envelope: ToolEnvelope): string {
+  const text = envelope.content?.[0]?.text;
+  if (typeof text !== "string") return "";
+  try {
+    const body = JSON.parse(text) as { resourceArn?: unknown };
+    if (typeof body.resourceArn === "string") return body.resourceArn;
+  } catch {
+    // Non-JSON envelope (shouldn't happen) — skip identifier extraction.
+  }
+  return "";
+}
 
 export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
   server.tool(
@@ -50,16 +72,34 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
       try {
         checkpoint = await loadCheckpointFromPath(checkpointPath);
       } catch (err) {
-        return errorEnvelope({
-          message:
-            err instanceof CheckpointError
-              ? err.message
-              : `Checkpoint file not found: ${checkpointPath}. Run plan_resource first.`,
+        const message =
+          err instanceof CheckpointError
+            ? err.message
+            : `Checkpoint file not found: ${checkpointPath}. Run plan_resource first.`;
+        // Story 50-5 H-3: audit the failed load attempt. runId +
+        // resourceType may not yet be known here; use "" sentinel.
+        await auditLog({
+          tool: "apply_plan",
+          runId: "",
+          resourceType: "",
+          identifier: checkpointPath,
+          success: false,
+          errorClass:
+            err instanceof CheckpointError ? "CheckpointError" : "UnknownError",
         });
+        return errorEnvelope({ message });
       }
 
       // ── Concurrency guard: one apply per checkpoint at a time ──────────
       if (isApplyActive(checkpointPath)) {
+        await auditLog({
+          tool: "apply_plan",
+          runId: checkpoint.runId,
+          resourceType: checkpoint.resourceType,
+          identifier: checkpointPath,
+          success: false,
+          errorClass: "ApplyAlreadyActive",
+        });
         return errorEnvelope({
           message:
             "This plan is already being applied. Wait for the current operation to complete.",
@@ -84,6 +124,14 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
           const result = evaluateCheckpointBPs(evalContext);
 
           if (result.blocking.length > 0) {
+            await auditLog({
+              tool: "apply_plan",
+              runId: checkpoint.runId,
+              resourceType: checkpoint.resourceType,
+              identifier: checkpointPath,
+              success: false,
+              errorClass: "BpBlocked",
+            });
             return errorEnvelope({
               message: `BP re-evaluation blocked apply: ${result.blocking.length} blocking finding(s) detected since the plan was generated.`,
               blockingFindings: result.blocking.map((f) => ({
@@ -102,6 +150,14 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
           // BP evaluation failure must be fail-closed in enforce mode —
           // block provisioning rather than silently skipping all rules.
           preflightPassed = false;
+          await auditLog({
+            tool: "apply_plan",
+            runId: checkpoint.runId,
+            resourceType: checkpoint.resourceType,
+            identifier: checkpointPath,
+            success: false,
+            errorClass: "BpEvaluationError",
+          });
           return errorEnvelope({
             message: `BP evaluation failed — cannot verify security compliance. ${bpError instanceof Error ? bpError.message : String(bpError)}`,
             hint: "Check that best-practice rules are accessible. Run plan_resource to generate a fresh plan.",
@@ -111,7 +167,7 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
         // ── Execute the graph from the checkpoint ────────────────────────
         // ctx is narrowed by checkGraphContext above; the type-guard
         // doesn't propagate through the closure so assert non-null here.
-        return await runGraphFromCheckpoint({
+        const envelope = await runGraphFromCheckpoint({
           ctx: ctx!,
           checkpoint: {
             runId: checkpoint.runId,
@@ -126,6 +182,20 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
           bpFindings,
           preflightPassed,
         });
+
+        // Story 50-5 H-3: mirror the outcome to the persistent audit log.
+        const succeeded = envelope.isError !== true;
+        await auditLog({
+          tool: "apply_plan",
+          runId: checkpoint.runId,
+          resourceType: checkpoint.resourceType,
+          identifier: succeeded
+            ? extractAuditIdentifier(envelope) || checkpointPath
+            : checkpointPath,
+          success: succeeded,
+          errorClass: succeeded ? "" : "GraphExecutionError",
+        });
+        return envelope;
       } finally {
         releaseApply(checkpointPath);
       }

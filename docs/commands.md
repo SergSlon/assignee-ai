@@ -17,11 +17,19 @@ When set, structured JSON diagnostic logs are written to stderr. Without it, inf
 
 ## Exit Codes
 
-| Code | Meaning                                                         |
-| ---- | --------------------------------------------------------------- |
-| 0    | Success                                                         |
-| 1    | General error (plan failure, provision failure, drift detected) |
-| 10   | MCP server startup failure                                      |
+| Code  | Meaning                                                                                          |
+| ----- | ------------------------------------------------------------------------------------------------ |
+| `0`   | Success                                                                                          |
+| `1`   | General error (plan failure, provision failure, drift detected)                                  |
+| `2`   | `assignee doctor` returned warnings only (no hard failures, see `--short`)                       |
+| `10`  | Policy / safety abort (typed-confirm mismatch, state guard, preflight rejection, BP block, etc.) |
+| `11`  | MCP server startup failure                                                                       |
+| `130` | Interrupted via SIGINT (Ctrl-C)                                                                  |
+| `143` | Terminated via SIGTERM                                                                           |
+
+`docs/troubleshooting.md` is the canonical playbook for each exit
+code, including the recovery steps. Scripts MAY branch on these codes;
+the contract is stable.
 
 ---
 
@@ -188,33 +196,29 @@ assignee status --bp-coverage --gaps-only --json   # machine-readable gap list
 
 ### destroy
 
-Safely destroy a managed AWS resource.
+Safely destroy a single managed AWS resource.
 
 ```
 assignee destroy <resource> [options]
-assignee destroy --all [options]
 ```
 
 **Arguments:**
 
-| Argument   | Description                                                                            |
-| ---------- | -------------------------------------------------------------------------------------- |
-| `resource` | Resource ARN or name (must be tagged `managed-by=assignee-ai`). Optional with `--all`. |
+| Argument   | Description                                                               |
+| ---------- | ------------------------------------------------------------------------- |
+| `resource` | Resource ARN or name (must be tagged `managed-by=assignee-ai`). Required. |
 
 **Options:**
 
-| Flag            | Description                                             | Default |
-| --------------- | ------------------------------------------------------- | ------- |
-| `-y, --yes`     | Auto-confirm without interactive prompt (CI/CD mode)    | false   |
-| `--all`         | Destroy all managed resources (bulk destroy)            | false   |
-| `--include-iam` | Include IAM roles in bulk destroy (excluded by default) | false   |
-| `--dry-run`     | Preview what would be destroyed without making changes  | false   |
+| Flag        | Description                                          | Default |
+| ----------- | ---------------------------------------------------- | ------- |
+| `-y, --yes` | Auto-confirm without interactive prompt (CI/CD mode) | false   |
 
 **Behavior:**
 
-- **Single resource**: Resolves the resource via the Resource Groups Tagging API, displays resource details (type, ARN, region, estimated cost savings), requires typing "yes" for confirmation (strict confirmation, not Y/n), deletes via CloudControl API and polls for completion
-- **Bulk destroy (`--all`)**: Lists all managed resources, orders by tier (compute/storage first, networking/IAM last), destroys in reverse-dependency order. IAM roles are excluded by default (use `--include-iam` to include them). `--dry-run` previews the destruction plan without executing it
-- Uses SDK fallback for types that CloudControl cannot model (see [resource-types.md](./resource-types.md#ccapi-fallback-types) for the current redirect list)
+- Resolves the resource via the Resource Groups Tagging API, displays resource details (type, ARN, region, estimated cost savings), requires typing the identifier for confirmation (strict typed-name confirmation, not Y/n), deletes via CloudControl API and polls for completion.
+- Uses SDK fallback for types that CloudControl cannot model (see [resource-types.md](./resource-types.md#ccapi-fallback-types) for the current redirect list).
+- Bulk destroy (`--all` / `--include-iam`) was removed in Story 50-3. Delete resources one at a time, or pipe `assignee list --json` through `jq` + a `destroy` loop for scripted sweeps.
 
 **Examples:**
 
@@ -222,8 +226,6 @@ assignee destroy --all [options]
 assignee destroy arn:aws:s3:::my-bucket
 assignee destroy my-bucket
 assignee destroy --yes arn:aws:lambda:us-east-1:123456789012:function:my-fn
-assignee destroy --all --dry-run
-assignee destroy --all --include-iam --yes
 ```
 
 ---
@@ -556,177 +558,6 @@ assignee setup --disable-llm-logging --dry-run  # preview the disable action, no
 
 > NOTE: `--disable-llm-logging` only calls Bedrock's `PutModelInvocationLoggingConfiguration` with `textDataDeliveryEnabled=false`. It does NOT re-create IAM users, policies, access keys, or the CloudWatch log group, and it never writes `.env`. Use it whenever you want to turn LLM body capture off after a previous `assignee setup --enable-llm-logging` run.
 
-### clean
-
-Remove stale checkpoints, expired cache, and rotate memory files.
-
-```
-assignee clean [options]
-```
-
-**Options:**
-
-| Flag            | Description                                                                      | Default                 |
-| --------------- | -------------------------------------------------------------------------------- | ----------------------- |
-| `--dry-run`     | Preview cleanup without making changes                                           | true (default behavior) |
-| `--confirm`     | Execute cleanup                                                                  | false                   |
-| `--yes`         | Alias for `--confirm` (CI-friendly)                                              | false                   |
-| `--checkpoints` | Only clean checkpoint files                                                      | false                   |
-| `--cache`       | Only clean price cache                                                           | false                   |
-| `--memory`      | Only rotate memory files                                                         | false                   |
-| `--resources`   | Clean orphaned resource records                                                  | false                   |
-| `--logs`        | Prune persistent warn/error logs older than `ASSIGNEE_LOG_RETENTION_DAYS`        | false                   |
-| `--baselines`   | Remove all baseline files adopted via `assignee drift --baseline` (A3 follow-up) | false                   |
-| `--json`        | Output results as JSON                                                           | false                   |
-
-**Behavior:**
-
-Default is a safe dry-run preview. Cleanup categories:
-
-- **Checkpoints**: removes expired checkpoint files (>72h)
-- **Cache**: removes stale price cache entries
-- **Memory**: rotates oversized provision/failure/pattern logs
-- **Logs**: prunes persistent warn/error logs older than the retention window
-- **Baselines**: removes files under `.assignee/baselines/` adopted via `assignee drift --baseline`
-
-The `--baselines` scope runs as a self-contained branch independent of the main cleanup report — it only touches the `.assignee/baselines/` directory under the current project cwd, never walks up to the user home, and never touches checkpoints or the provision log. Missing directory or empty listing prints "No baseline files found (nothing to clean)." and exits cleanly.
-
-**Examples:**
-
-```bash
-assignee clean                          # dry-run preview
-assignee clean --confirm                # execute cleanup
-assignee clean --checkpoints --confirm
-assignee clean --baselines --confirm    # drop adopted drift baselines
-assignee clean --json --yes             # CI-friendly JSON output
-```
-
-### cache
-
-Manage the CloudFormation schema cache.
-
-```
-assignee cache <subcommand>
-```
-
-**Subcommands:**
-
-| Subcommand | Description                                                 |
-| ---------- | ----------------------------------------------------------- |
-| `clear`    | Delete all cached schemas                                   |
-| `refresh`  | Clear and re-fetch all schemas for supported resource types |
-
-**Examples:**
-
-```bash
-assignee cache clear
-assignee cache refresh
-```
-
-### patterns
-
-Discover the compound architecture patterns assignee can auto-route natural-language intents to. Lists every registered pattern with its display name, resource count, and keyword preview; or shows the full resource list, dependency order, and all keywords for a single pattern.
-
-```
-assignee patterns [list|show <patternId>] [options]
-```
-
-**Subcommands:**
-
-| Subcommand           | Description                                                                           |
-| -------------------- | ------------------------------------------------------------------------------------- |
-| `list` (default)     | Print all registered compound patterns in precedence order                            |
-| `show <patternId>`   | Print the full resource list + dependency groups + every keyword for a single pattern |
-| `detect <intent...>` | Run the same keyword classifier the CLI uses and print which pattern would match      |
-
-**Options:**
-
-| Flag     | Description    | Default |
-| -------- | -------------- | ------- |
-| `--json` | Output as JSON | false   |
-
-**Behavior:**
-
-Pattern detection is first-keyword-match-wins in registration order, so the `list` output reflects the precedence — earlier-listed patterns get first crack at matching user intents. Use `assignee patterns show <patternId>` to see why a particular pattern matched or to understand the full resource footprint before running `plan`.
-
-**Examples:**
-
-```bash
-assignee patterns                               # list all patterns
-assignee patterns show scheduled-lambda         # show one pattern's details
-assignee patterns show efs-with-vpc --json      # JSON for CI consumers
-assignee patterns list --json | jq '.[].patternId'
-assignee patterns list --search lambda          # grep-like filter
-assignee patterns detect "create a nightly cleanup lambda"
-# → Matched: scheduled-lambda — Scheduled Lambda (EventBridge cron)
-#   Winning keyword: "nightly cleanup"
-```
-
-### types
-
-Discover the CloudFormation resource types assignee can provision directly (companion to `assignee patterns` which covers the compound routing layer).
-
-```
-assignee types [list|show <type>] [options]
-```
-
-**Subcommands:**
-
-| Subcommand       | Description                                                                       |
-| ---------------- | --------------------------------------------------------------------------------- |
-| `list` (default) | Print every supported type with short name, plugin field count, and BP rule count |
-| `show <type>`    | Print the full plugin field list, BP rules, and pricing info for a single type    |
-
-**Options:**
-
-| Flag                 | Description                                                                             | Default |
-| -------------------- | --------------------------------------------------------------------------------------- | ------- |
-| `--json`             | Output as JSON                                                                          | false   |
-| `--search <keyword>` | Filter types whose resourceType or short name contains the substring (case-insensitive) | -       |
-| `--with-bp`          | Only show types that have at least one BP rule                                          | false   |
-| `--without-bp`       | Only show types that have zero BP rules                                                 | false   |
-
-**Examples:**
-
-```bash
-assignee types                               # list all 37 supported types
-assignee types show AWS::Events::Rule        # full detail for one type
-assignee types list --json | jq '.[].resourceType'
-assignee types show AWS::Lambda::Function --json
-assignee types list --search lambda           # filter by keyword
-assignee types list --with-bp                 # only types with BP rules
-assignee types list --without-bp              # only types missing BP rules
-```
-
-### whoami
-
-A fast, single-purpose pre-flight check: prints the operator-role STS identity, AWS region, and whether a project config file is loaded in the cwd. Designed to answer the most common debugging question: "which AWS identity am I about to use?" before running `plan`/`apply`.
-
-```
-assignee whoami
-```
-
-**Behavior:**
-
-- Reads `ASSIGNEE_OPERATOR_ACCESS_KEY_ID` / `ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY` and calls `sts:GetCallerIdentity` (5 s timeout).
-- Resolves the active region from `AWS_REGION` → `AWS_DEFAULT_REGION` → SDK default (`us-east-1`).
-- Checks for `./assignee.yaml`, `./assignee.yml`, or `./.assignee/config.yaml` and reports whether one was loaded.
-- **Exits non-zero** when credentials are missing or STS fails — safe to chain in shell pipelines (`assignee whoami && assignee plan ...`).
-- For deeper diagnostics, use `assignee doctor`.
-
-**Examples:**
-
-```bash
-assignee whoami
-# Account:  123456789012
-# User ARN: arn:aws:iam::123456789012:user/assignee-operator
-# Region:   us-east-1
-# Role:     operator (ASSIGNEE_OPERATOR_ACCESS_KEY_ID)
-# Config:   ./assignee.yaml (loaded)
-#
-# For full diagnostics, run `assignee doctor`.
-```
-
 ### doctor
 
 A non-destructive end-to-end health check (think `flutter doctor` / `brew doctor`). Runs every check, prints results in column form, and exits non-zero if anything failed. Doctor never mutates state — every check is read-only.
@@ -737,12 +568,12 @@ assignee doctor [options]
 
 **Options:**
 
-| Flag                       | Description                                              | Default |
-| -------------------------- | -------------------------------------------------------- | ------- |
-| `--json`                   | Emit the report as JSON instead of formatted text        | false   |
-| `--skip-bedrock`           | Skip the LLM invoke check (offline / hermetic CI)        | false   |
-| `--skip-mcp`               | Skip the MCP server launch probe (offline / hermetic CI) | false   |
-| `--skip-mcp-version-check` | Skip the PyPI version drift check (offline / fast path)  | false   |
+| Flag             | Description                                                                              | Default |
+| ---------------- | ---------------------------------------------------------------------------------------- | ------- |
+| `--json`         | Emit the report as JSON instead of formatted text                                        | false   |
+| `--skip-bedrock` | Skip the LLM invoke check (offline / hermetic CI)                                        | false   |
+| `--skip-mcp`     | Skip the MCP server launch probe (offline / hermetic CI)                                 | false   |
+| `--short`        | Fast identity-only summary (STS account + ARN + region + config path); replaces `whoami` | false   |
 
 **Checks (each capped at 5 s):**
 

@@ -37,35 +37,22 @@ describe("resolveGlobalConfig", () => {
       expect(result.preferences.auto_fix).toBe(AutoFixMode.APPLY);
     });
 
-    it("project > user > CONFIG_DEFAULTS for verbosity", () => {
-      const result = resolveGlobalConfig({
-        projectConfig: { preferences: { verbosity: "verbose" } },
-        userConfig: { preferences: { verbosity: "quiet" } },
-      });
-      expect(result.preferences.verbosity).toBe("verbose");
-    });
-
     it("user > CONFIG_DEFAULTS when only user is provided", () => {
       const result = resolveGlobalConfig({
-        userConfig: { preferences: { output_format: "json" } },
+        userConfig: { preferences: { auto_fix: AutoFixMode.APPLY } },
       });
-      expect(result.preferences.output_format).toBe("json");
-      // Unspecified keys still come from CONFIG_DEFAULTS.
-      expect(result.preferences.auto_fix).toBe(CONFIG_DEFAULTS.auto_fix);
-      expect(result.preferences.verbosity).toBe(CONFIG_DEFAULTS.verbosity);
+      expect(result.preferences.auto_fix).toBe(AutoFixMode.APPLY);
     });
 
     it("different keys from different levels coexist (no source wipes another)", () => {
+      // Only auto_fix lives in preferences after Story 50-7 collapse.
+      // Earlier sources at a lower precedence level don't overwrite a
+      // higher-precedence setting for the same key.
       const result = resolveGlobalConfig({
         envOverrides: { preferences: { auto_fix: AutoFixMode.APPLY } },
-        userConfig: { preferences: { verbosity: "verbose" } },
+        userConfig: { preferences: { auto_fix: AutoFixMode.ASK } },
       });
       expect(result.preferences.auto_fix).toBe(AutoFixMode.APPLY);
-      expect(result.preferences.verbosity).toBe("verbose");
-      // output_format is not in either source — falls back to default.
-      expect(result.preferences.output_format).toBe(
-        CONFIG_DEFAULTS.output_format,
-      );
     });
   });
 
@@ -165,90 +152,6 @@ describe("resolveGlobalConfig", () => {
       const envOverrides = { preferences: { auto_fix: AutoFixMode.APPLY } };
       const result = resolveGlobalConfig({ envOverrides });
       expect(result.preferences.auto_fix).toBe(AutoFixMode.APPLY);
-    });
-  });
-
-  // ── Story 44.1: llm section merge ─────────────────────────────────────
-  describe("llm section merge (Story 44.1)", () => {
-    it("omits llm from result when no source provides it", () => {
-      const result = resolveGlobalConfig({});
-      expect(result.llm).toBeUndefined();
-    });
-
-    it("passes through llm from a single source", () => {
-      const result = resolveGlobalConfig({
-        projectConfig: {
-          llm: {
-            default: "bedrock/amazon.nova-lite-v1:0",
-            plan_generator: "anthropic/claude-sonnet-4-5",
-          },
-        },
-      });
-      expect(result.llm).toEqual({
-        default: "bedrock/amazon.nova-lite-v1:0",
-        plan_generator: "anthropic/claude-sonnet-4-5",
-      });
-    });
-
-    it("merges llm key-by-key across sources — higher priority wins per key", () => {
-      const result = resolveGlobalConfig({
-        userConfig: {
-          llm: {
-            default: "bedrock/amazon.nova-lite-v1:0",
-            advice_generator: "bedrock/us.amazon.nova-micro-v1:0",
-          },
-        },
-        projectConfig: {
-          llm: {
-            plan_generator: "anthropic/claude-sonnet-4-5",
-          },
-        },
-        envOverrides: {
-          llm: {
-            plan_generator: "openai/gpt-4o", // overrides project
-          },
-        },
-      });
-      expect(result.llm).toEqual({
-        default: "bedrock/amazon.nova-lite-v1:0",
-        advice_generator: "bedrock/us.amazon.nova-micro-v1:0",
-        plan_generator: "openai/gpt-4o", // env wins over project
-      });
-    });
-
-    it("env override for specific callsite overrides project default", () => {
-      const result = resolveGlobalConfig({
-        projectConfig: {
-          llm: {
-            default: "bedrock/amazon.nova-lite-v1:0",
-          },
-        },
-        envOverrides: {
-          llm: {
-            default: "anthropic/claude-sonnet-4-5",
-          },
-        },
-      });
-      expect(result.llm?.["default"]).toBe("anthropic/claude-sonnet-4-5");
-    });
-
-    it("user llm keys survive when project config adds different keys", () => {
-      const result = resolveGlobalConfig({
-        userConfig: {
-          llm: {
-            default: "bedrock/amazon.nova-lite-v1:0",
-          },
-        },
-        projectConfig: {
-          llm: {
-            plan_generator: "anthropic/claude-sonnet-4-5",
-          },
-        },
-      });
-      expect(result.llm).toEqual({
-        default: "bedrock/amazon.nova-lite-v1:0",
-        plan_generator: "anthropic/claude-sonnet-4-5",
-      });
     });
   });
 });
