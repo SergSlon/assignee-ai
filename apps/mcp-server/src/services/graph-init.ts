@@ -3,8 +3,25 @@
  * Provides the shared GraphContext type and createGraphContext() factory
  * that compiles the LangGraph agent graph at server startup.
  *
+ * Story 50-4 Wave 5 Pass I: `createGraph` is now a top-of-file static
+ * import from `@assignee/core/graph`. The previous dynamic import from
+ * `assignee/dist/services/graph.js` (and the corresponding
+ * `"assignee": "workspace:*"` dep in `apps/mcp-server/package.json`)
+ * have been removed. The monorepo now has zero `app → app` runtime
+ * dependencies — all shared code flows through `@assignee/core`.
+ *
+ * Credential resolution remains LAZY (preserves
+ * `feedback_lazy_credential_resolution_in_mcp`): the static import at
+ * module load does NOT touch the AWS SDK credential chain. Operator
+ * credentials are resolved only when an MCP tool handler invokes the
+ * graph and the graph's node calls
+ * `operatorCredentials()` / `createCloudControlClient()` on-demand.
+ *
  * @see Epic 20, Story 20.1, Story 20.2
+ * @see Story 50-4 Wave 5 Pass I handoff
  */
+
+import { createGraph } from "@assignee/core/graph";
 
 /**
  * Compiled LangGraph graph interface — minimal surface needed by tool handlers.
@@ -33,15 +50,9 @@ export interface GraphContext {
 /**
  * Create a GraphContext by compiling the LangGraph agent graph.
  * Called once at MCP server boot; the context is shared across all tool invocations.
- *
- * Dynamically imports the CLI's `createGraph` to avoid hard coupling at the module level.
  */
 export async function createGraphContext(): Promise<GraphContext> {
-  const { createGraph } = await import(
-    /* webpackIgnore: true */
-    "assignee/dist/services/graph.js"
-  );
-  const graph = (createGraph as () => CompiledGraph)();
+  const graph = createGraph() as unknown as CompiledGraph;
   return {
     graph,
     cleanup: async () => {

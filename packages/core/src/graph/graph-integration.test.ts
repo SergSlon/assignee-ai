@@ -14,14 +14,15 @@
  * Flow under test:
  *   intent_parser → schema_fetcher → option_elicitor → compound_dispatcher →
  *   plan_generator → preflight_guard → [routePreflightGuard] → result_formatter
+ *
+ * Story 50-4 Wave 5 Pass I: moved from
+ * `apps/cli/src/services/graph-integration.test.ts` to colocate with the
+ * in-core `createGraph`. Assertions unchanged — only mock-target paths +
+ * test-side import paths now point at core-internal modules.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  ExecutionMode,
-  ExecutionStatus,
-  SchemaFetchError,
-} from "@assignee/core";
+import { ExecutionMode, ExecutionStatus, SchemaFetchError } from "../index.js";
 import {
   McpMocks,
   RawSchemasByType,
@@ -40,6 +41,18 @@ import { ToolName } from "../constants/tools.js";
 // not MCP. NOTE: Constructor uses a plain class so it survives vitest's
 // mockReset:true between tests.
 const mockGetSchema = vi.fn();
+vi.mock("../index.js", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  class CloudFormationSchemaService {
+    getSchema = mockGetSchema;
+  }
+  return {
+    ...actual,
+    CloudFormationSchemaService,
+  };
+});
+// Also mock the package-name re-export path used by `@assignee/core` consumers
+// inside core's own code, so the two singletons stay aligned in the test.
 vi.mock("@assignee/core", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   class CloudFormationSchemaService {
@@ -73,8 +86,8 @@ vi.mock("@ai-sdk/amazon-bedrock", () => ({
 
 // Mock LlmAdapter — delegates to the same ai mock so existing test fixtures
 // work. Plain class survives vitest's mockReset:true between tests.
-vi.mock("./llm-adapter.js", async () => {
-  const { LlmError, safeTry } = await import("@assignee/core");
+vi.mock("../llm/adapter.js", async () => {
+  const { LlmError, safeTry } = await import("../index.js");
   const ai = await import("ai");
   class LlmAdapter {
     async generateStructured(
@@ -156,12 +169,6 @@ vi.mock("../utils/display.js", async () => {
   );
   return { ...actual, ..._displayStubs };
 });
-vi.mock("@assignee/core/utils/display.js", async () => {
-  const actual = await vi.importActual<typeof import("../utils/display.js")>(
-    "../utils/display.js",
-  );
-  return { ...actual, ..._displayStubs };
-});
 
 // Mock clack prompts (used by option-elicitor for spinners). Plain functions
 // where we don't need call assertions so impls survive mockReset:true.
@@ -198,8 +205,8 @@ vi.mock("../config/org-policy-cache.js", () => ({
   fetchOrgPolicy: async () => undefined,
 }));
 
-import { createGraph } from "./graph.js";
-import { _resetSchemaService } from "../nodes/schema-fetcher.js";
+import { createGraph } from "./create-graph.js";
+import { _resetSchemaService } from "./nodes/schema-fetcher.js";
 const { renderPlanBox, renderError } = await import("../utils/display.js");
 
 // ── Test helpers ────────────────────────────────────────────────────────────

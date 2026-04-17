@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ExecutionMode, ExecutionStatus } from "@assignee/core";
+import { ExecutionMode, ExecutionStatus } from "../index.js";
 
 // NOTE: Plain functions/classes survive vitest's mockReset:true. vi.fn-based
 // mocks have their default behavior re-installed in beforeEach.
+//
+// Story 50-4 Wave 5 Pass I: moved from `apps/cli/src/services/graph.test.ts`.
+// Assertions unchanged — only mock-target paths + test-side import paths
+// point at core-internal modules (createGraph lives in core now).
 
 // Mock cloudcontrol-client so createGraph() doesn't throw on missing env vars
 vi.mock("../services/cloudcontrol-client.js", () => ({
@@ -19,35 +23,35 @@ vi.mock("@ai-sdk/amazon-bedrock", () => ({
   createAmazonBedrock: () => () => undefined,
 }));
 
-// Mock LlmAdapter so graph.ts doesn't resolve real providers.
+// Mock LlmAdapter so create-graph.ts doesn't resolve real providers.
 // Return Result tuples matching LlmPort interface.
-vi.mock("./llm-adapter.js", () => ({
+vi.mock("../llm/adapter.js", () => ({
   LlmAdapter: vi.fn(),
 }));
 
 // Mock the nodes that have external dependencies or side-effects
-vi.mock("../nodes/schema-fetcher.js", () => ({
+vi.mock("./nodes/schema-fetcher.js", () => ({
   schemaFetcherNode: vi.fn(),
 }));
 
-vi.mock("../nodes/preflight-guard.js", () => ({
+vi.mock("./nodes/preflight-guard.js", () => ({
   preflightGuardNode: vi.fn(),
 }));
 
-vi.mock("../nodes/human-approval.js", () => ({
+vi.mock("./nodes/human-approval.js", () => ({
   humanApprovalNode: vi.fn(),
 }));
 
-vi.mock("../nodes/result-formatter.js", () => ({
+vi.mock("./nodes/result-formatter.js", () => ({
   resultFormatterNode: vi.fn(),
 }));
 
-import { createGraph } from "./graph.js";
-import { LlmAdapter } from "./llm-adapter.js";
-import { schemaFetcherNode } from "../nodes/schema-fetcher.js";
-import { preflightGuardNode } from "../nodes/preflight-guard.js";
-import { humanApprovalNode } from "../nodes/human-approval.js";
-import { resultFormatterNode } from "../nodes/result-formatter.js";
+import { createGraph } from "./create-graph.js";
+import { LlmAdapter } from "../llm/adapter.js";
+import { schemaFetcherNode } from "./nodes/schema-fetcher.js";
+import { preflightGuardNode } from "./nodes/preflight-guard.js";
+import { humanApprovalNode } from "./nodes/human-approval.js";
+import { resultFormatterNode } from "./nodes/result-formatter.js";
 
 beforeEach(() => {
   vi.mocked(LlmAdapter).mockImplementation(

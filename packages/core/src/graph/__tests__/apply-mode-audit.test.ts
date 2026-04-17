@@ -31,7 +31,7 @@ import {
   ExecutionMode,
   ExecutionStatus,
   SchemaFetchError,
-} from "@assignee/core";
+} from "../../index.js";
 import {
   McpMocks,
   RawSchemasByType,
@@ -44,7 +44,7 @@ import {
 // Mock CloudFormationSchemaService — schema fetching now uses direct SDK, not
 // MCP. NOTE: Plain class survives vitest's mockReset:true between tests.
 const mockGetSchema = vi.fn();
-vi.mock("@assignee/core", async (importOriginal) => {
+vi.mock("../../index.js", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   class CloudFormationSchemaService {
     getSchema = mockGetSchema;
@@ -74,8 +74,8 @@ vi.mock("@ai-sdk/amazon-bedrock", () => ({
 
 // Mock LlmAdapter — delegates to the same ai mock so existing test fixtures
 // work. Plain class survives vitest's mockReset:true between tests.
-vi.mock("../../services/llm-adapter.js", async () => {
-  const { LlmError, safeTry } = await import("@assignee/core");
+vi.mock("../../llm/adapter.js", async () => {
+  const { LlmError, safeTry } = await import("../../index.js");
   const ai = await import("ai");
   class LlmAdapter {
     async generateStructured(
@@ -178,9 +178,9 @@ vi.mock("../../config/org-policy-cache.js", () => ({
   fetchOrgPolicy: async () => undefined,
 }));
 
-import { createGraph } from "../../services/graph.js";
-import { _resetSchemaService } from "../schema-fetcher.js";
-import { resetBPCache } from "../bp-evaluator.js";
+import { createGraph } from "../create-graph.js";
+import { _resetSchemaService } from "../nodes/schema-fetcher.js";
+import { resetBPCache } from "../nodes/bp-evaluator.js";
 import { createCloudControlClient } from "../../services/cloudcontrol-client.js";
 
 // ── Test helpers ────────────────────────────────────────────────────────────

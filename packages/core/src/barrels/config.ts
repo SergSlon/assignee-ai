@@ -77,6 +77,9 @@ export { AwsErrorName } from "../constants/aws-error-names.js";
 // Constants — Environment variable name registry (Story 50-4 Wave 5 Pass A)
 export { EnvVar } from "../constants/env-vars.js";
 
+// Constants — Graph-node name registry (Story 50-4 Wave 5 Pass I)
+export { GraphNode, type GraphNodeType } from "../constants/graph-node.js";
+
 // Constants — Instance category canonical values (Story 50-4 Wave 5 Pass C)
 export {
   InstanceCategory,
