@@ -57,6 +57,10 @@ runs:
       run: pip install uvx
 
     # ── Install assignee CLI ────────────────────────────────────────────────
+    # Pulls the published CLI from npm. Requires v0.2+ published tarball;
+    # the composite action is itself only usable after `private: true` is
+    # flipped alongside the first `pnpm -r publish`. See
+    # `.github/workflows/release.yml.disabled` for the publish gate.
     - name: Install assignee CLI
       shell: bash
       run: npm install -g assignee
