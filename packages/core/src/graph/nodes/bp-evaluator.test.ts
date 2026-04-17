@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { BestPractice } from "@assignee/best-practices";
-import type { AgentState } from "../services/graph.js";
+import type { AgentState } from "../graph-state.js";
 
 // Mock loadBestPractices to return controlled fixtures. computeFreshness
 // is also mocked so the freshness warning path never touches the real
@@ -30,8 +30,10 @@ vi.mock("@assignee/best-practices", async (importOriginal) => {
   };
 });
 
-// Suppress logger output
-vi.mock("../utils/logger.js", () => ({
+// Suppress logger output. Path adjusted for in-core location
+// (Story 50-4 Wave 5 Pass D) — the orchestrator imports
+// `../../../utils/logger/index.js`.
+vi.mock("../../utils/logger/index.js", () => ({
   log: vi.fn(),
   LOG_ACTIONS: {
     BP_EVALUATED: "bp_evaluated",

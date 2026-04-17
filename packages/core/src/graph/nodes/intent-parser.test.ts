@@ -1,9 +1,29 @@
 import { describe, it, expect } from "vitest";
-import { ExecutionStatus } from "@assignee/core";
-import { MockLlmAdapter } from "@assignee/core/testing";
-import type { AgentState } from "../services/graph.js";
-import { SUPPORTED_TYPES, SUPPORTED_TYPES_HINT } from "../config/constants.js";
+import { ExecutionStatus, SUPPORTED_TYPES_ARRAY } from "../../index.js";
+import { MockLlmAdapter } from "../../testing/index.js";
+import type { AgentState } from "../graph-state.js";
 import { createIntentParserNode } from "./intent-parser.js";
+
+// Local aliases so the assertion lines stay byte-identical to the pre-lift
+// CLI test file (Story 50-4 Wave 5 Pass D; feedback_never_weaken_tests).
+const SUPPORTED_TYPES = SUPPORTED_TYPES_ARRAY;
+const SUPPORTED_TYPES_HINT = `What you can create (${SUPPORTED_TYPES_ARRAY.length} resource types):
+
+  Compute       EC2 instance, Lambda function, ECS cluster
+  Storage       S3 bucket
+  Databases     RDS (PostgreSQL/MySQL/MariaDB/Aurora), DynamoDB table
+  Networking    VPC, Subnet, Security Group, Internet Gateway,
+                NAT Gateway, Route Table, Route, Load Balancer
+  API           API Gateway v2 (HTTP/WebSocket)
+  Messaging     SQS queue, SNS topic
+  Security      IAM role, Secrets Manager secret, SSM parameter
+  Containers    ECR repository
+  Observability CloudWatch alarm, CloudWatch Logs group
+
+Examples:
+  assignee plan "Create an S3 bucket for my static site"
+  assignee plan "Create an EC2 t3.micro with SSH"
+  assignee plan "Create a PostgreSQL database for production"`;
 
 describe("intentParserNode", () => {
   it("identifies valid resource type (S3)", async () => {

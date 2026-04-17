@@ -5,9 +5,9 @@
 
 import { describe, it, expect } from "vitest";
 import { compoundDispatcherNode } from "./compound-dispatcher.js";
-import { ExecutionStatus, ExecutionMode } from "@assignee/core";
-import type { AgentState } from "../services/graph.js";
-import type { ArchitecturePattern } from "@assignee/core";
+import { ExecutionStatus, ExecutionMode } from "../../index.js";
+import type { AgentState } from "../graph-state.js";
+import type { ArchitecturePattern } from "../../index.js";
 
 /** Minimal mock AgentState for compound-dispatcher tests */
 function makeState(overrides: Partial<AgentState> = {}): AgentState {

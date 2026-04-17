@@ -1,13 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ExecutionStatus } from "@assignee/core";
+import { ExecutionStatus } from "../../index.js";
 import {
   statusPollerNode,
   isRetryableCloudFrontS3Error,
 } from "./status-poller.js";
-import {
-  ProvisioningErrorKind,
-  type ProvisioningPort,
-} from "../services/provisioning-port.js";
+import { ProvisioningErrorKind, type ProvisioningPort } from "../../index.js";
 
 // ── Mock provisioning port ──────────────────────────────────────────────────
 
