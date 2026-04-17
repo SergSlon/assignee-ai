@@ -1,19 +1,17 @@
 /**
- * AWS-related constants — region, service identifiers, credential error
- * message templates. Domain sub-module of the former `config/constants.ts`
- * coupling hub (Story 49.5).
+ * AWS-related constants — thin re-export shim.
+ *
+ * The canonical implementation lives in `@assignee/core`
+ * (lifted in Story 50-4 Wave 5 Pass A so the in-core LlmAdapter,
+ * logger, and token-usage accumulator can read AWS_REGION without
+ * reaching back into the CLI app).
+ *
+ * AWS_SERVICE_EXECUTE_API is already exported from `@assignee/core`
+ * via the `cfn-keys/defaults.ts` module; we re-export the same symbol
+ * for source-compatibility.
  */
-
-import { DEFAULT_AWS_REGION } from "@assignee/core";
-import { EnvVar } from "../../constants/env-vars.js";
-
-export const AWS_REGION = process.env[EnvVar.AWS_REGION] ?? DEFAULT_AWS_REGION;
-
-/** ARN service identifier for API Gateway V2 execute endpoints. */
-export const AWS_SERVICE_EXECUTE_API = "execute-api" as const;
-
-/** Standard error messages for missing operator credentials. */
-export const CredentialError = {
-  MISSING_ACCESS_KEY: "ASSIGNEE_OPERATOR_ACCESS_KEY_ID is missing or empty",
-  MISSING_SECRET_KEY: "ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY is missing or empty",
-} as const;
+export {
+  AWS_REGION,
+  CredentialError,
+  AWS_SERVICE_EXECUTE_API,
+} from "@assignee/core";

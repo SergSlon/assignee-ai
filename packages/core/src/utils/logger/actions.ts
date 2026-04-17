@@ -1,6 +1,9 @@
 /**
  * LogAction enum + LogEvent/LogLevel types.
- * Extracted from logger.ts (Wave 6d F5).
+ *
+ * Lifted from `apps/cli/src/utils/logger/actions.ts` in Story 50-4
+ * Wave 5 Pass A so LlmAdapter (in `@assignee/core/llm`) can emit
+ * structured log events without reaching back into the CLI app.
  */
 
 export const LOG_ACTIONS = {

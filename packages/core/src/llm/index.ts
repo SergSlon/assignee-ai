@@ -4,12 +4,11 @@
  * Story 50-4 Wave 5.1: lifted the LLM model-parser and Bedrock-region
  * helper from `apps/cli/src/services/llm-adapter/` so consumers (the
  * in-core graph and CLI alike) can use them without reaching back
- * into the CLI app.
+ * into the CLI.
  *
- * The full LlmAdapter (which depends on AWS_REGION + token-usage
- * accumulator + EnvVar — all CLI-side modules with their own deeper
- * dep closures) remains in `apps/cli/src/services/llm-adapter/adapter.ts`
- * pending a future wave that lifts the supporting CLI utilities.
+ * Story 50-4 Wave 5 Pass B: lifted the LlmAdapter production class
+ * here too, now that its deps (AWS_REGION, token-usage, logger,
+ * EnvVar) are all in core thanks to Pass A.
  */
 export {
   DEFAULT_MODEL,
@@ -26,3 +25,5 @@ export {
   LlmProvider,
   type LlmProviderType,
 } from "../constants/llm-providers.js";
+export { LlmAdapter, type LlmAdapterConfig } from "./adapter.js";
+export { createLanguageModel } from "./client-factory.js";

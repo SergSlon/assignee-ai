@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { z } from "zod";
-import { LlmError } from "@assignee/core";
+import { LlmError } from "../errors.js";
 
 // Mock all provider packages before importing the adapter.
 // NOTE: Plain functions (not vi.fn) for the provider factories so impls
@@ -30,7 +30,7 @@ import {
   DEFAULT_MAX_TOKENS,
   detectBedrockRegionError,
   KNOWN_BEDROCK_REGIONS,
-} from "../llm-adapter.js";
+} from "./index.js";
 import { generateText } from "ai";
 
 const savedEnv = { ...process.env };

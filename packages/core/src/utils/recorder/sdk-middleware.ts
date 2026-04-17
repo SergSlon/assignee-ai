@@ -1,6 +1,8 @@
 /**
  * AWS SDK v3 middleware that records every command invocation.
- * Extracted from recorder.ts (Wave 6d F5).
+ *
+ * Lifted from `apps/cli/src/utils/recorder/sdk-middleware.ts` in Story 50-4
+ * Wave 5 Pass A.
  */
 import type { RecordingInterceptor } from "./session.js";
 

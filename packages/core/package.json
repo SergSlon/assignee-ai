@@ -81,6 +81,7 @@
     "@aws-sdk/client-cloudcontrol": "^3.1009.0",
     "@aws-sdk/client-cloudformation": "^3.1015.0",
     "@aws-sdk/client-ec2": "^3.1015.0",
+    "@langchain/core": "^1.1.32",
     "ai": "^6.0.116",
     "zod": "^3.24.0"
   },

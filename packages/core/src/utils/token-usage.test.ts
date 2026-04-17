@@ -24,9 +24,11 @@ import {
 // Capture log() calls so tests can verify the structured emissions
 // without relying on stderr scraping or filesystem side effects.
 const { mockLog } = vi.hoisted(() => ({ mockLog: vi.fn() }));
-vi.mock("./logger.js", async () => {
+vi.mock("./logger/index.js", async () => {
   const actual =
-    await vi.importActual<typeof import("./logger.js")>("./logger.js");
+    await vi.importActual<typeof import("./logger/index.js")>(
+      "./logger/index.js",
+    );
   return {
     ...actual,
     log: mockLog,

@@ -1,6 +1,9 @@
 /**
- * Dedicated unit tests for the recorder fixture redaction module
- * (Story 50-6).
+ * Dedicated unit tests for the recorder fixture redaction module.
+ *
+ * Lifted from `apps/cli/src/utils/recorder/redaction.test.ts` in
+ * Story 50-4 Wave 5 Pass A (assertions byte-identical; only the import
+ * path changed per feedback_never_weaken_tests).
  *
  * The recorder writes LLM + SDK fixtures to disk for replay. The
  * redactor's job is to scrub operator credentials, IAM account IDs,

@@ -1,10 +1,14 @@
 /**
  * RecordingLlmAdapter — pass-through LlmPort that records every call.
- * Extracted from recorder.ts (Wave 6d F5).
+ *
+ * Lifted from `apps/cli/src/utils/recorder/llm-recorder.ts` in Story 50-4
+ * Wave 5 Pass A.
  */
 import type { ZodSchema } from "zod";
-import type { LlmPort, Result, LlmError } from "@assignee/core";
-import { UNKNOWN_FALLBACK } from "../../config/constants.js";
+import type { LlmPort } from "../../ports/llm-port.js";
+import type { Result } from "../../types/result.js";
+import type { LlmError } from "../../errors.js";
+import { UNKNOWN_FALLBACK } from "../../config/cfn-keys/defaults.js";
 import type { RecordingInterceptor } from "./session.js";
 
 /**

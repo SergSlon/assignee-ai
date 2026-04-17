@@ -1,6 +1,8 @@
 /**
  * Filename sanitization + recording-directory resolution.
- * Extracted from recorder.ts (Wave 6d F5).
+ *
+ * Lifted from `apps/cli/src/utils/recorder/paths.ts` in Story 50-4
+ * Wave 5 Pass A.
  */
 import * as path from "node:path";
 

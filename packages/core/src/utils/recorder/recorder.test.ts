@@ -16,7 +16,7 @@ import {
   sanitizeFilenameSegment,
   redactStringValue,
   addRecordingMiddleware,
-} from "./recorder.js";
+} from "./index.js";
 
 // ── isRecordingEnabled ──────────────────────────────────────────────────────
 

@@ -17,7 +17,6 @@ import type { StructuredTool } from "@langchain/core/tools";
 import {
   CostEstimateLabel,
   RESOURCE_TYPES as CORE_RESOURCE_TYPES,
-  arnToCloudFormationType,
   loadProvisionData,
   parseArn,
   type ManagedResource,
