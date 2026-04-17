@@ -355,12 +355,11 @@ assignee optimize [resource-id] [options]
 
 **Options:**
 
-| Flag                | Description                                                           | Default      |
-| ------------------- | --------------------------------------------------------------------- | ------------ |
-| `--region <region>` | AWS region to scan                                                    | `AWS_REGION` |
-| `--json`            | Emit recommendations as JSON instead of a table                       | false        |
-| `--reconcile`       | Also print suggested `assignee plan` commands for each recommendation | false        |
-| `--no-color`        | Disable color output                                                  | false        |
+| Flag                | Description                                     | Default      |
+| ------------------- | ----------------------------------------------- | ------------ |
+| `--region <region>` | AWS region to scan                              | `AWS_REGION` |
+| `--json`            | Emit recommendations as JSON instead of a table | false        |
+| `--no-color`        | Disable color output                            | false        |
 
 **Supported resource types:**
 
@@ -399,29 +398,13 @@ dollar amounts — when the server is unavailable, the recommendation
 for that resource is silently skipped and the operator sees "no
 recommendation" instead of a stale price.
 
-**--reconcile output:**
-
-When `--reconcile` is set, the command prints a suggested
-reconciliation playbook after the table: one `assignee plan
-"Change <resource> from X to Y"` line per recommendation. This does
-**not** auto-execute anything — Graviton swaps require AMI rebuild
-(for EC2) or RDS snapshot restore on the new instance class, both
-mutation-heavy interactive flows that should go through the normal
-`plan` → HITL → `apply` pipeline.
-
-In `--json` mode, the playbook surfaces as a `reconcilePlaybook:
-string[]` field on the JSON payload so CI pipelines can consume the
-machine-readable recommendations and the human-readable action list
-from a single invocation.
-
 **Examples:**
 
 ```bash
 assignee optimize
 assignee optimize --json
-assignee optimize --reconcile
 assignee optimize i-0123456789abcdef0
-assignee optimize --json --reconcile --no-color
+assignee optimize --json --no-color
 ```
 
 **Sample output:**
@@ -613,7 +596,7 @@ Doctor summary (assignee.ai 0.1.0):
 [✓] Config
     • ✓ ./assignee.yaml → valid YAML
 [✓] Best practices
-    • ✓ manifest → 185 rules tracked (186 YAML files on disk; 1 pending re-manifest), hash 636a1827cc85… matches
+    • ✓ manifest → 185 rules tracked, hash 636a1827cc85… matches
 
 ! 1 failures found.
 ```

@@ -102,6 +102,10 @@ Expected output:
 ✓ BP validation passed (186 rules, manifest OK)
 ```
 
+The count above (`186`) reflects the post-contribution total — i.e., the
+current 185 rules plus the new `BP-EFS-010` you just added. If you add
+multiple rules in one PR the count grows accordingly.
+
 If the script finds a schema violation it prints `<file> [<rule-id>]:
 <reason>` and exits 1. Common failures:
 
@@ -171,10 +175,10 @@ The three things that make the BP-rule library extensible:
    rules never reach main.
 3. **SHA-256 manifest instead of signed artifacts.** [Story 50-3](../../_bmad-output/implementation-artifacts/_archive/done-stories/)
    cut GPG signing as supply-chain theatre. An in-tree SHA-256 manifest
-   - git history is enough provenance for an Apache-2.0 OSS rule
+   - git history is enough provenance for an MIT-licensed OSS rule
      library; consumers with stronger threat models can re-sign at
      package time.
 
 See [`docs/explanation/oss-vs-saas.md`](./oss-vs-saas.md) for the
 contribution-first positioning: the community BP library is the
-long-term moat, not the current 186 rules.
+long-term moat, not the current 185 rules.

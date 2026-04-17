@@ -40,7 +40,7 @@ The core computation is a **StateGraph** from `@langchain/langgraph` with 13 nod
 
 ### State (AgentState)
 
-Defined in `apps/cli/src/services/graph-state.ts` as a LangGraph Annotation. Key channels:
+Defined in `packages/core/src/graph/graph-state.ts` as a LangGraph Annotation (canonical; `apps/cli/src/services/graph-state.ts` is a thin re-export shim). Key channels:
 
 | Channel                    | Type                                         | Purpose                                       |
 | -------------------------- | -------------------------------------------- | --------------------------------------------- |
@@ -69,7 +69,7 @@ Defined in `apps/cli/src/services/graph-state.ts` as a LangGraph Annotation. Key
 
 ### Routing Functions
 
-Defined in `apps/cli/src/services/graph-routing.ts`:
+Defined in `packages/core/src/graph/graph-routing.ts` (canonical; `apps/cli/src/services/graph-routing.ts` is a thin re-export shim):
 
 - **routeCheckpointEntry** (START): Checkpoint resumed with desiredState -> human_approval; otherwise -> intent_parser
 - **routePreflightGuard**: Plan mode or preflight failed -> result_formatter; compound continuation -> resource_provisioner; otherwise -> human_approval
@@ -132,7 +132,7 @@ Two registries:
 
 ### Best Practices Engine (`packages/best-practices/`)
 
-- 186 YAML rules organized by AWS service directory (s3/, ec2/, rds/, etc.); 185 tracked in `manifest.json` + 1 pending re-manifest
+- 185 YAML rules organized by AWS service directory (s3/, ec2/, rds/, etc.); count matches `manifest.json`
 - `loader.ts` reads YAML files, validates with Zod schema
 - `evaluate.ts` runs trigger checks against `EvalContext` (resourceType + desiredState + userIntent + patternId)
 - Check types: equals, not_equals, exists, not_exists, contains, not_contains, regex, comparison, nested_array_check, any_of, custom

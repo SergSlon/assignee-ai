@@ -53,7 +53,7 @@ Pre (f) 2026-04-09 the `static-website` compound pattern provisioned S3 via CCAP
 - `cdn-distribution` references `cdn-oac` via `markerRef` (OriginAccessControlId) and `website-bucket` via `markerRef` (origin DomainName)
 - `bucket-policy` references `website-bucket` via `markerRef` (Bucket primary identifier) and `cdn-distribution` via `markerRef` (aws:SourceArn condition — resolved to the full account-scoped distribution ARN via `buildResourceArn`)
 
-The compound apply is fully deterministic via CCAPI; the destroy pipeline tiers `bucket-policy` first (tier 0), then the distribution (tier 1, two-step disable+delete), then the OAC (tier 2), then the bucket (tier 5). See `apps/cli/src/services/bulk-destroy.ts` for the full ordering.
+The compound apply is fully deterministic via CCAPI; the destroy pipeline tiers `bucket-policy` first (tier 0), then the distribution (tier 1, two-step disable+delete), then the OAC (tier 2), then the bucket (tier 5). Story 50-3 removed the production `bulk-destroy` subtree; tier ordering for compound teardown now lives in the shared destroy strategies under `packages/core/src/destroy-strategies/` (with the CloudFront two-step handled by `packages/core/src/destroy-strategies/strategies/cloudfront-distribution.ts`), and the e2e sweep helper `apps/cli/src/e2e/bulk-sweep.ts` is the only remaining tier-aware enumerator.
 
 ## Provisioning Notes
 

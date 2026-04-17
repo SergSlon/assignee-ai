@@ -12,6 +12,50 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 51 — iteration 1 (2026-04-17)
+
+#### Docs
+
+- **License unification (L1-B1).** `docs/explanation/oss-vs-saas.md`
+  and `docs/explanation/contributing-a-bp-rule.md` now consistently
+  describe the project as MIT-licensed; all `Apache-2.0` references
+  replaced to match the root `LICENSE`.
+- **Stale path citations (L1-H1..H3, L8-H1).** Updated README, docs/
+  architecture.md, docs/integration-architecture.md,
+  docs/resource-types.md, and docs/explanation/invariants.md to
+  reflect the post–Wave-5 module layout — the canonical graph now
+  lives at `packages/core/src/graph/` and the MCP server imports
+  `createGraph` directly from `@assignee/core/graph` (no runtime
+  dependency on the `assignee` CLI package). Removed the deleted
+  `apps/cli/src/services/bulk-destroy.ts` references; pointed the
+  compound static-website destroy ordering at
+  `packages/core/src/destroy-strategies/`.
+- **Invariants pruning (L8-H1).** Deleted the "Safety allowlist in
+  bulk-destroy" invariant — Story 50-3 removed the production
+  bulk-destroy subtree that the allowlist guarded, so the invariant
+  is no longer enforced by any code.
+- **Docs index refresh (L10-H4).** `docs/index.md` key-metrics table
+  re-dated to 2026-04-17; test-count row rephrased to match the
+  README's "full unit suite across 4 packages" framing (307 test
+  files total: 72 CLI + 24 MCP + 200 core + 11 BP).
+
+#### Best-practice library
+
+- **Rule count drift (L10-H1).** README, docs, and architecture pages
+  now cite **185** BP rules (matching `packages/best-practices/manifest.json`)
+  instead of the stale "186 + 1 pending re-manifest" hedge; manifest
+  regenerated in-place (content-identical, timestamp refreshed).
+- **Contributor on-ramp (L10-H2).** Added a prominent contribution
+  call-out near the README's feature bullets linking to
+  `docs/explanation/contributing-a-bp-rule.md`.
+
+#### Run-ledger
+
+- **Destroy stickiness (L10-H3).** `docs/explanation/run-ledger-design.md`
+  now states the explicit OSS-launch gate: v0.1 uses the existing
+  per-resource `assignee destroy` flow; `destroy --run-id <uuid>` ships
+  in v0.2. No code changes — documentation-only clarification.
+
 ### Added
 
 - Root legal and community files: `LICENSE` (MIT), `SECURITY.md`,
@@ -56,7 +100,7 @@ Initial internal development baseline. Not published to npm.
   (Cursor, Claude Code, Windsurf) via MCP.
 - `@assignee/core` shared library: ports, schemas, destroy strategies,
   checkpoint store, pricing, testing utilities.
-- `@assignee/best-practices` — 186 YAML best-practice rules with
+- `@assignee/best-practices` — 185 YAML best-practice rules with
   SHA-256 manifest integrity.
 - Support for 37 AWS resource types, 9 compound architecture patterns.
 - 13-node LangGraph pipeline: intent_parser → schema_fetcher →

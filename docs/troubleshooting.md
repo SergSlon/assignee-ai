@@ -51,17 +51,6 @@ for your real account ID) or let the wizard prompt for it. See
 [invariants.md](explanation/invariants.md#placeholder-arn-preflight)
 for the enforcing code path.
 
-### Symptom: `Refusing to destroy AssigneeOperator / AssigneeAiBedrockLoggingRole`
-
-**Cause.** `bulk-destroy` has a hard-coded safety allowlist that
-unconditionally excludes the four IAM roles assignee itself relies on
-(`AssigneeOperator`, `AssigneeReader`, `AssigneeAuditor`, `AssigneeAiBedrockLoggingRole`).
-Without the allowlist, `destroy --all --include-iam` would lock the
-operator out of their own tool.
-
-**Fix.** If you actually need to remove those roles, delete them via
-the AWS console or CLI — assignee deliberately will not.
-
 ### Symptom: `State guard: resource already exists` on apply
 
 **Cause.** CloudControl `GetResource` reports the target identifier

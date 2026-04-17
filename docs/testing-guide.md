@@ -294,7 +294,7 @@ node process-captured-responses.mjs  # trims schemas/pricing/docs to fixture siz
 | `list-managed-resources.test.ts`      | —     | MCP list-managed-resources tool handler                                              |
 | `estimate-cost.test.ts` (MCP)         | —     | MCP estimate-cost tool handler                                                       |
 | Plugin tests (core)                   | ~100+ | S3, EC2, RDS, Lambda, generic plugin config hints                                    |
-| `bp-all-rules-audit.test.ts`          | 266   | All 186 BP rules fire correctly (185 manifest-tracked + 1 pending re-manifest)       |
+| `bp-all-rules-audit.test.ts`          | 266   | All 185 BP rules fire correctly (manifest-tracked)                                   |
 | `bp-auto-fix-audit.test.ts`           | 55    | All 27 auto-fixable rules verified end-to-end                                        |
 | `compound-provisioning-audit.test.ts` | 69    | All 9 compound patterns through dispatcher+provisioner                               |
 | `compound-failure-injector.test.ts`   | 12    | Failure-injection harness: in-memory port, tracker, synthetic error at index N       |
@@ -461,9 +461,7 @@ Run all tests and mark pass/fail:
 | 28  | Best practices findings in plan output                                                       | ⬜     |
 | 29  | Memory hints ("Previous provision: <live monthly cost from Pricing MCP>") in plan output     | ⬜     |
 | 30  | Static Website Deploy — S3 + CloudFront + file upload via `--source`                         | ⬜     |
-| 31  | Bulk Destroy — `destroy --all` with tier ordering and IAM exclusion                          | ⬜     |
-| 32  | Clean Resources — `clean --resources` removes e2e/test leftovers                             | ⬜     |
-| 33  | VPC Networking pattern — 17 resources, dependency ordering, NAT+EIP                          | ⬜     |
+| 31  | VPC Networking pattern — 17 resources, dependency ordering, NAT+EIP                          | ⬜     |
 | 34  | SQS Queue plan — encryption + DLQ best practices                                             | ⬜     |
 | 35  | SNS Topic plan — KMS encryption best practice                                                | ⬜     |
 | 36  | DynamoDB Table plan — key schema, PITR, deletion protection                                  | ⬜     |

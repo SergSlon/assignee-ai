@@ -9,10 +9,13 @@
 
 ## The short version
 
-- **OSS, Apache-2.0, forever:** the `assignee` CLI, the LangGraph
-  pipeline, the MCP server, the 186 BP rules + 9 compound patterns,
+- **OSS, MIT, forever:** the `assignee` CLI, the LangGraph
+  pipeline, the MCP server, the 185 BP rules + 9 compound patterns,
   cost preflight, mandatory tagging, the Bedrock adapter (BYOK), and
-  the single-user run-ledger.
+  the single-user run-ledger. (License chosen for maximum downstream
+  reuse — see [LICENSE](../../LICENSE); earlier drafts floated
+  Apache-2.0 but MIT ships the same permissive contract with lower
+  compliance overhead for Mara's-scale users.)
 - **Future SaaS tier (post-traction, no commitment date):** multi-user
   org + RBAC + SSO, signed-intent audit trail (KMS ECDSA), org-wide
   policy-as-code, anonymised provisioning telemetry, drift detection +
@@ -43,7 +46,7 @@ answer either question gets cut.
 
 The `assignee` CLI binary, the 13-node LangGraph pipeline, the hexagonal
 ports / adapters under `@assignee/core`, the MCP adapters, and the MCP
-server (`@assignee/mcp-server`) are all Apache-2.0, forever. That
+server (`@assignee/mcp-server`) are all MIT-licensed, forever. That
 includes:
 
 - **Every AWS credential path.** `operatorCredentials()`,
@@ -56,10 +59,10 @@ includes:
   the trigger language, the auto-fix patch application, the interactive
   fix UX.
 
-### The 186 BP rules + 9 compound patterns
+### The 185 BP rules + 9 compound patterns
 
 The rule library at [`packages/best-practices/`](../../packages/best-practices)
-is Apache-2.0. Community contributions are welcome (see
+is MIT-licensed. Community contributions are welcome (see
 [`CONTRIBUTING.md § Contributing a Best-Practice Rule`](../../CONTRIBUTING.md#contributing-a-best-practice-rule))
 — the network-effect bet is that a community-contributed rule library
 compounds over time and a competitor's proprietary rule set doesn't.
@@ -162,7 +165,7 @@ audited, which controls it covers) as the premium.
 
 Things we will **not** monetise, to keep the OSS side whole:
 
-- **Access to the 186 rules.** The shipped rules stay free.
+- **Access to the 185 rules.** The shipped rules stay free.
 - **Access to the compound patterns.** The nine shipped patterns stay
   free.
 - **Cost preflight.** The pre-confirm cost estimate stays free.
@@ -178,7 +181,7 @@ credential — and probably the product with it.
 Two reasons:
 
 1. **Contributor clarity.** Anyone contributing a BP rule should know
-   their rule stays Apache-2.0, forever, no matter how big Assignee
+   their rule stays MIT-licensed, forever, no matter how big Assignee
    gets. The pledge has to be on paper before the first community
    rule lands.
 2. **Forcing function.** Every SaaS feature listed above has to hold up
