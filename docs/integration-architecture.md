@@ -10,23 +10,31 @@ Assignee.ai has three primary packages that integrate with each other:
                     +-------------------+
                     |   @assignee/core  |
                     | (types, plugins,  |
-                    |  pricing, config) |
+                    |  pricing, config, |
+                    |  graph, nodes)    |
                     +-------------------+
                        /             \
                       /               \
           +-----------+           +------------------+
           |  apps/cli |           | apps/mcp-server  |
-          | (17 cmds, |           | (5 MCP tools,    |
-          |  13 nodes)|           |  stdio transport) |
+          | (13 cmds, |           | (5 MCP tools,    |
+          |  shim     |           |  stdio transport) |
+          |  nodes)   |           |                  |
           +-----------+           +------------------+
                |                         |
                |  depends on             |  depends on
                v                         v
     +--------------------+    +--------------------+
-    | @assignee/best-    |    |  assignee (CLI)    |
-    | practices          |    |  (workspace dep)   |
+    | @assignee/best-    |    | @assignee/core +   |
+    | practices          |    | @assignee/best-    |
+    |                    |    | practices (no CLI) |
     +--------------------+    +--------------------+
 ```
+
+**Wave-5 invariant:** `apps/mcp-server` no longer depends on the
+`assignee` (CLI) workspace package at runtime. Both apps now import
+`createGraph` and all node implementations directly from
+`@assignee/core/graph`.
 
 ## What Lives Where
 
@@ -95,7 +103,7 @@ Exposes CLI capabilities to AI coding assistants via Model Context Protocol.
 
 ### Shared Graph
 
-Both CLI and MCP server use the **same LangGraph pipeline** from `apps/cli/src/services/graph.ts`. The MCP server imports `createGraph()` from the CLI package (via `assignee` workspace dependency).
+Both CLI and MCP server use the **same LangGraph pipeline**, whose canonical definition lives in `packages/core/src/graph/create-graph.ts`. The MCP server imports `createGraph()` **directly from `@assignee/core/graph`** — the Wave-5 Pass I refactor inverted the earlier dependency, so the MCP server no longer needs a runtime import of the CLI package. The CLI keeps a thin re-export shim at `apps/cli/src/services/graph.ts` for backward compatibility with internal import paths, but there is no code-level coupling from MCP to CLI for the graph itself.
 
 **CLI invocation path:**
 
@@ -126,16 +134,25 @@ MCP tool handler -> createGraphContext() -> graph.invoke(initialState)
 | **Destroy**          | CloudControl + pre-delete hooks          | Strategy registry pattern                |
 | **Drift**            | Full drift detection + reconciliation    | Not exposed as MCP tool                  |
 
-### What MCP Server Reuses from CLI
+### What MCP Server Reuses from `@assignee/core`
 
-The MCP server has a `"assignee": "workspace:*"` dependency, giving it access to:
+The MCP server's only workspace runtime deps are `@assignee/core` and
+`@assignee/best-practices` (the `"assignee": "workspace:*"` runtime dep
+was removed in Story 50-4 Wave 5 Pass I). Through `@assignee/core` the
+MCP server accesses:
 
-- `createGraph()` function and all 13 nodes
+- `createGraph()` and every node implementation (all 13 nodes live
+  under `packages/core/src/graph/nodes/`; `apps/cli/src/nodes/` is
+  shim-only)
 - `CloudControlAdapter` (Story 50-7 inlined the former SDKFallbackDispatcher redirect classifier)
 - `MemoryService` for provision/failure recording
 - `fetchManagedResources()` for resource listing
-- All display utilities (though it formats differently)
+- Display utilities (the MCP server formats differently but shares the
+  underlying formatting primitives)
 - Checkpoint serialization functions
+- The shared destroy-strategies registry under
+  `packages/core/src/destroy-strategies/` (replaces the pre-Wave-5
+  per-app registries)
 
 ### What MCP Server Does NOT Reuse
 

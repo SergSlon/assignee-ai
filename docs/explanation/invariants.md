@@ -71,7 +71,9 @@ errors.
 
 **Where it's enforced.**
 
-- `apps/cli/src/nodes/preflight-guard.ts`
+- `packages/core/src/graph/nodes/preflight-guard/guards/placeholder-arn.ts`
+  (canonical); `apps/cli/src/nodes/preflight-guard.ts` is a thin
+  re-export shim.
 
 **Source memory.** `feedback_placeholder_arn_preflight_guard.md`
 
@@ -101,8 +103,8 @@ that without forcing it on everyone.
 
 **Where it's enforced.**
 
-- `apps/cli/src/nodes/preflight-guard/guards/managed-policy.ts` —
-  per-ARN auth / AccessDenied / Throttling / unknown branches and the
+- `packages/core/src/graph/nodes/preflight-guard/guards/managed-policy.ts`
+  — per-ARN auth / AccessDenied / Throttling / unknown branches and the
   outer client-construction auth branch. The
   `ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS=1` check sits inside the unknown
   (`else`) branch _after_ auth / NoSuchEntity / AccessDenied /
@@ -128,24 +130,6 @@ AWS quirk, not a bug you'd catch in unit tests.
 - `apps/cli/src/services/iam-role-inventory.ts`
 
 **Source memory.** `feedback_iam_role_rgta_gap.md`
-
----
-
-## Safety allowlist in bulk-destroy
-
-**Rule.** `bulk-destroy --include-iam` unconditionally excludes
-`AssigneeOperator`, `AssigneeReader`, `AssigneeAuditor`, and `Bedrock*`
-IAM roles. No flag overrides this.
-
-**Why.** Without the allowlist, a single `destroy --all --include-iam`
-sweep locks the operator out of their own tooling — including the
-credentials needed to undo the mistake.
-
-**Where it's enforced.**
-
-- `apps/cli/src/services/bulk-destroy.ts`
-
-**Source memory.** `feedback_assignee_infra_safety_allowlist.md`
 
 ---
 
@@ -199,7 +183,9 @@ required for apply.
 
 **Where it's enforced.**
 
-- `apps/cli/src/nodes/plan-generator.ts` / sanitizer
+- `packages/core/src/graph/nodes/plan-generator/safe-clone.ts`
+  (canonical allowlist + redactor); `apps/cli/src/nodes/plan-generator.ts`
+  is a thin re-export shim.
 
 **Source memory.** `feedback_redaction_allowlist_not_denylist.md`
 
@@ -274,7 +260,8 @@ names, role names) — users expect full ARNs in every surface.
 
 **Where it's enforced.**
 
-- `apps/cli/src/nodes/result-formatter.ts`
+- `packages/core/src/graph/nodes/result-formatter.ts` (canonical);
+  `apps/cli/src/nodes/result-formatter.ts` is a thin re-export shim.
 
 **Source memory.** `feedback_arn_builder_for_display.md`
 
@@ -310,7 +297,9 @@ apply.
 
 **Where it's enforced.**
 
-- `apps/cli/src/nodes/resource-provisioner.ts` (S3 special case)
+- `packages/core/src/graph/nodes/resource-provisioner.ts` (S3 special
+  case, canonical); `apps/cli/src/nodes/resource-provisioner.ts` is a
+  thin re-export shim.
 
 **Source memory.** AGENTS.md (moved — now documented here).
 

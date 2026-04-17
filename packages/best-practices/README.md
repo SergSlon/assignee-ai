@@ -23,7 +23,7 @@ Exported from `src/index.ts`:
 - **`loadBestPractices(dir?)`** — walk the package, parse every YAML rule, and return a typed `BestPractice[]`. Throws `BPSchemaError` on malformed rules. Honors `SKIP_DIRS`.
 - **`evaluateTriggers(bp, ctx)`** — evaluate a rule's `triggers` against an `EvalContext` (resource type + properties) and return whether the rule fires.
 - **`bestPracticeSchema`** — the Zod schema every rule file must satisfy.
-- **Integrity helpers** — `computeManifest`, `verifyManifest`, `computeFreshness`, `DEFAULT_STALE_THRESHOLD_DAYS`, and the `BPManifest` / `BPFreshness` / `ManifestVerifyResult` types.
+- **Integrity helpers** — `computeManifest`, `computeFreshness`, `DEFAULT_STALE_THRESHOLD_DAYS`, and the `BPManifest` / `BPFreshness` types.
 - **Rule types** — `BestPractice`, `BPFinding`, `BPSeverity`, `BPCategory`, `BPCheckType`, `Trigger`.
 - **Enums and constants** — `BP_SEVERITY`, `BP_CATEGORY`, `BP_CHECK_TYPE`, `BP_FIX_TYPE`, `Severity`, `FixType`, `FixAction`.
 

@@ -54,7 +54,9 @@ See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the IAM policy setup (ope
 
 - **Plain English in. Real AWS resource out.** CloudControl API + auto-tagging. No generated HCL, TypeScript, or Pulumi to maintain.
 - **No state file, no Pulumi stack, no Terraform backend, no CDK bootstrap.** Desired state is the AWS account itself, read back on every plan.
-- **Human approval gate (HITL) on every plan**; 186 best-practice rules with auto-fix; cost preflight via AWS Pricing MCP; reversible destroy with confirmation.
+- **Human approval gate (HITL) on every plan**; 185 best-practice rules with auto-fix; cost preflight via AWS Pricing MCP; reversible destroy with confirmation.
+
+> **Shape the rules.** Assignee's best-practice library is the community moat — every rule is YAML, every reviewer is listed, and a new rule lands in ~45 minutes of focused work. See [docs/explanation/contributing-a-bp-rule.md](docs/explanation/contributing-a-bp-rule.md) for a worked example.
 
 ## What this is NOT
 
@@ -83,22 +85,22 @@ intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
     → human_approval ─[HITL]─ → resource_provisioner → status_poller → result_formatter
 ```
 
-| Node                   | What it does                                                                                                                                                              |
-| :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `intent_parser`        | Classifies natural language into a resource type + action. Compound keywords ("create a vpc") are matched at zero LLM latency                                             |
-| `schema_fetcher`       | Fetches the CloudFormation schema for the target type via `@aws-sdk/client-cloudformation`                                                                                |
-| `option_elicitor`      | Interactive wizard — prompts for required and optional fields with live pricing, smart defaults, and `showIf` conditionals                                                |
-| `compound_dispatcher`  | Expands a compound pattern (e.g. VPC) into a dependency-ordered resource queue with marker-ref cross-references                                                           |
-| `plan_generator`       | LLM (Bedrock) produces a `desiredState` JSON from the schema + user answers. Validates output with Zod                                                                    |
-| `bp_evaluator`         | Evaluates 186 best-practice rules against the plan (185 tracked in manifest.json + 1 pending re-manifest). Flags violations by severity (CRITICAL / HIGH / MEDIUM / INFO) |
-| `fix_applicator`       | Auto-patches fixable violations (e.g. enables S3 encryption). Shows "Changed X → Y because BP-### (auto-fixed)" per fix                                                   |
-| `preflight_guard`      | Blocks the plan if any CRITICAL / blocking findings remain unfixed. Runs placeholder-ARN rejection + cost preflight                                                       |
-| `human_approval`       | Renders the plan box and waits for explicit user confirmation before any AWS resource is created (HITL gate)                                                              |
-| `resource_provisioner` | State Guard (read-before-write) then CloudControl API `createResource`. Tags injected automatically                                                                       |
-| `status_poller`        | Polls CloudControl until terminal state (SUCCESS / FAILED). Extended timeouts for RDS, ELBv2, NAT Gateway                                                                 |
-| `result_formatter`     | Renders success/failure output, writes provision records to memory, runs post-provision security checks                                                                   |
+| Node                   | What it does                                                                                                                                                               |
+| :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `intent_parser`        | Classifies natural language into a resource type + action. Compound keywords ("create a vpc") are matched at zero LLM latency                                              |
+| `schema_fetcher`       | Fetches the CloudFormation schema for the target type via `@aws-sdk/client-cloudformation`                                                                                 |
+| `option_elicitor`      | Interactive wizard — prompts for required and optional fields with live pricing, smart defaults, and `showIf` conditionals                                                 |
+| `compound_dispatcher`  | Expands a compound pattern (e.g. VPC) into a dependency-ordered resource queue with marker-ref cross-references                                                            |
+| `plan_generator`       | LLM (Bedrock) produces a `desiredState` JSON from the schema + user answers. Validates output with Zod                                                                     |
+| `bp_evaluator`         | Evaluates 185 best-practice rules against the plan (count matches `packages/best-practices/manifest.json`). Flags violations by severity (CRITICAL / HIGH / MEDIUM / INFO) |
+| `fix_applicator`       | Auto-patches fixable violations (e.g. enables S3 encryption). Shows "Changed X → Y because BP-### (auto-fixed)" per fix                                                    |
+| `preflight_guard`      | Blocks the plan if any CRITICAL / blocking findings remain unfixed. Runs placeholder-ARN rejection + cost preflight                                                        |
+| `human_approval`       | Renders the plan box and waits for explicit user confirmation before any AWS resource is created (HITL gate)                                                               |
+| `resource_provisioner` | State Guard (read-before-write) then CloudControl API `createResource`. Tags injected automatically                                                                        |
+| `status_poller`        | Polls CloudControl until terminal state (SUCCESS / FAILED). Extended timeouts for RDS, ELBv2, NAT Gateway                                                                  |
+| `result_formatter`     | Renders success/failure output, writes provision records to memory, runs post-provision security checks                                                                    |
 
-13 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order. Source of truth: `apps/cli/src/services/graph.ts` (`.addNode` calls) and the 13 `*.ts` sources under `apps/cli/src/nodes/`.
+13 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order. Source of truth: `packages/core/src/graph/create-graph.ts` (`.addNode` calls) and the node implementations under `packages/core/src/graph/nodes/`. `apps/cli/src/nodes/` carries thin re-export shims so existing imports keep working.
 
 All AWS credentials stay local — they never leave your machine. Bedrock calls run against your own account.
 
@@ -135,7 +137,7 @@ Eight direct / adjacent competitors, archived in the [workspace wiki](../wiki/co
 - **vs [kagent](../wiki/competitors/kagent.md)** — kagent runs day-2 ops INSIDE a Kubernetes cluster (Helm-installed controller, operates on K8s CRDs). Assignee provisions AWS primitives FROM zero, no cluster required. Pick kagent for K8s reconciliation; pick Assignee for greenfield AWS.
 - **vs [Pulumi AI / Neo](../wiki/competitors/pulumi-ai.md)** — Pulumi Neo writes Pulumi code in your language of choice; you still maintain a stack and a state file (local or Pulumi Cloud). Assignee writes nothing — resources live in your AWS account, tagged, with no source file to keep in sync.
 - **vs [Terraform + Claude/Cursor](../wiki/competitors/claude-writes-terraform.md)** — for the HCL-fluent engineer who already loves Terraform MCP + Cursor, that combo is excellent and Assignee does not compete. Assignee targets the engineer who does not want to own HCL.
-- **vs [Terraform AI (HCP + AI)](../wiki/competitors/terraform-ai.md)** — HCP Terraform's AI features (Copilot, plan explain) still produce HCL and a state file on the backend. Sentinel policy is a paid tier. Assignee bundles 186 BP rules on the free path.
+- **vs [Terraform AI (HCP + AI)](../wiki/competitors/terraform-ai.md)** — HCP Terraform's AI features (Copilot, plan explain) still produce HCL and a state file on the backend. Sentinel policy is a paid tier. Assignee bundles 185 BP rules on the free path.
 - **vs [CDK + Amazon Q](../wiki/competitors/cdk-ai.md)** — Q Developer's Console-to-Code generates CDK; you still do `cdk bootstrap` and `cdk deploy` and maintain TypeScript / Python. Different modality.
 - **vs [SST Ion](../wiki/competitors/sst.md)** — SST is TypeScript infrastructure-as-code for serverless app developers. Assignee is intent-as-infrastructure for operators — different category, different audience.
 - **vs [Nitric](../wiki/competitors/nitric.md)** — Nitric is code-defines-infra (TypeScript/Python), multi-cloud target. Assignee is English-defines-provisioning, AWS-only, with no code artifact.
@@ -184,25 +186,33 @@ apps/
       commands/        plan.ts · apply.ts · init.ts · list.ts · destroy.ts
                        status.ts · completions.ts · doctor.ts · drift.ts
                        reconcile.ts · optimize.ts · setup.ts
-      nodes/           intent-parser · schema-fetcher · option-elicitor
-                       compound-dispatcher · plan-generator · bp-evaluator
-                       fix-applicator · preflight-guard · human-approval
-                       resource-provisioner · status-poller · result-formatter
-      services/        graph.ts (LangGraph) · mcp-client.ts · memory.ts
-                       list-resources.ts · resource-resolver.ts · billing.ts
-                       status-aggregator.ts · llm-adapter.ts
+      nodes/           re-export shims that forward to @assignee/core/graph/nodes
+      services/        graph.ts + graph-state.ts + graph-routing.ts (re-export
+                       shims) · mcp-client.ts · memory.ts · list-resources.ts
+                       resource-resolver.ts · billing.ts · status-aggregator.ts
+                       llm-adapter.ts
       config/          mcp-servers.ts
       utils/           display.ts · logger.ts · tags.ts · mcp.ts · pricing-lookup.ts
       test-fixtures/   mcp-mock-responses/ (real MCP captures, per-resource)
     scripts/           capture → process → build fixture pipeline
   mcp-server/
-    src/               MCP server entry point, tool handlers
+    src/               MCP server entry point, tool handlers; imports
+                       createGraph directly from @assignee/core/graph
 packages/
   core/
     src/
-      schema/          graph-state.ts (Zod) · memory.ts
+      graph/           create-graph.ts (LangGraph builder) · graph-state.ts
+                       (Zod Annotation) · graph-routing.ts (conditional edges)
+        nodes/         intent-parser · schema-fetcher · option-elicitor
+                       compound-dispatcher · plan-generator · bp-evaluator
+                       fix-applicator · preflight-guard · human-approval
+                       resource-provisioner · status-poller · result-formatter
+                       advice-generator
+      destroy-strategies/ registry + per-type strategies (CloudFront, EIP,
+                       ELBv2, EFS, IGW, RouteTable, S3, DynamoDB, …)
       types/           result.ts (Result<T,E> monad)
-      config/          resource-types.ts · resource-identifiers.ts · resource-policy.ts
+      config/          resource-types.ts · resource-identifiers.ts
+                       resource-policy.ts · iam-policies/
       resource-plugins/  types.ts · registry.ts · index.ts
                          plugins/  s3-bucket · ec2-instance · rds-dbinstance
                                    lambda-function · generic
@@ -287,7 +297,7 @@ Packages `@assignee/cli` and `@assignee/mcp-server` are `"private": true` and in
 | **9**  | Architecture Hardening (type safety, error handling, prompt injection guard)            | Done                       |
 | **10** | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)                 | Done                       |
 | **11** | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                              | Done                       |
-| **12** | Best Practices Library (YAML schema, trigger engine, 186 rules today, FSBP)             | Done (12.4, 12.6 deferred) |
+| **12** | Best Practices Library (YAML schema, trigger engine, 185 rules today, FSBP)             | Done (12.4, 12.6 deferred) |
 | **14** | Multi-Provider LLM Gateway (Vercel AI SDK — bedrock, anthropic, openai, google, ollama) | Done (14.2-14.4 deferred)  |
 | **18** | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action)       | Done                       |
 | **19** | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)           | Done                       |

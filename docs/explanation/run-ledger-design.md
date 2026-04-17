@@ -2,8 +2,9 @@
 
 > Diátaxis: **explanation** (understanding-oriented). Why Assignee.ai
 > tags every resource with a run identifier, what the ledger buys us
-> today, and why `assignee destroy --run-id <uuid>` is deferred until a
-> multi-resource destroy flow is designed safely.
+> today, and why `assignee destroy --run-id <uuid>` is a **v0.2
+> milestone** rather than a v0.1 feature (v0.1 uses the existing
+> per-resource `assignee destroy <resource>` flow).
 
 ## What the run-ledger is
 
@@ -105,15 +106,17 @@ everything this run created, in one call." The design implications:
    flow needs a topological sort + rollback-on-error policy that we
    have not designed yet.
 
-The safer path forward: **design the multi-resource destroy as a
-first-class feature in a future epic**, with the learnings from Story
+The safer path forward: **the run-id-sticky destroy ships in
+v0.2** (the next public milestone), with the learnings from Story
 50-3 and the workflow-stickiness data from the OSS launch informing
-the UX. Until then the run-ledger is a _read-only_ audit trail plus a
-single-resource destroy primitive.
+the UX. v0.1 — the current pre-public source build — ships the
+_read-only_ audit trail plus the existing per-resource
+`assignee destroy <resource>` primitive; that is the deliberate
+OSS-launch gate and no separate "future epic" disclaimer is needed.
 
 ## What the design WILL look like (sketch, non-binding)
 
-When we do land `assignee destroy --run-id <uuid>`, the shape will
+When v0.2 lands `assignee destroy --run-id <uuid>`, the shape will
 probably be:
 
 ```text

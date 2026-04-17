@@ -4,25 +4,18 @@ Get from zero to a provisioned AWS resource in under 60 seconds.
 
 ## Install
 
-Both `@assignee/cli` and `@assignee/mcp-server` are currently `private` and not published to npm. Build from source locally:
+Both `@assignee/cli` and `@assignee/mcp-server` are currently `private` and not published to npm. Build from source locally and link the CLI into your `$PATH`:
 
 ```bash
-git clone https://github.com/SergSlon/assignee-ai.git
-cd assignee-ai
+git clone https://github.com/<owner>/assignee.ai.git
+cd assignee.ai
 pnpm install
 pnpm build
-
-# Run the CLI directly from the built output
-node apps/cli/dist/index.js plan "create an S3 bucket named my-app-logs"
+pnpm link --global        # adds 'assignee' to PATH
+assignee doctor --short   # verify AWS credentials + Bedrock region
 ```
 
-> **Tip:** For convenience, alias the built entrypoint in your shell:
->
-> ```bash
-> alias assignee="node $(pwd)/apps/cli/dist/index.js"
-> ```
->
-> The remaining examples in this guide use the bare `assignee` command — substitute `node apps/cli/dist/index.js` if you skip the alias.
+> **Tip:** If you prefer not to link globally, you can run the built entrypoint directly — `node apps/cli/dist/index.js <args>` — or alias it in your shell: `alias assignee="node $(pwd)/apps/cli/dist/index.js"`. The remaining examples in this guide use the bare `assignee` command.
 
 ## Prerequisites
 
@@ -59,7 +52,7 @@ What happens:
 2. **Schema Fetcher** -- fetches the CloudFormation schema for S3 buckets
 3. **Option Elicitor** -- prompts for any required fields not inferred from your intent
 4. **Plan Generator** -- Bedrock produces a desired-state JSON with all fields populated
-5. **BP Evaluator** -- evaluates 186 best practice rules (security, cost, reliability)
+5. **BP Evaluator** -- evaluates 185 best practice rules (security, cost, reliability)
 6. **Auto-Fix** -- patches fixable violations (e.g., enables S3 public access blocking, versioning, encryption, lifecycle policies)
 7. **Preflight Guard** -- blocks the plan if critical violations remain
 8. **Cost Estimator** -- fetches real-time pricing via the Pricing MCP
@@ -71,6 +64,16 @@ What happens:
 > ```
 
 The output is a plan box showing the desired state, estimated monthly cost, and any best practice findings. A checkpoint file is saved to `.assignee/checkpoint-<runId>.json` (valid for 72 hours).
+
+## Quick mode
+
+Pass `--quick` to `plan` or `apply` to skip every wizard prompt that has a sensible default. The CLI accepts defaults on each optional field and only asks for required fields that have no default — useful for scripted flows or one-shot provisioning where you trust the out-of-the-box settings.
+
+```bash
+assignee plan --quick --resources 1 S3Bucket "cold-storage-backups"
+```
+
+`--quick` pairs naturally with `-o json` for fully non-interactive runs, and with `--set key=value` to pin specific fields while still skipping everything else. A pre-plan summary is shown so you can confirm the defaults the wizard will accept before generation starts.
 
 ## Apply the Plan
 

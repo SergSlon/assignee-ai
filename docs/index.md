@@ -41,7 +41,7 @@ Dry, precise, lookup-style information. Skim the tables; search for specifics.
 | [resource-types.md](resource-types.md)   | Every supported AWS resource type and its plugin                                                   |
 | [configuration.md](configuration.md)     | Full config precedence chain, env vars, and file formats                                           |
 | [mcp-servers.md](mcp-servers.md)         | AWS MCP servers consumed by the pipeline (pins + tools)                                            |
-| [best-practices.md](best-practices.md)   | Best-practice rule engine and the 186 shipped rules                                                |
+| [best-practices.md](best-practices.md)   | Best-practice rule engine and the 185 shipped rules                                                |
 | [troubleshooting.md](troubleshooting.md) | Exit codes and error-class playbook (Bedrock region, CCAPI NotFound, throttling, expired creds, …) |
 
 ## Explanation — understanding-oriented
@@ -62,7 +62,7 @@ when you want to understand how assignee.ai thinks.
 
 ---
 
-## Key metrics (as of 2026-04-10)
+## Key metrics (as of 2026-04-17)
 
 | Metric                         | Count                                                                                                                                                     |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -72,12 +72,11 @@ when you want to understand how assignee.ai thinks.
 | CLI commands                   | 13                                                                                                                                                        |
 | MCP server tools               | 5                                                                                                                                                         |
 | Resource plugins               | 37 registered (35 type-specific + generic fallback; 2 compound-only types share the generic)                                                              |
-| Best practice YAML rules       | 186 (185 tracked in manifest.json + 1 pending re-manifest)                                                                                                |
+| Best practice YAML rules       | 185 (count matches `packages/best-practices/manifest.json`)                                                                                               |
 | Pricing strategies             | 23                                                                                                                                                        |
 | Pricing decomposers            | 23                                                                                                                                                        |
 | Config precedence levels       | 6                                                                                                                                                         |
 | LLM providers supported        | 5                                                                                                                                                         |
 | IAM credential users           | 3                                                                                                                                                         |
-| Test cases (passing)           | 7,595                                                                                                                                                     |
-| Test files                     | 303 (168 CLI + 100 core + 11 BP + 24 MCP)                                                                                                                 |
+| Test files                     | 307 across 4 packages (72 CLI + 24 MCP + 200 core + 11 BP) — run `pnpm test` for the live pass count                                                      |
 | RUN_E2E compound coverage      | 9/9 first-class compounds                                                                                                                                 |
