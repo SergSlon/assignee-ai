@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { RESOURCE_TYPES, ResourceDefault, CfnKey } from "@assignee/core";
+import { RESOURCE_TYPES, ResourceDefault, CfnKey } from "../index.js";
 import { getIntentDefaults, applyIntentOverrides } from "./intent-defaults.js";
-import type { ResourceField } from "@assignee/core";
+import type { ResourceField } from "../index.js";
 
 describe("getIntentDefaults", () => {
   // ── Task 3.1 / AC #3: Lambda API handler defaults ─────────────────────

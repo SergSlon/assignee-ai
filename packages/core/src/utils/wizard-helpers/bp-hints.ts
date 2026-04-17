@@ -8,7 +8,7 @@
  */
 
 import { loadBestPractices, type BestPractice } from "@assignee/best-practices";
-import type { ResourceField } from "@assignee/core";
+import type { ResourceField } from "../../index.js";
 
 /**
  * Injects "Recommended by Best Practices" hints into field questions when

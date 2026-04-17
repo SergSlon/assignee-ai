@@ -10,7 +10,7 @@
 
 import chalk from "chalk";
 import type { StructuredTool } from "@langchain/core/tools";
-import { RESOURCE_TYPES } from "@assignee/core";
+import { RESOURCE_TYPES } from "../../../../index.js";
 import type { AgentState } from "../../../graph-state.js";
 import { renderApplySuccess } from "../../../../utils/display.js";
 import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";

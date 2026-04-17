@@ -27,7 +27,7 @@ import {
   ProvisioningError,
   RESOURCE_TYPES,
   type ResourceType,
-} from "@assignee/core";
+} from "../../../index.js";
 import type { AgentState } from "../../graph-state.js";
 import {
   ProvisioningErrorKind,

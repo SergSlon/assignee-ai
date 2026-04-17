@@ -12,7 +12,7 @@
  * Wave-6c F3: extracted from option-elicitor.ts (SRP).
  */
 
-import { defaultPluginRegistry } from "@assignee/core";
+import { defaultPluginRegistry } from "../../../index.js";
 import type { AgentState } from "../../graph-state.js";
 import { getIntentDefaults } from "../../../utils/intent-defaults/index.js";
 

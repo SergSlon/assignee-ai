@@ -16,7 +16,7 @@ import {
   ExecutionStatus,
   PROVISIONING_ERROR_CODES,
   ProvisioningError,
-} from "@assignee/core";
+} from "../../index.js";
 import type { ProvisioningPort } from "../../ports/provisioning-port.js";
 import { ProvisioningErrorKind } from "../../ports/provisioning-port.js";
 import { injectMandatoryTags } from "../../utils/tags.js";

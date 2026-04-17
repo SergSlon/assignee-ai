@@ -15,8 +15,8 @@
  */
 
 import * as clack from "@clack/prompts";
-import { CfnKey, UserCancelledError } from "@assignee/core";
-import type { LlmPort, ResourceField } from "@assignee/core";
+import { CfnKey, UserCancelledError } from "../../../index.js";
+import type { LlmPort, ResourceField } from "../../../index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { UserMessage } from "../../../config/constants/ui.js";
 import { WIZARD_NONE_SENTINEL } from "../../../config/constants/enums.js";

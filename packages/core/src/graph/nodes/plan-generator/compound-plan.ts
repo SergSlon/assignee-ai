@@ -20,7 +20,7 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   CfnKey,
-} from "@assignee/core";
+} from "../../../index.js";
 import { AWS_REGION } from "../../../config/constants/aws.js";
 import { resolveAmiFromOsName } from "../../../utils/aws-resource-discovery/index.js";
 import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";

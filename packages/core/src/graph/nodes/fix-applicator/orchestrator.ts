@@ -11,7 +11,7 @@
  * Wave-6c F3: extracted from fix-applicator.ts (SRP).
  */
 
-import { AutoFixMode } from "@assignee/core";
+import { AutoFixMode } from "../../../index.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { AgentState } from "../../graph-state.js";
 import type { AppliedFix } from "../../graph-state.js";

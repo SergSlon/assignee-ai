@@ -19,7 +19,7 @@ import type {
   ResourceField,
   ResolvedFieldConfig,
   LlmPort,
-} from "@assignee/core";
+} from "../../../index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
   BACK_SENTINEL,

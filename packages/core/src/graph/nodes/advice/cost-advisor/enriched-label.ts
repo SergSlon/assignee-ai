@@ -7,7 +7,7 @@
  * formatter the enricher would use. This keeps every code path reading
  * a single shape without needing to know how enrichment works.
  */
-import { formatLabelWithSource } from "@assignee/core";
+import { formatLabelWithSource } from "../../../../index.js";
 import {
   type AdvisoryPriceId,
   type EnrichedPriceMap,

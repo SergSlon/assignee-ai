@@ -6,7 +6,7 @@
  * @see Story 40.1 — Advice-Lite: Inline Contextual Intelligence
  */
 
-import type { LlmPort } from "@assignee/core";
+import type { LlmPort } from "../../index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { log, LOG_ACTIONS } from "../../utils/logger/index.js";
 import type { AgentState } from "../graph-state.js";

@@ -5,8 +5,8 @@
  * single MissingRequiredFieldsError. See populateDefaultOptions JSDoc.
  */
 
-import { MissingRequiredFieldsError } from "@assignee/core";
-import type { ResourcePlugin } from "@assignee/core";
+import { MissingRequiredFieldsError } from "../../index.js";
+import type { ResourcePlugin } from "../../index.js";
 import { evaluateShowIf, fieldFetchKey } from "./show-if.js";
 
 /**

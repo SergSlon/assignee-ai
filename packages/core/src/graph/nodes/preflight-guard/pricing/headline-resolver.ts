@@ -14,7 +14,7 @@ import {
   CostEstimateLabel,
   type DataSource,
   type PricingBreakdown,
-} from "@assignee/core";
+} from "../../../../index.js";
 
 export interface ResolveInput {
   headlineLabel: string;

@@ -13,7 +13,7 @@
  */
 
 import type { StructuredTool } from "@langchain/core/tools";
-import { ExecutionStatus } from "@assignee/core";
+import { ExecutionStatus } from "../../../index.js";
 import type { AgentState } from "../../graph-state.js";
 import { formatApplyCompoundSuccess } from "./formatters/apply-compound.js";
 import { formatApplySingleSuccess } from "./formatters/apply-single.js";

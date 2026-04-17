@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { RESOURCE_TYPES, CfnKey } from "@assignee/core";
+import { RESOURCE_TYPES, CfnKey } from "../../../index.js";
 
 const {
   mockFetchEc2Prices,

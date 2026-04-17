@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ResourceField, ResolvedFieldConfig } from "@assignee/core";
+import type { ResourceField, ResolvedFieldConfig } from "../../../index.js";
 
 // Mock clack (prompts) so promptWithHelp can be controlled.
 vi.mock("@clack/prompts", () => ({

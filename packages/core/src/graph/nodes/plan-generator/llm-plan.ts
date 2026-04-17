@@ -19,7 +19,7 @@ import {
   ResourceDefault,
   AwsDefault,
   type LlmPort,
-} from "@assignee/core";
+} from "../../../index.js";
 import { EnvVar } from "../../../constants/env-vars.js";
 import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
 import { resolveAmiFromOsName } from "../../../utils/aws-resource-discovery/index.js";

@@ -10,7 +10,7 @@
 
 import * as clack from "@clack/prompts";
 import chalk from "chalk";
-import { type ResourceResult, RESOURCE_TYPES } from "@assignee/core";
+import { type ResourceResult, RESOURCE_TYPES } from "../../../../index.js";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

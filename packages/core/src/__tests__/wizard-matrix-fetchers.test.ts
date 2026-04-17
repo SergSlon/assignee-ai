@@ -19,7 +19,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ResourceField, ResourcePlugin } from "@assignee/core";
+import type { ResourceField, ResourcePlugin } from "../index.js";
 import { PLUGINS_WITH_FETCHERS } from "./fixtures/wizard-matrix-plugins.js";
 
 // Mock aws-resource-discovery so we can control fetcher return values per test.

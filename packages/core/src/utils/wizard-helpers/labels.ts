@@ -3,8 +3,8 @@
  * Pure transformations — no I/O, no input mutation.
  */
 
-import { QuestionTypeName } from "@assignee/core";
-import type { ResourceField } from "@assignee/core";
+import { QuestionTypeName } from "../../index.js";
+import type { ResourceField } from "../../index.js";
 import { enrichOptionLabel } from "../option-enrichment.js";
 import { rankOptions } from "../option-ranker.js";
 import type { WorkloadProfile } from "../workload-classifier.js";

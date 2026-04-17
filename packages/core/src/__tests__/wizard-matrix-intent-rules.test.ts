@@ -18,8 +18,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { ResourceField, ResourcePlugin } from "@assignee/core";
-import { defaultPluginRegistry } from "@assignee/core";
+import type { ResourceField, ResourcePlugin } from "../index.js";
+import { defaultPluginRegistry } from "../index.js";
 import {
   INTENT_RULES,
   getIntentDefaults,

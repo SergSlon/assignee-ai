@@ -2,7 +2,7 @@
  * Lambda::Function cost optimizer — arm64 architecture migration.
  */
 import type { StructuredTool } from "@langchain/core/tools";
-import { CfnKey, RESOURCE_TYPES } from "@assignee/core";
+import { CfnKey, RESOURCE_TYPES } from "../../../../index.js";
 import { fetchLambdaArchPrices } from "../../../../utils/pricing-lookup.js";
 import { parseHourly, type CostOptRecommendation } from "./types.js";
 

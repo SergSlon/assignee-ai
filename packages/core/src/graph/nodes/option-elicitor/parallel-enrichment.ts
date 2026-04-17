@@ -20,7 +20,7 @@ import {
   type ResourceField,
   type ResourcePlugin,
   type LlmPort,
-} from "@assignee/core";
+} from "../../../index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { PromiseStatus } from "../../../config/constants/enums.js";
 import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";

@@ -4,8 +4,8 @@
  */
 
 import * as clack from "@clack/prompts";
-import { isAccessDeniedError } from "@assignee/core";
-import type { ResourceField } from "@assignee/core";
+import { isAccessDeniedError } from "../../index.js";
+import type { ResourceField } from "../../index.js";
 import { DiscoveryCacheKey } from "../aws-resource-discovery/index.js";
 import {
   discoverAmis,

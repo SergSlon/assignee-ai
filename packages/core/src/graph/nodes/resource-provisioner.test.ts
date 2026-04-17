@@ -9,7 +9,7 @@ import {
   ResourceDefault,
   CfnKey,
   RESOURCE_TYPES,
-} from "@assignee/core";
+} from "../../index.js";
 import {
   resourceProvisionerNode,
   sanitizeKeyName,

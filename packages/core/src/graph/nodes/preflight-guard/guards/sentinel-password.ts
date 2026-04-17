@@ -7,7 +7,10 @@
  *
  * Mirrors detectPlaceholderArn shape for consistency.
  */
-import { PLACEHOLDER_DB_PASSWORDS, RDS_PASSWORD_FIELDS } from "@assignee/core";
+import {
+  PLACEHOLDER_DB_PASSWORDS,
+  RDS_PASSWORD_FIELDS,
+} from "../../../../index.js";
 import type { GuardContext, GuardResult, PreflightGuard } from "../types.js";
 import { failResult, passResult, skipResult } from "../types.js";
 

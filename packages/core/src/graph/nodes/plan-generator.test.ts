@@ -3,8 +3,8 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   ResourceDefault,
-} from "@assignee/core";
-import { MockLlmAdapter } from "@assignee/core/testing";
+} from "../../index.js";
+import { MockLlmAdapter } from "../../testing/index.js";
 import {
   createPlanGeneratorNode,
   applyToCfnTransforms,
@@ -19,7 +19,7 @@ import {
   markerAz,
   markerGetAtt,
   EIP_AUTO_ALLOCATE,
-} from "@assignee/core";
+} from "../../index.js";
 
 // Mock memory service (Story 19.3, 19.4).
 // NOTE: Default impls are re-installed in beforeEach because vitest's

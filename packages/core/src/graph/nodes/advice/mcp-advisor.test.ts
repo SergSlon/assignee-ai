@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { StructuredTool } from "@langchain/core/tools";
-import { SUPPORTED_TYPES_ARRAY } from "@assignee/core";
+import { SUPPORTED_TYPES_ARRAY } from "../../../index.js";
 import {
   gatherMcpAdviceContext,
   resourceTypeToServiceCode,

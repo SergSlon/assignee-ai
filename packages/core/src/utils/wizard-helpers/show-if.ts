@@ -3,7 +3,7 @@
  * Pure functions — no I/O, no mutation.
  */
 
-import type { ResourceField } from "@assignee/core";
+import type { ResourceField } from "../../index.js";
 
 /** Unique key for a field in fetchResults — disambiguates fields sharing the same name (e.g., EngineVersion per engine). */
 export function fieldFetchKey(field: ResourceField): string {

@@ -1,7 +1,7 @@
 /**
  * S3::Bucket cost hints — lifecycle, Intelligent-Tiering, and replication traps.
  */
-import { CfnKey } from "@assignee/core";
+import { CfnKey } from "../../../../index.js";
 import { AdviceIcon } from "../constants.js";
 import { S3_INTELLIGENT_TIERING_SAVINGS_PCT } from "../../../../pricing/advisory-prices.js";
 

@@ -10,7 +10,7 @@
  */
 
 import { AllocateAddressCommand, CreateTagsCommand } from "@aws-sdk/client-ec2";
-import type { EC2Client } from "@assignee/core";
+import type { EC2Client } from "../../../../index.js";
 import type { AgentState } from "../../../graph-state.js";
 import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
 import {

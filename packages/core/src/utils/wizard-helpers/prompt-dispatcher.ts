@@ -17,7 +17,7 @@ import type {
   LlmPort,
   ResolvedFieldConfig,
   ResourceField,
-} from "@assignee/core";
+} from "../../index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
   renderOptionPrompt,

@@ -6,7 +6,10 @@
  * Otherwise, render a single error box.
  */
 
-import { ExecutionStatus, defaultErrorHintRegistry } from "@assignee/core";
+import {
+  ExecutionStatus,
+  defaultErrorHintRegistry,
+} from "../../../../index.js";
 import type { AgentState } from "../../../graph-state.js";
 import {
   renderCompoundPartialFailure,
