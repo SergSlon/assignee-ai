@@ -116,27 +116,51 @@ vi.mock("./llm-adapter.js", async () => {
   return { LlmAdapter };
 });
 
-// Mock display utilities — capture output without writing to terminal
-vi.mock("../utils/display.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../utils/display.js")>();
-  return {
-    ...actual,
-    renderPlanBox: vi.fn(),
-    renderError: vi.fn(),
-    renderApplySuccess: vi.fn(),
-    renderOutro: vi.fn(),
-    renderIntro: vi.fn(),
-    renderHitlConfirm: vi.fn().mockResolvedValue(false),
-    renderHitlCompoundConfirm: vi.fn().mockResolvedValue(false),
-    renderDependencyPlan: vi.fn(),
-    renderCompoundSuccess: vi.fn(),
-    renderDocHelp: vi.fn().mockResolvedValue(undefined),
-    startSpinner: vi.fn(),
-    updateSpinner: vi.fn(),
-    stopSpinner: vi.fn(),
-    renderOptionPrompt: vi.fn(),
-    renderAdvancedConfirm: vi.fn().mockResolvedValue(false),
-  };
+// Mock display utilities — capture output without writing to terminal.
+// Story 50-4 Wave 5 Pass H: result-formatter was lifted to @assignee/core;
+// it imports from the core-internal display path. The CLI-side mock still
+// works for nodes/call-sites that import via the CLI shim. We add a SECOND
+// mock at the core path so core-side consumers see the same spies (shared
+// via vi.hoisted). The factory doesn't fall back to real impls — it returns
+// a full mock surface listing every callable the nodes exercise.
+const _displayStubs = vi.hoisted(() => ({
+  renderPlanBox: vi.fn(),
+  renderError: vi.fn(),
+  renderApplySuccess: vi.fn(),
+  renderOutro: vi.fn(),
+  renderIntro: vi.fn(),
+  renderHitlConfirm: vi.fn().mockResolvedValue(false),
+  renderHitlCompoundConfirm: vi.fn().mockResolvedValue(false),
+  renderDependencyPlan: vi.fn(),
+  renderCompoundSuccess: vi.fn(),
+  renderCompoundPartialFailure: vi.fn(),
+  renderDocHelp: vi.fn().mockResolvedValue(undefined),
+  renderTradeoffHelp: vi.fn(),
+  startSpinner: vi.fn(),
+  updateSpinner: vi.fn(),
+  stopSpinner: vi.fn(),
+  renderOptionPrompt: vi.fn(),
+  renderAdvancedConfirm: vi.fn().mockResolvedValue(false),
+  renderApplyNowConfirm: vi.fn().mockResolvedValue(false),
+  renderSecurityWarnings: vi.fn(),
+  renderResourceTable: vi.fn(),
+  renderEmptyList: vi.fn(),
+  renderStatusSummary: vi.fn(),
+  renderEmptyStatus: vi.fn(),
+  promptFixSelection: vi.fn().mockResolvedValue(null),
+  runReviewAnswers: vi.fn(),
+}));
+vi.mock("../utils/display.js", async () => {
+  const actual = await vi.importActual<typeof import("../utils/display.js")>(
+    "../utils/display.js",
+  );
+  return { ...actual, ..._displayStubs };
+});
+vi.mock("@assignee/core/utils/display.js", async () => {
+  const actual = await vi.importActual<typeof import("../utils/display.js")>(
+    "../utils/display.js",
+  );
+  return { ...actual, ..._displayStubs };
 });
 
 // Mock clack prompts (used by option-elicitor for spinners). Plain functions

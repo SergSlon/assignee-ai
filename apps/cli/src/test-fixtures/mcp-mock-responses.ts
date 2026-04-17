@@ -1,11 +1,10 @@
 /**
- * Comprehensive MCP mock responses for MCP servers and tools, plus raw schema data.
- * ALL response data captured from live servers on 2026-03-22.
+ * Thin re-export shim — canonical implementation lives in
+ * `@assignee/core/test-fixtures/mcp-mock-responses` (Story 50-4 Wave 5
+ * Pass H.2). The full fixture tree was lifted into core alongside the
+ * preflight-guard test relocation so core coverage restored above floor.
  *
- * This file is a thin facade — the actual fixture data lives in
- * ./mcp-mock-responses/ (split per resource type by story 48-10).
- *
- * Usage in tests (unchanged):
+ * Usage in CLI tests (unchanged):
  *   import { McpMocks, createMockTool } from "../test-fixtures/mcp-mock-responses.js";
  */
-export * from "./mcp-mock-responses/index.js";
+export * from "@assignee/core/test-fixtures/mcp-mock-responses.js";

@@ -38,3 +38,28 @@ export {
   enrichAdvisoryPrices,
   ENRICHABLE_PRICE_IDS,
 } from "./advisory-price-enricher/index.js";
+
+// Memory service — Story 50-4 Wave 5 Pass H
+export { MemoryService, defaultMemoryService } from "./memory.js";
+
+// S3 static-site upload — Story 50-4 Wave 5 Pass H
+export {
+  getMimeType,
+  collectFiles,
+  uploadStaticSite,
+  configureBucketPolicy,
+  type UploadResult,
+  type UploadProgress,
+} from "./s3-upload.js";
+
+// Desired-state sanitizer — Story 50-4 Wave 5 Pass H
+export {
+  sanitizeDesiredState,
+  type SanitizeResult,
+} from "./desired-state-sanitizer.js";
+
+// Required-field repairer — Story 50-4 Wave 5 Pass H
+export {
+  repairRequiredFields,
+  type RepairResult,
+} from "./required-field-repairer.js";

@@ -276,3 +276,14 @@ export {
   addRecordingMiddleware,
   RecordingLlmAdapter,
 } from "../utils/recorder/index.js";
+
+// Utils — Memory recording helpers (Story 50-4 Wave 5 Pass H)
+export {
+  writeProvisionRecord,
+  writeFailureRecord,
+  clearFailureHistory,
+  upsertPatternRecord,
+} from "../utils/memory-recorder.js";
+
+// Utils — Post-provision security posture check (Story 50-4 Wave 5 Pass H)
+export { checkSecurityPosture } from "../utils/security-posture.js";

@@ -337,3 +337,9 @@ export {
   IamAction,
   AwsServicePrincipal,
 } from "../config/aws-arns.js";
+
+// CloudFormation keys (Story 50-4 Wave 5 Pass H)
+export {
+  CloudFormationKey,
+  CFN_RESOURCE_TYPE_PREFIX,
+} from "../constants/cfn-keys.js";
