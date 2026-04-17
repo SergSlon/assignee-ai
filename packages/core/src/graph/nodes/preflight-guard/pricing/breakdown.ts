@@ -17,7 +17,7 @@ import {
   type PricingBreakdown,
   type PricingLineItem,
   type PricingLineItemResult,
-} from "@assignee/core";
+} from "../../../../index.js";
 import { AWS_REGION } from "../../../../config/constants/aws.js";
 import { PRICING_TIMEOUT_MS } from "../../../../config/constants/timeouts.js";
 import { HOURS_PER_MONTH } from "../../../../config/constants/limits.js";

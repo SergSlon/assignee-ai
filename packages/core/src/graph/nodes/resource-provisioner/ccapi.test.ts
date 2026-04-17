@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { RESOURCE_TYPES } from "@assignee/core";
+import { RESOURCE_TYPES } from "../../../index.js";
 import type { AgentState } from "../../graph-state.js";
 import type { ProvisioningPort } from "../../../ports/provisioning-port.js";
 import { ProvisioningErrorKind } from "../../../ports/provisioning-port.js";

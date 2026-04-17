@@ -48,11 +48,22 @@ export default defineConfig({
       // Pass I's createGraph lift can collapse the dual import paths
       // and raise this threshold back up. Zero assertions weakened —
       // only mock paths + test-side import paths changed.
+      //
+      // Story 51-it1-B1 (2026-04-17, L4-H1): self-import refactor
+      // eliminated the dual-singleton hazard — every
+      // `packages/core/src/**` file now imports its neighbors via
+      // relative paths instead of `from "@assignee/core"`, so the
+      // package resolves to a single instance regardless of whether the
+      // consumer is on the src or dist path. Coverage bounced back as
+      // predicted in Pass H.2: actuals measured at 88.77/88.39/85.07/
+      // 88.77 (lines/branches/functions/statements). Floors restored to
+      // 88/86 per the pre-Wave-5 baseline. L6-H1 real-data discovery
+      // mocks also lifted the populated-enum branch count.
       thresholds: {
-        lines: 86,
-        branches: 87,
+        lines: 88,
+        branches: 86,
         functions: 73,
-        statements: 86,
+        statements: 88,
       },
     },
   },

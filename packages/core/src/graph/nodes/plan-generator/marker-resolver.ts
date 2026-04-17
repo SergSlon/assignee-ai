@@ -15,7 +15,7 @@ import {
   MARKER_PREFIX,
   MARKER_PATTERN_GLOBAL,
   type ResourceResult,
-} from "@assignee/core";
+} from "../../../index.js";
 import { tryAssigneeCredentials } from "../../../config/aws-credentials.js";
 
 /**

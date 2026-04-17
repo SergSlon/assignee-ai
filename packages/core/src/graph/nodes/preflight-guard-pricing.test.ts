@@ -19,7 +19,7 @@ import {
   extractFirstTierPrice,
   type AwsPricingResponse,
   type McpPricingFilter,
-} from "@assignee/core";
+} from "../../index.js";
 import { preflightGuardNode } from "./preflight-guard.js";
 import { ToolName } from "../../constants/tools.js";
 import type { StructuredTool } from "@langchain/core/tools";

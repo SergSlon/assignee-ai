@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ExecutionStatus, CostEstimateLabel } from "@assignee/core";
+import { ExecutionStatus, CostEstimateLabel } from "../../index.js";
 import { preflightGuardNode } from "./preflight-guard.js";
 import { LambdaPricing, PricingUnit } from "../../constants/pricing-api.js";
 import { ToolName } from "../../constants/tools.js";
@@ -1353,98 +1353,124 @@ describe("preflightGuardNode — IAM permission check (Story 19.1)", () => {
 
 describe("preflightGuardNode — parallel pricing + IAM fan-out (Story 9.10)", () => {
   it("pricing and IAM run concurrently (overlapping execution)", async () => {
-    const executionLog: Array<{
-      task: string;
-      event: "start" | "end";
-      time: number;
-    }> = [];
+    // Story 51-it1-B1 (L6-H2): convert from real `setTimeout(50)` to fake
+    // timers so the concurrency assertion is deterministic (no CPU-load
+    // flake) and the suite spends zero real milliseconds here. The assertion
+    // semantics are preserved: both tasks start before either ends because
+    // `Promise.allSettled` schedules them eagerly in microtask order, and
+    // `advanceTimersByTimeAsync(50)` fires both queued setTimeouts in a
+    // single tick so `iamStart.time <= pricingEnd.time` holds structurally.
+    vi.useFakeTimers();
+    try {
+      const executionLog: Array<{
+        task: string;
+        event: "start" | "end";
+        time: number;
+      }> = [];
 
-    const pricingTool = {
-      name: "get_pricing",
-      invoke: vi.fn(async () => {
-        executionLog.push({
-          task: "pricing",
-          event: "start",
-          time: Date.now(),
-        });
-        await new Promise((r) => setTimeout(r, 50));
-        executionLog.push({ task: "pricing", event: "end", time: Date.now() });
-        return {
-          type: "text",
-          text: JSON.stringify({
-            status: "success",
-            data: [
-              {
-                terms: {
-                  OnDemand: {
-                    "X.Y": {
-                      priceDimensions: {
-                        "X.Y.Z": {
-                          beginRange: "0",
-                          endRange: "Inf",
-                          pricePerUnit: { USD: "0.0230000000" },
-                          unit: "GB-Mo",
+      const pricingTool = {
+        name: "get_pricing",
+        invoke: vi.fn(async () => {
+          executionLog.push({
+            task: "pricing",
+            event: "start",
+            time: Date.now(),
+          });
+          await new Promise((r) => setTimeout(r, 50));
+          executionLog.push({
+            task: "pricing",
+            event: "end",
+            time: Date.now(),
+          });
+          return {
+            type: "text",
+            text: JSON.stringify({
+              status: "success",
+              data: [
+                {
+                  terms: {
+                    OnDemand: {
+                      "X.Y": {
+                        priceDimensions: {
+                          "X.Y.Z": {
+                            beginRange: "0",
+                            endRange: "Inf",
+                            pricePerUnit: { USD: "0.0230000000" },
+                            unit: "GB-Mo",
+                          },
                         },
                       },
                     },
                   },
                 },
-              },
-            ],
-          }),
-        };
-      }),
-    } as unknown as StructuredTool;
+              ],
+            }),
+          };
+        }),
+      } as unknown as StructuredTool;
 
-    const iamTool = {
-      name: ToolName.SIMULATE_PRINCIPAL_POLICY,
-      invoke: vi.fn(async () => {
-        executionLog.push({ task: "iam", event: "start", time: Date.now() });
-        await new Promise((r) => setTimeout(r, 50));
-        executionLog.push({ task: "iam", event: "end", time: Date.now() });
-        return {
-          type: "text",
-          text: JSON.stringify({
-            EvaluationResults: [
-              { EvalActionName: "s3:CreateBucket", EvalDecision: "allowed" },
-            ],
-          }),
-        };
-      }),
-    } as unknown as StructuredTool;
+      const iamTool = {
+        name: ToolName.SIMULATE_PRINCIPAL_POLICY,
+        invoke: vi.fn(async () => {
+          executionLog.push({ task: "iam", event: "start", time: Date.now() });
+          await new Promise((r) => setTimeout(r, 50));
+          executionLog.push({ task: "iam", event: "end", time: Date.now() });
+          return {
+            type: "text",
+            text: JSON.stringify({
+              EvaluationResults: [
+                { EvalActionName: "s3:CreateBucket", EvalDecision: "allowed" },
+              ],
+            }),
+          };
+        }),
+      } as unknown as StructuredTool;
 
-    const result = await preflightGuardNode(makeState(), [
-      pricingTool,
-      iamTool,
-    ]);
+      // Kick off the pipeline without awaiting — both tools enqueue
+      // their 50ms timers in the microtask turn that follows. Draining
+      // timers + microtasks lets both promises resolve.
+      const resultPromise = preflightGuardNode(makeState(), [
+        pricingTool,
+        iamTool,
+      ]);
 
-    // Both should have been called
-    expect(pricingTool.invoke).toHaveBeenCalled();
-    expect(iamTool.invoke).toHaveBeenCalled();
-    expect(result.preflightPassed).toBe(true);
+      // Drain microtasks to let Promise.allSettled schedule both tool
+      // invokes, then advance timers to fire both setTimeouts, then
+      // drain again so the outer promise settles.
+      await vi.runAllTimersAsync();
 
-    // Verify overlapping execution: IAM should start before pricing ends
-    const pricingStart = executionLog.find(
-      (e) => e.task === "pricing" && e.event === "start",
-    );
-    const iamStart = executionLog.find(
-      (e) => e.task === "iam" && e.event === "start",
-    );
-    const pricingEnd = executionLog.find(
-      (e) => e.task === "pricing" && e.event === "end",
-    );
-    // Wave 17: strengthened — assert each timing entry is a real
-    // object with a numeric `time` field. The previous `toBeDefined()`
-    // would have passed for any non-undefined `find()` result, but the
-    // subsequent `iamStart!.time` chain requires the entries to be
-    // shape-correct objects. Making the shape check explicit means a
-    // regression that changes the executionLog event format fails
-    // here instead of producing a confusing arithmetic error below.
-    expect(typeof pricingStart?.time).toBe("number");
-    expect(typeof iamStart?.time).toBe("number");
-    expect(typeof pricingEnd?.time).toBe("number");
-    // IAM should start before pricing ends (proving concurrency)
-    expect(iamStart!.time).toBeLessThanOrEqual(pricingEnd!.time);
+      const result = await resultPromise;
+
+      // Both should have been called
+      expect(pricingTool.invoke).toHaveBeenCalled();
+      expect(iamTool.invoke).toHaveBeenCalled();
+      expect(result.preflightPassed).toBe(true);
+
+      // Verify overlapping execution: IAM should start before pricing ends
+      const pricingStart = executionLog.find(
+        (e) => e.task === "pricing" && e.event === "start",
+      );
+      const iamStart = executionLog.find(
+        (e) => e.task === "iam" && e.event === "start",
+      );
+      const pricingEnd = executionLog.find(
+        (e) => e.task === "pricing" && e.event === "end",
+      );
+      // Wave 17: strengthened — assert each timing entry is a real
+      // object with a numeric `time` field. The previous `toBeDefined()`
+      // would have passed for any non-undefined `find()` result, but the
+      // subsequent `iamStart!.time` chain requires the entries to be
+      // shape-correct objects. Making the shape check explicit means a
+      // regression that changes the executionLog event format fails
+      // here instead of producing a confusing arithmetic error below.
+      expect(typeof pricingStart?.time).toBe("number");
+      expect(typeof iamStart?.time).toBe("number");
+      expect(typeof pricingEnd?.time).toBe("number");
+      // IAM should start before pricing ends (proving concurrency)
+      expect(iamStart!.time).toBeLessThanOrEqual(pricingEnd!.time);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("graceful degradation: pricing failure does not block IAM check", async () => {

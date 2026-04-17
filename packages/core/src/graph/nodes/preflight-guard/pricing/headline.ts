@@ -15,7 +15,7 @@ import {
   extractFirstTierPrice,
   type AwsPricingResponse,
   type DataSource,
-} from "@assignee/core";
+} from "../../../../index.js";
 import { AWS_REGION } from "../../../../config/constants/aws.js";
 import { PRICING_TIMEOUT_MS } from "../../../../config/constants/timeouts.js";
 import { PricingTerm } from "../../../../constants/pricing-api.js";

@@ -15,7 +15,7 @@
  * it to the graph state.
  */
 
-import type { ResourceResult } from "@assignee/core";
+import type { ResourceResult } from "../../../index.js";
 import { resolveResourceArn } from "../../../utils/resolve-arn.js";
 
 /**

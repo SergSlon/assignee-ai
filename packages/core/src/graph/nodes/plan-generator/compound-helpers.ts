@@ -14,7 +14,7 @@ import {
   ResourceDefault,
   parseMarker,
   getPartitionFromRegion,
-} from "@assignee/core";
+} from "../../../index.js";
 import { AWS_REGION } from "../../../config/constants/aws.js";
 import { defaultMemoryService } from "../../../services/memory.js";
 import { tryAssigneeCredentials } from "../../../config/aws-credentials.js";

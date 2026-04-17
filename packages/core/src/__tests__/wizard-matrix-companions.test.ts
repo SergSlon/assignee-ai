@@ -25,8 +25,8 @@ import {
   defaultPluginRegistry,
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
-} from "@assignee/core";
-import type { CfnOutput, ResourcePlugin } from "@assignee/core";
+} from "../index.js";
+import type { CfnOutput, ResourcePlugin } from "../index.js";
 import { PLUGINS_WITH_COMPANIONS } from "./fixtures/wizard-matrix-plugins.js";
 
 function mustGet(resourceType: string): ResourcePlugin {

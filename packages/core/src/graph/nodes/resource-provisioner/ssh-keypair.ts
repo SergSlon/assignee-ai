@@ -32,7 +32,7 @@ import {
   RESOURCE_TYPES,
   ResourceDefault,
   createEC2Client,
-} from "@assignee/core";
+} from "../../../index.js";
 import type { AgentState } from "../../graph-state.js";
 import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
 import { AWS_REGION } from "../../../config/constants/aws.js";

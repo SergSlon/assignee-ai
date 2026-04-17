@@ -16,7 +16,7 @@ import {
   CfnKey,
   type ResourceField,
   type ResolvedFieldConfig,
-} from "@assignee/core";
+} from "../../../index.js";
 import { FieldPolicy, FieldSource } from "../../../constants/field-policy.js";
 import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
 import {

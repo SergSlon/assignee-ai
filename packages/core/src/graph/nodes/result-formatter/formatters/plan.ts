@@ -5,7 +5,7 @@
  * interactive fix selection prompt.
  */
 
-import { ExecutionMode, ExecutionStatus } from "@assignee/core";
+import { ExecutionMode, ExecutionStatus } from "../../../../index.js";
 import type { AgentState } from "../../../graph-state.js";
 import {
   promptFixSelection,

@@ -3,7 +3,7 @@
  * plugin surfaces at most 5 lines in the inline advice box so the first
  * hint should be the one most likely to save money on the user's workload.
  */
-import { CfnKey } from "@assignee/core";
+import { CfnKey } from "../../../../index.js";
 import { AdviceIcon } from "../constants.js";
 import {
   AdvisoryPriceId,

@@ -4,7 +4,7 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   ResourceDefault,
-} from "@assignee/core";
+} from "../../../index.js";
 import type { AgentState } from "../../graph-state.js";
 import { ensureSshKeypair } from "./ssh-keypair.js";
 

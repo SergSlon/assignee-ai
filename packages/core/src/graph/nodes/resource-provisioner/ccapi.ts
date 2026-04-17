@@ -16,7 +16,7 @@
  * SRP: this module changes when CCAPI create-call mechanics change.
  */
 
-import { RESOURCE_TYPES, type ResourceType } from "@assignee/core";
+import { RESOURCE_TYPES, type ResourceType } from "../../../index.js";
 import type { AgentState } from "../../graph-state.js";
 import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
 import type {

@@ -10,8 +10,8 @@
 
 import { describe, it, expect } from "vitest";
 import { populateDefaultOptions } from "./wizard-helpers.js";
-import { MissingRequiredFieldsError } from "@assignee/core";
-import type { ResourceField, ResourcePlugin } from "@assignee/core";
+import { MissingRequiredFieldsError } from "../index.js";
+import type { ResourceField, ResourcePlugin } from "../index.js";
 
 function field(
   name: string,

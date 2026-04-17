@@ -22,7 +22,7 @@ import {
   PatternId,
   RESOURCE_TYPES,
   type ResourceResult,
-} from "@assignee/core";
+} from "../../../../index.js";
 import type { AgentState } from "../../../graph-state.js";
 import { renderCompoundSuccess } from "../../../../utils/display.js";
 import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";

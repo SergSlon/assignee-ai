@@ -12,7 +12,7 @@
  * @see Story 46.2 — DataSource provenance tagging
  * @see Story 46.3 — Runtime advisory price enrichment
  */
-import { RESOURCE_TYPES } from "@assignee/core";
+import { RESOURCE_TYPES } from "../../../../index.js";
 import { type EnrichedPriceMap } from "../../../../pricing/advisory-prices.js";
 import { ec2CostHints } from "./ec2-hints.js";
 import { rdsCostHints } from "./rds-hints.js";

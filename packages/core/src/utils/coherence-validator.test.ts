@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { RESOURCE_TYPES } from "@assignee/core";
+import { RESOURCE_TYPES } from "../index.js";
 import { validateCoherence } from "./coherence-validator.js";
 
 describe("validateCoherence", () => {

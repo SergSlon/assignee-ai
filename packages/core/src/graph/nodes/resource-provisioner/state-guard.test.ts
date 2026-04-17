@@ -3,7 +3,7 @@ import {
   ExecutionStatus,
   PROVISIONING_ERROR_CODES,
   RESOURCE_TYPES,
-} from "@assignee/core";
+} from "../../../index.js";
 import type { AgentState } from "../../graph-state.js";
 import {
   ProvisioningErrorKind,

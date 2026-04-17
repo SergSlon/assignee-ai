@@ -26,7 +26,7 @@ import {
   isAccessDeniedError,
   isAuthFailureError,
   isThrottlingError,
-} from "@assignee/core";
+} from "../../../../index.js";
 import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
 import { EnvVar } from "../../../../constants/env-vars.js";
 import type { GuardContext, GuardResult, PreflightGuard } from "../types.js";

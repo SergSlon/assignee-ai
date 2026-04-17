@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-import { ExecutionStatus } from "@assignee/core";
-import type { ResourceField, ResourcePlugin } from "@assignee/core";
+import { ExecutionStatus } from "../../index.js";
+import type { ResourceField, ResourcePlugin } from "../../index.js";
 
 vi.mock("@clack/prompts", () => ({
   confirm: vi.fn(),
@@ -206,7 +206,7 @@ const testS3Plugin: ResourcePlugin = {
 // internal-src singleton used by the orchestrator and the dist-published
 // singleton used by expert-path.ts + config-resolution.ts +
 // parallel-enrichment.ts + plan-generator/placeholders.ts (all import
-// `defaultPluginRegistry` from "@assignee/core" for historical reasons,
+// `defaultPluginRegistry` from "../../index.js" for historical reasons,
 // which resolves to the dist entry point — a different module file
 // path than the internal src import, hence a different singleton).
 // Pass I's createGraph lift can collapse these into a single

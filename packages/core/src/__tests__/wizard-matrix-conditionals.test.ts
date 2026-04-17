@@ -19,8 +19,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ExecutionStatus } from "@assignee/core";
-import type { ResourceField, ResourcePlugin } from "@assignee/core";
+import { ExecutionStatus } from "../index.js";
+import type { ResourceField, ResourcePlugin } from "../index.js";
 import {
   PLUGINS_WITH_SHOWIF,
   generateDefaultAnswer,
@@ -57,15 +57,54 @@ vi.mock("../config/org-policy-cache.js", () => ({
 }));
 // Story 50-4 Wave 5 Pass H: share aws-resource-discovery spies across
 // CLI shim + core path (option-elicitor lifted to core).
+// Story 51-it1-B1 (L6-H1): real-data mocks so `resolveDynamicFields`
+// hits the populated-options branch (not the empty-array fallback).
+// Shapes mirror real discovery function return values.
 const _discoveryMocks = vi.hoisted(() => ({
-  discoverAmis: vi.fn().mockResolvedValue([]),
-  discoverSubnets: vi.fn().mockResolvedValue([]),
-  discoverSecurityGroups: vi.fn().mockResolvedValue([]),
-  discoverKeyPairs: vi.fn().mockResolvedValue([]),
+  discoverAmis: vi.fn().mockResolvedValue([
+    {
+      value: "ami-0abcdef1234567890",
+      label: "Amazon Linux 2023 (ami-0abcdef1234567890)",
+    },
+    {
+      value: "ami-0123456789abcdef0",
+      label: "Ubuntu 22.04 LTS (ami-0123456789abcdef0)",
+    },
+  ]),
+  discoverSubnets: vi.fn().mockResolvedValue([
+    {
+      value: "subnet-0abc1234def567890",
+      label: "public-a (10.0.0.0/24, us-east-1a) — subnet-0abc1234def567890",
+    },
+    {
+      value: "subnet-0def5678abc901234",
+      label: "private-a (10.0.1.0/24, us-east-1a) — subnet-0def5678abc901234",
+    },
+  ]),
+  discoverSecurityGroups: vi.fn().mockResolvedValue([
+    { value: "", label: "None (use VPC default security group)" },
+    {
+      value: "sg-0abc1234def567890",
+      label: "web-sg (sg-0abc1234def567890)",
+    },
+  ]),
+  discoverKeyPairs: vi.fn().mockResolvedValue([
+    { value: "", label: "None (SSM access only)" },
+    { value: "my-keypair", label: "my-keypair (rsa)" },
+  ]),
   discoverInstanceTypes: vi.fn().mockResolvedValue(null),
-  discoverRdsEngineVersions: vi.fn().mockResolvedValue([]),
-  discoverRdsInstanceClasses: vi.fn().mockResolvedValue([]),
-  discoverLambdaRuntimes: vi.fn().mockResolvedValue([]),
+  discoverRdsEngineVersions: vi.fn().mockResolvedValue([
+    { value: "16.4", label: "PostgreSQL 16.4", recommended: true },
+    { value: "15.8", label: "PostgreSQL 15.8" },
+  ]),
+  discoverRdsInstanceClasses: vi.fn().mockResolvedValue([
+    { value: "db.t3.micro", label: "db.t3.micro (2 vCPU, 1 GiB, burstable)" },
+    { value: "db.t3.small", label: "db.t3.small (2 vCPU, 2 GiB, burstable)" },
+  ]),
+  discoverLambdaRuntimes: vi.fn().mockResolvedValue([
+    { value: "nodejs20.x", label: "Node.js 20.x" },
+    { value: "python3.12", label: "Python 3.12" },
+  ]),
   resolveAmiFromOsName: vi.fn().mockResolvedValue(null),
   clearDiscoveryCache: vi.fn(),
   DiscoveryCacheKey: {
@@ -116,6 +155,52 @@ beforeEach(() => {
   // describe.each row does not bleed into the next.
   vi.resetAllMocks();
   setTTY(true);
+
+  // Story 51-it1-B1 (L6-H1): reinstate the realistic non-empty discovery
+  // defaults that were cleared by `vi.resetAllMocks()`. With populated
+  // options, `resolveDynamicFields` hits the enum-populated branch that the
+  // previous `[]` placeholders left untouched.
+  _discoveryMocks.discoverAmis.mockResolvedValue([
+    {
+      value: "ami-0abcdef1234567890",
+      label: "Amazon Linux 2023 (ami-0abcdef1234567890)",
+    },
+    {
+      value: "ami-0123456789abcdef0",
+      label: "Ubuntu 22.04 LTS (ami-0123456789abcdef0)",
+    },
+  ]);
+  _discoveryMocks.discoverSubnets.mockResolvedValue([
+    {
+      value: "subnet-0abc1234def567890",
+      label: "public-a (10.0.0.0/24, us-east-1a) — subnet-0abc1234def567890",
+    },
+    {
+      value: "subnet-0def5678abc901234",
+      label: "private-a (10.0.1.0/24, us-east-1a) — subnet-0def5678abc901234",
+    },
+  ]);
+  _discoveryMocks.discoverSecurityGroups.mockResolvedValue([
+    { value: "", label: "None (use VPC default security group)" },
+    { value: "sg-0abc1234def567890", label: "web-sg (sg-0abc1234def567890)" },
+  ]);
+  _discoveryMocks.discoverKeyPairs.mockResolvedValue([
+    { value: "", label: "None (SSM access only)" },
+    { value: "my-keypair", label: "my-keypair (rsa)" },
+  ]);
+  _discoveryMocks.discoverInstanceTypes.mockResolvedValue(null);
+  _discoveryMocks.discoverRdsEngineVersions.mockResolvedValue([
+    { value: "16.4", label: "PostgreSQL 16.4", recommended: true },
+    { value: "15.8", label: "PostgreSQL 15.8" },
+  ]);
+  _discoveryMocks.discoverRdsInstanceClasses.mockResolvedValue([
+    { value: "db.t3.micro", label: "db.t3.micro (2 vCPU, 1 GiB, burstable)" },
+    { value: "db.t3.small", label: "db.t3.small (2 vCPU, 2 GiB, burstable)" },
+  ]);
+  _discoveryMocks.discoverLambdaRuntimes.mockResolvedValue([
+    { value: "nodejs20.x", label: "Node.js 20.x" },
+    { value: "python3.12", label: "Python 3.12" },
+  ]);
 });
 
 afterEach(() => {

@@ -1,7 +1,7 @@
 /**
  * RDS::DBInstance cost hints — budget-class alternatives + Multi-AZ doubling warning.
  */
-import { CfnKey } from "@assignee/core";
+import { CfnKey } from "../../../../index.js";
 import {
   RDS_LARGE_CLASS_PREFIXES,
   RDS_BUDGET_ALTERNATIVES,

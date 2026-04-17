@@ -15,7 +15,7 @@
  *      (.agents/stories/wave-6b-f2-preflight-guard-solid.md)
  */
 
-import { ExecutionStatus } from "@assignee/core";
+import { ExecutionStatus } from "../../index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import type { AgentState } from "../graph-state.js";
 import { PromiseStatus } from "../../config/constants/enums.js";

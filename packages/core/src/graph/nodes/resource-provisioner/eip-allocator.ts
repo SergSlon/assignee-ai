@@ -29,7 +29,7 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   createEC2Client,
-} from "@assignee/core";
+} from "../../../index.js";
 import type { AgentState } from "../../graph-state.js";
 import { AWS_REGION } from "../../../config/constants/aws.js";
 import { requireAssigneeCredentials } from "../../../config/aws-credentials.js";

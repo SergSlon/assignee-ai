@@ -11,7 +11,7 @@ import {
   RESOURCE_TYPES,
   type ProvisionRecord,
   type FailureRecord,
-} from "@assignee/core";
+} from "../../../index.js";
 import { SCHEMA_EXCERPT_MAX_CHARS } from "../../../config/constants/limits.js";
 import { TWENTY_FOUR_HOURS_MS } from "../../../config/constants/timeouts.js";
 import {

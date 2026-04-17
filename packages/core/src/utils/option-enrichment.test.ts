@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { enrichOptionLabel } from "./option-enrichment.js";
-import { defaultPluginRegistry, RESOURCE_TYPES } from "@assignee/core";
+import { defaultPluginRegistry, RESOURCE_TYPES } from "../index.js";
 
 describe("enrichOptionLabel", () => {
   it("appends all metadata when costHint, fitHint, and recommended are present", () => {

@@ -5,7 +5,7 @@
  * @see Story 40.5 — Security Posture Advisor
  */
 
-import { RESOURCE_TYPES, CfnKey } from "@assignee/core";
+import { RESOURCE_TYPES, CfnKey } from "../../../index.js";
 import {
   Port,
   CIDR_ALL_IPV4,

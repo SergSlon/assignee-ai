@@ -14,7 +14,7 @@
  * Wave-6c F3: extracted from option-elicitor.ts (SRP).
  */
 
-import type { ResourceField } from "@assignee/core";
+import type { ResourceField } from "../../../index.js";
 import {
   enrichFieldLabels,
   applyCategorySmartFilter,

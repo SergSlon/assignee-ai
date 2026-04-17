@@ -14,7 +14,7 @@
  * @see .agents/stories/wave-6-f2-plan-generator-solid-refactor.md
  */
 
-import type { LlmPort } from "@assignee/core";
+import type { LlmPort } from "../../index.js";
 import type { AgentState } from "../graph-state.js";
 import { runCompoundPlan } from "./plan-generator/compound-plan.js";
 import { runLlmPlan } from "./plan-generator/llm-plan.js";

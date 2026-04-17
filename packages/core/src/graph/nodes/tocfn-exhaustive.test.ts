@@ -3,7 +3,7 @@
  * correct CloudFormation output for all answer variants (true/false/string/enum).
  */
 import { describe, it, expect } from "vitest";
-import { defaultPluginRegistry } from "@assignee/core";
+import { defaultPluginRegistry } from "../../index.js";
 import { applyToCfnTransforms } from "./plan-generator.js";
 
 const PLUGIN_TYPES = [

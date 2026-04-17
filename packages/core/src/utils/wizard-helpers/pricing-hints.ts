@@ -11,8 +11,8 @@ import {
   CfnKey,
   ResourceDefault,
   QuestionTypeName,
-} from "@assignee/core";
-import type { ResourceField, ResourcePlugin } from "@assignee/core";
+} from "../../index.js";
+import type { ResourceField, ResourcePlugin } from "../../index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { PRICING_LOOKUP_TIMEOUT_MS } from "../../config/constants/timeouts.js";
 import {

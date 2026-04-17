@@ -1,7 +1,7 @@
 /**
  * EC2::Instance cost hints — ARM (Graviton) equivalents + Spot eligibility.
  */
-import { CfnKey } from "@assignee/core";
+import { CfnKey } from "../../../../index.js";
 import {
   ARM_EQUIVALENTS,
   SPOT_ELIGIBLE_PREFIXES,

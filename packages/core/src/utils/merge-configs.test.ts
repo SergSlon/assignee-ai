@@ -4,7 +4,7 @@ import type {
   ResourceField,
   OrgResourceConfig,
   UserResourceConfig,
-} from "@assignee/core";
+} from "../index.js";
 
 const RESOURCE_TYPE = "AWS::S3::Bucket";
 

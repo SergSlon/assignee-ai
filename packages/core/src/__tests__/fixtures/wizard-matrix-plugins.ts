@@ -19,8 +19,8 @@
  * @see _bmad-output/implementation-artifacts/wizard-interaction-matrix.md
  */
 
-import { defaultPluginRegistry, RESOURCE_TYPES } from "@assignee/core";
-import type { ResourceField, ResourcePlugin } from "@assignee/core";
+import { defaultPluginRegistry, RESOURCE_TYPES } from "../../index.js";
+import type { ResourceField, ResourcePlugin } from "../../index.js";
 
 /**
  * Canonical list of primary resource types covered by the wizard matrix.

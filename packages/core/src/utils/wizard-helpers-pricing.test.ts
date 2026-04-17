@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from "vitest";
 import { injectPriceLabels } from "./wizard-helpers.js";
-import type { ResourceField } from "@assignee/core";
+import type { ResourceField } from "../index.js";
 
 /** Helper to build a minimal categorySelect field for testing. */
 function makeCategoryField(

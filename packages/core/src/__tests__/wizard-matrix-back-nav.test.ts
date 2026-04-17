@@ -30,8 +30,8 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   defaultPluginRegistry,
-} from "@assignee/core";
-import type { ResourceField, ResolvedFieldConfig } from "@assignee/core";
+} from "../index.js";
+import type { ResourceField, ResolvedFieldConfig } from "../index.js";
 import { FieldPolicy, FieldSource } from "../constants/field-policy.js";
 
 vi.mock("@clack/prompts", () => ({
