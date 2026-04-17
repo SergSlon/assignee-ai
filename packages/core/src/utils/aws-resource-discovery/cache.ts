@@ -6,7 +6,7 @@
  * expire after their configured TTL.
  */
 
-import { DiscoveryCacheKey } from "@assignee/core";
+import { DiscoveryCacheKey } from "../../config/discovery-keys.js";
 import type { CacheEntry, DiscoveryOption } from "./types.js";
 
 /** Default TTL: 5 minutes. */

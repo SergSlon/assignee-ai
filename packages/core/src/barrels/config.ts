@@ -77,6 +77,75 @@ export { AwsErrorName } from "../constants/aws-error-names.js";
 // Constants — Environment variable name registry (Story 50-4 Wave 5 Pass A)
 export { EnvVar } from "../constants/env-vars.js";
 
+// Constants — Instance category canonical values (Story 50-4 Wave 5 Pass C)
+export {
+  InstanceCategory,
+  type InstanceCategoryType,
+} from "../constants/instance-categories.js";
+
+// Constants — Field elicitation policy (Story 50-4 Wave 5 Pass C)
+export {
+  FieldPolicy,
+  type FieldPolicyType,
+  FieldSource,
+  type FieldSourceType,
+  InjectionSource,
+} from "../constants/field-policy.js";
+
+// Constants — Resource field name registry (Story 50-4 Wave 5 Pass C)
+export { ResourceFieldName } from "../constants/resource-fields.js";
+
+// Config constants — filesystem path + filename constants (Story 50-4 Wave 5 Pass C)
+// NOTE: PROVISIONS_FILE is ALSO exported from `list-resources/provision-log.ts`
+//   (pre-existing single source of truth). We intentionally re-export the
+//   copy from `paths.ts` — they resolve to the same string ("provisions.json").
+//   `FAILURES_FILE` lives only here.
+export {
+  CHECKPOINT_DIR,
+  BASELINES_DIR,
+  FileName,
+  FAILURES_FILE,
+  CHECKPOINT_FILE_PREFIX,
+} from "../config/constants/paths.js";
+
+// Config constants — named enums (Promise/Cleanup/Pricing/LogSource/sentinels)
+// (Story 50-4 Wave 5 Pass C)
+export {
+  CleanupCategoryName,
+  PricingCategory,
+  LogSource,
+  PromiseStatus,
+  WIZARD_NONE_SENTINEL,
+} from "../config/constants/enums.js";
+
+// Config constants — user-facing UI strings (Story 50-4 Wave 5 Pass C)
+export {
+  UserMessage,
+  BoxenAlign,
+  BoxenBorderColor,
+  PLAN_GENERATION_FAILED,
+  EXAMPLE_S3_INTENT,
+} from "../config/constants/ui.js";
+
+// Config constants — SaaS/Bedrock model IDs (Story 50-4 Wave 5 Pass C)
+export { BEDROCK_MODEL_ID, SAAS_API_URL } from "../config/constants/saas.js";
+
+// Constants — AWS docs section titles (Story 50-4 Wave 5 Pass C)
+export { DOC_SECTION_TITLES } from "../constants/doc-sections.js";
+
+// Constants — Reconcile actions (Story 50-4 Wave 5 Pass C)
+export {
+  ReconcileAction,
+  type ReconcileActionType,
+} from "../constants/reconcile-actions.js";
+
+// Constants — MCP server names (Story 50-4 Wave 5 Pass C)
+export {
+  McpServerName,
+  McpCommand,
+  type McpServerNameType,
+} from "../constants/mcp.js";
+
 // Config constants — AWS region/credential helpers (Story 50-4 Wave 5 Pass A)
 export { AWS_REGION, CredentialError } from "../config/constants/aws.js";
 

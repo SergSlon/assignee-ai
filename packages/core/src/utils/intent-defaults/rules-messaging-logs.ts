@@ -3,7 +3,8 @@
  * CloudWatch alarms, SNS topics, CloudWatch log groups.
  */
 
-import { CfnKey, RESOURCE_TYPES } from "@assignee/core";
+import { CfnKey } from "../../config/cfn-keys.js";
+import { RESOURCE_TYPES } from "../../config/resource-types/index.js";
 import type { IntentRule } from "./types.js";
 
 export const MESSAGING_LOGS_RULES: IntentRule[] = [

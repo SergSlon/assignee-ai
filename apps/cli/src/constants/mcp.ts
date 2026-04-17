@@ -1,15 +1,9 @@
-export const McpServerName = {
-  KNOWLEDGE: "aws-knowledge-mcp-server",
-  PRICING: "aws-pricing-mcp-server",
-  DOCS: "aws-documentation-mcp-server",
-  IAM: "iam-mcp-server",
-  WELL_ARCHITECTED_SECURITY: "well-architected-security-mcp-server",
-  BILLING: "aws-cost-management-mcp-server",
-} as const;
-
-export type McpServerNameType =
-  (typeof McpServerName)[keyof typeof McpServerName];
-
-export const McpCommand = {
-  UVX: "uvx",
-} as const;
+/**
+ * Thin re-export shim — implementation moved to @assignee/core
+ * (Story 50-4 Wave 5 Pass C).
+ */
+export {
+  McpServerName,
+  McpCommand,
+  type McpServerNameType,
+} from "@assignee/core";

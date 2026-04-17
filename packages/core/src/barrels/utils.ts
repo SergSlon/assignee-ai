@@ -1,6 +1,91 @@
 // Utils
 export { sanitizeUserIntent, MAX_INTENT_LENGTH } from "../utils/sanitize.js";
 export { redactSensitive } from "../utils/redact.js";
+export { withTimeout } from "../utils/timeout.js";
+export { unwrapMcpText } from "../utils/mcp.js";
+export {
+  wizardKeyMap,
+  toSetFlag,
+  toSetFlagFromPatch,
+} from "../utils/wizard-key-map.js";
+export {
+  injectMandatoryTags,
+  TAG_KEY_MANAGED_BY,
+  TAG_VALUE_MANAGED_BY,
+  type CfnTag,
+} from "../utils/tags.js";
+export type {
+  IntentDefaultOverride,
+  IntentRule,
+} from "../utils/intent-defaults/index.js";
+export {
+  INTENT_RULES,
+  getIntentDefaults,
+  applyIntentOverrides,
+} from "../utils/intent-defaults/index.js";
+export {
+  classifyWorkload,
+  _clearClassificationCache,
+  WorkloadProfileSchema,
+  type WorkloadProfile,
+  type WorkloadClassification,
+} from "../utils/workload-classifier.js";
+export {
+  mergeConfigs,
+  type MergeConfigsInput,
+} from "../utils/merge-configs.js";
+export {
+  validateCoherence,
+  type CoherenceWarning,
+} from "../utils/coherence-validator.js";
+export {
+  RECOMMENDATION_RULES,
+  evaluateWizardRecommendations,
+  displayRecommendations,
+  type RecommendationSeverity,
+  type RecommendationRule,
+  type WizardRecommendation,
+} from "../utils/wizard-recommendations.js";
+export {
+  rankOptions,
+  PROFILE_KEYWORDS,
+  RECOMMENDED_BONUS,
+  KEYWORD_MATCH_SCORE,
+  type RankedResult,
+} from "../utils/option-ranker.js";
+export { enrichOptionLabel } from "../utils/option-enrichment.js";
+export {
+  isMcpSearchResponse,
+  extractFirstUrl,
+  type McpSearchResult,
+  type McpSearchResponse,
+} from "../utils/mcp-types.js";
+export {
+  FreeTierType,
+  loadAccountCreatedDate,
+  _resetAccountDateCache,
+  getFreeTierNote,
+  getFreeTierCostLabel,
+  type FreeTierTypeValue,
+  type FreeTierNote,
+} from "../utils/free-tier.js";
+export type {
+  DiscoveryOption,
+  InstanceTypeCategory,
+} from "../utils/aws-resource-discovery/index.js";
+export {
+  clearDiscoveryCache,
+  discoverInstanceTypes,
+  discoverAmis,
+  resolveAmiFromOsName,
+  searchAmis,
+  discoverSubnets,
+  discoverSecurityGroups,
+  discoverKeyPairs,
+  discoverRdsEngineVersions,
+  discoverRdsInstanceClasses,
+  discoverLambdaRuntimes,
+} from "../utils/aws-resource-discovery/index.js";
 
 // Utils — Structured JSON logger (Story 50-4 Wave 5 Pass A)
 export {

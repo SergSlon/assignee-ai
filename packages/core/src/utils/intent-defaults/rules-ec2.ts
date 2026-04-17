@@ -1,7 +1,8 @@
 /** EC2 instance intent rules. */
 
-import { CfnKey, RESOURCE_TYPES, ResourceDefault } from "@assignee/core";
-import { WorkloadProfile as WP } from "../../constants/workload-profiles.js";
+import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
+import { RESOURCE_TYPES } from "../../config/resource-types/index.js";
+import { WorkloadProfileKey as WP } from "../../config/cfn-keys.js";
 import type { IntentRule } from "./types.js";
 
 export const EC2_RULES: IntentRule[] = [

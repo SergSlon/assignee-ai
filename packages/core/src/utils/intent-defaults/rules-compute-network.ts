@@ -4,7 +4,8 @@
  * ELBv2 Load Balancer, API Gateway V2 API.
  */
 
-import { CfnKey, RESOURCE_TYPES } from "@assignee/core";
+import { CfnKey } from "../../config/cfn-keys.js";
+import { RESOURCE_TYPES } from "../../config/resource-types/index.js";
 import type { IntentRule } from "./types.js";
 
 export const COMPUTE_NETWORK_RULES: IntentRule[] = [

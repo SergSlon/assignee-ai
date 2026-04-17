@@ -6,8 +6,9 @@ import {
   DescribeDBEngineVersionsCommand,
   DescribeOrderableDBInstanceOptionsCommand,
 } from "@aws-sdk/client-rds";
-import { CfnKey, DiscoveryCacheKey, ResourceDefault } from "@assignee/core";
-import { WorkloadProfile as WP } from "../../constants/workload-profiles.js";
+import { CfnKey, ResourceDefault } from "../../config/cfn-keys.js";
+import { DiscoveryCacheKey } from "../../config/discovery-keys.js";
+import { WorkloadProfileKey as WP } from "../../config/cfn-keys.js";
 import { withTimeout } from "../timeout.js";
 import { cachedDiscover } from "./cache.js";
 import { createRdsClient } from "./clients.js";

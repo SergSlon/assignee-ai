@@ -3,7 +3,8 @@
  * DynamoDB, SQS, SecretsManager, SSM Parameter.
  */
 
-import { CfnKey, RESOURCE_TYPES } from "@assignee/core";
+import { CfnKey } from "../../config/cfn-keys.js";
+import { RESOURCE_TYPES } from "../../config/resource-types/index.js";
 import type { IntentRule } from "./types.js";
 
 export const DATA_SERVICE_RULES: IntentRule[] = [

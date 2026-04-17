@@ -7,7 +7,7 @@ import {
   DescribeSecurityGroupsCommand,
   DescribeKeyPairsCommand,
 } from "@aws-sdk/client-ec2";
-import { DiscoveryCacheKey } from "@assignee/core";
+import { DiscoveryCacheKey } from "../../config/discovery-keys.js";
 import { withTimeout } from "../timeout.js";
 import { cachedDiscover } from "./cache.js";
 import { createEc2Client } from "./clients.js";

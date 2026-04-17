@@ -10,7 +10,8 @@
  *   (c) the 15-minute cache TTL applies
  */
 
-import { DiscoveryCacheKey, lambdaRuntimes } from "@assignee/core";
+import { DiscoveryCacheKey } from "../../config/discovery-keys.js";
+import { lambdaRuntimes } from "../../resource-plugins/index.js";
 import { cachedDiscover } from "./cache.js";
 import type { DiscoveryOption } from "./types.js";
 

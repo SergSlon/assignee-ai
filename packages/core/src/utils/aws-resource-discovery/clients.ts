@@ -18,10 +18,10 @@
  * honored.
  */
 
-import { createEC2Client, type EC2Client } from "@assignee/core";
+import { createEC2Client, type EC2Client } from "../../aws/index.js";
 import { RDSClient } from "@aws-sdk/client-rds";
 import { SSMClient } from "@aws-sdk/client-ssm";
-import { AWS_REGION } from "../../config/constants.js";
+import { AWS_REGION } from "../../config/constants/aws.js";
 import {
   tryAssigneeCredentials,
   type ExplicitAwsCredentials,

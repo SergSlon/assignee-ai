@@ -1,17 +1,5 @@
 /**
- * Canonical instance type categories used in workload classification and option ranking.
- * Single source of truth — every instance category string must reference these constants.
+ * Thin re-export shim — implementation moved to @assignee/core
+ * (Story 50-4 Wave 5 Pass C).
  */
-
-export const InstanceCategory = {
-  BURSTABLE: "burstable",
-  GENERAL_PURPOSE: "general-purpose",
-  COMPUTE_HEAVY: "compute-heavy",
-  MEMORY_INTENSIVE: "memory-intensive",
-  GPU_ACCELERATED: "gpu-accelerated",
-  STORAGE_HEAVY: "storage-heavy",
-  HPC: "hpc",
-} as const;
-
-export type InstanceCategoryType =
-  (typeof InstanceCategory)[keyof typeof InstanceCategory];
+export { InstanceCategory, type InstanceCategoryType } from "@assignee/core";
