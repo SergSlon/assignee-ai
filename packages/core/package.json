@@ -35,6 +35,18 @@
     "./graph/nodes/*.js": {
       "import": "./dist/graph/nodes/*.js",
       "types": "./dist/graph/nodes/*.d.ts"
+    },
+    "./graph": {
+      "import": "./dist/graph/index.js",
+      "types": "./dist/graph/index.d.ts"
+    },
+    "./utils/display.js": {
+      "import": "./dist/utils/display.js",
+      "types": "./dist/utils/display.d.ts"
+    },
+    "./utils/logger/index.js": {
+      "import": "./dist/utils/logger/index.js",
+      "types": "./dist/utils/logger/index.d.ts"
     }
   },
   "files": [

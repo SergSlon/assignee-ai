@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ExecutionStatus, SchemaFetchError } from "@assignee/core";
+import { ExecutionStatus, SchemaFetchError } from "../../index.js";
 
-// Mock CloudFormationSchemaService.
+// Mock CloudFormationSchemaService via the in-core barrel path.
 // NOTE: Constructor implementation is re-installed in beforeEach because
 // vitest's mockReset:true wipes vi.fn implementations between tests.
 const mockGetSchema = vi.fn();
-vi.mock("@assignee/core", async (importOriginal) => {
+vi.mock("../../index.js", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
@@ -14,8 +14,8 @@ vi.mock("@assignee/core", async (importOriginal) => {
 });
 
 import { schemaFetcherNode, _resetSchemaService } from "./schema-fetcher.js";
-import { CloudFormationSchemaService } from "@assignee/core";
-import type { AgentState } from "../services/graph.js";
+import { CloudFormationSchemaService } from "../../index.js";
+import type { AgentState } from "../graph-state.js";
 
 function makeState(overrides: Partial<AgentState> = {}): AgentState {
   return {

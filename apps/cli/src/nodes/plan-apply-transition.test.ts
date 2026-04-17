@@ -19,7 +19,11 @@ import type { AgentState } from "../services/graph.js";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock("../utils/display.js", () => ({
+// Story 50-4 Wave 5 finale: human_approval now lives in
+// `@assignee/core/graph/nodes/human-approval.js` and imports display/logger
+// from core (`../../utils/display.js` + `../../utils/logger/index.js`).
+// Mock at the CORE module paths so the in-core node's imports are intercepted.
+vi.mock("@assignee/core/utils/display.js", () => ({
   renderPlanBox: vi.fn(),
   renderHitlConfirm: vi.fn(),
   renderDependencyPlan: vi.fn(),
@@ -28,7 +32,7 @@ vi.mock("../utils/display.js", () => ({
   promptFixSelection: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("../utils/logger.js", () => ({
+vi.mock("@assignee/core/utils/logger/index.js", () => ({
   log: vi.fn(),
   LOG_ACTIONS: {
     PLAN_APPROVED: "plan_approved",
@@ -38,8 +42,11 @@ vi.mock("../utils/logger.js", () => ({
 }));
 
 import { humanApprovalNode } from "./human-approval.js";
-import { renderPlanBox, renderHitlConfirm } from "../utils/display.js";
-import { log } from "../utils/logger.js";
+import {
+  renderPlanBox,
+  renderHitlConfirm,
+} from "@assignee/core/utils/display.js";
+import { log } from "@assignee/core/utils/logger/index.js";
 import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
 import { type ProvisioningPort } from "../services/provisioning-port.js";
 import { resourceProvisionerNode } from "./resource-provisioner.js";
