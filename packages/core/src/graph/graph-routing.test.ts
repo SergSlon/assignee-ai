@@ -1,12 +1,16 @@
 /**
  * Unit tests for graph-routing.ts
  * Story 9.9 — T6: graph-routing.ts tests — all branch conditions
+ *
+ * Story 50-4 Wave 5 Pass I: moved from
+ * `apps/cli/src/services/graph-routing.test.ts`. Assertions unchanged —
+ * only the import paths target the in-core routing module.
  */
 
 import { describe, it, expect } from "vitest";
 import { END } from "@langchain/langgraph";
-import { ExecutionMode, ExecutionStatus } from "@assignee/core";
-import { GraphNode } from "../constants/graph.js";
+import { ExecutionMode, ExecutionStatus } from "../index.js";
+import { GraphNode } from "../constants/graph-node.js";
 import type { AgentState } from "./graph-state.js";
 import {
   routeCheckpointEntry,

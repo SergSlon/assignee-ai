@@ -63,7 +63,6 @@
     "@aws-sdk/client-resource-groups-tagging-api": "^3.1014.0",
     "@aws-sdk/client-sts": "^3.1030.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "assignee": "workspace:*",
     "zod": "^3.25.76"
   },
   "devDependencies": {

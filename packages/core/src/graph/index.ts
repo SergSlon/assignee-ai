@@ -1,12 +1,10 @@
 /**
  * `@assignee/core/graph` barrel.
  *
- * Story 50-4 Wave 5 Pass H: all 13 graph nodes + graph-state now live in
- * `@assignee/core`. `createGraph` and `graph-routing` still live in the
- * CLI (`apps/cli/src/services/graph.ts` + `graph-routing.ts`); moving
- * them is the remit of Pass I, which also removes the MCP server's
- * `workspace:*` dependency on the CLI and switches it to a static
- * `import { createGraph } from "@assignee/core/graph"`.
+ * Story 50-4 Wave 5 Pass I: `createGraph` and `graph-routing` now live in
+ * `@assignee/core` alongside the 13 graph nodes + graph-state. The MCP
+ * server imports `createGraph` from here directly, eliminating the
+ * previous `apps/mcp-server → apps/cli` runtime dependency.
  */
 
 export {
@@ -15,6 +13,18 @@ export {
   type AppliedFix,
   type SecurityFinding,
 } from "./graph-state.js";
+
+// Routing functions (Story 50-4 Wave 5 Pass I).
+export {
+  routeCheckpointEntry,
+  routePreflightGuard,
+  routeResourceProvisioner,
+  routeStatusPoller,
+  routeResultFormatter,
+} from "./graph-routing.js";
+
+// createGraph factory (Story 50-4 Wave 5 Pass I).
+export { createGraph, type CreateGraphOptions } from "./create-graph.js";
 
 // All 13 graph-node implementations (Story 50-4 Wave 5 Passes D/E/E.2/H).
 export {
