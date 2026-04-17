@@ -71,6 +71,9 @@ export {
   isThrottlingError,
 } from "../config/aws-errors.js";
 
+// Constants — AWS SDK error name strings (Story 50-4 Wave 5.1)
+export { AwsErrorName } from "../constants/aws-error-names.js";
+
 // Config — shared ARN parsing helpers (Wave 3 P2-2 dedup).
 // NOTE: `isArn` is ALSO exported from `./config/arn-builder.js` above for
 // backward compatibility — both exports resolve to the same implementation.
