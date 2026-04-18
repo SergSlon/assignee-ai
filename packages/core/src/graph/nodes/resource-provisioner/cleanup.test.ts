@@ -40,7 +40,12 @@ describe("cleanupAllocatedResources", () => {
   });
 
   it("releases every freshly-allocated EIP for NatGateway", async () => {
-    mockEc2Send.mockResolvedValue({});
+    // ReleaseAddressCommand returns an empty-body success response; the real
+    // AWS SDK shape is just `$metadata`. Documenting it explicitly so the
+    // mock can't drift from the production contract.
+    mockEc2Send.mockResolvedValue({
+      $metadata: { httpStatusCode: 200, requestId: "test-req-1" },
+    });
     await cleanupAllocatedResources(baseState(), {
       eipReleased: new Set(["eipalloc-111", "eipalloc-222"]),
       sshDeleted: undefined,
@@ -83,7 +88,11 @@ describe("cleanupAllocatedResources", () => {
   });
 
   it("deletes the SSH key pair when sshDeleted is set", async () => {
-    mockEc2Send.mockResolvedValue({});
+    // DeleteKeyPairCommand returns an empty-body success response; the real
+    // AWS SDK shape is just `$metadata`.
+    mockEc2Send.mockResolvedValue({
+      $metadata: { httpStatusCode: 200, requestId: "test-req-2" },
+    });
     await cleanupAllocatedResources(
       baseState({ resourceType: RESOURCE_TYPES.EC2_INSTANCE }),
       { eipReleased: new Set(), sshDeleted: "my-key" },
@@ -108,7 +117,12 @@ describe("cleanupAllocatedResources", () => {
   });
 
   it("is idempotent: calling twice with same inputs does not throw", async () => {
-    mockEc2Send.mockResolvedValue({});
+    // Blanket resolver for both ReleaseAddressCommand and DeleteKeyPairCommand
+    // — both are empty-body success responses whose only real field is
+    // `$metadata`.
+    mockEc2Send.mockResolvedValue({
+      $metadata: { httpStatusCode: 200, requestId: "test-req-3" },
+    });
     const inputs = {
       eipReleased: new Set(["eipalloc-111"]),
       sshDeleted: "my-key",
