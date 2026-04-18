@@ -101,12 +101,6 @@ MCP subprocesses receive credentials via env var injection — never via shared 
 
 The check runs in parallel across all servers via `Promise.all` with per-server `AbortController` timeouts, so a single slow PyPI response never blocks the other rows. Network failures are isolated — they produce `fetch-failed` rows, not exceptions.
 
-A standalone CI script (`apps/cli/scripts/check-mcp-versions.ts`) wraps the same logic for automated pipelines:
-
-- Any `behind` row exits with code 1 (fail CI — humans must bump deliberately)
-- All `fetch-failed` rows exit 0 with a stderr warning (don't break CI on offline runners)
-- Otherwise exit 0
-
 The drift check can be skipped via `assignee doctor --skip-version-check` for offline or fast-path usage.
 
 ## Updating Pins

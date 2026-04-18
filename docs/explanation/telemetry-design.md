@@ -91,8 +91,9 @@ contribution-diff reviewers look at first.
 - AWS account IDs, user ARNs, or IAM role names.
 - Operator hostname, IP address, or MAC address.
 - File paths, filesystem layout, or checkpoint contents.
-- Error messages (classification only — see `errorClass` in the CLI
-  `audit-log.ts` for the pattern we would reuse here).
+- Error messages (classification only — see `errorClass` in the MCP
+  server `apps/mcp-server/src/utils/audit-log.ts` for the pattern we
+  would reuse here).
 - Stack traces.
 - Any field derived from the operator's desiredState JSON.
 

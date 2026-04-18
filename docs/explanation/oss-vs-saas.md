@@ -10,7 +10,7 @@
 ## The short version
 
 - **OSS, MIT, forever:** the `assignee` CLI, the LangGraph
-  pipeline, the MCP server, the 185 BP rules + 9 compound patterns,
+  pipeline, the MCP server, the 185 BP rules + 10 compound patterns,
   cost preflight, mandatory tagging, the Bedrock adapter (BYOK), and
   the single-user run-ledger. (License chosen for maximum downstream
   reuse — see [LICENSE](../../LICENSE); earlier drafts floated
@@ -59,7 +59,7 @@ includes:
   the trigger language, the auto-fix patch application, the interactive
   fix UX.
 
-### The 185 BP rules + 9 compound patterns
+### The 185 BP rules + 10 compound patterns
 
 The rule library at [`packages/best-practices/`](../../packages/best-practices)
 is MIT-licensed. Community contributions are welcome (see
@@ -67,8 +67,10 @@ is MIT-licensed. Community contributions are welcome (see
 — the network-effect bet is that a community-contributed rule library
 compounds over time and a competitor's proprietary rule set doesn't.
 
-The nine canonical compound patterns (`s3-static-site`, `efs-with-vpc`,
-`rds-with-vpc`, etc.) stay OSS for the same reason: they're a reusable
+The ten canonical compound patterns (`serverless-api`, `static-website`,
+`efs-with-vpc`, `vpc-networking`, `vpc-public-only`, `lambda-with-exec-role`,
+`scheduled-lambda`, `message-processing`, `container-service`,
+`three-tier-web`) stay OSS for the same reason: they're a reusable
 knowledge artifact, not a monetisation surface.
 
 ### Cost preflight and mandatory tagging
@@ -166,7 +168,7 @@ audited, which controls it covers) as the premium.
 Things we will **not** monetise, to keep the OSS side whole:
 
 - **Access to the 185 rules.** The shipped rules stay free.
-- **Access to the compound patterns.** The nine shipped patterns stay
+- **Access to the compound patterns.** The ten shipped patterns stay
   free.
 - **Cost preflight.** The pre-confirm cost estimate stays free.
 - **A "pro" version of the CLI.** The binary is one build, OSS,

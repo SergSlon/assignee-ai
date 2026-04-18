@@ -1,6 +1,6 @@
 # Assignee.ai — Architecture & Flow Diagrams
 
-> **Developer-facing diagrams.** For the authoritative CLI implementation spec, see `cli-architecture.md` in the workspace-level `_bmad-output/planning-artifacts/` directory (outside this repo). For the full SaaS vision (deferred), see `architecture.md` in the same location.
+> **Developer-facing diagrams.** For the authoritative CLI implementation spec, see `cli-architecture.md` in the workspace-level `_bmad-output/planning-artifacts/` directory (outside this repo).
 
 Complete reference of all execution flows, resource types, MCP integrations, and data sources.
 
