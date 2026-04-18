@@ -31,10 +31,11 @@ redactor that matches `arn:aws:` over-rejects or over-leaks.
 **Where it's enforced.**
 
 - `packages/core/src/config/aws-partition.ts` — canonical helper
-- `apps/cli/src/utils/error-messages.ts` — redaction regex
-  (`ARN_PATTERN`)
-- `packages/core/src/plugins/*` — every validator that uses
-  `ARN_PATTERN_SOURCE` rather than string literals
+- `packages/core/src/utils/redact.ts` — redaction regex (`ARN_PATTERN`).
+  The former `apps/cli/src/utils/error-messages.ts` location is now a
+  thin re-export shim.
+- `packages/core/src/resource-plugins/plugins/*` — every validator
+  that uses `ARN_PATTERN_SOURCE` rather than string literals
 
 **Source memory.** `feedback_partition_aware_arn_matching.md`
 

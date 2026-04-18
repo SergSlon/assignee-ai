@@ -132,7 +132,8 @@ Before the first telemetry PR merges:
 
 - [ ] Privacy policy page published at a stable URL.
 - [ ] Field allowlist schema in `packages/core/src/telemetry/schema.ts`
-      with a unit test that rejects any unlisted field.
+      (v0.2.2 target — does not exist yet) with a unit test that
+      rejects any unlisted field.
 - [ ] End-to-end test that sends a record with a blocked field (e.g.
       raw intent) and asserts the serialiser drops it.
 - [ ] `assignee init` UX reviewed against the Contributor Covenant.

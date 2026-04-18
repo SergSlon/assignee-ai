@@ -68,7 +68,7 @@ when you want to understand how assignee.ai thinks.
 | Metric                         | Count                                                                                                                                                     |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Supported AWS resource types   | 37 (35 with dedicated plugins + 2 compound-only that fall through to the generic plugin: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) |
-| Compound architecture patterns | 9 first-class + 1 variant                                                                                                                                 |
+| Compound architecture patterns | 9 first-class                                                                                                                                             |
 | LangGraph pipeline nodes       | 13                                                                                                                                                        |
 | CLI commands                   | 13                                                                                                                                                        |
 | MCP server tools               | 5                                                                                                                                                         |
