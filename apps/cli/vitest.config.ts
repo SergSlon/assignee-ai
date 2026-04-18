@@ -10,10 +10,14 @@ export default defineConfig({
     mockReset: true,
     testTimeout: 30_000,
     hookTimeout: 30_000,
-    // Serialize tests within a file to eliminate coverage-v8 ENOENT race on
-    // `coverage/.tmp/coverage-*.json` (vitest@3.1.x + @vitest/coverage-v8).
-    // Story 48.8 — less runtime impact than switching to pool: "forks".
-    maxConcurrency: 1,
+    // Story 48.8 originally set `maxConcurrency: 1` here to work around a
+    // coverage-v8 ENOENT race on `coverage/.tmp/coverage-*.json` at
+    // vitest@3.1.x + @vitest/coverage-v8. Removed 2026-04-18 (Wave K2) after
+    // verifying vitest@3.2.4 + @vitest/coverage-v8@3.2.4 no longer race
+    // across three back-to-back `pnpm --filter assignee test:coverage` runs
+    // (all exit 0, zero ENOENT, zero "Cannot find coverage-*.json"). If the
+    // race re-appears on a version bump, restore `maxConcurrency: 1` and
+    // link the reproducing run.
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "json-summary", "html"],
