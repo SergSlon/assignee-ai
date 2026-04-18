@@ -25,11 +25,12 @@ if you are new to assignee.ai.
 
 Recipes for accomplishing specific goals. Assume you already know the basics.
 
-| Doc                                      | Goal                                                             |
-| ---------------------------------------- | ---------------------------------------------------------------- |
-| [drift-detection.md](drift-detection.md) | Detect and reconcile config drift between desired and live state |
-| [mcp-server.md](mcp-server.md)           | Expose assignee.ai as an MCP server to your IDE                  |
-| [testing-guide.md](testing-guide.md)     | Run the project's test suite and add new tests                   |
+| Doc                                                    | Goal                                                             |
+| ------------------------------------------------------ | ---------------------------------------------------------------- |
+| [drift-detection.md](drift-detection.md)               | Detect and reconcile config drift between desired and live state |
+| [how-to/read-a-plan-box.md](how-to/read-a-plan-box.md) | Decode every section of the `assignee plan` plan box             |
+| [mcp-server.md](mcp-server.md)                         | Expose assignee.ai as an MCP server to your IDE                  |
+| [testing-guide.md](testing-guide.md)                   | Run the project's test suite and add new tests                   |
 
 ## Reference — information-oriented
 

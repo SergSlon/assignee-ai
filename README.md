@@ -90,6 +90,8 @@ Mara has 2–8 years of experience, writes Python and TypeScript at an intermedi
 
 If that is you, Assignee.ai is for you. If you are a platform engineer at a 500+ engineer company, it is not — use Pulumi / Terraform / Crossplane.
 
+When Mara works alone, she runs `assignee plan` and `assignee apply` in her terminal. When her teammate Dev wants to drive the same provisioning from Claude Code, Cursor, or Windsurf, the same primitives flow through the [MCP Server](#mcp-server) — `plan_resource`, `apply_plan`, `destroy_resource`, `list_managed_resources`, `estimate_cost`. Same graph, same BP rules, same HITL approval; just a different entry-point. CLI and MCP are one product with two surfaces, so an intent that worked in the terminal works inside an agent harness without a second mental model.
+
 ---
 
 ## How it works
@@ -200,9 +202,19 @@ Multi-resource intents are detected by keyword matching (zero LLM latency) and p
 
 ## MCP Server
 
-The `@assignee/mcp-server` package exposes Assignee.ai as an MCP server for AI coding agents (Claude Code, Cursor, Windsurf). Tools: `plan_resource`, `apply_plan`, `list_managed_resources`, `estimate_cost`, `destroy_resource`.
+The `@assignee/mcp-server` package exposes Assignee.ai as an MCP server for AI coding agents (Claude Code, Cursor, Windsurf). It runs over **stdio transport, spawn-per-session** — the harness launches `assignee-mcp-server` as a child process on demand, no daemon required, credentials and state stay on the operator's box.
 
-See [docs/mcp-server.md](docs/mcp-server.md) and [apps/mcp-server/README.md](apps/mcp-server/README.md) for setup.
+Five tools are registered (see `apps/mcp-server/src/tools/index.ts`):
+
+- `plan_resource` — runs the 13-node graph up to the HITL gate and returns the plan box without provisioning
+- `apply_plan` — executes an approved plan through `resource_provisioner` → `status_poller`
+- `destroy_resource` — safe single-resource teardown using the per-type strategies under `packages/core/src/destroy-strategies/`
+- `list_managed_resources` — enumerates resources tagged with `assignee:managed=true` via the Resource Groups Tagging API, with the IAM-roles parallel listing path added in Story 52-2 (RGTA does not return IAM roles)
+- `estimate_cost` — pricing lookup against the `awslabs.aws-pricing-mcp-server` for a desired-state JSON
+
+The CLI is one-shot per intent; the MCP server is a long-lived child the agent can call repeatedly within a session, but it imports `createGraph` from `@assignee/core` so the graph, BP rules, and credential separation are identical to the terminal flow.
+
+Wire-up snippets for each harness live under [`apps/mcp-server/examples/`](apps/mcp-server/examples/) (`claude-code-mcp-config.json`, `cursor-mcp.json`, `windsurf-mcp-config.json`). See [docs/mcp-server.md](docs/mcp-server.md) and [apps/mcp-server/README.md](apps/mcp-server/README.md) for setup, env-var requirements, and troubleshooting.
 
 ---
 
@@ -237,6 +249,14 @@ packages/
                        fix-applicator · preflight-guard · human-approval
                        resource-provisioner · status-poller · result-formatter
                        advice-generator
+      ports/           hexagonal-architecture boundaries — nodes depend on
+                       these interfaces, concrete provider factories live
+                       behind them so adapters (Bedrock/mock LLM, CloudControl
+                       SDK) can be swapped without touching graph code:
+                       · llm-port.ts (LlmPort + LlmCallOptions with callsite
+                         token attribution)
+                       · provisioning-port.ts (ProvisioningPort with typed
+                         ProvisioningErrorKind discriminated union)
       destroy-strategies/ registry + per-type strategies (CloudFront, EIP,
                        ELBv2, EFS, IGW, RouteTable, S3, DynamoDB, …)
       types/           result.ts (Result<T,E> monad)
@@ -274,7 +294,7 @@ packages/
 
 Optional servers are spawned only when the corresponding command requires them.
 
-> **Note:** CloudFormation schemas and CCAPI provisioning are accessed directly via `@aws-sdk/client-cloudformation` and `@aws-sdk/client-cloudcontrol`. A guardrail test in `apps/cli/src/config/mcp-servers.test.ts` enforces that the legacy `cfn-mcp-server`, `ccapi-mcp-server`, and `aws-iac-mcp-server` wrappers cannot re-appear.
+> **Note:** CloudFormation schemas and CCAPI provisioning are accessed directly via `@aws-sdk/client-cloudformation` and `@aws-sdk/client-cloudcontrol`. A guardrail test in `packages/core/src/config/mcp-servers.test.ts` enforces that the legacy `cfn-mcp-server`, `ccapi-mcp-server`, and `aws-iac-mcp-server` wrappers cannot re-appear.
 
 **LLM provider:** Default `us.amazon.nova-lite-v1:0` (Bedrock). Override with `ASSIGNEE_LLM_DEFAULT=anthropic/claude-haiku-4-5` or any `provider/model-id` string.
 
