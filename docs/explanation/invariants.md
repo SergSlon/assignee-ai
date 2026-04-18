@@ -6,10 +6,13 @@ code path so the invariant stays honest: if the code moves, update the
 citation here. If the code is deleted, delete the entry.
 
 These come directly from multi-wave adversarial reviews and the
-maintainer's working notes (filenames cited inline as `feedback_*.md`
-hints — see internal coordinator notes for the source of those files).
-Read them before touching ARN handling, destroy paths, credential
-plumbing, or the redaction pipeline.
+maintainer's working notes. Filenames cited inline as `feedback_*.md`
+are author-local auto-memory pointers; the invariant rule is
+self-contained on this page. External contributors should treat the
+memory-file hints as grep keywords for commit-log archaeology, not as
+required reading. Read the invariants themselves before touching ARN
+handling, destroy paths, credential plumbing, or the redaction
+pipeline.
 
 ---
 
@@ -72,8 +75,7 @@ errors.
 **Where it's enforced.**
 
 - `packages/core/src/graph/nodes/preflight-guard/guards/placeholder-arn.ts`
-  (canonical); `apps/cli/src/nodes/preflight-guard.ts` is a thin
-  re-export shim.
+  (canonical).
 
 **Source memory.** `feedback_placeholder_arn_preflight_guard.md`
 
@@ -184,8 +186,7 @@ required for apply.
 **Where it's enforced.**
 
 - `packages/core/src/graph/nodes/plan-generator/safe-clone.ts`
-  (canonical allowlist + redactor); `apps/cli/src/nodes/plan-generator.ts`
-  is a thin re-export shim.
+  (canonical allowlist + redactor).
 
 **Source memory.** `feedback_redaction_allowlist_not_denylist.md`
 
@@ -260,8 +261,7 @@ names, role names) — users expect full ARNs in every surface.
 
 **Where it's enforced.**
 
-- `packages/core/src/graph/nodes/result-formatter.ts` (canonical);
-  `apps/cli/src/nodes/result-formatter.ts` is a thin re-export shim.
+- `packages/core/src/graph/nodes/result-formatter.ts` (canonical).
 
 **Source memory.** `feedback_arn_builder_for_display.md`
 
@@ -302,8 +302,7 @@ apply.
 **Where it's enforced.**
 
 - `packages/core/src/graph/nodes/resource-provisioner.ts` (S3 special
-  case, canonical); `apps/cli/src/nodes/resource-provisioner.ts` is a
-  thin re-export shim.
+  case, canonical).
 
 **Source memory.** AGENTS.md (moved — now documented here).
 

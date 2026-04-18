@@ -11,23 +11,18 @@
 ```console
 $ assignee plan "Create an S3 bucket named hero-demo-bucket"
 
-┌──────────────────────────────────────────────────────────────┐
-│  Assignee · Plan                                             │
-│                                                              │
-│  Type:     AWS::S3::Bucket                                   │
-│  Name:     hero-demo-bucket                                  │
-│  Region:   us-east-1                                         │
-│  Cost:     Free (under free tier) (live)                     │
-│                                                              │
-│  Best practices: 13 rules evaluated · 0 CRITICAL · 0 HIGH    │
-│    ✓ BP-S3-001 Block public access           (pass)          │
-│    ✓ BP-S3-004 Encryption at rest (AES-256)  (auto-applied)  │
-│    ✓ BP-S3-007 Versioning                    (pass)          │
-│                                                              │
-│  Proceed with apply?  [y/N]                                  │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────── Plan ───────────────────────────┐
+│                                                            │
+│   Resource Type:   AWS::S3::Bucket                         │
+│   Region:          us-east-1                               │
+│   Config:                                                  │
+│     Bucket Name   hero-demo-bucket                         │
+│   Estimated Cost:  Free (live)                             │
+│   Findings:        All checks passed                       │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
 
-? y
+Apply now? (AWS::S3::Bucket, est. Free) ▸ Yes
 ✓ Creating AWS::S3::Bucket hero-demo-bucket … done (2.1s)
   ARN: arn:aws:s3:::hero-demo-bucket
   Tags: assignee:managed-by=assignee, assignee:created=2026-04-16T…

@@ -54,11 +54,11 @@ get-resources --tag-filters Key=assignee-run-id,Values=<uuid>`). No
   migrate to Terraform or Pulumi in a single
   `aws resourcegroupstaggingapi` call, without exporting a proprietary
   state file. This is explicitly a positive trust signal, documented in
-  the [Epic 50 L10 review](../../../_bmad-output/planning-artifacts/research/epic-50/L10-moat.md).
+  the [Epic 50 L10 review](../../../_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md).
 
 ### Workflow-stickiness goals
 
-The [L10 moat review](../../../_bmad-output/planning-artifacts/research/epic-50/L10-moat.md)
+The [L10 moat review](../../../_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md)
 identifies the flip side: near-zero switching cost is fatal for
 retention. The run-ledger is the one piece of infrastructure that
 creates _workflow_ stickiness without _data_ stickiness — the user
@@ -88,9 +88,7 @@ everything this run created, in one call." The design implications:
    admission that bulk-destroy was too dangerous for v1 — the guard
    prevented `AssigneeOperator`/`Reader`/`Auditor` IAM from being
    swept, which meant the flag was always one blind `--include-iam`
-   away from a self-lockout. See the
-   [Story 50-3 handoff](../../../_bmad-output/implementation-artifacts/50-3-handoff.md)
-   for the full context.
+   away from a self-lockout.
 2. **Requires per-resource typed-name confirmation.** The current
    single-flow typed-confirm (`destroy/typed-confirm.ts`) demands the
    resource identifier to be typed back. Multiplying that over a run
@@ -101,7 +99,7 @@ everything this run created, in one call." The design implications:
    right dependency order by default. A run that provisioned a VPC +
    subnets + route tables + NAT gateway + EIPs must be destroyed in
    reverse dependency order or the deletes fail mid-way and leave
-   half-destroyed state. The [destroy pre-delete hooks](../explanation/invariants.md)
+   half-destroyed state. The [destroy pre-delete hooks](./invariants.md)
    for IGW/RouteTable handle the single-resource case; a multi-resource
    flow needs a topological sort + rollback-on-error policy that we
    have not designed yet.
@@ -154,10 +152,6 @@ lands.
 
 ## Related reading
 
-- [Story 50-10 spec](../../../_bmad-output/implementation-artifacts/50-10-moat-narrative.md)
-  — the workflow-stickiness rationale.
-- [Story 50-3 handoff](../../../_bmad-output/implementation-artifacts/50-3-handoff.md)
-  — why bulk destroy was cut and what replaced it.
 - [`oss-vs-saas.md`](./oss-vs-saas.md) — the run-ledger is OSS forever;
   drift detection on top is the future SaaS anchor.
 - [`invariants.md`](./invariants.md) — destroy-time invariants that any
