@@ -14,7 +14,7 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { CheckpointError } from "@assignee/core";
+import { CheckpointError, redactSensitive } from "@assignee/core";
 import type { EvalContext } from "@assignee/best-practices";
 import type { GraphContext } from "../../services/graph-init.js";
 import { loadCheckpointFromPath } from "../../services/checkpoint.js";
@@ -55,12 +55,19 @@ export function extractAuditIdentifier(envelope: ToolEnvelope): string {
     // Emit a structured warning so the parse failure is visible in
     // stderr tail / log aggregators; preserve the empty-string fallback
     // so the JSONL audit schema stays stable.
+    //
+    // L5-H2 hardening: route the textSnippet through redactSensitive so
+    // any ARN / 12-digit account ID that happens to be in the
+    // unparseable blob cannot leak to stderr log aggregators. Uses the
+    // canonical allowlist-shaped redactor from @assignee/core per
+    // feedback_redaction_allowlist_not_denylist memory — no local
+    // denylist regex is introduced.
     mcpLogWarn(
       "apply-plan/handler",
       "extract-audit-identifier-parse-fail",
       {
         error: err instanceof Error ? err.message : String(err),
-        textSnippet: text.slice(0, 200),
+        textSnippet: redactSensitive(text.slice(0, 200)),
       },
       "Failed to parse apply_plan envelope text as JSON; audit identifier will be empty.",
     );

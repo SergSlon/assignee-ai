@@ -109,4 +109,36 @@ describe("extractAuditIdentifier", () => {
     const [, , extras] = vi.mocked(mcpLogWarn).mock.calls[0]!;
     expect((extras as { textSnippet: string }).textSnippet.length).toBe(200);
   });
+
+  // L5-H2 hardening: parse-fail path must route textSnippet through the
+  // canonical redactSensitive allowlist before emitting to stderr log
+  // aggregators, so unparseable blobs cannot leak ARNs / 12-digit account
+  // IDs. Uses a realistic fake-but-syntactically-valid ARN + fake account
+  // ID (NOT a mocked `{}` blob) per feedback_real_data_mocks_all_cases.
+  it("redacts ARNs and account IDs from textSnippet on parse failure (L5-H2)", () => {
+    const fakeArn = "arn:aws:iam::123456789012:role/SecretRole";
+    const fakeAccount = "987654321098";
+    const leaky = `malformed { "resourceArn": "${fakeArn}", "accountId": "${fakeAccount}", `; // unterminated → JSON.parse throws
+    const envelope = {
+      content: [{ type: "text" as const, text: leaky }],
+    };
+
+    const id = extractAuditIdentifier(envelope);
+    expect(id).toBe("");
+    expect(mcpLogWarn).toHaveBeenCalledOnce();
+
+    const [, , extras] = vi.mocked(mcpLogWarn).mock.calls[0]!;
+    const snippet = (extras as { textSnippet: string }).textSnippet;
+
+    // Redaction fired — literal ARN and account ID MUST be gone.
+    expect(snippet).not.toContain(fakeArn);
+    expect(snippet).not.toContain("123456789012");
+    expect(snippet).not.toContain(fakeAccount);
+    // Allowlist placeholders ARE present — proves canonical redactor ran.
+    expect(snippet).toContain("[ARN]");
+    expect(snippet).toContain("[ACCOUNT]");
+    // Non-sensitive surrounding content preserved.
+    expect(snippet).toContain("malformed");
+    expect(snippet).toContain("resourceArn");
+  });
 });
