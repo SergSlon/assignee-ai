@@ -68,7 +68,7 @@ when you want to understand how assignee.ai thinks.
 | Metric                         | Count                                                                                                                                                     |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Supported AWS resource types   | 37 (35 with dedicated plugins + 2 compound-only that fall through to the generic plugin: `EC2::VPCGatewayAttachment`, `EC2::SubnetRouteTableAssociation`) |
-| Compound architecture patterns | 9 first-class                                                                                                                                             |
+| Compound architecture patterns | 10 first-class                                                                                                                                            |
 | LangGraph pipeline nodes       | 13                                                                                                                                                        |
 | CLI commands                   | 13                                                                                                                                                        |
 | MCP server tools               | 5                                                                                                                                                         |
@@ -80,4 +80,4 @@ when you want to understand how assignee.ai thinks.
 | LLM providers supported        | 5                                                                                                                                                         |
 | IAM credential users           | 3                                                                                                                                                         |
 | Test files                     | 307 across 4 packages (72 CLI + 24 MCP + 200 core + 11 BP) — run `pnpm test` for the live pass count                                                      |
-| RUN_E2E compound coverage      | 9/9 first-class compounds                                                                                                                                 |
+| RUN_E2E compound coverage      | 9/10 first-class compounds (vpc-public-only not yet exercised)                                                                                            |

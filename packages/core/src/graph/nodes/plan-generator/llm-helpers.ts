@@ -20,6 +20,7 @@ import {
 } from "../../../constants/cfn-keys.js";
 import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
 import { defaultMemoryService } from "../../../services/memory.js";
+import { stripPromptBoundaryTags } from "../../../llm/prompt-sanitize.js";
 import type { AgentState } from "../../graph-state.js";
 
 /**
@@ -130,7 +131,12 @@ export function buildPrompt(input: {
   } = input;
   return [
     `You are an AWS resource configuration expert. Generate the resource properties JSON for a "${resourceType}" resource.`,
-    `User intent: <user_intent>${userIntent.replace(/<\/user_intent>/gi, "")}</user_intent>`,
+    // Story 54-it1-05 (L5-H1): symmetric tag + fence strip so an attacker
+    // cannot break out of the <user_intent> block. The previous one-sided
+    // `</user_intent>` strip left opening tags and nested <system> / code
+    // fences intact. `stripPromptBoundaryTags` is defence-in-depth on top
+    // of `sanitizeUserIntent` (NFR-16) applied upstream in intent-parser.
+    `User intent: <user_intent>${stripPromptBoundaryTags(userIntent)}</user_intent>`,
     "",
     `Required properties: ${JSON.stringify(requiredKeys)}`,
     `Available properties: ${JSON.stringify(schemaKeys)}`,

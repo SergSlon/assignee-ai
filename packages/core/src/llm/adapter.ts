@@ -16,6 +16,7 @@ import type { LlmPort, LlmCallOptions } from "../ports/llm-port.js";
 import { AWS_REGION } from "../config/constants/aws.js";
 import { LlmProvider } from "../constants/llm-providers.js";
 import { recordTokenUsage, type RawLlmUsage } from "../utils/token-usage.js";
+import { redactSensitive } from "../utils/redact.js";
 import {
   DEFAULT_MAX_TOKENS,
   DEFAULT_MODEL,
@@ -75,13 +76,22 @@ export class LlmAdapter implements LlmPort {
       ] as const;
     }
 
+    // Story 54-it1-05 (L5-H2): defence-in-depth — redact ARNs + 12-digit
+    // account IDs from the outbound prompt before it leaves the process.
+    // The Bedrock path is the only active provider today, but the adapter
+    // contract is provider-agnostic and we cannot assume every future
+    // backend is equally trustworthy with raw identifiers. Allowlist-based
+    // per `feedback_redaction_allowlist_not_denylist`; partition-aware
+    // per `feedback_partition_aware_arn_matching`.
+    const redactedPrompt = redactSensitive(prompt);
+
     const [callErr, result] = await safeTry(
       generateText({
         model,
         output: Output.object({ schema }),
         maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
         ...this.guardrailOpts,
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: redactedPrompt }],
       }),
     );
 
@@ -127,12 +137,17 @@ export class LlmAdapter implements LlmPort {
       ] as const;
     }
 
+    // Story 54-it1-05 (L5-H2): defence-in-depth outbound redaction —
+    // mirrors the generateStructured path above. See that comment for
+    // rationale + invariant links.
+    const redactedPrompt = redactSensitive(prompt);
+
     const [callErr, result] = await safeTry(
       generateText({
         model,
         maxOutputTokens: options?.maxTokens ?? DEFAULT_MAX_TOKENS,
         ...this.guardrailOpts,
-        messages: [{ role: "user", content: prompt }],
+        messages: [{ role: "user", content: redactedPrompt }],
       }),
     );
 

@@ -191,7 +191,7 @@ Initial internal development baseline. Not published to npm.
   checkpoint store, pricing, testing utilities.
 - `@assignee/best-practices` — 185 YAML best-practice rules with
   SHA-256 manifest integrity.
-- Support for 37 AWS resource types, 9 compound architecture patterns.
+- Support for 37 AWS resource types, 10 compound architecture patterns.
 - 13-node LangGraph pipeline: intent_parser → schema_fetcher →
   option_elicitor → compound_dispatcher → plan_generator → bp_evaluator
   → fix_applicator → preflight_guard → human_approval →
