@@ -1,6 +1,6 @@
 /**
  * apply_plan MCP tool handler — orchestrates preflight, checkpoint
- * load, BP re-evaluation, concurrency guard, and graph execution.
+ * load, concurrency guard, BP re-evaluation, and graph execution.
  *
  * Safety mechanism: requires `confirmed: true` to proceed — prevents
  * accidental provisioning by AI agents. The agent must present the
@@ -8,32 +8,34 @@
  *
  * Story 50-5 H-3: every successful and failing apply is mirrored to
  * the persistent audit-log JSONL in addition to the existing stderr
- * `mcpLog` stream.
+ * `mcpLog` stream. Every audit write routes through `logApplyAudit`
+ * (see ./audit.ts) so the six-field envelope cannot drift between
+ * call-sites.
  *
- * @see Epic 20, Story 20.3, ADR-008, Story 50-5
+ * Story 54-it1-08 refactor: the pre-refactor inner arrow was 145 LOC
+ * with four duplicated 6-field `auditLog()` envelopes and nested
+ * try/catch blocks. Phase helpers moved into ./handler-steps.ts
+ * following the StepResult pattern (see utils/step-result.ts and
+ * destroy-resource/handler-steps.ts). Audit writes consolidated into
+ * ./audit.ts so the envelope shape is defined exactly once.
+ *
+ * @see Epic 20, Story 20.3, ADR-008, Story 50-5, Story 54-it1-08
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { CheckpointError, redactSensitive } from "@assignee/core";
-import type { EvalContext } from "@assignee/best-practices";
+import { redactSensitive } from "@assignee/core";
 import type { GraphContext } from "../../services/graph-init.js";
-import { loadCheckpointFromPath } from "../../services/checkpoint.js";
-import { auditLog } from "../../utils/audit-log.js";
 import { mcpLogWarn } from "../../utils/structured-log.js";
-import {
-  isApplyActive,
-  markApplyActive,
-  releaseApply,
-} from "./active-applies.js";
-import { evaluateCheckpointBPs } from "./bp-cache.js";
-import { runGraphFromCheckpoint } from "./graph-executor.js";
+import { releaseApply } from "./active-applies.js";
 import { applyPlanParams } from "./params.js";
+import { type ToolEnvelope } from "./result-envelope.js";
 import {
-  checkCheckpointPath,
-  checkConfirmedGate,
-  checkGraphContext,
-} from "./preflight.js";
-import { errorEnvelope, type ToolEnvelope } from "./result-envelope.js";
+  executeAndAudit,
+  guardConcurrency,
+  loadAndValidateCheckpoint,
+  reevaluateBestPractices,
+  runPreflightGuards,
+} from "./handler-steps.js";
 
 /**
  * Extracts an audit-safe identifier from an apply_plan result envelope.
@@ -81,145 +83,29 @@ export function registerApplyPlan(server: McpServer, ctx?: GraphContext): void {
     "Apply a previously generated infrastructure plan. REQUIRES confirmed: true as a safety mechanism — the AI agent must explicitly confirm before provisioning.",
     applyPlanParams,
     async ({ checkpointPath, confirmed }) => {
-      // ── Cheap preflight guards ────────────────────────────────────────
-      const confirmedError = checkConfirmedGate(confirmed);
-      if (confirmedError) return confirmedError;
+      const preflight = runPreflightGuards(confirmed, ctx, checkpointPath);
+      if (preflight.kind === "done") return preflight.response;
 
-      const ctxError = checkGraphContext(ctx);
-      if (ctxError) return ctxError;
+      const loaded = await loadAndValidateCheckpoint(checkpointPath);
+      if (loaded.kind === "done") return loaded.response;
+      const checkpoint = loaded.context;
 
-      const pathError = checkCheckpointPath(checkpointPath);
-      if (pathError) return pathError;
-
-      // ── Load and validate checkpoint ──────────────────────────────────
-      let checkpoint;
-      try {
-        checkpoint = await loadCheckpointFromPath(checkpointPath);
-      } catch (err) {
-        const message =
-          err instanceof CheckpointError
-            ? err.message
-            : `Checkpoint file not found: ${checkpointPath}. Run plan_resource first.`;
-        // Story 50-5 H-3: audit the failed load attempt. runId +
-        // resourceType may not yet be known here; use "" sentinel.
-        await auditLog({
-          tool: "apply_plan",
-          runId: "",
-          resourceType: "",
-          identifier: checkpointPath,
-          success: false,
-          errorClass:
-            err instanceof CheckpointError ? "CheckpointError" : "UnknownError",
-        });
-        return errorEnvelope({ message });
-      }
-
-      // ── Concurrency guard: one apply per checkpoint at a time ──────────
-      if (isApplyActive(checkpointPath)) {
-        await auditLog({
-          tool: "apply_plan",
-          runId: checkpoint.runId,
-          resourceType: checkpoint.resourceType,
-          identifier: checkpointPath,
-          success: false,
-          errorClass: "ApplyAlreadyActive",
-        });
-        return errorEnvelope({
-          message:
-            "This plan is already being applied. Wait for the current operation to complete.",
-        });
-      }
-      markApplyActive(checkpointPath);
+      const concurrency = await guardConcurrency(checkpoint, checkpointPath);
+      if (concurrency.kind === "done") return concurrency.response;
 
       try {
-        // ── Story 41.4: BP re-evaluation before provisioning ────────────
-        // Catches rules added or modified after the original plan was
-        // generated. MCP always enforces BPs — fail closed on error.
-        let bpFindings;
-        let preflightPassed = checkpoint.preflightPassed;
+        const bp = await reevaluateBestPractices(checkpoint, checkpointPath);
+        if (bp.kind === "done") return bp.response;
 
-        try {
-          const evalContext: EvalContext = {
-            resourceType: checkpoint.resourceType,
-            desiredState: checkpoint.desiredState,
-            userIntent: checkpoint.userIntent,
-            patternId: checkpoint.resourcePatternId ?? undefined,
-          };
-          const result = evaluateCheckpointBPs(evalContext);
-
-          if (result.blocking.length > 0) {
-            await auditLog({
-              tool: "apply_plan",
-              runId: checkpoint.runId,
-              resourceType: checkpoint.resourceType,
-              identifier: checkpointPath,
-              success: false,
-              errorClass: "BpBlocked",
-            });
-            return errorEnvelope({
-              message: `BP re-evaluation blocked apply: ${result.blocking.length} blocking finding(s) detected since the plan was generated.`,
-              blockingFindings: result.blocking.map((f) => ({
-                practiceId: f.practiceId,
-                title: f.title,
-                severity: f.severity,
-                message: f.message,
-                remediation: f.remediation,
-                consequence: f.consequence,
-              })),
-              hint: "Run plan_resource again to generate a new plan that satisfies current best practices.",
-            });
-          }
-          bpFindings = result.findings;
-        } catch (bpError: unknown) {
-          // BP evaluation failure must be fail-closed in enforce mode —
-          // block provisioning rather than silently skipping all rules.
-          preflightPassed = false;
-          await auditLog({
-            tool: "apply_plan",
-            runId: checkpoint.runId,
-            resourceType: checkpoint.resourceType,
-            identifier: checkpointPath,
-            success: false,
-            errorClass: "BpEvaluationError",
-          });
-          return errorEnvelope({
-            message: `BP evaluation failed — cannot verify security compliance. ${bpError instanceof Error ? bpError.message : String(bpError)}`,
-            hint: "Check that best-practice rules are accessible. Run plan_resource to generate a fresh plan.",
-          });
-        }
-
-        // ── Execute the graph from the checkpoint ────────────────────────
-        // ctx is narrowed by checkGraphContext above; the type-guard
+        // ctx is narrowed by runPreflightGuards above, but the type guard
         // doesn't propagate through the closure so assert non-null here.
-        const envelope = await runGraphFromCheckpoint({
-          ctx: ctx!,
-          checkpoint: {
-            runId: checkpoint.runId,
-            userIntent: checkpoint.userIntent,
-            resourceType: checkpoint.resourceType,
-            desiredState: checkpoint.desiredState,
-            estimatedMonthlyCost: checkpoint.estimatedMonthlyCost,
-            preflightPassed: checkpoint.preflightPassed,
-            elicitedOptions: checkpoint.elicitedOptions,
-            resourceQueue: checkpoint.resourceQueue,
-          },
-          bpFindings,
-          preflightPassed,
-        });
-
-        // Story 50-5 H-3: mirror the outcome to the persistent audit log.
-        const succeeded = envelope.isError !== true;
-        await auditLog({
-          tool: "apply_plan",
-          runId: checkpoint.runId,
-          resourceType: checkpoint.resourceType,
-          identifier: succeeded
-            ? extractAuditIdentifier(envelope) || checkpointPath
-            : checkpointPath,
-          success: succeeded,
-          errorClass: succeeded ? "" : "GraphExecutionError",
-        });
-        return envelope;
+        return await executeAndAudit(
+          ctx!,
+          checkpoint,
+          checkpointPath,
+          bp.context,
+          extractAuditIdentifier,
+        );
       } finally {
         releaseApply(checkpointPath);
       }
