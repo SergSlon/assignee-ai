@@ -204,7 +204,7 @@ jobs:
         # Pre-v0.2: build from source and link into PATH.
         # Available after v0.2 publish — replace with:  run: npm i -g assignee
         run: |
-          git clone https://github.com/<owner>/assignee.ai.git /tmp/assignee.ai
+          git clone https://github.com/assignee-ai/assignee.ai.git /tmp/assignee.ai
           cd /tmp/assignee.ai
           pnpm install
           pnpm build
