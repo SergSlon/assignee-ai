@@ -44,7 +44,11 @@ function makeCtx(overrides?: Partial<DestroyContext>): DestroyContext {
 describe("ec2EipStrategy", () => {
   it("returns success when ReleaseAddress succeeds", async () => {
     hoisted.mockSend.mockReset();
-    hoisted.mockSend.mockResolvedValue({});
+    // ReleaseAddressCommand returns an empty-body success response; the real
+    // AWS SDK shape is just `$metadata`.
+    hoisted.mockSend.mockResolvedValue({
+      $metadata: { httpStatusCode: 200, requestId: "test-req-eip" },
+    });
     const outcome = await ec2EipStrategy.destroy!(makeCtx());
     expect(outcome).toEqual({ success: true });
     expect(hoisted.mockSend).toHaveBeenCalledTimes(1);

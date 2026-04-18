@@ -31,7 +31,14 @@ setupDestroyServiceMocks();
 describe("destroySingleResource", () => {
   describe("DynamoDB pre-delete hook", () => {
     it("disables deletion protection before deleting", async () => {
-      mockDdbSend.mockResolvedValue({});
+      // UpdateTable + DescribeTable polls both resolve to this shape. An
+      // empty-body success (no `Table` field) means the DescribeTable poll
+      // reads `described.Table?.DeletionProtectionEnabled` as undefined →
+      // !== true → propagation-poll exits immediately (intended behavior
+      // for this happy-path test that is NOT exercising propagation).
+      mockDdbSend.mockResolvedValue({
+        $metadata: { httpStatusCode: 200, requestId: "test-req-ddb" },
+      });
       mockDeleteResource.mockResolvedValue([null, { requestToken: "tok-ddb" }]);
       mockGetRequestStatus.mockResolvedValue([
         null,
