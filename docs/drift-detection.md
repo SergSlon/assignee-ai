@@ -162,7 +162,7 @@ Each drifted resource is listed with its field differences, but no prompts are s
 Reconcile all drifted resources without interactive prompts:
 
 ```bash
-assignee reconcile --auto-reconcile
+assignee reconcile --yes
 ```
 
 A warning is displayed before proceeding. Press Enter to continue or Ctrl+C to abort.
@@ -264,4 +264,4 @@ fi
 | ------------------- | -------------------------------------- | ------- |
 | `--resource <type>` | Filter by CloudFormation resource type | all     |
 | `--dry-run`         | Preview without making changes         | false   |
-| `--auto-reconcile`  | Reconcile all without prompting        | false   |
+| `--yes`             | Reconcile all without prompting        | false   |

@@ -48,7 +48,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--json --region --bp-coverage --gaps-only --include-structural-gaps" -- "${cur}") )
       ;;
     reconcile)
-      COMPREPLY=( $(compgen -W "--resource --dry-run --auto-reconcile --yes" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--resource --dry-run --yes --auto-reconcile" -- "${cur}") )
       ;;
     doctor)
       COMPREPLY=( $(compgen -W "--json --skip-bedrock --skip-mcp --short" -- "${cur}") )

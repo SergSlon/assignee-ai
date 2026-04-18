@@ -177,18 +177,19 @@ assignee status [options]
 
 **Options:**
 
-| Flag                | Description                                                                                     | Default     |
-| ------------------- | ----------------------------------------------------------------------------------------------- | ----------- |
-| `--json`            | Output status data as JSON                                                                      | false       |
-| `--region <region>` | Filter to a specific AWS region                                                                 | all regions |
-| `--bp-coverage`     | Show BP rule coverage dashboard                                                                 | false       |
-| `--gaps-only`       | With `--bp-coverage`: print only the list of resource types with zero rules, exit 1 if any gaps | false       |
+| Flag                        | Description                                                                                                                    | Default     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------- |
+| `--json`                    | Output status data as JSON                                                                                                     | false       |
+| `--region <region>`         | Filter to a specific AWS region                                                                                                | all regions |
+| `--bp-coverage`             | Show BP rule coverage dashboard                                                                                                | false       |
+| `--gaps-only`               | Only meaningful with `--bp-coverage`. Prints just the list of resource types with zero rules, exits 1 if any gaps              | false       |
+| `--include-structural-gaps` | Only meaningful with `--bp-coverage --gaps-only`. Includes structural/cross-reference types (RouteTable, etc.) in the gap list | false       |
 
 **Behavior:**
 
 Fetches all managed resources and aggregates by type and region with cost totals. The `--bp-coverage` flag scans the best-practices rule directory and displays rules per resource type, auto-fix percentages, and coverage gaps.
 
-When `--gaps-only` is set alongside `--bp-coverage`, the full dashboard is replaced with a short "N BP coverage gaps" header followed by the list of resource types that have zero rules, and the command exits with code 1 if any gaps exist. The JSON mode returns only the `{ gaps: [...] }` array for easy CI consumption (`jq 'length'`).
+When `--gaps-only` is set alongside `--bp-coverage`, the full dashboard is replaced with a short "N BP coverage gaps" header followed by the list of resource types that have zero rules, and the command exits with code 1 if any gaps exist. The JSON mode returns only the `{ gaps: [...] }` array for easy CI consumption (`jq 'length'`). Structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS::MountTarget) are excluded from the gap list by default because their BP content lives on child resources — pass `--include-structural-gaps` to surface them.
 
 **Examples:**
 
@@ -321,11 +322,12 @@ assignee reconcile [options]
 
 **Options:**
 
-| Flag                | Description                                          | Default   |
-| ------------------- | ---------------------------------------------------- | --------- |
-| `--resource <type>` | Filter by resource type                              | all types |
-| `--dry-run`         | Show what would be reconciled without making changes | false     |
-| `--auto-reconcile`  | Reconcile all drifted resources without prompting    | false     |
+| Flag                | Description                                                                                                    | Default   |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- | --------- |
+| `--resource <type>` | Filter by resource type                                                                                        | all types |
+| `--dry-run`         | Show what would be reconciled without making changes                                                           | false     |
+| `-y, --yes`         | Non-interactive mode — reconcile every drifted resource without prompting (canonical CI flag)                  | false     |
+| `--auto-reconcile`  | _(deprecated alias for `--yes`)_ Retained for backward compatibility; may be removed in a future major version | false     |
 
 **Behavior:**
 
@@ -335,13 +337,15 @@ Runs drift detection, then for each drifted resource presents three choices:
 2. **Accept** -- accept the current live state as the new desired state
 3. **Skip** -- leave the resource as-is
 
+Pass `-y` / `--yes` for CI/CD usage to reconcile every drifted resource without prompts. The legacy `--auto-reconcile` flag still works but is deprecated — prefer `--yes`, which matches the idiom used by `assignee apply` and `assignee destroy`.
+
 **Examples:**
 
 ```bash
 assignee reconcile
 assignee reconcile --dry-run
-assignee reconcile --auto-reconcile
-assignee reconcile --resource AWS::S3::Bucket
+assignee reconcile --yes
+assignee reconcile --resource AWS::S3::Bucket --yes
 ```
 
 ### optimize
