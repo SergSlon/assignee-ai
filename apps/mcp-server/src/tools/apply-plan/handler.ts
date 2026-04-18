@@ -19,6 +19,7 @@ import type { EvalContext } from "@assignee/best-practices";
 import type { GraphContext } from "../../services/graph-init.js";
 import { loadCheckpointFromPath } from "../../services/checkpoint.js";
 import { auditLog } from "../../utils/audit-log.js";
+import { mcpLogWarn } from "../../utils/structured-log.js";
 import {
   isApplyActive,
   markApplyActive,
@@ -45,8 +46,20 @@ function extractAuditIdentifier(envelope: ToolEnvelope): string {
   try {
     const body = JSON.parse(text) as { resourceArn?: unknown };
     if (typeof body.resourceArn === "string") return body.resourceArn;
-  } catch {
-    // Non-JSON envelope (shouldn't happen) — skip identifier extraction.
+  } catch (err) {
+    // Non-JSON envelope (shouldn't happen under the documented contract).
+    // Emit a structured warning so the parse failure is visible in
+    // stderr tail / log aggregators; preserve the empty-string fallback
+    // so the JSONL audit schema stays stable.
+    mcpLogWarn(
+      "apply-plan/handler",
+      "extract-audit-identifier-parse-fail",
+      {
+        error: err instanceof Error ? err.message : String(err),
+        textSnippet: text.slice(0, 200),
+      },
+      "Failed to parse apply_plan envelope text as JSON; audit identifier will be empty.",
+    );
   }
   return "";
 }
