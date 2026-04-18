@@ -86,8 +86,12 @@ async function tryAutoDetectCheckpoint(
   return existingCheckpoint;
 }
 
-/** Build the initial state for a fresh (non-checkpoint) plan run. */
-function buildFreshPlanState(
+/**
+ * Build the initial state for a fresh (non-checkpoint) plan run.
+ * Exported so the Story-52-1 clarifier retry in phase1-gate can re-invoke
+ * the graph with a clarified intent without duplicating state assembly.
+ */
+export function buildFreshPlanState(
   ctx: Phase1Context,
   deps: Phase1Deps,
 ): Record<string, unknown> {

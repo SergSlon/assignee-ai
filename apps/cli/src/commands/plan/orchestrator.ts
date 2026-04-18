@@ -32,6 +32,7 @@ import {
   readAuthToken,
 } from "../../config/org-policy-cache.js";
 import { checkBudget } from "../../services/budget-guard.js";
+import { askClarifyingQuestion } from "../../services/clarifier.js";
 import { writePlanCheckpoint } from "./checkpoint-writer.js";
 import { runPlanToApply } from "./apply-transition.js";
 import type { ResolvedPlanArgs } from "./arg-parser.js";
@@ -65,36 +66,62 @@ export async function runPlan(
   // take effect at node-execution time.
   const resolvedConfig = await loadGlobalConfig(userConfig);
 
-  if (outputFormat !== "json") startSpinner("Generating plan...");
+  // Plan runs at most twice: once for the initial intent, optionally a
+  // second time if the first invocation fails at intent-ambiguity and the
+  // operator rephrases via the clarifier (Story 52-1). The retry is
+  // strictly one-shot — we never loop.
+  type PlanState = Awaited<ReturnType<typeof ctx.graph.invoke>>;
+  const invokePlan = async (intent: string): Promise<PlanState> => {
+    if (outputFormat !== "json") startSpinner("Generating plan...");
+    const s = await ctx.graph.invoke(
+      {
+        userIntent: intent,
+        runId: ctx.runId,
+        executionMode: ExecutionMode.PLAN,
+        startedAt: Date.now(),
+        projectDir: process.cwd(),
+        ...(resolvedSourceDir
+          ? { sourceDir: resolvedSourceDir, sourceFileCount }
+          : {}),
+        bpEnforcementLevel:
+          userConfig?.bestPractices?.enforcement ?? BPEnforcementLevel.ENFORCE,
+        ...(opts.advice === false ? { noAdvice: true } : {}),
+        ...(opts.quick === true ? { quickMode: true } : {}),
+        ...(userConfig ? { userConfig } : {}),
+        ...(orgConfig ? { orgConfig } : {}),
+        resolvedConfig,
+        ...(Object.keys(presetFields).length > 0 ? { presetFields } : {}),
+        ...(outputFormat !== "text" ? { outputFormat } : {}),
+      },
+      { configurable: { thread_id: ctx.runId }, recursionLimit: 1000 },
+    );
+    if (outputFormat !== "json") stopSpinner();
+    return s;
+  };
 
-  const finalState = await ctx.graph.invoke(
-    {
-      userIntent: ctx.intent,
-      runId: ctx.runId,
-      executionMode: ExecutionMode.PLAN,
-      startedAt: Date.now(),
-      projectDir: process.cwd(),
-      ...(resolvedSourceDir
-        ? { sourceDir: resolvedSourceDir, sourceFileCount }
-        : {}),
-      bpEnforcementLevel:
-        userConfig?.bestPractices?.enforcement ?? BPEnforcementLevel.ENFORCE,
-      ...(opts.advice === false ? { noAdvice: true } : {}),
-      ...(opts.quick === true ? { quickMode: true } : {}),
-      ...(userConfig ? { userConfig } : {}),
-      ...(orgConfig ? { orgConfig } : {}),
-      resolvedConfig,
-      ...(Object.keys(presetFields).length > 0 ? { presetFields } : {}),
-      ...(outputFormat !== "text" ? { outputFormat } : {}),
-    },
-    { configurable: { thread_id: ctx.runId }, recursionLimit: 1000 },
-  );
+  let finalState = await invokePlan(ctx.intent);
 
-  if (outputFormat !== "json") stopSpinner();
-
-  const failed =
+  let failed =
     finalState.executionStatus === ExecutionStatus.FAILED ||
     finalState.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE;
+
+  // Story 52-1: if plan failed on an ambiguous intent, offer one
+  // clarifying rephrase before surfacing the existing error. No-op in
+  // --quick / --yes / non-TTY / non-intent-failure modes.
+  if (failed && outputFormat !== "json") {
+    const rephrased = await askClarifyingQuestion({
+      state: finalState as AgentState,
+      autoApprove: false,
+      quick: opts.quick === true,
+    });
+    if (rephrased) {
+      ctx.intent = rephrased;
+      finalState = await invokePlan(rephrased);
+      failed =
+        finalState.executionStatus === ExecutionStatus.FAILED ||
+        finalState.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE;
+    }
+  }
 
   log({
     ts: new Date().toISOString(),
