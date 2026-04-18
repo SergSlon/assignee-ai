@@ -2,16 +2,18 @@
 
 You ran `assignee plan "..."` (for example, `assignee plan "an EC2 box for
 my homelab"`) and the CLI dropped a cyan-bordered "Plan" frame into your
-terminal. This guide explains every section so you can decide whether to
-accept, refine, or reject the plan.
+terminal — or, on a non-TTY pipe, a plain `=== Plan === / ============`
+block with identical contents. This guide explains every section so you
+can decide whether to accept, refine, or reject the plan.
 
 ## What you see
 
 The plan box is rendered by `renderPlanBox` (canonical source:
-`packages/core/src/utils/display-plan.ts`). On a TTY it appears inside a
-boxen frame titled `Plan`; on a non-TTY pipe it falls back to a plain
-`=== Plan === / ============` block with identical contents. The fields
-below are emitted in this order.
+`packages/core/src/utils/display-plan.ts`; `apps/cli/src/utils/display-plan.ts`
+is a legacy shim that re-exports the canonical symbols from `@assignee/core`).
+On a TTY it appears inside a boxen frame titled `Plan`; on a non-TTY pipe
+it falls back to a plain `=== Plan === / ============` block with identical
+contents. The fields below are emitted in this order.
 
 ### Compound prelude (only for compound patterns)
 
@@ -82,4 +84,4 @@ After the box, the CLI prints `Apply now?` (only on a TTY when
 - **Reject** — decline the prompt and refine your intent ("…with 50 GB
   storage and a public IP"), then re-run `assignee plan`.
 - **Inspect more** — re-run with `--verbose` for the run ID and extra
-  diagnostics, or check `docs/reference/commands.md` for related flags.
+  diagnostics, or check [`../commands.md`](../commands.md) for related flags.

@@ -83,7 +83,7 @@ opinion, and opinion is a product quality, not a monetisation surface.
 
 Users bring their own AWS account and their own Bedrock model access.
 There is no Assignee-operated LLM endpoint and no plan to build one on
-the OSS side. The [`LlmAdapter`](../../packages/core/src/llm/llm-adapter.ts)
+the OSS side. The [`LlmAdapter`](../../packages/core/src/llm/adapter.ts)
 wraps the Bedrock SDK with region / availability error hints and
 token-cost telemetry — all open.
 
@@ -150,7 +150,7 @@ re-tags a resource, or IAM permissions get rotated. Drift detection
 record) + continuous reconciliation (auto-revert or alert) is a
 per-resource-hour billable service. It's also the primary answer to
 kagent's day-2 operational story (see the
-[L10 review § Kagent delta](../../../_bmad-output/planning-artifacts/research/epic-50/L10-moat.md)).
+[L10 review § Kagent delta](../../../_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md)).
 
 ### Private BP-rule libraries
 
@@ -197,5 +197,5 @@ Two reasons:
   that unlocks the data-moat SaaS bet.
 - [`contributing-a-bp-rule.md`](./contributing-a-bp-rule.md) — the
   contribution on-ramp that community-rule network effects depend on.
-- [Epic 50 L10 review](../../../_bmad-output/planning-artifacts/research/epic-50/L10-moat.md)
+- [Epic 50 L10 review](../../../_bmad-output/planning-artifacts/_archive/research/epic-50/L10-moat.md)
   — the strategic analysis this split implements.
