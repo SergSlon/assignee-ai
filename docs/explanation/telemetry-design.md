@@ -4,6 +4,48 @@ This page documents the design of Assignee.ai's telemetry opt-in. No
 telemetry is collected today. The page exists so that when the feature
 ships it ships with a published privacy model, not as a retrofit.
 
+## Shipping milestone
+
+- **Current state**: Not implemented. Zero telemetry code in the repo
+  today. `rg "telemetry" apps/cli/src apps/mcp-server/src packages/core/src --type ts`
+  returns only the OTel exporter scaffold at
+  `packages/core/src/telemetry/otel-exporter.ts`, which is for BP rule
+  authorship — not usage telemetry. No runtime code reads
+  `telemetry.enabled` or `ASSIGNEE_TELEMETRY`.
+- **Milestone**: **v0.2.2** — _after_ the v0.2 npm-publish ships. The
+  first cohort of OSS users gets a known-good install (plan / apply /
+  destroy, config precedence, drift detection) for a release or two
+  before any data-collection prompt appears. Shipping telemetry with
+  the first public publish risks a trust flap that would cost more
+  than the usage data is worth.
+- **Why deferred to v0.2.2 specifically**: Operators should see the
+  tool work end-to-end on their own infrastructure before being asked
+  to opt in to anything. A v0.2 that prompts for telemetry on first
+  run is indistinguishable, to a suspicious operator reading the
+  install script, from a tool that phones home by default.
+- **What's ready today** (design-frozen, no code):
+  - Privacy model — the rest of this page.
+  - Opt-in schema — config key name (`telemetry.enabled`) and the
+    env-var-overrides-config rule (`ASSIGNEE_TELEMETRY=0` wins;
+    `ASSIGNEE_TELEMETRY=1` alone does nothing).
+  - Never-collect allowlist — the fields enumerated under
+    "What is NEVER collected" below.
+- **What's NOT ready** (the v0.2.2 implementation PR must land all of
+  these together or none of them):
+  - Wire-up code for a telemetry sink.
+  - OTel exporter integration for usage events (distinct from the
+    BP-authorship scaffold that already exists).
+  - `assignee init` prompt branch that writes
+    `telemetry.enabled` to `~/.assignee/config.yaml`.
+  - Config-loader logic that honors `telemetry.enabled` and the
+    `ASSIGNEE_TELEMETRY` env-var precedence rule.
+  - Every item in the "Review checklist for future implementers"
+    section below.
+
+Until v0.2.2 ships, this document is a design artifact only.
+Reviewers of any PR that adds telemetry code before v0.2 npm-publish
+completes should block the PR on these grounds alone.
+
 ## Default
 
 **Off.** The CLI does not send any telemetry to any third party unless
@@ -100,8 +142,10 @@ Before the first telemetry PR merges:
 - [ ] Retention window explicitly documented and enforced in the
       backing store.
 
-## Status
+## Design-only rule
 
 **Design only. No code.** This doc and the checklist land before the
 first line of telemetry code. Opening a PR that adds telemetry without
-the checklist items above should be blocked in review.
+the checklist items above should be blocked in review. See
+"Shipping milestone" at the top of this page for the v0.2.2 window in
+which implementation is expected to land.
