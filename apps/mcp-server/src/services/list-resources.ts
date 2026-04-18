@@ -1,15 +1,16 @@
 /**
- * Service for listing AWS resources managed by assignee.ai.
+ * MCP-side wrapper around `@assignee/core`'s `fetchManagedResources`.
  *
- * Queries the Resource Groups Tagging API for resources tagged with
- * `managed-by=assignee-ai` and enriches results with cost data from
- * the provision log.
+ * The core module is SDK-decoupled (Story 52-2); this wrapper owns the
+ * RGTA client lifecycle (long-running MCP must `destroy()` sockets
+ * per invocation) and injects an IAM-role enumerator so MCP no longer
+ * silently misses IAM roles per memory `feedback_iam_role_rgta_gap`.
  *
- * Uses shared types + ARN parser + provision-log loader from
- * `@assignee/core` (Story 49.2) so MCP and CLI list-output shapes
- * stay consistent.
+ * Credential resolution stays LAZY per memory
+ * `feedback_lazy_credential_resolution_in_mcp` — `requireAssigneeCredentials`
+ * throws per tool invocation rather than at module load.
  *
- * @see Story 20.4, Story 18.4, Story 49.2
+ * @see Story 20.4, Story 18.4, Story 49.2, Story 52-2
  */
 
 import {
@@ -18,98 +19,126 @@ import {
   type GetResourcesOutput,
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import {
+  IAMClient,
+  ListRolesCommand,
+  ListRoleTagsCommand,
+} from "@aws-sdk/client-iam";
+import {
   AssigneeTag,
-  CostEstimateLabel,
   DEFAULT_AWS_REGION,
-  loadProvisionData,
-  parseArn,
+  fetchManagedResources as coreFetchManagedResources,
   requireAssigneeCredentials,
+  type ManagedIamRole,
   type ManagedResource,
+  type RgtaMapping,
 } from "@assignee/core";
 
 export type { ManagedResource } from "@assignee/core";
-
-/** Tag key/value used to identify assignee-managed resources. */
-const TAG_KEY_MANAGED_BY = AssigneeTag.KEY;
-const TAG_VALUE_MANAGED_BY = AssigneeTag.VALUE;
 
 /** Default AWS region when none is specified. */
 const DEFAULT_REGION = process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
 
 /**
- * Fetches all resources tagged with `managed-by=assignee-ai` from AWS.
- * Paginates through all results and enriches with cost data from the
- * provision log.
+ * Enumerate tagged IAM roles — the RGTA API does NOT return IAM::Role
+ * (per memory `feedback_iam_role_rgta_gap`). We paginate `iam:ListRoles`
+ * + `iam:ListRoleTags` directly and filter client-side.
  *
- * @param region - AWS region to query (defaults to AWS_REGION env var or us-east-1)
- * @param resourceType - Optional filter by CloudFormation resource type
- * @returns Array of managed resources
+ * Failures are NON-FATAL — swallowed at the core level, which falls
+ * back to whatever RGTA returned.
+ */
+async function enumerateMcpIamRoles(region: string): Promise<ManagedIamRole[]> {
+  const creds = requireAssigneeCredentials("operator");
+  const client = new IAMClient({
+    region,
+    credentials: {
+      accessKeyId: creds.accessKeyId,
+      secretAccessKey: creds.secretAccessKey,
+      ...(creds.sessionToken ? { sessionToken: creds.sessionToken } : {}),
+    },
+  });
+  try {
+    const roles: ManagedIamRole[] = [];
+    let marker: string | undefined;
+    do {
+      const resp = await client.send(
+        new ListRolesCommand(marker ? { Marker: marker } : {}),
+      );
+      for (const role of resp.Roles ?? []) {
+        if (!role.RoleName || !role.Arn) continue;
+        const tagResp = await client.send(
+          new ListRoleTagsCommand({ RoleName: role.RoleName }),
+        );
+        const tags = tagResp.Tags ?? [];
+        const matches = tags.some(
+          (t: { Key?: string; Value?: string }) =>
+            t.Key === AssigneeTag.KEY && t.Value === AssigneeTag.VALUE,
+        );
+        if (!matches) continue;
+        const tagsRecord: Record<string, string> = {};
+        for (const t of tags as Array<{ Key?: string; Value?: string }>) {
+          if (t.Key && t.Value !== undefined) tagsRecord[t.Key] = t.Value;
+        }
+        roles.push({
+          arn: role.Arn,
+          roleName: role.RoleName,
+          createdDate: role.CreateDate?.toISOString() ?? "",
+          tags: tagsRecord,
+        });
+      }
+      marker = resp.IsTruncated ? resp.Marker : undefined;
+    } while (marker);
+    return roles;
+  } finally {
+    client.destroy();
+  }
+}
+
+/**
+ * Fetches all resources tagged with `managed-by=assignee-ai`.
+ * Paginates RGTA, merges IAM roles (new in Story 52-2), enriches with
+ * provision-log cost data.
  */
 export async function fetchManagedResources(
   region?: string,
   resourceType?: string,
 ): Promise<ManagedResource[]> {
   const resolvedRegion = region ?? DEFAULT_REGION;
-  // Story 49-HIGH-1: never fall through to the default AWS credential chain.
-  // MCP clients must resolve ASSIGNEE_OPERATOR_* explicitly or fail fast.
-  // @see feedback_lazy_credential_resolution_in_mcp
-  const client = new ResourceGroupsTaggingAPIClient({
+  const rgtaClient = new ResourceGroupsTaggingAPIClient({
     region: resolvedRegion,
     credentials: requireAssigneeCredentials("operator"),
   });
 
   try {
-    const { costMap } = loadProvisionData();
-    const resources: ManagedResource[] = [];
-    let paginationToken: string | undefined;
-
-    do {
-      const command = new GetResourcesCommand({
-        TagFilters: [
-          {
-            Key: TAG_KEY_MANAGED_BY,
-            Values: [TAG_VALUE_MANAGED_BY],
-          },
-        ],
-        ...(paginationToken ? { PaginationToken: paginationToken } : {}),
-      });
-
-      const response: GetResourcesOutput = await client.send(command);
-
-      for (const mapping of response.ResourceTagMappingList ?? []) {
-        const arn = mapping.ResourceARN ?? "";
-        const parsed = parseArn(arn);
-
-        // Look for created date from tags.
-        const createdTag = mapping.Tags?.find(
-          (t) => t.Key === "assignee-run-id",
-        );
-
-        resources.push({
-          resourceType: parsed.resourceType,
-          arn,
-          region: parsed.region || resolvedRegion,
-          createdDate: createdTag?.Value ?? CostEstimateLabel.NA,
-          estimatedMonthlyCost:
-            costMap.get(arn) ??
-            costMap.get(arn.split("/").pop() ?? "") ??
-            costMap.get(arn.split(":").pop() ?? "") ??
-            CostEstimateLabel.NA,
+    const fetchRgtaResources = async (): Promise<RgtaMapping[]> => {
+      const all: RgtaMapping[] = [];
+      let paginationToken: string | undefined;
+      do {
+        const command = new GetResourcesCommand({
+          TagFilters: [{ Key: AssigneeTag.KEY, Values: [AssigneeTag.VALUE] }],
+          ...(paginationToken ? { PaginationToken: paginationToken } : {}),
         });
-      }
+        const response: GetResourcesOutput = await rgtaClient.send(command);
+        for (const m of response.ResourceTagMappingList ?? []) all.push(m);
+        paginationToken = response.PaginationToken;
+      } while (paginationToken);
+      return all;
+    };
 
-      paginationToken = response.PaginationToken;
-    } while (paginationToken);
-
-    // Filter by resource type if specified.
-    if (resourceType) {
-      return resources.filter((r) => r.resourceType === resourceType);
-    }
-
-    return resources;
+    return await coreFetchManagedResources({
+      region: resolvedRegion,
+      fetchRgtaResources,
+      enrichWithIamRoles: () => enumerateMcpIamRoles(resolvedRegion),
+      ...(resourceType ? { resourceTypeFilter: resourceType } : {}),
+      createdDateFallback: "run-id-tag",
+      useFreeTierFallback: false,
+      onIamRoleEnumerationError: () => {
+        // Long-running MCP: swallow silently (structured log at the
+        // tool-handler layer captures the failure). This matches the
+        // pre-52-2 behavior of "IAM roles absent means missing, not
+        // error" for downstream MCP consumers.
+      },
+    });
   } finally {
-    // Story 49.3: dispose the RGTA client — long-running MCP server
-    // must not leak sockets per invocation.
-    client.destroy();
+    rgtaClient.destroy();
   }
 }
