@@ -111,4 +111,39 @@ describe("mergeEnvFile", () => {
     const content = fs.readFileSync(envPath, "utf-8");
     expect(content.endsWith("\n")).toBe(true);
   });
+
+  it("creates parent directory with 0700 mode when it does not exist", async () => {
+    // Skip on Windows — POSIX mode bits do not apply.
+    if (process.platform === "win32") return;
+
+    // Use a fresh nested directory that does NOT yet exist so mkdirSync runs.
+    const nestedDir = path.join(tmpDir, "nested-creds-dir");
+    const nestedEnvPath = path.join(nestedDir, ".env");
+
+    mergeEnvFile(nestedEnvPath, {
+      ASSIGNEE_OPERATOR_ACCESS_KEY_ID: "AKIA_PARENT_MODE",
+    });
+
+    const stat = await fs.promises.stat(nestedDir);
+    // Assert only the permission bits (0o777 mask filters out file-type bits).
+    expect(stat.mode & 0o777).toBe(0o700);
+  });
+
+  it("hardens parent directory mode to 0700 even when dir pre-existed with looser mode", async () => {
+    // Skip on Windows — POSIX mode bits do not apply.
+    if (process.platform === "win32") return;
+
+    // Pre-create the dir with world-readable 0755 to simulate umask-default mkdir.
+    const looseDir = path.join(tmpDir, "loose-creds-dir");
+    fs.mkdirSync(looseDir, { mode: 0o755 });
+    fs.chmodSync(looseDir, 0o755); // Belt-and-braces: umask may have masked the mkdirSync mode.
+    const looseEnvPath = path.join(looseDir, ".env");
+
+    mergeEnvFile(looseEnvPath, {
+      ASSIGNEE_OPERATOR_ACCESS_KEY_ID: "AKIA_PRE_EXISTING",
+    });
+
+    const stat = await fs.promises.stat(looseDir);
+    expect(stat.mode & 0o777).toBe(0o700);
+  });
 });
