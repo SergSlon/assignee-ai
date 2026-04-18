@@ -12,3 +12,13 @@ export {
   PROVISIONS_FILE,
   type ProvisionLookup,
 } from "./provision-log.js";
+export {
+  fetchManagedResources,
+  hasManagedByTag,
+  type FetchManagedResourcesOptions,
+  type RgtaFetcher,
+  type RgtaMapping,
+  type RgtaTag,
+  type ManagedIamRole,
+  type BillingEnricher,
+} from "./fetch-managed-resources.js";

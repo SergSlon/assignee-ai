@@ -1,0 +1,213 @@
+/**
+ * Shared `fetchManagedResources` — the single source of truth for
+ * merging the Resource-Groups-Tagging-API output with the provision
+ * log, IAM-role enumeration, billing enrichment, and free-tier
+ * fallbacks.
+ *
+ * Consolidates the previously-forked implementations in
+ * `apps/cli/src/services/list-resources.ts` (164 LOC, full-featured)
+ * and `apps/mcp-server/src/services/list-resources.ts` (115 LOC,
+ * silently missing IAM roles + billing per memory
+ * `feedback_iam_role_rgta_gap`). Story 52-2 / Epic 52.
+ *
+ * Design notes:
+ * - The RGTA SDK is injected via a `fetchRgtaResources` callback so
+ *   `packages/core` does not need to depend on
+ *   `@aws-sdk/client-resource-groups-tagging-api`. The callers each
+ *   own their SDK client (and their credential resolution, which
+ *   stays lazy per memory `feedback_lazy_credential_resolution_in_mcp`).
+ * - IAM-role enumeration and billing enrichment are OPTIONAL
+ *   injectors; MCP now opts into IAM-role enumeration to close the
+ *   RGTA blind spot.
+ */
+
+import { CostEstimateLabel } from "../pricing/filter-constants.js";
+import { AssigneeTag } from "../config/cfn-keys.js";
+import { RESOURCE_TYPES } from "../config/resource-types.js";
+import { getFreeTierCostLabel } from "../utils/free-tier.js";
+import { loadProvisionData } from "./provision-log.js";
+import { parseArn } from "./parse-arn.js";
+import type { ManagedResource } from "./types.js";
+
+/** Raw tag shape the RGTA injector returns (subset of AWS SDK type). */
+export interface RgtaTag {
+  Key?: string;
+  Value?: string;
+}
+
+/** Raw mapping shape the RGTA injector returns (subset of AWS SDK type). */
+export interface RgtaMapping {
+  ResourceARN?: string;
+  Tags?: RgtaTag[];
+}
+
+/**
+ * Injector the callers use to plug in their RGTA client. Must return
+ * the full paginated result set. Core drives pagination semantics by
+ * calling this exactly once per run; callers handle pagination inside.
+ */
+export type RgtaFetcher = () => Promise<RgtaMapping[]>;
+
+/** Minimal IAM-role shape merged into the ManagedResource list. */
+export interface ManagedIamRole {
+  arn: string;
+  roleName: string;
+  createdDate: string;
+  tags: Record<string, string>;
+}
+
+/** Billing-MCP enrichment callback shape. */
+export type BillingEnricher = (
+  resources: ManagedResource[],
+) => Promise<Map<string, { actualMonthlyCost: string }>>;
+
+/** Options controlling which enrichers fire and how timestamps resolve. */
+export interface FetchManagedResourcesOptions {
+  /** AWS region to stamp on resources when parseArn can't derive one. */
+  region: string;
+  /** RGTA pagination-complete fetcher (caller owns the SDK client). */
+  fetchRgtaResources: RgtaFetcher;
+  /** Optional IAM-role enumerator (RGTA doesn't cover IAM::Role). */
+  enrichWithIamRoles?: () => Promise<ManagedIamRole[]>;
+  /** Optional live-billing enrichment (Story 19.7). */
+  enrichWithBilling?: BillingEnricher;
+  /** Filter results to a single CloudFormation resource type. */
+  resourceTypeFilter?: string;
+  /**
+   * How `createdDate` falls back when not in the provision log. CLI
+   * uses `"na"`; MCP uses `"run-id-tag"` to fall back to the
+   * `assignee-run-id` tag value.
+   */
+  createdDateFallback?: "na" | "run-id-tag";
+  /**
+   * Whether `getFreeTierCostLabel` is used as a last-resort cost
+   * fallback. CLI=true, MCP=false.
+   */
+  useFreeTierFallback?: boolean;
+  /**
+   * Called when IAM-role enumeration throws. CLI writes a stderr
+   * warning; MCP logs via its structured logger. Defaults to a
+   * stderr write for parity with the original CLI behavior.
+   */
+  onIamRoleEnumerationError?: (err: unknown) => void;
+}
+
+/** Pure helper exposed for tests. */
+export function hasManagedByTag(tags: RgtaTag[] | undefined): boolean {
+  return (tags ?? []).some(
+    (t) => t.Key === AssigneeTag.KEY && t.Value === AssigneeTag.VALUE,
+  );
+}
+
+/**
+ * Enumerate all `managed-by=assignee-ai` resources — merges RGTA output
+ * with the provision log, optionally with IAM roles (RGTA blind spot)
+ * and live billing costs.
+ */
+export async function fetchManagedResources(
+  opts: FetchManagedResourcesOptions,
+): Promise<ManagedResource[]> {
+  const {
+    region,
+    fetchRgtaResources,
+    enrichWithIamRoles,
+    enrichWithBilling,
+    resourceTypeFilter,
+    createdDateFallback = "na",
+    useFreeTierFallback = false,
+    onIamRoleEnumerationError,
+  } = opts;
+
+  const { costMap, timestampMap } = loadProvisionData();
+  const resources: ManagedResource[] = [];
+
+  const mappings = await fetchRgtaResources();
+  for (const mapping of mappings) {
+    const arn = mapping.ResourceARN ?? "";
+    const parsed = parseArn(arn);
+    const arnName = arn.split("/").pop() ?? arn.split(":").pop() ?? "";
+
+    const runIdTag = mapping.Tags?.find(
+      (t) => t.Key === "assignee-run-id",
+    )?.Value;
+    const createdDate =
+      timestampMap.get(arn) ??
+      timestampMap.get(arnName) ??
+      (createdDateFallback === "run-id-tag" && runIdTag
+        ? runIdTag
+        : CostEstimateLabel.NA);
+
+    const freeTierLabel = useFreeTierFallback
+      ? getFreeTierCostLabel(parsed.resourceType)
+      : undefined;
+
+    resources.push({
+      resourceType: parsed.resourceType,
+      arn,
+      region: parsed.region || region,
+      createdDate,
+      estimatedMonthlyCost:
+        costMap.get(arn) ??
+        costMap.get(arnName) ??
+        freeTierLabel ??
+        CostEstimateLabel.NA,
+    });
+  }
+
+  // ── IAM::Role merge (closes feedback_iam_role_rgta_gap for MCP) ────
+  if (enrichWithIamRoles) {
+    try {
+      const iamRoles = await enrichWithIamRoles();
+      const seenArns = new Set(resources.map((r) => r.arn));
+      for (const role of iamRoles) {
+        if (seenArns.has(role.arn)) continue;
+        const freeTierLabel = useFreeTierFallback
+          ? getFreeTierCostLabel(RESOURCE_TYPES.IAM_ROLE)
+          : undefined;
+        resources.push({
+          resourceType: RESOURCE_TYPES.IAM_ROLE,
+          arn: role.arn,
+          region: "global",
+          createdDate:
+            timestampMap.get(role.arn) ??
+            timestampMap.get(role.roleName) ??
+            role.createdDate,
+          estimatedMonthlyCost:
+            costMap.get(role.arn) ??
+            costMap.get(role.roleName) ??
+            freeTierLabel ??
+            CostEstimateLabel.NA,
+        });
+      }
+    } catch (err) {
+      if (onIamRoleEnumerationError) {
+        onIamRoleEnumerationError(err);
+      } else {
+        process.stderr.write(
+          `⚠ Warning: Could not enumerate IAM roles (${
+            err instanceof Error ? err.message : String(err)
+          }). Run 'assignee setup' to refresh operator permissions if this persists.\n`,
+        );
+      }
+    }
+  }
+
+  // ── Billing enrichment (Story 19.7) ───────────────────────────────
+  if (enrichWithBilling && resources.length > 0) {
+    try {
+      const billingMap = await enrichWithBilling(resources);
+      for (const resource of resources) {
+        const billingData = billingMap.get(resource.arn);
+        if (billingData) {
+          resource.estimatedMonthlyCost = billingData.actualMonthlyCost;
+        }
+      }
+    } catch {
+      // Billing MCP unavailable — keep provision log costs.
+    }
+  }
+
+  return resourceTypeFilter
+    ? resources.filter((r) => r.resourceType === resourceTypeFilter)
+    : resources;
+}

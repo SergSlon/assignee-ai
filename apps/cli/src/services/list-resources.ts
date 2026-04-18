@@ -1,11 +1,12 @@
 /**
- * Service for listing AWS resources managed by assignee.ai.
+ * CLI-side wrapper around `@assignee/core`'s `fetchManagedResources`.
  *
- * Queries the Resource Groups Tagging API for resources tagged with
- * `managed-by=assignee-ai` and enriches results with cost data from
- * the provision log when available.
+ * The core module is transport-agnostic and SDK-decoupled (Story 52-2);
+ * this wrapper owns the RGTA client construction and injects the
+ * CLI-specific enrichers: `fetchManagedIamRoles` (IAM::Role gap) and
+ * `fetchBillingData` (Billing MCP live costs).
  *
- * @see Story 18.4, FR-40
+ * @see Story 18.4, Story 19.7, Story 49.2, Story 52-2
  */
 
 import {
@@ -15,33 +16,23 @@ import {
 } from "@aws-sdk/client-resource-groups-tagging-api";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
-  CostEstimateLabel,
-  RESOURCE_TYPES as CORE_RESOURCE_TYPES,
-  loadProvisionData,
-  parseArn,
+  fetchManagedResources as coreFetchManagedResources,
   type ManagedResource,
+  type RgtaMapping,
 } from "@assignee/core";
 import { AWS_REGION } from "../config/constants.js";
 import { operatorCredentials } from "../config/operator-credentials.js";
 import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "../utils/tags.js";
 import { fetchBillingData } from "./billing.js";
-import { getFreeTierCostLabel } from "../utils/free-tier.js";
-import {
-  fetchManagedIamRoles,
-  IAM_ROLE_RESOURCE_TYPE,
-} from "./iam-role-inventory.js";
+import { fetchManagedIamRoles } from "./iam-role-inventory.js";
 
 // Re-export for consumers that import from this module.
 export { arnToCloudFormationType, parseArn } from "@assignee/core";
 export type { ManagedResource } from "@assignee/core";
 
 /**
- * Fetches all resources tagged with `managed-by=assignee-ai` from AWS.
- * Paginates through all results and enriches with cost data from the provision log.
- *
- * @param region - AWS region to query (defaults to AWS_REGION constant)
- * @param mcpTools - Optional MCP tools for live billing data (Story 19.7)
- * @returns Array of managed resources
+ * Fetches all resources tagged with `managed-by=assignee-ai` from AWS,
+ * enriched with IAM-role + provision-log + billing data.
  */
 export async function fetchManagedResources(
   region?: string,
@@ -61,104 +52,37 @@ export async function fetchManagedResources(
       : {}),
   });
 
-  const { costMap, timestampMap } = loadProvisionData();
-  const resources: ManagedResource[] = [];
-  let paginationToken: string | undefined;
-
-  do {
-    const command = new GetResourcesCommand({
-      TagFilters: [
-        {
-          Key: TAG_KEY_MANAGED_BY,
-          Values: [TAG_VALUE_MANAGED_BY],
-        },
-      ],
-      ...(paginationToken ? { PaginationToken: paginationToken } : {}),
-    });
-
-    const response: GetResourcesOutput = await client.send(command);
-
-    for (const mapping of response.ResourceTagMappingList ?? []) {
-      const arn = mapping.ResourceARN ?? "";
-      const parsed = parseArn(arn);
-
-      // Use provision log timestamp; fall back to "N/A"
-      // Try matching by full ARN, then by resource name suffix
-      const arnName = arn.split("/").pop() ?? arn.split(":").pop() ?? "";
-      const createdDate =
-        timestampMap.get(arn) ??
-        timestampMap.get(arnName) ??
-        CostEstimateLabel.NA;
-
-      resources.push({
-        resourceType: parsed.resourceType,
-        arn,
-        region: parsed.region || resolvedRegion,
-        createdDate,
-        estimatedMonthlyCost:
-          costMap.get(arn) ??
-          costMap.get(arnName) ??
-          getFreeTierCostLabel(parsed.resourceType) ??
-          CostEstimateLabel.NA,
+  const fetchRgtaResources = async (): Promise<RgtaMapping[]> => {
+    const all: RgtaMapping[] = [];
+    let paginationToken: string | undefined;
+    do {
+      const command = new GetResourcesCommand({
+        TagFilters: [
+          { Key: TAG_KEY_MANAGED_BY, Values: [TAG_VALUE_MANAGED_BY] },
+        ],
+        ...(paginationToken ? { PaginationToken: paginationToken } : {}),
       });
-    }
+      const response: GetResourcesOutput = await client.send(command);
+      for (const m of response.ResourceTagMappingList ?? []) all.push(m);
+      paginationToken = response.PaginationToken;
+    } while (paginationToken);
+    return all;
+  };
 
-    paginationToken = response.PaginationToken;
-  } while (paginationToken);
-
-  // ── IAM::Role parallel listing ─────────────────────────────────────
-  // The Resource Groups Tagging API does NOT return AWS::IAM::Role
-  // resources (it covers users, groups, managed policies, server
-  // certificates, and SAML providers but not roles). Without this
-  // fallback, freshly-tagged roles created by `assignee apply` are
-  // invisible to `list` and `destroy --all`. See iam-role-inventory.ts.
-  //
-  // Failures here are non-fatal — log to stderr and continue with
-  // whatever RGTA returned, so a missing iam:ListRoles permission
-  // never silently breaks the rest of the inventory.
-  try {
-    const iamRoles = await fetchManagedIamRoles();
-    const seenArns = new Set(resources.map((r) => r.arn));
-    for (const role of iamRoles) {
-      if (seenArns.has(role.arn)) continue;
-      resources.push({
-        resourceType: IAM_ROLE_RESOURCE_TYPE,
-        arn: role.arn,
-        region: "global",
-        createdDate:
-          timestampMap.get(role.arn) ??
-          timestampMap.get(role.roleName) ??
-          role.createdDate,
-        estimatedMonthlyCost:
-          costMap.get(role.arn) ??
-          costMap.get(role.roleName) ??
-          getFreeTierCostLabel(CORE_RESOURCE_TYPES.IAM_ROLE) ??
-          CostEstimateLabel.NA,
-      });
-    }
-  } catch (err) {
-    process.stderr.write(
-      `⚠ Warning: Could not enumerate IAM roles (${
-        err instanceof Error ? err.message : String(err)
-      }). Run 'assignee setup' to refresh operator permissions if this persists.\n`,
-    );
-  }
-
-  // Story 19.7: Enrich with live billing data from the Billing MCP server.
-  // Overrides provision log costs when billing MCP data is available.
-  if (mcpTools && mcpTools.length > 0 && resources.length > 0) {
-    try {
-      const billingMap = await fetchBillingData(resources, mcpTools);
-      for (const resource of resources) {
-        const billingData = billingMap.get(resource.arn);
-        if (billingData) {
-          resource.estimatedMonthlyCost = billingData.actualMonthlyCost;
+  return coreFetchManagedResources({
+    region: resolvedRegion,
+    fetchRgtaResources,
+    enrichWithIamRoles: () => fetchManagedIamRoles(),
+    ...(mcpTools && mcpTools.length > 0
+      ? {
+          enrichWithBilling: async (resources) =>
+            (await fetchBillingData(resources, mcpTools)) as Map<
+              string,
+              { actualMonthlyCost: string }
+            >,
         }
-      }
-    } catch {
-      // Billing MCP unavailable — keep provision log costs
-    }
-  }
-
-  return resources;
+      : {}),
+    createdDateFallback: "na",
+    useFreeTierFallback: true,
+  });
 }
