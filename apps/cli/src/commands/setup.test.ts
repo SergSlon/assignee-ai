@@ -49,8 +49,20 @@ vi.mock("@aws-sdk/client-iam", () => {
   };
 });
 
-// Mock CloudWatch Logs and Bedrock clients (used by Bedrock logging setup)
-const mockCwlSend = vi.fn().mockResolvedValue({});
+// Mock CloudWatch Logs and Bedrock clients (used by Bedrock logging setup).
+// The commands actually dispatched to these clients — CreateLogGroupCommand,
+// PutResourcePolicyCommand, PutModelInvocationLoggingConfigurationCommand —
+// are all "empty-success" in the AWS SDK (real response carries only
+// $metadata; no business fields). Use a realistic $metadata shape as the
+// default so the mock is honest against the SDK contract.
+const mockCwlSend = vi.fn().mockResolvedValue({
+  $metadata: {
+    httpStatusCode: 200,
+    requestId: "test-req-cwl-default",
+    attempts: 1,
+    totalRetryDelay: 0,
+  },
+});
 vi.mock("@aws-sdk/client-cloudwatch-logs", () => {
   class CloudWatchLogsClient {
     send = mockCwlSend;
@@ -64,7 +76,14 @@ vi.mock("@aws-sdk/client-cloudwatch-logs", () => {
   };
 });
 
-const mockBedrockSend = vi.fn().mockResolvedValue({});
+const mockBedrockSend = vi.fn().mockResolvedValue({
+  $metadata: {
+    httpStatusCode: 200,
+    requestId: "test-req-bedrock-default",
+    attempts: 1,
+    totalRetryDelay: 0,
+  },
+});
 vi.mock("@aws-sdk/client-bedrock", () => {
   class BedrockClient {
     send = mockBedrockSend;
@@ -161,8 +180,24 @@ describe("setup command", () => {
       .mockImplementation(() => undefined as never);
 
     // Re-arm Bedrock and CWL default resolutions wiped by mockReset.
-    mockBedrockSend.mockResolvedValue({});
-    mockCwlSend.mockResolvedValue({});
+    // Commands dispatched here are empty-success SDK commands; realistic
+    // shape is just $metadata.
+    mockBedrockSend.mockResolvedValue({
+      $metadata: {
+        httpStatusCode: 200,
+        requestId: "test-req-bedrock-rearm",
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    });
+    mockCwlSend.mockResolvedValue({
+      $metadata: {
+        httpStatusCode: 200,
+        requestId: "test-req-cwl-rearm",
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    });
 
     // Default: STS returns an account ID
     mockStsSend.mockResolvedValue({
@@ -171,7 +206,14 @@ describe("setup command", () => {
     });
 
     // Default: Bedrock client send resolves successfully (mockReset clears it)
-    mockBedrockSend.mockResolvedValue({});
+    mockBedrockSend.mockResolvedValue({
+      $metadata: {
+        httpStatusCode: 200,
+        requestId: "test-req-bedrock-default-rearm",
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    });
 
     // Default IAM responses
     let accessKeyCounter = 0;

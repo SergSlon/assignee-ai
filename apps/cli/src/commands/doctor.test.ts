@@ -146,7 +146,20 @@ describe("checkCredentials", () => {
       "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
     const section = await checkCredentials({
       stsClientFactory: () => ({
-        send: vi.fn().mockResolvedValue({}),
+        // Intentionally empty identity body: production branches on
+        // `!result.Account || !result.Arn`. We keep Account/Arn absent
+        // (that's the test signal) but attach a realistic $metadata
+        // envelope so the mock matches the real SDK response shape —
+        // GetCallerIdentity always returns $metadata even when the
+        // payload is empty.
+        send: vi.fn().mockResolvedValue({
+          $metadata: {
+            httpStatusCode: 200,
+            requestId: "test-req-sts-empty-identity",
+            attempts: 1,
+            totalRetryDelay: 0,
+          },
+        }),
       }),
     });
     const operator = section.subs.find((s) => s.label.trim() === "operator");

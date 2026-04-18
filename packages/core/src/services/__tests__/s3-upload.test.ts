@@ -154,9 +154,22 @@ describe("uploadStaticSite", () => {
   beforeEach(async () => {
     tmpDir = mkdtempSync(join(tmpdir(), "s3-upload-test-"));
 
-    // Reset mock to get a fresh send function
+    // Reset mock to get a fresh send function. Real PutObjectCommand
+    // response shape: { ETag, VersionId, ServerSideEncryption, $metadata }.
+    // Tests don't read any of these off the result, but a realistic shape
+    // keeps the mock honest against the production SDK contract.
     const { S3Client } = await import("@aws-sdk/client-s3");
-    mockSend = vi.fn().mockResolvedValue({});
+    mockSend = vi.fn().mockResolvedValue({
+      ETag: '"d41d8cd98f00b204e9800998ecf8427e"',
+      VersionId: "null",
+      ServerSideEncryption: "AES256",
+      $metadata: {
+        httpStatusCode: 200,
+        requestId: "test-req-s3-put-upload",
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Partial mock of S3Client for test isolation (only `send` is exercised; full client shape has dozens of internal fields irrelevant to the unit under test)
     vi.mocked(S3Client).mockImplementation(() => ({ send: mockSend }) as any);
   });
@@ -302,8 +315,17 @@ describe("configureBucketPolicy", () => {
   let mockSend: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
+    // PutBucketPolicyCommand is an empty-success command — the real SDK
+    // response carries only $metadata. Use the realistic shape.
     const { S3Client } = await import("@aws-sdk/client-s3");
-    mockSend = vi.fn().mockResolvedValue({});
+    mockSend = vi.fn().mockResolvedValue({
+      $metadata: {
+        httpStatusCode: 200,
+        requestId: "test-req-s3-put-bucket-policy",
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Partial mock of S3Client for test isolation (only `send` is exercised; full client shape has dozens of internal fields irrelevant to the unit under test)
     vi.mocked(S3Client).mockImplementation(() => ({ send: mockSend }) as any);
   });
@@ -348,8 +370,22 @@ describe("s3-upload fail-closed credential enforcement", () => {
     process.env["AWS_ACCESS_KEY_ID"] = "shell-leak-key";
     process.env["AWS_SECRET_ACCESS_KEY"] = "shell-leak-secret";
 
+    // These tests all assert mockSend was NEVER called (fail-closed before
+    // any SDK roundtrip), so the resolved value is belt-and-suspenders. A
+    // realistic PutObjectCommand shape (the most-likely command to leak)
+    // makes the mock honest if the guard ever regresses.
     const { S3Client } = await import("@aws-sdk/client-s3");
-    mockSend = vi.fn().mockResolvedValue({});
+    mockSend = vi.fn().mockResolvedValue({
+      ETag: '"d41d8cd98f00b204e9800998ecf8427e"',
+      VersionId: "null",
+      ServerSideEncryption: "AES256",
+      $metadata: {
+        httpStatusCode: 200,
+        requestId: "test-req-s3-failclosed-should-not-run",
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Partial mock of S3Client for test isolation (only `send` is exercised; full client shape has dozens of internal fields irrelevant to the unit under test)
     vi.mocked(S3Client).mockImplementation(() => ({ send: mockSend }) as any);
   });

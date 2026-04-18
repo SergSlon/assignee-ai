@@ -566,7 +566,30 @@ describe("preflightGuardNode", () => {
       // Common case: user creates an IAM Role with no managed policies
       // attached (just a trust policy). No iam:GetPolicy calls should
       // fire because there's nothing to verify.
-      sendMock.mockResolvedValue({});
+      // Realistic iam:GetPolicy response shape (belt-and-suspenders —
+      // the test asserts sendMock was NEVER called, so this value is
+      // only observed if the guard regresses).
+      sendMock.mockResolvedValue({
+        Policy: {
+          PolicyName: "AmazonS3ReadOnlyAccess",
+          PolicyId: "ANPAIZKJKSPATGR2LLWAQ",
+          Arn: "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+          Path: "/",
+          DefaultVersionId: "v3",
+          AttachmentCount: 0,
+          PermissionsBoundaryUsageCount: 0,
+          IsAttachable: true,
+          Description: "Provides read only access to all S3 buckets",
+          CreateDate: new Date("2015-02-06T18:41:11Z"),
+          UpdateDate: new Date("2023-10-17T17:05:43Z"),
+        },
+        $metadata: {
+          httpStatusCode: 200,
+          requestId: "test-req-iam-get-policy-no-arns",
+          attempts: 1,
+          totalRetryDelay: 0,
+        },
+      });
 
       const result = await preflightGuardNode(
         makeState({
@@ -848,7 +871,30 @@ describe("preflightGuardNode", () => {
       // Verifier is scoped to AWS::IAM::Role only — Lambda, EC2, etc.
       // may also have ManagedPolicyArns-shaped fields but those aren't
       // the bug we're catching.
-      sendMock.mockResolvedValue({});
+      // Realistic iam:GetPolicy response shape (belt-and-suspenders —
+      // the test asserts sendMock was NEVER called, so this value is
+      // only observed if the scoping guard regresses).
+      sendMock.mockResolvedValue({
+        Policy: {
+          PolicyName: "AmazonS3ReadOnlyAccess",
+          PolicyId: "ANPAIZKJKSPATGR2LLWAQ",
+          Arn: "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+          Path: "/",
+          DefaultVersionId: "v3",
+          AttachmentCount: 0,
+          PermissionsBoundaryUsageCount: 0,
+          IsAttachable: true,
+          Description: "Provides read only access to all S3 buckets",
+          CreateDate: new Date("2015-02-06T18:41:11Z"),
+          UpdateDate: new Date("2023-10-17T17:05:43Z"),
+        },
+        $metadata: {
+          httpStatusCode: 200,
+          requestId: "test-req-iam-get-policy-non-role",
+          attempts: 1,
+          totalRetryDelay: 0,
+        },
+      });
 
       const result = await preflightGuardNode(
         makeState({

@@ -126,9 +126,21 @@ describe("MCP Protocol Compliance", () => {
         name: "assignee-ai-test",
         version: "0.1.0",
       });
+      // This test only asserts that `registerTools()` does not throw — the
+      // graph is NEVER invoked. The mocked `invoke` resolves to a realistic
+      // agent-graph terminal state (the same shape used in the
+      // "large response handling" test below) so the mock matches the
+      // production `CompiledGraph.invoke` return contract even though
+      // the test doesn't read it.
       const ctx: GraphContext = {
         graph: {
-          invoke: vi.fn().mockResolvedValue({}),
+          invoke: vi.fn().mockResolvedValue({
+            executionStatus: "success",
+            resourceType: "AWS::S3::Bucket",
+            desiredState: { BucketName: "test-bucket" },
+            estimatedMonthlyCost: "$0.00",
+            preflightPassed: true,
+          }),
           getState: vi.fn().mockResolvedValue({ values: {}, next: [] }),
         },
         cleanup: vi.fn().mockResolvedValue(undefined),
