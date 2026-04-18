@@ -7,38 +7,28 @@
  * Safety mechanism: requires `confirmed: true` to proceed — same pattern as apply_plan.
  * The agent must present resource details to the user and get explicit approval first.
  *
- * SOLID refactor (Wave 6b F5a): this entrypoint is now a thin MCP tool handler
- * that composes sub-modules under `./destroy-resource/`:
+ * SOLID refactor (Wave 6b F5a + Story 53-it1-09): this entrypoint is a
+ * thin MCP tool handler that composes sub-modules under `./destroy-resource/`:
  *   - resolve.ts         — RGTA lookup + ARN tag verification
  *   - sts-cache.ts       — operator account-id cache (poison-proof per Wave 4)
  *   - dispatcher.ts      — poll + NotFound classification + pre-destroy hook
  *   - error-envelope.ts  — MCP response shape
  *   - credentials.ts     — operator credential bootstrap + RGTA client init
+ *   - handler-steps.ts   — phase helpers (resolve / guard / pre-destroy /
+ *                          TOCTOU / dispatch / error-classify) so the handler
+ *                          body stays a flat sequence of early-return steps
+ *   - audit.ts           — single audit-log surface (`logDestroyAudit`) used
+ *                          by every outcome branch
  *
- * @see Story 18.5 (CLI destroy), Epic 20 (MCP tools)
+ * @see Story 18.5 (CLI destroy), Epic 20 (MCP tools), Story 53-it1-09 (handler refactor)
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import {
-  CloudControlClient,
-  DeleteResourceCommand,
-} from "@aws-sdk/client-cloudcontrol";
-import {
-  CCAPI_FALLBACK_TYPES,
-  CCAPI_REDIRECT_TYPES,
-  DEFAULT_AWS_REGION,
-  MissingAssigneeCredentialsError,
-} from "@assignee/core";
-import {
-  buildErrorResponse,
-  buildSuccessResponse,
-  DESTROY_ERROR_CODES,
-} from "./destroy-resource/error-envelope.js";
+import type { CloudControlClient } from "@aws-sdk/client-cloudcontrol";
+import { DEFAULT_AWS_REGION } from "@assignee/core";
 import { bootstrapOperatorCredentials } from "./destroy-resource/credentials.js";
 import {
-  isArn,
-  resolveResource,
   arnToResourceType as resolveArnToResourceType,
   extractIdentifierFromArn as resolveExtractIdentifierFromArn,
 } from "./destroy-resource/resolve.js";
@@ -47,14 +37,15 @@ import {
   resetOperatorAccountCache,
 } from "./destroy-resource/sts-cache.js";
 import {
-  classifyNotFoundShortCircuit,
-  pollDeleteStatus,
-  runPreDestroyHook,
-  verifyTagBeforeDelete,
-} from "./destroy-resource/dispatcher.js";
-import type { ResolvedResource } from "./destroy-resource/types.js";
-import { mcpLogWarn } from "../utils/structured-log.js";
-import { auditLog } from "../utils/audit-log.js";
+  buildCcClient,
+  classifyDestroyError,
+  dispatchDeleteAndPoll,
+  dryRunResponse,
+  guardUnsupportedTypes,
+  resolveStep,
+  runPreDestroyStep,
+  toctouReverifyStep,
+} from "./destroy-resource/handler-steps.js";
 
 // ── Public re-exports (preserve the pre-refactor import surface) ────────────
 // Existing tests import these from `../tools/destroy-resource.js`.
@@ -100,7 +91,6 @@ export function registerDestroyResource(server: McpServer): void {
     "Destroy a managed AWS resource by ARN or name. REQUIRES confirmed: true as a safety mechanism — the AI agent must present resource details and get explicit user approval before destroying.",
     destroyResourceParams,
     async ({ resource_identifier, confirmed }) => {
-      // ── Lazy operator credential resolution (P0-1) ───────────────────
       const region = DEFAULT_REGION;
       const bootstrap = bootstrapOperatorCredentials(region);
       if (!bootstrap.ok) return bootstrap.error;
@@ -113,258 +103,47 @@ export function registerDestroyResource(server: McpServer): void {
         // Capture start time before resolve so the TOCTOU SECURITY log line
         // reflects the full resolve→delete window observed by the operator.
         const resolveStartMs = Date.now();
-        let resolved: ResolvedResource | null;
-        try {
-          resolved = await resolveResource(
-            resource_identifier,
-            taggingClient,
-            region,
-          );
-        } catch (err) {
-          return buildErrorResponse(
-            `Failed to resolve resource: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
 
-        if (!resolved) {
-          // NO ARN fallback that bypasses tag verification. If RGTA cannot
-          // prove managed-by=assignee-ai, refuse to delete.
-          const isArnInput = isArn(resource_identifier);
-          const message = isArnInput
-            ? `Could not verify "${resource_identifier}" is managed by assignee.ai. The Resource Groups Tagging API did not return this ARN with a managed-by=assignee-ai tag after retries. Destroy was refused for safety.`
-            : `No managed resource found matching "${resource_identifier}". Use list_managed_resources to see available resources.`;
-          const hint = isArnInput
-            ? "Only resources tagged managed-by=assignee-ai can be destroyed via this tool. If the resource was just created, the tagging API may not have indexed it yet — wait a minute and retry. If the resource is not managed by assignee.ai, delete it through the AWS Console or CLI."
-            : undefined;
-          return buildErrorResponse(message, hint);
-        }
+        const resolvedStep = await resolveStep(
+          resource_identifier,
+          taggingClient,
+          region,
+        );
+        if (resolvedStep.kind === "done") return resolvedStep.response;
+        const resolved = resolvedStep.context;
 
         // ── Dry-run: return resource details without deleting ─────────────
-        if (!confirmed) {
-          return buildSuccessResponse({
-            status: "PENDING_CONFIRMATION",
-            message:
-              "Resource resolved. Set confirmed: true to proceed with destruction.",
-            resource: {
-              arn: resolved.arn,
-              resourceType: resolved.resourceType,
-              region: resolved.region,
-              identifier: resolved.identifier,
-            },
-            hint: "Present these details to the user and get explicit approval before setting confirmed: true.",
-          });
-        }
+        if (!confirmed) return dryRunResponse(resolved);
 
-        // ── Check for redirect types (cannot be deleted via CCAPI) ────────
-        if (CCAPI_REDIRECT_TYPES[resolved.resourceType]) {
-          return buildErrorResponse(
-            `${resolved.resourceType} cannot be deleted through assignee.ai. This resource type requires manual deletion.`,
-          );
-        }
-
-        // ── Check for SDK fallback types (not supported in MCP server) ────
-        const fallbackSet = new Set(
-          Object.values(CCAPI_FALLBACK_TYPES) as string[],
+        // ── Reject redirect / SDK-fallback resource types ─────────────────
+        const unsupported = guardUnsupportedTypes(
+          resolved,
+          resource_identifier,
         );
-        if (fallbackSet.has(resolved.resourceType)) {
-          return buildErrorResponse(
-            `${resolved.resourceType} requires SDK fallback deletion which is not yet supported in the MCP server. Use the CLI: assignee destroy ${resource_identifier}`,
-          );
-        }
+        if (unsupported.kind === "done") return unsupported.response;
 
         // ── Initialize CloudControl client in the resource's region ───────
-        let ccClient: CloudControlClient;
+        const cc = buildCcClient(resolved, operatorCreds);
+        if (cc.kind === "done") return cc.response;
+        ccClientRef = cc.context;
+
+        // ── Pre-delete hooks (IGW/RouteTable etc via strategy registry) ──
+        const preHook = await runPreDestroyStep(resolved);
+        if (preHook.kind === "done") return preHook.response;
+
+        // ── TOCTOU mitigation: re-verify managed-by tag before dispatch ──
+        const toctou = await toctouReverifyStep(
+          resolved,
+          taggingClient,
+          resolveStartMs,
+        );
+        if (toctou.kind === "done") return toctou.response;
+
+        // ── Delete via CloudControl API + poll + audit ────────────────────
         try {
-          ccClient = new CloudControlClient({
-            region: resolved.region,
-            credentials: operatorCreds,
-          });
-          ccClientRef = ccClient;
+          return await dispatchDeleteAndPoll(ccClientRef, resolved);
         } catch (err) {
-          return buildErrorResponse(
-            `Failed to initialize CloudControl client: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-
-        // ── Pre-delete hooks (delegated to strategy registry) ─────────────
-        try {
-          await runPreDestroyHook(
-            resolved.resourceType,
-            resolved.identifier,
-            resolved.region,
-          );
-        } catch (preHookErr: unknown) {
-          // Epic 49 review HIGH-2: `runPreDestroyHook` only rethrows
-          // `MissingAssigneeCredentialsError` — operator misconfig.
-          // Every other hook failure is swallowed + logged inside the
-          // dispatcher. Abort the destroy with an actionable message so
-          // the user isn't left chasing a downstream DependencyViolation.
-          if (preHookErr instanceof MissingAssigneeCredentialsError) {
-            return buildErrorResponse(
-              `Pre-destroy hook for ${resolved.resourceType} needs operator credentials: ${preHookErr.message}`,
-              "Set ASSIGNEE_OPERATOR_ACCESS_KEY_ID and ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY in the MCP server environment, or run 'assignee setup' to create the IAM users, then retry the destroy.",
-            );
-          }
-          throw preHookErr;
-        }
-
-        // ── TOCTOU mitigation: re-verify managed-by tag immediately before
-        //    DeleteResource dispatch. Closes the resolve→delete race where
-        //    an attacker with tag:UntagResources could strip the tag after
-        //    we resolved. See story 48.4 and invariants.md "Destroy TOCTOU
-        //    window". Composite-identifier resources (no ARN) bypass.
-        try {
-          const recheck = await verifyTagBeforeDelete(
-            resolved,
-            taggingClient,
-            resolveStartMs,
-            resolved.region,
-          );
-          if (!recheck.ok) {
-            // Intentionally unredacted: operator owns the ARN by virtue of
-            // the first verify passing, and the SOC needs it for forensic
-            // CloudTrail correlation. See feedback_redaction_allowlist_not_denylist.
-            mcpLogWarn(
-              "destroy-resource",
-              "toctou_tag_missing",
-              { warnLine: recheck.warnLine },
-              recheck.warnLine,
-            );
-            return buildErrorResponse(
-              `Destroy refused: the managed-by=assignee-ai tag on ${resolved.arn} was stripped between resolve and delete. The resource was NOT deleted.`,
-              "Investigate immediately — an external principal removed the managed-by tag mid-flight. Check CloudTrail for UntagResources events on this ARN and review IAM policies granting tag:UntagResources.",
-              DESTROY_ERROR_CODES.TOCTOU_TAG_MISSING,
-            );
-          }
-        } catch (err) {
-          // Fail-closed: if the second verify throws (RGTA error), we cannot
-          // prove the tag is still present, so refuse the delete rather than
-          // racing on a best-effort guess.
-          return buildErrorResponse(
-            `Pre-delete tag re-verification failed: ${err instanceof Error ? err.message : String(err)}. The resource was NOT deleted.`,
-            "RGTA was unreachable at the pre-delete check. Retry once the Resource Groups Tagging API is healthy.",
-          );
-        }
-
-        // ── Delete via CloudControl API ───────────────────────────────────
-        try {
-          const deleteResult = await ccClient.send(
-            new DeleteResourceCommand({
-              TypeName: resolved.resourceType,
-              Identifier: resolved.identifier,
-            }),
-          );
-
-          const requestToken = deleteResult.ProgressEvent?.RequestToken;
-          if (!requestToken) {
-            await auditLog({
-              tool: "destroy_resource",
-              runId: "",
-              resourceType: resolved.resourceType,
-              identifier: resolved.arn,
-              success: false,
-              errorClass: "NoRequestToken",
-            });
-            return buildErrorResponse(
-              "DeleteResource returned no request token — cannot track operation status.",
-            );
-          }
-
-          const pollResult = await pollDeleteStatus(
-            ccClient,
-            requestToken,
-            resolved.resourceType,
-            resolved.arn,
-            resolved.region,
-          );
-
-          if (!pollResult.success) {
-            await auditLog({
-              tool: "destroy_resource",
-              runId: "",
-              resourceType: resolved.resourceType,
-              identifier: resolved.arn,
-              success: false,
-              errorClass: "PollFailure",
-            });
-            return buildErrorResponse(`Destroy failed: ${pollResult.message}`);
-          }
-
-          // Story 50-5 H-3: persistent audit record for the success path.
-          await auditLog({
-            tool: "destroy_resource",
-            runId: "",
-            resourceType: resolved.resourceType,
-            identifier: resolved.arn,
-            success: true,
-            errorClass: "",
-          });
-          return buildSuccessResponse({
-            status: "SUCCESS",
-            message: `Resource ${resolved.arn} destroyed successfully.`,
-            resource: {
-              arn: resolved.arn,
-              resourceType: resolved.resourceType,
-              region: resolved.region,
-              identifier: resolved.identifier,
-            },
-          });
-        } catch (err) {
-          // NotFound short-circuit on the DeleteResource call itself —
-          // CCAPI can throw ResourceNotFoundException synchronously when
-          // the resource is already gone. Apply the cross-account sanity
-          // check so we don't silently succeed under the wrong account.
-          const errName = err instanceof Error ? err.name : "";
-          const errMsg = err instanceof Error ? err.message : String(err);
-          const isNotFound =
-            errName === "ResourceNotFoundException" ||
-            /ResourceNotFoundException|NotFound/.test(errMsg);
-          if (isNotFound) {
-            const classification = await classifyNotFoundShortCircuit(
-              resolved.arn,
-              resolved.region,
-            );
-            if (classification === "cross-account") {
-              await auditLog({
-                tool: "destroy_resource",
-                runId: "",
-                resourceType: resolved.resourceType,
-                identifier: resolved.arn,
-                success: false,
-                errorClass: "CrossAccountNotFound",
-              });
-              return buildErrorResponse(
-                `CloudControl reported NotFound for ${resolved.arn}, but the operator credentials are configured for a different AWS account. Verify ASSIGNEE_OPERATOR_ACCESS_KEY_ID points at the correct account before retrying.`,
-              );
-            }
-            await auditLog({
-              tool: "destroy_resource",
-              runId: "",
-              resourceType: resolved.resourceType,
-              identifier: resolved.arn,
-              success: true,
-              errorClass: "",
-            });
-            return buildSuccessResponse({
-              status: "SUCCESS",
-              message: `Resource ${resolved.arn} was already deleted (NotFound).`,
-              resource: {
-                arn: resolved.arn,
-                resourceType: resolved.resourceType,
-                region: resolved.region,
-                identifier: resolved.identifier,
-              },
-            });
-          }
-          await auditLog({
-            tool: "destroy_resource",
-            runId: "",
-            resourceType: resolved.resourceType,
-            identifier: resolved.arn,
-            success: false,
-            errorClass: errName || "DestroyError",
-          });
-          return buildErrorResponse(`Failed to destroy resource: ${errMsg}`);
+          return await classifyDestroyError(err, resolved);
         }
       } finally {
         // Story 49.3: dispose the CCAPI + tagging clients even when
