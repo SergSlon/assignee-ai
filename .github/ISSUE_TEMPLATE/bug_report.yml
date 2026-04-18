@@ -1,0 +1,86 @@
+name: Bug report
+description: Report a defect in assignee.ai (CLI, MCP servers, or docs).
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill in every required
+        section so we can reproduce and fix the issue quickly.
+
+        **Security issues:** do NOT use this form. Report them privately via
+        [GitHub Security Advisories](https://github.com/assignee-ai/assignee/security/advisories/new)
+        per the project's SECURITY.md.
+
+        **Redact before submitting:** AWS account IDs, access keys, session
+        tokens, customer-identifying resource names, and anything else you
+        wouldn't paste into a public chat.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One- or two-sentence description of the bug.
+      placeholder: "assignee plan crashes when an EC2 instance has no Name tag."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, numbered steps that reliably trigger the bug.
+      placeholder: |
+        1. Run `assignee init` in an empty directory.
+        2. Add the following to `assignee.yaml`: ...
+        3. Run `assignee plan`.
+        4. Observe the crash.
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+      description: What actually happened. Include error messages verbatim.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Run `assignee --version`, `node --version`, and note your OS. Paste
+        the output below.
+      placeholder: |
+        - OS: macOS 14.5 (arm64) / Ubuntu 22.04 / Windows 11
+        - Node: v20.11.1
+        - assignee: (output of `assignee --version`)
+        - AWS region(s) involved: us-east-1
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: verbose-logs
+    attributes:
+      label: Verbose logs (optional)
+      description: |
+        Output of `assignee --verbose <cmd>` or an excerpt from
+        `~/.assignee/logs/*.jsonl`. **Redact credentials, account IDs, and
+        customer-identifying resource names before pasting.**
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: redaction-checkbox
+    attributes:
+      label: Redaction confirmation
+      description: Please confirm before submitting.
+      options:
+        - label: I have redacted AWS account IDs, credentials, and customer-identifying resource names.
+          required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security issue (DO NOT file a public issue)
+    url: https://github.com/assignee-ai/assignee/security/advisories/new
+    about: Report security vulnerabilities privately per SECURITY.md.
+  - name: Question or discussion
+    url: https://github.com/assignee-ai/assignee/discussions
+    about: Ask questions or start a design discussion (not a bug).

@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a new capability or an enhancement to assignee.ai.
+title: "[feat] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping shape assignee.ai. Please describe the user problem
+        first — the best proposals start from a concrete pain point, not a
+        solution.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem are you solving? Who hits it, and how often?
+      placeholder: |
+        As an operator running `assignee apply` across many accounts, I cannot
+        currently ... which forces me to ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: What should assignee.ai do? Include CLI surface, config, or UX sketches if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered (optional)
+      description: Other approaches you weighed and why you rejected them.
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context (optional)
+      description: Links, screenshots, prior art, related issues, or any other context.
+    validations:
+      required: false
