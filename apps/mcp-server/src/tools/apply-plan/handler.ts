@@ -39,8 +39,12 @@ import { errorEnvelope, type ToolEnvelope } from "./result-envelope.js";
  * Extracts an audit-safe identifier from an apply_plan result envelope.
  * Prefers the ARN from the graph's successful output; falls back to
  * the empty string so the JSONL schema remains stable.
+ *
+ * Exported for unit testing of the parse-failure warning path
+ * (Wave L2 added structured-log surfacing; kept non-exported helper
+ * would otherwise block coverage on the catch branch).
  */
-function extractAuditIdentifier(envelope: ToolEnvelope): string {
+export function extractAuditIdentifier(envelope: ToolEnvelope): string {
   const text = envelope.content?.[0]?.text;
   if (typeof text !== "string") return "";
   try {
