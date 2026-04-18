@@ -151,6 +151,16 @@ Discovery shortcuts live under `plan --help`: supported resource types, compound
 
 ## vs the competition
 
+| Axis                  | Assignee             | kagent        | Pulumi Neo          | TF + Claude/Cursor     | CDK + Amazon Q       |
+| --------------------- | -------------------- | ------------- | ------------------- | ---------------------- | -------------------- |
+| Code artifact         | **None**             | K8s CRDs      | Pulumi code + state | HCL + state            | CDK code + bootstrap |
+| Primary scope         | AWS greenfield, ops  | K8s day-2 ops | Any cloud (stack)   | Any cloud (HCL-fluent) | AWS (CDK)            |
+| BP rules on free path | **185, YAML**        | None bundled  | Policy (paid tier)  | Sentinel (paid)        | None bundled         |
+| Plan preview          | NL → plan-box + HITL | K8s diff      | `pulumi preview`    | `terraform plan`       | `cdk diff`           |
+| Target operator       | Solo / small team    | K8s operators | Pulumi-using devs   | HCL-fluent devs        | CDK devs             |
+
+> Reads top-down: if the top row's "None" is a hard requirement, Assignee is the only fit. See the prose below for the full argument per competitor.
+
 Eight direct / adjacent competitors, archived in the [workspace wiki](../wiki/competitors/):
 
 - **vs [kagent](../wiki/competitors/kagent.md)** — kagent runs day-2 ops INSIDE a Kubernetes cluster (Helm-installed controller, operates on K8s CRDs). Assignee provisions AWS primitives FROM zero, no cluster required. Pick kagent for K8s reconciliation; pick Assignee for greenfield AWS.
