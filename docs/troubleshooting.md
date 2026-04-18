@@ -26,6 +26,43 @@ when filing a bug.
 
 ---
 
+## Exit 1 — generic failure (and the drift exception)
+
+### Symptom: `assignee drift` exits 1
+
+**Cause.** This is **not a bug.** `assignee drift` returns exit 1 when
+it finds at least one managed resource whose live state has diverged
+from the Assignee-managed state — i.e. drift was **detected**. Finding
+drift is the designed outcome of the command, not an error. The
+exit-code contract reuses `1` for this signal rather than introducing a
+new code, so that scripts can keep the existing `0 = clean / 1 =
+attention-needed` pattern.
+
+**How to branch in CI/CD.** Treat drift as a first-class signal, not a
+failure:
+
+```bash
+assignee drift
+case $? in
+  0)  echo "clean — no drift" ;;
+  1)  echo "drift detected — review the drift table and decide" ;;
+  10) echo "policy/safety abort — see exit 10 section below" ;;
+  *)  echo "genuine failure — capture logs and file a bug" ;;
+esac
+```
+
+If you only want the "something actually broke" codes, branch on
+`>= 2 && != 1` — or prefer `assignee drift --json` and parse the
+structured output for a deterministic view of which resources drifted.
+
+**Fix.** Inspect the drift report (`--verbose` shows all fields, not
+just diverging ones), then either (a) `assignee apply` to reconcile
+live → desired, (b) update your intent so desired matches the new
+reality, or (c) mark the drift as accepted in state. Exit 1 from
+`drift` will persist until the divergence is resolved.
+
+---
+
 ## Exit 10 — policy / safety aborts
 
 ### Symptom: `Type '<name>' to confirm destruction` → exit 10

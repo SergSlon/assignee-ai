@@ -20,12 +20,20 @@ When set, structured JSON diagnostic logs are written to stderr. Without it, inf
 | Code  | Meaning                                                                                          |
 | ----- | ------------------------------------------------------------------------------------------------ |
 | `0`   | Success                                                                                          |
-| `1`   | General error (plan failure, provision failure, drift detected)                                  |
+| `1`   | General error¹                                                                                   |
 | `2`   | `assignee doctor` returned warnings only (no hard failures, see `--short`)                       |
 | `10`  | Policy / safety abort (typed-confirm mismatch, state guard, preflight rejection, BP block, etc.) |
 | `11`  | MCP server startup failure                                                                       |
 | `130` | Interrupted via SIGINT (Ctrl-C)                                                                  |
 | `143` | Terminated via SIGTERM                                                                           |
+
+¹ Plan failure, provision failure, or — from `assignee drift` — drift
+detected. The drift case is the **designed outcome** of the `drift`
+command, not a bug: exit 1 simply signals that at least one managed
+resource diverged from state. Scripts branching on exit codes should
+treat drift as a first-class signal, not an error. See
+[troubleshooting.md](./troubleshooting.md#symptom-assignee-drift-exits-1)
+for the full discussion.
 
 `docs/troubleshooting.md` is the canonical playbook for each exit
 code, including the recovery steps. Scripts MAY branch on these codes;

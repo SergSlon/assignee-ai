@@ -279,7 +279,11 @@ callsite is a P1 regression.
 
 **Where it's enforced.**
 
-- `apps/cli/src/services/llm-adapter.ts`
+- `packages/core/src/llm/adapter.ts` (canonical `LlmAdapter` — passes
+  `options?.callsite ?? "unknown:generateStructured"` and
+  `options?.callsite ?? "unknown:generateText"` into `recordTokenUsage`)
+- `apps/cli/src/utils/command-runner/llm-factory.ts` (wires per-callsite
+  routing so every CLI command threads a callsite through to the adapter)
 
 **Source memory.** `feedback_token_cost_visibility.md`
 
