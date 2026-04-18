@@ -23,6 +23,12 @@ import { runWithConcurrency } from "./concurrency.js";
 export interface DriftDetectorOptions {
   /** Port for fetching actual resource state. */
   provisioningPort: ProvisioningPort;
+  /**
+   * Optional random source used for retry jitter. Defaults to `Math.random`.
+   * Tests can inject a deterministic stub (e.g. `() => 0.5`) to make the
+   * retry-backoff path observable.
+   */
+  rng?: () => number;
 }
 
 /** Batch check entry. */
@@ -47,9 +53,11 @@ export interface BatchCheckOptions {
 
 export class DriftDetectorService {
   private readonly port: ProvisioningPort;
+  private readonly rng: () => number;
 
   constructor(options: DriftDetectorOptions) {
     this.port = options.provisioningPort;
+    this.rng = options.rng ?? Math.random;
   }
 
   /**
@@ -113,7 +121,7 @@ export class DriftDetectorService {
             DRIFT_RETRY_BASE_DELAY_MS * Math.pow(2, attempt),
             30_000,
           );
-          const jitter = Math.random() * DRIFT_RETRY_JITTER_MS;
+          const jitter = this.rng() * DRIFT_RETRY_JITTER_MS;
           await new Promise((resolve) =>
             setTimeout(resolve, baseDelay + jitter),
           );
