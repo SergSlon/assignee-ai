@@ -77,14 +77,14 @@ complete -c assignee -n "__fish_seen_subcommand_from setup" -l dry-run -d 'Print
 complete -c assignee -n "__fish_seen_subcommand_from status" -l json -d 'Output status data as JSON'
 complete -c assignee -n "__fish_seen_subcommand_from status" -l region -r -d 'Filter to a specific AWS region'
 complete -c assignee -n "__fish_seen_subcommand_from status" -l bp-coverage -d 'Show BP rule coverage dashboard'
-complete -c assignee -n "__fish_seen_subcommand_from status" -l gaps-only -d 'With --bp-coverage: print only the list of resource types with zero BP rules, and exit non-zero if any gaps are found (CI-friendly). Structural types (RouteTable, VPCGatewayAttachment, etc.) are excluded by default — override with --include-structural-gaps.'
-complete -c assignee -n "__fish_seen_subcommand_from status" -l include-structural-gaps -d 'With --gaps-only: include structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS::MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.'
+complete -c assignee -n "__fish_seen_subcommand_from status" -l gaps-only -d 'Only meaningful with --bp-coverage. Prints just the list of resource types with zero BP rules and exits non-zero if any gaps are found (CI-friendly). Structural types (RouteTable, VPCGatewayAttachment, etc.) are excluded by default — override with --include-structural-gaps.'
+complete -c assignee -n "__fish_seen_subcommand_from status" -l include-structural-gaps -d 'Only meaningful with --bp-coverage --gaps-only. Includes structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS::MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.'
 
 # Options for 'reconcile'
 complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l resource -r -d 'Filter by resource type'
 complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l dry-run -d 'Show what would be reconciled without making changes'
-complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l auto-reconcile -d 'Reconcile all drifted resources without prompting'
-complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l yes -s y -d 'Non-interactive mode — reconcile every drifted resource without prompting (alias for --auto-reconcile; canonical CI flag)'
+complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l yes -s y -d 'Non-interactive mode — reconcile every drifted resource without prompting (canonical CI flag)'
+complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l auto-reconcile -d '(deprecated alias for --yes) Reconcile all drifted resources without prompting. Prefer --yes; this alias is retained for backward compatibility and may be removed in a future major version.'
 
 # Options for 'doctor'
 complete -c assignee -n "__fish_seen_subcommand_from doctor" -l json -d 'Emit the report as JSON instead of formatted text'

@@ -101,15 +101,15 @@ _assignee() {
             '--json[Output status data as JSON]' \
             '--region[Filter to a specific AWS region]:region:' \
             '--bp-coverage[Show BP rule coverage dashboard]' \
-            '--gaps-only[With --bp-coverage\: print only the list of resource types with zero BP rules, and exit non-zero if any gaps are found (CI-friendly). Structural types (RouteTable, VPCGatewayAttachment, etc.) are excluded by default — override with --include-structural-gaps.]' \
-            '--include-structural-gaps[With --gaps-only\: include structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS\:\:MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.]'
+            '--gaps-only[Only meaningful with --bp-coverage. Prints just the list of resource types with zero BP rules and exits non-zero if any gaps are found (CI-friendly). Structural types (RouteTable, VPCGatewayAttachment, etc.) are excluded by default — override with --include-structural-gaps.]' \
+            '--include-structural-gaps[Only meaningful with --bp-coverage --gaps-only. Includes structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS\:\:MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.]'
           ;;
         reconcile)
           _arguments \
             '--resource[Filter by resource type]:type:' \
             '--dry-run[Show what would be reconciled without making changes]' \
-            '--auto-reconcile[Reconcile all drifted resources without prompting]' \
-            '--yes[Non-interactive mode — reconcile every drifted resource without prompting (alias for --auto-reconcile; canonical CI flag)]'
+            '--yes[Non-interactive mode — reconcile every drifted resource without prompting (canonical CI flag)]' \
+            '--auto-reconcile[(deprecated alias for --yes) Reconcile all drifted resources without prompting. Prefer --yes; this alias is retained for backward compatibility and may be removed in a future major version.]'
           ;;
         doctor)
           _arguments \

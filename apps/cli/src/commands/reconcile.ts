@@ -37,12 +37,12 @@ export const reconcileCommand = new Command(CommandName.RECONCILE)
   .option("--resource <type>", "Filter by resource type")
   .option("--dry-run", "Show what would be reconciled without making changes")
   .option(
-    "--auto-reconcile",
-    "Reconcile all drifted resources without prompting",
+    "-y, --yes",
+    "Non-interactive mode — reconcile every drifted resource without prompting (canonical CI flag)",
   )
   .option(
-    "-y, --yes",
-    "Non-interactive mode — reconcile every drifted resource without prompting (alias for --auto-reconcile; canonical CI flag)",
+    "--auto-reconcile",
+    "(deprecated alias for --yes) Reconcile all drifted resources without prompting. Prefer --yes; this alias is retained for backward compatibility and may be removed in a future major version.",
   )
   .addHelpText(
     "after",
@@ -53,7 +53,7 @@ Examples:
   $ assignee reconcile --dry-run
         Preview reconcile decisions without calling AWS
   $ assignee reconcile --yes
-        Reconcile every drifted resource (CI-friendly, same as --auto-reconcile)
+        Reconcile every drifted resource (CI-friendly)
   $ assignee reconcile --resource AWS::S3::Bucket --yes
         Reconcile only S3 buckets, non-interactive
 `,
