@@ -478,6 +478,65 @@ independently.
 
 ---
 
+## LlmAdapter sanitize-by-default
+
+**Rule.** Every outbound LLM prompt is sanitized at the `LlmAdapter`
+boundary. `stripPromptBoundaryTags(prompt)` runs FIRST, then
+`redactSensitive(...)` — in that order — for both `generateStructured`
+and `generateText` send-sites. The order is load-bearing: boundary-tag
+strip MUST precede redact so an injected `<system>arn:aws:iam::…</system>`
+cannot hide an ARN from the redactor. Per-callsite wraps (in
+`plan-generator/llm-helpers.ts`, `advice-generator.ts`,
+`utils/display-docs.ts`, `wizard-helpers/prompt-dispatcher/other-handler.ts`)
+remain in place as defence-in-depth — they are idempotent no-ops once
+the adapter strip lands — but are no longer load-bearing.
+
+**Why.** Forgetting the per-callsite wrap was the root cause of L5-H1
+(Epic 54 it1) and the it55-1-L5-001 + it55-1-L5-002 follow-on finding
+class (Epic 55 it1: workload-classifier and intent-parser hot paths
+were missing the wrap). Per-site mirroring is unsustainable — every
+new LLM caller would need to remember the wrap, and the L5 reviewer
+catches the omission only after the fact. Lifting the wrap into the
+adapter eliminates the entire finding class by construction: no future
+LLM caller can bypass the boundary-tag strip unless they go around the
+adapter entirely (which the architecture forbids today). Same SSO
+pattern as the help-hints renderer above.
+
+**Where it's enforced.**
+
+- `packages/core/src/llm/adapter.ts` — load-bearing strip at both
+  send-sites: `generateStructured` (line 96) and `generateText`
+  (line 156). Order:
+  `stripPromptBoundaryTags(prompt) → redactSensitive(sanitized) →
+messages: [{role:"user", content: redactedPrompt}]`.
+- `packages/core/src/llm/adapter-redaction.test.ts` — the
+  "Story 55-it1-04" describe blocks pin the boundary-strip behaviour
+  for both `generateText` and `generateStructured`, including the
+  defence-in-depth ordering test (boundary-strip then ARN redact).
+- `packages/core/src/llm/prompt-sanitize.ts` — canonical helper +
+  `BOUNDARY_TAG_ALLOWLIST` (8 names) + triple-backtick fence strip;
+  unchanged by this story (re-used as-is).
+- Per-callsite defence-in-depth wraps (idempotent no-op once adapter
+  strip lands; preserved deliberately so a future direct-Bedrock
+  caller bypassing `LlmAdapter` would still be safe):
+  - `packages/core/src/graph/nodes/plan-generator/llm-helpers.ts:139`
+  - `packages/core/src/graph/nodes/advice-generator.ts:189`
+  - `packages/core/src/utils/display-docs.ts:51`
+  - `packages/core/src/utils/wizard-helpers/prompt-dispatcher/other-handler.ts:160-163`
+- Inherited coverage (no per-site wrap; rely on adapter):
+  - `packages/core/src/utils/workload-classifier.ts:71` —
+    `llmClient.generateStructured(prompt, …)` runs through
+    `LlmAdapter.generateStructured` → adapter strips before send.
+  - `packages/core/src/graph/nodes/intent-parser.ts:69` —
+    `llmClient.generateStructured(prompt, …)` runs through
+    `LlmAdapter.generateStructured` → adapter strips before send.
+
+**Source memory.** Story 55-it1-04 (Epic 55 it1) — adapter-boundary
+lift to eliminate the L5-H1 / it55-1-L5-001 / it55-1-L5-002 finding
+class by construction. Story 54-it1-05 (helper introduction).
+
+---
+
 ## How to add a new invariant
 
 1. Write the rule (one sentence).
