@@ -46,7 +46,7 @@ The shared foundation. Contains **zero business logic** -- only types, data, and
 
 - All 37 user-addressable resource type constants and type definitions (35 with dedicated plugins + 2 compound-only that fall through to the generic plugin)
 - Resource plugin registry (37 registered plugins: 35 type-specific + generic fallback; two compound-only types share the generic)
-- Pattern template registry (9 compound architecture patterns + 1 variant)
+- Pattern template registry (10 compound architecture patterns)
 - Pricing strategy registry (23 strategies) and decomposer registry (23 decomposers)
 - CloudFormation schema service (DescribeType + disk cache)
 - Schema adapter (raw CloudFormation -> normalized format)

@@ -12,6 +12,7 @@ import {
   ExecutionStatus,
   BPEnforcementLevel,
   StateField,
+  renderSupportedTypesHint,
 } from "@assignee/core";
 
 /** Error prefix used when plan generation fails. */
@@ -112,7 +113,7 @@ export function registerPlanResource(
                   ...(finalState[StateField.EXECUTION_STATUS] ===
                   ExecutionStatus.UNSUPPORTED_RESOURCE
                     ? {
-                        hint: "Supported types: S3, Lambda, DynamoDB, SQS, SNS, EC2, RDS, IAM Role, SSM Parameter, CloudWatch Logs, EventBridge Rule.",
+                        hint: renderSupportedTypesHint("mcp"),
                       }
                     : {}),
                 }),

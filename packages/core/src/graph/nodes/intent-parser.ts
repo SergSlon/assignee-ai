@@ -3,6 +3,7 @@ import {
   ExecutionStatus,
   SUPPORTED_TYPES_ARRAY as SUPPORTED_TYPES,
   defaultPatternRegistry,
+  renderSupportedTypesHint,
   sanitizeUserIntent,
 } from "../../index.js";
 import type { LlmPort } from "../../index.js";
@@ -10,30 +11,14 @@ import { log, LOG_ACTIONS } from "../../utils/logger/index.js";
 import type { AgentState } from "../graph-state.js";
 
 /**
- * Human-readable hint shown when an unsupported resource type is requested.
- * Inlined into the node (Story 50-4 Wave 5 Pass D) so core has no
- * dependency on the CLI's long-form help text. The CLI's
- * `config/constants/help.ts` keeps the richer version (with literal
- * `assignee` invocation examples) for user-facing `--help` output; the
- * node-returned message is used in graph-state.errorMessage only.
+ * Human-readable hint shown when an unsupported resource type is
+ * requested. Pulled from the core help-hints single source of truth
+ * (Story 54-it1-04) so the node's errorMessage, the CLI's `--help`
+ * output, and the MCP plan-resource tool all render from the same
+ * registry-derived strings. The `short` style omits the EFS/CFN
+ * detail lines to keep the inline graph-state errorMessage compact.
  */
-const SUPPORTED_TYPES_HINT = `What you can create (${SUPPORTED_TYPES.length} resource types):
-
-  Compute       EC2 instance, Lambda function, ECS cluster
-  Storage       S3 bucket
-  Databases     RDS (PostgreSQL/MySQL/MariaDB/Aurora), DynamoDB table
-  Networking    VPC, Subnet, Security Group, Internet Gateway,
-                NAT Gateway, Route Table, Route, Load Balancer
-  API           API Gateway v2 (HTTP/WebSocket)
-  Messaging     SQS queue, SNS topic
-  Security      IAM role, Secrets Manager secret, SSM parameter
-  Containers    ECR repository
-  Observability CloudWatch alarm, CloudWatch Logs group
-
-Examples:
-  assignee plan "Create an S3 bucket for my static site"
-  assignee plan "Create an EC2 t3.micro with SSH"
-  assignee plan "Create a PostgreSQL database for production"`;
+const SUPPORTED_TYPES_HINT = renderSupportedTypesHint("short");
 
 const intentParserSchema = z.object({
   resourceType: z.enum([...SUPPORTED_TYPES, "UNSUPPORTED"] as [

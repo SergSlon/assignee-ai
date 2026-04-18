@@ -27,3 +27,7 @@ export {
 } from "../constants/llm-providers.js";
 export { LlmAdapter, type LlmAdapterConfig } from "./adapter.js";
 export { createLanguageModel } from "./client-factory.js";
+export {
+  stripPromptBoundaryTags,
+  BOUNDARY_TAG_ALLOWLIST,
+} from "./prompt-sanitize.js";
