@@ -83,7 +83,9 @@ describe("StepResult utility", () => {
       );
       const result = doneStep(response);
       if (result.kind === "done") {
-        const payload = JSON.parse(result.response.content[0].text) as {
+        const firstContent = result.response.content[0];
+        expect(firstContent).toBeDefined();
+        const payload = JSON.parse(firstContent!.text) as {
           code: string;
           message: string;
           hint: string;
