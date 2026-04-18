@@ -12,45 +12,156 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
-### Epic 53 — iteration 1 (2026-04-18)
+### Epic 54 — iteration 1 (2026-04-18 → 2026-04-19)
+
+#### Refactored
+
+- **Three god-function decompositions via StepResult (Wave 3 — closes
+  L7-H1, L7-H2, L7-H3).** `apps/mcp-server/src/tools/plan-resource.ts`
+  201 → 88 LOC (-56%); inner arrow 145 → 30 LOC, nesting ≤3.
+  Extracted seven phase helpers under `plan-resource/` (`guardContext`,
+  `enrichDescriptionWithEnv`, `buildInitialGraphState`,
+  `checkExecutionStatus`, `serializeFinalState`,
+  `persistCheckpointAndRespond`, `buildUnexpectedErrorResponse`) plus
+  `error-envelope.ts`. `apps/mcp-server/src/tools/apply-plan/handler.ts`
+  228 → 114 LOC; four duplicated 6-field auditLog envelopes consolidated
+  into a single `logApplyAudit` helper plus `failWithAudit` reducer;
+  five StepResult helpers in new `handler-steps.ts`. `apps/cli/src/services/bedrock-logging.ts`
+  261 → 59 LOC; `setupBedrockLogging` body 163 → 30 LOC; five
+  `ensure-*.ts` phase helpers + two support modules (`build-clients.ts`,
+  `read-restriction-policy.ts`) under new `bedrock-logging/`
+  sub-directory; partition-aware ARN builders preserved for
+  `aws`/`aws-cn`/`aws-us-gov`. (commit `1cc223c`)
+
+#### Added
+
+- **`apps/mcp-server/src/utils/step-result.ts` reusable handler-step
+  utility.** `StepResult<TContext>` discriminated union with
+  `continueStep`, `continueVoid`, `doneStep`, `isContinue`, `isDone`
+  helpers — mirrors the existing `destroy-resource/handler-steps.ts`
+  shape so MCP tool handlers share one composition primitive. 25 LOC
+  - 36 lines JSDoc + 12 co-located test scenarios. (commit `01f7866`)
+- **`packages/core/src/config/help-hints.ts` single source of truth
+  for help-hint rendering (closes L3-H1, L3-H2, L3-H3 + L2-001 +
+  L2-002).** Exports `HINT_MAX_COLUMNS`, `HintStyle`,
+  `getSupportedTypeCount` / `getSupportedTypes` / `getPatternCount`,
+  `renderSupportedTypesHint('cli'|'short'|'mcp')`,
+  `renderPatternsHint('cli'|'short'|'mcp')`. Counts derived at call
+  time from `SUPPORTED_TYPES_ARRAY` + `defaultPatternRegistry` so the
+  drift class observed across the prior three epics is impossible by
+  construction. Three call-sites migrated:
+  `apps/cli/src/config/constants/help.ts` (`SUPPORTED_TYPES_HINT` and
+  `PATTERNS_HINT` are now thin wrappers), `intent-parser.ts` (inline
+  20-line constant replaced with `renderSupportedTypesHint('short')`),
+  `apps/mcp-server/src/tools/plan-resource.ts:115` (hardcoded
+  "Supported types: S3, Lambda…" replaced with
+  `renderSupportedTypesHint('mcp')`). Drift-guard test asserts
+  registry parity. Two-line CLI patterns hint enforces 100-column
+  wrap. (commit `01f7866`)
+
+#### Security
+
+- **`packages/core/src/llm/prompt-sanitize.ts` boundary-tag strip
+  (closes L5-H1).** New `stripPromptBoundaryTags(raw)` with
+  `BOUNDARY_TAG_ALLOWLIST` of nine tags (`user_intent`, `system`,
+  `assistant`, `human`, `user`, `tool`, `context`, `instructions`).
+  Single regex strips opening AND closing forms (allowlist, not
+  denylist); second regex strips triple-backtick fences. Tolerant of
+  attributes, whitespace, and self-closing forms; leaves TS generics,
+  inequalities, HTML tags, and ARNs untouched. `llm-helpers.ts:133`
+  replaces the old one-sided `</user_intent>/gi` regex. Step 6b
+  follow-up mirrored the wrap to three additional `userIntent`
+  call-sites (`advice-generator.ts:189`, `display-docs.ts:51`,
+  `other-handler.ts:161-163` — both `userDesc` and `userIntent`
+  fields). (commits `01f7866` + `b37aa1e`)
+- **`LlmAdapter` outbound prompt redaction (closes L5-H2).**
+  `packages/core/src/llm/adapter.ts` now wraps outbound prompt in
+  `redactSensitive` at BOTH send-sites (`generateStructured` and
+  `generateText`). Reuses the canonical allowlist redactor — partition
+  aware, no regex duplication. 11 new adapter-redaction tests against
+  realistic ARNs (`aws`/`aws-cn`/ISO partitions) and 12-digit account
+  IDs. Invariants preserved: `callsite:"plan_generator"` token-cost
+  attribution, Bedrock region-error hints, lazy credential resolution.
+  (commit `01f7866`)
 
 #### Docs
 
-- **Citation drift sweep (L8-B1, L8-H1..H3, L8-MEDs).** Full-repo
-  citation audit. Removed the dead `mcp-intelligence-audit.md` "See
-  also" from `docs/configuration.md` (target relocated to
-  `_bmad-output/planning-artifacts/_archive/` under Epic 52). Repointed
-  `apps/cli/src/test-fixtures/mcp-mock-responses/` references to the
-  real location `packages/core/src/test-fixtures/mcp-mock-responses/`
-  in `README.md` (architecture tree + testing-fixtures section) and
-  `docs/testing-guide.md`. Removed the stale `apps/cli/scripts/check-mcp-versions.ts`
-  paragraph + exit-code bullets from `docs/mcp-servers.md` — no such
-  script exists; the in-process doctor flow described above it is the
-  only implementation. Repointed `docs/testing-guide.md` MCP Server
-  E2E row from the nonexistent `apps/mcp-server/src/e2e/` to
-  `apps/mcp-server/e2e-test.mjs`. Dropped the gitignored
-  `_bmad-output/implementation-artifacts/_archive/done-stories/` link
-  from `docs/explanation/contributing-a-bp-rule.md` (regression of
-  Epic 51 L8-006 class — invisible to external clones). Corrected
-  `docs/architecture-flows.md` header note after `architecture.md`
-  moved into `_bmad-output/planning-artifacts/_archive/`. Fixed
-  `docs/explanation/telemetry-design.md` `audit-log.ts` pointer from
-  the deleted CLI module to the surviving MCP-server module
-  (`apps/mcp-server/src/utils/audit-log.ts`). Corrected the compound
-  pattern count and the invented pattern IDs (`s3-static-site`,
-  `rds-with-vpc`) in `docs/explanation/oss-vs-saas.md` to match the
-  ten patterns actually registered in
-  `packages/core/src/pattern-templates/`.
+- \*\*Full-repo citation sweep + moat/disruption rewrite + quickstart
+  13-node mirror (Wave 1 — closes L8-B1 + L1-H1 + L8-H1..H4 + L10-H1
+  - L10-H2).\*\* `docs/configuration.md` dead `mcp-intelligence-audit.md`
+    cross-link removed; `apps/cli/src/test-fixtures/mcp-mock-responses/`
+    references repointed to `packages/core/src/test-fixtures/mcp-mock-responses/`
+    in `README.md` + `docs/testing-guide.md`; nonexistent
+    `apps/cli/scripts/check-mcp-versions.ts` paragraph removed from
+    `docs/mcp-servers.md`; `docs/testing-guide.md` MCP E2E row repointed
+    to `apps/mcp-server/e2e-test.mjs`; gitignored `_bmad-output/_archive`
+    link dropped from `docs/explanation/contributing-a-bp-rule.md`;
+    `docs/architecture-flows.md` header repaired after the
+    `architecture.md` archive; `docs/explanation/telemetry-design.md`
+    `audit-log.ts` pointer corrected to `apps/mcp-server/src/utils/`;
+    `docs/explanation/oss-vs-saas.md` pattern IDs corrected (removed
+    invented `s3-static-site` + `rds-with-vpc`; count 9 → 10).
+    `docs/quickstart.md:100-107` ASCII pipeline diagram corrected to
+    the 13-node graph (advice_generator inserted between plan_generator
+    and bp_evaluator). README disruption-risk section reframed as a
+    three-row table (HCP Terraform + cost preflight; Amazon Q + CCAPI;
+    Spacelift Intent + env0); MCP section opens with the "MCP is not
+    the moat" lede; new five-row bundle-durability mini-table
+    (BP auto-fix / cost preflight / local-first no-state / HITL gate /
+    MCP parity). Hero transcript byte-unchanged. Workspace-root
+    `presentation/index.html` opportunistically corrected to 13-node /
+    MIT / 37 types / 10 patterns / 185 rules. (commit `d6e352d`)
 
 #### Tooling
 
-- **`apps/cli/scripts/citation-lint.mjs`.** Added a lightweight Node
-  ESM checker that scans `README.md`, `CHANGELOG.md`, and
-  `docs/**/*.md` for relative markdown citations and fails on broken
-  targets. Wired as the root script `pnpm citation-lint`. Skips
-  external URLs, anchor-only links, and citations inside code fences.
-  Catches the Step-6c scope-incomplete pattern mechanically so future
-  iterations never ship stale citations.
+- **`pnpm check-types` tightened to include test files (closes
+  Epic 54 it1 close-out finding).** `apps/mcp-server/src/utils/__tests__/step-result.test.ts`
+  guarded against `Object is possibly 'undefined'` on
+  `result.response.content[0]` access — captured to a const, asserted
+  defined before access. Production `tsconfig.build.json` excludes
+  tests, so `pnpm build` did not catch this; the pre-push
+  `tsc --noEmit` run did. Strengthening, not weakening — per the
+  project's "fix code, not assertions" rule. (commit `7e0cc53`)
+
+### Epic 53 — iteration 1 (2026-04-17 → 2026-04-18)
+
+#### Docs
+
+- **Cited-path drift Wave 1 + Step 6c sweep (closes 5 BLOCKER + 5
+  HIGH L8 findings).** Five BLOCKER cited-path-integrity findings and
+  five HIGH owner-placeholder + 13-node-pipeline drift items closed
+  through a Wave-1 docs sweep plus a Step-6c scope-completion follow-up
+  (5 inline fixes for sibling docs missed by the per-file Wave-1
+  pass). Cross-reference: `_bmad-output/planning-artifacts/epic-53-final-summary.md`.
+  (commits `8497c50`, `1b7d34e`)
+
+#### Refactored
+
+- **README/moat narrative + phase1-gate + resource-provisioner +
+  destroy-resource + llm-plan god-function decompositions (Wave 3 —
+  closes 10 HIGH).** Two-wave refactor pass: Wave 3a took the README
+  moat scorecard, the phase-1 gate handler, and the resource-provisioner
+  reducer (8 HIGH closures); Wave 3b finished the destroy-resource and
+  llm-plan god-function pair (2 HIGH closures). Public surfaces
+  unchanged; invariants preserved. (commits `92550d9`, `488490c`)
+
+#### Fixed
+
+- **Help-hint drift, MCP redaction, CI permissions, CLI package
+  metadata (Wave 2 — closes 7 HIGH).** Help-hint label drift across
+  CLI + MCP unified to a single rendering path; MCP redaction tightened
+  to the canonical allowlist redactor (no regex duplication); CI
+  workflow permissions narrowed to least-privilege; CLI package
+  metadata corrected ahead of the (still-deferred) `npm publish`.
+  (commit `8a50433`)
+
+#### Tests
+
+- **`extractAuditIdentifier` parse-fail branch covered (floor
+  recovery).** New MCP test asserts the JSON-parse fallback path that
+  surfaces as a structured audit error rather than a swallowed throw.
+  Closes the floor-coverage regression introduced when the inline
+  helper was extracted in Epic 51. (commit `e92d4e0`)
 
 ### Epic 52 — iteration 1 (2026-04-17 → 2026-04-18)
 

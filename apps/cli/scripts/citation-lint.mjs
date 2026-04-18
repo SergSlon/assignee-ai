@@ -2,11 +2,17 @@
 /**
  * citation-lint.mjs — full-repo markdown citation checker.
  *
- * Scans README.md, CHANGELOG.md, and docs/**\/*.md for relative
- * markdown/code citations of the form `[label](relative/path.ext)` and
- * verifies each target resolves on disk. Prevents the Step-6c
- * scope-incomplete pattern where isolated citation fixes leave the rest
- * of the repo stale (see Epic 53 L8-006 and Epic 54 it1 L8-B1).
+ * Scans the following surfaces for relative markdown/code citations of
+ * the form `[label](relative/path.ext)` and verifies each target
+ * resolves on disk:
+ *   - Root markdown: README.md, CHANGELOG.md, AGENTS.md, CONTRIBUTING.md,
+ *     SECURITY.md, CODE_OF_CONDUCT.md
+ *   - Recursive walks: docs/**\/*.md and .github/**\/*.md
+ *
+ * Prevents the Step-6c scope-incomplete pattern where isolated citation
+ * fixes leave the rest of the repo stale (see Epic 53 L8-006, Epic 54
+ * it1 L8-B1, Epic 55 it1 L8-B1 — the latter exposed 5 root files
+ * silently bypassed by the previous narrow scope).
  *
  * - Exit 0: every citation resolves.
  * - Exit 1: one or more broken citations; details printed to stderr.
@@ -14,6 +20,10 @@
  * External URLs (http/https/mailto/#anchors), image links inside code
  * fences, and citations whose target is a pure anchor (`#section`) are
  * skipped. Directories count as valid targets.
+ *
+ * Stdout always reports the scanned-file count so future scope drift
+ * (root file appearing/disappearing, new top-level doc tree) is visible
+ * in CI logs.
  *
  * Usage:
  *   node apps/cli/scripts/citation-lint.mjs
@@ -40,17 +50,28 @@ const EXCLUDED_DIRS = new Set([
 ]);
 
 /**
- * Walk docs/ recursively + pick up README.md/CHANGELOG.md at repo root.
+ * Walk docs/ + .github/ recursively + pick up the canonical root
+ * markdown set (README, CHANGELOG, AGENTS, CONTRIBUTING, SECURITY,
+ * CODE_OF_CONDUCT). Scope expansion tracked under Epic 55 it1 L8-B1.
  */
 async function collectTargets(root) {
   const files = [];
-  const rootEntries = ["README.md", "CHANGELOG.md"];
+  const rootEntries = [
+    "README.md",
+    "CHANGELOG.md",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+  ];
   for (const name of rootEntries) {
     const full = join(root, name);
     if (existsSync(full)) files.push(full);
   }
   const docsDir = join(root, "docs");
   if (existsSync(docsDir)) await walk(docsDir, files);
+  const githubDir = join(root, ".github");
+  if (existsSync(githubDir)) await walk(githubDir, files);
   return files;
 }
 
