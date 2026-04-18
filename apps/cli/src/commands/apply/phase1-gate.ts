@@ -15,7 +15,12 @@ import { renderError } from "../../utils/display.js";
 import { log, LOG_ACTIONS } from "../../utils/logger.js";
 import { SUPPORTED_TYPES_HINT } from "../../config/constants.js";
 import { checkBudget } from "../../services/budget-guard.js";
-import type { Phase1Context, Phase1Deps } from "./phase1-planner.js";
+import { askClarifyingQuestion } from "../../services/clarifier.js";
+import {
+  buildFreshPlanState,
+  type Phase1Context,
+  type Phase1Deps,
+} from "./phase1-planner.js";
 
 /**
  * Result of evaluating the post-Phase-1 state:
@@ -116,24 +121,53 @@ export async function handlePhase1Outcome(
     phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE ||
     phase1State.executionStatus === ExecutionStatus.POLICY_BLOCKED
   ) {
-    log({
-      ts: new Date().toISOString(),
-      runId: ctx.runId,
-      level: "info",
-      action: LOG_ACTIONS.APPLY_COMPLETE,
-      durationMs: Date.now() - ctx.startTs,
-      result: phase1State.executionStatus,
-    });
-    const defaultHint =
-      phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
-        ? SUPPORTED_TYPES_HINT
-        : "Try rephrasing your intent, or run `assignee --verbose apply <intent>` to see which node returned FAILED. Common causes: Bedrock region mismatch, missing credentials, or an intent the LLM could not map to a supported type.";
-    renderError(
-      phase1State.errorMessage ??
-        "Apply could not start — the planning phase did not produce a valid plan.",
-      defaultHint,
-    );
-    return { kind: "done", result: { success: false } };
+    // Story 52-1: offer one clarifying rephrase when the failure is an
+    // intent-ambiguity (not POLICY_BLOCKED — that's a different class).
+    // Skips silently in --yes / --quick / non-TTY.
+    if (phase1State.executionStatus !== ExecutionStatus.POLICY_BLOCKED) {
+      const rephrased = await askClarifyingQuestion({
+        state: phase1State,
+        autoApprove: deps.opts.yes === true,
+        quick: deps.opts.quick === true,
+      });
+      if (rephrased) {
+        ctx.intent = rephrased;
+        phase1State = (await ctx.graph.invoke(
+          buildFreshPlanState(ctx, deps) as Parameters<
+            typeof ctx.graph.invoke
+          >[0],
+          deps.graphConfig as Parameters<typeof ctx.graph.invoke>[1],
+        )) as AgentState;
+      }
+    }
+
+    // Re-check after optional clarifier retry.
+    const stillFailed =
+      phase1State.executionStatus === ExecutionStatus.FAILED ||
+      phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE ||
+      phase1State.executionStatus === ExecutionStatus.POLICY_BLOCKED;
+    if (stillFailed) {
+      log({
+        ts: new Date().toISOString(),
+        runId: ctx.runId,
+        level: "info",
+        action: LOG_ACTIONS.APPLY_COMPLETE,
+        durationMs: Date.now() - ctx.startTs,
+        result: phase1State.executionStatus,
+      });
+      const defaultHint =
+        phase1State.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
+          ? SUPPORTED_TYPES_HINT
+          : "Try rephrasing your intent, or run `assignee --verbose apply <intent>` to see which node returned FAILED. Common causes: Bedrock region mismatch, missing credentials, or an intent the LLM could not map to a supported type.";
+      renderError(
+        phase1State.errorMessage ??
+          "Apply could not start — the planning phase did not produce a valid plan.",
+        defaultHint,
+      );
+      return { kind: "done", result: { success: false } };
+    }
+    // Clarifier retry succeeded — fall through to the rest of the
+    // normal phase1-gate flow (BP findings, budget, continue).
   }
 
   // BP findings blocked the apply — plan box already rendered by result_formatter
