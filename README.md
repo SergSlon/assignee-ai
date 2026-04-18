@@ -118,7 +118,7 @@ intent_parser → schema_fetcher → option_elicitor → compound_dispatcher
 | `status_poller`        | Polls CloudControl until terminal state (SUCCESS / FAILED). Extended timeouts for RDS, ELBv2, NAT Gateway                                                                  |
 | `result_formatter`     | Renders success/failure output, writes provision records to memory, runs post-provision security checks                                                                    |
 
-13 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order. Source of truth: `packages/core/src/graph/create-graph.ts` (`.addNode` calls) and the node implementations under `packages/core/src/graph/nodes/`. `apps/cli/src/nodes/` carries thin re-export shims so existing imports keep working.
+13 nodes. Compound patterns loop `plan_generator → result_formatter` per resource in dependency order. Source of truth: `packages/core/src/graph/create-graph.ts` (`.addNode` calls) and the node implementations under `packages/core/src/graph/nodes/`. `apps/cli/src/nodes/advice/cost-optimizer/` and `apps/cli/src/nodes/fix-applicator/orchestrator.ts` are thin re-export shims from `@assignee/core`; the rest of the `apps/cli/src/nodes/` tree is CLI-only test code.
 
 All AWS credentials stay local — they never leave your machine. Bedrock calls run against your own account.
 
@@ -164,9 +164,9 @@ Discovery shortcuts live under `plan --help`: supported resource types, compound
 
 **Where Assignee loses.** The `Cloud coverage` row is the honest trade-off: four of the six alternatives are multi-cloud by design. Assignee is AWS-only (Epic 13, provider-abstraction, is deferred). If your workload spans AWS + GCP or AWS + Azure, pick Terraform, Pulumi, or Crossplane.
 
-> Reads top-down: the upper rows (code artifact, BP rules on free path) identify hard requirements — if "no code file to maintain" and "rules on the free path" are non-negotiable, Assignee is the only column that satisfies both. The lower rows (cloud coverage, runtime dependency) are the honest trade-offs — AWS-only, CLI on your own box. Pick the column whose column-sum matches your constraints, not whichever shouts loudest.
+> Reads top-down: the upper rows (code artifact, BP rules on free path) identify hard requirements — if "no code file to maintain" and "rules on the free path" are non-negotiable, Assignee is the only column that satisfies both. The lower rows (cloud coverage, runtime dependency) are the honest trade-offs — AWS-only, CLI on your own box. Pick the column whose row-by-row fit matches your constraints, not whichever shouts loudest.
 
-Eight direct / adjacent competitors, archived in the [workspace wiki](../wiki/competitors/):
+Nine direct / adjacent competitors — eight archived in the [workspace wiki](../wiki/competitors/) plus Crossplane (external link):
 
 - **vs [kagent](../wiki/competitors/kagent.md)** — kagent runs day-2 operations and observability INSIDE a Kubernetes cluster (Helm-installed controller, kubectl/helm/istioctl/prometheus-query tools). It diagnoses and reconciles existing workloads; it is not an IaC provisioner. Assignee provisions AWS primitives FROM zero, no cluster required. Pick kagent for K8s reconciliation; pick Assignee for greenfield AWS.
 - **vs [Pulumi AI / Neo](../wiki/competitors/pulumi-ai.md)** — Pulumi Neo writes Pulumi code in your language of choice; you still maintain a stack and a state file (local or Pulumi Cloud). Neo ships in the Team tier ($40/mo per seat at time of writing); CrossGuard policy-as-code is a separate SKU. Assignee writes nothing — resources live in your AWS account, tagged, with no source file to keep in sync, and all 185 BP rules ship on the free path.
@@ -176,19 +176,19 @@ Eight direct / adjacent competitors, archived in the [workspace wiki](../wiki/co
 - **vs [Crossplane](https://www.crossplane.io/)** — Crossplane is a Kubernetes control plane: you run a cluster, install provider CRDs (AWS, GCP, Azure), and author Compositions / Claims in YAML. Excellent for platform teams who already run K8s and want a control-loop for infrastructure. Assignee requires no cluster and targets operators who do not want one.
 - **vs [SST Ion](../wiki/competitors/sst.md)** — SST is TypeScript infrastructure-as-code for serverless app developers. Assignee is intent-as-infrastructure for operators — different category, different audience.
 - **vs [Nitric](../wiki/competitors/nitric.md)** — Nitric is code-defines-infra (TypeScript/Python), multi-cloud target. Assignee is English-defines-provisioning, AWS-only, with no code artifact.
-- **vs [Wing](../wiki/competitors/wing.md)** — Wing (shut down April 2025) was a new IaC language. Included here for completeness; no current comparison.
+- **vs [Wing](../wiki/competitors/wing.md)** — Wing (shut down April 9, 2025) was a new IaC language. Included here for completeness; no current comparison.
 
 Short answer: if you want a file to commit, pick any of the above. If you want a running AWS resource and a memory record, pick Assignee.
 
-### Disruption risk — three credible 6-18 month scenarios
+### Disruption risk — three credible 12-18 month scenarios
 
 No single-axis moat survives an 18-month vendor response. Three scenarios have comparable credibility; the bundle (not any one pillar) is the durable claim.
 
-| Scenario                                                                                                                     | Probability (6-18mo) | Impact on Assignee                              | Defensibility                                                                                                                |
-| ---------------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **HCP Terraform / IBM** ships native pre-apply cost preflight (gate, not PR-comment — Infracost-class, post-IBM acquisition) | HIGH                 | MED (cost-gate axis collapses; bundle survives) | MED — deterministic cost preflight against live AWS Pricing MCP, no SaaS platform fee, plan-time not PR-time                 |
-| **Amazon Q + CCAPI** direct-provision mode (no CDK intermediate; free, AWS-native, every account)                            | MED                  | HIGH (distribution moat)                        | HIGH risk — BP community on-ramp, local-first MIT, non-AWS LLM optionality (Anthropic / OpenAI / Google / Ollama)            |
-| **Spacelift Intent (OSS April 2026) + env0** ship no-HCL NL→provision with OPA/Sentinel gates                                | MED                  | MED (mid-market 10-50 eng teams)                | MED — HITL gate routed through the identical graph regardless of surface; local-first + no-SaaS posture for regulated buyers |
+| Scenario                                                                                                                     | Probability (12-18mo) | Impact on Assignee                              | Defensibility                                                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **HCP Terraform / IBM** ships native pre-apply cost preflight (gate, not PR-comment — Infracost-class, post-IBM acquisition) | HIGH                  | MED (cost-gate axis collapses; bundle survives) | MED — deterministic cost preflight against live AWS Pricing MCP, no SaaS platform fee, plan-time not PR-time                 |
+| **Amazon Q + CCAPI** direct-provision mode (no CDK intermediate; free, AWS-native, every account)                            | MED                   | HIGH (distribution moat)                        | HIGH risk — BP community on-ramp, local-first MIT, non-AWS LLM optionality (Anthropic / OpenAI / Google / Ollama)            |
+| **Spacelift Intent (OSS April 2026) + env0** ship no-HCL NL→provision with OPA/Sentinel gates                                | MED                   | MED (mid-market 10-50 eng teams)                | MED — HITL gate routed through the identical graph regardless of surface; local-first + no-SaaS posture for regulated buyers |
 
 Defensive response — already in flight across all three:
 
@@ -220,17 +220,18 @@ The single-axis moats each have a shelf life. The compound bundle is the durable
 
 Multi-resource intents are detected by keyword matching (zero LLM latency) and provisioned in dependency order. Run `assignee plan --help` for the live listing.
 
-| Pattern              | Resources                                              | Trigger keywords                       |
-| :------------------- | :----------------------------------------------------- | :------------------------------------- |
-| VPC Networking       | VPC → Subnets → IGW → RouteTables → NAT (17 resources) | "create a vpc", "vpc with subnets"     |
-| Serverless API       | IAM Role → Lambda → API Gateway V2 (8 resources)       | "serverless api", "lambda api"         |
-| Static Website       | S3 Bucket + CloudFront + OAC + S3 upload               | "static website", "static site"        |
-| Message Processing   | SQS DLQ → SQS + DynamoDB + IAM Role → Lambda           | "message queue", "event processing"    |
-| Three-Tier Web       | VPC → Subnet → SecurityGroup → ECS → ALB               | "three tier", "web application"        |
-| Container Service    | ECR → ECS Cluster → IAM Role                           | "container service", "ecs"             |
-| EFS with private VPC | VPC + private subnets + NFS SG + FS + MountTargets     | "create an efs", "shared file system"  |
-| Scheduled Lambda     | IAM Role → Lambda → EventBridge Rule (cron)            | "scheduled lambda", "cron lambda"      |
-| Lambda + Exec Role   | IAM Role → Lambda (minimal auto-exec-role pattern)     | "create a lambda", "create a function" |
+| Pattern              | Resources                                                     | Trigger keywords                                                |
+| :------------------- | :------------------------------------------------------------ | :-------------------------------------------------------------- |
+| VPC Networking       | VPC → Subnets → IGW → RouteTables → NAT (17 resources)        | "create a vpc", "vpc with subnets"                              |
+| Serverless API       | IAM Role → Lambda → API Gateway V2 (8 resources)              | "serverless api", "lambda api"                                  |
+| Static Website       | S3 Bucket + CloudFront + OAC + S3 upload                      | "static website", "static site"                                 |
+| Message Processing   | SQS DLQ → SQS + DynamoDB + IAM Role → Lambda                  | "message queue", "event processing"                             |
+| Three-Tier Web       | VPC → Subnet → SecurityGroup → ECS → ALB                      | "three tier", "web application"                                 |
+| Container Service    | ECR → ECS Cluster → IAM Role                                  | "container service", "ecs"                                      |
+| EFS with private VPC | VPC + private subnets + NFS SG + FS + MountTargets            | "create an efs", "shared file system"                           |
+| Scheduled Lambda     | IAM Role → Lambda → EventBridge Rule (cron)                   | "scheduled lambda", "cron lambda"                               |
+| Lambda + Exec Role   | IAM Role → Lambda (minimal auto-exec-role pattern)            | "create a lambda", "create a function"                          |
+| VPC Public-Only      | VPC + public Subnets + IGW + Routes (free-tier, 11 resources) | "vpc public only", "cheap vpc", "simple vpc", "vpc without nat" |
 
 ---
 
@@ -372,37 +373,37 @@ Packages `@assignee/cli` and `@assignee/mcp-server` are `"private": true` and in
 
 ### Completed epics
 
-| Epic   | Description                                                                             | Status                     |
-| :----- | :-------------------------------------------------------------------------------------- | :------------------------- |
-| **0**  | Project Foundation & Monorepo Setup                                                     | Done                       |
-| **1**  | Plan Command (LangGraph, MCP, intent parsing, plan generation)                          | Done                       |
-| **2**  | Apply Command (HITL, provisioning, status polling, tagging)                             | Done                       |
-| **7**  | Resource Intelligence (23 types, option elicitation, pricing, doc hints)                | Done                       |
-| **8**  | Compound Provisioning (6 architecture patterns, dependency ordering)                    | Done                       |
-| **9**  | Architecture Hardening (type safety, error handling, prompt injection guard)            | Done                       |
-| **10** | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)                 | Done                       |
-| **11** | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                              | Done                       |
-| **12** | Best Practices Library (YAML schema, trigger engine, 185 rules today, FSBP)             | Done (12.4, 12.6 deferred) |
-| **14** | Multi-Provider LLM Gateway (Vercel AI SDK — bedrock, anthropic, openai, google, ollama) | Done (14.2-14.4 deferred)  |
-| **18** | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action)       | Done                       |
-| **19** | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)           | Done                       |
-| **20** | MCP Server (plan, apply, list, estimate tools for AI agents)                            | Done                       |
-| **22** | Auto-Fix Round (apply auto-fixable BP patches with user consent)                        | Done                       |
-| **23** | Real-Time Pricing Breakdown (live pricing via AWS Pricing MCP, zero hardcoded $)        | Done                       |
-| **24** | Instance Type Selection UX (category filters, workload classification)                  | Done                       |
-| **25** | Sprint F — Tier 1 Resources (LogGroup, IGW, RouteTable, Route, NatGateway)              | Done                       |
-| **26** | Sprint G — Tier 2 Resources (ApiGatewayV2, CloudWatch Alarm, SecretsManager)            | Done                       |
-| **27** | Config Precedence (user, project, org policy, env overrides, CLI flags)                 | Done                       |
-| **28** | Drift Detection (`assignee drift`, `assignee reconcile`)                                | Done                       |
-| **29** | MCP Connection Pre-Warming & Resilience                                                 | Done (29.4 deferred)       |
-| **30** | Request/Response Recording & Replay                                                     | Done                       |
-| **31** | CloudFormation Schema SDK Migration (direct SDK, no MCP dependency)                     | Done                       |
-| **33** | Auto-Cleanup (checkpoints, cache rotation, memory TTL)                                  | Done                       |
-| **34** | Quality Hardening (node robustness, code splitting, error compensation)                 | Done                       |
-| **35** | Actionable Findings (interactive fix selection, fix hints, fix categories)              | Done                       |
-| **37** | Static Site Deploy (`--source`, S3 upload, CloudFront + OAC)                            | Done                       |
-| **38** | Full Codebase Hardening (bounds checks, timeout caps, input validation)                 | Done                       |
-| **50** | Positioning, Bloat Cut, Publish Prep                                                    | In progress                |
+| Epic   | Description                                                                                                                                | Status                     |
+| :----- | :----------------------------------------------------------------------------------------------------------------------------------------- | :------------------------- |
+| **0**  | Project Foundation & Monorepo Setup                                                                                                        | Done                       |
+| **1**  | Plan Command (LangGraph, MCP, intent parsing, plan generation)                                                                             | Done                       |
+| **2**  | Apply Command (HITL, provisioning, status polling, tagging)                                                                                | Done                       |
+| **7**  | Resource Intelligence (option elicitation, pricing, doc hints — see [Supported resource types](#supported-resource-types))                 | Done                       |
+| **8**  | Compound Provisioning (architecture patterns, dependency ordering — see [Compound architecture patterns](#compound-architecture-patterns)) | Done                       |
+| **9**  | Architecture Hardening (type safety, error handling, prompt injection guard)                                                               | Done                       |
+| **10** | Plan Intelligence & Checkpoint (save/resume, guardrails, plan-to-apply)                                                                    | Done                       |
+| **11** | Expert Apply Mode (`--yes`, `--no-wizard`, `--checkpoint`)                                                                                 | Done                       |
+| **12** | Best Practices Library (YAML schema, trigger engine, 185 rules today, FSBP)                                                                | Done (12.4, 12.6 deferred) |
+| **14** | Multi-Provider LLM Gateway (Vercel AI SDK — bedrock, anthropic, openai, google, ollama)                                                    | Done (14.2-14.4 deferred)  |
+| **18** | CLI Polish & Distribution (init, list, destroy, completions, npm/brew, GH Action)                                                          | Done                       |
+| **19** | Intelligence Layer (IAM MCP, WA Security MCP, memory system, status, billing)                                                              | Done                       |
+| **20** | MCP Server (plan, apply, list, estimate tools for AI agents)                                                                               | Done                       |
+| **22** | Auto-Fix Round (apply auto-fixable BP patches with user consent)                                                                           | Done                       |
+| **23** | Real-Time Pricing Breakdown (live pricing via AWS Pricing MCP, zero hardcoded $)                                                           | Done                       |
+| **24** | Instance Type Selection UX (category filters, workload classification)                                                                     | Done                       |
+| **25** | Sprint F — Tier 1 Resources (LogGroup, IGW, RouteTable, Route, NatGateway)                                                                 | Done                       |
+| **26** | Sprint G — Tier 2 Resources (ApiGatewayV2, CloudWatch Alarm, SecretsManager)                                                               | Done                       |
+| **27** | Config Precedence (user, project, org policy, env overrides, CLI flags)                                                                    | Done                       |
+| **28** | Drift Detection (`assignee drift`, `assignee reconcile`)                                                                                   | Done                       |
+| **29** | MCP Connection Pre-Warming & Resilience                                                                                                    | Done (29.4 deferred)       |
+| **30** | Request/Response Recording & Replay                                                                                                        | Done                       |
+| **31** | CloudFormation Schema SDK Migration (direct SDK, no MCP dependency)                                                                        | Done                       |
+| **33** | Auto-Cleanup (checkpoints, cache rotation, memory TTL)                                                                                     | Done                       |
+| **34** | Quality Hardening (node robustness, code splitting, error compensation)                                                                    | Done                       |
+| **35** | Actionable Findings (interactive fix selection, fix hints, fix categories)                                                                 | Done                       |
+| **37** | Static Site Deploy (`--source`, S3 upload, CloudFront + OAC)                                                                               | Done                       |
+| **38** | Full Codebase Hardening (bounds checks, timeout caps, input validation)                                                                    | Done                       |
+| **50** | Positioning, Bloat Cut, Publish Prep                                                                                                       | In progress                |
 
 ### Deferred epics (post-traction / SaaS phase)
 
