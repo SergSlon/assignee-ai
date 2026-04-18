@@ -50,6 +50,25 @@ assignee doctor --short   # verify AWS credentials + Bedrock region
 
 See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the IAM policy setup (operator / reader / auditor).
 
+## Table of contents
+
+- [30-second hero](#30-second-hero)
+- [Install](#install)
+- [What this is](#what-this-is)
+- [What this is NOT](#what-this-is-not)
+- [Who this is for — "Mara, the solo / small-team AWS operator"](#who-this-is-for--mara-the-solo--small-team-aws-operator)
+- [How it works](#how-it-works)
+- [Commands](#commands)
+- [vs the competition](#vs-the-competition)
+- [Supported resource types](#supported-resource-types)
+- [MCP Server](#mcp-server)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Project status](#project-status)
+- [AWS setup](#aws-setup)
+- [Documentation](#documentation)
+- [License · Contributing · Security](#license--contributing--security)
+
 ## What this is
 
 - **Plain English in. Real AWS resource out.** CloudControl API + auto-tagging. No generated HCL, TypeScript, or Pulumi to maintain.
