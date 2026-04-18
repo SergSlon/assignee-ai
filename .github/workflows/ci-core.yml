@@ -8,6 +8,9 @@ name: CI Core (reusable)
 # Keeping it reusable means the cross-platform sweep is bit-identical to the
 # default gate, and we never drift one copy from the other.
 
+permissions:
+  contents: read
+
 on:
   workflow_call:
     inputs:

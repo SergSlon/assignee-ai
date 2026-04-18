@@ -32,6 +32,9 @@ name: CI — cross-platform (manual + weekly)
 # Private-repo billing note: macOS minutes cost 10× Linux, Windows 2×.
 # Click "Run workflow" in the Actions tab to trigger on demand.
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:

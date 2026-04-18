@@ -12,6 +12,15 @@ on:
     branches: [main]
   pull_request:
 
+# Least-privilege default — GITHUB_TOKEN only gets read access to repo
+# contents. Any job that needs to write (e.g. publish a coverage badge
+# via gist) opts in with a per-job `permissions:` override. See
+# ci-core.yml's coverage-badge step — the gist write is authenticated
+# via a separate PAT (secrets.GIST_TOKEN), not GITHUB_TOKEN, so no
+# job-level elevation is needed here.
+permissions:
+  contents: read
+
 jobs:
   ubuntu-node22:
     name: ci (ubuntu-latest / node 22)

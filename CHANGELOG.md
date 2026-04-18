@@ -12,6 +12,55 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 52 — iteration 1 (2026-04-17 → 2026-04-18)
+
+#### Added
+
+- **Clarifying-question turn for ambiguous NL intents (Epic 52-1).**
+  When the intent parser cannot confidently choose a resource type or
+  the user's request is under-specified, the CLI now asks a single
+  short clarifying question before planning instead of guessing.
+  `--yes`, `--quick`, and `POLICY_BLOCKED` paths bypass the clarifier
+  so non-interactive flows remain fully autonomous.
+- **Update-notifier banner (Wave H1).** `assignee` now prints a
+  one-line hint when a newer version is available. This is a no-op
+  while the packages remain `private: true`; it activates once
+  `v0.2.x` lands on npm.
+- **Architecture patterns: full registry coverage in help (Story
+  53-it1-05).** `assignee --help` and `plan --help` now advertise all
+  ten compound patterns (`serverless-api`, `three-tier-web`,
+  `container-service`, `message-processing`, `static-website`,
+  `efs-with-vpc`, `vpc-networking`, `vpc-public-only`,
+  `scheduled-lambda`, `lambda-with-exec-role`) with counts derived
+  from the runtime registry. The resource-type hint now enumerates
+  every entry in `SUPPORTED_TYPES_ARRAY` (37 types) — previously it
+  displayed a curated subset missing EFS, KMS, CloudFront, the
+  EventBridge family, `S3::BucketPolicy`, and `RDS::DBSubnetGroup`.
+
+#### Changed
+
+- **MCP IAM role parity (Epic 52-2).** Consolidated the managed-
+  resource fetch path so the MCP server now returns the same IAM
+  role inventory as the CLI's `assignee list`. `fetchManagedResources`
+  was de-duplicated across the two packages and the long-standing
+  operator-vs-reader role gap in the MCP surface is closed.
+
+#### Fixed
+
+- **MCP active-applies cap (Wave G1).** The in-process `activeApplies`
+  `Set` is now bounded at 100 entries so a leaked apply during a long-
+  running MCP session no longer grows the Set unboundedly. Protects
+  against release-time memory drift in hosted MCP deployments.
+
+#### Security
+
+- **env-writer hardened + operator-creds warn-once (Wave E1).**
+  `assignee init` / `setup` now create the `.assignee/` parent
+  directory with `0o700` permissions on first write (previously
+  inherited the umask default, which could be world-readable on some
+  shells). The operator-credentials warning is emitted at most once
+  per command to reduce noise without hiding the risk.
+
 ### Epic 51 — iteration 1 (2026-04-17)
 
 #### Docs
