@@ -11,6 +11,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
     "check:mock-fixture-drift": "npx tsx --import ./scripts/_vitest-shim.mts scripts/check-mock-fixture-drift.mts",
+    "citation-lint": "node apps/cli/scripts/citation-lint.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

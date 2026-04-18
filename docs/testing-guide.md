@@ -257,7 +257,7 @@ node process-captured-responses.mjs  # trims schemas/pricing/docs to fixture siz
 
 > `build-fixture-ts.mjs` is **disabled** (exits 2) since story 48-10 split the
 > monolithic fixture into per-resource files under
-> `apps/cli/src/test-fixtures/mcp-mock-responses/`. To add or update fixtures,
+> `packages/core/src/test-fixtures/mcp-mock-responses/`. To add or update fixtures,
 > edit the per-resource files directly — see the directory layout and the facade
 > re-export in `mcp-mock-responses.ts`.
 
@@ -366,8 +366,8 @@ The same lifecycle coverage now lives in code:
   All other compounds are covered (VPC, lambda-with-exec-role, efs-with-vpc,
   static-website, scheduled-lambda, serverless-api, message-processing) plus
   the VPC EIP-leak regression and SSM single-resource apply.
-- **MCP Server E2E** — `apps/mcp-server/src/e2e/` (see the section above for
-  the `RUN_E2E_MCP=1` gate, mirrors the CLI lifecycle through the MCP API).
+- **MCP Server E2E** — `apps/mcp-server/e2e-test.mjs` (see the section above
+  for the `RUN_E2E_MCP=1` gate, mirrors the CLI lifecycle through the MCP API).
 - **Plan-only / dry-run coverage** — the unit suite under
   `apps/cli/src/__tests__/` covers every supported resource type with the
   same plan-shape assertions the manual tests used to verify, plus the

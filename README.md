@@ -180,17 +180,35 @@ Eight direct / adjacent competitors, archived in the [workspace wiki](../wiki/co
 
 Short answer: if you want a file to commit, pick any of the above. If you want a running AWS resource and a memory record, pick Assignee.
 
-### Disruption risk — Amazon Q + CCAPI direct-provision
+### Disruption risk — three credible 6-18 month scenarios
 
-The most credible disruption scenario for Assignee is a first-party convergence: Amazon Q Developer gaining a direct-provision mode against the Cloud Control API, bypassing CDK synthesis. A first-party tool would have native IAM integration, no cross-account credential mental model, and AWS Console discovery out of the box — three real advantages.
+No single-axis moat survives an 18-month vendor response. Three scenarios have comparable credibility; the bundle (not any one pillar) is the durable claim.
 
-Defensive response — already in flight:
+| Scenario                                                                                                                     | Probability (6-18mo) | Impact on Assignee                              | Defensibility                                                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **HCP Terraform / IBM** ships native pre-apply cost preflight (gate, not PR-comment — Infracost-class, post-IBM acquisition) | HIGH                 | MED (cost-gate axis collapses; bundle survives) | MED — deterministic cost preflight against live AWS Pricing MCP, no SaaS platform fee, plan-time not PR-time                 |
+| **Amazon Q + CCAPI** direct-provision mode (no CDK intermediate; free, AWS-native, every account)                            | MED                  | HIGH (distribution moat)                        | HIGH risk — BP community on-ramp, local-first MIT, non-AWS LLM optionality (Anthropic / OpenAI / Google / Ollama)            |
+| **Spacelift Intent (OSS April 2026) + env0** ship no-HCL NL→provision with OPA/Sentinel gates                                | MED                  | MED (mid-market 10-50 eng teams)                | MED — HITL gate routed through the identical graph regardless of surface; local-first + no-SaaS posture for regulated buyers |
 
-- **Best-practice library as community on-ramp.** Every BP rule is YAML, every reviewer listed; a new rule lands in ~45 minutes. The moat is not "we have 185 rules" (that is a snapshot); it is "a new rule lands in 45 minutes by a community contributor." See [docs/explanation/contributing-a-bp-rule.md](docs/explanation/contributing-a-bp-rule.md).
+Defensive response — already in flight across all three:
+
+- **Best-practice library as community on-ramp.** Every BP rule is YAML; a new rule lands in ~45 minutes. The moat is not "we have 185 rules" (a snapshot); it is "a new rule lands in 45 minutes by a community contributor." See [docs/explanation/contributing-a-bp-rule.md](docs/explanation/contributing-a-bp-rule.md).
 - **Local-first, open-source, MIT.** Credentials never leave the operator's machine; the full graph, rules, and prompts are inspectable. A first-party offering has to keep pace on transparency to displace a local-first OSS tool with its rule library held in a public repo.
 - **Non-AWS LLM optionality.** The Vercel AI SDK lets Mara swap to Anthropic / OpenAI / Google / Ollama — Assignee is not locked to Bedrock, so an operator wary of single-vendor AI has a credible escape hatch.
 
-This is a live risk, not a moat claim. It is listed here so the reader can price it in.
+These are live risks, not moat claims. They are listed here so the reader can price them in.
+
+#### Bundle durability — 12-month threat vs. defensibility
+
+The single-axis moats each have a shelf life. The compound bundle is the durable claim: a competitor who adds cost preflight still lacks BP auto-fix; a competitor who adds BP auto-fix still lacks plan-time cost preflight; a competitor who adds both is Pulumi Neo at $40/mo, not a free CLI.
+
+| Differentiator                                        | 12-month threat                                                    | Defensibility | 2026 response                                                           |
+| ----------------------------------------------------- | ------------------------------------------------------------------ | ------------- | ----------------------------------------------------------------------- |
+| **Pre-apply BP auto-fix** (185 YAML rules, free path) | MED — cdk-nag + CrossGuard engines exist; bundled rules are DIY    | HIGH          | Community contribution flow; reviewer-credited YAML rules               |
+| **Plan-time cost preflight** (live AWS Pricing MCP)   | HIGH — HCP/IBM or Infracost-native-gate likely 6-12mo              | MED           | Deterministic gate, no SaaS platform fee, local-first, not a PR-comment |
+| **Local-first, no state file**                        | LOW — SaaS platforms cannot easily retrofit no-backend posture     | HIGH          | Regulated-buyer posture; credentials never leave the box                |
+| **HITL gate before every apply**                      | MED — agents-generate-then-agents-apply pipelines will proliferate | HIGH          | Single graph, single gate, enforced at CLI and MCP surface alike        |
+| **MCP parity via shared `createGraph`**               | HIGH — every IaC tool will expose an MCP within 12mo               | MED           | Bundle parity, not MCP novelty: the agent cannot bypass the safety loop |
 
 ---
 
@@ -218,6 +236,8 @@ Multi-resource intents are detected by keyword matching (zero LLM latency) and p
 
 ## MCP Server
 
+**MCP is not the moat — every IaC tool will have one within 12 months. The moat is that the MCP path routes through the identical 13-node graph, 185 BP rules, and HITL gate as the CLI, so an agent cannot silently bypass the approval loop the way an agent-generates-HCL-then-agent-applies-HCL pipeline can.**
+
 The `@assignee/mcp-server` package exposes Assignee.ai as an MCP server for AI coding agents (Claude Code, Cursor, Windsurf). It runs over **stdio transport, spawn-per-session** — the harness launches `assignee-mcp-server` as a child process on demand, no daemon required, credentials and state stay on the operator's box.
 
 Five tools are registered (see `apps/mcp-server/src/tools/index.ts`):
@@ -228,7 +248,7 @@ Five tools are registered (see `apps/mcp-server/src/tools/index.ts`):
 - `list_managed_resources` — enumerates resources tagged with `assignee:managed=true` via the Resource Groups Tagging API, with the IAM-roles parallel listing path added in Story 52-2 (RGTA does not return IAM roles)
 - `estimate_cost` — pricing lookup against the `awslabs.aws-pricing-mcp-server` for a desired-state JSON
 
-The CLI is one-shot per intent; the MCP server is a long-lived child the agent can call repeatedly within a session, but it imports `createGraph` from `@assignee/core` so the graph, BP rules, and credential separation are identical to the terminal flow.
+The CLI is one-shot per intent; the MCP server is a long-lived child the agent can call repeatedly within a session. Both surfaces import `createGraph` from `@assignee/core`, so the graph, BP rules, HITL gate, and credential separation are identical — an agent calling `apply_plan` hits the same approval boundary as a human typing `assignee apply`.
 
 Wire-up snippets for each harness live under [`apps/mcp-server/examples/`](apps/mcp-server/examples/) (`claude-code-mcp-config.json`, `cursor-mcp.json`, `windsurf-mcp-config.json`). See [docs/mcp-server.md](docs/mcp-server.md) and [apps/mcp-server/README.md](apps/mcp-server/README.md) for setup, env-var requirements, and troubleshooting.
 
@@ -250,7 +270,6 @@ apps/
                        llm-adapter.ts
       config/          mcp-servers.ts
       utils/           display.ts · logger.ts · tags.ts · mcp.ts · pricing-lookup.ts
-      test-fixtures/   mcp-mock-responses/ (real MCP captures, per-resource)
     scripts/           capture → process → build fixture pipeline
   mcp-server/
     src/               MCP server entry point, tool handlers; imports
@@ -287,6 +306,7 @@ packages/
       pricing/         pricing data and lookup
       guardrails/      built-in guardrail rules
       errors.ts
+      test-fixtures/   mcp-mock-responses/ (real MCP captures, per-resource)
   best-practices/
     src/               BP YAML schema, trigger engine, rule library
 ```
@@ -334,7 +354,7 @@ Pre-commit hook runs: prettier → check-types → test.
 
 ### Test fixtures
 
-All MCP mock responses in `apps/cli/src/test-fixtures/mcp-mock-responses/` are captured from live MCP servers (not fabricated). Captured responses are tracked in git. To refresh:
+All MCP mock responses in `packages/core/src/test-fixtures/mcp-mock-responses/` are captured from live MCP servers (not fabricated). Captured responses are tracked in git. To refresh:
 
 ```bash
 cd apps/cli/scripts

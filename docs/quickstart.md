@@ -101,7 +101,7 @@ The 13-node LangGraph pipeline processed your intent through these stages:
 
 ```
 intent_parser -> schema_fetcher -> option_elicitor -> compound_dispatcher
-     -> plan_generator -> bp_evaluator -> fix_applicator
+     -> plan_generator -> advice_generator -> bp_evaluator -> fix_applicator
      -> preflight_guard -> human_approval -> resource_provisioner
      -> status_poller -> result_formatter
 ```

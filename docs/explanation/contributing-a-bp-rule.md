@@ -173,8 +173,8 @@ The three things that make the BP-rule library extensible:
 2. **Validation at PR time.** `manifest-freshness.test.ts` +
    `validate-bp-rules.test.ts` run under `pnpm test` in CI — broken
    rules never reach main.
-3. **SHA-256 manifest instead of signed artifacts.** [Story 50-3](../../_bmad-output/implementation-artifacts/_archive/done-stories/)
-   cut GPG signing as supply-chain theatre. An in-tree SHA-256 manifest
+3. **SHA-256 manifest instead of signed artifacts.** Story 50-3 cut GPG
+   signing as supply-chain theatre. An in-tree SHA-256 manifest
    - git history is enough provenance for an MIT-licensed OSS rule
      library; consumers with stronger threat models can re-sign at
      package time.

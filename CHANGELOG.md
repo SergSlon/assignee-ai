@@ -12,6 +12,46 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 53 — iteration 1 (2026-04-18)
+
+#### Docs
+
+- **Citation drift sweep (L8-B1, L8-H1..H3, L8-MEDs).** Full-repo
+  citation audit. Removed the dead `mcp-intelligence-audit.md` "See
+  also" from `docs/configuration.md` (target relocated to
+  `_bmad-output/planning-artifacts/_archive/` under Epic 52). Repointed
+  `apps/cli/src/test-fixtures/mcp-mock-responses/` references to the
+  real location `packages/core/src/test-fixtures/mcp-mock-responses/`
+  in `README.md` (architecture tree + testing-fixtures section) and
+  `docs/testing-guide.md`. Removed the stale `apps/cli/scripts/check-mcp-versions.ts`
+  paragraph + exit-code bullets from `docs/mcp-servers.md` — no such
+  script exists; the in-process doctor flow described above it is the
+  only implementation. Repointed `docs/testing-guide.md` MCP Server
+  E2E row from the nonexistent `apps/mcp-server/src/e2e/` to
+  `apps/mcp-server/e2e-test.mjs`. Dropped the gitignored
+  `_bmad-output/implementation-artifacts/_archive/done-stories/` link
+  from `docs/explanation/contributing-a-bp-rule.md` (regression of
+  Epic 51 L8-006 class — invisible to external clones). Corrected
+  `docs/architecture-flows.md` header note after `architecture.md`
+  moved into `_bmad-output/planning-artifacts/_archive/`. Fixed
+  `docs/explanation/telemetry-design.md` `audit-log.ts` pointer from
+  the deleted CLI module to the surviving MCP-server module
+  (`apps/mcp-server/src/utils/audit-log.ts`). Corrected the compound
+  pattern count and the invented pattern IDs (`s3-static-site`,
+  `rds-with-vpc`) in `docs/explanation/oss-vs-saas.md` to match the
+  ten patterns actually registered in
+  `packages/core/src/pattern-templates/`.
+
+#### Tooling
+
+- **`apps/cli/scripts/citation-lint.mjs`.** Added a lightweight Node
+  ESM checker that scans `README.md`, `CHANGELOG.md`, and
+  `docs/**/*.md` for relative markdown citations and fails on broken
+  targets. Wired as the root script `pnpm citation-lint`. Skips
+  external URLs, anchor-only links, and citations inside code fences.
+  Catches the Step-6c scope-incomplete pattern mechanically so future
+  iterations never ship stale citations.
+
 ### Epic 52 — iteration 1 (2026-04-17 → 2026-04-18)
 
 #### Added
