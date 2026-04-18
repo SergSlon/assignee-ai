@@ -27,7 +27,7 @@ export async function buildLlmClient(
   opts: LlmFactoryOpts,
 ): Promise<LlmPort | undefined> {
   if (!opts.recorder) return undefined;
-  const { LlmAdapter } = await import("../../services/llm-adapter.js");
+  const { LlmAdapter } = await import("@assignee/core/llm");
   const baseLlm = new LlmAdapter({
     modelString:
       process.env[EnvVar.ASSIGNEE_LLM_DEFAULT] ??

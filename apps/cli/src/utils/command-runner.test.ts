@@ -47,7 +47,7 @@ vi.mock("./recorder.js", () => ({
   RecordingLlmAdapter: vi.fn(),
 }));
 
-vi.mock("../services/llm-adapter.js", () => ({
+vi.mock("@assignee/core/llm", () => ({
   LlmAdapter: vi.fn(),
 }));
 
@@ -75,7 +75,7 @@ const {
   wrapToolWithRecorder,
   RecordingInterceptor: _RI,
 } = await import("./recorder.js");
-const { LlmAdapter } = await import("../services/llm-adapter.js");
+const { LlmAdapter } = await import("@assignee/core/llm");
 
 // ── Test setup ──────────────────────────────────────────────────────────────
 
