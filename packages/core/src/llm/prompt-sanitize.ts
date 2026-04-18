@@ -23,12 +23,15 @@
  */
 
 /**
- * Tag names we recognise as prompt-boundary / role directives. Stripped
- * in both opening (`<name …>`) and closing (`</name>`) form, case-
- * insensitive, tolerant of whitespace around the slash and name.
+ * Tag names we recognise as prompt-boundary / role directives (8 total).
+ * Stripped in both opening (`<name …>`) and closing (`</name>`) form,
+ * case-insensitive, tolerant of whitespace around the slash and name.
  *
- * Synced with `utils/sanitize.ts::ROLE_TAG_PATTERN` so the allowlist is
- * consistent across the two layers.
+ * Superset of `utils/sanitize.ts::ROLE_TAG_PATTERN` (which covers 7:
+ * user_intent, system, assistant, human, user, tool, context). This
+ * layer adds `instructions` because Anthropic-style prompts sometimes
+ * use `<instructions>` as a role marker the upstream helper does not
+ * recognise. Keep the two lists in sync when either gains a new tag.
  */
 const BOUNDARY_TAG_NAMES = [
   "user_intent",

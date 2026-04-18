@@ -22,6 +22,7 @@ import { UserMessage } from "../../../config/constants/ui.js";
 import { WIZARD_NONE_SENTINEL } from "../../../config/constants/enums.js";
 import { searchAmis } from "../../aws-resource-discovery/index.js";
 import { fetchSuggestionPrice } from "../pricing-hints.js";
+import { stripPromptBoundaryTags } from "../../../llm/prompt-sanitize.js";
 
 export interface OtherHandlerParams {
   field: ResourceField;
@@ -156,8 +157,10 @@ async function askLlmForValue(
     const prompt = [
       `The user is configuring a ${resourceType} resource.`,
       `They need to set the "${field.name}" field.`,
-      `They described what they need as: "${userDesc}"`,
-      userIntent ? `Their overall intent: "${userIntent}"` : "",
+      `They described what they need as: "${stripPromptBoundaryTags(userDesc)}"`,
+      userIntent
+        ? `Their overall intent: "${stripPromptBoundaryTags(userIntent)}"`
+        : "",
       optionsContext,
       "",
       "Respond with ONLY the exact value (a single short string, nothing else — no explanation, no sentences).",

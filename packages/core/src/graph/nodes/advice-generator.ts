@@ -19,6 +19,7 @@ import {
 } from "./advice/mcp-advisor.js";
 import { MAX_ADVICE_HINTS, ADVICE_LLM_MAX_TOKENS } from "./advice/constants.js";
 import { enrichAdvisoryPrices } from "../../services/advisory-price-enricher/index.js";
+import { stripPromptBoundaryTags } from "../../llm/prompt-sanitize.js";
 
 /**
  * Factory for the advice_generator LangGraph node.
@@ -185,7 +186,7 @@ function buildAdvicePrompt(
   return `You are an AWS cloud advisor. A user is about to provision this resource:
 
 Resource type: ${state.resourceType}
-User intent: "${state.userIntent}"
+User intent: "${stripPromptBoundaryTags(state.userIntent)}"
 Configuration keys: ${stateKeys}
 ${costLine}${mcpBlock}
 

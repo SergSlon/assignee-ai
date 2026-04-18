@@ -11,6 +11,7 @@ import { DOC_SECTION_TITLES } from "../constants/doc-sections.js";
 import { unwrapMcpText } from "./mcp.js";
 import { withTimeout } from "./timeout.js";
 import { extractFirstUrl } from "./mcp-types.js";
+import { stripPromptBoundaryTags } from "../llm/prompt-sanitize.js";
 
 // ── Trade-off analysis help (Story 10.6) ──────────────────────────────────────
 
@@ -47,7 +48,7 @@ export async function renderTradeoffHelp(
   const prompt = `You are an AWS infrastructure cost/performance advisor.
 A developer is configuring a "${resourceType}" resource and needs to choose a value for "${fieldName}".
 
-Their stated intent: "${userIntent}"
+Their stated intent: "${stripPromptBoundaryTags(userIntent)}"
 
 Available options:
 ${optionList}
