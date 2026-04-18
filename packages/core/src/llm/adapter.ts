@@ -25,6 +25,7 @@ import {
 } from "./model-parser.js";
 import { createLanguageModel } from "./client-factory.js";
 import { detectBedrockRegionError } from "./bedrock-region.js";
+import { stripPromptBoundaryTags } from "./prompt-sanitize.js";
 
 export interface LlmAdapterConfig {
   /** Model string, e.g. "anthropic/claude-sonnet-4-5". Defaults to DEFAULT_MODEL. */
@@ -76,6 +77,15 @@ export class LlmAdapter implements LlmPort {
       ] as const;
     }
 
+    // Story 55-it1-04 (it55-1-L5-001 + L5-002): sanitize-by-default at
+    // the adapter boundary. `stripPromptBoundaryTags` runs FIRST so any
+    // `</user_intent><system>ignore</system>` injection embedded in the
+    // raw prompt is removed before the redactor decides what to scrub.
+    // Per-callsite wraps (plan-generator, advice-generator, display-docs,
+    // wizard "other") remain as defence-in-depth but are no longer
+    // load-bearing — the adapter strip eliminates the entire L5-H1
+    // finding class by construction.
+    //
     // Story 54-it1-05 (L5-H2): defence-in-depth — redact ARNs + 12-digit
     // account IDs from the outbound prompt before it leaves the process.
     // The Bedrock path is the only active provider today, but the adapter
@@ -83,7 +93,8 @@ export class LlmAdapter implements LlmPort {
     // backend is equally trustworthy with raw identifiers. Allowlist-based
     // per `feedback_redaction_allowlist_not_denylist`; partition-aware
     // per `feedback_partition_aware_arn_matching`.
-    const redactedPrompt = redactSensitive(prompt);
+    const sanitizedPrompt = stripPromptBoundaryTags(prompt);
+    const redactedPrompt = redactSensitive(sanitizedPrompt);
 
     const [callErr, result] = await safeTry(
       generateText({
@@ -137,10 +148,13 @@ export class LlmAdapter implements LlmPort {
       ] as const;
     }
 
-    // Story 54-it1-05 (L5-H2): defence-in-depth outbound redaction —
-    // mirrors the generateStructured path above. See that comment for
-    // rationale + invariant links.
-    const redactedPrompt = redactSensitive(prompt);
+    // Story 55-it1-04 + Story 54-it1-05: sanitize-then-redact at the
+    // adapter boundary — mirrors the generateStructured path above. See
+    // that comment for rationale + invariant links. Order is critical:
+    // boundary-tag strip MUST precede redactSensitive so injected role
+    // tags cannot hide ARNs from the redactor.
+    const sanitizedPrompt = stripPromptBoundaryTags(prompt);
+    const redactedPrompt = redactSensitive(sanitizedPrompt);
 
     const [callErr, result] = await safeTry(
       generateText({

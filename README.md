@@ -70,7 +70,7 @@ See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the IAM policy setup (ope
 - **No state file, no Pulumi stack, no Terraform backend, no CDK bootstrap.** Desired state is the AWS account itself, read back on every plan.
 - **Human approval gate (HITL) on every plan**; 185 best-practice rules with auto-fix; cost preflight via AWS Pricing MCP; reversible destroy with confirmation.
 
-> **Shape the rules.** Assignee's best-practice library is the community moat — every rule is YAML, every reviewer is listed, and a new rule lands in ~45 minutes of focused work. See [docs/explanation/contributing-a-bp-rule.md](docs/explanation/contributing-a-bp-rule.md) for a worked example.
+> **Shape the rules.** Assignee's best-practice library is the community moat — every rule is YAML, every rule cites its source (FSBP control IDs, AWS Well-Architected pillars, AWS docs URLs, Trusted Advisor checks), and a new rule lands in ~45 minutes of focused work. See [docs/explanation/contributing-a-bp-rule.md](docs/explanation/contributing-a-bp-rule.md) for a worked example.
 
 ## What this is NOT
 
@@ -204,7 +204,7 @@ The single-axis moats each have a shelf life. The compound bundle is the durable
 
 | Differentiator                                        | 12-month threat                                                    | Defensibility | 2026 response                                                           |
 | ----------------------------------------------------- | ------------------------------------------------------------------ | ------------- | ----------------------------------------------------------------------- |
-| **Pre-apply BP auto-fix** (185 YAML rules, free path) | MED — cdk-nag + CrossGuard engines exist; bundled rules are DIY    | HIGH          | Community contribution flow; reviewer-credited YAML rules               |
+| **Pre-apply BP auto-fix** (185 YAML rules, free path) | MED — cdk-nag + CrossGuard engines exist; bundled rules are DIY    | HIGH          | Community contribution flow; source-cited YAML rules                    |
 | **Plan-time cost preflight** (live AWS Pricing MCP)   | HIGH — HCP/IBM or Infracost-native-gate likely 6-12mo              | MED           | Deterministic gate, no SaaS platform fee, local-first, not a PR-comment |
 | **Local-first, no state file**                        | LOW — SaaS platforms cannot easily retrofit no-backend posture     | HIGH          | Regulated-buyer posture; credentials never leave the box                |
 | **HITL gate before every apply**                      | MED — agents-generate-then-agents-apply pipelines will proliferate | HIGH          | Single graph, single gate, enforced at CLI and MCP surface alike        |
