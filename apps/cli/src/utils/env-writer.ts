@@ -82,10 +82,17 @@ export function mergeEnvFile(
   // Ensure file ends with a newline
   const output = processedLines.join("\n").replace(/\n*$/, "\n");
 
-  // Ensure directory exists
+  // Ensure directory exists with 0700 permissions — parent of .env should not
+  // be world-readable since it hosts AWS credentials. New dirs get 0700 via
+  // mkdirSync mode; pre-existing dirs keep their mode, so chmod belt-and-braces.
   const dir = path.dirname(envPath);
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  }
+  try {
+    fs.chmodSync(dir, 0o700);
+  } catch {
+    // chmod may fail on Windows — non-fatal
   }
 
   // Write with 0600 permissions — .env contains AWS credentials.
