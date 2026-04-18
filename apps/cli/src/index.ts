@@ -36,12 +36,19 @@ import {
 import { closeMcpClient } from "./services/mcp-client.js";
 import { bootstrapFirstRun } from "./utils/first-run.js";
 import { stopSpinner } from "./utils/display.js";
+import { checkForUpdates } from "./utils/update-notifier.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, "..", "package.json"), "utf-8"),
 );
+
+// Self-update UX (Wave H1): non-intrusive banner when a newer version
+// of assignee is on npm. No-op pre-publish (private: true → registry
+// 404), silent in CI / piped stdout / --json, opt-outable via
+// ASSIGNEE_NO_UPDATE_CHECK=1. All errors are swallowed internally.
+checkForUpdates({ name: pkg.name as string, version: pkg.version as string });
 
 // First-run detection: auto-create ~/.assignee/ and show welcome (Story 29.6)
 bootstrapFirstRun(pkg.version as string);
