@@ -7,7 +7,7 @@ Get from zero to a provisioned AWS resource in under 60 seconds.
 Both `@assignee/cli` and `@assignee/mcp-server` are currently `private` and not published to npm. Build from source locally and link the CLI into your `$PATH`:
 
 ```bash
-git clone https://github.com/<owner>/assignee.ai.git
+git clone https://github.com/assignee-ai/assignee.ai.git
 cd assignee.ai
 pnpm install
 pnpm build
