@@ -10,7 +10,7 @@
 import { tryAssigneeCredentials } from "@assignee/core";
 import { EnvVar } from "../../../constants/env-vars.js";
 import { AWS_REGION } from "../../../config/constants.js";
-import { LlmAdapter, DEFAULT_MODEL } from "../../../services/llm-adapter.js";
+import { LlmAdapter, DEFAULT_MODEL } from "@assignee/core/llm";
 import { DEFAULT_CHECK_TIMEOUT_MS } from "../types.js";
 import type { DoctorSection, DoctorSubCheck } from "../types.js";
 import { rollup, withTimeout } from "../util.js";
