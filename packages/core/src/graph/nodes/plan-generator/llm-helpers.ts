@@ -11,16 +11,16 @@ import {
   RESOURCE_TYPES,
   type ProvisionRecord,
   type FailureRecord,
-} from "../../../index.js";
-import { SCHEMA_EXCERPT_MAX_CHARS } from "../../../config/constants/limits.js";
-import { TWENTY_FOUR_HOURS_MS } from "../../../config/constants/timeouts.js";
+} from "@/index.js";
+import { SCHEMA_EXCERPT_MAX_CHARS } from "@/config/constants/limits.js";
+import { TWENTY_FOUR_HOURS_MS } from "@/config/constants/timeouts.js";
 import {
   CloudFormationKey,
   CFN_RESOURCE_TYPE_PREFIX,
-} from "../../../constants/cfn-keys.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
-import { defaultMemoryService } from "../../../services/memory.js";
-import { stripPromptBoundaryTags } from "../../../llm/prompt-sanitize.js";
+} from "@/constants/cfn-keys.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import { defaultMemoryService } from "@/services/memory.js";
+import { stripPromptBoundaryTags } from "@/llm/prompt-sanitize.js";
 import type { AgentState } from "../../graph-state.js";
 
 /**

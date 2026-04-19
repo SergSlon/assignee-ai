@@ -15,8 +15,8 @@
  * it to the graph state.
  */
 
-import type { ResourceResult } from "../../../index.js";
-import { resolveResourceArn } from "../../../utils/resolve-arn.js";
+import type { ResourceResult } from "@/index.js";
+import { resolveResourceArn } from "@/utils/resolve-arn.js";
 
 /**
  * Resolve a (resourceType, identifier) pair to a full ARN for display.

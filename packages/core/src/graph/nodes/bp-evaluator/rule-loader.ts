@@ -16,7 +16,7 @@ import {
   computeFreshness,
   type BestPractice,
 } from "@assignee/best-practices";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 
 let cachedPractices: BestPractice[] | undefined;
 let freshnessChecked = false;

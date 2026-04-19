@@ -14,9 +14,9 @@
  * SRP: one reason to change — how plugin fields and user-elicited values
  * combine with LLM output.
  */
-import { defaultPluginRegistry } from "../../../../index.js";
-import type { ResourceField } from "../../../../resource-plugins/types.js";
-import type { AgentState } from "../../../graph-state.js";
+import { defaultPluginRegistry } from "@/index.js";
+import type { ResourceField } from "@/resource-plugins/types.js";
+import type { AgentState } from "@/graph/graph-state.js";
 import { applyToCfnTransforms } from "../cfn-emitter.js";
 import {
   collectPluginPlaceholders,

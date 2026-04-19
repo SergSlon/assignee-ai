@@ -20,25 +20,25 @@ import {
   type ResourceField,
   type ResourcePlugin,
   type LlmPort,
-} from "../../../index.js";
+} from "@/index.js";
 import type { StructuredTool } from "@langchain/core/tools";
-import { PromiseStatus } from "../../../config/constants/enums.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+import { PromiseStatus } from "@/config/constants/enums.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import {
   discoverInstanceTypes,
   type InstanceTypeCategory,
-} from "../../../utils/aws-resource-discovery/index.js";
+} from "@/utils/aws-resource-discovery/index.js";
 import {
   classifyWorkload,
   type WorkloadProfile,
-} from "../../../utils/workload-classifier.js";
-import { WorkloadProfileKey as WP } from "../../../config/cfn-keys/display.js";
+} from "@/utils/workload-classifier.js";
+import { WorkloadProfileKey as WP } from "@/config/cfn-keys/display.js";
 import {
   enrichWithLivePricing,
   resolveDynamicFields,
   mergeEnrichedFields,
   getDiscoverySpinnerMessage,
-} from "../../../utils/wizard-helpers.js";
+} from "@/utils/wizard-helpers.js";
 import type { AgentState } from "../../graph-state.js";
 
 export interface EnrichmentResult {

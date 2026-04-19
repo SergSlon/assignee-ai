@@ -9,7 +9,7 @@ import {
   AdvisoryPriceId,
   EVENTBRIDGE_CUSTOM_PER_MILLION,
   type EnrichedPriceMap,
-} from "../../../../pricing/advisory-prices.js";
+} from "@/pricing/advisory-prices.js";
 import { enrichedLabel } from "./enriched-label.js";
 
 export function eventsRuleCostHints(

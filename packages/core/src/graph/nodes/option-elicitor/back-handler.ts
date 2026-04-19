@@ -18,7 +18,7 @@
  * did nothing.
  */
 
-import type { ResourceField } from "../../../index.js";
+import type { ResourceField } from "@/index.js";
 
 /**
  * Result of handling a BACK_SENTINEL answer.

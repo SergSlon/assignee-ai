@@ -3,11 +3,11 @@ import {
   ResourceDefault,
   AwsDefault,
   AmiOs,
-} from "../../../config/cfn-keys.js";
+} from "@/config/cfn-keys.js";
 import { QuestionTypeName, type ResourcePlugin } from "../../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../../shared-fields.js";
 import { FieldLabel } from "../../field-labels.js";
-import { isArnOfService } from "../../../config/aws-partition.js";
+import { isArnOfService } from "@/config/aws-partition.js";
 import { INSTANCE_CATEGORIES } from "../../instance-type-registry.js";
 import { classifyUserData, encodeUserData } from "./user-data.js";
 

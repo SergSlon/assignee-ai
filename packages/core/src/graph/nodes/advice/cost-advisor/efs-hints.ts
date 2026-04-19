@@ -3,7 +3,7 @@
  * plugin surfaces at most 5 lines in the inline advice box so the first
  * hint should be the one most likely to save money on the user's workload.
  */
-import { CfnKey } from "../../../../index.js";
+import { CfnKey } from "@/index.js";
 import { AdviceIcon } from "../constants.js";
 import {
   AdvisoryPriceId,
@@ -11,7 +11,7 @@ import {
   EFS_ONE_ZONE_SAVINGS_PCT,
   EFS_LIFECYCLE_SAVINGS_PCT,
   type EnrichedPriceMap,
-} from "../../../../pricing/advisory-prices.js";
+} from "@/pricing/advisory-prices.js";
 import { enrichedLabel } from "./enriched-label.js";
 
 export function efsCostHints(

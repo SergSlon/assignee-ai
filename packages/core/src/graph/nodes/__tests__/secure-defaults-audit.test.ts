@@ -8,11 +8,8 @@
 import { describe, it, expect } from "vitest";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  SUPPORTED_TYPES_ARRAY,
-  defaultPluginRegistry,
-} from "../../../index.js";
-import type { ResourcePlugin } from "../../../index.js";
+import { SUPPORTED_TYPES_ARRAY, defaultPluginRegistry } from "@/index.js";
+import type { ResourcePlugin } from "@/index.js";
 import { evaluateTriggers, loadBestPractices } from "@assignee/best-practices";
 import type { EvalContext } from "@assignee/best-practices";
 import { assembleS3Composites, assembleEc2Storage } from "../plan-generator.js";

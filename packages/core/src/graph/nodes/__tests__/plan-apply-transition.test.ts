@@ -18,8 +18,8 @@ import {
   ExecutionStatus,
   ProvisioningError,
   defaultErrorMessageRegistry,
-} from "../../../index.js";
-import type { ProvisioningPort } from "../../../index.js";
+} from "@/index.js";
+import type { ProvisioningPort } from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
@@ -48,8 +48,8 @@ vi.mock("../../../utils/logger/index.js", () => ({
 }));
 
 import { humanApprovalNode } from "../human-approval.js";
-import { renderPlanBox, renderHitlConfirm } from "../../../utils/display.js";
-import { log } from "../../../utils/logger/index.js";
+import { renderPlanBox, renderHitlConfirm } from "@/utils/display.js";
+import { log } from "@/utils/logger/index.js";
 import { resourceProvisionerNode } from "../resource-provisioner.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -424,7 +424,7 @@ describe("plan-to-apply transition: cost history display", () => {
     // Need the real renderPlanBox, not the mock
     vi.doUnmock("../../../utils/display.js");
     const { renderPlanBox: realRenderPlanBox } =
-      await import("../../../utils/display.js");
+      await import("@/utils/display.js");
 
     realRenderPlanBox({
       resourceType: "AWS::S3::Bucket",
@@ -452,7 +452,7 @@ describe("plan-to-apply transition: cost history display", () => {
   it('cost history hint gets "Cost History:" label', async () => {
     vi.doUnmock("../../../utils/display.js");
     const { renderPlanBox: realRenderPlanBox } =
-      await import("../../../utils/display.js");
+      await import("@/utils/display.js");
 
     realRenderPlanBox({
       resourceType: "AWS::S3::Bucket",
@@ -479,7 +479,7 @@ describe("plan-to-apply transition: cost history display", () => {
   it("mix of warning and cost history hints applies correct labels", async () => {
     vi.doUnmock("../../../utils/display.js");
     const { renderPlanBox: realRenderPlanBox } =
-      await import("../../../utils/display.js");
+      await import("@/utils/display.js");
 
     realRenderPlanBox({
       resourceType: "AWS::S3::Bucket",

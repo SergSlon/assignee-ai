@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ResourceField, ResolvedFieldConfig } from "../../../index.js";
+import type { ResourceField, ResolvedFieldConfig } from "@/index.js";
 
 // Mock clack (prompts) so promptWithHelp can be controlled.
 vi.mock("@clack/prompts", () => ({
@@ -34,8 +34,8 @@ vi.mock("../../../utils/display.js", async (importOriginal) => {
 });
 
 import { runPromptLoop } from "./prompt-loop.js";
-import { BACK_SENTINEL } from "../../../utils/display.js";
-import { FieldPolicy } from "../../../constants/field-policy.js";
+import { BACK_SENTINEL } from "@/utils/display.js";
+import { FieldPolicy } from "@/constants/field-policy.js";
 
 /**
  * Helper: builds a ResourceField with an optional showIf dependency.

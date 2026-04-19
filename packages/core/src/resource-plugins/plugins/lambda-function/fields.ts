@@ -1,6 +1,6 @@
-import { CfnKey, AwsDefault, SizeLabel } from "../../../config/cfn-keys.js";
-import { isArnOfService } from "../../../config/aws-partition.js";
-import { DiscoveryCacheKey } from "../../../config/discovery-keys.js";
+import { CfnKey, AwsDefault, SizeLabel } from "@/config/cfn-keys.js";
+import { isArnOfService } from "@/config/aws-partition.js";
+import { DiscoveryCacheKey } from "@/config/discovery-keys.js";
 import type { ResourcePlugin } from "../../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../../shared-fields.js";
 import { FieldLabel } from "../../field-labels.js";

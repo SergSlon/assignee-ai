@@ -14,18 +14,18 @@
  * Wave-6c F3: extracted from option-elicitor.ts (SRP).
  */
 
-import type { ResourceField } from "../../../index.js";
+import type { ResourceField } from "@/index.js";
 import {
   enrichFieldLabels,
   applyCategorySmartFilter,
   applyOptionRanking,
   injectBPHints,
-} from "../../../utils/wizard-helpers.js";
+} from "@/utils/wizard-helpers.js";
 import {
   applyIntentOverrides,
   type IntentDefaultOverride,
-} from "../../../utils/intent-defaults/index.js";
-import type { WorkloadProfile } from "../../../utils/workload-classifier.js";
+} from "@/utils/intent-defaults/index.js";
+import type { WorkloadProfile } from "@/utils/workload-classifier.js";
 
 export interface PreparedFields {
   commonFields: ResourceField[];

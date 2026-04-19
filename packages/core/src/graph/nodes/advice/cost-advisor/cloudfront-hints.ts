@@ -14,7 +14,7 @@ import {
   CF_INVALIDATION_EACH,
   CF_INVALIDATION_FREE_TIER,
   type EnrichedPriceMap,
-} from "../../../../pricing/advisory-prices.js";
+} from "@/pricing/advisory-prices.js";
 import { enrichedLabel } from "./enriched-label.js";
 
 export function cloudFrontCostHints(

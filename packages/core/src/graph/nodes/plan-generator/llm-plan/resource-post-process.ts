@@ -35,9 +35,9 @@ import {
   EIP_AUTO_ALLOCATE,
   ResourceDefault,
   AwsDefault,
-} from "../../../../index.js";
-import { resolveAmiFromOsName } from "../../../../utils/aws-resource-discovery/index.js";
-import type { AgentState } from "../../../graph-state.js";
+} from "@/index.js";
+import { resolveAmiFromOsName } from "@/utils/aws-resource-discovery/index.js";
+import type { AgentState } from "@/graph/graph-state.js";
 
 export interface PostProcessOk {
   kind: "ok";

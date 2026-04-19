@@ -4,10 +4,10 @@
  * Split from three-tier-web.ts (W6d F3). DBSubnetGroup + RDS instance.
  */
 
-import { RESOURCE_TYPES } from "../../../config/resource-types.js";
-import { CfnKey, ResourceDefault } from "../../../config/cfn-keys.js";
-import { markerRef } from "../../../config/marker-tokens.js";
-import { RDS_PLACEHOLDER_PASSWORD } from "../../../config/placeholder-passwords.js";
+import { RESOURCE_TYPES } from "@/config/resource-types.js";
+import { CfnKey, ResourceDefault } from "@/config/cfn-keys.js";
+import { markerRef } from "@/config/marker-tokens.js";
+import { RDS_PLACEHOLDER_PASSWORD } from "@/config/placeholder-passwords.js";
 import type { ResourceSpec } from "../../types.js";
 import { ThreeTierWebResourceId as R } from "../../pattern-resource-ids.js";
 

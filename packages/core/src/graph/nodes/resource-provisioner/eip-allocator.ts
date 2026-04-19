@@ -29,10 +29,10 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   createEC2Client,
-} from "../../../index.js";
+} from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
-import { AWS_REGION } from "../../../config/constants/aws.js";
-import { requireAssigneeCredentials } from "../../../config/aws-credentials.js";
+import { AWS_REGION } from "@/config/constants/aws.js";
+import { requireAssigneeCredentials } from "@/config/aws-credentials.js";
 import { findReusableEip } from "./eip-allocator/find-reusable.js";
 import { releaseOrphanEips } from "./eip-allocator/release-orphans.js";
 import { allocateFreshEip } from "./eip-allocator/allocate-fresh.js";

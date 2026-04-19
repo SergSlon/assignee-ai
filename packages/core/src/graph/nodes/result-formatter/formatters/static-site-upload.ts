@@ -10,7 +10,7 @@
 
 import * as clack from "@clack/prompts";
 import chalk from "chalk";
-import { type ResourceResult, RESOURCE_TYPES } from "../../../../index.js";
+import { type ResourceResult, RESOURCE_TYPES } from "@/index.js";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -22,8 +22,7 @@ export async function uploadStaticSiteFiles(
   bucketName: string,
   sourceDir: string,
 ): Promise<void> {
-  const { uploadStaticSite } =
-    await import("../../../../services/s3-upload.js");
+  const { uploadStaticSite } = await import("@/services/s3-upload.js");
 
   const spinner = clack.spinner();
   spinner.start("Uploading files...");

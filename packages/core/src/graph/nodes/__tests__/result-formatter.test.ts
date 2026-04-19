@@ -12,14 +12,14 @@ import {
   ExecutionMode,
   ProvisioningError,
   AssigneeError,
-} from "../../../index.js";
+} from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
-import type { ArchitecturePattern } from "../../../index.js";
+import type { ArchitecturePattern } from "@/index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
   McpMocks,
   createSecurityMockTool,
-} from "../../../test-fixtures/mcp-mock-responses.js";
+} from "@/test-fixtures/mcp-mock-responses.js";
 
 // Mock @clack/prompts spinner (used by Story 37.4 upload flow).
 // NOTE: Plain functions for spinner/isCancel survive mockReset:true.
@@ -112,12 +112,12 @@ import {
   renderSecurityWarnings,
   promptFixSelection,
   type FixSelectionResult,
-} from "../../../utils/display.js";
-import { defaultMemoryService } from "../../../services/memory.js";
+} from "@/utils/display.js";
+import { defaultMemoryService } from "@/services/memory.js";
 import {
   uploadStaticSite,
   configureBucketPolicy,
-} from "../../../services/s3-upload.js";
+} from "@/services/s3-upload.js";
 
 /** 3-resource pattern for compound tests */
 const mockPattern: ArchitecturePattern = {
@@ -170,7 +170,7 @@ const RESULT_FORMATTER_ORIGINAL_ENV = { ...process.env };
 beforeEach(async () => {
   vi.clearAllMocks();
   // Re-install default mock impls (mockReset:true wipes them between tests).
-  const s3 = await import("../../../services/s3-upload.js");
+  const s3 = await import("@/services/s3-upload.js");
   vi.mocked(s3.uploadStaticSite).mockResolvedValue({
     uploaded: 3,
     failed: 0,
@@ -179,10 +179,10 @@ beforeEach(async () => {
   });
   vi.mocked(s3.configureBucketPolicy).mockResolvedValue(undefined);
 
-  const display = await import("../../../utils/display.js");
+  const display = await import("@/utils/display.js");
   vi.mocked(display.promptFixSelection).mockResolvedValue(null);
 
-  const memory = await import("../../../services/memory.js");
+  const memory = await import("@/services/memory.js");
   vi.mocked(memory.defaultMemoryService.appendProvision).mockResolvedValue(
     undefined,
   );

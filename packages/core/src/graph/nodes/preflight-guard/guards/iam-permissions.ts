@@ -10,14 +10,14 @@
  *   observability failure).
  */
 import type { StructuredTool } from "@langchain/core/tools";
-import { getRequiredIamActions } from "../../../../config/iam-actions/index.js";
-import { AWS_REGION } from "../../../../config/constants/aws.js";
-import { PRICING_TIMEOUT_MS } from "../../../../config/constants/timeouts.js";
-import { ToolName } from "../../../../constants/tools.js";
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
-import { unwrapMcpText } from "../../../../utils/mcp.js";
-import { withTimeout } from "../../../../utils/timeout.js";
-import { getOperatorCallerArn } from "../../../../utils/resolve-arn.js";
+import { getRequiredIamActions } from "@/config/iam-actions/index.js";
+import { AWS_REGION } from "@/config/constants/aws.js";
+import { PRICING_TIMEOUT_MS } from "@/config/constants/timeouts.js";
+import { ToolName } from "@/constants/tools.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import { unwrapMcpText } from "@/utils/mcp.js";
+import { withTimeout } from "@/utils/timeout.js";
+import { getOperatorCallerArn } from "@/utils/resolve-arn.js";
 
 export interface IamCheckResult {
   passed: boolean;

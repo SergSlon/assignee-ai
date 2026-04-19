@@ -4,7 +4,7 @@ import {
   EIP_AUTO_ALLOCATE,
   ExecutionStatus,
   RESOURCE_TYPES,
-} from "../../../index.js";
+} from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
 import { allocateNatGatewayEip } from "./eip-allocator.js";
 

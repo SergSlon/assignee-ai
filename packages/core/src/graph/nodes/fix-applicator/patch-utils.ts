@@ -8,8 +8,8 @@
  * Wave-6c F3: extracted from fix-applicator.ts (SRP).
  */
 
-import { PROTO_POLLUTION_KEYS } from "../../../config/constants/security.js";
-import { wizardKeyMap } from "../../../utils/wizard-key-map.js";
+import { PROTO_POLLUTION_KEYS } from "@/config/constants/security.js";
+import { wizardKeyMap } from "@/utils/wizard-key-map.js";
 
 /**
  * Deep-merge a patch object into a target object.

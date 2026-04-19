@@ -19,7 +19,7 @@ export {
   SPOT_ELIGIBLE_PREFIXES,
   RDS_LARGE_CLASS_PREFIXES,
   RDS_BUDGET_ALTERNATIVES,
-} from "../../../constants/instance-family-registry.js";
+} from "@/constants/instance-family-registry.js";
 
 /** Lambda memory threshold (MB) above which we suggest optimization. */
 export const LAMBDA_MEMORY_OPTIMIZATION_THRESHOLD_MB = 512;

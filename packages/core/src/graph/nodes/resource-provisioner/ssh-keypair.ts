@@ -32,12 +32,12 @@ import {
   RESOURCE_TYPES,
   ResourceDefault,
   createEC2Client,
-} from "../../../index.js";
+} from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
-import { AWS_REGION } from "../../../config/constants/aws.js";
-import { ASSIGNEE_DIR } from "../../../config/constants/paths.js";
-import { requireAssigneeCredentials } from "../../../config/aws-credentials.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import { AWS_REGION } from "@/config/constants/aws.js";
+import { ASSIGNEE_DIR } from "@/config/constants/paths.js";
+import { requireAssigneeCredentials } from "@/config/aws-credentials.js";
 import { sanitizeKeyName } from "./util.js";
 
 export type SshKeypairResult =

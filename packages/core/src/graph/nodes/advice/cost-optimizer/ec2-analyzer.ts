@@ -2,8 +2,8 @@
  * EC2::Instance cost optimizer — ARM (Graviton) swap recommendations.
  */
 import type { StructuredTool } from "@langchain/core/tools";
-import { CfnKey, RESOURCE_TYPES } from "../../../../index.js";
-import { fetchEc2InstancePrices } from "../../../../utils/pricing-lookup.js";
+import { CfnKey, RESOURCE_TYPES } from "@/index.js";
+import { fetchEc2InstancePrices } from "@/utils/pricing-lookup.js";
 import { armEquivalentEc2 } from "./arm-equivalents.js";
 import { buildRecommendation, type CostOptRecommendation } from "./types.js";
 

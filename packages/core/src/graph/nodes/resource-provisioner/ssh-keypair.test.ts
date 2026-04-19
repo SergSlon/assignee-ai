@@ -4,7 +4,7 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   ResourceDefault,
-} from "../../../index.js";
+} from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
 import { ensureSshKeypair } from "./ssh-keypair.js";
 

@@ -5,9 +5,9 @@
  * Load Balancer placed across both public subnets.
  */
 
-import { RESOURCE_TYPES } from "../../../config/resource-types.js";
-import { AwsDefault } from "../../../config/cfn-keys.js";
-import { markerRef } from "../../../config/marker-tokens.js";
+import { RESOURCE_TYPES } from "@/config/resource-types.js";
+import { AwsDefault } from "@/config/cfn-keys.js";
+import { markerRef } from "@/config/marker-tokens.js";
 import type { ResourceSpec } from "../../types.js";
 import { ThreeTierWebResourceId as R } from "../../pattern-resource-ids.js";
 

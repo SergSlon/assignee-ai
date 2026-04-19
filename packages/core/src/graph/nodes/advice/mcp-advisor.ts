@@ -6,9 +6,9 @@
  */
 
 import type { StructuredTool } from "@langchain/core/tools";
-import { ToolName } from "../../../constants/tools.js";
-import { AWS_REGION } from "../../../config/constants/aws.js";
-import { withTimeout } from "../../../utils/timeout.js";
+import { ToolName } from "@/constants/tools.js";
+import { AWS_REGION } from "@/config/constants/aws.js";
+import { withTimeout } from "@/utils/timeout.js";
 
 const MCP_ADVICE_TIMEOUT_MS = 3_000;
 

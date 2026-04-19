@@ -12,10 +12,10 @@ import {
   defaultPluginRegistry,
   CfnKey,
   type LlmPort,
-} from "../../../../index.js";
-import { EnvVar } from "../../../../constants/env-vars.js";
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
-import type { AgentState } from "../../../graph-state.js";
+} from "@/index.js";
+import { EnvVar } from "@/constants/env-vars.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import type { AgentState } from "@/graph/graph-state.js";
 import {
   readMemoryHints,
   buildPrompt,

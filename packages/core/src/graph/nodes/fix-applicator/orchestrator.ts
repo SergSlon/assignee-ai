@@ -11,12 +11,12 @@
  * Wave-6c F3: extracted from fix-applicator.ts (SRP).
  */
 
-import { AutoFixMode } from "../../../index.js";
+import { AutoFixMode } from "@/index.js";
 import type { BPFinding } from "@assignee/best-practices";
 import type { AgentState } from "../../graph-state.js";
 import type { AppliedFix } from "../../graph-state.js";
 import { FixType } from "@assignee/best-practices";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import { resolveAutoFixMode } from "./mode-resolver.js";
 import { applyAutoFixes } from "./apply-auto.js";
 import { runInteractiveFixes } from "./interactive-prompt.js";

@@ -1,7 +1,7 @@
 /**
  * EC2::Instance cost hints — ARM (Graviton) equivalents + Spot eligibility.
  */
-import { CfnKey } from "../../../../index.js";
+import { CfnKey } from "@/index.js";
 import {
   ARM_EQUIVALENTS,
   SPOT_ELIGIBLE_PREFIXES,
@@ -10,7 +10,7 @@ import {
 import {
   ARM_GRAVITON_SAVINGS_PCT,
   SPOT_SAVINGS_UP_TO_PCT,
-} from "../../../../pricing/advisory-prices.js";
+} from "@/pricing/advisory-prices.js";
 
 export function ec2CostHints(
   ds: Record<string, unknown>,

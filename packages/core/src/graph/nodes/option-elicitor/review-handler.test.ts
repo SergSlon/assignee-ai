@@ -14,8 +14,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ResourceField, ResolvedFieldConfig } from "../../../index.js";
-import { FieldPolicy } from "../../../constants/field-policy.js";
+import type { ResourceField, ResolvedFieldConfig } from "@/index.js";
+import { FieldPolicy } from "@/constants/field-policy.js";
 
 // Mock clack so runReviewAnswers / promptWithHelp internals are harmless.
 vi.mock("@clack/prompts", () => ({
@@ -43,7 +43,7 @@ vi.mock("../../../utils/wizard-helpers.js", async (importOriginal) => {
 });
 
 const { handleReviewSentinel } = await import("./review-handler.js");
-const { BACK_SENTINEL } = await import("../../../utils/display.js");
+const { BACK_SENTINEL } = await import("@/utils/display.js");
 
 function makeField(
   name: string,

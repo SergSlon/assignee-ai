@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import type { StructuredTool } from "@langchain/core/tools";
-import { SUPPORTED_TYPES_ARRAY } from "../../../index.js";
+import { SUPPORTED_TYPES_ARRAY } from "@/index.js";
 import {
   gatherMcpAdviceContext,
   resourceTypeToServiceCode,
 } from "./mcp-advisor.js";
-import { ToolName } from "../../../constants/tools.js";
+import { ToolName } from "@/constants/tools.js";
 
 /**
  * Anti-drift gate: every SUPPORTED_TYPES_ARRAY entry MUST be

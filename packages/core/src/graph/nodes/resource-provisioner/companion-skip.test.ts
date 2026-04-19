@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ExecutionStatus } from "../../../index.js";
+import { ExecutionStatus } from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
 import { skipIfCompanionResource } from "./companion-skip.js";
 

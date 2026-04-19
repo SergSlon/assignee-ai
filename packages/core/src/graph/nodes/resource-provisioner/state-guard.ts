@@ -27,13 +27,13 @@ import {
   ProvisioningError,
   RESOURCE_TYPES,
   type ResourceType,
-} from "../../../index.js";
+} from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
 import {
   ProvisioningErrorKind,
   type ProvisioningPort,
-} from "../../../ports/provisioning-port.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+} from "@/ports/provisioning-port.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 
 export type StateGuardResult =
   | { abort: false }

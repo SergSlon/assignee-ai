@@ -21,8 +21,8 @@ import {
   hasUsableDefault,
   countVisible,
 } from "./field-gates.js";
-import { FieldPolicy } from "../../../constants/field-policy.js";
-import type { ResourceField, ResolvedFieldConfig } from "../../../index.js";
+import { FieldPolicy } from "@/constants/field-policy.js";
+import type { ResourceField, ResolvedFieldConfig } from "@/index.js";
 
 function makeField(
   name: string,

@@ -1,7 +1,7 @@
 /**
  * Lambda::Function cost hints — memory over-provisioning threshold.
  */
-import { CfnKey } from "../../../../index.js";
+import { CfnKey } from "@/index.js";
 import {
   LAMBDA_MEMORY_OPTIMIZATION_THRESHOLD_MB,
   AdviceIcon,

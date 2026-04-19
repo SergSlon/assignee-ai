@@ -8,9 +8,9 @@
  */
 import type { StructuredTool } from "@langchain/core/tools";
 import type { BPFinding, BPCategory } from "@assignee/best-practices";
-import { ToolName } from "../../../../constants/tools.js";
-import { AWS_REGION } from "../../../../config/constants/aws.js";
-import { withTimeout } from "../../../../utils/timeout.js";
+import { ToolName } from "@/constants/tools.js";
+import { AWS_REGION } from "@/config/constants/aws.js";
+import { withTimeout } from "@/utils/timeout.js";
 import { MCP_BP_TIMEOUT_MS, mapMcpSeverity } from "./types.js";
 import { parseWaSecurityFindings } from "./wa-security-parser.js";
 

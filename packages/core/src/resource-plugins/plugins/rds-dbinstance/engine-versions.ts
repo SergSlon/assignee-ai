@@ -4,7 +4,7 @@ import {
   AwsDefault,
   RdsEngineId,
   RDS_ENGINE_VERSION_HINT,
-} from "../../../config/cfn-keys.js";
+} from "@/config/cfn-keys.js";
 import type { ResourcePlugin } from "../../types.js";
 
 /**

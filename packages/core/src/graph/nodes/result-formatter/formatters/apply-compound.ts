@@ -22,16 +22,16 @@ import {
   PatternId,
   RESOURCE_TYPES,
   type ResourceResult,
-} from "../../../../index.js";
-import type { AgentState } from "../../../graph-state.js";
-import { renderCompoundSuccess } from "../../../../utils/display.js";
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
-import { checkSecurityPosture } from "../../../../utils/security-posture.js";
+} from "@/index.js";
+import type { AgentState } from "@/graph/graph-state.js";
+import { renderCompoundSuccess } from "@/utils/display.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import { checkSecurityPosture } from "@/utils/security-posture.js";
 import {
   writeProvisionRecord,
   clearFailureHistory,
   upsertPatternRecord,
-} from "../../../../utils/memory-recorder.js";
+} from "@/utils/memory-recorder.js";
 import { buildDisplayArnMap, resolveDisplayArn } from "../arn-display.js";
 import {
   printStaticWebsiteCloudFrontUrl,

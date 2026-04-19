@@ -5,12 +5,12 @@
  * entry point. Stats flow back for the --quick summary line.
  */
 
-import type { LlmPort } from "../../../ports/llm-port.js";
-import type { ResolvedFieldConfig } from "../../../config/resource-policy.js";
-import type { ResourceField } from "../../../resource-plugins/types.js";
+import type { LlmPort } from "@/ports/llm-port.js";
+import type { ResolvedFieldConfig } from "@/config/resource-policy.js";
+import type { ResourceField } from "@/resource-plugins/types.js";
 import type { StructuredTool } from "@langchain/core/tools";
-import { renderAdvancedConfirm } from "../../../utils/display.js";
-import { evaluateShowIf } from "../../../utils/wizard-helpers.js";
+import { renderAdvancedConfirm } from "@/utils/display.js";
+import { evaluateShowIf } from "@/utils/wizard-helpers.js";
 import type { AgentState } from "../../graph-state.js";
 import { runPromptLoop } from "./prompt-loop.js";
 

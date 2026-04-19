@@ -5,11 +5,11 @@
  * groups, the EC2 instance profile role, and the EC2 instance itself.
  */
 
-import { RESOURCE_TYPES } from "../../../config/resource-types.js";
-import { CfnKey, AwsDefault, AmiOs } from "../../../config/cfn-keys.js";
-import { IamEffect } from "../../../config/iam-effects.js";
-import { IamPolicy, AwsServicePrincipal } from "../../../config/aws-arns.js";
-import { markerRef } from "../../../config/marker-tokens.js";
+import { RESOURCE_TYPES } from "@/config/resource-types.js";
+import { CfnKey, AwsDefault, AmiOs } from "@/config/cfn-keys.js";
+import { IamEffect } from "@/config/iam-effects.js";
+import { IamPolicy, AwsServicePrincipal } from "@/config/aws-arns.js";
+import { markerRef } from "@/config/marker-tokens.js";
 import type { ResourceSpec } from "../../types.js";
 import { ThreeTierWebResourceId as R } from "../../pattern-resource-ids.js";
 import { VPC_CIDR } from "./vpc-layer.js";

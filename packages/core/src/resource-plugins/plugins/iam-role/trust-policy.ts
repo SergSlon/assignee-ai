@@ -1,5 +1,5 @@
-import { IamPolicy, AwsServicePrincipal } from "../../../config/aws-arns.js";
-import { IamEffect } from "../../../config/iam-effects.js";
+import { IamPolicy, AwsServicePrincipal } from "@/config/aws-arns.js";
+import { IamEffect } from "@/config/iam-effects.js";
 
 /**
  * Wave 19 Bug #2: recognize a real AssumeRolePolicyDocument emitted by the

@@ -21,7 +21,7 @@ import {
   type EvalContext,
 } from "@assignee/best-practices";
 import type { StructuredTool } from "@langchain/core/tools";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import type { AgentState } from "../../graph-state.js";
 import { enrichBpWithMcp } from "../advice/bp-mcp-enricher/orchestrator.js";
 import { loadCached } from "./rule-loader.js";

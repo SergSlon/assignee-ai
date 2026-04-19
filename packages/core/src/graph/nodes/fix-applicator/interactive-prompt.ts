@@ -11,7 +11,7 @@ import * as clack from "@clack/prompts";
 import { FixAction, FixType, type BPFinding } from "@assignee/best-practices";
 import type { AppliedFix } from "../../graph-state.js";
 import type { AgentState } from "../../graph-state.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 
 export interface InteractiveResult {
   patchedState: Record<string, unknown>;

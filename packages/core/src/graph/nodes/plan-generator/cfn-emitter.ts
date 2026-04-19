@@ -13,7 +13,7 @@ import {
   CfnKey,
   ResourceDefault,
   AwsDefault,
-} from "../../../index.js";
+} from "@/index.js";
 
 /**
  * A composite-assembler mutates `transformed` (the post-toCfn map) using

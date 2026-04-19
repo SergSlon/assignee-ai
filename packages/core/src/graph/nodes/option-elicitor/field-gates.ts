@@ -20,12 +20,9 @@
  * the caller increments its own counters.
  */
 
-import type { ResourceField, ResolvedFieldConfig } from "../../../index.js";
-import { FieldPolicy } from "../../../constants/field-policy.js";
-import {
-  evaluateShowIf,
-  fieldFetchKey,
-} from "../../../utils/wizard-helpers.js";
+import type { ResourceField, ResolvedFieldConfig } from "@/index.js";
+import { FieldPolicy } from "@/constants/field-policy.js";
+import { evaluateShowIf, fieldFetchKey } from "@/utils/wizard-helpers.js";
 
 /**
  * Result of applying the pre-prompt gates for a single field.

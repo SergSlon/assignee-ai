@@ -1,5 +1,5 @@
-import { CfnKey, CloudWatchStatistic } from "../../../config/cfn-keys.js";
-import { isArnOfService } from "../../../config/aws-partition.js";
+import { CfnKey, CloudWatchStatistic } from "@/config/cfn-keys.js";
+import { isArnOfService } from "@/config/aws-partition.js";
 import type { ResourcePlugin } from "../../types.js";
 
 /** Shared validator for comma-separated SNS topic ARN lists. */

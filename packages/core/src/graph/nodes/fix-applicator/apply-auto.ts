@@ -14,7 +14,7 @@
 import * as clack from "@clack/prompts";
 import type { BPFinding } from "@assignee/best-practices";
 import type { AppliedFix } from "../../graph-state.js";
-import { formatFixValue } from "../../../utils/display-plan.js";
+import { formatFixValue } from "@/utils/display-plan.js";
 import {
   deepMergePatch,
   extractFieldPath,
