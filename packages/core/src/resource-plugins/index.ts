@@ -108,58 +108,15 @@ defaultPluginRegistry.register(s3BucketPolicyPlugin);
 defaultPluginRegistry.register(rdsDbSubnetGroupPlugin);
 defaultPluginRegistry.register(genericPlugin);
 
+// Story 58-it1-05 (L4-L1, plugin OCP): the 37 individual plugin named
+// re-exports that previously lived here were dropped. Plugins are
+// consumed via `defaultPluginRegistry.get(resourceType)` — callers
+// should never reach for a specific plugin by name. Keep only the
+// plugin-framework public surface below (registry + companion helpers +
+// shared types/labels + the `lambdaRuntimes` option catalog that the
+// AWS resource-discovery layer relies on).
 export { PluginRegistry };
-export { s3BucketPlugin } from "./plugins/s3-bucket.js";
-export { ec2InstancePlugin } from "./plugins/ec2-instance.js";
-export { rdsDbInstancePlugin } from "./plugins/rds-dbinstance.js";
-export {
-  lambdaFunctionPlugin,
-  sortedRuntimes as lambdaRuntimes,
-} from "./plugins/lambda-function.js";
-export { securityGroupPlugin } from "./plugins/security-group.js";
-export { dynamodbTablePlugin } from "./plugins/dynamodb-table.js";
-export { vpcPlugin } from "./plugins/vpc.js";
-export { subnetPlugin } from "./plugins/subnet.js";
-export { sqsQueuePlugin } from "./plugins/sqs-queue.js";
-export { snsTopicPlugin } from "./plugins/sns-topic.js";
-export { ssmParameterPlugin } from "./plugins/ssm-parameter.js";
-export { iamRolePlugin } from "./plugins/iam-role.js";
-export { ecsClusterPlugin } from "./plugins/ecs-cluster.js";
-export { ecrRepositoryPlugin } from "./plugins/ecr-repository.js";
-export { elbv2LoadBalancerPlugin } from "./plugins/elbv2-loadbalancer.js";
-// Sprint F: Tier 1 resources (Epic 25)
-export { logGroupPlugin } from "./plugins/logs-loggroup.js";
-export { internetGatewayPlugin } from "./plugins/ec2-internet-gateway.js";
-export { routeTablePlugin } from "./plugins/ec2-route-table.js";
-export { routePlugin } from "./plugins/ec2-route.js";
-export { natGatewayPlugin } from "./plugins/ec2-nat-gateway.js";
-// Sprint G: Tier 2 resources (Epic 26)
-export { apiGatewayV2Plugin } from "./plugins/apigatewayv2-api.js";
-export { cloudWatchAlarmPlugin } from "./plugins/cloudwatch-alarm.js";
-export { secretsManagerSecretPlugin } from "./plugins/secretsmanager-secret.js";
-// A1 (2026-04-08): first-class EFS support
-export { efsFileSystemPlugin } from "./plugins/efs-file-system.js";
-export { efsMountTargetPlugin } from "./plugins/efs-mount-target.js";
-// A8 (2026-04-08): EventBridge Rule first-class
-export { eventsRulePlugin } from "./plugins/events-rule.js";
-// A9 (2026-04-09): EventBridge custom event bus first-class
-export { eventsEventBusPlugin } from "./plugins/events-eventbus.js";
-// A10 (2026-04-09): SNS Subscription first-class
-export { snsSubscriptionPlugin } from "./plugins/sns-subscription.js";
-// A11 (2026-04-09): KMS::Key first-class
-export { kmsKeyPlugin } from "./plugins/kms-key.js";
-// A12 (2026-04-09): Events::Connection first-class
-export { eventsConnectionPlugin } from "./plugins/events-connection.js";
-// A13 (2026-04-09): Events::ApiDestination first-class
-export { eventsApiDestinationPlugin } from "./plugins/events-apidestination.js";
-// A14 (2026-04-09): CloudFront::Distribution first-class
-export { cloudFrontDistributionPlugin } from "./plugins/cloudfront-distribution.js";
-// (f) 2026-04-09 Task 4b: OAC + BucketPolicy for static-website compound
-export { cloudFrontOriginAccessControlPlugin } from "./plugins/cloudfront-origin-access-control.js";
-export { s3BucketPolicyPlugin } from "./plugins/s3-bucket-policy.js";
-// 2026-04-13: RDS::DBSubnetGroup for three-tier-web compound
-export { rdsDbSubnetGroupPlugin } from "./plugins/rds-db-subnet-group.js";
-export { genericPlugin } from "./plugins/generic.js";
+export { sortedRuntimes as lambdaRuntimes } from "./plugins/lambda-function.js";
 export type {
   ResourcePlugin,
   ResourceField,

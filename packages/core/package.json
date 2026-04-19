@@ -32,14 +32,6 @@
       "import": "./dist/graph/graph-state.js",
       "types": "./dist/graph/graph-state.d.ts"
     },
-    "./graph/nodes/*.js": {
-      "import": "./dist/graph/nodes/*.js",
-      "types": "./dist/graph/nodes/*.d.ts"
-    },
-    "./graph/nodes/*": {
-      "import": "./dist/graph/nodes/*",
-      "types": "./dist/graph/nodes/*"
-    },
     "./graph": {
       "import": "./dist/graph/index.js",
       "types": "./dist/graph/index.d.ts"
