@@ -12,6 +12,100 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 58 — iteration 1 (2026-04-19)
+
+#### Refactored
+
+- **`phase1-gate.ts` 315 → 78 LOC via 6 sub-modules (closes L7-L1
+  LOW + L4-006 MED).** Story-by-story decomposition: `invocation-
+builder.ts` assembles the resumable-gate `continue` payload,
+  `failure-class.ts` classifies gate outcomes, `bp-blocked.ts`
+  handles BP-rule denials, `post-check.ts` runs the after-apply
+  verification, `log-helpers.ts` centralises structured logging,
+  and `types.ts` pins the shared shape. Outer gate becomes a
+  10-line dispatch over the new helpers. (commit `adfb33b`,
+  follow-up `ae65636`)
+- **`free-tier.ts` pure `getFreeTierMaps()` extraction (closes
+  L4-004 MED).** The 67-LOC MCP duplicate collapses to a 25-LOC
+  shape-adapter over the pure helper — MCP + CLI now share one
+  source of truth for free-tier coverage data, with an IO wrapper
+  `getFreeTierNoteWithConfig()` in core for caller convenience.
+  (commit `e690fe0`)
+- **Plugin registry OCP compliance (closes L4-L1 LOW).** Dropped
+  37 re-exports from `resource-plugins/index.ts`; new plugins now
+  register via the canonical registry API rather than the
+  barrel's implicit re-export surface, restoring
+  open-for-extension / closed-for-modification. (commit
+  `aefd39a`)
+- **`iam-actions.ts` shim + test relocated to core (closes L4-L5
+  LOW).** Stale CLI shim inlined into its single consumer; the
+  accompanying test moved to `packages/core/src/**/__tests__/`.
+  (commit `aefd39a`)
+
+#### Added
+
+- **`apps/cli/src/commands/version.ts` + `program.addCommand()`
+  wiring (closes L3-L1 LOW).** Refactor pulls `version` out of
+  the `program.command("version")` inline block into a dedicated
+  command module exporting `versionCommand`, registered via
+  `program.addCommand()` so the shell-completion generator
+  discovers it. `assignee completions bash|zsh|fish` now emit
+  `version` alongside the other 12 commands without a manual
+  allow-list entry. (commit `fd6697a`)
+- **`pnpm lint:barrels` circ-check gate (closes L4-L4 LOW).**
+  New `apps/cli/scripts/check-config-barrel-circular.mjs` grep-
+  based gate fails CI if `barrels/config/constants.ts`,
+  `barrels/config/resources.ts`, or `barrels/config/help-
+hints.ts` import from one another. Keeps the Epic 56-it2
+  `barrels/config` split structurally enforced. (commit
+  `aefd39a`)
+
+#### Architecture
+
+- **4 CLI tests relocated to
+  `packages/core/src/graph/nodes/__tests__/` (closes L4-006 MED
+  remainder).** Tests that exercised core graph-node behaviour
+  but lived in `apps/cli/src/**` moved to the canonical core
+  location; `./graph/nodes/*` wildcard export deleted from
+  `packages/core/package.json` in the same commit so the public
+  surface no longer leaks internal module paths. (commit
+  `899bc7a`)
+
+#### Tooling
+
+- **New `pnpm lint:barrels` script wired in root
+  `package.json`.** Invoked from the pre-push hook alongside
+  `pnpm lint:shims` and `pnpm doc-lint`. (commit `aefd39a`)
+
+### Epic 57 — iteration 1 (2026-04-19)
+
+#### Docs
+
+- **`CHANGELOG.md` Epic 55 + Epic 56 entries (closes L8-H1
+  HIGH).** Added the missing `### Epic 55 — iteration 1
+(2026-04-19)` and `### Epic 56 — iteration 1 / iteration 2`
+  subsections so the Unreleased block accurately reflects the
+  last three iterations' work. Entries follow the established
+  Refactored / Added / Security / Docs / Tooling structure with
+  commit-SHA citations on every bullet. (commit `2ab7931`,
+  prettier follow-up `bf8fba8`)
+- **`CHANGELOG.md` `[0.1.0]` placeholder polish (closes L8-L1
+  LOW).** Trailing `<!-- date filled at v0.2 publish -->` inline
+  comment cleaned up ahead of the first public `v0.2` cut.
+  (commit `2ab7931`)
+- **`README.md` read-a-plan-box numbering fix (closes L8-L2
+  LOW).** Cosmetic list-numbering drift in the "How to read an
+  assignee plan" box corrected so every step increments. (commit
+  `2ab7931`)
+- **`README.md` `Advanced overrides` env-var section (closes
+  L8-002 MED + L8-L3/L4 LOW).** New subsection documents
+  `ASSIGNEE_NO_CLARIFIER` (disable clarifying-question turn for
+  non-interactive flows), `ASSIGNEE_MCP_MAX_ACTIVE_APPLIES`
+  (raise 100 active-applies cap for hosted MCP), and the
+  `HEADLINE_SHORTHANDS` silent no-op warning. Aligns user-visible
+  documentation with the Epic 56-it2 env-override surface.
+  (commit `ceef3fb`)
+
 ### Epic 56 — iteration 2 (2026-04-19)
 
 #### Refactored
