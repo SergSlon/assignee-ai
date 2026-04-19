@@ -71,8 +71,19 @@ export async function __getOperatorAccountIdForTests(
 // `process.env["AWS_REGION"]` at import time serves a stale region
 // until the worker restarts. CLI-shaped consumers re-read env per
 // call; we mirror that contract here.
-function resolveDefaultRegion(): string {
-  return process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
+//
+// Story 56-it2-04 P2-03: coalesce on empty / whitespace-only values,
+// not just `undefined`. `??` only triggers on undefined; an exported
+// but empty `AWS_REGION=` used to silently reach the SDK builder and
+// emit an opaque `InvalidRegion` from AWS. Trim first so a sloppy
+// pasted env doesn't break the client either. Exported so the unit
+// test can exercise the fallback without registering the tool.
+export function resolveDefaultRegion(): string {
+  const raw = process.env["AWS_REGION"];
+  if (typeof raw !== "string") return DEFAULT_AWS_REGION;
+  const trimmed = raw.trim();
+  if (trimmed === "") return DEFAULT_AWS_REGION;
+  return trimmed;
 }
 
 // ── Zod schema ───────────────────────────────────────────────────────────────

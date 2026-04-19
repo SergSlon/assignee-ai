@@ -34,6 +34,8 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 
+import { mcpLogError } from "./structured-log.js";
+
 /**
  * Record shape written to the audit log. Stable across tool types so
  * the JSONL file parses uniformly. All fields required; undefined
@@ -96,8 +98,25 @@ export async function auditLog(record: AuditRecord): Promise<void> {
     // doesn't chmod an existing file), so if an operator has manually
     // tightened the mode further we don't widen it.
     await fs.appendFile(filePath, entry, { encoding: "utf-8", mode: 0o600 });
-  } catch {
-    // Best-effort only. See module comment for rationale.
+  } catch (err) {
+    // Best-effort only. See module comment for rationale — we MUST NOT
+    // propagate the failure back to the tool handler. But silent
+    // failure hides a full-disk / permission-denied condition from
+    // operators running a long-lived MCP, so Story 56-it2-04 L5-L2
+    // routes the swallowed failure to the structured stderr logger.
+    // The audit pipeline keeps the "never break the handler" contract;
+    // operators now at least see the error surface in their log scrape.
+    mcpLogError(
+      "audit-log",
+      "append-failed",
+      {
+        tool: record.tool,
+        runId: record.runId,
+        errorClass:
+          err instanceof Error ? err.constructor.name : "UnknownError",
+      },
+      err instanceof Error ? err.message : String(err),
+    );
   }
 }
 

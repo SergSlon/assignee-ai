@@ -43,9 +43,21 @@ export type { ManagedResource } from "@assignee/core";
  * `process.env["AWS_REGION"]` at import time serves a stale region
  * until restart. CLI-shaped consumers re-read env per call; mirror
  * that contract here.
+ *
+ * Story 56-it2-04 P2-03: coalesce on empty / whitespace-only values,
+ * not just `undefined`. Unix shells that `export AWS_REGION=` (no
+ * value) produce an empty string, and `??` only falls through on
+ * undefined — so an empty region silently reached the SDK builder and
+ * the AWS client threw an opaque `InvalidRegion` error. Trim first so
+ * a single leading/trailing space from a sloppy pasted env doesn't
+ * break the client either.
  */
-function resolveDefaultRegion(): string {
-  return process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
+export function resolveDefaultRegion(): string {
+  const raw = process.env["AWS_REGION"];
+  if (typeof raw !== "string") return DEFAULT_AWS_REGION;
+  const trimmed = raw.trim();
+  if (trimmed === "") return DEFAULT_AWS_REGION;
+  return trimmed;
 }
 
 /**

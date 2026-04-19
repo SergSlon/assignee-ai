@@ -13,7 +13,7 @@
  */
 
 import * as clack from "@clack/prompts";
-import { ExecutionStatus } from "@assignee/core";
+import { ExecutionStatus, renderClarifierExampleList } from "@assignee/core";
 import type { AgentState } from "./graph-state.js";
 
 /** Inputs the clarifier needs from the caller. */
@@ -41,13 +41,17 @@ export function buildClarifyingQuestion(state: AgentState): string {
   const intent = (state.userIntent ?? "").trim();
   const err = (state.errorMessage ?? "").trim();
 
+  // Story 56-it2-04 L3-L3: beginner example list is rendered from the
+  // help-hints SSO module instead of duplicating a literal inline —
+  // adding/renaming an example now happens in one place.
+  const examples = renderClarifierExampleList();
   if (err && intent) {
-    return `I couldn't map "${intent}" to a supported AWS resource (${err}). Could you rephrase — for example, name the specific AWS resource type (S3 bucket, Lambda function, DynamoDB table, etc.)?`;
+    return `I couldn't map "${intent}" to a supported AWS resource (${err}). Could you rephrase — for example, name the specific AWS resource type (${examples})?`;
   }
   if (intent) {
     return `I couldn't map "${intent}" to a supported AWS resource. Could you rephrase — for example, name the specific AWS resource type you'd like to create?`;
   }
-  return "I couldn't determine a resource type from your intent. Could you describe what you want, naming the specific AWS resource type (S3 bucket, Lambda function, DynamoDB table, etc.)?";
+  return `I couldn't determine a resource type from your intent. Could you describe what you want, naming the specific AWS resource type (${examples})?`;
 }
 
 /**
@@ -79,6 +83,11 @@ export async function askClarifyingQuestion(
   // ── Bypass conditions ────────────────────────────────────────────────
   if (!isTty) return null;
   if (autoApprove || quick) return null;
+  // Story 56-it2-04 L3-L1: ASSIGNEE_NO_CLARIFIER=1 skips the prompt
+  // entirely. Mirrors ASSIGNEE_NO_UPDATE_CHECK — opt-out for users who
+  // want the original error surface restored without passing --yes /
+  // --quick (e.g. long-running automation pipelines).
+  if (process.env["ASSIGNEE_NO_CLARIFIER"] === "1") return null;
   if (!isClarifiableFailure(state)) return null;
 
   const question = buildClarifyingQuestion(state);

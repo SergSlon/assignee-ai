@@ -8,7 +8,7 @@ _assignee_completions() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-  commands="plan apply init completions destroy drift optimize list setup status reconcile doctor"
+  commands="plan apply init completions destroy drift optimize list setup status reconcile doctor version"
 
   if [[ ${COMP_CWORD} -eq 1 ]]; then
     COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
@@ -52,6 +52,9 @@ _assignee_completions() {
       ;;
     doctor)
       COMPREPLY=( $(compgen -W "--json --skip-bedrock --skip-mcp --short" -- "${cur}") )
+      ;;
+    version)
+      COMPREPLY=( $(compgen -W "" -- "${cur}") )
       ;;
   esac
   return 0

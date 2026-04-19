@@ -389,6 +389,54 @@ describe("status command --resource-type filter (Story 56-it1-01)", () => {
 
     expect(fetchManagedResources).toHaveBeenCalledWith(undefined, undefined);
   });
+
+  // Story 56-it2-04 P1-02: a non-INVALID_RESOURCE_TYPE_CODE throw from
+  // the shared resolver now routes through `renderError` before being
+  // re-thrown. Previously Commander dumped a bare stack and the user
+  // had no actionable message. We mock the resolver to throw an
+  // AssigneeError with a non-INVALID code and assert the friendly
+  // fallback appears on stderr (renderError writes there).
+  it("P1-02: non-INVALID_RESOURCE_TYPE_CODE resolver error still renders before re-throw", async () => {
+    vi.resetModules();
+    vi.doMock("./resource-type-filter.js", async () => {
+      const actual = await vi.importActual<
+        typeof import("./resource-type-filter.js")
+      >("./resource-type-filter.js");
+      const { AssigneeError } = await import("@assignee/core");
+      return {
+        ...actual,
+        resolveResourceTypeFilter: (_input: string): string => {
+          throw new AssigneeError(
+            "simulated upstream failure",
+            "SOME_OTHER_CODE",
+          );
+        },
+      };
+    });
+
+    try {
+      const { statusCommand } = await import("./status.js");
+
+      await expect(
+        statusCommand.parseAsync(["node", "status", "--resource-type", "ec2"], {
+          from: "user",
+        }),
+      ).rejects.toThrow("simulated upstream failure");
+
+      // renderError writes to stderr — the stderrSpy captures it.
+      const stderrOutput = stderrSpy.mock.calls
+        .map((c: unknown[]) => c[0])
+        .join("");
+      expect(stderrOutput).toContain(
+        'Failed to validate --resource-type "ec2"',
+      );
+      expect(stderrOutput).toContain("`assignee status --help`");
+      expect(stderrOutput).toContain("simulated upstream failure");
+    } finally {
+      vi.doUnmock("./resource-type-filter.js");
+      vi.resetModules();
+    }
+  });
 });
 
 describe("status --bp-coverage uses status-factory for DI", () => {

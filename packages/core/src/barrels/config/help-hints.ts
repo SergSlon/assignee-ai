@@ -4,12 +4,14 @@
 // Single source of truth for CLI + MCP + graph-node hint strings.
 // Registry-derived counts; never hardcode. (Story 54-it1-04)
 export {
+  BEGINNER_EXAMPLE_TYPES,
   HINT_MAX_COLUMNS,
   type HintStyle,
   getCompoundPatterns,
   getPatternCount,
   getSupportedResourceTypes,
   getSupportedTypeCount,
+  renderClarifierExampleList,
   renderPatternsHint,
   renderSupportedTypesHint,
 } from "../../config/help-hints.js";
