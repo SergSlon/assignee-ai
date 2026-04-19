@@ -75,7 +75,7 @@ See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the IAM policy setup (ope
 ## What this is NOT
 
 - **Not multi-cloud.** AWS-only by design (Epic 13 deferred; see [project status](#project-status)).
-- **Not a Terraform replacement for platform teams.** If you have a state-file culture and love HCP/Spacelift/env0, keep using them.
+- **Not a Terraform replacement for platform teams.** If you already run Terraform with Spacelift/env0/HCP and want an AI layer, use their native MCP/NL tooling — Assignee is for the operator who does not want to own Terraform state at all.
 - **Not a Kubernetes operator.** See [kagent](../wiki/competitors/kagent.md) for K8s day-2 ops.
 - **Not for HCL-fluent platform engineers** who already love Cursor + the Terraform MCP.
 
@@ -150,15 +150,15 @@ Discovery shortcuts live under `plan --help`: supported resource types, compound
 
 ## vs the competition
 
-| Axis                  | Assignee             | kagent                     | Pulumi Neo                  | Terraform + Claude/Cursor | CDK + Amazon Q           | Crossplane                  | HCP Terraform AI          |
-| --------------------- | -------------------- | -------------------------- | --------------------------- | ------------------------- | ------------------------ | --------------------------- | ------------------------- |
-| Code artifact         | **None**             | K8s CRDs                   | Pulumi code + state         | HCL + state               | CDK code + bootstrap     | K8s CRDs (Compositions)     | HCL + state (HCP-managed) |
-| Primary scope         | AWS greenfield, ops  | K8s day-2 ops              | Any cloud (stack)           | Any cloud (HCL-fluent)    | AWS (CDK)                | Any cloud (via K8s cluster) | Any cloud (HCL-fluent)    |
-| BP rules on free path | **185, YAML**        | N/A _(ops tool)_           | CrossGuard _(separate SKU)_ | Sentinel _(paid)_         | cdk-nag _(add-on, free)_ | None bundled                | Sentinel _(paid)_         |
-| Plan preview          | NL → plan-box + HITL | N/A _(not provisioning)_   | `pulumi preview`            | `terraform plan`          | `cdk diff`               | `kubectl diff` on CR        | `terraform plan` (web UI) |
-| Target operator       | Solo / small team    | K8s cluster operator       | Pulumi-using devs           | HCL-fluent devs           | CDK devs                 | K8s platform engineer       | TF-using platform team    |
-| Cloud coverage        | AWS-only             | K8s (any cloud underneath) | Multi-cloud                 | Multi-cloud               | AWS-only                 | Multi-cloud                 | Multi-cloud               |
-| Runtime dependency    | Node + AWS creds     | K8s cluster + Helm         | Pulumi CLI + cloud account  | Terraform CLI + state BE  | Node + CDK bootstrap     | K8s cluster + providers     | HCP account (hosted)      |
+| Axis                    | Assignee                | kagent                     | Pulumi Neo                                                            | Terraform + Claude/Cursor     | CDK + Amazon Q           | Crossplane                  | HCP Terraform AI          |
+| ----------------------- | ----------------------- | -------------------------- | --------------------------------------------------------------------- | ----------------------------- | ------------------------ | --------------------------- | ------------------------- |
+| Code artifact           | **None**                | K8s CRDs                   | Pulumi code + state                                                   | HCL + state                   | CDK code + bootstrap     | K8s CRDs (Compositions)     | HCL + state (HCP-managed) |
+| Primary scope           | AWS greenfield, ops     | K8s day-2 ops              | Any cloud (stack)                                                     | Any cloud (HCL-fluent)        | AWS (CDK)                | Any cloud (via K8s cluster) | Any cloud (HCL-fluent)    |
+| BP rules on free path   | **185, YAML**           | N/A _(ops tool)_           | CrossGuard _(local free; 0 bundled rules; paid SKU for policy packs)_ | Sentinel _(paid)_             | cdk-nag _(add-on, free)_ | None bundled                | Sentinel _(paid)_         |
+| Plan preview            | NL → plan-box + HITL    | N/A _(not provisioning)_   | `pulumi preview`                                                      | `terraform plan`              | `cdk diff`               | `kubectl diff` on CR        | `terraform plan` (web UI) |
+| Onboarding prerequisite | None (Node + AWS creds) | K8s cluster + Helm         | Pulumi CLI + state backend                                            | Terraform CLI + state backend | Node + cdk bootstrap     | K8s cluster + CRDs          | HCP account               |
+| Cloud coverage          | AWS-only                | K8s (any cloud underneath) | Multi-cloud                                                           | Multi-cloud                   | AWS-only                 | Multi-cloud                 | Multi-cloud               |
+| Runtime dependency      | Node + AWS creds        | K8s cluster + Helm         | Pulumi CLI + cloud account                                            | Terraform CLI + state BE      | Node + CDK bootstrap     | K8s cluster + providers     | HCP account (hosted)      |
 
 **Footnote on omitted categories.** Three hosted / enterprise-tier adjacents are not in the scorecard because they target different buyers: **Spacelift Intent** (hosted Terraform runner with AI-assisted review — enterprise platform-team buyer, priced per run), **env0** (hosted Terraform/OpenTofu collaboration platform — enterprise team buyer, priced per user), and generic hosted-HCP AI features beyond the HCP Terraform AI column above. If you are an enterprise platform team already paying for one of these, Assignee is not a replacement — it is a different modality for a different operator profile.
 
@@ -180,9 +180,11 @@ Nine direct / adjacent competitors — eight archived in the [workspace wiki](..
 
 Short answer: if you want a file to commit, pick any of the above. If you want a running AWS resource and a memory record, pick Assignee.
 
+Assignee's CLI stays free (MIT) forever; the future SaaS tier (no commitment date) is reserved for multi-user / RBAC / audit-trail features and will sit between free-OSS and Terraform per-resource tier pricing. See [docs/explanation/oss-vs-saas.md](docs/explanation/oss-vs-saas.md).
+
 ### Disruption risk — three credible 12-18 month scenarios
 
-No single-axis moat survives an 18-month vendor response. Three scenarios have comparable credibility; the bundle (not any one pillar) is the durable claim.
+No single-axis moat survives a 12-18 month vendor response. Three scenarios have comparable credibility; the bundle (not any one pillar) is the durable claim.
 
 | Scenario                                                                                                                     | Probability (12-18mo) | Impact on Assignee                              | Defensibility                                                                                                                |
 | ---------------------------------------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -194,7 +196,7 @@ Defensive response — already in flight across all three:
 
 - **Best-practice library as community on-ramp.** Every BP rule is YAML; a new rule lands in ~45 minutes. The moat is not "we have 185 rules" (a snapshot); it is "a new rule lands in 45 minutes by a community contributor." See [docs/explanation/contributing-a-bp-rule.md](docs/explanation/contributing-a-bp-rule.md).
 - **Local-first, open-source, MIT.** Credentials never leave the operator's machine; the full graph, rules, and prompts are inspectable. A first-party offering has to keep pace on transparency to displace a local-first OSS tool with its rule library held in a public repo.
-- **Non-AWS LLM optionality.** The Vercel AI SDK lets Mara swap to Anthropic / OpenAI / Google / Ollama — Assignee is not locked to Bedrock, so an operator wary of single-vendor AI has a credible escape hatch.
+- **Non-AWS LLM optionality.** The Vercel AI SDK lets Mara swap to Anthropic / OpenAI / Google / Ollama — Assignee is not locked to Bedrock, so an operator wary of single-vendor AI has a credible escape hatch. (Implementation: [`packages/core/src/llm/client-factory.ts`](packages/core/src/llm/client-factory.ts) lazy-loads each provider via the Vercel AI SDK so unused SDKs never enter the bundle.)
 
 These are live risks, not moat claims. They are listed here so the reader can price them in.
 
