@@ -25,14 +25,24 @@ import { Command } from "commander";
  * Matches the lookup used by the root `program.version(pkg.version)` call
  * in `src/index.ts`, so `assignee --version` and `assignee version` can
  * never drift apart.
+ *
+ * Epic 61-it1-01 (L3-001): when the package.json read/parse fails (damaged
+ * install, partial extract, permission issue) we now emit a stderr warning
+ * before returning the "0.0.0" fallback. Silent fallback used to leave
+ * operators with "version 0.0.0" in bug reports and no hint that the npm
+ * package itself was damaged; the warning makes the degraded state visible
+ * and points them at the remediation (reinstall / verify the package).
  */
-function readPackageVersion(): string {
+export function readPackageVersion(): string {
   try {
     const pkgPath = resolve(import.meta.dirname, "..", "..", "package.json");
     const raw = readFileSync(pkgPath, "utf-8");
     const parsed = JSON.parse(raw) as { version?: string };
     return parsed.version ?? "0.0.0";
   } catch {
+    console.warn(
+      "assignee: package.json version unreadable; reporting 0.0.0. Reinstall or verify the npm package is intact.",
+    );
     return "0.0.0";
   }
 }

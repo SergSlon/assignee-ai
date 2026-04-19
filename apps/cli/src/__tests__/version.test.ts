@@ -38,7 +38,35 @@ import {
   type MockInstance,
 } from "vitest";
 import { Command } from "commander";
-import { versionCommand } from "../commands/version.js";
+
+// Hoisted mock shim for node:fs so we can force readPackageVersion's
+// readFileSync call to throw on demand (Epic 61-it1-01 L3-001 test).
+// The shim defaults to the real module implementation so every other
+// test in this file — including the tests that read the real package.json
+// via `readCliPackageVersion` below — keeps working unchanged. Individual
+// tests call `__fsControl.readFileSyncImpl = ...` to override.
+const __fsControl = vi.hoisted(() => {
+  return {
+    readFileSyncImpl: null as ((...args: unknown[]) => unknown) | null,
+  };
+});
+vi.mock("node:fs", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...original,
+    readFileSync: ((...args: Parameters<typeof original.readFileSync>) => {
+      if (__fsControl.readFileSyncImpl) {
+        return __fsControl.readFileSyncImpl(...args);
+      }
+      return original.readFileSync(...args);
+    }) as typeof original.readFileSync,
+  };
+});
+
+// Imported AFTER the vi.mock hoist (vi.mock is auto-hoisted above all
+// imports in the test file, so static imports here are safe). The SUT
+// picks up the shimmed readFileSync via the same mocked `node:fs`.
+import { versionCommand, readPackageVersion } from "../commands/version.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -126,6 +154,40 @@ describe("version command", () => {
     expect(output).toMatch(/iam\s+\S+/);
     expect(output).toMatch(/wa-security\s+\S+/);
     expect(output).toMatch(/cost-mgmt\s+\S+/);
+  });
+
+  it("warns to stderr and returns 0.0.0 when package.json is unreadable (Epic 61-it1-01 L3-001)", () => {
+    // Force the readFileSync path used by readPackageVersion to throw so we
+    // exercise the catch branch. `__fsControl` is the hoisted shim defined
+    // at the top of this file — setting `readFileSyncImpl` makes the
+    // shimmed node:fs readFileSync delegate to our thrower instead of the
+    // real one. This reaches into the SUT (commands/version.ts) because
+    // it imports readFileSync from the same shimmed module.
+    __fsControl.readFileSyncImpl = () => {
+      throw new Error("ENOENT: no such file or directory");
+    };
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const version = readPackageVersion();
+
+      // Fallback semantics preserved — callers still get a printable string.
+      expect(version).toBe("0.0.0");
+
+      // Operator-visible warning emitted BEFORE the fallback is returned.
+      // We assert on substrings so minor wording tweaks don't break the
+      // regression signal; the informative phrase + remediation hint are
+      // the durable parts of the contract.
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const warned = warnSpy.mock.calls[0]?.[0];
+      expect(typeof warned).toBe("string");
+      expect(warned).toContain("package.json version unreadable");
+      expect(warned).toContain("0.0.0");
+      expect(warned).toContain("Reinstall");
+    } finally {
+      __fsControl.readFileSyncImpl = null;
+      warnSpy.mockRestore();
+    }
   });
 
   it("is discoverable by a completion-generator-style tree walk", () => {
