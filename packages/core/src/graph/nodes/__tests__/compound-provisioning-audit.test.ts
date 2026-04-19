@@ -18,18 +18,16 @@ import {
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
   defaultPatternRegistry,
-  type ArchitecturePattern,
-} from "@assignee/core";
-import { compoundDispatcherNode } from "@assignee/core/graph/nodes/compound-dispatcher.js";
-import { resourceProvisionerNode } from "@assignee/core/graph/nodes/resource-provisioner.js";
-import {
   ProvisioningErrorKind,
+  type ArchitecturePattern,
   type ProvisioningPort,
-} from "../../services/provisioning-port.js";
-import type { AgentState } from "../../services/graph.js";
+} from "../../../index.js";
+import { compoundDispatcherNode } from "../compound-dispatcher.js";
+import { resourceProvisionerNode } from "../resource-provisioner.js";
+import type { AgentState } from "../../graph-state.js";
 
 // Suppress logger output
-vi.mock("../../utils/logger.js", () => ({
+vi.mock("../../../utils/logger/index.js", () => ({
   log: vi.fn(),
   LOG_ACTIONS: {
     RESULT_FORMATTED: "result_formatted",
@@ -48,7 +46,7 @@ vi.mock("../../utils/logger.js", () => ({
 //
 // Story 50-4 Wave 5 Pass H: result-formatter was lifted to @assignee/core;
 // it imports display from the core-internal path. Hoisted spies are mocked
-// at both the CLI shim path and the core path so both sides see the same spies.
+// so dynamic imports in tests below resolve to the same spies.
 const _displayMocks = vi.hoisted(() => ({
   renderApplySuccess: vi.fn(),
   renderCompoundSuccess: vi.fn(),
@@ -58,10 +56,10 @@ const _displayMocks = vi.hoisted(() => ({
   renderSecurityWarnings: vi.fn(),
   promptFixSelection: vi.fn().mockResolvedValue(null),
 }));
-vi.mock("../../utils/display.js", () => _displayMocks);
-vi.mock("@assignee/core/utils/display.js", () => _displayMocks);
+vi.mock("../../../utils/display.js", () => _displayMocks);
 
-// Mock memory service (lifted to core in Pass H — hoisted & dual-path mocked)
+// Mock memory service (lifted to core in Pass H — hoisted & mocked at the
+// core-internal path)
 const _memoryMocks = vi.hoisted(() => ({
   defaultMemoryService: {
     appendProvision: vi.fn().mockResolvedValue(undefined),
@@ -70,8 +68,7 @@ const _memoryMocks = vi.hoisted(() => ({
     clearFailuresForType: vi.fn().mockResolvedValue(undefined),
   },
 }));
-vi.mock("../../services/memory.js", () => _memoryMocks);
-vi.mock("@assignee/core/services/memory.js", () => _memoryMocks);
+vi.mock("../../../services/memory.js", () => _memoryMocks);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -617,11 +614,11 @@ describe("resourceProvisionerNode — compound context", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("compound queue iteration (result-formatter loop)", () => {
-  let resultFormatterNode: typeof import("@assignee/core/graph/nodes/result-formatter.js").resultFormatterNode;
+  let resultFormatterNode: typeof import("../result-formatter.js").resultFormatterNode;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const mod = await import("@assignee/core/graph/nodes/result-formatter.js");
+    const mod = await import("../result-formatter.js");
     resultFormatterNode = mod.resultFormatterNode;
   });
 
@@ -699,7 +696,7 @@ describe("compound queue iteration (result-formatter loop)", () => {
   });
 
   it("renders compound summary when last resource (index 2) completes", async () => {
-    const { renderCompoundSuccess } = await import("../../utils/display.js");
+    const { renderCompoundSuccess } = await import("../../../utils/display.js");
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourcePattern: iterPattern,
@@ -801,13 +798,13 @@ describe("compound queue iteration (result-formatter loop)", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("compound flow error handling", () => {
-  let resultFormatterNode: typeof import("@assignee/core/graph/nodes/result-formatter.js").resultFormatterNode;
+  let resultFormatterNode: typeof import("../result-formatter.js").resultFormatterNode;
   let mockProvisioner: ReturnType<typeof createMockProvisioner>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     mockProvisioner = createMockProvisioner();
-    const mod = await import("@assignee/core/graph/nodes/result-formatter.js");
+    const mod = await import("../result-formatter.js");
     resultFormatterNode = mod.resultFormatterNode;
   });
 
@@ -889,7 +886,7 @@ describe("compound flow error handling", () => {
 
   it("result-formatter shows cleanup guidance with previously provisioned resources on failure", async () => {
     const { renderCompoundPartialFailure } =
-      await import("../../utils/display.js");
+      await import("../../../utils/display.js");
 
     const state = makeState({
       executionStatus: ExecutionStatus.FAILED,
@@ -935,7 +932,7 @@ describe("compound flow error handling", () => {
 
   it("cleanup guidance lists resources in forward order (renderer reverses for destroy)", async () => {
     const { renderCompoundPartialFailure } =
-      await import("../../utils/display.js");
+      await import("../../../utils/display.js");
 
     const state = makeState({
       executionStatus: ExecutionStatus.FAILED,
@@ -985,7 +982,7 @@ describe("compound flow error handling", () => {
   });
 
   it("partial failure with no completed resources shows standard error (no cleanup guidance)", async () => {
-    const { renderError } = await import("../../utils/display.js");
+    const { renderError } = await import("../../../utils/display.js");
 
     const state = makeState({
       executionStatus: ExecutionStatus.FAILED,

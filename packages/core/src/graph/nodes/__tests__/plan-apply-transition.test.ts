@@ -14,16 +14,22 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { MockInstance } from "vitest";
-import { ExecutionStatus, ProvisioningError } from "@assignee/core";
-import type { AgentState } from "../services/graph.js";
+import {
+  ExecutionStatus,
+  ProvisioningError,
+  defaultErrorMessageRegistry,
+} from "../../../index.js";
+import type { ProvisioningPort } from "../../../index.js";
+import type { AgentState } from "../../graph-state.js";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-// Story 50-4 Wave 5 finale: human_approval now lives in
-// `@assignee/core/graph/nodes/human-approval.js` and imports display/logger
+// Story 50-4 Wave 5 finale: human_approval lives in
+// `@assignee/core/graph/nodes/human-approval.ts` and imports display/logger
 // from core (`../../utils/display.js` + `../../utils/logger/index.js`).
-// Mock at the CORE module paths so the in-core node's imports are intercepted.
-vi.mock("@assignee/core/utils/display.js", () => ({
+// Mock at the core-internal module paths so the in-core node's imports are
+// intercepted.
+vi.mock("../../../utils/display.js", () => ({
   renderPlanBox: vi.fn(),
   renderHitlConfirm: vi.fn(),
   renderDependencyPlan: vi.fn(),
@@ -32,7 +38,7 @@ vi.mock("@assignee/core/utils/display.js", () => ({
   promptFixSelection: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("@assignee/core/utils/logger/index.js", () => ({
+vi.mock("../../../utils/logger/index.js", () => ({
   log: vi.fn(),
   LOG_ACTIONS: {
     PLAN_APPROVED: "plan_approved",
@@ -41,15 +47,10 @@ vi.mock("@assignee/core/utils/logger/index.js", () => ({
   },
 }));
 
-import { humanApprovalNode } from "@assignee/core/graph/nodes/human-approval.js";
-import {
-  renderPlanBox,
-  renderHitlConfirm,
-} from "@assignee/core/utils/display.js";
-import { log } from "@assignee/core/utils/logger/index.js";
-import { defaultErrorMessageRegistry } from "../utils/error-messages.js";
-import { type ProvisioningPort } from "../services/provisioning-port.js";
-import { resourceProvisionerNode } from "@assignee/core/graph/nodes/resource-provisioner.js";
+import { humanApprovalNode } from "../human-approval.js";
+import { renderPlanBox, renderHitlConfirm } from "../../../utils/display.js";
+import { log } from "../../../utils/logger/index.js";
+import { resourceProvisionerNode } from "../resource-provisioner.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -421,9 +422,9 @@ describe("plan-to-apply transition: cost history display", () => {
 
   it('warning hint (starts with ⚠) gets "Warning:" label', async () => {
     // Need the real renderPlanBox, not the mock
-    vi.doUnmock("../utils/display.js");
+    vi.doUnmock("../../../utils/display.js");
     const { renderPlanBox: realRenderPlanBox } =
-      await import("../utils/display.js");
+      await import("../../../utils/display.js");
 
     realRenderPlanBox({
       resourceType: "AWS::S3::Bucket",
@@ -439,7 +440,7 @@ describe("plan-to-apply transition: cost history display", () => {
     expect(output).toContain("Previous deployment failed after 3 retries");
 
     // Re-mock for subsequent tests
-    vi.doMock("../utils/display.js", () => ({
+    vi.doMock("../../../utils/display.js", () => ({
       renderPlanBox: vi.fn(),
       renderHitlConfirm: vi.fn(),
       renderDependencyPlan: vi.fn(),
@@ -449,9 +450,9 @@ describe("plan-to-apply transition: cost history display", () => {
   });
 
   it('cost history hint gets "Cost History:" label', async () => {
-    vi.doUnmock("../utils/display.js");
+    vi.doUnmock("../../../utils/display.js");
     const { renderPlanBox: realRenderPlanBox } =
-      await import("../utils/display.js");
+      await import("../../../utils/display.js");
 
     realRenderPlanBox({
       resourceType: "AWS::S3::Bucket",
@@ -466,7 +467,7 @@ describe("plan-to-apply transition: cost history display", () => {
     expect(output).toContain("Cost History:");
     expect(output).toContain("Last deployed: $0.50/mo avg");
 
-    vi.doMock("../utils/display.js", () => ({
+    vi.doMock("../../../utils/display.js", () => ({
       renderPlanBox: vi.fn(),
       renderHitlConfirm: vi.fn(),
       renderDependencyPlan: vi.fn(),
@@ -476,9 +477,9 @@ describe("plan-to-apply transition: cost history display", () => {
   });
 
   it("mix of warning and cost history hints applies correct labels", async () => {
-    vi.doUnmock("../utils/display.js");
+    vi.doUnmock("../../../utils/display.js");
     const { renderPlanBox: realRenderPlanBox } =
-      await import("../utils/display.js");
+      await import("../../../utils/display.js");
 
     realRenderPlanBox({
       resourceType: "AWS::S3::Bucket",
@@ -498,7 +499,7 @@ describe("plan-to-apply transition: cost history display", () => {
     expect(output).toContain("Cost History:");
     expect(output).toContain("Last deployed: $1.20/mo avg");
 
-    vi.doMock("../utils/display.js", () => ({
+    vi.doMock("../../../utils/display.js", () => ({
       renderPlanBox: vi.fn(),
       renderHitlConfirm: vi.fn(),
       renderDependencyPlan: vi.fn(),
