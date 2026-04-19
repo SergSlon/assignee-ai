@@ -229,6 +229,166 @@ describe("status command options registration", () => {
     statusCommand.parseOptions(["--bp-coverage"]);
     expect(statusCommand.opts()["bpCoverage"]).toBe(true);
   });
+
+  // Story 56-it1-01: --resource-type parity with MCP
+  // list_managed_resources. Option is registered and long flag is
+  // canonical so renames get caught by this assertion.
+  it("has --resource-type option registered", async () => {
+    const { statusCommand } = await import("./status.js");
+    const opt = statusCommand.options.find((o) => o.long === "--resource-type");
+    expect(opt?.long).toBe("--resource-type");
+    expect(opt!.description).toMatch(/CFN resource type/i);
+  });
+
+  it("parses --resource-type value correctly", async () => {
+    const { statusCommand } = await import("./status.js");
+    statusCommand.parseOptions(["--resource-type", "AWS::S3::Bucket"]);
+    expect(statusCommand.opts()["resourceType"]).toBe("AWS::S3::Bucket");
+  });
+});
+
+// Story 56-it1-01: runtime behaviour of `status --resource-type`.
+// Mirrors the list-command tests: shorthand normalises to the CFN
+// form, full CFN passes through, invalid types surface the SSO hint
+// WITHOUT touching AWS.
+/**
+ * Reset commander option state on the shared statusCommand singleton
+ * (see analogous helper in list.test.ts for the rationale). Prior
+ * describe blocks call `parseOptions([...])` which leaves parsed
+ * values on the module-level command; without this teardown the
+ * Story 56-it1-01 tests below run with stale `resourceType` /
+ * `bpCoverage` / `region` flags set.
+ */
+async function resetStatusCommandOptions(): Promise<void> {
+  const { statusCommand } = await import("./status.js");
+  const internals = statusCommand as unknown as {
+    _optionValues: Record<string, unknown>;
+  };
+  for (const opt of statusCommand.options) {
+    internals._optionValues[opt.attributeName()] = undefined;
+  }
+}
+
+describe("status command --resource-type filter (Story 56-it1-01)", () => {
+  let stdoutSpy: MockInstance<typeof process.stdout.write>;
+  let stderrSpy: MockInstance<typeof process.stderr.write>;
+  let exitSpy: MockInstance<typeof process.exit>;
+
+  beforeEach(async () => {
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    stderrSpy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called");
+    }) as never);
+    // Re-prime the module mocks vitest's `restoreMocks: true` wipes
+    // between tests in other describe blocks (see existing comment in
+    // the --bp-coverage DI describe), and clear leftover commander state.
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    const { buildStatusData } =
+      await import("../services/status-aggregator.js");
+    vi.mocked(fetchManagedResources).mockReset();
+    vi.mocked(buildStatusData).mockReset();
+    await resetStatusCommandOptions();
+  });
+
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    exitSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it("forwards --resource-type S3 (shorthand) as AWS::S3::Bucket to core", async () => {
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    const { buildStatusData } =
+      await import("../services/status-aggregator.js");
+    const { statusCommand } = await import("./status.js");
+
+    vi.mocked(fetchManagedResources).mockResolvedValue([mockResources[0]!]);
+    vi.mocked(buildStatusData).mockResolvedValue({
+      totalResources: 1,
+      totalEstimatedMonthlyCost: "$5.00/month",
+      byType: [
+        {
+          type: "AWS::S3::Bucket",
+          count: 1,
+          estimatedMonthlyCost: "$5.00/month",
+        },
+      ],
+      byRegion: [
+        { region: "us-east-1", count: 1, estimatedMonthlyCost: "$5.00/month" },
+      ],
+      lastUpdated: "2026-03-22T00:00:00.000Z",
+    });
+
+    try {
+      await statusCommand.parseAsync(
+        ["node", "status", "--resource-type", "S3", "--json"],
+        { from: "user" },
+      );
+    } catch {
+      // process.exit throws
+    }
+
+    expect(fetchManagedResources).toHaveBeenCalledWith(
+      undefined,
+      "AWS::S3::Bucket",
+    );
+  });
+
+  it("rejects an unsupported --resource-type with the SSO hint and skips AWS", async () => {
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    const { statusCommand } = await import("./status.js");
+
+    vi.mocked(fetchManagedResources).mockResolvedValue([]);
+
+    await expect(
+      statusCommand.parseAsync(
+        ["node", "status", "--resource-type", "NOT-A-REAL-TYPE"],
+        { from: "user" },
+      ),
+    ).rejects.toThrow(/Unknown --resource-type "NOT-A-REAL-TYPE"/);
+
+    // AWS must NOT have been hit when validation fails.
+    expect(fetchManagedResources).not.toHaveBeenCalled();
+
+    const stderrOutput = stderrSpy.mock.calls
+      .map((c: unknown[]) => c[0])
+      .join("");
+    // SSO hint header is rendered via renderError's `why:` channel.
+    expect(stderrOutput).toContain("What you can create");
+    expect(stderrOutput).toContain("AWS::S3::Bucket");
+  });
+
+  it("no --resource-type flag leaves filter undefined (regression)", async () => {
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    const { buildStatusData } =
+      await import("../services/status-aggregator.js");
+    const { statusCommand } = await import("./status.js");
+
+    vi.mocked(fetchManagedResources).mockResolvedValue(mockResources);
+    vi.mocked(buildStatusData).mockResolvedValue({
+      totalResources: 2,
+      totalEstimatedMonthlyCost: "$15.00/month",
+      byType: [],
+      byRegion: [],
+      lastUpdated: "2026-03-22T00:00:00.000Z",
+    });
+
+    try {
+      await statusCommand.parseAsync(["node", "status", "--json"], {
+        from: "user",
+      });
+    } catch {
+      // process.exit throws
+    }
+
+    expect(fetchManagedResources).toHaveBeenCalledWith(undefined, undefined);
+  });
 });
 
 describe("status --bp-coverage uses status-factory for DI", () => {

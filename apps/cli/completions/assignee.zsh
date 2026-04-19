@@ -86,6 +86,7 @@ _assignee() {
           _arguments \
             '--json[Output as JSON array]' \
             '--region[Filter to a specific AWS region]:region:' \
+            '--resource-type[Filter to one CFN resource type (e.g. AWS\:\:S3\:\:Bucket or shorthand S3, Lambda)]:type:' \
             '--total-cost[After the table, print a total estimated monthly cost across all resources (skips Free / N/A / unparseable entries)]'
           ;;
         setup)
@@ -100,6 +101,7 @@ _assignee() {
           _arguments \
             '--json[Output status data as JSON]' \
             '--region[Filter to a specific AWS region]:region:' \
+            '--resource-type[Filter to one CFN resource type (e.g. AWS\:\:S3\:\:Bucket or shorthand S3, Lambda)]:type:' \
             '--bp-coverage[Show BP rule coverage dashboard]' \
             '--gaps-only[Only meaningful with --bp-coverage. Prints just the list of resource types with zero BP rules and exits non-zero if any gaps are found (CI-friendly). Structural types (RouteTable, VPCGatewayAttachment, etc.) are excluded by default — override with --include-structural-gaps.]' \
             '--include-structural-gaps[Only meaningful with --bp-coverage --gaps-only. Includes structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS\:\:MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.]'

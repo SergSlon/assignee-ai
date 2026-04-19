@@ -21,6 +21,10 @@ import {
   renderEmptyList,
   renderError,
 } from "../utils/display.js";
+import {
+  resolveResourceTypeFilter,
+  INVALID_RESOURCE_TYPE_CODE,
+} from "./resource-type-filter.js";
 
 /**
  * Parse an `estimatedMonthlyCost` string into a numeric USD monthly
@@ -56,6 +60,10 @@ export const listCommand = new Command(CommandName.LIST)
   .option("--json", "Output as JSON array")
   .option("--region <region>", "Filter to a specific AWS region")
   .option(
+    "--resource-type <type>",
+    "Filter to one CFN resource type (e.g. AWS::S3::Bucket or shorthand S3, Lambda)",
+  )
+  .option(
     "--total-cost",
     "After the table, print a total estimated monthly cost across all resources (skips Free / N/A / unparseable entries)",
   )
@@ -67,6 +75,10 @@ Examples:
         Table of every assignee-managed resource in the default region
   $ assignee list --region us-east-1
         Only resources in us-east-1
+  $ assignee list --resource-type S3
+        Only S3 buckets (shorthand accepted; full CFN form also works)
+  $ assignee list --resource-type AWS::Lambda::Function
+        Only Lambda functions (full CFN form)
   $ assignee list --total-cost
         Include a total-monthly-cost footer
   $ assignee list --json | jq .
@@ -77,9 +89,38 @@ No --yes flag is required.
 `,
   )
   .action(
-    async (opts: { json?: boolean; region?: string; totalCost?: boolean }) => {
+    async (opts: {
+      json?: boolean;
+      region?: string;
+      resourceType?: string;
+      totalCost?: boolean;
+    }) => {
+      // Resolve + validate the --resource-type filter BEFORE hitting
+      // AWS so invalid input fails fast and surfaces the SSO hint.
+      let resolvedResourceType: string | undefined;
+      if (opts.resourceType !== undefined) {
+        try {
+          resolvedResourceType = resolveResourceTypeFilter(opts.resourceType);
+        } catch (err) {
+          if (
+            err instanceof AssigneeError &&
+            err.code === INVALID_RESOURCE_TYPE_CODE
+          ) {
+            renderError(
+              `Unknown --resource-type "${opts.resourceType}".`,
+              "Pass a supported CFN type (e.g. AWS::S3::Bucket) or a unique shorthand (e.g. S3, Lambda).",
+              { why: err.message },
+            );
+          }
+          throw err;
+        }
+      }
+
       try {
-        const resources = await fetchManagedResources(opts.region);
+        const resources = await fetchManagedResources(
+          opts.region,
+          resolvedResourceType,
+        );
 
         if (resources.length === 0) {
           renderEmptyList();

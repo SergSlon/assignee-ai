@@ -39,13 +39,13 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--region --json --min-savings --no-color" -- "${cur}") )
       ;;
     list)
-      COMPREPLY=( $(compgen -W "--json --region --total-cost" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--json --region --resource-type --total-cost" -- "${cur}") )
       ;;
     setup)
       COMPREPLY=( $(compgen -W "--profile --yes --enable-llm-logging --disable-llm-logging --dry-run" -- "${cur}") )
       ;;
     status)
-      COMPREPLY=( $(compgen -W "--json --region --bp-coverage --gaps-only --include-structural-gaps" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--json --region --resource-type --bp-coverage --gaps-only --include-structural-gaps" -- "${cur}") )
       ;;
     reconcile)
       COMPREPLY=( $(compgen -W "--resource --dry-run --yes --auto-reconcile" -- "${cur}") )

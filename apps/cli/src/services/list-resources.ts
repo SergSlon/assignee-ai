@@ -33,9 +33,16 @@ export type { ManagedResource } from "@assignee/core";
 /**
  * Fetches all resources tagged with `managed-by=assignee-ai` from AWS,
  * enriched with IAM-role + provision-log + billing data.
+ *
+ * Parity with MCP `list_managed_resources` tool (see
+ * `apps/mcp-server/src/tools/list-managed-resources.ts`): positional
+ * argument order is `(region?, resourceType?, mcpTools?)` so the CLI
+ * `list` / `status` commands can forward the same filter the MCP tool
+ * exposes. Story 56-it1-01.
  */
 export async function fetchManagedResources(
   region?: string,
+  resourceType?: string,
   mcpTools?: StructuredTool[],
 ): Promise<ManagedResource[]> {
   const resolvedRegion = region ?? AWS_REGION;
@@ -73,6 +80,7 @@ export async function fetchManagedResources(
     region: resolvedRegion,
     fetchRgtaResources,
     enrichWithIamRoles: () => fetchManagedIamRoles(),
+    ...(resourceType ? { resourceTypeFilter: resourceType } : {}),
     ...(mcpTools && mcpTools.length > 0
       ? {
           enrichWithBilling: async (resources) =>

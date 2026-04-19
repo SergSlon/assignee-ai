@@ -32,11 +32,19 @@ import {
   filterActionableGaps,
 } from "./status-bp-coverage.js";
 import { getBpDir } from "./status-factory.js";
+import {
+  resolveResourceTypeFilter,
+  INVALID_RESOURCE_TYPE_CODE,
+} from "./resource-type-filter.js";
 
 export const statusCommand = new Command(CommandName.STATUS)
   .description(CommandDescription.STATUS)
   .option("--json", "Output status data as JSON")
   .option("--region <region>", "Filter to a specific AWS region")
+  .option(
+    "--resource-type <type>",
+    "Filter to one CFN resource type (e.g. AWS::S3::Bucket or shorthand S3, Lambda)",
+  )
   .option("--bp-coverage", "Show BP rule coverage dashboard")
   .option(
     "--gaps-only",
@@ -54,6 +62,8 @@ Examples:
         Summary of managed resources and recent runs
   $ assignee status --json
         Machine-readable status payload
+  $ assignee status --resource-type S3
+        Summary scoped to S3 buckets only (shorthand or full CFN form)
   $ assignee status --bp-coverage
         Best-practice rule coverage dashboard
   $ assignee status --bp-coverage --gaps-only
@@ -66,6 +76,7 @@ status is read-only. No --yes required.
     async (opts: {
       json?: boolean;
       region?: string;
+      resourceType?: string;
       bpCoverage?: boolean;
       gapsOnly?: boolean;
       includeStructuralGaps?: boolean;
@@ -119,8 +130,33 @@ status is read-only. No --yes required.
         return;
       }
 
+      // Resolve + validate the --resource-type filter BEFORE hitting
+      // AWS. Parity with MCP `list_managed_resources` — same CFN-form
+      // filter gets forwarded to core.
+      let resolvedResourceType: string | undefined;
+      if (opts.resourceType !== undefined) {
+        try {
+          resolvedResourceType = resolveResourceTypeFilter(opts.resourceType);
+        } catch (err) {
+          if (
+            err instanceof AssigneeError &&
+            err.code === INVALID_RESOURCE_TYPE_CODE
+          ) {
+            renderError(
+              `Unknown --resource-type "${opts.resourceType}".`,
+              "Pass a supported CFN type (e.g. AWS::S3::Bucket) or a unique shorthand (e.g. S3, Lambda).",
+              { why: err.message },
+            );
+          }
+          throw err;
+        }
+      }
+
       try {
-        const resources = await fetchManagedResources(opts.region);
+        const resources = await fetchManagedResources(
+          opts.region,
+          resolvedResourceType,
+        );
 
         if (resources.length === 0) {
           renderEmptyStatus();

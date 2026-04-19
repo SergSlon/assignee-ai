@@ -64,6 +64,7 @@ complete -c assignee -n "__fish_seen_subcommand_from optimize" -l no-color -d 'D
 # Options for 'list'
 complete -c assignee -n "__fish_seen_subcommand_from list" -l json -d 'Output as JSON array'
 complete -c assignee -n "__fish_seen_subcommand_from list" -l region -r -d 'Filter to a specific AWS region'
+complete -c assignee -n "__fish_seen_subcommand_from list" -l resource-type -r -d 'Filter to one CFN resource type (e.g. AWS::S3::Bucket or shorthand S3, Lambda)'
 complete -c assignee -n "__fish_seen_subcommand_from list" -l total-cost -d 'After the table, print a total estimated monthly cost across all resources (skips Free / N/A / unparseable entries)'
 
 # Options for 'setup'
@@ -76,6 +77,7 @@ complete -c assignee -n "__fish_seen_subcommand_from setup" -l dry-run -d 'Print
 # Options for 'status'
 complete -c assignee -n "__fish_seen_subcommand_from status" -l json -d 'Output status data as JSON'
 complete -c assignee -n "__fish_seen_subcommand_from status" -l region -r -d 'Filter to a specific AWS region'
+complete -c assignee -n "__fish_seen_subcommand_from status" -l resource-type -r -d 'Filter to one CFN resource type (e.g. AWS::S3::Bucket or shorthand S3, Lambda)'
 complete -c assignee -n "__fish_seen_subcommand_from status" -l bp-coverage -d 'Show BP rule coverage dashboard'
 complete -c assignee -n "__fish_seen_subcommand_from status" -l gaps-only -d 'Only meaningful with --bp-coverage. Prints just the list of resource types with zero BP rules and exits non-zero if any gaps are found (CI-friendly). Structural types (RouteTable, VPCGatewayAttachment, etc.) are excluded by default — override with --include-structural-gaps.'
 complete -c assignee -n "__fish_seen_subcommand_from status" -l include-structural-gaps -d 'Only meaningful with --bp-coverage --gaps-only. Includes structural/cross-reference types (RouteTable, VPCGatewayAttachment, SubnetRouteTableAssociation, EFS::MountTarget) in the gap list. Default is to exclude them because their BP content lives on child resources by design.'
