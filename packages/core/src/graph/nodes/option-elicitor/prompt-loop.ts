@@ -7,11 +7,15 @@
  *   - ASK_IF_NOT_SET policy (skip if value already set)
  *   - BACK_SENTINEL from promptWithHelp (restore previous visible index,
  *     delete dependent showIf children)
+ *   - REVIEW_SENTINEL from promptWithHelp (mid-wizard review-answers UI)
  *
  * Back-nav + review-answers are flagged Wave-4 follow-up — core back-stack
  * implementation lives here and will be extended later.
  *
  * Wave-6c F3: extracted from option-elicitor.ts (SRP).
+ * Story 56-it2-03c: split while-body into `field-gates` / `back-handler` /
+ * `review-handler` sub-modules so the main loop body is a policy
+ * dispatcher (≤ 85 LOC) rather than a 172-LOC monolith.
  */
 
 import * as clack from "@clack/prompts";
@@ -21,39 +25,14 @@ import type {
   LlmPort,
 } from "../../../index.js";
 import type { StructuredTool } from "@langchain/core/tools";
-import {
-  BACK_SENTINEL,
-  REVIEW_SENTINEL,
-  runReviewAnswers,
-} from "../../../utils/display.js";
-import { FieldPolicy } from "../../../constants/field-policy.js";
+import { BACK_SENTINEL, REVIEW_SENTINEL } from "../../../utils/display.js";
 import {
   fieldFetchKey,
-  evaluateShowIf,
   promptWithHelp,
 } from "../../../utils/wizard-helpers.js";
-
-/**
- * BFS cleanup of transitive showIf dependents. When field A is edited/reverted
- * and B depends on A (B.showIf.field === A.name), B's value is deleted. Then
- * any field C that depends on B is also deleted, and so on.
- */
-function cleanDependents(
-  rootName: string,
-  fields: ResourceField[],
-  elicitedOptions: Record<string, unknown>,
-): void {
-  const queue = [rootName];
-  while (queue.length > 0) {
-    const parent = queue.shift()!;
-    for (const f of fields) {
-      if (f.question.showIf?.field === parent && f.name in elicitedOptions) {
-        delete elicitedOptions[f.name];
-        queue.push(f.name);
-      }
-    }
-  }
-}
+import { applyFieldGates, countVisible } from "./field-gates.js";
+import { handleBackSentinel } from "./back-handler.js";
+import { handleReviewSentinel } from "./review-handler.js";
 
 export interface PromptLoopParams {
   fields: ResourceField[];
@@ -74,23 +53,6 @@ export interface PromptLoopParams {
    * human-approval AFTER option_elicitor).
    */
   quickMode?: boolean;
-}
-
-/**
- * Story 50-2: a field has a usable default if the resolved-config value
- * is set OR the field carries an `initialValue` on the question shape.
- * `--set key=value` pre-fills and config-derived values both populate
- * `resolved.value`; plugin-level initialValue lives on the question.
- */
-function hasUsableDefault(
-  field: ResourceField,
-  res: ResolvedFieldConfig,
-  elicitedOptions: Record<string, unknown>,
-): boolean {
-  if (elicitedOptions[field.name] !== undefined) return true;
-  if (res.value !== undefined) return true;
-  if (field.question.initialValue !== undefined) return true;
-  return false;
 }
 
 /**
@@ -116,22 +78,8 @@ export async function runPromptLoop(
 
   let skippedByDefault = 0;
   let promptedCount = 0;
-
   const history: number[] = [];
-
-  const countVisible = () =>
-    fields.filter((f) => {
-      const res = resolved[fieldFetchKey(f)];
-      if (!res) return false;
-      if (res.policy === FieldPolicy.NEVER_ASK) return false;
-      if (
-        f.question.showIf &&
-        !evaluateShowIf(f.question.showIf, elicitedOptions)
-      )
-        return false;
-      return true;
-    }).length;
-  let total = countVisible();
+  let total = countVisible(fields, resolved, elicitedOptions);
 
   let i = 0;
   let visibleIndex = 0;
@@ -143,36 +91,12 @@ export async function runPromptLoop(
       continue;
     }
 
-    if (field.question.showIf) {
-      if (!evaluateShowIf(field.question.showIf, elicitedOptions)) {
-        i++;
-        continue;
-      }
-    }
-
-    if (res.policy === FieldPolicy.NEVER_ASK) {
-      if (res.value !== undefined) elicitedOptions[field.name] = res.value;
-      skippedByDefault++;
+    const gate = applyFieldGates(field, res, elicitedOptions, quickMode);
+    if (gate.kind === "skip") {
       i++;
       continue;
     }
-
-    if (res.policy === FieldPolicy.ASK_IF_NOT_SET) {
-      if (elicitedOptions[field.name] !== undefined) {
-        i++;
-        continue;
-      }
-    }
-
-    // Story 50-2 --quick: if the field has a usable default, accept it
-    // silently without prompting. Populate elicitedOptions with the
-    // resolved value OR the question's initialValue so downstream
-    // showIf evaluation sees the chosen value.
-    if (quickMode && hasUsableDefault(field, res, elicitedOptions)) {
-      if (elicitedOptions[field.name] === undefined) {
-        elicitedOptions[field.name] =
-          res.value !== undefined ? res.value : field.question.initialValue;
-      }
+    if (gate.kind === "silent-default") {
       skippedByDefault++;
       i++;
       continue;
@@ -195,106 +119,36 @@ export async function runPromptLoop(
     );
 
     if (answer === BACK_SENTINEL) {
-      const prevIndex = history.pop();
-      if (prevIndex !== undefined) {
-        const prevField = fields[prevIndex]!;
-        delete elicitedOptions[field.name];
-        delete elicitedOptions[prevField.name];
-        // Clean up showIf-dependent values transitively (A→B→C chain).
-        cleanDependents(prevField.name, fields, elicitedOptions);
-        i = prevIndex;
-        if (visibleIndex > 0) visibleIndex--;
+      const back = handleBackSentinel(
+        field,
+        fields,
+        elicitedOptions,
+        history,
+        visibleIndex,
+      );
+      if (back.kind === "jump") {
+        i = back.i;
+        visibleIndex = back.visibleIndex;
       }
       continue;
     }
 
-    // Story 48.7: mid-wizard review-answers affordance.
-    // The user picked "Review answers so far" from the current prompt's
-    // action menu. Open the review UI, then either cancel (re-show current
-    // prompt, byte-identical no-op) or edit-by-index (re-prompt the chosen
-    // field with its current value as default, then re-walk the tier from
-    // that slot so downstream showIf branches re-evaluate correctly).
     if (answer === REVIEW_SENTINEL) {
-      const review = await runReviewAnswers({ fields, elicitedOptions });
-      if (review.action === "cancel") {
-        // No state mutation — loop iteration re-prompts the same `i`.
-        continue;
-      }
-      const editIdx = review.fieldIndex;
-      const editField = fields[editIdx]!;
-      const editRes = resolved[fieldFetchKey(editField)];
-      if (!editRes) {
-        // Defensive: if the picked field has no resolved config, cancel.
-        continue;
-      }
-
-      // Re-prompt the picked field with current value as default. Build a
-      // temporary resolved config with `value` overridden to the current
-      // answer so the clack primitive's initialValue reflects what the
-      // user already chose.
-      const priorAnswer = elicitedOptions[editField.name];
-      const editResWithCurrent: ResolvedFieldConfig = {
-        ...editRes,
-        value: priorAnswer ?? editRes.value,
-      };
-
-      // Remove the prior answer + every downstream answer whose showIf
-      // depends on the edited field (transitive BFS, mirrors BACK path).
-      delete elicitedOptions[editField.name];
-      cleanDependents(editField.name, fields, elicitedOptions);
-
-      const newAnswer = await promptWithHelp(
-        editField,
-        editResWithCurrent,
+      const review = await handleReviewSentinel({
+        fields,
+        resolved,
+        elicitedOptions,
         resourceType,
         tools,
         llmClient,
         userIntent,
-        // showBack:false on the targeted re-prompt — BACK from here means
-        // "cancel edit" and is treated as a no-op (we restore prior value).
-        false,
-        elicitedOptions,
-      );
-
-      if (
-        newAnswer === BACK_SENTINEL ||
-        newAnswer === REVIEW_SENTINEL ||
-        newAnswer === undefined ||
-        newAnswer === ""
-      ) {
-        // User cancelled the edit — restore prior answer + re-walk so the
-        // rest of the tier is unchanged.
-        if (priorAnswer !== undefined) {
-          elicitedOptions[editField.name] = priorAnswer;
-        }
-      } else {
-        elicitedOptions[editField.name] = newAnswer;
+        history,
+      });
+      if (review.kind === "jump") {
+        i = review.i;
+        visibleIndex = review.visibleIndex;
+        total = review.total;
       }
-
-      // Truncate history to the slot before editIdx and restart the forward
-      // walk from editIdx + 1. The while-loop naturally re-evaluates every
-      // downstream field's showIf and only re-prompts fields without a value
-      // (ASK_IF_NOT_SET skips already-answered fields).
-      while (history.length > 0 && history[history.length - 1]! >= editIdx) {
-        history.pop();
-      }
-      i = editIdx + 1;
-      total = countVisible();
-      // Recompute visible position: count visible fields at indices 0..editIdx.
-      let vis = 0;
-      for (let j = 0; j <= editIdx && j < fields.length; j++) {
-        const f = fields[j]!;
-        const r = resolved[fieldFetchKey(f)];
-        if (!r) continue;
-        if (r.policy === FieldPolicy.NEVER_ASK) continue;
-        if (
-          f.question.showIf &&
-          !evaluateShowIf(f.question.showIf, elicitedOptions)
-        )
-          continue;
-        vis++;
-      }
-      visibleIndex = vis;
       continue;
     }
 
@@ -303,7 +157,7 @@ export async function runPromptLoop(
       elicitedOptions[field.name] = answer;
     }
     promptedCount++;
-    total = countVisible();
+    total = countVisible(fields, resolved, elicitedOptions);
     visibleIndex++;
     i++;
   }
