@@ -10,10 +10,12 @@
  *      option-ranking → intent overrides.
  *   4. Config resolution (6-level precedence).
  *   5. Pattern-memory hint injection + intent bool pre-injection.
- *   6. Prompt loop for common tier, optional advanced tier gate + loop.
+ *   6. Wizard passes (common + advanced tier) via runWizardPasses,
+ *      with an optional --quick-override replay pass.
  *   7. Post-wizard recommendations + coherence validation.
  *
  * Wave-6c F3: extracted from option-elicitor.ts (SRP).
+ * Story 56-it2-03b: wizard passes extracted to wizard-passes.ts.
  */
 
 import { ExecutionStatus } from "../../../schema/graph-state.js";
@@ -21,13 +23,10 @@ import { defaultPluginRegistry } from "../../../resource-plugins/index.js";
 import type { LlmPort } from "../../../ports/llm-port.js";
 import type { ResolvedFieldConfig } from "../../../config/resource-policy.js";
 import type { ResourceField } from "../../../resource-plugins/types.js";
+import type { IntentDefaultOverride } from "../../../utils/intent-defaults/types.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import * as clack from "@clack/prompts";
-import {
-  renderAdvancedConfirm,
-  startSpinner,
-  stopSpinner,
-} from "../../../utils/display.js";
+import { startSpinner, stopSpinner } from "../../../utils/display.js";
 import { UserCancelledError } from "../../../errors.js";
 import { UserMessage } from "../../../config/constants/ui.js";
 import { FieldSource } from "../../../constants/field-policy.js";
@@ -38,14 +37,14 @@ import {
   readAuthToken,
 } from "../../../config/org-policy-cache.js";
 import { getIntentDefaults } from "../../../utils/intent-defaults/index.js";
-import { evaluateShowIf } from "../../../utils/wizard-helpers.js";
 import type { AgentState } from "../../graph-state.js";
 import { buildExpertModeOptions } from "./expert-path.js";
 import { runParallelEnrichment } from "./parallel-enrichment.js";
 import { prepareFields } from "./field-preparation.js";
 import { resolveAllFields } from "./config-resolution.js";
-import { makePatternHintApplier, runPromptLoop } from "./prompt-loop.js";
+import { makePatternHintApplier } from "./prompt-loop.js";
 import { runPostWizardHooks } from "./post-wizard.js";
+import { runWizardPasses } from "./wizard-passes.js";
 
 export async function optionElicitorNode(
   state: AgentState,
@@ -121,13 +120,7 @@ export async function optionElicitorNode(
     configs: { userConfig, projectConfig, orgPolicy },
   });
 
-  // Story 18.12: propagate categoryHint from intent overrides
-  for (const override of intentOverrides) {
-    if (override.categoryHint) {
-      const resolved = resolvedCommon[override.fieldName];
-      if (resolved) resolved.categoryHint = override.categoryHint;
-    }
-  }
+  applyCategoryHints(intentOverrides, resolvedCommon);
 
   const patternHintedFields = applyPatternMemory({
     previousOptions,
@@ -135,51 +128,32 @@ export async function optionElicitorNode(
     resolvedAdvanced,
   });
 
-  const elicitedOptions: Record<string, unknown> = {};
-
-  // Story 10.5: pre-inject boolean toggles from intent (so showIf gates open)
-  const commonFieldNames = new Set(commonFields.map((f) => f.name));
-  for (const override of intentOverrides) {
-    if (
-      (override.value === true || override.value === false) &&
-      commonFieldNames.has(override.fieldName)
-    ) {
-      elicitedOptions[override.fieldName] = override.value;
-    }
-  }
+  const elicitedOptions = preInjectIntentBooleans(
+    intentOverrides,
+    commonFields,
+  );
 
   const applyPatternHint = makePatternHintApplier(patternHintedFields);
 
-  // Common tier
-  const commonStats = await runPromptLoop({
-    fields: commonFields.map(applyPatternHint),
-    resolved: resolvedCommon,
+  const passParams = {
+    commonFields,
+    advancedFields,
+    resolvedCommon,
+    resolvedAdvanced,
     elicitedOptions,
-    resourceType: state.resourceType,
-    tools: tools ?? [],
+    applyPatternHint,
+    state,
+    tools,
     llmClient,
-    userIntent: state.userIntent,
-    progressLabel: "Step",
-    quickMode: state.quickMode === true,
-  });
+  };
 
-  // Advanced tier (gated).
+  // Initial wizard pass (quickMode mirrors CLI flag).
   // Story 50-2: --quick auto-declines the advanced confirm and applies
   // secure defaults (same as answering "No" to "Configure advanced
-  // options?"). The user never sees the advanced prompt chain.
-  let advancedStats = { skippedByDefault: 0, promptedCount: 0 };
-  if (advancedFields.length > 0) {
-    advancedStats = await runAdvancedTier({
-      advancedFields,
-      resolvedAdvanced,
-      elicitedOptions,
-      applyPatternHint,
-      state,
-      tools,
-      llmClient,
-      quickMode: state.quickMode === true,
-    });
-  }
+  // options?"). The user never sees the advanced prompt chain here.
+  const quickMode = state.quickMode === true;
+  const { common: commonStats, advanced: advancedStats } =
+    await runWizardPasses(passParams, { quickMode });
 
   runPostWizardHooks({
     elicitedOptions,
@@ -188,48 +162,9 @@ export async function optionElicitorNode(
     runId: state.runId,
   });
 
-  // Story 50-2: in --quick mode, show the summary line + single override
-  // gate so the user can bail into the full wizard if needed.
-  if (state.quickMode === true && process.stdin.isTTY) {
-    const totalSkipped =
-      commonStats.skippedByDefault + advancedStats.skippedByDefault;
-    const totalPrompted =
-      commonStats.promptedCount + advancedStats.promptedCount;
-    if (totalSkipped > 0 || totalPrompted > 0) {
-      const override = await promptQuickModeOverride(
-        totalSkipped,
-        totalPrompted,
-      );
-      if (override) {
-        // User opted out of quick mode — drop into the full wizard by
-        // re-running the common + advanced loops with quickMode=false.
-        // Fields already answered stay (ASK_IF_NOT_SET / resolved), so
-        // the user is only re-prompted for fields that quickMode skipped.
-        await runPromptLoop({
-          fields: commonFields.map(applyPatternHint),
-          resolved: resolvedCommon,
-          elicitedOptions,
-          resourceType: state.resourceType,
-          tools: tools ?? [],
-          llmClient,
-          userIntent: state.userIntent,
-          progressLabel: "Step",
-          quickMode: false,
-        });
-        if (advancedFields.length > 0) {
-          await runAdvancedTier({
-            advancedFields,
-            resolvedAdvanced,
-            elicitedOptions,
-            applyPatternHint,
-            state,
-            tools,
-            llmClient,
-            quickMode: false,
-          });
-        }
-      }
-    }
+  // Story 50-2: --quick summary + optional override replay (full wizard).
+  if (quickMode && process.stdin.isTTY) {
+    await maybeRunQuickOverrideReplay(passParams, commonStats, advancedStats);
   }
 
   startSpinner("Generating your plan...");
@@ -261,6 +196,27 @@ async function promptQuickModeOverride(
   // result === true  → proceed (no override)
   // result === false → override (drop into full wizard)
   return result === false;
+}
+
+/**
+ * Story 50-2 replay: if any field was skipped/prompted under --quick, offer
+ * the user a single gate to re-run the full wizard. The replay re-uses the
+ * same wizard passes with quickMode=false; fields already answered stay,
+ * so the user is only re-prompted for fields that --quick defaulted.
+ */
+async function maybeRunQuickOverrideReplay(
+  passParams: Parameters<typeof runWizardPasses>[0],
+  commonStats: { skippedByDefault: number; promptedCount: number },
+  advancedStats: { skippedByDefault: number; promptedCount: number },
+): Promise<void> {
+  const totalSkipped =
+    commonStats.skippedByDefault + advancedStats.skippedByDefault;
+  const totalPrompted = commonStats.promptedCount + advancedStats.promptedCount;
+  if (totalSkipped === 0 && totalPrompted === 0) return;
+  const override = await promptQuickModeOverride(totalSkipped, totalPrompted);
+  if (override) {
+    await runWizardPasses(passParams, { quickMode: false });
+  }
 }
 
 /**
@@ -297,65 +253,40 @@ function applyPatternMemory(params: {
 }
 
 /**
- * Story 41.2: advanced tier gate.
- * If user skips advanced, apply secure defaults (initialValue) for every
- * showIf-visible advanced field. Otherwise run the prompt loop.
- *
- * Story 50-2: in --quick mode, the advanced-gate prompt is auto-declined
- * (secure defaults applied). Returns stats so the orchestrator can show a
- * combined summary. The count of fields that received a default in the
- * skip branch is tallied as `skippedByDefault`.
+ * Story 18.12: propagate categoryHint from intent overrides into the
+ * already-resolved common-field config so the UI can group options
+ * (e.g. "recommended for this intent") when rendering.
  */
-async function runAdvancedTier(params: {
-  advancedFields: ResourceField[];
-  resolvedAdvanced: Record<string, ResolvedFieldConfig>;
-  elicitedOptions: Record<string, unknown>;
-  applyPatternHint: (f: ResourceField) => ResourceField;
-  state: AgentState;
-  tools: StructuredTool[] | undefined;
-  llmClient: LlmPort | undefined;
-  quickMode?: boolean;
-}): Promise<{ skippedByDefault: number; promptedCount: number }> {
-  const {
-    advancedFields,
-    resolvedAdvanced,
-    elicitedOptions,
-    applyPatternHint,
-    state,
-    tools,
-    llmClient,
-    quickMode,
-  } = params;
-
-  // Quick mode: auto-decline the advanced prompt; apply secure defaults
-  // without pestering the user.
-  const showAdvanced = quickMode ? false : await renderAdvancedConfirm();
-  if (!showAdvanced) {
-    let skipped = 0;
-    for (const field of advancedFields) {
-      if (
-        field.question.showIf &&
-        !evaluateShowIf(field.question.showIf, elicitedOptions)
-      )
-        continue;
-      const iv = field.question.initialValue;
-      if (iv !== undefined && elicitedOptions[field.name] === undefined) {
-        elicitedOptions[field.name] = iv;
-        skipped++;
-      }
+function applyCategoryHints(
+  intentOverrides: IntentDefaultOverride[],
+  resolvedCommon: Record<string, ResolvedFieldConfig>,
+): void {
+  for (const override of intentOverrides) {
+    if (override.categoryHint) {
+      const resolved = resolvedCommon[override.fieldName];
+      if (resolved) resolved.categoryHint = override.categoryHint;
     }
-    return { skippedByDefault: skipped, promptedCount: 0 };
   }
+}
 
-  return runPromptLoop({
-    fields: advancedFields.map(applyPatternHint),
-    resolved: resolvedAdvanced,
-    elicitedOptions,
-    resourceType: state.resourceType,
-    tools: tools ?? [],
-    llmClient,
-    userIntent: state.userIntent,
-    progressLabel: "Advanced step",
-    quickMode: quickMode === true,
-  });
+/**
+ * Story 10.5: pre-inject boolean toggles from intent so showIf gates on
+ * dependent fields open without a manual prompt. Returns a fresh
+ * elicitedOptions map seeded with those booleans.
+ */
+function preInjectIntentBooleans(
+  intentOverrides: IntentDefaultOverride[],
+  commonFields: ResourceField[],
+): Record<string, unknown> {
+  const commonFieldNames = new Set(commonFields.map((f) => f.name));
+  const elicitedOptions: Record<string, unknown> = {};
+  for (const override of intentOverrides) {
+    if (
+      (override.value === true || override.value === false) &&
+      commonFieldNames.has(override.fieldName)
+    ) {
+      elicitedOptions[override.fieldName] = override.value;
+    }
+  }
+  return elicitedOptions;
 }
