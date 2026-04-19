@@ -8,20 +8,22 @@
 import { describe, it, expect } from "vitest";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SUPPORTED_TYPES_ARRAY, defaultPluginRegistry } from "@assignee/core";
-import type { ResourcePlugin } from "@assignee/core";
+import {
+  SUPPORTED_TYPES_ARRAY,
+  defaultPluginRegistry,
+} from "../../../index.js";
+import type { ResourcePlugin } from "../../../index.js";
 import { evaluateTriggers, loadBestPractices } from "@assignee/best-practices";
 import type { EvalContext } from "@assignee/best-practices";
-import {
-  assembleS3Composites,
-  assembleEc2Storage,
-} from "@assignee/core/graph/nodes/plan-generator.js";
+import { assembleS3Composites, assembleEc2Storage } from "../plan-generator.js";
 
 // ---------------------------------------------------------------------------
 // Load all BP rules once
 // ---------------------------------------------------------------------------
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const BP_ROOT = join(__dirname, "../../../../packages/best-practices");
+// From packages/core/src/graph/nodes/__tests__/ climb 6 levels to repo root,
+// then into packages/best-practices.
+const BP_ROOT = join(__dirname, "../../../../../../packages/best-practices");
 const allPractices = loadBestPractices(BP_ROOT);
 
 /**

@@ -12,14 +12,14 @@ import {
   ExecutionMode,
   ProvisioningError,
   AssigneeError,
-} from "@assignee/core";
-import type { AgentState } from "../services/graph.js";
-import type { ArchitecturePattern } from "@assignee/core";
+} from "../../../index.js";
+import type { AgentState } from "../../graph-state.js";
+import type { ArchitecturePattern } from "../../../index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
   McpMocks,
   createSecurityMockTool,
-} from "../test-fixtures/mcp-mock-responses.js";
+} from "../../../test-fixtures/mcp-mock-responses.js";
 
 // Mock @clack/prompts spinner (used by Story 37.4 upload flow).
 // NOTE: Plain functions for spinner/isCancel survive mockReset:true.
@@ -38,16 +38,15 @@ vi.mock("@clack/prompts", () => ({
 }));
 
 // Mock s3-upload service (Story 37.4). Default impls re-installed in beforeEach.
-// Story 50-4 Wave 5 Pass H: s3-upload lifted to @assignee/core — mock both
-// the CLI shim and the core path so dynamic imports resolve the same spies.
+// Story 50-4 Wave 5 Pass H: s3-upload lifted to @assignee/core — mocked at the
+// core-internal path (this test file lives in core).
 const _s3Mocks = vi.hoisted(() => ({
   uploadStaticSite: vi.fn(),
   configureBucketPolicy: vi.fn(),
   getMimeType: vi.fn((_p: string) => "text/plain"),
   collectFiles: vi.fn(() => []),
 }));
-vi.mock("../services/s3-upload.js", () => _s3Mocks);
-vi.mock("@assignee/core/services/s3-upload.js", () => _s3Mocks);
+vi.mock("../../../services/s3-upload.js", () => _s3Mocks);
 
 // (f) 2026-04-09 Task 4b: cloudfront-setup.ts (the SDK post-provision
 // distribution + OAC + bucket-policy hook) was deleted — the same
@@ -62,8 +61,7 @@ vi.mock("@assignee/core/services/s3-upload.js", () => _s3Mocks);
 //
 // Story 50-4 Wave 5 Pass H: security-posture (which calls
 // renderSecurityWarnings) was lifted to @assignee/core in this pass; it
-// imports display via the core-internal path. Mock both the CLI shim and
-// the core display source so both consumer sides see the same spies.
+// imports display via the core-internal path.
 const displayMocks = vi.hoisted(() => ({
   renderApplySuccess: vi.fn(),
   renderCompoundSuccess: vi.fn(),
@@ -73,11 +71,10 @@ const displayMocks = vi.hoisted(() => ({
   renderSecurityWarnings: vi.fn(),
   promptFixSelection: vi.fn(),
 }));
-vi.mock("../utils/display.js", () => displayMocks);
-vi.mock("@assignee/core/utils/display.js", () => displayMocks);
+vi.mock("../../../utils/display.js", () => displayMocks);
 
 // Suppress logger output
-vi.mock("../utils/logger.js", () => ({
+vi.mock("../../../utils/logger/index.js", () => ({
   log: vi.fn(),
   LOG_ACTIONS: {
     RESULT_FORMATTED: "result_formatted",
@@ -90,10 +87,8 @@ vi.mock("../utils/logger.js", () => ({
 // Mock memory service (Story 19.3, 19.4, 20.13). Default impls re-installed
 // in beforeEach because mockReset:true wipes vi.fn implementations.
 //
-// Story 50-4 Wave 5 Pass H: MemoryService lifted to @assignee/core. The CLI
-// shim at ../services/memory.js re-exports from core, so the module the
-// memory-recorder util actually imports is the core copy. Mock both the
-// shim (so consumers that import the shim see mocks) and the core source.
+// Story 50-4 Wave 5 Pass H: MemoryService lifted to @assignee/core. Mock at
+// the core-internal path (this test file lives in core).
 const { mockMemoryService } = vi.hoisted(() => ({
   mockMemoryService: {
     appendProvision: vi.fn(),
@@ -102,16 +97,12 @@ const { mockMemoryService } = vi.hoisted(() => ({
     clearFailuresForType: vi.fn(),
   },
 }));
-vi.mock("../services/memory.js", () => ({
-  defaultMemoryService: mockMemoryService,
-  MemoryService: vi.fn(() => mockMemoryService),
-}));
-vi.mock("@assignee/core/services/memory.js", () => ({
+vi.mock("../../../services/memory.js", () => ({
   defaultMemoryService: mockMemoryService,
   MemoryService: vi.fn(() => mockMemoryService),
 }));
 
-import { resultFormatterNode } from "@assignee/core/graph/nodes/result-formatter.js";
+import { resultFormatterNode } from "../result-formatter.js";
 import {
   renderApplySuccess,
   renderCompoundSuccess,
@@ -121,12 +112,12 @@ import {
   renderSecurityWarnings,
   promptFixSelection,
   type FixSelectionResult,
-} from "../utils/display.js";
-import { defaultMemoryService } from "../services/memory.js";
+} from "../../../utils/display.js";
+import { defaultMemoryService } from "../../../services/memory.js";
 import {
   uploadStaticSite,
   configureBucketPolicy,
-} from "../services/s3-upload.js";
+} from "../../../services/s3-upload.js";
 
 /** 3-resource pattern for compound tests */
 const mockPattern: ArchitecturePattern = {
@@ -179,7 +170,7 @@ const RESULT_FORMATTER_ORIGINAL_ENV = { ...process.env };
 beforeEach(async () => {
   vi.clearAllMocks();
   // Re-install default mock impls (mockReset:true wipes them between tests).
-  const s3 = await import("../services/s3-upload.js");
+  const s3 = await import("../../../services/s3-upload.js");
   vi.mocked(s3.uploadStaticSite).mockResolvedValue({
     uploaded: 3,
     failed: 0,
@@ -188,10 +179,10 @@ beforeEach(async () => {
   });
   vi.mocked(s3.configureBucketPolicy).mockResolvedValue(undefined);
 
-  const display = await import("../utils/display.js");
+  const display = await import("../../../utils/display.js");
   vi.mocked(display.promptFixSelection).mockResolvedValue(null);
 
-  const memory = await import("../services/memory.js");
+  const memory = await import("../../../services/memory.js");
   vi.mocked(memory.defaultMemoryService.appendProvision).mockResolvedValue(
     undefined,
   );
