@@ -12,6 +12,213 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 56 — iteration 2 (2026-04-19)
+
+#### Refactored
+
+- **`apps/cli/src/aws-resource-discovery/` sub-path deleted (closes
+  L4-005a MED).** Five legacy CLI discovery shims removed in favour of
+  the canonical `@assignee/core/aws-resource-discovery` barrel. No
+  runtime impact — call-sites already imported from core. (commit
+  `1b4321c`)
+- **`packages/core/src/config/barrels/config.ts` split (closes L4-008
+  MED).** 361-LOC aggregate barrel replaced with a thin re-exporter
+  plus three sub-barrels (each ≤ 200 LOC). Public surface of
+  `@assignee/core/config` preserved — every `import {x} from
+"@assignee/core/config"` continues to resolve to the same symbol.
+  (commit `1b4321c`)
+- **`resource-provisioner.ts` 326 → 172 LOC (closes L7-003 MED).**
+  Three in-file helpers extracted into `resource-provisioner/`
+  sub-directory: `companion-skip.ts` (skip-if-companion predicate),
+  `redirect-guard.ts` (unsupported-redirect classifier), and
+  `create-error-handler.ts`. 17 new unit tests. (commit `77ff64e`)
+- **`option-elicitor/orchestrator.ts` body 188 → 119 LOC (closes
+  L7-001 MED).** `runWizardPasses` helper extracted into a dedicated
+  module (117 LOC) with 5 focused tests. (commit `5d66293`)
+- **`option-elicitor/prompt-loop.ts` while-body 172 → 76 LOC (closes
+  L7-002 MED).** Split into three sub-modules —
+  `review-handler.ts`, `back-handler.ts`, `field-gates.ts` — so the
+  outer loop is a policy dispatcher. 46 new tests across 4 files.
+  (commit `7682dc4`)
+
+#### Added
+
+- **`ASSIGNEE_MCP_MAX_ACTIVE_APPLIES` and `ASSIGNEE_NO_CLARIFIER` env
+  overrides (closes L3-L1 LOW).** Operators can now raise the 100
+  active-applies cap in hosted MCP deployments and disable the
+  clarifying-question turn for fully non-interactive CLI flows.
+  (commit `e3bc140`)
+- **`version` subcommand now appears in generated shell completions
+  (closes L3-L2 LOW).** `assignee completions bash|zsh|fish` emit
+  `version` alongside the other 12 commands. (commit `e3bc140`)
+- **`renderClarifierExampleList` SSO helper (closes L3-L3 LOW).**
+  Intent-parser clarifier examples now render through a single
+  source of truth, matching the `renderSupportedTypesHint` /
+  `renderPatternsHint` pattern introduced in Epic 54. (commit
+  `e3bc140`)
+- **`pnpm lint:shims` guardrail (closes L4-007a MED).** New
+  `no-new-cli-shims` script fails CI when a new `apps/cli/src/**`
+  file re-exports from `@assignee/core` without adding genuine CLI
+  behaviour — keeps the shim deletion permanent. (commit `1b4321c`)
+
+#### Security
+
+- **`pnpm audit` 9 moderate advisories → 0 (closes L5-001..L5-004
+  MED).** `pnpm.overrides` pins `langsmith@^0.5.19` (GHSA-fw9q-39r9-c252
+  - GHSA-rr7j-v2q5-chgv — prototype pollution + streaming token
+    redaction bypass) plus `hono@^4.12.14` and `@hono/node-server`.
+    ARN canonicalization unified through `ARN_PATTERN_SOURCE` (no regex
+    duplication). `operatorCredentials` field marked `@deprecated`
+    across 7 audited call-sites ahead of removal in v0.2. (commit
+    `19d8194`)
+
+#### Fixed
+
+- **Empty-string `AWS_REGION` coalesce (closes P2-05 LOW).** Treating
+  `AWS_REGION=""` the same as unset avoids a silent fallback to
+  `us-east-1` when a shell sources an empty var. (commit `e3bc140`)
+- **`list` / `status` error-guard on unrecognised `--resource-type`
+  (closes L3-L4 LOW).** CLI now rejects unknown types with an
+  actionable message that re-renders the supported-types hint.
+  (commit `e3bc140`)
+- **`HEADLINE_SHORTHANDS` silent no-op warning (closes P2-02 LOW).**
+  Displaying a shorthand that resolves to itself now emits a single
+  debug warning so the drift can be grepped. (commit `e3bc140`)
+
+#### Docs
+
+- **`CHANGELOG.md` `[0.1.0]` placeholder tidied (closes L8-L1 LOW).**
+  Stale `<!-- date filled at v0.2 publish -->` inline comment cleaned
+  up ahead of the first public `v0.2` cut. (commit `e3bc140`)
+- **Audit-log + unicode-fallback + active-applies notes in
+  `docs/explanation/` (closes L8-L2/L3/L4 LOW).** Three narrative
+  gaps closed in-place; invariants file untouched. (commit
+  `e3bc140`)
+
+### Epic 56 — iteration 1 (2026-04-19)
+
+#### Added
+
+- **`--resource-type <type>` on `assignee list` and `assignee status`
+  (closes L3-001 HIGH — MCP↔CLI parity).** CLI now accepts the same
+  `--resource-type` filter as the MCP `list_managed_resources` tool.
+  Validated against `SUPPORTED_TYPES_ARRAY` via
+  `renderSupportedTypesHint` so drift is impossible by construction.
+  (commit `2c8db8e`)
+- **`pnpm doc-lint` script (closes L3-002 MED).** New
+  `apps/cli/scripts/doc-lint.mjs` verifies that the README
+  pattern-table row count equals `defaultPatternRegistry.size()` and
+  that `docs/integration-architecture.md` pattern enumeration matches
+  the registry. Six drift-guard parity assertions wired across MCP
+  fixture tests. 11 new unit tests. (commit `ddc5f03`)
+
+#### Refactored
+
+- **Destroy-resource barrel adoption + 4 of 5 CLI shims deleted
+  (closes L4-001, L4-002, L4-003 MED).** CLI call-sites migrated to
+  `@assignee/core/destroy-strategies`; four legacy CLI re-export
+  shims removed. MCP `DEFAULT_REGION` switched to a lazy per-tool
+  resolve so region-snapshot timing cannot race with env-writer
+  setup. Two new MCP region-resolution tests. (commit `d6f6838`)
+- **`iam-policies` inline + 2 further CLI shims deleted + KEEP
+  rationale comments on stable barrels (closes L7-004/005/006 MED).**
+  `cfn-keys.ts` and `resource-types.ts` gain `KEEP` header comments
+  explaining why they stay in `apps/cli` despite the shim-deletion
+  sweep. (commit `b637cb4`)
+
+#### Docs
+
+- **Narrative + positioning polish (closes 7 MED + 5 LOW).**
+  `apps/cli/package.json` description aligned with the MCP-server
+  neutral framing; `docs/index.md` key-metrics date refreshed;
+  seven `wiki/competitors/*.md` BP-rule counts corrected 186 → 185;
+  README Onboarding-prereq row, sunk-cost reframe, price-as-moat
+  line, and LLM cross-link added. (commit `2cca0ce`)
+
+#### Tooling
+
+- **`doc-lint.d.mts` declaration added (close-out follow-up).**
+  `tsc --noEmit` now passes on the pre-push hook after story 04's
+  `.mjs` import was wired through a proper ambient declaration —
+  no more blanket `@ts-ignore`. (commit `042821f`)
+
+### Epic 55 — iteration 1 (2026-04-19)
+
+#### Security
+
+- **`LlmAdapter` sanitize-by-default — prompt-injection by
+  construction (closes L5-001 + L5-002 HIGH class).**
+  `stripPromptBoundaryTags` is now applied inside
+  `LlmAdapter.generateText` and `generateStructured` before
+  `redactSensitive`, so no caller can accidentally forward an
+  un-sanitised user-intent to Bedrock. Eliminates the entire
+  user-intent-boundary-tag injection vector documented in Epic 54 as
+  a library-level invariant rather than a per-call-site wrap. 11 new
+  adapter-redaction tests. (commit `b72298f`)
+
+#### Added
+
+- **MCP ↔ CLI `createGraph` parity test (closes L10-002 HIGH).**
+  New `mcp-cli-graph-parity.test.ts` pins 5 assertions on the
+  canonical graph — same nodes, same edges, same entry node, same
+  terminal node, same conditional routing — preventing MCP and CLI
+  from silently diverging on the 13-node pipeline.
+  (commit `b72298f`)
+- **`logToolAudit` shared helper (post-epic-55 cleanup batch).**
+  Common 95 % of `logApplyAudit` + `logDestroyAudit` extracted into
+  `apps/mcp-server/src/utils/log-tool-audit.ts`. Both tool handlers
+  now thin-wrap the shared helper; tool-specific telemetry lands in
+  a reserved `extras` field that is NOT persisted to the JSONL trail
+  (six-field schema preserved). 6 new tests covering the full union
+  of 11 classifications. (commit `d34a902`)
+
+#### Refactored
+
+- **`citation-lint` scope expanded to the canonical root + `.github/`
+  set (closes L8-B1 BLOCKER).** `apps/cli/scripts/citation-lint.mjs`
+  now scans `docs/`, top-level `AGENTS.md` / `CONTRIBUTING.md` /
+  `SECURITY.md` / `CODE_OF_CONDUCT.md`, and `.github/**/*.md`
+  (PULL_REQUEST_TEMPLATE, workflows/README). Citation count
+  93 → 107, broken count 0. `pnpm citation-lint` is now the hard
+  gate for the entire externally-visible doc surface. (commit
+  `f18e332`)
+- **`setup-arn-builder` helper + `iam-policies` barrel inline
+  (post-epic-55 cleanup batch).** Partition-aware ARN construction
+  unified into a single helper (`aws`/`aws-cn`/`aws-us-gov`); stale
+  IAM-policy re-export barrel inlined into the sole consumer.
+  (commit `d34a902`)
+- **Real-timer sweep — four vitest sites migrated to fake timers
+  (post-epic-55 cleanup batch).** Saves ~155 ms per test run.
+  Different technique per site (`vi.useFakeTimers()`,
+  `process.hrtime.bigint()` spy, `toFake:["setTimeout"]`, microtask
+  yields) documented inline. (commit `446ee63`)
+- **`destroy-resource/handler-steps.ts` dedupes `StepResult<T>`
+  (post-epic-55 cleanup batch).** Local type definition removed in
+  favour of the shared `apps/mcp-server/src/utils/step-result.ts`
+  utility shipped in Epic 54 Wave 2. -8 LOC, zero semantic change.
+  (commit `446ee63`)
+
+#### Docs
+
+- **`docs/explanation/invariants.md` gains three utility-doc blocks
+  (closes L8-002 / L8-003 / L8-004 HIGH).** `StepResult<T>` discrim
+  contract, `help-hints` SSO rendering rules, and `prompt-sanitize`
+  boundary-tag allowlist documented as first-class invariants. The
+  Epic 54 utilities are now discoverable via the invariants page
+  rather than only through the source files. (commit `f18e332`)
+- **`README.md` pattern table extended to 10 rows (closes L3-001 +
+  L3-002 HIGH).** Added missing `vpc-public-only` row with
+  description sourced from `pattern-templates/patterns/vpc-networking/
+compose.ts`; stripped static "23 types / 6 patterns" claims and
+  replaced with anchor links to the canonical sections. README
+  L73 reviewer-claim softened to "every rule cites its source"
+  (was a broader factual overreach). (commit `f18e332`)
+- **`CHANGELOG.md` Epic 53 / Epic 54 section labels corrected.** The
+  Wave-1 sweep relabelled the mis-labelled "Epic 53 it1" block
+  (which contained Epic 54 work) to "Epic 54 it1" and added a new
+  "Epic 53 it1" section above it with the actual Epic 53 commits.
+  (commit `f18e332`)
+
 ### Epic 54 — iteration 1 (2026-04-18 → 2026-04-19)
 
 #### Refactored
@@ -287,7 +494,7 @@ later) will land when the project is ready for public release.
 - `docs/mcp-intelligence-audit.md` — relocated to
   `_bmad-output/planning-artifacts/_archive/`.
 
-## [0.1.0] — <!-- date filled at v0.2 publish -->
+## [0.1.0]
 
 Initial internal development baseline. Not published to npm.
 

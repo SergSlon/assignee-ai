@@ -22,9 +22,10 @@ public and private subnets"), the box opens with a queue listing:
 
 ```
 Compound:        <Pattern Name> (<N> resources)
-  ▸ 01. <ResourceType> — <displayName>
-    02. <ResourceType> — <displayName>
+  ▸  1. <ResourceType> — <displayName>
+     2. <ResourceType> — <displayName>
     ...
+    10. <ResourceType> — <displayName>
 ```
 
 The `▸` marker points to the resource the current plan slice is for. The
