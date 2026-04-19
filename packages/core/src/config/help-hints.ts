@@ -240,3 +240,33 @@ export function renderPatternsHint(style: HintStyle): string {
       return renderPatternsHintShort();
   }
 }
+
+/**
+ * Beginner-friendly example resource types used by the NL-intent
+ * clarifier when nudging a user to rephrase an ambiguous intent.
+ *
+ * Curated — NOT auto-derived from SUPPORTED_TYPES_ARRAY — because the
+ * set of example types shown to a confused user is a UX decision
+ * (friendly names, beginner-recognisable services) rather than a full
+ * enumeration. Still lives in the help-hints SSO module so the curated
+ * list is maintained alongside the authoritative registry rather than
+ * duplicated as string literals across CLI surfaces (Story 56-it2-04
+ * L3-L3). Each entry MUST correspond to a supported CFN type — a
+ * drift-guard test in help-hints.test.ts enforces this.
+ */
+export const BEGINNER_EXAMPLE_TYPES: readonly string[] = Object.freeze([
+  "S3 bucket",
+  "Lambda function",
+  "DynamoDB table",
+]);
+
+/**
+ * Render a comma-separated, `etc.`-suffixed list of beginner example
+ * resource types for the clarifier prompt. Produces e.g.
+ * "S3 bucket, Lambda function, DynamoDB table, etc." — a single source
+ * of truth so the clarifier, docs and any future UX surfaces share the
+ * same curated list (Story 56-it2-04 L3-L3).
+ */
+export function renderClarifierExampleList(): string {
+  return `${BEGINNER_EXAMPLE_TYPES.join(", ")}, etc.`;
+}

@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  BEGINNER_EXAMPLE_TYPES,
   HINT_MAX_COLUMNS,
   getCompoundPatterns,
   getPatternCount,
   getSupportedResourceTypes,
   getSupportedTypeCount,
+  renderClarifierExampleList,
   renderPatternsHint,
   renderSupportedTypesHint,
 } from "../help-hints.js";
@@ -215,5 +217,50 @@ describe("drift guard — registry coverage", () => {
         p.displayName.toLowerCase(),
       );
     }
+  });
+});
+
+// Story 56-it2-04 L3-L3 — curated beginner example list shared between
+// the CLI clarifier and any future UX surface that needs a friendly
+// "name a resource type" nudge.
+describe("BEGINNER_EXAMPLE_TYPES + renderClarifierExampleList", () => {
+  // Map each curated example label to the CFN type it implies, so we
+  // can assert every example corresponds to a real supported type.
+  // Kept here (not in the module under test) so adding a label forces
+  // the author to also claim which CFN type it represents.
+  const labelToCfn: Record<string, string> = {
+    "S3 bucket": "AWS::S3::Bucket",
+    "Lambda function": "AWS::Lambda::Function",
+    "DynamoDB table": "AWS::DynamoDB::Table",
+  };
+
+  it("BEGINNER_EXAMPLE_TYPES is a non-empty frozen array", () => {
+    expect(Array.isArray(BEGINNER_EXAMPLE_TYPES)).toBe(true);
+    expect(BEGINNER_EXAMPLE_TYPES.length).toBeGreaterThan(0);
+    expect(Object.isFrozen(BEGINNER_EXAMPLE_TYPES)).toBe(true);
+  });
+
+  it("every curated label maps to an entry in SUPPORTED_TYPES_ARRAY (drift guard)", () => {
+    for (const label of BEGINNER_EXAMPLE_TYPES) {
+      const cfn = labelToCfn[label];
+      expect(
+        cfn,
+        `curated beginner label "${label}" has no known CFN mapping in the test`,
+      ).toBeDefined();
+      expect(
+        SUPPORTED_TYPES_ARRAY,
+        `label "${label}" → ${cfn} must exist in SUPPORTED_TYPES_ARRAY`,
+      ).toContain(cfn);
+    }
+  });
+
+  it("renderClarifierExampleList joins the labels with commas and an etc. suffix", () => {
+    const rendered = renderClarifierExampleList();
+    expect(rendered.endsWith(", etc.")).toBe(true);
+    for (const label of BEGINNER_EXAMPLE_TYPES) {
+      expect(rendered).toContain(label);
+    }
+    // Exact canonical shape for the current 3-entry curation.
+    expect(rendered).toBe("S3 bucket, Lambda function, DynamoDB table, etc.");
   });
 });

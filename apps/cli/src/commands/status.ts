@@ -147,6 +147,15 @@ status is read-only. No --yes required.
               "Pass a supported CFN type (e.g. AWS::S3::Bucket) or a unique shorthand (e.g. S3, Lambda).",
               { why: err.message },
             );
+          } else {
+            // Story 56-it2-04 P1-02: guard asymmetric error paths —
+            // see the sibling comment in list.ts for the rationale.
+            const message = err instanceof Error ? err.message : String(err);
+            renderError(
+              `Failed to validate --resource-type "${opts.resourceType}".`,
+              "Check the value and try again — see `assignee status --help` for supported types.",
+              { why: message },
+            );
           }
           throw err;
         }

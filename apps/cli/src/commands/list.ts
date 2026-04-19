@@ -111,6 +111,19 @@ No --yes flag is required.
               "Pass a supported CFN type (e.g. AWS::S3::Bucket) or a unique shorthand (e.g. S3, Lambda).",
               { why: err.message },
             );
+          } else {
+            // Story 56-it2-04 P1-01: guard asymmetric error paths.
+            // Any non-INVALID_RESOURCE_TYPE_CODE throw from the
+            // resolver used to re-throw without a `renderError` call,
+            // so Commander dumped a bare stack trace. Route through
+            // the same user-friendly surface the happy-path catches
+            // use before bubbling the error for the process exit code.
+            const message = err instanceof Error ? err.message : String(err);
+            renderError(
+              `Failed to validate --resource-type "${opts.resourceType}".`,
+              "Check the value and try again — see `assignee list --help` for supported types.",
+              { why: message },
+            );
           }
           throw err;
         }

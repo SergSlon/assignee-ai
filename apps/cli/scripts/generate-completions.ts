@@ -63,6 +63,15 @@ function buildProgram(): Command {
   program.addCommand(reconcileCommand);
   program.addCommand(doctorCommand);
 
+  // Story 56-it2-04 L3-L2: the `version` subcommand is registered
+  // inline in `src/index.ts` (richer output than the --version flag —
+  // node version, platform, pinned MCP pins) and was missing from the
+  // generator's program tree, so shell completions never listed it.
+  // We re-declare it here with a description that matches the runtime
+  // one; we do NOT wire an `.action()` because the completion generator
+  // only reads name + description + options.
+  program.command("version").description("Show version and environment info");
+
   return program;
 }
 

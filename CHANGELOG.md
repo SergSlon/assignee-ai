@@ -287,7 +287,7 @@ later) will land when the project is ready for public release.
 - `docs/mcp-intelligence-audit.md` — relocated to
   `_bmad-output/planning-artifacts/_archive/`.
 
-## [0.1.0] — YYYY-MM-DD
+## [0.1.0] — <!-- date filled at v0.2 publish -->
 
 Initial internal development baseline. Not published to npm.
 

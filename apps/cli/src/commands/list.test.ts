@@ -239,6 +239,60 @@ describe("assignee list command", () => {
     );
   });
 
+  // Story 56-it2-04 P1-01: a non-INVALID_RESOURCE_TYPE_CODE throw from
+  // the resolver used to re-throw bare, so Commander dumped a stack.
+  // The fallback `renderError` now surfaces a friendly message first.
+  // We exercise the guard by mocking the resolver to throw an AssigneeError
+  // with a DIFFERENT code, then assert the fallback `renderError` call
+  // by re-importing the (mocked) display module AFTER vi.resetModules.
+  it("P1-01: non-INVALID_RESOURCE_TYPE_CODE resolver error still renders before re-throw", async () => {
+    vi.resetModules();
+    vi.doMock("../utils/display.js", () => ({
+      renderResourceTable: vi.fn(),
+      renderEmptyList: vi.fn(),
+      renderError: vi.fn(),
+    }));
+    vi.doMock("../services/list-resources.js", () => ({
+      fetchManagedResources: vi.fn(),
+    }));
+    vi.doMock("./resource-type-filter.js", async () => {
+      const actual = await vi.importActual<
+        typeof import("./resource-type-filter.js")
+      >("./resource-type-filter.js");
+      const { AssigneeError } = await import("@assignee/core");
+      return {
+        ...actual,
+        resolveResourceTypeFilter: (_input: string): string => {
+          throw new AssigneeError(
+            "simulated upstream failure",
+            "SOME_OTHER_CODE",
+          );
+        },
+      };
+    });
+
+    try {
+      const { listCommand } = await import("./list.js");
+      const { renderError: freshRenderError } =
+        await import("../utils/display.js");
+
+      await expect(
+        listCommand.parseAsync(["node", "list", "--resource-type", "ec2"]),
+      ).rejects.toThrow("simulated upstream failure");
+
+      expect(freshRenderError).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to validate --resource-type "ec2"'),
+        expect.stringContaining("`assignee list --help`"),
+        expect.objectContaining({ why: "simulated upstream failure" }),
+      );
+    } finally {
+      vi.doUnmock("./resource-type-filter.js");
+      vi.doUnmock("../utils/display.js");
+      vi.doUnmock("../services/list-resources.js");
+      vi.resetModules();
+    }
+  });
+
   // A3 / optimize follow-up (2026-04-08): the --total-cost flag uses
   // parseMonthlyCost() to coerce the four cost-string shapes the list
   // service emits into a single USD monthly number. The fn is exported

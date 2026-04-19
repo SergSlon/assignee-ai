@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  isUtf8Locale,
   operatorCredentials,
   _resetOperatorCredsWarning,
 } from "./operator-credentials.js";
@@ -77,6 +78,13 @@ describe("operatorCredentials", () => {
     expect(written).toContain("ASSIGNEE_OPERATOR_*");
     expect(written).toContain("default credential provider chain");
     expect(written).toContain("assignee init");
+    // Story 56-it2-04 L5-L3: glyph is one of the two known prefixes —
+    // the UTF-8 `\u26A0` variant or the ASCII `[!]` fallback. This
+    // avoids a locale-dependent flaky assertion while still locking
+    // the "must begin with some warning glyph" contract.
+    expect(written.startsWith("\u26A0") || written.startsWith("[!]")).toBe(
+      true,
+    );
   });
 
   it("does NOT emit the warning when both env vars are set", () => {
@@ -124,6 +132,43 @@ describe("operatorCredentials", () => {
     _resetOperatorCredsWarning();
     operatorCredentials();
     expect(stderrCalls.length).toBe(2);
+  });
+
+  // Story 56-it2-04 L5-L3 — the "missing operator creds" warning uses
+  // `\u26A0` ⚠ by default, which shows as "?" on legacy Windows code
+  // pages (cp1252 / cp437). The `isUtf8Locale` helper decides whether
+  // to fall through to the ASCII `[!]` sentinel instead. These tests
+  // lock in the detection rules across the usual POSIX vars. Note:
+  // the glyph swap itself is indirectly asserted via the first test
+  // below (stderr capture) on systems where LANG is UTF-8; the direct
+  // unit test for `isUtf8Locale` covers the matrix without depending
+  // on ambient machine locale.
+  describe("isUtf8Locale (L5-L3)", () => {
+    it("returns true when LC_ALL advertises UTF-8", () => {
+      expect(isUtf8Locale({ LC_ALL: "en_US.UTF-8" })).toBe(true);
+    });
+
+    it("returns true when LC_CTYPE advertises UTF-8 (LC_ALL takes precedence only if set)", () => {
+      expect(isUtf8Locale({ LC_CTYPE: "en_GB.UTF-8" })).toBe(true);
+    });
+
+    it("returns true when LANG advertises utf8 (hyphenless variant)", () => {
+      expect(isUtf8Locale({ LANG: "C.utf8" })).toBe(true);
+    });
+
+    it("returns false when all three vars are empty (Windows default)", () => {
+      expect(isUtf8Locale({})).toBe(false);
+    });
+
+    it("returns false when LANG is a legacy cp1252 code page", () => {
+      expect(isUtf8Locale({ LANG: "en_US.CP1252" })).toBe(false);
+    });
+
+    it("is case-insensitive on the UTF-8 marker", () => {
+      expect(isUtf8Locale({ LANG: "en_US.utf-8" })).toBe(true);
+      expect(isUtf8Locale({ LANG: "en_US.UTF-8" })).toBe(true);
+      expect(isUtf8Locale({ LANG: "en_US.UTF8" })).toBe(true);
+    });
   });
 
   /**

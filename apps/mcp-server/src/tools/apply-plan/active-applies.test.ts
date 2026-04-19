@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   _resetActiveApplies,
@@ -42,10 +42,10 @@ describe("active-applies concurrency guard", () => {
       markApplyActive(`/tmp/checkpoint-${index}.json`);
     }
 
-    expect(() =>
-      markApplyActive(`/tmp/checkpoint-${MAX_ACTIVE_APPLIES}.json`),
-    ).toThrow(
-      `Active-applies cap reached (${MAX_ACTIVE_APPLIES}). This likely indicates a release leak; check apply-plan handler for missing finally/release paths.`,
+    const overflowPath = `/tmp/checkpoint-${MAX_ACTIVE_APPLIES}.json`;
+    // Story 56-it2-04 L5-L1: message includes the rejected checkpointPath.
+    expect(() => markApplyActive(overflowPath)).toThrow(
+      `Active-applies cap reached (${MAX_ACTIVE_APPLIES}); rejected checkpoint "${overflowPath}". This likely indicates a release leak; check apply-plan handler for missing finally/release paths.`,
     );
 
     // Re-marking an already-active path at the cap is idempotent and
@@ -64,6 +64,70 @@ describe("active-applies concurrency guard", () => {
 
     expect(() => markApplyActive("/tmp/checkpoint-new.json")).not.toThrow();
     expect(isApplyActive("/tmp/checkpoint-new.json")).toBe(true);
+  });
+
+  // Story 56-it2-04 L3-L1: ASSIGNEE_MCP_MAX_ACTIVE_APPLIES overrides the
+  // default. Evaluated at module-load, so we re-import through vi.resetModules.
+  describe("ASSIGNEE_MCP_MAX_ACTIVE_APPLIES env override (L3-L1)", () => {
+    const ENV_KEY = "ASSIGNEE_MCP_MAX_ACTIVE_APPLIES";
+    const origValue = process.env[ENV_KEY];
+
+    afterEach(() => {
+      if (origValue === undefined) {
+        delete process.env[ENV_KEY];
+      } else {
+        process.env[ENV_KEY] = origValue;
+      }
+      vi.resetModules();
+    });
+
+    it("defaults to 100 when env var is unset", async () => {
+      delete process.env[ENV_KEY];
+      vi.resetModules();
+      const mod = await import("./active-applies.js");
+      expect(mod.MAX_ACTIVE_APPLIES).toBe(mod.DEFAULT_MAX_ACTIVE_APPLIES);
+      expect(mod.DEFAULT_MAX_ACTIVE_APPLIES).toBe(100);
+    });
+
+    it("honours a positive integer override", async () => {
+      process.env[ENV_KEY] = "250";
+      vi.resetModules();
+      const mod = await import("./active-applies.js");
+      expect(mod.MAX_ACTIVE_APPLIES).toBe(250);
+    });
+
+    it("falls back to default on non-numeric value (typo-safe)", async () => {
+      process.env[ENV_KEY] = "not-a-number";
+      vi.resetModules();
+      const mod = await import("./active-applies.js");
+      expect(mod.MAX_ACTIVE_APPLIES).toBe(mod.DEFAULT_MAX_ACTIVE_APPLIES);
+    });
+
+    it("falls back to default on zero / negative values (guard never disabled)", async () => {
+      process.env[ENV_KEY] = "0";
+      vi.resetModules();
+      let mod = await import("./active-applies.js");
+      expect(mod.MAX_ACTIVE_APPLIES).toBe(mod.DEFAULT_MAX_ACTIVE_APPLIES);
+
+      process.env[ENV_KEY] = "-5";
+      vi.resetModules();
+      mod = await import("./active-applies.js");
+      expect(mod.MAX_ACTIVE_APPLIES).toBe(mod.DEFAULT_MAX_ACTIVE_APPLIES);
+    });
+
+    it("falls back to default on fractional values (integer required)", async () => {
+      process.env[ENV_KEY] = "42.5";
+      vi.resetModules();
+      const mod = await import("./active-applies.js");
+      expect(mod.MAX_ACTIVE_APPLIES).toBe(mod.DEFAULT_MAX_ACTIVE_APPLIES);
+    });
+
+    it("trims surrounding whitespace before parsing", async () => {
+      process.env[ENV_KEY] = "  42  ";
+      vi.resetModules();
+      const mod = await import("./active-applies.js");
+      expect(mod.MAX_ACTIVE_APPLIES).toBe(42);
+    });
   });
 
   it("_resetActiveApplies clears all tracked entries", () => {

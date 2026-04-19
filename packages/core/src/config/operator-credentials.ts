@@ -24,8 +24,28 @@ import { EnvVar } from "../constants/env-vars.js";
  */
 let hasWarned = false;
 
-const MISSING_OPERATOR_CREDS_WARNING =
-  "\u26A0  ASSIGNEE_OPERATOR_* env vars are not set — AWS SDK clients in this process will fall through to the default credential provider chain (env vars, ~/.aws/credentials, EC2 instance role, SSO). Run 'assignee init' to configure operator credentials.\n";
+/**
+ * Choose a warning glyph that renders across legacy Windows code pages
+ * (cp1252, cp437) where `\u26A0` shows as "?" and obscures the message.
+ * We look for the `UTF-8` / `utf8` marker on `LC_ALL` / `LC_CTYPE` /
+ * `LANG` — standard POSIX locale plumbing. Everything else (including
+ * empty env on Windows) falls through to the plain ASCII `[!]` sentinel
+ * so the operator-facing warning is always legible (Story 56-it2-04
+ * L5-L3). Exported for the sibling unit test — pure, no side effects.
+ */
+export function isUtf8Locale(env: NodeJS.ProcessEnv = process.env): boolean {
+  const candidates = [env["LC_ALL"], env["LC_CTYPE"], env["LANG"]];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    if (/utf-?8/i.test(raw)) return true;
+  }
+  return false;
+}
+
+function buildMissingOperatorCredsWarning(): string {
+  const glyph = isUtf8Locale() ? "\u26A0" : "[!]";
+  return `${glyph}  ASSIGNEE_OPERATOR_* env vars are not set — AWS SDK clients in this process will fall through to the default credential provider chain (env vars, ~/.aws/credentials, EC2 instance role, SSO). Run 'assignee init' to configure operator credentials.\n`;
+}
 
 /**
  * Reads ASSIGNEE_OPERATOR_ACCESS_KEY_ID, ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY,
@@ -58,7 +78,7 @@ export function operatorCredentials(): AwsConfig {
 
   if (!hasWarned && accessKeyId === "" && secretAccessKey === "") {
     hasWarned = true;
-    process.stderr.write(MISSING_OPERATOR_CREDS_WARNING);
+    process.stderr.write(buildMissingOperatorCredsWarning());
   }
 
   return {

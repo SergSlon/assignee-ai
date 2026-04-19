@@ -26,6 +26,7 @@ _assignee() {
         'status:Show summary of managed infrastructure'
         'reconcile:Reconcile drifted resources back to desired state'
         'doctor:Run a non-destructive health check of credentials, Bedrock, MCP servers, cache, config and best-practices'
+        'version:Show version and environment info'
       )
       _describe 'command' commands
       ;;
@@ -119,6 +120,8 @@ _assignee() {
             '--skip-bedrock[Skip the Bedrock LLM invoke check]' \
             '--skip-mcp[Skip the MCP server launch probe]' \
             '--short[Fast identity-only summary\: STS account + ARN + region + active config (replaces the removed `whoami` command)]'
+          ;;
+        version)
           ;;
       esac
       ;;

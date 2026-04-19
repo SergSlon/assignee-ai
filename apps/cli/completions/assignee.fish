@@ -17,6 +17,7 @@ complete -c assignee -n __fish_use_subcommand -a setup -d 'Create IAM users and 
 complete -c assignee -n __fish_use_subcommand -a status -d 'Show summary of managed infrastructure'
 complete -c assignee -n __fish_use_subcommand -a reconcile -d 'Reconcile drifted resources back to desired state'
 complete -c assignee -n __fish_use_subcommand -a doctor -d 'Run a non-destructive health check of credentials, Bedrock, MCP servers, cache, config and best-practices'
+complete -c assignee -n __fish_use_subcommand -a version -d 'Show version and environment info'
 
 # Options for 'plan'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l output -s o -r -d 'Output format (json|text)'

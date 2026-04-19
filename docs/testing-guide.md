@@ -265,50 +265,50 @@ node process-captured-responses.mjs  # trims schemas/pricing/docs to fixture siz
 
 ### Key test files
 
-| File                                  | Tests | What it covers                                                                                             |
-| ------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------- |
-| `graph-integration.test.ts`           | 29    | Full graph pipeline: S3, EC2, Lambda, IAM, DynamoDB, error paths, pricing edge cases                       |
-| `preflight-guard.test.ts`             | 10    | Required field validation, cost estimation, pricing timeout                                                |
-| `intent-parser.test.ts`               | 11    | Resource type classification, compound pattern detection                                                   |
-| `schema-fetcher.test.ts`              | 7     | MCP schema retrieval, error handling                                                                       |
-| `option-elicitor.test.ts`             | ~50   | Interactive prompts, showIf conditionals, CI mode                                                          |
-| `plan-generator.test.ts`              | 8     | LLM plan generation, JSON parsing                                                                          |
-| `pricing-lookup.test.ts`              | 17    | EC2/RDS live price enrichment                                                                              |
-| `result-formatter.test.ts`            | ~45   | Memory writes, security checks, output formatting                                                          |
-| `status-poller.test.ts`               | —     | CloudControl status polling, timeout handling                                                              |
-| `destroy.test.ts`                     | ~25   | Safe teardown, confirmation prompts, error paths                                                           |
-| `list.test.ts`                        | 7     | Managed resource listing, filtering                                                                        |
-| `status.test.ts`                      | 4     | Summary with cost totals                                                                                   |
-| `resource-resolver.test.ts`           | 7     | Resource type resolution, ARN parsing                                                                      |
-| `list-resources.test.ts`              | 14    | Resource enumeration, tag-based filtering                                                                  |
-| `billing.test.ts`                     | 11    | Cost data retrieval, forecast, multi-resource aggregation                                                  |
-| `status-aggregator.test.ts`           | 19    | Status rollup across multiple resources                                                                    |
-| `memory.test.ts` (service)            | —     | Memory service read/write, hint retrieval                                                                  |
-| `memory.test.ts` (core schema)        | —     | Memory schema validation                                                                                   |
-| `iam-actions.test.ts`                 | 6     | IAM action resolution, permission checks                                                                   |
-| `distribution.test.ts`                | —     | CLI + MCP server distribution packaging                                                                    |
-| `mcp-servers.test.ts`                 | 6     | MCP server config loading, lifecycle                                                                       |
-| `server.test.ts` (MCP)                | —     | MCP server startup, tool registration                                                                      |
-| `plan-resource.test.ts` (MCP)         | —     | MCP plan-resource tool handler                                                                             |
-| `apply-plan.test.ts` (MCP)            | —     | MCP apply-plan tool handler                                                                                |
-| `list-managed-resources.test.ts`      | —     | MCP list-managed-resources tool handler                                                                    |
-| `estimate-cost.test.ts` (MCP)         | —     | MCP estimate-cost tool handler                                                                             |
-| Plugin tests (core)                   | ~100+ | S3, EC2, RDS, Lambda, generic plugin config hints                                                          |
-| `bp-all-rules-audit.test.ts`          | 266   | All 185 BP rules fire correctly (manifest-tracked)                                                         |
-| `bp-auto-fix-audit.test.ts`           | 55    | All 27 auto-fixable rules verified end-to-end                                                              |
-| `compound-provisioning-audit.test.ts` | 69    | 8 of 10 compound patterns through dispatcher+provisioner (missing: lambda-with-exec-role, vpc-public-only) |
-| `compound-failure-injector.test.ts`   | 12    | Failure-injection harness: in-memory port, tracker, synthetic error at index N                             |
-| `compound-cleanup-matrix.test.ts`     | 19    | VPC 17-position reverse-edge cleanup invariant (parameterized)                                             |
-| `compound-smoke-trace.test.ts`        | 21    | Happy-path smoke + marker-ref validation for 6 compound patterns                                           |
-| `apply-mode-audit.test.ts`            | 5     | Full apply mode: plan->bp->fix->approval->provision->result                                                |
-| `destroy-service.test.ts`             | 16    | destroySingleResource: CloudControl, SDK fallback, CloudFront                                              |
-| `s3-upload.test.ts`                   | 19    | S3 file upload with MIME types, progress, error handling                                                   |
-| `bulk-destroy.test.ts`                | 21    | Tier ordering, IAM exclusion, pattern filtering                                                            |
-| `decomposer-integration.test.ts`      | —     | Decomposer integration across all resource types                                                           |
-| `bp-enforcement-integration.test.ts`  | —     | Best-practice enforcement modes (enforce/warn/skip) integration                                            |
-| `secure-defaults-audit.test.ts`       | —     | Secure default values audit across all resource types                                                      |
-| `cost-estimator-e2e.test.ts`          | —     | Cost estimator end-to-end with real pricing data                                                           |
-| `coverage.test.ts`                    | 47    | Integration: asserts 23/23 pricing strategies + 23/23 decomposers registered                               |
+| File                                  | Tests | What it covers                                                                                                               |
+| ------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `graph-integration.test.ts`           | 29    | Full graph pipeline: S3, EC2, Lambda, IAM, DynamoDB, error paths, pricing edge cases                                         |
+| `preflight-guard.test.ts`             | 10    | Required field validation, cost estimation, pricing timeout                                                                  |
+| `intent-parser.test.ts`               | 11    | Resource type classification, compound pattern detection                                                                     |
+| `schema-fetcher.test.ts`              | 7     | MCP schema retrieval, error handling                                                                                         |
+| `option-elicitor.test.ts`             | ~50   | Interactive prompts, showIf conditionals, CI mode                                                                            |
+| `plan-generator.test.ts`              | 8     | LLM plan generation, JSON parsing                                                                                            |
+| `pricing-lookup.test.ts`              | 17    | EC2/RDS live price enrichment                                                                                                |
+| `result-formatter.test.ts`            | ~45   | Memory writes, security checks, output formatting                                                                            |
+| `status-poller.test.ts`               | —     | CloudControl status polling, timeout handling                                                                                |
+| `destroy.test.ts`                     | ~25   | Safe teardown, confirmation prompts, error paths                                                                             |
+| `list.test.ts`                        | 7     | Managed resource listing, filtering                                                                                          |
+| `status.test.ts`                      | 4     | Summary with cost totals                                                                                                     |
+| `resource-resolver.test.ts`           | 7     | Resource type resolution, ARN parsing                                                                                        |
+| `list-resources.test.ts`              | 14    | Resource enumeration, tag-based filtering                                                                                    |
+| `billing.test.ts`                     | 11    | Cost data retrieval, forecast, multi-resource aggregation                                                                    |
+| `status-aggregator.test.ts`           | 19    | Status rollup across multiple resources                                                                                      |
+| `memory.test.ts` (service)            | —     | Memory service read/write, hint retrieval                                                                                    |
+| `memory.test.ts` (core schema)        | —     | Memory schema validation                                                                                                     |
+| `iam-actions.test.ts`                 | 6     | IAM action resolution, permission checks                                                                                     |
+| `distribution.test.ts`                | —     | CLI + MCP server distribution packaging                                                                                      |
+| `mcp-servers.test.ts`                 | 6     | MCP server config loading, lifecycle                                                                                         |
+| `server.test.ts` (MCP)                | —     | MCP server startup, tool registration                                                                                        |
+| `plan-resource.test.ts` (MCP)         | —     | MCP plan-resource tool handler                                                                                               |
+| `apply-plan.test.ts` (MCP)            | —     | MCP apply-plan tool handler                                                                                                  |
+| `list-managed-resources.test.ts`      | —     | MCP list-managed-resources tool handler                                                                                      |
+| `estimate-cost.test.ts` (MCP)         | —     | MCP estimate-cost tool handler                                                                                               |
+| Plugin tests (core)                   | ~100+ | S3, EC2, RDS, Lambda, generic plugin config hints                                                                            |
+| `bp-all-rules-audit.test.ts`          | 266   | All 185 BP rules fire correctly (manifest-tracked)                                                                           |
+| `bp-auto-fix-audit.test.ts`           | 55    | All 27 auto-fixable rules verified end-to-end                                                                                |
+| `compound-provisioning-audit.test.ts` | 69    | Compound patterns through dispatcher+provisioner (coverage count is derived at runtime — see the audit test's registry loop) |
+| `compound-failure-injector.test.ts`   | 12    | Failure-injection harness: in-memory port, tracker, synthetic error at index N                                               |
+| `compound-cleanup-matrix.test.ts`     | 19    | VPC 17-position reverse-edge cleanup invariant (parameterized)                                                               |
+| `compound-smoke-trace.test.ts`        | 21    | Happy-path smoke + marker-ref validation for 6 compound patterns                                                             |
+| `apply-mode-audit.test.ts`            | 5     | Full apply mode: plan->bp->fix->approval->provision->result                                                                  |
+| `destroy-service.test.ts`             | 16    | destroySingleResource: CloudControl, SDK fallback, CloudFront                                                                |
+| `s3-upload.test.ts`                   | 19    | S3 file upload with MIME types, progress, error handling                                                                     |
+| `bulk-destroy.test.ts`                | 21    | Tier ordering, IAM exclusion, pattern filtering                                                                              |
+| `decomposer-integration.test.ts`      | —     | Decomposer integration across all resource types                                                                             |
+| `bp-enforcement-integration.test.ts`  | —     | Best-practice enforcement modes (enforce/warn/skip) integration                                                              |
+| `secure-defaults-audit.test.ts`       | —     | Secure default values audit across all resource types                                                                        |
+| `cost-estimator-e2e.test.ts`          | —     | Cost estimator end-to-end with real pricing data                                                                             |
+| `coverage.test.ts`                    | 47    | Integration: asserts 23/23 pricing strategies + 23/23 decomposers registered                                                 |
 
 ### Pricing decomposer tests (Epic 39)
 

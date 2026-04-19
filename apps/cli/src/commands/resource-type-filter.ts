@@ -34,6 +34,34 @@ import {
 export const INVALID_RESOURCE_TYPE_CODE = "INVALID_RESOURCE_TYPE" as const;
 
 /**
+ * @internal Test-only — emit an ambiguous-shorthand warning (P2-01).
+ * Exported so the unit test can spy on the `console.warn` surface
+ * without also exercising the whole resolver. Called by
+ * `normaliseResourceType` when a HEADLINE_SHORTHANDS hit narrows a
+ * multi-type service to just its headline CFN form.
+ */
+export function warnAmbiguousShorthandIfNeeded(
+  shorthand: string,
+  resolved: string,
+): void {
+  const parts = resolved.split("::");
+  if (parts.length !== 3) return;
+  const service = parts[1]!;
+  const siblings = SUPPORTED_TYPES_ARRAY.filter((t) => {
+    const p = t.split("::");
+    return p[1] === service && t !== resolved;
+  });
+  if (siblings.length === 0) return;
+  // Keep the message terse — stderr only, never blocks the command.
+  // Shows the alternative CFN forms the user can pass if they meant
+  // one of them.
+  const alternatives = siblings.join(", ");
+  console.warn(
+    `Shorthand "${shorthand}" resolved to ${resolved}, but ${service} also supports: ${alternatives}. Pass the full CFN type if you meant one of those.`,
+  );
+}
+
+/**
  * Small curated shorthand alias map for the common case where the
  * service name maps to a single "headline" CFN type even though the
  * service owns multiple supported types (e.g. S3 has Bucket AND
@@ -72,6 +100,13 @@ const HEADLINE_SHORTHANDS: Readonly<Record<string, string>> = {
  *      the service has exactly one supported CFN type
  *
  * Returns `undefined` if no supported type matches.
+ *
+ * Story 56-it2-04 P2-01: when a curated headline shorthand resolves
+ * for a service that owns MORE than one supported CFN type (e.g.
+ * `rds` → `AWS::RDS::DBInstance` while `AWS::RDS::DBSubnetGroup` also
+ * exists), we emit a one-line `console.warn` hint so a user who
+ * expected the other type isn't silently narrowed. The warning never
+ * changes the return value — it's additive UX.
  */
 export function normaliseResourceType(input: string): string | undefined {
   const trimmed = input.trim();
@@ -87,6 +122,10 @@ export function normaliseResourceType(input: string): string | undefined {
   //    resolve to a removed CFN type.
   const headline = HEADLINE_SHORTHANDS[lower];
   if (headline && SUPPORTED_TYPES_ARRAY.some((t) => t === headline)) {
+    // P2-01 UX warning: service has >1 supported types, but shorthand
+    // resolves to just the headline one. Point the user to alternatives
+    // so a RDS/DBSubnetGroup query doesn't silently become DBInstance.
+    warnAmbiguousShorthandIfNeeded(trimmed, headline);
     return headline;
   }
 
