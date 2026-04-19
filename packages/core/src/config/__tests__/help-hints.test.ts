@@ -254,6 +254,30 @@ describe("BEGINNER_EXAMPLE_TYPES + renderClarifierExampleList", () => {
     }
   });
 
+  // Story 62-it1-02 / L3-001 MED: complementary token-based drift guard.
+  // The labelToCfn map above is curator-maintained; this test is map-free
+  // and instead derives the canonical service token from the first word of
+  // each curated label ("S3 bucket" → "S3", "Lambda function" → "Lambda",
+  // "DynamoDB table" → "DynamoDB") and asserts at least one entry in
+  // SUPPORTED_TYPES_ARRAY contains that token. This catches the case where
+  // a registry rename leaves an example pointing at a service that no
+  // longer exists, even if the curator forgets to update the labelToCfn
+  // map in the test file.
+  it("every curated label's service token appears in SUPPORTED_TYPES_ARRAY (token drift guard)", () => {
+    for (const label of BEGINNER_EXAMPLE_TYPES) {
+      const token = label.split(/\s+/)[0];
+      expect(
+        token,
+        `curated beginner label "${label}" yielded an empty service token`,
+      ).toBeTruthy();
+      const matches = SUPPORTED_TYPES_ARRAY.filter((t) => t.includes(token!));
+      expect(
+        matches.length,
+        `service token "${token}" (from label "${label}") must match at least one SUPPORTED_TYPES_ARRAY entry — registry rename suspected`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
   it("renderClarifierExampleList joins the labels with commas and an etc. suffix", () => {
     const rendered = renderClarifierExampleList();
     expect(rendered.endsWith(", etc.")).toBe(true);

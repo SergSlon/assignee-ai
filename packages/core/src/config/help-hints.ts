@@ -266,6 +266,12 @@ export const BEGINNER_EXAMPLE_TYPES: readonly string[] = Object.freeze([
  * "S3 bucket, Lambda function, DynamoDB table, etc." — a single source
  * of truth so the clarifier, docs and any future UX surfaces share the
  * same curated list (Story 56-it2-04 L3-L3).
+ *
+ * @see {@link BEGINNER_EXAMPLE_TYPES} — the curated list rendered here.
+ * @see apps/cli/src/services/clarifier.ts `buildClarifyingQuestion` /
+ *      `askClarifyingQuestion` — the consumer that embeds this string
+ *      in the user-facing rephrase prompt. Story 62-it1-02 L3-L1 added
+ *      this cross-ref so renames on either side stay discoverable.
  */
 export function renderClarifierExampleList(): string {
   return `${BEGINNER_EXAMPLE_TYPES.join(", ")}, etc.`;
