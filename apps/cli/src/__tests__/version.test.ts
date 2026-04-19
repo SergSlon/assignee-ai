@@ -66,11 +66,10 @@ vi.mock("node:fs", async (importOriginal) => {
 // Imported AFTER the vi.mock hoist (vi.mock is auto-hoisted above all
 // imports in the test file, so static imports here are safe). The SUT
 // picks up the shimmed readFileSync via the same mocked `node:fs`.
-import {
-  versionCommand,
-  readPackageVersion,
-  loadMcpPinsOrFallback,
-} from "../commands/version.js";
+// loadMcpPinsOrFallback is consumed via fresh dynamic import inside the
+// L3-001 MCP_PINS-failure test (see ~L212) — bringing it in here at module
+// scope would defeat the vi.resetModules() isolation the test relies on.
+import { versionCommand, readPackageVersion } from "../commands/version.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
