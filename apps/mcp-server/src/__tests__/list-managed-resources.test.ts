@@ -202,6 +202,66 @@ describe("list_managed_resources", () => {
     // Should have been called with some region (the default)
     expect(ResourceGroupsTaggingAPIClient).toHaveBeenCalled();
   });
+
+  // Story 56-it1-03 L4-003: verify region is re-read per invocation
+  // so a long-running MCP worker picks up `AWS_REGION` changes between
+  // tool calls instead of serving the module-load snapshot.
+  it("re-reads process.env.AWS_REGION per invocation (lazy capture)", async () => {
+    const prevRegion = process.env["AWS_REGION"];
+    try {
+      const mockSend = getMockSend();
+      mockSend.mockResolvedValue({
+        ResourceTagMappingList: [],
+        PaginationToken: undefined,
+      });
+
+      process.env["AWS_REGION"] = "us-east-1";
+      await fetchManagedResources();
+      const firstCall = vi
+        .mocked(ResourceGroupsTaggingAPIClient)
+        .mock.calls.at(-1)?.[0] as { region?: string } | undefined;
+
+      process.env["AWS_REGION"] = "eu-west-1";
+      await fetchManagedResources();
+      const secondCall = vi
+        .mocked(ResourceGroupsTaggingAPIClient)
+        .mock.calls.at(-1)?.[0] as { region?: string } | undefined;
+
+      expect(firstCall?.region).toBe("us-east-1");
+      expect(secondCall?.region).toBe("eu-west-1");
+      expect(firstCall?.region).not.toBe(secondCall?.region);
+    } finally {
+      if (prevRegion === undefined) delete process.env["AWS_REGION"];
+      else process.env["AWS_REGION"] = prevRegion;
+    }
+  });
+
+  it("falls back to DEFAULT_AWS_REGION when AWS_REGION is unset (per-invocation)", async () => {
+    const prevRegion = process.env["AWS_REGION"];
+    try {
+      const mockSend = getMockSend();
+      mockSend.mockResolvedValue({
+        ResourceTagMappingList: [],
+        PaginationToken: undefined,
+      });
+
+      delete process.env["AWS_REGION"];
+      await fetchManagedResources();
+      const firstCall = vi
+        .mocked(ResourceGroupsTaggingAPIClient)
+        .mock.calls.at(-1)?.[0] as { region?: string } | undefined;
+
+      expect(firstCall?.region).toBeDefined();
+      // DEFAULT_AWS_REGION from @assignee/core — real value (us-east-1
+      // per the constant). Using the fallback directly rather than the
+      // literal keeps the test resilient to a rename.
+      const { DEFAULT_AWS_REGION } = await import("@assignee/core");
+      expect(firstCall?.region).toBe(DEFAULT_AWS_REGION);
+    } finally {
+      if (prevRegion === undefined) delete process.env["AWS_REGION"];
+      else process.env["AWS_REGION"] = prevRegion;
+    }
+  });
 });
 
 // ── Tagging API error scenarios ──────────────────────────────────────────────
