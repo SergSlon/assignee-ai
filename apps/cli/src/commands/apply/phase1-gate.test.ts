@@ -16,7 +16,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ExecutionStatus, BPEnforcementLevel } from "@assignee/core";
+import {
+  ExecutionMode,
+  ExecutionStatus,
+  BPEnforcementLevel,
+} from "@assignee/core";
 import type { BPFinding } from "@assignee/best-practices";
 import type { AgentState } from "../../services/graph.js";
 import type { Phase1Context, Phase1Deps } from "./phase1-planner.js";
@@ -43,7 +47,8 @@ vi.mock("../../services/budget-guard.js", () => ({
   checkBudget: vi.fn().mockReturnValue({ status: "ok" }),
 }));
 
-const { handlePhase1Outcome } = await import("./phase1-gate.js");
+const { handlePhase1Outcome, buildContinueInvocation } =
+  await import("./phase1-gate.js");
 const { log } = await import("../../utils/logger.js");
 const { renderError } = await import("../../utils/display.js");
 const { askClarifyingQuestion } = await import("../../services/clarifier.js");
@@ -487,5 +492,157 @@ describe("handlePhase1Outcome — budget guard", () => {
 
     expect(result).toEqual({ kind: "continue", phase1State: state });
     expect(renderError).not.toHaveBeenCalled();
+  });
+});
+
+// ── buildContinueInvocation (Story 58-it1-02) ─────────────────────────
+
+describe("buildContinueInvocation — arg shape for graph.invoke", () => {
+  const effectiveIntent =
+    "Create an S3 bucket for analytics exports with SSE-S3 encryption";
+
+  it("all 6 conditional branches OFF → minimal arg shape, bpFindings forwarded, enforcement defaults to ENFORCE", () => {
+    const ctx = makeCtx();
+    const deps = makeDeps({
+      opts: { yes: false, quick: false } as unknown as Phase1Deps["opts"],
+      userConfig: undefined,
+      orgConfig: undefined,
+      resolvedSourceDir: undefined,
+      sourceFileCount: undefined,
+    });
+    const phase1State = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      preflightPassed: false,
+      resourceType: "AWS::S3::Bucket",
+      desiredState: { BucketName: "analytics-exports-prod" },
+      estimatedMonthlyCost: "$2.30/mo",
+      appliedFixes: [
+        {
+          findingId: "bp-s3-public-access",
+          description: "Block public access",
+        } as unknown as NonNullable<AgentState["appliedFixes"]>[number],
+      ],
+      elicitedOptions: { encryption: "SSE-S3" },
+      resourceQueue: ["AWS::S3::Bucket"],
+      resourcePattern: undefined,
+    });
+    const residualFindings: AgentState["bpFindings"] = [];
+
+    const arg = buildContinueInvocation(
+      ctx,
+      deps,
+      phase1State,
+      residualFindings,
+      effectiveIntent,
+    );
+
+    // Required keys always present
+    expect(arg).toMatchObject({
+      checkpointResumed: true,
+      userIntent: effectiveIntent,
+      runId: ctx.runId,
+      executionMode: ExecutionMode.APPLY,
+      projectDir: process.cwd(),
+      resourceType: "AWS::S3::Bucket",
+      desiredState: { BucketName: "analytics-exports-prod" },
+      estimatedMonthlyCost: "$2.30/mo",
+      preflightPassed: true,
+      bpFindings: [],
+      appliedFixes: phase1State.appliedFixes,
+      elicitedOptions: { encryption: "SSE-S3" },
+      resourceQueue: ["AWS::S3::Bucket"],
+      bpEnforcementLevel: BPEnforcementLevel.ENFORCE,
+    });
+    expect(typeof arg.startedAt).toBe("number");
+
+    // All 4 conditional spreads OMITTED when their guards are falsy
+    expect(arg).not.toHaveProperty("autoApprove");
+    expect(arg).not.toHaveProperty("userConfig");
+    expect(arg).not.toHaveProperty("orgConfig");
+    expect(arg).not.toHaveProperty("sourceDir");
+    expect(arg).not.toHaveProperty("sourceFileCount");
+  });
+
+  it("all 6 conditional branches ON → full arg shape, findings forwarded, user-configured enforcement wins", () => {
+    const ctx = makeCtx();
+    const userConfig = {
+      bestPractices: { enforcement: BPEnforcementLevel.WARN },
+    } as unknown as NonNullable<Phase1Deps["userConfig"]>;
+    const orgConfig = { requireEncryption: true };
+    const deps = makeDeps({
+      opts: { yes: true, quick: false } as unknown as Phase1Deps["opts"],
+      userConfig,
+      orgConfig,
+      resolvedSourceDir: "/project/infra",
+      sourceFileCount: 17,
+    });
+    const phase1State = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      preflightPassed: false,
+      resourceType: "AWS::S3::Bucket",
+      desiredState: { BucketName: "analytics-exports-prod" },
+      appliedFixes: [
+        {
+          findingId: "bp-s3-public-access",
+          description: "Block public access",
+        } as unknown as NonNullable<AgentState["appliedFixes"]>[number],
+      ],
+    });
+    const residualFindings: AgentState["bpFindings"] = [
+      makeBpFinding({ blocking: false, severity: "HIGH" }),
+    ];
+
+    const arg = buildContinueInvocation(
+      ctx,
+      deps,
+      phase1State,
+      residualFindings,
+      effectiveIntent,
+    );
+
+    // All 4 conditional-spread keys present
+    expect(arg).toMatchObject({
+      autoApprove: true,
+      userConfig,
+      orgConfig,
+      sourceDir: "/project/infra",
+      sourceFileCount: 17,
+      // And user-level enforcement overrides the ENFORCE default
+      bpEnforcementLevel: BPEnforcementLevel.WARN,
+      // Findings passed through (non-empty branch)
+      bpFindings: residualFindings,
+    });
+    expect((arg.bpFindings as unknown[]).length).toBe(1);
+  });
+
+  it("residualFindings=undefined → forwarded as undefined (not defaulted); effectiveIntent still propagates", () => {
+    const ctx = makeCtx();
+    const deps = makeDeps();
+    const phase1State = makeState({
+      executionStatus: ExecutionStatus.PENDING,
+      preflightPassed: false,
+      resourceType: "AWS::S3::Bucket",
+      desiredState: { BucketName: "analytics-exports-prod" },
+      appliedFixes: [
+        {
+          findingId: "bp-s3-public-access",
+          description: "Block public access",
+        } as unknown as NonNullable<AgentState["appliedFixes"]>[number],
+      ],
+    });
+
+    const arg = buildContinueInvocation(
+      ctx,
+      deps,
+      phase1State,
+      undefined,
+      effectiveIntent,
+    );
+
+    expect(arg.bpFindings).toBeUndefined();
+    expect(arg.userIntent).toBe(effectiveIntent);
+    // checkpointResumed: true is always set — the whole point of this
+    // builder is the fix-and-continue re-invocation.
+    expect(arg.checkpointResumed).toBe(true);
   });
 });
