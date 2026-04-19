@@ -20,8 +20,20 @@ export const PLACEHOLDER_AWS_ACCOUNT_IDS = new Set([
   "000000000000", // Unit test fixtures
 ]);
 
+import { ARN_PATTERN_SOURCE } from "../config/aws-partition.js";
+
 /**
  * Regex to extract the 12-digit account ID from an ARN.
- * Partition-aware: matches arn:aws, arn:aws-cn, arn:aws-us-gov.
+ *
+ * Partition-aware: built from the canonical `ARN_PATTERN_SOURCE` so it
+ * accepts every published AWS partition (`aws`, `aws-cn`, `aws-us-gov`,
+ * `aws-iso`, `aws-iso-b`, and the announced-but-not-yet-public
+ * `aws-iso-e` / `aws-iso-f`). It rejects malformed partitions like
+ * `arn:aws_x:` (underscore) or `arn:AWS_BAD_PARTITION:` (uppercase)
+ * that the old `[\w-]*` pattern would have silently accepted.
+ *
+ * Closes L5-003 (Story 56-it2-02): canonical partition matching.
  */
-export const ARN_ACCOUNT_REGEX = /^arn:aws[\w-]*:[\w-]*:[\w-]*:(\d{12}):/;
+export const ARN_ACCOUNT_REGEX = new RegExp(
+  `^${ARN_PATTERN_SOURCE}[\\w-]*:[\\w-]*:(\\d{12}):`,
+);

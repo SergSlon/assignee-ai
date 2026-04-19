@@ -37,6 +37,20 @@ const MISSING_OPERATOR_CREDS_WARNING =
  * to stderr. The return shape is preserved (empty strings) so existing callers
  * that conditionally spread non-empty fields keep working. See
  * `apps/cli/src/commands/list-resources.ts` for the conditional-spread pattern.
+ *
+ * @deprecated Prefer a variant that throws on missing/empty credentials rather
+ * than silently returning empty strings (scheduled for Epic 57). Every current
+ * call-site must either (a) guard with `if (!creds.accessKeyId || !creds.secretAccessKey)`
+ * before using the result, or (b) pass the result to `createCloudControlClient`
+ * / `createTaggingClient` which throw `ConfigurationError` on empty. Audited
+ * call-sites as of Story 56-it2-02:
+ *   - `apps/cli/src/services/destroy-service.ts` — passes into `createCloudControlClient` (throws)
+ *   - `apps/cli/src/services/drift-detector-factory.ts` — explicit `if (!creds.accessKeyId)` guard
+ *   - `apps/cli/src/services/list-resources.ts` — conditional-spread pattern
+ *   - `apps/cli/src/e2e/bulk-sweep.ts` — dev-only e2e harness, creds required by design
+ *   - `apps/cli/src/commands/destroy/single-flow.ts` — passes into `createTaggingClient` (throws)
+ *   - `packages/core/src/graph/create-graph.ts` — passes into `createCloudControlClient` (throws)
+ *   - `packages/core/src/graph/nodes/preflight-guard/guards/managed-policy.ts` — conditional-spread pattern
  */
 export function operatorCredentials(): AwsConfig {
   const accessKeyId = process.env[EnvVar.OPERATOR_ACCESS_KEY] ?? "";

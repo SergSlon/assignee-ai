@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   operatorCredentials,
   _resetOperatorCredsWarning,
@@ -122,5 +124,33 @@ describe("operatorCredentials", () => {
     _resetOperatorCredsWarning();
     operatorCredentials();
     expect(stderrCalls.length).toBe(2);
+  });
+
+  /**
+   * L5-004 (Story 56-it2-02) — the `operatorCredentials()` function's silent
+   * empty-string fallthrough is a latent footgun. Until a breaking variant
+   * ships in Epic 57, the JSDoc `@deprecated` tag is the public signal that
+   * call-sites must guard the return value. This test asserts the tag is
+   * still present by reading the source file directly, so a future refactor
+   * cannot silently drop the deprecation notice without a compile failure.
+   */
+  it("carries an @deprecated JSDoc tag on the exported function (L5-004)", () => {
+    const sourcePath = fileURLToPath(
+      new URL("./operator-credentials.ts", import.meta.url),
+    );
+    const source = readFileSync(sourcePath, "utf8");
+
+    // The tag must appear in a JSDoc block that precedes the function
+    // export. Match the *block* that ends just before `export function
+    // operatorCredentials` to avoid picking up deprecations in unrelated
+    // comments.
+    const exportBlock = source.match(
+      /\/\*\*[\s\S]*?\*\/\s*export function operatorCredentials\b/,
+    );
+    expect(
+      exportBlock,
+      "expected JSDoc block above operatorCredentials",
+    ).not.toBeNull();
+    expect(exportBlock![0]).toContain("@deprecated");
   });
 });
