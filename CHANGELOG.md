@@ -12,6 +12,20 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 63 — iteration 1 (2026-04-19)
+
+#### Docs
+
+- CHANGELOG: Epic 62-it1 subsection backfill (3c3300a)
+
+### Epic 64 — iteration 1 (2026-04-19)
+
+#### Docs
+
+- CHANGELOG: Epic 63 + Epic 64 self-entries (this commit) — breaks recurring 1-iteration lag pattern.
+- `docs/explanation/invariants.md`: new "CHANGELOG self-entry on epic close" invariant block.
+- Memory: `feedback_changelog_self_entry.md` codifies process change.
+
 ### Epic 62 — iteration 1 (2026-04-19)
 
 #### Docs
