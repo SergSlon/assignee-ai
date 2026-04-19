@@ -12,6 +12,54 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 59 — iteration 1 (2026-04-19)
+
+#### Refactored
+
+- \*\*`packages/core/package.json` exports 28 → 14 (closes L4-005 MED
+  - L4-L2 LOW).\*\* Deleted 15 zero-consumer sub-path entries
+    (`./testing`, `./aws`, `./utils/display`, `./utils/logger`,
+    `./services/memory`, `./services/s3-upload`,
+    `./utils/memory-recorder`, `./utils/security-posture`,
+    `./resource-plugins`, `./utils/resolve-arn`, `./utils/free-tier`,
+    `./services/price-cache`, `./config/user-config-loader`,
+    `./config/project-config-loader`, `./config/org-policy-cache`);
+    each verified via cross-workspace grep before removal. The 13
+    remaining sub-paths are load-bearing apps shims; further collapse
+    to ≤10 is deferred to a follow-up that lifts the apps-no-touch
+    constraint. (commit `eac3529`)
+- **~336 deep relative imports → `@/*` tsconfig path aliases
+  across `packages/core` + `packages/best-practices` (closes L4-L2
+  LOW).** 133 files rewired; `baseUrl: "."` + `paths: {"@/*":
+["src/*"]}` added to both tsconfigs. Zero 3+-level relatives
+  remain in either package. (commit `eac3529`)
+
+#### Added
+
+- **`tsc-alias` runtime wiring for `packages/core` build.** `tsc`
+  does not rewrite path aliases in emitted JS; apps crashed with
+  `ERR_MODULE_NOT_FOUND '@/config'` on first build. Build script
+  now runs `tsc && tsc-alias` so the `@/*` alias resolves at
+  runtime across the monorepo. (commit `eac3529`)
+- **`vite-tsconfig-paths` vitest plugin wired in
+  `packages/core/vitest.config.ts`.** Without it, vitest emits
+  `ERR_MODULE_NOT_FOUND` for `@/…` imports under test. Installed
+  as devDep in `@assignee/core` only (best-practices has no `@/`
+  imports yet). (commit `eac3529`)
+
+#### Docs
+
+- **CHANGELOG Unreleased section gained Epic 57-it1 + Epic 58-it1
+  subsections (closes HIGH CHANGELOG-lag finding).** Back-fills
+  the iteration history for the two previous epics that shipped
+  without changelog entries. (commit `4fc81c5`)
+- **`docs/explanation/invariants.md` gained 2 invariant blocks.**
+  "No circular imports across `barrels/config` sub-barrels"
+  documents the Epic 56-it2 split enforced by `pnpm lint:barrels`;
+  "Path-alias resolution requires tsc-alias post-build" records
+  the runtime-rewrite invariant introduced by the Epic 59-it1
+  `@/*` migration. (commit `4fc81c5`)
+
 ### Epic 58 — iteration 1 (2026-04-19)
 
 #### Refactored
