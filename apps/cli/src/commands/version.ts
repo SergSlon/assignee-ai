@@ -47,10 +47,62 @@ export function readPackageVersion(): string {
   }
 }
 
+/**
+ * Shape of the `MCP_PINS` record we depend on for the pinned-servers block.
+ * Keeping it local to this module avoids a top-level static import so the
+ * version command can still run when the MCP-server config module fails to
+ * load (corrupt install, partial extract, permission issue).
+ *
+ * Epic 65-it1-01 (L3-001 MED): the dynamic `import("../config/mcp-servers.js")`
+ * call in the action handler is now wrapped in try/catch. On failure we warn
+ * the operator and substitute an empty pins record so `assignee version`
+ * still prints CLI version + Node + platform — the exact triage info a bug
+ * report needs when the MCP server wiring itself is broken.
+ */
+type McpPinsRecord = {
+  AWS_PRICING: string;
+  AWS_DOCUMENTATION: string;
+  AWS_IAM: string;
+  AWS_WA_SECURITY: string;
+  AWS_COST_MANAGEMENT: string;
+};
+
+/**
+ * All-empty fallback used when `import("../config/mcp-servers.js")` throws.
+ * Every pin renders as an empty string so the "Pinned MCP servers:" block
+ * still appears (five labelled rows) but the version column is blank —
+ * the adjacent `console.warn` gives the operator the "why".
+ */
+const EMPTY_MCP_PINS: McpPinsRecord = {
+  AWS_PRICING: "",
+  AWS_DOCUMENTATION: "",
+  AWS_IAM: "",
+  AWS_WA_SECURITY: "",
+  AWS_COST_MANAGEMENT: "",
+};
+
+/**
+ * Dynamically load `MCP_PINS`. On any failure emit an operator-visible
+ * warning and return {@link EMPTY_MCP_PINS} so the rest of the version
+ * output still completes. Exported so the Epic 65-it1-01 unit test can
+ * exercise the catch branch directly without spawning a subprocess.
+ */
+export async function loadMcpPinsOrFallback(): Promise<McpPinsRecord> {
+  try {
+    const mod = await import("../config/mcp-servers.js");
+    return mod.MCP_PINS as McpPinsRecord;
+  } catch {
+    console.warn(
+      "assignee: MCP_PINS unavailable; reporting empty list. Reinstall or verify the package is intact.",
+    );
+    return EMPTY_MCP_PINS;
+  }
+}
+
 export const versionCommand = new Command("version")
   .description("Show version and environment info")
   .action(async () => {
-    const { MCP_PINS } = await import("../config/mcp-servers.js");
+    const MCP_PINS = await loadMcpPinsOrFallback();
     const lines = [
       `assignee ${readPackageVersion()}`,
       `node     ${process.version}`,

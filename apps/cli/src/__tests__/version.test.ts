@@ -66,7 +66,11 @@ vi.mock("node:fs", async (importOriginal) => {
 // Imported AFTER the vi.mock hoist (vi.mock is auto-hoisted above all
 // imports in the test file, so static imports here are safe). The SUT
 // picks up the shimmed readFileSync via the same mocked `node:fs`.
-import { versionCommand, readPackageVersion } from "../commands/version.js";
+import {
+  versionCommand,
+  readPackageVersion,
+  loadMcpPinsOrFallback,
+} from "../commands/version.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -186,6 +190,49 @@ describe("version command", () => {
       expect(warned).toContain("Reinstall");
     } finally {
       __fsControl.readFileSyncImpl = null;
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("warns and returns empty MCP pins when the mcp-servers import throws (Epic 65-it1-01 L3-001)", async () => {
+    // Force the dynamic `import("../config/mcp-servers.js")` inside
+    // `loadMcpPinsOrFallback` to throw so the catch branch runs. We
+    // reset module cache, install a `vi.doMock` factory that throws on
+    // resolution, then re-import the SUT so its closure captures the
+    // fresh shimmed version. `vi.doUnmock` + `resetModules` in the
+    // finally block restores the real module for every other test.
+    vi.resetModules();
+    vi.doMock("../config/mcp-servers.js", () => {
+      throw new Error("ENOENT: config/mcp-servers.js missing from package");
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const fresh = await import("../commands/version.js");
+      const pins = await fresh.loadMcpPinsOrFallback();
+
+      // Fallback shape preserved — every canonical pin key is still present,
+      // but every value is an empty string so downstream rendering
+      // (`  pricing        ${MCP_PINS.AWS_PRICING}`) degrades gracefully
+      // instead of hitting a `Cannot read properties of undefined`.
+      expect(pins).toStrictEqual({
+        AWS_PRICING: "",
+        AWS_DOCUMENTATION: "",
+        AWS_IAM: "",
+        AWS_WA_SECURITY: "",
+        AWS_COST_MANAGEMENT: "",
+      });
+
+      // Operator-visible warning emitted exactly once, with the informative
+      // phrase + remediation hint that match the MED finding's contract.
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const warned = warnSpy.mock.calls[0]?.[0];
+      expect(typeof warned).toBe("string");
+      expect(warned).toContain("MCP_PINS unavailable");
+      expect(warned).toContain("Reinstall");
+    } finally {
+      vi.doUnmock("../config/mcp-servers.js");
+      vi.resetModules();
       warnSpy.mockRestore();
     }
   });
