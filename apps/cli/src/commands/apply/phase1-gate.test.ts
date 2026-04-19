@@ -523,7 +523,13 @@ describe("buildContinueInvocation — arg shape for graph.invoke", () => {
         } as unknown as NonNullable<AgentState["appliedFixes"]>[number],
       ],
       elicitedOptions: { encryption: "SSE-S3" },
-      resourceQueue: ["AWS::S3::Bucket"],
+      resourceQueue: [
+        {
+          resourceType: "AWS::S3::Bucket",
+          resourceId: "bucket",
+          displayName: "S3 Bucket",
+        },
+      ],
       resourcePattern: undefined,
     });
     const residualFindings: AgentState["bpFindings"] = [];
@@ -550,10 +556,16 @@ describe("buildContinueInvocation — arg shape for graph.invoke", () => {
       bpFindings: [],
       appliedFixes: phase1State.appliedFixes,
       elicitedOptions: { encryption: "SSE-S3" },
-      resourceQueue: ["AWS::S3::Bucket"],
+      resourceQueue: [
+        {
+          resourceType: "AWS::S3::Bucket",
+          resourceId: "bucket",
+          displayName: "S3 Bucket",
+        },
+      ],
       bpEnforcementLevel: BPEnforcementLevel.ENFORCE,
     });
-    expect(typeof arg.startedAt).toBe("number");
+    expect(typeof arg["startedAt"]).toBe("number");
 
     // All 4 conditional spreads OMITTED when their guards are falsy
     expect(arg).not.toHaveProperty("autoApprove");
@@ -612,7 +624,7 @@ describe("buildContinueInvocation — arg shape for graph.invoke", () => {
       // Findings passed through (non-empty branch)
       bpFindings: residualFindings,
     });
-    expect((arg.bpFindings as unknown[]).length).toBe(1);
+    expect((arg["bpFindings"] as unknown[]).length).toBe(1);
   });
 
   it("residualFindings=undefined → forwarded as undefined (not defaulted); effectiveIntent still propagates", () => {
@@ -639,10 +651,10 @@ describe("buildContinueInvocation — arg shape for graph.invoke", () => {
       effectiveIntent,
     );
 
-    expect(arg.bpFindings).toBeUndefined();
-    expect(arg.userIntent).toBe(effectiveIntent);
+    expect(arg["bpFindings"]).toBeUndefined();
+    expect(arg["userIntent"]).toBe(effectiveIntent);
     // checkpointResumed: true is always set — the whole point of this
     // builder is the fix-and-continue re-invocation.
-    expect(arg.checkpointResumed).toBe(true);
+    expect(arg["checkpointResumed"]).toBe(true);
   });
 });
