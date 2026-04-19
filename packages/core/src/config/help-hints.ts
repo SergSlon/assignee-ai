@@ -273,6 +273,18 @@ export const BEGINNER_EXAMPLE_TYPES: readonly string[] = Object.freeze([
  *      in the user-facing rephrase prompt. Story 62-it1-02 L3-L1 added
  *      this cross-ref so renames on either side stay discoverable.
  */
-export function renderClarifierExampleList(): string {
-  return `${BEGINNER_EXAMPLE_TYPES.join(", ")}, etc.`;
+export function renderClarifierExampleList(
+  // Epic 65-it1-01 (L3-L1 LOW): the list parameter is injectable so the
+  // defensive empty-array guard below is directly testable. Default is the
+  // frozen curated list, so every existing caller is unchanged.
+  examples: readonly string[] = BEGINNER_EXAMPLE_TYPES,
+): string {
+  // Epic 65-it1-01 (L3-L1 LOW): defensive empty-array guard. If a future
+  // curation leaves the example list empty (e.g. a rename migration
+  // temporarily wipes the list) the naive join-and-suffix would emit
+  // ", etc." — a visually broken fragment in the clarifier prompt. Return
+  // an empty string instead so the consumer sees nothing rather than a
+  // malformed list.
+  if (examples.length === 0) return "";
+  return `${examples.join(", ")}, etc.`;
 }

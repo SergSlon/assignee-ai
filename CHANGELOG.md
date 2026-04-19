@@ -12,6 +12,18 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 65 — iteration 1 (2026-04-19)
+
+#### Fixed
+
+- `apps/cli/src/commands/version.ts`: defensive try/catch around MCP_PINS dynamic import; warn + empty-fallback on failure (closes L3-001 MED).
+- `packages/core/src/config/help-hints.ts`: empty-array guard in `renderClarifierExampleList()` so output never becomes `, etc.` (closes L3-L1 LOW).
+- `apps/cli/src/services/clarifier.ts`: `.trim()` safety hoist (L3-L2 LOW).
+
+#### Tests
+
+- 2 new unit tests covering version.ts MCP_PINS failure + help-hints empty-array guard.
+
 ### Epic 63 — iteration 1 (2026-04-19)
 
 #### Docs

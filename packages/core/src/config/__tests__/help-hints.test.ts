@@ -287,4 +287,29 @@ describe("BEGINNER_EXAMPLE_TYPES + renderClarifierExampleList", () => {
     // Exact canonical shape for the current 3-entry curation.
     expect(rendered).toBe("S3 bucket, Lambda function, DynamoDB table, etc.");
   });
+
+  // Epic 65-it1-01 (L3-L1 LOW): defensive guard for the degenerate case
+  // where the curated beginner-example list is empty. Without the guard,
+  // `[].join(", ")` yields "" and the suffix produces the visually broken
+  // fragment ", etc." — this test documents that we now return "" instead.
+  //
+  // `BEGINNER_EXAMPLE_TYPES` is frozen so we can't mutate the real export.
+  // The function accepts an optional `examples` parameter (default is the
+  // frozen curated list) specifically so this guard is directly testable
+  // without module-reimport gymnastics.
+  it("renderClarifierExampleList returns '' when examples list is empty (Epic 65-it1-01 L3-L1)", () => {
+    // Passing `[]` exercises the freeze-bypass path — it does NOT mutate
+    // BEGINNER_EXAMPLE_TYPES, so the default-arg behaviour for every other
+    // caller is unchanged.
+    expect(renderClarifierExampleList([])).toBe("");
+  });
+
+  it("renderClarifierExampleList still renders correctly with a non-empty custom list (guard regression)", () => {
+    // Sanity check that the injectable parameter preserves the normal
+    // rendering when the list is non-empty — the guard only short-circuits
+    // on empty input.
+    expect(renderClarifierExampleList(["EC2 instance", "VPC"])).toBe(
+      "EC2 instance, VPC, etc.",
+    );
+  });
 });
