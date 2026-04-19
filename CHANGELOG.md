@@ -12,6 +12,57 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 61 — iteration 1 (2026-04-19)
+
+#### Fixed
+
+- **`apps/cli/src/commands/version.ts` emits `console.warn` before
+  the `"0.0.0"` fallback on `package.json` parse failure.** Operators
+  now see explicit visibility into corrupted-install conditions
+  rather than a silent zero-version masquerade. (commit `c45706b`)
+- **`apps/cli/src/index.ts` signal handler emits `console.error`
+  before the re-entrant `SIGINT` hard-exit.** Adds debuggability for
+  orphaned processes that previously vanished without trace on the
+  second Ctrl-C. (commit `c45706b`)
+
+#### Tests
+
+- **2 new unit tests covering the warn-then-fallback and
+  error-before-hard-exit paths.** `version.ts` now exports
+  `readPackageVersion` so the parse-failure branch is directly
+  testable without filesystem stubs at the command boundary.
+  (commit `c45706b`)
+
+### Epic 60 — iteration 1 (2026-04-19)
+
+#### Refactored
+
+- **`packages/core/src/utils/free-tier.ts` 299 → 150 LOC via
+  pure-data extraction to `free-tier/maps.ts` (130 LOC, NEW).** The
+  free-tier coverage tables move into a side-effect-free data
+  module; the remaining IO wrapper is a thin shape adapter over the
+  pure helper. (commit `0445450`)
+- **`packages/core/package.json` exports 14 → 6 — apps shims
+  rewired to consume from the broader `@assignee/core` +
+  `@assignee/core/graph` barrels.** Continues the Epic 59-it1
+  surface-shrink trajectory; deep sub-paths collapse into two
+  load-bearing barrels. (commit `014ea96`)
+
+#### Added
+
+- **`analyzeResource` + cost-optimizer types + 15 wizard helpers +
+  `MCP_PINS` + instance-family registry + `resolveFieldConfigs`
+  promoted to the root barrel.** Replaces the deep sub-path
+  consumers retired by the exports-collapse above; apps now import
+  the full surface from `@assignee/core`. (commit `014ea96`)
+
+#### Docs
+
+- **CHANGELOG Unreleased gained the Epic 59-it1 subsection citing
+  `eac3529` + `4fc81c5`.** Closes the changelog-lag finding for
+  Epic 59 so future readers can trace the `@/*` migration and
+  exports-collapse without git archaeology. (commit `6af6b2b`)
+
 ### Epic 59 — iteration 1 (2026-04-19)
 
 #### Refactored
