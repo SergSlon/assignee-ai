@@ -5,10 +5,16 @@
  *            -> getFreeTierNote -> formatted CostEstimateResult
  *
  * Unlike the unit tests that test classifyResourceType and getFreeTierNote
- * independently, these tests verify the FULL flow for all 23 resource types.
+ * independently, these tests verify the FULL flow for a curated subset of
+ * resource types. Fixture coverage is intentionally partial — see the
+ * Story 56-it1-04 drift guard below for the parity assertion that alerts
+ * when `SUPPORTED_TYPES_ARRAY` grows without a matching fixture.
+ *
+ * @see Story 56-it1-04 — L3-003 fixture-vs-registry drift guard
  */
 
 import { describe, it, expect } from "vitest";
+import { SUPPORTED_TYPES_ARRAY } from "@assignee/core";
 import {
   classifyResourceType,
   estimateCostForResource,
@@ -17,7 +23,7 @@ import { getFreeTierNote } from "../free-tier.js";
 
 // ── Data tables ─────────────────────────────────────────────────────────────
 
-/** All 23 resource types with a representative keyword for classification. */
+/** Curated keyword fixture covering one representative per fixture entry. */
 const ALL_RESOURCE_TYPES: Array<{
   keyword: string;
   expectedType: string;
@@ -154,7 +160,7 @@ const ALL_RESOURCE_TYPES: Array<{
 // ── Full pipeline tests ─────────────────────────────────────────────────────
 
 describe("estimate-cost E2E: keyword -> classify -> estimate -> free tier", () => {
-  describe("full pipeline for all 23 resource types", () => {
+  describe("full pipeline across every curated fixture", () => {
     for (const {
       keyword,
       expectedType,
@@ -267,8 +273,25 @@ describe("estimate-cost E2E: keyword -> classify -> estimate -> free tier", () =
       }
     });
 
-    it("covers all 23 supported resource types", () => {
+    it("fixture size matches the documented baseline", () => {
+      // Story 56-it1-04 / L3-003: this is a SMOKE TEST coverage of the
+      // pipeline, not a full-registry matrix. Authoritative per-type
+      // coverage lives in `coverage-consistency.test.ts`. When new types
+      // are added, either expand this fixture or bump the baseline below.
       expect(ALL_RESOURCE_TYPES).toHaveLength(23);
+      expect(ALL_RESOURCE_TYPES.length).toBeLessThanOrEqual(
+        SUPPORTED_TYPES_ARRAY.length,
+      );
+    });
+
+    it("every fixture expectedType is a member of SUPPORTED_TYPES_ARRAY (fail-loud drift guard)", () => {
+      const registry = new Set<string>(SUPPORTED_TYPES_ARRAY);
+      for (const { expectedType } of ALL_RESOURCE_TYPES) {
+        expect(
+          registry.has(expectedType),
+          `stale fixture: ${expectedType} is not in SUPPORTED_TYPES_ARRAY`,
+        ).toBe(true);
+      }
     });
   });
 
