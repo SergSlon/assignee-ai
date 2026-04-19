@@ -408,31 +408,46 @@ describe("DriftDetectorService", () => {
     });
 
     it("executes in parallel (faster than sequential)", async () => {
-      let concurrent = 0;
-      let maxConcurrent = 0;
+      // Fake timers + Date.now() so we measure simulated wall clock instead
+      // of waiting on real time. With concurrency 3 and a 20 ms per-entry
+      // delay, the 6 entries should complete in two waves (≈ 40 ms of
+      // simulated time), not six sequential 20 ms waits (≈ 120 ms).
+      vi.useFakeTimers();
+      try {
+        let concurrent = 0;
+        let maxConcurrent = 0;
 
-      const port = createMockPort(async () => {
-        concurrent++;
-        if (concurrent > maxConcurrent) maxConcurrent = concurrent;
-        await new Promise((r) => setTimeout(r, 20));
-        concurrent--;
-        return [null, ccResponse({ BucketName: "b" })];
-      });
-      const service = new DriftDetectorService({ provisioningPort: port });
+        const port = createMockPort(async () => {
+          concurrent++;
+          if (concurrent > maxConcurrent) maxConcurrent = concurrent;
+          await new Promise((r) => setTimeout(r, 20));
+          concurrent--;
+          return [null, ccResponse({ BucketName: "b" })];
+        });
+        const service = new DriftDetectorService({ provisioningPort: port });
 
-      const entries = Array.from({ length: 6 }, (_, i) => ({
-        typeName: "AWS::S3::Bucket",
-        identifier: `b${i}`,
-        desiredState: { BucketName: "b" },
-      }));
+        const entries = Array.from({ length: 6 }, (_, i) => ({
+          typeName: "AWS::S3::Bucket",
+          identifier: `b${i}`,
+          desiredState: { BucketName: "b" },
+        }));
 
-      const start = Date.now();
-      await service.checkAll(entries, { concurrency: 3 });
-      const elapsed = Date.now() - start;
+        const start = Date.now();
+        const checkAll = service.checkAll(entries, { concurrency: 3 });
+        // Drain every queued timer (and the microtasks they unblock).
+        // Two parallel waves of 20 ms each → ~40 ms of simulated time.
+        await vi.runAllTimersAsync();
+        await checkAll;
+        const elapsed = Date.now() - start;
 
-      // With concurrency 3, 6 entries at 20ms each should take ~40ms, not ~120ms
-      expect(elapsed).toBeLessThan(100);
-      expect(maxConcurrent).toBeLessThanOrEqual(3);
+        // With concurrency 3, 6 entries at 20 ms each should take ~40 ms,
+        // not ~120 ms — fake-timer mode preserves the same observable
+        // ordering as the original wall-clock test.
+        expect(elapsed).toBeLessThan(100);
+        expect(maxConcurrent).toBeLessThanOrEqual(3);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("handles partial failure — other resources still checked", async () => {

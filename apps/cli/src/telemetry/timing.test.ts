@@ -34,11 +34,24 @@ describe("timing", () => {
     });
 
     it("measures actual elapsed time", async () => {
-      startTimer("delay");
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      const elapsed = endTimer("delay");
-      // Should be at least ~50ms (allow some slack for CI)
-      expect(elapsed).toBeGreaterThanOrEqual(30);
+      // The implementation uses process.hrtime.bigint() (sub-ms precision)
+      // which vitest's fake timers do NOT fake. To eliminate the real
+      // 50 ms wall-clock wait while keeping the assertion meaningful,
+      // we stub hrtime to return a controlled pair: 0 ns at startTimer,
+      // 50 000 000 ns (= 50 ms) at endTimer. The endTimer math
+      // (Number(end - start) / 1_000_000) yields exactly 50 ms.
+      const hrtimeSpy = vi
+        .spyOn(process.hrtime, "bigint")
+        .mockReturnValueOnce(0n) // startTimer
+        .mockReturnValueOnce(50_000_000n); // endTimer → 50 ms elapsed
+      try {
+        startTimer("delay");
+        const elapsed = endTimer("delay");
+        // Should be at least ~50ms (allow some slack for CI)
+        expect(elapsed).toBeGreaterThanOrEqual(30);
+      } finally {
+        hrtimeSpy.mockRestore();
+      }
     });
   });
 

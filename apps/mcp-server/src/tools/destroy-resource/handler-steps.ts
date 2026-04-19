@@ -48,15 +48,7 @@ import { isArn, resolveResource } from "./resolve.js";
 import type { ResolvedResource } from "./types.js";
 import { mcpLogWarn } from "../../utils/structured-log.js";
 import { logDestroyAudit } from "./audit.js";
-
-/**
- * Discriminated step result. "done" short-circuits the pipeline with
- * a pre-built MCP response; "continue" passes control to the next
- * step, optionally with refined data.
- */
-export type StepResult<TContext = void> =
-  | { kind: "done"; response: McpToolResponse }
-  | { kind: "continue"; context: TContext };
+import type { StepResult } from "../../utils/step-result.js";
 
 /** Resolve the caller's identifier into a ResolvedResource or bail. */
 export async function resolveStep(

@@ -629,8 +629,23 @@ describe("apply_plan tool", () => {
         },
       });
 
-      // Give the first call a tick to enter the handler and acquire the lock
-      await new Promise((r) => setTimeout(r, 50));
+      // Give the first call a tick to enter the handler and acquire the lock.
+      // The original 50 ms wait was a wall-clock yield to let the in-memory
+      // MCP transport hand the request to the server. We replace it with a
+      // fake-timer advance so the test does not block on real time. Scope
+      // `toFake: ["setTimeout"]` keeps the MCP transport's microtask
+      // scheduler (queueMicrotask) untouched while still advancing the
+      // 50 ms timer below; `advanceTimersByTimeAsync` also flushes the
+      // microtask queue between timer ticks, which is the actual yield
+      // the original wall-clock wait was relying on.
+      vi.useFakeTimers({ toFake: ["setTimeout"] });
+      try {
+        const lockYield = new Promise<void>((r) => setTimeout(r, 50));
+        await vi.advanceTimersByTimeAsync(50);
+        await lockYield;
+      } finally {
+        vi.useRealTimers();
+      }
 
       // Second apply on the same checkpoint should be rejected immediately
       const secondResult = await client.callTool({

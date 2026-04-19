@@ -53,7 +53,7 @@
     "natural-language"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "postbuild": "chmod +x dist/index.js && npx tsx scripts/generate-completions.ts",
     "dev": "tsc --watch",
     "generate-completions": "npx tsx scripts/generate-completions.ts",
