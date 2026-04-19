@@ -8,19 +8,16 @@
  * into `resource-provisioner/*`. This file is the thin orchestrator that
  * wires pre-hooks → state-guard → CCAPI create → cleanup-on-failure.
  *
+ * Story 56-it2-03a (closes L7-003 MED) relocated the last 3 in-file
+ * sibling helpers out to `resource-provisioner/{companion-skip,
+ * redirect-guard, create-error-handler}.ts` so this file is purely
+ * orchestration glue.
+ *
  * @see Story 7-6, Story 9-2, docs/stories/wave-6-f3-resource-provisioner-solid.md
  */
 
-import {
-  CCAPI_REDIRECT_TYPES,
-  ExecutionStatus,
-  PROVISIONING_ERROR_CODES,
-  ProvisioningError,
-} from "../../index.js";
-import type {
-  ProvisioningPort,
-  ProvisioningPortError,
-} from "../../ports/provisioning-port.js";
+import { ExecutionStatus } from "../../index.js";
+import type { ProvisioningPort } from "../../ports/provisioning-port.js";
 import { injectMandatoryTags } from "../../utils/tags.js";
 import { log, LOG_ACTIONS } from "../../utils/logger/index.js";
 import type { AgentState } from "../graph-state.js";
@@ -40,164 +37,14 @@ import {
   waitForCloudFrontRetryDnsIfNeeded,
   waitForCloudFrontS3DnsIfNeeded,
 } from "./resource-provisioner/ccapi.js";
-import { classifyCreateError } from "./resource-provisioner/error-classifier.js";
+import { skipIfCompanionResource } from "./resource-provisioner/companion-skip.js";
+import { checkUnsupportedRedirect } from "./resource-provisioner/redirect-guard.js";
+import { handleCreateError } from "./resource-provisioner/create-error-handler.js";
 
 // Re-export for backwards-compatibility with existing test imports and any
 // external callers. DO NOT remove — `resource-provisioner.test.ts` imports
 // these by name from "./resource-provisioner.js".
 export { sanitizeKeyName, formatErrorForLog };
-
-/**
- * Inline classifier for CCAPI-gap resource types.
- *
- * Story 50-7: replaces the prior `SDKFallbackDispatcher.isRedirect()` —
- * after A10 removed all SDK write paths there were only two redirect
- * entries left (AWS::Lambda::Permission → PermissionPolicy,
- * AWS::ElastiCache::ReplicationGroup → ServerlessCache). A class with
- * two always-false hooks was pure ceremony; the map-lookup is the
- * whole function.
- */
-function classifyUnsupported(resourceType: string): {
-  redirect: true;
-  message: string;
-} | null {
-  const alternative = CCAPI_REDIRECT_TYPES[resourceType];
-  if (!alternative) return null;
-  if (resourceType === "AWS::Lambda::Permission") {
-    return {
-      redirect: true,
-      message:
-        "AWS::Lambda::Permission is not supported by CCAPI. Use AWS::Lambda::PermissionPolicy instead.",
-    };
-  }
-  if (resourceType === "AWS::ElastiCache::ReplicationGroup") {
-    return {
-      redirect: true,
-      message:
-        "ElastiCache ReplicationGroup is not supported. Use AWS::ElastiCache::ServerlessCache for Redis/Memcached.",
-    };
-  }
-  return {
-    redirect: true,
-    message: `${resourceType} is not supported by CCAPI. Use ${alternative} instead.`,
-  };
-}
-
-/**
- * Log and short-circuit for non-provisionable (companion/post-provision)
- * resources. Returns the SUCCESS partial when the current resource is
- * flagged `provisionable: false`; otherwise `null` so the caller
- * continues with the normal CCAPI pipeline.
- */
-function skipIfCompanionResource(
-  state: AgentState,
-  currentResource:
-    | { provisionable?: boolean; displayName?: string }
-    | undefined,
-): Partial<AgentState> | null {
-  if (currentResource?.provisionable !== false) return null;
-  log({
-    ts: new Date().toISOString(),
-    runId: state.runId,
-    level: "info",
-    action: LOG_ACTIONS.SDK_FALLBACK_DISPATCHED,
-    extras: {
-      resourceType: state.resourceType,
-      dispatchPath: "companion-skip",
-      message: `Skipping non-provisionable resource: ${currentResource.displayName}`,
-    },
-  });
-  return {
-    executionStatus: ExecutionStatus.SUCCESS,
-    resourceArn: undefined,
-  };
-}
-
-/**
- * If `resourceType` is a CCAPI-gap redirect (Lambda::Permission,
- * ElastiCache::ReplicationGroup, …), emit a structured warn-log and
- * return the FAILED reducer partial. Otherwise return `null` and let
- * the caller proceed to the standard CCAPI path.
- *
- * Extracted from the main orchestrator body so the happy-path read is
- * a linear pipeline (state-guard → pre-hooks → CCAPI → result) rather
- * than an inline 25-line block.
- */
-function checkUnsupportedRedirect(
-  state: AgentState,
-): Partial<AgentState> | null {
-  if (!state.resourceType) return null;
-  const redirect = classifyUnsupported(state.resourceType);
-  if (!redirect) return null;
-
-  log({
-    ts: new Date().toISOString(),
-    runId: state.runId,
-    level: "warn",
-    action: LOG_ACTIONS.SDK_FALLBACK_DISPATCHED,
-    extras: {
-      resourceType: state.resourceType,
-      dispatchPath: "redirect",
-      message: redirect.message,
-    },
-  });
-
-  return {
-    executionStatus: ExecutionStatus.FAILED,
-    errorMessage: redirect.message,
-    error: new ProvisioningError(
-      redirect.message,
-      PROVISIONING_ERROR_CODES.UNSUPPORTED_TYPE,
-    ),
-  };
-}
-
-/**
- * Context passed to `handleCreateError` — gathered at the call site so the
- * helper stays pure (no scope-closure side-effects on reducer state).
- */
-interface CreateErrorCtx {
-  readonly state: AgentState;
-  readonly createErr: ProvisioningPortError;
-  readonly desiredState: Record<string, unknown>;
-  readonly freshlyAllocatedEipIds: Set<string>;
-  readonly sshKeyCreatedName: string | undefined;
-}
-
-/**
- * Build the FAILED reducer partial for a CCAPI `createResource` error.
- *
- * Single-source-of-truth for the three axes (userPrefix, errorCode,
- * shortMessage) — they all come from `classifyCreateError` instead of
- * being re-computed from `createErr.kind` by three parallel nested
- * ternaries (the pre-53-it1-12 shape).
- *
- * Side-effect: invokes `cleanupAllocatedResources` to release EIPs /
- * delete SSH key pairs that were allocated before the CCAPI call failed.
- *
- * Invariant: always surfaces the cloned `desiredState` back to the
- * reducer (H9) so retry paths can reuse allocated side-resources.
- */
-async function handleCreateError(
-  ctx: CreateErrorCtx,
-): Promise<Partial<AgentState>> {
-  const { state, createErr, desiredState } = ctx;
-  const classified = classifyCreateError(createErr, state.resourceType);
-
-  await cleanupAllocatedResources(state, {
-    eipReleased: ctx.freshlyAllocatedEipIds,
-    sshDeleted: ctx.sshKeyCreatedName,
-  });
-
-  return {
-    executionStatus: ExecutionStatus.FAILED,
-    errorMessage: `CloudControl provisioning failed: ${classified.userPrefix}`,
-    error: new ProvisioningError(classified.shortMessage, classified.errorCode),
-    // H9: ALWAYS surface the cloned desiredState back to the reducer —
-    // even on failure — so retries can reuse allocated side-resources.
-    desiredState,
-  };
-}
 
 export async function resourceProvisionerNode(
   state: AgentState,
@@ -236,8 +83,7 @@ export async function resourceProvisionerNode(
   // CCAPI-gap redirect (Story 7.7, inlined in Story 50-7) — emit a
   // friendly "use X instead" message before the CCAPI path for the
   // two remaining redirect-only types (Lambda::Permission,
-  // ElastiCache::ReplicationGroup). A10 (2026-04-09) removed the
-  // last SDK write path, so this is purely a classifier now.
+  // ElastiCache::ReplicationGroup).
   const redirectPartial = checkUnsupportedRedirect(state);
   if (redirectPartial) return redirectPartial;
 
