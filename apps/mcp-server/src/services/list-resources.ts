@@ -35,8 +35,18 @@ import {
 
 export type { ManagedResource } from "@assignee/core";
 
-/** Default AWS region when none is specified. */
-const DEFAULT_REGION = process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
+/**
+ * Default AWS region when none is specified.
+ *
+ * Story 56-it1-03 L4-003: resolve per-invocation, not at module load.
+ * The MCP server is a long-running worker — capturing
+ * `process.env["AWS_REGION"]` at import time serves a stale region
+ * until restart. CLI-shaped consumers re-read env per call; mirror
+ * that contract here.
+ */
+function resolveDefaultRegion(): string {
+  return process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
+}
 
 /**
  * Enumerate tagged IAM roles — the RGTA API does NOT return IAM::Role
@@ -102,7 +112,7 @@ export async function fetchManagedResources(
   region?: string,
   resourceType?: string,
 ): Promise<ManagedResource[]> {
-  const resolvedRegion = region ?? DEFAULT_REGION;
+  const resolvedRegion = region ?? resolveDefaultRegion();
   const rgtaClient = new ResourceGroupsTaggingAPIClient({
     region: resolvedRegion,
     credentials: requireAssigneeCredentials("operator"),

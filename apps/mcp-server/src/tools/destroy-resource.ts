@@ -27,25 +27,25 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { CloudControlClient } from "@aws-sdk/client-cloudcontrol";
 import { DEFAULT_AWS_REGION } from "@assignee/core";
-import { bootstrapOperatorCredentials } from "./destroy-resource/credentials.js";
+// Story 56-it1-03 L4-001: consume the sub-barrel (sister pattern to
+// `apply-plan.ts` → `./apply-plan/index.js`) instead of deep-importing
+// each sub-module. Keeps the public symbol surface identical; only the
+// import path collapses.
 import {
   arnToResourceType as resolveArnToResourceType,
-  extractIdentifierFromArn as resolveExtractIdentifierFromArn,
-} from "./destroy-resource/resolve.js";
-import {
-  getOperatorAccountId,
-  resetOperatorAccountCache,
-} from "./destroy-resource/sts-cache.js";
-import {
+  bootstrapOperatorCredentials,
   buildCcClient,
   classifyDestroyError,
   dispatchDeleteAndPoll,
   dryRunResponse,
+  extractIdentifierFromArn as resolveExtractIdentifierFromArn,
+  getOperatorAccountId,
   guardUnsupportedTypes,
+  resetOperatorAccountCache,
   resolveStep,
   runPreDestroyStep,
   toctouReverifyStep,
-} from "./destroy-resource/handler-steps.js";
+} from "./destroy-resource/index.js";
 
 // ── Public re-exports (preserve the pre-refactor import surface) ────────────
 // Existing tests import these from `../tools/destroy-resource.js`.
@@ -66,7 +66,14 @@ export async function __getOperatorAccountIdForTests(
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const DEFAULT_REGION = process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
+// Story 56-it1-03 L4-003: region must resolve per-invocation, not at
+// module load. The MCP server is a long-running worker — capturing
+// `process.env["AWS_REGION"]` at import time serves a stale region
+// until the worker restarts. CLI-shaped consumers re-read env per
+// call; we mirror that contract here.
+function resolveDefaultRegion(): string {
+  return process.env["AWS_REGION"] ?? DEFAULT_AWS_REGION;
+}
 
 // ── Zod schema ───────────────────────────────────────────────────────────────
 
@@ -91,7 +98,7 @@ export function registerDestroyResource(server: McpServer): void {
     "Destroy a managed AWS resource by ARN or name. REQUIRES confirmed: true as a safety mechanism — the AI agent must present resource details and get explicit user approval before destroying.",
     destroyResourceParams,
     async ({ resource_identifier, confirmed }) => {
-      const region = DEFAULT_REGION;
+      const region = resolveDefaultRegion();
       const bootstrap = bootstrapOperatorCredentials(region);
       if (!bootstrap.ok) return bootstrap.error;
       const { operatorCreds, taggingClient } = bootstrap.result;
