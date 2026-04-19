@@ -12,6 +12,18 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 67 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+- `.husky/pre-push`: run `pnpm lint` before `pnpm check-types` + `pnpm test` so ESLint --max-warnings 0 (which CI also enforces) catches unused-import / warning-level regressions locally before push (closes the gap that let Epic 65's CI Lint fail).
+
+### Epic 66 — iteration 1 (2026-04-19)
+
+#### Fixed
+
+- `apps/cli/src/__tests__/version.test.ts`: drop unused `loadMcpPinsOrFallback` static import that leaked from Epic 65-it1-01 (the test exercises it via dynamic `await import()` inside a `vi.resetModules()` block). Closes CI Lint regression on run 24637134402.
+
 ### Epic 65 — iteration 1 (2026-04-19)
 
 #### Fixed
