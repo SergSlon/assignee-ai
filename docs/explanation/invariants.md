@@ -651,6 +651,27 @@ shipped without it.
 
 ---
 
+## CHANGELOG self-entry on epic close
+
+**Rule.** Each epic-closing commit MUST include the epic's own
+CHANGELOG entry as part of the final commit (or as the very next
+docs commit before the next epic begins). Do NOT defer to the next
+epic.
+
+**Why.** From Epic 60 through Epic 63 the project incurred a
+permanent 1-iteration documentation lag — every epic's external
+review surfaced "CHANGELOG missing prior epic entry" as a HIGH,
+consuming one entire docs story per iteration to close. The lag
+breaks at Epic 64 by including the closing epic's own entry inline.
+
+**Where enforced.** Manual review during epic close; future
+work could add a `pnpm lint:changelog` script that asserts the
+last commit's epic-id appears in CHANGELOG Unreleased.
+
+**Source.** Epic 64-it1-01 (this commit).
+
+---
+
 ## How to add a new invariant
 
 1. Write the rule (one sentence).
