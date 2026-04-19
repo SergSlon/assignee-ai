@@ -64,13 +64,32 @@ async function runListCommand(args: string[] = []): Promise<void> {
   await listCommand.parseAsync(["node", "list", ...args]);
 }
 
+/**
+ * Reset commander option state on the shared listCommand singleton.
+ * Commander 12 retains parsed values across `parseAsync` calls, so any
+ * test that exercises a `--flag value` option must wipe the retained
+ * value on teardown or the next test will inherit it. Public API
+ * (`listCommand.opts()`) is read-only; we reach into `_optionValues`
+ * via an assertion because vitest is the only caller.
+ */
+async function resetListCommandOptions(): Promise<void> {
+  const { listCommand } = await import("./list.js");
+  const internals = listCommand as unknown as {
+    _optionValues: Record<string, unknown>;
+  };
+  for (const opt of listCommand.options) {
+    internals._optionValues[opt.attributeName()] = undefined;
+  }
+}
+
 describe("assignee list command", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
     stdoutWrite = vi
       .spyOn(process.stdout, "write")
       .mockImplementation(() => true);
+    await resetListCommandOptions();
   });
 
   it("calls renderResourceTable when resources are found", async () => {
@@ -115,7 +134,68 @@ describe("assignee list command", () => {
 
     await runListCommand(["--region", "eu-west-1"]);
 
-    expect(fetchManagedResources).toHaveBeenCalledWith("eu-west-1");
+    expect(fetchManagedResources).toHaveBeenCalledWith("eu-west-1", undefined);
+  });
+
+  // Story 56-it1-01: --resource-type filter parity with MCP
+  // list_managed_resources tool. The validated CFN-form string is
+  // forwarded to the shared core function so CLI and MCP return the
+  // same filtered result set.
+  it("--resource-type S3 normalises to AWS::S3::Bucket and forwards it", async () => {
+    vi.mocked(fetchManagedResources).mockResolvedValueOnce([
+      MOCK_RESOURCES[0]!,
+    ]);
+
+    await runListCommand(["--resource-type", "S3"]);
+
+    expect(fetchManagedResources).toHaveBeenCalledWith(
+      undefined,
+      "AWS::S3::Bucket",
+    );
+    expect(renderResourceTable).toHaveBeenCalledWith([MOCK_RESOURCES[0]]);
+  });
+
+  it("--resource-type AWS::Lambda::Function (full CFN) is forwarded as-is", async () => {
+    vi.mocked(fetchManagedResources).mockResolvedValueOnce([
+      MOCK_RESOURCES[1]!,
+    ]);
+
+    await runListCommand(["--resource-type", "AWS::Lambda::Function"]);
+
+    expect(fetchManagedResources).toHaveBeenCalledWith(
+      undefined,
+      "AWS::Lambda::Function",
+    );
+    expect(renderResourceTable).toHaveBeenCalledWith([MOCK_RESOURCES[1]]);
+  });
+
+  it("--resource-type INVALID errors with the SSO supported-types hint", async () => {
+    await expect(
+      runListCommand(["--resource-type", "NOT-A-REAL-TYPE"]),
+    ).rejects.toThrow(/Unknown --resource-type "NOT-A-REAL-TYPE"/);
+
+    // AWS must NOT have been hit when validation fails.
+    expect(fetchManagedResources).not.toHaveBeenCalled();
+
+    // The rendered error embeds the SSO-authoritative grouped list.
+    expect(renderError).toHaveBeenCalledWith(
+      expect.stringContaining('Unknown --resource-type "NOT-A-REAL-TYPE"'),
+      expect.stringContaining("AWS::S3::Bucket"),
+      expect.objectContaining({
+        // The AssigneeError.message contains the rendered hint, which
+        // starts with the registry-derived count header.
+        why: expect.stringContaining("What you can create"),
+      }),
+    );
+  });
+
+  it("no --resource-type flag leaves the filter undefined (regression)", async () => {
+    vi.mocked(fetchManagedResources).mockResolvedValueOnce(MOCK_RESOURCES);
+
+    await runListCommand();
+
+    expect(fetchManagedResources).toHaveBeenCalledWith(undefined, undefined);
+    expect(renderResourceTable).toHaveBeenCalledWith(MOCK_RESOURCES);
   });
 
   it("renders error on AccessDeniedException", async () => {
