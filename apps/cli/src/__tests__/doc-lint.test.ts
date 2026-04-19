@@ -16,8 +16,6 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — .mjs node script, no types published
 import {
   countReadmePatternRows,
   extractIntegrationArchitectureCounts,
