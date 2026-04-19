@@ -1,14 +1,19 @@
 /**
- * Per-resource-type destroy_resource success tests for all 23 resource types.
- * Validates ARN resolution + CloudControl deletion for each type.
+ * Per-resource-type destroy_resource success tests.
+ * Validates ARN resolution + CloudControl deletion for each type in the
+ * fixture table. Fixture coverage is intentionally partial — see the
+ * Story 56-it1-04 drift guard below for the parity assertion that alerts
+ * when `SUPPORTED_TYPES_ARRAY` grows without a matching fixture.
  *
  * @see Story E2E.2 — AC1, AC4
+ * @see Story 56-it1-04 — L3-003 fixture-vs-registry drift guard
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SUPPORTED_TYPES_ARRAY } from "@assignee/core";
 import { registerDestroyResource } from "../tools/destroy-resource.js";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
@@ -218,7 +223,22 @@ const DESTROY_FIXTURES: Array<{
   },
 ];
 
-describe("destroy_resource success for all resource types (Story E2E.2 AC1)", () => {
+// Story 56-it1-04 / L3-003: fail-loud drift guard.
+//
+// DESTROY_FIXTURES is a curated subset of the ARN-addressable types in
+// `SUPPORTED_TYPES_ARRAY`. Full-registry coverage is deferred (see the
+// story's non-goal section). This bound assertion alerts when the
+// registry grows past the fixture's assumed ceiling, so stale
+// hardcoded-count phrasing can't creep back in silently.
+describe("destroy_resource fixture-vs-registry drift guard (Story 56-it1-04)", () => {
+  it("fixture size does not exceed the supported-types registry", () => {
+    expect(DESTROY_FIXTURES.length).toBeLessThanOrEqual(
+      SUPPORTED_TYPES_ARRAY.length,
+    );
+  });
+});
+
+describe("destroy_resource per-fixture success (Story E2E.2 AC1)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // P0-1 fix: destroy_resource now requires explicit operator

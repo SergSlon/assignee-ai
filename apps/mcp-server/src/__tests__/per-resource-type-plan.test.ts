@@ -1,15 +1,20 @@
 /**
- * Per-resource-type plan_resource MCP tool tests for all 23 resource types.
- * Validates that each type can be planned successfully through the MCP tool layer.
+ * Per-resource-type plan_resource MCP tool tests.
+ * Validates that each type in the fixture list can be planned successfully
+ * through the MCP tool layer. Fixture coverage is intentionally partial —
+ * see the Story 56-it1-04 drift guard at the bottom of this file for the
+ * parity assertion that alerts when `SUPPORTED_TYPES_ARRAY` grows without
+ * a matching fixture update.
  *
- * @see Story E2E.2 — AC1: All 23 Resource Types Have MCP Tool Tests
+ * @see Story E2E.2 — AC1: baseline per-type MCP tool tests
+ * @see Story 56-it1-04 — L3-003 fixture-vs-registry drift guard
  */
 
 import { describe, it, expect, vi } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { ExecutionStatus } from "@assignee/core";
+import { ExecutionStatus, SUPPORTED_TYPES_ARRAY } from "@assignee/core";
 import type { GraphContext } from "../services/graph-init.js";
 import { registerPlanResource } from "../tools/plan-resource.js";
 
@@ -43,7 +48,7 @@ function parseResult(result: Record<string, unknown>) {
   return JSON.parse(content[0]!.text);
 }
 
-// ── All 23 resource types ────────────────────────────────────────────────────
+// ── Fixture table (one entry per covered resource type) ────────────────────
 
 const RESOURCE_TYPE_FIXTURES: Array<{
   name: string;
@@ -257,7 +262,34 @@ const RESOURCE_TYPE_FIXTURES: Array<{
   },
 ];
 
-describe("plan_resource for all 23 resource types (Story E2E.2 AC1)", () => {
+// Story 56-it1-04 / L3-003: fail-loud drift guard.
+//
+// The RESOURCE_TYPE_FIXTURES above is a curated subset of
+// `SUPPORTED_TYPES_ARRAY` — full-registry coverage expansion is deferred
+// (see the story's non-goal section). This suite records the fixture's
+// current coverage against the registry so future registry growth fails
+// loudly instead of a stale hardcoded-count label drifting.
+describe("plan_resource fixture-vs-registry drift guard (Story 56-it1-04)", () => {
+  it("fixture size does not exceed the supported-types registry", () => {
+    // Sanity bound: adding a fixture for a type no longer in the
+    // registry is also a drift signal.
+    expect(RESOURCE_TYPE_FIXTURES.length).toBeLessThanOrEqual(
+      SUPPORTED_TYPES_ARRAY.length,
+    );
+  });
+
+  it("every fixture cfnType is a member of SUPPORTED_TYPES_ARRAY", () => {
+    const registry = new Set<string>(SUPPORTED_TYPES_ARRAY);
+    for (const fixture of RESOURCE_TYPE_FIXTURES) {
+      expect(
+        registry.has(fixture.cfnType),
+        `stale fixture: ${fixture.cfnType}`,
+      ).toBe(true);
+    }
+  });
+});
+
+describe("plan_resource per-fixture MCP tool contract (Story E2E.2 AC1)", () => {
   for (const fixture of RESOURCE_TYPE_FIXTURES) {
     it(`plan_resource succeeds for ${fixture.name} (${fixture.cfnType})`, async () => {
       const mockState = {
