@@ -7,6 +7,18 @@
  * If detection fails, callers receive `null` and continue without a note.
  *
  * @see Story 7.8 — FR-17 Free Tier Awareness
+ * @see Story 58-it1-01 — pure/IO split for MCP shape-adapter reuse (L4-004)
+ *
+ * ## Architecture
+ *
+ * - {@link getFreeTierMaps} — pure, synchronous accessor for the raw
+ *   category → resource maps. No IO, no file reads, no date parsing.
+ *   MCP (or any other consumer) can reshape these into their own note
+ *   format without redefining the underlying data.
+ * - {@link getFreeTierNote} — pure classifier that consults the maps and
+ *   the optional account-created date to produce a core `FreeTierNote`.
+ * - {@link getFreeTierNoteWithConfig} — IO entry that reads the YAML
+ *   config for `aws_account_created` then delegates to `getFreeTierNote`.
  */
 
 import { readFileSync } from "node:fs";
@@ -41,7 +53,26 @@ export interface FreeTierNote {
   message: string;
 }
 
-// ── Resource maps ────────────────────────────────────────────────────────────
+/**
+ * Pure data shape returned by {@link getFreeTierMaps}. Consumers (including
+ * the MCP shape-adapter in `apps/mcp-server/src/services/free-tier.ts`)
+ * should treat these as read-only.
+ */
+export interface FreeTierMaps {
+  /** Resources that are always free regardless of account age. */
+  readonly alwaysFree: Readonly<Record<string, string>>;
+  /** Resources that are always free but with per-month usage limits. */
+  readonly alwaysFreeWithLimits: Readonly<Record<string, string>>;
+  /**
+   * Resources eligible for the legacy 12-month free tier (accounts created
+   * before `cutoffDate`). Post-cutoff accounts receive AWS credits instead.
+   */
+  readonly legacyEligible: Readonly<Record<string, string>>;
+  /** ISO date string for the legacy-free-tier → credits cutover. */
+  readonly cutoffDate: string;
+}
+
+// ── Resource maps (private, raw data) ────────────────────────────────────────
 
 // Re-export FREE_TIER_MESSAGE for backward-compat callers
 export { FREE_TIER_MESSAGE };
@@ -80,6 +111,36 @@ const LEGACY_ELIGIBLE_RESOURCES: Record<string, string> = {
 
 /** The date when AWS changed from 12-month free tier to credits model. */
 const FREE_TIER_CUTOFF_DATE = "2025-07-15";
+
+/**
+ * Pre-built frozen snapshot of the maps. Built once at module load so
+ * {@link getFreeTierMaps} returns a stable reference (cheap to call in hot
+ * paths such as the preflight guard loop) and so consumers cannot mutate
+ * the shared data.
+ */
+const FREE_TIER_MAPS_SNAPSHOT: FreeTierMaps = Object.freeze({
+  alwaysFree: Object.freeze({ ...ALWAYS_FREE_RESOURCES }),
+  alwaysFreeWithLimits: Object.freeze({ ...ALWAYS_FREE_WITH_LIMITS }),
+  legacyEligible: Object.freeze({ ...LEGACY_ELIGIBLE_RESOURCES }),
+  cutoffDate: FREE_TIER_CUTOFF_DATE,
+});
+
+/**
+ * Pure, synchronous accessor for the free-tier resource maps.
+ *
+ * No IO: does not read files, does not call `Date.now()`, does not touch
+ * the YAML config. Always returns the same frozen snapshot so callers
+ * can safely cache the reference.
+ *
+ * Used by:
+ * - The classifier {@link getFreeTierNote} inside this file.
+ * - The MCP shape-adapter in `apps/mcp-server/src/services/free-tier.ts`
+ *   which reshapes these maps into MCP's own `FreeTierInfo` shape without
+ *   redefining the underlying data (L4-004 dedup).
+ */
+export function getFreeTierMaps(): FreeTierMaps {
+  return FREE_TIER_MAPS_SNAPSHOT;
+}
 
 // ── Account date detection (Task 2) ──────────────────────────────────────────
 
@@ -126,7 +187,8 @@ export function _resetAccountDateCache(): void {
  * Returns a free tier eligibility note for the given resource type, or `null`
  * if the resource is not covered by any known free tier category.
  *
- * Pure function (aside from the optional `accountCreatedDate` parameter).
+ * Pure function (aside from the optional `accountCreatedDate` parameter and
+ * `Date.now()` used for the 12-month window check).
  *
  * @param resourceType - AWS CloudFormation resource type string
  * @param accountCreatedDate - ISO date string from config, or undefined
@@ -136,20 +198,23 @@ export function getFreeTierNote(
   resourceType: string,
   accountCreatedDate?: string,
 ): FreeTierNote | null {
+  const { alwaysFree, alwaysFreeWithLimits, legacyEligible, cutoffDate } =
+    getFreeTierMaps();
+
   // 1. Always-free resources
-  const alwaysFreeMsg = ALWAYS_FREE_RESOURCES[resourceType];
+  const alwaysFreeMsg = alwaysFree[resourceType];
   if (alwaysFreeMsg) {
     return { type: FreeTierType.ALWAYS_FREE, message: alwaysFreeMsg };
   }
 
   // 2. Always-free with usage limits
-  const alwaysFreeLimitMsg = ALWAYS_FREE_WITH_LIMITS[resourceType];
+  const alwaysFreeLimitMsg = alwaysFreeWithLimits[resourceType];
   if (alwaysFreeLimitMsg) {
     return { type: FreeTierType.ALWAYS_FREE, message: alwaysFreeLimitMsg };
   }
 
   // 3. Legacy 12-month eligible resources
-  const legacyMsg = LEGACY_ELIGIBLE_RESOURCES[resourceType];
+  const legacyMsg = legacyEligible[resourceType];
   if (legacyMsg) {
     if (accountCreatedDate === undefined) {
       return {
@@ -159,7 +224,7 @@ export function getFreeTierNote(
       };
     }
 
-    if (accountCreatedDate >= FREE_TIER_CUTOFF_DATE) {
+    if (accountCreatedDate >= cutoffDate) {
       return {
         type: FreeTierType.CREDITS_APPLY,
         message: "AWS credits may apply -- check your billing dashboard",
@@ -180,6 +245,27 @@ export function getFreeTierNote(
 
   // 4. Not in any map
   return null;
+}
+
+/**
+ * IO entry point: reads the YAML config (cached) for `aws_account_created`
+ * and delegates to the pure {@link getFreeTierNote} classifier.
+ *
+ * Prefer this function when calling from code paths that already accept IO
+ * side effects (preflight guard, CLI output). The IO is split out from the
+ * classifier so test suites and the MCP adapter can use the pure APIs
+ * without mocking `node:fs`.
+ *
+ * NEVER throws — `loadAccountCreatedDate` swallows errors and returns
+ * `undefined`, which `getFreeTierNote` handles as "eligibility unknown".
+ *
+ * @param resourceType - AWS CloudFormation resource type string
+ * @returns FreeTierNote or null
+ */
+export function getFreeTierNoteWithConfig(
+  resourceType: string,
+): FreeTierNote | null {
+  return getFreeTierNote(resourceType, loadAccountCreatedDate());
 }
 
 /**
@@ -206,7 +292,7 @@ function isWithin12Months(dateStr: string): boolean {
  * Used by the list command as a fallback when the provision log has no cost entry.
  */
 export function getFreeTierCostLabel(resourceType: string): string | null {
-  if (ALWAYS_FREE_RESOURCES[resourceType]) {
+  if (getFreeTierMaps().alwaysFree[resourceType]) {
     return CostEstimateLabel.FREE;
   }
   return null;

@@ -14,6 +14,8 @@ vi.mock("node:fs", () => ({
 import { readFileSync } from "node:fs";
 import {
   getFreeTierNote,
+  getFreeTierNoteWithConfig,
+  getFreeTierMaps,
   loadAccountCreatedDate,
   _resetAccountDateCache,
 } from "./free-tier.js";
@@ -263,5 +265,122 @@ describe("loadAccountCreatedDate", () => {
 
     expect(() => loadAccountCreatedDate()).not.toThrow();
     expect(loadAccountCreatedDate()).toBeUndefined();
+  });
+});
+
+// ── getFreeTierMaps tests (pure / no IO) ─────────────────────────────────────
+
+describe("getFreeTierMaps", () => {
+  it("returns the three category maps plus the cutoff date", () => {
+    const maps = getFreeTierMaps();
+
+    expect(maps).toHaveProperty("alwaysFree");
+    expect(maps).toHaveProperty("alwaysFreeWithLimits");
+    expect(maps).toHaveProperty("legacyEligible");
+    expect(maps).toHaveProperty("cutoffDate");
+    expect(maps.cutoffDate).toBe("2025-07-15");
+  });
+
+  it("is pure: does not call readFileSync", () => {
+    // Sanity check: calling getFreeTierMaps must not touch the fs mock.
+    vi.clearAllMocks();
+    getFreeTierMaps();
+    getFreeTierMaps();
+    getFreeTierMaps();
+    expect(readFileSync).not.toHaveBeenCalled();
+  });
+
+  it("returns the same frozen snapshot on repeated calls", () => {
+    const first = getFreeTierMaps();
+    const second = getFreeTierMaps();
+    // Reference equality: the snapshot is pre-built once at module load.
+    expect(first).toBe(second);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.alwaysFree)).toBe(true);
+    expect(Object.isFrozen(first.alwaysFreeWithLimits)).toBe(true);
+    expect(Object.isFrozen(first.legacyEligible)).toBe(true);
+  });
+
+  it("contains every always-free resource type exposed by getFreeTierNote", () => {
+    const { alwaysFree, alwaysFreeWithLimits } = getFreeTierMaps();
+    // Spot-check a representative from each always-free bucket.
+    expect(alwaysFree["AWS::IAM::Role"]).toBeTruthy();
+    expect(alwaysFree["AWS::EC2::VPC"]).toBeTruthy();
+    expect(alwaysFreeWithLimits["AWS::DynamoDB::Table"]).toBeTruthy();
+    expect(alwaysFreeWithLimits["AWS::Lambda::Function"]).toBeTruthy();
+  });
+
+  it("contains the two legacy-eligible resource types", () => {
+    const { legacyEligible } = getFreeTierMaps();
+    expect(legacyEligible["AWS::EC2::Instance"]).toBeTruthy();
+    expect(legacyEligible["AWS::RDS::DBInstance"]).toBeTruthy();
+  });
+});
+
+// ── getFreeTierNoteWithConfig tests (IO wrapper) ─────────────────────────────
+
+describe("getFreeTierNoteWithConfig", () => {
+  beforeEach(() => {
+    _resetAccountDateCache();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    _resetAccountDateCache();
+  });
+
+  it("delegates to getFreeTierNote using the date loaded from config", () => {
+    // Legacy account within 12 months and before the cutoff → legacy_eligible.
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const accountDate = sixMonthsAgo.toISOString().slice(0, 10);
+    const safeAccountDate =
+      accountDate < "2025-07-15" ? accountDate : "2025-06-01";
+
+    vi.mocked(readFileSync).mockReturnValue(
+      `aws_account_created: '${safeAccountDate}'\n`,
+    );
+
+    const note = getFreeTierNoteWithConfig("AWS::EC2::Instance");
+    expect(note).toEqual({
+      type: "legacy_eligible",
+      message: expect.stringContaining("750 hrs/month"),
+    });
+  });
+
+  it("treats missing config as 'eligibility unknown' for legacy resources", () => {
+    vi.mocked(readFileSync).mockImplementation(() => {
+      const err = new Error("ENOENT") as NodeJS.ErrnoException;
+      err.code = "ENOENT";
+      throw err;
+    });
+
+    const note = getFreeTierNoteWithConfig("AWS::EC2::Instance");
+    expect(note).toEqual({
+      type: "credits_apply",
+      message:
+        "Free tier eligibility unknown -- check your AWS billing dashboard",
+    });
+  });
+
+  it("returns always_free for IAM::Role regardless of config presence", () => {
+    vi.mocked(readFileSync).mockImplementation(() => {
+      throw new Error("fs is broken");
+    });
+
+    const note = getFreeTierNoteWithConfig("AWS::IAM::Role");
+    expect(note).toEqual({
+      type: "always_free",
+      message: "Always free tier",
+    });
+  });
+
+  it("returns null for resource types outside every category", () => {
+    vi.mocked(readFileSync).mockReturnValue(
+      "aws_account_created: '2024-01-01'\n",
+    );
+
+    expect(getFreeTierNoteWithConfig("AWS::S3::Bucket")).toBeNull();
+    expect(getFreeTierNoteWithConfig("AWS::Unknown::Resource")).toBeNull();
   });
 });

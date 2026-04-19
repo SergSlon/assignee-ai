@@ -65,9 +65,12 @@ export {
   loadAccountCreatedDate,
   _resetAccountDateCache,
   getFreeTierNote,
+  getFreeTierNoteWithConfig,
+  getFreeTierMaps,
   getFreeTierCostLabel,
   type FreeTierTypeValue,
   type FreeTierNote,
+  type FreeTierMaps,
 } from "../utils/free-tier.js";
 export type {
   DiscoveryOption,
