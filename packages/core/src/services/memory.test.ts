@@ -603,11 +603,16 @@ describe("MemoryService — rotation TOCTOU (REG-N5)", () => {
     // Slow the rotation's read step so an interleaving append window exists
     // — but with the fix, the lock is already held when the slow read fires,
     // so the append's acquireLock will fail-fast and skip rather than clobber.
+    // Yield via microtasks (8 cycles) instead of a 25 ms wall-clock wait —
+    // each `await Promise.resolve()` lets the queued append microtask run
+    // and attempt its own lock acquisition before rotation proceeds.
     const realRead = MemoryService.prototype.readProvisions;
     const readSpy = vi
       .spyOn(service, "readProvisions")
       .mockImplementation(async function (this: MemoryService) {
-        await new Promise((r) => setTimeout(r, 25));
+        for (let i = 0; i < 8; i++) {
+          await Promise.resolve();
+        }
         return realRead.call(this);
       });
 
