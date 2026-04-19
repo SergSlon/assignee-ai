@@ -7,4 +7,4 @@ export {
   type McpServerConfig,
   getMcpServerConfigs,
   getOptionalMcpServerConfigs,
-} from "@assignee/core/config/mcp-servers.js";
+} from "@assignee/core";

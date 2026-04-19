@@ -20,41 +20,9 @@
       "import": "./dist/llm/index.js",
       "types": "./dist/llm/index.d.ts"
     },
-    "./graph/graph-state.js": {
-      "import": "./dist/graph/graph-state.js",
-      "types": "./dist/graph/graph-state.d.ts"
-    },
     "./graph": {
       "import": "./dist/graph/index.js",
       "types": "./dist/graph/index.d.ts"
-    },
-    "./config/mcp-servers.js": {
-      "import": "./dist/config/mcp-servers.js",
-      "types": "./dist/config/mcp-servers.d.ts"
-    },
-    "./services/mcp-client.js": {
-      "import": "./dist/services/mcp-client.js",
-      "types": "./dist/services/mcp-client.d.ts"
-    },
-    "./constants/placeholder-accounts.js": {
-      "import": "./dist/constants/placeholder-accounts.js",
-      "types": "./dist/constants/placeholder-accounts.d.ts"
-    },
-    "./constants/cfn-keys.js": {
-      "import": "./dist/constants/cfn-keys.js",
-      "types": "./dist/constants/cfn-keys.d.ts"
-    },
-    "./constants/instance-family-registry.js": {
-      "import": "./dist/constants/instance-family-registry.js",
-      "types": "./dist/constants/instance-family-registry.d.ts"
-    },
-    "./utils/wizard-helpers.js": {
-      "import": "./dist/utils/wizard-helpers.js",
-      "types": "./dist/utils/wizard-helpers.d.ts"
-    },
-    "./utils/field-resolver.js": {
-      "import": "./dist/utils/field-resolver.js",
-      "types": "./dist/utils/field-resolver.d.ts"
     },
     "./test-fixtures/mcp-mock-responses.js": {
       "import": "./dist/test-fixtures/mcp-mock-responses.js",

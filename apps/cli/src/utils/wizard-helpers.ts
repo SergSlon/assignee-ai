@@ -18,4 +18,4 @@ export {
   fetchSuggestionPrice,
   injectBPHints,
   promptWithHelp,
-} from "@assignee/core/utils/wizard-helpers.js";
+} from "@assignee/core";
