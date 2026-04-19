@@ -12,6 +12,34 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 62 — iteration 1 (2026-04-19)
+
+#### Docs
+
+- **CHANGELOG Unreleased gained Epic 60-it1 + Epic 61-it1
+  subsections citing `0445450`, `014ea96`, `6af6b2b`, and
+  `c45706b`.** Closes the changelog-lag finding for Epic 60 and
+  Epic 61 so future readers can trace the free-tier extraction,
+  exports-collapse continuation, and version/signal observability
+  fixes without git archaeology. (commit `f1bc3ab`)
+- **`packages/core/src/config/help-hints.ts` and
+  `apps/cli/src/services/clarifier.ts` gained reciprocal `@see`
+  JSDoc cross-refs between `renderClarifierExampleList` /
+  `BEGINNER_EXAMPLE_TYPES` and the clarifier consumer.** Renames on
+  either side now surface the matching call-site so the curated
+  beginner-example list stays discoverable. (commit `970622d`)
+
+#### Tests
+
+- **New token-based drift guard in
+  `packages/core/src/config/__tests__/help-hints.test.ts` derives
+  the canonical service token from each curated
+  `BEGINNER_EXAMPLE_TYPES` label and asserts at least one
+  `SUPPORTED_TYPES_ARRAY` entry contains it.** Map-free
+  complement to the existing curator-maintained `labelToCfn`
+  guard — catches registry renames even when the test's hand-
+  written map is stale. (commit `970622d`)
+
 ### Epic 61 — iteration 1 (2026-04-19)
 
 #### Fixed
