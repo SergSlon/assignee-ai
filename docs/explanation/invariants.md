@@ -577,6 +577,80 @@ shims removed) and 56-it1-04 (narrative-count drift linter).
 
 ---
 
+## No circular imports across `barrels/config` sub-barrels
+
+**Rule.** `packages/core/src/config/barrels/config/constants.ts`,
+`packages/core/src/config/barrels/config/resources.ts`, and
+`packages/core/src/config/barrels/config/help-hints.ts` must not
+import from each other. Each sub-barrel owns a disjoint slice of the
+`@assignee/core/config` public surface; cross-imports collapse the
+split back into a single aggregate barrel and re-introduce the 361-LOC
+god-file problem the Epic 56-it2 split solved.
+
+**Why.** Split barrels lose their purpose if they cross-reference —
+runtime module-resolution order becomes brittle, dead-code elimination
+breaks, and the original motivation (three focused ≤ 200-LOC files
+instead of one 361-LOC aggregate) silently regresses. A grep-level
+guard catches the drift in CI before it lands, because a runtime
+cycle wouldn't throw until a downstream consumer exercises the exact
+import order that triggers the loop.
+
+**Where it's enforced.**
+
+- `apps/cli/scripts/check-config-barrel-circular.mjs` — grep-based
+  circ-check that fails if any of the three sub-barrel files imports
+  from either of the other two.
+- Root `package.json` — `pnpm lint:barrels` wires the script into the
+  pre-push hook alongside `pnpm lint:shims` and `pnpm doc-lint`.
+
+**Source memory.** Story 58-it1-05 (commit `aefd39a`). Related:
+Story 56-it2-02 (original `barrels/config` split) — canonical invariant
+is the sub-barrel disjointness this rule enforces.
+
+---
+
+## Path-alias resolution requires tsc-alias post-build
+
+**Rule.** `packages/core` uses `@/*` TypeScript path aliases in source
+(`tsconfig.json` `paths: {"@/*": ["src/*"]}`). The emitted JS is
+consumed at runtime via `tsx` / Node ESM loader, so the build script
+MUST run `tsc-alias -p tsconfig.build.json` AFTER `tsc` to rewrite
+`@/config` → `../config` (or equivalent relative) in the emitted
+`.js` and `.d.ts` files. Without `tsc-alias`, runtime imports fail
+with `ERR_MODULE_NOT_FOUND '@/config'` the moment a downstream consumer
+(CLI, MCP server, or a direct Node script) loads the compiled output.
+
+**Why.** `tsc` itself does NOT rewrite path aliases in emitted JS — it
+only resolves them at compile time for type-checking. The Node ESM
+loader has no knowledge of `tsconfig.json paths`, so an unrewritten
+`import {x} from "@/config"` throws at module-load. This is a
+surprising default for contributors coming from Vite or Webpack
+(which DO rewrite aliases by default); the fix is a post-build
+`tsc-alias` invocation that's load-bearing and must never be skipped.
+`vitest` uses the `vite-tsconfig-paths` plugin (wired in
+`packages/core/vitest.config.ts`) for test-time resolution, so unit
+tests pass even when `tsc-alias` is broken — only the built artifact
+exercises the aliases at runtime.
+
+**Where it's enforced.**
+
+- `packages/core/package.json` — build script
+  `tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json`.
+  Both halves are required; the `&&` short-circuits correctly only if
+  both steps are present.
+- `packages/core/vitest.config.ts` — `vite-tsconfig-paths` plugin
+  resolves aliases at test time (separate concern from runtime build
+  output, but kept here so contributors see both paths together).
+- `packages/best-practices/package.json` + `vitest.config.ts` — same
+  pattern, because `best-practices` also uses `@/*` aliases.
+
+**Source memory.** Story 59-it1-01 (commit `eac3529`). Related:
+Epic 50 Wave 5 (`packages/core` lift) first introduced the alias
+surface; `tsc-alias` was added in the same commit so runtime has never
+shipped without it.
+
+---
+
 ## How to add a new invariant
 
 1. Write the rule (one sentence).
