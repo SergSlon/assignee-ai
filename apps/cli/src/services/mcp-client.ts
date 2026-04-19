@@ -7,4 +7,4 @@ export {
   getMcpTools,
   getBillingMcpToolsAsync,
   closeMcpClient,
-} from "@assignee/core/services/mcp-client.js";
+} from "@assignee/core";

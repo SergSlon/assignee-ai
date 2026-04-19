@@ -11,4 +11,4 @@ export {
   type AgentState,
   type AppliedFix,
   type SecurityFinding,
-} from "@assignee/core/graph/graph-state.js";
+} from "@assignee/core/graph";
