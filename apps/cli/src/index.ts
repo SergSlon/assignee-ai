@@ -180,6 +180,16 @@ function installSignalHandler(signal: ShutdownSignal, code: number) {
   process.on(signal, async () => {
     if (shuttingDown) {
       // Second signal during teardown — abandon cleanup.
+      //
+      // Epic 61-it1-01 (L3-003): emit a stderr marker before the hard
+      // exit so operators see why their repeated Ctrl-C bypassed the
+      // normal "Cancelled." handshake. Without this the process simply
+      // vanishes, leaving users to wonder whether the second signal
+      // was observed at all. `console.error` is sync on the stderr
+      // stream so the message reliably lands before process.exit.
+      console.error(
+        "assignee: received repeated interrupt during shutdown; forcing exit.",
+      );
       process.exit(code);
     }
     shuttingDown = true;
