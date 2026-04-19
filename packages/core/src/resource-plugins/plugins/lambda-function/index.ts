@@ -1,4 +1,4 @@
-import { RESOURCE_TYPES } from "../../../config/resource-types.js";
+import { RESOURCE_TYPES } from "@/config/resource-types.js";
 import type { ResourcePlugin } from "../../types.js";
 import { commonFields, advancedFields } from "./fields.js";
 import { defaults, companionResources, configHints } from "./config.js";

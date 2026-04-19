@@ -3,7 +3,7 @@ import {
   ResourceDefault,
   AwsDefault,
   SizeLabel,
-} from "../../../config/cfn-keys.js";
+} from "@/config/cfn-keys.js";
 import type { ResourcePlugin } from "../../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../../shared-fields.js";
 import { FieldLabel } from "../../field-labels.js";

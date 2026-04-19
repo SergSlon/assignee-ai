@@ -1,5 +1,5 @@
-import { RESOURCE_TYPES } from "../../../config/resource-types.js";
-import { CfnKey, AwsDefault } from "../../../config/cfn-keys.js";
+import { RESOURCE_TYPES } from "@/config/resource-types.js";
+import { CfnKey, AwsDefault } from "@/config/cfn-keys.js";
 import type { ResourcePlugin, CfnOutput } from "../../types.js";
 import { runtimeOptions, buildRuntimeHint } from "./runtimes.js";
 

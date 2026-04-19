@@ -6,8 +6,8 @@
  *   "warn"              — log only.
  *   "skip"              — no evaluation.
  */
-import type { AgentState } from "../../../graph-state.js";
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
+import type { AgentState } from "@/graph/graph-state.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 
 export function evaluateBpFindings(state: AgentState): { blocked: boolean } {
   const bpFindings = state.bpFindings ?? [];

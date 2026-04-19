@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { RESOURCE_TYPES } from "../../../index.js";
+import { RESOURCE_TYPES } from "@/index.js";
 import { securityPosture } from "./security-advisor.js";
 
 describe("securityPosture", () => {

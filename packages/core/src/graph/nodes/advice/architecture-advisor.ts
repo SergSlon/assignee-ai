@@ -5,9 +5,9 @@
  * @see Story 40.6 — Architecture Advisor for Compound Patterns
  */
 
-import { RESOURCE_TYPES } from "../../../index.js";
+import { RESOURCE_TYPES } from "@/index.js";
 import { AdviceIcon } from "./constants.js";
-import type { ArchitecturePattern, ResourceSpec } from "../../../index.js";
+import type { ArchitecturePattern, ResourceSpec } from "@/index.js";
 
 /** Companion check: resource type that should be present in a pattern. */
 interface CompanionCheck {

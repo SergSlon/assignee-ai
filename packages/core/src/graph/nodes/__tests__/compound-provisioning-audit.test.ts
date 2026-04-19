@@ -21,7 +21,7 @@ import {
   ProvisioningErrorKind,
   type ArchitecturePattern,
   type ProvisioningPort,
-} from "../../../index.js";
+} from "@/index.js";
 import { compoundDispatcherNode } from "../compound-dispatcher.js";
 import { resourceProvisionerNode } from "../resource-provisioner.js";
 import type { AgentState } from "../../graph-state.js";
@@ -696,7 +696,7 @@ describe("compound queue iteration (result-formatter loop)", () => {
   });
 
   it("renders compound summary when last resource (index 2) completes", async () => {
-    const { renderCompoundSuccess } = await import("../../../utils/display.js");
+    const { renderCompoundSuccess } = await import("@/utils/display.js");
     const state = makeState({
       executionStatus: ExecutionStatus.SUCCESS,
       resourcePattern: iterPattern,
@@ -885,8 +885,7 @@ describe("compound flow error handling", () => {
   });
 
   it("result-formatter shows cleanup guidance with previously provisioned resources on failure", async () => {
-    const { renderCompoundPartialFailure } =
-      await import("../../../utils/display.js");
+    const { renderCompoundPartialFailure } = await import("@/utils/display.js");
 
     const state = makeState({
       executionStatus: ExecutionStatus.FAILED,
@@ -931,8 +930,7 @@ describe("compound flow error handling", () => {
   });
 
   it("cleanup guidance lists resources in forward order (renderer reverses for destroy)", async () => {
-    const { renderCompoundPartialFailure } =
-      await import("../../../utils/display.js");
+    const { renderCompoundPartialFailure } = await import("@/utils/display.js");
 
     const state = makeState({
       executionStatus: ExecutionStatus.FAILED,
@@ -982,7 +980,7 @@ describe("compound flow error handling", () => {
   });
 
   it("partial failure with no completed resources shows standard error (no cleanup guidance)", async () => {
-    const { renderError } = await import("../../../utils/display.js");
+    const { renderError } = await import("@/utils/display.js");
 
     const state = makeState({
       executionStatus: ExecutionStatus.FAILED,

@@ -26,9 +26,9 @@ import {
   isAccessDeniedError,
   isAuthFailureError,
   isThrottlingError,
-} from "../../../../index.js";
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
-import { EnvVar } from "../../../../constants/env-vars.js";
+} from "@/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import { EnvVar } from "@/constants/env-vars.js";
 import type { GuardContext, GuardResult, PreflightGuard } from "../types.js";
 import { failResult, passResult, skipResult } from "../types.js";
 
@@ -41,7 +41,7 @@ export async function verifyManagedPolicyArns(
   try {
     const { IAMClient, GetPolicyCommand } = await import("@aws-sdk/client-iam");
     const { operatorCredentials } =
-      await import("../../../../config/operator-credentials.js");
+      await import("@/config/operator-credentials.js");
     const creds = operatorCredentials();
     const iam = new IAMClient({
       region: "us-east-1",

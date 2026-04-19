@@ -24,8 +24,8 @@ import {
   ExecutionStatus,
   PROVISIONING_ERROR_CODES,
   ProvisioningError,
-} from "../../../index.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+} from "@/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import type { AgentState } from "../../graph-state.js";
 
 /**

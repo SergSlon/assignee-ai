@@ -13,9 +13,9 @@ import * as clack from "@clack/prompts";
 import {
   evaluateWizardRecommendations,
   displayRecommendations,
-} from "../../../utils/wizard-recommendations.js";
-import { validateCoherence } from "../../../utils/coherence-validator.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+} from "@/utils/wizard-recommendations.js";
+import { validateCoherence } from "@/utils/coherence-validator.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 
 export function runPostWizardHooks(params: {
   elicitedOptions: Record<string, unknown>;

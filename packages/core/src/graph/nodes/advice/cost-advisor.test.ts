@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { RESOURCE_TYPES } from "../../../index.js";
+import { RESOURCE_TYPES } from "@/index.js";
 import { costAlternatives } from "./cost-advisor/orchestrator.js";
 
 describe("costAlternatives", () => {
@@ -375,8 +375,7 @@ describe("costAlternatives", () => {
 
   describe("enriched advisory prices", () => {
     it('renders "(live)" suffix when an enriched price map is supplied', async () => {
-      const { AdvisoryPriceId } =
-        await import("../../../pricing/advisory-prices.js");
+      const { AdvisoryPriceId } = await import("@/pricing/advisory-prices.js");
       // Synthesize an enriched map with a live NAT Gateway price.
       const enriched = new Map([
         [

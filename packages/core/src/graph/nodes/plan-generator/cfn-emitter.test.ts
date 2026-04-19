@@ -4,7 +4,7 @@
  * resource type).
  */
 import { describe, it, expect } from "vitest";
-import { CfnKey, RESOURCE_TYPES } from "../../../index.js";
+import { CfnKey, RESOURCE_TYPES } from "@/index.js";
 import {
   applyToCfnTransforms,
   assembleS3Composites,

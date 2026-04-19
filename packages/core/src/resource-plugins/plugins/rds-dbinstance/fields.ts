@@ -5,7 +5,7 @@ import {
   RdsEngineDisplay,
   RdsEngineId,
   SizeLabel,
-} from "../../../config/cfn-keys.js";
+} from "@/config/cfn-keys.js";
 import type { ResourcePlugin } from "../../types.js";
 import { engineVersionFields } from "./engine-versions.js";
 import { credentialFields } from "./credentials.js";

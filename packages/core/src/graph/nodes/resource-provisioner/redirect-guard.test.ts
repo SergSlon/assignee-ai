@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ExecutionStatus, PROVISIONING_ERROR_CODES } from "../../../index.js";
+import { ExecutionStatus, PROVISIONING_ERROR_CODES } from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
 import {
   checkUnsupportedRedirect,

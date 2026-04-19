@@ -13,7 +13,7 @@
 import {
   PLACEHOLDER_AWS_ACCOUNT_IDS,
   ARN_ACCOUNT_REGEX,
-} from "../../../../constants/placeholder-accounts.js";
+} from "@/constants/placeholder-accounts.js";
 import type { GuardContext, GuardResult, PreflightGuard } from "../types.js";
 import { failResult, passResult } from "../types.js";
 

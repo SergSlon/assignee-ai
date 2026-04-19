@@ -21,21 +21,14 @@
  * whose answers were cleared by the edit (via BFS cleanup) are re-asked.
  */
 
-import type {
-  ResourceField,
-  ResolvedFieldConfig,
-  LlmPort,
-} from "../../../index.js";
+import type { ResourceField, ResolvedFieldConfig, LlmPort } from "@/index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import {
   BACK_SENTINEL,
   REVIEW_SENTINEL,
   runReviewAnswers,
-} from "../../../utils/display.js";
-import {
-  fieldFetchKey,
-  promptWithHelp,
-} from "../../../utils/wizard-helpers.js";
+} from "@/utils/display.js";
+import { fieldFetchKey, promptWithHelp } from "@/utils/wizard-helpers.js";
 import { cleanDependents } from "./back-handler.js";
 import { countVisible } from "./field-gates.js";
 

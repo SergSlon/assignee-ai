@@ -2,7 +2,7 @@
  * DynamoDB::Table cost hints — BillingMode tradeoff (provisioned vs on-demand).
  */
 import { AdviceIcon } from "../constants.js";
-import { DYNAMODB_PROVISIONED_SAVINGS_PCT } from "../../../../pricing/advisory-prices.js";
+import { DYNAMODB_PROVISIONED_SAVINGS_PCT } from "@/pricing/advisory-prices.js";
 
 export function dynamodbCostHints(
   ds: Record<string, unknown>,

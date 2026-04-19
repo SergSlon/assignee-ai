@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from "vitest";
 import { handleBackSentinel, cleanDependents } from "./back-handler.js";
-import type { ResourceField } from "../../../index.js";
+import type { ResourceField } from "@/index.js";
 
 function makeField(
   name: string,

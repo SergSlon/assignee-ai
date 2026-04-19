@@ -10,15 +10,15 @@
 
 import chalk from "chalk";
 import type { StructuredTool } from "@langchain/core/tools";
-import { RESOURCE_TYPES } from "../../../../index.js";
-import type { AgentState } from "../../../graph-state.js";
-import { renderApplySuccess } from "../../../../utils/display.js";
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
-import { checkSecurityPosture } from "../../../../utils/security-posture.js";
+import { RESOURCE_TYPES } from "@/index.js";
+import type { AgentState } from "@/graph/graph-state.js";
+import { renderApplySuccess } from "@/utils/display.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import { checkSecurityPosture } from "@/utils/security-posture.js";
 import {
   writeProvisionRecord,
   clearFailureHistory,
-} from "../../../../utils/memory-recorder.js";
+} from "@/utils/memory-recorder.js";
 import { resolveDisplayArn } from "../arn-display.js";
 import { runStaticSiteUploadFor } from "./static-site-upload.js";
 

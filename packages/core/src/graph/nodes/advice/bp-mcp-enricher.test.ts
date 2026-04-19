@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { StructuredTool } from "@langchain/core/tools";
 import type { BPFinding } from "@assignee/best-practices";
 import { enrichBpWithMcp } from "./bp-mcp-enricher/orchestrator.js";
-import { ToolName } from "../../../constants/tools.js";
+import { ToolName } from "@/constants/tools.js";
 
 /**
  * Build a minimal StructuredTool stub with a mocked `invoke` method.

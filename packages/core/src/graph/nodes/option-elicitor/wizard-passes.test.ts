@@ -15,16 +15,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ResourceField, ResolvedFieldConfig } from "../../../index.js";
-import { FieldPolicy } from "../../../constants/field-policy.js";
+import type { ResourceField, ResolvedFieldConfig } from "@/index.js";
+import { FieldPolicy } from "@/constants/field-policy.js";
 import type { AgentState } from "../../graph-state.js";
 
 // Mock the advanced-gate confirm (I/O) and runPromptLoop (side-effect
 // recursion that we don't re-test here — prompt-loop has its own tests).
 const mockRenderAdvancedConfirm = vi.fn();
 vi.mock("../../../utils/display.js", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../../../utils/display.js")>();
+  const actual = await importOriginal<typeof import("@/utils/display.js")>();
   return {
     ...actual,
     renderAdvancedConfirm: (...args: unknown[]) =>

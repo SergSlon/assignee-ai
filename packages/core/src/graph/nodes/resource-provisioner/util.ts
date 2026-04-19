@@ -5,7 +5,7 @@
  * no LangGraph state. Safe to import from any submodule without cycles.
  */
 
-import { SUPPORTED_TYPES_ARRAY, type ResourceType } from "../../../index.js";
+import { SUPPORTED_TYPES_ARRAY, type ResourceType } from "@/index.js";
 
 export function isResourceType(s: string): s is ResourceType {
   return (SUPPORTED_TYPES_ARRAY as readonly string[]).includes(s);

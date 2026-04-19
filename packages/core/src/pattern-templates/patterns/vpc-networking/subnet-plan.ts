@@ -5,8 +5,8 @@
  * ResourceSpec entries, and defaultOptions fragments for VPC + subnets.
  */
 
-import { RESOURCE_TYPES } from "../../../config/resource-types.js";
-import { markerRef, markerAz } from "../../../config/marker-tokens.js";
+import { RESOURCE_TYPES } from "@/config/resource-types.js";
+import { markerRef, markerAz } from "@/config/marker-tokens.js";
 import type { ResourceSpec } from "../../types.js";
 
 /** Logical resource IDs used in VPC patterns — single source of truth. */

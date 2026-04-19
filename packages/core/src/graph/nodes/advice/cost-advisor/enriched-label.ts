@@ -7,11 +7,11 @@
  * formatter the enricher would use. This keeps every code path reading
  * a single shape without needing to know how enrichment works.
  */
-import { formatLabelWithSource } from "../../../../index.js";
+import { formatLabelWithSource } from "@/index.js";
 import {
   type AdvisoryPriceId,
   type EnrichedPriceMap,
-} from "../../../../pricing/advisory-prices.js";
+} from "@/pricing/advisory-prices.js";
 
 export function enrichedLabel(
   enriched: EnrichedPriceMap | undefined,

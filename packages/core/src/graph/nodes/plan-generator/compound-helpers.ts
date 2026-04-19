@@ -14,11 +14,11 @@ import {
   ResourceDefault,
   parseMarker,
   getPartitionFromRegion,
-} from "../../../index.js";
-import { AWS_REGION } from "../../../config/constants/aws.js";
-import { defaultMemoryService } from "../../../services/memory.js";
-import { tryAssigneeCredentials } from "../../../config/aws-credentials.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+} from "@/index.js";
+import { AWS_REGION } from "@/config/constants/aws.js";
+import { defaultMemoryService } from "@/services/memory.js";
+import { tryAssigneeCredentials } from "@/config/aws-credentials.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import type { AgentState } from "../../graph-state.js";
 
 /**

@@ -15,14 +15,14 @@
  */
 
 import * as clack from "@clack/prompts";
-import { CfnKey, UserCancelledError } from "../../../index.js";
-import type { LlmPort, ResourceField } from "../../../index.js";
+import { CfnKey, UserCancelledError } from "@/index.js";
+import type { LlmPort, ResourceField } from "@/index.js";
 import type { StructuredTool } from "@langchain/core/tools";
-import { UserMessage } from "../../../config/constants/ui.js";
-import { WIZARD_NONE_SENTINEL } from "../../../config/constants/enums.js";
+import { UserMessage } from "@/config/constants/ui.js";
+import { WIZARD_NONE_SENTINEL } from "@/config/constants/enums.js";
 import { searchAmis } from "../../aws-resource-discovery/index.js";
 import { fetchSuggestionPrice } from "../pricing-hints.js";
-import { stripPromptBoundaryTags } from "../../../llm/prompt-sanitize.js";
+import { stripPromptBoundaryTags } from "@/llm/prompt-sanitize.js";
 
 export interface OtherHandlerParams {
   field: ResourceField;

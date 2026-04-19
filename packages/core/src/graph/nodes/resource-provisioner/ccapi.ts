@@ -16,14 +16,14 @@
  * SRP: this module changes when CCAPI create-call mechanics change.
  */
 
-import { RESOURCE_TYPES, type ResourceType } from "../../../index.js";
+import { RESOURCE_TYPES, type ResourceType } from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import type {
   ProvisioningPort,
   ProvisioningPortError,
   CreateResourceResult,
-} from "../../../ports/provisioning-port.js";
+} from "@/ports/provisioning-port.js";
 
 /** CloudFront S3 origin DNS retry budget (ms). */
 const CLOUDFRONT_S3_DNS_RETRY_DELAYS_MS = [5000, 10000, 20000] as const;

@@ -1,4 +1,4 @@
-import { CfnKey, CloudWatchStatistic } from "../../../config/cfn-keys.js";
+import { CfnKey, CloudWatchStatistic } from "@/config/cfn-keys.js";
 import type { ResourcePlugin } from "../../types.js";
 
 export const defaults: ResourcePlugin["defaults"] = {

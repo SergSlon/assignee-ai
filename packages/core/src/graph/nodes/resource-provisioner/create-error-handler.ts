@@ -18,8 +18,8 @@
  * SRP: this module changes only when the failure-partial contract changes.
  */
 
-import { ExecutionStatus, ProvisioningError } from "../../../index.js";
-import type { ProvisioningPortError } from "../../../ports/provisioning-port.js";
+import { ExecutionStatus, ProvisioningError } from "@/index.js";
+import type { ProvisioningPortError } from "@/ports/provisioning-port.js";
 import type { AgentState } from "../../graph-state.js";
 import { cleanupAllocatedResources } from "./cleanup.js";
 import { classifyCreateError } from "./error-classifier.js";

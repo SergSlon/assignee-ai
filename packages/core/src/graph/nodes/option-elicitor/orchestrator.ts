@@ -18,25 +18,22 @@
  * Story 56-it2-03b: wizard passes extracted to wizard-passes.ts.
  */
 
-import { ExecutionStatus } from "../../../schema/graph-state.js";
-import { defaultPluginRegistry } from "../../../resource-plugins/index.js";
-import type { LlmPort } from "../../../ports/llm-port.js";
-import type { ResolvedFieldConfig } from "../../../config/resource-policy.js";
-import type { ResourceField } from "../../../resource-plugins/types.js";
-import type { IntentDefaultOverride } from "../../../utils/intent-defaults/types.js";
+import { ExecutionStatus } from "@/schema/graph-state.js";
+import { defaultPluginRegistry } from "@/resource-plugins/index.js";
+import type { LlmPort } from "@/ports/llm-port.js";
+import type { ResolvedFieldConfig } from "@/config/resource-policy.js";
+import type { ResourceField } from "@/resource-plugins/types.js";
+import type { IntentDefaultOverride } from "@/utils/intent-defaults/types.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import * as clack from "@clack/prompts";
-import { startSpinner, stopSpinner } from "../../../utils/display.js";
-import { UserCancelledError } from "../../../errors.js";
-import { UserMessage } from "../../../config/constants/ui.js";
-import { FieldSource } from "../../../constants/field-policy.js";
-import { loadUserConfig } from "../../../config/user-config-loader.js";
-import { loadProjectConfig } from "../../../config/project-config-loader.js";
-import {
-  fetchOrgPolicy,
-  readAuthToken,
-} from "../../../config/org-policy-cache.js";
-import { getIntentDefaults } from "../../../utils/intent-defaults/index.js";
+import { startSpinner, stopSpinner } from "@/utils/display.js";
+import { UserCancelledError } from "@/errors.js";
+import { UserMessage } from "@/config/constants/ui.js";
+import { FieldSource } from "@/constants/field-policy.js";
+import { loadUserConfig } from "@/config/user-config-loader.js";
+import { loadProjectConfig } from "@/config/project-config-loader.js";
+import { fetchOrgPolicy, readAuthToken } from "@/config/org-policy-cache.js";
+import { getIntentDefaults } from "@/utils/intent-defaults/index.js";
 import type { AgentState } from "../../graph-state.js";
 import { buildExpertModeOptions } from "./expert-path.js";
 import { runParallelEnrichment } from "./parallel-enrichment.js";

@@ -3,12 +3,12 @@ import {
   ExecutionStatus,
   PROVISIONING_ERROR_CODES,
   RESOURCE_TYPES,
-} from "../../../index.js";
+} from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
 import {
   ProvisioningErrorKind,
   type ProvisioningPort,
-} from "../../../ports/provisioning-port.js";
+} from "@/ports/provisioning-port.js";
 import { runStateGuard } from "./state-guard.js";
 
 function mockProvisioner(): ProvisioningPort & {

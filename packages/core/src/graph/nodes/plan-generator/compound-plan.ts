@@ -20,10 +20,10 @@ import {
   ExecutionStatus,
   RESOURCE_TYPES,
   CfnKey,
-} from "../../../index.js";
-import { AWS_REGION } from "../../../config/constants/aws.js";
-import { resolveAmiFromOsName } from "../../../utils/aws-resource-discovery/index.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+} from "@/index.js";
+import { AWS_REGION } from "@/config/constants/aws.js";
+import { resolveAmiFromOsName } from "@/utils/aws-resource-discovery/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import type { AgentState } from "../../graph-state.js";
 import { applyToCfnTransforms } from "./cfn-emitter.js";
 import {

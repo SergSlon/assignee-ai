@@ -15,8 +15,8 @@ import {
   MARKER_PREFIX,
   MARKER_PATTERN_GLOBAL,
   type ResourceResult,
-} from "../../../index.js";
-import { tryAssigneeCredentials } from "../../../config/aws-credentials.js";
+} from "@/index.js";
+import { tryAssigneeCredentials } from "@/config/aws-credentials.js";
 
 /**
  * Lookup function returning the sorted list of AvailabilityZone names for a

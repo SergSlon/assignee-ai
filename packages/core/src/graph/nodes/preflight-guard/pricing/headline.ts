@@ -15,14 +15,14 @@ import {
   extractFirstTierPrice,
   type AwsPricingResponse,
   type DataSource,
-} from "../../../../index.js";
-import { AWS_REGION } from "../../../../config/constants/aws.js";
-import { PRICING_TIMEOUT_MS } from "../../../../config/constants/timeouts.js";
-import { PricingTerm } from "../../../../constants/pricing-api.js";
-import { ToolName } from "../../../../constants/tools.js";
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
-import { unwrapMcpText } from "../../../../utils/mcp.js";
-import { withTimeout } from "../../../../utils/timeout.js";
+} from "@/index.js";
+import { AWS_REGION } from "@/config/constants/aws.js";
+import { PRICING_TIMEOUT_MS } from "@/config/constants/timeouts.js";
+import { PricingTerm } from "@/constants/pricing-api.js";
+import { ToolName } from "@/constants/tools.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import { unwrapMcpText } from "@/utils/mcp.js";
+import { withTimeout } from "@/utils/timeout.js";
 
 export interface HeadlinePricing {
   label: string;

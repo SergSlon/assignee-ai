@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import { PROVISIONING_ERROR_CODES } from "../../../errors.js";
-import { ProvisioningErrorKind } from "../../../ports/provisioning-port.js";
+import { PROVISIONING_ERROR_CODES } from "@/errors.js";
+import { ProvisioningErrorKind } from "@/ports/provisioning-port.js";
 import { classifyCreateError } from "./error-classifier.js";
 
 /**

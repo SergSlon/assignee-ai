@@ -8,8 +8,8 @@
 import {
   RESOURCE_TYPES,
   COMPANION_RESOURCE_TYPES,
-} from "../../../config/resource-types.js";
-import { markerRef } from "../../../config/marker-tokens.js";
+} from "@/config/resource-types.js";
+import { markerRef } from "@/config/marker-tokens.js";
 import type { ResourceSpec } from "../../types.js";
 import { VpcResourceId } from "./subnet-plan.js";
 

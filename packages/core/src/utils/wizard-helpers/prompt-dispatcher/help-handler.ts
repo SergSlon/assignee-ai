@@ -8,8 +8,8 @@
  * @see Story 49.6 (Epic 49) — decompose promptWithHelp god function
  */
 
-import { QuestionTypeName } from "../../../index.js";
-import type { LlmPort, ResourceField } from "../../../index.js";
+import { QuestionTypeName } from "@/index.js";
+import type { LlmPort, ResourceField } from "@/index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { renderDocHelp, renderTradeoffHelp } from "../../display.js";
 

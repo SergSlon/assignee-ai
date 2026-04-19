@@ -12,9 +12,9 @@
  * Wave-6c F3: extracted from option-elicitor.ts (SRP).
  */
 
-import { defaultPluginRegistry } from "../../../index.js";
+import { defaultPluginRegistry } from "@/index.js";
 import type { AgentState } from "../../graph-state.js";
-import { getIntentDefaults } from "../../../utils/intent-defaults/index.js";
+import { getIntentDefaults } from "@/utils/intent-defaults/index.js";
 
 /** Produce elicitedOptions without any interactive prompts. */
 export function buildExpertModeOptions(

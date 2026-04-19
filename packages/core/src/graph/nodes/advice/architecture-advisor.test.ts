@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { RESOURCE_TYPES } from "../../../index.js";
-import type { ArchitecturePattern, ResourceSpec } from "../../../index.js";
+import { RESOURCE_TYPES } from "@/index.js";
+import type { ArchitecturePattern, ResourceSpec } from "@/index.js";
 import { architectureAdvisor } from "./architecture-advisor.js";
 
 function makePattern(

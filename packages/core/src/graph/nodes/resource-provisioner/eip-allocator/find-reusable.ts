@@ -9,9 +9,9 @@
 
 import type { DescribeAddressesCommandOutput } from "@aws-sdk/client-ec2";
 import { DescribeAddressesCommand } from "@aws-sdk/client-ec2";
-import { isAccessDeniedError, type EC2Client } from "../../../../index.js";
-import type { AgentState } from "../../../graph-state.js";
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
+import { isAccessDeniedError, type EC2Client } from "@/index.js";
+import type { AgentState } from "@/graph/graph-state.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import { formatErrorForLog } from "../util.js";
 
 /** What DescribeAddresses(runId) tells us about the prior attempt. */

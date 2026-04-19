@@ -12,9 +12,9 @@
  * SRP: one reason to change — the schema conformance + required-field
  * contract between LLM output and CloudControl.
  */
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
-import { sanitizeDesiredState } from "../../../../services/desired-state-sanitizer.js";
-import { repairRequiredFields } from "../../../../services/required-field-repairer.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import { sanitizeDesiredState } from "@/services/desired-state-sanitizer.js";
+import { repairRequiredFields } from "@/services/required-field-repairer.js";
 
 export interface SanitizeOutput {
   desiredState: Record<string, unknown>;

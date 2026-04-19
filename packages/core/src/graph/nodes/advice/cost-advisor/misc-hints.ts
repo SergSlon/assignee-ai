@@ -13,7 +13,7 @@ import {
   CW_HIGH_RES_ALARM_MULTIPLIER,
   CW_LOGS_INGESTION_PER_GB,
   type EnrichedPriceMap,
-} from "../../../../pricing/advisory-prices.js";
+} from "@/pricing/advisory-prices.js";
 import { enrichedLabel } from "./enriched-label.js";
 
 export function natGatewayHint(

@@ -3,8 +3,8 @@
  * resolution modes (apply vs plan) and the AZ-lookup port (DIP).
  */
 import { describe, it, expect, beforeEach } from "vitest";
-import { markerRef, markerAz, markerRegion } from "../../../index.js";
-import type { ResourceResult } from "../../../index.js";
+import { markerRef, markerAz, markerRegion } from "@/index.js";
+import type { ResourceResult } from "@/index.js";
 import {
   resolveCompoundMarkers,
   resolvePlaceholderMarkers,

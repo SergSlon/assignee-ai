@@ -6,18 +6,12 @@
  * Otherwise, render a single error box.
  */
 
-import {
-  ExecutionStatus,
-  defaultErrorHintRegistry,
-} from "../../../../index.js";
-import type { AgentState } from "../../../graph-state.js";
-import {
-  renderCompoundPartialFailure,
-  renderError,
-} from "../../../../utils/display.js";
-import { defaultErrorMessageRegistry } from "../../../../utils/error-messages/index.js";
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
-import { writeFailureRecord } from "../../../../utils/memory-recorder.js";
+import { ExecutionStatus, defaultErrorHintRegistry } from "@/index.js";
+import type { AgentState } from "@/graph/graph-state.js";
+import { renderCompoundPartialFailure, renderError } from "@/utils/display.js";
+import { defaultErrorMessageRegistry } from "@/utils/error-messages/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import { writeFailureRecord } from "@/utils/memory-recorder.js";
 
 export async function formatErrorResult(
   state: AgentState,

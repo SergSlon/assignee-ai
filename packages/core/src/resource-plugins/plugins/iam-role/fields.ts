@@ -1,5 +1,5 @@
-import { CfnKey } from "../../../config/cfn-keys.js";
-import { isArnOfService } from "../../../config/aws-partition.js";
+import { CfnKey } from "@/config/cfn-keys.js";
+import { isArnOfService } from "@/config/aws-partition.js";
 import type { ResourcePlugin } from "../../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../../shared-fields.js";
 import { FieldLabel } from "../../field-labels.js";

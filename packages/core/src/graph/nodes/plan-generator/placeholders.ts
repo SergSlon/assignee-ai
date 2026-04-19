@@ -11,11 +11,11 @@
  *   3. `stripPlaceholderArns` — remove LLM-hallucinated canonical AWS
  *      docs account-id ARNs from top-level array fields.
  */
-import { defaultPluginRegistry } from "../../../index.js";
+import { defaultPluginRegistry } from "@/index.js";
 import {
   PLACEHOLDER_AWS_ACCOUNT_IDS,
   ARN_ACCOUNT_REGEX,
-} from "../../../constants/placeholder-accounts.js";
+} from "@/constants/placeholder-accounts.js";
 
 /**
  * Heuristic markers that identify a plugin placeholder as an OBVIOUSLY

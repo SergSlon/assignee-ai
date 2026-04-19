@@ -12,17 +12,9 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./testing": {
-      "import": "./dist/testing/index.js",
-      "types": "./dist/testing/index.d.ts"
-    },
     "./checkpoint": {
       "import": "./dist/checkpoint/index.js",
       "types": "./dist/checkpoint/index.d.ts"
-    },
-    "./aws": {
-      "import": "./dist/aws/index.js",
-      "types": "./dist/aws/index.d.ts"
     },
     "./llm": {
       "import": "./dist/llm/index.js",
@@ -36,14 +28,6 @@
       "import": "./dist/graph/index.js",
       "types": "./dist/graph/index.d.ts"
     },
-    "./utils/display.js": {
-      "import": "./dist/utils/display.js",
-      "types": "./dist/utils/display.d.ts"
-    },
-    "./utils/logger/index.js": {
-      "import": "./dist/utils/logger/index.js",
-      "types": "./dist/utils/logger/index.d.ts"
-    },
     "./config/mcp-servers.js": {
       "import": "./dist/config/mcp-servers.js",
       "types": "./dist/config/mcp-servers.d.ts"
@@ -51,22 +35,6 @@
     "./services/mcp-client.js": {
       "import": "./dist/services/mcp-client.js",
       "types": "./dist/services/mcp-client.d.ts"
-    },
-    "./services/memory.js": {
-      "import": "./dist/services/memory.js",
-      "types": "./dist/services/memory.d.ts"
-    },
-    "./services/s3-upload.js": {
-      "import": "./dist/services/s3-upload.js",
-      "types": "./dist/services/s3-upload.d.ts"
-    },
-    "./utils/memory-recorder.js": {
-      "import": "./dist/utils/memory-recorder.js",
-      "types": "./dist/utils/memory-recorder.d.ts"
-    },
-    "./utils/security-posture.js": {
-      "import": "./dist/utils/security-posture.js",
-      "types": "./dist/utils/security-posture.d.ts"
     },
     "./constants/placeholder-accounts.js": {
       "import": "./dist/constants/placeholder-accounts.js",
@@ -80,22 +48,6 @@
       "import": "./dist/constants/instance-family-registry.js",
       "types": "./dist/constants/instance-family-registry.d.ts"
     },
-    "./resource-plugins/index.js": {
-      "import": "./dist/resource-plugins/index.js",
-      "types": "./dist/resource-plugins/index.d.ts"
-    },
-    "./utils/resolve-arn.js": {
-      "import": "./dist/utils/resolve-arn.js",
-      "types": "./dist/utils/resolve-arn.d.ts"
-    },
-    "./utils/free-tier.js": {
-      "import": "./dist/utils/free-tier.js",
-      "types": "./dist/utils/free-tier.d.ts"
-    },
-    "./services/price-cache.js": {
-      "import": "./dist/services/price-cache.js",
-      "types": "./dist/services/price-cache.d.ts"
-    },
     "./utils/wizard-helpers.js": {
       "import": "./dist/utils/wizard-helpers.js",
       "types": "./dist/utils/wizard-helpers.d.ts"
@@ -103,18 +55,6 @@
     "./utils/field-resolver.js": {
       "import": "./dist/utils/field-resolver.js",
       "types": "./dist/utils/field-resolver.d.ts"
-    },
-    "./config/user-config-loader.js": {
-      "import": "./dist/config/user-config-loader.js",
-      "types": "./dist/config/user-config-loader.d.ts"
-    },
-    "./config/project-config-loader.js": {
-      "import": "./dist/config/project-config-loader.js",
-      "types": "./dist/config/project-config-loader.d.ts"
-    },
-    "./config/org-policy-cache.js": {
-      "import": "./dist/config/org-policy-cache.js",
-      "types": "./dist/config/org-policy-cache.d.ts"
     },
     "./test-fixtures/mcp-mock-responses.js": {
       "import": "./dist/test-fixtures/mcp-mock-responses.js",
@@ -161,7 +101,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "dev": "tsc --watch",
@@ -200,7 +140,9 @@
     "@aws-sdk/client-efs": "^3.1029.0",
     "@types/node": "^25.5.0",
     "eslint": "^9.39.1",
+    "tsc-alias": "^1.8.16",
     "typescript": "^5.9.2",
+    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^3.1.0"
   }
 }

@@ -23,7 +23,7 @@
  * recommendation" row.
  */
 import type { StructuredTool } from "@langchain/core/tools";
-import { RESOURCE_TYPES } from "../../../../index.js";
+import { RESOURCE_TYPES } from "@/index.js";
 import { analyzeEc2Instance } from "./ec2-analyzer.js";
 import { analyzeRdsInstance } from "./rds-analyzer.js";
 import { analyzeLambdaFunction } from "./lambda-analyzer.js";

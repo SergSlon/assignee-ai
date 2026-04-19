@@ -16,8 +16,8 @@
  * non-provisionable companion resources change.
  */
 
-import { ExecutionStatus } from "../../../index.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+import { ExecutionStatus } from "@/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import type { AgentState } from "../../graph-state.js";
 
 /**

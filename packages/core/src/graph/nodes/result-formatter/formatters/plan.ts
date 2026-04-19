@@ -5,15 +5,15 @@
  * interactive fix selection prompt.
  */
 
-import { ExecutionMode, ExecutionStatus } from "../../../../index.js";
-import type { AgentState } from "../../../graph-state.js";
+import { ExecutionMode, ExecutionStatus } from "@/index.js";
+import type { AgentState } from "@/graph/graph-state.js";
 import {
   promptFixSelection,
   renderPlanBox,
   type FixSelectionResult,
-} from "../../../../utils/display.js";
-import { AWS_REGION } from "../../../../config/constants/aws.js";
-import { EnvVar } from "../../../../constants/env-vars.js";
+} from "@/utils/display.js";
+import { AWS_REGION } from "@/config/constants/aws.js";
+import { EnvVar } from "@/constants/env-vars.js";
 
 interface PlanJsonPayload {
   resourceType: string | undefined;

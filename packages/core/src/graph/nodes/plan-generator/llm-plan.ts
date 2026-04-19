@@ -17,8 +17,8 @@
  *
  * Public surface: only `runLlmPlan` is exported. Sibling modules are internal.
  */
-import type { LlmPort } from "../../../index.js";
-import { log, LOG_ACTIONS } from "../../../utils/logger/index.js";
+import type { LlmPort } from "@/index.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import type { AgentState } from "../../graph-state.js";
 import { invokeLlmPhase } from "./llm-plan/invoke.js";
 import { mergeElicitedOptions, stripPlaceholders } from "./llm-plan/merge.js";

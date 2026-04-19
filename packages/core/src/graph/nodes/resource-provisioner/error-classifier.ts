@@ -18,13 +18,13 @@
  * SRP: pure classification, no I/O, no cleanup, no state mutation.
  */
 
-import { PROVISIONING_ERROR_CODES } from "../../../errors.js";
-import type { ProvisioningErrorCode } from "../../../errors.js";
+import { PROVISIONING_ERROR_CODES } from "@/errors.js";
+import type { ProvisioningErrorCode } from "@/errors.js";
 import {
   ProvisioningErrorKind,
   type ProvisioningErrorKindType,
   type ProvisioningPortError,
-} from "../../../ports/provisioning-port.js";
+} from "@/ports/provisioning-port.js";
 
 /**
  * Axes of the per-error-kind dispatch table.

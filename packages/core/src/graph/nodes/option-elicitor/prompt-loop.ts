@@ -19,17 +19,10 @@
  */
 
 import * as clack from "@clack/prompts";
-import type {
-  ResourceField,
-  ResolvedFieldConfig,
-  LlmPort,
-} from "../../../index.js";
+import type { ResourceField, ResolvedFieldConfig, LlmPort } from "@/index.js";
 import type { StructuredTool } from "@langchain/core/tools";
-import { BACK_SENTINEL, REVIEW_SENTINEL } from "../../../utils/display.js";
-import {
-  fieldFetchKey,
-  promptWithHelp,
-} from "../../../utils/wizard-helpers.js";
+import { BACK_SENTINEL, REVIEW_SENTINEL } from "@/utils/display.js";
+import { fieldFetchKey, promptWithHelp } from "@/utils/wizard-helpers.js";
 import { applyFieldGates, countVisible } from "./field-gates.js";
 import { handleBackSentinel } from "./back-handler.js";
 import { handleReviewSentinel } from "./review-handler.js";

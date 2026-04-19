@@ -1,4 +1,4 @@
-import { CfnKey } from "../../../config/cfn-keys.js";
+import { CfnKey } from "@/config/cfn-keys.js";
 import type { ResourcePlugin } from "../../types.js";
 
 /** Database credential + initial-DB fields (name, username, password). */

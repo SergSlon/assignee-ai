@@ -10,13 +10,10 @@
  */
 
 import { AllocateAddressCommand, CreateTagsCommand } from "@aws-sdk/client-ec2";
-import type { EC2Client } from "../../../../index.js";
-import type { AgentState } from "../../../graph-state.js";
-import { log, LOG_ACTIONS } from "../../../../utils/logger/index.js";
-import {
-  TAG_KEY_MANAGED_BY,
-  TAG_VALUE_MANAGED_BY,
-} from "../../../../utils/tags.js";
+import type { EC2Client } from "@/index.js";
+import type { AgentState } from "@/graph/graph-state.js";
+import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
+import { TAG_KEY_MANAGED_BY, TAG_VALUE_MANAGED_BY } from "@/utils/tags.js";
 import { formatErrorForLog } from "../util.js";
 
 export type AllocateFreshEipResult =

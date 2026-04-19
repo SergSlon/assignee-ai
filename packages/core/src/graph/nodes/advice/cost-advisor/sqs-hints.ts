@@ -2,7 +2,7 @@
  * SQS::Queue cost hints — FIFO surcharge + data-transfer-out clarification.
  */
 import { AdviceIcon } from "../constants.js";
-import { SQS_FIFO_SURCHARGE_PCT } from "../../../../pricing/advisory-prices.js";
+import { SQS_FIFO_SURCHARGE_PCT } from "@/pricing/advisory-prices.js";
 
 export function sqsCostHints(
   ds: Record<string, unknown>,

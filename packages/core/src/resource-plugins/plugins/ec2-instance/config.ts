@@ -1,5 +1,5 @@
-import { RESOURCE_TYPES } from "../../../config/resource-types.js";
-import { CfnKey, ResourceDefault } from "../../../config/cfn-keys.js";
+import { RESOURCE_TYPES } from "@/config/resource-types.js";
+import { CfnKey, ResourceDefault } from "@/config/cfn-keys.js";
 import type { ResourcePlugin, CfnOutput } from "../../types.js";
 
 export const defaults: ResourcePlugin["defaults"] = {
