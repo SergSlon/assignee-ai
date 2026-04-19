@@ -65,12 +65,12 @@ later) will land when the project is ready for public release.
 
 - **`pnpm audit` 9 moderate advisories → 0 (closes L5-001..L5-004
   MED).** `pnpm.overrides` pins `langsmith@^0.5.19` (GHSA-fw9q-39r9-c252
-  - GHSA-rr7j-v2q5-chgv — prototype pollution + streaming token
-    redaction bypass) plus `hono@^4.12.14` and `@hono/node-server`.
-    ARN canonicalization unified through `ARN_PATTERN_SOURCE` (no regex
-    duplication). `operatorCredentials` field marked `@deprecated`
-    across 7 audited call-sites ahead of removal in v0.2. (commit
-    `19d8194`)
+  and GHSA-rr7j-v2q5-chgv — prototype pollution plus streaming token
+  redaction bypass) plus `hono@^4.12.14` and `@hono/node-server`.
+  ARN canonicalization unified through `ARN_PATTERN_SOURCE` (no regex
+  duplication). `operatorCredentials` field marked `@deprecated`
+  across 7 audited call-sites ahead of removal in v0.2. (commit
+  `19d8194`)
 
 #### Fixed
 
