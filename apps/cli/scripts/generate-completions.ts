@@ -35,6 +35,7 @@ import { setupCommand } from "../src/commands/setup.js";
 import { statusCommand } from "../src/commands/status.js";
 import { reconcileCommand } from "../src/commands/reconcile.js";
 import { doctorCommand } from "../src/commands/doctor.js";
+import { versionCommand } from "../src/commands/version.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const completionsDir = path.resolve(__dirname, "..", "completions");
@@ -63,14 +64,12 @@ function buildProgram(): Command {
   program.addCommand(reconcileCommand);
   program.addCommand(doctorCommand);
 
-  // Story 56-it2-04 L3-L2: the `version` subcommand is registered
-  // inline in `src/index.ts` (richer output than the --version flag —
-  // node version, platform, pinned MCP pins) and was missing from the
-  // generator's program tree, so shell completions never listed it.
-  // We re-declare it here with a description that matches the runtime
-  // one; we do NOT wire an `.action()` because the completion generator
-  // only reads name + description + options.
-  program.command("version").description("Show version and environment info");
+  // Story 58-it1-03: `version` is now a standalone command module
+  // (closes it57-1-L3-L1 — the previous inline `.command("version")`
+  // registration in `src/index.ts` meant we had to re-declare a stub
+  // here; now we `addCommand` the real instance so the generator and
+  // the runtime CLI can never drift on name/description again).
+  program.addCommand(versionCommand);
 
   return program;
 }
