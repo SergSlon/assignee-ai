@@ -12,6 +12,7 @@
 
 import * as clack from "@clack/prompts";
 import type { BedrockClient } from "@aws-sdk/client-bedrock";
+import { buildIamRoleArn } from "../../../utils/setup-arn-builder.js";
 import {
   BEDROCK_LOG_GROUP_NAME,
   BEDROCK_LOGGING_ROLE_NAME,
@@ -31,7 +32,11 @@ export async function enableModelInvocationLogging(opts: {
   const { PutModelInvocationLoggingConfigurationCommand } =
     await import("@aws-sdk/client-bedrock");
   const textLogging = enableLlmLogging === true;
-  const roleArn = `arn:${partition}:iam::${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`;
+  const roleArn = buildIamRoleArn({
+    partition,
+    accountId,
+    roleName: BEDROCK_LOGGING_ROLE_NAME,
+  });
   if (textLogging) {
     clack.log.warn(
       "⚠ All LLM prompts/responses will be logged to CloudWatch — " +

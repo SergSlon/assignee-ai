@@ -10,6 +10,7 @@
 import * as clack from "@clack/prompts";
 import { getPartitionFromRegion } from "@assignee/core";
 import { AWS_REGION } from "../../config/constants.js";
+import { buildIamRoleArn } from "../../utils/setup-arn-builder.js";
 import {
   BEDROCK_LOGGING_ROLE_NAME,
   BEDROCK_LOG_GROUP_NAME,
@@ -40,7 +41,11 @@ export async function runDisableLoggingFastPath(opts: {
         loggingConfig: {
           cloudWatchConfig: {
             logGroupName: BEDROCK_LOG_GROUP_NAME,
-            roleArn: `arn:${partition}:iam::${accountId}:role/${BEDROCK_LOGGING_ROLE_NAME}`,
+            roleArn: buildIamRoleArn({
+              partition,
+              accountId,
+              roleName: BEDROCK_LOGGING_ROLE_NAME,
+            }),
           },
           textDataDeliveryEnabled: false,
           imageDataDeliveryEnabled: false,

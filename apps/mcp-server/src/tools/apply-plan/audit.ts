@@ -9,6 +9,13 @@
  * outcome keeps the orchestrator readable and prevents a future edit
  * from drifting one of the call-sites.
  *
+ * Backlog cleanup story C (post-Epic-55): the underlying record-
+ * emission is now provided by the shared `logToolAudit` writer in
+ * `utils/log-tool-audit.ts`. `logApplyAudit` is a thin adapter that
+ * stamps the apply-plan-specific tool name and forwards the caller's
+ * context. The on-disk JSONL shape is unchanged; downstream parsers
+ * are unaffected.
+ *
  * Redaction policy (per feedback_redaction_allowlist_not_denylist):
  *   The underlying `auditLog` enforces the allowlist. This helper
  *   only widens the input type, it never strips or injects fields.
@@ -17,7 +24,10 @@
  * record shape to the persistent JSONL log.
  */
 
-import { auditLog } from "../../utils/audit-log.js";
+import {
+  logToolAudit,
+  type ToolAuditOutcome,
+} from "../../utils/log-tool-audit.js";
 import { type StepResult, doneStep } from "../../utils/step-result.js";
 import { errorEnvelope, type ToolEnvelope } from "./result-envelope.js";
 
@@ -42,29 +52,30 @@ export interface ApplyAuditContext {
  * string (e.g. "CheckpointError", "BpBlocked", "BpEvaluationError",
  * "ApplyAlreadyActive", "GraphExecutionError") — never a raw message.
  */
-export type ApplyOutcome =
-  | { kind: "success" }
-  | { kind: "failure"; errorClass: string };
+export type ApplyOutcome = ToolAuditOutcome;
 
 /**
  * Emits a single persistent audit record for the apply_plan tool.
  *
  * Centralising the envelope guarantees every outcome writes the same
  * six fields (tool / runId / resourceType / identifier / success /
- * errorClass) with no drift between call-sites.
+ * errorClass) with no drift between call-sites. The shared
+ * `logToolAudit` writer enforces that contract across both
+ * audit-emitting MCP tools.
  */
 export async function logApplyAudit(
   ctx: ApplyAuditContext,
   outcome: ApplyOutcome,
 ): Promise<void> {
-  await auditLog({
-    tool: "apply_plan",
-    runId: ctx.runId,
-    resourceType: ctx.resourceType,
-    identifier: ctx.identifier,
-    success: outcome.kind === "success",
-    errorClass: outcome.kind === "success" ? "" : outcome.errorClass,
-  });
+  await logToolAudit(
+    {
+      tool: "apply_plan",
+      runId: ctx.runId,
+      resourceType: ctx.resourceType,
+      identifier: ctx.identifier,
+    },
+    outcome,
+  );
 }
 
 /**

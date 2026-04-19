@@ -19,6 +19,11 @@
  */
 
 import { IAM_USER_NAMES, IamEffect, IamPolicy } from "@assignee/core";
+import {
+  buildIamRootArn,
+  buildIamUserArn,
+  buildLogGroupArn,
+} from "../../../utils/setup-arn-builder.js";
 import { BEDROCK_LOG_GROUP_NAME } from "../constants.js";
 
 /**
@@ -38,9 +43,18 @@ export function buildBedrockLogReadRestriction(opts: {
   region: string;
 }): string {
   const { partition, accountId, region } = opts;
-  const logGroupArn = `arn:${partition}:logs:${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`;
-  const operatorUserArn = `arn:${partition}:iam::${accountId}:user/${IAM_USER_NAMES.operator}`;
-  const rootArn = `arn:${partition}:iam::${accountId}:root`;
+  const logGroupArn = buildLogGroupArn({
+    partition,
+    region,
+    accountId,
+    logGroupName: BEDROCK_LOG_GROUP_NAME,
+  });
+  const operatorUserArn = buildIamUserArn({
+    partition,
+    accountId,
+    userName: IAM_USER_NAMES.operator,
+  });
+  const rootArn = buildIamRootArn({ partition, accountId });
   return JSON.stringify({
     Version: IamPolicy.VERSION,
     Statement: [

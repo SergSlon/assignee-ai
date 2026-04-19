@@ -317,7 +317,7 @@ export {
   IAM_POLICY_NAMES,
   type PolicyDocument,
   type PolicyStatement,
-} from "../config/iam-policies.js";
+} from "../config/iam-policies/index.js";
 export { IamEffect, type IamEffectType } from "../config/iam-effects.js";
 
 // Resource Policy (config types for option elicitation — full loader in Story 7.2)
