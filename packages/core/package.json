@@ -112,10 +112,6 @@
       "import": "./dist/utils/field-resolver.js",
       "types": "./dist/utils/field-resolver.d.ts"
     },
-    "./utils/aws-resource-discovery.js": {
-      "import": "./dist/utils/aws-resource-discovery/index.js",
-      "types": "./dist/utils/aws-resource-discovery/index.d.ts"
-    },
     "./config/user-config-loader.js": {
       "import": "./dist/config/user-config-loader.js",
       "types": "./dist/config/user-config-loader.d.ts"
