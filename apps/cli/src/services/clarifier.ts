@@ -13,6 +13,14 @@
  */
 
 import * as clack from "@clack/prompts";
+// `renderClarifierExampleList` is the single source of truth for the
+// "S3 bucket, Lambda function, DynamoDB table, etc." beginner-example
+// string embedded in the rephrase prompt. The curated label list lives
+// in `packages/core/src/config/help-hints.ts` (`BEGINNER_EXAMPLE_TYPES`)
+// and is drift-guarded against `SUPPORTED_TYPES_ARRAY` by tests in
+// `packages/core/src/config/__tests__/help-hints.test.ts`.
+// @see packages/core/src/config/help-hints.ts `renderClarifierExampleList`
+//      — Story 62-it1-02 L3-L1 added this reciprocal cross-ref.
 import { ExecutionStatus, renderClarifierExampleList } from "@assignee/core";
 import type { AgentState } from "./graph-state.js";
 
