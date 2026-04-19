@@ -62,7 +62,7 @@ import {
   discoverRdsInstanceClasses,
   searchAmis,
   clearDiscoveryCache,
-} from "./aws-resource-discovery.js";
+} from "./aws-resource-discovery/index.js";
 
 describe("aws-resource-discovery", () => {
   // Snapshot env so per-test mutations don't leak between cases
@@ -874,7 +874,7 @@ describe("aws-resource-discovery", () => {
   describe("discoverLambdaRuntimes (Story 44.4)", () => {
     it("returns runtime options from the canonical list", async () => {
       const { discoverLambdaRuntimes, clearDiscoveryCache } =
-        await import("./aws-resource-discovery.js");
+        await import("./aws-resource-discovery/index.js");
       clearDiscoveryCache();
       const result = await discoverLambdaRuntimes();
       expect(result.length).toBeGreaterThanOrEqual(7);
@@ -889,7 +889,7 @@ describe("aws-resource-discovery", () => {
 
     it("returns cached results on second call", async () => {
       const { discoverLambdaRuntimes, clearDiscoveryCache } =
-        await import("./aws-resource-discovery.js");
+        await import("./aws-resource-discovery/index.js");
       clearDiscoveryCache();
       const first = await discoverLambdaRuntimes();
       const second = await discoverLambdaRuntimes();

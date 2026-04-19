@@ -537,6 +537,46 @@ class by construction. Story 54-it1-05 (helper introduction).
 
 ---
 
+## CLI stability-shim policy
+
+**Rule.** The CLI holds ~60 thin re-export shims under `apps/cli/src/**`
+that bounce symbols from `@assignee/core` back out under legacy CLI
+paths. The full list is snapshotted at
+`apps/cli/src/__fixtures__/known-shims.txt`. **No NEW shims.** Every
+existing shim is KEEP until its last importer migrates to the
+`@assignee/core` direct path; a handful of dead shims were deleted in
+Epic 56-it1 (see Stories `56-it1-03` and `56-it1-04`). Deleting a shim
+is always welcome — regenerate the snapshot in the same commit so the
+linter stays honest.
+
+**Why.** During the `50-4 Wave 5` lift-and-shift, framework-agnostic
+code relocated from `apps/cli/src/**` to `packages/core/src/**`. The
+CLI's test files (plus a scatter of untyped `from "./utils/*.js"`
+call-sites) already imported from those moved paths; rewriting every
+one of those paths in a single commit would have made the diff
+unreviewable. The shims preserve the old path while delegating to the
+new module. New code must import from `@assignee/core` directly — any
+new shim is a covert test-path coupling that blocks future refactors
+and inflates the CLI's `src/` tree.
+
+**Where it's enforced.**
+
+- `apps/cli/src/__fixtures__/known-shims.txt` — canonical allow-list
+  (auto-regenerated via `node apps/cli/scripts/no-new-cli-shims.mjs --write`).
+- `apps/cli/scripts/no-new-cli-shims.mjs` — grep-based tree-walker
+  that detects a shim by the `Thin re-export shim` or
+  `Re-export from @assignee/core` docblock marker.
+- `apps/cli/src/__tests__/no-new-cli-shims.test.ts` — drift-guard
+  that fails the vitest run if a NEW shim path appears or an
+  EXISTING snapshot path disappears.
+- Root `package.json` — `pnpm lint:shims` runs the script from CI.
+
+**Source memory.** Story 56-it2-01 (closes `it56-1-L4-007a`). Related
+cleanup: Stories 56-it1-03 (destroy-resource barrel adoption, 5 dead
+shims removed) and 56-it1-04 (narrative-count drift linter).
+
+---
+
 ## How to add a new invariant
 
 1. Write the rule (one sentence).
