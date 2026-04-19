@@ -25,6 +25,7 @@ import { setupCommand } from "./commands/setup.js";
 import { statusCommand } from "./commands/status.js";
 import { reconcileCommand } from "./commands/reconcile.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { versionCommand } from "./commands/version.js";
 import { ProcessExitCode } from "./constants/errors.js";
 import { errorToExitCode } from "./utils/exit-code.js";
 import {
@@ -116,25 +117,11 @@ program.hook("preSubcommand", (thisCommand) => {
 // server versions. MCP pins are relevant for bug reports because they
 // carry their own feature sets; an issue against the pricing or docs
 // server is much easier to triage with the exact version stamp.
-program
-  .command("version")
-  .description("Show version and environment info")
-  .action(async () => {
-    const { MCP_PINS } = await import("./config/mcp-servers.js");
-    const lines = [
-      `assignee ${pkg.version as string}`,
-      `node     ${process.version}`,
-      `platform ${process.platform} ${process.arch}`,
-      "",
-      "Pinned MCP servers:",
-      `  pricing        ${MCP_PINS.AWS_PRICING}`,
-      `  documentation  ${MCP_PINS.AWS_DOCUMENTATION}`,
-      `  iam            ${MCP_PINS.AWS_IAM}`,
-      `  wa-security    ${MCP_PINS.AWS_WA_SECURITY}`,
-      `  cost-mgmt      ${MCP_PINS.AWS_COST_MANAGEMENT}`,
-    ];
-    process.stdout.write(lines.join("\n") + "\n");
-  });
+//
+// Story 58-it1-03: extracted to `./commands/version.ts` so the
+// completion generator (which walks `program.commands` via
+// `program.addCommand`) sees it without needing a hand-maintained stub.
+program.addCommand(versionCommand);
 
 program.addCommand(completionsCommand);
 program.addCommand(destroyCommand);
