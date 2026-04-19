@@ -2,7 +2,7 @@
   "name": "assignee",
   "private": true,
   "version": "0.1.0",
-  "description": "Assignee.ai — AI-Native Cloud Operator. Plan and apply cloud infrastructure using natural language.",
+  "description": "Assignee.ai CLI — plan, estimate, and provision AWS infrastructure from natural language with HITL approval, best-practice auto-fix, and pre-apply cost preflight.",
   "type": "module",
   "license": "MIT",
   "bin": {
