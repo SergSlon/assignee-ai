@@ -343,6 +343,12 @@ Optional servers are spawned only when the corresponding command requires them.
 - `ASSIGNEE_READER_*` env vars → reader IAM user → MCP servers with read-only access (CCAPI, pricing)
 - `ASSIGNEE_AUDITOR_*` env vars → auditor IAM user → MCP servers with audit access (CloudFormation describe/list)
 
+**Advanced overrides:**
+
+- `ASSIGNEE_NO_CLARIFIER=1` — skip the intent-clarifier prompt on ambiguous inputs (useful in CI / scripted flows where no operator is available to answer). Source: [`apps/cli/src/services/clarifier.ts`](apps/cli/src/services/clarifier.ts).
+- `ASSIGNEE_MCP_MAX_ACTIVE_APPLIES=N` — override the default 100 concurrent-apply ceiling on the MCP server (tune for high-concurrency CI fleets; must be a positive integer — invalid values fall back to 100). Source: [`apps/mcp-server/src/tools/apply-plan/active-applies.ts`](apps/mcp-server/src/tools/apply-plan/active-applies.ts).
+- `--resource-type` shorthand warnings — shorthand aliases (`s3`, `lambda`, `rds`, etc.) resolve to a single "headline" CFN type; when the underlying service also exposes other supported types, the CLI emits a `console.warn` on stderr suggesting the explicit CFN form. Source: [`apps/cli/src/commands/resource-type-filter.ts`](apps/cli/src/commands/resource-type-filter.ts).
+
 ---
 
 ## Development
