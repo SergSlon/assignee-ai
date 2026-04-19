@@ -7,6 +7,7 @@ import {
 import type { AgentState } from "../../graph-state.js";
 import {
   ProvisioningErrorKind,
+  type ProvisioningErrorKindType,
   type ProvisioningPortError,
 } from "../../../ports/provisioning-port.js";
 import { handleCreateError } from "./create-error-handler.js";
@@ -23,7 +24,7 @@ function baseState(overrides: Partial<AgentState> = {}): AgentState {
 }
 
 function createErr(
-  kind: ProvisioningErrorKind,
+  kind: ProvisioningErrorKindType,
   message: string,
 ): ProvisioningPortError {
   return { kind, message } as ProvisioningPortError;
