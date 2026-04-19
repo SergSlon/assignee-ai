@@ -44,3 +44,16 @@ export { resourceProvisionerNode } from "./nodes/resource-provisioner.js";
 export { createPlanGeneratorNode } from "./nodes/plan-generator.js";
 export { optionElicitorNode } from "./nodes/option-elicitor.js";
 export { createAdviceGeneratorNode } from "./nodes/advice-generator.js";
+
+// Cost-optimizer (Story 58-it1-05): exported here so CLI shims
+// `apps/cli/src/nodes/advice/cost-optimizer/{orchestrator,types}.ts` can
+// consume the canonical implementation from `@assignee/core/graph` instead
+// of the wildcard `@assignee/core/graph/nodes/*` path.
+export { analyzeResource } from "./nodes/advice/cost-optimizer/orchestrator.js";
+export {
+  HOURS_PER_MONTH,
+  parseHourly,
+  buildRecommendation,
+  type CostOptRecommendation,
+  type OptimizationConfidence,
+} from "./nodes/advice/cost-optimizer/types.js";

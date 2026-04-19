@@ -14,6 +14,7 @@
     "citation-lint": "node apps/cli/scripts/citation-lint.mjs",
     "doc-lint": "node apps/cli/scripts/doc-lint.mjs",
     "lint:shims": "node apps/cli/scripts/no-new-cli-shims.mjs",
+    "lint:barrels": "node apps/cli/scripts/check-config-barrel-circular.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

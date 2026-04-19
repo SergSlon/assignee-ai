@@ -46,7 +46,6 @@ utils/field-resolver.ts
 utils/fix-command-resolver.ts
 utils/fix-selection.ts
 utils/free-tier.ts
-utils/iam-actions.ts
 utils/intent-defaults.ts
 utils/mcp-types.ts
 utils/mcp.ts

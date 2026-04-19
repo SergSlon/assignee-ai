@@ -1,6 +1,7 @@
 /**
  * Thin re-export shim — canonical implementation lives in
- * `@assignee/core/graph/nodes/fix-applicator/orchestrator.js`
- * (Story 50-4 Wave 5 Pass H).
+ * `@assignee/core/graph` (barrel) → `./nodes/fix-applicator/orchestrator.ts`
+ * (Story 50-4 Wave 5 Pass H; Story 58-it1-05 moved the import path off the
+ * now-removed `@assignee/core/graph/nodes/*` wildcard export).
  */
-export { fixApplicatorNode } from "@assignee/core/graph/nodes/fix-applicator/orchestrator.js";
+export { fixApplicatorNode } from "@assignee/core/graph";
