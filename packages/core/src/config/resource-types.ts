@@ -1,3 +1,6 @@
+// KEEP: stable import surface. 117 consumers across 4 packages as of Epic 56 it1.
+// Barrel-over-barrel pattern is load-bearing; do NOT inline into parent barrel.
+// WONTFIX: L7-006 closed by rationale, not refactor.
 /**
  * AWS CloudFormation resource type constants for the POC phase.
  * Single source of truth — used by intent_parser, schema_fetcher, resource_provisioner,

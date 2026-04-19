@@ -1,3 +1,6 @@
+// KEEP: stable import surface. 124 consumers across 4 packages as of Epic 56 it1.
+// Barrel-over-barrel pattern is load-bearing; do NOT inline into parent barrel.
+// WONTFIX: L7-006 closed by rationale, not refactor.
 /**
  * CloudFormation property key constants — single source of truth.
  * Use these instead of raw strings in plugins, decomposers, and graph nodes.
