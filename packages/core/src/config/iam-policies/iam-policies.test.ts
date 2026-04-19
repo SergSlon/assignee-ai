@@ -7,8 +7,8 @@ import {
   auditorPolicy,
   IAM_USER_NAMES,
   IAM_POLICY_NAMES,
-} from "./iam-policies.js";
-import { SUPPORTED_TYPES_ARRAY } from "./resource-types.js";
+} from "./index.js";
+import { SUPPORTED_TYPES_ARRAY } from "../resource-types.js";
 
 /**
  * Union helper for tests that care about the combined service-action

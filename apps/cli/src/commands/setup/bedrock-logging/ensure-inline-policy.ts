@@ -12,6 +12,7 @@
 import * as clack from "@clack/prompts";
 import { type IAMClient, PutRolePolicyCommand } from "@aws-sdk/client-iam";
 import { IamAction, IamEffect, IamPolicy } from "@assignee/core";
+import { buildLogGroupArn } from "../../../utils/setup-arn-builder.js";
 import {
   BEDROCK_LOG_GROUP_NAME,
   BEDROCK_LOGGING_POLICY_NAME,
@@ -45,7 +46,12 @@ export async function ensureInlinePolicy(opts: {
               IamAction.LOGS_PUT_LOG_EVENTS,
               IamAction.LOGS_DESCRIBE_LOG_GROUPS,
             ],
-            Resource: `arn:${partition}:logs:${region}:${accountId}:log-group:${BEDROCK_LOG_GROUP_NAME}:*`,
+            Resource: buildLogGroupArn({
+              partition,
+              region,
+              accountId,
+              logGroupName: BEDROCK_LOG_GROUP_NAME,
+            }),
           },
         ],
       }),

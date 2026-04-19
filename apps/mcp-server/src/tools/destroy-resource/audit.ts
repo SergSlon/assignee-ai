@@ -9,12 +9,22 @@
  * orchestrator readable and prevents a future edit from drifting
  * one of the call-sites.
  *
+ * Backlog cleanup story C (post-Epic-55): the underlying record-
+ * emission is now provided by the shared `logToolAudit` writer in
+ * `utils/log-tool-audit.ts`. `logDestroyAudit` is a thin adapter
+ * that stamps the destroy-resource tool name and forwards the
+ * caller's resolved-resource context. The on-disk JSONL shape is
+ * unchanged; downstream parsers are unaffected.
+ *
  * Redaction policy (per feedback_redaction_allowlist_not_denylist):
  *   The underlying `auditLog` enforces the allowlist. This helper
  *   only widens the input type, it never strips or injects fields.
  */
 
-import { auditLog } from "../../utils/audit-log.js";
+import {
+  logToolAudit,
+  type ToolAuditOutcome,
+} from "../../utils/log-tool-audit.js";
 import type { ResolvedResource } from "./types.js";
 
 /**
@@ -25,9 +35,7 @@ import type { ResolvedResource } from "./types.js";
  * `errorClass` on the failure variant is a short kebab-case or
  * SDK-error-name string (never a raw message).
  */
-export type DestroyOutcome =
-  | { kind: "success" }
-  | { kind: "failure"; errorClass: string };
+export type DestroyOutcome = ToolAuditOutcome;
 
 /**
  * Emits a single persistent audit record for the destroy tool.
@@ -35,18 +43,20 @@ export type DestroyOutcome =
  * Accepts the already-resolved resource so call-sites don't repeat
  * the (resourceType, arn) pair. `runId` is unused today because
  * ad-hoc destroys have no checkpoint — keep the field on the record
- * shape so the JSONL schema matches apply_plan.
+ * shape so the JSONL schema matches apply_plan (Story 50-5 H-3
+ * empty-string sentinel convention).
  */
 export async function logDestroyAudit(
   resolved: Pick<ResolvedResource, "arn" | "resourceType">,
   outcome: DestroyOutcome,
 ): Promise<void> {
-  await auditLog({
-    tool: "destroy_resource",
-    runId: "",
-    resourceType: resolved.resourceType,
-    identifier: resolved.arn,
-    success: outcome.kind === "success",
-    errorClass: outcome.kind === "success" ? "" : outcome.errorClass,
-  });
+  await logToolAudit(
+    {
+      tool: "destroy_resource",
+      runId: "",
+      resourceType: resolved.resourceType,
+      identifier: resolved.arn,
+    },
+    outcome,
+  );
 }

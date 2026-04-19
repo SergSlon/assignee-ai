@@ -20,6 +20,7 @@ import {
 import { AssigneeTag, getPartitionFromRegion } from "@assignee/core";
 import { AWS_REGION } from "../../config/constants.js";
 import { AwsErrorName } from "../../constants/aws-errors.js";
+import { buildIamPolicyArn } from "../../utils/setup-arn-builder.js";
 import type { PolicyDocument } from "./constants.js";
 
 /**
@@ -35,7 +36,7 @@ export async function ensurePolicy(
   // Partition-aware: setup runs in the caller's region so GovCloud/China
   // operators get `arn:aws-us-gov:` / `arn:aws-cn:` policy ARNs.
   const partition = getPartitionFromRegion(AWS_REGION);
-  const policyArn = `arn:${partition}:iam::${accountId}:policy/${policyName}`;
+  const policyArn = buildIamPolicyArn({ partition, accountId, policyName });
   const policyJson = JSON.stringify(policyDoc);
 
   try {
