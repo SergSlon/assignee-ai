@@ -83,7 +83,7 @@ hallucinations — the canonical pattern is `arn:aws:iam::123456789012:…`
 (twelve "123…012" digits). This is not a real account; the LLM produced
 it instead of asking the operator.
 
-**Fix.** Edit your intent to pass a concrete ARN (run `assignee whoami`
+**Fix.** Edit your intent to pass a concrete ARN (run `assignee doctor --short`
 for your real account ID) or let the wizard prompt for it. See
 [invariants.md](explanation/invariants.md#placeholder-arn-preflight)
 for the enforcing code path.
@@ -309,7 +309,7 @@ apply. Checkpoints live under `.assignee/checkpoints/`.
   retained for `ASSIGNEE_LOG_RETENTION_DAYS` (default 14).
 - `assignee doctor --json` — structured snapshot suitable for bug
   reports.
-- `assignee whoami` — resolved account/region/profile before any
+- `assignee doctor --short` — resolved account/region/profile before any
   mutation.
 
 If the failure is not covered above, file an issue at

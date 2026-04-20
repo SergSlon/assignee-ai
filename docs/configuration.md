@@ -19,11 +19,11 @@ Higher-priority values override lower ones. Unknown keys are silently ignored fo
 
 ### Global Preferences (A2, 2026-04-08)
 
-Global preferences (`defaults.region`, `defaults.tags`, `preferences.auto_fix`, `preferences.output_format`, `preferences.verbosity`, `budget`) flow through a single `resolveGlobalConfig()` helper in `@assignee/core` that merges the sources above into a fully-populated `ResolvedGlobalConfig` object. The CLI calls this helper inside `plan`, `apply`, and `whoami` at boot, then plumbs the result into graph state as `resolvedConfig` so downstream nodes read one authoritative source instead of re-reading env vars or raw user config point-of-use.
+Global preferences (`defaults.region`, `defaults.tags`, `preferences.auto_fix`, `budget`) flow through a single `resolveGlobalConfig()` helper in `@assignee/core` that merges the sources above into a fully-populated `ResolvedGlobalConfig` object. The CLI calls this helper inside `plan`, `apply`, and `doctor --short` at boot, then plumbs the result into graph state as `resolvedConfig` so downstream nodes read one authoritative source instead of re-reading env vars or raw user config point-of-use.
 
 - **Nested merging.** `defaults.tags` and `defaults.naming` merge **key-by-key** rather than whole-object replacement, so a user-level `defaults.naming.prefix` and a project-level `defaults.naming.suffix` both survive. Similarly, `defaults.tags.env=prod` from env can coexist with `defaults.tags.owner=alice` from user yaml.
 - **`org_policy` is NOT merged.** The highest-priority source that defines `org_policy` wins wholesale — per-resource-type keys make shallow merging surprising and deep merging unsafe.
-- **Verifying the resolution.** Run `assignee whoami` — the output includes a `Resolved global preferences` block showing the final `auto_fix` / `output_format` / `verbosity` values after the merge. This is the quickest way to confirm an `ASSIGNEE_*` env var is taking effect.
+- **Verifying the resolution.** Run `assignee doctor --short` — the output includes a `Resolved global preferences` block showing the final `auto_fix` value after the merge. This is the quickest way to confirm an `ASSIGNEE_*` env var is taking effect.
 - **Resource-level fields** (per-type wizard overrides like `InstanceType` or `BucketName`) use a separate 6-level merger in `apps/cli/src/utils/merge-configs.ts`. That merger handles the org-policy `locked` / `always_ask` semantics and is called inside the option-elicitor node, not at boot.
 
 ### `--set` Flag
@@ -165,7 +165,9 @@ Pass-through section for organization-wide policies. Keys are domain-specific (e
 
 ### `llm` Section (Story 44.1)
 
-Per-node LLM model routing. By default, all pipeline nodes use the same model (`ASSIGNEE_LLM_DEFAULT` or the built-in default `bedrock/amazon.nova-lite-v1:0`). The `llm` section lets you assign different models to different pipeline stages — for example, a smart model for plan generation and a cheap/fast model for intent classification.
+> **Note:** The `llm` config-file section is planned but does **not** exist in the current config schema (`packages/core/src/config/config-schema.ts`). Per-node LLM routing is currently driven entirely by the `ASSIGNEE_LLM_*` environment variables listed below. The YAML example describes the intended future design — reading `llm.*` keys from `.assignee/config.yaml` is a no-op today.
+
+Per-node LLM model routing. By default, all pipeline nodes use the same model (`ASSIGNEE_LLM_DEFAULT` or the built-in default `bedrock/amazon.nova-lite-v1:0`). Set `ASSIGNEE_LLM_<CALLSITE>` env vars to assign different models to different pipeline stages — for example, a smart model for plan generation and a cheap/fast model for intent classification.
 
 ```yaml
 # .assignee/config.yaml
@@ -187,9 +189,9 @@ llm:
 
 Each value must be in `provider/model-id` format. Supported providers: `bedrock`, `anthropic`, `openai`, `google`, `ollama`.
 
-**Precedence:** The `llm` section follows the same precedence rules as all other config sections: env vars > project config > user config. Each key merges independently, so a user-level `llm.default` and a project-level `llm.plan_generator` both take effect.
+**Precedence (today):** Only the `ASSIGNEE_LLM_*` env vars are honored. When config-file support lands, the `llm` section will follow the same precedence as other sections (env vars > project config > user config), with per-key merging so a user-level `llm.default` and a project-level `llm.plan_generator` would both take effect.
 
-**Environment variable overrides:** Each callsite can be overridden via `ASSIGNEE_LLM_<CALLSITE>` (uppercased):
+**Environment variable overrides (authoritative today):** Each callsite is configured via `ASSIGNEE_LLM_<CALLSITE>` (uppercased):
 
 ```bash
 ASSIGNEE_LLM_PLAN_GENERATOR=anthropic/claude-sonnet-4-5 assignee plan "Create an EC2 instance"
@@ -251,7 +253,7 @@ The `DataSource` type and `formatLabelWithSource()` helper live in `@assignee/co
 | `ASSIGNEE_BP_SIGNING_KEY`             | Release-only: when set, `pnpm --filter=@assignee/best-practices run generate-manifest` also emits a detached GPG signature (`manifest.json.sig`) using this local-user identity (key id, fingerprint, or email). Absent = unsigned manifest (current behaviour). | unset                            |
 | `ASSIGNEE_BP_REQUIRE_SIGNATURE`       | When set to any non-empty value, the CLI refuses to load BP rules in enforce mode unless a valid GPG signature is present alongside the manifest. Defense-in-depth beyond the hash check. Absent = unsigned manifests accepted in enforce mode (warns once).     | unset                            |
 | `ASSIGNEE_LOG_DIR`                    | Override directory for always-on warn/error log file                                                                                                                                                                                                             | `~/.assignee/logs`               |
-| `ASSIGNEE_LOG_RETENTION_DAYS`         | Days to retain persistent warn/error log files before `assignee clean --logs` deletes them                                                                                                                                                                       | `14`                             |
+| `ASSIGNEE_LOG_RETENTION_DAYS`         | Days to retain persistent warn/error log files before auto-prune (runs at most once per hour via `autoPruneLogsIfDue`) deletes them                                                                                                                              | `14`                             |
 | `ASSIGNEE_OTEL_ENDPOINT`              | When set, every structured log event is also POSTed to `<endpoint>/v1/logs` in OTLP/HTTP-JSON format. Errors and timeouts are swallowed silently — the exporter never blocks the CLI. Example: `http://localhost:4318` for a local OpenTelemetry Collector.      | unset (disabled)                 |
 | `ASSIGNEE_OTEL_SERVICE_NAME`          | Optional `service.name` resource attribute attached to every emitted log record. Only consulted when `ASSIGNEE_OTEL_ENDPOINT` is set.                                                                                                                            | `assignee-cli`                   |
 | `ASSIGNEE_ENABLE_REMOTE_MCP`          | Set to `1` to enable the optional remote knowledge MCP server (see security note below)                                                                                                                                                                          | unset (disabled)                 |
@@ -297,13 +299,12 @@ The CLI keeps an always-on `warn`/`error` log on disk so post-mortem debugging i
 
 ### `ASSIGNEE_LOG_RETENTION_DAYS`
 
-Persistent warn/error log files (`cli-YYYY-MM-DD.jsonl` and their numbered rotations under `~/.assignee/logs/`) are pruned by `assignee clean --logs`. Files whose filename date is strictly older than `now - retentionDays` are deleted.
+Persistent warn/error log files (`cli-YYYY-MM-DD.jsonl` and their numbered rotations under `~/.assignee/logs/`) are auto-pruned by an internal hook. Files whose filename date is strictly older than `now - retentionDays` are deleted.
 
 - **Default:** `14` days.
 - **Override:** set `ASSIGNEE_LOG_RETENTION_DAYS` to a positive integer. Non-numeric, zero, or negative values fall back to the default.
-- **Manual prune:** `assignee clean --logs` (dry-run) or `assignee clean --logs --confirm` (destructive).
-- **Default `clean` mode:** when run with no scoped flags, `assignee clean` prunes logs as part of its "everything" pass.
-- **Auto-throttle:** an internal auto-prune hook (`autoPruneLogsIfDue`) runs at most once per 24 hours, gated by a `.last-prune` marker file inside the log directory.
+- **How it runs:** the auto-prune hook (`autoPruneLogsIfDue` in `apps/cli/src/services/cleanup/orchestrator.ts`) runs opportunistically at most once per hour, gated by a `.last-prune` marker file inside the log directory. There is no `assignee clean` CLI command — pruning is entirely automatic and throttled.
+- **Manual control:** if you need to force a prune, delete the `.last-prune` marker (`rm ~/.assignee/logs/.last-prune`) so the next CLI invocation re-runs the hook. To inspect retained files, run `ls ~/.assignee/logs/`.
 
 ### `ASSIGNEE_ENABLE_REMOTE_MCP`
 
