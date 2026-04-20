@@ -12,6 +12,51 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 88 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+Two real production bugs surfaced by a live dogfood run of `assignee apply` deploying the project's own pitch deck (presentation/) via the static-website compound pattern. Both bugs made it to live AWS before anything caught them. The more interesting part — documented below — is _why_ the existing test + review regime missed them.
+
+**Bug 1 — static-website BucketPolicy `Resource` double-ARN**
+
+- `packages/core/src/pattern-templates/patterns/static-website.ts:202` generated `Resource: arn:*:s3:::${markerRef(R.WEBSITE_BUCKET)}/*`. But `markerRef` resolves to the **full ARN** (`arn:aws:s3:::bucket-name`), not the bare bucket name — because `buildResourceArn` synthesizes ARNs for every entry in `completedResources` (`marker-resolver.ts:233` returns `String(match.resourceArn)`, the full synthesized ARN). At runtime the Resource field ended up as `arn:*:s3:::arn:aws:s3:::bucket-name/*` — S3 rejected with `Policy has invalid resource (Service: S3, Status Code: 400)`.
+- Reproduced against live AWS twice in one session (plan-then-apply + fresh apply). 3 of 4 compound resources provisioned; the 4th (BucketPolicy) halted the compound.
+- Fix: dropped the redundant `arn:*:s3:::` prefix — `markerRef(R.WEBSITE_BUCKET)` already returns a partition-correct ARN. New line: `Resource: \`${markerRef(R.WEBSITE_BUCKET)}/\*\``. Preserves the parallel `aws:SourceArn: markerRef(R.CDN_DISTRIBUTION)` pattern on the adjacent line (which already was correct — no prefix, no bug).
+
+**Bug 2 — compound-halt error message suggested a nonexistent flag**
+
+- `packages/core/src/utils/display-output/compound-failure.ts:154` suggested `assignee status ${runId} --resume` as the recovery command. `status` has no `--resume` flag — verified by reading every `.option(...)` in `apps/cli/src/commands/status.ts:40-56` (only `--json`, `--region`, `--resource-type`, `--bp-coverage`, `--gaps-only`, `--include-structural-gaps`). Running the suggested command returns `error: unknown option '--resume'`.
+- Fix: replaced with `assignee apply --checkpoint .assignee/checkpoint-${runId}.json` — the real resumption command (`apply.ts:51-54`'s `-c, --checkpoint` flag skips Phase 1 and enters Phase 2 directly, resuming from where the compound halted).
+
+#### Why existing tests + reviewers missed both
+
+**Bug 1** — no test ever instantiated the static-website pattern and ran its markers through the resolver:
+
+- `marker-resolver.test.ts` only tested a VPC marker case — ARN pre-synthesis wasn't exercised for S3.
+- `serverless-api.test.ts` imports `staticWebsitePattern` for its keyword-detection tests but never resolves markers.
+- `apps/cli/src/e2e/e2e-plan.test.ts` has a static-website scenario but asserts on `executionStatus === SUCCESS` + `resourceArn is string` — never inspects the `PolicyDocument.Statement[0].Resource` shape it generated.
+- **Zero-coverage outlier**: every other compound pattern had its own per-pattern test file (`efs-with-vpc.test.ts`, `vpc-networking.test.ts`, `scheduled-lambda.test.ts`, etc.). Only `static-website.test.ts` didn't exist. The bug lived in the one pattern that had no unit test of its own.
+
+**Bug 2** — the existing test was _tautological_:
+
+- `packages/core/src/utils/display.test.ts:201` asserted `expect(output).toContain("assignee status run-abc-123 --resume")`. It verified the error-message string, not whether the suggested command would work. A test that says "the code emits what the code emits" is worthless for catching typos in suggestions.
+- No cross-cutting scanner existed for `assignee <cmd> ... --<flag>` patterns in emitted strings vs. the `.option(...)` lists on the matching subcommands.
+
+**The common lesson**: both bugs are at the exact layer where unit tests stop and integration+live tests haven't started. Unit tests mock the CloudControl call so S3's `invalid resource` error never fires; e2e tests check "did it succeed?" but not "did the intermediate payload look right?". The dogfood run that caught them is precisely what was missing.
+
+#### Tests added (red-phase — fail before fix, pass after)
+
+- `packages/core/src/pattern-templates/patterns/static-website.test.ts` (NEW FILE — 4 tests) — pins patternId, asserts BucketPolicy `Resource` matches `/^arn:aws:s3:::[\w-]+\/\*$/` and explicitly rejects the double-ARN `/arn:.*:s3:::arn:/` shape that was the bug, asserts `aws:SourceArn` resolves to the distribution's full ARN, asserts the `Bucket` field resolves to the raw bucket ARN. Closes the "zero-coverage outlier" gap by giving static-website a dedicated per-pattern test file like every other compound.
+- `packages/core/src/utils/display.test.ts` (lines 200-213) — the tautological assertion replaced with a positive assertion for the correct `assignee apply --checkpoint ...` command PLUS a `not.toContain("--resume")` + `not.toMatch(/assignee\s+status\s+\S+\s+--\S+/)` regex guard that locks out the broken form.
+- `packages/core/src/utils/display.test.ts` (lines 215-325 — NEW validator test) — `every 'assignee <cmd> ... --<flag>' suggestion references a real flag`: regex-extracts every `(cmd, flag)` pair from rendered compound-failure output, cross-checks against a hardcoded `KNOWN_FLAGS` map (apply / status / destroy) with inline source anchors (e.g., `apps/cli/src/commands/apply.ts:38-64`). The map is intentionally hardcoded rather than imported from `apps/cli/...`, because core is upstream of apps/cli and reversing the dependency direction would break the layered build. When a future contributor adds a new flag-mention to a compound-failure string, this test fires a loud "update the KNOWN_FLAGS map" error — making regressions visible instead of silent.
+
+Test totals: **core 5507 → 5512** (+5). Other packages unchanged. Grand total 7888 → 7893 passing.
+
+#### Process note
+
+The dogfood run that surfaced these was the presentation-deploy for the project's own GenAI-course-final pitch deck. This is a strong argument for queuing a real end-to-end dogfood harness as part of the nightly-e2e workflow — `apps/mcp-server/e2e-test.mjs` already provisions representative resources but gates behind `RUN_E2E_MCP=1` (Epic 83 closure). A static-website-specific dogfood that asserts on the FINAL resolved PolicyDocument shape (not just provisioning success) would have caught Bug 1 automatically. Epic 89 candidate if the nightly-e2e budget supports it.
+
 ### Epic 87 — iteration 1 (2026-04-20)
 
 #### Added
