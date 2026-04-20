@@ -12,6 +12,38 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 82 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+4-expert BMAD-team docs audit (persistent team via `TeamCreate` on opus-4-7[1m]) found 14 verified drifts across 8 docs beyond Epic 73-75's scope. Every HIGH/CRITICAL spot-checked against HEAD `94be206` before fix-dispatch — zero reviewer hallucinations this round.
+
+**Mary (analyst)**
+
+- `docs/explanation/contributing-a-bp-rule.md:33-38,42,45,64,106,154`: worked-example mis-routed contributors. Prose said `BP-EFS-001` through `BP-EFS-009` exist and told contributors to pick `BP-EFS-010`; live `ls packages/best-practices/efs/` returns only `001`–`003`. Corrected to claim `001`–`003` and new ID `BP-EFS-004`; replaced `BP-EFS-010` → `BP-EFS-004` at 6 sites.
+- `docs/explanation/contributing-a-bp-rule.md:58`: sample YAML `lastVerified: "2026-04-16"` (4 days stale) → placeholder `"<YYYY-MM-DD>"` so copy-paste contributors must fill in.
+
+**Paige (tech-writer)**
+
+- `docs/quickstart.md:95`: "MAX_POLL_ITERATIONS=450 safety guard; extended 15-min timeout" — the guard was removed in the H10 fix (`status-poller.ts:34` notes it, `status-poller.test.ts:255` pins the removal), and live `EXTENDED_POLL_TIMEOUT_MS = 20 * 60 * 1000` (20 min, not 15). Fixed.
+- `docs/configuration.md:326-338` Internal Constants table: dropped removed `MAX_POLL_ITERATIONS` row; corrected `EXTENDED_POLL_TIMEOUT_MS` value `900000/15 min` → `1200000/20 min`; dropped `POLL_INTERVAL_MS` (it's module-local in `status-poller.ts`, not a global).
+- `docs/commands.md:297,300`: baseline path `.assignee/baselines/…` → `~/.assignee/baselines/…` (`baseline-adopt.ts:7` JSDoc is the source of truth).
+- `docs/commands.md:602-604`: doctor example MCP pin versions were stale (pricing `1.0.6` → `1.0.27`, documentation `1.1.1` → `1.1.20`, iam `1.0.2` → `1.0.17`; WA-security and billing already correct).
+
+**Winston (architect)**
+
+- `docs/explanation/invariants.md:582-584`: "No circular imports" invariant cited three paths under `packages/core/src/config/barrels/config/` — that path does not exist at HEAD; canonical is `packages/core/src/barrels/config/`. Stripped the duplicate `/config/` segment in all three bullets.
+- `docs/architecture.md:167`: Services table row cited `apps/cli/src/services/checkpoint.ts` which does not exist (only the `.test.ts` does). Restructured into three rows pointing at the real checkpoint split — `commands/apply/checkpoint-state.ts`, `commands/plan/checkpoint-writer.ts`, `packages/core/src/schema/checkpoint.ts`.
+- `docs/architecture.md:185`: Services table cited `apps/cli/src/services/desired-state-sanitizer.ts` which moved to `packages/core/src/services/desired-state-sanitizer.ts` in Wave-5 Pass H. Path corrected.
+- `docs/explanation/run-ledger-design.md:17`: canonical cite for `NO_TAG_TYPES` + tag injector was pointing at the shim `apps/cli/src/utils/tags.ts`; canonical is `packages/core/src/utils/tags.ts:60`. Fixed with shim parenthetical.
+- `docs/explanation/run-ledger-design.md:24`: same shim-vs-canonical swap for memory-recorder.
+- `docs/explanation/invariants.md:34-36`: deleted the stale "former location" sentence about `apps/cli/src/utils/error-messages.ts` — that file has no ARN pattern today; `ARN_PATTERN` lives in `packages/core/src/utils/redact.ts` (correctly cited elsewhere in the same invariant).
+- `docs/integration-architecture.md:73`: internal contradiction — line 20 said `13 cmds`, line 73 said `17 Commander.js commands`. Ground truth is 13 (`grep -nE "program.addCommand\(" apps/cli/src/index.ts` shows 13 real calls; one additional line is a comment). Corrected to 13.
+
+#### Review discipline
+
+Spot-checked every HIGH/CRITICAL against HEAD before dispatch: EFS dir contents, status-poller constants, baseline-adopt JSDoc, barrel path existence, checkpoint/desired-state-sanitizer file locations, integration-architecture both sides of the 13-vs-17 contradiction. Zero findings fabricated this round. Quinn (QA) still running — additional test/coverage-focused findings land in Wave 2 as Epic 83 if she reports.
+
 ### Epic 81 — iteration 2 (2026-04-20)
 
 #### Added

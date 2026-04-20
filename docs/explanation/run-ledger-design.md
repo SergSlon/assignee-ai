@@ -14,14 +14,16 @@ its `AgentState`. The runId flows through the graph and lands in three
 places:
 
 1. **Resource tags** — the mandatory-tag injector at
-   [`apps/cli/src/utils/tags.ts`](../../apps/cli/src/utils/tags.ts)
-   writes `assignee-run-id=<uuid>` on every resource it provisions
+   [`packages/core/src/utils/tags.ts`](../../packages/core/src/utils/tags.ts)
+   (re-exported via `apps/cli/src/utils/tags.ts`) writes
+   `assignee-run-id=<uuid>` on every resource it provisions
    (alongside `managed-by=assignee-ai` and `environment=<env>`).
    Resource types that CloudFormation refuses to tag (e.g.
    `AWS::EC2::Route`, `AWS::SNS::Subscription`) are skipped — the
    `NO_TAG_TYPES` set in the same file is the canonical list.
 2. **Provision records** — the memory-recorder at
-   [`apps/cli/src/utils/memory-recorder.ts`](../../apps/cli/src/utils/memory-recorder.ts)
+   [`packages/core/src/utils/memory-recorder.ts`](../../packages/core/src/utils/memory-recorder.ts)
+   (re-exported via `apps/cli/src/utils/memory-recorder.ts`)
    appends a JSONL entry with the runId, resource type, ARN, region,
    desired-state SHA-256 hash, estimated monthly cost, and timestamp.
    The file lives under the user's memory dir (`~/.assignee/memory/` by

@@ -92,7 +92,7 @@ The apply flow adds these steps after planning:
 
 8. **Human Approval** -- shows the plan and asks you to confirm (type "yes"). When resuming from a checkpoint (including the plan-to-apply flow), confirmation is auto-approved to avoid double prompting.
 9. **Resource Provisioner** -- creates the resource via AWS CloudControl API. State guard is skipped for S3 buckets (globally unique names cause false positives).
-10. **Status Poller** -- polls every 2s until CloudControl reports SUCCESS or FAILED (MAX_POLL_ITERATIONS=450 safety guard; extended 15-min timeout for RDS/ELBv2/NatGateway)
+10. **Status Poller** -- polls every 2s until CloudControl reports SUCCESS or FAILED (extended 20-min timeout for CloudFront / RDS / ELBv2 / NatGateway)
 11. **Result Formatter** -- displays the created resource ARN, tags, and cost
 
 ## What Just Happened

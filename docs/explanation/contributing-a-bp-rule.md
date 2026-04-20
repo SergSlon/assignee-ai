@@ -34,15 +34,15 @@ ls packages/best-practices/efs/
 ```
 
 At the time of writing, `efs/` contains `BP-EFS-001.yaml` through
-`BP-EFS-009.yaml`. None of them checks `KmsKeyId`. Good — the rule slot
-is open. Pick the next free number: `BP-EFS-010`.
+`BP-EFS-003.yaml`. None of them checks `KmsKeyId`. Good — the rule slot
+is open. Pick the next free number: `BP-EFS-004`.
 
 ### Step 2 — Write the rule
 
-Drop a new file at `packages/best-practices/efs/BP-EFS-010.yaml`:
+Drop a new file at `packages/best-practices/efs/BP-EFS-004.yaml`:
 
 ```yaml
-id: BP-EFS-010
+id: BP-EFS-004
 title: "EFS file system should enforce KMS encryption at rest"
 severity: CRITICAL
 resource_type: "AWS::EFS::FileSystem"
@@ -55,13 +55,13 @@ description: "Encrypted EFS file systems protect data at rest with a customer-ma
 remediation: "Set KmsKeyId to the ARN of a customer-managed KMS key (e.g. arn:aws:kms:<region>:<account>:key/<id>) before creating the file system."
 consequence: "A KMS-key-less EFS allows anyone with file-system-level access to read every stored byte in plaintext."
 category: security
-lastVerified: "2026-04-16"
+lastVerified: "<YYYY-MM-DD>"
 autoFixable: false
 ```
 
 Why the fields are what they are:
 
-- **`id`** — `BP-EFS-010` matches the naming regex and continues the
+- **`id`** — `BP-EFS-004` matches the naming regex and continues the
   service sequence. See
   [`src/schema.ts`](../../packages/best-practices/src/schema.ts)
   for the regex.
@@ -103,7 +103,7 @@ Expected output:
 ```
 
 The count above (`186`) reflects the post-contribution total — i.e., the
-current 185 rules plus the new `BP-EFS-010` you just added. If you add
+current 185 rules plus the new `BP-EFS-004` you just added. If you add
 multiple rules in one PR the count grows accordingly.
 
 If the script finds a schema violation it prints `<file> [<rule-id>]:
@@ -151,7 +151,7 @@ Every test must pass, including:
 ### Step 7 — Open the PR
 
 Use [`.github/PULL_REQUEST_TEMPLATE.md`](../../.github/PULL_REQUEST_TEMPLATE.md)
-— check the "BP rule" type-of-change box, list `BP-EFS-010` in the rule
+— check the "BP rule" type-of-change box, list `BP-EFS-004` in the rule
 ID section, link the Well-Architected pillar, and attach a short
 `assignee plan` transcript showing the finding fire.
 
