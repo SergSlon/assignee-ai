@@ -65,7 +65,14 @@ jobs:
           if [ -z "$raw" ]; then
             raw="22"
           fi
-          json="$(echo "$raw" | tr ',' '\n' | awk 'NF {print "  " $1}' | jq -R . | jq -cs .)"
+          # awk strips any stray whitespace and drops empty tokens so the
+          # emitted array is a clean ["22"] (or ["20","22"] for dispatch
+          # multi-version runs). Leading whitespace in a node-version
+          # string breaks `actions/setup-node` and causes the downstream
+          # matrix jobs to fail-to-dispatch — the weekly run ends up
+          # with only `prepare` green and the overall status red, which
+          # is exactly what happened on 2026-04-20 before this fix.
+          json="$(echo "$raw" | tr ',' '\n' | awk '{gsub(/[[:space:]]/,""); if (length($0)) print $0}' | jq -R . | jq -cs .)"
           echo "json=$json" >> "$GITHUB_OUTPUT"
 
   matrix:

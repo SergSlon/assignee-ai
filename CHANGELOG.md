@@ -12,6 +12,12 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 76 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+- `.github/workflows/ci-cross-platform.yml`: the `prepare` job emitted the node-version matrix with leading whitespace (`awk 'NF {print "  " $1}'` → `["  22"]`). Passing `"  22"` to `actions/setup-node` in the downstream `matrix` reusable-workflow call broke dispatch: every scheduled weekly run (cron Mondays 07:00 UTC) ended with only the `prepare` job green and the overall run marked `failure` without any matrix job even starting. Surfaced by `gh run list` on 2026-04-20 (run 24657895247 on `fcfd4f8`). Replaced with `awk '{gsub(/[[:space:]]/,""); if (length($0)) print $0}'` so scheduled and dispatch runs alike emit `["22"]` / `["20","22","24"]` without padding. Sanity-tested both paths locally.
+
 ### Epic 75 — iteration 1 (2026-04-20)
 
 #### Fixed
