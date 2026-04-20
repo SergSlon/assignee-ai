@@ -12,6 +12,13 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 76 — iteration 2 (2026-04-20)
+
+#### Fixed
+
+- `.github/workflows/ci-core.yml`: `node` input type `number` → `string` (+ inline comment explaining the caller contract). The real reason the weekly cross-platform matrix never dispatched: `ci-cross-platform.yml`'s `prepare` job emits `fromJson`-parsed strings (`["22"]`), so passing `matrix.node = "22"` to a reusable workflow declaring `type: number` silently fails type validation and no downstream job spawns. `ci.yml` passes `node: 22` as an unquoted literal which GitHub auto-coerces to the new string type, so no change is required at that caller. Verified by a manual workflow_dispatch immediately after push (Epic 76-it1's fix was incidental polish; it-2 closes the actual bug).
+- `.github/workflows/ci-cross-platform.yml`: update the comment to attribute the failure correctly and point to Epic 76-it2.
+
 ### Epic 76 — iteration 1 (2026-04-20)
 
 #### Fixed

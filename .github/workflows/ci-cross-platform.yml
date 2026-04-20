@@ -67,11 +67,11 @@ jobs:
           fi
           # awk strips any stray whitespace and drops empty tokens so the
           # emitted array is a clean ["22"] (or ["20","22"] for dispatch
-          # multi-version runs). Leading whitespace in a node-version
-          # string breaks `actions/setup-node` and causes the downstream
-          # matrix jobs to fail-to-dispatch — the weekly run ends up
-          # with only `prepare` green and the overall status red, which
-          # is exactly what happened on 2026-04-20 before this fix.
+          # multi-version runs). The leading-whitespace prefix the earlier
+          # version used ("  " + $1) was cosmetic noise, not the root cause
+          # of the silent weekly failure — that was a type-mismatch in
+          # `ci-core.yml` (node input declared `type: number` while
+          # `fromJson` emits strings). See Epic 76-it2 for the full fix.
           json="$(echo "$raw" | tr ',' '\n' | awk '{gsub(/[[:space:]]/,""); if (length($0)) print $0}' | jq -R . | jq -cs .)"
           echo "json=$json" >> "$GITHUB_OUTPUT"
 
