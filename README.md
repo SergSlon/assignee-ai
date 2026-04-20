@@ -1,5 +1,7 @@
 # Assignee.ai
 
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/SergSlon/f9d960dd5a1defd7b8fbd4656df40915/raw/assignee-ai-coverage.json)](https://github.com/SergSlon/assignee-ai/actions)
+
 > Type AWS infrastructure intent in English. Get a real, tagged, cost-estimated AWS resource — no IaC code, no state file, no CDK bootstrap, no Terraform backend. Human approval before every apply.
 
 ## 30-second hero
@@ -377,7 +379,7 @@ node process-captured-responses.mjs
 
 **Status: pre-public.** Source available under MIT (see [LICENSE](LICENSE)). `npm publish` is deferred until v0.2 — see [CHANGELOG.md](CHANGELOG.md). To track release, watch the repo.
 
-Packages `@assignee/cli` and `@assignee/mcp-server` are `"private": true` and installable only from source today. Public CI and coverage badges are intentionally omitted until first release.
+Packages `@assignee/cli` and `@assignee/mcp-server` are `"private": true` and installable only from source today. Public CI status, npm registry links, and release badges are intentionally omitted until first release; the coverage badge above is rendered from a secret gist (`f9d960dd5a1defd7b8fbd4656df40915`) updated by `ci-core.yml` on every green `main` push via `schneegans/dynamic-badges-action` — internal visibility only, not a published artifact.
 
 ### Completed epics
 
