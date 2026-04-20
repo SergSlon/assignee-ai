@@ -12,6 +12,12 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 81 — iteration 2 (2026-04-20)
+
+#### Added
+
+- `README.md`: expand the coverage-only badge from iteration 1 into a seven-badge header row visible under the H1. New row: **CI** (push/PR workflow status), **Cross-platform** (weekly+manual matrix workflow status), **Coverage** (existing gist endpoint), **License: MIT** (LICENSE file is MIT), **Node ≥20.11** (matches `package.json` `engines.node`), **TypeScript strict** (links to `packages/typescript-config/strict.json`), **pnpm workspaces** (links to `pnpm-workspace.yaml`). Private-repo policy check: `gh repo view` confirms `visibility: PRIVATE`, so the badge row is visible only to collaborators — matches `feedback_no_public_artifacts` (no public npm/registry URLs until approved) while still giving the team full at-a-glance signal. Node-version badge set to `>=20.11` not `>=22` to match the actual `engines` field; TypeScript link corrected from non-existent `tsconfig.base.json` → `packages/typescript-config/strict.json`.
+
 ### Epic 81 — iteration 1 (2026-04-20)
 
 #### Fixed
