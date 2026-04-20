@@ -12,6 +12,12 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 73 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+- `docs/index.md`: Pricing strategies and decomposers rows in the Key metrics table listed `23` each; live registries have `37` each (confirmed by `pnpm doc-lint`). Updated both rows to `37` and rolled the "as of" date to 2026-04-20 (closes L8 HIGH from epic-73-it1 review — stale metric drift surfaced by on-demand 7-lane review after 17 no-delta iterations).
+
 ### Epic 67 — iteration 1 (2026-04-20)
 
 #### Fixed
