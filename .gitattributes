@@ -1,0 +1,58 @@
+# Line-ending policy
+#
+# Why this file exists:
+# - The BP manifest integrity hash (`packages/best-practices/src/integrity.ts`)
+#   reads YAML file bytes raw and feeds them into SHA-256. Git on Windows
+#   defaults to `core.autocrlf=true`, which rewrites LF → CRLF on checkout
+#   and breaks the hash — the Windows CI matrix surfaced this the first
+#   time it actually dispatched (Epic 76-it2 fix), see
+#   `__tests__/manifest-freshness.test.ts` on 2026-04-20 run 24668814167.
+# - Without an explicit policy, deterministic artefacts (manifest hashes,
+#   snapshot tests, lint formatters) drift between platforms with no
+#   obvious culprit.
+#
+# Policy:
+# - Force LF on every hash-sensitive or content-deterministic file type so
+#   all platforms see the same bytes.
+# - Force LF on every typical source/doc file for predictability. Windows
+#   developers should set `git config --global core.autocrlf input` (the
+#   standard non-macOS/non-Linux setting) — that combines with this file
+#   to give clean checkouts everywhere.
+# - Binary assets (images, fonts, lockfile caches) are marked binary so
+#   git never touches them.
+
+# Default: treat everything as text with auto-detected LF-normalized storage.
+# This keeps git smart about new file types while keeping stored blobs clean.
+* text=auto eol=lf
+
+# Hash-sensitive / determinism-critical: explicitly LF everywhere
+*.yaml       text eol=lf
+*.yml        text eol=lf
+*.json       text eol=lf
+*.jsonl      text eol=lf
+*.ts         text eol=lf
+*.tsx        text eol=lf
+*.js         text eol=lf
+*.mjs        text eol=lf
+*.cjs        text eol=lf
+*.md         text eol=lf
+*.mdx        text eol=lf
+*.sh         text eol=lf
+*.env        text eol=lf
+
+# Shell scripts and hooks: must stay LF for POSIX interpreters
+.husky/*     text eol=lf
+*.bash       text eol=lf
+*.zsh        text eol=lf
+*.fish       text eol=lf
+
+# Binary assets: leave git alone
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.webp       binary
+*.ico        binary
+*.pdf        binary
+*.woff       binary
+*.woff2      binary
