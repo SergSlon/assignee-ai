@@ -333,9 +333,7 @@ These constants control system behavior and are not user-configurable:
 | `MEMORY_MAX_PROVISIONS`        | 200         | Max provision records in memory rotation           |
 | `MEMORY_MAX_FAILURES`          | 100         | Max failure records in memory rotation             |
 | `MEMORY_MAX_PATTERNS`          | 100         | Max pattern records in memory rotation             |
-| `MAX_POLL_ITERATIONS`          | 450         | Safety guard for status poller iterations          |
-| `POLL_INTERVAL_MS`             | 2000        | Status poller interval (2 seconds)                 |
-| `EXTENDED_POLL_TIMEOUT_MS`     | 900000      | Extended timeout for RDS/ELBv2/NatGateway (15 min) |
+| `EXTENDED_POLL_TIMEOUT_MS`     | 1200000     | Extended timeout for RDS/ELBv2/NatGateway (20 min) |
 
 ## State Directories
 

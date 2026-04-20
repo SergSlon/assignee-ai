@@ -32,8 +32,6 @@ redactor that matches `arn:aws:` over-rejects or over-leaks.
 
 - `packages/core/src/config/aws-partition.ts` — canonical helper
 - `packages/core/src/utils/redact.ts` — redaction regex (`ARN_PATTERN`).
-  The former `apps/cli/src/utils/error-messages.ts` location is now a
-  thin re-export shim.
 - `packages/core/src/resource-plugins/plugins/*` — every validator
   that uses `ARN_PATTERN_SOURCE` rather than string literals
 
@@ -579,9 +577,9 @@ shims removed) and 56-it1-04 (narrative-count drift linter).
 
 ## No circular imports across `barrels/config` sub-barrels
 
-**Rule.** `packages/core/src/config/barrels/config/constants.ts`,
-`packages/core/src/config/barrels/config/resources.ts`, and
-`packages/core/src/config/barrels/config/help-hints.ts` must not
+**Rule.** `packages/core/src/barrels/config/constants.ts`,
+`packages/core/src/barrels/config/resources.ts`, and
+`packages/core/src/barrels/config/help-hints.ts` must not
 import from each other. Each sub-barrel owns a disjoint slice of the
 `@assignee/core/config` public surface; cross-imports collapse the
 split back into a single aggregate barrel and re-introduce the 361-LOC

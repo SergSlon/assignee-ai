@@ -158,31 +158,33 @@ Two registries:
 
 ### Key Services
 
-| Service                      | File      | Purpose                                      |
-| ---------------------------- | --------- | -------------------------------------------- |
-| `graph.ts`                   | services/ | LangGraph workflow construction              |
-| `graph-state.ts`             | services/ | State annotation definition                  |
-| `graph-routing.ts`           | services/ | Conditional edge routing                     |
-| `memory.ts`                  | services/ | JSON-file provision/failure/pattern memory   |
-| `checkpoint.ts`              | services/ | Plan checkpoint save/load/prune              |
-| `cleanup.ts`                 | services/ | Orchestrates checkpoint/cache/memory cleanup |
-| `price-cache.ts`             | services/ | TTL-based pricing result cache               |
-| `mcp-client.ts`              | services/ | MCP server process management (singleton)    |
-| `list-resources.ts`          | services/ | AWS Resource Groups Tagging API queries      |
-| `billing.ts`                 | services/ | Live cost data from Cost Management MCP      |
-| `drift-detector.ts`          | services/ | Deep-diff desired vs. actual state           |
-| `drift-detector-factory.ts`  | services/ | Factory for drift detector with env config   |
-| `destroy-service.ts`         | services/ | Single-resource destroy logic                |
-| `bulk-destroy.ts`            | services/ | Tier-ordered bulk destroy                    |
-| `resource-resolver.ts`       | services/ | Resolve resources by ARN or name             |
-| `status-aggregator.ts`       | services/ | Aggregate resources for status command       |
-| `cloudcontrol-client.ts`     | services/ | CloudControl SDK client factory              |
-| `cloudcontrol-adapter.ts`    | services/ | ProvisioningPort implementation              |
-| `credential-detector.ts`     | services/ | AWS credential auto-detection                |
-| `completion-generator.ts`    | services/ | Shell completion generation                  |
-| `desired-state-sanitizer.ts` | services/ | Strip extraneous keys, coerce types          |
-| `required-field-repairer.ts` | services/ | Fill missing required fields from defaults   |
-| `s3-upload.ts`               | services/ | Static site file upload to S3                |
+| Service                      | File                        | Purpose                                      |
+| ---------------------------- | --------------------------- | -------------------------------------------- |
+| `graph.ts`                   | services/                   | LangGraph workflow construction              |
+| `graph-state.ts`             | services/                   | State annotation definition                  |
+| `graph-routing.ts`           | services/                   | Conditional edge routing                     |
+| `memory.ts`                  | services/                   | JSON-file provision/failure/pattern memory   |
+| `checkpoint-state.ts`        | commands/apply/             | Checkpoint save/resume state at apply time   |
+| `checkpoint-writer.ts`       | commands/plan/              | Write plan checkpoint JSON from graph state  |
+| `checkpoint.ts` (schema)     | @assignee/core/schema/      | Checkpoint serialize/validate schema (Zod)   |
+| `cleanup.ts`                 | services/                   | Orchestrates checkpoint/cache/memory cleanup |
+| `price-cache.ts`             | services/                   | TTL-based pricing result cache               |
+| `mcp-client.ts`              | services/                   | MCP server process management (singleton)    |
+| `list-resources.ts`          | services/                   | AWS Resource Groups Tagging API queries      |
+| `billing.ts`                 | services/                   | Live cost data from Cost Management MCP      |
+| `drift-detector.ts`          | services/                   | Deep-diff desired vs. actual state           |
+| `drift-detector-factory.ts`  | services/                   | Factory for drift detector with env config   |
+| `destroy-service.ts`         | services/                   | Single-resource destroy logic                |
+| `bulk-destroy.ts`            | services/                   | Tier-ordered bulk destroy                    |
+| `resource-resolver.ts`       | services/                   | Resolve resources by ARN or name             |
+| `status-aggregator.ts`       | services/                   | Aggregate resources for status command       |
+| `cloudcontrol-client.ts`     | services/                   | CloudControl SDK client factory              |
+| `cloudcontrol-adapter.ts`    | services/                   | ProvisioningPort implementation              |
+| `credential-detector.ts`     | services/                   | AWS credential auto-detection                |
+| `completion-generator.ts`    | services/                   | Shell completion generation                  |
+| `desired-state-sanitizer.ts` | packages/core/src/services/ | Strip extraneous keys, coerce types          |
+| `required-field-repairer.ts` | services/                   | Fill missing required fields from defaults   |
+| `s3-upload.ts`               | services/                   | Static site file upload to S3                |
 
 ## Configuration System
 

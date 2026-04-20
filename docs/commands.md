@@ -294,10 +294,10 @@ When `--baseline` is set alongside a positional `<resource-id>` ARN, the command
 
 1. Infers the CloudFormation resource type from the ARN.
 2. Calls CCAPI `GetResource` for the live state.
-3. Writes a baseline payload to `.assignee/baselines/<slugified-arn>.json` containing the live state, resource type, and an ISO timestamp.
+3. Writes a baseline payload to `~/.assignee/baselines/<slugified-arn>.json` containing the live state, resource type, and an ISO timestamp.
 4. Future `assignee drift` runs will find the baseline via the checkpoint fallback in `resolve-desired-state.ts` and compare against it instead of reporting `BASELINE_MISSING`.
 
-Checkpoints still win over baselines — the baseline is a last-resort fallback for resources adopted AFTER they were provisioned. To drop an adopted baseline, delete its file directly from `.assignee/baselines/` (there is no dedicated CLI command for this — baselines are plain JSON files keyed by slugified ARN).
+Checkpoints still win over baselines — the baseline is a last-resort fallback for resources adopted AFTER they were provisioned. To drop an adopted baseline, delete its file directly from `~/.assignee/baselines/` (there is no dedicated CLI command for this — baselines are plain JSON files keyed by slugified ARN).
 
 **Examples:**
 
@@ -599,9 +599,9 @@ Doctor summary (assignee.ai 0.1.0):
 [✓] Bedrock (us-east-1, model us.amazon.nova-lite-v1:0)
     • ✓ LLM (bedrock/amazon.nova-lite-v1:0) → responded (Hello! How can I help…)
 [!] MCP servers (4/5 ok)
-    • ✓ awslabs.aws-pricing-mcp-server@1.0.6     → launched (uvx)
-    • ✓ awslabs.aws-documentation-mcp-server@1.1.1 → launched (uvx)
-    • ✓ awslabs.iam-mcp-server@1.0.2             → launched (uvx)
+    • ✓ awslabs.aws-pricing-mcp-server@1.0.27    → launched (uvx)
+    • ✓ awslabs.aws-documentation-mcp-server@1.1.20 → launched (uvx)
+    • ✓ awslabs.iam-mcp-server@1.0.17            → launched (uvx)
     • ✗ awslabs.well-architected-security-mcp-server@0.1.7 → uvx exited with code 127
     • ✓ awslabs.billing-cost-management-mcp-server@0.0.17 → launched (uvx)
 [✓] Cache

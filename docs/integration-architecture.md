@@ -70,7 +70,7 @@ The primary user-facing application. Contains all business logic.
 
 - 13-node LangGraph pipeline (graph.ts + all nodes)
 - Interactive wizard (option-elicitor with clack prompts)
-- 17 Commander.js commands
+- 13 Commander.js commands
 - MCP server process management (spawn/lifecycle)
 - AWS SDK integration (Bedrock, CloudControl, CloudFront, CloudWatch Logs, DynamoDB, EC2, IAM, Lambda, RDS, Resource Groups Tagging API, S3, SNS, SSM, STS)
 - 6-level configuration precedence system
