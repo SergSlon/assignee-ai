@@ -71,18 +71,49 @@ Apply now? (AWS::S3::Bucket, est. $0.0230/GB-month) ▸
 
 ## Install
 
+**v0.2** (npm publish target — not yet available):
+
 ```bash
-# v0.2 (npm publish target):
-#   npm install -g assignee
-#
-# Today (source build, MIT-licensed):
-git clone https://github.com/assignee-ai/assignee.ai.git
-cd assignee.ai && pnpm install && pnpm build
-pnpm link --global        # adds 'assignee' to PATH
-assignee doctor --short   # verify AWS credentials + Bedrock region
+npm install -g assignee
 ```
 
-See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the IAM policy setup (operator / reader / auditor).
+**Today** — source build, MIT-licensed:
+
+```bash
+git clone https://github.com/SergSlon/assignee-ai.git
+cd assignee-ai && pnpm install && pnpm build
+```
+
+Then pick one of the two invocation paths:
+
+```bash
+# Path A — run directly from the build output (no global install).
+# This is the lowest-friction option and works identically to 'assignee':
+node apps/cli/dist/index.js doctor --short
+
+# Path B — put 'assignee' on $PATH via pnpm's global bin.
+# Requires a one-time 'pnpm setup' on fresh machines (it creates
+# $PNPM_HOME and appends it to your shell profile). Skip 'pnpm setup'
+# if $PNPM_HOME is already exported in your environment.
+pnpm setup               # one-time — writes .zshrc / .bashrc; reload shell after
+pnpm link --global       # adds the CLI to the pnpm global bin
+assignee doctor --short  # real command on $PATH
+```
+
+Either path produces the same output (example from a fresh run on 2026-04-20):
+
+```console
+$ assignee doctor --short
+Account:  ************
+User ARN: arn:aws:iam::************:user/assignee-operator
+Region:   us-east-1
+Role:     operator (ASSIGNEE_OPERATOR_ACCESS_KEY_ID)
+Config:   ./.assignee/config.yaml (loaded)
+
+For full diagnostics, run `assignee doctor`.
+```
+
+See [docs/aws-bootstrap.md](docs/aws-bootstrap.md) for the IAM policy setup (operator / reader / auditor) before running `doctor`.
 
 ## Table of contents
 
