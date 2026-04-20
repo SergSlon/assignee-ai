@@ -12,6 +12,12 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 78 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+- Add `.gitattributes` at repo root. Git on Windows defaults to `core.autocrlf=true`, which rewrites LF → CRLF on checkout. The BP manifest integrity hash in `packages/best-practices/src/integrity.ts` reads YAML bytes raw and feeds them into SHA-256, so checkout-time line-ending rewriting produces a different hash than the on-disk manifest — `__tests__/manifest-freshness.test.ts` fails with `expected '636a1827…' to be 'f89aeb47…'` on Windows only. Surfaced by the Epic 76-it2 xplat verify run (24668814167, 2026-04-20) — the first time the matrix actually dispatched since the workflow was written. Without the matrix dispatching, the Windows bug hid for months. `.gitattributes` now forces LF for every hash-sensitive / determinism-critical file type (YAML, JSON, TS/JS, MD, shell scripts, husky hooks) and pins binary file types so Git doesn't touch them. `git add --renormalize .` is a no-op on this dev machine (macOS default is LF); Windows CI runners get clean LF checkouts from this commit forward.
+
 ### Epic 77 — iteration 1 (2026-04-20)
 
 #### Fixed
