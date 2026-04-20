@@ -62,13 +62,13 @@ jobs:
       AWS_REGION: us-east-1
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         with:
           version: 10.32.1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -87,7 +87,7 @@ jobs:
         # doesn't produce a nightly red ❌. The verify step below
         # emits a visible warning annotation instead.
         continue-on-error: true
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DRIFT_READER_ROLE_ARN }}
           aws-access-key-id: ${{ secrets.ASSIGNEE_DRIFT_READER_ACCESS_KEY_ID }}
@@ -118,7 +118,7 @@ jobs:
 
       - name: Upload drift report
         if: failure() && steps.verify-creds.outputs.has-creds == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mock-fixture-drift-report-${{ github.run_number }}
           path: mock-fixture-drift-report.json
