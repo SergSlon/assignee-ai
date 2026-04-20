@@ -301,7 +301,12 @@ describe("vpcNetworkingPattern — DependsOn ordering", () => {
         for (const s of strings) {
           const parsed = parseMarker(s);
           if (!parsed) continue;
-          if (parsed.kind === "az" || parsed.kind === "region") continue; // region-wide, no dependency
+          if (
+            parsed.kind === "az" ||
+            parsed.kind === "region" ||
+            parsed.kind === "account-id"
+          )
+            continue; // region- or account-wide, no resource dependency
           const targetId = parsed.resourceId;
           const targetGroup = depOrder.findIndex((g) => g.includes(targetId));
           expect(

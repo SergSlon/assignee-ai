@@ -17,6 +17,7 @@ import {
   type ResourceResult,
 } from "@/index.js";
 import { tryAssigneeCredentials } from "@/config/aws-credentials.js";
+import { extractIdentifierFromArn } from "@/config/arn-helpers.js";
 
 /**
  * Lookup function returning the sorted list of AvailabilityZone names for a
@@ -26,12 +27,52 @@ import { tryAssigneeCredentials } from "@/config/aws-credentials.js";
 export type AzLookup = (region: string) => Promise<string[]>;
 
 /**
+ * Lookup function returning the calling operator's AWS account ID.
+ * Abstracted so unit tests can supply a deterministic account ID instead
+ * of requiring real STS credentials for every fixture.
+ */
+export type AccountIdLookup = () => Promise<string>;
+
+/**
  * Default AZ lookup — dynamically imports the EC2 SDK and calls
  * DescribeAvailabilityZones with operator credentials. Results are cached per
  * region for the lifetime of the process; compound plan generation may need
  * multiple AZs within a single run and we don't want to pay for the SDK
  * round-trip more than once.
  */
+/**
+ * Default account-ID lookup — calls STS GetCallerIdentity once per
+ * process and caches. Used when no `accountIdLookup` is supplied via
+ * resolver options (production path). Unit tests supply a deterministic
+ * lookup so they don't need STS credentials.
+ */
+let ACCOUNT_ID_CACHE: string | undefined;
+export function __resetAccountIdCacheForTests(): void {
+  ACCOUNT_ID_CACHE = undefined;
+}
+export function defaultAccountIdLookup(region: string): AccountIdLookup {
+  return async () => {
+    if (ACCOUNT_ID_CACHE) return ACCOUNT_ID_CACHE;
+    const { STSClient, GetCallerIdentityCommand } =
+      await import("@aws-sdk/client-sts");
+    const creds = tryAssigneeCredentials("operator");
+    if (!creds) {
+      throw new Error(
+        "ACCOUNT_ID marker resolution requires operator credentials " +
+          "(ASSIGNEE_OPERATOR_ACCESS_KEY_ID / ASSIGNEE_OPERATOR_SECRET_ACCESS_KEY). " +
+          "None set.",
+      );
+    }
+    const sts = new STSClient({ region, credentials: creds });
+    const res = await sts.send(new GetCallerIdentityCommand({}));
+    if (!res.Account) {
+      throw new Error("STS GetCallerIdentity returned no Account.");
+    }
+    ACCOUNT_ID_CACHE = res.Account;
+    return res.Account;
+  };
+}
+
 const AZ_CACHE: Map<string, string[]> = new Map();
 export async function defaultAzLookup(region: string): Promise<string[]> {
   const cached = AZ_CACHE.get(region);
@@ -111,11 +152,18 @@ export function resolvePlaceholderMarkers(
   function resolveSinglePlaceholder(
     parsed: NonNullable<ReturnType<typeof parseMarker>>,
   ): string {
-    if (parsed.kind === "ref" || parsed.kind === "getatt") {
+    if (
+      parsed.kind === "ref" ||
+      parsed.kind === "getatt" ||
+      parsed.kind === "identifier"
+    ) {
       return `(from ${parsed.resourceId})`;
     }
     if (parsed.kind === "region") {
       return region;
+    }
+    if (parsed.kind === "account-id") {
+      return "(account)";
     }
     return azPlaceholder(parsed.index);
   }
@@ -168,10 +216,14 @@ export async function resolveCompoundMarkers(
     region: string;
     currentResourceId: string;
     azLookup?: AzLookup;
+    accountIdLookup?: AccountIdLookup;
   },
 ): Promise<Record<string, unknown>> {
   const lookup = options.azLookup ?? defaultAzLookup;
+  const accountIdLookup =
+    options.accountIdLookup ?? defaultAccountIdLookup(options.region);
   let azCache: string[] | undefined;
+  let accountIdCache: string | undefined;
 
   async function resolveString(value: string, path: string): Promise<string> {
     // Fast path: entire string is a single marker
@@ -209,7 +261,11 @@ export async function resolveCompoundMarkers(
     parsed: NonNullable<ReturnType<typeof parseMarker>>,
     path: string,
   ): Promise<string> {
-    if (parsed.kind === "ref" || parsed.kind === "getatt") {
+    if (
+      parsed.kind === "ref" ||
+      parsed.kind === "getatt" ||
+      parsed.kind === "identifier"
+    ) {
       const match = options.completedResources.find(
         (r) => r.resourceId === parsed.resourceId,
       );
@@ -230,11 +286,27 @@ export async function resolveCompoundMarkers(
             `This is a CloudControl adapter bug — please file an issue.`,
         );
       }
-      return String(match.resourceArn);
+      const fullArn = String(match.resourceArn);
+      // `identifier` markers return the BARE primary identifier (bucket name,
+      // vpc-id, instance-id, …), NOT the ARN. See markerIdentifier JSDoc and
+      // the S3 BucketPolicy.Bucket field in static-website pattern — that
+      // property requires the bucket name, not the ARN. `ref`/`getatt` keep
+      // the historical ARN behaviour.
+      if (parsed.kind === "identifier") {
+        return extractIdentifierFromArn(fullArn);
+      }
+      return fullArn;
     }
     // Region marker — resolves to the target AWS region string
     if (parsed.kind === "region") {
       return options.region;
+    }
+    // Account-ID marker — one STS call per plan, cached.
+    if (parsed.kind === "account-id") {
+      if (!accountIdCache) {
+        accountIdCache = await accountIdLookup();
+      }
+      return accountIdCache;
     }
     // AZ marker
     if (!azCache) {

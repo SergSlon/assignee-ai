@@ -30,7 +30,10 @@ import { createGraph } from "@assignee/core/graph";
 export interface CompiledGraph {
   invoke(
     input: Record<string, unknown> | null,
-    config: { configurable: { thread_id: string } },
+    config: {
+      configurable: { thread_id: string };
+      recursionLimit?: number;
+    },
   ): Promise<Record<string, unknown>>;
 
   getState(config: {

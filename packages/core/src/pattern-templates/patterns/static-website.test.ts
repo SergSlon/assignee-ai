@@ -23,7 +23,10 @@ import {
   resolveCompoundMarkers,
   __resetAzCacheForTests,
   type AzLookup,
+  type AccountIdLookup,
 } from "../../graph/nodes/plan-generator/marker-resolver.js";
+
+const fakeAccountIdLookup: AccountIdLookup = async () => "111122223333";
 
 // AZ lookup is irrelevant for BucketPolicy resolution (no AZ markers in the
 // defaultOptions for R.BUCKET_POLICY), but the resolver contract takes an
@@ -36,11 +39,18 @@ const fakeAzLookup: AzLookup = async () => [
 ];
 
 const TEST_BUCKET_NAME = "assignee-website-bucket-test";
-const TEST_BUCKET_ARN = `arn:aws:s3:::${TEST_BUCKET_NAME}`;
-const TEST_DISTRIBUTION_ID = "ETESTFAKE";
-// 111122223333 is an AWS-documentation placeholder account ID — not a real
-// 12-digit account. Safe to embed in fixtures.
-const TEST_DISTRIBUTION_ARN = `arn:aws:cloudfront::111122223333:distribution/${TEST_DISTRIBUTION_ID}`;
+// At runtime the compound resolver reads `completedResources[].resourceArn`
+// which status-poller.ts:254 sets from `result.identifier` returned by
+// CCAPI. For AWS::S3::Bucket that's the bare bucket NAME — not a full
+// ARN. The fixtures mirror that reality so the test actually matches
+// production behaviour.
+const TEST_BUCKET_IDENTIFIER = TEST_BUCKET_NAME;
+// For CloudFront distributions CCAPI returns the bare distribution ID as
+// the identifier (e.g. "ETESTFAKE"), so resourceArn is the bare ID, not a
+// full ARN. fakeAccountIdLookup below returns the AWS-documentation
+// placeholder account ID 111122223333 so tests that synthesize a full
+// ARN (e.g. aws:SourceArn) assert against a stable, non-real account.
+const TEST_DISTRIBUTION_IDENTIFIER = "ETESTFAKE";
 
 /**
  * Build the `completedResources` fixture the resolver expects when resolving
@@ -54,7 +64,8 @@ function buildCompletedResources(): ResourceResult[] {
       resourceId: R.WEBSITE_BUCKET,
       resourceType: RESOURCE_TYPES.S3_BUCKET,
       executionStatus: "SUCCESS" as never,
-      resourceArn: TEST_BUCKET_ARN,
+      // Bare bucket name — matches `result.identifier` from CCAPI.
+      resourceArn: TEST_BUCKET_IDENTIFIER,
     },
     {
       resourceId: R.CDN_OAC,
@@ -66,7 +77,10 @@ function buildCompletedResources(): ResourceResult[] {
       resourceId: R.CDN_DISTRIBUTION,
       resourceType: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
       executionStatus: "SUCCESS" as never,
-      resourceArn: TEST_DISTRIBUTION_ARN,
+      // CCAPI returns the bare distribution ID. If we ever add a
+      // buildResourceArn step between status-poller and the resolver,
+      // this fixture must change in lockstep.
+      resourceArn: TEST_DISTRIBUTION_IDENTIFIER,
     },
   ];
 }
@@ -122,6 +136,7 @@ describe("staticWebsitePattern — BucketPolicy Resource ARN regression", () => 
       region: "us-east-1",
       currentResourceId: R.BUCKET_POLICY,
       azLookup: fakeAzLookup,
+      accountIdLookup: fakeAccountIdLookup,
     });
 
     const stmt = statementFrom(cloned);
@@ -136,7 +151,6 @@ describe("staticWebsitePattern — BucketPolicy Resource ARN regression", () => 
     expect(stmt.Resource).not.toMatch(/arn:.*:s3:::arn:/);
 
     // Exact match — the value S3 actually needs.
-    expect(stmt.Resource).toBe(`${TEST_BUCKET_ARN}/*`);
     expect(stmt.Resource).toBe(`arn:aws:s3:::${TEST_BUCKET_NAME}/*`);
   });
 
@@ -149,24 +163,29 @@ describe("staticWebsitePattern — BucketPolicy Resource ARN regression", () => 
       region: "us-east-1",
       currentResourceId: R.BUCKET_POLICY,
       azLookup: fakeAzLookup,
+      accountIdLookup: fakeAccountIdLookup,
     });
 
     const stmt = statementFrom(cloned);
 
-    // The aws:SourceArn condition must resolve to the full distribution ARN
-    // exactly — the resolver returns resourceArn verbatim, no template
-    // prefix to strip. Pinning this so a future refactor that changes the
-    // resolver or template cannot silently regress it.
+    // Epic 88-it3 regression guard: the template manually builds the
+    // full CloudFront distribution ARN because markerRef resolves to
+    // the bare distribution ID (CCAPI's `result.identifier`), and the
+    // IAM AWS:SourceArn condition requires the full ARN for scoping.
+    // The fake accountIdLookup in this test returns 111122223333.
     expect(stmt.Condition.StringEquals["aws:SourceArn"]).toBe(
-      TEST_DISTRIBUTION_ARN,
+      `arn:aws:cloudfront::111122223333:distribution/${TEST_DISTRIBUTION_IDENTIFIER}`,
     );
-    // CloudFront distribution ARN shape: arn:aws:cloudfront::<account>:distribution/<id>
+    // Shape guard: must be a full CloudFront distribution ARN, never a
+    // bare ID (the earlier failure mode that CCAPI accepted but the
+    // IAM evaluator quietly didn't honour, causing S3 to return 403
+    // when CloudFront fetched through OAC).
     expect(stmt.Condition.StringEquals["aws:SourceArn"]).toMatch(
       /^arn:aws:cloudfront::\d{12}:distribution\/[A-Z0-9]+$/,
     );
   });
 
-  it("BucketPolicy Bucket field resolves to the raw bucket ARN (primary identifier for S3::BucketPolicy)", async () => {
+  it("BucketPolicy Bucket field resolves to the BARE bucket NAME (not the ARN — CCAPI rejects ARN)", async () => {
     const cloned = cloneBucketPolicyOptions();
     const completed = buildCompletedResources();
 
@@ -175,13 +194,20 @@ describe("staticWebsitePattern — BucketPolicy Resource ARN regression", () => 
       region: "us-east-1",
       currentResourceId: R.BUCKET_POLICY,
       azLookup: fakeAzLookup,
+      accountIdLookup: fakeAccountIdLookup,
     });
 
-    // The Bucket field is a bare markerRef — resolves to the full bucket
-    // ARN. CCAPI for AWS::S3::BucketPolicy accepts the ARN form; the
-    // primary identifier is documented as the bucket name but the resolver
-    // emits the ARN (buildResourceArn normalises this) and CCAPI tolerates
-    // both. Pin the current behaviour so any future change is intentional.
-    expect(cloned["Bucket"]).toBe(TEST_BUCKET_ARN);
+    // Epic 88-it2 regression guard: AWS::S3::BucketPolicy.Bucket requires
+    // the bare bucket NAME, NOT the ARN. CCAPI rejects the ARN form with
+    // "The specified bucket is not valid (Service: S3, Status Code: 400)"
+    // — reproduced twice in dogfood runs on 2026-04-20 against real AWS.
+    // The pattern uses `markerIdentifier(R.WEBSITE_BUCKET)` (not markerRef)
+    // so the resolver runs extractIdentifierFromArn to strip the
+    // `arn:aws:s3:::` prefix and emit just the bare bucket name.
+    expect(cloned["Bucket"]).toBe(TEST_BUCKET_NAME);
+    // Explicit guards: the old failure mode was "ARN where name expected"
+    // — lock it out forever.
+    expect(cloned["Bucket"]).not.toMatch(/^arn:/);
+    expect(cloned["Bucket"]).not.toContain(":::");
   });
 });
