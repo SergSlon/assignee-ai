@@ -12,6 +12,20 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 87 — iteration 1 (2026-04-20)
+
+#### Added
+
+- **`docs/explanation/ai-architecture.md`** — new long-form explanation doc describing what the AI layer actually does: the three LLM callsites (intent_parser / plan_generator / advice_generator), the five AWS MCP servers the pipeline consumes (Pricing, Documentation, IAM, Well-Architected-Security, Billing), the 185-rule deterministic Best Practices engine, the HITL `interruptBefore: [resource_provisioner]` gate, and the 5 MCP tools this repo exports in return. Commissioned by the user as a final-project writeup after GenAI coursework.
+- **Method — code-cited accuracy over narrative**: three parallel BMAD-style Explore subagents surveyed the pipeline / LLM adapter / MCP+BP layers under opus-4-7, each required to cite exact file:line. Doc integrates their findings verbatim. No claim is paraphrased from a comment; every number (13 nodes, 185 rules, 37 resource types, 5 MCP servers, 5 MCP tools, 2 sanitization passes, 3 credential roles) is grep-verifiable against HEAD.
+- **Honest disclosure — per-node LLM routing is designed but not wired**: the doc calls out explicitly that the env-var registry (`ASSIGNEE_LLM_PLAN_GENERATOR`, `ASSIGNEE_LLM_INTENT_PARSER`, etc.) exists in `packages/core/src/constants/env-vars.ts:31-36` but only `ASSIGNEE_LLM_DEFAULT` is consumed at HEAD. Story 50-7 dropped the `RoutingLlmAdapter` branch when no in-repo YAML was using the `llm:` config-file section; the per-callsite env vars were preserved for a future re-enable but are not honored by today's single-adapter graph (`create-graph.ts:76-84`). `docs/configuration.md` already has a "planned — not yet implemented" note for the config-file side; this AI doc extends the honest-accounting to the env-var side so readers can't mistake intent for behavior.
+- **A real captured run**: the doc closes with the actual token-usage summary (3 LLM calls, 3429 tokens total, per-callsite breakdown) from the same `assignee plan "Create an S3 bucket named hero-demo-bucket"` invocation that was captured verbatim in the README hero during Epic 84 (run-id `fa465600af5a`, 2026-04-20). Same single run feeds the README hero _and_ the AI architecture doc — one source of truth for "what does this actually look like?".
+- **`docs/index.md`** — added the new doc to the Explanation section at the top of the list so it's the first "how does this actually work?" pointer readers hit.
+
+#### Design notes the doc covers
+
+Each architectural choice gets one paragraph of rationale: why LangGraph (checkpoint + replay + routing functions), why only three LLM callsites (LLM translates, MCP reports, rules enforce, humans authorize), why rule-based BP on top of LLM output (catches blind spots cheaply — <10ms vs multi-second LLM), why MCP servers for pricing / IAM (clean LLM-tool seam + supply-chain pinning + 3-user credential isolation), why HITL as interrupt rather than flag (dangerous default is "stop and ask" not "apply then warn"), and what's deliberately not built yet.
+
 ### Epic 86 — iteration 1 (2026-04-20)
 
 #### Fixed
