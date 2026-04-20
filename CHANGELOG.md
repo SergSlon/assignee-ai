@@ -12,6 +12,32 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 84 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+- `README.md:13-47` — **the 30-second hero had fabricated output**. User asked to verify, simulate real user actions, and update with real data.
+
+**What was wrong (spot-check vs HEAD `00224af`)**:
+
+1. The HTML comment at lines 15-17 claimed the transcript was "literal" and cited `renderPlanBox in apps/cli/src/utils/display-plan.ts`. Two bugs: (a) the code path is a 13-line re-export shim; canonical is `packages/core/src/utils/display-plan.ts` (294 lines); (b) the transcript was NOT literal — tags and provisioning tail were invented.
+2. `Config:` block showed only `Bucket Name   hero-demo-bucket`. Real S3 plan box shows 4 fields: Bucket Name, Block Public Access, Encryption, Versioning — because the plan-generator auto-populates safe defaults.
+3. `Estimated Cost: Free (live)` — **wrong**. Real cost for `AWS::S3::Bucket` at HEAD (verified via AWS Pricing MCP live): `$0.0230/GB-month`, plus per-unit rates for PUT/GET/data-transfer.
+4. `Findings: All checks passed` — **wrong**. Real BP evaluator flags `5 high, 5 medium (4 fixable)` on a default S3 plan. The hero under-sold the BP engine's value.
+5. `Apply now? (AWS::S3::Bucket, est. Free) ▸ Yes` — the message format is right, but `est. Free` is wrong (real prompt shows `est. $0.0230/GB-month`); the `▸ Yes` suffix is an inquirer answer-rendering artifact, fine to keep.
+6. Provisioning tail (`✓ Creating AWS::S3::Bucket … done (2.1s) / ARN: arn:aws:s3:::… / Tags: assignee:managed-by=assignee, assignee:created=…`):
+   - `Creating … done (2.1s)` output format returned zero matches in the codebase — invented.
+   - Tag key format `assignee:managed-by` uses a colon namespace prefix; real keys at `packages/core/src/utils/tags.ts:22-24` are `managed-by` (plain), `assignee-run-id` (hyphen separator), `environment`. No `created` tag exists.
+
+**What I did**:
+
+- Ran `node apps/cli/dist/index.js plan --no-apply "Create an S3 bucket named hero-demo-bucket"` against the live system (AWS account `112233445566` via Bedrock us-east-1, pricing from AWS Pricing MCP). Run-id `fa465600af5a`. Captured both non-TTY `=== Plan ===` plain form and TTY-rendered boxen form via `script -q`.
+- Replaced the hero body with the real captured output, abbreviated where needed with explicit `(... N more)` markers so readers know what's elided. No fabricated lines.
+- Fixed the comment citation to point at the canonical `packages/core/src/utils/display-plan.ts` and documented the TTY-vs-non-TTY rendering difference.
+- Dropped the invented Tags + provisioning tail. Added an honest footnote: tags get injected at apply time from `tags.ts`, listing the real three keys (`managed-by=assignee`, `assignee-run-id=<uuid>`, `environment=poc`). The asciinema-cast plan covering the apply phase still stands for v0.2.
+
+**Process note (session carry-forward)**: same category of lie as Epic 82 — docs claiming to be "literal" or "canonical" when the underlying code has moved or the values are invented. The fix-everything-you-find + simulate-real-user-actions memories both applied here. Running the CLI end-to-end to capture real output is the only reliable way to keep a hero honest; the next asciinema-cast drop at `docs/_assets/hero.cast` should replace even this textual version.
+
 ### Epic 83 — iteration 1 (2026-04-20)
 
 #### Fixed

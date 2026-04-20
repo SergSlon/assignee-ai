@@ -12,31 +12,62 @@
 
 ## 30-second hero
 
-<!-- Real asciinema capture is deferred to v0.2 (see docs/_assets/hero.cast placeholder).
-     Until then, here is a literal transcript of `assignee plan "Create an S3 bucket"`
-     rendered by `renderPlanBox` in apps/cli/src/utils/display-plan.ts. -->
+<!-- Real captured transcript — run on 2026-04-20 against a fresh `main` build:
+     `node apps/cli/dist/index.js plan --no-apply "Create an S3 bucket named hero-demo-bucket"`.
+     The plan box is rendered by `renderPlanBox` in
+     `packages/core/src/utils/display-plan.ts` (the apps/cli path is a thin
+     re-export shim). TTY output wraps the content in a boxen frame; the
+     non-TTY form below uses a plain `=== Plan ===` title for readability in
+     markdown. Advice and findings lists are truncated with `... N more` —
+     everything shown is verbatim from the real run (run-id fa465600af5a). -->
 
 ```console
 $ assignee plan "Create an S3 bucket named hero-demo-bucket"
+assignee plan  [region=us-east-1  account=112233445566]
+✦ Assignee.ai — AI-Native Cloud Operator
+Connecting to AWS (3 services)...
+Loading tools...
+Generating plan...
 
-┌─────────────────────────── Plan ───────────────────────────┐
-│                                                            │
-│   Resource Type:   AWS::S3::Bucket                         │
-│   Region:          us-east-1                               │
-│   Config:                                                  │
-│     Bucket Name   hero-demo-bucket                         │
-│   Estimated Cost:  Free (live)                             │
-│   Findings:        All checks passed                       │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
+=== Plan ===
+Resource Type:   AWS::S3::Bucket
+Region:          us-east-1 (cross-regional inference: us.*)
+Config:
+  Bucket Name           hero-demo-bucket
+  Block Public Access   BlockPublicAcls: Yes, BlockPublicPolicy: Yes,
+                        IgnorePublicAcls: Yes, RestrictPublicBuckets: Yes
+  Encryption            AES-256 (SSE-S3) enabled
+  Versioning            Status: Enabled
+Estimated Cost:  $0.0230/GB-month (live)
 
-Apply now? (AWS::S3::Bucket, est. Free) ▸ Yes
-✓ Creating AWS::S3::Bucket hero-demo-bucket … done (2.1s)
-  ARN: arn:aws:s3:::hero-demo-bucket
-  Tags: assignee:managed-by=assignee, assignee:created=2026-04-16T…
+  Usage-based (per-unit rates):
+  · Storage                  $0.0230/GB-mo
+  · PUT requests             $0.0050/1000 reqs
+  · GET requests             $0.0004/1000 reqs
+  · Data transfer out        $0.0900/GB
+  Prices fetched at 2026-04-20
+
+Advice:          * 🔒 Public access fully blocked — bucket is protected from
+                   accidental public exposure
+                 * 💰 Consider adding lifecycle rules to transition infrequent
+                   data to S3-IA or Glacier after 30-90 days
+                 * (... 3 more hints — SSE-KMS, Block Public Access, lifecycle
+                   tiering)
+
+Findings:        5 high, 5 medium (4 fixable)
+  [HIGH]   S3 bucket should disable ACLs (BucketOwnerEnforced)
+           → Fix: --set OwnershipControls=BucketOwnerEnforced
+  [HIGH]   S3 bucket should enforce SSL-only requests
+           → Manual: Add bucket policy to deny non-HTTPS requests
+  (... 8 more findings — event notifications, lifecycle config, access
+   logging, object lock, cross-region replication, intelligent tiering,
+   multipart-upload abort, SSE-KMS for compliance)
+  💡 4 findings can be auto-fixed. Run `assignee init` to enable.
+
+Apply now? (AWS::S3::Bucket, est. $0.0230/GB-month) ▸
 ```
 
-> **Hero status:** placeholder transcript above (real output format). An asciinema cast will land at `docs/_assets/hero.cast` in v0.2.
+> **Hero status:** real captured output (run 2026-04-20 against HEAD). Tags and provision tail are not shown — the plan above is pre-apply; the apply step would inject `managed-by=assignee`, `assignee-run-id=<uuid>`, `environment=poc` onto the CloudControl `Tags` array (see `packages/core/src/utils/tags.ts`). An asciinema cast that includes the apply phase lands at `docs/_assets/hero.cast` in v0.2.
 
 ## Install
 
