@@ -625,15 +625,24 @@ describe("checkpoint file permissions and redaction (H17)", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("writes the checkpoint file with mode 0o600 (owner-only)", async () => {
-    const checkpoint = serializeCheckpoint(baseGraphState as AgentState);
-    const filePath = await saveCheckpoint(checkpoint, tmpDir);
+  it.skipIf(process.platform === "win32")(
+    "writes the checkpoint file with mode 0o600 (owner-only)",
+    async () => {
+      const checkpoint = serializeCheckpoint(baseGraphState as AgentState);
+      const filePath = await saveCheckpoint(checkpoint, tmpDir);
 
-    const stat = await fs.stat(filePath);
-    // Only the permission bits — mask out file-type bits.
-    const mode = stat.mode & 0o777;
-    expect(mode).toBe(0o600);
-  });
+      const stat = await fs.stat(filePath);
+      // Only the permission bits — mask out file-type bits.
+      const mode = stat.mode & 0o777;
+      expect(mode).toBe(0o600);
+    },
+  );
+  // POSIX permission bits don't exist on NTFS — on Windows `chmod(0o600)` is a
+  // no-op and `stat.mode & 0o777` returns 0o666 regardless of what the code
+  // requests. The security guarantee on Windows is carried by NTFS ACLs (which
+  // `fs.chmod` cannot set), so asserting POSIX mode on Windows is wrong.
+  // The underlying saveCheckpoint() call still runs `chmod(0o600)` for POSIX
+  // callers; Windows-specific ACL enforcement is out of scope for this suite.
 
   // REG-N1 regression: real CFN property names that contain a sensitive
   // substring but are NOT secrets must be preserved verbatim. The previous

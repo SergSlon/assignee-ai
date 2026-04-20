@@ -12,6 +12,18 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 79 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+Three Windows-only test failures surfaced once Epic 78's `.gitattributes` closed the BP manifest hash mismatch and unblocked the rest of the Windows test run. All three were pre-existing assertions that assumed POSIX semantics:
+
+- `packages/core/src/utils/recorder/recorder.test.ts:71`: `mkdtempSync(path.join("/tmp", …))` → `mkdtempSync(path.join(os.tmpdir(), …))`. Hardcoded `/tmp` threw `ENOENT` on Windows (no such directory) and broke 20 tests in the suite. Every other test in the repo already uses `os.tmpdir()`; this one file was an outlier.
+- `apps/mcp-server/src/__tests__/mcp-cli-graph-parity.test.ts:137`: assertion `expect(path).toMatch(/services\/graph-init\.ts$/)` normalizes backslashes to forward slashes before matching. `path.join` / `path.resolve` emit OS-native separators (Windows → `\\`); the regex is POSIX-style because the claim being tested is about logical module path, not disk-byte representation.
+- `apps/cli/src/services/checkpoint.test.ts:628`: POSIX permission-bit test guarded with `it.skipIf(process.platform === "win32")`. NTFS doesn't support POSIX mode bits; `chmod(0o600)` is a no-op on Windows and `stat.mode & 0o777` always returns `0o666` (438 decimal, not 384). The security guarantee on Windows is carried by NTFS ACLs (which Node.js `fs.chmod` cannot set), so the POSIX mode assertion is wrong to run there. Code under test is unchanged; `saveCheckpoint` still calls `chmod(0o600)` for POSIX callers. Comment block explains the skip so the gap is discoverable.
+
+Together with Epic 78's `.gitattributes`, this closes the full Windows xplat job — the failures were only visible because Epic 76-it2 finally let the matrix dispatch. First-time cross-platform truth-in-testing: every OS cell should now be green.
+
 ### Epic 78 — iteration 1 (2026-04-20)
 
 #### Fixed

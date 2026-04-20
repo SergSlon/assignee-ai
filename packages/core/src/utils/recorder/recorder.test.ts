@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import {
   isRecordingEnabled,
@@ -68,7 +69,7 @@ function createTestRecorder(
   runId: string,
   command = "",
 ): { recorder: RecordingInterceptor; tmpDir: string } {
-  const tmpDir = fs.mkdtempSync(path.join("/tmp", "recorder-test-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "recorder-test-"));
   // We override the internal dir by subclassing
   const recorder = new RecordingInterceptor(runId, command);
   // Access private dir via prototype trick — set it to our tmpDir

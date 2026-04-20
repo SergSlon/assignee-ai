@@ -134,6 +134,12 @@ describe("MCP ↔ CLI graph parity invariant", () => {
       }
     }
     expect(callsiteFiles).toHaveLength(1);
-    expect(callsiteFiles[0]).toMatch(/services\/graph-init\.ts$/);
+    // Normalize path separators so the assertion works on Windows (\\) and
+    // POSIX (/). path.join/resolve produce OS-native separators; the regex
+    // below is intentionally POSIX-style because the claim being tested is
+    // about logical module path, not disk-byte representation.
+    expect(callsiteFiles[0]!.replace(/\\/g, "/")).toMatch(
+      /services\/graph-init\.ts$/,
+    );
   });
 });
