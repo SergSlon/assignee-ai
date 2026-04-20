@@ -12,6 +12,16 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 81 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+- `README.md`: restore coverage badge removed in commit `0fe96cd` (refactor). The gist automation at `ci-core.yml` has been updating `gist.githubusercontent.com/SergSlon/f9d960dd5a1defd7b8fbd4656df40915/raw/assignee-ai-coverage.json` on every green main push since it was wired up (verified via badge-step log "Content did not change, not updating gist" — idempotent, the 88.6% value has been steady); README just stopped rendering it. Badge lives directly under the H1.
+- `README.md`: reworded the "public artifacts intentionally omitted" paragraph to reflect the actual policy — npm registry links and release badges are omitted until first release, but the coverage badge above is kept for internal visibility since it is served from a **secret** gist (`public: false`) that only repo members can discover via URL.
+- `.github/workflows/ci-core.yml`: `schneegans/dynamic-badges-action@v1.7.0` → `@v1.8.0`. Also on the Node.js 20 deprecation list (surfaced in the Epic 80 xplat verify log); missed in Epic 77's first-party-actions bump sweep because I filtered on `actions/*` prefix and left the third-party action at `@v1.7.0`.
+
+Also captures the session milestone: Epic 80 xplat verify `24671447401` on `e4e6077` is the **first green cross-platform run since the workflow was authored** — matrix prepare + ubuntu + macos + **windows** all successful. 8-epic domino chain (76-it2 type-mismatch → 78 BP hash → 79 POSIX assumptions → 80 config/HOME) fully closed.
+
 ### Epic 80 — iteration 1 (2026-04-20)
 
 #### Fixed
