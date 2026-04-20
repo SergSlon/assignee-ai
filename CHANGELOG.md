@@ -12,6 +12,22 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 77 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+- Bump every GitHub Actions pin across all workflow files (active + disabled) off the Node.js-20 runtime that GitHub will remove on 2026-09-16 (warned in the `ci (ubuntu-latest / node 22)` log during the Epic 75 push watch). New pins:
+  - `actions/checkout@v4` → `@v6` (5 call-sites across `ci-core.yml`, `mock-fixture-drift.yml`, `nightly-e2e.yml`, `release.yml.disabled`, `test-actions.yml.disabled`)
+  - `actions/setup-node@v4` → `@v6` (same 5 call-sites)
+  - `actions/upload-artifact@v4` → `@v7` (4 call-sites — `ci-core.yml`, `mock-fixture-drift.yml`, `nightly-e2e.yml`, `release.yml.disabled`)
+  - `actions/download-artifact@v4` → `@v8` (1 call-site in `release.yml.disabled`)
+  - `pnpm/action-setup@v4` → `@v5` (5 call-sites)
+  - `aws-actions/configure-aws-credentials@v4` → `@v6` (1 call-site in `mock-fixture-drift.yml`)
+  - `softprops/action-gh-release@v2` → `@v3` (1 call-site in `release.yml.disabled`)
+  - `schneegans/dynamic-badges-action@v1.7.0` unchanged (not on the Node-20 runtime deprecation list).
+- Disabled workflows (`release.yml.disabled`, `test-actions.yml.disabled`) are bumped in the same commit so that whoever re-enables them doesn't inherit silently-broken pins.
+- Epic 76-it1 + it2 already ran the manual `gh workflow run ci-cross-platform.yml` verify dance; Epic 77 will re-use the same pattern to confirm the upgraded pins run cleanly across the full ubuntu/macos/windows matrix.
+
 ### Epic 76 — iteration 2 (2026-04-20)
 
 #### Fixed
