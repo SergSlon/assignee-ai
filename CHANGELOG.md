@@ -12,6 +12,27 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 86 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+- `README.md` Install section had **three** user-breaking bugs, caught when the user ran the instructions verbatim and hit `ERR_PNPM_NO_GLOBAL_BIN_DIR`:
+  1. **Wrong clone URL / directory name.** README said `git clone https://github.com/assignee-ai/assignee.ai.git` and `cd assignee.ai`. The actual repo is `https://github.com/SergSlon/assignee-ai.git` (different org, different dir name). Following the README would `git clone` a non-existent org.
+  2. **`pnpm link --global` fails on fresh machines.** The README recommended `pnpm link --global` immediately after build, but pnpm v10 requires `PNPM_HOME` / `global-bin-dir` to be set first — those come from a one-time `pnpm setup` that modifies shell profile and needs a shell reload. The user's trace: `pnpm install && pnpm build` succeeded, then `pnpm link --global` failed with _"Unable to find the global bin directory. Run 'pnpm setup' to create it automatically, or set the global-bin-dir setting, or the PNPM_HOME env variable."_
+  3. **Implied `pnpm link` is the only invocation path.** The CLI actually runs cleanly via direct `node apps/cli/dist/index.js <cmd>` after `pnpm build` — verified during Epic 84 hero-capture. No global bin required. That option was never mentioned.
+
+#### What I did
+
+Replaced the Install block with a split-path layout:
+
+- **Path A (recommended, zero-friction):** `node apps/cli/dist/index.js doctor --short` — runs directly from the build output, no global install, works identically to `assignee <cmd>`.
+- **Path B (PATH-level install):** `pnpm setup` → reload shell → `pnpm link --global` → `assignee doctor --short`. Explicitly calls out that `pnpm setup` is needed on fresh machines and that it writes `.zshrc` / `.bashrc`.
+- Fixed the clone URL to `https://github.com/SergSlon/assignee-ai.git` and the directory to `assignee-ai`.
+- Added an **actual** `doctor --short` output block (captured from a real run: `Account: ************ / ARN: arn:aws:iam::************:user/assignee-operator / Region: us-east-1 / Role: operator / Config: ./.assignee/config.yaml (loaded)`), with account ID redacted per the Epic 85 rule. Previous README showed zero example output — users had no baseline for "what does success look like?".
+- Linked to `docs/aws-bootstrap.md` with the explicit prerequisite note "run bootstrap before `doctor`" so users know the IAM setup comes first.
+
+Same pattern as Epic 84 (hero transcript fabrication): the fix is to actually walk the user flow end-to-end, capture real output, and document what works. `feedback_verify_user_flows_before_done` memory applied.
+
 ### Epic 85 — iteration 1 (2026-04-20)
 
 #### Security
