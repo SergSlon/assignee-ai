@@ -50,16 +50,17 @@ Dry, precise, lookup-style information. Skim the tables; search for specifics.
 Background, design rationale, and the "why" behind the system. Read these
 when you want to understand how assignee.ai thinks.
 
-| Doc                                                                            | Topic                                                                                                                                    |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| [architecture.md](architecture.md)                                             | Monorepo layout, 13-node LangGraph pipeline, hexagonal ports                                                                             |
-| [architecture-flows.md](architecture-flows.md)                                 | End-to-end flow diagrams for plan / apply / destroy / drift                                                                              |
-| [integration-architecture.md](integration-architecture.md)                     | How CLI, MCP server, and `@assignee/core` fit together                                                                                   |
-| [explanation/invariants.md](explanation/invariants.md)                         | Load-bearing rules (partition-aware ARN, CCAPI NotFound short-circuit, safety allowlist, …) — read before touching ARN/destroy/cred code |
-| [explanation/oss-vs-saas.md](explanation/oss-vs-saas.md)                       | What stays OSS and what monetizes — the trust-credential argument for the split                                                          |
-| [explanation/telemetry-design.md](explanation/telemetry-design.md)             | Opt-in telemetry design + privacy model (no code yet; design doc gating future PRs)                                                      |
-| [explanation/run-ledger-design.md](explanation/run-ledger-design.md)           | Run-ID-based workflow stickiness via tags; why there is no state file                                                                    |
-| [explanation/contributing-a-bp-rule.md](explanation/contributing-a-bp-rule.md) | Worked example walkthrough for contributing a new best-practice rule                                                                     |
+| Doc                                                                            | Topic                                                                                                                                     |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| [explanation/ai-architecture.md](explanation/ai-architecture.md)               | **What the AI parts actually do** — LLM callsites, MCP servers, BP engine, HITL interrupt, with code-cited accuracy + a real captured run |
+| [architecture.md](architecture.md)                                             | Monorepo layout, 13-node LangGraph pipeline, hexagonal ports                                                                              |
+| [architecture-flows.md](architecture-flows.md)                                 | End-to-end flow diagrams for plan / apply / destroy / drift                                                                               |
+| [integration-architecture.md](integration-architecture.md)                     | How CLI, MCP server, and `@assignee/core` fit together                                                                                    |
+| [explanation/invariants.md](explanation/invariants.md)                         | Load-bearing rules (partition-aware ARN, CCAPI NotFound short-circuit, safety allowlist, …) — read before touching ARN/destroy/cred code  |
+| [explanation/oss-vs-saas.md](explanation/oss-vs-saas.md)                       | What stays OSS and what monetizes — the trust-credential argument for the split                                                           |
+| [explanation/telemetry-design.md](explanation/telemetry-design.md)             | Opt-in telemetry design + privacy model (no code yet; design doc gating future PRs)                                                       |
+| [explanation/run-ledger-design.md](explanation/run-ledger-design.md)           | Run-ID-based workflow stickiness via tags; why there is no state file                                                                     |
+| [explanation/contributing-a-bp-rule.md](explanation/contributing-a-bp-rule.md) | Worked example walkthrough for contributing a new best-practice rule                                                                      |
 
 ---
 
