@@ -12,6 +12,24 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 83 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+Quinn (BMAD QA) completed the Epic 82 cross-cutting docs audit and returned 6 HIGH + 2 MED + 1 LOW findings. All 6 HIGH verified against HEAD `8864aab` before dispatch. Fixes:
+
+- `docs/testing-guide.md:10,162`: static test counts (`~7595 tests across 303 files`, `168 CLI + 100 core + 11 BP + 24 MCP`) replaced with non-rotting prose that points at `pnpm -r test:coverage` for live numbers. Memory `project_e2e_progress.md` explicitly prohibits recording static test counts; these two lines contradicted that policy. Per-package breakdown in the second line was ~40% below the actual 341/78/33/219/11 split.
+- `docs/index.md:82`: same class of drift — Key-metrics "Test files" row dropped the hardcoded `341 / 78 / 33 / 219 / 11` numbers and now says "across 4 packages (cli + mcp-server + core + best-practices) — run `pnpm -r test:coverage` for live counts".
+- `apps/mcp-server/e2e-test.mjs:22-35`: **safety gate added**. Docs (testing-guide.md + invariants.md) claimed the script was gated behind `RUN_E2E_MCP=1` but the script had no such check — running `node apps/mcp-server/e2e-test.mjs` would have provisioned real AWS resources unconditionally. Added an explicit early-return that refuses to run unless `RUN_E2E_MCP=1` is set, with exit code 2 and a usage message. Docs↔code now agree.
+- `apps/mcp-server/e2e-test.mjs:5-7`: header comment said "Tests ALL 23 resource types + 2 compound patterns"; the `RESOURCE_TYPES` array has **22** entries and live registry has **37** supported types. Updated to "Tests a representative subset — 22 of the 37 first-class resource types plus 2 compound patterns" so the claim matches what the script actually exercises.
+- `.husky/pre-push`: **4 enforcement gates added**. `docs/explanation/invariants.md:603-604` claimed `pnpm lint:barrels`, `pnpm lint:shims`, `pnpm doc-lint`, and `pnpm citation-lint` were "wired into the pre-push hook"; `CHANGELOG.md` Epic 58 entries made the same claim about `citation-lint` being "the hard gate". Live hook only ran `lint / check-types / test` — the gates were manual-only. Added all four between `check-types` and `test` so the enforced sequence now matches the invariant claim. Total added runtime <1s (all four are fast grep/node scripts).
+
+#### Method
+
+Same pattern as Epic 82 — every HIGH spot-checked against HEAD before dispatch (`.husky/pre-push` contents, `grep -n RUN_E2E_MCP` over the script, `RESOURCE_TYPES` array size, testing-guide line numbers). 3 parallel one-shot fix subagents with exclusive file ownership. Policy choice on HIGH-4/5: fix the code (add the gates) rather than weaken the claim (admit manual-only), per `feedback_never_weaken_tests` — the same principle extended to doc-claim↔code-enforcement mismatches.
+
+The docs-audit team was shut down gracefully after Quinn's report — 4-member BMAD audit complete; all 4 experts' reports integrated across Epic 82 (Mary + Paige + Winston) and Epic 83 (Quinn).
+
 ### Epic 82 — iteration 1 (2026-04-20)
 
 #### Fixed

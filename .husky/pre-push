@@ -1,3 +1,7 @@
 pnpm lint
 pnpm check-types
+pnpm lint:barrels
+pnpm lint:shims
+pnpm doc-lint
+pnpm citation-lint
 pnpm test
