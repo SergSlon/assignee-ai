@@ -42,6 +42,7 @@ assignee.ai supports 37 AWS resource types end-to-end via the CloudFormation Clo
 | 34  | `AWS::CloudFront::Distribution` (A14)            | CloudFront CDN       | cloudfront-distribution          | -             |
 | 35  | `AWS::CloudFront::OriginAccessControl` (Task 4b) | CloudFront OAC       | cloudfront-origin-access-control | -             |
 | 36  | `AWS::S3::BucketPolicy` (Task 4b)                | S3 Bucket Policy     | s3-bucket-policy                 | -             |
+| 37  | `AWS::RDS::DBSubnetGroup`                        | RDS DB Subnet Group  | rds-db-subnet-group              | -             |
 
 A **generic plugin** handles any resource type not covered by a dedicated plugin, using CloudFormation schema defaults.
 
