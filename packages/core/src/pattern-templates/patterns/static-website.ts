@@ -6,7 +6,12 @@ import {
   IamAction,
   IamPolicy,
 } from "../../config/aws-arns.js";
-import { markerRef, markerRegion } from "../../config/marker-tokens.js";
+import {
+  markerRef,
+  markerIdentifier,
+  markerRegion,
+  markerAccountId,
+} from "../../config/marker-tokens.js";
 import type { ArchitecturePattern } from "../types.js";
 import { StaticWebsiteResourceId as R } from "../pattern-resource-ids.js";
 import { PatternId } from "../pattern-ids.js";
@@ -170,12 +175,13 @@ export const staticWebsitePattern: ArchitecturePattern = {
       },
     },
     [R.BUCKET_POLICY]: {
-      // BucketPolicy.Bucket is a marker ref to the bucket logical id
-      // — resolves to the bucket's name at apply time. Note that the
-      // S3::BucketPolicy CCAPI primaryIdentifier IS the bucket name,
-      // so this doubles as both the cross-reference and the primary
-      // identifier.
-      Bucket: markerRef(R.WEBSITE_BUCKET),
+      // AWS::S3::BucketPolicy.Bucket requires the bucket NAME, not the ARN.
+      // markerRef resolves to the full synthesized ARN (`arn:aws:s3:::name`)
+      // because completedResources[].resourceArn is ARN-shaped — feeding
+      // that into CloudControl produces `The specified bucket is not valid`
+      // at apply time. markerIdentifier resolves to the bare bucket name
+      // via extractIdentifierFromArn (arn-helpers.ts). See Epic 88-it2.
+      Bucket: markerIdentifier(R.WEBSITE_BUCKET),
       // The PolicyDocument grants read access to CloudFront service
       // principal, scoped by aws:SourceArn to the specific
       // distribution that will reference this bucket. The resolver
@@ -192,22 +198,27 @@ export const staticWebsitePattern: ArchitecturePattern = {
               Service: AwsServicePrincipal.CLOUDFRONT,
             },
             Action: IamAction.S3_GET_OBJECT,
-            // S3 object ARN — markerRef(R.WEBSITE_BUCKET) resolves to
-            // the FULL bucket ARN (`arn:aws:s3:::bucket-name`) because
-            // the compound marker resolver returns
-            // `completedResources[].resourceArn` which is synthesized
-            // via buildResourceArn (partition-aware — commercial/gov/
-            // china/iso). Appending `/*` produces the valid S3 object
-            // ARN the BucketPolicy requires. Previously the template
-            // prefixed `arn:*:s3:::` too, which double-nested the ARN
-            // ("arn:*:s3:::arn:aws:s3:::bucket-name/*") and caused S3
-            // to reject the policy with "Policy has invalid resource"
-            // at apply time. See static-website.test.ts for a red-
-            // phase regression guard.
-            Resource: `${markerRef(R.WEBSITE_BUCKET)}/*`,
+            // S3 object ARN. markerRef(R.WEBSITE_BUCKET) resolves to
+            // the bucket's BARE primary identifier (bucket name) —
+            // status-poller.ts populates completedResources[].resourceArn
+            // from `result.identifier` returned by CCAPI, which for
+            // S3::Bucket is just the bucket name. So the template has
+            // to prepend `arn:aws:s3:::` explicitly to produce the
+            // valid S3 object ARN the BucketPolicy Resource field
+            // requires. Epic 88-it1 dropped this prefix under the
+            // mistaken belief that markerRef already emits a full ARN;
+            // it does not. See Epic 88-it3 + static-website.test.ts for
+            // the regression guard against dropping the prefix again.
+            Resource: `arn:aws:s3:::${markerRef(R.WEBSITE_BUCKET)}/*`,
             Condition: {
               StringEquals: {
-                "aws:SourceArn": markerRef(R.CDN_DISTRIBUTION),
+                // Full CloudFront distribution ARN for the SourceArn
+                // condition. markerRef(R.CDN_DISTRIBUTION) resolves to the
+                // bare distribution ID (CCAPI's `result.identifier`), so
+                // we template the full ARN manually here. markerAccountId
+                // expands to the operator's AWS account ID via a cached
+                // STS GetCallerIdentity. See Epic 88-it3.
+                "aws:SourceArn": `arn:aws:cloudfront::${markerAccountId()}:distribution/${markerRef(R.CDN_DISTRIBUTION)}`,
               },
             },
           },

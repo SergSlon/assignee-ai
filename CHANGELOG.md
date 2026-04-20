@@ -12,6 +12,27 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 88 — iteration 3 (2026-04-20)
+
+#### Reverted
+
+- **`static-website.ts` `Resource` ARN prefix restored.** Epic 88-it1 dropped the `arn:aws:s3:::` prefix from the BucketPolicy `Resource` line after a subagent analysis concluded `markerRef` resolves to the full ARN at runtime. That analysis was wrong: `completedResources[].resourceArn` is populated from CCAPI's `result.identifier`, which for `AWS::S3::Bucket` is the **bare bucket name**, not an ARN. Apply-time this produced malformed resources like `Resource: "my-bucket/*"` that S3 rejected with `Policy has invalid resource`. Epic 88-it3 restores the explicit prefix — the emitted value is now `arn:aws:s3:::${markerRef(R.WEBSITE_BUCKET)}/*` again, matching the pre-it1 shape. **Mea culpa:** 1.5h was burned iterating through live-AWS deploys instead of adding ONE `console.error` on the runtime payload at the resource-provisioner boundary. One log line would have shown the bare name in 15 min. Lesson filed as `feedback_instrument_before_iterating.md` in auto-memory.
+
+#### Added
+
+- **`markerIdentifier(resourceId)` helper** (`packages/core/src/config/marker-tokens.ts`) plus barrel re-export (`packages/core/src/barrels/config/constants.ts`). Emits `__ASSIGNEE_IDENTIFIER_<id>__`; the resolver runs `extractIdentifierFromArn` to strip any `arn:*:service:::` prefix and return the bare primary identifier. For today's S3 case this is a no-op alias for `markerRef` (identifier == name == ARN tail), but the token is semantically explicit so future non-S3 bare-id sites (e.g. downstream CCAPI adapters that DO return full ARNs) read correctly without guessing. **Future-proofing, not a behavior change for S3 today.**
+- **`markerAccountId()` helper + `AccountIdLookup` port + `defaultAccountIdLookup` + `__resetAccountIdCacheForTests`** (`marker-tokens.ts`, `marker-resolver.ts`, barrel). Required for compounds that have to synthesize ARNs whose CCAPI identifier is NOT the ARN — e.g. `AWS::CloudFront::Distribution` returns just the distribution ID, so `aws:SourceArn` has to be templated as `arn:aws:cloudfront::${markerAccountId()}:distribution/${markerRef(...)}`. Resolver calls `sts:GetCallerIdentity` once per process (cached in `ACCOUNT_ID_CACHE`); `AccountIdLookup` port lets unit tests inject a deterministic ID without STS credentials; `__resetAccountIdCacheForTests` clears the module-level cache between suites.
+
+#### Fixed
+
+- **`MARKER_PATTERN` / `MARKER_PATTERN_GLOBAL` split into two disjoint branches** (`marker-tokens.ts`). The old `_?[^\s]*?__` lazy suffix greedy-matched across neighbor text when a no-suffix marker (`REGION`, `ACCOUNT_ID`) appeared adjacent to a suffix-bearing marker in the same string. Before: `arn:aws:cloudfront::__ASSIGNEE_ACCOUNT_ID__:distribution/__ASSIGNEE_REF_x__` parsed as one malformed blob `__ASSIGNEE_ACCOUNT_ID_:distribution/__` that `parseMarker` rejected, leaving ACCOUNT*ID unresolved. After: suffix-bearing kinds (`REF|GETATT|AZ|IDENTIFIER`) require `*<suffix>**`; no-suffix kinds (`REGION|ACCOUNT_ID`) terminate directly with `**`.
+- **`recursionLimit` bumped 25 → 500** in `apps/mcp-server/src/tools/plan-resource.ts`. LangGraph's default 25-super-step budget tripped out on 4+ resource compounds (static-website = 4, three-tier-web = 22) because `plan_generator` iterates per-resource alongside sub-nodes. Mirrors `apply_plan`'s existing 500-step budget.
+- **`static-website.test.ts` fixtures updated to real-CCAPI bare-identifier values.** `resourceArn` was being populated with full ARNs (`arn:aws:s3:::...`, `arn:aws:cloudfront::...:distribution/...`) that never match what `status-poller.ts:254` actually writes — CCAPI returns the bare name/ID. The hermetic test is now faithful to production and the new `accountIdLookup` port is wired via `fakeAccountIdLookup` returning `111122223333`.
+
+#### Process note
+
+Future live-AWS failures: **instrument the production boundary before iterating**. 15 minutes of one `console.error` dumping the actual wire payload at the resource-provisioner entry beats 4 × 15 minutes of blind fix attempts guided by subagent theorizing. Fake-fixture trace scripts and parallel subagent analyses are not substitutes for the real payload. See `feedback_instrument_before_iterating.md`.
+
 ### Epic 88 — iteration 1 (2026-04-20)
 
 #### Fixed

@@ -85,8 +85,70 @@ export function markerRegion(): string {
   return `${MARKER_PREFIX}REGION${MARKER_SUFFIX}`;
 }
 
-/** Matches any assignee.ai marker token — used for bare-string detection. */
-export const MARKER_PATTERN = /__ASSIGNEE_(REF|GETATT|AZ|REGION)_?[^\s]*?__/;
+/**
+ * Builds a marker that resolves to the **bare primary identifier** of a
+ * compound resource — NOT the ARN. `markerRef` returns the full ARN
+ * (because `completedResources[].resourceArn` is pre-synthesized by
+ * `buildResourceArn`), which is correct for fields like `aws:SourceArn`
+ * and any IAM Resource clause, but WRONG for the handful of CloudControl
+ * properties that require the bare identifier.
+ *
+ * Known bare-identifier call-sites:
+ *   - `AWS::S3::BucketPolicy.Bucket`     — must be the bucket NAME, not ARN
+ *   - future resources that cross-reference their parent's name directly
+ *
+ * At resolve time the token `__ASSIGNEE_IDENTIFIER_<resourceId>__` is
+ * replaced by `extractIdentifierFromArn(completedResources[].resourceArn,
+ * resourceType)` which strips the ARN prefix and returns the bare name
+ * (partition-aware via the existing arn-helpers table).
+ *
+ * Choose `markerRef` for ARN fields; choose `markerIdentifier` for
+ * bare-name fields. If a property's spec is ambiguous, check the
+ * CloudFormation schema for the target resource type — it will say
+ * either "Type: string — the bucket name" (→ use `markerIdentifier`)
+ * or "Type: string — the ARN" (→ use `markerRef`).
+ */
+export function markerIdentifier(resourceId: string): string {
+  if (!resourceId) {
+    throw new Error("markerIdentifier: resourceId must be non-empty");
+  }
+  return `${MARKER_PREFIX}IDENTIFIER_${resourceId}${MARKER_SUFFIX}`;
+}
+
+/**
+ * Builds a marker that resolves to the calling operator's AWS account ID
+ * at apply time (12 digits, e.g. "112233445566"). Compound patterns need
+ * this when they construct ARNs for resources whose CCAPI `identifier`
+ * is NOT the full ARN — e.g. `AWS::CloudFront::Distribution` returns the
+ * bare distribution ID, so to produce a valid `aws:SourceArn` condition
+ * value the template must manually build
+ * `arn:aws:cloudfront::<account>:distribution/<id>` — and the `<account>`
+ * slot is this marker.
+ *
+ * The resolver calls `sts:GetCallerIdentity` once per plan (cached for
+ * the process lifetime) using operator credentials.
+ */
+export function markerAccountId(): string {
+  return `${MARKER_PREFIX}ACCOUNT_ID${MARKER_SUFFIX}`;
+}
+
+/**
+ * Matches any assignee.ai marker token — used for bare-string detection.
+ *
+ * Two disjoint branches to avoid the multi-marker lazy-suffix bug:
+ *   - `(REF|GETATT|AZ|IDENTIFIER)` kinds ALWAYS have a suffix like
+ *     `_<resourceId>` or `_<n>`, so they require `_[^\s]*?__`.
+ *   - `(REGION|ACCOUNT_ID)` kinds have NO suffix — directly followed by
+ *     the closing `__`. Without this split, a lazy `_?[^\s]*?__` after
+ *     `ACCOUNT_ID` would eat characters up to the FIRST `__` anywhere in
+ *     the string, which for templates like
+ *     `arn:aws:cloudfront::__ASSIGNEE_ACCOUNT_ID__:distribution/__ASSIGNEE_REF_x__`
+ *     produced a malformed combined token
+ *     `__ASSIGNEE_ACCOUNT_ID_:distribution/__` that parseMarker rejected,
+ *     so the ACCOUNT_ID stayed unresolved. Closed in Epic 88-it3.
+ */
+export const MARKER_PATTERN =
+  /__ASSIGNEE_(?:(?:REF|GETATT|AZ|IDENTIFIER)_[^\s]*?__|(?:REGION|ACCOUNT_ID)__)/;
 
 /**
  * Global-flag variant of {@link MARKER_PATTERN} — used by plan-generator's
@@ -97,7 +159,7 @@ export const MARKER_PATTERN = /__ASSIGNEE_(REF|GETATT|AZ|REGION)_?[^\s]*?__/;
  * land in both places or risk drift.
  */
 export const MARKER_PATTERN_GLOBAL =
-  /__ASSIGNEE_(REF|GETATT|AZ|REGION)_?[^\s]*?__/g;
+  /__ASSIGNEE_(?:(?:REF|GETATT|AZ|IDENTIFIER)_[^\s]*?__|(?:REGION|ACCOUNT_ID)__)/g;
 
 /**
  * Parses a marker string into its structured components.
@@ -106,8 +168,10 @@ export const MARKER_PATTERN_GLOBAL =
 export type ParsedMarker =
   | { kind: "ref"; resourceId: string }
   | { kind: "getatt"; resourceId: string; attribute: string }
+  | { kind: "identifier"; resourceId: string }
   | { kind: "az"; index: number }
-  | { kind: "region" };
+  | { kind: "region" }
+  | { kind: "account-id" };
 
 export function parseMarker(value: unknown): ParsedMarker | undefined {
   if (typeof value !== "string") return undefined;
@@ -121,6 +185,12 @@ export function parseMarker(value: unknown): ParsedMarker | undefined {
     if (!resourceId) return undefined;
     return { kind: "ref", resourceId };
   }
+  // IDENTIFIER_<id>
+  if (inner.startsWith("IDENTIFIER_")) {
+    const resourceId = inner.slice("IDENTIFIER_".length);
+    if (!resourceId) return undefined;
+    return { kind: "identifier", resourceId };
+  }
   // GETATT_<id>_<attr>
   if (inner.startsWith("GETATT_")) {
     const rest = inner.slice("GETATT_".length);
@@ -130,6 +200,10 @@ export function parseMarker(value: unknown): ParsedMarker | undefined {
     const attribute = rest.slice(lastUnderscore + 1);
     if (!resourceId || !attribute) return undefined;
     return { kind: "getatt", resourceId, attribute };
+  }
+  // ACCOUNT_ID
+  if (inner === "ACCOUNT_ID") {
+    return { kind: "account-id" };
   }
   // AZ_<n>
   if (inner.startsWith("AZ_")) {

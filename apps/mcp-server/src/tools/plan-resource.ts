@@ -68,8 +68,18 @@ export function registerPlanResource(
           region,
         );
 
+        // LangGraph's default recursionLimit is 25 super-steps. Compound
+        // patterns iterate plan_generator once per resource (4 for
+        // static-website, 22 for three-tier-web, 8 for serverless-api,
+        // etc.), plus the per-resource sub-nodes (advice_generator,
+        // bp_evaluator, preflight_guard, …). A 4-resource compound
+        // easily exceeds 25 super-steps and gets cut off mid-plan with
+        // "Recursion limit of 25 reached without hitting a stop
+        // condition". Mirror apply_plan's 500-step budget so every
+        // first-class compound comfortably fits. See Epic 88-it3.
         const finalState = await graphCtx.graph.invoke(initialState, {
           configurable: { thread_id: runId },
+          recursionLimit: 500,
         });
 
         const statusCheck = checkExecutionStatus(finalState);
