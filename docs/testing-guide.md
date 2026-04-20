@@ -7,7 +7,7 @@
 ## Quick reference
 
 ```bash
-pnpm test                                    # ~7595 tests across 303 files, ~20s, no AWS needed
+pnpm test                                    # full suite, ~20s, no AWS needed (see "pnpm -r test:coverage" for live counts)
 pnpm check-types                             # TypeScript type check
 pnpm --filter @assignee/mcp-server test:e2e  # MCP E2E against real AWS (~43 min)
 RUN_E2E=1 pnpm --filter assignee test        # CLI graph E2E against real AWS (opt-in gate)
@@ -159,7 +159,7 @@ Actual AWS costs for a full end-to-end run vary by region and pricing changes. M
 ## Unit tests
 
 ```bash
-pnpm test          # ~7595 tests across 303 files (168 CLI + 100 core + 11 BP + 24 MCP)
+pnpm test          # full suite across all 4 packages (cli / mcp-server / core / best-practices)
 pnpm check-types   # TypeScript type check
 ```
 

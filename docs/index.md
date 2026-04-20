@@ -79,5 +79,5 @@ when you want to understand how assignee.ai thinks.
 | Config precedence levels       | 6                                                                                                                                                         |
 | LLM providers supported        | 5                                                                                                                                                         |
 | IAM credential users           | 3                                                                                                                                                         |
-| Test files                     | 341 across 4 packages (78 CLI + 33 MCP + 219 core + 11 BP) — run `pnpm test` for the live pass count                                                      |
+| Test files                     | across 4 packages (cli + mcp-server + core + best-practices) — run `pnpm -r test:coverage` for live counts                                                |
 | RUN_E2E compound coverage      | 9/10 first-class compounds (vpc-public-only not yet exercised)                                                                                            |

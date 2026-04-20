@@ -2,8 +2,9 @@
 /**
  * MCP Server E2E Test Harness
  *
- * Tests ALL 23 resource types + 2 compound patterns through the full
- * MCP tool lifecycle: plan → estimate → apply → list → destroy → verify.
+ * Tests a representative subset — 22 of the 37 first-class resource types
+ * plus 2 compound patterns — through the full MCP tool lifecycle:
+ * plan → estimate → apply → list → destroy → verify.
  *
  * Uses the real MCP server via StdioClientTransport (true MCP protocol compliance).
  * Provisions and destroys real AWS resources.
@@ -17,6 +18,21 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync, execFileSync } from "node:child_process";
+
+// ── Safety gate: require explicit opt-in ─────────────────────────────────────
+// This harness provisions REAL AWS resources. Running it by accident would
+// cost money and leave orphaned infrastructure. Refuse to run unless the
+// operator explicitly sets RUN_E2E_MCP=1 — matches the docs/testing-guide.md
+// and invariants.md claims. `--smoke` mode still requires the gate (it also
+// provisions real resources, just fewer types).
+if (process.env.RUN_E2E_MCP !== "1") {
+  console.error(
+    "apps/mcp-server/e2e-test.mjs is gated by RUN_E2E_MCP=1.\n" +
+    "Set it explicitly to opt in (the script provisions REAL AWS resources):\n" +
+    "  RUN_E2E_MCP=1 node apps/mcp-server/e2e-test.mjs [--smoke] [--type S3]",
+  );
+  process.exit(2);
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "../..");
