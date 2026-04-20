@@ -63,7 +63,7 @@ when you want to understand how assignee.ai thinks.
 
 ---
 
-## Key metrics (as of 2026-04-19)
+## Key metrics (as of 2026-04-20)
 
 | Metric                         | Count                                                                                                                                                     |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -74,8 +74,8 @@ when you want to understand how assignee.ai thinks.
 | MCP server tools               | 5                                                                                                                                                         |
 | Resource plugins               | 37 registered (35 type-specific + generic fallback; 2 compound-only types share the generic)                                                              |
 | Best practice YAML rules       | 185 (count matches `packages/best-practices/manifest.json`)                                                                                               |
-| Pricing strategies             | 23                                                                                                                                                        |
-| Pricing decomposers            | 23                                                                                                                                                        |
+| Pricing strategies             | 37 (matches `pnpm doc-lint`)                                                                                                                              |
+| Pricing decomposers            | 37 (matches `pnpm doc-lint`)                                                                                                                              |
 | Config precedence levels       | 6                                                                                                                                                         |
 | LLM providers supported        | 5                                                                                                                                                         |
 | IAM credential users           | 3                                                                                                                                                         |
