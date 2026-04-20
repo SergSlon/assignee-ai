@@ -18,7 +18,7 @@ export function isSqsQueueUrl(input: string): boolean {
 
 /**
  * Parses an SQS queue URL into its components.
- * @param url - SQS queue URL like https://sqs.us-east-1.amazonaws.com/054125018476/my-queue
+ * @param url - SQS queue URL like https://sqs.us-east-1.amazonaws.com/210987654321/my-queue
  * @returns Parsed components or null if not a valid SQS URL
  */
 export function parseSqsQueueUrl(url: string): {

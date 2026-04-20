@@ -48,7 +48,7 @@ import {
 } from "../iam-role-inventory.js";
 import { MissingAssigneeCredentialsError } from "@assignee/core";
 
-const ACCOUNT = "054125018476";
+const ACCOUNT = "210987654321";
 const MANAGED_TAG = { Key: "managed-by", Value: "assignee-ai" };
 const RUN_ID_TAG = { Key: "assignee-run-id", Value: "run-abc123" };
 
@@ -181,7 +181,7 @@ describe("fetchManagedIamRoles", () => {
   it("skips roles missing RoleName or Arn defensively", async () => {
     mockIamSend.mockResolvedValueOnce({
       Roles: [
-        { Arn: "arn:aws:iam::054125018476:role/no-name" }, // missing RoleName
+        { Arn: "arn:aws:iam::210987654321:role/no-name" }, // missing RoleName
         { RoleName: "no-arn" }, // missing Arn
         managedRole,
       ],

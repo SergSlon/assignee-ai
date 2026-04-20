@@ -9,7 +9,7 @@ import { describe, it, expect } from "vitest";
 import { buildResourceArn, partitionForRegion, isArn } from "./arn-builder.js";
 import { RESOURCE_TYPES } from "./resource-types.js";
 
-const ACCOUNT = "054125018476";
+const ACCOUNT = "210987654321";
 const REGION = "us-east-1";
 
 describe("partitionForRegion", () => {
@@ -33,7 +33,7 @@ describe("partitionForRegion", () => {
 describe("isArn", () => {
   it("accepts well-formed ARNs", () => {
     expect(isArn("arn:aws:s3:::my-bucket")).toBe(true);
-    expect(isArn("arn:aws:iam::054125018476:role/my-role")).toBe(true);
+    expect(isArn("arn:aws:iam::210987654321:role/my-role")).toBe(true);
     expect(isArn("arn:aws-us-gov:lambda:us-gov-east-1:123:function:fn")).toBe(
       true,
     );
@@ -68,7 +68,7 @@ describe("buildResourceArn", () => {
 
     it("preserves ELBv2 LoadBalancer ARN (CCAPI returns full ARN for this type)", () => {
       const arn =
-        "arn:aws:elasticloadbalancing:us-east-1:054125018476:loadbalancer/app/my-alb/1234567890abcdef";
+        "arn:aws:elasticloadbalancing:us-east-1:210987654321:loadbalancer/app/my-alb/1234567890abcdef";
       const result = buildResourceArn({
         resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
         identifier: arn,
@@ -121,7 +121,7 @@ describe("buildResourceArn", () => {
     });
 
     it("ECS Cluster ARN passes through unchanged (existing CCAPI shape)", () => {
-      const arn = "arn:aws:ecs:us-east-1:054125018476:cluster/my-cluster";
+      const arn = "arn:aws:ecs:us-east-1:210987654321:cluster/my-cluster";
       const result = buildResourceArn({
         resourceType: RESOURCE_TYPES.ECS_CLUSTER,
         identifier: arn,
@@ -132,7 +132,7 @@ describe("buildResourceArn", () => {
     });
 
     it("SNS Topic ARN passes through unchanged (existing CCAPI shape)", () => {
-      const arn = "arn:aws:sns:us-east-1:054125018476:my-topic";
+      const arn = "arn:aws:sns:us-east-1:210987654321:my-topic";
       const result = buildResourceArn({
         resourceType: RESOURCE_TYPES.SNS_TOPIC,
         identifier: arn,
@@ -163,7 +163,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:iam::054125018476:role/cli-ex-iam-1775586358");
+      ).toBe("arn:aws:iam::210987654321:role/cli-ex-iam-1775586358");
     });
   });
 
@@ -176,7 +176,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:lambda:us-east-1:054125018476:function:my-fn");
+      ).toBe("arn:aws:lambda:us-east-1:210987654321:function:my-fn");
     });
 
     it("RDS DB instance", () => {
@@ -187,7 +187,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:rds:us-east-1:054125018476:db:mydb");
+      ).toBe("arn:aws:rds:us-east-1:210987654321:db:mydb");
     });
 
     it("SecretsManager Secret", () => {
@@ -199,7 +199,7 @@ describe("buildResourceArn", () => {
           accountId: ACCOUNT,
         }),
       ).toBe(
-        "arn:aws:secretsmanager:us-east-1:054125018476:secret:mysecret-aBcDef",
+        "arn:aws:secretsmanager:us-east-1:210987654321:secret:mysecret-aBcDef",
       );
     });
 
@@ -211,7 +211,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:cloudwatch:us-east-1:054125018476:alarm:high-cpu");
+      ).toBe("arn:aws:cloudwatch:us-east-1:210987654321:alarm:high-cpu");
     });
 
     it("CloudWatch Logs log group with leading slash", () => {
@@ -222,7 +222,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:logs:us-east-1:054125018476:log-group:/aws/lambda/my-fn");
+      ).toBe("arn:aws:logs:us-east-1:210987654321:log-group:/aws/lambda/my-fn");
     });
   });
 
@@ -235,7 +235,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:dynamodb:us-east-1:054125018476:table/mytable");
+      ).toBe("arn:aws:dynamodb:us-east-1:210987654321:table/mytable");
     });
 
     it("EC2 instance", () => {
@@ -246,7 +246,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:ec2:us-east-1:054125018476:instance/i-0123456789abcdef0");
+      ).toBe("arn:aws:ec2:us-east-1:210987654321:instance/i-0123456789abcdef0");
     });
 
     it("EC2 VPC", () => {
@@ -257,7 +257,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:ec2:us-east-1:054125018476:vpc/vpc-0a1b2c3d");
+      ).toBe("arn:aws:ec2:us-east-1:210987654321:vpc/vpc-0a1b2c3d");
     });
 
     it("EC2 Subnet", () => {
@@ -268,7 +268,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:ec2:us-east-1:054125018476:subnet/subnet-0f1e2d3c");
+      ).toBe("arn:aws:ec2:us-east-1:210987654321:subnet/subnet-0f1e2d3c");
     });
 
     it("EC2 Security Group", () => {
@@ -279,7 +279,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:ec2:us-east-1:054125018476:security-group/sg-0987654321");
+      ).toBe("arn:aws:ec2:us-east-1:210987654321:security-group/sg-0987654321");
     });
 
     it("EC2 Internet Gateway", () => {
@@ -291,7 +291,7 @@ describe("buildResourceArn", () => {
           accountId: ACCOUNT,
         }),
       ).toBe(
-        "arn:aws:ec2:us-east-1:054125018476:internet-gateway/igw-05bfc1e2bde305134",
+        "arn:aws:ec2:us-east-1:210987654321:internet-gateway/igw-05bfc1e2bde305134",
       );
     });
 
@@ -304,7 +304,7 @@ describe("buildResourceArn", () => {
           accountId: ACCOUNT,
         }),
       ).toBe(
-        "arn:aws:ec2:us-east-1:054125018476:route-table/rtb-0577c1b03ff7f0473",
+        "arn:aws:ec2:us-east-1:210987654321:route-table/rtb-0577c1b03ff7f0473",
       );
     });
 
@@ -317,7 +317,7 @@ describe("buildResourceArn", () => {
           accountId: ACCOUNT,
         }),
       ).toBe(
-        "arn:aws:ec2:us-east-1:054125018476:natgateway/nat-0b337150b5f9b0b62",
+        "arn:aws:ec2:us-east-1:210987654321:natgateway/nat-0b337150b5f9b0b62",
       );
     });
 
@@ -329,7 +329,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:ecr:us-east-1:054125018476:repository/my-app");
+      ).toBe("arn:aws:ecr:us-east-1:210987654321:repository/my-app");
     });
 
     it("API Gateway v2 API", () => {
@@ -350,11 +350,11 @@ describe("buildResourceArn", () => {
         buildResourceArn({
           resourceType: RESOURCE_TYPES.SQS_QUEUE,
           identifier:
-            "https://sqs.us-east-1.amazonaws.com/054125018476/my-queue",
+            "https://sqs.us-east-1.amazonaws.com/210987654321/my-queue",
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:sqs:us-east-1:054125018476:my-queue");
+      ).toBe("arn:aws:sqs:us-east-1:210987654321:my-queue");
     });
 
     it("preserves region and account from the queue URL (not the args)", () => {
@@ -378,7 +378,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:sqs:us-east-1:054125018476:bare-queue-name");
+      ).toBe("arn:aws:sqs:us-east-1:210987654321:bare-queue-name");
     });
   });
 
@@ -391,7 +391,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:ssm:us-east-1:054125018476:parameter/app/db/host");
+      ).toBe("arn:aws:ssm:us-east-1:210987654321:parameter/app/db/host");
     });
 
     it("handles identifier without leading slash", () => {
@@ -402,7 +402,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:ssm:us-east-1:054125018476:parameter/app/db/host");
+      ).toBe("arn:aws:ssm:us-east-1:210987654321:parameter/app/db/host");
     });
   });
 
@@ -470,7 +470,7 @@ describe("buildResourceArn", () => {
           region: REGION,
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws:cloudfront::054125018476:distribution/E1ABCDEFG12345");
+      ).toBe("arn:aws:cloudfront::210987654321:distribution/E1ABCDEFG12345");
     });
 
     it("uses the aws-us-gov partition for GovCloud callers", () => {
@@ -482,7 +482,7 @@ describe("buildResourceArn", () => {
           accountId: ACCOUNT,
         }),
       ).toBe(
-        "arn:aws-us-gov:cloudfront::054125018476:distribution/E1ABCDEFG12345",
+        "arn:aws-us-gov:cloudfront::210987654321:distribution/E1ABCDEFG12345",
       );
     });
   });
@@ -496,7 +496,7 @@ describe("buildResourceArn", () => {
           region: "us-gov-east-1",
           accountId: ACCOUNT,
         }),
-      ).toBe("arn:aws-us-gov:lambda:us-gov-east-1:054125018476:function:my-fn");
+      ).toBe("arn:aws-us-gov:lambda:us-gov-east-1:210987654321:function:my-fn");
     });
 
     it("uses aws-cn partition for China regions", () => {
@@ -519,7 +519,7 @@ describe("buildResourceArn", () => {
           accountId: ACCOUNT,
           partition: "aws-us-gov",
         }),
-      ).toBe("arn:aws-us-gov:iam::054125018476:role/my-role");
+      ).toBe("arn:aws-us-gov:iam::210987654321:role/my-role");
     });
   });
 

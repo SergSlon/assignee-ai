@@ -1861,7 +1861,7 @@ describeE2E("E2E: SNS Subscription plan", () => {
     const state = await graph.invoke(
       {
         userIntent:
-          "Create an SNS Subscription with Protocol=email and Endpoint=test@example.com for topic arn:aws:sns:us-east-1:054125018476:e2e-topic",
+          "Create an SNS Subscription with Protocol=email and Endpoint=test@example.com for topic arn:aws:sns:us-east-1:210987654321:e2e-topic",
         runId: crypto.randomUUID(),
         executionMode: ExecutionMode.PLAN,
         startedAt: Date.now(),
@@ -2230,7 +2230,7 @@ describeE2E("E2E: Events ApiDestination plan (standalone)", () => {
           // if a future APPLY mode needs a real Connection it must be
           // created via a companion resource first.
           ConnectionArn:
-            "arn:aws:events:us-east-1:054125018476:connection/e2e-conn/11111111-1111-1111-1111-111111111111",
+            "arn:aws:events:us-east-1:210987654321:connection/e2e-conn/11111111-1111-1111-1111-111111111111",
         },
       },
       { configurable: { thread_id: crypto.randomUUID() } },

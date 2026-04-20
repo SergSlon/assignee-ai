@@ -26,7 +26,7 @@ setupDestroyServiceMocks();
 describe("destroySingleResource", () => {
   describe("ALB post-delete ENI drain", () => {
     const ALB_ARN =
-      "arn:aws:elasticloadbalancing:us-east-1:054125018476:loadbalancer/app/assignee-alb-test/abc123def456";
+      "arn:aws:elasticloadbalancing:us-east-1:210987654321:loadbalancer/app/assignee-alb-test/abc123def456";
 
     it("polls DescribeNetworkInterfaces until ALB ENIs are gone", async () => {
       // CCAPI delete succeeds

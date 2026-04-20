@@ -723,21 +723,21 @@ describe("resultFormatterNode — compound FAILED with partial results", () => {
           resourceId: "vpc",
           resourceType: "AWS::EC2::VPC",
           resourceArn:
-            "arn:aws:ec2:us-east-1:054125018476:vpc/vpc-00609e37203c1044c",
+            "arn:aws:ec2:us-east-1:210987654321:vpc/vpc-00609e37203c1044c",
           executionStatus: ExecutionStatus.SUCCESS,
         },
         {
           resourceId: "subnet-public-1",
           resourceType: "AWS::EC2::Subnet",
           resourceArn:
-            "arn:aws:ec2:us-east-1:054125018476:subnet/subnet-0f855779f1b6c0ff8",
+            "arn:aws:ec2:us-east-1:210987654321:subnet/subnet-0f855779f1b6c0ff8",
           executionStatus: ExecutionStatus.SUCCESS,
         },
         {
           resourceId: "igw",
           resourceType: "AWS::EC2::InternetGateway",
           resourceArn:
-            "arn:aws:ec2:us-east-1:054125018476:internet-gateway/igw-0398fb964fa35931d",
+            "arn:aws:ec2:us-east-1:210987654321:internet-gateway/igw-0398fb964fa35931d",
           executionStatus: ExecutionStatus.SUCCESS,
         },
         {
@@ -751,7 +751,7 @@ describe("resultFormatterNode — compound FAILED with partial results", () => {
           resourceId: "rt-public",
           resourceType: "AWS::EC2::RouteTable",
           resourceArn:
-            "arn:aws:ec2:us-east-1:054125018476:route-table/rtb-07fb017a426465e6f",
+            "arn:aws:ec2:us-east-1:210987654321:route-table/rtb-07fb017a426465e6f",
           executionStatus: ExecutionStatus.SUCCESS,
         },
         {

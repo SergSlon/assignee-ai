@@ -148,7 +148,7 @@ describe("resolveResource", () => {
     // mocked — these tests pin the routing decision (does an IAM ARN
     // hit the IAM helper instead of falling through to RGTA?).
     it("resolves an IAM role by ARN via the IAM helper short-circuit", async () => {
-      const iamArn = "arn:aws:iam::054125018476:role/my-app-role";
+      const iamArn = "arn:aws:iam::210987654321:role/my-app-role";
       mockGetManagedIamRoleByArn.mockResolvedValueOnce({
         arn: iamArn,
         roleName: "my-app-role",
@@ -171,7 +171,7 @@ describe("resolveResource", () => {
       mockGetManagedIamRoleByArn.mockResolvedValueOnce(null);
 
       const result = await resolveResource(
-        "arn:aws:iam::054125018476:role/external-app-role",
+        "arn:aws:iam::210987654321:role/external-app-role",
         taggingClient,
         "us-east-1",
       );
@@ -191,7 +191,7 @@ describe("resolveResource", () => {
     // return IAM roles), giving a guaranteed null even when the role
     // existed. Pin both partitions.
     it("routes a GovCloud (aws-us-gov) IAM role ARN to the IAM helper", async () => {
-      const govArn = "arn:aws-us-gov:iam::054125018476:role/my-gov-role";
+      const govArn = "arn:aws-us-gov:iam::210987654321:role/my-gov-role";
       mockGetManagedIamRoleByArn.mockResolvedValueOnce({
         arn: govArn,
         roleName: "my-gov-role",
@@ -212,7 +212,7 @@ describe("resolveResource", () => {
     });
 
     it("routes a China (aws-cn) IAM role ARN to the IAM helper", async () => {
-      const cnArn = "arn:aws-cn:iam::054125018476:role/my-china-role";
+      const cnArn = "arn:aws-cn:iam::210987654321:role/my-china-role";
       mockGetManagedIamRoleByArn.mockResolvedValueOnce({
         arn: cnArn,
         roleName: "my-china-role",
@@ -311,11 +311,11 @@ describe("resolveResource", () => {
   // ── SSM Parameter regression suite (P0-3 destroy resolver fix) ─────────
   describe("SSM Parameter", () => {
     // Real-shaped ARNs harvested from actual AWS responses.
-    const bareArn = "arn:aws:ssm:us-east-1:054125018476:parameter/smoke-test-x";
+    const bareArn = "arn:aws:ssm:us-east-1:210987654321:parameter/smoke-test-x";
     const nestedArn =
-      "arn:aws:ssm:us-east-1:054125018476:parameter/myapp/database/host";
+      "arn:aws:ssm:us-east-1:210987654321:parameter/myapp/database/host";
     const secretArn =
-      "arn:aws:ssm:us-east-1:054125018476:parameter/myapp/secret-token";
+      "arn:aws:ssm:us-east-1:210987654321:parameter/myapp/secret-token";
     const managedTags = [{ Key: "managed-by", Value: "assignee-ai" }];
 
     function mockTagging(arns: string[]): void {
@@ -421,7 +421,7 @@ describe("resolveResource", () => {
 
     it("picks the right SSM parameter among multiple managed resources", async () => {
       mockTagging([
-        "arn:aws:ssm:us-east-1:054125018476:parameter/other-param",
+        "arn:aws:ssm:us-east-1:210987654321:parameter/other-param",
         bareArn,
         "arn:aws:s3:::some-bucket",
       ]);
@@ -439,7 +439,7 @@ describe("resolveResource", () => {
         ResourceTagMappingList: [
           {
             ResourceARN:
-              "arn:aws:ssm:us-east-1:054125018476:parameter/first-page-param",
+              "arn:aws:ssm:us-east-1:210987654321:parameter/first-page-param",
             Tags: managedTags,
           },
         ],
@@ -498,7 +498,7 @@ describe("resolveResource", () => {
 
     it("StringList variant resolves by bare name", async () => {
       const stringListArn =
-        "arn:aws:ssm:us-east-1:054125018476:parameter/app/feature-flags";
+        "arn:aws:ssm:us-east-1:210987654321:parameter/app/feature-flags";
       mockSend.mockResolvedValueOnce({
         ResourceTagMappingList: [
           {
@@ -523,7 +523,7 @@ describe("resolveResource", () => {
 
     it("returns the SSM region extracted from the ARN", async () => {
       const euArn =
-        "arn:aws:ssm:eu-west-1:054125018476:parameter/eu-app/config";
+        "arn:aws:ssm:eu-west-1:210987654321:parameter/eu-app/config";
       mockTagging([euArn]);
       const result = await resolveResource(
         "/eu-app/config",
@@ -537,7 +537,7 @@ describe("resolveResource", () => {
     it("does not confuse SSM parameter with an unrelated S3 bucket of the same basename", async () => {
       mockTagging([
         "arn:aws:s3:::database-host",
-        "arn:aws:ssm:us-east-1:054125018476:parameter/myapp/database/host",
+        "arn:aws:ssm:us-east-1:210987654321:parameter/myapp/database/host",
       ]);
       // "database/host" has a slash, so it cannot collide with the bucket name "database-host".
       const result = await resolveResource(
@@ -562,7 +562,7 @@ describe("resolveResource", () => {
 
     it("deeply nested SSM path resolves by bare input", async () => {
       const deepArn =
-        "arn:aws:ssm:us-east-1:054125018476:parameter/company/team/service/env/var";
+        "arn:aws:ssm:us-east-1:210987654321:parameter/company/team/service/env/var";
       mockTagging([deepArn]);
       const result = await resolveResource(
         "company/team/service/env/var",
@@ -624,7 +624,7 @@ describe("resolveResource", () => {
         ResourceTagMappingList: [
           {
             ResourceARN:
-              "arn:aws:lambda:us-east-1:054125018476:function:my-func",
+              "arn:aws:lambda:us-east-1:210987654321:function:my-func",
             Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
           },
         ],
@@ -634,7 +634,7 @@ describe("resolveResource", () => {
         ResourceTagMappingList: [
           {
             ResourceARN:
-              "arn:aws:lambda:us-west-2:054125018476:function:my-func",
+              "arn:aws:lambda:us-west-2:210987654321:function:my-func",
             Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
           },
         ],

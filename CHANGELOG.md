@@ -12,6 +12,21 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 85 — iteration 1 (2026-04-20)
+
+#### Security
+
+- **Scrubbed real AWS account ID (`054125018476`) from 20 files across the tracked tree.** User flagged after noticing it in the Epic 84 hero capture. Grep found 87 occurrences total: 1 in `README.md` (Epic 84), 1 in `CHANGELOG.md` (Epic 84 entry), and **85 pre-existing** in production source JSDoc (`resolve-arn.ts`, `destroy-strategies/strategies/ec2-eip.ts`, `apps/cli/src/services/resource-resolver/sqs-url.ts`) plus test fixtures (`arn-builder.test.ts` with 29 occurrences, `resource-resolver.test.ts` with 15, `preflight-guard.test.ts` with 10, `destroy-service-single.test.ts` with 6, and 11 other test files). The leak dates back to commit `312ec5e` (months old, pre-dates this session).
+- Substitution: `054125018476` → `210987654321` (descending-digit synthetic ID — obviously not a real account, and deliberately NOT on the `PLACEHOLDER_AWS_ACCOUNT_IDS` denylist at `packages/core/src/constants/placeholder-accounts.ts` so tests that assert on a _passing_ ARN — specifically `preflight-guard.test.ts` negative-case ARNs — continue to work). AWS's canonical doc placeholders (`123456789012`, `111122223333`, etc.) would have broken those tests because preflight rejects them by design.
+- `README.md:26` hero transcript updated: `account=054125018476` → `account=************` (redaction, since the hero is user-facing and the specific number has no documentation value).
+- `CHANGELOG.md:34` Epic 84 narrative: swapped the raw account for `(real AWS account, redacted — see Epic 85; …)`.
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`: 3 occurrences redacted to `************` (file is workspace-root, not git-tracked, but scrubbed for hygiene).
+- Saved a cross-session feedback memory `feedback_no_real_account_ids_in_repo.md` so future sessions don't repeat the leak. Memory documents the safe substitution IDs + pre-commit grep pattern (`\b\d{12}\b`) + the git-history-scrub-is-separate posture.
+
+#### Out-of-scope for this epic (user authorization required)
+
+- Git history at commits `312ec5e`, `0d838c0`, `9f45061`, `11c4d54`, `feb12f1` still contains `054125018476`. Full remediation requires `git filter-repo` + force-push to rewrite history — destructive and not authorized. Safe interim posture: HEAD is clean from the Epic 85 commit forward, the repo is PRIVATE today, and a one-time history scrub should happen before the repo's visibility flips to public (v0.2 release). Flagged in the feedback memory as the deferred decision.
+
 ### Epic 84 — iteration 1 (2026-04-20)
 
 #### Fixed
@@ -31,7 +46,7 @@ later) will land when the project is ready for public release.
 
 **What I did**:
 
-- Ran `node apps/cli/dist/index.js plan --no-apply "Create an S3 bucket named hero-demo-bucket"` against the live system (AWS account `054125018476` via Bedrock us-east-1, pricing from AWS Pricing MCP). Run-id `fa465600af5a`. Captured both non-TTY `=== Plan ===` plain form and TTY-rendered boxen form via `script -q`.
+- Ran `node apps/cli/dist/index.js plan --no-apply "Create an S3 bucket named hero-demo-bucket"` against the live system (real AWS account, redacted — see Epic 85; Bedrock us-east-1, pricing from AWS Pricing MCP). Run-id `fa465600af5a`. Captured both non-TTY `=== Plan ===` plain form and TTY-rendered boxen form via `script -q`.
 - Replaced the hero body with the real captured output, abbreviated where needed with explicit `(... N more)` markers so readers know what's elided. No fabricated lines.
 - Fixed the comment citation to point at the canonical `packages/core/src/utils/display-plan.ts` and documented the TTY-vs-non-TTY rendering difference.
 - Dropped the invented Tags + provisioning tail. Added an honest footnote: tags get injected at apply time from `tags.ts`, listing the real three keys (`managed-by=assignee`, `assignee-run-id=<uuid>`, `environment=poc`). The asciinema-cast plan covering the apply phase still stands for v0.2.

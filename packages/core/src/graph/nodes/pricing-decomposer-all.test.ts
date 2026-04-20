@@ -911,7 +911,7 @@ describe("Lambda pricing — filter-dispatched queryLineItemPrices (regression t
           Handler: "index.handler",
           // Real-shaped account ID — preflight rejects 123456789012 as
           // a docs placeholder (Phase 2 Lambda passrole bug fix).
-          Role: "arn:aws:iam::054125018476:role/lambda-role",
+          Role: "arn:aws:iam::210987654321:role/lambda-role",
           Code: { ZipFile: "exports.handler = async () => {}" },
         },
       }),

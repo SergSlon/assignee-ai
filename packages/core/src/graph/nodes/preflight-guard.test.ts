@@ -53,7 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Default: operator ARN available so IAM pre-check runs
   mockGetOperatorCallerArn.mockResolvedValue(
-    "arn:aws:iam::054125018476:user/assignee-operator",
+    "arn:aws:iam::210987654321:user/assignee-operator",
   );
 });
 
@@ -80,12 +80,12 @@ describe("preflightGuardNode", () => {
         desiredState: {
           FunctionName: "my-fn",
           Runtime: "nodejs22.x",
-          // Real-shaped account ID — 054125018476 is the test user's account.
+          // Real-shaped account ID — 210987654321 is the test user's account.
           // Must NOT use 123456789012 here: that's an AWS docs placeholder
           // account and the new detectPlaceholderArn guard will (correctly)
           // reject any desiredState containing it. See the placeholder ARN
           // rejection test further down.
-          Role: "arn:aws:iam::054125018476:role/my-role",
+          Role: "arn:aws:iam::210987654321:role/my-role",
         },
       }),
     );
@@ -224,7 +224,7 @@ describe("preflightGuardNode", () => {
             FunctionName: "my-fn",
             Runtime: "nodejs22.x",
             Layers: [
-              "arn:aws:lambda:us-east-1:054125018476:layer:ok:1",
+              "arn:aws:lambda:us-east-1:210987654321:layer:ok:1",
               "arn:aws:lambda:us-east-1:123456789012:layer:bad:1",
             ],
           },
@@ -262,7 +262,7 @@ describe("preflightGuardNode", () => {
           desiredState: {
             FunctionName: "my-fn",
             Runtime: "nodejs22.x",
-            Role: "arn:aws:iam::054125018476:role/my-role",
+            Role: "arn:aws:iam::210987654321:role/my-role",
             Description:
               "This function handles events from account 123456789012 (see docs).",
           },
@@ -281,7 +281,7 @@ describe("preflightGuardNode", () => {
     it("does NOT throw on pathologically deep desiredState (depth guard)", async () => {
       // Build a 50-level deep object: { a: { a: { a: ... { Role: "real-arn" } } } }
       let nested: Record<string, unknown> = {
-        Role: "arn:aws:iam::054125018476:role/leaf",
+        Role: "arn:aws:iam::210987654321:role/leaf",
       };
       for (let i = 0; i < 50; i++) {
         nested = { a: nested };
@@ -381,7 +381,7 @@ describe("preflightGuardNode", () => {
           desiredState: {
             FunctionName: "my-fn",
             Runtime: "nodejs22.x",
-            Role: "arn:aws:iam::054125018476:role/my-role",
+            Role: "arn:aws:iam::210987654321:role/my-role",
             // Field name doesn't match RDS_PASSWORD_FIELDS AND the
             // resource type is out of scope — must pass through.
             MasterUserPassword: SENTINEL,
@@ -529,7 +529,7 @@ describe("preflightGuardNode", () => {
       // trying to catch would break every existing user's IAM Role flow.
       sendMock.mockImplementation(() => {
         const err = new Error(
-          "User: arn:aws:iam::054125018476:user/assignee-operator is not authorized to perform: iam:GetPolicy",
+          "User: arn:aws:iam::210987654321:user/assignee-operator is not authorized to perform: iam:GetPolicy",
         ) as Error & { name: string };
         err.name = "AccessDenied";
         return Promise.reject(err);
@@ -903,7 +903,7 @@ describe("preflightGuardNode", () => {
           desiredState: {
             FunctionName: "my-fn",
             Runtime: "nodejs22.x",
-            Role: "arn:aws:iam::054125018476:role/exec-role",
+            Role: "arn:aws:iam::210987654321:role/exec-role",
           },
         }),
       );
@@ -1389,7 +1389,7 @@ describe("preflightGuardNode — IAM permission check (Story 19.1)", () => {
 
     expect(iamTool.invoke).toHaveBeenCalledWith(
       expect.objectContaining({
-        policy_source_arn: "arn:aws:iam::054125018476:user/assignee-operator",
+        policy_source_arn: "arn:aws:iam::210987654321:user/assignee-operator",
       }),
     );
   });

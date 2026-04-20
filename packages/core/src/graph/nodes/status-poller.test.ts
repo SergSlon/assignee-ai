@@ -428,7 +428,7 @@ describe("isRetryableCloudFrontS3Error", () => {
     // with a bucket/origin/s3 co-occurrence guard.
     expect(
       isRetryableCloudFrontS3Error(
-        "The IAM role arn:aws:iam::054125018476:role/my-role does not exist",
+        "The IAM role arn:aws:iam::210987654321:role/my-role does not exist",
       ),
     ).toBe(false);
     expect(

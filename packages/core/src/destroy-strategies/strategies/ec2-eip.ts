@@ -37,7 +37,7 @@ export const ec2EipStrategy: DestroyStrategy = {
         : {}),
     });
     try {
-      // ARN format: arn:aws:ec2:us-east-1:054125018476:elastic-ip/eipalloc-xxx
+      // ARN format: arn:aws:ec2:us-east-1:210987654321:elastic-ip/eipalloc-xxx
       // Identifier comes from extractIdentifier and is just `eipalloc-xxx`.
       await ec2.send(
         new ReleaseAddressCommand({ AllocationId: resource.identifier }),
