@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import {
   loadUserConfig,
   resolveConfigPath,
@@ -24,12 +25,15 @@ describe("user-config-loader", () => {
     it("uses ASSIGNEE_CONFIG_DIR env var when set", () => {
       process.env["ASSIGNEE_CONFIG_DIR"] = "/custom/config/dir";
       const result = resolveConfigPath();
-      expect(result).toBe("/custom/config/dir/config.yaml");
+      // path.join on both sides so the assertion matches the production
+      // path separator on every platform (backslash on Windows, forward
+      // slash on POSIX).
+      expect(result).toBe(path.join("/custom/config/dir", "config.yaml"));
     });
 
     it("uses XDG default when env var is not set", () => {
       const result = resolveConfigPath();
-      expect(result).toContain(".config/assignee/config.yaml");
+      expect(result).toContain(path.join(".config", "assignee", "config.yaml"));
     });
   });
 

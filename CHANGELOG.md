@@ -12,6 +12,18 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 80 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+Six more Windows-only test failures surfaced by Epic 79 — all POSIX-assumption bugs in test fixtures/mocks. Domino pattern continues: each Windows-compat layer reveals the next.
+
+- `packages/core/src/config/user-config-loader.test.ts:27,32`: assertions used hardcoded forward-slash paths (`"/custom/config/dir/config.yaml"`, `".config/assignee/config.yaml"`). Production code uses `path.join` → OS-native separators. Both sides now use `path.join` so the assertion matches Windows backslashes and POSIX forward slashes alike.
+- `packages/core/src/config/org-policy-loader.test.ts`: 3 test mocks did `.includes(".assignee/org-policy.yaml")` / `.includes(".config/assignee/org-policy.yaml")` on the raw `filePath` string; on Windows the actual `path.join`-produced string has backslashes, the substring check fails, the mock throws ENOENT, and the test expects content it never gets. Normalize `String(filePath).replace(/\\/g, "/")` before the check.
+- `packages/core/src/services/price-cache.test.ts:143`: `beforeEach` sets `process.env.HOME = tempDir` to redirect `os.homedir()`. On Windows `os.homedir()` prefers `USERPROFILE`, not `HOME`, so the cache lands at the real home, the test reads the empty temp dir, and `readdirSync` returns `[]`. Set both `HOME` (POSIX) and `USERPROFILE` (Windows) in `beforeEach`; restore both in `afterEach`.
+
+These are Epic 79's logical continuation — same "once Windows finally runs, years of silent POSIX assumptions surface." After this iteration, Windows failure count should drop to 0 (or expose yet another layer — the pattern has been proving stable at each step).
+
 ### Epic 79 — iteration 1 (2026-04-20)
 
 #### Fixed

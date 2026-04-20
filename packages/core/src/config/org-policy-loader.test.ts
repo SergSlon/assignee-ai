@@ -48,7 +48,9 @@ describe("org-policy-loader", () => {
       SSEAlgorithm: "aws:kms"
 `;
       mockedFs.readFile.mockImplementation(async (filePath) => {
-        const p = String(filePath);
+        // Normalize to POSIX separators so the substring checks survive
+        // `path.join`'s OS-native separators on Windows.
+        const p = String(filePath).replace(/\\/g, "/");
         if (
           p.includes(".assignee/org-policy.yaml") &&
           p.includes("test-project")
@@ -74,7 +76,7 @@ describe("org-policy-loader", () => {
     policy: always_ask
 `;
       mockedFs.readFile.mockImplementation(async (filePath) => {
-        const p = String(filePath);
+        const p = String(filePath).replace(/\\/g, "/");
         if (p.includes(".config/assignee/org-policy.yaml")) {
           return yaml;
         }
@@ -109,7 +111,7 @@ describe("org-policy-loader", () => {
 `;
 
       mockedFs.readFile.mockImplementation(async (filePath) => {
-        const p = String(filePath);
+        const p = String(filePath).replace(/\\/g, "/");
         if (
           p.includes("test-project") &&
           p.includes(".assignee/org-policy.yaml")

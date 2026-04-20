@@ -139,13 +139,18 @@ describe("sweepExpiredPrices (Story 33.1)", () => {
 describe("price-cache hash function (L-A3)", () => {
   let homeDir: string;
   let originalHome: string | undefined;
+  let originalUserProfile: string | undefined;
 
   beforeEach(async () => {
     homeDir = await fsPromises.mkdtemp(
       path.join(os.tmpdir(), "assignee-pricecache-home-"),
     );
     originalHome = process.env["HOME"];
+    originalUserProfile = process.env["USERPROFILE"];
     process.env["HOME"] = homeDir;
+    // os.homedir() prefers USERPROFILE on Windows; HOME alone only works on
+    // POSIX. Setting both keeps the test deterministic on every platform.
+    process.env["USERPROFILE"] = homeDir;
     vi.resetModules();
   });
 
@@ -155,6 +160,11 @@ describe("price-cache hash function (L-A3)", () => {
       delete process.env["HOME"];
     } else {
       process.env["HOME"] = originalHome;
+    }
+    if (originalUserProfile === undefined) {
+      delete process.env["USERPROFILE"];
+    } else {
+      process.env["USERPROFILE"] = originalUserProfile;
     }
     await fsPromises
       .rm(homeDir, { recursive: true, force: true })
