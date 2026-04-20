@@ -86,4 +86,15 @@ export const EnvVar = {
    * SaaS tenants that want to abort on any verification anomaly.
    */
   ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS: "ASSIGNEE_PREFLIGHT_UNKNOWN_BLOCKS",
+
+  // ── Remote MCP opt-in (supply-chain gate) ────────────────────
+  /**
+   * When set to exactly `"1"`, the CLI adds the remote
+   * `knowledge-mcp.global.api.aws` server to the MCP config at
+   * startup. The remote server executes code fetched over the
+   * network at runtime, so it is OFF by default and users must
+   * explicitly opt in. Any value other than `"1"` leaves it
+   * disabled. @see config/mcp-servers.ts
+   */
+  ASSIGNEE_ENABLE_REMOTE_MCP: "ASSIGNEE_ENABLE_REMOTE_MCP",
 } as const;

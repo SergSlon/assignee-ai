@@ -12,6 +12,18 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 75 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+- `docs/resource-types.md`: add row 37 to the Resource Type Table for `AWS::RDS::DBSubnetGroup` (plugin `rds-db-subnet-group`). Intro already claims "37 AWS resource types"; table had only 36 rows since the type was added to `SUPPORTED_TYPES_ARRAY` on 2026-04-13. Closes Zone C re-sweep CRITICAL.
+- `docs/commands.md:535` and `docs/aws-bootstrap.md:35,126`: path citations `packages/core/src/config/iam-policies.ts` → `packages/core/src/config/iam-policies/` (directory with per-role generators `operator.ts` / `reader.ts` / `auditor.ts` behind an `index.ts` barrel). The `.ts` file was split into a directory; three doc call-sites carried the old path. Closes Zone D re-sweep MED (flagged as out-of-Zone-D scope but actionable).
+- `packages/core/src/constants/env-vars.ts`: add `ASSIGNEE_ENABLE_REMOTE_MCP` to the `EnvVar` registry under "Remote MCP opt-in". Closes Zone B re-sweep CRITICAL — the var was declared as a raw string literal at `config/mcp-servers.ts:58` and referenced by raw string in tests, violating the zero-magic-strings policy (Story 42.10). `mcp-servers.ts:58` now uses `EnvVar.ASSIGNEE_ENABLE_REMOTE_MCP` via the registry.
+
+#### Review discipline
+
+- epic-75-it1 re-sweep ran the same 5 zones (ZA/ZB/ZC/ZD/ZE). Zones A + E: zero findings (steady-state across Epic 73/74 fixes confirmed holding). Zone D: zero in owned files — surfaced the iam-policies path drift as an out-of-scope note. Zones B + C: one CRITICAL each, both verified at spot-check. Cumulative reviewer-agent hallucinations caught across Epic 57+: ~11 (unchanged this round — reviewers correctly flagged 3 real issues and the coordinator verified all three against HEAD before accepting). Pattern: the re-sweep surface is narrower than the initial sweep (deep-read mandate catches what tight lanes skipped; second pass catches what first pass missed plus anything added between commits).
+
 ### Epic 74 — iteration 1 (2026-04-20)
 
 #### Fixed

@@ -31,6 +31,7 @@
  * @see architecture.md — MCP Servers Catalog section
  */
 import { McpServerName, McpCommand } from "../constants/mcp.js";
+import { EnvVar } from "../constants/env-vars.js";
 import { DEFAULT_AWS_REGION } from "./config-schema.js";
 import {
   requireAssigneeCredentials,
@@ -55,7 +56,7 @@ export const MCP_PINS = {
 } as const;
 
 /** Env var that must be set to `1` to enable the remote knowledge MCP server. */
-const ENABLE_REMOTE_MCP_VAR = "ASSIGNEE_ENABLE_REMOTE_MCP";
+const ENABLE_REMOTE_MCP_VAR = EnvVar.ASSIGNEE_ENABLE_REMOTE_MCP;
 
 export interface McpServerConfig {
   /** The command to execute (e.g. 'uvx', 'npx') */

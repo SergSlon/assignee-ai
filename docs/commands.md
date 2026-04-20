@@ -532,8 +532,9 @@ Bedrock + CCAPI + tagging + XRay + SDK fallback; the Services-A and
 Services-B policies each hold a byte-balanced half of the service
 actions. All three attach to the same IAM user and AWS evaluates the
 union, so behavior is identical to a single hypothetical unlimited
-policy. See `packages/core/src/config/iam-policies.ts` for the split
-algorithm.
+policy. See `packages/core/src/config/iam-policies/` (barrel at `index.ts`,
+split-algorithm helpers in `action-collector.ts` + `wildcard-collapser.ts`,
+role-specific generators in `operator.ts` / `reader.ts` / `auditor.ts`).
 
 Also sets up Bedrock invocation logging (IAM role, CloudWatch log group, Bedrock logging config).
 
