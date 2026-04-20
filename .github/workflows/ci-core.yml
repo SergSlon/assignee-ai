@@ -21,7 +21,17 @@ on:
       node:
         description: "Node major version (e.g. 22)"
         required: true
-        type: number
+        # MUST be string, not number: `ci-cross-platform.yml` derives the
+        # node version list via `fromJson(needs.prepare.outputs.node-json)`,
+        # which returns an array of strings. Passing a string where
+        # `type: number` is declared causes workflow_call type validation
+        # to fail silently — the matrix job never dispatches and the
+        # caller run ends red with only `prepare` green (observed every
+        # Monday 07:00 UTC from the workflow's inception until 2026-04-20).
+        # Unquoted number literals in other callers (e.g. `node: 22` in
+        # `ci.yml`) are auto-coerced to string by GitHub Actions, so all
+        # existing callers continue to work without modification.
+        type: string
       experimental:
         description: "If true, the job is allowed to fail without blocking the calling workflow"
         required: false
