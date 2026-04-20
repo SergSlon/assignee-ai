@@ -192,14 +192,19 @@ export const staticWebsitePattern: ArchitecturePattern = {
               Service: AwsServicePrincipal.CLOUDFRONT,
             },
             Action: IamAction.S3_GET_OBJECT,
-            // S3 object ARN — uses the resolved bucket name as the
-            // resource segment. The compound resolver substitutes
-            // markerRef(R.WEBSITE_BUCKET) with the real bucket name
-            // before the policy hits CCAPI. The `arn:*:s3:::` partition
-            // wildcard lets the same pattern deploy in commercial,
-            // GovCloud, China, and ISO partitions — IAM accepts `*` in
-            // the partition segment of Resource ARNs.
-            Resource: `arn:*:s3:::${markerRef(R.WEBSITE_BUCKET)}/*`,
+            // S3 object ARN — markerRef(R.WEBSITE_BUCKET) resolves to
+            // the FULL bucket ARN (`arn:aws:s3:::bucket-name`) because
+            // the compound marker resolver returns
+            // `completedResources[].resourceArn` which is synthesized
+            // via buildResourceArn (partition-aware — commercial/gov/
+            // china/iso). Appending `/*` produces the valid S3 object
+            // ARN the BucketPolicy requires. Previously the template
+            // prefixed `arn:*:s3:::` too, which double-nested the ARN
+            // ("arn:*:s3:::arn:aws:s3:::bucket-name/*") and caused S3
+            // to reject the policy with "Policy has invalid resource"
+            // at apply time. See static-website.test.ts for a red-
+            // phase regression guard.
+            Resource: `${markerRef(R.WEBSITE_BUCKET)}/*`,
             Condition: {
               StringEquals: {
                 "aws:SourceArn": markerRef(R.CDN_DISTRIBUTION),

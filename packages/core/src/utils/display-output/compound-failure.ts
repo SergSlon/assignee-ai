@@ -151,7 +151,9 @@ function appendRecovery(
   lines.push(
     c.dim(`  Or retry from the failed step after addressing the root cause:`),
   );
-  lines.push(`    assignee status ${runId} --resume`);
+  lines.push(
+    `    assignee apply --checkpoint .assignee/checkpoint-${runId}.json`,
+  );
 }
 
 export function renderCompoundPartialFailure(

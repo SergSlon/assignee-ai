@@ -197,8 +197,138 @@ describe("display.ts — non-TTY (CI) mode", () => {
       const vpcDestroyIdx = output.indexOf("assignee destroy vpc-0abc");
       expect(subnetDestroyIdx).toBeGreaterThan(-1);
       expect(vpcDestroyIdx).toBeGreaterThan(subnetDestroyIdx);
-      // Resume command includes the runId
-      expect(output).toContain("assignee status run-abc-123 --resume");
+      // Resume command points users at `assignee apply --checkpoint <path>`
+      // (the real resume flow) — NOT `assignee status <runId> --resume`,
+      // which never existed on the status subcommand and used to ship as
+      // a broken suggestion. See apps/cli/src/commands/apply.ts:51-54 for
+      // the -c, --checkpoint <path> option that owns resumption.
+      expect(output).toContain(
+        "assignee apply --checkpoint .assignee/checkpoint-run-abc-123.json",
+      );
+      // Stronger guard: the output must NOT mention the old broken suggestion.
+      // Running `assignee status <runId> --resume` hits
+      // `error: unknown option '--resume'` because status has no such flag.
+      expect(output).not.toContain("--resume");
+      expect(output).not.toMatch(/assignee\s+status\s+\S+\s+--\S+/);
+    });
+
+    it("every 'assignee <cmd> ... --<flag>' suggestion references a real flag", async () => {
+      // Regression guard for the "broken suggestion" class of bug.
+      //
+      // The previous revision of compound-failure.ts emitted
+      //     `assignee status ${runId} --resume`
+      // which looks plausible but the status command never defined --resume.
+      // The original test asserted the literal string and therefore codified
+      // the bug rather than catching it.
+      //
+      // This test scans the rendered output for every `assignee <cmd> ... --<flag>`
+      // pattern and cross-checks the flag against a hardcoded known-flags map
+      // seeded from each command's `.option(...)` list as of HEAD.
+      //
+      // If a future contributor adds a new flag-mention to any compound-failure
+      // string, this test will fail loudly with "unknown flag" — prompting
+      // them to either fix the string or extend the map below (after verifying
+      // the flag actually exists in the matching command module).
+      //
+      // Cross-package imports (core → apps/cli) are disallowed by the
+      // workspace layout, so the map is hardcoded and annotated with source
+      // anchors instead of programmatically loaded.
+      const { renderCompoundPartialFailure } = await import("./display.js");
+      const { chunks, restore } = captureStream(process.stderr);
+
+      renderCompoundPartialFailure({
+        pattern: fakePattern,
+        completed: [
+          {
+            resourceId: "vpc",
+            resourceType: "AWS::EC2::VPC",
+            resourceArn: "vpc-0abc",
+            executionStatus: "SUCCESS" as never,
+          },
+          {
+            resourceId: "subnet-public-a",
+            resourceType: "AWS::EC2::Subnet",
+            resourceArn: "subnet-0def",
+            executionStatus: "SUCCESS" as never,
+          },
+        ],
+        failedResource: {
+          resourceId: "natgw",
+          resourceType: "AWS::EC2::NatGateway",
+          displayName: "NAT Gateway",
+          errorMessage: "AccessDenied: ec2:CreateNatGateway",
+        },
+        notAttempted: [
+          {
+            resourceId: "private-route",
+            resourceType: "AWS::EC2::Route",
+            displayName: "Private Route",
+          },
+        ] as never,
+        runId: "run-flag-validator-1",
+      });
+      restore();
+
+      const output = chunks.join("");
+
+      // Known flags per subcommand — source anchors listed so a future
+      // contributor knows where to verify before extending this map.
+      //   apply  → apps/cli/src/commands/apply.ts:38-64
+      //   status → apps/cli/src/commands/status.ts:42-56
+      //   destroy takes positional ARNs, no flags used in compound-failure output
+      const KNOWN_FLAGS: Record<string, ReadonlySet<string>> = {
+        apply: new Set([
+          "--wizard",
+          "--quick",
+          "--no-advice",
+          "--yes",
+          "-y",
+          "--checkpoint",
+          "-c",
+          "--source",
+          "-s",
+          "--set",
+        ]),
+        status: new Set([
+          "--json",
+          "--region",
+          "--resource-type",
+          "--bp-coverage",
+          "--gaps-only",
+          "--include-structural-gaps",
+        ]),
+        destroy: new Set<string>(),
+      };
+
+      // Extract every `assignee <cmd> ... --<flag>` pair from the output.
+      // The regex is greedy within a single line; we walk all matches so a
+      // line with multiple flags is still covered.
+      const pairRegex = /assignee\s+(\S+)(?:\s+[^\n]*?)?(\s--[\w-]+)/g;
+      const pairs: Array<{ cmd: string; flag: string; line: string }> = [];
+      for (const line of output.split("\n")) {
+        for (const m of line.matchAll(pairRegex)) {
+          pairs.push({ cmd: m[1], flag: m[2].trim(), line });
+        }
+      }
+
+      // Sanity: the compound-failure renderer should emit at least one
+      // flag-bearing suggestion (the --checkpoint resume line). If this
+      // ever goes to 0, the fixture or the renderer stopped emitting
+      // actionable commands — surface that as a test failure.
+      expect(pairs.length).toBeGreaterThan(0);
+
+      for (const { cmd, flag, line } of pairs) {
+        const known = KNOWN_FLAGS[cmd];
+        expect(
+          known,
+          `compound-failure output mentions unknown subcommand '${cmd}' in line: ${line}`,
+        ).toBeDefined();
+        expect(
+          known!.has(flag),
+          `compound-failure output suggests 'assignee ${cmd} ... ${flag}' but ${flag} is not in the known-flags map for '${cmd}'. ` +
+            `Either the suggestion is broken, or the map needs updating after a new flag was added (see apps/cli/src/commands/${cmd}.ts).`,
+        ).toBe(true);
+      }
     });
 
     it("annotates composite-identifier resources with cascade note", async () => {
@@ -274,6 +404,7 @@ describe("display.ts — non-TTY (CI) mode", () => {
       // No destroy/resume commands when nothing landed
       expect(output).not.toContain("assignee destroy");
       expect(output).not.toContain("--resume");
+      expect(output).not.toContain("--checkpoint");
     });
   });
 
