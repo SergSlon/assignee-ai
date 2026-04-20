@@ -138,7 +138,7 @@ export async function getOperatorAccountId(): Promise<string | undefined> {
 
 /**
  * Returns the full caller ARN from the STS GetCallerIdentity response
- * (e.g. `arn:aws:iam::112233445566:user/assignee-operator`).
+ * (e.g. `arn:aws:iam::210987654321:user/assignee-operator`).
  *
  * Piggybacks on the same STS call as getOperatorAccountId — no extra
  * network request. Returns undefined when:

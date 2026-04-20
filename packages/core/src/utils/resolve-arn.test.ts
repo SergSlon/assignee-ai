@@ -35,7 +35,7 @@ import {
 } from "./resolve-arn.js";
 
 const ORIGINAL_ENV = { ...process.env };
-const REAL_ACCOUNT = "112233445566";
+const REAL_ACCOUNT = "210987654321";
 
 beforeEach(() => {
   vi.clearAllMocks();

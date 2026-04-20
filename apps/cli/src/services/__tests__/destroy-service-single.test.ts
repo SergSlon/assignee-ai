@@ -227,7 +227,7 @@ describe("destroySingleResource", () => {
     // a real error rather than treating it as silent destroy success.
     it("blocks deleteResource NOT_FOUND short-circuit when operator account differs from ARN account", async () => {
       // Operator is configured for one account...
-      mockGetOperatorAccountId.mockResolvedValue("112233445566");
+      mockGetOperatorAccountId.mockResolvedValue("210987654321");
       mockDeleteResource.mockResolvedValue([
         {
           kind: "NOT_FOUND",
@@ -252,8 +252,8 @@ describe("destroySingleResource", () => {
     });
 
     it("blocks deleteResource NOT_FOUND short-circuit on cross-account NAT Gateway ARN", async () => {
-      // Operator is configured for 112233445566...
-      mockGetOperatorAccountId.mockResolvedValue("112233445566");
+      // Operator is configured for 210987654321...
+      mockGetOperatorAccountId.mockResolvedValue("210987654321");
       mockDeleteResource.mockResolvedValue([
         {
           kind: "NOT_FOUND",
@@ -280,7 +280,7 @@ describe("destroySingleResource", () => {
     it("still treats deleteResource NOT_FOUND as success when operator account matches the ARN", async () => {
       // Operator IS configured for the same account as the ARN — the
       // legitimate "already gone" case (Wave 5 tag-ghost cleanup).
-      mockGetOperatorAccountId.mockResolvedValue("112233445566");
+      mockGetOperatorAccountId.mockResolvedValue("210987654321");
       mockDeleteResource.mockResolvedValue([
         {
           kind: "NOT_FOUND",
@@ -290,7 +290,7 @@ describe("destroySingleResource", () => {
       ]);
 
       const result = await destroySingleResource({
-        arn: "arn:aws:ec2:us-east-1:112233445566:natgateway/nat-0928a4abb02ca9eb3",
+        arn: "arn:aws:ec2:us-east-1:210987654321:natgateway/nat-0928a4abb02ca9eb3",
         resourceType: "AWS::EC2::NatGateway",
         identifier: "nat-0928a4abb02ca9eb3",
         region: "us-east-1",
@@ -304,7 +304,7 @@ describe("destroySingleResource", () => {
       // Same threat for the second NotFound path (CCAPI accepts the
       // delete request, then returns FAILED+ErrorCode=NotFound from
       // the poll).
-      mockGetOperatorAccountId.mockResolvedValue("112233445566");
+      mockGetOperatorAccountId.mockResolvedValue("210987654321");
       mockDeleteResource.mockResolvedValue([
         null,
         { requestToken: "tok-cross-account" },

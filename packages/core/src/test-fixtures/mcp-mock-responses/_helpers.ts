@@ -25,7 +25,7 @@ export function iamResultEnvelope(payload: Record<string, unknown>): {
     result: {
       ...payload,
       IsTruncated: false,
-      PolicySourceArn: "arn:aws:iam::112233445566:user/assignee-operator",
+      PolicySourceArn: "arn:aws:iam::210987654321:user/assignee-operator",
     },
   };
 }

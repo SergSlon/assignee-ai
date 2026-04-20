@@ -343,7 +343,7 @@ describe("Graph integration — plan mode", () => {
       "AWS::Lambda::Function",
       // Real-shaped account ID — preflight rejects 123456789012 as a
       // docs placeholder (Phase 2 Lambda compound passrole bug fix).
-      '{"FunctionName":"my-fn","Runtime":"nodejs22.x","Role":"arn:aws:iam::112233445566:role/lambda-exec"}',
+      '{"FunctionName":"my-fn","Runtime":"nodejs22.x","Role":"arn:aws:iam::210987654321:role/lambda-exec"}',
     );
 
     const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
@@ -411,7 +411,7 @@ describe("Graph integration — plan mode", () => {
   it("Lambda function: uses local pricing estimate (no MCP pricing call)", async () => {
     mockLlmForPlanFlow(
       "AWS::Lambda::Function",
-      '{"FunctionName":"my-fn","Runtime":"nodejs22.x","Role":"arn:aws:iam::112233445566:role/lambda-exec","Code":{"ZipFile":"exports.handler=async()=>({statusCode:200})"}}',
+      '{"FunctionName":"my-fn","Runtime":"nodejs22.x","Role":"arn:aws:iam::210987654321:role/lambda-exec","Code":{"ZipFile":"exports.handler=async()=>({statusCode:200})"}}',
     );
 
     const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
@@ -432,7 +432,7 @@ describe("Graph integration — plan mode", () => {
     expect(result.desiredState).toMatchObject({
       FunctionName: "my-fn",
       Runtime: "nodejs22.x",
-      Role: "arn:aws:iam::112233445566:role/lambda-exec",
+      Role: "arn:aws:iam::210987654321:role/lambda-exec",
       Code: { ZipFile: "exports.handler=async()=>({statusCode:200})" },
     });
     expect(result.preflightPassed).toBe(true);

@@ -23,7 +23,7 @@
 
 ```console
 $ assignee plan "Create an S3 bucket named hero-demo-bucket"
-assignee plan  [region=us-east-1  account=112233445566]
+assignee plan  [region=us-east-1  account=************]
 ✦ Assignee.ai — AI-Native Cloud Operator
 Connecting to AWS (3 services)...
 Loading tools...

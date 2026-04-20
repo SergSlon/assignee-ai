@@ -506,9 +506,9 @@ it("renderCompoundSuccess prefers explicit displayArns map over each resource's 
     // Explicit display map keyed by resourceId — what result-formatter
     // builds after STS lookup
     {
-      "vpc-1": "arn:aws:ec2:us-east-1:112233445566:vpc/vpc-0123456789abcdef0",
+      "vpc-1": "arn:aws:ec2:us-east-1:210987654321:vpc/vpc-0123456789abcdef0",
       "subnet-1":
-        "arn:aws:ec2:us-east-1:112233445566:subnet/subnet-0123456789abcdef0",
+        "arn:aws:ec2:us-east-1:210987654321:subnet/subnet-0123456789abcdef0",
     },
   );
   restore();
@@ -516,10 +516,10 @@ it("renderCompoundSuccess prefers explicit displayArns map over each resource's 
   const output = chunks.join("");
   // The full ARNs from displayArns appear, not the bare identifiers
   expect(output).toContain(
-    "arn:aws:ec2:us-east-1:112233445566:vpc/vpc-0123456789abcdef0",
+    "arn:aws:ec2:us-east-1:210987654321:vpc/vpc-0123456789abcdef0",
   );
   expect(output).toContain(
-    "arn:aws:ec2:us-east-1:112233445566:subnet/subnet-0123456789abcdef0",
+    "arn:aws:ec2:us-east-1:210987654321:subnet/subnet-0123456789abcdef0",
   );
 });
 

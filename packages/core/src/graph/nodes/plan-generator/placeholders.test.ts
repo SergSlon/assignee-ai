@@ -82,12 +82,12 @@ describe("placeholders direct import", () => {
       const state = {
         AlarmActions: [
           "arn:aws:sns:us-east-1:123456789012:Topic",
-          "arn:aws:sns:us-east-1:112233445566:Real",
+          "arn:aws:sns:us-east-1:210987654321:Real",
         ],
       };
       stripPlaceholderArns(state);
       expect(state.AlarmActions).toEqual([
-        "arn:aws:sns:us-east-1:112233445566:Real",
+        "arn:aws:sns:us-east-1:210987654321:Real",
       ]);
     });
 
