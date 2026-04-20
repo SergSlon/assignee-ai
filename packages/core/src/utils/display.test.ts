@@ -307,7 +307,7 @@ describe("display.ts — non-TTY (CI) mode", () => {
       const pairs: Array<{ cmd: string; flag: string; line: string }> = [];
       for (const line of output.split("\n")) {
         for (const m of line.matchAll(pairRegex)) {
-          pairs.push({ cmd: m[1], flag: m[2].trim(), line });
+          pairs.push({ cmd: m[1]!, flag: m[2]!.trim(), line });
         }
       }
 
