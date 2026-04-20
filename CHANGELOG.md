@@ -12,6 +12,21 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 74 — iteration 1 (2026-04-20)
+
+#### Fixed
+
+- `docs/configuration.md`, `docs/troubleshooting.md`: replace references to the removed `assignee whoami` command with `assignee doctor --short` (Story 50-3 replacement). Four call-sites updated (configuration.md:22,26; troubleshooting.md:86,312).
+- `docs/configuration.md`: drop `preferences.output_format` and `preferences.verbosity` from the live-keys sentence at line 22 and the "Verifying the resolution" example at line 26 — Story 50-7 removed both fields from `ConfigPreferences`; prose now matches the existing caveat at line 132.
+- `docs/configuration.md`, `docs/commands.md`: remove `assignee clean`/`assignee clean --baselines --confirm` call-sites. The `clean` command does not exist at HEAD; log pruning is driven by `autoPruneLogsIfDue` in `apps/cli/src/services/cleanup/orchestrator.ts` (1-hour throttle via `.last-prune` marker), and adopted baselines are dropped by deleting the JSON file under `.assignee/baselines/`.
+- `docs/configuration.md`: add a "planned — not yet implemented" note to the `llm` Section. Per-node LLM routing is ENV-var-only today (`ASSIGNEE_LLM_*`); the `.assignee/config.yaml` `llm:` block is not wired into the config schema. Precedence paragraph reworded to reflect env-var-only reality.
+- `docs/index.md`: Key metrics row 82 test-file count `307 (72/24/200/11)` → `341 (78/33/219/11)`; counts drifted by 34 files since the row was last refreshed. Numbers match vitest `Test Files` output across all four packages (authoritative over `find` because vitest picks up `.spec.ts` + `.test.ts`).
+- `docs/architecture.md:128,131`: Pricing strategy and decomposer counts updated from `23` each to `37` each (matches `pnpm doc-lint`: `patterns=10 types=37 strategies=37 decomposers=37`). Same underlying drift as Epic 73's `docs/index.md:77-78` fix.
+
+#### Review discipline
+
+- epic-74-it1 deep docs sweep ran 5 zone reviewers (ZA root+index, ZB tutorials/how-to, ZC reference, ZD architecture, ZE explanation) in parallel with exclusive file ownership. Coordinator spot-check rejected 4 reviewer claims as hallucinations before accepting any finding: Zone A's README "14 commands" ambiguity (actual 13), Zone B's "archive path does not exist" (archive has 313 files), Zone C's "37→38 types drift" (live registry is 37; doc is correct), Zone D's "185→190 BP rules" (manifest has 185; doc is correct), and Zone E's "BP-S3-001.yaml orphan" (file is a test fixture under `__tests__/fixtures/valid/`, intentionally excluded from manifest). Cumulative reviewer-agent hallucinations caught across Epic 57+: ~11.
+
 ### Epic 73 — iteration 1 (2026-04-20)
 
 #### Fixed

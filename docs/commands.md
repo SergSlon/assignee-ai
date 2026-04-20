@@ -297,7 +297,7 @@ When `--baseline` is set alongside a positional `<resource-id>` ARN, the command
 3. Writes a baseline payload to `.assignee/baselines/<slugified-arn>.json` containing the live state, resource type, and an ISO timestamp.
 4. Future `assignee drift` runs will find the baseline via the checkpoint fallback in `resolve-desired-state.ts` and compare against it instead of reporting `BASELINE_MISSING`.
 
-Checkpoints still win over baselines — the baseline is a last-resort fallback for resources adopted AFTER they were provisioned. Run `assignee clean --baselines --confirm` to drop adopted baselines.
+Checkpoints still win over baselines — the baseline is a last-resort fallback for resources adopted AFTER they were provisioned. To drop an adopted baseline, delete its file directly from `.assignee/baselines/` (there is no dedicated CLI command for this — baselines are plain JSON files keyed by slugified ARN).
 
 **Examples:**
 

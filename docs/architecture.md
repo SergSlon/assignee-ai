@@ -125,10 +125,10 @@ Registry uses `detect(intent)` to match patterns with zero LLM latency.
 
 Two registries:
 
-1. **PricingStrategyRegistry** -- 23 strategies, one per resource type. Each provides:
+1. **PricingStrategyRegistry** -- 37 strategies, one per registered resource type plugin. Each provides:
    - `estimate(desiredState)` -> local fallback label
    - `getMcpConfig(desiredState)` -> MCP query parameters for live pricing
-2. **PricingDecomposerRegistry** -- 23 decomposers. Each returns `PricingLineItem[]` with service codes, filters, units for multi-line cost breakdowns.
+2. **PricingDecomposerRegistry** -- 37 decomposers. Each returns `PricingLineItem[]` with service codes, filters, units for multi-line cost breakdowns. Counts verified by `pnpm doc-lint` (`patterns=10 types=37 strategies=37 decomposers=37`).
 
 ### Best Practices Engine (`packages/best-practices/`)
 
