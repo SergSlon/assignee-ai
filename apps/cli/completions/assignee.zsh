@@ -60,7 +60,10 @@ _assignee() {
           ;;
         destroy)
           _arguments \
-            '--yes[Auto-confirm destroy without interactive prompt (for CI/CD)]'
+            '--yes[Auto-confirm destroy without interactive prompt (for CI/CD)]' \
+            '--pending-window-in-days[KMS keys only\: pending-deletion window (7-30 days, default 7). KMS keys continue billing until the window elapses.]:n:' \
+            '--recovery-window-in-days[SecretsManager secrets only\: recovery window (7-30 days, default 7). Secrets continue billing until the window elapses.]:n:' \
+            '--force-delete-without-recovery[SecretsManager secrets only\: skip the recovery window and destroy the secret immediately. Mutually exclusive with --recovery-window-in-days.]'
           ;;
         drift)
           _arguments \

@@ -19,6 +19,10 @@ import {
 } from "./advice/mcp-advisor.js";
 import { MAX_ADVICE_HINTS, ADVICE_LLM_MAX_TOKENS } from "./advice/constants.js";
 import { enrichAdvisoryPrices } from "../../services/advisory-price-enricher/index.js";
+import {
+  resourceTypeNeedsAdvisoryPrices,
+  type EnrichedPriceMap,
+} from "../../pricing/advisory-prices.js";
 import { stripPromptBoundaryTags } from "../../llm/prompt-sanitize.js";
 
 /**
@@ -82,6 +86,17 @@ export function createAdviceGeneratorNode({
     // phase. Both are non-blocking — Promise.allSettled isolates per-
     // task failure so one MCP timeout never poisons the rest.
     let mcpContext: McpAdviceContext = {};
+    // Story 92.1.e: gate `enrichAdvisoryPrices` on resource-type
+    // relevance. Plans for S3, Lambda, DDB, SNS, SQS, EC2, Logs, IAM,
+    // SSM, EventBridge, SNS-sub, etc. consume ZERO advisory prices —
+    // the cost-advisor branch for those types never reads the enriched
+    // map. Invoking the enricher anyway caused a stream of spurious
+    // `pricing_unavailable advisoryPriceId=alb-monthly` warnings on
+    // every plan (findings A-05 / B-19 / C-08 / C-21 / D-17 all trace
+    // to this gate). Skip the entire enricher call when irrelevant —
+    // no MCP traffic, no log spam, no fabricated fallback labels that
+    // the consumer wouldn't render anyway.
+    //
     // enrichAdvisoryPrices is built to NEVER throw — every error path
     // resolves to a fulfilled all-fallback map. We still wrap it in
     // Promise.allSettled so a future regression that breaks that
@@ -89,8 +104,14 @@ export function createAdviceGeneratorNode({
     // is intentionally minimal — fall back to an empty map and let
     // cost-advisor's `enrichedLabel` helper synthesize "(estimated)"
     // labels per-ID. We do NOT re-invoke the enricher (Edge Hunter F8).
+    const needsAdvisoryPrices = resourceTypeNeedsAdvisoryPrices(
+      state.resourceType,
+    );
+    const emptyEnrichedMap: EnrichedPriceMap = new Map();
     const [enrichedSettled, mcpContextSettled] = await Promise.allSettled([
-      enrichAdvisoryPrices(tools, state.runId),
+      needsAdvisoryPrices
+        ? enrichAdvisoryPrices(tools, state.runId)
+        : Promise.resolve<EnrichedPriceMap>(emptyEnrichedMap),
       tools && tools.length > 0
         ? gatherMcpAdviceContext(state.resourceType, ds, tools)
         : Promise.resolve<McpAdviceContext>({}),
@@ -98,7 +119,7 @@ export function createAdviceGeneratorNode({
     const enrichedPrices =
       enrichedSettled.status === "fulfilled"
         ? enrichedSettled.value
-        : new Map();
+        : emptyEnrichedMap;
     if (mcpContextSettled.status === "fulfilled") {
       mcpContext = mcpContextSettled.value;
     }

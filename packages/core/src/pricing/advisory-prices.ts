@@ -26,6 +26,7 @@
  * @see docs/mcp-intelligence-audit.md §3.1 — Hardcoded price inventory
  */
 
+import { RESOURCE_TYPES } from "../config/resource-types.js";
 import type { DataSource } from "./types.js";
 
 // ── Fixed monthly costs ─────────────────────────────────────────────────────
@@ -127,3 +128,85 @@ export interface EnrichedPrice {
 
 /** Map type returned by the enricher. */
 export type EnrichedPriceMap = Map<AdvisoryPriceId, EnrichedPrice>;
+
+// ── Story 92.1.e: per-resource-type relevance gating ──────────────────────
+//
+// Plans for resource types that don't consume any advisory price MUST NOT
+// trigger MCP pricing fetches. Historically the advice-generator called
+// `enrichAdvisoryPrices` on every plan, causing `pricing_unavailable
+// advisoryPriceId=alb-monthly` warnings to spam logs for every S3,
+// Lambda, DDB, SNS, SQS, EC2, Logs, IAM, SSM, EventBridge, SNS-sub plan.
+//
+// This map is the single source of truth for which AdvisoryPriceIds a
+// given resource type's `cost-advisor` hints will actually consume.
+// Resource types absent from this map (or mapping to an empty set) cause
+// the advice-generator to skip enrichment entirely — zero MCP traffic,
+// zero noisy warnings.
+//
+// Keep this aligned with `graph/nodes/advice/cost-advisor/orchestrator.ts`:
+// every `resourceType === RESOURCE_TYPES.X` branch in that file that
+// reads an enriched label via `enrichedLabel(...)` must have its
+// AdvisoryPriceId(s) listed here.
+
+const EMPTY_RELEVANT_SET: ReadonlySet<AdvisoryPriceId> = Object.freeze(
+  new Set<AdvisoryPriceId>(),
+);
+
+/**
+ * Lookup table: resource type → set of `AdvisoryPriceId`s whose live
+ * value the cost-advisor will actually render for that type.
+ *
+ * NOT every `AdvisoryPriceId` enum value is represented — only those
+ * that are consumed by a cost-advisor branch. Consumers are located in
+ * `graph/nodes/advice/cost-advisor/*` (misc-hints.ts, efs-hints.ts,
+ * events-rule-hints.ts, cloudfront-hints.ts).
+ */
+const RELEVANT_ADVISORY_PRICES: Readonly<
+  Record<string, ReadonlySet<AdvisoryPriceId>>
+> = Object.freeze({
+  [RESOURCE_TYPES.EC2_NAT_GATEWAY]: Object.freeze(
+    new Set<AdvisoryPriceId>([AdvisoryPriceId.NAT_GATEWAY_MONTHLY]),
+  ),
+  [RESOURCE_TYPES.ELBV2_LOAD_BALANCER]: Object.freeze(
+    new Set<AdvisoryPriceId>([AdvisoryPriceId.ALB_MONTHLY]),
+  ),
+  [RESOURCE_TYPES.CLOUDWATCH_ALARM]: Object.freeze(
+    new Set<AdvisoryPriceId>([AdvisoryPriceId.CW_ALARM_PER_MONTH]),
+  ),
+  [RESOURCE_TYPES.LOGS_LOG_GROUP]: Object.freeze(
+    new Set<AdvisoryPriceId>([AdvisoryPriceId.CW_LOGS_INGESTION_PER_GB]),
+  ),
+  [RESOURCE_TYPES.EFS_FILE_SYSTEM]: Object.freeze(
+    new Set<AdvisoryPriceId>([AdvisoryPriceId.EFS_PROVISIONED_PER_MIBS_MONTH]),
+  ),
+  [RESOURCE_TYPES.EVENTS_RULE]: Object.freeze(
+    new Set<AdvisoryPriceId>([AdvisoryPriceId.EVENTBRIDGE_CUSTOM_PER_MILLION]),
+  ),
+  [RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION]: Object.freeze(
+    new Set<AdvisoryPriceId>([AdvisoryPriceId.CF_INVALIDATION_EACH]),
+  ),
+});
+
+/**
+ * Returns the set of `AdvisoryPriceId`s relevant for the given resource
+ * type. Returns an empty set for types that consume no advisory prices
+ * (S3, Lambda, DDB, SNS, SQS, EC2, IAM, SSM, SNS-sub, etc.) — caller
+ * should skip enrichment entirely in that case.
+ */
+export function getRelevantAdvisoryPriceIds(
+  resourceType: string | undefined,
+): ReadonlySet<AdvisoryPriceId> {
+  if (!resourceType) return EMPTY_RELEVANT_SET;
+  return RELEVANT_ADVISORY_PRICES[resourceType] ?? EMPTY_RELEVANT_SET;
+}
+
+/**
+ * True iff the given resource type consumes at least one advisory
+ * price — used by the advice-generator to decide whether to invoke
+ * `enrichAdvisoryPrices` at all.
+ */
+export function resourceTypeNeedsAdvisoryPrices(
+  resourceType: string | undefined,
+): boolean {
+  return getRelevantAdvisoryPriceIds(resourceType).size > 0;
+}

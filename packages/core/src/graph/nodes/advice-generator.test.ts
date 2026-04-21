@@ -3,6 +3,8 @@ import { ExecutionStatus, RESOURCE_TYPES } from "../../index.js";
 import { MockLlmAdapter } from "../../testing/index.js";
 import { createAdviceGeneratorNode } from "./advice-generator.js";
 import type { AgentState } from "../graph-state.js";
+import type { StructuredTool } from "@langchain/core/tools";
+import { ToolName } from "../../constants/tools.js";
 
 function makeState(overrides: Record<string, unknown> = {}) {
   return {
@@ -213,5 +215,200 @@ describe("adviceGeneratorNode", () => {
     const result = await node(makeState());
 
     expect(result.adviceHints).toHaveLength(5);
+  });
+
+  // ── Story 92.1.e: per-resource-type advisory-price gating ─────────────
+  //
+  // A plan for S3/Lambda/DDB/SNS/SQS/EC2/Logs/IAM/SSM/EventBridge/SNS-sub
+  // must NOT trigger an ALB (or any) advisory-price fetch. Historically
+  // the advice-generator called `enrichAdvisoryPrices` on every plan,
+  // which fanned out to the pricing MCP for NAT / ALB / CW Alarm and
+  // logged `pricing_unavailable advisoryPriceId=alb-monthly` warnings
+  // for every non-ALB resource. Closes findings A-05, B-19, C-08, C-21,
+  // D-17.
+  describe("advisory-price gating on resource-type relevance", () => {
+    // The advisory-price enricher identifies its fetches by
+    // `productFamily` filter. Non-advisory-price pricing calls (e.g.
+    // the LLM-prompt context fetch in `mcp-advisor.ts`) pass
+    // `filters: []` and a `max_results` option. We count ONLY calls
+    // that look like advisory-price queries so the gating pin is not
+    // confused with the LLM-context fetch.
+    const ADVISORY_PRODUCT_FAMILIES = new Set([
+      "NAT Gateway",
+      "Load Balancer",
+      "Load Balancer-Application",
+      "Load Balancer-Network",
+      "Alarm",
+      "Logs",
+      "AWS Systems Manager",
+      "Secret",
+      "Encryption Key",
+    ]);
+
+    type PricingInvokeArgs = {
+      filters?: Array<{ Field: string; Value: string; Type: string }>;
+      output_options?: { pricing_terms?: string[] };
+    };
+
+    function isAdvisoryPriceCall(args: unknown): boolean {
+      const a = args as PricingInvokeArgs;
+      const filters = a.filters ?? [];
+      return filters.some(
+        (f) =>
+          f.Field === "productFamily" && ADVISORY_PRODUCT_FAMILIES.has(f.Value),
+      );
+    }
+
+    function makePricingTool(): {
+      tool: StructuredTool;
+      invokeCalls: Array<[unknown]>;
+    } {
+      const invokeCalls: Array<[unknown]> = [];
+      const tool = {
+        name: ToolName.GET_PRICING,
+        description: "",
+        invoke: vi.fn().mockImplementation(async (args: unknown) => {
+          invokeCalls.push([args]);
+          // Emulate a "no data" MCP response — the production code
+          // treats this as an unavailable price and logs
+          // `pricing_unavailable`. The test doesn't care about the
+          // response shape; it cares that the call happens at all.
+          return { type: "text", text: JSON.stringify({ data: [] }) };
+        }),
+      } as unknown as StructuredTool;
+      return { tool, invokeCalls };
+    }
+
+    // The 11 types cited in the brief — each must see ZERO pricing MCP
+    // calls with an advisory-price filter shape. LLM-context pricing
+    // calls (with empty filters) are intentionally allowed because the
+    // advice-generator feeds them to the downstream LLM prompt — that
+    // path is not the subject of this finding cluster.
+    it.each([
+      ["S3_BUCKET", RESOURCE_TYPES.S3_BUCKET],
+      ["LAMBDA_FUNCTION", RESOURCE_TYPES.LAMBDA_FUNCTION],
+      ["DYNAMODB_TABLE", RESOURCE_TYPES.DYNAMODB_TABLE],
+      ["SNS_TOPIC", RESOURCE_TYPES.SNS_TOPIC],
+      ["SQS_QUEUE", RESOURCE_TYPES.SQS_QUEUE],
+      ["EC2_INSTANCE", RESOURCE_TYPES.EC2_INSTANCE],
+      ["IAM_ROLE", RESOURCE_TYPES.IAM_ROLE],
+      ["SSM_PARAMETER", RESOURCE_TYPES.SSM_PARAMETER],
+      ["EVENTS_EVENT_BUS", RESOURCE_TYPES.EVENTS_EVENT_BUS],
+      ["SNS_SUBSCRIPTION", RESOURCE_TYPES.SNS_SUBSCRIPTION],
+      ["RDS_DB_INSTANCE", RESOURCE_TYPES.RDS_DB_INSTANCE],
+    ])(
+      "%s plan must NOT trigger advisory-price MCP fetch",
+      async (_name, resourceType) => {
+        const { tool, invokeCalls } = makePricingTool();
+        const mock = new MockLlmAdapter(undefined, "[]");
+        const node = createAdviceGeneratorNode({ llmClient: mock });
+
+        await node(
+          makeState({
+            resourceType,
+            desiredState: { SomeField: "value" },
+          }),
+          [tool],
+        );
+
+        const advisoryCalls = invokeCalls.filter((c) =>
+          isAdvisoryPriceCall(c[0]),
+        );
+        expect(advisoryCalls).toHaveLength(0);
+      },
+    );
+
+    it("ELBV2_LOAD_BALANCER plan DOES trigger advisory-price fetch (positive control)", async () => {
+      const { tool, invokeCalls } = makePricingTool();
+      const mock = new MockLlmAdapter(undefined, "[]");
+      const node = createAdviceGeneratorNode({ llmClient: mock });
+
+      await node(
+        makeState({
+          resourceType: RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+          desiredState: { Type: "application" },
+        }),
+        [tool],
+      );
+
+      // Positive control: at least one advisory-price call occurred.
+      const advisoryCalls = invokeCalls.filter((c) =>
+        isAdvisoryPriceCall(c[0]),
+      );
+      expect(advisoryCalls.length).toBeGreaterThan(0);
+    });
+
+    it("EC2_NAT_GATEWAY plan DOES trigger advisory-price fetch (positive control)", async () => {
+      const { tool, invokeCalls } = makePricingTool();
+      const mock = new MockLlmAdapter(undefined, "[]");
+      const node = createAdviceGeneratorNode({ llmClient: mock });
+
+      await node(
+        makeState({
+          resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
+          // Non-empty desiredState so the empty-state short-circuit
+          // doesn't hide the positive-control gating behaviour.
+          desiredState: {
+            SubnetId: "subnet-abc123",
+            ConnectivityType: "public",
+          },
+        }),
+        [tool],
+      );
+
+      const advisoryCalls = invokeCalls.filter((c) =>
+        isAdvisoryPriceCall(c[0]),
+      );
+      expect(advisoryCalls.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ── Story 92.1.e: no hardcoded dollar amounts in rendered hints ───────
+  //
+  // Per `feedback_no_hardcoded_prices`: ALL prices come from the
+  // Pricing MCP at runtime. A rendered advice hint must never carry a
+  // fabricated "$16/mo" literal — either the live fetch succeeds and
+  // the hint shows "(live)", or the live fetch fails and the hint
+  // falls through enrichedLabel's formatter (which is tagged
+  // "(estimated)" and derived from the *_APPROX constant, which is a
+  // deliberate acknowledged fallback, not a silently-hardcoded
+  // display string).
+  describe("no hardcoded dollar literals emitted for gated resource types", () => {
+    it.each([
+      ["S3_BUCKET", RESOURCE_TYPES.S3_BUCKET],
+      ["LAMBDA_FUNCTION", RESOURCE_TYPES.LAMBDA_FUNCTION],
+      ["DYNAMODB_TABLE", RESOURCE_TYPES.DYNAMODB_TABLE],
+      ["SNS_TOPIC", RESOURCE_TYPES.SNS_TOPIC],
+      ["SQS_QUEUE", RESOURCE_TYPES.SQS_QUEUE],
+      ["EC2_INSTANCE", RESOURCE_TYPES.EC2_INSTANCE],
+    ])(
+      "%s advice emits no '$16/mo' or 'ALB-style' fabricated amounts",
+      async (_name, resourceType) => {
+        const mock = new MockLlmAdapter(undefined, "[]");
+        const node = createAdviceGeneratorNode({ llmClient: mock });
+
+        const result = await node(
+          makeState({
+            resourceType,
+            desiredState:
+              resourceType === RESOURCE_TYPES.LAMBDA_FUNCTION
+                ? { FunctionName: "my-fn", MemorySize: 256 }
+                : resourceType === RESOURCE_TYPES.EC2_INSTANCE
+                  ? { InstanceType: "t3.micro" }
+                  : { SomeField: "value" },
+          }),
+        );
+
+        // No hint should contain the literal hardcoded ALB/NAT dollar
+        // placeholder strings — those belong ONLY to ELBV2 / NAT
+        // Gateway advice paths, which are gated above.
+        for (const hint of result.adviceHints ?? []) {
+          expect(hint).not.toMatch(/\$16(?:\.\d+)?\/mo/);
+          expect(hint).not.toMatch(/~?\$16\s*\/\s*mo/);
+          expect(hint).not.toContain("ALB costs");
+          expect(hint).not.toContain("NAT Gateway costs");
+        }
+      },
+    );
   });
 });

@@ -126,6 +126,9 @@ export const cloudFrontDistributionPlugin: ResourcePlugin = {
   advancedFields: [],
   defaults: {},
   configHints: [
+    "DistributionConfig.Origins, DistributionConfig.CacheBehaviors, and DistributionConfig.CustomErrorResponses MUST use the wrapped {Items: [...], Quantity: N} shape — never a bare array. Quantity MUST equal Items.length.",
+    "Each Origin MUST include EXACTLY ONE of S3OriginConfig or CustomOriginConfig — never both. Use S3OriginConfig when DomainName ends with '.s3.<region>.amazonaws.com' (or '.s3.amazonaws.com'); use CustomOriginConfig for every other origin (ALB, API Gateway, custom HTTP endpoint, etc).",
+    "S3OriginConfig.OriginAccessIdentity MUST be either a real origin-access-identity ID (format 'origin-access-identity/cloudfront/<ID>') or omitted entirely. Never emit an empty string ''.",
     "Create / Update / Delete operations take 5-60 MINUTES to propagate through the global edge network. Apply runs against CloudFront will be noticeably slower than other resource types — this is a CloudFront limitation, not an assignee bug.",
     "DistributionConfig is createOnly-free per the CCAPI schema, but updating Origins or ViewerCertificate in practice triggers a full re-deployment that holds the distribution in 'InProgress' state for the full propagation window. Batch updates to minimize re-deployment cost.",
     "For SPA / static-site CloudFronts, use the static-website compound pattern instead (`assignee patterns show static-website`). It provisions S3 + OAC + Distribution + the correct ViewerProtocolPolicy=redirect-to-https default in one intent.",

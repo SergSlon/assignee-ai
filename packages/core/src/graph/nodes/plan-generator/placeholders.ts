@@ -139,34 +139,100 @@ export function stripEmpty(
 }
 
 /**
- * Strips placeholder ARNs from array fields in desiredState.
- * The LLM frequently hallucinates ARNs with canonical AWS docs account IDs
- * (e.g., 123456789012) in array fields like AlarmActions, OKActions, etc.
- * Removes placeholder elements; deletes the field if the array becomes empty.
+ * Strips placeholder ARNs from arbitrary nested shapes in desiredState.
  *
- * Operates on ALL top-level array fields containing strings — generic enough
- * to catch any ARN-bearing array, not just CloudWatch Alarm fields.
+ * The LLM frequently hallucinates ARNs with canonical AWS docs account IDs
+ * (e.g., 123456789012, 111122223333) in a variety of shapes:
+ *   - Top-level arrays (`AlarmActions`, `OKActions`, `NotificationARNs`)
+ *   - Scalar string fields (`PerformanceInsightsKMSKeyId`, `DomainAuthSecretArn`,
+ *     `KmsKeyId`) — see Epic 92 findings C-01 / C-02 where LLM-emitted RDS
+ *     Postgres scalar KMS ARNs slipped past the pre-Epic-92 top-level-only
+ *     walker and hard-failed preflight on the first natural intent.
+ *   - Nested objects / mixed arrays (future-proofing: e.g. `OriginConfig.CertificateArn`).
+ *
+ * Behaviour:
+ *   - Scalar string placeholder → delete the key.
+ *   - Array element placeholder → filter element out.
+ *   - Array emptied by filtering → delete the key.
+ *   - Nested object placeholder values → delete the nested key; if the
+ *     nested object empties, delete the parent key as well.
+ *
+ * The walker is depth-capped (32) to defend against cycles / hostile
+ * deeply-nested JSON, matching `detectPlaceholderArn` in the preflight
+ * guard (Epic 92 wave-1: the stripper silently drops LLM emissions
+ * FIRST, the guard catches user-supplied placeholders that survive).
+ *
+ * Partition-aware: delegates to `ARN_ACCOUNT_REGEX` (`^arn:aws[\\w-]*:`)
+ * so GovCloud + China + ISO partitions are covered. Never use the
+ * literal `arn:aws:` prefix (per `feedback_partition_aware_arn_matching`).
  */
+export const PLACEHOLDER_STRIP_MAX_DEPTH = 32;
+
+/**
+ * True iff the string is an ARN whose account-ID segment matches a
+ * canonical AWS docs example. Shared between the stripper below and
+ * the preflight guard's detector so both agree on what "placeholder"
+ * means.
+ */
+export function isPlaceholderArn(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const match = ARN_ACCOUNT_REGEX.exec(value);
+  if (!match) return false;
+  return PLACEHOLDER_AWS_ACCOUNT_IDS.has(match[1]!);
+}
+
 export function stripPlaceholderArns(
   desiredState: Record<string, unknown>,
 ): Record<string, unknown> {
-  for (const [key, value] of Object.entries(desiredState)) {
-    if (!Array.isArray(value)) continue;
-    // Only process arrays that contain at least one string element
-    if (!value.some((item) => typeof item === "string")) continue;
-
-    const cleaned = value.filter((item) => {
-      if (typeof item !== "string") return true;
-      const match = ARN_ACCOUNT_REGEX.exec(item);
-      if (!match) return true; // not an ARN — keep
-      return !PLACEHOLDER_AWS_ACCOUNT_IDS.has(match[1]!);
-    });
-
-    if (cleaned.length === 0) {
-      delete desiredState[key];
-    } else if (cleaned.length < value.length) {
-      desiredState[key] = cleaned;
-    }
-  }
+  walkAndStrip(desiredState, 0);
   return desiredState;
+}
+
+/**
+ * Recursively scrubs placeholder ARNs out of the target in place.
+ * Returns `true` when the target became empty (caller may want to
+ * delete the parent key).
+ */
+function walkAndStrip(target: unknown, depth: number): boolean {
+  if (depth > PLACEHOLDER_STRIP_MAX_DEPTH) return false;
+  if (Array.isArray(target)) {
+    // Walk each element; collect survivors. For nested containers we
+    // recurse first, then drop the element if it emptied to nothing.
+    const survivors: unknown[] = [];
+    for (const item of target) {
+      if (typeof item === "string") {
+        if (isPlaceholderArn(item)) continue;
+        survivors.push(item);
+        continue;
+      }
+      if (item && typeof item === "object") {
+        const emptied = walkAndStrip(item, depth + 1);
+        if (emptied) continue;
+        survivors.push(item);
+        continue;
+      }
+      survivors.push(item);
+    }
+    if (survivors.length !== target.length) {
+      target.length = 0;
+      target.push(...survivors);
+    }
+    return target.length === 0;
+  }
+  if (target && typeof target === "object") {
+    const record = target as Record<string, unknown>;
+    for (const key of Object.keys(record)) {
+      const value = record[key];
+      if (typeof value === "string") {
+        if (isPlaceholderArn(value)) delete record[key];
+        continue;
+      }
+      if (value && typeof value === "object") {
+        const emptied = walkAndStrip(value, depth + 1);
+        if (emptied) delete record[key];
+      }
+    }
+    return Object.keys(record).length === 0;
+  }
+  return false;
 }

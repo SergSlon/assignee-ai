@@ -144,8 +144,31 @@ describe("dynamodbTablePlugin", () => {
 
   it("has configHints for LLM", () => {
     // Wave 16: dropped redundant `toBeDefined()` — `Array.isArray`
-    // catches null/undefined AND non-array shapes.
+    // catches null/meters and non-array shapes.
     expect(Array.isArray(dynamodbTablePlugin.configHints)).toBe(true);
     expect(dynamodbTablePlugin.configHints!.length).toBeGreaterThan(0);
+  });
+
+  // Story e92.1.a — configHints guard LLM against the two CCAPI-shape
+  // bugs (A-01 ProvisionedThroughput under PAY_PER_REQUEST; A-16
+  // AttributeDefinitions omissions). If these hints regress, the
+  // sanitizer is the last line of defense — but the prompt should
+  // also educate the LLM up front.
+  describe("configHints CCAPI-shape guardrails (e92.1.a)", () => {
+    const hints = dynamodbTablePlugin.configHints!.join(" ");
+
+    it("warns against ProvisionedThroughput with PAY_PER_REQUEST (A-01)", () => {
+      expect(hints).toMatch(/PAY_PER_REQUEST/);
+      expect(hints).toMatch(/ProvisionedThroughput/);
+      expect(hints).toMatch(/DO NOT include|never|rejects/i);
+    });
+
+    it("requires AttributeDefinitions to cover every KeySchema reference (A-16)", () => {
+      expect(hints).toMatch(/AttributeDefinitions/);
+      expect(hints).toMatch(/KeySchema/);
+      expect(hints).toMatch(
+        /GlobalSecondaryIndexes|LocalSecondaryIndexes|EVERY/,
+      );
+    });
   });
 });

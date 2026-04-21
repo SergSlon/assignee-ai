@@ -133,6 +133,7 @@ export const ecsClusterPlugin: ResourcePlugin = {
     [CfnKey.CAPACITY_PROVIDERS]: [AwsDefault.CAPACITY_FARGATE],
   },
   configHints: [
+    "ClusterSettings MUST use the [{Name, Value}] shape — e.g. [{Name: 'containerInsights', Value: 'enabled'}]. NEVER use the key-as-name form [{containerInsights: 'enabled'}]; CCAPI rejects it.",
     "ClusterSettings should include containerInsights set to 'enabled' for production observability — it collects per-task CPU, memory, and network metrics.",
     "CapacityProviders should default to ['FARGATE'] for serverless operation. Add 'FARGATE_SPOT' only if the user accepts interruption-tolerant workloads for ~70% cost savings.",
     "DefaultCapacityProviderStrategy defines how tasks are placed when no launch type is specified. Use Base:1 on FARGATE to guarantee at least one on-demand task.",

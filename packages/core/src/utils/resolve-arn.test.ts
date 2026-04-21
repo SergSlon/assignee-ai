@@ -295,4 +295,125 @@ describe("resolveResourceArn", () => {
       `arn:aws:lambda:eu-west-2:${REAL_ACCOUNT}:function:my-fn`,
     );
   });
+
+  // ── Epic 92 Wave 1 (e92.1.b) — ARN-builder coverage for the three
+  //    resource types whose CCAPI primaryIdentifier was surfacing as
+  //    a bare value in the apply success line and breaking round-trip
+  //    destroy:
+  //      - SG  (B-03)  sg-<id>
+  //      - KMS (D-22)  <uuid>
+  //      - EB  (D-20)  <bus-name>
+  describe("Epic 92 Wave 1 — round-trip ARN synthesis", () => {
+    it("synthesizes a full SG ARN from a bare sg-<id> identifier (B-03)", async () => {
+      mockStsSend.mockResolvedValueOnce({ Account: REAL_ACCOUNT });
+
+      const result = await resolveResourceArn({
+        resourceType: "AWS::EC2::SecurityGroup",
+        identifier: "sg-0abc1234def567890",
+        region: "us-east-1",
+      });
+
+      // The user-supplied GroupName must NEVER leak through the
+      // display path. CCAPI's primaryIdentifier for SG is GroupId
+      // (`sg-<id>`), and the display ARN must be the canonical
+      // `security-group/sg-<id>` shape so `assignee destroy <arn>`
+      // round-trips via RGTA lookup.
+      expect(result).toBe(
+        `arn:aws:ec2:us-east-1:${REAL_ACCOUNT}:security-group/sg-0abc1234def567890`,
+      );
+    });
+
+    it("synthesizes a full KMS ARN from a bare UUID KeyId (D-22)", async () => {
+      mockStsSend.mockResolvedValueOnce({ Account: REAL_ACCOUNT });
+
+      const result = await resolveResourceArn({
+        resourceType: "AWS::KMS::Key",
+        identifier: "ba48550a-3f14-446e-8f0c-1473f345c62d",
+        region: "us-east-1",
+      });
+
+      // Exact wire value observed in the D-22 regression report:
+      // apply printed "ARN: ba48550a-3f14-446e-8f0c-1473f345c62d"
+      // (a bare UUID). After the fix, resolveResourceArn synthesizes
+      // the canonical `arn:aws:kms:<region>:<account>:key/<uuid>`.
+      expect(result).toBe(
+        `arn:aws:kms:us-east-1:${REAL_ACCOUNT}:key/ba48550a-3f14-446e-8f0c-1473f345c62d`,
+      );
+    });
+
+    it("synthesizes a full EventBus ARN from a bare Name identifier (D-20)", async () => {
+      mockStsSend.mockResolvedValueOnce({ Account: REAL_ACCOUNT });
+
+      const result = await resolveResourceArn({
+        resourceType: "AWS::Events::EventBus",
+        identifier: "e92d-bus-1776801116",
+        region: "us-east-1",
+      });
+
+      // EventBus primaryIdentifier IS the user-supplied Name.
+      // The D-20 regression: apply showed "ARN: e92d-bus-1776801116"
+      // (just the name). After the fix, it is the canonical
+      // `arn:aws:events:<region>:<account>:event-bus/<name>` shape.
+      expect(result).toBe(
+        `arn:aws:events:us-east-1:${REAL_ACCOUNT}:event-bus/e92d-bus-1776801116`,
+      );
+    });
+
+    it("KMS ARN synthesis respects explicit non-default region (GovCloud)", async () => {
+      mockStsSend.mockResolvedValueOnce({ Account: REAL_ACCOUNT });
+
+      const result = await resolveResourceArn({
+        resourceType: "AWS::KMS::Key",
+        identifier: "8f7e6d5c-4b3a-2918-7706-5d4e3c2b1a09",
+        region: "us-gov-west-1",
+      });
+
+      // Partition must flip to aws-us-gov when the caller specifies
+      // a GovCloud region — feedback_partition_aware_arn_matching.
+      expect(result).toBe(
+        `arn:aws-us-gov:kms:us-gov-west-1:${REAL_ACCOUNT}:key/8f7e6d5c-4b3a-2918-7706-5d4e3c2b1a09`,
+      );
+    });
+
+    it("EventBus ARN synthesis respects explicit non-default region (China)", async () => {
+      mockStsSend.mockResolvedValueOnce({ Account: REAL_ACCOUNT });
+
+      const result = await resolveResourceArn({
+        resourceType: "AWS::Events::EventBus",
+        identifier: "shanghai-events",
+        region: "cn-north-1",
+      });
+
+      expect(result).toBe(
+        `arn:aws-cn:events:cn-north-1:${REAL_ACCOUNT}:event-bus/shanghai-events`,
+      );
+    });
+
+    it("KMS short-circuits when the caller already passed a full ARN", async () => {
+      // Regression: the local-synthesis fallback must not re-wrap an
+      // already-ARN'd identifier (would produce `.../key/arn:aws:...`).
+      const alreadyArn = `arn:aws:kms:us-east-1:${REAL_ACCOUNT}:key/ba48550a-3f14-446e-8f0c-1473f345c62d`;
+
+      const result = await resolveResourceArn({
+        resourceType: "AWS::KMS::Key",
+        identifier: alreadyArn,
+      });
+
+      expect(result).toBe(alreadyArn);
+      // STS short-circuit is on the isArn() fast path in resolveResourceArn.
+      expect(mockStsSend).not.toHaveBeenCalled();
+    });
+
+    it("EventBus short-circuits when the caller already passed a full ARN", async () => {
+      const alreadyArn = `arn:aws:events:us-east-1:${REAL_ACCOUNT}:event-bus/already-bus`;
+
+      const result = await resolveResourceArn({
+        resourceType: "AWS::Events::EventBus",
+        identifier: alreadyArn,
+      });
+
+      expect(result).toBe(alreadyArn);
+      expect(mockStsSend).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -1,0 +1,36 @@
+{
+  "checkpoint_version": "1",
+  "created_at": "2026-04-21T19:54:33.864Z",
+  "ttl_hours": 72,
+  "runId": "c28ee96e-c949-4f17-9748-db10e9f0159d",
+  "userIntent": "Create a Lambda that runs every hour",
+  "resourceType": "AWS::Lambda::Function",
+  "resourcePatternId": "lambda-with-exec-role",
+  "resourceQueue": [
+    {
+      "resourceId": "iam-execution-role",
+      "resourceType": "AWS::IAM::Role",
+      "displayName": "Lambda Execution Role",
+      "desiredState": {}
+    },
+    {
+      "resourceId": "lambda-fn",
+      "resourceType": "AWS::Lambda::Function",
+      "displayName": "Lambda Function",
+      "desiredState": {}
+    }
+  ],
+  "desiredState": {
+    "Runtime": "nodejs22.x",
+    "MemorySize": 512,
+    "Timeout": 30,
+    "Architectures": ["arm64"],
+    "Code": {
+      "ZipFile": "exports.handler = async (event) => ({ statusCode: 200, body: 'placeholder' });"
+    },
+    "Handler": "index.handler",
+    "FunctionName": "assignee-lambda-fn-c28ee96e"
+  },
+  "estimatedMonthlyCost": "~$1.03/million req (100ms avg, 512MB)",
+  "preflightPassed": true
+}
