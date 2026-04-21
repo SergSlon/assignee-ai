@@ -176,6 +176,15 @@ describe("scheduledLambdaPattern — registry detection & ordering", () => {
     "recurring job that calls our cleanup API",
     "periodic lambda",
     "timer lambda that resets counters",
+    // Epic 92 wave 2.b (finding C-07) — new colloquial triggers
+    "lambda that runs every 5 minutes",
+    "lambda runs-every hour for cache warmup",
+    "lambda every hour for log rotation",
+    "lambda every day at midnight",
+    "lambda on a schedule for backups",
+    "lambda on-a-schedule triggered by cron",
+    "hourly lambda for metric roll-up",
+    "daily lambda for report generation",
   ];
 
   for (const intent of positiveCases) {

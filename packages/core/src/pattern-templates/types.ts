@@ -51,6 +51,25 @@ export interface ArchitecturePattern {
    * Must contain ≥5 variants. Order matters — first match wins across all patterns.
    */
   keywords: string[];
+  /**
+   * Negative keywords that DISQUALIFY this pattern even when a positive
+   * keyword matches. Case-insensitive substring match. Used to prevent
+   * bare or explicitly-standalone intents from ballooning into compound
+   * patterns that drag in expensive infrastructure (e.g. a $32.85/mo
+   * NAT Gateway on bare "Create a VPC"). Examples:
+   *   - `serverless-api` adds "websocket" so "serverless websocket API"
+   *     falls through to the dedicated websocket-api pattern.
+   *   - `efs-with-vpc` adds "standalone" so
+   *     "Create a standalone EFS file system" routes to the bare
+   *     AWS::EFS::FileSystem type (where the user will be told via
+   *     intent-parser that they need mount targets).
+   *
+   * When omitted, no negative filtering is applied (backward compatible).
+   * Checked AFTER positive keyword match — a pattern with a positive
+   * hit but ANY negative hit is skipped, and the registry continues
+   * scanning for a later pattern.
+   */
+  negativeKeywords?: readonly string[];
   /** Ordered list of all resources in the pattern */
   resourceList: ResourceSpec[];
   /**

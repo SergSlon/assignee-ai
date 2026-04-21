@@ -39,4 +39,16 @@ export const PatternId = {
    * previously had no compound answer.
    */
   SCHEDULED_LAMBDA: "scheduled-lambda",
+  /**
+   * Epic 92 wave 2.b: API Gateway v2 WebSocket compound pattern.
+   * Mirrors the serverless-api pattern shape but for the WebSocket
+   * protocol — same 8 resource slots (IAM Role + Lambda + LogGroup +
+   * API + Integration + Route + Stage + Permission) with two
+   * structural differences: (a) ProtocolType is WEBSOCKET not HTTP,
+   * (b) three Routes ($connect, $disconnect, $default) each with
+   * their own Integration pointing at the same Lambda. Closes C-10
+   * ("no compound answer for WebSocket intents") and the
+   * serverless-api/WebSocket collision half of C-06.
+   */
+  WEBSOCKET_API: "websocket-api",
 } as const;

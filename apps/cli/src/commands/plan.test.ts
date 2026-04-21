@@ -581,3 +581,246 @@ describe("planCommand — run callback (--no-apply)", () => {
     expect(result.success).toBe(true);
   });
 });
+
+// ── Epic 92 Wave 2.c — JSON envelope + stderr discipline (A-02 / B-04 / D-29) ──
+// The `--output json` path installs a stdout interceptor in plan.ts
+// that buffers per-resource NDJSON written by the formatter and
+// re-emits a single top-level envelope. We exercise the interceptor
+// via `runCommand`'s mocked `run` callback by having the mock write
+// formatter-shaped payloads to stdout while the interceptor is live.
+describe("planCommand — --output json stdout interceptor (A-02 / B-04 / D-29)", () => {
+  beforeEach(() => {
+    capturedOpts = null;
+  });
+
+  it("compound plan writes buffer as NDJSON then flush as a single { ok, plans:[...] } envelope", async () => {
+    const { runCommand } = await import("../utils/command-runner.js");
+
+    // Real-shape payloads — matches formatPlanResult.ts output.
+    // Account IDs redacted per feedback_no_real_account_ids_in_repo.
+    const s3 = {
+      resourceType: "AWS::S3::Bucket",
+      region: "us-east-1",
+      desiredState: { BucketName: "demo" },
+      estimatedMonthlyCost: "$0.023/mo",
+      pricingBreakdown: null,
+      bpFindings: [],
+      appliedFixes: [],
+      freeTierNote: null,
+      adviceHints: [],
+    };
+    const lambda = {
+      resourceType: "AWS::Lambda::Function",
+      region: "us-east-1",
+      desiredState: {
+        FunctionName: "demo-fn",
+        Runtime: "nodejs20.x",
+        Handler: "index.handler",
+        Role: "arn:aws:iam::210987654321:role/lambda-exec",
+      },
+      estimatedMonthlyCost: "$0.20/mo",
+      pricingBreakdown: null,
+      bpFindings: [],
+      appliedFixes: [],
+      freeTierNote: null,
+      adviceHints: [],
+    };
+
+    // Capture raw stdout bytes across the interceptor boundary.
+    const stdoutCaptured: string[] = [];
+    stdoutWriteSpy.mockImplementation(((chunk: unknown) => {
+      stdoutCaptured.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk as Uint8Array).toString("utf8"),
+      );
+      return true;
+    }) as never);
+
+    // Swap in a runCommand implementation that emulates the formatter
+    // by writing pretty-printed JSON payloads to stdout. The call is
+    // invoked synchronously inside the CLI's action() body so the
+    // interceptor is live when these writes occur.
+    vi.mocked(runCommand).mockImplementationOnce(
+      async (opts: RunCommandOptions) => {
+        capturedOpts = opts;
+        process.stdout.write(JSON.stringify(s3, null, 2) + "\n");
+        process.stdout.write(JSON.stringify(lambda, null, 2) + "\n");
+      },
+    );
+
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--output",
+      "json",
+      "Create an S3 and a Lambda",
+    ]);
+
+    const joined = stdoutCaptured.join("");
+    // The envelope must be parseable JSON. Because the interceptor
+    // buffers writes and calls the ORIGINAL write on flush, the
+    // captured tail is the envelope.
+    // Find the last top-level JSON value — it must be the envelope.
+    const parsed = JSON.parse(joined.trim());
+    expect(parsed.ok).toBe(true);
+    expect(Array.isArray(parsed.plans)).toBe(true);
+    expect(parsed.plans).toHaveLength(2);
+    expect(parsed.plans[0].resourceType).toBe("AWS::S3::Bucket");
+    expect(parsed.plans[1].resourceType).toBe("AWS::Lambda::Function");
+    // Critical: there must be NO NDJSON — only the envelope.
+    // Two concatenated root objects would throw on the JSON.parse above.
+  });
+
+  it("single-resource plan flushes as { ok, plan: <payload> } (not plans array)", async () => {
+    const { runCommand } = await import("../utils/command-runner.js");
+
+    const s3 = {
+      resourceType: "AWS::S3::Bucket",
+      region: "us-east-1",
+      desiredState: { BucketName: "demo-single" },
+      estimatedMonthlyCost: "$0.023/mo",
+      pricingBreakdown: null,
+      bpFindings: [],
+      appliedFixes: [],
+      freeTierNote: null,
+      adviceHints: [],
+    };
+
+    const stdoutCaptured: string[] = [];
+    stdoutWriteSpy.mockImplementation(((chunk: unknown) => {
+      stdoutCaptured.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk as Uint8Array).toString("utf8"),
+      );
+      return true;
+    }) as never);
+
+    vi.mocked(runCommand).mockImplementationOnce(
+      async (opts: RunCommandOptions) => {
+        capturedOpts = opts;
+        process.stdout.write(JSON.stringify(s3, null, 2) + "\n");
+      },
+    );
+
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--output",
+      "json",
+      "Create an S3 bucket",
+    ]);
+
+    const parsed = JSON.parse(stdoutCaptured.join("").trim());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.plan).toEqual(s3);
+    expect(parsed.plans).toBeUndefined();
+  });
+
+  it("runCommand throw — emits a single { ok:false, error:{code,message,hint} } envelope", async () => {
+    const { runCommand } = await import("../utils/command-runner.js");
+
+    const stdoutCaptured: string[] = [];
+    stdoutWriteSpy.mockImplementation(((chunk: unknown) => {
+      stdoutCaptured.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk as Uint8Array).toString("utf8"),
+      );
+      return true;
+    }) as never);
+
+    const { AssigneeError } = await import("@assignee/core");
+    vi.mocked(runCommand).mockImplementationOnce(async () => {
+      throw new AssigneeError(
+        "Plan generation failed: LLM crashed",
+        "PLAN_FAILED",
+      );
+    });
+
+    const { planCommand } = await import("./plan.js");
+    await expect(
+      planCommand.parseAsync([
+        "node",
+        "plan",
+        "--output",
+        "json",
+        "Create an S3 bucket",
+      ]),
+    ).rejects.toThrow("Plan generation failed: LLM crashed");
+
+    const joined = stdoutCaptured.join("").trim();
+    expect(joined.length).toBeGreaterThan(0);
+    const parsed = JSON.parse(joined);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("PLAN_FAILED");
+    expect(parsed.error.message).toContain("Plan generation failed");
+    expect(parsed.error.hint).toBeDefined();
+  });
+
+  it("runCommand throw discards any partial NDJSON buffer — only the error envelope reaches stdout", async () => {
+    const { runCommand } = await import("../utils/command-runner.js");
+
+    const partial = {
+      resourceType: "AWS::S3::Bucket",
+      region: "us-east-1",
+      desiredState: { BucketName: "partial" },
+      estimatedMonthlyCost: "$0.023/mo",
+      pricingBreakdown: null,
+      bpFindings: [],
+      appliedFixes: [],
+      freeTierNote: null,
+      adviceHints: [],
+    };
+
+    const stdoutCaptured: string[] = [];
+    stdoutWriteSpy.mockImplementation(((chunk: unknown) => {
+      stdoutCaptured.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk as Uint8Array).toString("utf8"),
+      );
+      return true;
+    }) as never);
+
+    vi.mocked(runCommand).mockImplementationOnce(async () => {
+      // Simulate the formatter emitting a first resource payload
+      // before the second resource errors.
+      process.stdout.write(JSON.stringify(partial, null, 2) + "\n");
+      throw new Error("second resource failed");
+    });
+
+    const { planCommand } = await import("./plan.js");
+    await expect(
+      planCommand.parseAsync([
+        "node",
+        "plan",
+        "--output",
+        "json",
+        "Create an S3 and a Lambda",
+      ]),
+    ).rejects.toThrow("second resource failed");
+
+    const joined = stdoutCaptured.join("").trim();
+    // Exactly ONE JSON value — the error envelope — must reach stdout.
+    const parsed = JSON.parse(joined);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.message).toBe("second resource failed");
+    // The partial S3 payload must NOT have leaked — no "partial" string
+    // in the captured stdout.
+    expect(joined).not.toContain('"BucketName": "partial"');
+  });
+
+  it("text mode does NOT swap stdout.write (regression — byte-identical passthrough)", async () => {
+    // In text mode, installJsonStdoutInterceptor returns no-op handlers
+    // and leaves process.stdout.write untouched. We confirm by asserting
+    // the reference is unchanged across the command action boundary.
+    const before = process.stdout.write;
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync(["node", "plan", "Create an S3 bucket"]);
+    expect(process.stdout.write).toBe(before);
+  });
+});

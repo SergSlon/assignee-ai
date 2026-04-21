@@ -1,5 +1,6 @@
 import { PatternRegistry } from "./registry.js";
 import { serverlessApiPattern } from "./patterns/serverless-api.js";
+import { websocketApiPattern } from "./patterns/websocket-api.js";
 import { threeTierWebPattern } from "./patterns/three-tier-web.js";
 import { containerServicePattern } from "./patterns/container-service.js";
 import { messageProcessingPattern } from "./patterns/message-processing.js";
@@ -32,6 +33,13 @@ export { PatternId } from "./pattern-ids.js";
  * therefore registered LAST among the Lambda-bearing patterns.
  */
 export const defaultPatternRegistry = new PatternRegistry();
+// Epic 92 wave 2.b: websocket-api registered BEFORE serverless-api so
+// intents like "create a websocket api" hit the WebSocket compound
+// (ProtocolType: WEBSOCKET, three routes) instead of the HTTP
+// serverless-api pattern. As a belt-and-braces, serverless-api also
+// carries "websocket" as a negativeKeyword so registration-order
+// mistakes cannot re-introduce the collision.
+defaultPatternRegistry.register(websocketApiPattern);
 defaultPatternRegistry.register(serverlessApiPattern);
 defaultPatternRegistry.register(threeTierWebPattern);
 defaultPatternRegistry.register(containerServicePattern);
@@ -55,6 +63,7 @@ defaultPatternRegistry.register(lambdaWithExecRolePattern);
 
 export { PatternRegistry };
 export { serverlessApiPattern } from "./patterns/serverless-api.js";
+export { websocketApiPattern } from "./patterns/websocket-api.js";
 export { threeTierWebPattern } from "./patterns/three-tier-web.js";
 export { containerServicePattern } from "./patterns/container-service.js";
 export { messageProcessingPattern } from "./patterns/message-processing.js";
@@ -76,4 +85,5 @@ export {
   LambdaWithExecRoleResourceId,
   EfsWithVpcResourceId,
   ScheduledLambdaResourceId,
+  WebsocketApiResourceId,
 } from "./pattern-resource-ids.js";

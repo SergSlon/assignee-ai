@@ -36,6 +36,26 @@
  * AssigneeOperatorPolicy / AssigneeAiBedrockLoggingRole. Our
  * `assignee-` prefix (lowercase, hyphenated) does NOT trip the
  * pattern. Verified.
+ *
+ * Epic 92 wave 2.b (finding A-03 — Lambda name propagation half):
+ * when the intent-parser extracts a user-specified FunctionName into
+ * `elicitedOptions` (this work lands in the 2.a parser slice), the
+ * compound expansion path preserves it end-to-end because:
+ *   1. `compound-plan.ts` spreads `elicitedOptions` over
+ *      `patternDefaults` into `desiredState` BEFORE name injection.
+ *      So `desiredState.FunctionName === "my-user-function"` at that
+ *      point.
+ *   2. `injectCompoundResourceName` in compound-helpers.ts guards
+ *      on `!desiredState[nameField]` — a truthy user value is NOT
+ *      overwritten with the `assignee-lambda-fn-<runId>` auto-name.
+ *
+ * This pattern's defaultOptions intentionally OMIT any FunctionName
+ * so the auto-name path still fires when the parser didn't extract
+ * one; the user's value wins whenever provided. The same contract
+ * applies to the sibling serverless-api, scheduled-lambda, and
+ * websocket-api patterns which all share this wiring convention.
+ * No code change is required inside this pattern file — this comment
+ * exists as a map for future readers so the invariant is findable.
  */
 
 import { RESOURCE_TYPES } from "../../config/resource-types.js";

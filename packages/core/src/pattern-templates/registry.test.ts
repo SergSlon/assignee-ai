@@ -85,4 +85,60 @@ describe("PatternRegistry", () => {
     const registry = new PatternRegistry();
     expect(registry.detect("anything")).toBeNull();
   });
+
+  describe("negativeKeywords disqualification", () => {
+    const withNegatives: ArchitecturePattern = {
+      ...mockPattern,
+      patternId: "with-negatives",
+      keywords: ["build a widget"],
+      negativeKeywords: ["standalone", "only"],
+    };
+
+    it("skips a pattern when a negative keyword is present in the intent", () => {
+      const registry = new PatternRegistry();
+      registry.register(withNegatives);
+      expect(
+        registry.detect("build a widget standalone for me please"),
+      ).toBeNull();
+    });
+
+    it("skips a pattern when ANY negative keyword matches (OR semantics)", () => {
+      const registry = new PatternRegistry();
+      registry.register(withNegatives);
+      expect(registry.detect("build a widget only")).toBeNull();
+    });
+
+    it("negative keyword match is case-insensitive", () => {
+      const registry = new PatternRegistry();
+      registry.register(withNegatives);
+      expect(registry.detect("Build a Widget STANDALONE")).toBeNull();
+    });
+
+    it("falls through to the next pattern when the first has a negative hit", () => {
+      const fallback: ArchitecturePattern = {
+        ...mockPattern,
+        patternId: "fallback",
+        keywords: ["build a widget"],
+      };
+      const registry = new PatternRegistry();
+      registry.register(withNegatives);
+      registry.register(fallback);
+      // First pattern is disqualified → registry returns second.
+      expect(registry.detect("build a widget standalone")).toBe(fallback);
+    });
+
+    it("still matches when no negative keyword appears", () => {
+      const registry = new PatternRegistry();
+      registry.register(withNegatives);
+      expect(registry.detect("please build a widget for me")).toBe(
+        withNegatives,
+      );
+    });
+
+    it("patterns without negativeKeywords behave unchanged (backward compatible)", () => {
+      const registry = new PatternRegistry();
+      registry.register(mockPattern);
+      expect(registry.detect("test keyword standalone")).toBe(mockPattern);
+    });
+  });
 });

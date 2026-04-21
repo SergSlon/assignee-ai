@@ -14,6 +14,7 @@ import {
   ExecutionStatus,
   BPEnforcementLevel,
   StateField,
+  type ResourceResult,
 } from "@assignee/core";
 import type { BPFinding } from "@assignee/best-practices";
 import type { GraphContext } from "../../services/graph-init.js";
@@ -47,6 +48,19 @@ export interface CheckpointInput {
   preflightPassed: boolean;
   elicitedOptions?: unknown;
   resourceQueue?: unknown;
+  /**
+   * Story e92.1.d-followup (Epic 89 C-05 closure): partial-apply
+   * resume state. When both are non-default the graph re-enters the
+   * compound loop at `currentResourceIndex` and the marker-resolver
+   * looks up cross-resource references in `completedResources` —
+   * avoiding a re-plan of already-provisioned resources. Hydrated
+   * to the `ResourceResult` shape by `handler-steps.executeAndAudit`
+   * (the on-disk checkpoint persists only `{resourceArn,
+   * resourceType}` per entry; the `resourceId` is recovered by
+   * zipping against `resourceQueue`).
+   */
+  currentResourceIndex?: number;
+  completedResources?: ResourceResult[];
 }
 
 export interface RunGraphArgs {
@@ -71,6 +85,22 @@ export async function runGraphFromCheckpoint({
     recursionLimit: GRAPH_RECURSION_LIMIT,
   };
 
+  // Story e92.1.d-followup: forward resume-state into the graph
+  // ONLY when the checkpoint carries non-default values. A missing
+  // / zero index with no completions maps to a fresh compound plan
+  // — we deliberately omit the keys so the graph state shape stays
+  // byte-for-byte identical to the pre-fix path on single-resource
+  // / pre-Epic-92 checkpoints.
+  const hasResume =
+    (checkpoint.currentResourceIndex ?? 0) > 0 &&
+    (checkpoint.completedResources?.length ?? 0) > 0;
+  const resumeProgress = hasResume
+    ? {
+        currentResourceIndex: checkpoint.currentResourceIndex,
+        completedResources: checkpoint.completedResources,
+      }
+    : {};
+
   try {
     // Phase 1: inject checkpoint state, auto-approve (MCP has no HITL).
     await ctx.graph.invoke(
@@ -87,6 +117,7 @@ export async function runGraphFromCheckpoint({
         preflightPassed,
         elicitedOptions: checkpoint.elicitedOptions,
         resourceQueue: checkpoint.resourceQueue,
+        ...resumeProgress,
         // MCP server bypasses HITL — the `confirmed` gate is the safety mechanism.
         autoApprove: true,
         ...(bpFindings ? { bpFindings } : {}),

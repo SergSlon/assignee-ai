@@ -1,12 +1,20 @@
 import { describe, it, expect } from "vitest";
 import {
   ExecutionStatus,
+  RESOURCE_TYPES,
   SUPPORTED_TYPES_ARRAY,
   renderSupportedTypesHint,
 } from "../../index.js";
 import { MockLlmAdapter } from "../../testing/index.js";
 import type { AgentState } from "../graph-state.js";
-import { createIntentParserNode } from "./intent-parser.js";
+import {
+  createIntentParserNode,
+  extractAssertedValues,
+  isValidCidr,
+  isValidInstanceType,
+  isValidAmiId,
+  isValidEngineVersion,
+} from "./intent-parser.js";
 
 // Story 54-it1-04: errorMessage now delegates to the help-hints SSO
 // module. Assert against the same rendered string so divergence
@@ -116,5 +124,400 @@ describe("intentParserNode", () => {
     expect(SUPPORTED_TYPES).toContain("AWS::CloudFront::OriginAccessControl");
     expect(SUPPORTED_TYPES).toContain("AWS::S3::BucketPolicy");
     expect(SUPPORTED_TYPES).toHaveLength(37);
+  });
+
+  // ─── Epic 92 Wave 2 — asserted-token preservation (B-01/B-07/B-09/B-16/C-12/C-13/A-03) ───
+
+  it("preserves user-asserted VPC CIDR block (B-01)", async () => {
+    const mock = new MockLlmAdapter({ resourceType: RESOURCE_TYPES.EC2_VPC });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create a VPC with CIDR 10.42.0.0/16 for production",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.resourceType).toBe(RESOURCE_TYPES.EC2_VPC);
+    expect(result.elicitedOptions).toEqual(
+      expect.objectContaining({ CidrBlock: "10.42.0.0/16" }),
+    );
+  });
+
+  it("fails plan on invalid CIDR block (B-09)", async () => {
+    const mock = new MockLlmAdapter({ resourceType: RESOURCE_TYPES.EC2_VPC });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create a VPC with CIDR 999.999.999.999/99",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toContain("Invalid CIDR");
+    expect(result.errorMessage).toContain("999.999.999.999/99");
+    expect(result.resourceType).toBeUndefined();
+  });
+
+  it("fails plan on unknown instance type (C-13)", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create an EC2 t99.huge instance for web hosting",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toContain("Unknown EC2 instance type");
+    expect(result.errorMessage).toContain("t99.huge");
+  });
+
+  it("fails plan on unknown AWS region (C-13)", async () => {
+    const mock = new MockLlmAdapter({ resourceType: RESOURCE_TYPES.S3_BUCKET });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create an S3 bucket in region eu-west-fake-1",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toContain("Unknown AWS region");
+    expect(result.errorMessage).toContain("eu-west-fake-1");
+  });
+
+  it("fails plan on invalid RDS engine version (C-13)", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create a PostgreSQL RDS database with engine version 99.99",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+    expect(result.errorMessage).toContain("Invalid RDS engine version");
+    expect(result.errorMessage).toContain("99.99");
+  });
+
+  it("preserves user-asserted instance type (C-12)", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create a t3.micro instance for a web server",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.elicitedOptions).toEqual(
+      expect.objectContaining({ InstanceType: "t3.micro" }),
+    );
+  });
+
+  it("preserves user-asserted AMI ID", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Launch EC2 from ami-0abc1234def567890",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.elicitedOptions).toEqual(
+      expect.objectContaining({ ImageId: "ami-0abc1234def567890" }),
+    );
+  });
+
+  it("preserves RDS engine version 16.3 (B-01 sibling)", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.RDS_DB_INSTANCE,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create a PostgreSQL database with engine version 16.3",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.elicitedOptions).toEqual(
+      expect.objectContaining({ EngineVersion: "16.3" }),
+    );
+  });
+
+  it("extracts Lambda FunctionName from 'named X' phrasing (A-03)", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create an AWS Lambda named hello-world for image processing",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.elicitedOptions).toEqual(
+      expect.objectContaining({ FunctionName: "hello-world" }),
+    );
+  });
+
+  it("extracts DynamoDB TableName from 'called X' phrasing", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create a DynamoDB table called user-sessions",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.elicitedOptions).toEqual(
+      expect.objectContaining({ TableName: "user-sessions" }),
+    );
+  });
+
+  it("extracts SNS TopicName from 'named X' phrasing", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.SNS_TOPIC,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create an SNS topic named order-events",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.elicitedOptions).toEqual(
+      expect.objectContaining({ TopicName: "order-events" }),
+    );
+  });
+
+  it("extracts SG ingress rules from 'allowing port 443 from 0.0.0.0/0' (B-07)", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.EC2_SECURITY_GROUP,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent:
+        "Create a security group for web servers allowing port 443 from 0.0.0.0/0",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    const ingress = (result.elicitedOptions as Record<string, unknown>)[
+      "SecurityGroupIngress"
+    ] as Array<Record<string, unknown>>;
+    expect(ingress).toBeDefined();
+    expect(ingress.length).toBeGreaterThanOrEqual(1);
+    expect(ingress[0]).toEqual(
+      expect.objectContaining({
+        IpProtocol: "tcp",
+        FromPort: 443,
+        ToPort: 443,
+        CidrIp: "0.0.0.0/0",
+      }),
+    );
+  });
+
+  it("extracts 'do not attach to any VPC' directive (B-16)", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.EC2_SECURITY_GROUP,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent:
+        "Create a security group; do not attach to any VPC — standalone for reference",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.elicitedOptions).toEqual(
+      expect.objectContaining({ __noVpc: true }),
+    );
+  });
+
+  it("extracts SNS subscription Protocol from http:// endpoint", async () => {
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.SNS_SUBSCRIPTION,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent:
+        "SNS subscription that sends http://example.com/webhook to topic arn:aws:sns:us-east-1:210987654321:alerts",
+    } as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.elicitedOptions).toEqual(
+      expect.objectContaining({
+        Protocol: "http",
+        Endpoint: "http://example.com/webhook",
+      }),
+    );
+  });
+
+  it("preserves existing elicitedOptions when merging parser assertions", async () => {
+    const mock = new MockLlmAdapter({ resourceType: RESOURCE_TYPES.EC2_VPC });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    // Simulate checkpoint-resumed state with a pre-existing elicited key.
+    const state = {
+      userIntent: "Create a VPC with CIDR 10.42.0.0/16",
+      elicitedOptions: { EnableDnsHostnames: true },
+    } as unknown as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.elicitedOptions).toEqual(
+      expect.objectContaining({
+        EnableDnsHostnames: true,
+        CidrBlock: "10.42.0.0/16",
+      }),
+    );
+  });
+
+  it("does not overwrite pre-existing elicited keys", async () => {
+    // If the user's --set flag or a checkpoint already supplied InstanceType,
+    // the parser must NOT clobber it — the explicit prior assertion wins.
+    const mock = new MockLlmAdapter({
+      resourceType: RESOURCE_TYPES.EC2_INSTANCE,
+    });
+    const node = createIntentParserNode({ llmClient: mock });
+
+    const state = {
+      userIntent: "Create a t3.micro instance",
+      elicitedOptions: { InstanceType: "m5.large" },
+    } as unknown as AgentState;
+    const result = await node(state);
+
+    expect(result.executionStatus).toBeUndefined();
+    expect(
+      (result.elicitedOptions as Record<string, unknown>)["InstanceType"],
+    ).toBe("m5.large");
+  });
+});
+
+describe("extractAssertedValues", () => {
+  it("returns empty elicited + no errors for plain intent", () => {
+    const out = extractAssertedValues(
+      "Create a web server",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    expect(out.errors).toEqual([]);
+    expect(Object.keys(out.elicited)).toHaveLength(0);
+  });
+
+  it("extracts VPC CIDR but not instance type when both absent", () => {
+    const out = extractAssertedValues(
+      "Create a VPC with CIDR 10.50.0.0/16",
+      RESOURCE_TYPES.EC2_VPC,
+    );
+    expect(out.elicited["CidrBlock"]).toBe("10.50.0.0/16");
+  });
+
+  it("collects multiple errors when multiple tokens are invalid", () => {
+    const out = extractAssertedValues(
+      "EC2 instance type t99.fake in region xx-fake-1",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    expect(out.errors.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("extracts region as __assertedRegion (informational hint)", () => {
+    const out = extractAssertedValues(
+      "Create an S3 bucket in us-west-2",
+      RESOURCE_TYPES.S3_BUCKET,
+    );
+    expect(out.elicited["__assertedRegion"]).toBe("us-west-2");
+  });
+});
+
+describe("token validators", () => {
+  describe("isValidCidr", () => {
+    it("accepts VPC-sized CIDR (/16)", () => {
+      expect(isValidCidr("10.0.0.0/16", "vpc")).toBe(true);
+    });
+    it("accepts /28 VPC CIDR", () => {
+      expect(isValidCidr("10.0.0.0/28", "vpc")).toBe(true);
+    });
+    it("rejects /8 as VPC CIDR (too large)", () => {
+      expect(isValidCidr("10.0.0.0/8", "vpc")).toBe(false);
+    });
+    it("accepts /0 for SG source CIDR", () => {
+      expect(isValidCidr("0.0.0.0/0", "source")).toBe(true);
+    });
+    it("rejects octets > 255", () => {
+      expect(isValidCidr("999.999.999.999/99", "source")).toBe(false);
+    });
+    it("rejects malformed CIDR", () => {
+      expect(isValidCidr("not-a-cidr", "source")).toBe(false);
+    });
+  });
+
+  describe("isValidInstanceType", () => {
+    it("accepts common types", () => {
+      expect(isValidInstanceType("t3.micro")).toBe(true);
+      expect(isValidInstanceType("m5.large")).toBe(true);
+      expect(isValidInstanceType("c5.xlarge")).toBe(true);
+      expect(isValidInstanceType("r5.2xlarge")).toBe(true);
+      expect(isValidInstanceType("p4d.24xlarge")).toBe(true);
+    });
+    it("rejects unknown family", () => {
+      expect(isValidInstanceType("t99.huge")).toBe(false);
+    });
+    it("rejects unknown size", () => {
+      expect(isValidInstanceType("t3.huge")).toBe(false);
+    });
+    it("rejects non-dotted shapes", () => {
+      expect(isValidInstanceType("t3micro")).toBe(false);
+    });
+  });
+
+  describe("isValidAmiId", () => {
+    it("accepts 8-char hex AMI", () => {
+      expect(isValidAmiId("ami-0abc1234")).toBe(true);
+    });
+    it("accepts 17-char hex AMI", () => {
+      expect(isValidAmiId("ami-0abc1234def567890")).toBe(true);
+    });
+    it("rejects non-hex chars", () => {
+      expect(isValidAmiId("ami-zzzzzzzz")).toBe(false);
+    });
+    it("rejects wrong length", () => {
+      expect(isValidAmiId("ami-1234")).toBe(false);
+    });
+  });
+
+  describe("isValidEngineVersion", () => {
+    it("accepts Postgres 16.3", () => {
+      expect(isValidEngineVersion("16.3")).toBe(true);
+    });
+    it("accepts MySQL 8.0.35", () => {
+      expect(isValidEngineVersion("8.0.35")).toBe(true);
+    });
+    it("rejects adversarial 99.99", () => {
+      expect(isValidEngineVersion("99.99")).toBe(false);
+    });
+    it("rejects non-numeric", () => {
+      expect(isValidEngineVersion("latest")).toBe(false);
+    });
   });
 });

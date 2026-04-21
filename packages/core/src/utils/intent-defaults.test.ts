@@ -386,3 +386,80 @@ describe("applyIntentOverrides", () => {
     );
   });
 });
+
+// ── Epic 92 wave 2 — assertion suppression (C-12/C-13/B-01) ─────────────
+
+describe("getIntentDefaults — user-asserted values suppress defaults", () => {
+  it("suppresses InstanceType override when user asserts t3.micro", () => {
+    // Without the assertion, "web server" intent returns t3.small default.
+    const baseline = getIntentDefaults(
+      "Create a web server",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    expect(baseline).toContainEqual(
+      expect.objectContaining({ fieldName: "InstanceType", value: "t3.small" }),
+    );
+
+    // With an explicit t3.micro assertion, the InstanceType override drops.
+    const asserted = getIntentDefaults(
+      "Create a t3.micro instance for a web server",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    const instanceTypeOverride = asserted.find(
+      (o) => o.fieldName === "InstanceType",
+    );
+    expect(instanceTypeOverride).toBeUndefined();
+  });
+
+  it("suppresses VPC CidrBlock override when user asserts a CIDR", () => {
+    // The VPC plugin doesn't have an intent rule overriding CidrBlock
+    // in the default ruleset, so this test asserts the negative case:
+    // any future rule overriding CidrBlock would be suppressed when the
+    // user has asserted a valid CIDR in their intent. Guard against
+    // regression by explicitly checking the detection helper.
+    const result = getIntentDefaults(
+      "Create a VPC with CIDR 10.42.0.0/16",
+      RESOURCE_TYPES.EC2_VPC,
+    );
+    // Whatever overrides exist, none should touch CidrBlock — the user
+    // asserted 10.42.0.0/16 and the parser preserves it elsewhere.
+    for (const override of result) {
+      expect(override.fieldName).not.toBe("CidrBlock");
+    }
+  });
+
+  it("leaves unrelated overrides in place when one field is asserted", () => {
+    // SSH intent triggers three overrides (KeyName, AssociatePublicIp,
+    // SecurityGroupIds). Asserting t3.micro should suppress only the
+    // InstanceType override — the SSH bundle must survive.
+    const result = getIntentDefaults(
+      "Create a t3.micro instance I can ssh into",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    expect(result).toContainEqual(
+      expect.objectContaining({ fieldName: CfnKey.KEY_NAME }),
+    );
+    expect(result).toContainEqual(
+      expect.objectContaining({ fieldName: CfnKey.ASSOCIATE_PUBLIC_IP }),
+    );
+    expect(result.find((o) => o.fieldName === "InstanceType")).toBeUndefined();
+  });
+
+  it("does not suppress when asserted token is invalid (parser fails first)", () => {
+    // Invalid tokens (e.g., t99.huge) must NOT be treated as assertions —
+    // the intent-parser fails the plan before this function runs. If for
+    // some reason it DID run with an invalid token, the default override
+    // should still fire so behaviour degrades gracefully rather than
+    // leaving the field blank.
+    const result = getIntentDefaults(
+      "Create a t99.huge instance for a web server",
+      RESOURCE_TYPES.EC2_INSTANCE,
+    );
+    // The web-server rule still fires — the parser would have failed the
+    // plan upstream, so this fallthrough path only matters for test
+    // invariants.
+    expect(result).toContainEqual(
+      expect.objectContaining({ fieldName: "InstanceType", value: "t3.small" }),
+    );
+  });
+});

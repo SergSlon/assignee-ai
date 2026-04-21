@@ -61,6 +61,29 @@ export const serverlessApiPattern: ArchitecturePattern = {
     "build an http api",
     "serverless rest api",
   ],
+  /**
+   * Epic 92 wave 2.b (finding C-06): skip this pattern on intents that
+   * call for a WebSocket API, a standalone resource, or "existing
+   * VPC" wiring. The WebSocket case routes to `websocket-api`; the
+   * standalone/only cases fall through to the LLM classifier which
+   * has explicit guidance to treat them as bare resource types; the
+   * "existing-vpc" case indicates the user has a VPC already and
+   * doesn't want a new compound stack layered on top.
+   *
+   * Each negative keyword is a case-insensitive substring match.
+   * "on its own" and "without api" deliberately include spaces — they
+   * are full phrases rather than single tokens.
+   */
+  negativeKeywords: [
+    "websocket",
+    "standalone",
+    "existing-vpc",
+    "existing vpc",
+    "on its own",
+    "without api",
+    "only the lambda",
+    "just the lambda",
+  ],
   resourceList: [
     // 1. IAM Role (no dependencies)
     {

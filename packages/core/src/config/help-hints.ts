@@ -197,6 +197,8 @@ function renderPatternsHintCli(): string {
       "IAM Role + Lambda + EventBridge Rule + Permission (4 resources)",
     "lambda-with-exec-role":
       "IAM Role + Lambda (2 resources, auto-created exec role)",
+    "websocket-api":
+      "IAM + Lambda + Logs + API Gateway v2 WebSocket + 3 Routes (12 resources)",
   };
 
   const lines: string[] = [];

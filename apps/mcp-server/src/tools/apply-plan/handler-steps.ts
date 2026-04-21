@@ -24,7 +24,12 @@
  * - `registerApplyPlan` signature and the MCP tool schema are unchanged.
  */
 
-import { CheckpointError, type PlanCheckpoint } from "@assignee/core";
+import {
+  CheckpointError,
+  ExecutionStatus,
+  type PlanCheckpoint,
+  type ResourceResult,
+} from "@assignee/core";
 import type { BPFinding, EvalContext } from "@assignee/best-practices";
 import {
   type StepResult,
@@ -51,6 +56,40 @@ export interface BpReevalContext {
   bpFindings?: BPFinding[];
   /** Whether preflight still considers the checkpoint valid. */
   preflightPassed: boolean;
+}
+
+/**
+ * Story e92.1.d-followup (Epic 89 C-05 closure): hydrate the graph-
+ * state shape of `completedResources` (`ResourceResult[]`) from the
+ * checkpoint's compact on-disk shape (`{resourceArn, resourceType}[]`).
+ *
+ * The marker-resolver in plan-generator keys cross-resource references
+ * off `ResourceResult.resourceId`; the on-disk schema intentionally
+ * omits that logical ID to keep the checkpoint small. We recover it by
+ * zipping the persisted `completedResources` against the matching
+ * prefix of `resourceQueue` — the serializer persists completions in
+ * queue order, so entry `i` corresponds to `resourceQueue[i]` for all
+ * `i < currentResourceIndex`. `executionStatus: SUCCESS` is
+ * tautological: the serializer only writes entries that carry a real
+ * ARN (i.e. provisioning succeeded).
+ *
+ * Exported so `handler-steps.test.ts` can assert the shape end-to-
+ * end without reaching into private helpers.
+ */
+export function hydrateCheckpointCompletedResources(
+  checkpoint: PlanCheckpoint,
+): ResourceResult[] {
+  const completed = checkpoint.completedResources;
+  const queue = checkpoint.resourceQueue ?? [];
+  return completed.map((entry, index) => {
+    const queueEntry = queue[index];
+    return {
+      resourceId: queueEntry?.resourceId ?? entry.resourceType,
+      resourceType: entry.resourceType,
+      resourceArn: entry.resourceArn,
+      executionStatus: ExecutionStatus.SUCCESS,
+    };
+  });
 }
 
 /**
@@ -224,6 +263,20 @@ export async function executeAndAudit(
   bpCtx: BpReevalContext,
   extractIdentifier: (envelope: ToolEnvelope) => string,
 ): Promise<ToolEnvelope> {
+  // Story e92.1.d-followup: conditional resume-state hydration —
+  // omit both fields on checkpoints with the default (0 / []) shape
+  // so the graph initial state stays byte-for-byte identical for
+  // pre-Epic-92 / single-resource / fresh-compound plans.
+  const hasResumeProgress =
+    checkpoint.currentResourceIndex > 0 &&
+    checkpoint.completedResources.length > 0;
+  const resumePayload = hasResumeProgress
+    ? {
+        currentResourceIndex: checkpoint.currentResourceIndex,
+        completedResources: hydrateCheckpointCompletedResources(checkpoint),
+      }
+    : {};
+
   const envelope = await runGraphFromCheckpoint({
     ctx,
     checkpoint: {
@@ -235,6 +288,7 @@ export async function executeAndAudit(
       preflightPassed: checkpoint.preflightPassed,
       elicitedOptions: checkpoint.elicitedOptions,
       resourceQueue: checkpoint.resourceQueue,
+      ...resumePayload,
     },
     bpFindings: bpCtx.bpFindings,
     preflightPassed: bpCtx.preflightPassed,

@@ -2,6 +2,15 @@
  * Intent rules for compute/container and networking services:
  * IAM Roles (Lambda/EC2 trust policies), ECS Cluster, ECR Repository,
  * ELBv2 Load Balancer, API Gateway V2 API.
+ *
+ * Epic 92 wave 2 contract: each rule below is an UNCONDITIONAL default —
+ * fired on keyword match, regardless of user assertions. When the user
+ * explicitly asserts a value in natural language (e.g. "t3.micro" for
+ * EC2 InstanceType, "10.42.0.0/16" for VPC CidrBlock), the intent-parser
+ * writes that assertion to `presetFields` (NEVER_ASK policy) so the
+ * option-elicitor's `applyPresetFields` path wins over any override
+ * this file emits. Rules here do NOT need to be assertion-aware — the
+ * preservation guarantee lives in the parser + elicitor pipeline.
  */
 
 import { CfnKey } from "../../config/cfn-keys.js";

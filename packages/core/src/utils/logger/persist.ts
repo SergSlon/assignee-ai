@@ -3,6 +3,13 @@
  *
  * Lifted from `apps/cli/src/utils/logger/persist.ts` in Story 50-4
  * Wave 5 Pass A.
+ *
+ * ⚠️ INVARIANT (Epic 92 Wave 2.c — A-21 / B-14): this module MUST
+ * write structured log events to `process.stderr` ONLY. Under
+ * `--output json` the CLI reserves `process.stdout` for a single
+ * parseable JSON envelope; a stray logger write would shred the
+ * stream. The invariant is locked in by the regression tests
+ * `logger.test.ts › invariant — log() never writes to stdout`.
  */
 import * as fs from "node:fs";
 import { EnvVar } from "../../constants/env-vars.js";

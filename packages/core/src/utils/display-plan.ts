@@ -2,6 +2,10 @@
  * Plan rendering helpers for Assignee.ai CLI.
  * Extracted from display.ts — renderPlanBox, formatCostLine, formatPricingBreakdown,
  * formatAppliedFixes, formatFixValue, formatAutoFixHint, regionLabel.
+ *
+ * Epic 92 Wave 2.c (A-02): also exposes the compound JSON envelope
+ * serializer used by the CLI `plan.ts` stdout interceptor so the
+ * envelope shape is a single source of truth the e2e test can rely on.
  */
 
 import * as fs from "node:fs";
@@ -270,6 +274,178 @@ export function formatAutoFixHint(state: RenderableState): string | null {
   const isTTY = process.stdout.isTTY;
   const msg = `${autoFixCount} finding${autoFixCount === 1 ? "" : "s"} can be auto-fixed. Run \`assignee init\` to enable.`;
   return isTTY ? chalk.cyan(`  \u{1F4A1} ${msg}`) : `  * ${msg}`;
+}
+
+/**
+ * Epic 92 Wave 2.c — A-02 / D-29: single source of truth for the
+ * `--output json` envelope shape consumers rely on.
+ *
+ * The existing formatter at
+ * `graph/nodes/result-formatter/formatters/plan.ts` emits one
+ * JSON object per resource when a compound plan runs — that's
+ * NDJSON, not parseable JSON. We buffer those payloads at the CLI
+ * layer and the CLI calls the helpers below to serialise a
+ * single parseable envelope.
+ *
+ * Three shapes:
+ *
+ *   single-resource success:
+ *     { ok: true, plan: <payload> }
+ *   compound success:
+ *     { ok: true, plans: [<payload>, <payload>, ...] }
+ *   any error:
+ *     { ok: false, error: { code, message, hint? } }
+ *
+ * The helpers are pure — no I/O. CLI `plan.ts` / `list.ts` do the
+ * `process.stdout.write(... + "\n")` themselves.
+ */
+export interface JsonErrorEnvelope {
+  ok: false;
+  error: {
+    code: string;
+    message: string;
+    hint?: string;
+  };
+}
+
+export interface JsonSuccessEnvelope {
+  ok: true;
+  plan?: unknown;
+  plans?: unknown[];
+}
+
+/**
+ * Parse a string that might be an NDJSON stream (newline-separated
+ * JSON objects) and return the parsed top-level objects. Returns an
+ * empty array when the input is empty or not parseable. Used by the
+ * CLI stdout interceptor to aggregate per-resource payloads written
+ * by `formatters/plan.ts` (owned by Wave 4.a — not editable here).
+ */
+export function parsePlanJsonStream(buffered: string): unknown[] {
+  if (!buffered) return [];
+  const out: unknown[] = [];
+  // The formatter writes `JSON.stringify(..., null, 2) + "\n"` per
+  // resource. Each payload is a JSON object spanning multiple lines.
+  // Primary strategy: walk char-by-char, honoring string boundaries,
+  // and capture each balanced `{...}` at depth 0.
+  //
+  // Recovery: if a stray unmatched `{` earlier in the buffer skews the
+  // depth counter, we never reach depth 0 again and lose every
+  // subsequent payload. To guard against that we ALSO record every
+  // newline-anchored `{` as a candidate recovery boundary and, at the
+  // end of the primary pass, retry parsing from each anchor that did
+  // not already produce a value. This recovers truncated-first /
+  // complete-second streams without weakening the happy-path parser.
+  let depth = 0;
+  let start = 0;
+  let inString = false;
+  let escape = false;
+  const anchors: number[] = [];
+  for (let i = 0; i < buffered.length; i++) {
+    const ch = buffered[i];
+    // Record newline-anchored `{` boundaries before string/escape handling
+    // so we see them even when nested inside a depth-skewed context.
+    if (!inString && ch === "{" && (i === 0 || buffered[i - 1] === "\n")) {
+      anchors.push(i);
+    }
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        const slice = buffered.slice(start, i + 1);
+        try {
+          out.push(JSON.parse(slice));
+        } catch {
+          // Fall through to the newline-anchored recovery below.
+        }
+      }
+    }
+  }
+  if (out.length === 0 && anchors.length > 0) {
+    for (const anchor of anchors) {
+      const tail = buffered.slice(anchor);
+      let d = 0;
+      let s = false;
+      let esc = false;
+      let end = -1;
+      for (let j = 0; j < tail.length; j++) {
+        const c = tail[j];
+        if (esc) {
+          esc = false;
+          continue;
+        }
+        if (c === "\\" && s) {
+          esc = true;
+          continue;
+        }
+        if (c === '"') {
+          s = !s;
+          continue;
+        }
+        if (s) continue;
+        if (c === "{") d++;
+        else if (c === "}") {
+          d--;
+          if (d === 0) {
+            end = j;
+            break;
+          }
+        }
+      }
+      if (end >= 0) {
+        try {
+          out.push(JSON.parse(tail.slice(0, end + 1)));
+        } catch {
+          // Skip — not every anchor is a valid payload.
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Serialise an array of plan payloads (one per resource) as a single
+ * top-level envelope. Compound → `{ ok, plans: [...] }`; single →
+ * `{ ok, plan: <payload> }`. Deterministic 2-space indentation
+ * matches the existing formatter output for side-by-side diff review.
+ */
+export function serializePlanEnvelope(payloads: unknown[]): string {
+  const envelope: JsonSuccessEnvelope =
+    payloads.length === 1
+      ? { ok: true, plan: payloads[0] }
+      : { ok: true, plans: payloads };
+  return JSON.stringify(envelope, null, 2) + "\n";
+}
+
+/**
+ * Serialise a failure envelope. Code/message required; hint optional.
+ */
+export function serializeErrorEnvelope(
+  code: string,
+  message: string,
+  hint?: string,
+): string {
+  const envelope: JsonErrorEnvelope = {
+    ok: false,
+    error: hint !== undefined ? { code, message, hint } : { code, message },
+  };
+  return JSON.stringify(envelope, null, 2) + "\n";
 }
 
 /**

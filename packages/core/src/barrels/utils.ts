@@ -183,6 +183,12 @@ export {
   formatFixValue,
   formatAutoFixHint,
   regionLabel,
+  // Epic 92 Wave 2.c — JSON envelope helpers (A-02 / D-29 / D-30)
+  parsePlanJsonStream,
+  serializePlanEnvelope,
+  serializeErrorEnvelope,
+  type JsonErrorEnvelope,
+  type JsonSuccessEnvelope,
 } from "../utils/display-plan.js";
 export {
   formatFindings,

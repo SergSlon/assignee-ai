@@ -922,9 +922,15 @@ describe("Graph integration — new resource types", () => {
 
     const tools = createPricingMockTools(McpMocks.pricing.emptyData.success);
     const graph = createGraph(tools);
+    // Epic 92 wave 2.b (finding B-05): the vpc-networking keyword set
+    // was tightened so bare "Create a VPC" no longer auto-triggers
+    // the 17-resource NAT-bearing compound. The intent here is
+    // explicit about wanting the multi-subnet compound so it keeps
+    // matching vpc-networking.
     const result = await graph.invoke(
       {
-        userIntent: "Create a VPC with CIDR 10.0.0.0/16",
+        userIntent:
+          "Create a VPC with public and private subnets (CIDR 10.0.0.0/16)",
         executionMode: ExecutionMode.PLAN,
         noWizard: true,
       },

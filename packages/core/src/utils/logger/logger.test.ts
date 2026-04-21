@@ -27,6 +27,7 @@ import type { LogEvent } from "./index.js";
 
 describe("logger", () => {
   let stderrSpy: MockInstance;
+  let stdoutSpy: MockInstance;
   let tmpLogDir: string;
   const originalArgv = process.argv;
   const originalEnv = { ...process.env };
@@ -34,6 +35,11 @@ describe("logger", () => {
   beforeEach(async () => {
     stderrSpy = vi
       .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    // Epic 92 Wave 2.c (A-21 / B-14): spy stdout too so every test
+    // implicitly enforces the "log() never touches stdout" invariant.
+    stdoutSpy = vi
+      .spyOn(process.stdout, "write")
       .mockImplementation(() => true);
     tmpLogDir = await fs.mkdtemp(
       path.join(os.tmpdir(), "assignee-logger-test-"),
@@ -48,6 +54,7 @@ describe("logger", () => {
 
   afterEach(async () => {
     stderrSpy.mockRestore();
+    stdoutSpy.mockRestore();
     process.argv = originalArgv;
     process.env = { ...originalEnv };
     clearEnsuredDirCacheForTests();
@@ -874,5 +881,144 @@ describe("logger", () => {
     expect(LOG_ACTIONS.APPLY_SUCCEEDED).toBe("apply_succeeded");
     expect(LOG_ACTIONS.APPLY_FAILED).toBe("apply_failed");
     expect(LOG_ACTIONS.PLAN_REJECTED).toBe("plan_rejected_by_user");
+  });
+
+  // ── Epic 92 Wave 2.c (A-21 / B-14) ────────────────────────────────
+  // log() MUST write only to stderr + the rotating file. Under
+  // `assignee <cmd> --output json` stdout is reserved for a single
+  // parseable JSON envelope; a stray logger write to stdout would
+  // shred the stream. These regression tests lock the invariant by
+  // exercising every documented entry point (info/warn/error,
+  // verbose on/off, fallback path) and asserting the stdout spy
+  // is NEVER called. Matches the stderr discipline invariant
+  // documented at the top of persist.ts.
+  describe("invariant — log() never writes to stdout", () => {
+    it("error events with verbose off write stderr-only (file + no stdout)", async () => {
+      delete process.env["ASSIGNEE_VERBOSITY"];
+      delete process.env["ASSIGNEE_LOG_LEVEL"];
+
+      log({
+        ts: "2026-04-20T00:00:00.000Z",
+        runId: "550e8400-e29b-41d4-a716-446655441001",
+        level: "error",
+        action: LOG_ACTIONS.APPLY_FAILED,
+        extras: { awsAccountId: "210987654321" },
+      });
+
+      expect(stdoutSpy).not.toHaveBeenCalled();
+      // Persisted file path — no stderr either in non-verbose.
+      expect(stderrSpy).not.toHaveBeenCalled();
+    });
+
+    it("error events with verbose on write stderr + file, never stdout", async () => {
+      process.argv = [...originalArgv, "--verbose"];
+
+      log({
+        ts: "2026-04-20T00:00:00.000Z",
+        runId: "550e8400-e29b-41d4-a716-446655441002",
+        level: "error",
+        action: LOG_ACTIONS.APPLY_FAILED,
+      });
+
+      expect(stdoutSpy).not.toHaveBeenCalled();
+      expect(stderrSpy).toHaveBeenCalledOnce();
+    });
+
+    it("info events routed to stderr-only under --verbose, never stdout", () => {
+      process.argv = [...originalArgv, "--verbose"];
+
+      log({
+        ts: "2026-04-20T00:00:00.000Z",
+        runId: "550e8400-e29b-41d4-a716-446655441003",
+        level: "info",
+        action: LOG_ACTIONS.PLAN_STARTED,
+        extras: { intent: "Create an S3 bucket" },
+      });
+
+      expect(stdoutSpy).not.toHaveBeenCalled();
+      expect(stderrSpy).toHaveBeenCalledOnce();
+    });
+
+    it("warn events under --verbose route to stderr + file, never stdout", () => {
+      process.argv = [...originalArgv, "--verbose"];
+
+      log({
+        ts: "2026-04-20T00:00:00.000Z",
+        runId: "550e8400-e29b-41d4-a716-446655441004",
+        level: "warn",
+        action: LOG_ACTIONS.MEMORY_WRITE_FAILED,
+      });
+
+      expect(stdoutSpy).not.toHaveBeenCalled();
+      expect(stderrSpy).toHaveBeenCalledOnce();
+    });
+
+    it("persist-info allowlist (TOKEN_USAGE_SUMMARY) still never writes stdout", () => {
+      // Real-shaped payload copied from a live S3 apply on 2026-04-08.
+      delete process.env["ASSIGNEE_VERBOSITY"];
+      delete process.env["ASSIGNEE_LOG_LEVEL"];
+
+      log({
+        ts: "2026-04-08T07:29:32.019Z",
+        runId: "1c1b9ae0-6411-4eb5-aaa6-e8947c9fc4bf",
+        level: "info",
+        action: LOG_ACTIONS.TOKEN_USAGE_SUMMARY,
+        extras: {
+          totalCallCount: 3,
+          totalInputTokens: 2714,
+          totalOutputTokens: 311,
+          totalTokens: 3025,
+        },
+      });
+
+      expect(stdoutSpy).not.toHaveBeenCalled();
+    });
+
+    it("fallback path (log dir unwritable) writes to stderr, never stdout", () => {
+      const blockingFile = path.join(tmpLogDir, "blocker");
+      fsSync.writeFileSync(blockingFile, "not a directory");
+      process.env["ASSIGNEE_LOG_DIR"] = path.join(blockingFile, "nested");
+
+      log({
+        ts: "2026-04-20T00:00:00.000Z",
+        runId: "550e8400-e29b-41d4-a716-446655441005",
+        level: "error",
+        action: LOG_ACTIONS.APPLY_FAILED,
+      });
+
+      expect(stdoutSpy).not.toHaveBeenCalled();
+      expect(stderrSpy).toHaveBeenCalled();
+      const fallback = stderrSpy.mock.calls
+        .map((c) => String(c[0] ?? ""))
+        .some((s) => s.includes("persistentLogFallback"));
+      expect(fallback).toBe(true);
+    });
+
+    it("JSON output mode does not flip the stderr routing (both flags present)", () => {
+      // Simulate the exact argv pattern used by `assignee plan --output json ...`
+      // when --verbose is also set. The --output flag is NOT consumed by the
+      // logger; it is the CLI's stdout contract. logger MUST still honor
+      // stderr-only regardless of --output json.
+      process.argv = [
+        "/usr/local/bin/node",
+        "/usr/local/bin/assignee",
+        "--verbose",
+        "plan",
+        "--output",
+        "json",
+        "Create an S3 bucket",
+      ];
+
+      log({
+        ts: "2026-04-20T00:00:00.000Z",
+        runId: "550e8400-e29b-41d4-a716-446655441006",
+        level: "info",
+        action: LOG_ACTIONS.PLAN_STARTED,
+        extras: { intent: "Create an S3 bucket" },
+      });
+
+      expect(stdoutSpy).not.toHaveBeenCalled();
+      expect(stderrSpy).toHaveBeenCalledOnce();
+    });
   });
 });

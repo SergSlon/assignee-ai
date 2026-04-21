@@ -5,7 +5,21 @@
  * Wave-6d F4: decomposed into `plan/` sub-modules. This file is now a
  * thin Commander wrapper + `runCommand` bridge.
  *
+ * Epic 92 Wave 2.c (A-02 / B-04 / D-29): in `--output json` mode the
+ * formatter at `graph/nodes/result-formatter/formatters/plan.ts` writes
+ * one JSON object per resource (NDJSON). That formatter is owned by a
+ * different fix wave (4.a) and cannot be touched here. We therefore
+ * install a stdout interceptor at the CLI layer: every byte the
+ * formatter writes to stdout is buffered, then on command exit we
+ * aggregate via `serializePlanEnvelope` / `serializeErrorEnvelope`
+ * and write a SINGLE top-level JSON value (object with `plans` array
+ * for compound plans, or an `ok:false` envelope on error). The
+ * registry/help block that `renderError` would normally write to
+ * stderr is already stderr-routed; this layer adds the machine-
+ * readable envelope on stdout.
+ *
  * @see Story 1-6, Story 1-8, Story 9-6
+ * @see _bmad-output/implementation-artifacts/e92-2c-json-envelope.md
  */
 
 import { Command } from "commander";
@@ -21,10 +35,117 @@ import {
   PLAN_GENERATION_FAILED,
   EXAMPLE_S3_INTENT,
 } from "../config/constants.js";
+import {
+  parsePlanJsonStream,
+  serializePlanEnvelope,
+  serializeErrorEnvelope,
+} from "@assignee/core";
 import { resolveIntroContext, formatIntroContext } from "./init.js";
 import { resolvePlanArgs, type PlanOpts } from "./plan/arg-parser.js";
 import { renderDiscoveryBlock } from "./plan/discovery.js";
 import { runPlan } from "./plan/orchestrator.js";
+
+/**
+ * Buffering stdout interceptor used when `--output json` is active.
+ *
+ * Replaces `process.stdout.write` with a capture function so the
+ * formatter's per-resource `JSON.stringify(...)` calls land in memory
+ * rather than emitting NDJSON. On flush, the buffered text is parsed
+ * via `parsePlanJsonStream` and re-emitted as a single envelope.
+ *
+ * Side-effect-free for callers in text mode — `install` only hooks
+ * when `enabled` is true, and the restore callback always resets to
+ * the original `write`.
+ */
+function installJsonStdoutInterceptor(enabled: boolean): {
+  flushSuccess: () => void;
+  flushError: (code: string, message: string, hint?: string) => void;
+  restore: () => void;
+} {
+  if (!enabled) {
+    return {
+      flushSuccess: () => {},
+      flushError: () => {},
+      restore: () => {},
+    };
+  }
+  // Capture by reference (NOT `.bind(process.stdout)`) so `restore()`
+  // puts back the exact same function object the test harness spied
+  // on. A bound wrapper has a different identity and breaks
+  // spy-identity assertions in downstream tests.
+  const originalWrite = process.stdout.write;
+  let buffered = "";
+  // Replace stdout.write. We only capture strings / Buffers that look
+  // like JSON payloads; any other writes are let through verbatim so
+  // incidental noise (if any) remains observable during debugging.
+  // The formatter itself writes exactly `JSON.stringify(...) + "\n"`,
+  // which always starts with `{` — that's our capture condition.
+  process.stdout.write = ((
+    chunk: string | Uint8Array,
+    ...rest: unknown[]
+  ): boolean => {
+    const text =
+      typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    const trimmedStart = text.trimStart();
+    if (trimmedStart.startsWith("{")) {
+      buffered += text;
+      // Invoke the optional callback if one was provided so the caller's
+      // write-result contract is preserved.
+      const cb = rest.find((r) => typeof r === "function") as
+        | ((err?: Error | null) => void)
+        | undefined;
+      if (cb) cb();
+      return true;
+    }
+    return (
+      originalWrite as (this: NodeJS.WriteStream, ...args: unknown[]) => boolean
+    ).call(process.stdout, chunk, ...rest);
+  }) as typeof process.stdout.write;
+
+  const restore = (): void => {
+    process.stdout.write = originalWrite;
+  };
+
+  return {
+    flushSuccess: () => {
+      const payloads = parsePlanJsonStream(buffered);
+      restore();
+      if (payloads.length === 0) {
+        // No per-resource payloads were buffered — this happens when
+        // the plan failed BEFORE the formatter had a chance to write
+        // (e.g. UNSUPPORTED_RESOURCE exits early via renderError). The
+        // orchestrator returns `{ success: false }` in that case and
+        // runCommand returns normally without throwing, so our outer
+        // error-envelope path is not triggered. Emit a bare
+        // PLAN_FAILED envelope so consumers always see a parseable
+        // JSON value on stdout.
+        originalWrite.call(
+          process.stdout,
+          serializeErrorEnvelope(
+            "PLAN_FAILED",
+            "Plan generation did not produce any output.",
+            "See stderr for the human-readable error message, or run `assignee --verbose plan <intent>` to trace.",
+          ),
+        );
+        return;
+      }
+      originalWrite.call(process.stdout, serializePlanEnvelope(payloads));
+    },
+    flushError: (code, message, hint) => {
+      // On error the user may or may not have also produced plan
+      // payloads before the failure. The contract for machine readers
+      // is a SINGLE JSON value, so we discard any partial success
+      // buffer and emit only the error envelope.
+      buffered = "";
+      restore();
+      originalWrite.call(
+        process.stdout,
+        serializeErrorEnvelope(code, message, hint),
+      );
+    },
+    restore,
+  };
+}
 
 export const planCommand = new Command(CommandName.PLAN)
   .description(CommandDescription.PLAN)
@@ -71,20 +192,51 @@ export const planCommand = new Command(CommandName.PLAN)
       process.stderr.write(`assignee plan  [${formatIntroContext(ctx)}]\n`);
     }
 
-    await runCommand({
-      intent: intent!,
-      commandName: "plan",
-      startAction: LOG_ACTIONS.PLAN_STARTED,
-      endAction: LOG_ACTIONS.PLAN_COMPLETE,
-      errorPrefix: PLAN_GENERATION_FAILED,
-      errorHint:
-        "Check that AWS credentials are configured and Bedrock is accessible in your region.",
-      silent: outputFormat === "json",
-      run: async (ctx) =>
-        runPlan(ctx, {
-          ...resolved,
+    // Epic 92 Wave 2.c: wrap stdout in JSON mode so the per-resource
+    // payloads from the formatter land in an aggregator instead of
+    // streaming as NDJSON. See installJsonStdoutInterceptor.
+    const interceptor = installJsonStdoutInterceptor(outputFormat === "json");
+
+    try {
+      let runErrored: Error | null = null;
+      try {
+        await runCommand({
           intent: intent!,
-          opts: { advice: opts.advice, quick: opts.quick === true },
-        }),
-    });
+          commandName: "plan",
+          startAction: LOG_ACTIONS.PLAN_STARTED,
+          endAction: LOG_ACTIONS.PLAN_COMPLETE,
+          errorPrefix: PLAN_GENERATION_FAILED,
+          errorHint:
+            "Check that AWS credentials are configured and Bedrock is accessible in your region.",
+          silent: outputFormat === "json",
+          run: async (ctx) =>
+            runPlan(ctx, {
+              ...resolved,
+              intent: intent!,
+              opts: { advice: opts.advice, quick: opts.quick === true },
+            }),
+        });
+      } catch (err) {
+        runErrored = err instanceof Error ? err : new Error(String(err));
+      }
+
+      if (outputFormat === "json") {
+        if (runErrored) {
+          // Shape the envelope from the thrown error. The renderError
+          // block (WHY/FIX text + registry) already went to stderr; we
+          // only need the structured code/message/hint on stdout.
+          const code = (runErrored as { code?: string }).code ?? "PLAN_FAILED";
+          const hint =
+            (runErrored as { hint?: string }).hint ??
+            "Try rephrasing your intent, or run `assignee --verbose plan <intent>` to see the full node trace.";
+          interceptor.flushError(code, runErrored.message, hint);
+        } else {
+          interceptor.flushSuccess();
+        }
+      }
+
+      if (runErrored) throw runErrored;
+    } finally {
+      interceptor.restore();
+    }
   });

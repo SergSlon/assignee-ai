@@ -1,6 +1,16 @@
 /**
  * Intent rules for data-oriented services:
  * DynamoDB, SQS, SecretsManager, SSM Parameter.
+ *
+ * Epic 92 wave 2 contract: each rule below is an UNCONDITIONAL default —
+ * fired on keyword match, regardless of user assertions. When the user
+ * explicitly asserts a value (e.g. DynamoDB TableName via "called X",
+ * SNS::Subscription Protocol via http:// endpoint scheme), the
+ * intent-parser writes that assertion to `presetFields` (NEVER_ASK
+ * policy) so the option-elicitor's `applyPresetFields` path wins over
+ * any override this file emits. Rules here do NOT need to be
+ * assertion-aware — the preservation guarantee lives in the parser
+ * + elicitor pipeline.
  */
 
 import { CfnKey } from "../../config/cfn-keys.js";

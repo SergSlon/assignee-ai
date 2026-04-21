@@ -2022,3 +2022,260 @@ describe("collectPluginPlaceholders (Wave 15)", () => {
     expect(placeholders.size).toBe(0);
   });
 });
+
+// ── Epic 92 Wave 2.d — post-LLM plan-time validators ────────────────────────
+//
+// These integration tests drive the validator through the full node path
+// (makeState → LLM mock → runLlmPlan → sanitize → post-process → validator).
+// The Wave 1 sanitizer auto-fixes the common A-16 shape, so to prove the
+// belt-and-braces validator fires we use desiredState shapes the sanitizer
+// doesn't cover (e.g. schema missing AttributeDefinitions so it is stripped,
+// or LSI KeySchema referencing an attribute type-mismatched by intent).
+
+describe("planGeneratorNode — Epic 92 Wave 2.d validators", () => {
+  it("passes DDB plan validation when sanitizer auto-fills AttributeDefinitions", async () => {
+    // Real-world F-A-16 repro: LLM emits KeySchema referencing an attr not
+    // in AttributeDefinitions. The Wave 1 sanitizer auto-synthesises the
+    // missing definition, so the validator passes silently and plan generation
+    // succeeds — proving the belt-and-braces layering (sanitizer fixes;
+    // validator stays quiet).
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({
+        TableName: "payments-prod",
+        KeySchema: [{ AttributeName: "hashKey", KeyType: "HASH" }],
+        AttributeDefinitions: [{ AttributeName: "Id", AttributeType: "S" }],
+        BillingMode: "PAY_PER_REQUEST",
+      }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(
+      makeState({
+        resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
+        userIntent: "Create a DynamoDB table with hashKey primary key",
+        resourceSchema: {
+          properties: {
+            TableName: { type: "string" },
+            KeySchema: { type: "array" },
+            AttributeDefinitions: { type: "array" },
+            BillingMode: { type: "string" },
+            GlobalSecondaryIndexes: { type: "array" },
+            LocalSecondaryIndexes: { type: "array" },
+          },
+          required: ["KeySchema", "AttributeDefinitions"],
+        },
+      }),
+    );
+    // Sanitizer auto-filled the missing AttributeDefinition → validator passes.
+    expect(result.executionStatus).toBeUndefined();
+    const defs = (result.desiredState as Record<string, unknown>)[
+      "AttributeDefinitions"
+    ] as Array<Record<string, unknown>>;
+    expect(defs.map((d) => d["AttributeName"])).toContain("hashKey");
+  });
+
+  it("passes DDB plan validation for a composite-key table with matching AttributeDefinitions", async () => {
+    // Clean LLM output: KeySchema names all present in AttributeDefinitions.
+    // Sanitizer's DDB rule runs but has nothing to fix; validator stays quiet.
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({
+        TableName: "events",
+        KeySchema: [
+          { AttributeName: "userId", KeyType: "HASH" },
+          { AttributeName: "eventId", KeyType: "RANGE" },
+        ],
+        AttributeDefinitions: [
+          { AttributeName: "userId", AttributeType: "S" },
+          { AttributeName: "eventId", AttributeType: "S" },
+        ],
+        BillingMode: "PAY_PER_REQUEST",
+      }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(
+      makeState({
+        resourceType: RESOURCE_TYPES.DYNAMODB_TABLE,
+        userIntent: "Create a DynamoDB table with composite key",
+        resourceSchema: {
+          properties: {
+            TableName: { type: "string" },
+            KeySchema: { type: "array" },
+            AttributeDefinitions: { type: "array" },
+            BillingMode: { type: "string" },
+          },
+          required: ["KeySchema", "AttributeDefinitions"],
+        },
+      }),
+    );
+    // Clean shape — both layers happy.
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.errorMessage).toBeUndefined();
+  });
+
+  it("passes CloudFront plan validation when Origin has only one config", async () => {
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({
+        DistributionConfig: {
+          Enabled: true,
+          DefaultCacheBehavior: {
+            TargetOriginId: "s3-origin",
+            ViewerProtocolPolicy: "redirect-to-https",
+          },
+          Origins: {
+            Items: [
+              {
+                Id: "s3-origin",
+                DomainName: "static-site.s3.us-east-1.amazonaws.com",
+                S3OriginConfig: { OriginAccessIdentity: "" },
+              },
+            ],
+            Quantity: 1,
+          },
+        },
+      }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(
+      makeState({
+        resourceType: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
+        userIntent: "Create a CloudFront distribution for static-site S3",
+        resourceSchema: {
+          properties: { DistributionConfig: { type: "object" } },
+          required: ["DistributionConfig"],
+        },
+      }),
+    );
+    expect(result.executionStatus).toBeUndefined();
+    expect(result.errorMessage).toBeUndefined();
+  });
+
+  it("resolves CloudFront dual-origin via sanitizer disambiguation (no validator fail)", async () => {
+    // LLM emits BOTH S3OriginConfig and CustomOriginConfig with an S3-shaped
+    // DomainName. The Wave 1 sanitizer's CloudFront rule disambiguates by
+    // dropping CustomOriginConfig (because DomainName matches the S3 regex).
+    // The validator then passes — proving sanitizer is the primary layer.
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({
+        DistributionConfig: {
+          Enabled: true,
+          DefaultCacheBehavior: {
+            TargetOriginId: "dual-origin",
+            ViewerProtocolPolicy: "redirect-to-https",
+          },
+          Origins: {
+            Items: [
+              {
+                Id: "dual-origin",
+                DomainName: "mixed-bucket.s3.us-east-1.amazonaws.com",
+                S3OriginConfig: { OriginAccessIdentity: "" },
+                CustomOriginConfig: {
+                  HTTPPort: 80,
+                  HTTPSPort: 443,
+                  OriginProtocolPolicy: "https-only",
+                },
+              },
+            ],
+            Quantity: 1,
+          },
+        },
+      }),
+    );
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    const result = await node(
+      makeState({
+        resourceType: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
+        userIntent: "Create a CloudFront distribution",
+        resourceSchema: {
+          properties: { DistributionConfig: { type: "object" } },
+          required: ["DistributionConfig"],
+        },
+      }),
+    );
+    // Sanitizer disambiguated → validator passes.
+    expect(result.executionStatus).toBeUndefined();
+    const origins = (
+      (result.desiredState as Record<string, unknown>)[
+        "DistributionConfig"
+      ] as Record<string, unknown>
+    )["Origins"];
+    const firstItem = (origins as Record<string, unknown>)["Items"] as Array<
+      Record<string, unknown>
+    >;
+    // CustomOriginConfig was dropped because DomainName looks like S3.
+    expect(firstItem[0]).toHaveProperty("S3OriginConfig");
+    expect(firstItem[0]).not.toHaveProperty("CustomOriginConfig");
+  });
+
+  it("emits resource-type-specific placeholder examples in rule 7 (SNS does not include Lambda ARN)", async () => {
+    let capturedPrompt = "";
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({ TopicName: "order-events" }),
+    );
+    const originalGenerateText = mock.generateText.bind(mock);
+    mock.generateText = async (prompt: string) => {
+      capturedPrompt = prompt;
+      return originalGenerateText(prompt);
+    };
+
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    await node(
+      makeState({
+        resourceType: RESOURCE_TYPES.SNS_TOPIC,
+        userIntent: "Create an SNS topic for order events",
+        resourceSchema: {
+          properties: {
+            TopicName: { type: "string" },
+            DisplayName: { type: "string" },
+          },
+          required: ["TopicName"],
+        },
+      }),
+    );
+
+    // Rule 7 must not leak the Lambda IAM role ARN example into an SNS prompt.
+    expect(capturedPrompt).not.toContain(
+      "arn:aws:iam::123456789012:role/my-role",
+    );
+    expect(capturedPrompt).toContain("my-topic");
+  });
+
+  it("includes Lambda-specific placeholder examples in rule 7 for Lambda resource type", async () => {
+    let capturedPrompt = "";
+    const mock = new MockLlmAdapter(
+      undefined,
+      JSON.stringify({
+        FunctionName: "my-fn",
+        Runtime: "nodejs22.x",
+        Handler: "index.handler",
+      }),
+    );
+    const originalGenerateText = mock.generateText.bind(mock);
+    mock.generateText = async (prompt: string) => {
+      capturedPrompt = prompt;
+      return originalGenerateText(prompt);
+    };
+
+    const node = createPlanGeneratorNode({ llmClient: mock });
+    await node(
+      makeState({
+        resourceType: RESOURCE_TYPES.LAMBDA_FUNCTION,
+        userIntent: "Create a Lambda function",
+        resourceSchema: {
+          properties: {
+            FunctionName: { type: "string" },
+            Runtime: { type: "string" },
+            Handler: { type: "string" },
+            Role: { type: "string" },
+          },
+          required: ["FunctionName", "Runtime", "Handler", "Role"],
+        },
+      }),
+    );
+
+    expect(capturedPrompt).toContain("arn:aws:iam::123456789012:role/my-role");
+  });
+});
