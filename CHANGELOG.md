@@ -12,6 +12,45 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 92 — Wave 1 (2026-04-21)
+
+Context: after Epic 88 shipped on a dogfood-surfaced-bugs cycle, the user flagged that every time they tried the CLI themselves they hit fresh bugs. Epic 92 is a **proactive** dogfood sweep across every user-visible command and every supported resource type, with all 118 collected findings planned into disjoint fix waves.
+
+Dogfood phase: 4 parallel reconnaissance agents, disjoint resource slices, `--no-apply` plan surveys plus selective cheap-resource apply-destroy round-trips. Outcome: 116 findings across slices A-D, 2 additional found by the synthesizer (118 total). 16 BLOCKER, 34 HIGH, 41 MED, 21 LOW, 5 INFO. Clustered into 11 root-cause groups. 93 findings earmarked for fix this epic, 25 deferred with explicit target-epic rationale. Zero BLOCKER deferrals.
+
+Wave 1 (this commit) closes 31 findings across 5 disjoint-file stories:
+
+#### Fixed — CCAPI-shape sanitizer hardening (story e92.1.a)
+
+Closes A-01, A-09, A-16, C-03, C-04, C-15. `desired-state-sanitizer.ts` gains four resource-specific rules: DynamoDB strips `ProvisionedThroughput` when `BillingMode=PAY_PER_REQUEST` (apply no longer 100% fails on named DDB tables); ECS `ClusterSettings` items coerced to `{Name,Value}`; CloudFront origin strips whichever of `S3OriginConfig`/`CustomOriginConfig` is absent-meaningful; CloudFront `Origins`/`CacheBehaviors`/`CustomErrorResponses` canonicalised to `{Items,Quantity}`. DDB plugin adds `AttributeDefinitions` parity configHint matching every `KeySchema.AttributeName`. 37 new tests use real CCAPI-shape fixtures (no synthetic mocks) per `feedback_real_data_mocks_all_cases`. Follow-up flagged: the sanitizer hookup in `plan-generator/llm-plan/sanitize.ts` needs to thread `state.resourceType` through so the new rules fire at plan time — configHints help the LLM avoid the bad shapes today, but the runtime safety net is dormant until the hookup lands (tracked as `e92.1.a-followup`).
+
+#### Fixed — ARN-builder + destroy truth (story e92.1.b)
+
+Closes B-03, D-19, D-20, D-21, D-22, D-25. `resolve-arn.ts` gains local ARN synthesis for KMS (`key/<uuid>`) and EventBus (`event-bus/<name>`); SecurityGroup `sg-<id>` synthesis was already present and gets regression pins. `assignee destroy` for KMS gains `--pending-window-in-days <7..30>` (default 7); Secrets Manager gains `--recovery-window-in-days <7..30>` and `--force-delete-without-recovery`. UX lies replaced: destroys that schedule (not delete) now render `"Scheduled for deletion on <date>"` instead of `"Resource destroyed"`. EventBus destroy routes to `DeleteEventBus` by name via direct SDK call, bypassing the upstream `arn-type-map.ts` misclassification that maps every Events ARN to `AWS::Events::Rule`. 31 new tests (incl. 5 `RUN_E2E=1`-gated round-trip regressions: apply → capture ARN → destroy). SDK deps `@aws-sdk/client-kms`, `client-secrets-manager`, `client-eventbridge` added to `apps/cli/package.json` for the bypass. Follow-up flagged: `arn-type-map.ts` `SERVICE_TYPE_MAP["events"]` still misclassifies EventBus; `assignee list` shows the wrong type (tracked as `e92.1.b-followup`).
+
+#### Fixed — placeholder-ARN preflight expansion (story e92.1.c)
+
+Closes B-06, B-08 (EC2-ID half), B-10, C-01, C-02, C-14. `stripPlaceholderArns` rewritten to walk recursively — scalar ARN fields (`PerformanceInsightsKMSKeyId`, `DomainAuthSecretArn`) are now stripped, closing the "RDS Postgres default plan fails on LLM-emitted placeholder ARN" BLOCKER. New preflight guard `placeholder-resource-id.ts` detects hallucinated EC2 IDs (`vpc-0abc1234def567890`, `rtb-12345678`, `subnet-abc12345`, etc.) on cross-resource reference fields. New `vpc-existence.ts` guard calls `ec2:DescribeVpcs` (via injected factory so tests don't reach real AWS) before any VPC-referencing resource; plan fails fast if VPC absent. Both guards wired into `registry.ts`. `plan-generator.test.ts:1875` had codified the PRE-Epic-92 broken contract (asserted scalars SURVIVED stripping — exactly the bug); assertion flipped to the correct post-fix behaviour. Partition-aware regex preserved per `feedback_partition_aware_arn_matching`. 64+ new tests across the three guard files.
+
+#### Fixed — checkpoint resume (story e92.1.d — closes Epic 89)
+
+Closes C-05. `PlanCheckpointSchema` gains two additive fields: `currentResourceIndex: number` (default 0) and `completedResources: Array<{resourceArn, type}>` (default []). Serializer stores the fully-elicited `desiredState` per queue entry (was hardcoded to `{}`). Loader backwards-compatible: pre-Epic-92 checkpoints load with the defaults, do NOT throw. 47 new tests across schema / serializer / loader. 3 real preserved checkpoints (serverless-api, EC2 baseline, scheduled-lambda) moved to `test-fixtures/checkpoints/` with account IDs redacted to `<ACCOUNT_ID>`. Follow-up flagged: downstream wiring in `apps/cli/src/commands/apply/checkpoint-state.ts` and `apps/mcp-server/src/tools/apply-plan/handler-steps.ts` still needs to propagate the new fields into graph initial state so resume actually re-enters at the saved index (tracked as `e92.1.d-followup`). Schema changes are the foundation; the full Epic 89 closure needs that wiring.
+
+#### Fixed — advisory-price gating + ALB decomposer (story e92.1.e)
+
+Closes A-05, B-08 (ALB-price half), B-19, C-08, C-21, D-17. `AdvisoryPriceId.ALB_MONTHLY` (and every other advisory-price fetch) now gated on resource-type relevance — S3/Lambda/DDB/SNS/SQS/EC2/Logs/IAM/SSM/EventBridge/SNS-sub plans no longer trigger ALB price fetch (the "alb-monthly pricing_unavailable" warning that fired on every plan). Only 7 of 37 resource types (ELBV2, NAT, CloudWatch Alarm, CW Logs, EFS, EventBridge Rule, CloudFront) actually need advisory prices. `elbv2.ts` pricing-decomposer filter repaired with `usagetype=LoadBalancerUsage` / `LCUUsage` alongside the `productFamily` match — ALB monthly resolves to ~$16.43/mo against the real pricing-MCP response fixture. Hardcoded `"$16/mo (estimated)"` advice strings deleted; live fetch failure now emits `"cost unavailable"` not a fake number. Per `feedback_no_hardcoded_prices`: zero hardcoded-dollar hits remain in production code (15 remaining matches are all in JSDoc/code comments describing display format). 64 new tests (47 gating + 17 advice-generator).
+
+#### Test totals (this commit)
+
+Baseline 7893 → 8111 passing (+218), 63 skipped (`RUN_E2E=1`-gated round-trips):
+
+- `packages/core`: 5512 → 5711 (+199, 226 test files)
+- `packages/best-practices`: 614 unchanged
+- `apps/mcp-server`: 619 unchanged
+- `apps/cli`: 1148 → 1167 (+19) plus 5 new gated e2e
+
+Full gate run (`pnpm lint / check-types / lint:barrels / lint:shims / doc-lint / citation-lint / audit --prod / build / -r test:coverage`) green at commit time. No hardcoded prices (`feedback_no_hardcoded_prices`). No real 12-digit AWS account IDs in tracked tree (`feedback_no_real_account_ids_in_repo`). Tests not weakened (`feedback_never_weaken_tests`).
+
 ### Epic 88 — iteration 3 (2026-04-20)
 
 #### Reverted

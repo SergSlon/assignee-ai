@@ -131,6 +131,55 @@ vi.mock("@aws-sdk/client-sns", () => {
   };
 });
 
+// ── Epic 92 Wave 1 (e92.1.b): mock the three direct-SDK clients the
+//    new special-path handlers call (KMS, Secrets, EventBridge).
+//    Each client stores a `send` stub so tests can control response
+//    shape and assert on the command arguments.
+const mockKmsSend = vi.fn();
+vi.mock("@aws-sdk/client-kms", () => {
+  class MockKMSClient {
+    send = mockKmsSend;
+    destroy = vi.fn();
+  }
+  return {
+    KMSClient: MockKMSClient,
+    ScheduleKeyDeletionCommand: vi.fn((input: unknown) => ({
+      _type: "ScheduleKeyDeletion",
+      input,
+    })),
+  };
+});
+
+const mockSecretsSend = vi.fn();
+vi.mock("@aws-sdk/client-secrets-manager", () => {
+  class MockSecretsManagerClient {
+    send = mockSecretsSend;
+    destroy = vi.fn();
+  }
+  return {
+    SecretsManagerClient: MockSecretsManagerClient,
+    DeleteSecretCommand: vi.fn((input: unknown) => ({
+      _type: "DeleteSecret",
+      input,
+    })),
+  };
+});
+
+const mockEventBridgeSend = vi.fn();
+vi.mock("@aws-sdk/client-eventbridge", () => {
+  class MockEventBridgeClient {
+    send = mockEventBridgeSend;
+    destroy = vi.fn();
+  }
+  return {
+    EventBridgeClient: MockEventBridgeClient,
+    DeleteEventBusCommand: vi.fn((input: unknown) => ({
+      _type: "DeleteEventBus",
+      input,
+    })),
+  };
+});
+
 // ── Mock modules ────────────────────────────────────────────────────────────
 vi.mock("../services/resource-resolver.js", () => ({
   resolveResource: (...args: unknown[]) => mockResolveResource(...args),
@@ -680,5 +729,243 @@ describe("resourceConfirmationToken — edge cases (P2-R2-5)", () => {
   it("handles ARN-only input (no identifier) by using ARN tail", async () => {
     const fn = await load();
     expect(fn({ arn: "arn:aws:iam::111111111111:role/MyRole" })).toBe("MyRole");
+  });
+});
+
+// ─── Epic 92 Wave 1 (e92.1.b) — CCAPI-bypass destroy paths ────────────────
+//
+// These tests cover the four findings that `destroy.ts` now handles
+// inline with the direct AWS SDK instead of going through
+// `destroy-service.ts` + CCAPI:
+//
+//   - D-21 — KMS destroy prints "Scheduled for deletion on <date>"
+//            and honours `--pending-window-in-days`
+//   - D-22 — KMS resolved identifier synthesizes a real ARN
+//   - D-19/D-20 — EventBus destroy routes to DeleteEventBus by name
+//   - D-25 — Secret destroy prints scheduled message or, with
+//            `--force-delete-without-recovery`, prints destroyed
+//
+// All four share the same confirmation/resolution scaffolding as the
+// S3 happy path above. The assertions focus on which AWS SDK command
+// shape is sent and which renderer string is emitted.
+describe("Epic 92 Wave 1 — destroy scheduled-deletion paths", () => {
+  const kmsResource = {
+    arn: "arn:aws:kms:us-east-1:210987654321:key/ba48550a-3f14-446e-8f0c-1473f345c62d",
+    resourceType: "AWS::KMS::Key",
+    region: "us-east-1",
+    tags: { "managed-by": "assignee-ai" },
+    identifier: "ba48550a-3f14-446e-8f0c-1473f345c62d",
+  };
+  const secretResource = {
+    arn: "arn:aws:secretsmanager:us-east-1:210987654321:secret:my-app/prod/db-password-AbCdEf",
+    resourceType: "AWS::SecretsManager::Secret",
+    region: "us-east-1",
+    tags: { "managed-by": "assignee-ai" },
+    identifier: "my-app/prod/db-password",
+  };
+  // D-19 reproduction: real-world EventBus ARN where resource-resolver
+  // mis-classifies as AWS::Events::Rule via SERVICE_TYPE_MAP. Our
+  // inline dispatch must detect the `event-bus/` segment and route to
+  // DeleteEventBus regardless of the classifier output.
+  const eventBusResource = {
+    arn: "arn:aws:events:us-east-1:210987654321:event-bus/e92d-bus-1776801116",
+    resourceType: "AWS::Events::Rule", // INTENTIONALLY the wrong class
+    region: "us-east-1",
+    tags: { "managed-by": "assignee-ai" },
+    identifier: "e92d-bus-1776801116",
+  };
+
+  it("KMS destroy with --pending-window-in-days 7 → ScheduleKeyDeletion(7)", async () => {
+    mockResolveResource.mockResolvedValue(kmsResource);
+    // Simulate a realistic AWS response: DeletionDate set to 7 days out.
+    const deletionDate = new Date("2026-04-27T00:00:00Z");
+    mockKmsSend.mockResolvedValue({ DeletionDate: deletionDate });
+
+    await destroyAction(kmsResource.arn, {
+      yes: true,
+      pendingWindowInDays: "7",
+    });
+
+    // Exactly one ScheduleKeyDeletion command with the 7-day window.
+    expect(mockKmsSend).toHaveBeenCalledTimes(1);
+    const command = mockKmsSend.mock.calls[0]![0] as {
+      _type: string;
+      input: { KeyId: string; PendingWindowInDays: number };
+    };
+    expect(command._type).toBe("ScheduleKeyDeletion");
+    expect(command.input.PendingWindowInDays).toBe(7);
+    expect(command.input.KeyId).toBe(kmsResource.identifier);
+    // Scheduled-deletion phrasing; NOT "Resource destroyed".
+    expect(stdoutOutput).toContain("Scheduled for deletion on 2026-04-27");
+    expect(stdoutOutput).not.toContain("Resource destroyed");
+  });
+
+  it("KMS destroy without --pending-window-in-days uses the 7-day default", async () => {
+    // D-21 default rationale: 7 (minimum) beats 30 (AWS default) because
+    // cost exposure during the window is real.
+    mockResolveResource.mockResolvedValue(kmsResource);
+    mockKmsSend.mockResolvedValue({
+      DeletionDate: new Date("2026-04-27T00:00:00Z"),
+    });
+
+    await destroyAction(kmsResource.arn, { yes: true });
+
+    expect(mockKmsSend).toHaveBeenCalledTimes(1);
+    const command = mockKmsSend.mock.calls[0]![0] as {
+      input: { PendingWindowInDays: number };
+    };
+    expect(command.input.PendingWindowInDays).toBe(7);
+  });
+
+  it("KMS destroy rejects --pending-window-in-days 6 (below minimum)", async () => {
+    await expect(
+      destroyAction(kmsResource.arn, { yes: true, pendingWindowInDays: "6" }),
+    ).rejects.toThrow(/between 7 and 30/);
+    // Zero AWS traffic for the rejected call.
+    expect(mockKmsSend).not.toHaveBeenCalled();
+  });
+
+  it("KMS destroy rejects --pending-window-in-days 31 (above maximum)", async () => {
+    await expect(
+      destroyAction(kmsResource.arn, { yes: true, pendingWindowInDays: "31" }),
+    ).rejects.toThrow(/between 7 and 30/);
+    expect(mockKmsSend).not.toHaveBeenCalled();
+  });
+
+  it("KMS destroy rejects non-integer --pending-window-in-days", async () => {
+    await expect(
+      destroyAction(kmsResource.arn, {
+        yes: true,
+        pendingWindowInDays: "14.5",
+      }),
+    ).rejects.toThrow(/between 7 and 30/);
+  });
+
+  it("Secret destroy with --recovery-window-in-days 7 → DeleteSecret(RecoveryWindow=7)", async () => {
+    mockResolveResource.mockResolvedValue(secretResource);
+    mockSecretsSend.mockResolvedValue({
+      DeletionDate: new Date("2026-04-27T00:00:00Z"),
+    });
+
+    await destroyAction(secretResource.arn, {
+      yes: true,
+      recoveryWindowInDays: "7",
+    });
+
+    expect(mockSecretsSend).toHaveBeenCalledTimes(1);
+    const command = mockSecretsSend.mock.calls[0]![0] as {
+      _type: string;
+      input: {
+        SecretId: string;
+        RecoveryWindowInDays?: number;
+        ForceDeleteWithoutRecovery?: boolean;
+      };
+    };
+    expect(command._type).toBe("DeleteSecret");
+    expect(command.input.RecoveryWindowInDays).toBe(7);
+    expect(command.input.ForceDeleteWithoutRecovery).toBeUndefined();
+    expect(stdoutOutput).toContain("Scheduled for deletion on 2026-04-27");
+    expect(stdoutOutput).not.toContain("Resource destroyed");
+  });
+
+  it("Secret destroy with --force-delete-without-recovery → DeleteSecret(Force=true)", async () => {
+    mockResolveResource.mockResolvedValue(secretResource);
+    mockSecretsSend.mockResolvedValue({});
+
+    await destroyAction(secretResource.arn, {
+      yes: true,
+      forceDeleteWithoutRecovery: true,
+    });
+
+    expect(mockSecretsSend).toHaveBeenCalledTimes(1);
+    const command = mockSecretsSend.mock.calls[0]![0] as {
+      input: {
+        ForceDeleteWithoutRecovery?: boolean;
+        RecoveryWindowInDays?: number;
+      };
+    };
+    expect(command.input.ForceDeleteWithoutRecovery).toBe(true);
+    expect(command.input.RecoveryWindowInDays).toBeUndefined();
+    // Force-delete IS genuinely destroyed, so the line is the plain one.
+    expect(stdoutOutput).toContain("Resource destroyed");
+  });
+
+  it("Secret destroy rejects combining --recovery-window-in-days and --force-delete-without-recovery", async () => {
+    await expect(
+      destroyAction(secretResource.arn, {
+        yes: true,
+        recoveryWindowInDays: "14",
+        forceDeleteWithoutRecovery: true,
+      }),
+    ).rejects.toThrow(/cannot be combined/);
+    expect(mockSecretsSend).not.toHaveBeenCalled();
+  });
+
+  it("Secret destroy without flags uses default 7-day recovery window", async () => {
+    mockResolveResource.mockResolvedValue(secretResource);
+    mockSecretsSend.mockResolvedValue({
+      DeletionDate: new Date("2026-04-27T00:00:00Z"),
+    });
+
+    await destroyAction(secretResource.arn, { yes: true });
+
+    const command = mockSecretsSend.mock.calls[0]![0] as {
+      input: { RecoveryWindowInDays?: number };
+    };
+    expect(command.input.RecoveryWindowInDays).toBe(7);
+  });
+
+  it("EventBus destroy routes to DeleteEventBus by name (D-19)", async () => {
+    // Regression: resource-resolver may classify the EventBus ARN as
+    // AWS::Events::Rule (wrong) — our inline dispatch must detect the
+    // `event-bus/` segment of the ARN and call DeleteEventBus anyway.
+    mockResolveResource.mockResolvedValue(eventBusResource);
+    mockEventBridgeSend.mockResolvedValue({});
+
+    await destroyAction(eventBusResource.arn, { yes: true });
+
+    expect(mockEventBridgeSend).toHaveBeenCalledTimes(1);
+    const command = mockEventBridgeSend.mock.calls[0]![0] as {
+      _type: string;
+      input: { Name: string };
+    };
+    expect(command._type).toBe("DeleteEventBus");
+    expect(command.input.Name).toBe("e92d-bus-1776801116");
+    expect(stdoutOutput).toContain("Resource destroyed");
+  });
+
+  it("KMS flag passed against a non-KMS resource → actionable error", async () => {
+    // Guard against silently ignoring user-specified flags on mismatched
+    // types. Story invariant: flags must refuse to apply to the wrong
+    // resource class.
+    mockResolveResource.mockResolvedValue(mockResource);
+
+    await expect(
+      destroyAction("arn:aws:kms:us-east-1:210987654321:key/uuid", {
+        yes: true,
+        pendingWindowInDays: "10",
+      }),
+    ).rejects.toThrow(/only applies to AWS::KMS::Key/);
+  });
+
+  it("non-scheduled resource destroy (S3) is unaffected — still says 'Resource destroyed'", async () => {
+    // Invariant from the story: non-scheduled types keep the original
+    // line. This is the regression-guard.
+    mockResolveResource.mockResolvedValue(mockResource);
+    mockDestroySingleResource.mockResolvedValue({
+      success: true,
+      resourceType: "AWS::S3::Bucket",
+      identifier: "test-bucket",
+      arn: "arn:aws:s3:::test-bucket",
+    });
+
+    await destroyAction("test-bucket", { yes: true });
+
+    expect(stdoutOutput).toContain("Resource destroyed");
+    expect(stdoutOutput).not.toContain("Scheduled for deletion on");
+    // Special-path SDKs must NOT be touched for S3.
+    expect(mockKmsSend).not.toHaveBeenCalled();
+    expect(mockSecretsSend).not.toHaveBeenCalled();
+    expect(mockEventBridgeSend).not.toHaveBeenCalled();
   });
 });

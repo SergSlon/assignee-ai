@@ -1872,14 +1872,27 @@ describe("stripPlaceholderArns", () => {
     expect(ds["SecurityGroupIds"]).toEqual(["sg-12345678", "sg-abcdef01"]);
   });
 
-  it("does not affect scalar ARN fields (preflight-guard handles those)", () => {
+  it("strips scalar ARN fields recursively (Epic 92 C-01/C-02)", () => {
+    // Epic 92 Wave 1 (e92.1.c) extended stripPlaceholderArns to walk
+    // scalar string fields as well as top-level arrays. This closes
+    // the RDS Postgres first-attempt failure where LLM-emitted
+    // `PerformanceInsightsKMSKeyId: arn:aws:kms:...:key/xxx-…` slipped
+    // past the pre-Epic-92 array-only walker and hard-failed preflight.
+    //
+    // Prior behaviour (pre-Epic 92): scalar placeholders survived the
+    // stripper and relied on preflight-guard as the sole backstop —
+    // but that backstop emits a hard error, surfacing the LLM's
+    // hallucination as an operator-facing failure. The new stripper
+    // silently drops LLM emissions first; the guard catches only the
+    // user-supplied residue that survives (far narrower surface).
     const ds: Record<string, unknown> = {
       Role: "arn:aws:iam::123456789012:role/my-role",
       AlarmName: "cpu-alarm",
     };
     stripPlaceholderArns(ds);
-    // Scalar ARN is NOT stripped — preflight-guard catches it
-    expect(ds["Role"]).toBe("arn:aws:iam::123456789012:role/my-role");
+    expect(ds["Role"]).toBeUndefined();
+    // Non-ARN fields are preserved unchanged.
+    expect(ds["AlarmName"]).toBe("cpu-alarm");
   });
 
   it("handles OKActions and InsufficientDataActions the same way", () => {

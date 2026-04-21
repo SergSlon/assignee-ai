@@ -1,0 +1,41 @@
+{
+  "checkpoint_version": "1",
+  "created_at": "2026-04-21T19:48:29.593Z",
+  "ttl_hours": 72,
+  "runId": "4b338078-1d6b-43ae-9315-c616371dcb5c",
+  "userIntent": "Create an EC2 t3.micro instance for a web server",
+  "resourceType": "AWS::EC2::Instance",
+  "desiredState": {
+    "InstanceType": "t3.small",
+    "ImageId": "ami-098e39bafa7e7303d",
+    "KeyName": "assignee-ssh-key",
+    "DisableApiTermination": true,
+    "MetadataOptions": {
+      "HttpTokens": "required"
+    },
+    "BlockDeviceMappings": [
+      {
+        "DeviceName": "/dev/xvda",
+        "Ebs": {
+          "VolumeType": "gp3",
+          "VolumeSize": 8,
+          "Encrypted": true
+        }
+      }
+    ],
+    "EbsOptimized": true
+  },
+  "estimatedMonthlyCost": "$0.0208/hour",
+  "preflightPassed": true,
+  "elicitedOptions": {
+    "InstanceType": "t3.small",
+    "ImageId": "amazon-linux-2023",
+    "EbsVolumeType": "gp3",
+    "EbsVolumeSize": "8",
+    "EbsEncrypted": true,
+    "Monitoring": false,
+    "AssociatePublicIpAddress": false,
+    "DisableApiTermination": true,
+    "EbsOptimized": true
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "checkpoint_version": "1",
+  "created_at": "2026-04-21T19:54:35.834Z",
+  "ttl_hours": 72,
+  "runId": "ae5a006f-e4d9-4819-8788-c35b5dab3723",
+  "userIntent": "Create a serverless API with Lambda and API Gateway",
+  "resourceType": "AWS::Logs::LogGroup",
+  "resourcePatternId": "serverless-api",
+  "resourceQueue": [
+    {
+      "resourceId": "iam-execution-role",
+      "resourceType": "AWS::IAM::Role",
+      "displayName": "Lambda Execution Role",
+      "desiredState": {
+        "RoleName": "assignee-iam-execution-role-ae5a006f",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Service": "lambda.amazonaws.com" },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        ]
+      }
+    },
+    {
+      "resourceId": "lambda-fn",
+      "resourceType": "AWS::Lambda::Function",
+      "displayName": "Lambda Function",
+      "desiredState": {
+        "FunctionName": "assignee-lambda-fn-ae5a006f",
+        "Runtime": "nodejs22.x",
+        "Handler": "index.handler",
+        "MemorySize": 512,
+        "Timeout": 30,
+        "Architectures": ["arm64"],
+        "Code": {
+          "ZipFile": "exports.handler = async (event) => ({ statusCode: 200, body: 'placeholder' });"
+        }
+      }
+    },
+    {
+      "resourceId": "access-log-group",
+      "resourceType": "AWS::Logs::LogGroup",
+      "displayName": "API Gateway Access LogGroup",
+      "desiredState": {
+        "LogGroupName": "/aws/apigateway/serverless-api",
+        "RetentionInDays": 14
+      }
+    },
+    {
+      "resourceId": "http-api",
+      "resourceType": "AWS::ApiGatewayV2::Api",
+      "displayName": "HTTP API Gateway",
+      "desiredState": {
+        "Name": "assignee-http-api-ae5a006f",
+        "ProtocolType": "HTTP"
+      }
+    },
+    {
+      "resourceId": "lambda-integration",
+      "resourceType": "AWS::ApiGatewayV2::Integration",
+      "displayName": "Lambda Proxy Integration",
+      "desiredState": {
+        "IntegrationType": "AWS_PROXY",
+        "PayloadFormatVersion": "2.0"
+      }
+    },
+    {
+      "resourceId": "default-route",
+      "resourceType": "AWS::ApiGatewayV2::Route",
+      "displayName": "Default Route ($default)",
+      "desiredState": {
+        "RouteKey": "$default"
+      }
+    },
+    {
+      "resourceId": "default-stage",
+      "resourceType": "AWS::ApiGatewayV2::Stage",
+      "displayName": "$default Stage",
+      "desiredState": {
+        "StageName": "$default",
+        "AutoDeploy": true
+      }
+    },
+    {
+      "resourceId": "api-invoke-permission",
+      "resourceType": "AWS::Lambda::Permission",
+      "displayName": "API Gateway → Lambda Permission",
+      "desiredState": {
+        "Action": "lambda:InvokeFunction",
+        "Principal": "apigateway.amazonaws.com"
+      }
+    }
+  ],
+  "desiredState": {
+    "LogGroupName": "/aws/apigateway/serverless-api",
+    "RetentionInDays": 14
+  },
+  "estimatedMonthlyCost": "N/A",
+  "preflightPassed": true,
+  "currentResourceIndex": 3,
+  "completedResources": [
+    {
+      "resourceArn": "arn:aws:iam::<ACCOUNT_ID>:role/assignee-iam-execution-role-ae5a006f",
+      "resourceType": "AWS::IAM::Role"
+    },
+    {
+      "resourceArn": "arn:aws:lambda:us-east-1:<ACCOUNT_ID>:function:assignee-lambda-fn-ae5a006f",
+      "resourceType": "AWS::Lambda::Function"
+    },
+    {
+      "resourceArn": "arn:aws:logs:us-east-1:<ACCOUNT_ID>:log-group:/aws/apigateway/serverless-api",
+      "resourceType": "AWS::Logs::LogGroup"
+    }
+  ]
+}

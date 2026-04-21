@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PlanCheckpointSchema, CHECKPOINT_VERSION } from "./checkpoint.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const FIXTURE_DIR = path.resolve(
+  __dirname,
+  "..",
+  "test-fixtures",
+  "checkpoints",
+);
+const readFixture = (name: string): unknown =>
+  JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), "utf-8"));
 
 describe("PlanCheckpointSchema", () => {
   const validCheckpoint = {
@@ -97,5 +110,141 @@ describe("PlanCheckpointSchema", () => {
 
   it("exports CHECKPOINT_VERSION constant", () => {
     expect(CHECKPOINT_VERSION).toBe("1");
+  });
+
+  // ─── Story e92.1.d (Epic 89 C-05) additive-field backwards-compat ──
+  describe("Story e92.1.d — resume-state fields (additive)", () => {
+    it("defaults currentResourceIndex to 0 when absent (pre-Epic-92 checkpoint)", () => {
+      // Uses the REAL preserved EC2 checkpoint shape from `.assignee/` —
+      // no currentResourceIndex / completedResources on disk.
+      const result = PlanCheckpointSchema.safeParse(validCheckpoint);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.currentResourceIndex).toBe(0);
+      }
+    });
+
+    it("defaults completedResources to [] when absent (pre-Epic-92 checkpoint)", () => {
+      const result = PlanCheckpointSchema.safeParse(validCheckpoint);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.completedResources).toEqual([]);
+      }
+    });
+
+    it("parses Epic-92 checkpoint with explicit resume state", () => {
+      const withResume = {
+        ...validCheckpoint,
+        currentResourceIndex: 2,
+        completedResources: [
+          {
+            resourceArn:
+              "arn:aws:iam::111111111111:role/assignee-iam-execution-role",
+            resourceType: "AWS::IAM::Role",
+          },
+          {
+            resourceArn: "arn:aws:lambda:us-east-1:111111111111:function:my-fn",
+            resourceType: "AWS::Lambda::Function",
+          },
+        ],
+      };
+      const result = PlanCheckpointSchema.safeParse(withResume);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.currentResourceIndex).toBe(2);
+        expect(result.data.completedResources).toHaveLength(2);
+        expect(result.data.completedResources[0]?.resourceType).toBe(
+          "AWS::IAM::Role",
+        );
+      }
+    });
+
+    it("rejects negative currentResourceIndex", () => {
+      const bad = { ...validCheckpoint, currentResourceIndex: -1 };
+      const result = PlanCheckpointSchema.safeParse(bad);
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects non-integer currentResourceIndex", () => {
+      const bad = { ...validCheckpoint, currentResourceIndex: 1.5 };
+      const result = PlanCheckpointSchema.safeParse(bad);
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects completedResources entries missing resourceArn", () => {
+      const bad = {
+        ...validCheckpoint,
+        completedResources: [{ resourceType: "AWS::S3::Bucket" }],
+      };
+      const result = PlanCheckpointSchema.safeParse(bad);
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects completedResources entries missing resourceType", () => {
+      const bad = {
+        ...validCheckpoint,
+        completedResources: [{ resourceArn: "arn:aws:s3:::my-bucket" }],
+      };
+      const result = PlanCheckpointSchema.safeParse(bad);
+      expect(result.success).toBe(false);
+    });
+
+    it("preserves strict-mode unknown-field rejection alongside new defaults", () => {
+      const withExtra = {
+        ...validCheckpoint,
+        currentResourceIndex: 1,
+        completedResources: [],
+        brandNewField: "nope",
+      };
+      const result = PlanCheckpointSchema.strict().safeParse(withExtra);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  // ─── Real on-disk fixtures (copied + redacted from `.assignee/`) ────
+  describe("parses real preserved checkpoints from `.assignee/`", () => {
+    it("loads pre-Epic-92 EC2 baseline with defaults applied", () => {
+      const raw = readFixture("single-ec2-baseline.json");
+      const result = PlanCheckpointSchema.safeParse(raw);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.currentResourceIndex).toBe(0);
+        expect(result.data.completedResources).toEqual([]);
+        expect(result.data.resourceType).toBe("AWS::EC2::Instance");
+      }
+    });
+
+    it("loads pre-Epic-92 scheduled-Lambda compound with defaults applied", () => {
+      const raw = readFixture("single-lambda-scheduled.json");
+      const result = PlanCheckpointSchema.safeParse(raw);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.currentResourceIndex).toBe(0);
+        expect(result.data.completedResources).toEqual([]);
+        expect(result.data.resourceQueue).toHaveLength(2);
+        // Old fixtures still have desiredState:{} per resource — we
+        // do not retroactively populate them.
+        expect(result.data.resourceQueue?.[0]?.desiredState).toEqual({});
+      }
+    });
+
+    it("loads post-Epic-92 compound serverless-api with explicit resume state", () => {
+      const raw = readFixture("compound-serverless-api.json");
+      const result = PlanCheckpointSchema.safeParse(raw);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.currentResourceIndex).toBe(3);
+        expect(result.data.completedResources).toHaveLength(3);
+        expect(result.data.resourceQueue).toHaveLength(8);
+        // per-queue desiredState must be populated (this is the C-05 fix)
+        expect(
+          Object.keys(result.data.resourceQueue?.[0]?.desiredState ?? {})
+            .length,
+        ).toBeGreaterThan(0);
+        // account-ID redaction confirmed at the fixture level
+        const arn = result.data.completedResources[0]?.resourceArn ?? "";
+        expect(arn).toContain("<ACCOUNT_ID>");
+      }
+    });
   });
 });

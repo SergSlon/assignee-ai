@@ -123,6 +123,19 @@ describe("ecsClusterPlugin", () => {
     });
   });
 
+  // Story e92.1.a — configHints guard the LLM against the C-03
+  // ClusterSettings key-as-name bug. Sanitizer still repairs it,
+  // but the prompt should educate up front.
+  describe("configHints ClusterSettings guardrail (e92.1.a / C-03)", () => {
+    const hints = ecsClusterPlugin.configHints!.join(" ");
+
+    it("documents the canonical {Name, Value} shape and rejects key-as-name", () => {
+      expect(hints).toMatch(/Name.*Value/);
+      expect(hints).toMatch(/key-as-name|NEVER|rejects/i);
+      expect(hints).toMatch(/containerInsights/);
+    });
+  });
+
   describe("DefaultCapacityProviderStrategy toCfn transform", () => {
     const field = ecsClusterPlugin.advancedFields.find(
       (f) => f.name === "DefaultCapacityProviderStrategy",

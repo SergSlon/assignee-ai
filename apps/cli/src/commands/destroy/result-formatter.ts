@@ -55,3 +55,36 @@ export function renderDestroySuccess(estimatedMonthlyCost: string): void {
     );
   }
 }
+
+/**
+ * Scheduled-deletion success message for resource types that AWS refuses
+ * to hard-delete synchronously. The previous `renderDestroySuccess`
+ * ("Resource destroyed.") line is a lie for these types:
+ *
+ *   - KMS::Key — `ScheduleKeyDeletion` puts the key into `PendingDeletion`
+ *     with a 7-30 day window (closes Epic 92 D-21). During the window
+ *     the key keeps billing and remains cryptographically reversible.
+ *   - SecretsManager::Secret — `DeleteSecret` without `ForceDeleteWithoutRecovery`
+ *     imposes a mandatory 7-30 day recovery window (closes D-25).
+ *     The secret continues to incur per-secret monthly charges during the
+ *     window.
+ *
+ * Honest phrasing: "Scheduled for deletion on <ISO date>. Estimated
+ * savings after deletion: <cost>".
+ */
+export function renderDestroyScheduled(
+  scheduledAt: Date,
+  estimatedMonthlyCost: string,
+): void {
+  // Render `YYYY-MM-DD` (UTC). Full ISO would add a time component that
+  // is not actionable for users planning cost cut-off dates; the UTC
+  // date-only form matches how AWS reports `DeletionDate` /
+  // `ScheduledDeletionDate` in the console.
+  const iso = scheduledAt.toISOString().slice(0, 10);
+  const line = `Scheduled for deletion on ${iso}. Estimated savings after deletion: ${estimatedMonthlyCost}\n`;
+  if (process.stdout.isTTY) {
+    process.stdout.write(chalk.green(line));
+  } else {
+    process.stdout.write(line);
+  }
+}

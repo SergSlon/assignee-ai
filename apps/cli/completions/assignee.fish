@@ -42,6 +42,9 @@ complete -c assignee -n "__fish_seen_subcommand_from init" -l global -d 'Create 
 
 # Options for 'destroy'
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l yes -s y -d 'Auto-confirm destroy without interactive prompt (for CI/CD)'
+complete -c assignee -n "__fish_seen_subcommand_from destroy" -l pending-window-in-days -r -d 'KMS keys only: pending-deletion window (7-30 days, default 7). KMS keys continue billing until the window elapses.'
+complete -c assignee -n "__fish_seen_subcommand_from destroy" -l recovery-window-in-days -r -d 'SecretsManager secrets only: recovery window (7-30 days, default 7). Secrets continue billing until the window elapses.'
+complete -c assignee -n "__fish_seen_subcommand_from destroy" -l force-delete-without-recovery -d 'SecretsManager secrets only: skip the recovery window and destroy the secret immediately. Mutually exclusive with --recovery-window-in-days.'
 
 # Options for 'drift'
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l resource -r -d 'Filter by resource type'

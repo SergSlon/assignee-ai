@@ -191,9 +191,11 @@ export const dynamodbTablePlugin: ResourcePlugin = {
   },
   configHints: [
     "BillingMode MUST be either PAY_PER_REQUEST or PROVISIONED — never omit it.",
+    "When BillingMode=PAY_PER_REQUEST, DO NOT include ProvisionedThroughput — CCAPI rejects the pair. ProvisionedThroughput is only valid with BillingMode=PROVISIONED.",
     "If PROVISIONED, include ProvisionedThroughput with ReadCapacityUnits and WriteCapacityUnits.",
     "KeySchema requires exactly one HASH key; RANGE key is optional.",
-    "AttributeDefinitions MUST include all attributes used in KeySchema.",
+    "AttributeDefinitions MUST include an entry for EVERY attribute name referenced in KeySchema, GlobalSecondaryIndexes.KeySchema, and LocalSecondaryIndexes.KeySchema. Mismatched names (e.g. KeySchema names 'hashKey' but AttributeDefinitions only declares 'Id') cause CCAPI rejection.",
+    "Each AttributeDefinition has { AttributeName, AttributeType } where AttributeType is S (string), N (number), or B (binary).",
     "Set PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled to true unless user explicitly opts out.",
     "Only set DeletionProtectionEnabled to true when the user explicitly requests it. Default is false to allow destroy lifecycle.",
     "Set SSESpecification.SSEEnabled to true for CMK encryption unless user explicitly opts out.",

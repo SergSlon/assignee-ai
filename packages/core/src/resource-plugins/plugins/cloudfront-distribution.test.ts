@@ -202,5 +202,28 @@ describe("cloudFrontDistributionPlugin", () => {
       expect(hints).toMatch(/Enabled.*false|pre-disable|disable/i);
       expect(hints).toMatch(/delete|destroy/i);
     });
+
+    // Story e92.1.a — CCAPI-shape guardrails. Sanitizer repairs these
+    // shapes but the prompt should educate the LLM up front.
+    it("requires {Items, Quantity} shape for Origins / CacheBehaviors / CustomErrorResponses (C-15)", () => {
+      const hints = cloudFrontDistributionPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/Items.*Quantity|Quantity.*Items/);
+      expect(hints).toMatch(/Origins/);
+      expect(hints).toMatch(/CacheBehaviors/);
+      expect(hints).toMatch(/CustomErrorResponses/);
+    });
+
+    it("requires EXACTLY ONE of S3OriginConfig / CustomOriginConfig (C-04)", () => {
+      const hints = cloudFrontDistributionPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/EXACTLY ONE|exactly one|one of/i);
+      expect(hints).toMatch(/S3OriginConfig/);
+      expect(hints).toMatch(/CustomOriginConfig/);
+    });
+
+    it("forbids empty-string OriginAccessIdentity placeholder (C-04)", () => {
+      const hints = cloudFrontDistributionPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/OriginAccessIdentity/);
+      expect(hints).toMatch(/empty string|never emit|omitted/i);
+    });
   });
 });

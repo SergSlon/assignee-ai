@@ -12,7 +12,14 @@
  * desiredState checks but BEFORE redacted fields are stripped (so the
  * hash computed here matches the hash MCP registered at save time).
  *
- * @see Story 11.3, Story 50-5 B-2
+ * Story e92.1.d (Epic 89 regression C-05): the schema now carries two
+ * additive fields — `currentResourceIndex` + `completedResources` —
+ * with Zod `.default(...)` fallbacks. Pre-Epic-92 checkpoint files that
+ * omit these fields still parse cleanly; the defaults (`0` / `[]`)
+ * land on the returned `PlanCheckpoint` so downstream code can treat
+ * every checkpoint uniformly without branching on undefined.
+ *
+ * @see Story 11.3, Story 50-5 B-2, Story e92.1.d
  */
 
 import * as fs from "node:fs/promises";

@@ -28,6 +28,8 @@
 
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import { buildResourceArn, isArn } from "../config/arn-builder.js";
+import { partitionForRegion } from "../config/arn-builder.js";
+import { RESOURCE_TYPES } from "../config/resource-types.js";
 import {
   requireAssigneeCredentials,
   MissingAssigneeCredentialsError,
@@ -200,10 +202,38 @@ export async function resolveResourceArn(args: {
   // fire correctly and surface the bare identifier instead.
   if (!accountId) return undefined;
 
-  return buildResourceArn({
+  const region = args.region ?? AWS_REGION;
+  const built = buildResourceArn({
     resourceType: args.resourceType,
     identifier: args.identifier,
-    region: args.region ?? AWS_REGION,
+    region,
     accountId,
   });
+
+  // Epic 92 Wave 1 (e92.1.b): buildResourceArn returns the identifier
+  // unchanged for types whose ARN template is not registered in
+  // arn-templates.ts. Historically this meant:
+  //   - KMS::Key        → UUID (D-22)
+  //   - Events::EventBus→ bus name (D-20)
+  // which surfaced as the bare primary identifier in the apply success
+  // line and got stamped into the provision record as the "ARN" — so
+  // the user couldn't pipe that value back into `assignee destroy`
+  // (nor could billing / security posture resolve it).
+  //
+  // Synthesize the canonical ARN locally for these types when the
+  // upstream template registry returns the identifier unchanged and it
+  // still isn't a full ARN. Kept narrow (two known types) so we don't
+  // fabricate ARNs for future types that deliberately have no template.
+  if (built === args.identifier && !isArn(built)) {
+    const partition = partitionForRegion(region);
+    if (args.resourceType === RESOURCE_TYPES.KMS_KEY) {
+      // arn:<partition>:kms:<region>:<account>:key/<KeyId-uuid>
+      return `arn:${partition}:kms:${region}:${accountId}:key/${args.identifier}`;
+    }
+    if (args.resourceType === RESOURCE_TYPES.EVENTS_EVENT_BUS) {
+      // arn:<partition>:events:<region>:<account>:event-bus/<Name>
+      return `arn:${partition}:events:${region}:${accountId}:event-bus/${args.identifier}`;
+    }
+  }
+  return built;
 }
