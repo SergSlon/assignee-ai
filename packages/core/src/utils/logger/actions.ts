@@ -73,6 +73,20 @@ export const LOG_ACTIONS = {
    * --verbose can diagnose why cost data is missing.
    */
   BILLING_MCP_QUERY_FAILED: "billing_mcp_query_failed",
+  /**
+   * Epic 92 uncluster e92.u.a (D-36): emitted at the start of every
+   * `assignee status` invocation so `--verbose` users get the same
+   * structured-log envelope that `plan` / `optimize` already provide.
+   * Also fires at WARN level when the user passes a stale/unknown
+   * runId positional (A-12) so the informative warning lands on the
+   * daily log file.
+   */
+  STATUS_STARTED: "status_started",
+  /**
+   * Epic 92 uncluster e92.u.a (D-36): emitted at the end of every
+   * `assignee status` invocation with `durationMs` + `result:"ok"|"error"`.
+   */
+  STATUS_COMPLETE: "status_complete",
 } as const;
 
 export type LogAction = (typeof LOG_ACTIONS)[keyof typeof LOG_ACTIONS];

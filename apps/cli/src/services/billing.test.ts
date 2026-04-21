@@ -249,13 +249,16 @@ describe("getCostSavingsEstimate", () => {
     expect(result).toBe("$2.50/month saved");
   });
 
-  it('returns "N/A" when no data available', async () => {
+  it('returns "No cost savings" when no data available (Epic 92 A-08/D-15)', async () => {
+    // Epic 92 Wave 4 (e92.4.a): previously returned "N/A" which concatenated
+    // to "Estimated savings: N/A" in destroy output — awkward. The sanitized
+    // fallback now reads cleanly when rendered verbatim.
     const result = await getCostSavingsEstimate(sampleResource.arn);
 
-    expect(result).toBe("N/A");
+    expect(result).toBe("No cost savings");
   });
 
-  it('returns "N/A" when MCP tools fail', async () => {
+  it('returns "No cost savings" when MCP tools fail (Epic 92 A-08/D-15)', async () => {
     const failingTool = createFailingMockTool(
       ToolName.COST_EXPLORER,
       new Error("Server down"),
@@ -265,7 +268,7 @@ describe("getCostSavingsEstimate", () => {
       failingTool,
     ]);
 
-    expect(result).toBe("N/A");
+    expect(result).toBe("No cost savings");
   });
 });
 

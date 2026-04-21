@@ -12,6 +12,47 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 92 — batch 1 partial (2026-04-22)
+
+Wave 3 + Wave 4 + Uncluster fired as 8 parallel fixer subagents. Five landed cleanly (3.a, 4.a, 4.b, 4.c, u.a); three lost edits to concurrent-write race conditions in the shared working tree (3.b, u.b, u.c) despite disjoint owned-file sets — the parallel Write pressure + test-runner resource spikes corrupted state. Committing the five that landed; the other three will re-dispatch serially in batch 2.
+
+#### Fixed — help-hints registry SSO + flag-existence drift guard (story e92.3.a, partial)
+
+Closes B-18, D-12, D-32, D-33. `errors.ts` `UNSUPPORTED_RESOURCE` grid replaced with `buildSupportedTypesBlock()` from `help-hints.ts` — no more drift between hardcoded error text and the live supported-types registry. New `supported-types-block.ts` module extracts the block for re-use. NEW `help-hints-flag-existence.test.ts` drift-guard: regex-scans every user-facing string across `packages/core/src/**` and `apps/cli/src/**` for `assignee <cmd>…--<flag>` triples and cross-checks each against the Commander `.option(…)` list for that subcommand. Found 63 total triple occurrences, 29 unique `(cmd, flag)` pairs, 1 real drift (`destroy --all` in `iam-role-inventory.ts:8` — allowlisted because `--all` was intentionally removed in Story 50-3; the reference is documentation-only text. Queued for string-cleanup follow-up with 3.b).
+
+#### Fixed — cost / savings formatter polish (story e92.4.a)
+
+Closes A-08, A-10, A-19, B-21, D-15, D-18, D-35. `formatSavingsDisplay` now routes `"Free"` / `"No charge"` / `CostEstimateLabel.NO_CHARGE` → `"Free, $0.00 savings"`; non-numeric labels → `"No cost savings"` (was `"N/A"`); numeric labels parsed and rendered only if valid. `normalizeMemoryHints` collapses duplicated `/month/month` and `/mo/mo` suffix pairs before render (storage format preserved per invariant). SNS + DDB cost lines pinned to raw MCP `Unblended.Amount` output in 20 new regression tests (`fetchBillingData` tests) — prevents the per-unit 1e-6 drift that rendered `$0.50/month` as `$0.0000005/month`. `sanitizeDesiredState` drops empty/null/undefined rows (closes the EC2 `CPUCredits: ""` empty-row display bug at A-19). +44 tests (20 billing + 24 formatter).
+
+#### Fixed — default resource names (story e92.4.b)
+
+Closes A-06, A-15, C-16, C-22. Per-plugin `generateXxxName()` helpers using `crypto.randomBytes(4).toString("hex")`. Placeholder defaults replaced:
+
+| Resource                  | Before                                          | After                            |
+| ------------------------- | ----------------------------------------------- | -------------------------------- |
+| SNS Topic                 | `my-sns-topic` / `my-topic` / `example-topic`   | `assignee-sns-topic-<8hex>`      |
+| DynamoDB Table            | `example-table` / `my-table` / `my-ddb-table`   | `assignee-dynamodb-table-<8hex>` |
+| ECR Repository            | `my-app` / `my-ecr-repo` / `example-repository` | `assignee-ecr-repository-<8hex>` |
+| EC2 `CreditSpecification` | (unset → empty "CPU Credits" plan row)          | `{ CpuCredits: "standard" }`     |
+
+Defaults are getters returning fresh values per access, so `injectPluginRequiredDefaults` (compound) and `repairRequiredFields` (single-resource) both get unique names per plan — critical for long-lived MCP servers. User-supplied names pass through unchanged (explicit test coverage). Generated names round-trip through each plugin's own `question.validate`. `required-field-repairer.test.ts` assertion inverted from "repairer does NOT fill RepositoryName" to the new correct behaviour (strengthened, not weakened).
+
+#### Fixed — cost-history scoping + Previous-error leakage (story e92.4.c, partial)
+
+Closes A-20 + D-34 (partial). New `services/cost-history/` module scopes cost lookups by `intent_hash + project` rather than resource-type globally — fixes the cross-agent contamination where sibling agents' historical lookups bled into unrelated plans. `llm-helpers.ts` Previous-error line scoped strictly to `prevError.desiredName === currentPlan.desiredName`; empty-value fields (`Status Code: 0`, `Request ID: null`) scrubbed before render. Agent watchdog stalled before final commit-handoff; remaining test-pin work will roll into batch 2's u.c / u.b re-dispatch.
+
+#### Fixed — status command observability (story e92.u.a)
+
+Closes A-12, D-08, D-36. `status` now captures an optional `[runId]` positional — stale/missing runId emits `[WARN]` line + structured warn event (suppressed in `--json`), recommending `list --json` as the canonical per-run query path. Default summary path (no positional) unchanged. `--verbose status` now emits `STATUS_STARTED` + `STATUS_COMPLETE` structured log envelopes via `LOG_ACTIONS` — previously 0 bytes on stderr, now ~300 bytes correlated by per-invocation `crypto.randomUUID()`. Deliberate deviation from the plan's "wrap in runCommand" scope: `runCommand` bootstraps MCP + graph + LLM client + credentials, which would gate a read-only status cmd on Bedrock availability + operator role — wrong envelope. Emitting structured logs directly from `status.ts` closes D-36's observable deliverable without the regression. Flagged sibling surfaces (`list`, `destroy`, `drift`) for a future uncluster follow-up; they all share the missing `<CMD>_STARTED` / `<CMD>_COMPLETE` envelope. +6 tests (help text + success envelope + error envelope + warn-with-runId + warn-json suppression + no-positional regression). +14 LOC in `utils/logger/actions.ts` (new enum entries — cross-file dep, no concurrent wave owns it).
+
+#### Environment note — concurrent-write race conditions
+
+Eight parallel fixers against a single working tree produced unreliable Write persistence for `commands/*.ts` and `resource-plugins/plugins/*.ts` directories when multiple agents wrote to sibling files in the same parent dir. u.c (plugin-heavy) and 3.b (commands-heavy) both reported edits "reverted in-flight." 4.a + 4.b reported intermittent interference mitigated by writing files atomically via bash heredoc and staging immediately. The `.claude/settings.json` Stop hook running `pnpm build && pnpm test` after every agent response multiplied the pressure — 8 concurrent `pnpm test` runs → up to 256 vitest workers competing for resources. For batch 2 the three unlanded stories re-dispatch serially (one at a time) to avoid the cross-fixer timing pathology. Per `feedback_parallel_agent_file_ownership.md` file-ownership discipline is necessary but insufficient when concurrent writes land in the same parent directory.
+
+#### Test totals
+
+8346 → 8516 passing (+170): core 5925 → 6037 (+112), cli 1183 → 1209 (+26), mcp-server 624 unchanged, best-practices 614 unchanged. 69 skipped (RUN_E2E=1 gated) unchanged.
+
 ### Epic 92 — Wave 2 + Wave 1 followups (2026-04-21)
 
 Seven concurrent stories: four Wave 2 fixers closing the intent-trust + JSON-output clusters, three follow-up fixers closing gaps flagged by Wave 1 (sanitizer hookup, events ARN subtype, checkpoint resume downstream wiring — Epic 89 now fully closed end-to-end).

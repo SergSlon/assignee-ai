@@ -175,9 +175,16 @@ describe("repairRequiredFields", () => {
   });
 
   describe("ECR Repository", () => {
-    it("does not inject RepositoryName (no plugin default for user-provided names)", () => {
-      // RepositoryName is required but has no initialValue or plugin default —
-      // it must come from the user's intent. The repairer correctly skips it.
+    it("injects an auto-generated RepositoryName (Epic 92 Wave 4.b / C-22)", () => {
+      // Before Wave 4.b: RepositoryName was required but the plugin had no
+      // initialValue / default, so the repairer skipped it and preflight
+      // surfaced a confusing "RepositoryName missing" error.
+      //
+      // After Wave 4.b: the ECR plugin's `defaults.RepositoryName` is a
+      // getter returning `assignee-ecr-repository-<8hex>` (mirroring the
+      // Lambda compound pattern's `assignee-lambda-fn-<hash>` convention).
+      // The repairer now fills a recognisably Assignee-generated name so
+      // the plan displays a meaningful value instead of failing preflight.
       const desiredState = {};
       const { repaired, injectedFields } = repairRequiredFields(
         desiredState,
@@ -185,12 +192,20 @@ describe("repairRequiredFields", () => {
         ["RepositoryName"],
       );
 
-      // RepositoryName has no default — repairer can't fill it
-      // This is correct: preflight should catch it
-      expect(repaired["RepositoryName"]).toBeUndefined();
-      expect(
-        injectedFields.filter((f) => f.field === "RepositoryName"),
-      ).toHaveLength(0);
+      expect(typeof repaired["RepositoryName"]).toBe("string");
+      expect(repaired["RepositoryName"] as string).toMatch(
+        /^assignee-ecr-repository-[0-9a-f]{8}$/,
+      );
+      const repoFields = injectedFields.filter(
+        (f) => f.field === "RepositoryName",
+      );
+      expect(repoFields).toHaveLength(1);
+      // pluginDefault branch — the getter on `plugin.defaults[RepositoryName]`
+      // fires ahead of the field-level initialValue branch because no
+      // initialValue is set on the RepositoryName field (by design — the
+      // placeholder is only a UX hint; the authoritative source is the
+      // plugin defaults getter).
+      expect(repoFields[0]!.source).toBe("pluginDefault");
     });
   });
 

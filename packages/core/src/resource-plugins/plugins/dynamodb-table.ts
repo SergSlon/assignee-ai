@@ -1,8 +1,34 @@
+import { randomBytes } from "node:crypto";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import type { ResourcePlugin } from "../types.js";
 import { TAGS_VALIDATE, TAGS_HINT } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
+
+/**
+ * Epic 92 Wave 4.b (finding A-06): "example-table" / "my-table" literals
+ * were leaking into real AWS accounts because the LLM echoed the field
+ * placeholder. Mirrors the Lambda compound pattern's
+ * `assignee-lambda-fn-<hash>` convention:
+ *
+ *   assignee-dynamodb-table-<8 hex>
+ *
+ * Generated identifier stays inside DynamoDB's 3-255 char limit and uses
+ * only characters allowed by AWS (`[a-zA-Z0-9._-]`). ARN round-trip is
+ * preserved because the identifier contains no special characters that
+ * would confuse `config/arn-builder.ts`.
+ */
+const PLACEHOLDER_TABLE_NAMES = new Set([
+  "my-table",
+  "example-table",
+  "my-dynamodb-table",
+  "example-dynamodb-table",
+  "my-ddb-table",
+]);
+
+function generateDynamodbTableName(): string {
+  return `assignee-dynamodb-table-${randomBytes(4).toString("hex")}`;
+}
 
 /**
  * ResourcePlugin for AWS::DynamoDB::Table.
@@ -18,8 +44,9 @@ export const dynamodbTablePlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "Table name",
-        placeholder: "my-table",
-        hint: "Must be 3-255 characters. Letters, numbers, underscores, hyphens, and periods. Cannot be changed after creation.",
+        placeholder:
+          "assignee-dynamodb-table-<8hex> (leave blank for auto-generated)",
+        hint: "Must be 3-255 characters. Letters, numbers, underscores, hyphens, and periods. Cannot be changed after creation. Leave blank — Assignee auto-generates 'assignee-dynamodb-table-<8hex>'.",
         validate: (value: unknown) => {
           if (!value) return "Table name is required";
           const s = String(value);
@@ -29,6 +56,15 @@ export const dynamodbTablePlugin: ResourcePlugin = {
             return "Table name may only contain letters, numbers, underscores, hyphens, and periods";
           return undefined;
         },
+      },
+      toCfn: (v: unknown) => {
+        if (v === undefined || v === null) return generateDynamodbTableName();
+        const s = String(v).trim();
+        if (s === "") return generateDynamodbTableName();
+        if (PLACEHOLDER_TABLE_NAMES.has(s.toLowerCase())) {
+          return generateDynamodbTableName();
+        }
+        return s;
       },
     },
     {
@@ -188,6 +224,9 @@ export const dynamodbTablePlugin: ResourcePlugin = {
     [CfnKey.BILLING_MODE]: AwsDefault.BILLING_PAY_PER_REQUEST,
     [CfnKey.PITR_SPECIFICATION]: { [CfnKey.PITR_ENABLED]: true },
     [CfnKey.SSE_SPECIFICATION]: { [CfnKey.SSE_ENABLED]: true },
+    get [CfnKey.TABLE_NAME](): string {
+      return generateDynamodbTableName();
+    },
   },
   configHints: [
     "BillingMode MUST be either PAY_PER_REQUEST or PROVISIONED — never omit it.",
@@ -199,5 +238,6 @@ export const dynamodbTablePlugin: ResourcePlugin = {
     "Set PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled to true unless user explicitly opts out.",
     "Only set DeletionProtectionEnabled to true when the user explicitly requests it. Default is false to allow destroy lifecycle.",
     "Set SSESpecification.SSEEnabled to true for CMK encryption unless user explicitly opts out.",
+    "TableName: OMIT when the user didn't specify a name. Assignee auto-generates `assignee-dynamodb-table-<8hex>` so placeholders like `my-table`, `example-table`, or `my-ddb-table` never materialize in production.",
   ],
 };

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey, AwsDefault } from "../../config/cfn-keys.js";
 import { isArnOfService } from "../../config/aws-partition.js";
@@ -8,6 +9,30 @@ import {
   KMS_ARN_FULL_VALIDATION_MSG,
 } from "../shared-fields.js";
 import { FieldLabel } from "../field-labels.js";
+
+/**
+ * Epic 92 Wave 4.b (finding C-22): plans omitted RepositoryName when the
+ * user didn't specify one, leaving the operator with no idea what will be
+ * created. Mirrors the Lambda compound pattern's `assignee-lambda-fn-<hash>`:
+ *
+ *   assignee-ecr-repository-<8 hex>
+ *
+ * ECR RepositoryName constraints: 2-256 chars, `[a-z0-9][a-z0-9._/-]*`.
+ * 8 lowercase hex chars fit trivially. Destroy round-trip preserved.
+ */
+const PLACEHOLDER_ECR_NAMES = new Set([
+  "my-app",
+  "my-ecr",
+  "my-ecr-repo",
+  "my-repository",
+  "example-repo",
+  "example-repository",
+  "example-ecr-repository",
+]);
+
+function generateEcrRepositoryName(): string {
+  return `assignee-ecr-repository-${randomBytes(4).toString("hex")}`;
+}
 
 /**
  * ResourcePlugin for AWS::ECR::Repository.
@@ -22,8 +47,9 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "Repository name",
-        placeholder: "my-app",
-        hint: "Must be 2-256 chars: lowercase letters, numbers, hyphens, underscores, forward slashes. Namespacing with slashes is common (e.g., team/app).",
+        placeholder:
+          "assignee-ecr-repository-<8hex> (leave blank for auto-generated)",
+        hint: "Must be 2-256 chars: lowercase letters, numbers, hyphens, underscores, forward slashes. Namespacing with slashes is common (e.g., team/app). Leave blank — Assignee auto-generates 'assignee-ecr-repository-<8hex>'.",
         validate: (value: unknown) => {
           if (!value) return "Repository name is required";
           const s = String(value);
@@ -33,6 +59,15 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
             return "Must start with lowercase letter/number and contain only lowercase letters, numbers, hyphens, underscores, forward slashes, and periods";
           return undefined;
         },
+      },
+      toCfn: (v: unknown) => {
+        if (v === undefined || v === null) return generateEcrRepositoryName();
+        const s = String(v).trim();
+        if (s === "") return generateEcrRepositoryName();
+        if (PLACEHOLDER_ECR_NAMES.has(s.toLowerCase())) {
+          return generateEcrRepositoryName();
+        }
+        return s;
       },
     },
     {
@@ -151,6 +186,9 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
   defaults: {
     [CfnKey.IMAGE_TAG_MUTABILITY]: "IMMUTABLE",
     [CfnKey.IMAGE_SCANNING_CONFIGURATION]: { [CfnKey.SCAN_ON_PUSH]: true },
+    get [CfnKey.REPOSITORY_NAME](): string {
+      return generateEcrRepositoryName();
+    },
   },
   configHints: [
     "ALWAYS set ImageTagMutability to IMMUTABLE unless the user explicitly needs mutable tags (e.g., for 'latest' tag workflows). Immutable tags prevent accidental overwrites.",
@@ -158,5 +196,6 @@ export const ecrRepositoryPlugin: ResourcePlugin = {
     "EncryptionConfiguration.EncryptionType defaults to AES256 (free). Only use KMS if the user needs customer-managed key rotation or cross-account access control.",
     "LifecyclePolicy is a JSON string (not an object) — it MUST be passed as the LifecyclePolicyText property. Common rule: expire untagged images after 14 days to control storage costs.",
     "RepositoryName is immutable — changing it triggers resource replacement. Use lowercase letters, numbers, hyphens, underscores, and forward slashes only.",
+    "RepositoryName: OMIT when the user didn't specify a name. Assignee auto-generates `assignee-ecr-repository-<8hex>` so placeholders like `my-app`, `my-ecr-repo`, or `example-repository` never materialize in production.",
   ],
 };
