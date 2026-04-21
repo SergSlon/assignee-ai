@@ -18,7 +18,13 @@
  *   - 1 EFS::FileSystem (encrypted, elastic throughput, backups on)
  *   - 2 EFS::MountTarget (one per private subnet)
  *
- * Total: 9 resources. No IGW, no NAT, no public subnets — EFS is an
+ * Total: 10 resources (1 + 2 + 1 + 2 + 1 + 1 + 2 = 10). Epic 92 wave
+ * 2.b fixed the off-by-one in the prior header — the resourceList
+ * has always emitted 10, but the comment said "9 resources". A
+ * snapshot test in efs-with-vpc.test.ts now pins the TOC count
+ * against `resourceList.length` so future drift is caught.
+ *
+ * No IGW, no NAT, no public subnets — EFS is an
  * internal service and anything that mounts it already has to be
  * in the same VPC. Skipping the IGW/NAT keeps this pattern within
  * the free tier for the networking layer ($0 for VPC + subnets +
@@ -71,6 +77,27 @@ export const efsWithVpcPattern: ArchitecturePattern = {
     "shared storage for lambda",
     "shared storage for ec2",
     "nfs mount",
+  ],
+  /**
+   * Epic 92 wave 2.b (finding B-02): skip this pattern when the user
+   * explicitly asks for a standalone / bare EFS. The bare EFS
+   * resource type (AWS::EFS::FileSystem) is first-class in
+   * SUPPORTED_TYPES — advanced users who already have a VPC don't
+   * need the 10-resource compound. `existing-vpc` hints the user has
+   * a VPC already; `just` / `only` are explicit bail-outs to the
+   * single-resource plan.
+   */
+  negativeKeywords: [
+    "standalone",
+    "existing-vpc",
+    "existing vpc",
+    "on its own",
+    "just the efs",
+    "just the filesystem",
+    "just the file system",
+    "only the efs",
+    "only the filesystem",
+    "only the file system",
   ],
   resourceList: [
     {

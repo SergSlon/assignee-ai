@@ -337,3 +337,183 @@ describe("assignee list command", () => {
     });
   });
 });
+
+// ── Epic 92 Wave 2.c (D-30) — JSON error envelope ──────────────────
+// `list --json --resource-type NotAThing` used to emit plaintext
+// "[ERROR] Unknown ..." + the 37-resource registry block to stdout.
+// Consumers running `jq -e .` failed with a syntax error. Now we
+// emit a single `{ok:false,error:{...}}` envelope to stdout while
+// the human text + registry block goes to stderr via renderError.
+//
+// This describe block is INTENTIONALLY at module top-level (sibling
+// to the main `describe("assignee list command", ...)`) to avoid
+// the P1-01 test's `vi.resetModules()` + `vi.doMock()` torching
+// our mocks. We (re-)register mocks via `vi.doMock` in the
+// `beforeAll` below so the Epic-92 tests run in isolation.
+describe("Epic 92 Wave 2.c — list --json error envelope (D-30)", () => {
+  let stdoutWrite: MockInstance<typeof process.stdout.write>;
+
+  beforeEach(async () => {
+    // Hard reset module graph so the top-level vi.mock calls are NOT
+    // relied on — the P1-01 test in the main describe may have left
+    // the cache in an inconsistent state. Re-register via doMock.
+    vi.resetModules();
+    vi.doMock("../services/list-resources.js", () => ({
+      fetchManagedResources: vi.fn(),
+    }));
+    vi.doMock("../utils/display.js", () => ({
+      renderResourceTable: vi.fn(),
+      renderEmptyList: vi.fn(),
+      renderError: vi.fn(),
+    }));
+    vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
+    stdoutWrite = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+  });
+
+  async function importFresh() {
+    const { listCommand } = await import("./list.js");
+    const { renderError } = await import("../utils/display.js");
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    // Reset Commander's retained option values between invocations so
+    // `--json` / `--resource-type` from prior tests don't leak in.
+    const internals = listCommand as unknown as {
+      _optionValues: Record<string, unknown>;
+    };
+    for (const opt of listCommand.options) {
+      internals._optionValues[opt.attributeName()] = undefined;
+    }
+    return { listCommand, renderError, fetchManagedResources };
+  }
+
+  it("--json --resource-type NOT-A-REAL-TYPE emits parseable INVALID_RESOURCE_TYPE envelope", async () => {
+    const { listCommand, renderError } = await importFresh();
+    await expect(
+      listCommand.parseAsync([
+        "node",
+        "list",
+        "--json",
+        "--resource-type",
+        "NOT-A-REAL-TYPE",
+      ]),
+    ).rejects.toThrow(/Unknown --resource-type "NOT-A-REAL-TYPE"/);
+
+    expect(renderError).toHaveBeenCalled();
+
+    const writes = vi
+      .mocked(stdoutWrite)
+      .mock.calls.map((c) => String(c[0]))
+      .join("")
+      .trim();
+    expect(writes.length).toBeGreaterThan(0);
+    const parsed = JSON.parse(writes);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("INVALID_RESOURCE_TYPE");
+    expect(parsed.error.message).toContain(
+      'Unknown --resource-type "NOT-A-REAL-TYPE"',
+    );
+    expect(parsed.error.hint).toBeDefined();
+  });
+
+  it("--json --resource-type NOT-A-REAL-TYPE does NOT emit registry/help block to stdout", async () => {
+    const { listCommand } = await importFresh();
+    await expect(
+      listCommand.parseAsync([
+        "node",
+        "list",
+        "--json",
+        "--resource-type",
+        "NOT-A-REAL-TYPE",
+      ]),
+    ).rejects.toThrow();
+
+    const stdoutText = vi
+      .mocked(stdoutWrite)
+      .mock.calls.map((c) => String(c[0]))
+      .join("");
+    expect(stdoutText).not.toContain("What you can create");
+    expect(stdoutText).not.toContain("[ERROR]");
+    expect(stdoutText).not.toContain("[FIX]");
+  });
+
+  it("--json on AccessDenied writes ACCESS_DENIED envelope", async () => {
+    const { listCommand, fetchManagedResources } = await importFresh();
+    const error = new Error("Access Denied");
+    (error as unknown as { name: string }).name = "AccessDeniedException";
+    vi.mocked(fetchManagedResources).mockRejectedValueOnce(error);
+
+    await expect(
+      listCommand.parseAsync(["node", "list", "--json"]),
+    ).rejects.toThrow("Access Denied");
+
+    const stdoutText = vi
+      .mocked(stdoutWrite)
+      .mock.calls.map((c) => String(c[0]))
+      .join("")
+      .trim();
+    expect(stdoutText.length).toBeGreaterThan(0);
+    const parsed = JSON.parse(stdoutText);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("ACCESS_DENIED");
+    expect(parsed.error.hint).toContain("ResourceGroupsTaggingAPI");
+  });
+
+  it("--json on network failure writes NETWORK_ERROR envelope", async () => {
+    const { listCommand, fetchManagedResources } = await importFresh();
+    const error = new Error("getaddrinfo ENOTFOUND");
+    vi.mocked(fetchManagedResources).mockRejectedValueOnce(error);
+
+    await expect(
+      listCommand.parseAsync(["node", "list", "--json"]),
+    ).rejects.toThrow("getaddrinfo ENOTFOUND");
+
+    const stdoutText = vi
+      .mocked(stdoutWrite)
+      .mock.calls.map((c) => String(c[0]))
+      .join("")
+      .trim();
+    const parsed = JSON.parse(stdoutText);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("NETWORK_ERROR");
+  });
+
+  it("--json on unknown failure writes LIST_ERROR envelope", async () => {
+    const { listCommand, fetchManagedResources } = await importFresh();
+    const error = new Error("Something went wrong");
+    vi.mocked(fetchManagedResources).mockRejectedValueOnce(error);
+
+    await expect(
+      listCommand.parseAsync(["node", "list", "--json"]),
+    ).rejects.toThrow("Something went wrong");
+
+    const stdoutText = vi
+      .mocked(stdoutWrite)
+      .mock.calls.map((c) => String(c[0]))
+      .join("")
+      .trim();
+    const parsed = JSON.parse(stdoutText);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("LIST_ERROR");
+  });
+
+  it("text-mode (no --json) does NOT emit any JSON envelope to stdout", async () => {
+    const { listCommand } = await importFresh();
+    await expect(
+      listCommand.parseAsync([
+        "node",
+        "list",
+        "--resource-type",
+        "NOT-A-REAL-TYPE",
+      ]),
+    ).rejects.toThrow();
+
+    const stdoutText = vi
+      .mocked(stdoutWrite)
+      .mock.calls.map((c) => String(c[0]))
+      .join("");
+    expect(stdoutText).not.toContain('"ok"');
+    expect(stdoutText).not.toContain('"error"');
+  });
+});

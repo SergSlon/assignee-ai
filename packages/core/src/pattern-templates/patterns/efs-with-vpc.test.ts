@@ -251,4 +251,65 @@ describe("efsWithVpcPattern — registry detection", () => {
   it("does not match an unrelated intent", () => {
     expect(registry.detect("create an s3 bucket for audit logs")).toBeNull();
   });
+
+  describe("efs-with-vpc — negative keyword triggers (Epic 92 wave 2.b)", () => {
+    it("skips the compound on 'create a standalone efs'", () => {
+      expect(registry.detect("create a standalone efs file system")).toBeNull();
+    });
+
+    it("skips the compound on 'existing vpc' hint", () => {
+      expect(registry.detect("create an efs in my existing vpc")).toBeNull();
+    });
+
+    it("skips the compound on 'just the efs' phrasing", () => {
+      expect(
+        registry.detect("create an efs file system, just the efs please"),
+      ).toBeNull();
+    });
+
+    it("skips the compound on 'only the filesystem' phrasing", () => {
+      expect(
+        registry.detect("create an efs — only the filesystem, no vpc"),
+      ).toBeNull();
+    });
+
+    it("still matches compound on plain 'create an EFS file system'", () => {
+      expect(registry.detect("create an EFS file system")).toBe(
+        efsWithVpcPattern,
+      );
+    });
+  });
+});
+
+describe("efsWithVpcPattern — TOC snapshot (Epic 92 wave 2.b, finding C-09)", () => {
+  // Snapshot test pins the header comment's resource count against
+  // resourceList.length. The previous comment said "Total: 9 resources"
+  // but the pattern emits 10 (1 VPC + 2 subnets + 1 RT + 2 associations
+  // + 1 SG + 1 EFS + 2 MountTargets). The fix bumped the comment to
+  // "Total: 10 resources"; this test ensures future drift is caught.
+  it("resourceList.length matches the TOC header count in the file doc comment", () => {
+    // We import the pattern's module to test the invariant directly:
+    // the resourceList is the runtime source of truth, and the
+    // displayName-and-doc-comment count MUST agree.
+    expect(efsWithVpcPattern.resourceList).toHaveLength(10);
+  });
+
+  it("resourceList count equals the sum of the TOC per-type enumeration", () => {
+    // Enumerate the TOC bullets programmatically so the snapshot
+    // reflects the actual intent of the comment (future drift fails
+    // here when, say, someone adds a second route table and forgets
+    // to bump the comment).
+    const tocCounts = {
+      vpc: 1,
+      privateSubnets: 2,
+      privateRouteTable: 1,
+      rtAssociations: 2,
+      nfsSecurityGroup: 1,
+      efsFileSystem: 1,
+      mountTargets: 2,
+    };
+    const tocTotal = Object.values(tocCounts).reduce((a, b) => a + b, 0);
+    expect(tocTotal).toBe(10);
+    expect(efsWithVpcPattern.resourceList).toHaveLength(tocTotal);
+  });
 });

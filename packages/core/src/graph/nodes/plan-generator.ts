@@ -14,10 +14,11 @@
  * @see .agents/stories/wave-6-f2-plan-generator-solid-refactor.md
  */
 
-import type { LlmPort } from "../../index.js";
+import { ExecutionStatus, type LlmPort } from "../../index.js";
 import type { AgentState } from "../graph-state.js";
 import { runCompoundPlan } from "./plan-generator/compound-plan.js";
 import { runLlmPlan } from "./plan-generator/llm-plan.js";
+import { validatePlanShape } from "./plan-generator/llm-helpers.js";
 import type { AzLookup } from "./plan-generator/marker-resolver.js";
 
 // ---------------------------------------------------------------------------
@@ -72,9 +73,36 @@ export function createPlanGeneratorNode({
       state.resourcePattern !== undefined &&
       state.resourceQueue !== undefined &&
       state.currentResourceIndex !== undefined;
-    if (isCompound) {
-      return runCompoundPlan(state, azLookup);
+    const result = isCompound
+      ? await runCompoundPlan(state, azLookup)
+      : await runLlmPlan(state, llmClient);
+
+    // Epic 92 Wave 2.d — post-LLM, post-sanitize plan-time validators.
+    // Runs for BOTH compound and LLM paths so pattern-authored desiredStates
+    // are also checked. Sanitizer (Wave 1) already auto-fixes what it can;
+    // validators surface an explicit FAILED for the remaining known-bad
+    // shapes (DDB KeySchema↔AttributeDefinitions parity, CloudFront
+    // dual-origin-config) BEFORE the resource reaches CCAPI.
+    //
+    // Skip validation when the result is already FAILED (invalid JSON, LLM
+    // error, etc.) so we don't overwrite a more specific upstream error.
+    if (result.executionStatus === ExecutionStatus.FAILED) return result;
+
+    const desired = result.desiredState;
+    const resourceType = state.resourceType ?? "";
+    if (desired && typeof desired === "object" && resourceType) {
+      const validationError = validatePlanShape(
+        desired as Record<string, unknown>,
+        resourceType,
+      );
+      if (validationError !== null) {
+        return {
+          ...result,
+          executionStatus: ExecutionStatus.FAILED,
+          errorMessage: validationError,
+        };
+      }
     }
-    return runLlmPlan(state, llmClient);
+    return result;
   };
 }

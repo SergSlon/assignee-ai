@@ -78,6 +78,24 @@ export const scheduledLambdaPattern: ArchitecturePattern = {
     "recurring job",
     "eventbridge scheduled lambda",
     "timer lambda",
+    // Epic 92 wave 2.b (finding C-07): colloquial scheduling triggers
+    // the previous keyword set missed. Each phrase strongly implies
+    // a time-based schedule and should route to this 4-resource
+    // EventBridge compound rather than the 2-resource
+    // lambda-with-exec-role pattern.
+    //
+    // Both hyphenated and space-separated forms are listed so either
+    // "runs-every 5 minutes" or "runs every 5 minutes" catches.
+    "runs-every",
+    "runs every",
+    "every-hour",
+    "every hour",
+    "every-day",
+    "every day",
+    "hourly",
+    "daily",
+    "on-a-schedule",
+    "on a schedule",
   ],
   resourceList: [
     {

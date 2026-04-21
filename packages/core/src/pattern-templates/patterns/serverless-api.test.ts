@@ -83,6 +83,51 @@ describe("Pattern keyword detection", () => {
     expect(registry.detect("add an IAM role")).toBeNull();
     expect(registry.detect("provision an EC2 instance")).toBeNull();
   });
+
+  describe("serverless-api — negative keyword triggers (Epic 92 wave 2.b)", () => {
+    // Registry-only test — no websocket-api registered so "websocket"
+    // in the intent disqualifies serverless-api and returns null.
+    // When websocket-api IS registered (the default registry), WebSocket
+    // intents route there. See websocket-api.test.ts for that coverage.
+    it("skips serverless-api on 'create a serverless websocket api'", () => {
+      expect(registry.detect("create a serverless websocket api")).toBeNull();
+    });
+
+    it("skips serverless-api on 'create an api (standalone)'", () => {
+      expect(
+        registry.detect("create an api (standalone) for my Lambda"),
+      ).toBeNull();
+    });
+
+    it("skips serverless-api on 'build an http api on its own'", () => {
+      expect(registry.detect("build an http api on its own")).toBeNull();
+    });
+
+    it("skips serverless-api when user says 'existing vpc'", () => {
+      expect(
+        registry.detect("create an api that attaches to my existing vpc"),
+      ).toBeNull();
+    });
+
+    it("skips serverless-api on 'just the lambda, no api'", () => {
+      expect(
+        registry.detect(
+          "create a lambda function with api — just the lambda please",
+        ),
+      ).toBeNull();
+    });
+
+    it("skips serverless-api on 'only the lambda' phrasing", () => {
+      expect(registry.detect("create an api but only the lambda")).toBeNull();
+    });
+
+    it("still matches serverless-api on plain positive intents (baseline)", () => {
+      expect(registry.detect("create a serverless api")).toBe(
+        serverlessApiPattern,
+      );
+      expect(registry.detect("build an http api")).toBe(serverlessApiPattern);
+    });
+  });
 });
 
 describe("Pattern dependencyOrder integrity", () => {

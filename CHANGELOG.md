@@ -12,6 +12,44 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 92 — Wave 2 + Wave 1 followups (2026-04-21)
+
+Seven concurrent stories: four Wave 2 fixers closing the intent-trust + JSON-output clusters, three follow-up fixers closing gaps flagged by Wave 1 (sanitizer hookup, events ARN subtype, checkpoint resume downstream wiring — Epic 89 now fully closed end-to-end).
+
+#### Fixed — intent-parser preservation (story e92.2.a)
+
+Closes B-01, B-07, B-09, B-16, C-12, C-13, A-03. Intent parser pre-extracts user-asserted tokens (CIDR blocks, EC2 instance types, AMI IDs, regions, RDS engine versions, SG ingress triples, resource names across 9 types, "no VPC" directive, SNS subscription Protocol) and mirrors them into both `elicitedOptions` and `presetFields` so the option-elicitor's `NEVER_ASK` path wins over the defaults engine. Invalid asserted values now FAIL the plan with actionable `ExecutionStatus.FAILED + [ERROR]…[FIX]…` hints — no silent fallback. `10.42.0.0/16` is preserved (no longer hardcoded-overridden to `10.0.0.0/16`); `t3.micro` stays `t3.micro` (no longer rewritten to `t3.small`); `999.999.999.999/99` now fails with "Invalid CIDR block" instead of being silently accepted. +76 tests (31 intent-defaults + 45 intent-parser).
+
+#### Fixed — pattern-matcher precision + new WebSocket pattern (story e92.2.b)
+
+Closes B-05, C-06, C-07, C-09, C-10, B-02, D-26 (pattern half). Introduced `negativeKeywords` to `PatternRegistry` — patterns can now declare cues that DISQUALIFY them even when positive keywords match. Applied across the board: `serverless-api` skips when "websocket" / "standalone" / "existing vpc" / "only the lambda" in intent; `efs-with-vpc` skips "standalone" / "existing vpc" / "just the efs"; `vpc-networking` requires explicit "public and private subnets" / "networking foundation" cue — bare "Create a VPC" no longer triggers the 17-resource compound with a $32.85/mo NAT Gateway. `scheduled-lambda` gains 10 new keywords (`runs every`, `every hour`, `hourly`, `daily`, `on a schedule`, etc.) — "Lambda that runs every hour" now routes correctly. NEW `websocket-api` pattern (12 resources: IAM role + Lambda + LogGroup + API Gateway V2 WebSocket + 3 routes/integrations + stage + permission; registered BEFORE serverless-api so it wins on websocket intents). `efs-with-vpc` TOC off-by-one fixed (header claimed 9, actually 10). SNS subscription `Protocol` inferred from `Endpoint` scheme at pattern level (partition-aware ARN matching; bails on ambiguity). Registry count 10 → 11 (README + `integration-architecture.md` + `help-hints.ts` descriptions + doc-lint count updated in lockstep).
+
+#### Fixed — JSON envelope + stderr discipline (story e92.2.c)
+
+Closes A-02, A-21, B-04, B-14, D-29, D-30. Compound plan `--output json` now emits a SINGLE `{ok:true,plans:[…]}` envelope via a new stdout interceptor in `plan.ts` + `serializePlanEnvelope`/`parsePlanJsonStream` helpers in `display-plan.ts` — no more NDJSON that `jq -e .` rejects as invalid. On error under `--output json`, exactly ONE envelope `{ok:false,error:{code,message,hint}}` lands on stdout; the `[ERROR]`/`[CONTEXT]`/`[FIX]` block + 37-type registry stays on stderr. Soft plan-failure path (orchestrator returns `{success:false}` without throwing) also gets a `PLAN_FAILED` envelope. `list --json --resource-type <unknown>` now emits `INVALID_RESOURCE_TYPE` envelope on stdout; registry block on stderr. Structured logger was already stderr-only; invariant locked in with 7 new `process.stdout.write` spy tests across every log branch. NEW gated e2e `apps/cli/src/e2e/e2e-json-envelope.test.ts` (8 cases, `RUN_E2E=1`). Live probe: `assignee list --json --resource-type NOT-A-REAL 2>/dev/null | jq -e .` now exits 0 with parseable JSON.
+
+#### Fixed — plan-generator pre-apply validators (story e92.2.d)
+
+Closes A-16 (plan-time half; Wave 1 sanitizer is the runtime safety net), C-04 (plan-time half; Wave 1 handled runtime stripping). Two new post-LLM validators in `plan-generator.ts`: (1) DDB KeySchema ↔ AttributeDefinitions parity — every `KeySchema.AttributeName` (including GSI / LSI keys) must appear in `AttributeDefinitions`; failure emits `[ERROR] DynamoDB KeySchema references attribute(s) not in AttributeDefinitions: '<name>'. [FIX] Add the missing attributes…`. (2) CloudFront dual-origin-config rejection — an Origin must NOT have both `S3OriginConfig` AND `CustomOriginConfig` set. Also fixed a Rule-7 observability leak: the `llm-helpers.ts` "Previous error" generator no longer shows `arn:aws:iam::123456789012:role/my-role` when the resource being planned is not Lambda — resource-type dispatch via `placeholderExamplesForType(resourceType)`. +34 tests (6 integration + 28 llm-helpers unit).
+
+#### Fixed — Wave 1.a follow-up: sanitize.ts hookup
+
+Threaded `state.resourceType` through `sanitizeAgainstSchema` → `sanitizeDesiredState` in `plan-generator/llm-plan/sanitize.ts` so the Wave 1 DDB/ECS/CloudFront sanitizer rules actually fire at plan time (were dormant until now — only the configHints helped). End-to-end regression test asserts DDB `PAY_PER_REQUEST + ProvisionedThroughput` is stripped via the real hookup path. Single callsite in `llm-plan.ts` updated to pass `resourceType`.
+
+#### Fixed — Wave 1.b follow-up: arn-type-map events subtype split
+
+Moved `events` out of `SERVICE_TYPE_MAP` into `SERVICE_SUBTYPE_MAP` with 4 subtype keys (`rule`, `event-bus`, `connection`, `api-destination`) plus `""` fallback → `AWS::Events::Rule` for backwards compat. `assignee list` now shows `AWS::Events::EventBus` / `::Connection` / `::ApiDestination` correctly instead of misclassifying everything as `::Rule`. Fix flows transparently through `fetchManagedResources`, `drift/baseline-adopt`, `parse-arn`, and destroy's resource-resolver without any consumer changes. Partition-aware (AWS commercial + GovCloud + China). +22 tests.
+
+#### Fixed — Wave 1.d follow-up: checkpoint resume downstream wiring (Epic 89 fully closed)
+
+The schema additions from Wave 1 are now actually consumed. CLI `apply/checkpoint-state.ts` and MCP `apply-plan/handler-steps.ts` both hydrate `currentResourceIndex` + `completedResources` from the loaded `PlanCheckpoint` into the graph initial state, zipping checkpoint's stored `{resourceArn, resourceType}` against `resourceQueue[0..index-1]` to recover `resourceId` with `executionStatus: SUCCESS`. Compound resume now re-enters at the saved index; marker-resolver's cross-resource reference lookups hit `completedResources` as expected. Pre-Epic-92 / single-resource / fresh-compound checkpoints still work identically — fields are OMITTED (not zero-valued) so pre-fix code paths are byte-for-byte unchanged. +10 tests (5 CLI checkpoint-state + 5 MCP handler-steps).
+
+#### Test totals
+
+8111 → 8346 passing (+235), 69 skipped (up from 63 — 2.c's 8 new gated e2e cases). `packages/core` 5711 → 5925 (+214, 230 test files). `apps/mcp-server` 619 → 624 (+5). `apps/cli` 1167 → 1183 (+16). `packages/best-practices` 614 unchanged.
+
+Full gate run green at commit time: `pnpm lint / check-types / lint:barrels / lint:shims / doc-lint / citation-lint / audit --prod / build / -r test:coverage`.
+
 ### Epic 92 — Wave 1 (2026-04-21)
 
 Context: after Epic 88 shipped on a dogfood-surfaced-bugs cycle, the user flagged that every time they tried the CLI themselves they hit fresh bugs. Epic 92 is a **proactive** dogfood sweep across every user-visible command and every supported resource type, with all 118 collected findings planned into disjoint fix waves.

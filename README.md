@@ -292,18 +292,19 @@ The single-axis moats each have a shelf life. The compound bundle is the durable
 
 Multi-resource intents are detected by keyword matching (zero LLM latency) and provisioned in dependency order. Run `assignee plan --help` for the live listing.
 
-| Pattern              | Resources                                                     | Trigger keywords                                                |
-| :------------------- | :------------------------------------------------------------ | :-------------------------------------------------------------- |
-| VPC Networking       | VPC → Subnets → IGW → RouteTables → NAT (17 resources)        | "create a vpc", "vpc with subnets"                              |
-| Serverless API       | IAM Role → Lambda → API Gateway V2 (8 resources)              | "serverless api", "lambda api"                                  |
-| Static Website       | S3 Bucket + CloudFront + OAC + S3 upload                      | "static website", "static site"                                 |
-| Message Processing   | SQS DLQ → SQS + DynamoDB + IAM Role → Lambda                  | "message queue", "event processing"                             |
-| Three-Tier Web       | VPC → Subnet → SecurityGroup → ECS → ALB                      | "three tier", "web application"                                 |
-| Container Service    | ECR → ECS Cluster → IAM Role                                  | "container service", "ecs"                                      |
-| EFS with private VPC | VPC + private subnets + NFS SG + FS + MountTargets            | "create an efs", "shared file system"                           |
-| Scheduled Lambda     | IAM Role → Lambda → EventBridge Rule (cron)                   | "scheduled lambda", "cron lambda"                               |
-| Lambda + Exec Role   | IAM Role → Lambda (minimal auto-exec-role pattern)            | "create a lambda", "create a function"                          |
-| VPC Public-Only      | VPC + public Subnets + IGW + Routes (free-tier, 11 resources) | "vpc public only", "cheap vpc", "simple vpc", "vpc without nat" |
+| Pattern              | Resources                                                       | Trigger keywords                                                |
+| :------------------- | :-------------------------------------------------------------- | :-------------------------------------------------------------- |
+| VPC Networking       | VPC → Subnets → IGW → RouteTables → NAT (17 resources)          | "create a vpc", "vpc with subnets"                              |
+| WebSocket API        | IAM Role → Lambda → LogGroup → API Gateway V2 WS (12 resources) | "websocket api", "realtime api", "chat api"                     |
+| Serverless API       | IAM Role → Lambda → API Gateway V2 (8 resources)                | "serverless api", "lambda api"                                  |
+| Static Website       | S3 Bucket + CloudFront + OAC + S3 upload                        | "static website", "static site"                                 |
+| Message Processing   | SQS DLQ → SQS + DynamoDB + IAM Role → Lambda                    | "message queue", "event processing"                             |
+| Three-Tier Web       | VPC → Subnet → SecurityGroup → ECS → ALB                        | "three tier", "web application"                                 |
+| Container Service    | ECR → ECS Cluster → IAM Role                                    | "container service", "ecs"                                      |
+| EFS with private VPC | VPC + private subnets + NFS SG + FS + MountTargets              | "create an efs", "shared file system"                           |
+| Scheduled Lambda     | IAM Role → Lambda → EventBridge Rule (cron)                     | "scheduled lambda", "cron lambda"                               |
+| Lambda + Exec Role   | IAM Role → Lambda (minimal auto-exec-role pattern)              | "create a lambda", "create a function"                          |
+| VPC Public-Only      | VPC + public Subnets + IGW + Routes (free-tier, 11 resources)   | "vpc public only", "cheap vpc", "simple vpc", "vpc without nat" |
 
 ---
 

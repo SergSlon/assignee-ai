@@ -25,6 +25,14 @@ export interface SanitizeOutput {
  * Strips extraneous keys + coerces types against the CFN schema. No-op when
  * `schemaKeys` is empty (can't sanitize without schema metadata).
  *
+ * When `resourceType` is a non-empty CFN type name (e.g.
+ * `AWS::DynamoDB::Table`), the sanitizer ALSO applies the resource-aware
+ * CCAPI-shape rules added in story e92.1.a (DDB PAY_PER_REQUEST drops
+ * ProvisionedThroughput, ECS key-as-name → {Name,Value}, CloudFront
+ * origin-config disambiguation, CF list canonicalisation). Threading
+ * `state.resourceType` through this hookup is what activates those rules
+ * at plan-generation time (story e92.1.a-followup).
+ *
  * Logs a structured `PLAN_GENERATED` entry when any keys were stripped or
  * coerced so operators can trace LLM drift.
  */
@@ -33,12 +41,14 @@ export function sanitizeAgainstSchema(
   resourceSchema: Record<string, unknown>,
   schemaKeys: string[],
   runId: string,
+  resourceType: string,
 ): Record<string, unknown> {
   if (schemaKeys.length === 0) return desiredState;
 
   const { sanitized, strippedKeys, coercedKeys } = sanitizeDesiredState(
     desiredState,
     resourceSchema,
+    resourceType || undefined,
   );
   if (strippedKeys.length > 0 || coercedKeys.length > 0) {
     log({

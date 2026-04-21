@@ -7,17 +7,80 @@
  * to catch rules added/modified after the original plan was generated.
  * Blocking findings update preflightPassed; findings are injected into
  * graph state so preflight_guard and result_formatter can display them.
+ *
+ * Story e92.1.d-followup (Epic 89 C-05 closure): when the loaded
+ * checkpoint carries a non-default `currentResourceIndex` +
+ * `completedResources`, hydrate both fields into the graph initial
+ * state so plan-generator / resource-provisioner re-enter the
+ * compound loop at the right index instead of re-planning already-
+ * provisioned resources. The on-disk checkpoint persists only
+ * `{resourceArn, resourceType}` per completed entry (intentionally
+ * small), but the graph state channel is typed `ResourceResult[]`
+ * — which the marker-resolver keys off `.resourceId`. We recover
+ * `resourceId` by zipping the persisted entries against the matching
+ * prefix of `resourceQueue` (the serializer persists completions in
+ * queue order, so indices 0..N-1 of the queue correspond 1:1 to the
+ * N persisted completions). Pre-Epic-92 / single-resource
+ * checkpoints keep the same initial-state shape they've always had.
  */
 
 import {
   ExecutionMode,
   ExecutionStatus,
   BPEnforcementLevel,
+  type ResourceResult,
 } from "@assignee/core";
 import type { PlanCheckpoint } from "@assignee/core";
 import { log, LOG_ACTIONS } from "../../utils/logger.js";
 import { reEvaluateBP } from "../../utils/bp-reeval.js";
 import type { UserConfig } from "../../config/user-config-loader.js";
+
+/**
+ * Hydrate a `ResourceResult[]` from the checkpoint's compact
+ * `{resourceArn, resourceType}[]` + the full `resourceQueue`.
+ *
+ * The serializer guarantees `completedResources[i]` corresponds to
+ * `resourceQueue[i]` for `i < currentResourceIndex` (see
+ * `packages/core/src/checkpoint/serializer.ts`). We use that 1:1
+ * ordering to recover the logical `resourceId`, which the marker-
+ * resolver needs to look up cross-resource references on resume
+ * (`match.resourceId === parsed.resourceId`, see
+ * `plan-generator/marker-resolver.ts`). `executionStatus: SUCCESS`
+ * is tautological — a persisted `completedResource` has a real ARN,
+ * which the serializer only writes after provisioning succeeds.
+ */
+function hydrateCompletedResources(
+  checkpoint: PlanCheckpoint,
+): ResourceResult[] {
+  const completed = checkpoint.completedResources;
+  const queue = checkpoint.resourceQueue ?? [];
+  return completed.map((entry, index) => {
+    const queueEntry = queue[index];
+    return {
+      // Fall back to the persisted resourceType when the queue is
+      // out-of-sync (defence in depth — should not happen with
+      // matching serializer/loader versions).
+      resourceId: queueEntry?.resourceId ?? entry.resourceType,
+      resourceType: entry.resourceType,
+      resourceArn: entry.resourceArn,
+      executionStatus: ExecutionStatus.SUCCESS,
+    };
+  });
+}
+
+/**
+ * Returns `true` when the checkpoint carries a non-default resume
+ * position — i.e. the compound loop has already provisioned at least
+ * one resource. Pre-Epic-92 / single-resource / fresh-plan
+ * checkpoints (index `0`, no completions) return `false` so the
+ * graph state stays byte-for-byte identical to the pre-fix shape.
+ */
+function hasResumeProgress(checkpoint: PlanCheckpoint): boolean {
+  return (
+    checkpoint.currentResourceIndex > 0 &&
+    checkpoint.completedResources.length > 0
+  );
+}
 
 export function buildCheckpointState(
   checkpoint: PlanCheckpoint,
@@ -27,6 +90,18 @@ export function buildCheckpointState(
 ): Record<string, unknown> {
   const bpLevel =
     userConfig?.bestPractices?.enforcement ?? BPEnforcementLevel.ENFORCE;
+
+  // Story e92.1.d-followup: conditional resume-state payload —
+  // present only when the checkpoint has advanced past index 0 with
+  // at least one completed resource. Defined once here so both the
+  // BP-fail early-return and the happy-path return spread the same
+  // shape into the graph state.
+  const resumeProgress = hasResumeProgress(checkpoint)
+    ? {
+        currentResourceIndex: checkpoint.currentResourceIndex,
+        completedResources: hydrateCompletedResources(checkpoint),
+      }
+    : {};
 
   // Story 41.3: BP re-evaluation for checkpoint resume
   let bpFindings: ReturnType<typeof reEvaluateBP>["findings"] | undefined;
@@ -66,6 +141,7 @@ export function buildCheckpointState(
           bpLevel === BPEnforcementLevel.ENFORCE
             ? ExecutionStatus.FAILED
             : undefined,
+        ...resumeProgress,
         ...(opts.yes ? { autoApprove: true } : {}),
         ...(userConfig ? { userConfig } : {}),
         ...(orgConfig ? { orgConfig } : {}),
@@ -121,6 +197,7 @@ export function buildCheckpointState(
     elicitedOptions: checkpoint.elicitedOptions,
     resourceQueue: checkpoint.resourceQueue,
     bpEnforcementLevel: bpLevel,
+    ...resumeProgress,
     ...(bpFindings ? { bpFindings } : {}),
     ...(opts.yes ? { autoApprove: true } : {}),
     ...(userConfig ? { userConfig } : {}),

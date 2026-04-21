@@ -49,14 +49,55 @@ import {
 export const vpcNetworkingPattern: ArchitecturePattern = {
   patternId: "vpc-networking",
   displayName: "VPC with Public and Private Subnets",
+  /**
+   * Epic 92 wave 2.b (finding B-05): bare "Create a VPC" used to
+   * short-circuit to this 17-resource compound that includes a
+   * ~$32.85/month NAT Gateway — a surprise expense for users who
+   * just wanted the single AWS::EC2::VPC resource to poke at.
+   *
+   * The keyword set is now tightened so only explicit multi-subnet /
+   * NAT-bearing intents trigger the full compound. Bare intents like
+   * "create a vpc" / "vpc network" now fall through the registry
+   * (no match) and the LLM classifier routes them to the standalone
+   * AWS::EC2::VPC type (or to the cheaper `vpc-public-only` variant
+   * if the user hints at free-tier / no-NAT).
+   *
+   * The new keyword list requires one of:
+   *   - "public and private subnets" — explicit about the 4-subnet
+   *     multi-AZ layout
+   *   - "networking foundation" — common Well-Architected phrasing
+   *   - "with nat" / "with nat gateway" — user knows they want NAT
+   *   - "multi-az vpc" — retained from the previous set, clearly
+   *     implies a multi-AZ compound
+   *   - "vpc with subnets" / "vpc with public and private" — retained
+   *     explicit-compound phrases
+   */
   keywords: [
-    "vpc with subnets",
     "vpc with public and private subnets",
+    "vpc with subnets",
     "vpc with networking",
-    "create a vpc",
-    "vpc network",
-    "vpc public private",
+    "networking foundation",
+    "vpc with nat gateway",
+    "vpc with nat",
     "multi-az vpc",
+    "vpc public private",
+  ],
+  /**
+   * Epic 92 wave 2.b: even with tighter positive keywords, explicit
+   * "standalone" or "existing-vpc" intents must never reach this
+   * pattern — they signal the user wants the bare VPC resource or
+   * has a VPC already. The "public-only" negative keyword avoids
+   * collision with the public-only variant.
+   */
+  negativeKeywords: [
+    "standalone",
+    "existing-vpc",
+    "existing vpc",
+    "on its own",
+    "without nat",
+    "public only",
+    "public-only",
+    "no nat",
   ],
   resourceList: [
     ...vpcAndPublicSubnetResources,
@@ -125,13 +166,36 @@ export const vpcNetworkingPattern: ArchitecturePattern = {
 export const vpcPublicOnlyPattern: ArchitecturePattern = {
   patternId: "vpc-public-only",
   displayName: "VPC with Public Subnets Only",
+  /**
+   * Epic 92 wave 2.b: added "vpc without nat" / "public-only vpc" /
+   * "vpc no nat" aliases because users routinely phrase the
+   * "free-tier VPC" intent in multiple ways. The keyword set
+   * remains disjoint from the full vpcNetworkingPattern: each
+   * entry includes a clear disclaimer ("public only", "no nat",
+   * "cheap", "simple") so the registry can cleanly bifurcate
+   * positive hits between the two variants.
+   */
   keywords: [
     "vpc public only",
+    "vpc public-only",
+    "public-only vpc",
     "vpc no private subnets",
     "vpc without nat",
+    "vpc no nat",
     "cheap vpc",
     "simple vpc",
     "vpc public subnets only",
+    "free-tier vpc",
+    "free tier vpc",
+  ],
+  /**
+   * Standalone intents skip this pattern too — user wanted bare VPC.
+   */
+  negativeKeywords: [
+    "standalone",
+    "existing-vpc",
+    "existing vpc",
+    "on its own",
   ],
   resourceList: [
     ...vpcAndPublicSubnetResources,

@@ -23,15 +23,26 @@ export class PatternRegistry {
    * Uses case-insensitive substring matching — NO Bedrock/LLM call.
    * Returns the first matching pattern in insertion order, or null if none match.
    * Zero latency cost when no pattern matches.
+   *
+   * A pattern is skipped (the scan continues) when its `negativeKeywords`
+   * set has any case-insensitive substring hit on `userIntent`, even if
+   * a positive keyword also matches. This lets bare "Create a VPC" and
+   * "Create a standalone X" intents fall through to the LLM classifier
+   * instead of short-circuiting into an expensive compound pattern.
    */
   detect(userIntent: string): ArchitecturePattern | null {
     const normalized = userIntent.toLowerCase();
     for (const pattern of this.patterns.values()) {
-      if (
-        pattern.keywords.some((kw) => normalized.includes(kw.toLowerCase()))
-      ) {
-        return pattern;
-      }
+      const positiveHit = pattern.keywords.some((kw) =>
+        normalized.includes(kw.toLowerCase()),
+      );
+      if (!positiveHit) continue;
+      const negatives = pattern.negativeKeywords ?? [];
+      const negativeHit = negatives.some((kw) =>
+        normalized.includes(kw.toLowerCase()),
+      );
+      if (negativeHit) continue;
+      return pattern;
     }
     return null;
   }

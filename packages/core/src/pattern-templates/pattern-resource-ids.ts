@@ -126,6 +126,35 @@ export const ScheduledLambdaResourceId = {
 } as const;
 
 /**
+ * Resource IDs for the WebSocket API compound pattern (Epic 92 wave 2.b).
+ *
+ * Mirrors `ServerlessApiResourceId` for the shared slots (IAM Role,
+ * Lambda, LogGroup, API, Stage, Permission) so plan-generator's
+ * existing compound role-injection and marker-resolution code paths
+ * handle both patterns identically. The difference is the Route /
+ * Integration fan-out: WebSocket APIs have three canonical routes
+ * ($connect, $disconnect, $default), each wired to its own
+ * Integration record pointing at the same Lambda.
+ *
+ * Per API Gateway v2 docs:
+ * https://docs.aws.amazon.com/apigatewayv2/latest/api-reference/apis-apiid-routes.html
+ */
+export const WebsocketApiResourceId = {
+  IAM_EXECUTION_ROLE: "iam-execution-role",
+  LAMBDA_FN: "lambda-fn",
+  ACCESS_LOG_GROUP: "access-log-group",
+  WEBSOCKET_API: "websocket-api",
+  CONNECT_INTEGRATION: "connect-integration",
+  DISCONNECT_INTEGRATION: "disconnect-integration",
+  DEFAULT_INTEGRATION: "default-integration",
+  CONNECT_ROUTE: "connect-route",
+  DISCONNECT_ROUTE: "disconnect-route",
+  DEFAULT_ROUTE: "default-route",
+  DEFAULT_STAGE: "default-stage",
+  API_INVOKE_PERMISSION: "api-invoke-permission",
+} as const;
+
+/**
  * Resource IDs for the EFS-with-VPC compound pattern.
  *
  * The VPC-bearing resource IDs intentionally reuse the same string

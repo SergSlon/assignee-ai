@@ -28,7 +28,10 @@ export const SERVICE_TYPE_MAP: Readonly<Record<string, string>> = {
   elasticfilesystem: RESOURCE_TYPES.EFS_FILE_SYSTEM,
   cloudformation: LIST_RESOURCE_TYPES.CLOUDFORMATION_STACK,
   logs: RESOURCE_TYPES.LOGS_LOG_GROUP,
-  events: RESOURCE_TYPES.EVENTS_RULE,
+  // NOTE: `events` deliberately absent from SERVICE_TYPE_MAP — it's
+  // resolved via SERVICE_SUBTYPE_MAP["events"] below, which dispatches
+  // on the resource segment (rule / event-bus / connection /
+  // api-destination). See Story e92.1.b-followup.
   cloudfront: RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION,
   ecs: RESOURCE_TYPES.ECS_CLUSTER,
   eks: LIST_RESOURCE_TYPES.EKS_CLUSTER,
@@ -91,6 +94,24 @@ export const SERVICE_SUBTYPE_MAP: Readonly<
   lambda: {
     "event-source-mapping": LIST_RESOURCE_TYPES.LAMBDA_EVENT_SOURCE_MAPPING,
     "": RESOURCE_TYPES.LAMBDA_FUNCTION,
+  },
+  // Story e92.1.b-followup — dispatch Events ARNs to the correct CFN
+  // type by resource segment. Prior to this split, SERVICE_TYPE_MAP
+  // forced every Events ARN (EventBus, Connection, ApiDestination) to
+  // classify as AWS::Events::Rule, breaking `assignee list` and every
+  // other arn-type-map consumer. Wave-1 e92.1.b put a targeted
+  // DeleteEventBus bypass in `destroy.ts`; this follow-up is the
+  // root-cause classifier fix.
+  //
+  // Fallback ("" key) preserves the pre-split default of
+  // AWS::Events::Rule so unparseable / future Events resource segments
+  // do not crash (no change in behaviour for those cases).
+  events: {
+    rule: RESOURCE_TYPES.EVENTS_RULE,
+    "event-bus": RESOURCE_TYPES.EVENTS_EVENT_BUS,
+    connection: RESOURCE_TYPES.EVENTS_CONNECTION,
+    "api-destination": RESOURCE_TYPES.EVENTS_API_DESTINATION,
+    "": RESOURCE_TYPES.EVENTS_RULE,
   },
 } as const;
 

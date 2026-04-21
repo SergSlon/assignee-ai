@@ -16,9 +16,13 @@ import { EIP_AUTO_ALLOCATE } from "../../config/cfn-keys.js";
 
 function buildRegistry(): PatternRegistry {
   const r = new PatternRegistry();
-  // Register public-only first (same order as defaultPatternRegistry)
-  r.register(vpcPublicOnlyPattern);
+  // Matches the default registration order in pattern-templates/index.ts:
+  //   vpcNetworkingPattern (full) FIRST, then vpcPublicOnlyPattern.
+  // Keyword disjointness means either pattern can win on its own
+  // keywords; negative-keyword filtering (Epic 92 wave 2.b) handles
+  // the edge where a "public only" cue appears in a longer intent.
   r.register(vpcNetworkingPattern);
+  r.register(vpcPublicOnlyPattern);
   return r;
 }
 
@@ -447,8 +451,29 @@ describe("VPC pattern keyword detection", () => {
     expect(registry.detect("vpc with networking")).toBe(vpcNetworkingPattern);
   });
 
-  it("detects full VPC pattern for 'create a vpc'", () => {
-    expect(registry.detect("create a vpc")).toBe(vpcNetworkingPattern);
+  it("detects full VPC pattern for 'networking foundation' cue", () => {
+    expect(registry.detect("create a networking foundation for my app")).toBe(
+      vpcNetworkingPattern,
+    );
+  });
+
+  it("detects full VPC pattern for 'vpc with nat gateway' cue", () => {
+    expect(registry.detect("vpc with nat gateway for outbound")).toBe(
+      vpcNetworkingPattern,
+    );
+  });
+
+  // Epic 92 wave 2.b (finding B-05): bare "create a vpc" MUST NOT
+  // short-circuit to the 17-resource compound. The previous behaviour
+  // silently added a ~$32.85/mo NAT Gateway. Now the registry returns
+  // null so the LLM classifier routes this to the standalone
+  // AWS::EC2::VPC resource type.
+  it("bare 'create a vpc' does NOT trigger the 17-resource compound", () => {
+    expect(registry.detect("create a vpc")).toBeNull();
+  });
+
+  it("bare 'vpc network' does NOT trigger the 17-resource compound", () => {
+    expect(registry.detect("i need a vpc network")).toBeNull();
   });
 
   it("detects public-only variant for 'vpc public only'", () => {
@@ -473,6 +498,43 @@ describe("VPC pattern keyword detection", () => {
 
   it("detects public-only variant for 'vpc without nat'", () => {
     expect(registry.detect("vpc without nat")).toBe(vpcPublicOnlyPattern);
+  });
+
+  it("detects public-only variant for new 'free-tier vpc' cue", () => {
+    expect(registry.detect("free-tier vpc for my demo")).toBe(
+      vpcPublicOnlyPattern,
+    );
+  });
+
+  // Epic 92 wave 2.b: negative-keyword triggers skip both VPC patterns.
+  describe("VPC pattern — negative keyword triggers (Epic 92 wave 2.b)", () => {
+    it("skips vpc-networking on 'create a standalone vpc'", () => {
+      expect(registry.detect("create a standalone vpc")).toBeNull();
+    });
+
+    it("skips vpc-networking on 'vpc with subnets (standalone)'", () => {
+      expect(
+        registry.detect("create a vpc with subnets (standalone)"),
+      ).toBeNull();
+    });
+
+    it("skips vpc-networking on 'existing vpc' hint", () => {
+      expect(
+        registry.detect("attach to my existing vpc with subnets"),
+      ).toBeNull();
+    });
+
+    it("skips both VPC patterns on 'on its own' phrasing", () => {
+      expect(
+        registry.detect("create a vpc with subnets on its own"),
+      ).toBeNull();
+    });
+
+    it("skips public-only on 'existing vpc' even when matching keywords", () => {
+      expect(
+        registry.detect("simple vpc for my existing vpc stack"),
+      ).toBeNull();
+    });
   });
 });
 

@@ -7,7 +7,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { formatCostLine } from "./display-plan.js";
+import {
+  formatCostLine,
+  parsePlanJsonStream,
+  serializePlanEnvelope,
+  serializeErrorEnvelope,
+} from "./display-plan.js";
 import type { DataSource } from "../pricing/types.js";
 
 describe("formatCostLine — source suffix rendering (Story 46.2)", () => {
@@ -47,5 +52,205 @@ describe("formatCostLine — source suffix rendering (Story 46.2)", () => {
     // Defensive: a free-tier resource that for some reason renders a
     // dollar amount must NOT get an "(estimated)" tag tacked on.
     expect(formatCostLine("$0.00/mo", "free")).toBe("$0.00/mo");
+  });
+});
+
+// ── Epic 92 Wave 2.c — JSON envelope helpers (A-02 / D-29 / D-30) ────
+describe("parsePlanJsonStream — compound NDJSON → array (A-02)", () => {
+  // Real-shape payload captured from an S3 bucket plan run on 2026-04-10.
+  // Primitive values preserved verbatim to keep the round-trip honest.
+  const s3Payload = {
+    resourceType: "AWS::S3::Bucket",
+    region: "us-east-1",
+    desiredState: {
+      BucketName: "audit-logs-2026",
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: true,
+        BlockPublicPolicy: true,
+        IgnorePublicAcls: true,
+        RestrictPublicBuckets: true,
+      },
+    },
+    estimatedMonthlyCost: "$0.023/mo",
+    pricingBreakdown: null,
+    bpFindings: [],
+    appliedFixes: [],
+    freeTierNote: null,
+    adviceHints: [],
+  };
+  const lambdaPayload = {
+    resourceType: "AWS::Lambda::Function",
+    region: "us-east-1",
+    desiredState: {
+      FunctionName: "image-processor",
+      Runtime: "nodejs20.x",
+      Handler: "index.handler",
+      Role: "arn:aws:iam::210987654321:role/lambda-exec",
+    },
+    estimatedMonthlyCost: "$0.20/mo",
+    pricingBreakdown: null,
+    bpFindings: [],
+    appliedFixes: [],
+    freeTierNote: null,
+    adviceHints: [],
+  };
+
+  it("returns [] for empty input", () => {
+    expect(parsePlanJsonStream("")).toEqual([]);
+  });
+
+  it("parses a single pretty-printed JSON object", () => {
+    const buffered = JSON.stringify(s3Payload, null, 2) + "\n";
+    const out = parsePlanJsonStream(buffered);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toEqual(s3Payload);
+  });
+
+  it("parses two concatenated pretty-printed JSON objects (NDJSON → 2 elements)", () => {
+    // This is the exact shape that today fails `JSON.parse` end-to-end.
+    const buffered =
+      JSON.stringify(s3Payload, null, 2) +
+      "\n" +
+      JSON.stringify(lambdaPayload, null, 2) +
+      "\n";
+    const out = parsePlanJsonStream(buffered);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toEqual(s3Payload);
+    expect(out[1]).toEqual(lambdaPayload);
+  });
+
+  it("ignores braces inside string values (quoted `}` does not end an object)", () => {
+    // BP message text legitimately contains `{` and `}` characters —
+    // the depth counter must honor string boundaries.
+    const payload = {
+      resourceType: "AWS::S3::Bucket",
+      bpFindings: [
+        {
+          practiceId: "BP-S3-010",
+          message: "Add LifecycleConfiguration: { Rules: [...] } to enable",
+          blocking: false,
+        },
+      ],
+    };
+    const buffered = JSON.stringify(payload, null, 2) + "\n";
+    const out = parsePlanJsonStream(buffered);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toEqual(payload);
+  });
+
+  it('honors escaped quotes inside strings (\\") without losing depth tracking', () => {
+    const payload = {
+      resourceType: "AWS::Lambda::Function",
+      desiredState: {
+        Description: 'A function that says "hello \\"world\\""',
+      },
+    };
+    const buffered = JSON.stringify(payload, null, 2) + "\n";
+    const out = parsePlanJsonStream(buffered);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toEqual(payload);
+  });
+
+  it("skips malformed slices but keeps forward progress on valid ones", () => {
+    // Simulate a truncated write followed by a complete payload. This
+    // guards the `JSON.parse` try/catch branch so a single corrupt
+    // object does not abort the whole envelope.
+    const buffered =
+      '{"resourceType":"AWS::S3::Bucket","desiredState":' +
+      "\n" +
+      JSON.stringify(lambdaPayload, null, 2) +
+      "\n";
+    const out = parsePlanJsonStream(buffered);
+    // The broken leading fragment — `{"resourceType":"AWS::S3::Bucket","desiredState":`
+    // — technically reaches depth 0 via mismatched brackets? No: the
+    // leading `{` has no matching `}` before the Lambda payload opens
+    // its own `{`. We expect the parser to recover with the Lambda
+    // payload parsed correctly.
+    expect(out.length).toBeGreaterThanOrEqual(1);
+    const last = out[out.length - 1] as typeof lambdaPayload;
+    expect(last.resourceType).toBe("AWS::Lambda::Function");
+  });
+});
+
+describe("serializePlanEnvelope — single vs compound (A-02)", () => {
+  const payload = {
+    resourceType: "AWS::S3::Bucket",
+    region: "us-east-1",
+    desiredState: { BucketName: "demo" },
+    estimatedMonthlyCost: "$0.023/mo",
+    pricingBreakdown: null,
+    bpFindings: [],
+    appliedFixes: [],
+    freeTierNote: null,
+    adviceHints: [],
+  };
+
+  it("single-payload array → { ok: true, plan: <payload> }", () => {
+    const out = serializePlanEnvelope([payload]);
+    const parsed = JSON.parse(out);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.plan).toEqual(payload);
+    expect(parsed.plans).toBeUndefined();
+  });
+
+  it("multi-payload array → { ok: true, plans: [...] }", () => {
+    const lambda = { ...payload, resourceType: "AWS::Lambda::Function" };
+    const out = serializePlanEnvelope([payload, lambda]);
+    const parsed = JSON.parse(out);
+    expect(parsed.ok).toBe(true);
+    expect(Array.isArray(parsed.plans)).toBe(true);
+    expect(parsed.plans).toHaveLength(2);
+    expect(parsed.plan).toBeUndefined();
+  });
+
+  it("envelope always ends with a trailing newline", () => {
+    const out = serializePlanEnvelope([payload]);
+    expect(out.endsWith("\n")).toBe(true);
+  });
+
+  it("output is valid JSON (jq -e equivalent)", () => {
+    const lambda = { ...payload, resourceType: "AWS::Lambda::Function" };
+    const out = serializePlanEnvelope([payload, lambda]);
+    expect(() => JSON.parse(out)).not.toThrow();
+  });
+});
+
+describe("serializeErrorEnvelope — failure path (D-29 / D-30)", () => {
+  it("emits { ok: false, error: { code, message } } without hint", () => {
+    const out = serializeErrorEnvelope(
+      "UNSUPPORTED_RESOURCE",
+      "Cannot plan: unsupported resource type.",
+    );
+    const parsed = JSON.parse(out);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toEqual({
+      code: "UNSUPPORTED_RESOURCE",
+      message: "Cannot plan: unsupported resource type.",
+    });
+  });
+
+  it("emits { ok: false, error: { code, message, hint } } with hint", () => {
+    const out = serializeErrorEnvelope(
+      "INVALID_RESOURCE_TYPE",
+      'Unknown --resource-type "NotAThing".',
+      "Pass a supported CFN type (e.g. AWS::S3::Bucket).",
+    );
+    const parsed = JSON.parse(out);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("INVALID_RESOURCE_TYPE");
+    expect(parsed.error.message).toBe('Unknown --resource-type "NotAThing".');
+    expect(parsed.error.hint).toBe(
+      "Pass a supported CFN type (e.g. AWS::S3::Bucket).",
+    );
+  });
+
+  it("trailing newline present — piped consumers read one full line", () => {
+    const out = serializeErrorEnvelope("X", "y");
+    expect(out.endsWith("\n")).toBe(true);
+  });
+
+  it("output is valid JSON under jq -e .", () => {
+    const out = serializeErrorEnvelope("X", "y", "z");
+    expect(() => JSON.parse(out)).not.toThrow();
   });
 });

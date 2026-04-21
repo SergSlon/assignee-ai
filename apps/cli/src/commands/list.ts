@@ -13,7 +13,7 @@
 
 import { Command } from "commander";
 import { CommandName, CommandDescription } from "../constants/commands.js";
-import { AssigneeError } from "@assignee/core";
+import { AssigneeError, serializeErrorEnvelope } from "@assignee/core";
 import { AwsErrorName } from "../constants/aws-errors.js";
 import { fetchManagedResources } from "../services/list-resources.js";
 import {
@@ -25,6 +25,20 @@ import {
   resolveResourceTypeFilter,
   INVALID_RESOURCE_TYPE_CODE,
 } from "./resource-type-filter.js";
+
+/**
+ * Epic 92 Wave 2.c (D-30): emit a single JSON error envelope to stdout
+ * in addition to the stderr-routed human renderError output. Keeps the
+ * text-mode behaviour byte-identical; `--json` consumers now get a
+ * parseable envelope regardless of which error class fired.
+ */
+function writeJsonErrorEnvelope(
+  code: string,
+  message: string,
+  hint?: string,
+): void {
+  process.stdout.write(serializeErrorEnvelope(code, message, hint));
+}
 
 /**
  * Parse an `estimatedMonthlyCost` string into a numeric USD monthly
@@ -111,6 +125,15 @@ No --yes flag is required.
               "Pass a supported CFN type (e.g. AWS::S3::Bucket) or a unique shorthand (e.g. S3, Lambda).",
               { why: err.message },
             );
+            if (opts.json) {
+              // D-30: emit JSON envelope to stdout; registry/help
+              // block went to stderr via renderError above.
+              writeJsonErrorEnvelope(
+                "INVALID_RESOURCE_TYPE",
+                `Unknown --resource-type "${opts.resourceType}".`,
+                "Pass a supported CFN type (e.g. AWS::S3::Bucket) or a unique shorthand (e.g. S3, Lambda).",
+              );
+            }
           } else {
             // Story 56-it2-04 P1-01: guard asymmetric error paths.
             // Any non-INVALID_RESOURCE_TYPE_CODE throw from the
@@ -124,6 +147,13 @@ No --yes flag is required.
               "Check the value and try again — see `assignee list --help` for supported types.",
               { why: message },
             );
+            if (opts.json) {
+              writeJsonErrorEnvelope(
+                "RESOURCE_TYPE_RESOLVER_ERROR",
+                `Failed to validate --resource-type "${opts.resourceType}".`,
+                "Check the value and try again — see `assignee list --help` for supported types.",
+              );
+            }
           }
           throw err;
         }
@@ -172,6 +202,12 @@ No --yes flag is required.
         const err = error instanceof Error ? error : new Error(String(error));
         const errName = (error as { name?: string }).name ?? "";
 
+        // Branch shapes preserved so existing test assertions remain
+        // valid — JSON envelope is additive (D-30).
+        let jsonCode = "LIST_ERROR";
+        let jsonMessage = "Failed to list managed resources.";
+        let jsonHint: string | undefined;
+
         if (errName === AwsErrorName.ACCESS_DENIED) {
           renderError(
             "Cannot list managed resources.",
@@ -180,6 +216,10 @@ No --yes flag is required.
               why: "Your IAM identity lacks `tag:GetResources` permission.",
             },
           );
+          jsonCode = "ACCESS_DENIED";
+          jsonMessage = "Cannot list managed resources.";
+          jsonHint =
+            "Ask your admin to grant the `ResourceGroupsTaggingAPI:GetResources` action.";
         } else if (
           err.message.includes("ENOTFOUND") ||
           err.message.includes(AwsErrorName.NETWORKING_ERROR) ||
@@ -190,12 +230,23 @@ No --yes flag is required.
             "Failed to connect to AWS.",
             "Check your internet connection and AWS credentials, then try again.",
           );
+          jsonCode = "NETWORK_ERROR";
+          jsonMessage = "Failed to connect to AWS.";
+          jsonHint =
+            "Check your internet connection and AWS credentials, then try again.";
         } else {
           renderError(
             "Failed to list managed resources.",
             "Check your AWS credentials and try again.",
             { why: err.message },
           );
+          jsonCode = "LIST_ERROR";
+          jsonMessage = "Failed to list managed resources.";
+          jsonHint = "Check your AWS credentials and try again.";
+        }
+
+        if (opts.json) {
+          writeJsonErrorEnvelope(jsonCode, jsonMessage, jsonHint);
         }
 
         throw new AssigneeError(

@@ -44,12 +44,16 @@ export async function runLlmPlan(
   desiredState = stripPlaceholders(desiredState, resourceType);
   desiredState = mergeElicitedOptions(desiredState, state);
 
-  // Phase 3a — schema sanitize (strip extraneous keys + coerce types).
+  // Phase 3a — schema sanitize (strip extraneous keys + coerce types +
+  // resource-aware CCAPI-shape rules from story e92.1.a). Passing
+  // `resourceType` is what arms the DDB / ECS / CloudFront shape rules
+  // — keep this argument live (story e92.1.a-followup).
   desiredState = sanitizeAgainstSchema(
     desiredState,
     state.resourceSchema ?? {},
     schemaKeys,
     state.runId,
+    resourceType,
   );
 
   // Phase 4a — pre-repair post-processing (EC2 AMI / NAT EIP).
