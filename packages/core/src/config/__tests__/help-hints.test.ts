@@ -2,14 +2,17 @@ import { describe, it, expect } from "vitest";
 import {
   BEGINNER_EXAMPLE_TYPES,
   HINT_MAX_COLUMNS,
+  buildSupportedTypesBlock,
   getCompoundPatterns,
   getPatternCount,
   getSupportedResourceTypes,
   getSupportedTypeCount,
+  getTypeHint,
   renderClarifierExampleList,
   renderPatternsHint,
   renderSupportedTypesHint,
 } from "../help-hints.js";
+import { UnsupportedResourceError } from "../../errors.js";
 import { SUPPORTED_TYPES_ARRAY } from "../resource-types/supported.js";
 import { defaultPatternRegistry } from "../../pattern-templates/index.js";
 
@@ -311,5 +314,77 @@ describe("BEGINNER_EXAMPLE_TYPES + renderClarifierExampleList", () => {
     expect(renderClarifierExampleList(["EC2 instance", "VPC"])).toBe(
       "EC2 instance, VPC, etc.",
     );
+  });
+});
+
+// Story e92-3a (Epic 92 wave 3.a) — Supported-types block SSO API.
+describe("buildSupportedTypesBlock + getTypeHint (Epic 92 wave 3.a)", () => {
+  it("buildSupportedTypesBlock returns the CLI-style grouped grid", () => {
+    const block = buildSupportedTypesBlock();
+    expect(block).toContain(
+      `What you can create (${SUPPORTED_TYPES_ARRAY.length} resource types):`,
+    );
+    for (const group of [
+      "Compute",
+      "Storage",
+      "Databases",
+      "Networking",
+      "Edge / CDN",
+      "API",
+      "Messaging",
+      "Security",
+      "Containers",
+      "Observability",
+    ]) {
+      expect(block).toContain(group);
+    }
+    expect(block).toContain("Examples:");
+    expect(block).toContain('assignee plan "Create an S3 bucket');
+  });
+
+  it("buildSupportedTypesBlock output equals renderSupportedTypesHint('cli') (SSO invariant)", () => {
+    expect(buildSupportedTypesBlock()).toBe(renderSupportedTypesHint("cli"));
+  });
+
+  it("buildSupportedTypesBlock every line fits within HINT_MAX_COLUMNS", () => {
+    for (const line of buildSupportedTypesBlock().split("\n")) {
+      expect(line.length).toBeLessThanOrEqual(HINT_MAX_COLUMNS);
+    }
+  });
+
+  it("getTypeHint returns a single-line, compact breadcrumb", () => {
+    const hint = getTypeHint();
+    expect(hint).not.toContain("\n");
+    expect(hint).toContain("assignee plan --help");
+    expect(hint.length).toBeLessThanOrEqual(HINT_MAX_COLUMNS);
+  });
+
+  it("getTypeHint does NOT contain the full grouped grid (D-33 guarantee)", () => {
+    const hint = getTypeHint();
+    expect(hint).not.toContain("Compute");
+    expect(hint).not.toContain("Networking");
+    expect(hint).not.toContain("What you can create (");
+  });
+});
+
+describe("UnsupportedResourceError — SSO message (Epic 92 wave 3.a / D-32)", () => {
+  it("uses getTypeHint() breadcrumb, not the full grouped grid", () => {
+    const err = new UnsupportedResourceError("AWS::DynamoDB::GlobalTable");
+    expect(err.message).toContain("AWS::DynamoDB::GlobalTable");
+    expect(err.message).toContain(getTypeHint());
+    expect(err.message).not.toContain("What you can create (");
+    expect(err.message).not.toContain("Compute       EC2");
+    expect(err.message).not.toContain("Networking    VPC");
+  });
+
+  it("code field is UNSUPPORTED_RESOURCE (machine-readable stability)", () => {
+    const err = new UnsupportedResourceError("AWS::DoesNotExist::Type");
+    expect(err.code).toBe("UNSUPPORTED_RESOURCE");
+    expect(err.name).toBe("UnsupportedResourceError");
+  });
+
+  it("drift guard: getTypeHint does not embed a count", () => {
+    const hint = getTypeHint();
+    expect(hint).not.toMatch(/\(\d+ resource types\)/);
   });
 });

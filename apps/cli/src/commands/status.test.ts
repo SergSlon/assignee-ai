@@ -1,10 +1,15 @@
 /**
  * Tests for `assignee status` command.
  *
- * Validates --json output shape, empty state message, and error handling.
- * Mocks fetchManagedResources to avoid AWS API calls.
+ * Validates --json output shape, empty state message, error handling,
+ * and Epic 92 e92.u.a observability additions (runId positional warning
+ * + STATUS_STARTED / STATUS_COMPLETE structured log events).
  *
- * @see Story 19.6, AC #5
+ * Mocks fetchManagedResources to avoid AWS API calls and the logger
+ * module so we can assert the emitted action envelope without touching
+ * the real daily log file.
+ *
+ * @see Story 19.6, AC #5; Epic 92 e92.u.a
  */
 
 import {
@@ -55,11 +60,31 @@ vi.mock("../services/status-aggregator.js", async (importOriginal) => {
 vi.mock("./status-bp-coverage.js", () => ({
   computeBPCoverage: vi.fn(),
   renderBPCoverage: vi.fn(),
+  renderBPCoverageGaps: vi.fn(),
+  filterActionableGaps: vi.fn((gaps: unknown[]) => gaps),
 }));
 
 // Mock status-factory so the --bp-coverage branch never touches the real filesystem
 vi.mock("./status-factory.js", () => ({
   getBpDir: vi.fn(() => "/tmp/fixture-bp-dir"),
+}));
+
+// Epic 92 e92.u.a: mock the logger module so the new STATUS_STARTED /
+// STATUS_COMPLETE emissions don't hit the real daily log file during
+// tests, and so we can assert the action envelope. The action enum and
+// LogLevel constants are re-exported from core; use the real values
+// (copied verbatim) to keep the tests honest about the wire format.
+vi.mock("../utils/logger.js", () => ({
+  log: vi.fn(),
+  LOG_ACTIONS: {
+    STATUS_STARTED: "status_started",
+    STATUS_COMPLETE: "status_complete",
+  },
+  LogLevel: {
+    INFO: "info",
+    WARN: "warn",
+    ERROR: "error",
+  },
 }));
 
 describe("status command", () => {
@@ -244,6 +269,20 @@ describe("status command options registration", () => {
     const { statusCommand } = await import("./status.js");
     statusCommand.parseOptions(["--resource-type", "AWS::S3::Bucket"]);
     expect(statusCommand.opts()["resourceType"]).toBe("AWS::S3::Bucket");
+  });
+
+  // Epic 92 e92.u.a (D-08): help text documents the [runId] positional
+  // and recommends `list --json` for per-run queries.
+  it("documents [runId] positional + list --json per-run guidance in help", async () => {
+    const { statusCommand } = await import("./status.js");
+    const helpText = statusCommand.helpInformation();
+    // Commander renders optional positional args as `[runId]` in Usage.
+    expect(helpText).toContain("[runId]");
+    // The runId description nudges users at `list --json`. Commander
+    // word-wraps long descriptions across lines, so normalise
+    // whitespace before asserting the phrase is present.
+    const collapsed = helpText.replace(/\s+/g, " ");
+    expect(collapsed).toContain("assignee list --json");
   });
 });
 
@@ -509,5 +548,240 @@ describe("status --bp-coverage uses status-factory for DI", () => {
     expect(computeBPCoverage).toHaveBeenCalledWith("/virtual/bp-fixture-json");
     const output = stdoutSpy.mock.calls.map((c: unknown[]) => c[0]).join("");
     expect(JSON.parse(output)).toEqual(payload);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────
+// Epic 92 e92.u.a (A-12, D-36): observability envelope
+// ────────────────────────────────────────────────────────────────────────
+
+describe("status observability — Epic 92 e92.u.a", () => {
+  let stdoutSpy: MockInstance<typeof process.stdout.write>;
+  let stderrSpy: MockInstance<typeof process.stderr.write>;
+  let exitSpy: MockInstance<typeof process.exit>;
+
+  beforeEach(async () => {
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    stderrSpy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit called");
+    }) as never);
+    // Re-prime shared mocks in case a prior describe block cleared them.
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    const { buildStatusData } =
+      await import("../services/status-aggregator.js");
+    const { log } = await import("../utils/logger.js");
+    vi.mocked(fetchManagedResources).mockReset();
+    vi.mocked(buildStatusData).mockReset();
+    vi.mocked(log).mockReset();
+    await resetStatusCommandOptions();
+  });
+
+  afterEach(() => {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+    exitSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it("D-36: emits STATUS_STARTED + STATUS_COMPLETE around a successful run", async () => {
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    const { buildStatusData } =
+      await import("../services/status-aggregator.js");
+    const { log } = await import("../utils/logger.js");
+    const { statusCommand } = await import("./status.js");
+
+    vi.mocked(fetchManagedResources).mockResolvedValue(mockResources);
+    vi.mocked(buildStatusData).mockResolvedValue({
+      totalResources: 2,
+      totalEstimatedMonthlyCost: "$15.00/month",
+      byType: [],
+      byRegion: [],
+      lastUpdated: "2026-03-22T00:00:00.000Z",
+    });
+
+    await statusCommand.parseAsync(["node", "status", "--json"], {
+      from: "user",
+    });
+
+    const calls = vi
+      .mocked(log)
+      .mock.calls.map((c: unknown[]) => c[0] as Record<string, unknown>);
+
+    const started = calls.find(
+      (ev) => ev["action"] === "status_started" && ev["level"] === "info",
+    );
+    expect(started).toBeDefined();
+    expect(started!["runId"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect((started!["extras"] as Record<string, unknown>)["intent"]).toBe(
+      "status",
+    );
+
+    const completed = calls.find((ev) => ev["action"] === "status_complete");
+    expect(completed).toBeDefined();
+    expect(completed!["level"]).toBe("info");
+    expect(completed!["result"]).toBe("ok");
+    expect(typeof completed!["durationMs"]).toBe("number");
+    // Same runId on start and complete — correlation holds end-to-end.
+    expect(completed!["runId"]).toBe(started!["runId"]);
+  });
+
+  it("D-36: emits STATUS_COMPLETE at error level when the body throws", async () => {
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    const { log } = await import("../utils/logger.js");
+    const { statusCommand } = await import("./status.js");
+
+    vi.mocked(fetchManagedResources).mockRejectedValue(
+      new Error("AWS credentials not found"),
+    );
+
+    try {
+      await statusCommand.parseAsync(["node", "status"], { from: "user" });
+    } catch {
+      // The action wraps in AssigneeError("STATUS_ERROR"); that's fine.
+    }
+
+    const calls = vi
+      .mocked(log)
+      .mock.calls.map((c: unknown[]) => c[0] as Record<string, unknown>);
+
+    const errorComplete = calls.find(
+      (ev) => ev["action"] === "status_complete" && ev["level"] === "error",
+    );
+    expect(errorComplete).toBeDefined();
+    expect(errorComplete!["result"]).toBe("error");
+    expect(
+      (errorComplete!["extras"] as Record<string, unknown>)["errorMessage"],
+    ).toBe("AWS credentials not found");
+  });
+
+  it("A-12: `status <runId>` warns then still renders the default summary", async () => {
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    const { buildStatusData } =
+      await import("../services/status-aggregator.js");
+    const { log } = await import("../utils/logger.js");
+    const { statusCommand } = await import("./status.js");
+
+    vi.mocked(fetchManagedResources).mockResolvedValue(mockResources);
+    vi.mocked(buildStatusData).mockResolvedValue({
+      totalResources: 2,
+      totalEstimatedMonthlyCost: "$15.00/month",
+      byType: [],
+      byRegion: [],
+      lastUpdated: "2026-03-22T00:00:00.000Z",
+    });
+
+    // Use default `from: "node"` so commander strips argv[0]/argv[1] and
+    // the third element becomes the [runId] positional. `from: "user"`
+    // (used by tests above) does NOT strip a prefix — which was harmless
+    // before e92.u.a added the argument but would capture "node" as the
+    // positional with the new surface.
+    await statusCommand.parseAsync(["node", "status", "stale-run-id-abc-123"]);
+
+    // A structured WARN event lands alongside the INFO start event.
+    const calls = vi
+      .mocked(log)
+      .mock.calls.map((c: unknown[]) => c[0] as Record<string, unknown>);
+    const warn = calls.find(
+      (ev) => ev["action"] === "status_started" && ev["level"] === "warn",
+    );
+    expect(warn).toBeDefined();
+    const extras = warn!["extras"] as Record<string, unknown>;
+    expect(extras["warning"]).toBe("runId-positional-ignored");
+    expect(extras["suppliedRunId"]).toBe("stale-run-id-abc-123");
+    expect(extras["hint"]).toContain("assignee list --json");
+
+    // Human-facing stderr line is emitted outside --json so operators
+    // without --verbose still see the warning.
+    const stderrOutput = stderrSpy.mock.calls
+      .map((c: unknown[]) => c[0])
+      .join("");
+    expect(stderrOutput).toContain("[WARN]");
+    expect(stderrOutput).toContain("stale-run-id-abc-123");
+    expect(stderrOutput).toContain("assignee list --json");
+
+    // And the default summary did NOT get blocked — buildStatusData ran.
+    expect(fetchManagedResources).toHaveBeenCalled();
+    expect(buildStatusData).toHaveBeenCalled();
+  });
+
+  it("A-12: `status <runId> --json` suppresses the human-readable stderr WARN but keeps the structured event", async () => {
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    const { buildStatusData } =
+      await import("../services/status-aggregator.js");
+    const { log } = await import("../utils/logger.js");
+    const { statusCommand } = await import("./status.js");
+
+    vi.mocked(fetchManagedResources).mockResolvedValue(mockResources);
+    vi.mocked(buildStatusData).mockResolvedValue({
+      totalResources: 2,
+      totalEstimatedMonthlyCost: "$15.00/month",
+      byType: [],
+      byRegion: [],
+      lastUpdated: "2026-03-22T00:00:00.000Z",
+    });
+
+    await statusCommand.parseAsync([
+      "node",
+      "status",
+      "stale-run-id-json",
+      "--json",
+    ]);
+
+    const stderrOutput = stderrSpy.mock.calls
+      .map((c: unknown[]) => c[0])
+      .join("");
+    // JSON mode: no human-readable `[WARN]` line on stderr.
+    expect(stderrOutput).not.toContain("[WARN]");
+
+    // Structured WARN event still emitted so the machinery is honest
+    // about dropping the runId.
+    const calls = vi
+      .mocked(log)
+      .mock.calls.map((c: unknown[]) => c[0] as Record<string, unknown>);
+    const warn = calls.find(
+      (ev) => ev["action"] === "status_started" && ev["level"] === "warn",
+    );
+    expect(warn).toBeDefined();
+    expect((warn!["extras"] as Record<string, unknown>)["suppliedRunId"]).toBe(
+      "stale-run-id-json",
+    );
+  });
+
+  it("regression: `status` (no positional) emits NO WARN event", async () => {
+    const { fetchManagedResources } =
+      await import("../services/list-resources.js");
+    const { buildStatusData } =
+      await import("../services/status-aggregator.js");
+    const { log } = await import("../utils/logger.js");
+    const { statusCommand } = await import("./status.js");
+
+    vi.mocked(fetchManagedResources).mockResolvedValue(mockResources);
+    vi.mocked(buildStatusData).mockResolvedValue({
+      totalResources: 2,
+      totalEstimatedMonthlyCost: "$15.00/month",
+      byType: [],
+      byRegion: [],
+      lastUpdated: "2026-03-22T00:00:00.000Z",
+    });
+
+    // Default `from: "node"` so argv[0]="node" and argv[1]="status" are
+    // stripped — no surplus positional captured as runId.
+    await statusCommand.parseAsync(["node", "status"]);
+
+    const calls = vi
+      .mocked(log)
+      .mock.calls.map((c: unknown[]) => c[0] as Record<string, unknown>);
+    const warn = calls.find(
+      (ev) => ev["action"] === "status_started" && ev["level"] === "warn",
+    );
+    expect(warn).toBeUndefined();
   });
 });

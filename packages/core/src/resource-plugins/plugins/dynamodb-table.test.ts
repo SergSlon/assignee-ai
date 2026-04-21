@@ -24,11 +24,6 @@ describe("dynamodbTablePlugin", () => {
     expect(field?.required).toBe(true);
   });
 
-  // Wave 16: strengthened the validator tests below to assert each
-  // returns a non-empty STRING error message rather than just any
-  // non-undefined value. The previous `toBeDefined()` would have
-  // passed for `0`, `false`, `""` — none of which a wizard prompt
-  // could meaningfully display.
   describe("TableName validation", () => {
     const validate = dynamodbTablePlugin.commonFields.find(
       (f) => f.name === "TableName",
@@ -53,6 +48,60 @@ describe("dynamodbTablePlugin", () => {
 
     it("rejects names shorter than 3 chars", () => {
       expectStringError(validate("ab"));
+    });
+  });
+
+  describe("TableName toCfn auto-generation (Epic 92 Wave 4.b / A-06)", () => {
+    const field = dynamodbTablePlugin.commonFields.find(
+      (f) => f.name === "TableName",
+    )!;
+    const AUTO_NAME_PATTERN = /^assignee-dynamodb-table-[0-9a-f]{8}$/;
+
+    it("auto-generates assignee-dynamodb-table-<8hex> on empty input", () => {
+      const result = field.toCfn!("");
+      expect(typeof result).toBe("string");
+      expect(result as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("auto-generates on whitespace-only input", () => {
+      expect(field.toCfn!("   ") as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("auto-generates on undefined input", () => {
+      expect(field.toCfn!(undefined) as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("replaces the literal placeholder 'example-table' (LLM echo guard)", () => {
+      expect(field.toCfn!("example-table") as string).toMatch(
+        AUTO_NAME_PATTERN,
+      );
+    });
+
+    it("replaces 'my-table' / 'my-dynamodb-table' / 'my-ddb-table'", () => {
+      expect(field.toCfn!("my-table") as string).toMatch(AUTO_NAME_PATTERN);
+      expect(field.toCfn!("my-dynamodb-table") as string).toMatch(
+        AUTO_NAME_PATTERN,
+      );
+      expect(field.toCfn!("my-ddb-table") as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("preserves user-specified names unchanged", () => {
+      expect(field.toCfn!("orders_v2")).toBe("orders_v2");
+      expect(field.toCfn!("user-sessions-prod")).toBe("user-sessions-prod");
+    });
+
+    it("returns a different auto-name on each call (crypto.randomBytes)", () => {
+      const a = field.toCfn!("");
+      const b = field.toCfn!("");
+      expect(a).not.toBe(b);
+    });
+
+    it("generated names satisfy the TableName validator (round-trip)", () => {
+      const validate = field.question.validate!;
+      for (let i = 0; i < 5; i++) {
+        const name = field.toCfn!("") as string;
+        expect(validate(name)).toBeUndefined();
+      }
     });
   });
 
@@ -135,25 +184,29 @@ describe("dynamodbTablePlugin", () => {
   });
 
   it("has secure defaults", () => {
-    expect(dynamodbTablePlugin.defaults).toEqual({
-      BillingMode: "PAY_PER_REQUEST",
-      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true },
-      SSESpecification: { SSEEnabled: true },
+    // Epic 92 Wave 4.b (A-06): TableName is now a dynamic getter producing
+    // `assignee-dynamodb-table-<8hex>` on each access. Assert the static
+    // defaults and the getter shape separately because `toEqual` would fail
+    // on the fresh random value.
+    expect(dynamodbTablePlugin.defaults.BillingMode).toBe("PAY_PER_REQUEST");
+    expect(
+      dynamodbTablePlugin.defaults.PointInTimeRecoverySpecification,
+    ).toEqual({ PointInTimeRecoveryEnabled: true });
+    expect(dynamodbTablePlugin.defaults.SSESpecification).toEqual({
+      SSEEnabled: true,
     });
+    const defaultName = dynamodbTablePlugin.defaults.TableName;
+    expect(typeof defaultName).toBe("string");
+    expect(defaultName as string).toMatch(
+      /^assignee-dynamodb-table-[0-9a-f]{8}$/,
+    );
   });
 
   it("has configHints for LLM", () => {
-    // Wave 16: dropped redundant `toBeDefined()` — `Array.isArray`
-    // catches null/meters and non-array shapes.
     expect(Array.isArray(dynamodbTablePlugin.configHints)).toBe(true);
     expect(dynamodbTablePlugin.configHints!.length).toBeGreaterThan(0);
   });
 
-  // Story e92.1.a — configHints guard LLM against the two CCAPI-shape
-  // bugs (A-01 ProvisionedThroughput under PAY_PER_REQUEST; A-16
-  // AttributeDefinitions omissions). If these hints regress, the
-  // sanitizer is the last line of defense — but the prompt should
-  // also educate the LLM up front.
   describe("configHints CCAPI-shape guardrails (e92.1.a)", () => {
     const hints = dynamodbTablePlugin.configHints!.join(" ");
 
@@ -169,6 +222,12 @@ describe("dynamodbTablePlugin", () => {
       expect(hints).toMatch(
         /GlobalSecondaryIndexes|LocalSecondaryIndexes|EVERY/,
       );
+    });
+
+    it("guides LLM to OMIT TableName so Assignee auto-generates (A-06)", () => {
+      expect(hints).toMatch(/TableName/);
+      expect(hints).toMatch(/OMIT|auto-generate/i);
+      expect(hints).toMatch(/assignee-dynamodb-table/);
     });
   });
 });

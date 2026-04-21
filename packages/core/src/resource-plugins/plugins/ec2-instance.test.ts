@@ -35,14 +35,10 @@ describe("ec2InstancePlugin", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "InstanceType",
     );
-    // Wave 16: strengthened — assert by name + question type instead
-    // of bare existence (matches the strengthening pattern across all
-    // plugin tests in this wave).
     expect(field?.name).toBe("InstanceType");
     expect(field?.question.type).toBe("categorySelect");
     expect(field?.question.initialValue).toBe("t3.micro");
     expect(field?.question.categories?.length).toBe(4);
-    // Verify all 28 instance types are present across categories
     const allValues =
       field?.question.categories?.flatMap((c) =>
         c.options.map((o) => o.value),
@@ -52,7 +48,6 @@ describe("ec2InstancePlugin", () => {
     expect(allValues).toContain("m5.large");
     expect(allValues).toContain("c5.large");
     expect(allValues).toContain("r5.large");
-    // No duplicate values
     expect(new Set(allValues).size).toBe(28);
   });
 
@@ -60,7 +55,6 @@ describe("ec2InstancePlugin", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "ImageId",
     );
-    // Wave 16: strengthened.
     expect(field?.name).toBe("ImageId");
     expect(field?.question.type).toBe("enum");
     expect(field?.question.fetcher).toBe("discover-amis");
@@ -70,7 +64,6 @@ describe("ec2InstancePlugin", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "KeyName",
     );
-    // Wave 16: strengthened.
     expect(field?.name).toBe("KeyName");
     expect(field?.question.type).toBe("enum");
     expect(field?.question.fetcher).toBe("discover-key-pairs");
@@ -80,7 +73,6 @@ describe("ec2InstancePlugin", () => {
     const field = ec2InstancePlugin.commonFields.find(
       (f) => f.name === "SecurityGroupIds",
     );
-    // Wave 16: strengthened.
     expect(field?.name).toBe("SecurityGroupIds");
     expect(field?.question.type).toBe("multi");
   });
@@ -142,7 +134,12 @@ describe("ec2InstancePlugin", () => {
     expect(names).toContain("UserData");
   });
 
-  it("defaults includes secure settings: IMDSv2 + hop limit, encrypted EBS, termination protection, EBS optimized", () => {
+  it("defaults includes secure settings: IMDSv2 + hop limit, encrypted EBS, termination protection, EBS optimized, CPU credits standard", () => {
+    // Epic 92 Wave 4.b (finding C-16): the facade seeds
+    // CreditSpecification = { CpuCredits: "standard" } on top of the
+    // inner plugin's defaults so the plan-row "CPU Credits" is never
+    // empty. "standard" matches AWS's own default for burstable
+    // (t3/t4g) types and is a no-op for non-burstable types at apply.
     expect(ec2InstancePlugin.defaults).toEqual({
       MetadataOptions: { HttpTokens: "required", HttpPutResponseHopLimit: 1 },
       DisableApiTermination: true,
@@ -153,6 +150,18 @@ describe("ec2InstancePlugin", () => {
           Ebs: { Encrypted: true, VolumeType: "gp3" },
         },
       ],
+      CreditSpecification: { CpuCredits: "standard" },
+    });
+  });
+
+  it("CPU Credits default (C-16): CreditSpecification seeded with CpuCredits=standard", () => {
+    // Finding C-16 root cause: when the user didn't supply a
+    // CreditSpecification, the plan-display row "CPU Credits" (from
+    // utils/display-helpers/friendly-names.ts) rendered with an empty
+    // value and looked broken. The facade now seeds the AWS-native
+    // default so every plan row has a meaningful value.
+    expect(ec2InstancePlugin.defaults.CreditSpecification).toEqual({
+      CpuCredits: "standard",
     });
   });
 
@@ -171,10 +180,6 @@ describe("ec2InstancePlugin", () => {
       expect(field.question.validate?.("16384")).toBeUndefined();
     });
 
-    // Wave 16: strengthened — validators must return a non-empty STRING
-    // error message, not just any non-undefined value (e.g. `0`,
-    // `false`, `""`). Same pattern as the lambda-function and
-    // s3-bucket plugin tests.
     it("rejects value below 1", () => {
       const err = field.question.validate?.("0");
       expect(typeof err).toBe("string");
@@ -196,8 +201,6 @@ describe("ec2InstancePlugin", () => {
 
   describe("configHints", () => {
     it("has configHints defined", () => {
-      // Wave 16: dropped redundant `toBeDefined()` — `Array.isArray`
-      // catches null/undefined AND non-array shapes.
       expect(Array.isArray(ec2InstancePlugin.configHints)).toBe(true);
       expect(ec2InstancePlugin.configHints!.length).toBeGreaterThan(0);
     });
@@ -263,7 +266,6 @@ describe("ec2InstancePlugin", () => {
       });
 
       it("classifies valid base64 (binary blob) as base64", () => {
-        // "hello world" → aGVsbG8gd29ybGQ= (no plaintext marker on decode)
         expect(classifyUserData("aGVsbG8gd29ybGQ=")).toBe("base64");
       });
 
@@ -288,12 +290,10 @@ describe("ec2InstancePlugin", () => {
       });
 
       it("classifies UTF-8 non-ASCII plaintext as plaintext", () => {
-        // Japanese characters — not valid base64 chars
         expect(classifyUserData("こんにちは世界")).toBe("plaintext");
       });
 
       it("classifies base64 with newlines as base64 (stripped)", () => {
-        // Split base64 across lines — still valid base64
         const encoded = Buffer.from("binary blob content", "utf8").toString(
           "base64",
         );
@@ -302,7 +302,6 @@ describe("ec2InstancePlugin", () => {
       });
 
       it("classifies non-multiple-of-4 length as plaintext", () => {
-        // Length 5 — can't be real base64
         expect(classifyUserData("abcde")).toBe("plaintext");
       });
     });

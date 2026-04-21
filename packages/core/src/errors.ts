@@ -5,6 +5,8 @@
  * @see project-context.md — Error Handling section
  */
 
+import { getTypeHint } from "./config/supported-types-block.js";
+
 /**
  * Base error class for all Assignee.ai errors (referred to as `AppError` in story/spec docs).
  */
@@ -50,11 +52,21 @@ export class StateGuardError extends AssigneeError {
   }
 }
 
-/** Error when a requested resource type is not supported. */
+/**
+ * Error when a requested resource type is not supported.
+ *
+ * Story e92-3a (Epic 92 wave 3.a): the message embeds the short
+ * single-line hint from `getTypeHint()` rather than a hardcoded
+ * supported-types grid. The full grouped grid is reserved for `--help`
+ * output; error triples ([ERROR]+[CONTEXT]+[FIX]) must stay compact so
+ * short terminals don't scroll the error off-screen (closes finding
+ * D-33). The hint is registry-derived via `getTypeHint()` — single
+ * source of truth, no drift possible (closes D-32).
+ */
 export class UnsupportedResourceError extends AssigneeError {
   constructor(resourceType: string) {
     super(
-      `Resource type "${resourceType}" is not supported in the current phase.`,
+      `Resource type "${resourceType}" is not supported in the current phase. ${getTypeHint()}`,
       "UNSUPPORTED_RESOURCE",
     );
     this.name = "UnsupportedResourceError";

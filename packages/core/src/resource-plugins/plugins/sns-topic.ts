@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { CfnKey } from "../../config/cfn-keys.js";
 import { KMS_ALIAS_PREFIX } from "../../config/aws-arns.js";
@@ -11,6 +12,29 @@ import {
 import { FieldLabel } from "../field-labels.js";
 
 /**
+ * Epic 92 Wave 4.b (finding A-15): placeholder-sounding literal names like
+ * "my-sns-topic" or "my-topic" were leaking into real AWS accounts when the
+ * LLM echoed the field placeholder. Mirrors the Lambda compound pattern's
+ * `assignee-lambda-fn-<hash>` convention:
+ *
+ *   assignee-sns-topic-<8 hex>
+ *
+ * Generated identifier uses only `[a-zA-Z0-9_-]` (SNS-allowed), fits within
+ * the 256-char limit, and has no special characters that would confuse
+ * `config/arn-builder.ts` on destroy round-trip.
+ */
+const PLACEHOLDER_TOPIC_NAMES = new Set([
+  "my-topic",
+  "my-sns-topic",
+  "example-topic",
+  "example-sns-topic",
+]);
+
+function generateSnsTopicName(): string {
+  return `assignee-sns-topic-${randomBytes(4).toString("hex")}`;
+}
+
+/**
  * ResourcePlugin for AWS::SNS::Topic.
  * Supports standard and FIFO topics for pub/sub messaging.
  */
@@ -22,12 +46,12 @@ export const snsTopicPlugin: ResourcePlugin = {
       question: {
         type: "string",
         label: "Topic name",
-        placeholder: "my-topic (leave blank for auto-generated)",
-        hint: "Must be 1-256 chars. FIFO topics get .fifo appended automatically. Leave blank for an auto-generated name.",
+        placeholder:
+          "assignee-sns-topic-<8hex> (leave blank for auto-generated)",
+        hint: "Must be 1-256 chars. FIFO topics get .fifo appended automatically. Leave blank — Assignee auto-generates 'assignee-sns-topic-<8hex>'.",
         validate: (value: unknown) => {
           if (!value) return undefined;
           let s = String(value);
-          // Strip .fifo suffix — AWS appends it automatically for FIFO topics
           if (s.endsWith(".fifo")) s = s.slice(0, -5);
           if (s.length > 256) return "Topic name must be 1-256 characters";
           if (!/^[a-zA-Z0-9_-]+$/.test(s))
@@ -36,13 +60,16 @@ export const snsTopicPlugin: ResourcePlugin = {
         },
       },
       toCfn: (v: unknown) => {
-        if (!v) return undefined;
-        let s = String(v);
-        // Strip .fifo suffix if user included it — AWS adds .fifo automatically for FIFO topics
+        if (v === undefined || v === null) return generateSnsTopicName();
+        let s = String(v).trim();
+        if (s === "") return generateSnsTopicName();
         if (s.endsWith(".fifo")) {
           s = s.slice(0, -5);
         }
-        return s || undefined;
+        if (PLACEHOLDER_TOPIC_NAMES.has(s.toLowerCase())) {
+          return generateSnsTopicName();
+        }
+        return s || generateSnsTopicName();
       },
     },
     {
@@ -119,12 +146,19 @@ export const snsTopicPlugin: ResourcePlugin = {
       },
     },
   ],
-  defaults: {},
+  defaults: {
+    // Getter — every access returns a fresh `assignee-sns-topic-<8hex>` so
+    // a long-lived MCP server does not reuse the same seed across plans.
+    get [CfnKey.TOPIC_NAME](): string {
+      return generateSnsTopicName();
+    },
+  },
   configHints: [
     "SNS KmsMasterKeyId: Consider setting to 'alias/aws/sns' for server-side encryption at rest using the AWS-managed SNS key.",
     "FifoTopic MUST be set to true if the TopicName ends with .fifo. Standard and FIFO topics cannot be converted after creation.",
     "ContentBasedDeduplication can only be enabled on FIFO topics — setting it on a standard topic causes a CloudFormation error.",
     "Subscription configuration (protocol, endpoint) requires a separate AWS::SNS::Subscription resource — do NOT put subscription properties on the Topic itself.",
     "DisplayName is used as the 'from' line in SMS messages and is limited to 100 characters for SMS delivery.",
+    "TopicName: OMIT when the user didn't specify a name. Assignee auto-generates `assignee-sns-topic-<8hex>` so placeholders like `my-topic`, `my-sns-topic`, or `example-topic` never materialize into a real AWS account.",
   ],
 };

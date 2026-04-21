@@ -35,6 +35,13 @@ import {
 } from "@/constants/cfn-keys.js";
 import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
 import { defaultMemoryService } from "@/services/memory.js";
+// Epic 92 Wave 4.c F-D-34 — name-matching scope tightening + metadata
+// scrub for the "Previous error" hint. See `readMemoryHints` below.
+import {
+  extractDesiredNameFromErrorMessage,
+  extractDesiredNameFromState,
+  scrubEmptyErrorMetadata,
+} from "@/services/cost-history/index.js";
 import { stripPromptBoundaryTags } from "@/llm/prompt-sanitize.js";
 import type { AgentState } from "../../graph-state.js";
 
@@ -104,12 +111,52 @@ export async function readMemoryHints(
         Date.now() - new Date(latestFailure.timestamp).getTime();
       const failureIsTooOld = failureAge > TWENTY_FOUR_HOURS_MS;
       if (!failureIsStale && !failureIsTooOld) {
-        const fixSuffix = latestFailure.suggestedFix
-          ? ` Fix: ${latestFailure.suggestedFix}`
-          : "";
-        memoryHints.push(
-          `\u26A0 Previous error with ${latestFailure.resourceType}: ${latestFailure.errorMessage}.${fixSuffix}`,
+        // Epic 92 Wave 4.c F-D-34 — name-matching scope tightening.
+        // Pre-fix behaviour printed every previous error whose
+        // resource type + staleness window matched, even when the
+        // error clearly referred to a different resource name
+        // (F-CROSS-001 repro: slice-A's `dogfood-e92-a-s3-1776800919
+        // already exists` leaked into slice-D's plan for a fresh bucket).
+        //
+        // Without schema support for a stored `desiredName`, derive
+        // both sides at read time:
+        //   - prior: parse the failure's errorMessage for a leading
+        //     identifier token (best-effort; real AWS SDK messages put
+        //     the offending name up front).
+        //   - current: pull the primary-identifier from `state.desiredState`
+        //     when earlier nodes populated it, else extract a `named
+        //     <token>` / `called <token>` reference from the user intent.
+        //
+        // Only when BOTH extractions succeed AND the names differ do
+        // we skip the hint. Either-side-undefined falls back to the
+        // existing scope (type + stale + 24h) — important so a
+        // legitimate same-name retry still surfaces its prior failure.
+        const priorName = extractDesiredNameFromErrorMessage(
+          latestFailure.errorMessage,
         );
+        const currentName = extractDesiredNameFromState({
+          desiredState: state.desiredState,
+          userIntent: state.userIntent,
+        });
+        const nameMismatch =
+          priorName !== undefined &&
+          currentName !== undefined &&
+          priorName !== currentName;
+        if (!nameMismatch) {
+          const fixSuffix = latestFailure.suggestedFix
+            ? ` Fix: ${latestFailure.suggestedFix}`
+            : "";
+          // F-D-34 scrub: strip `Status Code: 0`, `Request ID: null`,
+          // and empty `(Service: X)` parentheticals so the user sees
+          // an actionable message rather than AWS SDK placeholder
+          // machinery.
+          const cleanMessage = scrubEmptyErrorMetadata(
+            latestFailure.errorMessage,
+          );
+          memoryHints.push(
+            `\u26A0 Previous error with ${latestFailure.resourceType}: ${cleanMessage}.${fixSuffix}`,
+          );
+        }
       }
     }
   } catch (err) {

@@ -31,7 +31,6 @@ describe("ecrRepositoryPlugin", () => {
     });
 
     it("rejects empty value with 'required' error", () => {
-      // Tier C: strengthened from toBeDefined()
       expect(field.question.validate?.("")).toBe("Repository name is required");
     });
 
@@ -44,34 +43,84 @@ describe("ecrRepositoryPlugin", () => {
     });
 
     it("rejects names shorter than 2 chars with length error", () => {
-      // Tier C: strengthened from toBeDefined()
       expect(field.question.validate?.("a")).toBe(
         "Repository name must be 2-256 characters",
       );
     });
 
     it("rejects names longer than 256 chars with length error", () => {
-      // Tier C: strengthened from toBeDefined()
       expect(field.question.validate?.("a".repeat(257))).toBe(
         "Repository name must be 2-256 characters",
       );
     });
 
     it("accepts exactly 256 chars (boundary)", () => {
-      // Tier C: new boundary test
       expect(field.question.validate?.("a".repeat(256))).toBeUndefined();
     });
 
     it("accepts exactly 2 chars (lower boundary)", () => {
-      // Tier C: new boundary test
       expect(field.question.validate?.("ab")).toBeUndefined();
     });
 
     it("rejects names with uppercase with charset error", () => {
-      // Tier C: strengthened from toBeDefined()
       expect(field.question.validate?.("MyApp")).toBe(
         "Must start with lowercase letter/number and contain only lowercase letters, numbers, hyphens, underscores, forward slashes, and periods",
       );
+    });
+  });
+
+  describe("RepositoryName toCfn auto-generation (Epic 92 Wave 4.b / C-22)", () => {
+    const field = ecrRepositoryPlugin.commonFields.find(
+      (f) => f.name === "RepositoryName",
+    )!;
+    const AUTO_NAME_PATTERN = /^assignee-ecr-repository-[0-9a-f]{8}$/;
+
+    it("auto-generates assignee-ecr-repository-<8hex> on empty input", () => {
+      const result = field.toCfn!("");
+      expect(typeof result).toBe("string");
+      expect(result as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("auto-generates on whitespace-only input", () => {
+      expect(field.toCfn!("   ") as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("auto-generates on undefined input", () => {
+      expect(field.toCfn!(undefined) as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("replaces the literal placeholder 'my-app' (LLM echo guard)", () => {
+      expect(field.toCfn!("my-app") as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("replaces common placeholders (example-repo / my-repository / my-ecr-repo)", () => {
+      expect(field.toCfn!("example-repo") as string).toMatch(AUTO_NAME_PATTERN);
+      expect(field.toCfn!("my-repository") as string).toMatch(
+        AUTO_NAME_PATTERN,
+      );
+      expect(field.toCfn!("my-ecr-repo") as string).toMatch(AUTO_NAME_PATTERN);
+      expect(field.toCfn!("example-repository") as string).toMatch(
+        AUTO_NAME_PATTERN,
+      );
+    });
+
+    it("preserves user-specified names unchanged", () => {
+      expect(field.toCfn!("payments-api")).toBe("payments-api");
+      expect(field.toCfn!("team/backend-service")).toBe("team/backend-service");
+    });
+
+    it("returns a different auto-name on each call (crypto.randomBytes)", () => {
+      const a = field.toCfn!("");
+      const b = field.toCfn!("");
+      expect(a).not.toBe(b);
+    });
+
+    it("generated names satisfy the RepositoryName validator (round-trip)", () => {
+      const validate = field.question.validate!;
+      for (let i = 0; i < 5; i++) {
+        const name = field.toCfn!("") as string;
+        expect(validate(name)).toBeUndefined();
+      }
     });
   });
 
@@ -107,7 +156,6 @@ describe("ecrRepositoryPlugin", () => {
   });
 
   it("Tags field has callable toCfn transform", () => {
-    // Tier C: strengthened — find!() + function-ness
     const field = ecrRepositoryPlugin.commonFields.find(
       (f) => f.name === "Tags",
     )!;
@@ -164,7 +212,6 @@ describe("ecrRepositoryPlugin", () => {
     });
 
     it("rejects invalid ARN with KMS-format error", () => {
-      // Tier C: strengthened from toBeDefined()
       expect(field.question.validate?.("not-a-kms-arn")).toBe(
         "Must be a KMS key ARN (arn:aws:kms:...)",
       );
@@ -172,9 +219,23 @@ describe("ecrRepositoryPlugin", () => {
   });
 
   it("defaults include ImageTagMutability and ImageScanningConfiguration", () => {
-    expect(ecrRepositoryPlugin.defaults).toEqual({
-      ImageTagMutability: "IMMUTABLE",
-      ImageScanningConfiguration: { ScanOnPush: true },
+    // Epic 92 Wave 4.b (C-22): RepositoryName is now a dynamic getter
+    // producing `assignee-ecr-repository-<8hex>` on each access.
+    expect(ecrRepositoryPlugin.defaults.ImageTagMutability).toBe("IMMUTABLE");
+    expect(ecrRepositoryPlugin.defaults.ImageScanningConfiguration).toEqual({
+      ScanOnPush: true,
     });
+    const defaultName = ecrRepositoryPlugin.defaults.RepositoryName;
+    expect(typeof defaultName).toBe("string");
+    expect(defaultName as string).toMatch(
+      /^assignee-ecr-repository-[0-9a-f]{8}$/,
+    );
+  });
+
+  it("configHints guides LLM to OMIT RepositoryName for auto-generation (C-22)", () => {
+    const hints = ecrRepositoryPlugin.configHints!.join(" ");
+    expect(hints).toMatch(/RepositoryName/);
+    expect(hints).toMatch(/OMIT|auto-generate/i);
+    expect(hints).toMatch(/assignee-ecr-repository/);
   });
 });

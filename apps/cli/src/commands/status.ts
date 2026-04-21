@@ -10,7 +10,22 @@
  * This is a direct SDK command (no LangGraph graph), following the same
  * pattern as `assignee list`.
  *
- * @see Story 19.6, Story 30.7
+ * Epic 92 uncluster e92.u.a (A-12, D-08, D-36):
+ *   - [runId] positional: accepted now but `status` is a fleet-level
+ *     summary that cannot filter by run id. When the caller passes a
+ *     runId we emit a `[WARN]` structured log event pointing them at
+ *     `assignee list --json` (the per-run query surface) and continue
+ *     to render the default summary so the command is still useful.
+ *   - Structured log envelope: `STATUS_STARTED` at entry, `STATUS_COMPLETE`
+ *     at success / error. Matches the plan / optimize envelope so
+ *     `--verbose status 2>stderr.log` actually writes JSON events. We do
+ *     NOT pull status through the full `runCommand` harness because
+ *     status is a direct-SDK command — forcing the LLM client / graph
+ *     build just for a summary would introduce a Bedrock-availability
+ *     regression. The observable deliverable for D-36 is the log events,
+ *     which are emitted directly here.
+ *
+ * @see Story 19.6, Story 30.7, Epic 92 e92.u.a
  */
 
 import { Command } from "commander";
@@ -36,9 +51,19 @@ import {
   resolveResourceTypeFilter,
   INVALID_RESOURCE_TYPE_CODE,
 } from "./resource-type-filter.js";
+import { log, LOG_ACTIONS, LogLevel } from "../utils/logger.js";
 
 export const statusCommand = new Command(CommandName.STATUS)
   .description(CommandDescription.STATUS)
+  // Epic 92 e92.u.a (A-12, D-08): accept an optional [runId] so passing
+  // one no longer silently disappears. It's informational — status is
+  // fleet-level and doesn't support per-run filtering — but the help
+  // text now documents the arg and the WARN event tells the user where
+  // to go (`list --json`) for per-run queries.
+  .argument(
+    "[runId]",
+    "Optional run id. `status` is a fleet-level summary and cannot filter by run — when you pass one we emit a warning and point you at `assignee list --json` for the per-run query path.",
+  )
   .option("--json", "Output status data as JSON")
   .option("--region <region>", "Filter to a specific AWS region")
   .option(
@@ -68,155 +93,246 @@ Examples:
         Best-practice rule coverage dashboard
   $ assignee status --bp-coverage --gaps-only
         CI mode: exit non-zero if any resource type has zero BP rules
+  $ assignee status <runId>
+        status is a fleet-level summary — the positional runId is NOT
+        used to filter; we emit a warning and still render the summary.
+        Use \`assignee list --json\` to query a specific run's resources.
 
 status is read-only. No --yes required.
 `,
   )
   .action(
-    async (opts: {
-      json?: boolean;
-      region?: string;
-      resourceType?: string;
-      bpCoverage?: boolean;
-      gapsOnly?: boolean;
-      includeStructuralGaps?: boolean;
-    }) => {
-      // BP Coverage mode (Story 30.7)
-      if (opts.bpCoverage) {
-        try {
-          // Resolve the best-practices package directory via factory
-          const bpDir = getBpDir();
+    async (
+      runId: string | undefined,
+      opts: {
+        json?: boolean;
+        region?: string;
+        resourceType?: string;
+        bpCoverage?: boolean;
+        gapsOnly?: boolean;
+        includeStructuralGaps?: boolean;
+      },
+    ) => {
+      // Per-invocation correlation id. Used to tag the STATUS_STARTED /
+      // STATUS_COMPLETE events so a single run can be grep'd end-to-end
+      // out of `~/.assignee/logs/cli-YYYY-MM-DD.jsonl`.
+      const invocationId = crypto.randomUUID();
+      const startTs = Date.now();
 
-          const data = computeBPCoverage(bpDir);
+      log({
+        ts: new Date().toISOString(),
+        runId: invocationId,
+        level: LogLevel.INFO,
+        action: LOG_ACTIONS.STATUS_STARTED,
+        extras: {
+          intent: "status",
+          ...(runId !== undefined ? { suppliedRunId: runId } : {}),
+          ...(opts.bpCoverage === true ? { mode: "bp-coverage" } : {}),
+          ...(opts.json === true ? { json: true } : {}),
+        },
+      });
 
-          // --gaps-only: CI-friendly filtered view. JSON mode returns
-          // just the gaps array so `jq length` gives the gap count;
-          // text mode prints the short list and exits 1 if non-empty.
-          // By default the filter drops structural/cross-reference
-          // types whose BP content lives on child resources —
-          // opts.includeStructuralGaps restores the raw list for
-          // users who explicitly want to audit those too.
-          if (opts.gapsOnly) {
-            const reportedGaps = opts.includeStructuralGaps
-              ? data.gaps
-              : filterActionableGaps(data.gaps);
-            if (opts.json) {
-              process.stdout.write(
-                JSON.stringify({ gaps: reportedGaps }, null, 2) + "\n",
-              );
-            } else {
-              renderBPCoverageGaps(reportedGaps);
-            }
-            if (reportedGaps.length > 0) {
-              process.exit(1);
-            }
-            return;
-          }
-
-          if (opts.json) {
-            process.stdout.write(JSON.stringify(data, null, 2) + "\n");
-            return;
-          }
-
-          renderBPCoverage(data);
-        } catch (error: unknown) {
-          const err = error instanceof Error ? error : new Error(String(error));
-          renderError(
-            "Failed to compute BP coverage.",
-            "Ensure packages/best-practices/ directory is accessible.",
-            { why: err.message },
+      // A-12: warn the caller that the positional runId doesn't gate
+      // the summary. We still execute the default flow so the user
+      // isn't punished — they learn about the real query surface
+      // (`list --json`) without losing the output they wanted.
+      if (runId !== undefined && runId.length > 0) {
+        log({
+          ts: new Date().toISOString(),
+          runId: invocationId,
+          level: LogLevel.WARN,
+          action: LOG_ACTIONS.STATUS_STARTED,
+          extras: {
+            warning: "runId-positional-ignored",
+            suppliedRunId: runId,
+            hint: "`assignee status` is a fleet-level summary. Use `assignee list --json` (optionally filtered by --resource-type / --region) to query a specific run's resources.",
+          },
+        });
+        // In non-JSON mode also surface the warning on stderr so a
+        // user who didn't pass --verbose still learns why their
+        // positional is not being honoured. JSON mode keeps stderr
+        // minimal so scripted consumers don't get surprise bytes.
+        if (opts.json !== true) {
+          process.stderr.write(
+            `[WARN] \`status\` ignores the runId positional ("${runId}"). ` +
+              "Use `assignee list --json` for per-run queries; continuing with fleet-level summary.\n",
           );
-        }
-        return;
-      }
-
-      // Resolve + validate the --resource-type filter BEFORE hitting
-      // AWS. Parity with MCP `list_managed_resources` — same CFN-form
-      // filter gets forwarded to core.
-      let resolvedResourceType: string | undefined;
-      if (opts.resourceType !== undefined) {
-        try {
-          resolvedResourceType = resolveResourceTypeFilter(opts.resourceType);
-        } catch (err) {
-          if (
-            err instanceof AssigneeError &&
-            err.code === INVALID_RESOURCE_TYPE_CODE
-          ) {
-            renderError(
-              `Unknown --resource-type "${opts.resourceType}".`,
-              "Pass a supported CFN type (e.g. AWS::S3::Bucket) or a unique shorthand (e.g. S3, Lambda).",
-              { why: err.message },
-            );
-          } else {
-            // Story 56-it2-04 P1-02: guard asymmetric error paths —
-            // see the sibling comment in list.ts for the rationale.
-            const message = err instanceof Error ? err.message : String(err);
-            renderError(
-              `Failed to validate --resource-type "${opts.resourceType}".`,
-              "Check the value and try again — see `assignee status --help` for supported types.",
-              { why: message },
-            );
-          }
-          throw err;
         }
       }
 
       try {
-        const resources = await fetchManagedResources(
-          opts.region,
-          resolvedResourceType,
-        );
-
-        if (resources.length === 0) {
-          renderEmptyStatus();
-          return;
-        }
-
-        // Fetch status data and cost anomalies in parallel
-        const billingTools = await getBillingMcpToolsAsync();
-        const [statusData, anomalies] = await Promise.all([
-          buildStatusData(resources),
-          billingTools
-            ? queryCostAnomalies(billingTools)
-            : ([] as CostAnomaly[]),
-        ]);
-
-        if (opts.json) {
-          process.stdout.write(
-            JSON.stringify(
-              {
-                ...statusData,
-                ...(anomalies.length > 0 ? { costAnomalies: anomalies } : {}),
-              },
-              null,
-              2,
-            ) + "\n",
-          );
-          return;
-        }
-
-        renderStatusSummary(statusData);
-
-        // Render cost anomalies inline (non-blocking enhancement)
-        if (anomalies.length > 0) {
-          process.stdout.write("\nCost Anomalies:\n");
-          for (const a of anomalies) {
-            process.stdout.write(
-              `  ${a.severity} | ${a.service} | impact: ${a.impact} | ${a.startDate}\n`,
-            );
-          }
-        }
-      } catch (error: unknown) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        renderError(
-          "Failed to fetch status.",
-          "Check your AWS credentials and try again.",
-          { why: err.message },
-        );
-        throw new AssigneeError(
-          err.message || "Failed to fetch status.",
-          "STATUS_ERROR",
-        );
+        await runStatusBody(opts);
+        log({
+          ts: new Date().toISOString(),
+          runId: invocationId,
+          level: LogLevel.INFO,
+          action: LOG_ACTIONS.STATUS_COMPLETE,
+          durationMs: Date.now() - startTs,
+          result: "ok",
+        });
+      } catch (err) {
+        log({
+          ts: new Date().toISOString(),
+          runId: invocationId,
+          level: LogLevel.ERROR,
+          action: LOG_ACTIONS.STATUS_COMPLETE,
+          durationMs: Date.now() - startTs,
+          result: "error",
+          extras: {
+            errorMessage: err instanceof Error ? err.message : String(err),
+          },
+        });
+        throw err;
       }
     },
   );
+
+/**
+ * The pre-Epic-92-e92.u.a status body. Split out from the action
+ * callback so the structured-log envelope wraps it cleanly without
+ * reshuffling the nested try/catch flow below.
+ */
+async function runStatusBody(opts: {
+  json?: boolean;
+  region?: string;
+  resourceType?: string;
+  bpCoverage?: boolean;
+  gapsOnly?: boolean;
+  includeStructuralGaps?: boolean;
+}): Promise<void> {
+  // BP Coverage mode (Story 30.7)
+  if (opts.bpCoverage) {
+    try {
+      // Resolve the best-practices package directory via factory
+      const bpDir = getBpDir();
+
+      const data = computeBPCoverage(bpDir);
+
+      // --gaps-only: CI-friendly filtered view. JSON mode returns
+      // just the gaps array so `jq length` gives the gap count;
+      // text mode prints the short list and exits 1 if non-empty.
+      // By default the filter drops structural/cross-reference
+      // types whose BP content lives on child resources —
+      // opts.includeStructuralGaps restores the raw list for
+      // users who explicitly want to audit those too.
+      if (opts.gapsOnly) {
+        const reportedGaps = opts.includeStructuralGaps
+          ? data.gaps
+          : filterActionableGaps(data.gaps);
+        if (opts.json) {
+          process.stdout.write(
+            JSON.stringify({ gaps: reportedGaps }, null, 2) + "\n",
+          );
+        } else {
+          renderBPCoverageGaps(reportedGaps);
+        }
+        if (reportedGaps.length > 0) {
+          process.exit(1);
+        }
+        return;
+      }
+
+      if (opts.json) {
+        process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+        return;
+      }
+
+      renderBPCoverage(data);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      renderError(
+        "Failed to compute BP coverage.",
+        "Ensure packages/best-practices/ directory is accessible.",
+        { why: err.message },
+      );
+    }
+    return;
+  }
+
+  // Resolve + validate the --resource-type filter BEFORE hitting
+  // AWS. Parity with MCP `list_managed_resources` — same CFN-form
+  // filter gets forwarded to core.
+  let resolvedResourceType: string | undefined;
+  if (opts.resourceType !== undefined) {
+    try {
+      resolvedResourceType = resolveResourceTypeFilter(opts.resourceType);
+    } catch (err) {
+      if (
+        err instanceof AssigneeError &&
+        err.code === INVALID_RESOURCE_TYPE_CODE
+      ) {
+        renderError(
+          `Unknown --resource-type "${opts.resourceType}".`,
+          "Pass a supported CFN type (e.g. AWS::S3::Bucket) or a unique shorthand (e.g. S3, Lambda).",
+          { why: err.message },
+        );
+      } else {
+        // Story 56-it2-04 P1-02: guard asymmetric error paths —
+        // see the sibling comment in list.ts for the rationale.
+        const message = err instanceof Error ? err.message : String(err);
+        renderError(
+          `Failed to validate --resource-type "${opts.resourceType}".`,
+          "Check the value and try again — see `assignee status --help` for supported types.",
+          { why: message },
+        );
+      }
+      throw err;
+    }
+  }
+
+  try {
+    const resources = await fetchManagedResources(
+      opts.region,
+      resolvedResourceType,
+    );
+
+    if (resources.length === 0) {
+      renderEmptyStatus();
+      return;
+    }
+
+    // Fetch status data and cost anomalies in parallel
+    const billingTools = await getBillingMcpToolsAsync();
+    const [statusData, anomalies] = await Promise.all([
+      buildStatusData(resources),
+      billingTools ? queryCostAnomalies(billingTools) : ([] as CostAnomaly[]),
+    ]);
+
+    if (opts.json) {
+      process.stdout.write(
+        JSON.stringify(
+          {
+            ...statusData,
+            ...(anomalies.length > 0 ? { costAnomalies: anomalies } : {}),
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+      return;
+    }
+
+    renderStatusSummary(statusData);
+
+    // Render cost anomalies inline (non-blocking enhancement)
+    if (anomalies.length > 0) {
+      process.stdout.write("\nCost Anomalies:\n");
+      for (const a of anomalies) {
+        process.stdout.write(
+          `  ${a.severity} | ${a.service} | impact: ${a.impact} | ${a.startDate}\n`,
+        );
+      }
+    }
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    renderError(
+      "Failed to fetch status.",
+      "Check your AWS credentials and try again.",
+      { why: err.message },
+    );
+    throw new AssigneeError(
+      err.message || "Failed to fetch status.",
+      "STATUS_ERROR",
+    );
+  }
+}

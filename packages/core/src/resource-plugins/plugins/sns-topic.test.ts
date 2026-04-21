@@ -35,27 +35,86 @@ describe("snsTopicPlugin", () => {
     });
 
     it("rejects names longer than 256 chars with length error", () => {
-      // Tier C: strengthened from toBeDefined()
       expect(field.question.validate?.("a".repeat(257))).toBe(
         "Topic name must be 1-256 characters",
       );
     });
 
     it("accepts exactly 256 chars (boundary)", () => {
-      // Tier C: new boundary test
       expect(field.question.validate?.("a".repeat(256))).toBeUndefined();
     });
 
     it("rejects names with special characters with charset error", () => {
-      // Tier C: strengthened from toBeDefined()
       expect(field.question.validate?.("my topic!")).toBe(
         "Topic name can only contain alphanumeric characters, hyphens, and underscores",
       );
     });
   });
 
+  describe("TopicName toCfn auto-generation (Epic 92 Wave 4.b / A-15)", () => {
+    const field = snsTopicPlugin.commonFields.find(
+      (f) => f.name === "TopicName",
+    )!;
+    const AUTO_NAME_PATTERN = /^assignee-sns-topic-[0-9a-f]{8}$/;
+
+    it("auto-generates assignee-sns-topic-<8hex> on empty input", () => {
+      const result = field.toCfn!("");
+      expect(typeof result).toBe("string");
+      expect(result as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("auto-generates on whitespace-only input", () => {
+      expect(field.toCfn!("   ") as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("auto-generates on undefined input", () => {
+      expect(field.toCfn!(undefined) as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("replaces the literal placeholder 'my-sns-topic' (LLM echo guard)", () => {
+      expect(field.toCfn!("my-sns-topic") as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("replaces the literal placeholder 'my-topic'", () => {
+      expect(field.toCfn!("my-topic") as string).toMatch(AUTO_NAME_PATTERN);
+    });
+
+    it("replaces 'example-topic' / 'example-sns-topic'", () => {
+      expect(field.toCfn!("example-topic") as string).toMatch(
+        AUTO_NAME_PATTERN,
+      );
+      expect(field.toCfn!("example-sns-topic") as string).toMatch(
+        AUTO_NAME_PATTERN,
+      );
+    });
+
+    it("preserves user-specified names unchanged", () => {
+      expect(field.toCfn!("my-real-business-topic")).toBe(
+        "my-real-business-topic",
+      );
+      expect(field.toCfn!("payments-q3-events")).toBe("payments-q3-events");
+    });
+
+    it("strips .fifo suffix on user-provided name (AWS appends it)", () => {
+      expect(field.toCfn!("orders.fifo")).toBe("orders");
+    });
+
+    it("returns a different auto-name on each call (crypto.randomBytes)", () => {
+      const a = field.toCfn!("");
+      const b = field.toCfn!("");
+      expect(a).not.toBe(b);
+    });
+
+    it("defaults[TopicName] getter yields the auto-name pattern", () => {
+      const v = snsTopicPlugin.defaults["TopicName"];
+      expect(typeof v).toBe("string");
+      expect(v as string).toMatch(AUTO_NAME_PATTERN);
+      const w = snsTopicPlugin.defaults["TopicName"];
+      expect(v).not.toBe(w);
+    });
+  });
+
   it("FifoTopic is a boolean field", () => {
-    // Tier C: strengthened — find!() + toMatchObject
     const field = snsTopicPlugin.commonFields.find(
       (f) => f.name === "FifoTopic",
     )!;
@@ -66,7 +125,6 @@ describe("snsTopicPlugin", () => {
   });
 
   it("DisplayName validation rejects > 100 chars with length error", () => {
-    // Tier C: strengthened from toBeDefined()
     const field = snsTopicPlugin.commonFields.find(
       (f) => f.name === "DisplayName",
     )!;
@@ -74,12 +132,10 @@ describe("snsTopicPlugin", () => {
       "Display name must be 100 characters or fewer",
     );
     expect(field.question.validate?.("valid name")).toBeUndefined();
-    // Boundary
     expect(field.question.validate?.("a".repeat(100))).toBeUndefined();
   });
 
   it("Tags field has callable toCfn transform", () => {
-    // Tier C: strengthened — function-ness check
     const field = snsTopicPlugin.commonFields.find((f) => f.name === "Tags")!;
     expect(typeof field.toCfn).toBe("function");
   });
@@ -100,10 +156,6 @@ describe("snsTopicPlugin", () => {
   });
 
   it("advancedFields exposes ContentBasedDeduplication gated on FifoTopic=true", () => {
-    // wizard-interaction-matrix (2026-04-11): the SNS "fifo" intent rule
-    // pre-populates ContentBasedDeduplication, which requires the field to
-    // exist as a user-facing advanced field. It's gated on FifoTopic=true
-    // because AWS rejects ContentBasedDeduplication on standard topics.
     expect(snsTopicPlugin.advancedFields).toHaveLength(1);
     const cbd = snsTopicPlugin.advancedFields[0]!;
     expect(cbd.name).toBe("ContentBasedDeduplication");
@@ -131,7 +183,6 @@ describe("snsTopicPlugin", () => {
     });
 
     it("rejects invalid format with KMS-format error", () => {
-      // Tier C: strengthened from toBeDefined()
       expect(field.question.validate?.("not-a-valid-key")).toBe(
         "Must be a KMS key ARN or alias",
       );
@@ -140,7 +191,6 @@ describe("snsTopicPlugin", () => {
 
   describe("configHints", () => {
     it("has at least 3 configHints (Tier C: was toBeDefined+>0)", () => {
-      // Tier C: strengthened — meaningful floor
       expect(snsTopicPlugin.configHints).toBeInstanceOf(Array);
       expect(snsTopicPlugin.configHints!.length).toBeGreaterThanOrEqual(3);
     });
@@ -149,6 +199,13 @@ describe("snsTopicPlugin", () => {
       const hints = snsTopicPlugin.configHints!.join(" ");
       expect(hints).toMatch(/KmsMasterKeyId/i);
       expect(hints).toMatch(/encryption/i);
+    });
+
+    it("includes guidance to OMIT TopicName for auto-generation (A-15)", () => {
+      const hints = snsTopicPlugin.configHints!.join(" ");
+      expect(hints).toMatch(/TopicName/);
+      expect(hints).toMatch(/OMIT|auto-generate/i);
+      expect(hints).toMatch(/assignee-sns-topic/);
     });
   });
 });

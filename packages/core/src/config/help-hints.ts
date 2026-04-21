@@ -29,12 +29,37 @@
 
 import { SUPPORTED_TYPES_ARRAY } from "./resource-types/supported.js";
 import { defaultPatternRegistry } from "../pattern-templates/index.js";
+import {
+  HINT_MAX_COLUMNS as BLOCK_HINT_MAX_COLUMNS,
+  buildSupportedTypesBlock,
+  getTypeHint,
+} from "./supported-types-block.js";
 
 /** Available render styles for hint output. */
 export type HintStyle = "cli" | "mcp" | "short";
 
-/** Max columns permitted in any rendered hint line (L2-001 closure). */
-export const HINT_MAX_COLUMNS = 100 as const;
+/**
+ * Max columns permitted in any rendered hint line (L2-001 closure).
+ * Re-exported from `supported-types-block.ts` which owns the grouped
+ * rendering; kept as a first-class export on this module so existing
+ * consumers continue to import `{ HINT_MAX_COLUMNS }` from
+ * `@assignee/core` without a path change.
+ */
+export const HINT_MAX_COLUMNS = BLOCK_HINT_MAX_COLUMNS;
+
+/**
+ * Re-export the supported-types-block public API so consumers that
+ * import from `@assignee/core` (via the help-hints sub-barrel) get a
+ * stable named accessor. Epic 92 wave 3.a (story e92-3a) moved the
+ * block body to a dedicated module but preserved every existing
+ * import-site by re-exporting here.
+ *
+ * - `buildSupportedTypesBlock()` — full CLI grouped grid. Only emit on
+ *   `--help` output; never on error-path [FIX] text (see D-33).
+ * - `getTypeHint()` — short single-line breadcrumb for error-path
+ *   surfaces. Points users at `assignee plan --help`.
+ */
+export { buildSupportedTypesBlock, getTypeHint };
 
 /** Registry-derived number of supported resource types (curated CFN list). */
 export function getSupportedTypeCount(): number {
@@ -80,32 +105,7 @@ export function getCompoundPatterns(): ReadonlyArray<{
  * silently fall behind the registry.
  */
 function renderSupportedTypesHintCli(): string {
-  const count = getSupportedTypeCount();
-  return `What you can create (${count} resource types):
-
-  Compute       EC2 instance, Lambda function, ECS cluster
-  Storage       S3 bucket, S3 bucket policy, EFS file system,
-                EFS mount target
-  Databases     RDS DB instance (PostgreSQL/MySQL/MariaDB/Aurora),
-                RDS DB subnet group, DynamoDB table
-  Networking    VPC, Subnet, Security Group, Internet Gateway,
-                VPC Gateway Attachment, Route Table, Route,
-                Subnet <-> Route Table Association, NAT Gateway,
-                Load Balancer
-  Edge / CDN    CloudFront distribution, CloudFront OAC
-  API           API Gateway v2 (HTTP / WebSocket)
-  Messaging     SQS queue, SNS topic, SNS subscription,
-                EventBridge rule, EventBridge event bus,
-                EventBridge connection, EventBridge API destination
-  Security      IAM role, KMS key, Secrets Manager secret,
-                SSM parameter
-  Containers    ECR repository
-  Observability CloudWatch alarm, CloudWatch Logs group
-
-Examples:
-  assignee plan "Create an S3 bucket for my static site"
-  assignee plan "Create an EC2 t3.micro with SSH"
-  assignee plan "Create a PostgreSQL database for production"`;
+  return buildSupportedTypesBlock();
 }
 
 /**
