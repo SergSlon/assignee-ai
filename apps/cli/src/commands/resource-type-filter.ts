@@ -22,6 +22,8 @@
  *      `apps/mcp-server/src/tools/list-managed-resources.ts`.
  *
  * @see Story 56-it1-01 — closes HIGH `it56-1-L3-001`.
+ * @see Story e92.u.b — closes HIGH `F-A-04` (SNS/EC2/VPC/EventBridge/
+ *      CloudWatch/CloudFront service-name shorthands).
  */
 
 import {
@@ -72,7 +74,18 @@ export function warnAmbiguousShorthandIfNeeded(
  *
  * Keep this map small and reviewable — adding an entry is a UX
  * decision, not a default. For ambiguous services (EC2 has 10+
- * supported types) users must pass the full CFN form.
+ * supported types) users must pass the full CFN form OR the service
+ * shorthand added here (e.g. `ec2` → `AWS::EC2::Instance`) which
+ * fires the P2-01 ambiguous-shorthand warning so the user is steered
+ * to the sibling CFN forms if they meant one of those.
+ *
+ * Story e92.u.b (F-A-04): added six service-level shorthands — `sns`,
+ * `ec2`, `vpc`, `eventbridge`, `cloudwatch`, `cloudfront` — so common
+ * user inputs (`--resource-type SNS`, `EC2`, `VPC`, `EventBridge`,
+ * `CloudWatch`, `CloudFront`) resolve instead of erroring out.
+ * `eventbridge` is a special case: the CFN service is `Events` not
+ * `EventBridge`, so step-5 service-name fallback would never fire for
+ * this alias.
  */
 const HEADLINE_SHORTHANDS: Readonly<Record<string, string>> = {
   s3: "AWS::S3::Bucket",
@@ -84,6 +97,13 @@ const HEADLINE_SHORTHANDS: Readonly<Record<string, string>> = {
   ecs: "AWS::ECS::Cluster",
   ecr: "AWS::ECR::Repository",
   kms: "AWS::KMS::Key",
+  // Story e92.u.b — F-A-04 service-level shorthands.
+  sns: "AWS::SNS::Topic",
+  ec2: "AWS::EC2::Instance",
+  vpc: "AWS::EC2::VPC",
+  eventbridge: "AWS::Events::Rule",
+  cloudwatch: "AWS::CloudWatch::Alarm",
+  cloudfront: "AWS::CloudFront::Distribution",
 };
 
 /**
