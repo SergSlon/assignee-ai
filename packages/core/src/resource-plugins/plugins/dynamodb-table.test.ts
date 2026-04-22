@@ -188,14 +188,14 @@ describe("dynamodbTablePlugin", () => {
     // `assignee-dynamodb-table-<8hex>` on each access. Assert the static
     // defaults and the getter shape separately because `toEqual` would fail
     // on the fresh random value.
-    expect(dynamodbTablePlugin.defaults.BillingMode).toBe("PAY_PER_REQUEST");
+    expect(dynamodbTablePlugin.defaults["BillingMode"]).toBe("PAY_PER_REQUEST");
     expect(
-      dynamodbTablePlugin.defaults.PointInTimeRecoverySpecification,
+      dynamodbTablePlugin.defaults["PointInTimeRecoverySpecification"],
     ).toEqual({ PointInTimeRecoveryEnabled: true });
-    expect(dynamodbTablePlugin.defaults.SSESpecification).toEqual({
+    expect(dynamodbTablePlugin.defaults["SSESpecification"]).toEqual({
       SSEEnabled: true,
     });
-    const defaultName = dynamodbTablePlugin.defaults.TableName;
+    const defaultName = dynamodbTablePlugin.defaults["TableName"];
     expect(typeof defaultName).toBe("string");
     expect(defaultName as string).toMatch(
       /^assignee-dynamodb-table-[0-9a-f]{8}$/,

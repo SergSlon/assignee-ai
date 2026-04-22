@@ -160,7 +160,7 @@ describe("ec2InstancePlugin", () => {
     // utils/display-helpers/friendly-names.ts) rendered with an empty
     // value and looked broken. The facade now seeds the AWS-native
     // default so every plan row has a meaningful value.
-    expect(ec2InstancePlugin.defaults.CreditSpecification).toEqual({
+    expect(ec2InstancePlugin.defaults["CreditSpecification"]).toEqual({
       CpuCredits: "standard",
     });
   });

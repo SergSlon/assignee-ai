@@ -275,7 +275,11 @@ describe("planCommand — help text (Epic 92 C-24 / D-01)", () => {
     // Commander keeps per-command addHelpText listeners on the
     // command's EventEmitter under 'afterHelp' (the event the
     // "after" position emits). We count the listeners directly.
-    const listeners = planCommand.listeners("afterHelp");
+    const listeners = (
+      planCommand as unknown as {
+        listeners: (evt: string) => unknown[];
+      }
+    ).listeners("afterHelp");
     // Exactly one — the consolidated block installed in plan.ts.
     expect(listeners.length).toBe(1);
   });

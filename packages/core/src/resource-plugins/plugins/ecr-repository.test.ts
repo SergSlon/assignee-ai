@@ -221,11 +221,13 @@ describe("ecrRepositoryPlugin", () => {
   it("defaults include ImageTagMutability and ImageScanningConfiguration", () => {
     // Epic 92 Wave 4.b (C-22): RepositoryName is now a dynamic getter
     // producing `assignee-ecr-repository-<8hex>` on each access.
-    expect(ecrRepositoryPlugin.defaults.ImageTagMutability).toBe("IMMUTABLE");
-    expect(ecrRepositoryPlugin.defaults.ImageScanningConfiguration).toEqual({
+    expect(ecrRepositoryPlugin.defaults["ImageTagMutability"]).toBe(
+      "IMMUTABLE",
+    );
+    expect(ecrRepositoryPlugin.defaults["ImageScanningConfiguration"]).toEqual({
       ScanOnPush: true,
     });
-    const defaultName = ecrRepositoryPlugin.defaults.RepositoryName;
+    const defaultName = ecrRepositoryPlugin.defaults["RepositoryName"];
     expect(typeof defaultName).toBe("string");
     expect(defaultName as string).toMatch(
       /^assignee-ecr-repository-[0-9a-f]{8}$/,
