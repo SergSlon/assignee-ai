@@ -20,7 +20,7 @@
  *     with no identifiers) pass through unchanged.
  */
 import { describe, it, expect } from "vitest";
-import { redactSensitive } from "./redact.js";
+import { redactSensitive, redactAccountIdsInPrompt } from "./redact.js";
 
 describe("redactSensitive — bare account IDs", () => {
   it("replaces a bare 12-digit account ID with [ACCOUNT]", () => {
@@ -165,5 +165,109 @@ describe("redactSensitive — Bedrock model ARN (allowed visibility)", () => {
     const input =
       "model: arn:aws-us-gov:bedrock:us-gov-west-1::foundation-model/amazon.nova-lite-v1:0";
     expect(redactSensitive(input)).toBe(input);
+  });
+});
+
+// Epic 92 u.e (D-27) — ARN-preserving account-only redaction.
+// The LLM adapter uses this helper so the plan table can still show
+// `TopicArn: arn:aws:sns:us-east-1:[ACCOUNT]:my-topic` instead of
+// `TopicArn: [ARN]` — user can verify the target, account is scrubbed.
+describe("redactAccountIdsInPrompt — preserves ARN skeleton, scrubs account slot", () => {
+  it("replaces the 12-digit account slot in a full IAM ARN", () => {
+    expect(
+      redactAccountIdsInPrompt(
+        "use arn:aws:iam::123456789012:role/assignee-operator for the lambda",
+      ),
+    ).toBe("use arn:aws:iam::[ACCOUNT]:role/assignee-operator for the lambda");
+  });
+
+  it("replaces the account slot in an SNS topic ARN (D-27 canonical case)", () => {
+    expect(
+      redactAccountIdsInPrompt(
+        "subscribe to arn:aws:sns:us-east-1:123456789012:my-orders-topic",
+      ),
+    ).toBe("subscribe to arn:aws:sns:us-east-1:[ACCOUNT]:my-orders-topic");
+  });
+
+  it("handles multiple ARNs in one string", () => {
+    expect(
+      redactAccountIdsInPrompt(
+        "role arn:aws:iam::111111111111:role/A and queue arn:aws:sqs:us-east-1:222222222222:queue-b",
+      ),
+    ).toBe(
+      "role arn:aws:iam::[ACCOUNT]:role/A and queue arn:aws:sqs:us-east-1:[ACCOUNT]:queue-b",
+    );
+  });
+
+  it("partition-aware: GovCloud ARN account slot scrubbed", () => {
+    expect(
+      redactAccountIdsInPrompt(
+        "operator arn:aws-us-gov:iam::123456789012:role/gov-ops",
+      ),
+    ).toBe("operator arn:aws-us-gov:iam::[ACCOUNT]:role/gov-ops");
+  });
+
+  it("partition-aware: China-partition ARN account slot scrubbed", () => {
+    expect(
+      redactAccountIdsInPrompt(
+        "alerts arn:aws-cn:sns:cn-north-1:123456789012:alerts",
+      ),
+    ).toBe("alerts arn:aws-cn:sns:cn-north-1:[ACCOUNT]:alerts");
+  });
+
+  it("sweeps bare 12-digit account IDs that are NOT part of an ARN", () => {
+    expect(
+      redactAccountIdsInPrompt(
+        "caller account 123456789012 is not the same as 987654321098",
+      ),
+    ).toBe("caller account [ACCOUNT] is not the same as [ACCOUNT]");
+  });
+
+  it("mixed: ARN + bare account ID — both scrubbed, skeleton preserved", () => {
+    expect(
+      redactAccountIdsInPrompt(
+        "Primary: arn:aws:iam::123456789012:role/X cross-account target 987654321098",
+      ),
+    ).toBe(
+      "Primary: arn:aws:iam::[ACCOUNT]:role/X cross-account target [ACCOUNT]",
+    );
+  });
+
+  it("clean prompt (no ARN, no 12-digit number) passes through unchanged", () => {
+    const msg = "Create a t3.micro EC2 in us-east-1";
+    expect(redactAccountIdsInPrompt(msg)).toBe(msg);
+  });
+
+  it("S3 bucket ARN (no account slot) passes through — nothing to scrub", () => {
+    const msg = "bucket arn:aws:s3:::assignee-logs";
+    expect(redactAccountIdsInPrompt(msg)).toBe(msg);
+  });
+
+  it("Bedrock foundation-model ARN (empty account slot) passes through", () => {
+    const msg =
+      "Using arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-v1:0";
+    expect(redactAccountIdsInPrompt(msg)).toBe(msg);
+  });
+
+  it("empty string passes through", () => {
+    expect(redactAccountIdsInPrompt("")).toBe("");
+  });
+
+  it("never leaks account digits — invariant under every partition", () => {
+    const partitions = [
+      "aws",
+      "aws-cn",
+      "aws-us-gov",
+      "aws-iso",
+      "aws-iso-b",
+    ] as const;
+    for (const p of partitions) {
+      const input = `token arn:${p}:sns:us-east-1:123456789012:topic suffix`;
+      const out = redactAccountIdsInPrompt(input);
+      expect(out).not.toContain("123456789012");
+      expect(out).toContain("[ACCOUNT]");
+      expect(out).toContain(p);
+      expect(out).toContain("topic");
+    }
   });
 });

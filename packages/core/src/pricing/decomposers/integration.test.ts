@@ -271,6 +271,9 @@ describe("variant consistency", () => {
   });
 
   describe("Logs — STANDARD vs INFREQUENT_ACCESS", () => {
+    // Epic 92 u.e (D-14): usagetypes now match the canonical AWS
+    // Pricing API keys — `DataProcessing-Bytes` (ingestion) and
+    // `TimedStorage-ByteHrs` (storage), NO `CW:` prefix.
     it("STANDARD has standard usagetype values", () => {
       const items = defaultDecomposerRegistry.decompose(
         RESOURCE_TYPES.LOGS_LOG_GROUP,
@@ -280,8 +283,8 @@ describe("variant consistency", () => {
       const usagetypes = items.flatMap((i) =>
         i.filters.filter((f) => f.Field === "usagetype").map((f) => f.Value),
       );
-      expect(usagetypes).toContain("CW:DataProcessing-Bytes");
-      expect(usagetypes).toContain("CW:DataStorage-Bytes");
+      expect(usagetypes).toContain("DataProcessing-Bytes");
+      expect(usagetypes).toContain("TimedStorage-ByteHrs");
     });
 
     it("INFREQUENT_ACCESS has infrequent access usagetype values", () => {
@@ -293,10 +296,8 @@ describe("variant consistency", () => {
       const usagetypes = items.flatMap((i) =>
         i.filters.filter((f) => f.Field === "usagetype").map((f) => f.Value),
       );
-      expect(usagetypes).toContain(
-        "CW:LogInfrequentAccess-DataProcessing-Bytes",
-      );
-      expect(usagetypes).toContain("CW:LogInfrequentAccess-DataStorage-Bytes");
+      expect(usagetypes).toContain("LogInfrequentAccess-DataProcessing-Bytes");
+      expect(usagetypes).toContain("LogInfrequentAccess-TimedStorage-ByteHrs");
     });
   });
 

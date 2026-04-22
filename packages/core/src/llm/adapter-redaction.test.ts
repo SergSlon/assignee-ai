@@ -1,17 +1,28 @@
 /**
- * LlmAdapter outbound redaction tests (Story 54-it1-05, L5-H2).
+ * LlmAdapter outbound redaction tests (Story 54-it1-05, L5-H2 +
+ * Epic 92 u.e D-27).
  *
  * Defence-in-depth: every prompt dispatched through `generateText` or
- * `generateStructured` is passed through `redactSensitive` so full ARNs
- * and 12-digit account IDs cannot leak to the backing LLM. The Bedrock
- * path is the only active provider today but the adapter contract is
- * provider-agnostic; future providers may not be equally trusted with
- * raw identifiers.
+ * `generateStructured` is passed through `redactAccountIdsInPrompt` so
+ * the 12-digit account slot within an ARN, and bare 12-digit account
+ * IDs, cannot leak to the backing LLM. The Bedrock path is the only
+ * active provider today but the adapter contract is provider-agnostic;
+ * future providers may not be equally trusted with raw identifiers.
+ *
+ * Epic 92 u.e (D-27): unlike the earlier `redactSensitive`-based wrap,
+ * `redactAccountIdsInPrompt` preserves the ARN skeleton (service,
+ * region, resource name) so the LLM can produce a plan whose
+ * `TopicArn` / `RoleArn` still references the user's actual resource,
+ * and the plan table shows the same (non-sensitive) information so the
+ * user can verify it. Only the 12-digit account segment is scrubbed
+ * to `[ACCOUNT]`.
  *
  * Invariants pinned here:
- *   - Full ARN → `[ARN]` at the send-command argument.
+ *   - Full ARN → same ARN with the 12-digit slot replaced by `[ACCOUNT]`
+ *     (e.g. `arn:aws:iam::[ACCOUNT]:role/X`). No `[ARN]` token.
  *   - Bare 12-digit account ID → `[ACCOUNT]`.
- *   - Partition-aware: `arn:aws-cn:…`, `arn:aws-us-gov:…` also redacted.
+ *   - Partition-aware: `arn:aws-cn:…`, `arn:aws-us-gov:…`, `arn:aws-iso*`
+ *     all have the account slot scrubbed identically.
  *   - Clean prompt passes through verbatim.
  *   - Bedrock region-error hint wrapping still fires with redacted prompt.
  *   - Token-cost `callsite` still propagates.
@@ -70,7 +81,7 @@ describe("LlmAdapter outbound redaction — generateText", () => {
     process.env = { ...savedEnv };
   });
 
-  it("redacts a full commercial ARN in the outbound prompt", async () => {
+  it("scrubs the 12-digit account slot in a full commercial ARN but keeps the ARN skeleton (D-27)", async () => {
     const adapter = new LlmAdapter({
       modelString: "bedrock/amazon.nova-lite-v1:0",
     });
@@ -79,9 +90,15 @@ describe("LlmAdapter outbound redaction — generateText", () => {
     );
 
     const sent = lastSentPromptContent();
-    expect(sent).toBe("attach [ARN] to the lambda");
+    // ARN skeleton preserved so the LLM can generate a plan whose
+    // RoleArn still identifies the resource the user typed about.
+    expect(sent).toBe(
+      "attach arn:aws:iam::[ACCOUNT]:role/assignee-operator to the lambda",
+    );
+    // Account digits still must not reach the model.
     expect(sent).not.toContain("123456789012");
-    expect(sent).not.toContain("assignee-operator");
+    // Resource name is now allowed to survive — not PII on its own.
+    expect(sent).toContain("assignee-operator");
   });
 
   it("redacts a bare 12-digit account ID to [ACCOUNT]", async () => {
@@ -100,7 +117,7 @@ describe("LlmAdapter outbound redaction — generateText", () => {
     expect(sent).not.toContain("987654321098");
   });
 
-  it("redacts GovCloud (arn:aws-us-gov:…) ARN — partition-aware", async () => {
+  it("scrubs account slot in GovCloud ARN (partition-aware)", async () => {
     const adapter = new LlmAdapter({
       modelString: "bedrock/amazon.nova-lite-v1:0",
     });
@@ -109,11 +126,13 @@ describe("LlmAdapter outbound redaction — generateText", () => {
     );
 
     const sent = lastSentPromptContent();
-    expect(sent).toBe("GovCloud role [ARN] ready");
+    expect(sent).toBe(
+      "GovCloud role arn:aws-us-gov:iam::[ACCOUNT]:role/gov-ops ready",
+    );
     expect(sent).not.toContain("123456789012");
   });
 
-  it("redacts China-partition (arn:aws-cn:…) ARN — partition-aware", async () => {
+  it("scrubs account slot in China-partition ARN (partition-aware)", async () => {
     const adapter = new LlmAdapter({
       modelString: "bedrock/amazon.nova-lite-v1:0",
     });
@@ -122,9 +141,13 @@ describe("LlmAdapter outbound redaction — generateText", () => {
     );
 
     const sent = lastSentPromptContent();
-    expect(sent).toBe("notify [ARN] on failure");
+    expect(sent).toBe(
+      "notify arn:aws-cn:sns:cn-north-1:[ACCOUNT]:assignee-alerts on failure",
+    );
     expect(sent).not.toContain("123456789012");
-    expect(sent).not.toContain("assignee-alerts");
+    // Resource/topic name is preserved so the plan table can render it
+    // (the whole point of D-27).
+    expect(sent).toContain("assignee-alerts");
   });
 
   it("leaves a non-sensitive prompt untouched (pass-through)", async () => {
@@ -196,7 +219,7 @@ describe("LlmAdapter outbound redaction — generateStructured", () => {
     process.env = { ...savedEnv };
   });
 
-  it("redacts a full ARN in the outbound structured-call prompt", async () => {
+  it("scrubs the account slot in a full ARN but keeps the ARN skeleton in structured prompts (D-27)", async () => {
     const schema = z.object({ resourceType: z.string() });
     const adapter = new LlmAdapter({
       modelString: "bedrock/amazon.nova-lite-v1:0",
@@ -207,7 +230,7 @@ describe("LlmAdapter outbound redaction — generateStructured", () => {
     );
 
     const sent = lastSentPromptContent();
-    expect(sent).toBe("classify [ARN]");
+    expect(sent).toBe("classify arn:aws:iam::[ACCOUNT]:role/assignee-operator");
     expect(sent).not.toContain("123456789012");
   });
 
@@ -226,7 +249,7 @@ describe("LlmAdapter outbound redaction — generateStructured", () => {
     );
   });
 
-  it("redacts ISO-partition ARNs (partition-aware)", async () => {
+  it("scrubs account slot in ISO-partition ARNs (partition-aware)", async () => {
     const schema = z.object({ resourceType: z.string() });
     const adapter = new LlmAdapter({
       modelString: "bedrock/amazon.nova-lite-v1:0",
@@ -237,7 +260,9 @@ describe("LlmAdapter outbound redaction — generateStructured", () => {
     );
 
     const sent = lastSentPromptContent();
-    expect(sent).toBe("key [ARN] is stale");
+    expect(sent).toBe(
+      "key arn:aws-iso:kms:us-iso-east-1:[ACCOUNT]:key/abcd-1234 is stale",
+    );
     expect(sent).not.toContain("123456789012");
   });
 
@@ -348,11 +373,15 @@ describe("LlmAdapter boundary-tag sanitize — generateText (Story 55-it1-04)", 
     );
 
     const sent = lastSentPromptContent();
-    expect(sent).toBe("operatorattach [ARN]");
+    expect(sent).toBe(
+      "operatorattach arn:aws:iam::[ACCOUNT]:role/assignee-operator",
+    );
     expect(sent).not.toContain("<system>");
     expect(sent).not.toContain("</system>");
+    // Account digits still blocked.
     expect(sent).not.toContain("123456789012");
-    expect(sent).not.toContain("assignee-operator");
+    // Resource name is now allowed through (non-PII).
+    expect(sent).toContain("assignee-operator");
   });
 });
 
@@ -444,11 +473,14 @@ describe("LlmAdapter boundary-tag sanitize — generateStructured (Story 55-it1-
     );
 
     const sent = lastSentPromptContent();
-    expect(sent).toBe("adminclassify [ARN] on account [ACCOUNT]");
+    expect(sent).toBe(
+      "adminclassify arn:aws:iam::[ACCOUNT]:role/assignee-operator on account [ACCOUNT]",
+    );
     expect(sent).not.toContain("<system>");
     expect(sent).not.toContain("123456789012");
     expect(sent).not.toContain("987654321098");
-    expect(sent).not.toContain("assignee-operator");
+    // Resource name now survives (D-27) — verified in the equality
+    // assertion above; explicit `not.toContain` would fight that.
   });
 
   it("preserves clean structured prompts (no false positives on Array<string>)", async () => {

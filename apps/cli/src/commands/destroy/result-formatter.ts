@@ -9,6 +9,36 @@ import chalk from "chalk";
 import boxen from "boxen";
 import { BoxenAlign } from "../../config/constants.js";
 
+/**
+ * Resource types that live in the AWS global control plane — their
+ * resources are not region-scoped even though the CLI always has a
+ * resolved AWS_REGION on hand for API calls. `list` already reports
+ * these as `region: "global"` (see
+ * `packages/core/src/list-resources/fetch-managed-resources.ts:170`);
+ * the destroy confirmation box must render the same string so users
+ * don't see conflicting region labels between `list` and `destroy`.
+ *
+ * Epic 92 u.e (D-16): IAM Role destroy previously showed
+ * `Region: us-east-1` because the resolver fills the AWS credential
+ * region regardless of whether the resource is actually region-scoped.
+ *
+ * Covered prefixes:
+ *   - `AWS::IAM::*`         — IAM (users/roles/policies/groups)
+ *   - `AWS::CloudFront::*`  — CloudFront distributions + OAC
+ * Not covered (region-scoped despite a global-ish feel):
+ *   - `AWS::S3::Bucket`     — buckets live in a single region
+ *   - `AWS::Route53::*`     — zones are global, but record sets
+ *                             resolve by zone id, not region — if a
+ *                             future release supports destroy for
+ *                             Route53, add the prefix here.
+ */
+function isGlobalResourceType(resourceType: string): boolean {
+  return (
+    resourceType.startsWith("AWS::IAM::") ||
+    resourceType.startsWith("AWS::CloudFront::")
+  );
+}
+
 /** Render resource details box before confirmation. */
 export function renderDestroyBox(resource: {
   resourceType: string;
@@ -17,10 +47,15 @@ export function renderDestroyBox(resource: {
   identifier: string;
   estimatedMonthlyCost: string;
 }): void {
+  // Epic 92 u.e (D-16): override the region label for global resource
+  // types so the destroy box matches how `list` already reports them.
+  const displayRegion = isGlobalResourceType(resource.resourceType)
+    ? "global"
+    : resource.region;
   const content = [
     `Resource Type:   ${resource.resourceType}`,
     `ARN:             ${resource.arn}`,
-    `Region:          ${resource.region}`,
+    `Region:          ${displayRegion}`,
     `Identifier:      ${resource.identifier}`,
     `Estimated Cost:  ${resource.estimatedMonthlyCost}`,
   ].join("\n");

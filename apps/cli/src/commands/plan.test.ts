@@ -45,6 +45,12 @@ vi.mock("../utils/display.js", () => ({
   renderHitlConfirm: sharedApprovalConfirm,
   startSpinner: vi.fn(),
   stopSpinner: vi.fn(),
+  // Epic 92 u.e: resolvePlanArgs calls resolveSetKey for each --set
+  // token; the CLI's display.ts re-exports it from core. In this mock
+  // module we pass through (identity) because the fields-under-test do
+  // not exercise the human-name → CFN-key mapping — they only care
+  // that the --set token parsing + validation itself works.
+  resolveSetKey: (k: string) => k,
 }));
 
 vi.mock("../utils/logger.js", () => ({
@@ -124,7 +130,27 @@ function makeCtx(graphInvokeFn?: (...args: unknown[]) => unknown) {
 
 let stdoutWriteSpy: MockInstance;
 
-beforeEach(() => {
+/**
+ * Commander v12 retains parsed option values on the shared singleton
+ * `planCommand` between `parseAsync` calls. When one test passes
+ * `--set size=t3.medium` and the next test omits `--set`, the second
+ * test's `opts.set` still contains the leftover value. That was fine
+ * until Epic 92 u.e added a `--set` token validator — now stale state
+ * throws in the next test. Wipe `_optionValues` on each beforeEach.
+ */
+async function resetPlanCommandOptions(): Promise<void> {
+  const { planCommand } = await import("./plan.js");
+  const internals = planCommand as unknown as {
+    _optionValues: Record<string, unknown>;
+  };
+  for (const opt of planCommand.options) {
+    // Restore the option's declared default (e.g. `--set` defaults to
+    // `[]` — wiping to `undefined` breaks the collector `[...prev, val]`).
+    internals._optionValues[opt.attributeName()] = opt.defaultValue;
+  }
+}
+
+beforeEach(async () => {
   vi.clearAllMocks();
   capturedOpts = null;
   vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
@@ -140,6 +166,7 @@ beforeEach(() => {
     value: false,
     configurable: true,
   });
+  await resetPlanCommandOptions();
 });
 
 afterEach(() => {
@@ -748,6 +775,93 @@ describe("planCommand — --json shorthand normalization (Epic 92 D-13)", () => 
 // ── P1-6: --no-apply skips renderApplyNowConfirm ──────────────────────────
 // MUST be last describe block — Commander is a singleton and parseAsync with
 // --no-apply mutates the shared command instance's opts.
+
+// ── Epic 92 u.e — --set parsing (C-11 / C-17) ─────────────────────────────
+// C-11: `plan --set size=t3.medium "Create an EC2"` used to drop the
+//       positional intent because the variadic `--set <key=value...>`
+//       swallowed the intent string. Now each `--set` takes one value;
+//       the flag can still be supplied multiple times.
+// C-17: a malformed `--set badsyntax` (no `=`) used to be silently
+//       dropped; now it throws with an actionable USAGE_ERROR.
+//
+// These tests exercise the Commander surface AND the `resolvePlanArgs`
+// validator — they share the same code path the real CLI runs.
+describe("planCommand — --set flag parsing (Epic 92 C-11 / C-17)", () => {
+  beforeEach(() => {
+    capturedOpts = null;
+  });
+
+  it("C-11: --set key=value before the intent does NOT swallow the intent", async () => {
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--set",
+      "size=t3.medium",
+      "Create an EC2 instance",
+    ]);
+
+    // The intent was preserved (otherwise runCommand.run would throw
+    // "Missing intent" before capturedOpts could be set).
+    expect(capturedOpts).not.toBeNull();
+    expect(capturedOpts!.intent).toBe("Create an EC2 instance");
+  });
+
+  it("C-11: multiple --set flags are collected (non-variadic, repeatable)", async () => {
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--set",
+      "size=t3.medium",
+      "--set",
+      "region=us-east-1",
+      "Create an EC2 instance",
+    ]);
+    expect(capturedOpts).not.toBeNull();
+    expect(capturedOpts!.intent).toBe("Create an EC2 instance");
+  });
+
+  it("C-17: --set without = fails with a USAGE_ERROR", async () => {
+    const { planCommand } = await import("./plan.js");
+    await expect(
+      planCommand.parseAsync([
+        "node",
+        "plan",
+        "--set",
+        "badsyntax",
+        "Create an EC2 instance",
+      ]),
+    ).rejects.toThrow(/Invalid --set token "badsyntax"/);
+  });
+
+  it("C-17: --set with empty key (starts with =) fails", async () => {
+    const { planCommand } = await import("./plan.js");
+    await expect(
+      planCommand.parseAsync([
+        "node",
+        "plan",
+        "--set",
+        "=oops",
+        "Create an EC2 instance",
+      ]),
+    ).rejects.toThrow(/Invalid --set token/);
+  });
+
+  it("C-17: --set key= (empty value) is allowed (explicit clear)", async () => {
+    const { planCommand } = await import("./plan.js");
+    // Empty value is legitimate — `--set Tags=` means "clear the Tags
+    // field". Regex allows `.*` after the `=`.
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--set",
+      "Tags=",
+      "Create an EC2 instance",
+    ]);
+    expect(capturedOpts).not.toBeNull();
+  });
+});
 
 describe("planCommand — run callback (--no-apply)", () => {
   beforeEach(async () => {
