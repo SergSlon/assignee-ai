@@ -24,6 +24,7 @@
 import { CostEstimateLabel } from "../pricing/filter-constants.js";
 import { AssigneeTag } from "../config/cfn-keys.js";
 import { RESOURCE_TYPES } from "../config/resource-types.js";
+import { isGlobalService } from "../config/arn-type-map.js";
 import { getFreeTierCostLabel } from "../utils/free-tier.js";
 import { loadProvisionData } from "./provision-log.js";
 import { parseArn } from "./parse-arn.js";
@@ -141,10 +142,19 @@ export async function fetchManagedResources(
       ? getFreeTierCostLabel(parsed.resourceType)
       : undefined;
 
+    // Story e94.P2 (D-06): global-service ARNs (IAM, CloudFront,
+    // Route53, WAF, Organizations) have no region slot — display
+    // them as `"global"` instead of leaking the operator's configured
+    // region. Mirrors the IAM-Role enrichment branch below which
+    // already hardcodes `"global"`.
+    const displayRegion = isGlobalService(parsed.service)
+      ? "global"
+      : parsed.region || region;
+
     resources.push({
       resourceType: parsed.resourceType,
       arn,
-      region: parsed.region || region,
+      region: displayRegion,
       createdDate,
       estimatedMonthlyCost:
         costMap.get(arn) ??

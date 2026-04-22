@@ -110,7 +110,7 @@ export function createAdviceGeneratorNode({
     const emptyEnrichedMap: EnrichedPriceMap = new Map();
     const [enrichedSettled, mcpContextSettled] = await Promise.allSettled([
       needsAdvisoryPrices
-        ? enrichAdvisoryPrices(tools, state.runId)
+        ? enrichAdvisoryPrices(tools, state.runId, state.resourceType)
         : Promise.resolve<EnrichedPriceMap>(emptyEnrichedMap),
       tools && tools.length > 0
         ? gatherMcpAdviceContext(state.resourceType, ds, tools)

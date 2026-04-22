@@ -6,14 +6,16 @@
  * value, and that the legacy callers (no source) still work unchanged.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   formatCostLine,
   parsePlanJsonStream,
+  renderPlanBox,
   serializePlanEnvelope,
   serializeErrorEnvelope,
 } from "./display-plan.js";
 import type { DataSource } from "../pricing/types.js";
+import type { RenderableState } from "./display-helpers/renderable-state.js";
 
 describe("formatCostLine — source suffix rendering (Story 46.2)", () => {
   it.each([
@@ -212,6 +214,79 @@ describe("serializePlanEnvelope — single vs compound (A-02)", () => {
     const lambda = { ...payload, resourceType: "AWS::Lambda::Function" };
     const out = serializePlanEnvelope([payload, lambda]);
     expect(() => JSON.parse(out)).not.toThrow();
+  });
+});
+
+// ── Epic 94 N8 (C-01) — companion rendering tag ────────────────────
+describe("renderPlanBox — companion tag (Epic 94 N8 / C-01)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stdoutSpy: any;
+  let captured: string;
+
+  afterEach(() => {
+    stdoutSpy?.mockRestore();
+  });
+
+  function installStdoutCapture(): void {
+    captured = "";
+    stdoutSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk: unknown) => {
+        captured +=
+          typeof chunk === "string"
+            ? chunk
+            : Buffer.from(chunk as Uint8Array).toString("utf8");
+        return true;
+      });
+  }
+
+  const baseState: RenderableState = {
+    resourceType: "AWS::ApiGatewayV2::Api",
+    runId: "run-e94-n8",
+    desiredState: {
+      ProtocolType: "WEBSOCKET",
+      RouteSelectionExpression: "$request.body.action",
+    },
+    estimatedMonthlyCost: "Free",
+  };
+
+  it("renders a plain `Resource Type:` row when provisionable is true", () => {
+    installStdoutCapture();
+    renderPlanBox({ ...baseState, provisionable: true });
+    expect(captured).toContain("Resource Type:");
+    expect(captured).toContain("AWS::ApiGatewayV2::Api");
+    // No `[companion]` prefix on provisionable resources.
+    expect(captured).not.toContain("[companion]");
+  });
+
+  it("renders a plain `Resource Type:` row when provisionable is undefined (default)", () => {
+    installStdoutCapture();
+    renderPlanBox(baseState);
+    expect(captured).toContain("Resource Type:");
+    expect(captured).not.toContain("[companion]");
+  });
+
+  it("prefixes the resource type with `[companion]` when provisionable is false", () => {
+    installStdoutCapture();
+    renderPlanBox({ ...baseState, provisionable: false });
+    expect(captured).toContain("[companion] AWS::ApiGatewayV2::Api");
+  });
+
+  it("companion render still surfaces the desiredState (WEBSOCKET + $request.body.action visible)", () => {
+    // This is the load-bearing assertion for C-01: the user MUST be
+    // able to see the WebSocket API's ProtocolType + RouteSelectionExpression
+    // VALUES before apply. `formatDesiredState` humanizes the KEY names
+    // for AWS::ApiGatewayV2::Api (ProtocolType → "Protocol",
+    // RouteSelectionExpression → "Route Selection Expression"), so the
+    // assertion pins the VALUES (which are the bits that tell a
+    // WebSocket API apart from an HTTP fallback).
+    installStdoutCapture();
+    renderPlanBox({ ...baseState, provisionable: false });
+    expect(captured).toContain("WEBSOCKET");
+    expect(captured).toContain("$request.body.action");
+    // Humanized key labels (friendly-names.ts) for AWS::ApiGatewayV2::Api.
+    expect(captured).toContain("Protocol");
+    expect(captured).toContain("Route Selection Expression");
   });
 });
 

@@ -20,7 +20,9 @@ import { AWS_SERVICE_EXECUTE_API } from "./cfn-keys.js";
  */
 export const SERVICE_TYPE_MAP: Readonly<Record<string, string>> = {
   s3: RESOURCE_TYPES.S3_BUCKET,
-  rds: RESOURCE_TYPES.RDS_DB_INSTANCE,
+  // NOTE: `rds` deliberately absent from SERVICE_TYPE_MAP — resolved
+  // via SERVICE_SUBTYPE_MAP["rds"] below, which dispatches on the
+  // resource segment (db / subgrp). See Story e94.P1.
   dynamodb: RESOURCE_TYPES.DYNAMODB_TABLE,
   sqs: RESOURCE_TYPES.SQS_QUEUE,
   sns: RESOURCE_TYPES.SNS_TOPIC,
@@ -113,6 +115,45 @@ export const SERVICE_SUBTYPE_MAP: Readonly<
     "api-destination": RESOURCE_TYPES.EVENTS_API_DESTINATION,
     "": RESOURCE_TYPES.EVENTS_RULE,
   },
+  // Story e94.P1 (D-03) — dispatch RDS ARNs to the correct CFN type
+  // by resource segment. Prior to this split, SERVICE_TYPE_MAP forced
+  // every RDS ARN to classify as AWS::RDS::DBInstance, misclassifying
+  // DBSubnetGroup, DBParameterGroup, DBSnapshot, DBCluster, etc. in
+  // `assignee list`, provision-record classification, and every other
+  // arn-type-map consumer.
+  //
+  // Canonical RDS ARN shapes (AWS ARN reference):
+  //   DBInstance        arn:<p>:rds:<r>:<a>:db:<name>
+  //   DBSubnetGroup     arn:<p>:rds:<r>:<a>:subgrp:<name>
+  //   DBSecurityGroup   arn:<p>:rds:<r>:<a>:secgrp:<name>         (EC2-Classic legacy)
+  //   DBParameterGroup  arn:<p>:rds:<r>:<a>:pg:<name>
+  //   DBSnapshot        arn:<p>:rds:<r>:<a>:snapshot:<name>
+  //   DBCluster         arn:<p>:rds:<r>:<a>:cluster:<name>
+  //   DBClusterSnapshot arn:<p>:rds:<r>:<a>:cluster-snapshot:<name>
+  //   OptionGroup       arn:<p>:rds:<r>:<a>:og:<name>
+  //
+  // The `secgrp`, `pg`, `snapshot`, `cluster-snapshot`, `og` mappings
+  // use literal CFN type strings because those subtypes are not (yet)
+  // in the `RESOURCE_TYPES` registry — we do not currently create /
+  // destroy them as first-class resources. This is a classification-
+  // only fix: a misclassified ARN in `assignee list` is the D-03 bug;
+  // promoting any of these to provisionable types is a separate
+  // future epic.
+  //
+  // Fallback ("" key) preserves the pre-split default of
+  // AWS::RDS::DBInstance so unparseable / future RDS resource segments
+  // do not crash (no change in behaviour for those cases).
+  rds: {
+    db: RESOURCE_TYPES.RDS_DB_INSTANCE,
+    subgrp: RESOURCE_TYPES.RDS_DB_SUBNET_GROUP,
+    secgrp: "AWS::RDS::DBSecurityGroup",
+    pg: "AWS::RDS::DBParameterGroup",
+    snapshot: "AWS::RDS::DBSnapshot",
+    cluster: "AWS::RDS::DBCluster",
+    "cluster-snapshot": "AWS::RDS::DBClusterSnapshot",
+    og: "AWS::RDS::OptionGroup",
+    "": RESOURCE_TYPES.RDS_DB_INSTANCE,
+  },
 } as const;
 
 /**
@@ -178,6 +219,52 @@ const SERVICE_CASING_OVERRIDES: Readonly<Record<string, string>> = {
   apigateway: "ApiGateway",
   apigatewayv2: "ApiGatewayV2",
 };
+
+/**
+ * AWS services whose control plane is GLOBAL — ARNs for these services
+ * have an empty region segment (`arn:aws:iam::<acct>:role/...`) and
+ * are not region-scoped.
+ *
+ * Story e94.P2 (D-06): the RGTA-driven listing path previously stamped
+ * the operator's configured region on every IAM ARN because the parse
+ * layer returned `""` for the empty region slot and the call site's
+ * `parsed.region || region` fallback leaked the operator default to
+ * display. Consumers should call `isGlobalService` at display time to
+ * substitute `"global"` instead.
+ *
+ * Scope:
+ * - `iam` — roles, policies, users, groups, instance-profiles.
+ * - `cloudfront` — distributions, OACs, cache policies.
+ * - `route53` — hosted zones (record sets are per-zone, not regional).
+ * - `waf` — global-only, classic WAF and WAFv2 CloudFront scope.
+ * - `organizations` — AWS Organizations is global-only.
+ *
+ * `s3` is deliberately EXCLUDED from this set. S3 buckets are
+ * technically regional (the bucket lives in one region) even though
+ * the ARN has no region segment; the existing display fallback to the
+ * operator-default region stays correct for S3.
+ */
+export const GLOBAL_SERVICES: ReadonlySet<string> = new Set([
+  "iam",
+  "cloudfront",
+  "route53",
+  "waf",
+  "organizations",
+]);
+
+/**
+ * Returns `true` when an ARN's service slot names a globally-scoped
+ * AWS control plane. Used by display helpers to stamp
+ * `region: "global"` on IAM / CloudFront / etc. ARNs instead of
+ * leaking the operator's configured region.
+ *
+ * @param service - AWS service name from ARN slot 2 (e.g. `iam`,
+ *                  `cloudfront`). Lowercased comparison matches
+ *                  RGTA output shape.
+ */
+export function isGlobalService(service: string): boolean {
+  return GLOBAL_SERVICES.has(service);
+}
 
 /**
  * Converts an AWS service name and resource component from an ARN

@@ -255,6 +255,117 @@ describe("fetchManagedResources — IAM role merge", () => {
   });
 });
 
+describe("fetchManagedResources — global-service region display (Story e94.P2, D-06)", () => {
+  beforeEach(() => {
+    vi.mocked(provisionLog.loadProvisionData).mockReturnValue(emptyLookup);
+  });
+
+  // Pre-fix: `region: parsed.region || region` leaked the operator's
+  // configured region on every IAM ARN shape except IAM::Role (which
+  // had a dedicated enrichment branch hardcoding `"global"`). The
+  // fix applies `isGlobalService(parsed.service)` so all IAM shapes —
+  // plus CloudFront / Route53 / WAF / Organizations — now display
+  // `"global"` like the Role branch already did.
+  it("stamps `region: global` on IAM ManagedPolicy ARN (D-06 fix)", async () => {
+    const mappings: RgtaMapping[] = [
+      {
+        ResourceARN: "arn:aws:iam::210987654321:policy/assignee-deny-public",
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      },
+    ];
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.resourceType).toBe("AWS::IAM::ManagedPolicy");
+    // Operator's region is us-east-1 but IAM is global — must render
+    // as "global" so the user does not assume the policy is
+    // region-scoped.
+    expect(result[0]!.region).toBe("global");
+  });
+
+  it("stamps `region: global` on IAM User ARN", async () => {
+    const mappings: RgtaMapping[] = [
+      {
+        ResourceARN: "arn:aws:iam::210987654321:user/assignee-operator",
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      },
+    ];
+    const result = await fetchManagedResources({
+      region: "eu-west-1",
+      fetchRgtaResources: async () => mappings,
+    });
+    expect(result[0]!.region).toBe("global");
+  });
+
+  it("stamps `region: global` on IAM Group ARN", async () => {
+    const mappings: RgtaMapping[] = [
+      {
+        ResourceARN: "arn:aws:iam::210987654321:group/dev-team",
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      },
+    ];
+    const result = await fetchManagedResources({
+      region: "ap-south-1",
+      fetchRgtaResources: async () => mappings,
+    });
+    expect(result[0]!.region).toBe("global");
+  });
+
+  it("stamps `region: global` on CloudFront Distribution ARN", async () => {
+    const mappings: RgtaMapping[] = [
+      {
+        ResourceARN: "arn:aws:cloudfront::210987654321:distribution/EABC123DEF",
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      },
+    ];
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+    });
+    expect(result[0]!.region).toBe("global");
+  });
+
+  it("preserves regional ARNs untouched (no over-reach)", async () => {
+    // Regression guard: the fix must not globalise regional ARNs.
+    const mappings: RgtaMapping[] = [
+      {
+        ResourceARN: "arn:aws:lambda:eu-west-1:210987654321:function:worker",
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      },
+      {
+        ResourceARN: "arn:aws:s3:::regional-bucket",
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      },
+    ];
+    const result = await fetchManagedResources({
+      region: "us-east-1",
+      fetchRgtaResources: async () => mappings,
+    });
+    // Lambda keeps its own region from the ARN.
+    expect(result[0]!.region).toBe("eu-west-1");
+    // S3 falls back to operator-default because the bucket itself is
+    // regional even though the ARN has no region segment. S3 is NOT
+    // in `GLOBAL_SERVICES` by design.
+    expect(result[1]!.region).toBe("us-east-1");
+  });
+
+  it("partition-agnostic: GovCloud IAM ARN also displays as global", async () => {
+    const mappings: RgtaMapping[] = [
+      {
+        ResourceARN: "arn:aws-us-gov:iam::210987654321:policy/gov-policy",
+        Tags: [{ Key: "managed-by", Value: "assignee-ai" }],
+      },
+    ];
+    const result = await fetchManagedResources({
+      region: "us-gov-west-1",
+      fetchRgtaResources: async () => mappings,
+    });
+    expect(result[0]!.region).toBe("global");
+  });
+});
+
 describe("fetchManagedResources — billing enrichment", () => {
   beforeEach(() => {
     vi.mocked(provisionLog.loadProvisionData).mockReturnValue(emptyLookup);

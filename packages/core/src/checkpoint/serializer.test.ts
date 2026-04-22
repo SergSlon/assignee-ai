@@ -142,12 +142,96 @@ describe("serializeCheckpoint", () => {
       expect(persisted["DBInstanceIdentifier"]).toBe("prod-db");
     });
 
-    it("emits currentResourceIndex verbatim when caller supplies it", () => {
+    it("Epic 94 N7 (C-02): derives currentResourceIndex from completedResources length, not from the overflowed in-memory value", () => {
+      // Plan-mode formatter advances `currentResourceIndex` past the
+      // end of the queue so the END router triggers — an overflow
+      // that is graph-internal plumbing. On disk the semantic is
+      // "next resource to apply", which equals the filtered
+      // `completedResources.length`. Persisting the overflow caused
+      // apply-resume to skip the entire queue (C-02 regression).
+      //
+      // Two-resource queue, 1 persistable completion → canonical
+      // on-disk index is 1, regardless of the in-memory overflow.
       const cp = serializeCheckpoint({
         ...baseState,
-        currentResourceIndex: 3,
+        resourceQueue: [
+          {
+            resourceId: "iam-role",
+            resourceType: "AWS::IAM::Role",
+            displayName: "IAM Role",
+          },
+          {
+            resourceId: "lambda-fn",
+            resourceType: "AWS::Lambda::Function",
+            displayName: "Lambda Fn",
+          },
+        ],
+        // Simulate the post-plan overflow the formatter leaves on
+        // the terminal graph state.
+        currentResourceIndex: 2,
+        completedResources: [
+          {
+            resourceArn:
+              "arn:aws:iam::111111111111:role/assignee-iam-execution-role",
+            resourceType: "AWS::IAM::Role",
+          },
+        ],
       });
-      expect(cp.currentResourceIndex).toBe(3);
+      expect(cp.currentResourceIndex).toBe(1);
+    });
+
+    it("Epic 94 N7 (C-02): clamps an overflowed index with no completions back to 0", () => {
+      // After plan with no apply: completedResources = [],
+      // state.currentResourceIndex = queue.length. On-disk value
+      // must be 0 — "next resource to apply is the first one" — so
+      // apply-resume re-plans from the start instead of skipping
+      // the whole queue.
+      const cp = serializeCheckpoint({
+        ...baseState,
+        resourceQueue: [
+          {
+            resourceId: "iam-role",
+            resourceType: "AWS::IAM::Role",
+            displayName: "IAM Role",
+          },
+          {
+            resourceId: "lambda-fn",
+            resourceType: "AWS::Lambda::Function",
+            displayName: "Lambda Fn",
+          },
+        ],
+        currentResourceIndex: 2, // overflow past end
+        completedResources: [],
+      });
+      expect(cp.currentResourceIndex).toBe(0);
+    });
+
+    it("Epic 94 N7 (C-02): preserves a mid-apply in-bounds index when it has no completions yet", () => {
+      // Covers mid-apply crash recovery: the provisioner node may
+      // have advanced `currentResourceIndex` but not yet written
+      // an entry into `completedResources` (e.g. STATUS_POLLER
+      // picks up after a crash between SUCCESS and the compound
+      // formatter append). Preserving the in-memory value here
+      // keeps resume from mistakenly re-planning a resource that
+      // was actually in-flight.
+      const cp = serializeCheckpoint({
+        ...baseState,
+        resourceQueue: [
+          {
+            resourceId: "iam-role",
+            resourceType: "AWS::IAM::Role",
+            displayName: "IAM Role",
+          },
+          {
+            resourceId: "lambda-fn",
+            resourceType: "AWS::Lambda::Function",
+            displayName: "Lambda Fn",
+          },
+        ],
+        currentResourceIndex: 1, // in bounds, mid-apply-pending
+        completedResources: [],
+      });
+      expect(cp.currentResourceIndex).toBe(1);
     });
 
     it("emits completedResources with only ARN + type (drops graph-internal fields)", () => {
@@ -200,6 +284,198 @@ describe("serializeCheckpoint", () => {
           resourceType: "AWS::S3::Bucket",
         },
       ]);
+    });
+  });
+
+  // ── Epic 94 Wave 3 N7 (C-02): full plan → serialize → load → resume ──
+  describe("Epic 94 N7 (C-02) — full apply-resume cycle fixture", () => {
+    /**
+     * Simulates the exact terminal-state shape the CLI's plan orchestrator
+     * produces after a 3-resource compound plan completes with
+     * `--no-apply`:
+     *   - `currentResourceIndex` overflows past the end of the queue
+     *     (set by `result-formatter`'s plan-mode advance when
+     *     `nextIndex >= resourceQueue.length`).
+     *   - `completedResources` is empty (nothing was applied yet).
+     *   - `resourceQueue[i].desiredState` may be populated for slots
+     *     the formatter stashed during iteration, plus the final slot
+     *     carried on top-level `state.desiredState`.
+     *
+     * Contract after N7:
+     *   - On-disk `currentResourceIndex === 0` so apply-resume starts
+     *     the compound loop from the beginning (not skips to the end).
+     *   - Every queue slot has a non-empty `desiredState` on disk (via
+     *     per-slot state already present + top-level backfill for the
+     *     final slot).
+     *   - `JSON.parse(JSON.stringify(cp))` round-trips through the
+     *     Zod schema without loss.
+     */
+    it("post-plan --no-apply state persists every slot and resets index to 0", () => {
+      const state: SerializableGraphState = {
+        runId: "0b4b0fa4-0b6a-4b6a-8b7a-000000000777",
+        userIntent: "Create a serverless API with Lambda and API Gateway",
+        // Top-level state = the LAST-planned resource's desiredState.
+        // The formatter never stashed it back into the queue because
+        // the terminal advance returns without writing to the slot.
+        resourceType: "AWS::Logs::LogGroup",
+        resourcePattern: { patternId: "serverless-api" },
+        desiredState: {
+          LogGroupName: "/aws/apigateway/serverless-api",
+          RetentionInDays: 14,
+        },
+        estimatedMonthlyCost: "N/A",
+        preflightPassed: true,
+        resourceQueue: [
+          {
+            resourceId: "iam-execution-role",
+            resourceType: "AWS::IAM::Role",
+            displayName: "Lambda Execution Role",
+            desiredState: {
+              RoleName: "assignee-iam-execution-role-0b4b0fa4",
+            },
+          },
+          {
+            resourceId: "lambda-fn",
+            resourceType: "AWS::Lambda::Function",
+            displayName: "Lambda Function",
+            desiredState: {
+              FunctionName: "assignee-lambda-fn-0b4b0fa4",
+              Runtime: "nodejs22.x",
+            },
+          },
+          {
+            // Terminal slot — no per-slot desiredState because the
+            // formatter terminated after planning it. Top-level
+            // `state.desiredState` above is what the plan produced.
+            resourceId: "access-log-group",
+            resourceType: "AWS::Logs::LogGroup",
+            displayName: "API Gateway Access LogGroup",
+          },
+        ],
+        // Overflow that the plan-mode formatter writes so the graph
+        // router sends to END.
+        currentResourceIndex: 3,
+        completedResources: [],
+      };
+
+      const cp = serializeCheckpoint(state);
+
+      // Clamp to 0 — nothing has been applied so apply-resume starts
+      // at index 0 with a fresh compound loop.
+      expect(cp.currentResourceIndex).toBe(0);
+      expect(cp.completedResources).toEqual([]);
+
+      // Every queue slot has non-empty desiredState on disk.
+      expect(cp.resourceQueue).toHaveLength(3);
+      for (let i = 0; i < 3; i++) {
+        const slotState = cp.resourceQueue?.[i]?.desiredState ?? {};
+        expect(
+          Object.keys(slotState).length,
+          `slot ${i} (${cp.resourceQueue?.[i]?.resourceId}) must persist desiredState`,
+        ).toBeGreaterThan(0);
+      }
+
+      // The terminal slot picked up its desiredState from the top-
+      // level state via the N7 backfill rule.
+      expect(cp.resourceQueue?.[2]?.desiredState).toMatchObject({
+        LogGroupName: "/aws/apigateway/serverless-api",
+        RetentionInDays: 14,
+      });
+
+      // JSON round-trip + schema parse — on-disk fidelity.
+      const asJson = JSON.parse(JSON.stringify(cp));
+      const parsed = PlanCheckpointSchema.safeParse(asJson);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.currentResourceIndex).toBe(0);
+        expect(parsed.data.resourceQueue).toHaveLength(3);
+        expect(parsed.data.resourceQueue?.[0]?.desiredState).toMatchObject({
+          RoleName: "assignee-iam-execution-role-0b4b0fa4",
+        });
+      }
+    });
+
+    /**
+     * Bulletproof mid-apply resume fixture: after apply has
+     * successfully provisioned the first resource and crashed
+     * before the second, the checkpoint must carry
+     *   - `currentResourceIndex === 1` (next to apply is index 1),
+     *   - one entry in `completedResources` with the real ARN,
+     *   - per-slot desiredState for every queue entry so
+     *     plan-generator can resume without re-running the LLM.
+     */
+    it("mid-apply resume state persists completions + index=1 when resource 0 of 2 has applied", () => {
+      const state: SerializableGraphState = {
+        runId: "aaaaaaaa-bbbb-cccc-dddd-000000000001",
+        userIntent: "Create an S3 bucket + CloudFront distribution",
+        resourceType: "AWS::CloudFront::Distribution",
+        resourcePattern: { patternId: "static-website" },
+        desiredState: {
+          DistributionConfig: {
+            Enabled: true,
+            DefaultRootObject: "index.html",
+          },
+        },
+        estimatedMonthlyCost: "$5.00/month",
+        preflightPassed: true,
+        resourceQueue: [
+          {
+            resourceId: "origin-bucket",
+            resourceType: "AWS::S3::Bucket",
+            displayName: "Origin Bucket",
+            desiredState: {
+              BucketName: "assignee-origin-bucket-aaaaaaaa",
+            },
+          },
+          {
+            resourceId: "cf-distro",
+            resourceType: "AWS::CloudFront::Distribution",
+            displayName: "CloudFront Distribution",
+            desiredState: {
+              DistributionConfig: {
+                Enabled: true,
+                DefaultRootObject: "index.html",
+              },
+            },
+          },
+        ],
+        // In-memory value is 1 (pointing at the CF distro that was
+        // mid-provision when we crashed) — persisted index must also
+        // be 1 since there is exactly one completion.
+        currentResourceIndex: 1,
+        completedResources: [
+          {
+            resourceArn: "arn:aws:s3:::assignee-origin-bucket-aaaaaaaa",
+            resourceType: "AWS::S3::Bucket",
+          },
+        ],
+      };
+
+      const cp = serializeCheckpoint(state);
+      expect(cp.currentResourceIndex).toBe(1);
+      expect(cp.completedResources).toHaveLength(1);
+      expect(cp.completedResources[0]?.resourceArn).toBe(
+        "arn:aws:s3:::assignee-origin-bucket-aaaaaaaa",
+      );
+      expect(cp.resourceQueue?.[0]?.desiredState).toMatchObject({
+        BucketName: "assignee-origin-bucket-aaaaaaaa",
+      });
+      expect(cp.resourceQueue?.[1]?.desiredState).toMatchObject({
+        DistributionConfig: { Enabled: true },
+      });
+
+      // Simulate load-side (JSON round-trip + schema parse).
+      const asJson = JSON.parse(JSON.stringify(cp));
+      const parsed = PlanCheckpointSchema.safeParse(asJson);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        // Resume contract: index equals completions length — the
+        // marker-resolver uses `completedResources[i]` to key into
+        // `resourceQueue[i]` for cross-resource references.
+        expect(parsed.data.currentResourceIndex).toBe(
+          parsed.data.completedResources.length,
+        );
+      }
     });
   });
 

@@ -22,11 +22,7 @@
  * resource-type-aware so SNS/SQS/Route53/etc. prompts don't list IAM role
  * ARN or instance-profile examples (observability leak noted by agent C).
  */
-import {
-  RESOURCE_TYPES,
-  type ProvisionRecord,
-  type FailureRecord,
-} from "@/index.js";
+import { RESOURCE_TYPES } from "@/index.js";
 import { SCHEMA_EXCERPT_MAX_CHARS } from "@/config/constants/limits.js";
 import { TWENTY_FOUR_HOURS_MS } from "@/config/constants/timeouts.js";
 import {
@@ -34,12 +30,16 @@ import {
   CFN_RESOURCE_TYPE_PREFIX,
 } from "@/constants/cfn-keys.js";
 import { log, LOG_ACTIONS } from "@/utils/logger/index.js";
-import { defaultMemoryService } from "@/services/memory.js";
 // Epic 92 Wave 4.c F-D-34 — name-matching scope tightening + metadata
-// scrub for the "Previous error" hint. See `readMemoryHints` below.
+// scrub for the "Previous error" hint. Epic 94 e94.N10 then routes
+// `readMemoryHints` through the scoped readers so cross-project /
+// cross-intent records are filtered out before name-mismatch + staleness
+// checks run. See `readMemoryHints` below.
 import {
   extractDesiredNameFromErrorMessage,
   extractDesiredNameFromState,
+  readScopedFailures,
+  readScopedProvisions,
   scrubEmptyErrorMetadata,
 } from "@/services/cost-history/index.js";
 import { stripPromptBoundaryTags } from "@/llm/prompt-sanitize.js";
@@ -51,6 +51,18 @@ import type { AgentState } from "../../graph-state.js";
  * Non-blocking — returns empty state on any memory read failure.
  * Story 20.13: skips failures older than the latest success for same type,
  * and also treats failures older than 24 hours as stale.
+ *
+ * Epic 94 e94.N10 — B-08 HIGH NEW scope-tightening. Routes both reads
+ * through the scoped readers (`readScopedProvisions` /
+ * `readScopedFailures` from `services/cost-history/index.ts`) so
+ * `{projectDir, intentHash}` contradicting records are filtered out
+ * before the name-mismatch + staleness gates run. Wave 4.c added the
+ * scoped reader infrastructure; this story wires it into the actual
+ * hint call site so cross-project / cross-intent leakage stops. Legacy
+ * records without sidecar entries still surface (the scoped reader
+ * treats missing scope axes as non-contradicting — that's backward
+ * compat by design and is what the existing plan-generator test suite
+ * exercises).
  */
 export async function readMemoryHints(
   state: AgentState,
@@ -58,12 +70,7 @@ export async function readMemoryHints(
   let provisionHintLine = "";
   const memoryHints: string[] = [];
   try {
-    const provisions = await defaultMemoryService.readProvisions();
-    const previousForType = provisions
-      .filter((p: ProvisionRecord) => p.resourceType === state.resourceType)
-      .sort((a: ProvisionRecord, b: ProvisionRecord) =>
-        b.timestamp.localeCompare(a.timestamp),
-      );
+    const previousForType = await readScopedProvisions(state);
     if (previousForType.length > 0) {
       const prev = previousForType[0]!;
       const dateStr = new Date(prev.timestamp).toLocaleDateString();
@@ -81,15 +88,10 @@ export async function readMemoryHints(
   }
 
   try {
-    const failures = await defaultMemoryService.readFailures();
-    const previousFailuresForType = failures
-      .filter((f: FailureRecord) => f.resourceType === state.resourceType)
-      .sort((a: FailureRecord, b: FailureRecord) =>
-        b.timestamp.localeCompare(a.timestamp),
-      );
+    const previousFailuresForType = await readScopedFailures(state);
     // Only show provisioning failures (apply errors), not transient plan errors.
     const provisioningFailures = previousFailuresForType.filter(
-      (f: FailureRecord) =>
+      (f) =>
         !f.errorMessage.includes("invalid JSON") &&
         !f.errorMessage.includes("Plan generator") &&
         !f.errorMessage.includes("Intent parsing"),
@@ -97,12 +99,10 @@ export async function readMemoryHints(
     const latestFailure = provisioningFailures[0];
     if (latestFailure) {
       // Only show if failure is newer than latest success for this type.
-      const provisions = await defaultMemoryService.readProvisions();
-      const latestSuccess = provisions
-        .filter((p: ProvisionRecord) => p.resourceType === state.resourceType)
-        .sort((a: ProvisionRecord, b: ProvisionRecord) =>
-          b.timestamp.localeCompare(a.timestamp),
-        )[0];
+      // Scoped reader ensures the success list obeys the same
+      // project / intent scope as the failure list, so staleness
+      // comparisons stay apples-to-apples.
+      const latestSuccess = (await readScopedProvisions(state))[0];
       const failureIsStale =
         latestSuccess &&
         latestFailure.timestamp.localeCompare(latestSuccess.timestamp) <= 0;

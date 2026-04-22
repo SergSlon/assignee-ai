@@ -207,10 +207,30 @@ export const graphAnnotation = Annotation.Root({
    *
    * Epic 94 wave 1 fixer e94.R8 (A-06): populated by the intent-parser
    * when the "named <x>" clause drops trailing tokens.
+   *
+   * Epic 94 wave 3 fixer e94.N6 (B-04 / C-05 / C-06): also populated by
+   * `preflight_guard` when a placeholder-class guard would have blocked
+   * the plan under `--no-apply` preview mode. Code
+   * `PREFLIGHT_PLACEHOLDER_DOWNGRADED` carries the original guard
+   * message so the user sees what would fail on apply without losing
+   * the preview render.
    */
   advisories: Annotation<Advisory[] | undefined>({
     reducer: (_, b) => b,
     default: () => undefined,
+  }),
+  /**
+   * Epic 94 wave 3 fixer e94.N6 (C-05 / C-06): set by the CLI plan
+   * command when the user passed `--no-apply`. Under this flag the
+   * user explicitly asked for a read-only preview; placeholder-class
+   * preflight failures (ARN / EC2-ID / sentinel-password) are
+   * downgraded to advisories so the plan still renders. Mutating
+   * paths (apply / destroy) leave the flag at its default `false` so
+   * the original fail-closed semantics are preserved.
+   */
+  noApply: Annotation<boolean>({
+    reducer: (_, b) => b,
+    default: () => false,
   }),
 });
 

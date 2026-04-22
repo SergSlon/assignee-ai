@@ -347,7 +347,15 @@ describe("resultFormatterNode — plan mode (PENDING)", () => {
       executionMode: ExecutionMode.PLAN,
     });
     await resultFormatterNode(state);
-    expect(renderPlanBox).toHaveBeenCalledWith(state);
+    // Epic 94 N8 (C-01): attachCompoundQueue threads `provisionable`
+    // onto the rendered state so renderPlanBox can tag compound
+    // companions with `[companion]`. Non-compound plans default to
+    // `true` (single-resource deploys are always provisioning
+    // targets). objectContaining accommodates the N8 field without
+    // changing the assertion's intent.
+    expect(renderPlanBox).toHaveBeenCalledWith(
+      expect.objectContaining({ ...state, provisionable: true }),
+    );
   });
 });
 
@@ -369,7 +377,11 @@ describe("resultFormatterNode — apply mode with BP blocking (PENDING + preflig
       ],
     });
     await resultFormatterNode(state);
-    expect(renderPlanBox).toHaveBeenCalledWith(state);
+    // Epic 94 N8 (C-01): see plan-mode test comment above — provisionable
+    // flag added to the rendered state by attachCompoundQueue.
+    expect(renderPlanBox).toHaveBeenCalledWith(
+      expect.objectContaining({ ...state, provisionable: true }),
+    );
   });
 
   it("does NOT call renderPlanBox in apply mode when preflightPassed is true", async () => {
@@ -424,7 +436,19 @@ describe("resultFormatterNode — compound plan-mode iteration", () => {
     expect(result.currentResourceIndex).toBe(3);
   });
 
-  it("skips non-provisionable resources when advancing", async () => {
+  // Bug-codified assertion flip: Epic 94 N8 (C-01). Before N8, the
+  // queue-advance helper skipped `provisionable: false` entries so
+  // compound companions (API Gateway v2 Integration / Route / Stage,
+  // Lambda Permission, VPC IGW Attachment, etc.) never rendered a
+  // plan box and their desiredState never appeared in `--output json`.
+  // Users could not verify load-bearing settings like
+  // `ProtocolType: WEBSOCKET` before apply. N8 removes the skip:
+  // companions now advance into plan-generator like any other resource,
+  // and `compound-plan.ts` synthesises their display-only desiredState
+  // (marker placeholder substitution — zero AWS calls). APPLY-mode
+  // still skips companions at the provisioner
+  // (`companion-skip.ts` — untouched).
+  it("does NOT skip non-provisionable resources when advancing (N8 bug fix — C-01)", async () => {
     const queueWithCompanion = [
       {
         resourceId: "vpc",
@@ -460,9 +484,11 @@ describe("resultFormatterNode — compound plan-mode iteration", () => {
 
     const result = await resultFormatterNode(state);
 
-    // Should skip index 1 (non-provisionable) and advance to index 2
-    expect(result.currentResourceIndex).toBe(2);
-    expect(result.resourceType).toBe("AWS::EC2::InternetGateway");
+    // N8: companions render — advance by exactly +1, not jumping over
+    // the non-provisionable entry. The graph loop now renders every
+    // member of the queue in order, including companions.
+    expect(result.currentResourceIndex).toBe(1);
+    expect(result.resourceType).toBe("AWS::EC2::VPCGatewayAttachment");
   });
 
   it("does NOT advance in apply mode (existing SUCCESS path handles that)", async () => {
@@ -1386,8 +1412,12 @@ describe("resultFormatterNode — P1-2 plan mode promptFixSelection integration"
 
     // renderPlanBox called twice: initial render + re-render after fix
     expect(renderPlanBox).toHaveBeenCalledTimes(2);
-    // First call with original state
-    expect(renderPlanBox).toHaveBeenNthCalledWith(1, state);
+    // First call with original state (+ N8 provisionable flag).
+    // Epic 94 N8 (C-01): attachCompoundQueue adds `provisionable`.
+    expect(renderPlanBox).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ ...state, provisionable: true }),
+    );
     // Second call with updated state (patched desiredState, residual findings)
     // Cost estimate is preserved (not cleared to N/A) — spread from original state
     expect(renderPlanBox).toHaveBeenNthCalledWith(

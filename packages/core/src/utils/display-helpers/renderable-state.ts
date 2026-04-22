@@ -54,4 +54,15 @@ export interface RenderableState {
   // this, compound plans only displayed the first resource which
   // misled users about what was about to happen.
   compoundQueue?: RenderableCompoundQueue;
+  /**
+   * Epic 94 N8 (C-01): `false` marks the rendered resource as a
+   * compound companion — API Gateway sub-resources, Lambda
+   * permissions, etc. that are display-only at plan time. The plan
+   * box prefixes such resources with `[companion]` on the
+   * `Resource Type:` line so users can distinguish the 3
+   * provisionable WebSocket resources from the 9 display-only
+   * companions. Default (undefined / true) renders a normal
+   * Resource Type header.
+   */
+  provisionable?: boolean;
 }

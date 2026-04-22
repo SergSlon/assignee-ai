@@ -12,6 +12,32 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 94 — Wave 2 N6 + Wave 3 + Wave 4 (2026-04-22)
+
+Closed the NEW + PREEXISTING lanes via a persistent **3-member opus-4-7[1m] team** (`epic94-fix-team`) working on disjoint file slices — graph-fixer on preflight+checkpoint, display-fixer on render+pattern, pricing-fixer on advisory-prices+cost-history. Each member processed stories serially within itself; all three in parallel across the team. No concurrent-write race (Epic 92 lesson applied: calibrated to 3 members, not 8).
+
+#### Fixed
+
+- **e94.N6** — Placeholder ARN regex + `--no-apply` preview. Extended `placeholder-resource-id.ts` regex to catch `<hex>` / `<id>` / angle-bracket tokens. New `state.noApply` flag propagated from CLI into preflight context: under `--no-apply`, placeholder-class guard failures (placeholder-arn / placeholder-resource-id / sentinel-password) downgrade to `PREFLIGHT_PLACEHOLDER_DOWNGRADED` advisories instead of hard-blocking — plan still renders so the user can preview. AWS-touching guards + `required-fields` stay hard failures (schema-invalid previews remain fail-closed). Closes B-04 HIGH + B-10 LOW + C-05 HIGH + C-06 HIGH.
+- **e94.N7** — **Epic 89 (third attempt) FINALLY CLOSED**. Three-layer fix for checkpoint values persistence:
+  1. Serializer clamps `currentResourceIndex` to `completedResources.length` on plan-mode overflow (formatter was advancing past `queue.length`, serializing the overflow verbatim — apply-resume then skipped the entire queue on re-entry).
+  2. Plan formatter now stashes each resource's fully-elicited `desiredState` back into `resourceQueue[i].desiredState` BEFORE advancing (per-slot hook from Story e92.1.d existed but caller never populated it).
+  3. Serializer's `backfillSlotDesiredState` helper adopts top-level `state.desiredState` for the terminal queue slot when types match (final-planned resource otherwise had no chance to be stashed).
+
+  Probe on a 9-resource VPC compound: `currentResourceIndex` 9→0, `desiredState` field-count 0→21 (8 of 9 slots populated; IGW slot legitimately empty). Closes C-02 HIGH NEW.
+
+- **e94.N8** — WebSocket 12-resource render. Epic 92 Wave 2.b shipped the `websocket-api` pattern with 12 resources, but `formatters/plan.ts` queue-advance skipped `provisionable: false` entries in PLAN mode. Users saw 3 plan boxes instead of 12 — couldn't verify `ProtocolType: WEBSOCKET` or `RouteSelectionExpression` before apply. Removed the PLAN-mode companion-skip (APPLY-mode skip at `companion-skip.ts` untouched). `RenderableState.provisionable?: boolean` threaded through `attachCompoundQueue`; `renderPlanBox` prefixes `[companion]` on `provisionable: false`. JSON envelope carries `provisionable` so consumers can filter deploy targets from companions. Closes C-01 HIGH NEW.
+- **e94.N9** — ALB-monthly inner fanout gate. Epic 92 Wave 1.e landed the OUTER gate at `advice-generator.ts` (S3/Lambda/DDB/etc. don't call `enrichAdvisoryPrices` at all), but Epic 93 found the inner fan-out still fetched all IDs regardless of resource type — NAT / EFS / CloudWatch plans still emitted `pricing_unavailable alb-monthly`. Extended `getRelevantAdvisoryPriceIds(resourceType)` to expose the per-type `AdvisoryPriceId` set; `enrichAdvisoryPrices` now intersects with `ENRICHABLE_PRICE_IDS`. NAT plan → 1 MCP call (NAT_GATEWAY_MONTHLY filters only); ALB plan → 1 call (ALB_MONTHLY); etc. `undefined` resourceType preserves full back-compat fan-out for existing callers. Closes B-05 MED NEW.
+- **e94.N10** — Cross-agent contamination scope-tightening. Epic 92 Wave 4.c shipped `services/cost-history/` with scoped readers + `scopeMatches` over `{projectDir, intentHash}`, but `plan-generator/llm-helpers.ts`'s `readMemoryHints` was still calling `defaultMemoryService.readProvisions/readFailures` directly — Wave 4.c's scope infrastructure wasn't actually exercised by the hint-emitting path. Routed `readMemoryHints` through `readScopedProvisions` / `readScopedFailures`. A failure from project A no longer leaks into project B's "Previous error" warning; a failure tied to intentHash H1 no longer leaks onto H2 when `projectDir` is absent. Empty-field scrub (`Status Code: 0`, `Request ID: null`) preserved from Wave 4.c. Closes B-08 HIGH NEW.
+- **e94.P1** — RDS ARN subtype split. Epic 92 Wave 1.b-followup split `events` into `SERVICE_SUBTYPE_MAP`; `rds` stayed single-type in `SERVICE_TYPE_MAP` → every RDS ARN forced to `AWS::RDS::DBInstance`. Lifted `rds` into `SERVICE_SUBTYPE_MAP` with **8 subtype keys** (`db` / `subgrp` / `secgrp` / `pg` / `snapshot` / `cluster` / `cluster-snapshot` / `og`) plus `""` fallback → `AWS::RDS::DBInstance` for back-compat. Partition-aware across AWS commercial + GovCloud + China (19 new tests). Closes D93-D-03 MED PREEXISTING.
+- **e94.P2** — IAM ManagedPolicy region display. RGTA listing path stamped the operator's configured region on every IAM shape except `AWS::IAM::Role` (which had a hardcoded `"global"` branch). IAM ManagedPolicy / User / Group / InstanceProfile all leaked the operator region. New `GLOBAL_SERVICES` set + `isGlobalService()` helper in `arn-type-map.ts`; applied in `fetch-managed-resources.ts` — all IAM shapes + CloudFront + Route53 + WAF + Organizations now render `region: "global"`. S3 deliberately excluded (buckets are regional despite empty-region ARN). Closes D-06 / D93-D-something MED PREEXISTING. +25 new tests.
+
+#### Test totals
+
+8791 → **8881 passing** (+90). `packages/core` 6212 → 6302 (+90). `packages/best-practices` 639 unchanged. `apps/cli` 1316 unchanged. `apps/mcp-server` 624 unchanged. 154 skipped (RUN_E2E=1 gated, up from 130). Full `pnpm -r test:coverage` run had one mcp-server timeout (`should handle null ResourceTagMappingList`, 30s) caused by parallel-coverage resource contention; passes in isolation in 467ms — not a real regression.
+
+Full gate run green: `pnpm lint / check-types / lint:barrels / lint:shims / doc-lint / citation-lint / audit --prod / build / -r test:coverage` (bar the single flake).
+
 ### Epic 94 — Wave 2 stories N1-N5 (2026-04-22)
 
 Five serial stories landing the NEW lane's first half. N6 splits into the final Wave-2 story dispatched alongside Wave 3 as a persistent opus-4-7[1m] team (3 members; file-slice-disjoint so no concurrent-write race).
