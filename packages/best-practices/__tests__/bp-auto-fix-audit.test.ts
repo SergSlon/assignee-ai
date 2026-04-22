@@ -157,9 +157,14 @@ const testCases: AutoFixTestCase[] = [
     id: "BP-SG-002",
     resourceType: "AWS::EC2::SecurityGroup",
     triggeringState: {
-      // check_type: not_equals, expected: "0.0.0.0/0:22"
-      // Fires when SecurityGroupIngress === "0.0.0.0/0:22"
-      SecurityGroupIngress: "0.0.0.0/0:22",
+      // Epic 94 R4 (B-02): rule-runner now parses `"<cidr>:<port>"` as
+      // an SG-ingress semantic check against the CFN array shape — the
+      // old bare-string fixture never fires. Supply a real ingress
+      // element opening SSH to 0.0.0.0/0 so the rule fires for its
+      // documented reason.
+      SecurityGroupIngress: [
+        { IpProtocol: "tcp", FromPort: 22, ToPort: 22, CidrIp: "0.0.0.0/0" },
+      ],
     },
   },
   // --- RDS rules ---

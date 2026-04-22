@@ -8,15 +8,47 @@
 import { getTypeHint } from "./config/supported-types-block.js";
 
 /**
+ * Optional construction-time flags for `AssigneeError`.
+ *
+ * Story 94-R7 (Epic 94 wave 1 fixer): callers that have already
+ * routed the human-readable message through `renderError` (or any
+ * other structured printer that targets stderr) can set
+ * `alreadyRendered: true` so the top-level Commander
+ * `parseAsync.catch` in `apps/cli/src/index.ts` skips its fallback
+ * `Error: ${err.message}` write. The exit code is still derived from
+ * the error — only the duplicate stderr paint is suppressed. Closes
+ * D-02 (MED REGRESSION): `list --resource-type <invalid>` was
+ * printing the 37-types registry grid twice on stderr.
+ */
+export interface AssigneeErrorOptions {
+  /**
+   * Signal to top-level CLI catches that the human-readable form of
+   * this error has already been printed. Default: `false` (unchanged
+   * behaviour for existing call sites).
+   */
+  readonly alreadyRendered?: boolean;
+}
+
+/**
  * Base error class for all Assignee.ai errors (referred to as `AppError` in story/spec docs).
  */
 export class AssigneeError extends Error {
+  /**
+   * Set when the CLI (or other surface) has already routed this
+   * error's human-readable form to the user (typically via
+   * `renderError`). Top-level error handlers check this to avoid
+   * double-paint. See `AssigneeErrorOptions.alreadyRendered`.
+   */
+  public readonly alreadyRendered: boolean;
+
   constructor(
     message: string,
     public readonly code: string,
+    options: AssigneeErrorOptions = {},
   ) {
     super(message);
     this.name = "AssigneeError";
+    this.alreadyRendered = options.alreadyRendered === true;
   }
 }
 

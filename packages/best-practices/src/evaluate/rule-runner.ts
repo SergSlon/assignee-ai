@@ -13,6 +13,65 @@ import {
 import { isAwarenessCheck } from "./awareness-filter.js";
 
 /**
+ * Epic 94 R4 (B-02). `expected_value: "0.0.0.0/0:22"` and `"0.0.0.0/0:3389"`
+ * are the canonical shapes BP-SG-002 / BP-SG-005 (and any future
+ * CIDR+port rule on SG ingress arrays) declare. Without this helper the
+ * `not_equals` branch compared the whole ingress array to the string
+ * and either always-fired (before R4) or never-fired — neither matched
+ * the YAML author's intent.
+ *
+ * Shape check: `<cidr>:<port>` where cidr is dotted-quad `/mask` and port
+ * is 0-65535. The mere presence of `:` rejects IPv6 strings and other
+ * accidental matches — dotted-quad v4 only for now.
+ */
+const CIDR_PORT_RE =
+  /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}):(\d{1,5})$/;
+
+/**
+ * True when the candidate value looks like an SG ingress rule object
+ * — at minimum has `CidrIp` (string) and ideally `FromPort`/`ToPort`
+ * (numbers). Missing port fields are treated as "any port" (the CFN
+ * default for `IpProtocol: -1` all-traffic rules).
+ */
+function looksLikeSgIngressElement(el: unknown): boolean {
+  if (el === null || typeof el !== "object") return false;
+  const obj = el as Record<string, unknown>;
+  return typeof obj["CidrIp"] === "string";
+}
+
+/**
+ * Check whether the given SG ingress array contains a rule that opens
+ * the given CIDR to the given port. Used by the `not_equals` branch to
+ * implement the `"cidr:port"` grammar.
+ *
+ * Semantics: an ingress rule matches when its `CidrIp` equals the
+ * target cidr AND (no FromPort/ToPort OR FromPort <= port <= ToPort).
+ * All-traffic rules (IpProtocol: -1, no port bounds) are treated as
+ * covering every port, matching real AWS SG evaluation behaviour.
+ */
+function sgIngressOpensCidrPort(
+  fieldValue: unknown,
+  cidr: string,
+  port: number,
+): boolean {
+  if (!Array.isArray(fieldValue)) return false;
+  for (const el of fieldValue) {
+    if (!looksLikeSgIngressElement(el)) continue;
+    const rule = el as Record<string, unknown>;
+    if (rule["CidrIp"] !== cidr) continue;
+    const fromRaw = rule["FromPort"];
+    const toRaw = rule["ToPort"];
+    // Absent bounds → all-traffic / all-ports → matches any port.
+    if (fromRaw === undefined && toRaw === undefined) return true;
+    const from = typeof fromRaw === "number" ? fromRaw : Number(fromRaw);
+    const to = typeof toRaw === "number" ? toRaw : Number(toRaw);
+    if (Number.isNaN(from) || Number.isNaN(to)) continue;
+    if (from <= port && port <= to) return true;
+  }
+  return false;
+}
+
+/**
  * Evaluate a single check_type condition against a field value.
  *
  * @returns true if the check PASSES (best practice is satisfied), false if it FAILS (finding should fire)
@@ -29,8 +88,26 @@ export function checkPasses(
     case "equals":
       return fieldValue === expectedValue;
 
-    case "not_equals":
+    case "not_equals": {
+      // Epic 94 R4 (B-02). SG ingress rules (BP-SG-002, BP-SG-005, future
+      // port+CIDR rules) declare `expected_value: "0.0.0.0/0:22"` style
+      // strings. Detect that grammar and inspect the ingress array
+      // properly instead of falling through to a string !== array
+      // comparison (which would always fire, guaranteeing false
+      // positives). The rule fails (finding fires) when any ingress
+      // element actually opens the target cidr to the target port.
+      if (typeof expectedValue === "string") {
+        const cidrPort = CIDR_PORT_RE.exec(expectedValue);
+        if (cidrPort !== null) {
+          const [, cidr, portStr] = cidrPort;
+          const port = Number(portStr);
+          if (!Number.isNaN(port) && port >= 0 && port <= 65535) {
+            return !sgIngressOpensCidrPort(fieldValue, cidr!, port);
+          }
+        }
+      }
       return fieldValue !== expectedValue;
+    }
 
     case "exists":
       // "exists" treats empty arrays AND empty strings as absent.

@@ -37,6 +37,7 @@ import { AssigneeError } from "../errors.js";
 import type { FreeTierNote } from "../utils/free-tier.js";
 import type { AppliedFix, SecurityFinding } from "../types/fix-finding.js";
 import type { BPFinding } from "@assignee/best-practices";
+import type { Advisory } from "./nodes/intent-parser.js";
 
 export type { AppliedFix, SecurityFinding };
 
@@ -197,6 +198,19 @@ export const graphAnnotation = Annotation.Root({
   retryCount: Annotation<number>({
     reducer: (_, b) => b,
     default: () => 0,
+  }),
+  /**
+   * Non-blocking structured advisories surfaced from the parse / plan
+   * pipeline. Unlike `errorMessage` (which halts the plan) advisories
+   * let the plan succeed but surface a user-visible signal that some
+   * aspect of the input was silently altered.
+   *
+   * Epic 94 wave 1 fixer e94.R8 (A-06): populated by the intent-parser
+   * when the "named <x>" clause drops trailing tokens.
+   */
+  advisories: Annotation<Advisory[] | undefined>({
+    reducer: (_, b) => b,
+    default: () => undefined,
   }),
 });
 

@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  INVALID_DESIRED_STATE_CODE,
   validateS3BucketName,
   validateDesiredState,
   validateDesiredStateNode,
   formatValidationError,
 } from "./validate-desired-state.js";
+import { AssigneeError } from "../../errors.js";
 import { ExecutionStatus } from "../../schema/graph-state.js";
 import type { AgentState } from "../graph-state.js";
 
@@ -293,6 +295,11 @@ describe("validateDesiredStateNode", () => {
     expect(patch.errorMessage).toContain("[ERROR]");
     expect(patch.errorMessage).toContain("IPv4");
     expect(patch.errorMessage).toContain("[FIX]");
+    // Epic 94 R1: the node also attaches a typed AssigneeError carrying
+    // the machine-readable code so the CLI JSON-envelope path surfaces
+    // `error.code === "INVALID_DESIRED_STATE"`.
+    expect(patch.error).toBeInstanceOf(AssigneeError);
+    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
   });
 
   it("sets FAILED on xn-- prefix with actionable fix", async () => {
@@ -304,6 +311,8 @@ describe("validateDesiredStateNode", () => {
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(patch.errorMessage).toContain("xn--");
     expect(patch.errorMessage).toContain("[FIX]");
+    expect(patch.error).toBeInstanceOf(AssigneeError);
+    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
   });
 
   it("sets FAILED on leading '.' with guidance", async () => {
@@ -314,6 +323,8 @@ describe("validateDesiredStateNode", () => {
     const patch = await validateDesiredStateNode(state);
     expect(patch.executionStatus).toBe(ExecutionStatus.FAILED);
     expect(patch.errorMessage).toContain("start and end");
+    expect(patch.error).toBeInstanceOf(AssigneeError);
+    expect(patch.error?.code).toBe(INVALID_DESIRED_STATE_CODE);
   });
 
   it("passes through unchanged for unregistered resource types", async () => {

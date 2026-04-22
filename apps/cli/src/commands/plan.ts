@@ -49,6 +49,7 @@ import {
   EXAMPLE_S3_INTENT,
 } from "../config/constants.js";
 import {
+  AssigneeError,
   parsePlanJsonStream,
   serializePlanEnvelope,
   serializeErrorEnvelope,
@@ -278,10 +279,22 @@ export const planCommand = new Command(CommandName.PLAN)
           // Shape the envelope from the thrown error. The renderError
           // block (WHY/FIX text + registry) already went to stderr; we
           // only need the structured code/message/hint on stdout.
-          const code = (runErrored as { code?: string }).code ?? "PLAN_FAILED";
-          const hint =
-            (runErrored as { hint?: string }).hint ??
-            "Try rephrasing your intent, or run `assignee --verbose plan <intent>` to see the full node trace.";
+          //
+          // Epic 94 R5 (C-03): distinguish TYPED failures (AssigneeError
+          // with a stable `.code` from the error hierarchy) from
+          // UNKNOWN failures (plain Error or thrown non-Error). Typed
+          // errors keep their own code + hint; unknown errors get the
+          // `UNKNOWN_ERROR` sentinel + a `--verbose` hint so machine
+          // readers can filter "pipeline did not model this" from
+          // "pipeline ran and raised a known failure".
+          const isTyped = runErrored instanceof AssigneeError;
+          const code = isTyped
+            ? (runErrored as AssigneeError).code
+            : "UNKNOWN_ERROR";
+          const hint = isTyped
+            ? ((runErrored as { hint?: string }).hint ??
+              "Try rephrasing your intent, or run `assignee --verbose plan <intent>` to see the full node trace.")
+            : "Run with --verbose for full stack trace.";
           interceptor.flushError(code, runErrored.message, hint);
         } else {
           interceptor.flushSuccess();

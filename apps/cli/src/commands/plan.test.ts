@@ -1126,6 +1126,129 @@ describe("planCommand — --output json stdout interceptor (A-02 / B-04 / D-29)"
     expect(joined).not.toContain('"BucketName": "partial"');
   });
 
+  // ── Epic 94 R5 (C-03) — error-envelope discipline ───────────────────
+  // On AssigneeError with a specific code (UNSUPPORTED_RESOURCE,
+  // INVALID_DESIRED_STATE, …) the envelope must preserve that code
+  // verbatim, not collapse to a generic "PLAN_FAILED". On a plain
+  // Error the envelope must use code "UNKNOWN_ERROR" + the `--verbose`
+  // hint so machine readers can filter unmodelled crashes from typed
+  // failures.
+  it("AssigneeError(UNSUPPORTED_RESOURCE) preserves its code + message on stdout", async () => {
+    const { runCommand } = await import("../utils/command-runner.js");
+    const { AssigneeError } = await import("@assignee/core");
+
+    const stdoutCaptured: string[] = [];
+    stdoutWriteSpy.mockImplementation(((chunk: unknown) => {
+      stdoutCaptured.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk as Uint8Array).toString("utf8"),
+      );
+      return true;
+    }) as never);
+
+    vi.mocked(runCommand).mockImplementationOnce(async () => {
+      throw new AssigneeError(
+        'Resource type "AWS::RDS::DBInstance" is not supported in the current phase.',
+        "UNSUPPORTED_RESOURCE",
+      );
+    });
+
+    const { planCommand } = await import("./plan.js");
+    await expect(
+      planCommand.parseAsync([
+        "node",
+        "plan",
+        "--output",
+        "json",
+        "Create an unsupported resource",
+      ]),
+    ).rejects.toThrow("is not supported");
+
+    const parsed = JSON.parse(stdoutCaptured.join("").trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("UNSUPPORTED_RESOURCE");
+    expect(parsed.error.message).toContain("not supported");
+    expect(parsed.error.hint).toBeDefined();
+  });
+
+  it("plain Error (non-AssigneeError) emits UNKNOWN_ERROR + --verbose hint", async () => {
+    const { runCommand } = await import("../utils/command-runner.js");
+
+    const stdoutCaptured: string[] = [];
+    stdoutWriteSpy.mockImplementation(((chunk: unknown) => {
+      stdoutCaptured.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk as Uint8Array).toString("utf8"),
+      );
+      return true;
+    }) as never);
+
+    vi.mocked(runCommand).mockImplementationOnce(async () => {
+      throw new Error("unexpected pipeline crash");
+    });
+
+    const { planCommand } = await import("./plan.js");
+    await expect(
+      planCommand.parseAsync([
+        "node",
+        "plan",
+        "--output",
+        "json",
+        "Create something",
+      ]),
+    ).rejects.toThrow("unexpected pipeline crash");
+
+    const parsed = JSON.parse(stdoutCaptured.join("").trim());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("UNKNOWN_ERROR");
+    expect(parsed.error.message).toBe("unexpected pipeline crash");
+    expect(parsed.error.hint).toBe("Run with --verbose for full stack trace.");
+  });
+
+  it("stdout is a single parseable JSON value on error (no NDJSON / no plaintext leak)", async () => {
+    const { runCommand } = await import("../utils/command-runner.js");
+    const { AssigneeError } = await import("@assignee/core");
+
+    const stdoutCaptured: string[] = [];
+    stdoutWriteSpy.mockImplementation(((chunk: unknown) => {
+      stdoutCaptured.push(
+        typeof chunk === "string"
+          ? chunk
+          : Buffer.from(chunk as Uint8Array).toString("utf8"),
+      );
+      return true;
+    }) as never);
+
+    vi.mocked(runCommand).mockImplementationOnce(async () => {
+      throw new AssigneeError("Plan generation failed", "PLAN_FAILED");
+    });
+
+    const { planCommand } = await import("./plan.js");
+    await expect(
+      planCommand.parseAsync([
+        "node",
+        "plan",
+        "--output",
+        "json",
+        "Create something",
+      ]),
+    ).rejects.toThrow("Plan generation failed");
+
+    const joined = stdoutCaptured.join("").trim();
+    // Single parse must succeed: no NDJSON, no prefix/suffix text.
+    const parsed = JSON.parse(joined);
+    expect(parsed.ok).toBe(false);
+    // No "}\n{" boundary anywhere — that would mean two root values.
+    expect(joined.includes("}\n{")).toBe(false);
+    // No [ERROR] / [CONTEXT] / [FIX] plaintext blocks leaked onto stdout
+    // (they belong on stderr via renderError).
+    expect(joined).not.toContain("[ERROR]");
+    expect(joined).not.toContain("[CONTEXT]");
+    expect(joined).not.toContain("[FIX]");
+  });
+
   it("text mode does NOT swap stdout.write (regression — byte-identical passthrough)", async () => {
     // In text mode, installJsonStdoutInterceptor returns no-op handlers
     // and leaves process.stdout.write untouched. We confirm by asserting

@@ -134,6 +134,15 @@ No --yes flag is required.
                 "Pass a supported CFN type (e.g. AWS::S3::Bucket) or a unique shorthand (e.g. S3, Lambda).",
               );
             }
+            // Story 94-R7 (D-02): renderError already painted the
+            // [ERROR]/[CONTEXT]/[FIX] triple (including the 37-types
+            // registry grid) to stderr. Re-throw a marked AssigneeError
+            // so the top-level Commander catch in `index.ts` skips its
+            // fallback `Error: ${err.message}` print — otherwise the
+            // grid shows up twice on stderr.
+            throw new AssigneeError(err.message, err.code, {
+              alreadyRendered: true,
+            });
           } else {
             // Story 56-it2-04 P1-01: guard asymmetric error paths.
             // Any non-INVALID_RESOURCE_TYPE_CODE throw from the
@@ -154,8 +163,17 @@ No --yes flag is required.
                 "Check the value and try again — see `assignee list --help` for supported types.",
               );
             }
+            // Story 94-R7 (D-02): same double-paint guard as above.
+            // Wrap whatever was thrown so the top-level catch knows the
+            // user has already seen a friendly message.
+            const existingCode =
+              err instanceof AssigneeError
+                ? err.code
+                : "RESOURCE_TYPE_RESOLVER_ERROR";
+            throw new AssigneeError(message, existingCode, {
+              alreadyRendered: true,
+            });
           }
-          throw err;
         }
       }
 
@@ -249,9 +267,14 @@ No --yes flag is required.
           writeJsonErrorEnvelope(jsonCode, jsonMessage, jsonHint);
         }
 
+        // Story 94-R7 (D-02): renderError already printed the
+        // [ERROR]/[CONTEXT]/[FIX] triple. Mark the rethrown error so
+        // the top-level Commander catch skips its fallback print —
+        // otherwise `err.message` gets echoed to stderr a second time.
         throw new AssigneeError(
           err.message || "Failed to list managed resources.",
           "LIST_ERROR",
+          { alreadyRendered: true },
         );
       }
     },

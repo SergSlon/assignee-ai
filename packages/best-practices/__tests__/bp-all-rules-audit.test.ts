@@ -124,9 +124,27 @@ function firingState(spec: RuleSpec): Record<string, unknown> {
         return stateWith(spec.propertyPath, "__WRONG__");
       return {}; // missing field also fires
 
-    case "not_equals":
+    case "not_equals": {
+      // Epic 94 R4 (B-02): SG ingress rules use the `"<cidr>:<port>"`
+      // grammar (BP-SG-002, BP-SG-005). Rule-runner now parses that
+      // grammar and inspects the ingress ARRAY — a bare string
+      // fixture no longer fires. Build a real CFN ingress element
+      // instead so the "fires" branch exercises the intended logic.
+      if (
+        typeof spec.expectedValue === "string" &&
+        /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}:\d{1,5}$/.test(
+          spec.expectedValue,
+        )
+      ) {
+        const [cidr, portStr] = spec.expectedValue.split(":");
+        const port = Number(portStr);
+        return stateWith(spec.propertyPath, [
+          { IpProtocol: "tcp", FromPort: port, ToPort: port, CidrIp: cidr },
+        ]);
+      }
       // Field equals the unwanted value → fires
       return stateWith(spec.propertyPath, spec.expectedValue);
+    }
 
     case "exists":
       // Field missing → fires
@@ -294,6 +312,27 @@ function passingState(spec: RuleSpec): Record<string, unknown> {
       return stateWith(spec.propertyPath, spec.expectedValue);
 
     case "not_equals":
+      // Epic 94 R4 (B-02): mirror the `firingState` branch — SG CIDR:port
+      // rules need a real CFN ingress element whose CidrIp/port does NOT
+      // match the unwanted value.
+      if (
+        typeof spec.expectedValue === "string" &&
+        /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}:\d{1,5}$/.test(
+          spec.expectedValue,
+        )
+      ) {
+        const [, portStr] = spec.expectedValue.split(":");
+        const port = Number(portStr);
+        // Use a private CIDR so the target port is NOT open to 0.0.0.0/0.
+        return stateWith(spec.propertyPath, [
+          {
+            IpProtocol: "tcp",
+            FromPort: port,
+            ToPort: port,
+            CidrIp: "10.0.0.0/8",
+          },
+        ]);
+      }
       // Field is different from unwanted value
       if (spec.expectedValue === true)
         return stateWith(spec.propertyPath, false);
@@ -672,8 +711,12 @@ const sgRules: RuleSpec[] = [
     id: "BP-SG-005",
     resourceType: "AWS::EC2::SecurityGroup",
     propertyPath: "SecurityGroupIngress",
-    checkType: "awareness",
-    expectedValue: true,
+    // Epic 94 R4 (B-02). Re-tagged from `awareness` to `not_equals` with
+    // the canonical `"<cidr>:<port>"` grammar BP-SG-002 uses. Was firing
+    // as a CRITICAL false positive on every SG plan regardless of the
+    // ports the user actually requested.
+    checkType: "not_equals",
+    expectedValue: "0.0.0.0/0:3389",
   },
   {
     id: "BP-SG-006",

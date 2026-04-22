@@ -95,16 +95,43 @@ function mockPrompts(opts: {
 // ── Tests ────────────────────────────────────────────────────────────────
 
 describe("assignee init command", () => {
+  const ORIGINAL_STDOUT_IS_TTY = process.stdout.isTTY;
+  const ORIGINAL_STDIN_IS_TTY = process.stdin.isTTY;
+
   beforeEach(async () => {
     vi.clearAllMocks();
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "init-test-"));
     originalCwd = process.cwd();
     process.chdir(tmpDir);
+    // Epic 94 R6: the interactive-wizard tests all assume TTY context,
+    // but under vitest both streams report `isTTY === undefined` so the
+    // R6 guard would trip. Pin both to `true` here so the wizard path
+    // runs as intended.
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
   });
 
   afterEach(async () => {
     process.chdir(originalCwd);
     await fs.rm(tmpDir, { recursive: true, force: true });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: ORIGINAL_STDOUT_IS_TTY,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: ORIGINAL_STDIN_IS_TTY,
+      configurable: true,
+      writable: true,
+    });
   });
 
   it("creates .assignee/config.yaml with valid credentials", async () => {
@@ -577,6 +604,8 @@ describe("assignee init --help (e92-3b3 D-05 help-text half)", () => {
 
 describe("assignee init --global", () => {
   let globalConfigDir: string;
+  const ORIGINAL_STDOUT_IS_TTY = process.stdout.isTTY;
+  const ORIGINAL_STDIN_IS_TTY = process.stdin.isTTY;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -589,11 +618,34 @@ describe("assignee init --global", () => {
     vi.mocked(resolveConfigPath).mockReturnValue(
       path.join(globalConfigDir, "config.yaml"),
     );
+
+    // Epic 94 R6: simulate TTY context so the R6 non-interactive guard
+    // doesn't trip during the global wizard tests.
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
   });
 
   afterEach(async () => {
     process.chdir(originalCwd);
     await fs.rm(tmpDir, { recursive: true, force: true });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: ORIGINAL_STDOUT_IS_TTY,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: ORIGINAL_STDIN_IS_TTY,
+      configurable: true,
+      writable: true,
+    });
   });
 
   it("--global flag triggers global config wizard and writes AssigneeConfig YAML", async () => {
@@ -809,7 +861,8 @@ describe("detectAvailableRoles (M-S8)", () => {
 // Non-TTY + no --yes must emit an actionable error, not block.
 
 describe("assignee init non-interactive flags (e92-u.d)", () => {
-  const ORIGINAL_IS_TTY = process.stdout.isTTY;
+  const ORIGINAL_STDOUT_IS_TTY = process.stdout.isTTY;
+  const ORIGINAL_STDIN_IS_TTY = process.stdin.isTTY;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -832,7 +885,16 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
     process.chdir(tmpDir);
     // Tests here default to a TTY context; individual tests flip it when
     // exercising the non-TTY branch. The restore happens in afterEach.
+    // Epic 94 R6: the guard now requires BOTH stdin AND stdout to be a
+    // TTY (isTTY === true). Under vitest the default is `undefined` on
+    // both streams, so we have to set both explicitly to simulate an
+    // interactive terminal.
     Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
       value: true,
       configurable: true,
       writable: true,
@@ -850,7 +912,12 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
     process.chdir(originalCwd);
     await fs.rm(tmpDir, { recursive: true, force: true });
     Object.defineProperty(process.stdout, "isTTY", {
-      value: ORIGINAL_IS_TTY,
+      value: ORIGINAL_STDOUT_IS_TTY,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: ORIGINAL_STDIN_IS_TTY,
       configurable: true,
       writable: true,
     });
@@ -1015,6 +1082,99 @@ describe("assignee init non-interactive flags (e92-u.d)", () => {
     // No config file should have been written.
     const configPath = path.join(tmpDir, ".assignee", "config.yaml");
     await expect(fs.access(configPath)).rejects.toThrow();
+  });
+
+  // Epic 94 R6 (D-01 regression) — the predicate must catch the
+  // production case where stdin is redirected (`assignee init </dev/null`).
+  // Node reports `stdin.isTTY === undefined` in that context, NOT
+  // `false`, so the old `=== false` predicate silently let the wizard
+  // proceed, clack aborted on the piped stdin, and `process.exit(0)`
+  // fired without writing any config. This test pins the fix.
+  it("R6/D-01: stdin.isTTY=undefined (piped) trips the guard with exit 1", async () => {
+    // Simulate `assignee init </dev/null`: stdout still a TTY, stdin
+    // is a pipe (isTTY === undefined). The vitest process.stdin default
+    // IS `undefined` for isTTY, but the surrounding beforeEach set it
+    // to `true`, so we explicitly clear it back here.
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+
+    let errBuf = "";
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown): boolean => {
+        errBuf += String(chunk);
+        return true;
+      });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: number | string | null | undefined) => {
+        throw new Error(`__TEST_EXIT__:${String(code ?? "")}`);
+      });
+
+    let caughtMsg = "";
+    let exitCallArgs: unknown[] = [];
+    try {
+      await runInitAction(["node", "init"]);
+    } catch (err) {
+      caughtMsg = err instanceof Error ? err.message : String(err);
+    } finally {
+      exitCallArgs = exitSpy.mock.calls[0] ?? [];
+      stderrSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+
+    expect(caughtMsg).toBe("__TEST_EXIT__:1");
+    expect(exitCallArgs[0]).toBe(1);
+    expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
+    expect(errBuf).toContain("[FIX] Re-run with: assignee init --yes");
+    // No prompts should have fired — we bailed before the wizard.
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(clack.select).not.toHaveBeenCalled();
+    // No config file should have been written.
+    const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+    await expect(fs.access(configPath)).rejects.toThrow();
+  });
+
+  // Epic 94 R6 — symmetric coverage for the piped-stdout case
+  // (e.g. `assignee init | tee log.txt`). Node also reports
+  // `stdout.isTTY === undefined` for pipes, not `false`. The old
+  // predicate missed this too.
+  it("R6/D-01: stdout.isTTY=undefined (piped) trips the guard with exit 1", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+
+    let errBuf = "";
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown): boolean => {
+        errBuf += String(chunk);
+        return true;
+      });
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: number | string | null | undefined) => {
+        throw new Error(`__TEST_EXIT__:${String(code ?? "")}`);
+      });
+
+    let caughtMsg = "";
+    try {
+      await runInitAction(["node", "init"]);
+    } catch (err) {
+      caughtMsg = err instanceof Error ? err.message : String(err);
+    } finally {
+      stderrSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+
+    expect(caughtMsg).toBe("__TEST_EXIT__:1");
+    expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
+    expect(errBuf).toContain("[FIX] Re-run with: assignee init --yes");
   });
 
   it("non-TTY + --yes: proceeds silently with defaults (CI mode)", async () => {

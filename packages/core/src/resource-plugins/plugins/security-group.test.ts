@@ -106,13 +106,23 @@ describe("securityGroupPlugin", () => {
     });
   });
 
-  it("defaults include HTTPS from anywhere and all egress (no SSH)", () => {
+  // Epic 94 R3 (B-01): previously this test asserted a hardcoded
+  //   SecurityGroupIngress: [{ port 443 }]
+  // default. That codified a BLOCKER REGRESSION — the default clobbered
+  // the intent-parser payload (e.g. "allowing port 22" → FromPort 22)
+  // and every SG request silently collapsed to port 443. The ingress
+  // default has been REMOVED so intent-derived rules survive; when the
+  // user supplies no port, SecurityGroupIngress is simply omitted (a
+  // valid CFN shape — AWS creates the SG with zero ingress rules).
+  it("defaults omit SecurityGroupIngress (intent-parser is the source of truth) and keep egress", () => {
     expect(securityGroupPlugin.defaults).toEqual({
-      SecurityGroupIngress: [
-        { IpProtocol: "tcp", FromPort: 443, ToPort: 443, CidrIp: "0.0.0.0/0" },
-      ],
       SecurityGroupEgress: [{ IpProtocol: "-1", CidrIp: "0.0.0.0/0" }],
     });
+    expect(
+      (securityGroupPlugin.defaults as Record<string, unknown>)[
+        "SecurityGroupIngress"
+      ],
+    ).toBeUndefined();
   });
 
   it("has at least 2 configHints (Tier C: was toBeDefined+>0)", () => {

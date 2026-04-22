@@ -235,8 +235,21 @@ if (process.platform === "win32") {
 }
 
 program.parseAsync(process.argv).catch((err) => {
-  process.stderr.write(
-    `Error: ${err instanceof Error ? err.message : String(err)}\n`,
-  );
+  // Story 94-R7 (D-02): command-level catches (e.g. `list.ts`) that
+  // have already routed the human-readable message through
+  // `renderError` mark their rethrown errors with `alreadyRendered`.
+  // Without this guard, the `Error: ${err.message}` write below would
+  // paint the entire message (which may embed the supported-types
+  // grid) a second time on stderr. We still propagate the exit code
+  // unchanged.
+  const alreadyRendered =
+    err !== null &&
+    typeof err === "object" &&
+    (err as { alreadyRendered?: unknown }).alreadyRendered === true;
+  if (!alreadyRendered) {
+    process.stderr.write(
+      `Error: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  }
   process.exitCode = errorToExitCode(err);
 });

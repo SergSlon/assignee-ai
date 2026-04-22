@@ -189,6 +189,44 @@ describe("assignee list command", () => {
     );
   });
 
+  // Story 94-R7 (D-02): the thrown error must carry `alreadyRendered:
+  // true` so the top-level Commander catch in `index.ts` skips its
+  // fallback `Error: ${err.message}` write. Without this flag the
+  // 37-types registry grid (embedded in `err.message`) prints twice
+  // on stderr.
+  it("94-R7: --resource-type INVALID throws AssigneeError with alreadyRendered=true", async () => {
+    const { AssigneeError } = await import("@assignee/core");
+    let caught: unknown;
+    try {
+      await runListCommand(["--resource-type", "NOT-A-REAL-TYPE"]);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(AssigneeError);
+    expect(caught).toMatchObject({
+      code: "INVALID_RESOURCE_TYPE",
+      alreadyRendered: true,
+    });
+  });
+
+  it("94-R7: generic LIST_ERROR fallback sets alreadyRendered=true", async () => {
+    const { AssigneeError } = await import("@assignee/core");
+    const error = new Error("boom on the wire");
+    vi.mocked(fetchManagedResources).mockRejectedValueOnce(error);
+
+    let caught: unknown;
+    try {
+      await runListCommand();
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(AssigneeError);
+    expect(caught).toMatchObject({
+      code: "LIST_ERROR",
+      alreadyRendered: true,
+    });
+  });
+
   it("no --resource-type flag leaves the filter undefined (regression)", async () => {
     vi.mocked(fetchManagedResources).mockResolvedValueOnce(MOCK_RESOURCES);
 

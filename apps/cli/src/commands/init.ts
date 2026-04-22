@@ -60,14 +60,32 @@ function parseAutoFixFlag(raw: string): AutoFixModeType {
 }
 
 /**
- * Non-TTY detection — mirrors the `chalk` / `supports-color` convention.
- * In test runs the vitest harness replaces process.stdout with a stream
- * that reports `isTTY === undefined`, so we only treat `false` explicitly
- * as non-TTY to avoid spurious failures; this matches the real-world
- * behaviour where CI pipes set `isTTY` to false.
+ * Non-TTY detection — Epic 94 R6 (D-01 regression fix).
+ *
+ * Node reports `process.std{in,out}.isTTY` as `undefined` (NOT `false`)
+ * for streams that are pipes or redirections — e.g. the canonical CI
+ * invocation `assignee init </dev/null` has `stdin.isTTY === undefined`,
+ * and `assignee init | tee log.txt` has `stdout.isTTY === undefined`.
+ * The previous `=== false` check missed both cases, so the D-39
+ * guard-and-exit envelope never fired; clack's prompt saw a non-TTY
+ * stdin, resolved immediately, and the CLI exited 0 without writing a
+ * config. Every non-interactive `assignee init` without `--yes` was
+ * silently broken since Epic 92 u.d landed.
+ *
+ * The fix: require BOTH stdin AND stdout to be an explicit TTY
+ * (`isTTY === true`) for the interactive wizard to proceed. If either
+ * stream is anything other than `true` (i.e. `false` OR `undefined`),
+ * we treat the context as non-interactive. Stdin matters because
+ * clack's prompt reads from it; stdout matters because clack's renderer
+ * writes to it. Both must be a terminal for an interactive prompt to
+ * make sense.
+ *
+ * The vitest harness tests that want to exercise the TTY branch
+ * explicitly set `isTTY = true` on the relevant stream, so the
+ * `!== true` check is also correct under test.
  */
 function isNonInteractive(): boolean {
-  return process.stdout.isTTY === false;
+  return process.stdout.isTTY !== true || process.stdin.isTTY !== true;
 }
 
 interface InitOptions {

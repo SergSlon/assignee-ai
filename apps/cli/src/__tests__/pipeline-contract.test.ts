@@ -1,6 +1,11 @@
 /**
  * Pipeline State Contract Test — validates that graph state flows correctly
- * through all 12 nodes in the Assignee.ai pipeline.
+ * through all 14 nodes in the Assignee.ai pipeline.
+ *
+ * Epic 94 R1 (A-01): `validate_desired_state` joined the roster when the
+ * Epic 92 u.c.1 plan-time S3 validator was finally wired into
+ * `create-graph.ts`. The expected-nodes list is strengthened (not
+ * weakened) — we still require every prior node AND the new one.
  *
  * Mocks at the AWS boundary (CloudControl, Bedrock), not at the node boundary.
  * Verifies key state fields are populated at each stage.
@@ -21,6 +26,7 @@ describe("Pipeline contract — graph node enumeration", () => {
     "option_elicitor",
     "compound_dispatcher",
     "plan_generator",
+    "validate_desired_state",
     "advice_generator",
     "preflight_guard",
     "human_approval",
@@ -31,9 +37,9 @@ describe("Pipeline contract — graph node enumeration", () => {
     "result_formatter",
   ] as const;
 
-  it("GraphNode has exactly 13 nodes", () => {
+  it("GraphNode has exactly 14 nodes", () => {
     const nodeValues = Object.values(GraphNode);
-    expect(nodeValues).toHaveLength(13);
+    expect(nodeValues).toHaveLength(14);
   });
 
   it.each(expectedNodes)("GraphNode contains '%s'", (nodeName) => {
@@ -147,23 +153,31 @@ describe("Pipeline contract — routing functions", () => {
 // ── 4. Edge flow contract ────────────────────────────────────────────────────
 
 describe("Pipeline contract — edge flow", () => {
-  it("plan mode follows: intent_parser -> schema_fetcher -> option_elicitor -> compound_dispatcher -> plan_generator -> bp_evaluator -> fix_applicator -> preflight_guard -> result_formatter", () => {
+  it("plan mode follows: intent_parser -> schema_fetcher -> option_elicitor -> compound_dispatcher -> plan_generator -> validate_desired_state -> advice_generator -> bp_evaluator -> fix_applicator -> preflight_guard -> result_formatter", () => {
     // This documents the expected linear path for plan mode.
     // The actual graph wiring is tested in graph-integration.test.ts.
     // Here we verify the node constant ordering matches the documented pipeline.
+    //
+    // Epic 94 R1 (A-01): `validate_desired_state` inserted between
+    // plan_generator and advice_generator. On validation failure it
+    // short-circuits to result_formatter (see routeValidateDesiredState
+    // in graph-routing.ts); happy path falls through to advice_generator
+    // as shown below.
     const planPath = [
       GraphNode.INTENT_PARSER,
       GraphNode.SCHEMA_FETCHER,
       GraphNode.OPTION_ELICITOR,
       GraphNode.COMPOUND_DISPATCHER,
       GraphNode.PLAN_GENERATOR,
+      GraphNode.VALIDATE_DESIRED_STATE,
+      GraphNode.ADVICE_GENERATOR,
       GraphNode.BP_EVALUATOR,
       GraphNode.FIX_APPLICATOR,
       GraphNode.PREFLIGHT_GUARD,
       GraphNode.RESULT_FORMATTER,
     ];
 
-    expect(planPath).toHaveLength(9);
+    expect(planPath).toHaveLength(11);
     expect(planPath[0]).toBe("intent_parser");
     expect(planPath[planPath.length - 1]).toBe("result_formatter");
   });
