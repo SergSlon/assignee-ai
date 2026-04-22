@@ -65,6 +65,82 @@ describe("sqsQueuePlugin", () => {
     });
   });
 
+  describe("VisibilityTimeout field (Epic 92 A-07)", () => {
+    const field = sqsQueuePlugin.commonFields.find(
+      (f) => f.name === "VisibilityTimeout",
+    );
+
+    it("uses the schema-accurate key name 'VisibilityTimeout' (not the stripped alias)", () => {
+      // The desired-state-sanitizer strips "VisibilityTimeoutSeconds" because
+      // that key is NOT in the AWS::SQS::Queue CCAPI schema. The real key is
+      // "VisibilityTimeout" (see test-fixtures/mcp-mock-responses/schema-sqs-queue.ts).
+      expect(field).toBeDefined();
+      expect(field!.name).toBe("VisibilityTimeout");
+    });
+
+    it("has initialValue '30' for the wizard default", () => {
+      expect(field!.question.initialValue).toBe("30");
+    });
+
+    it("toCfn coerces numeric string to integer", () => {
+      expect(field!.toCfn!("30")).toBe(30);
+      expect(field!.toCfn!("43200")).toBe(43200);
+    });
+
+    it("toCfn returns undefined for non-numeric input", () => {
+      // Number("abc") is NaN → undefined. Note: Number("") is 0 (JS
+      // coercion quirk); empty inputs are handled upstream by the
+      // elicitor (field is skipped entirely) so this path is not a
+      // user-facing concern.
+      expect(field!.toCfn!("abc")).toBeUndefined();
+      expect(field!.toCfn!("not-a-number")).toBeUndefined();
+    });
+
+    it("validate rejects values above 43200 (max 12 hours)", () => {
+      expect(field!.question.validate?.("43201")).toBe(
+        "Must be 0-43200 seconds",
+      );
+    });
+
+    it("validate rejects negative values", () => {
+      expect(field!.question.validate?.("-1")).toBe("Must be 0-43200 seconds");
+    });
+
+    it("validate rejects non-integer values", () => {
+      expect(field!.question.validate?.("30.5")).toBe(
+        "Must be 0-43200 seconds",
+      );
+    });
+
+    it("validate accepts 0 (boundary)", () => {
+      expect(field!.question.validate?.("0")).toBeUndefined();
+    });
+
+    it("validate accepts 43200 (boundary)", () => {
+      expect(field!.question.validate?.("43200")).toBeUndefined();
+    });
+  });
+
+  describe("plugin.defaults (Epic 92 A-07)", () => {
+    it("declares a default of 30 for VisibilityTimeout (schema-accurate key)", () => {
+      // This default survives desired-state-sanitizer because the schema
+      // property is "VisibilityTimeout" (not "VisibilityTimeoutSeconds").
+      expect(sqsQueuePlugin.defaults["VisibilityTimeout"]).toBe(30);
+    });
+
+    it("keeps the SqsManagedSseEnabled default (free SSE-SQS)", () => {
+      expect(sqsQueuePlugin.defaults["SqsManagedSseEnabled"]).toBe(true);
+    });
+
+    it("does NOT register a default under the legacy broken alias 'VisibilityTimeoutSeconds'", () => {
+      // Regression guard: make sure we never re-introduce the
+      // sanitizer-stripped key path.
+      expect(
+        sqsQueuePlugin.defaults["VisibilityTimeoutSeconds"],
+      ).toBeUndefined();
+    });
+  });
+
   it("MessageRetentionPeriod is an enum with 5 options", () => {
     // Tier C: strengthened
     const field = sqsQueuePlugin.commonFields.find(
@@ -109,7 +185,7 @@ describe("sqsQueuePlugin", () => {
     )!;
 
     it("transforms ARN to DLQ policy object", () => {
-      const arn = "arn:aws:sqs:us-east-1:123456789012:my-dlq";
+      const arn = "arn:aws:sqs:us-east-1:210987654321:my-dlq";
       expect(field.toCfn!(arn)).toEqual({
         deadLetterTargetArn: arn,
         maxReceiveCount: 3,

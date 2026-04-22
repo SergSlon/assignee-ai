@@ -125,6 +125,60 @@ describe("natGatewayPlugin", () => {
     expect(hints).toContain("per AZ");
   });
 
+  // ── Epic 92 e92.u.c.2 A-14 — plan-time UX hints ──────────────────────
+
+  describe("Epic 92 A-14: SubnetId plan-time UX hints", () => {
+    it("SubnetId required flag is still set (regression guard)", () => {
+      // A-14 scope note: the `required: true` flag was already set before
+      // e92.u.c.2. This test guards against accidental removal.
+      const field = natGatewayPlugin.commonFields.find(
+        (f) => f.name === "SubnetId",
+      )!;
+      expect(field.required).toBe(true);
+    });
+
+    it("configHints contain the compound-path auto-wire guidance", () => {
+      // A-14: the plan-generator LLM should set SubnetId to
+      // { "Ref": "<PublicSubnetLogicalId>" } when a public subnet is
+      // being planned in the same graph, instead of asking the user
+      // for a bare 'subnet-<hex>' identifier.
+      const hints = natGatewayPlugin.configHints!.join("\n");
+      expect(hints).toContain("compound auto-wire");
+      expect(hints).toContain("Ref");
+      expect(hints).toContain("PublicSubnet");
+      expect(hints).toContain("public-subnet-1");
+    });
+
+    it("configHints contain the standalone-path --set remediation", () => {
+      // A-14: when no managed public subnet is being planned and the
+      // user did not supply --set SubnetId=<subnet-id>, the plan
+      // should emit a [BLOCK] with a concrete remediation instead of
+      // inventing a placeholder identifier.
+      const hints = natGatewayPlugin.configHints!.join("\n");
+      expect(hints).toContain("[BLOCK]");
+      expect(hints).toContain("--set SubnetId=<subnet-id>");
+      expect(hints).toContain("SubnetId missing");
+    });
+
+    it("configHints discourage fabricated subnet-00000000 placeholders", () => {
+      // A-14: guard rail against LLM hallucination of fake IDs that
+      // would hit CloudControl and waste a round-trip.
+      const hints = natGatewayPlugin.configHints!.join("\n");
+      expect(hints).toContain("subnet-00000000");
+      expect(hints).toContain("NOT fabricate");
+    });
+
+    it("has at least 8 configHints after A-14 additions (regression floor)", () => {
+      // Existing floor was 4. Post-A-14 there are 2 additional hints,
+      // making the natural floor 6. Using 6 (not 8) so the assertion
+      // stays conservative against minor rewording in future commits
+      // — but 8 is the actual count as of this commit.
+      expect(natGatewayPlugin.configHints!.length).toBeGreaterThanOrEqual(6);
+      // Additional: the exact count at this commit is 8.
+      expect(natGatewayPlugin.configHints!.length).toBe(8);
+    });
+  });
+
   // ── Tags toCfn transform ─────────────────────────────────────────────
 
   describe("Tags toCfn transform", () => {

@@ -1120,3 +1120,227 @@ describe("evaluateTriggers — performance", () => {
     expect(findings.length).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// evaluateTriggers — BP-RT-001 route-table-role downgrade (E92 u.c.3, B-13/B-17)
+// ---------------------------------------------------------------------------
+
+describe("evaluateTriggers — BP-RT-001 role-aware severity", () => {
+  /** Build the BP-RT-001 rule fixture (mirrors ec2/BP-RT-001.yaml). */
+  function makeBpRt001(): BestPractice {
+    return {
+      id: "BP-RT-001",
+      title: "No public route (0.0.0.0/0 via IGW) in private route tables",
+      severity: "CRITICAL",
+      resource_type: "AWS::EC2::Route",
+      property_path: "GatewayId",
+      check_type: "conditional_forbidden",
+      expected_value:
+        "Private subnets must route 0.0.0.0/0 through NatGateway, not InternetGateway",
+      source: "AWS Well-Architected Framework",
+      source_id: "SEC-05",
+      description:
+        "A route table associated with private subnets must NOT have a 0.0.0.0/0 route pointing to an InternetGateway.",
+      category: "security",
+      lastVerified: "2026-03-24",
+      blocking: true,
+      fixType: "interactive",
+      interactiveOptions: [
+        {
+          label: "Switch target to NatGateway",
+          action: "prompt_value",
+          targetField: "NatGatewayId",
+        },
+      ],
+    };
+  }
+
+  it("confirmed-private (Role tag) + public route → BLOCK (CRITICAL, blocking)", () => {
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      desiredState: {
+        RouteTableId: "rtb-abc123",
+        DestinationCidrBlock: "0.0.0.0/0",
+        GatewayId: "igw-deadbeef",
+        Tags: [{ Key: "Role", Value: "private" }],
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("CRITICAL");
+    expect(findings[0]!.blocking).toBe(true);
+    expect(findings[0]!.practiceId).toBe("BP-RT-001");
+  });
+
+  it("confirmed-private (RouteTableType hint) + public route → BLOCK", () => {
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      desiredState: {
+        RouteTableId: "rtb-abc123",
+        RouteTableType: "private",
+        DestinationCidrBlock: "0.0.0.0/0",
+        GatewayId: "igw-deadbeef",
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("CRITICAL");
+    expect(findings[0]!.blocking).toBe(true);
+  });
+
+  it("confirmed-private (RouteTableId name pattern) + public route → BLOCK", () => {
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      desiredState: {
+        RouteTableId: { Ref: "private-route-table" },
+        DestinationCidrBlock: "0.0.0.0/0",
+        GatewayId: { Ref: "internet-gateway" },
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("CRITICAL");
+    expect(findings[0]!.blocking).toBe(true);
+  });
+
+  it("unknown role + public route → WARN (MEDIUM, non-blocking, hint appended)", () => {
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      // Ambiguous: no RouteTableType, no Role tag, no name hint.
+      desiredState: {
+        RouteTableId: "rtb-deadbeef",
+        DestinationCidrBlock: "0.0.0.0/0",
+        GatewayId: "igw-abc123",
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("MEDIUM");
+    expect(findings[0]!.blocking).toBe(false);
+    expect(findings[0]!.message).toMatch(/Role=private/);
+    expect(findings[0]!.practiceId).toBe("BP-RT-001");
+  });
+
+  it("unknown role (RouteTableId has no role substring) + public route → WARN", () => {
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      desiredState: {
+        RouteTableId: { Ref: "main-routes-primary" },
+        DestinationCidrBlock: "0.0.0.0/0",
+        GatewayId: { Ref: "igw" },
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("MEDIUM");
+    expect(findings[0]!.blocking).toBe(false);
+  });
+
+  it("confirmed-public (Role tag) + public route → rule does not fire", () => {
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      desiredState: {
+        RouteTableId: "rtb-public123",
+        DestinationCidrBlock: "0.0.0.0/0",
+        GatewayId: "igw-deadbeef",
+        Tags: [{ Key: "Role", Value: "public" }],
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("confirmed-public (RouteTableId name pattern) + public route → rule does not fire", () => {
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      desiredState: {
+        RouteTableId: { Ref: "public-route-table" },
+        DestinationCidrBlock: "0.0.0.0/0",
+        GatewayId: { Ref: "igw" },
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("confirmed-private + NO public route (NatGatewayId only) → rule does not fire", () => {
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      desiredState: {
+        RouteTableId: { Ref: "private-route-table" },
+        DestinationCidrBlock: "0.0.0.0/0",
+        NatGatewayId: { Ref: "nat-gateway-1" },
+        // GatewayId intentionally absent.
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("unknown role + NO public route → rule does not fire (conditional_forbidden passes)", () => {
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      desiredState: {
+        RouteTableId: "rtb-anon",
+        DestinationCidrBlock: "0.0.0.0/0",
+        NatGatewayId: "nat-abc",
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("RouteTableType case-insensitive: 'PRIVATE' → private", () => {
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      desiredState: {
+        RouteTableId: "rtb-x",
+        RouteTableType: "PRIVATE",
+        GatewayId: "igw-y",
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("CRITICAL");
+    expect(findings[0]!.blocking).toBe(true);
+  });
+
+  it("explicit RouteTableType overrides name-based heuristic", () => {
+    // Route table name suggests public, but explicit hint says private.
+    // Explicit hint wins.
+    const bp = makeBpRt001();
+    const ctx = makeCtx({
+      resourceType: "AWS::EC2::Route",
+      desiredState: {
+        RouteTableId: { Ref: "public-route-table" },
+        RouteTableType: "private",
+        GatewayId: { Ref: "igw" },
+      },
+    });
+
+    const findings = evaluateTriggers(ctx, [bp]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("CRITICAL");
+    expect(findings[0]!.blocking).toBe(true);
+  });
+});

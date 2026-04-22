@@ -13,6 +13,16 @@ import { FieldLabel } from "../field-labels.js";
  * When ConnectivityType is "public", toCfn() auto-provisions a companion EIP.
  *
  * @see Story 25.4 — NatGateway Plugin + Pricing + BP Rules
+ *
+ * Epic 92 e92.u.c.2 (A-14): SubnetId is already `required: true` on the
+ * first commonField (it has been since the plugin was introduced). What
+ * was missing was concrete plan-time guidance: (a) for compound flows
+ * (auto-wire to a planned PublicSubnet via `{ "Ref": <logicalId> }`)
+ * and (b) for standalone flows (emit a `[BLOCK]` with a concrete
+ * `--set SubnetId=` remediation). Those two cases are now enumerated
+ * in `configHints` so the plan-generator LLM follows them
+ * deterministically. No runtime behaviour here changes — elicitation,
+ * `required`, and `toCfn()` are all unchanged.
  */
 export const natGatewayPlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
@@ -100,6 +110,8 @@ export const natGatewayPlugin: ResourcePlugin = {
     "NatGateway cost: significant cost driver — hourly charges PLUS per-GB data processing fees apply even with zero traffic. Run `assignee cost` for live Pricing-MCP rates. Consider VPC endpoints for S3/DynamoDB to reduce data processing costs.",
     "NatGateway HA: For production, deploy one NatGateway per AZ to avoid cross-AZ single point of failure. Each NatGateway needs its own EIP.",
     "NatGateway MaxDrainDurationSeconds: if not specified, OMIT — default 350 seconds applies automatically.",
+    "NatGateway SubnetId compound auto-wire: when the same plan is creating a public subnet (logical IDs like PublicSubnet1, PublicSubnetA, or a marker such as 'public-subnet-1'), set SubnetId to { \"Ref\": \"<PublicSubnetLogicalId>\" } instead of asking the user for a bare 'subnet-<hex>'. This lets CloudFormation wire the dependency deterministically and avoids the user having to paste IDs by hand.",
+    "NatGateway SubnetId standalone fallback: when NO managed public subnet is being planned AND the user did not supply --set SubnetId=<subnet-id>, emit a [BLOCK] with the remediation message 'SubnetId missing — add --set SubnetId=<subnet-id> or plan inside a VPC compound'. Do NOT fabricate a placeholder like 'subnet-00000000' — the apply will fail on CloudControl and waste a round-trip.",
   ],
   toCfn(desiredState: Record<string, unknown>) {
     const connectivityType =
