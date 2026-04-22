@@ -373,6 +373,60 @@ describe("readScopedProvisions", () => {
 });
 
 describe("readScopedFailures", () => {
+  // e94.N10 (B-08 HIGH NEW): `readMemoryHints` now routes through this
+  // reader, so the scope-narrowing guarantees below are what keep
+  // cross-agent contamination out of the "Previous error" hint line in
+  // the plan-generator prompt. Each scenario mirrors a concrete B-08
+  // repro.
+
+  it("keeps legacy failures without a sidecar entry (backward compat — plan-generator test mocks rely on this)", async () => {
+    // The existing plan-generator.test.ts fixtures mock
+    // defaultMemoryService.readFailures directly and don't populate the
+    // sidecar. The scoped reader MUST still surface those records or
+    // the Wave 19 "Previous error" hint regresses silently.
+    const state = makeState({
+      userIntent: "Create an S3 bucket named my-test-bucket",
+      projectDir: undefined,
+    });
+    await memory.appendFailure(
+      makeFailure({
+        runId: SLICE_D_UUID,
+        errorMessage: "Bucket already exists",
+      }),
+    );
+    const scoped = await readScopedFailures(state, memory, store);
+    expect(scoped).toHaveLength(1);
+    expect(scoped[0]!.errorMessage).toBe("Bucket already exists");
+  });
+
+  it("drops failures with a different intentHash when neither side has a projectDir (B-08 repro — CLI invoked outside a project)", async () => {
+    // Epic 94 B-08: a previous error for one intent leaked into a
+    // materially-different intent's plan. When both sides run outside
+    // a tracked project dir, intentHash is the remaining guard.
+    const state = makeState({
+      userIntent: "Create a NAT gateway",
+      projectDir: undefined,
+      resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
+    });
+    await memory.appendFailure(
+      makeFailure({
+        runId: SLICE_A_UUID,
+        resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
+        errorMessage: "Missing required fields for AWS::EC2::Route",
+      }),
+    );
+    await store.appendEntry(
+      makeSidecarEntry({
+        runId: SLICE_A_UUID,
+        resourceType: RESOURCE_TYPES.EC2_NAT_GATEWAY,
+        intentHash: computeIntentHash("Create a Route pointing at an IGW"),
+        projectDir: undefined,
+      }),
+    );
+    const scoped = await readScopedFailures(state, memory, store);
+    expect(scoped).toHaveLength(0);
+  });
+
   it("drops failures from a different project (F-CROSS-001 surface)", async () => {
     const state = makeState({
       userIntent: "Create fresh slice-d bucket",

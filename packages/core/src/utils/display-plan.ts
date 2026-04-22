@@ -137,9 +137,22 @@ export function renderPlanBox(state: RenderableState): void {
     compoundLines.push("");
   }
 
+  // Epic 94 N8 (C-01): companion (non-provisionable) resources render
+  // with a `[companion]` tag so users can distinguish the provisionable
+  // members of a compound plan from display-only sub-resources (e.g.
+  // API Gateway v2 Integration / Route / Stage, Lambda Permission).
+  // The companion still carries a full desiredState block — that is
+  // the user-visible proof of settings like
+  // `ProtocolType: WEBSOCKET` that would otherwise be invisible
+  // before `apply`.
+  const resourceTypeLine =
+    state.provisionable === false
+      ? `Resource Type:   [companion] ${state.resourceType}`
+      : `Resource Type:   ${state.resourceType}`;
+
   const content = [
     ...compoundLines,
-    `Resource Type:   ${state.resourceType}`,
+    resourceTypeLine,
     `Region:          ${regionLabel()}`,
     `Config:`,
     configBlock,

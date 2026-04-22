@@ -26,6 +26,26 @@ import { AWS_REGION } from "@/config/constants/aws.js";
 import { EnvVar } from "@/constants/env-vars.js";
 
 /**
+ * Epic 94 Wave 3 N6 (C-05 / C-06): emit each advisory as a `[WARN]`
+ * stderr line before the plan box. Lands on stderr to keep shell
+ * captures of the plan render itself clean (stdout). Callable with
+ * `undefined` so the caller can omit the guard check.
+ */
+export function emitAdvisoryWarnings(advisories: Advisory[] | undefined): void {
+  if (!advisories || advisories.length === 0) return;
+  for (const advisory of advisories) {
+    // One line per advisory keeps grep-ability intact:
+    //   `[WARN] <code>: <message>`
+    // with the hint on an indented continuation line so a casual
+    // `grep WARN` still shows the headline without losing context.
+    process.stderr.write(`[WARN] ${advisory.code}: ${advisory.message}\n`);
+    if (advisory.hint) {
+      process.stderr.write(`       hint: ${advisory.hint}\n`);
+    }
+  }
+}
+
+/**
  * Epic 92 Wave 4 (e92.4.a) / A-19: strip rows whose value is empty-string,
  * `undefined`, or `null` so the plan renderer does not produce
  * "CPU Credits:  " empty lines.
@@ -118,6 +138,17 @@ interface PlanJsonPayload {
    * and `adviceHints` (free-form tips). Epic 94 R8.
    */
   advisories: Advisory[];
+  /**
+   * Epic 94 N8 (C-01): `false` when the emitted payload represents a
+   * compound companion resource (display-only at plan time — e.g.
+   * API Gateway v2 Integration / Route / Stage, Lambda Permission).
+   * Consumers filter on this flag to separate the N provisionable
+   * deploy targets from the M display-only sub-resources. Defaults
+   * to `true` for single-resource plans and non-compound paths so
+   * existing machine readers that never read this field continue to
+   * treat every payload as a real provisioning target.
+   */
+  provisionable: boolean;
   resourcePattern?: {
     patternId: string;
     displayName: string;
@@ -139,6 +170,16 @@ function buildPlanJsonPayload(state: AgentState): PlanJsonPayload {
   // Epic 92 Wave 4 (e92.4.a) / A-19: strip empty-valued rows so JSON
   // consumers don't see `"CPU Credits": ""` noise either.
   const cleanDesiredState = sanitizeDesiredState(state.desiredState);
+  // Epic 94 N8 (C-01): surface the current resource's `provisionable`
+  // flag on the per-payload envelope. Default to `true` when there is
+  // no resourceQueue (single-resource plans) or the current index is
+  // out of range — a bare S3 / Lambda / VPC plan is always a real
+  // provisioning target.
+  const currentQueueEntry =
+    state.resourceQueue && state.currentResourceIndex !== undefined
+      ? state.resourceQueue[state.currentResourceIndex]
+      : undefined;
+  const isProvisionable = currentQueueEntry?.provisionable !== false;
   return {
     resourceType: state.resourceType,
     region,
@@ -150,6 +191,7 @@ function buildPlanJsonPayload(state: AgentState): PlanJsonPayload {
     freeTierNote: state.freeTierNote ?? null,
     adviceHints: state.adviceHints ?? [],
     advisories: state.advisories ?? [],
+    provisionable: isProvisionable,
     ...(state.resourcePattern
       ? {
           resourcePattern: {
@@ -183,6 +225,15 @@ function buildPlanJsonPayload(state: AgentState): PlanJsonPayload {
 function attachCompoundQueue(state: AgentState): AgentState {
   const cleanDesiredState = sanitizeDesiredState(state.desiredState);
   const cleanMemoryHints = normalizeMemoryHints(state.memoryHints);
+  // Epic 94 N8 (C-01): thread the current resource's provisionable
+  // flag through to renderPlanBox so companion resources render with
+  // a `[companion]` tag on their Resource Type line. Default to
+  // `true` for single-resource plans and out-of-range indices.
+  const currentQueueEntry =
+    state.resourceQueue && state.currentResourceIndex !== undefined
+      ? state.resourceQueue[state.currentResourceIndex]
+      : undefined;
+  const isProvisionable = currentQueueEntry?.provisionable !== false;
   const base: AgentState = {
     ...state,
     // Only overwrite when the sanitizer returned a defined value; keep
@@ -193,7 +244,11 @@ function attachCompoundQueue(state: AgentState): AgentState {
     ...(cleanMemoryHints !== undefined
       ? { memoryHints: cleanMemoryHints }
       : {}),
-  };
+    // Explicitly pass provisionable so renderPlanBox can tag
+    // companions. AgentState carries this via spread into the
+    // RenderableState view.
+    provisionable: isProvisionable,
+  } as AgentState;
   if (
     state.resourcePattern &&
     state.resourceQueue &&
@@ -228,6 +283,11 @@ export async function formatPlanResult(
         JSON.stringify(buildPlanJsonPayload(state), null, 2) + "\n",
       );
     } else {
+      // Epic 94 Wave 3 N6 (C-05 / C-06): emit non-blocking advisories
+      // as `[WARN]` lines on stderr BEFORE the plan box so the
+      // operator sees why the preview is provisional. stderr keeps
+      // shell captures of the plan render clean.
+      emitAdvisoryWarnings(state.advisories);
       const stateWithQueue = attachCompoundQueue(state);
       renderPlanBox(stateWithQueue);
 
@@ -245,19 +305,42 @@ export async function formatPlanResult(
   }
 
   // Compound plan-mode queue advance.
+  //
+  // Epic 94 N8 (C-01): companion resources (`provisionable: false`)
+  // are NO LONGER skipped in PLAN mode. compound-plan.ts synthesises
+  // a full display-only desiredState for every queued resource
+  // (placeholder marker substitution, zero AWS calls). Rendering
+  // each one produces the user-visible proof of load-bearing
+  // settings like `ProtocolType: WEBSOCKET` and
+  // `RouteSelectionExpression: $request.body.action` that would
+  // otherwise never appear in plan output. APPLY mode still skips
+  // companions at the provisioner (`companion-skip.ts` — untouched);
+  // this is a PLAN-mode rendering fix only.
   if (
     state.executionMode === ExecutionMode.PLAN &&
     state.resourcePattern &&
     state.resourceQueue &&
     state.currentResourceIndex !== undefined
   ) {
-    let nextIndex = state.currentResourceIndex + 1;
-    while (
-      nextIndex < state.resourceQueue.length &&
-      state.resourceQueue[nextIndex]?.provisionable === false
-    ) {
-      nextIndex++;
-    }
+    const nextIndex = state.currentResourceIndex + 1;
+
+    // Epic 94 Wave 3 N7 (C-02): stash the just-planned resource's
+    // fully-elicited desiredState back into its queue slot. Without
+    // this loop-back write, only the final-planned resource's state
+    // survives on `state.desiredState`; earlier slots round-trip as
+    // `{}` through the checkpoint serializer and apply-resume cannot
+    // plan them without re-running the LLM. Use the post-fix value
+    // when an interactive BP fix was accepted (Story 35.4) so the
+    // fix persists too.
+    const stashState = fixResult?.desiredState ?? state.desiredState;
+    const updatedQueue =
+      stashState && typeof stashState === "object"
+        ? state.resourceQueue.map((spec, i) =>
+            i === state.currentResourceIndex
+              ? { ...spec, desiredState: stashState as Record<string, unknown> }
+              : spec,
+          )
+        : state.resourceQueue;
 
     const advance: Partial<AgentState> =
       nextIndex < state.resourceQueue.length
@@ -266,9 +349,15 @@ export async function formatPlanResult(
             resourceType: state.resourceQueue[nextIndex]!.resourceType,
             desiredState: undefined,
             executionStatus: ExecutionStatus.PENDING,
+            resourceQueue: updatedQueue,
           }
-        : // All resources planned — advance past end so the router sends to END.
-          { currentResourceIndex: state.resourceQueue.length };
+        : // All resources planned — advance past end so the router
+          // sends to END. Carry the stashed queue so the checkpoint
+          // serializer sees the final slot's desiredState on disk.
+          {
+            currentResourceIndex: state.resourceQueue.length,
+            resourceQueue: updatedQueue,
+          };
 
     if (fixResult) {
       // Spread advance FIRST so fixResult fields win (advance.desiredState

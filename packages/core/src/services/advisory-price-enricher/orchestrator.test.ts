@@ -18,6 +18,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { StructuredTool } from "@langchain/core/tools";
 import { ToolName } from "../../constants/tools.js";
 import { AdvisoryPriceId } from "../../pricing/advisory-prices.js";
+import { RESOURCE_TYPES } from "../../config/resource-types.js";
 import { enrichAdvisoryPrices } from "./orchestrator.js";
 import { ENRICHABLE_PRICE_IDS } from "./types.js";
 
@@ -445,5 +446,190 @@ describe("enrichAdvisoryPrices — extracted value handling", () => {
     expect(map.get(AdvisoryPriceId.NAT_GATEWAY_MONTHLY)?.source).toBe(
       "fallback",
     );
+  });
+});
+
+// ── Story 94.N9: per-resource-type inner fan-out gate ──────────────────────
+//
+// The outer gate in `advice-generator.ts` (Epic 92 Wave 1.e) skips the
+// enricher entirely for types that consume zero advisory prices. These
+// tests cover the INNER gate: plans whose type DOES consume an advisory
+// price must fetch ONLY the relevant ID(s), not the full enrichable set.
+// Before this change, a NAT Gateway plan would still invoke the ALB and
+// CW Alarm queries, producing `pricing_unavailable advisoryPriceId=
+// alb-monthly` warnings on every NAT plan.
+
+describe("enrichAdvisoryPrices — resourceType inner gate", () => {
+  function getPricingCalls(
+    tool: StructuredTool,
+  ): Array<Record<string, unknown>> {
+    return (
+      tool.invoke as unknown as {
+        mock: { calls: Array<[Record<string, unknown>]> };
+      }
+    ).mock.calls.map((c) => c[0]);
+  }
+
+  it("NAT Gateway plan fetches only NAT_GATEWAY_MONTHLY (no ALB / Alarm calls)", async () => {
+    const tool = makeFilterDispatchedPricingTool({
+      "NAT Gateway": natGatewayResponse,
+      "Load Balancer": albResponse,
+      Alarm: cwAlarmResponse,
+    });
+    const map = await enrichAdvisoryPrices(
+      [tool],
+      "run-nat",
+      RESOURCE_TYPES.EC2_NAT_GATEWAY,
+    );
+
+    expect(map.size).toBe(1);
+    expect(map.get(AdvisoryPriceId.NAT_GATEWAY_MONTHLY)?.source).toBe("mcp");
+    expect(map.has(AdvisoryPriceId.ALB_MONTHLY)).toBe(false);
+    expect(map.has(AdvisoryPriceId.CW_ALARM_PER_MONTH)).toBe(false);
+
+    // The Pricing tool must have been called EXACTLY once — and with
+    // the NAT filter set, never with ALB or Alarm filters.
+    const calls = getPricingCalls(tool);
+    expect(calls.length).toBe(1);
+    const filters = (calls[0]?.["filters"] ?? []) as Array<{
+      Field: string;
+      Value: string;
+    }>;
+    expect(filters.some((f) => f.Value === "NAT Gateway")).toBe(true);
+    expect(filters.some((f) => f.Value === "Load Balancer")).toBe(false);
+    expect(filters.some((f) => f.Value === "Alarm")).toBe(false);
+  });
+
+  it("ALB plan fetches only ALB_MONTHLY", async () => {
+    const tool = makeFilterDispatchedPricingTool({
+      "NAT Gateway": natGatewayResponse,
+      "Load Balancer": albResponse,
+      Alarm: cwAlarmResponse,
+    });
+    const map = await enrichAdvisoryPrices(
+      [tool],
+      "run-alb",
+      RESOURCE_TYPES.ELBV2_LOAD_BALANCER,
+    );
+
+    expect(map.size).toBe(1);
+    expect(map.get(AdvisoryPriceId.ALB_MONTHLY)?.source).toBe("mcp");
+
+    const calls = getPricingCalls(tool);
+    expect(calls.length).toBe(1);
+    const filters = (calls[0]?.["filters"] ?? []) as Array<{ Value: string }>;
+    expect(filters.some((f) => f.Value === "Load Balancer")).toBe(true);
+    expect(filters.some((f) => f.Value === "NAT Gateway")).toBe(false);
+  });
+
+  it("CloudWatch Alarm plan fetches only CW_ALARM_PER_MONTH", async () => {
+    const tool = makeFilterDispatchedPricingTool({
+      "NAT Gateway": natGatewayResponse,
+      "Load Balancer": albResponse,
+      Alarm: cwAlarmResponse,
+    });
+    const map = await enrichAdvisoryPrices(
+      [tool],
+      "run-alarm",
+      RESOURCE_TYPES.CLOUDWATCH_ALARM,
+    );
+
+    expect(map.size).toBe(1);
+    expect(map.get(AdvisoryPriceId.CW_ALARM_PER_MONTH)?.source).toBe("mcp");
+
+    const calls = getPricingCalls(tool);
+    expect(calls.length).toBe(1);
+    const filters = (calls[0]?.["filters"] ?? []) as Array<{ Value: string }>;
+    expect(filters.some((f) => f.Value === "Alarm")).toBe(true);
+  });
+
+  // Types that are in the relevance table but NOT yet in ENRICHABLE_PRICE_IDS
+  // (EFS / Logs / EventBridge / CloudFront) map to an empty fetch set —
+  // the cost-advisor's `enrichedLabel` helper synthesizes (estimated)
+  // labels locally, and NO MCP call fires.
+  it.each([
+    ["EFS", RESOURCE_TYPES.EFS_FILE_SYSTEM],
+    ["Logs", RESOURCE_TYPES.LOGS_LOG_GROUP],
+    ["EventBridge", RESOURCE_TYPES.EVENTS_RULE],
+    ["CloudFront", RESOURCE_TYPES.CLOUDFRONT_DISTRIBUTION],
+  ])(
+    "%s plan fires zero Pricing MCP calls — ID is relevant but not yet enrichable",
+    async (_name, resourceType) => {
+      const tool = makeFilterDispatchedPricingTool({
+        "NAT Gateway": natGatewayResponse,
+        "Load Balancer": albResponse,
+        Alarm: cwAlarmResponse,
+      });
+      const map = await enrichAdvisoryPrices([tool], "run", resourceType);
+      expect(map.size).toBe(0);
+      expect(getPricingCalls(tool).length).toBe(0);
+    },
+  );
+
+  // Types that consume zero advisory prices (the outer-gate types) — if
+  // a caller bypasses the outer gate and passes the type straight to the
+  // enricher, we STILL want zero fetches.
+  it.each([
+    ["S3", RESOURCE_TYPES.S3_BUCKET],
+    ["Lambda", RESOURCE_TYPES.LAMBDA_FUNCTION],
+    ["DynamoDB", RESOURCE_TYPES.DYNAMODB_TABLE],
+    ["SNS", RESOURCE_TYPES.SNS_TOPIC],
+    ["SQS", RESOURCE_TYPES.SQS_QUEUE],
+    ["EC2 Instance", RESOURCE_TYPES.EC2_INSTANCE],
+    ["IAM Role", RESOURCE_TYPES.IAM_ROLE],
+    ["SSM Parameter", RESOURCE_TYPES.SSM_PARAMETER],
+    ["VPC", RESOURCE_TYPES.EC2_VPC],
+  ])(
+    "%s plan fires zero Pricing MCP calls (defense in depth behind outer gate)",
+    async (_name, resourceType) => {
+      const tool = makeFilterDispatchedPricingTool({
+        "NAT Gateway": natGatewayResponse,
+      });
+      const map = await enrichAdvisoryPrices([tool], "run", resourceType);
+      expect(map.size).toBe(0);
+      expect(getPricingCalls(tool).length).toBe(0);
+    },
+  );
+
+  it("undefined resourceType preserves original behavior — fans out to every enrichable ID", async () => {
+    // Back-compat contract for callers that don't pass a resourceType
+    // (notably the existing test suite above and any legacy entrypoint).
+    const tool = makeFilterDispatchedPricingTool({
+      "NAT Gateway": natGatewayResponse,
+      "Load Balancer": albResponse,
+      Alarm: cwAlarmResponse,
+    });
+    const map = await enrichAdvisoryPrices([tool]);
+
+    expect(map.size).toBe(ENRICHABLE_PRICE_IDS.length);
+    expect(getPricingCalls(tool).length).toBe(ENRICHABLE_PRICE_IDS.length);
+  });
+
+  it("unknown resourceType resolves to zero fetches — no fabricated fallback rows", async () => {
+    const tool = makeFilterDispatchedPricingTool({
+      "NAT Gateway": natGatewayResponse,
+    });
+    const map = await enrichAdvisoryPrices(
+      [tool],
+      "run",
+      "AWS::SomeFuture::Resource",
+    );
+    expect(map.size).toBe(0);
+    expect(getPricingCalls(tool).length).toBe(0);
+  });
+
+  it("missing pricing tool + relevant resourceType → fallback only for the relevant ID", async () => {
+    // No Pricing tool but the resource type consumes NAT_GATEWAY_MONTHLY
+    // — the map must contain exactly that ID tagged 'fallback', not the
+    // full enrichable set.
+    const map = await enrichAdvisoryPrices(
+      undefined,
+      "run",
+      RESOURCE_TYPES.EC2_NAT_GATEWAY,
+    );
+    expect(map.size).toBe(1);
+    const entry = map.get(AdvisoryPriceId.NAT_GATEWAY_MONTHLY);
+    expect(entry?.source).toBe("fallback");
+    expect(entry?.label).toContain("(estimated)");
   });
 });

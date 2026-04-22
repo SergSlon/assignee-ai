@@ -88,6 +88,13 @@ export async function runPlan(
           userConfig?.bestPractices?.enforcement ?? BPEnforcementLevel.ENFORCE,
         ...(opts.advice === false ? { noAdvice: true } : {}),
         ...(opts.quick === true ? { quickMode: true } : {}),
+        // Epic 94 Wave 3 N6 (C-05 / C-06): forward `--no-apply` into
+        // the graph so `preflight_guard` can downgrade placeholder-
+        // class rejections into advisories and let the preview render.
+        // Default behaviour (apply-capable) is preserved when the flag
+        // is absent because `noApply` defaults to false in the state
+        // annotation.
+        ...(noApply ? { noApply: true } : {}),
         ...(userConfig ? { userConfig } : {}),
         ...(orgConfig ? { orgConfig } : {}),
         resolvedConfig,

@@ -18,12 +18,29 @@
 import { ExecutionStatus } from "../../index.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import type { AgentState } from "../graph-state.js";
+import type { Advisory } from "./intent-parser.js";
 import { PromiseStatus } from "../../config/constants/enums.js";
 import { log, LOG_ACTIONS } from "../../utils/logger/index.js";
 
 import { defaultPreflightGuards } from "./preflight-guard/registry.js";
 import { runGuards } from "./preflight-guard/runner.js";
 import type { GuardContext } from "./preflight-guard/types.js";
+
+/**
+ * Epic 94 Wave 3 N6 (C-05 / C-06): guard IDs whose failures represent
+ * "the LLM fabricated an identifier" rather than "the operator's AWS
+ * account is in a bad state". Under `--no-apply` these are downgraded
+ * to advisories so the preview still renders. AWS-touching guards
+ * (`vpc-existence`, `managed-policy`, `iam-permissions` elsewhere) and
+ * the schema-shape `required-fields` guard stay HARD failures: a
+ * schema-invalid preview is not actually useful, and an AWS-side
+ * posture failure signals something the preview cannot mask.
+ */
+const PLACEHOLDER_CLASS_GUARD_IDS = new Set<string>([
+  "placeholder-arn",
+  "placeholder-resource-id",
+  "sentinel-password",
+]);
 import {
   runIamPermissionsCheck,
   type IamCheckResult,
@@ -50,11 +67,42 @@ export async function preflightGuardNode(
   // 1. Sequential guards (required-fields → placeholder-ARN → sentinel
   // password → managed-policy verification). First FAIL short-circuits.
   const guardOutcome = await runGuards(defaultPreflightGuards, ctx);
+  let placeholderDowngradeAdvisory: Advisory | undefined;
   if (guardOutcome.errorMessage) {
-    return {
-      executionStatus: ExecutionStatus.FAILED,
-      errorMessage: guardOutcome.errorMessage,
-    };
+    // Epic 94 Wave 3 N6 (C-05 / C-06): under `--no-apply` preview the
+    // user explicitly asked for a read-only render. Placeholder-class
+    // guard failures are downgraded to advisories so the plan box
+    // still produces useful output; the apply path keeps fail-closed
+    // semantics because `state.noApply` is false there.
+    if (
+      state.noApply === true &&
+      guardOutcome.failedGuardId !== undefined &&
+      PLACEHOLDER_CLASS_GUARD_IDS.has(guardOutcome.failedGuardId)
+    ) {
+      placeholderDowngradeAdvisory = {
+        code: "PREFLIGHT_PLACEHOLDER_DOWNGRADED",
+        message: guardOutcome.errorMessage,
+        hint:
+          "Re-run without `--no-apply` (or with concrete resource IDs) " +
+          "before applying — the plan would be rejected by AWS as-is.",
+        details: { guardId: guardOutcome.failedGuardId },
+      };
+      log({
+        ts: new Date().toISOString(),
+        runId: state.runId,
+        level: "warn",
+        action: LOG_ACTIONS.PREFLIGHT_COMPLETED,
+        extras: {
+          phase: "placeholder_downgraded_noapply",
+          guardId: guardOutcome.failedGuardId,
+        },
+      });
+    } else {
+      return {
+        executionStatus: ExecutionStatus.FAILED,
+        errorMessage: guardOutcome.errorMessage,
+      };
+    }
   }
 
   // 2. Synchronous pre-pass work (cheap, happens before the parallel fan-
@@ -159,12 +207,24 @@ export async function preflightGuardNode(
     decomposerReportedFree,
   });
 
+  // Epic 94 Wave 3 N6 (C-05 / C-06): merge the downgrade advisory onto
+  // any advisories the intent-parser already emitted so the formatter
+  // (JSON and text) sees both. `preflightPassed` stays false so the
+  // plan-mode render path fires but the apply prompt / CI path sees
+  // the usual "not safe to apply" signal.
+  const mergedAdvisories =
+    placeholderDowngradeAdvisory !== undefined
+      ? [...(state.advisories ?? []), placeholderDowngradeAdvisory]
+      : state.advisories;
+
   return {
     estimatedMonthlyCost: resolved.label,
     estimatedMonthlyCostSource: resolved.source,
-    preflightPassed: !bpBlocked,
+    preflightPassed:
+      placeholderDowngradeAdvisory !== undefined ? false : !bpBlocked,
     freeTierNote: freeTierNote ?? undefined,
     ...(perResourceCosts !== undefined ? { perResourceCosts } : {}),
     ...(pricingBreakdown !== undefined ? { pricingBreakdown } : {}),
+    ...(mergedAdvisories !== undefined ? { advisories: mergedAdvisories } : {}),
   };
 }

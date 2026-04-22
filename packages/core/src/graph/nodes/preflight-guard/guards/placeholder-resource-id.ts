@@ -67,6 +67,9 @@ export const PLACEHOLDER_RESOURCE_ID_PREFIXES = [
  *   - `12345678` / `87654321`          — docs-example shorthand
  *   - `abc12345` / `def67890`          — docs-example shorthand
  *   - `[0a]{8,}`                       — all-zero / all-"0a" stubs
+ *   - `<…>`                            — Epic 94 finding B-04 angle-bracket
+ *                                        template tokens (`subnet-<hex>`,
+ *                                        `vpc-<id>`, `sg-<YOUR-ID>` etc.)
  */
 export const PLACEHOLDER_RESOURCE_ID_REGEX = new RegExp(
   `^(${PLACEHOLDER_RESOURCE_ID_PREFIXES.join("|")})-(` +
@@ -78,6 +81,11 @@ export const PLACEHOLDER_RESOURCE_ID_REGEX = new RegExp(
       "abc12345",
       "def67890",
       "[0a]{8,}",
+      // Angle-bracket template token: any `<...>` wrapper, content
+      // non-greedy so `subnet-<hex>`, `vpc-<id>`, `sg-<YOUR-ID>`,
+      // `i-<instance-id>` all match while an honest literal like
+      // `vpc-abc` (no angle brackets) continues to pass.
+      "<[^>]*>",
     ].join("|") +
     ")$",
   "i",

@@ -308,6 +308,99 @@ describe("preflightGuardNode", () => {
     });
   });
 
+  // ── Epic 94 Wave 3 N6 (C-05 / C-06): --no-apply downgrade ────────────
+  describe("Epic 94 N6 — --no-apply downgrade of placeholder-class failures", () => {
+    it("preview mode (`noApply: true`) downgrades placeholder ARN to advisory and keeps plan running", async () => {
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Role: "arn:aws:iam::123456789012:role/my-role",
+          },
+          noApply: true,
+        }),
+      );
+      // Non-FAILED status — the graph keeps running so result_formatter
+      // can render the preview.
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+      // preflightPassed must remain false so the CLI's "apply now?"
+      // prompt and CI gates still see "not safe to apply".
+      expect(result.preflightPassed).toBe(false);
+      // The advisory carries the original guard message + the
+      // downgrade code so machine readers can distinguish this from
+      // an intent-parser "name was rewritten" advisory.
+      expect(result.advisories).toBeDefined();
+      expect(
+        result.advisories!.some(
+          (a) => a.code === "PREFLIGHT_PLACEHOLDER_DOWNGRADED",
+        ),
+      ).toBe(true);
+      const downgrade = result.advisories!.find(
+        (a) => a.code === "PREFLIGHT_PLACEHOLDER_DOWNGRADED",
+      )!;
+      expect(downgrade.message).toContain("123456789012");
+      expect(downgrade.details?.["guardId"]).toBe("placeholder-arn");
+    });
+
+    it("preview mode downgrades angle-bracket placeholder resource ID to advisory", async () => {
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::EC2::Subnet",
+          resourceSchema: { required: ["VpcId", "CidrBlock"] },
+          desiredState: {
+            VpcId: "vpc-<hex>",
+            CidrBlock: "10.0.1.0/24",
+          },
+          noApply: true,
+        }),
+      );
+      expect(result.executionStatus).not.toBe(ExecutionStatus.FAILED);
+      const downgrade = (result.advisories ?? []).find(
+        (a) => a.code === "PREFLIGHT_PLACEHOLDER_DOWNGRADED",
+      );
+      expect(downgrade).toBeDefined();
+      expect(downgrade!.message).toContain("vpc-<hex>");
+      expect(downgrade!.details?.["guardId"]).toBe("placeholder-resource-id");
+    });
+
+    it("default mode (`noApply: false`) still FAILS on placeholder ARN — no downgrade outside preview", async () => {
+      // Fail-closed semantics preserved on the apply path.
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+          desiredState: {
+            FunctionName: "my-fn",
+            Runtime: "nodejs22.x",
+            Role: "arn:aws:iam::123456789012:role/my-role",
+          },
+          // noApply omitted — default false.
+        }),
+      );
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toContain("placeholder ARN");
+      // No advisory must land on the FAILED return — the envelope is
+      // the error message, not the downgrade channel.
+      expect(result.advisories).toBeUndefined();
+    });
+
+    it("preview mode does NOT downgrade required-fields failures — schema-invalid preview is not useful", async () => {
+      const result = await preflightGuardNode(
+        makeState({
+          resourceType: "AWS::Lambda::Function",
+          resourceSchema: { required: ["FunctionName", "Runtime", "Role"] },
+          desiredState: { FunctionName: "my-fn", Runtime: "nodejs22.x" }, // Role missing
+          noApply: true,
+        }),
+      );
+      expect(result.executionStatus).toBe(ExecutionStatus.FAILED);
+      expect(result.errorMessage).toContain("Role");
+    });
+  });
+
   // ── Placeholder password sentinel rejection ───────────────────────────
   // Mirrors detectPlaceholderArn. The three-tier-web pattern emits
   // `MasterUserPassword: "ChangeMe-REPLACE-123!"` as a deterministic

@@ -90,6 +90,21 @@ describe("isPlaceholderResourceId", () => {
     expect(isPlaceholderResourceId("sg-0000000000000000")).toBe(true);
   });
 
+  it("true for Epic 94 finding B-04 angle-bracket template tokens", () => {
+    // The original B-04 finding: `"Create a NAT gateway in subnet-<hex>"`.
+    // Before N6 the angle-bracket suffix slipped past the placeholder
+    // regex and CloudControl later rejected the plan as malformed.
+    expect(isPlaceholderResourceId("subnet-<hex>")).toBe(true);
+    expect(isPlaceholderResourceId("vpc-<id>")).toBe(true);
+    expect(isPlaceholderResourceId("rtb-<rtb-id>")).toBe(true);
+    expect(isPlaceholderResourceId("igw-<YOUR-ID>")).toBe(true);
+    expect(isPlaceholderResourceId("sg-<replace-me>")).toBe(true);
+    expect(isPlaceholderResourceId("i-<instance-id>")).toBe(true);
+    // Empty brackets are still a placeholder — the LLM emitted a stub
+    // with no content inside the angle wrapper.
+    expect(isPlaceholderResourceId("subnet-<>")).toBe(true);
+  });
+
   it("false for realistic customer resource IDs (hex-random suffix)", () => {
     // Real AWS IDs are drawn from full hex entropy — not the curated
     // placeholder suffix list, and they mix digits with letters
@@ -224,6 +239,20 @@ describe("placeholderResourceIdGuard.run", () => {
     expect(result.kind).toBe("fail");
     if (result.kind === "fail") {
       expect(result.errorMessage).toContain("sg-12345678");
+    }
+  });
+
+  it("fails on angle-bracket template subnet id (Epic 94 B-04)", async () => {
+    const result = await placeholderResourceIdGuard.run(
+      ctx({
+        // From the B-04 finding: `"Create a NAT gateway in subnet-<hex>"`.
+        SubnetId: "subnet-<hex>",
+      }),
+    );
+    expect(result.kind).toBe("fail");
+    if (result.kind === "fail") {
+      expect(result.errorMessage).toContain("subnet-<hex>");
+      expect(result.errorMessage).toContain("placeholder");
     }
   });
 
