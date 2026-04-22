@@ -158,7 +158,8 @@ describe("normalizeMemoryHints (Epic 92 Wave 4.a / A-19 / D-35)", () => {
 });
 
 describe("formatPlanResult JSON output (Epic 92 Wave 4.a)", () => {
-  let stdoutSpy: ReturnType<typeof vi.spyOn>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let stdoutSpy: any;
   let captured: string;
 
   beforeEach(() => {
