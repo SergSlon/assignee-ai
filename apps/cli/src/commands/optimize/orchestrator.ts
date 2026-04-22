@@ -3,7 +3,15 @@
  * gathering → filter/sort → human-readable OR JSON output.
  *
  * Wave-6d F4: split from optimize.ts.
+ *
+ * Epic 92 / story e92-3b2 (D-03): sources `noColor` from
+ * `chalk.level === 0` rather than the removed local `--no-color`
+ * option. The root program's `preSubcommand` hook reconciles the
+ * global `--no-color` / `--color` / `NO_COLOR` inputs into
+ * `chalk.level` before the subcommand runs, so the chalk level is the
+ * authoritative signal.
  */
+import chalk from "chalk";
 import { fetchManagedResources } from "../../services/list-resources.js";
 import { AWS_REGION } from "../../config/constants.js";
 import type { CommandContext } from "../../utils/command-runner.js";
@@ -22,7 +30,7 @@ export async function runOptimize(
   args: RunOptimizeArgs,
 ): Promise<{ success: boolean }> {
   const { resourceId, opts } = args;
-  const noColor = opts.color === false;
+  const noColor = chalk.level === 0;
   const asJson = opts.json === true;
 
   const region = opts.region ?? AWS_REGION;

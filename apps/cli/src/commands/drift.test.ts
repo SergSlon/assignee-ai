@@ -221,4 +221,47 @@ describe("drift command", () => {
     // exit code should remain undefined (0) - no drifted resources
     expect(process.exitCode).toBeUndefined();
   });
+
+  // ---------------------------------------------------------------
+  // Epic 92 / story e92-3b2 (D-03, D-04, C-23):
+  // Flag-registration invariants: the local `--no-color` and
+  // `--verbose` options MUST NOT be present on the drift command,
+  // because they shadow the global ones declared on the root program
+  // in `apps/cli/src/index.ts`. The local `--output <file>` option
+  // MUST be renamed to `--output-file <file>` so it no longer
+  // collides with other commands' `--output <format>` semantics.
+  // Drift's old `--verbose` per-field-detail semantics are preserved
+  // under the new `--detailed` name.
+  // ---------------------------------------------------------------
+  describe("e92-3b2 flag-registration invariants", () => {
+    it("does not register a local --no-color option (served by global)", () => {
+      const localNoColor = driftCommand.options.find(
+        (o) => o.long === "--no-color",
+      );
+      expect(localNoColor).toBeUndefined();
+    });
+
+    it("does not register a local --verbose option (served by global)", () => {
+      const localVerbose = driftCommand.options.find(
+        (o) => o.long === "--verbose",
+      );
+      expect(localVerbose).toBeUndefined();
+    });
+
+    it("registers --detailed as the per-resource detail flag", () => {
+      const detailed = driftCommand.options.find(
+        (o) => o.long === "--detailed",
+      );
+      expect(detailed).toBeDefined();
+    });
+
+    it("registers --output-file (not --output) for the JSON report path", () => {
+      const outputFile = driftCommand.options.find(
+        (o) => o.long === "--output-file",
+      );
+      const output = driftCommand.options.find((o) => o.long === "--output");
+      expect(outputFile).toBeDefined();
+      expect(output).toBeUndefined();
+    });
+  });
 });

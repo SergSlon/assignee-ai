@@ -4,6 +4,19 @@
  * Wave-6d F4: decomposed into `drift/` sub-modules. This file is now a
  * thin Commander wrapper. Orchestration + rendering lives under `drift/`.
  *
+ * Epic 92 / story e92-3b2 (D-03, D-04, C-23):
+ *   - Removed local `--no-color` and `--verbose` options that shadowed
+ *     the global ones declared on the root program in
+ *     `apps/cli/src/index.ts`. The global `preSubcommand` hook already
+ *     reconciles `--no-color`, `--color`, and `NO_COLOR` into
+ *     `chalk.level` for every subcommand, so a local flag is redundant
+ *     and produces duplicate entries in `--help` plus precedence bugs.
+ *   - Drift's old local `--verbose` meaning ("show all fields, including
+ *     matching ones") moved to a new `--detailed` option. The global
+ *     `--verbose` now uniformly means "structured diagnostic logs".
+ *   - Renamed `--output <file>` → `--output-file <file>` so the flag no
+ *     longer collides with other commands' `--output <format>` knob.
+ *
  * @see Story 28.2, 28.3, 28.5, 28.6
  */
 
@@ -27,10 +40,9 @@ export const driftCommand = new Command("drift")
     "Adopt the given [resource-id] into drift tracking by snapshotting its live CCAPI state as a baseline",
   )
   .option("--json", "Output as JSON")
-  .option("--output <file>", "Write JSON report to file (requires --json)")
+  .option("--output-file <file>", "Write JSON report to file (requires --json)")
   .option("--concurrency <n>", "Max parallel drift checks (default 10, max 50)")
-  .option("--no-color", "Disable color output")
-  .option("--verbose", "Show all fields including matching ones")
+  .option("--detailed", "Show all fields including matching ones")
   .option(
     "-y, --yes",
     "Accepted for CI wrapper compatibility; drift is read-only and does not mutate.",
@@ -45,14 +57,19 @@ Examples:
         Only check S3 buckets
   $ assignee drift --exclude BASELINE_MISSING --json > drift.json
         CI-friendly report without false positives for unadopted resources
+  $ assignee drift --json --output-file drift.json
+        Write the JSON report to a file instead of stdout
   $ assignee drift <arn> --baseline
         Adopt a resource's current state as its drift baseline
-  $ assignee drift <arn>
-        Detailed diff for a single resource
+  $ assignee drift <arn> --detailed
+        Detailed diff for a single resource, including matching fields
 
 drift is read-only (it never mutates AWS state except when --baseline is
 used, which only writes a local snapshot). No --yes flag is needed — use
 \`assignee reconcile --yes\` to auto-apply drift corrections.
+
+Use the global \`--no-color\` and \`--verbose\` flags (see Global Options)
+to disable ANSI colour or enable structured diagnostic logs.
 `,
   )
   .action(async (resourceId: string | undefined, opts: DriftOpts) => {

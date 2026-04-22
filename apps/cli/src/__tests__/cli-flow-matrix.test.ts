@@ -955,6 +955,17 @@ describe("status command definition", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe("drift command definition", () => {
+  // Epic 92 / story e92-3b2 (D-03, D-04, C-23): the old contract pinned
+  // local `--no-color`, `--verbose`, and `--output` options on drift.
+  // Those were buggy:
+  //   - `--no-color` and `--verbose` shadowed the GLOBAL options of the
+  //     same name declared on the root program in `apps/cli/src/index.ts`
+  //     (duplicate help entries + precedence bugs).
+  //   - `--output <file>` collided with other commands' `--output <format>`
+  //     semantics.
+  // The flip: local `--no-color` and `--verbose` are removed (served by
+  // global), the per-field detail flag renames to `--detailed`, and the
+  // JSON-report file path renames to `--output-file`.
   it("has all expected options", async () => {
     const { driftCommand } = await import("../commands/drift.js");
     const optionNames = driftCommand.options.map((o) => o.long);
@@ -962,10 +973,13 @@ describe("drift command definition", () => {
     expect(optionNames).toContain("--region");
     expect(optionNames).toContain("--status");
     expect(optionNames).toContain("--json");
-    expect(optionNames).toContain("--output");
+    expect(optionNames).toContain("--output-file");
     expect(optionNames).toContain("--concurrency");
-    expect(optionNames).toContain("--no-color");
-    expect(optionNames).toContain("--verbose");
+    expect(optionNames).toContain("--detailed");
+    // Negative assertions: removed / renamed local options must NOT come back.
+    expect(optionNames).not.toContain("--output");
+    expect(optionNames).not.toContain("--no-color");
+    expect(optionNames).not.toContain("--verbose");
   });
 
   it("accepts optional [resource-id] argument", async () => {
