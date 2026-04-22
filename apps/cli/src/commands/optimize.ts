@@ -5,6 +5,13 @@
  * now a thin Commander wrapper. Read-only: never mutates AWS state or
  * any local file.
  *
+ * Epic 92 / story e92-3b2 (D-03): removed the local `--no-color`
+ * option that shadowed the global `--no-color` declared on the root
+ * program in `apps/cli/src/index.ts`. The global `preSubcommand` hook
+ * reconciles the global flag into `chalk.level` before the subcommand
+ * runs, so a local redeclaration was both redundant and surfaced as a
+ * duplicate entry in `--help`.
+ *
  * @see apps/cli/src/nodes/advice/cost-optimizer.ts for analyzer
  * @see docs/nfr-assessment-2026-04-08.md — Q-7.2 option ranking
  */
@@ -26,7 +33,6 @@ export const optimizeCommand = new Command("optimize")
     "--min-savings <usd>",
     "Drop recommendations whose projected monthly savings are below this USD threshold (e.g. 10 for ≥$10/mo)",
   )
-  .option("--no-color", "Disable color output")
   .addHelpText(
     "after",
     `
@@ -41,6 +47,9 @@ Examples:
 optimize is read-only — it prints recommendations but never mutates AWS
 state. Apply changes via \`assignee plan\` / \`assignee apply\`; no --yes
 flag is needed here.
+
+Use the global \`--no-color\` flag (see Global Options) to disable ANSI
+colour output.
 `,
   )
   .action(async (resourceId: string | undefined, opts: OptimizeOpts) => {

@@ -186,6 +186,93 @@ describe("planCommand — flag parsing", () => {
   });
 });
 
+// ── Epic 92 Wave 3.b.1 — flag alias registration (D-13) ───────────────────
+describe("planCommand — flag aliases (Epic 92 D-13)", () => {
+  it("registers --wizard as a boolean option (synonym for --quick)", async () => {
+    const { planCommand } = await import("./plan.js");
+    const wizard = planCommand.options.find((o) => o.long === "--wizard");
+    expect(wizard?.long).toBe("--wizard");
+    expect(wizard?.description).toMatch(/--quick/);
+    // It MUST be a boolean flag (no argument), so the help renders as
+    // `--wizard` not `--wizard <value>`.
+    expect(wizard?.flags).toBe("--wizard");
+  });
+
+  it("registers --quick with -q shorthand (canonical wizard flag)", async () => {
+    const { planCommand } = await import("./plan.js");
+    const quick = planCommand.options.find((o) => o.long === "--quick");
+    expect(quick?.long).toBe("--quick");
+    expect(quick?.short).toBe("-q");
+  });
+
+  it("registers --json as a boolean shorthand for --output json", async () => {
+    const { planCommand } = await import("./plan.js");
+    const json = planCommand.options.find((o) => o.long === "--json");
+    expect(json?.long).toBe("--json");
+    expect(json?.description).toMatch(/--output json/);
+    // Boolean, not --json <value>.
+    expect(json?.flags).toBe("--json");
+  });
+
+  it("keeps -o, --output <format> option registered alongside --json shorthand", async () => {
+    const { planCommand } = await import("./plan.js");
+    const output = planCommand.options.find((o) => o.long === "--output");
+    expect(output?.long).toBe("--output");
+    expect(output?.short).toBe("-o");
+  });
+});
+
+// ── Epic 92 Wave 3.b.1 — help text consolidation (C-24 / D-01) ────────────
+// Commander 12's `helpInformation()` intentionally does NOT concat the
+// `addHelpText()` payloads — those emit through `beforeHelp`/`afterHelp`
+// event hooks during `outputHelp()`. We re-run outputHelp with a
+// capture write to get the fully-rendered help.
+function captureFullPlanHelp(cmd: Command): string {
+  let captured = "";
+  cmd.outputHelp({
+    write: (chunk: string) => {
+      captured += chunk;
+    },
+  } as unknown as { error: boolean });
+  return captured;
+}
+
+describe("planCommand — help text (Epic 92 C-24 / D-01)", () => {
+  // The parent `program` in index.ts also registers an
+  // `addHelpText("after", ...)` block. These tests assert the
+  // PER-COMMAND block (owned by plan.ts) is correctly shaped and
+  // that the per-command `addHelpText` itself is ONE consolidated
+  // call (not scattered), which is what C-24 / D-01 require.
+  it("plan command registers exactly one addHelpText(after) entry on itself", async () => {
+    const { planCommand } = await import("./plan.js");
+    // Commander keeps per-command addHelpText listeners on the
+    // command's EventEmitter under 'afterHelp' (the event the
+    // "after" position emits). We count the listeners directly.
+    const listeners = planCommand.listeners("afterHelp");
+    // Exactly one — the consolidated block installed in plan.ts.
+    expect(listeners.length).toBe(1);
+  });
+
+  it("plan --help per-command block lists plan-specific invocations", async () => {
+    const { planCommand } = await import("./plan.js");
+    const helpText = captureFullPlanHelp(planCommand);
+    // Plan-specific invocations must appear.
+    expect(helpText).toContain('assignee plan "');
+    // The per-command block includes the alias examples that do
+    // NOT appear in the global block — presence of these two strings
+    // confirms the per-command block rendered.
+    expect(helpText).toContain("--wizard");
+    expect(helpText).toContain("--json");
+  });
+
+  it("plan --help Examples block shows --wizard and --json alias examples", async () => {
+    const { planCommand } = await import("./plan.js");
+    const helpText = captureFullPlanHelp(planCommand);
+    expect(helpText).toContain("assignee plan --wizard");
+    expect(helpText).toContain("assignee plan --json");
+  });
+});
+
 // ── Plan command action tests (via captured run callback) ───────────────────
 
 describe("planCommand — action", () => {
@@ -548,6 +635,113 @@ describe("planCommand — run callback (no --no-apply)", () => {
     const [, hint] = vi.mocked(renderError).mock.calls[0]!;
     expect(hint).toMatch(/--verbose/);
     expect(result.success).toBe(false);
+  });
+});
+
+// ── Epic 92 Wave 3.b.1 — alias normalization in action (D-13) ────────────
+// The action rewrites `opts.wizard=true` → `opts.quick=true` and
+// `opts.json=true` → `opts.output="json"` before handing off to
+// `resolvePlanArgs` + `runPlan`. These tests invoke the real
+// planCommand through parseAsync and verify the run callback sees
+// the normalized values.
+
+describe("planCommand — --wizard alias normalization (Epic 92 D-13)", () => {
+  it("--wizard flag on plan triggers the quick/wizard run path", async () => {
+    capturedOpts = null;
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--wizard",
+      "Create an S3 bucket",
+    ]);
+    expect(capturedOpts).not.toBeNull();
+
+    // Exercise the captured run callback; runPlan inspects
+    // `opts.quick` on its way into the graph. We assert the callback
+    // completes without throwing and that the graph state reflects
+    // the quick mode flag.
+    const ctx = makeCtx();
+    await capturedOpts!.run(ctx);
+    expect(ctx.graph.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quickMode: true,
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("--quick alone (no --wizard) still sets quickMode on graph state", async () => {
+    capturedOpts = null;
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--quick",
+      "Create an S3 bucket",
+    ]);
+    expect(capturedOpts).not.toBeNull();
+    const ctx = makeCtx();
+    await capturedOpts!.run(ctx);
+    expect(ctx.graph.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quickMode: true,
+      }),
+      expect.anything(),
+    );
+  });
+});
+
+describe("planCommand — --json shorthand normalization (Epic 92 D-13)", () => {
+  it("--json (boolean) behaves the same as --output json", async () => {
+    capturedOpts = null;
+    // Capture stdout so the JSON-mode interceptor has something to
+    // restore against; we don't assert on the envelope content here.
+    stdoutWriteSpy.mockImplementation((() => true) as never);
+
+    const { runCommand } = await import("../utils/command-runner.js");
+    vi.mocked(runCommand).mockImplementationOnce(
+      async (opts: Parameters<typeof runCommand>[0]) => {
+        capturedOpts = opts;
+      },
+    );
+
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--json",
+      "Create an S3 bucket",
+    ]);
+    expect(capturedOpts).not.toBeNull();
+    // The shorthand normalizes to the same JSON-mode path, which
+    // suppresses the AWS-context stderr preamble. We detect that by
+    // asserting `silent: true` was passed to runCommand (the flag the
+    // JSON-mode branch sets in the plan action).
+    expect(capturedOpts!.silent).toBe(true);
+  });
+
+  it("--output json (explicit) keeps setting silent run", async () => {
+    capturedOpts = null;
+    stdoutWriteSpy.mockImplementation((() => true) as never);
+
+    const { runCommand } = await import("../utils/command-runner.js");
+    vi.mocked(runCommand).mockImplementationOnce(
+      async (opts: Parameters<typeof runCommand>[0]) => {
+        capturedOpts = opts;
+      },
+    );
+
+    const { planCommand } = await import("./plan.js");
+    await planCommand.parseAsync([
+      "node",
+      "plan",
+      "--output",
+      "json",
+      "Create an S3 bucket",
+    ]);
+    expect(capturedOpts).not.toBeNull();
+    expect(capturedOpts!.silent).toBe(true);
   });
 });
 

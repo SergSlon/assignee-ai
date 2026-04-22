@@ -13,7 +13,18 @@
  * Wave-6c F2: decomposed into `apply/` sub-modules. This file is now a thin
  * Commander wrapper + `runCommand` bridge. All real logic lives under `apply/`.
  *
+ * Epic 92 Wave 3.b.1 (C-24 / D-02 / D-13): the help surface was
+ * collapsed into a SINGLE `addHelpText("after", ...)` block and the
+ * Examples section now shows apply-specific invocations (previously
+ * it contained `assignee plan "..."` entries leaked from the plan
+ * command). The flag surface keeps the existing `--wizard` (opt-in
+ * interactive wizard, wires to `noWizard=false` in phase1-planner)
+ * and `--quick` (skip defaulted prompts) — both are preserved
+ * because they carry distinct graph-state semantics that downstream
+ * tests rely on (`apply-action.test.ts` T1.4, phase1-planner.ts).
+ *
  * @see Story 2-6, Story 1-8, Story 9-6, Story 11-2, Story 11-3
+ * @see _bmad-output/implementation-artifacts/e92-3b1-plan-apply-help.md
  */
 
 import { Command } from "commander";
@@ -40,7 +51,7 @@ export const applyCommand = new Command(CommandName.APPLY)
     "Run interactive configuration wizard (without this flag, defaults are auto-selected from your intent)",
   )
   .option(
-    "--quick",
+    "-q, --quick",
     "Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before provisioning.",
   )
   .option("--no-advice", "Skip inline contextual advice generation")
@@ -62,9 +73,13 @@ export const applyCommand = new Command(CommandName.APPLY)
     (val: string, prev: string[]) => [...prev, val],
     [] as string[],
   )
+  // Epic 92 Wave 3.b.1 (C-24 / D-02): ONE consolidated addHelpText
+  // block with APPLY-specific examples. Before this fix the Examples
+  // block leaked `assignee plan "..."` invocations under
+  // `assignee apply --help`.
   .addHelpText(
     "after",
-    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee apply "${EXAMPLE_S3_INTENT}"\n  assignee apply --checkpoint .assignee/checkpoint-abc123.json\n  assignee apply --wizard "Create an EC2 instance"   # interactive mode\n  assignee apply --yes "Create a Lambda function"    # CI / non-interactive\n  assignee apply --set size=t3.medium "Create an EC2 instance"`,
+    `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee apply "${EXAMPLE_S3_INTENT}"\n  assignee apply --yes "Create an S3 bucket"\n  assignee apply --checkpoint .assignee/checkpoint-abc.json\n  assignee apply --wizard "Create an EC2 instance"\n  assignee apply --set size=t3.medium "Create an EC2 instance"`,
   )
   .action(async (intent: string | undefined, opts: ApplyOpts) => {
     // P2-R2-4: print resolved AWS context as the very first line so the

@@ -3,6 +3,9 @@
  * single-resource OR batch-check flow → display / JSON export.
  *
  * Wave-6d F4: split from drift.ts.
+ *
+ * Epic 92 / story e92-3b2 (C-23): reads `opts.outputFile` (renamed from
+ * `opts.output` — see types.ts).
  */
 import * as fs from "node:fs/promises";
 import { DriftStatus, type DriftResult } from "@assignee/core";
@@ -103,9 +106,9 @@ export async function runDrift(
     });
     const jsonOutput = JSON.stringify(report, null, 2) + "\n";
 
-    if (opts.output) {
-      await fs.writeFile(opts.output, jsonOutput, "utf-8");
-      process.stderr.write(`Report written to ${opts.output}\n`);
+    if (opts.outputFile) {
+      await fs.writeFile(opts.outputFile, jsonOutput, "utf-8");
+      process.stderr.write(`Report written to ${opts.outputFile}\n`);
     } else {
       process.stdout.write(jsonOutput);
     }

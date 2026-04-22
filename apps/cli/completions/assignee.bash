@@ -18,7 +18,7 @@ _assignee_completions() {
   local command="${COMP_WORDS[1]}"
   case "${command}" in
     plan)
-      COMPREPLY=( $(compgen -W "--output --no-apply --no-advice --source --set --yes --quick" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--output --json --no-apply --no-advice --source --set --yes --quick --wizard" -- "${cur}") )
       ;;
     apply)
       COMPREPLY=( $(compgen -W "--wizard --quick --no-advice --yes --checkpoint --source --set" -- "${cur}") )
@@ -33,10 +33,10 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--yes --pending-window-in-days --recovery-window-in-days --force-delete-without-recovery" -- "${cur}") )
       ;;
     drift)
-      COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --json --output --concurrency --no-color --verbose --yes" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --json --output-file --concurrency --detailed --yes" -- "${cur}") )
       ;;
     optimize)
-      COMPREPLY=( $(compgen -W "--region --json --min-savings --no-color" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--region --json --min-savings" -- "${cur}") )
       ;;
     list)
       COMPREPLY=( $(compgen -W "--json --region --resource-type --total-cost" -- "${cur}") )

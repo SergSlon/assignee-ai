@@ -525,6 +525,56 @@ describe("assignee init command", () => {
   });
 });
 
+// ── Story e92-3b3 (D-05 help-text half) ────────────────────────────────
+// `assignee init --help` must describe the project config directory as
+// `.assignee/` (the hidden-dir convention that matches the actual target
+// location). The previous text said `./assignee/` (a visible subdir),
+// which was inaccurate. This test pins the fix.
+//
+// Note: `addHelpText("after", ...)` content is emitted via commander's
+// `afterHelp` lifecycle when `outputHelp()` runs — it is NOT part of the
+// string returned by `helpInformation()`. So these tests capture the
+// full rendered help by routing `configureOutput` into a buffer.
+describe("assignee init --help (e92-3b3 D-05 help-text half)", () => {
+  async function captureInitHelp(): Promise<string> {
+    const { initCommand } = await import("./init.js");
+    let captured = "";
+    initCommand.configureOutput({
+      writeOut: (s: string) => {
+        captured += s;
+      },
+      writeErr: (s: string) => {
+        captured += s;
+      },
+    });
+    initCommand.outputHelp();
+    return captured;
+  }
+
+  it("describes the project config dir as .assignee/ (not ./assignee/)", async () => {
+    const helpText = await captureInitHelp();
+
+    expect(helpText).toContain(".assignee/");
+    expect(helpText).not.toContain("./assignee/");
+  });
+
+  it("has a single consolidated Examples block in addHelpText", async () => {
+    const helpText = await captureInitHelp();
+
+    // Count "Examples:" headers — must be exactly one.
+    const matches = helpText.match(/^Examples:$/gm);
+    expect(matches).not.toBeNull();
+    expect(matches!.length).toBe(1);
+  });
+
+  it("still mentions the auto-fix mode selection flow", async () => {
+    const helpText = await captureInitHelp();
+
+    expect(helpText).toContain("auto-fix");
+    expect(helpText).toMatch(/ask.*apply.*skip/s);
+  });
+});
+
 describe("assignee init --global", () => {
   let globalConfigDir: string;
 

@@ -5,7 +5,16 @@
  * invoked with a resource id, look it up in the provision log, resolve
  * the desired state, run a single drift check, and render the detail
  * view (JSON or pretty).
+ *
+ * Epic 92 / story e92-3b2 (D-03, D-04):
+ *   - Reads `opts.detailed` (renamed from `opts.verbose` — D-04).
+ *   - Sources `noColor` from `chalk.level === 0` rather than
+ *     `opts.color === false`, because the local `--no-color` option
+ *     was removed. The root program's `preSubcommand` hook already
+ *     reconciles the global `--no-color` / `--color` / `NO_COLOR`
+ *     inputs into `chalk.level` before this code runs.
  */
+import chalk from "chalk";
 import {
   DriftStatus,
   type DriftResult,
@@ -55,8 +64,8 @@ export async function runSingleResourceDetail(
   }
 
   const output = renderDriftDetail(driftResult, {
-    noColor: opts.color === false,
-    verbose: opts.verbose ?? false,
+    noColor: chalk.level === 0,
+    verbose: opts.detailed ?? false,
     lastProvisioned: provision.timestamp,
   });
   process.stdout.write(output + "\n");

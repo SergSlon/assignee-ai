@@ -18,8 +18,21 @@
  * stderr is already stderr-routed; this layer adds the machine-
  * readable envelope on stdout.
  *
+ * Epic 92 Wave 3.b.1 (C-24 / D-01 / D-13): the help surface gained
+ *   a. a single consolidated `addHelpText("after", ...)` block (prior
+ *      help had two Examples headers — global + per-command),
+ *   b. `--wizard` registered as a synonym for `--quick` because the
+ *      canonical flag name is `--quick` but docs/agent transcripts
+ *      reference the user-facing term `--wizard`, and
+ *   c. `--json` registered as a boolean shorthand for `--output json`
+ *      so plan matches list/status/doctor/optimize/drift flag naming.
+ *   The action normalizes `opts.wizard` → `opts.quick` and
+ *   `opts.json` → `opts.output = "json"` before `resolvePlanArgs`,
+ *   leaving downstream modules untouched.
+ *
  * @see Story 1-6, Story 1-8, Story 9-6
  * @see _bmad-output/implementation-artifacts/e92-2c-json-envelope.md
+ * @see _bmad-output/implementation-artifacts/e92-3b1-plan-apply-help.md
  */
 
 import { Command } from "commander";
@@ -151,6 +164,10 @@ export const planCommand = new Command(CommandName.PLAN)
   .description(CommandDescription.PLAN)
   .argument(CommandArgs.INTENT.NAME, CommandArgs.INTENT.DESC)
   .option("-o, --output <format>", "Output format (json|text)", "text")
+  .option(
+    "--json",
+    "Shorthand for --output json (emit machine-readable envelope)",
+  )
   .option("--no-apply", "Skip the apply prompt after plan display")
   .option("--no-advice", "Skip inline contextual advice generation")
   .option(
@@ -168,19 +185,46 @@ export const planCommand = new Command(CommandName.PLAN)
     "Accepted for CI wrapper compatibility; plan is read-only and does not mutate.",
   )
   .option(
-    "--quick",
+    "-q, --quick",
     "Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.",
   )
-  // Story 50-3: discovery block folded in from the removed
-  // `patterns` + `types` commands. Lazily rendered via a function so
-  // construction of the Command object has zero runtime cost when
-  // --help is not requested.
+  .option(
+    "--wizard",
+    "Alias for --quick; runs the wizard flow that asks only for required fields without a default.",
+  )
+  // Epic 92 Wave 3.b.1 (C-24 / D-01): single consolidated Examples +
+  // discovery block — previously composed as two separate addHelpText
+  // calls which rendered back-to-back "Examples:" headers in
+  // `plan --help`. Lazily rendered via a function so construction of
+  // the Command object has zero runtime cost when --help is not
+  // requested.
   .addHelpText(
     "after",
     () =>
-      `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee plan "${EXAMPLE_S3_INTENT}"\n  assignee plan "Create an EC2 t3.micro instance"\n  assignee plan "Create a Lambda function for image processing"\n\n${renderDiscoveryBlock()}`,
+      `\n${SUPPORTED_TYPES_HINT}\n\nExamples:\n  assignee plan "${EXAMPLE_S3_INTENT}"\n  assignee plan "Create an EC2 t3.micro instance"\n  assignee plan "Create a Lambda function for image processing"\n  assignee plan --json "Create an S3 bucket"\n  assignee plan --wizard "Create an EC2 instance"\n  assignee plan --set size=t3.medium "Create an EC2 instance"\n\n${renderDiscoveryBlock()}`,
   )
-  .action(async (intent: string | undefined, opts: PlanOpts) => {
+  .action(async (intent: string | undefined, rawOpts: PlanOpts) => {
+    // Epic 92 Wave 3.b.1 (D-13): `--wizard` is a user-facing synonym
+    // for the canonical `--quick` flag; `--json` is a shorthand for
+    // `--output json`. Normalize at the CLI boundary so the rest of
+    // the pipeline (resolvePlanArgs / runPlan) only needs to read
+    // `opts.quick` and `opts.output`. Commander v12 does not support
+    // multi-long-alias in a single `.option()` call — each synonym
+    // is a separate boolean option and coalesces here. The local
+    // `PlanOptsWithAliases` widens `PlanOpts` to expose the synonym
+    // keys without mutating the shared arg-parser contract.
+    type PlanOptsWithAliases = PlanOpts & { wizard?: boolean; json?: boolean };
+    const aliasOpts = rawOpts as PlanOptsWithAliases;
+    const opts: PlanOpts = { ...rawOpts };
+    if (aliasOpts.wizard === true && opts.quick !== true) {
+      opts.quick = true;
+    }
+    if (
+      aliasOpts.json === true &&
+      (opts.output === undefined || opts.output === "text")
+    ) {
+      opts.output = "json";
+    }
     const resolved = resolvePlanArgs(intent, opts);
     const { outputFormat } = resolved;
 

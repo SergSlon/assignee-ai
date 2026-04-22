@@ -44,7 +44,7 @@ export const initCommand = new Command(CommandName.INIT)
     `
 Examples:
   $ assignee init
-        Create a project config in ./assignee/ (interactive, asks auto-fix mode)
+        Create a project config in .assignee/ (interactive, asks auto-fix mode)
   $ assignee init --global
         Create/update ~/.config/assignee/config.yaml for the current user
 

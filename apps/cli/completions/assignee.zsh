@@ -35,12 +35,14 @@ _assignee() {
         plan)
           _arguments \
             '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json (emit machine-readable envelope)]' \
             '--no-apply[Skip the apply prompt after plan display]' \
             '--no-advice[Skip inline contextual advice generation]' \
             '--source[Path to local files to upload after provisioning (e.g., static site)]:path:' \
             '--set[Pre-set field values, supports human names (e.g., --set size=t3.medium)]:key=value...:' \
             '--yes[Accepted for CI wrapper compatibility; plan is read-only and does not mutate.]' \
-            '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.]'
+            '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.]' \
+            '--wizard[Alias for --quick; runs the wizard flow that asks only for required fields without a default.]'
           ;;
         apply)
           _arguments \
@@ -73,18 +75,16 @@ _assignee() {
             '--exclude[Exclude a drift status from output (e.g. --exclude BASELINE_MISSING for CI)]:status:' \
             '--baseline[Adopt the given [resource-id] into drift tracking by snapshotting its live CCAPI state as a baseline]' \
             '--json[Output as JSON]' \
-            '--output[Write JSON report to file (requires --json)]:file:' \
+            '--output-file[Write JSON report to file (requires --json)]:file:' \
             '--concurrency[Max parallel drift checks (default 10, max 50)]:n:' \
-            '--no-color[Disable color output]' \
-            '--verbose[Show all fields including matching ones]' \
+            '--detailed[Show all fields including matching ones]' \
             '--yes[Accepted for CI wrapper compatibility; drift is read-only and does not mutate.]'
           ;;
         optimize)
           _arguments \
             '--region[AWS region to scan (defaults to AWS_REGION env var)]:region:' \
             '--json[Emit recommendations as JSON instead of a table]' \
-            '--min-savings[Drop recommendations whose projected monthly savings are below this USD threshold (e.g. 10 for ≥$10/mo)]:usd:' \
-            '--no-color[Disable color output]'
+            '--min-savings[Drop recommendations whose projected monthly savings are below this USD threshold (e.g. 10 for ≥$10/mo)]:usd:'
           ;;
         list)
           _arguments \
