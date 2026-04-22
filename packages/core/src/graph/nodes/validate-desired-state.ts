@@ -20,8 +20,17 @@
  */
 
 import { RESOURCE_TYPES } from "../../config/resource-types.js";
+import { AssigneeError } from "../../errors.js";
 import { ExecutionStatus } from "../../schema/graph-state.js";
 import type { AgentState } from "../graph-state.js";
+
+/**
+ * Machine-readable error code emitted when the `validateDesiredStateNode`
+ * fails. Surfaces through the CLI's `--output json` envelope as
+ * `error.code === "INVALID_DESIRED_STATE"` so CI/automation can detect
+ * plan-time validation failures without string-matching the human message.
+ */
+export const INVALID_DESIRED_STATE_CODE = "INVALID_DESIRED_STATE";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -240,8 +249,15 @@ export async function validateDesiredStateNode(
   const firstError = errors[0];
   if (!firstError) return {};
 
+  const errorMessage = formatValidationError(firstError);
+
   return {
     executionStatus: ExecutionStatus.FAILED,
-    errorMessage: formatValidationError(firstError),
+    errorMessage,
+    // Epic 94 R1: carry a machine-readable code so the CLI JSON envelope
+    // path surfaces `error.code: "INVALID_DESIRED_STATE"`. Downstream
+    // `formatErrorResult` already reads `state.error` through
+    // `defaultErrorMessageRegistry.resolve(...)`.
+    error: new AssigneeError(errorMessage, INVALID_DESIRED_STATE_CODE),
   };
 }

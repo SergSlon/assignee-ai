@@ -68,9 +68,16 @@ export async function optionElicitorNode(
     return { elicitedOptions: buildExpertModeOptions(state, presetElicited) };
   }
 
-  // Non-TTY (CI/pipes): skip prompts, include --set values
+  // Non-TTY (CI/pipes): skip prompts, include --set values AND the
+  // intent-parser's earlier writes (e.g. SecurityGroupIngress array, per
+  // Epic 94 R3 / B-01 regression fix). Without this merge, array/object
+  // assertions produced by `extractSgIngress` / `extractAssertedValues`
+  // are silently discarded in non-TTY runs — every SG ingest collapses
+  // to plugin defaults.
   if (!process.stdin.isTTY) {
-    return { elicitedOptions: { ...presetElicited } };
+    return {
+      elicitedOptions: { ...(state.elicitedOptions ?? {}), ...presetElicited },
+    };
   }
 
   stopSpinner();

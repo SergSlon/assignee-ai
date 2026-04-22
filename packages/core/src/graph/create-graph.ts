@@ -21,6 +21,7 @@ import {
   routeResourceProvisioner,
   routeStatusPoller,
   routeResultFormatter,
+  routeValidateDesiredState,
 } from "./graph-routing.js";
 
 import { createIntentParserNode } from "./nodes/intent-parser.js";
@@ -28,6 +29,7 @@ import { schemaFetcherNode } from "./nodes/schema-fetcher.js";
 import { optionElicitorNode } from "./nodes/option-elicitor.js";
 import { compoundDispatcherNode } from "./nodes/compound-dispatcher.js";
 import { createPlanGeneratorNode } from "./nodes/plan-generator.js";
+import { validateDesiredStateNode } from "./nodes/validate-desired-state.js";
 import { createAdviceGeneratorNode } from "./nodes/advice-generator.js";
 import { preflightGuardNode } from "./nodes/preflight-guard.js";
 import { humanApprovalNode } from "./nodes/human-approval.js";
@@ -99,6 +101,9 @@ export function createGraph(
       compoundDispatcherNode(state),
     )
     .addNode(GraphNode.PLAN_GENERATOR, (state) => planGeneratorNode(state))
+    .addNode(GraphNode.VALIDATE_DESIRED_STATE, (state) =>
+      validateDesiredStateNode(state),
+    )
     .addNode(GraphNode.ADVICE_GENERATOR, (state) =>
       adviceGeneratorNode(state, tools),
     )
@@ -125,7 +130,24 @@ export function createGraph(
     .addEdge(GraphNode.SCHEMA_FETCHER, GraphNode.OPTION_ELICITOR)
     .addEdge(GraphNode.OPTION_ELICITOR, GraphNode.COMPOUND_DISPATCHER)
     .addEdge(GraphNode.COMPOUND_DISPATCHER, GraphNode.PLAN_GENERATOR)
-    .addEdge(GraphNode.PLAN_GENERATOR, GraphNode.ADVICE_GENERATOR)
+    // Epic 94 R1 (A-01): wire validateDesiredStateNode between
+    // PLAN_GENERATOR and ADVICE_GENERATOR. Epic 92 u.c.1 shipped the node
+    // + 28 tests but left this edge unconnected — every S3 bucket-name
+    // rule (length, IPv4 shape, xn--, sthree-, -s3alias, adjacent dots,
+    // charset) silently passed through to CloudControl at APPLY time
+    // instead of failing fast at PLAN time with an actionable
+    // `[ERROR] / [FIX]` triple. The conditional edge short-circuits to
+    // RESULT_FORMATTER on validation failure so advice / BP / fix /
+    // preflight don't burn tokens on a payload that cannot provision.
+    .addEdge(GraphNode.PLAN_GENERATOR, GraphNode.VALIDATE_DESIRED_STATE)
+    .addConditionalEdges(
+      GraphNode.VALIDATE_DESIRED_STATE,
+      routeValidateDesiredState,
+      {
+        [GraphNode.ADVICE_GENERATOR]: GraphNode.ADVICE_GENERATOR,
+        [GraphNode.RESULT_FORMATTER]: GraphNode.RESULT_FORMATTER,
+      },
+    )
     .addEdge(GraphNode.ADVICE_GENERATOR, GraphNode.BP_EVALUATOR)
     .addEdge(GraphNode.BP_EVALUATOR, GraphNode.FIX_APPLICATOR)
     .addEdge(GraphNode.FIX_APPLICATOR, GraphNode.PREFLIGHT_GUARD)

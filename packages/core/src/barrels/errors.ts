@@ -12,6 +12,7 @@ export {
   MissingRequiredFieldsError,
   UserCancelledError,
   PROVISIONING_ERROR_CODES,
+  type AssigneeErrorOptions,
   type ProvisioningErrorCode,
 } from "../errors.js";
 export {

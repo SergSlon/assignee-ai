@@ -16,6 +16,7 @@
 
 import { ExecutionMode, ExecutionStatus } from "@/index.js";
 import type { AgentState } from "@/graph/graph-state.js";
+import type { Advisory } from "@/graph/nodes/intent-parser.js";
 import {
   promptFixSelection,
   renderPlanBox,
@@ -110,6 +111,13 @@ interface PlanJsonPayload {
   appliedFixes: unknown[];
   freeTierNote: unknown;
   adviceHints: unknown[];
+  /**
+   * Non-blocking structured advisories — emitted by the intent-parser
+   * when a token was silently altered (e.g. multi-word name remainder
+   * was dropped). Distinct from `bpFindings` (best-practice violations)
+   * and `adviceHints` (free-form tips). Epic 94 R8.
+   */
+  advisories: Advisory[];
   resourcePattern?: {
     patternId: string;
     displayName: string;
@@ -141,6 +149,7 @@ function buildPlanJsonPayload(state: AgentState): PlanJsonPayload {
     appliedFixes: state.appliedFixes ?? [],
     freeTierNote: state.freeTierNote ?? null,
     adviceHints: state.adviceHints ?? [],
+    advisories: state.advisories ?? [],
     ...(state.resourcePattern
       ? {
           resourcePattern: {

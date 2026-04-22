@@ -12,6 +12,7 @@ export const GraphNode = {
   OPTION_ELICITOR: "option_elicitor",
   COMPOUND_DISPATCHER: "compound_dispatcher",
   PLAN_GENERATOR: "plan_generator",
+  VALIDATE_DESIRED_STATE: "validate_desired_state",
   ADVICE_GENERATOR: "advice_generator",
   PREFLIGHT_GUARD: "preflight_guard",
   HUMAN_APPROVAL: "human_approval",

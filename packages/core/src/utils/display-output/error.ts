@@ -28,13 +28,40 @@ export function renderError(
   // The CONTEXT line adds no information when it equals the ERROR
   // line — comparing after trimming whitespace is intentional so
   // stray trailing spaces don't defeat the dedup.
-  const why = context?.why?.trim();
+  //
+  // Story 94-R7 (D-10): strengthen the dedup to cover the
+  // header-plus-details pattern — `context.why` begins with the
+  // headline followed by a blank line, then carries the useful
+  // detail body (registry grid, structured hint, etc.). Previously
+  // the headline was echoed twice: once as `[ERROR] <headline>` and
+  // once as the first line of `[CONTEXT] <headline>\n\n<detail>`.
+  // We now strip the redundant `<headline>\n\n` prefix so CONTEXT
+  // renders only the new information. If the ENTIRE `why` is just
+  // the headline, we skip CONTEXT wholesale (D-31 case).
+  const rawWhy = context?.why;
+  const why = rawWhy?.trim();
   const headline = message.trim();
-  const showContext = !!why && why !== headline;
+  let renderedWhy: string | undefined;
+  if (why && why !== headline) {
+    if (rawWhy && rawWhy.trimStart().startsWith(headline)) {
+      // Strip the redundant headline prefix (plus any immediately
+      // following whitespace/blank line). If the remainder is empty
+      // we fall through to the D-31 path and hide CONTEXT entirely.
+      const startIdx = rawWhy.indexOf(headline);
+      const tail = rawWhy
+        .slice(startIdx + headline.length)
+        .replace(/^\s*\n/, "") // drop a single blank line separator
+        .replace(/^\s+/, ""); // then drop leading whitespace
+      renderedWhy = tail.length > 0 ? tail : undefined;
+    } else {
+      renderedWhy = context!.why;
+    }
+  }
+  const showContext = renderedWhy !== undefined;
   if (process.stderr.isTTY) {
     process.stderr.write(chalk.red(`\u2716 Error: ${message}\n`));
     if (showContext) {
-      process.stderr.write(chalk.yellow(`  Why: ${context!.why}\n`));
+      process.stderr.write(chalk.yellow(`  Why: ${renderedWhy}\n`));
     }
     if (hint) {
       process.stderr.write(chalk.green(`  How to Fix: ${hint}\n`));
@@ -42,7 +69,7 @@ export function renderError(
   } else {
     process.stderr.write(`[ERROR] ${message}\n`);
     if (showContext) {
-      process.stderr.write(`[CONTEXT] ${context!.why}\n`);
+      process.stderr.write(`[CONTEXT] ${renderedWhy}\n`);
     }
     if (hint) {
       process.stderr.write(`[FIX] ${hint}\n`);

@@ -84,6 +84,23 @@ function parseRules(
   answer: unknown,
   direction: "ingress" | "egress",
 ): unknown[] | undefined {
+  // Epic 94 R3 (B-01): intent-parser.extractSgIngress emits
+  // `elicitedOptions.SecurityGroupIngress = [{IpProtocol,FromPort,ToPort,CidrIp}]`
+  // — the CFN-native shape. Downstream plan-merge pipes every
+  // elicitedOptions value through toCfn; without this branch the array
+  // was coerced to `undefined` (a string-only parser) and the merge
+  // then deleted the LLM-emitted ingress entirely, collapsing every SG
+  // request to the hardcoded port-443 default. Pass through array
+  // input unchanged once it already looks CFN-shaped.
+  if (Array.isArray(answer)) {
+    const looksCfnShaped = answer.every(
+      (r) =>
+        r !== null &&
+        typeof r === "object" &&
+        "IpProtocol" in (r as Record<string, unknown>),
+    );
+    return looksCfnShaped && answer.length > 0 ? answer : undefined;
+  }
   if (typeof answer !== "string" || !answer.trim()) return undefined;
   const rules = answer
     .split(",")
@@ -191,16 +208,22 @@ export const securityGroupPlugin: ResourcePlugin = {
       toCfn: (answer: unknown) => parseRules(answer, "egress"),
     },
   ],
+  // Epic 94 R3 (B-01): the previous `SG_INGRESS: [{port 443}]` hardcoded
+  // default was a BLOCKER REGRESSION — it clobbered the intent-parser
+  // payload (`extractSgIngress` emits `[{FromPort:22,...}]` etc.) so every
+  // SG request collapsed to port 443 regardless of what the user asked for.
+  // We now omit SG_INGRESS from defaults entirely; if the user supplied no
+  // port, CFN receives no `SecurityGroupIngress` property (a valid shape —
+  // AWS defaults to zero ingress rules). The egress default is kept because
+  // "all outbound allowed" is the conventional secure default for egress
+  // and does not shadow an intent-derived answer.
   defaults: {
-    [CfnKey.SG_INGRESS]: [
-      { IpProtocol: "tcp", FromPort: 443, ToPort: 443, CidrIp: "0.0.0.0/0" },
-    ],
     [CfnKey.SG_EGRESS]: [{ IpProtocol: "-1", CidrIp: "0.0.0.0/0" }],
   },
   configHints: [
     "SecurityGroup GroupDescription: REQUIRED. Cannot be changed after creation. Must be a meaningful description.",
     "SecurityGroup VpcId: if the user did not provide a VPC, OMIT VpcId — the default VPC will be used.",
-    "SecurityGroup Ingress: Default allows HTTPS (443) from anywhere only. SSH must be explicitly added with a restricted CIDR. NEVER open SSH to 0.0.0.0/0.",
+    "SecurityGroup Ingress: USE the port(s) the user explicitly named (e.g. 22 / 80 / 3306 / 3389). NEVER default to port 443 when the user asked for a different port. If the user supplied NO port, OMIT SecurityGroupIngress entirely — the SG will be created with zero ingress rules. NEVER open SSH (22) to 0.0.0.0/0 — require a restricted CIDR.",
     "SecurityGroup Egress: Default allows all outbound traffic. Restrict if the workload has known egress patterns.",
   ],
 };

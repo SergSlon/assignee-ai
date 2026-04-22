@@ -7,6 +7,7 @@
  */
 import * as clack from "@clack/prompts";
 import {
+  AssigneeError,
   BPEnforcementLevel,
   ExecutionMode,
   ExecutionStatus,
@@ -148,7 +149,37 @@ export async function runPlan(
     await writePlanCheckpoint(finalState as AgentState, ctx, outputFormat);
   }
 
-  if (failed) return { success: false };
+  if (failed) {
+    // Epic 94 R1 (A-01) + R5 (C-03): when the graph surfaces a typed
+    // error (e.g. INVALID_DESIRED_STATE from validate_desired_state),
+    // propagate its code so the JSON-envelope path in plan.ts can stamp
+    // the stable machine-readable code on stdout. In text mode,
+    // renderError above already wrote the human message; runCommand is
+    // silent in JSON mode so there is no double render.
+    //
+    // R5 broadening: also throw when `state.error` is NOT an
+    // AssigneeError (e.g. intent-parser's UNSUPPORTED_RESOURCE path
+    // sets `executionStatus` + `errorMessage` but never attaches a
+    // typed `state.error`). Without a throw, runCommand returns
+    // gracefully and the stdout interceptor's flushSuccess hits its
+    // "no payloads were buffered" fallback — which emits the generic
+    // `PLAN_FAILED` envelope and loses the real code. Derive the code
+    // from `executionStatus` so UNSUPPORTED_RESOURCE stays
+    // UNSUPPORTED_RESOURCE on the wire.
+    const stateError = (finalState as AgentState).error;
+    if (outputFormat === "json") {
+      if (stateError instanceof AssigneeError) {
+        throw stateError;
+      }
+      const derivedCode =
+        finalState.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE
+          ? "UNSUPPORTED_RESOURCE"
+          : "PLAN_FAILED";
+      const derivedMessage = finalState.errorMessage ?? PLAN_GENERATION_FAILED;
+      throw new AssigneeError(derivedMessage, derivedCode);
+    }
+    return { success: false };
+  }
 
   // JSON output — plan data already written by result_formatter; skip interactive prompts
   if (outputFormat === "json") {

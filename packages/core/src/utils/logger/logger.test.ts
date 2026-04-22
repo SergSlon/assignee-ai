@@ -994,6 +994,34 @@ describe("logger", () => {
       expect(fallback).toBe(true);
     });
 
+    // Epic 94 R5 (C-03): under `--output json` an error-level event
+    // MUST still land on stderr only, never stdout — otherwise a
+    // failing plan run would shred the single-envelope contract.
+    // This is the ERROR-path twin of the "--verbose --output json"
+    // info-path test below.
+    it("JSON output mode + error-level event still writes stderr only (Epic 94 R5 / C-03)", () => {
+      process.argv = [
+        "/usr/local/bin/node",
+        "/usr/local/bin/assignee",
+        "--verbose",
+        "plan",
+        "--output",
+        "json",
+        "Create an RDS db.t3.tiny.nope.not-a-class",
+      ];
+
+      log({
+        ts: "2026-04-20T00:00:00.000Z",
+        runId: "550e8400-e29b-41d4-a716-446655441007",
+        level: "error",
+        action: LOG_ACTIONS.APPLY_FAILED,
+        extras: { errorMessage: "Unsupported resource type." },
+      });
+
+      expect(stdoutSpy).not.toHaveBeenCalled();
+      expect(stderrSpy).toHaveBeenCalled();
+    });
+
     it("JSON output mode does not flip the stderr routing (both flags present)", () => {
       // Simulate the exact argv pattern used by `assignee plan --output json ...`
       // when --verbose is also set. The --output flag is NOT consumed by the

@@ -2404,6 +2404,64 @@ describe("renderError — structured format", () => {
       configurable: true,
     });
   });
+
+  // Story 94-R7 (D-10): header-plus-details dedup. When `context.why`
+  // begins with the headline followed by a blank line and then the
+  // useful details, the headline prefix is redundant and must be
+  // stripped so CONTEXT renders only the new information. This is
+  // the shape `list.ts` passes when the resolver throws an
+  // AssigneeError whose `message` is `"<headline>\n\n<registry-grid>"`.
+  it("D-10: strips redundant headline prefix from CONTEXT (header+details)", async () => {
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const { renderError } = await import("./display.js");
+    const headline = 'Unknown --resource-type "NOT-A-REAL-TYPE".';
+    const details = "What you can create (37 resource types):\n\n  ...grid...";
+    renderError(headline, "Pass a supported CFN type", {
+      why: `${headline}\n\n${details}`,
+    });
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain(`[ERROR] ${headline}`);
+    // CONTEXT must contain the details but NOT a second headline.
+    expect(output).toContain("[CONTEXT] What you can create");
+    // The literal `[CONTEXT] Unknown --resource-type` line (the
+    // redundant headline repeat) must not appear.
+    expect(output).not.toContain(`[CONTEXT] ${headline}`);
+    expect(output).toContain("[FIX] Pass a supported CFN type");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  // D-10 regression: if `why` does NOT start with the headline, it
+  // must render verbatim — the prefix-strip must not over-match.
+  it("D-10 regression: unrelated why still renders in full", async () => {
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const { renderError } = await import("./display.js");
+    renderError("Headline A", "fix-it", {
+      why: "Completely different root cause body.",
+    });
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain("[CONTEXT] Completely different root cause body.");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
 });
 
 describe("renderResourceTable — non-TTY", () => {

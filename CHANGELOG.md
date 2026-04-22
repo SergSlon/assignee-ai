@@ -12,6 +12,28 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 94 — Wave 1 regression lane (2026-04-22)
+
+After Epic 92 shipped 107 findings "closed", Epic 93's post-fix dogfood sweep found **11 REGRESSIONS + 28 NEW + 13 PREEXISTING = 52 new findings**. Several Epic 92 stories shipped inert — the module landed but was never wired into the user-visible path. Epic 94 prioritises the regression lane: 9 stories closing 11 findings, **serial dispatch**. Every Wave 1 story's acceptance criterion is a **CLI-level end-to-end probe**, not just a unit test. 10/10 probes pass at wave close.
+
+#### Fixed
+
+- **e94.R1** — `validateDesiredStateNode` wired into the graph between `PLAN_GENERATOR` and `ADVICE_GENERATOR`. Epic 92 u.c.1 shipped the module + 28 tests but never registered the node — 70-char / IPv4 / unicode / reserved-prefix bucket-name validators were dead code. Closes A-01 (BLOCKER REGRESSION). Pipeline contract strengthened 13 → 14 nodes. New `INVALID_DESIRED_STATE` error code propagates through `--output json`.
+- **e94.R2** — Lambda compound `FunctionName` preservation. Intent-parser's pattern-detect branch passed empty `resourceType` to `extractAssertedValues`, so `resolveNameField` short-circuited to `null`. New `patternPrimaryResourceType(patternId)` helper maps 7 PatternIds. Closes A-02 (HIGH REGRESSION).
+- **e94.R3** — Security Group ingress routed from user intent. Three-layer fix: removed hardcoded port-443 default in `security-group.ts`; option-elicitor expert/non-TTY paths now seed from `state.elicitedOptions` first; `parseRules` passes CFN-shaped arrays through (was returning `undefined` → merge deleted parser output). Ports 22 / 3306 / 3389 now preserved end-to-end. Closes B-01 (BLOCKER REGRESSION).
+- **e94.R4** — BP-SG-005 re-tagged `awareness` → `not_equals` with `expected_value: "0.0.0.0/0:3389"` mirroring BP-SG-002's shape. Also fixed a latent bug in the `not_equals` CFN-array comparator — the evaluator only compared string fields, so BP-SG-002 (SSH) was also silently never firing. New `sgIngressOpensCidrPort()` helper detects `<cidr>:<port>` grammar and inspects ingress arrays. Closes B-02 (BLOCKER REGRESSION).
+- **e94.R5** — `plan --output json` error envelope discipline. Success path already had the envelope; error path leaked structured JSONL log lines + plaintext error blocks to stdout. Plan command's outer catch now preserves `AssigneeError.code`/`hint` or stamps `UNKNOWN_ERROR` for unknown errors. Stderr retains full log stream + `[ERROR]` block. Closes C-03 (HIGH REGRESSION).
+- **e94.R6** — `assignee init` non-TTY guard predicate. `process.stdout.isTTY === false` fails under pipe redirection where Node returns `undefined` — CI pipelines using `init` without `--yes` silently aborted with exit 0, no config written. Flipped to `!== true` predicate covering both stdout AND stdin. Closes D-01 (HIGH REGRESSION).
+- **e94.R7** — `list --resource-type <invalid>` hint-grid dedup. 37-types grid printed twice on stderr (CONTEXT echo + Commander default handler). New `AssigneeErrorOptions.alreadyRendered` flag; top-level `parseAsync.catch` in `index.ts` skips fallback write. `renderError` strips redundant header prefix from CONTEXT. Closes D-02 + D-10.
+- **e94.R8** — S3 name extractor: unicode rejection + multi-word capture. Non-ASCII now emits `AssigneeError("S3 bucket names can only contain ASCII…")` BEFORE R1's validator. Multi-word (`named bad bucket name`) captures `bad` and attaches per-plan `NAME_REMAINDER_IGNORED` advisory. New `state.advisories` graph-state field + `Advisory` type. Boundary set excludes resource nouns so "my bucket name" style survives. IPv4-shape preserved through to R1. Closes A-05 + A-06.
+- **e94.R9** — wave-close CLI probe sweep (10/10 pass). Log at `_bmad-output/implementation-artifacts/epic-94-wave1-probe-log.md`.
+
+#### Test totals
+
+8516 → **8712 passing** (+196). 103 skipped (RUN_E2E=1 gated; up from 69). `packages/core` 6037 → 6160 (+123, 239 files). `packages/best-practices` 625 → 639 (+14). `apps/cli` 1209 → 1289 (+80). `apps/mcp-server` 624 unchanged.
+
+Full gate run green: `pnpm lint / check-types / lint:barrels / lint:shims / doc-lint / citation-lint / audit --prod / build / -r test:coverage`.
+
 ### Epic 92 — batch 1 partial (2026-04-22)
 
 Wave 3 + Wave 4 + Uncluster fired as 8 parallel fixer subagents. Five landed cleanly (3.a, 4.a, 4.b, 4.c, u.a); three lost edits to concurrent-write race conditions in the shared working tree (3.b, u.b, u.c) despite disjoint owned-file sets — the parallel Write pressure + test-runner resource spikes corrupted state. Committing the five that landed; the other three will re-dispatch serially in batch 2.

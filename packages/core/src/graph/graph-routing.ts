@@ -33,6 +33,31 @@ export function routeCheckpointEntry(
   return GraphNode.INTENT_PARSER;
 }
 
+/**
+ * Routes after validate_desired_state: FAILED (invalid bucket name, etc.)
+ * short-circuits to RESULT_FORMATTER so the user sees the actionable
+ * `[ERROR] / [FIX]` triple before we waste tokens on advice / BP / fix /
+ * preflight for a payload that cannot provision. Happy path falls through
+ * to ADVICE_GENERATOR.
+ *
+ * Epic 94 R1 (A-01): this routing is the gate that actually activates the
+ * `validateDesiredStateNode` shipped in Epic 92 u.c.1 — without it, the
+ * node was dead code.
+ */
+export function routeValidateDesiredState(
+  state: AgentState,
+): typeof GraphNode.ADVICE_GENERATOR | typeof GraphNode.RESULT_FORMATTER {
+  if (
+    state.executionStatus === ExecutionStatus.FAILED ||
+    state.executionStatus === ExecutionStatus.CANCELLED ||
+    state.executionStatus === ExecutionStatus.UNSUPPORTED_RESOURCE ||
+    state.executionStatus === ExecutionStatus.POLICY_BLOCKED
+  ) {
+    return GraphNode.RESULT_FORMATTER;
+  }
+  return GraphNode.ADVICE_GENERATOR;
+}
+
 /** Routes after preflight_guard: plan → result, apply → approval or provisioner.
  *  Safety: a checkpoint-resumed run whose state is FAILED/CANCELLED must never
  *  reach HUMAN_APPROVAL — always short-circuit to RESULT_FORMATTER. */
