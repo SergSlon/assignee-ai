@@ -800,3 +800,351 @@ describe("detectAvailableRoles (M-S8)", () => {
     expect(detectAvailableRoles(env)).toEqual([]);
   });
 });
+
+// ── Story e92-u.d (non-interactive / flag matrix / TTY detection) ─────
+// New flags:
+//   --yes                    — skip all prompts, use defaults
+//   --region <region>        — pin region, skip region prompt
+//   --auto-fix <mode>        — pin mode (ask|apply|skip), skip prompt
+// Non-TTY + no --yes must emit an actionable error, not block.
+
+describe("assignee init non-interactive flags (e92-u.d)", () => {
+  const ORIGINAL_IS_TTY = process.stdout.isTTY;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Commander's option state persists across `parseAsync` calls on the
+    // same instance. Preceding test blocks invoke init with `--global`,
+    // which leaves `_optionValues.global = true` set on the singleton and
+    // incorrectly routes subsequent project-mode invocations through the
+    // global flow. Reset the option values bag to avoid cross-test
+    // contamination.
+    const { initCommand } = await import("./init.js");
+    // Commander exposes an internal `_optionValues` bag that holds
+    // parsed flag values. Clearing it lets each test start from scratch
+    // without re-importing the module (which would also drop the
+    // `vi.mock` bindings set at the top of the file).
+    (
+      initCommand as unknown as { _optionValues: Record<string, unknown> }
+    )._optionValues = {};
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "init-ud-test-"));
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    // Tests here default to a TTY context; individual tests flip it when
+    // exercising the non-TTY branch. The restore happens in afterEach.
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+
+    mockCredentials({
+      detected: true,
+      source: "env",
+      profile: "default",
+    });
+    mockRegion({ region: "us-east-1" });
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: ORIGINAL_IS_TTY,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it("--yes --region --auto-fix apply: writes config without any prompts", async () => {
+    await runInitAction([
+      "node",
+      "init",
+      "--yes",
+      "--region",
+      "eu-west-1",
+      "--auto-fix",
+      "apply",
+    ]);
+
+    // No prompts should have fired — wizard went straight through.
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(clack.select).not.toHaveBeenCalled();
+
+    const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    const parsed = parseYaml(content) as Record<string, unknown>;
+
+    expect(parsed["region"]).toBe("eu-west-1");
+    expect(parsed["profile"]).toBe("default");
+    // `apply` maps to the legacy boolean true and preferences.auto_fix = apply.
+    expect(parsed["autoFixBestPractices"]).toBe(true);
+    const prefs = parsed["preferences"] as Record<string, unknown>;
+    expect(prefs["auto_fix"]).toBe("apply");
+  });
+
+  it("--yes alone: writes config using default region / profile / env / auto-fix=ask", async () => {
+    await runInitAction(["node", "init", "--yes"]);
+
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(clack.select).not.toHaveBeenCalled();
+
+    const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    const parsed = parseYaml(content) as Record<string, unknown>;
+
+    // detectRegion mock returns us-east-1; profile mock returns "default".
+    expect(parsed["region"]).toBe("us-east-1");
+    expect(parsed["profile"]).toBe("default");
+    expect(parsed["autoFixBestPractices"]).toBe(false);
+    const prefs = parsed["preferences"] as Record<string, unknown>;
+    expect(prefs["auto_fix"]).toBe("ask");
+    // Environment default is "development" when --yes skips the select.
+    const tags = parsed["tags"] as Record<string, string>;
+    expect(tags["environment"]).toBe("development");
+  });
+
+  it("--auto-fix skip persists preferences.auto_fix=skip", async () => {
+    await runInitAction([
+      "node",
+      "init",
+      "--yes",
+      "--region",
+      "us-west-2",
+      "--auto-fix",
+      "skip",
+    ]);
+
+    const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    const prefs = parsed["preferences"] as Record<string, unknown>;
+    expect(prefs["auto_fix"]).toBe("skip");
+    expect(parsed["autoFixBestPractices"]).toBe(false);
+  });
+
+  it("--auto-fix ask persists preferences.auto_fix=ask", async () => {
+    await runInitAction([
+      "node",
+      "init",
+      "--yes",
+      "--region",
+      "ap-northeast-1",
+      "--auto-fix",
+      "ask",
+    ]);
+
+    const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    const prefs = parsed["preferences"] as Record<string, unknown>;
+    expect(prefs["auto_fix"]).toBe("ask");
+  });
+
+  it("--auto-fix <invalid>: rejects with Commander validation error", async () => {
+    // Route Commander's error output into a buffer so the test runner
+    // doesn't print the validation noise AND we can inspect it.
+    const { initCommand } = await import("./init.js");
+    let errBuf = "";
+    initCommand.configureOutput({
+      writeErr: (s: string) => {
+        errBuf += s;
+      },
+    });
+    // Commander throws on invalid choice when exitOverride is active.
+    initCommand.exitOverride();
+
+    await expect(
+      initCommand.parseAsync([
+        "node",
+        "init",
+        "--yes",
+        "--auto-fix",
+        "nonsense",
+      ]),
+    ).rejects.toThrow();
+
+    expect(errBuf + "").toMatch(/auto-fix|ask|apply|skip/);
+  });
+
+  it("non-TTY + no --yes: emits actionable error and exits non-zero", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+      writable: true,
+    });
+
+    let errBuf = "";
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk: unknown): boolean => {
+        errBuf += String(chunk);
+        return true;
+      });
+    // Override the global no-op exit mock with one that throws, so we
+    // can assert the exit(1) happened without letting Commander's
+    // action body continue past it.
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: number | string | null | undefined) => {
+        throw new Error(`__TEST_EXIT__:${String(code ?? "")}`);
+      });
+
+    let caughtMsg = "";
+    let exitCallArgs: unknown[] = [];
+    try {
+      await runInitAction(["node", "init"]);
+    } catch (err) {
+      caughtMsg = err instanceof Error ? err.message : String(err);
+    } finally {
+      exitCallArgs = exitSpy.mock.calls[0] ?? [];
+      stderrSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+
+    // The thrown marker proves process.exit was called and Commander
+    // did NOT continue into the wizard.
+    expect(caughtMsg).toBe("__TEST_EXIT__:1");
+    expect(exitCallArgs[0]).toBe(1);
+    expect(errBuf).toContain("[ERROR] init requires a TTY OR --yes flag");
+    expect(errBuf).toContain("[FIX] Re-run with: assignee init --yes");
+
+    // No prompts should have fired — we bailed before the wizard.
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(clack.select).not.toHaveBeenCalled();
+    // No config file should have been written.
+    const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+    await expect(fs.access(configPath)).rejects.toThrow();
+  });
+
+  it("non-TTY + --yes: proceeds silently with defaults (CI mode)", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      configurable: true,
+      writable: true,
+    });
+
+    await runInitAction([
+      "node",
+      "init",
+      "--yes",
+      "--region",
+      "us-east-1",
+      "--auto-fix",
+      "ask",
+    ]);
+
+    const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    expect(parsed["region"]).toBe("us-east-1");
+    const prefs = parsed["preferences"] as Record<string, unknown>;
+    expect(prefs["auto_fix"]).toBe("ask");
+    // No prompts fired.
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(clack.select).not.toHaveBeenCalled();
+  });
+
+  it("--yes silently overwrites existing config (no confirm prompt)", async () => {
+    // Existing config present.
+    const configDir = path.join(tmpDir, ".assignee");
+    await fs.mkdir(configDir, { recursive: true });
+    await fs.writeFile(
+      path.join(configDir, "config.yaml"),
+      "region: old-region\n",
+    );
+
+    await runInitAction([
+      "node",
+      "init",
+      "--yes",
+      "--region",
+      "us-east-2",
+      "--auto-fix",
+      "ask",
+    ]);
+
+    expect(clack.confirm).not.toHaveBeenCalled();
+
+    const content = await fs.readFile(
+      path.join(configDir, "config.yaml"),
+      "utf-8",
+    );
+    expect(content).toContain("us-east-2");
+    expect(content).not.toContain("old-region");
+  });
+
+  it("interactive path unchanged when no new flags are supplied (TTY)", async () => {
+    // No flags, TTY context. The existing mockPrompts() contract must
+    // still be honoured — this is the non-regression guard for D-06.
+    mockPrompts({
+      region: "eu-central-1",
+      profile: "default",
+      environment: "development",
+    });
+
+    await runInitAction(["node", "init"]);
+
+    // text (region + profile) and select (env + auto_fix) fired.
+    expect(clack.text).toHaveBeenCalled();
+    expect(clack.select).toHaveBeenCalled();
+
+    const configPath = path.join(tmpDir, ".assignee", "config.yaml");
+    const content = await fs.readFile(configPath, "utf-8");
+    const parsed = parseYaml(content) as Record<string, unknown>;
+    expect(parsed["region"]).toBe("eu-central-1");
+  });
+});
+
+// D-05 code-emit half: ensure init source writes `.assignee/` (hidden),
+// never `./assignee/` (visible subdir). The help-text half already has
+// its own guard above (describe "assignee init --help").
+describe("assignee init D-05 code-emit half (e92-u.d)", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { initCommand } = await import("./init.js");
+    (
+      initCommand as unknown as { _optionValues: Record<string, unknown> }
+    )._optionValues = {};
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "init-d05-test-"));
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("writes to hidden `.assignee/config.yaml`, never `./assignee/`", async () => {
+    mockCredentials({
+      detected: true,
+      source: "env",
+      profile: "default",
+    });
+    mockRegion({ region: "us-east-1" });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+
+    await runInitAction([
+      "node",
+      "init",
+      "--yes",
+      "--region",
+      "us-east-1",
+      "--auto-fix",
+      "ask",
+    ]);
+
+    // Hidden dir exists, visible sibling does not.
+    await expect(
+      fs.access(path.join(tmpDir, ".assignee", "config.yaml")),
+    ).resolves.toBeUndefined();
+    await expect(
+      fs.access(path.join(tmpDir, "assignee", "config.yaml")),
+    ).rejects.toThrow();
+  });
+});

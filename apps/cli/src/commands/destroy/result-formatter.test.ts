@@ -75,11 +75,95 @@ describe("renderDestroyBox", () => {
     expect(stdoutOutput).toContain(
       "ARN:             arn:aws:kms:us-east-1:210987654321:key/ba48550a-3f14-446e-8f0c-1473f345c62d",
     );
+    // KMS::Key is region-scoped — the resolved region must survive.
     expect(stdoutOutput).toContain("Region:          us-east-1");
     expect(stdoutOutput).toContain(
       "Identifier:      ba48550a-3f14-446e-8f0c-1473f345c62d",
     );
     expect(stdoutOutput).toContain("Estimated Cost:  $1.00/mo");
+  });
+
+  // Epic 92 u.e (D-16): IAM and CloudFront resources live in the
+  // global control plane. Previously the destroy box showed the
+  // resolved API region (e.g. `us-east-1`) which contradicted the
+  // `list` output (`global`). Both surfaces must agree.
+  it("D-16: IAM Role shows Region: global (not the credential's resolved region)", () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    renderDestroyBox({
+      resourceType: "AWS::IAM::Role",
+      arn: "arn:aws:iam::210987654321:role/assignee-operator",
+      region: "us-east-1",
+      identifier: "assignee-operator",
+      estimatedMonthlyCost: "Free",
+    });
+
+    expect(stdoutOutput).toContain("Resource Type:   AWS::IAM::Role");
+    expect(stdoutOutput).toContain("Region:          global");
+    // Must NOT show the resolved AWS region for a global resource.
+    expect(stdoutOutput).not.toContain("Region:          us-east-1");
+  });
+
+  it("D-16: IAM User also renders as global", () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    renderDestroyBox({
+      resourceType: "AWS::IAM::User",
+      arn: "arn:aws:iam::210987654321:user/operator",
+      region: "eu-west-1",
+      identifier: "operator",
+      estimatedMonthlyCost: "Free",
+    });
+
+    expect(stdoutOutput).toContain("Region:          global");
+  });
+
+  it("D-16: CloudFront Distribution renders as global", () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    renderDestroyBox({
+      resourceType: "AWS::CloudFront::Distribution",
+      arn: "arn:aws:cloudfront::210987654321:distribution/E1234567890ABC",
+      region: "us-east-1",
+      identifier: "E1234567890ABC",
+      estimatedMonthlyCost: "$0.85/mo",
+    });
+
+    expect(stdoutOutput).toContain("Region:          global");
+  });
+
+  // Regression guard: S3::Bucket is NOT global (buckets live in a
+  // single region). If we accidentally add S3 to the global list, the
+  // user would see the wrong region label on every bucket destroy.
+  it("D-16 anti-regression: S3::Bucket stays region-scoped (not global)", () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    renderDestroyBox({
+      resourceType: "AWS::S3::Bucket",
+      arn: "arn:aws:s3:::demo-bucket-210987654321",
+      region: "us-west-2",
+      identifier: "demo-bucket-210987654321",
+      estimatedMonthlyCost: "$0.023/mo",
+    });
+
+    expect(stdoutOutput).toContain("Region:          us-west-2");
+    expect(stdoutOutput).not.toContain("Region:          global");
   });
 });
 

@@ -25,7 +25,7 @@ complete -c assignee -n "__fish_seen_subcommand_from plan" -l json -d 'Shorthand
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l no-apply -d 'Skip the apply prompt after plan display'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l no-advice -d 'Skip inline contextual advice generation'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l source -s s -r -d 'Path to local files to upload after provisioning (e.g., static site)'
-complete -c assignee -n "__fish_seen_subcommand_from plan" -l set -r -d 'Pre-set field values, supports human names (e.g., --set size=t3.medium)'
+complete -c assignee -n "__fish_seen_subcommand_from plan" -l set -r -d 'Pre-set field values (repeatable), supports human names (e.g., --set size=t3.medium)'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l yes -s y -d 'Accepted for CI wrapper compatibility; plan is read-only and does not mutate.'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l quick -s q -d 'Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.'
 complete -c assignee -n "__fish_seen_subcommand_from plan" -l wizard -d 'Alias for --quick; runs the wizard flow that asks only for required fields without a default.'
@@ -41,6 +41,9 @@ complete -c assignee -n "__fish_seen_subcommand_from apply" -l set -r -d 'Pre-se
 
 # Options for 'init'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l global -d 'Create global user config (~/.config/assignee/config.yaml) instead of project config'
+complete -c assignee -n "__fish_seen_subcommand_from init" -l yes -s y -d 'Skip interactive prompts and accept defaults (CI scriptability)'
+complete -c assignee -n "__fish_seen_subcommand_from init" -l region -r -d 'AWS region to write into the config (skips the region prompt)'
+complete -c assignee -n "__fish_seen_subcommand_from init" -l auto-fix -r -d 'Set preferences.auto_fix mode: ask | apply | skip (skips the auto-fix prompt)'
 
 # Options for 'destroy'
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l yes -s y -d 'Auto-confirm destroy without interactive prompt (for CI/CD)'

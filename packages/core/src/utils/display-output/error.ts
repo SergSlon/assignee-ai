@@ -18,18 +18,31 @@ export function renderError(
   context?: { why?: string },
 ): void {
   stopSpinner();
+  // Epic 92 u.e (D-31): dedup CONTEXT when it would be a verbatim
+  // restatement of the headline message. The list command's
+  // LIST_ERROR path surfaces `err.message` as both `message` and
+  // `context.why`, which produced output like:
+  //   [ERROR] Failed to list managed resources.
+  //   [CONTEXT] Failed to list managed resources.
+  //   [FIX] Check your AWS credentials and try again.
+  // The CONTEXT line adds no information when it equals the ERROR
+  // line — comparing after trimming whitespace is intentional so
+  // stray trailing spaces don't defeat the dedup.
+  const why = context?.why?.trim();
+  const headline = message.trim();
+  const showContext = !!why && why !== headline;
   if (process.stderr.isTTY) {
     process.stderr.write(chalk.red(`\u2716 Error: ${message}\n`));
-    if (context?.why) {
-      process.stderr.write(chalk.yellow(`  Why: ${context.why}\n`));
+    if (showContext) {
+      process.stderr.write(chalk.yellow(`  Why: ${context!.why}\n`));
     }
     if (hint) {
       process.stderr.write(chalk.green(`  How to Fix: ${hint}\n`));
     }
   } else {
     process.stderr.write(`[ERROR] ${message}\n`);
-    if (context?.why) {
-      process.stderr.write(`[CONTEXT] ${context.why}\n`);
+    if (showContext) {
+      process.stderr.write(`[CONTEXT] ${context!.why}\n`);
     }
     if (hint) {
       process.stderr.write(`[FIX] ${hint}\n`);

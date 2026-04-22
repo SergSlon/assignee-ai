@@ -59,6 +59,30 @@ function formatCorsConfiguration(value: object): string {
 }
 
 export function formatSpecialValue(key: string, value: unknown): string | null {
+  // Epic 92 u.e (C-18): RDS `EnableCloudwatchLogsExports` ships an
+  // array of log types (e.g. `["audit","error","general","slowquery"]`).
+  // The default formatValue path handled arrays correctly, but if the
+  // LLM plan-generator coerces the field to a boolean (seen in the
+  // dogfood run — user said "enable logs exports" and the planner
+  // emitted `true`) the Yes/No branch kicked in and the user lost
+  // all type information. Covering BOTH shapes here keeps the plan
+  // table honest:
+  //   - array → joined list of log types (`audit, error, general, slowquery`)
+  //   - boolean true → explicit hint that log types are required
+  //   - empty array / false / undefined → fall through (formatValue
+  //     renders `-` or `No`, which is the right thing)
+  if (key === "EnableCloudwatchLogsExports") {
+    if (Array.isArray(value) && value.length > 0) {
+      return value.map(String).join(", ");
+    }
+    if (value === true) {
+      // Planner emitted a bare boolean; surface actionable guidance
+      // instead of the misleading `Yes`.
+      return "(specify log types with --set EnableCloudwatchLogsExports=audit,error,general,slowquery)";
+    }
+    // Empty array / false / undefined / null — let formatValue handle it.
+    return null;
+  }
   if (key === CfnKey.BLOCK_DEVICE_MAPPINGS && Array.isArray(value)) {
     return formatBlockDeviceMappings(value);
   }

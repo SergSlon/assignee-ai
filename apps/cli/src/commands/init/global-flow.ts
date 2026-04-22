@@ -1,7 +1,17 @@
 /**
  * Global init flow — ~/.config/assignee/config.yaml.
  *
- * @see Story 27.5
+ * Epic 92 u.d: accepts the same `NonInteractiveOverrides` bag as the
+ * project flow. `--yes` silently overwrites an existing config (implicit
+ * consent) rather than prompting. The overrides are NOT plumbed through
+ * to `promptGlobalConfig` in this wave — the global wizard collects
+ * tags / naming prefix which have no matching CLI flags yet — so a
+ * `--yes` invocation in a non-TTY context would still block on those
+ * prompts. Callers of `--global --yes` currently need to also be in a
+ * TTY; a follow-up finding can expand flag coverage for the global
+ * wizard.
+ *
+ * @see Story 27.5, Story e92-u.d
  */
 
 import * as fs from "node:fs/promises";
@@ -10,27 +20,35 @@ import * as clack from "@clack/prompts";
 import { stringify as yamlStringify } from "yaml";
 import { resolveConfigPath } from "../../config/user-config-loader.js";
 import { promptGlobalConfig } from "./global-wizard.js";
+import type { NonInteractiveOverrides } from "./project-config-types.js";
 
 /**
  * Runs the global config flow. Returns when done (or after early exit).
  */
-export async function runGlobalInit(): Promise<void> {
+export async function runGlobalInit(
+  overrides: NonInteractiveOverrides = {},
+): Promise<void> {
   const configPath = resolveConfigPath();
   const configDir = path.dirname(configPath);
 
   // Check for existing global config
   try {
     await fs.access(configPath);
-    const overwrite = await clack.confirm({
-      message: `Global config already exists at ${configPath}. Overwrite it?`,
-      initialValue: false,
-    });
+    // D-06: when --yes is set, treat as implicit overwrite consent.
+    if (overrides.yes === true) {
+      // Silent overwrite; caller opted in via --yes.
+    } else {
+      const overwrite = await clack.confirm({
+        message: `Global config already exists at ${configPath}. Overwrite it?`,
+        initialValue: false,
+      });
 
-    if (clack.isCancel(overwrite) || overwrite === false) {
-      clack.outro(
-        `Keeping existing configuration at ${configPath}. No changes made.`,
-      );
-      return;
+      if (clack.isCancel(overwrite) || overwrite === false) {
+        clack.outro(
+          `Keeping existing configuration at ${configPath}. No changes made.`,
+        );
+        return;
+      }
     }
   } catch {
     // Config does not exist — proceed

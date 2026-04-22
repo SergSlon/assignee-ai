@@ -39,7 +39,7 @@ _assignee() {
             '--no-apply[Skip the apply prompt after plan display]' \
             '--no-advice[Skip inline contextual advice generation]' \
             '--source[Path to local files to upload after provisioning (e.g., static site)]:path:' \
-            '--set[Pre-set field values, supports human names (e.g., --set size=t3.medium)]:key=value...:' \
+            '--set[Pre-set field values (repeatable), supports human names (e.g., --set size=t3.medium)]:key=value:' \
             '--yes[Accepted for CI wrapper compatibility; plan is read-only and does not mutate.]' \
             '--quick[Skip wizard prompts that have defaults — only ask for required fields without a default. Shows a summary gate before generating the plan.]' \
             '--wizard[Alias for --quick; runs the wizard flow that asks only for required fields without a default.]'
@@ -56,7 +56,10 @@ _assignee() {
           ;;
         init)
           _arguments \
-            '--global[Create global user config (~/.config/assignee/config.yaml) instead of project config]'
+            '--global[Create global user config (~/.config/assignee/config.yaml) instead of project config]' \
+            '--yes[Skip interactive prompts and accept defaults (CI scriptability)]' \
+            '--region[AWS region to write into the config (skips the region prompt)]:region:' \
+            '--auto-fix[Set preferences.auto_fix mode\: ask | apply | skip (skips the auto-fix prompt)]:mode:'
           ;;
         completions)
           ;;

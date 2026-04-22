@@ -2333,6 +2333,77 @@ describe("renderError — structured format", () => {
       configurable: true,
     });
   });
+
+  // Epic 92 u.e (D-31): when the `why` context string equals the
+  // headline, the CONTEXT line is pure noise — omit it.
+  it("D-31: omits [CONTEXT] when why equals the message verbatim", async () => {
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const { renderError } = await import("./display.js");
+    const text = "Failed to list managed resources.";
+    renderError(text, "Check your AWS credentials", { why: text });
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain(`[ERROR] ${text}`);
+    // CONTEXT line is suppressed — otherwise it would restate the
+    // headline with no new information.
+    expect(output).not.toContain(`[CONTEXT] ${text}`);
+    // The FIX line still renders.
+    expect(output).toContain("[FIX] Check your AWS credentials");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  it("D-31: dedup survives leading/trailing whitespace differences", async () => {
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const { renderError } = await import("./display.js");
+    renderError("Something failed", undefined, {
+      why: "  Something failed  ",
+    });
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain("[ERROR] Something failed");
+    expect(output).not.toContain("[CONTEXT]");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
+  // Regression: different why/message still produces a [CONTEXT] line.
+  it("D-31 regression: distinct why still renders [CONTEXT]", async () => {
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: false,
+      configurable: true,
+    });
+    const writeSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const { renderError } = await import("./display.js");
+    renderError("Outer failure", "Retry", {
+      why: "Inner root cause — timeout",
+    });
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain("[CONTEXT] Inner root cause — timeout");
+    writeSpy.mockRestore();
+    Object.defineProperty(process.stderr, "isTTY", {
+      value: undefined,
+      configurable: true,
+    });
+  });
 });
 
 describe("renderResourceTable — non-TTY", () => {

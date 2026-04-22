@@ -3,6 +3,12 @@
  *
  * Reports credential status (non-fatal), detects region, and writes the
  * project config via the project-wizard.
+ *
+ * Epic 92 u.d: accepts a `NonInteractiveOverrides` bag so the Commander
+ * entry point can drive the flow non-interactively when `--yes` /
+ * `--region` / `--auto-fix` are supplied. Interactive path (no flags)
+ * is unchanged — the prompts still fire when the override fields are
+ * undefined.
  */
 
 import * as fs from "node:fs/promises";
@@ -16,6 +22,9 @@ import {
 import { CHECKPOINT_DIR, FileName } from "../../config/constants.js";
 import { detectAvailableRoles } from "./credentials-detect.js";
 import { promptProjectConfig } from "./project-wizard.js";
+import type { NonInteractiveOverrides } from "./project-config-types.js";
+
+export type { NonInteractiveOverrides } from "./project-config-types.js";
 
 /**
  * Report the credential state with a single concise clack block.
@@ -55,7 +64,9 @@ function reportCredentialState(credentialResult: {
 }
 
 /** Run the project-level init flow. */
-export async function runProjectInit(): Promise<void> {
+export async function runProjectInit(
+  overrides: NonInteractiveOverrides = {},
+): Promise<void> {
   const credentialResult = await detectCredentials();
   reportCredentialState(credentialResult);
 
@@ -67,25 +78,35 @@ export async function runProjectInit(): Promise<void> {
   // Check for existing config
   try {
     await fs.access(configPath);
-    const overwrite = await clack.confirm({
-      message: `Project config already exists at ${configPath}. Overwrite it?`,
-      initialValue: false,
-    });
+    // D-06: when --yes is set, treat it as implicit overwrite consent.
+    // This matches how `npm init --yes` / `gh init --yes` behave and lets
+    // CI pipelines re-run init without an interactive block.
+    if (overrides.yes === true) {
+      // Silent overwrite; caller opted in via --yes.
+    } else {
+      const overwrite = await clack.confirm({
+        message: `Project config already exists at ${configPath}. Overwrite it?`,
+        initialValue: false,
+      });
 
-    if (clack.isCancel(overwrite) || overwrite === false) {
-      clack.outro(
-        `Keeping existing configuration at ${configPath}. No changes made.`,
-      );
-      return;
+      if (clack.isCancel(overwrite) || overwrite === false) {
+        clack.outro(
+          `Keeping existing configuration at ${configPath}. No changes made.`,
+        );
+        return;
+      }
     }
   } catch {
     // Config does not exist — proceed
   }
 
-  const config = await promptProjectConfig({
-    region: regionResult.region,
-    profile: credentialResult.profile,
-  });
+  const config = await promptProjectConfig(
+    {
+      region: overrides.region ?? regionResult.region,
+      profile: credentialResult.profile,
+    },
+    overrides,
+  );
   if (!config) return;
 
   await fs.mkdir(configDir, { recursive: true });

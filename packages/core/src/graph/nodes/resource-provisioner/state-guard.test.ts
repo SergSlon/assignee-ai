@@ -55,6 +55,24 @@ describe("runStateGuard", () => {
     expect(p.getResource).not.toHaveBeenCalled();
   });
 
+  // Epic 92 u.e (D-24): SecretsManager::Secret keys on the full secret
+  // ARN in CCAPI's GetResource handler; we only have the user-friendly
+  // `Name` at plan time. Feeding that name to GetResource produced a
+  // noisy "Secret Id <name> is not a valid ARN" warn on every apply.
+  // The state guard now skips this type outright — the CCAPI create
+  // call returns AlreadyExists if the name is genuinely taken.
+  it("D-24: SKIPS the guard entirely for SecretsManager::Secret (ARN-only identifier)", async () => {
+    const p = mockProvisioner();
+    const r = await runStateGuard(
+      baseState(),
+      p,
+      RESOURCE_TYPES.SECRETSMANAGER_SECRET,
+      { Name: "assignee-db-master-password", Description: "RDS master pw" },
+    );
+    expect(r.abort).toBe(false);
+    expect(p.getResource).not.toHaveBeenCalled();
+  });
+
   it("proceeds when getResource returns NOT_FOUND", async () => {
     const p = mockProvisioner();
     p.getResource.mockResolvedValue([

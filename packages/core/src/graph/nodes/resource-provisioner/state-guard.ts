@@ -46,7 +46,23 @@ export async function runStateGuard(
   desiredState: Record<string, unknown>,
 ): Promise<StateGuardResult> {
   // S3 bucket names are globally unique across ALL AWS accounts. Skip.
-  const skipStateGuard = resourceType === RESOURCE_TYPES.S3_BUCKET;
+  //
+  // Epic 92 u.e (D-24): also skip AWS::SecretsManager::Secret. CCAPI's
+  // SecretsManager GetResource handler keys on the full secret ARN
+  // (`arn:aws:secretsmanager:<region>:<account>:secret:<name>-<6hex>`),
+  // but the resource plugin stores the user-friendly `Name` in
+  // desiredState at plan time (see `resource-identifiers.ts:39`). Feeding
+  // that bare name to GetResource yielded:
+  //   `state_guard_skipped reason=... message="Secret Id <name> is not
+  //    a valid ARN. Provide a full secret ARN..."`
+  // on every Secret apply — noisy warn on every run, no actual value
+  // because the create path correctly returns AlreadyExists on a
+  // duplicate name. Skip the pre-flight GetResource the same way S3
+  // does; the CCAPI create call remains the authoritative "already
+  // exists" check.
+  const skipStateGuard =
+    resourceType === RESOURCE_TYPES.S3_BUCKET ||
+    resourceType === RESOURCE_TYPES.SECRETSMANAGER_SECRET;
 
   const identifier = skipStateGuard
     ? undefined

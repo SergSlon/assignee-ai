@@ -27,12 +27,25 @@ export function formatValue(value: unknown): string {
     return value.map((item) => formatValue(item)).join(", ");
   }
   if (typeof value === "object") {
-    // Nested objects — show key: value pairs inline
+    // Nested objects — show key: value pairs inline.
     const obj = value as Record<string, unknown>;
     const entries = Object.entries(obj);
-    // For deeply nested configs (e.g., encryption), summarize instead of dumping
+    // Epic 92 u.e (C-19): for configs with more than 4 entries we used
+    // to print the opaque `N properties configured` summary. That hid
+    // every field of CloudFront `OriginAccessControlConfig` (5 entries)
+    // and `DistributionConfig` so the user could not verify what was
+    // about to be created. Fall back to compact inline JSON instead —
+    // the user sees every field, the line stays grep-able, and the
+    // plan box continues to render inside the boxen frame fine because
+    // JSON.stringify without indent produces a single line.
     if (entries.length > 4) {
-      return `${entries.length} properties configured`;
+      try {
+        return JSON.stringify(obj);
+      } catch {
+        // Circular reference or non-serialisable value — fall back to
+        // the legacy summary so the plan still renders.
+        return `${entries.length} properties configured`;
+      }
     }
     return entries.map(([k, v]) => `${k}: ${formatValue(v)}`).join(", ");
   }

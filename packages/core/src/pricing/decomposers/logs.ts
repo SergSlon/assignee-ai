@@ -32,6 +32,19 @@ export const logsPricingDecomposer: PricingDecomposer = {
     );
     const isInfrequent = logGroupClass === AwsDefault.LOG_CLASS_INFREQUENT;
 
+    // Epic 92 u.e (D-14): the CloudWatch-Logs MCP pricing rows are keyed
+    // by usagetype WITHOUT the legacy "CW:" prefix. Pricing preflight
+    // returned "unavailable" on every Logs plan because the filter
+    // spec `CW:DataProcessing-Bytes` / `CW:DataStorage-Bytes` never
+    // matched. The live AWS Pricing API publishes:
+    //   - ingestion:   `<region>-DataProcessing-Bytes` (standard) /
+    //                  `<region>-LogInfrequentAccess-DataProcessing-Bytes`
+    //   - archived:    `<region>-TimedStorage-ByteHrs` (standard) /
+    //                  `<region>-LogInfrequentAccess-TimedStorage-ByteHrs`
+    // Using a TERM_MATCH on the shared suffix (no region prefix)
+    // resolves across every region because the decomposer layer
+    // already filters by service region upstream.
+
     // 1. Log ingestion
     items.push({
       label: LineItemLabel.LOG_INGESTION,
@@ -47,8 +60,8 @@ export const logsPricingDecomposer: PricingDecomposer = {
         {
           Field: F.USAGE_TYPE,
           Value: isInfrequent
-            ? "CW:LogInfrequentAccess-DataProcessing-Bytes"
-            : "CW:DataProcessing-Bytes",
+            ? "LogInfrequentAccess-DataProcessing-Bytes"
+            : "DataProcessing-Bytes",
           Type: M.TERM_MATCH,
         },
       ],
@@ -57,7 +70,10 @@ export const logsPricingDecomposer: PricingDecomposer = {
       priceUnit: PriceUnit.PER_GB_INGESTED,
     });
 
-    // 2. Log storage
+    // 2. Log storage — TimedStorage-ByteHrs is the canonical
+    //    usagetype the AWS Pricing API publishes; the previous
+    //    `DataStorage-Bytes` name was invalid and produced zero
+    //    matches in every region.
     items.push({
       label: LineItemLabel.LOG_STORAGE,
       quantity: 0,
@@ -72,8 +88,8 @@ export const logsPricingDecomposer: PricingDecomposer = {
         {
           Field: F.USAGE_TYPE,
           Value: isInfrequent
-            ? "CW:LogInfrequentAccess-DataStorage-Bytes"
-            : "CW:DataStorage-Bytes",
+            ? "LogInfrequentAccess-TimedStorage-ByteHrs"
+            : "TimedStorage-ByteHrs",
           Type: M.TERM_MATCH,
         },
       ],

@@ -16,7 +16,7 @@ import type { LlmPort, LlmCallOptions } from "../ports/llm-port.js";
 import { AWS_REGION } from "../config/constants/aws.js";
 import { LlmProvider } from "../constants/llm-providers.js";
 import { recordTokenUsage, type RawLlmUsage } from "../utils/token-usage.js";
-import { redactSensitive } from "../utils/redact.js";
+import { redactAccountIdsInPrompt } from "../utils/redact.js";
 import {
   DEFAULT_MAX_TOKENS,
   DEFAULT_MODEL,
@@ -93,8 +93,16 @@ export class LlmAdapter implements LlmPort {
     // backend is equally trustworthy with raw identifiers. Allowlist-based
     // per `feedback_redaction_allowlist_not_denylist`; partition-aware
     // per `feedback_partition_aware_arn_matching`.
+    // Epic 92 u.e (D-27): use ARN-preserving account-id redaction so
+    // the LLM still sees `arn:aws:sns:us-east-1:[ACCOUNT]:my-topic`
+    // (not just `[ARN]`). The model needs the service / region /
+    // resource-name parts to generate a plan whose `TopicArn` /
+    // `RoleArn` / etc. still points at the user's actual resource,
+    // and the plan table shows the same (non-sensitive) information
+    // so the user can verify it. The 12-digit account slot is still
+    // scrubbed, preserving the L5-H2 security property.
     const sanitizedPrompt = stripPromptBoundaryTags(prompt);
-    const redactedPrompt = redactSensitive(sanitizedPrompt);
+    const redactedPrompt = redactAccountIdsInPrompt(sanitizedPrompt);
 
     const [callErr, result] = await safeTry(
       generateText({
@@ -153,8 +161,16 @@ export class LlmAdapter implements LlmPort {
     // that comment for rationale + invariant links. Order is critical:
     // boundary-tag strip MUST precede redactSensitive so injected role
     // tags cannot hide ARNs from the redactor.
+    // Epic 92 u.e (D-27): use ARN-preserving account-id redaction so
+    // the LLM still sees `arn:aws:sns:us-east-1:[ACCOUNT]:my-topic`
+    // (not just `[ARN]`). The model needs the service / region /
+    // resource-name parts to generate a plan whose `TopicArn` /
+    // `RoleArn` / etc. still points at the user's actual resource,
+    // and the plan table shows the same (non-sensitive) information
+    // so the user can verify it. The 12-digit account slot is still
+    // scrubbed, preserving the L5-H2 security property.
     const sanitizedPrompt = stripPromptBoundaryTags(prompt);
-    const redactedPrompt = redactSensitive(sanitizedPrompt);
+    const redactedPrompt = redactAccountIdsInPrompt(sanitizedPrompt);
 
     const [callErr, result] = await safeTry(
       generateText({

@@ -174,9 +174,18 @@ export const planCommand = new Command(CommandName.PLAN)
     "-s, --source <path>",
     "Path to local files to upload after provisioning (e.g., static site)",
   )
+  // Epic 92 u.e (C-11 / C-17): `--set <key=value>` is REPEATABLE but
+  // NOT variadic. `--set key=value...` (variadic) consumed the positional
+  // intent when the user typed `plan --set size=t3.medium "Create EC2"`
+  // because Commander interpreted the intent string as another `--set`
+  // argument. Each `--set` now accepts exactly one token and the
+  // collector appends to an array — same UX surface, no intent loss.
+  // Token syntax is validated in `resolvePlanArgs` so the error path
+  // emits an actionable `[ERROR]` hint instead of silently ignoring a
+  // malformed `--set novalue`.
   .option(
-    "--set <key=value...>",
-    "Pre-set field values, supports human names (e.g., --set size=t3.medium)",
+    "--set <key=value>",
+    "Pre-set field values (repeatable), supports human names (e.g., --set size=t3.medium)",
     (val: string, prev: string[]) => [...prev, val],
     [] as string[],
   )
