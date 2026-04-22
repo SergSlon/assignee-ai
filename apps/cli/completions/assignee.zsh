@@ -52,7 +52,9 @@ _assignee() {
             '--yes[Auto-confirm apply without interactive prompt (for CI/CD)]' \
             '--checkpoint[Use a saved plan checkpoint instead of running Phase 1]:path:' \
             '--source[Path to local files to upload after provisioning (e.g., static site)]:path:' \
-            '--set[Pre-set wizard field values (repeatable)]:key=value...:'
+            '--set[Pre-set wizard field values (repeatable)]:key=value...:' \
+            '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json (emit machine-readable envelope)]'
           ;;
         init)
           _arguments \
@@ -68,7 +70,9 @@ _assignee() {
             '--yes[Auto-confirm destroy without interactive prompt (for CI/CD)]' \
             '--pending-window-in-days[KMS keys only\: pending-deletion window (7-30 days, default 7). KMS keys continue billing until the window elapses.]:n:' \
             '--recovery-window-in-days[SecretsManager secrets only\: recovery window (7-30 days, default 7). Secrets continue billing until the window elapses.]:n:' \
-            '--force-delete-without-recovery[SecretsManager secrets only\: skip the recovery window and destroy the secret immediately. Mutually exclusive with --recovery-window-in-days.]'
+            '--force-delete-without-recovery[SecretsManager secrets only\: skip the recovery window and destroy the secret immediately. Mutually exclusive with --recovery-window-in-days.]' \
+            '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json (emit machine-readable envelope)]'
           ;;
         drift)
           _arguments \
@@ -118,7 +122,9 @@ _assignee() {
             '--resource[Filter by resource type]:type:' \
             '--dry-run[Show what would be reconciled without making changes]' \
             '--yes[Non-interactive mode — reconcile every drifted resource without prompting (canonical CI flag)]' \
-            '--auto-reconcile[(deprecated alias for --yes) Reconcile all drifted resources without prompting. Prefer --yes; this alias is retained for backward compatibility and may be removed in a future major version.]'
+            '--auto-reconcile[(deprecated alias for --yes) Reconcile all drifted resources without prompting. Prefer --yes; this alias is retained for backward compatibility and may be removed in a future major version.]' \
+            '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json (emit machine-readable envelope)]'
           ;;
         doctor)
           _arguments \

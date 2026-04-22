@@ -53,6 +53,7 @@ import {
   UserCancelledError,
   CostEstimateLabel,
   UserMessage,
+  serializeErrorEnvelope,
 } from "@assignee/core";
 import * as clack from "@clack/prompts";
 import {
@@ -532,6 +533,75 @@ async function deleteEventBus(resolved: ResolvedResource): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────
 // Commander wrapper
 // ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Epic 94 Wave 2 N4 (D-08): in `--json` mode, any stdout writes the
+ * destroy pipeline emits (`renderDestroyBox`, `renderDestroySuccess`,
+ * multi-match prompt) are suppressed; a single top-level envelope is
+ * written on completion. Mirrors the pattern added to `plan.ts` /
+ * `apply.ts`.
+ */
+function installJsonStdoutSuppressor(enabled: boolean): {
+  flushSuccess: (operation: string) => void;
+  flushError: (code: string, message: string, hint?: string) => void;
+  restore: () => void;
+} {
+  if (!enabled) {
+    return {
+      flushSuccess: () => {},
+      flushError: () => {},
+      restore: () => {},
+    };
+  }
+  const originalWrite = process.stdout.write;
+  process.stdout.write = ((
+    _chunk: string | Uint8Array,
+    ...rest: unknown[]
+  ): boolean => {
+    const cb = rest.find((r) => typeof r === "function") as
+      | ((err?: Error | null) => void)
+      | undefined;
+    if (cb) cb();
+    return true;
+  }) as typeof process.stdout.write;
+
+  let restored = false;
+  const restore = (): void => {
+    if (restored) return;
+    process.stdout.write = originalWrite;
+    restored = true;
+  };
+
+  return {
+    flushSuccess: (operation) => {
+      restore();
+      originalWrite.call(
+        process.stdout,
+        JSON.stringify({ ok: true, operation }, null, 2) + "\n",
+      );
+    },
+    flushError: (code, message, hint) => {
+      restore();
+      originalWrite.call(
+        process.stdout,
+        serializeErrorEnvelope(code, message, hint),
+      );
+    },
+    restore,
+  };
+}
+
+/**
+ * Extended option shape recognised by the outer Commander wrapper. The
+ * json/output keys are read here and stripped before delegating to
+ * `destroyAction`, which keeps its own `DestroyOptions` contract
+ * untouched (preserving every existing unit test).
+ */
+type DestroyOptsWithJson = DestroyOptions & {
+  json?: boolean;
+  output?: string;
+};
+
 export const destroyCommand = new Command(CommandName.DESTROY)
   .description(CommandDescription.DESTROY)
   .argument("<resource>", CommandArgs.RESOURCE.DESC)
@@ -551,6 +621,14 @@ export const destroyCommand = new Command(CommandName.DESTROY)
     "--force-delete-without-recovery",
     "SecretsManager secrets only: skip the recovery window and destroy the secret immediately. Mutually exclusive with --recovery-window-in-days.",
   )
+  // Epic 94 N4 (D-08): parity with plan/list/apply — `--json` is the
+  // canonical shorthand for `--output json`. Scripts that piped plan
+  // output can now pipe destroy output.
+  .option("-o, --output <format>", "Output format (json|text)", "text")
+  .option(
+    "--json",
+    "Shorthand for --output json (emit machine-readable envelope)",
+  )
   .addHelpText(
     "after",
     `
@@ -565,6 +643,8 @@ Examples:
   $ assignee destroy arn:aws:secretsmanager:us-east-1:210987654321:secret:my-secret \\
         --force-delete-without-recovery --yes
         SecretsManager: immediate delete, no recovery window
+  $ assignee destroy my-bucket --yes --json
+        Machine-readable envelope for CI scripts
 
 Safety: typed-name confirmation is required for single-resource
 destroys without --yes. Bulk destroy (--all) was removed in Story 50-3;
@@ -575,4 +655,62 @@ Scheduled-deletion types (KMS keys, SecretsManager secrets) display
 the resource is still billing and recoverable during the window.
 `,
   )
-  .action(destroyAction);
+  .action(
+    async (resource: string | undefined, rawOpts: DestroyOptsWithJson) => {
+      // Normalise `--json` → `--output json`.
+      const json = rawOpts.json === true || rawOpts.output === "json";
+      const suppressor = installJsonStdoutSuppressor(json);
+
+      try {
+        let runErrored: Error | null = null;
+        try {
+          // destroyAction expects DestroyOptions (no json/output). Strip
+          // the envelope flags so the inner function's contract is
+          // preserved 1:1 — existing destroyAction unit tests stay valid.
+          const inner: DestroyOptions = {
+            yes: rawOpts.yes,
+            pendingWindowInDays: rawOpts.pendingWindowInDays,
+            recoveryWindowInDays: rawOpts.recoveryWindowInDays,
+            forceDeleteWithoutRecovery: rawOpts.forceDeleteWithoutRecovery,
+          };
+          await destroyAction(resource, inner);
+        } catch (err) {
+          runErrored = err instanceof Error ? err : new Error(String(err));
+        }
+
+        if (json) {
+          if (runErrored) {
+            const isTyped = runErrored instanceof AssigneeError;
+            const code = isTyped
+              ? (runErrored as AssigneeError).code
+              : "UNKNOWN_ERROR";
+            const hint = isTyped
+              ? ((runErrored as { hint?: string }).hint ??
+                "Run `assignee list` to verify the resource ARN or name.")
+              : "Run with --verbose for full stack trace.";
+            suppressor.flushError(code, runErrored.message, hint);
+          } else {
+            suppressor.flushSuccess("destroy");
+          }
+        }
+
+        if (runErrored) {
+          // Mark alreadyRendered in JSON mode so the top-level Commander
+          // catch does not double-paint; in text mode preserve the
+          // original error exactly for legacy behaviour.
+          if (json) {
+            const code =
+              runErrored instanceof AssigneeError
+                ? runErrored.code
+                : "UNKNOWN_ERROR";
+            throw new AssigneeError(runErrored.message, code, {
+              alreadyRendered: true,
+            });
+          }
+          throw runErrored;
+        }
+      } finally {
+        suppressor.restore();
+      }
+    },
+  );

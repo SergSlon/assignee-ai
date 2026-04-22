@@ -9,6 +9,10 @@ import {
   sanitizeUserIntent,
 } from "../../index.js";
 import type { LlmPort } from "../../index.js";
+import {
+  resolveCompoundPatternIdLiteral,
+  resolveSingletonOverride,
+} from "../../intent/compound-keywords.js";
 import { log, LOG_ACTIONS } from "../../utils/logger/index.js";
 import type { AgentState } from "../graph-state.js";
 
@@ -241,6 +245,11 @@ function mentionsDatabaseEngine(intentLower: string): boolean {
  * Epic 94 Wave 1 fixer e94.R8 — closes A-06 (MED REGRESSION): before
  * this, `named bad bucket name` silently captured `bad` and dropped
  * `bucket name` with no user signal.
+ *
+ * Epic 94 Wave 2 fixer e94.N5 — extended with optional `details` to
+ * carry structured `{from, to}` diffs for `NAME_REWRITTEN` and
+ * `BP_ADJUSTED_VALUE` advisories. Additive field — pre-N5 consumers
+ * read only `code` / `message` / `hint` and continue to work.
  */
 export interface Advisory {
   /** Stable machine-readable code (e.g. `NAME_REMAINDER_IGNORED`). */
@@ -249,6 +258,13 @@ export interface Advisory {
   message: string;
   /** Actionable fix hint so the user can rephrase. */
   hint: string;
+  /**
+   * Optional structured payload — e.g. `{from: "192.168.1.1", to:
+   * "ip-192-168-1-1"}` for NAME_REWRITTEN, or `{field:
+   * "RetentionInDays", from: 14, to: 30}` for BP_ADJUSTED_VALUE.
+   * Consumers that pre-date N5 ignore this field.
+   */
+  details?: Record<string, unknown>;
 }
 
 export interface AssertionExtraction {
@@ -288,6 +304,7 @@ export function extractAssertedValues(
   extractSgIngress(intent, elicited, errors);
   extractNoVpcDirective(intentLower, elicited);
   extractSnsProtocol(intent, intentLower, resourceType, elicited);
+  extractRetentionDays(intent, intentLower, resourceType, elicited);
 
   return { elicited, errors, advisories };
 }
@@ -702,7 +719,16 @@ function extractResourceName(
   if (nameField) elicited[nameField] = parsed.name;
 }
 
-function resolveNameField(resourceType: string): string | null {
+/**
+ * Resolve the CFN property name that carries the user-settable resource
+ * name for a given resource type. Returns `null` when the type has no
+ * such field (e.g., EC2::Instance uses tags for naming, not a top-level
+ * `Name` property).
+ *
+ * Exported so the plan-stage NAME_REWRITTEN comparator (N5) can
+ * resolve the same field without duplicating the switch.
+ */
+export function resolveNameField(resourceType: string): string | null {
   switch (resourceType) {
     case RESOURCE_TYPES.LAMBDA_FUNCTION:
       return "FunctionName";
@@ -826,6 +852,41 @@ function extractSnsProtocol(
 }
 
 /**
+ * Extract an explicit "N days retention" clause for
+ * `AWS::Logs::LogGroup`. The plan-generator's downstream comparator
+ * raises this value to the BP minimum (30) when necessary and emits
+ * a `BP_ADJUSTED_VALUE` advisory. Stored in `elicitedOptions` as an
+ * integer (matching the CFN schema type).
+ *
+ * Epic 94 Wave 2 fixer e94.N5 — required for finding D-05 so the
+ * comparator has a concrete asserted value to compare against.
+ */
+function extractRetentionDays(
+  intent: string,
+  intentLower: string,
+  resourceType: string,
+  elicited: Record<string, unknown>,
+): void {
+  if (resourceType !== RESOURCE_TYPES.LOGS_LOG_GROUP) return;
+  if (!/\bretention\b|\bretain\b/.test(intentLower)) return;
+  // Accept "14 days retention" / "14-day retention" / "retention 14
+  // days" / "retention of 14 days". Bound the number to 1-3652.
+  const patterns: RegExp[] = [
+    /\b(\d{1,4})[-\s]*days?\s+retention\b/i,
+    /\bretention\s+(?:of\s+)?(\d{1,4})\s*days?\b/i,
+    /\bretain\s+(?:for\s+)?(\d{1,4})\s*days?\b/i,
+  ];
+  for (const re of patterns) {
+    const m = re.exec(intent);
+    if (!m) continue;
+    const n = Number(m[1]);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    elicited["RetentionInDays"] = n;
+    return;
+  }
+}
+
+/**
  * Maps a compound PatternId to the primary AWS resource type that owns
  * the user-facing "named <x>" field in that pattern. Used to dispatch
  * {@link resolveNameField} inside the pattern-detect branch so
@@ -881,6 +942,18 @@ function mergeAdvisories(
  * Accepts llmClient via injection — no direct @ai-sdk imports.
  *
  * @see Story 9.5 — LLM client decoupling (M3)
+ *
+ * Epic 94 Wave 2 fixer e94.N5 adds two pre-`detect()` classification
+ * passes:
+ *
+ *   1. Singleton-override cues (C-08, C-09): "mount target" / "http
+ *      api gateway" force the classifier to a specific singleton
+ *      resource type, overriding the registry's compound match.
+ *   2. Pattern-ID literal lookup (C-07): if the intent contains one
+ *      of the 6 literal pattern-IDs (case-insensitive, token-
+ *      bounded), look up the pattern directly via
+ *      `registry.get(patternId)` instead of going through `detect()`.
+ *      Bypasses negativeKeywords — the user was explicit.
  */
 export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
   return async function intentParserNode(
@@ -889,9 +962,84 @@ export function createIntentParserNode({ llmClient }: { llmClient: LlmPort }) {
     // Sanitize user intent first (NFR-16: Prompt Injection Protection)
     const safeIntent = sanitizeUserIntent(state.userIntent);
 
-    // Pattern detection — zero latency, no LLM call when pattern matches
-    const detectedPattern = defaultPatternRegistry.detect(safeIntent);
-    if (detectedPattern !== null) {
+    // ---------------------------------------------------------------
+    // Step 1 — Singleton-override cues (C-08, C-09).
+    // ---------------------------------------------------------------
+    //
+    // "Create an EFS mount target" must produce a single
+    // AWS::EFS::MountTarget, not the 10-resource efs-with-vpc
+    // compound. "Create an HTTP API Gateway" must produce a single
+    // AWS::ApiGatewayV2::Api, not the 8-resource serverless-api
+    // compound. These override the registry entirely.
+    const singletonType = resolveSingletonOverride(safeIntent);
+    if (singletonType !== null) {
+      // Validate against SUPPORTED_TYPES — if the override targets an
+      // unsupported type the override is silently ignored (defence in
+      // depth; today both cues target supported types).
+      if (!(SUPPORTED_TYPES as readonly string[]).includes(singletonType)) {
+        // fall through to normal dispatch
+      } else {
+        const extraction = extractAssertedValues(safeIntent, singletonType);
+        if (extraction.errors.length > 0) {
+          return {
+            userIntent: safeIntent,
+            executionStatus: ExecutionStatus.FAILED,
+            errorMessage: `Intent validation failed: ${extraction.errors.join(" ")}`,
+          };
+        }
+        log({
+          ts: new Date().toISOString(),
+          runId: state.runId,
+          level: "info",
+          action: LOG_ACTIONS.INTENT_PARSED,
+          extras: { resourceType: singletonType, pattern: null },
+        });
+        const merged = mergeElicited(
+          state.elicitedOptions,
+          extraction.elicited,
+        );
+        const mergedPresets = mergePresetFields(
+          state.presetFields,
+          extraction.elicited,
+        );
+        const mergedAdvisories = mergeAdvisories(
+          state.advisories,
+          extraction.advisories,
+        );
+        return {
+          userIntent: safeIntent,
+          resourceType: singletonType,
+          ...(merged !== undefined ? { elicitedOptions: merged } : {}),
+          ...(mergedPresets !== undefined
+            ? { presetFields: mergedPresets }
+            : {}),
+          ...(mergedAdvisories !== undefined
+            ? { advisories: mergedAdvisories }
+            : {}),
+        };
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // Step 2 — Pattern-ID literal lookup (C-07).
+    // ---------------------------------------------------------------
+    //
+    // Literal pattern-ID strings in the intent ("static-website",
+    // "serverless-api", …) take precedence over the registry's
+    // keyword matcher. The user has been explicit about which
+    // compound they want — skip the negativeKeywords filter.
+    const literalPatternId = resolveCompoundPatternIdLiteral(safeIntent);
+    const literalPattern =
+      literalPatternId !== null
+        ? defaultPatternRegistry.get(literalPatternId)
+        : undefined;
+
+    // ---------------------------------------------------------------
+    // Step 3 — Normal pattern detection (registry-level substring match).
+    // ---------------------------------------------------------------
+    const detectedPattern =
+      literalPattern ?? defaultPatternRegistry.detect(safeIntent);
+    if (detectedPattern !== undefined && detectedPattern !== null) {
       // Pre-extract asserted tokens so compound-plan consumers (downstream
       // wave) can honour user-specified CIDR / region / names even when
       // the pattern matcher short-circuits the LLM classifier.

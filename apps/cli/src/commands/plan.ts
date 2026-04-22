@@ -235,8 +235,21 @@ export const planCommand = new Command(CommandName.PLAN)
     ) {
       opts.output = "json";
     }
-    const resolved = resolvePlanArgs(intent, opts);
-    const { outputFormat } = resolved;
+
+    // Epic 94 N3 (A-03 / A-09): install the interceptor BEFORE arg
+    // parsing so that AssigneeError throws from `resolvePlanArgs`
+    // (empty intent, malformed `--set`) still emit a clean
+    // `{ok:false, error:{code,message,hint}}` envelope on stdout in
+    // JSON mode. Before this change, arg-parse ran outside the try
+    // block, bubbled to Commander, and stdout stayed empty → `jq`
+    // fails with no JSON input.
+    //
+    // `outputFormat` is read off `opts.output` here (pre-arg-parse)
+    // because `resolvePlanArgs` only defaults to `"text"` — it does
+    // NOT alter the value the user passed via `--output` / `--json`.
+    // So reading `opts.output ?? "text"` at the CLI boundary
+    // produces the same result as `resolved.outputFormat`.
+    const outputFormat = opts.output ?? "text";
 
     // P2-R2-4: print resolved AWS context before any mutation-capable
     // step so the operator always sees which account/region/profile the
@@ -254,6 +267,11 @@ export const planCommand = new Command(CommandName.PLAN)
     try {
       let runErrored: Error | null = null;
       try {
+        // Epic 94 N3: arg-parse moved INSIDE the try so AssigneeError
+        // throws (MISSING_INTENT / BAD_SET_SYNTAX) get routed through
+        // the R5 envelope pipeline below instead of bubbling past the
+        // interceptor.
+        const resolved = resolvePlanArgs(intent, opts);
         await runCommand({
           intent: intent!,
           commandName: "plan",
