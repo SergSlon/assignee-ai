@@ -12,7 +12,24 @@ import { FieldLabel } from "../field-labels.js";
 
 /**
  * ResourcePlugin for AWS::SQS::Queue.
+ *
  * Supports standard and FIFO queues with dead-letter queue configuration.
+ *
+ * Epic 92 e92.u.c.1 (A-07): the VisibilityTimeout field is wired with the
+ * schema-accurate property name "VisibilityTimeout" (NOT the legacy alias
+ * `CfnKey.VISIBILITY_TIMEOUT = "VisibilityTimeoutSeconds"` — that alias is
+ * stripped by the desired-state-sanitizer because it does not appear in
+ * the real AWS::SQS::Queue schema). A default of 30s is registered in
+ * plugin.defaults so --no-wizard flows and the secure-defaults-audit
+ * direct-spread path always ship a sane value.
+ *
+ * Follow-ups (out of scope here):
+ *   F1 — sqs:GetQueueAttributes readback after CCAPI SUCCESS in
+ *        graph/nodes/status-poller.ts so displayed cost/config reflects
+ *        the actual queue state.
+ *   F2 — retire the CfnKey.VISIBILITY_TIMEOUT alias; it encodes a bug
+ *        and is only referenced by the sanitizer tests that assert the
+ *        strip.
  */
 export const sqsQueuePlugin: ResourcePlugin = {
   resourceType: RESOURCE_TYPES.SQS_QUEUE,
@@ -55,7 +72,10 @@ export const sqsQueuePlugin: ResourcePlugin = {
       },
     },
     {
-      name: CfnKey.VISIBILITY_TIMEOUT,
+      // Epic 92 e92.u.c.1 A-07: use the schema-accurate key directly
+      // (NOT CfnKey.VISIBILITY_TIMEOUT which aliases to the wrong string
+      // "VisibilityTimeoutSeconds" and gets stripped by the sanitizer).
+      name: "VisibilityTimeout",
       question: {
         type: "string",
         label: "Visibility timeout (seconds)",
@@ -195,6 +215,10 @@ export const sqsQueuePlugin: ResourcePlugin = {
   ],
   defaults: {
     [CfnKey.SQS_MANAGED_SSE]: true,
+    // Epic 92 e92.u.c.1 A-07: schema-accurate default; survives the
+    // desired-state-sanitizer because "VisibilityTimeout" IS a valid
+    // AWS::SQS::Queue property.
+    VisibilityTimeout: 30,
   },
   configHints: [
     "FifoQueue set to true requires QueueName to end with '.fifo' suffix — CloudFormation will fail without it. ContentBasedDeduplication is only valid on FIFO queues.",
