@@ -21,7 +21,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--output --json --no-apply --no-advice --source --set --yes --quick --wizard" -- "${cur}") )
       ;;
     apply)
-      COMPREPLY=( $(compgen -W "--wizard --quick --no-advice --yes --checkpoint --source --set" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--wizard --quick --no-advice --yes --checkpoint --source --set --output --json" -- "${cur}") )
       ;;
     init)
       COMPREPLY=( $(compgen -W "--global --yes --region --auto-fix" -- "${cur}") )
@@ -30,7 +30,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "" -- "${cur}") )
       ;;
     destroy)
-      COMPREPLY=( $(compgen -W "--yes --pending-window-in-days --recovery-window-in-days --force-delete-without-recovery" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--yes --pending-window-in-days --recovery-window-in-days --force-delete-without-recovery --output --json" -- "${cur}") )
       ;;
     drift)
       COMPREPLY=( $(compgen -W "--resource --region --status --exclude --baseline --json --output-file --concurrency --detailed --yes" -- "${cur}") )
@@ -48,7 +48,7 @@ _assignee_completions() {
       COMPREPLY=( $(compgen -W "--json --region --resource-type --bp-coverage --gaps-only --include-structural-gaps" -- "${cur}") )
       ;;
     reconcile)
-      COMPREPLY=( $(compgen -W "--resource --dry-run --yes --auto-reconcile" -- "${cur}") )
+      COMPREPLY=( $(compgen -W "--resource --dry-run --yes --auto-reconcile --output --json" -- "${cur}") )
       ;;
     doctor)
       COMPREPLY=( $(compgen -W "--json --skip-bedrock --skip-mcp --short" -- "${cur}") )

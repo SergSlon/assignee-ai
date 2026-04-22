@@ -54,10 +54,20 @@ export function resolvePlanArgs(
   const presetFields: Record<string, string> = {};
   for (const kv of opts.set ?? []) {
     if (!SET_TOKEN_RE.test(kv)) {
-      throw new AssigneeError(
+      // Epic 94 N3 (A-09): stable code `BAD_SET_SYNTAX` + attached
+      // `hint` so `plan --json --set BAD-SYNTAX "..."` emits a clean
+      // `{ok:false, error:{code:"BAD_SET_SYNTAX", ...}}` envelope via
+      // the Wave 94.R5 `--json` error path (plan.ts reads `.hint` off
+      // any thrown AssigneeError). Message text preserved so the
+      // existing C-17 regex assertion (`/Invalid --set token/`) still
+      // matches. Previous code was the generic `USAGE_ERROR`.
+      const err = new AssigneeError(
         `Invalid --set token "${kv}". Expected key=value (e.g. --set size=t3.medium).`,
-        ErrorCode.USAGE_ERROR,
+        "BAD_SET_SYNTAX",
       );
+      (err as unknown as { hint: string }).hint =
+        "Use `--set <key>=<value>` (one pair per flag). Repeat the flag for multiple fields.";
+      throw err;
     }
     const eqIdx = kv.indexOf("=");
     const rawKey = kv.slice(0, eqIdx);
@@ -99,10 +109,18 @@ export function resolvePlanArgs(
   }
 
   if (!intent) {
-    throw new AssigneeError(
+    // Epic 94 N3 (A-03): keep the stable code `MISSING_INTENT` and
+    // attach a `hint` so `plan --json ""` can emit a clean
+    // `{ok:false, error:{code:"MISSING_INTENT", message, hint}}`
+    // envelope. Message text preserved so the existing "Missing
+    // intent" substring assertion remains valid.
+    const err = new AssigneeError(
       `Missing intent. Usage: assignee plan "${EXAMPLE_S3_INTENT}"`,
       "MISSING_INTENT",
     );
+    (err as unknown as { hint: string }).hint =
+      `Quote your intent, e.g. \`assignee plan "${EXAMPLE_S3_INTENT}"\`.`;
+    throw err;
   }
 
   return {

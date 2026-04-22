@@ -15,7 +15,11 @@ import { Command } from "commander";
 import { CommandName, CommandDescription } from "../constants/commands.js";
 import { AssigneeError, serializeErrorEnvelope } from "@assignee/core";
 import { AwsErrorName } from "../constants/aws-errors.js";
-import { fetchManagedResources } from "../services/list-resources.js";
+import { AWS_REGION } from "../config/constants.js";
+import {
+  fetchManagedResources,
+  type ManagedResource,
+} from "../services/list-resources.js";
 import {
   renderResourceTable,
   renderEmptyList,
@@ -183,13 +187,32 @@ No --yes flag is required.
           resolvedResourceType,
         );
 
-        if (resources.length === 0) {
-          renderEmptyList();
+        // Story 94-N2 (A-04): `list --json` success path emits a
+        // discriminated envelope symmetric with the Wave 2.c failure
+        // envelope (`{ok:false, error:{...}}`). Clients can switch on
+        // `.ok` and can distinguish `resources:[]` (empty) from a
+        // broken call. `region` is the resolved region the service
+        // actually queried — same value used to construct the RGTA
+        // client — so the response is self-describing.
+        if (opts.json) {
+          const resolvedRegion = opts.region ?? AWS_REGION;
+          const envelope: {
+            ok: true;
+            resources: ManagedResource[];
+            count: number;
+            region: string;
+          } = {
+            ok: true,
+            resources,
+            count: resources.length,
+            region: resolvedRegion,
+          };
+          process.stdout.write(JSON.stringify(envelope, null, 2) + "\n");
           return;
         }
 
-        if (opts.json) {
-          process.stdout.write(JSON.stringify(resources, null, 2) + "\n");
+        if (resources.length === 0) {
+          renderEmptyList();
           return;
         }
 

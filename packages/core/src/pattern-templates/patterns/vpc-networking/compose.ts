@@ -98,6 +98,15 @@ export const vpcNetworkingPattern: ArchitecturePattern = {
     "public only",
     "public-only",
     "no nat",
+    // Epic 94 N1 (B-03): mirror the new public-only positive cues so
+    // mixed intents ("vpc with public and private subnets, but only
+    // public subnets") defeat first-match on the full compound and
+    // the public-only variant can win.
+    "public subnets only",
+    "only public subnets",
+    "without private subnets",
+    "one public subnet",
+    "vpc with public access",
   ],
   resourceList: [
     ...vpcAndPublicSubnetResources,
@@ -187,6 +196,21 @@ export const vpcPublicOnlyPattern: ArchitecturePattern = {
     "vpc public subnets only",
     "free-tier vpc",
     "free tier vpc",
+    // Epic 94 N1 (B-03): natural phrasing cues. The previous list
+    // required contiguous substrings like "vpc public subnets only"
+    // which miss the natural "vpc WITH public subnets only" (the
+    // inserted "with" breaks contiguity). The new cues are
+    // disambiguation-complete — each includes an unambiguous
+    // public-only signal (a direct "public", "public access",
+    // "without nat/private", or "one public") so they never
+    // collide with the full-compound vpcNetworkingPattern.
+    "public subnets only", // catches "vpc with public subnets only"
+    "only public subnets", // catches "with only public subnets"
+    "public only", // catches "vpc, public only"
+    "without nat", // catches "create a vpc without NAT"
+    "without private subnets", // catches "vpc without private subnets"
+    "one public subnet", // catches "vpc with one public subnet"
+    "vpc with public access", // catches "create a vpc with public access"
   ],
   /**
    * Standalone intents skip this pattern too — user wanted bare VPC.

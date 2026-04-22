@@ -180,17 +180,24 @@ describeE2E("Epic 92 Wave 2.c — JSON envelope e2e (RUN_E2E=1)", () => {
       expect(parsed.error.code).toBe("INVALID_RESOURCE_TYPE");
     });
 
-    it("success path — list --json emits a parseable JSON array (legacy shape)", () => {
+    it("success path — list --json emits parseable { ok:true, resources:[...], count, region } envelope (A-04)", () => {
       if (!jqAvailable()) return;
-      // Legacy list --json emits a JSON array of ManagedResource —
-      // already parseable today; this test locks that the envelope
-      // rewrite did not regress the happy path.
+      // Story 94-N2 (A-04): `list --json` success path now emits a
+      // discriminated envelope symmetric with the Wave 2.c failure
+      // envelope. The legacy `Array.isArray(parsed)` assertion that
+      // locked the bare-array shape is updated to the new envelope
+      // shape — NOT weakened. See `94-n2-list-json-envelope.md`.
       const { stdout } = runCli(["list", "--json"]);
       const jq = jqParse(stdout);
       expect(jq.code).toBe(0);
-      // May be an empty array if nothing is managed; that's still valid.
       const parsed = JSON.parse(stdout.trim());
-      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed.ok).toBe(true);
+      // May be an empty array if nothing is managed; that's still valid.
+      expect(Array.isArray(parsed.resources)).toBe(true);
+      expect(typeof parsed.count).toBe("number");
+      expect(parsed.count).toBe(parsed.resources.length);
+      expect(typeof parsed.region).toBe("string");
+      expect(parsed.region.length).toBeGreaterThan(0);
     });
   });
 

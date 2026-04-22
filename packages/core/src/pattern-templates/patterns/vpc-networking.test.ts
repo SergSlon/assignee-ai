@@ -538,6 +538,126 @@ describe("VPC pattern keyword detection", () => {
   });
 });
 
+// ── Epic 94 N1 (B-03): natural phrasing routes to vpcPublicOnlyPattern ───────
+
+describe("VPC public-only natural phrasing (Epic 94 N1 / B-03)", () => {
+  const registry = buildRegistry();
+
+  // Before B-03, none of these phrasings matched any keyword and
+  // `registry.detect(...)` returned null, so the intent parser routed
+  // to a bare single AWS::EC2::VPC resource. Each phrasing now routes
+  // to the 9-resource public-only compound (VPC + 2 public subnets +
+  // IGW + attachment + public RT + public route + 2 RT associations).
+
+  it("detects public-only for 'Create a VPC with public subnets only' (the flagship phrasing)", () => {
+    expect(registry.detect("Create a VPC with public subnets only")).toBe(
+      vpcPublicOnlyPattern,
+    );
+  });
+
+  it("detects public-only for 'VPC with only public subnets'", () => {
+    expect(registry.detect("VPC with only public subnets")).toBe(
+      vpcPublicOnlyPattern,
+    );
+  });
+
+  it("detects public-only for 'I want a vpc, public only'", () => {
+    expect(registry.detect("I want a vpc, public only")).toBe(
+      vpcPublicOnlyPattern,
+    );
+  });
+
+  it("detects public-only for 'Create a VPC without NAT' (uppercase NAT preserved in substring match)", () => {
+    expect(registry.detect("Create a VPC without NAT")).toBe(
+      vpcPublicOnlyPattern,
+    );
+  });
+
+  it("detects public-only for 'Create a VPC without private subnets'", () => {
+    expect(registry.detect("Create a VPC without private subnets")).toBe(
+      vpcPublicOnlyPattern,
+    );
+  });
+
+  it("detects public-only for 'VPC with one public subnet'", () => {
+    expect(registry.detect("VPC with one public subnet")).toBe(
+      vpcPublicOnlyPattern,
+    );
+  });
+
+  it("detects public-only for 'Create a VPC with public access'", () => {
+    expect(registry.detect("Create a VPC with public access")).toBe(
+      vpcPublicOnlyPattern,
+    );
+  });
+
+  // Regression guards: Epic 92 Wave 2.b B-05 locked in that a bare
+  // VPC intent must fall through to the LLM classifier (null result
+  // from the registry) so the single-resource AWS::EC2::VPC type is
+  // used. Epic 94 N1 keyword expansion must not regress this.
+  describe("regression: bare-VPC intents still return null", () => {
+    it("'Create a VPC' still returns null", () => {
+      expect(registry.detect("Create a VPC")).toBeNull();
+    });
+
+    it("'i need a vpc network' still returns null", () => {
+      expect(registry.detect("i need a vpc network")).toBeNull();
+    });
+  });
+
+  // Regression guards: vpcNetworkingPattern still wins for explicit
+  // multi-AZ / NAT-bearing intents. The B-03 expansion added the
+  // new public-only positive cues to vpcNetworkingPattern.negativeKeywords
+  // as a defensive mirror, so a MIXED intent that contains BOTH a
+  // public-only cue AND a full-compound cue skips vpc-networking on
+  // the negative hit and the public-only variant (registered next)
+  // wins. The two pure-full-compound cases below must still win on
+  // vpc-networking.
+  describe("regression: full vpc-networking still wins on pure full-compound intents", () => {
+    it("'create a vpc with public and private subnets' still routes to vpcNetworkingPattern", () => {
+      expect(
+        registry.detect("create a vpc with public and private subnets"),
+      ).toBe(vpcNetworkingPattern);
+    });
+
+    it("'create a networking foundation for my app' still routes to vpcNetworkingPattern", () => {
+      expect(registry.detect("create a networking foundation for my app")).toBe(
+        vpcNetworkingPattern,
+      );
+    });
+
+    it("'vpc with nat gateway for outbound' still routes to vpcNetworkingPattern", () => {
+      expect(registry.detect("vpc with nat gateway for outbound")).toBe(
+        vpcNetworkingPattern,
+      );
+    });
+  });
+
+  // Mixed-intent disambiguation: when a single intent contains BOTH
+  // a full-compound positive keyword and a public-only positive
+  // keyword, vpc-networking's negativeKeyword mirror forces a skip
+  // and public-only wins. This is the B-03 fix's defense-in-depth.
+  describe("mixed intent disambiguation", () => {
+    it("'vpc with public and private subnets, but only public subnets' skips vpc-networking → public-only wins", () => {
+      // The mirrored negative "only public subnets" on vpc-networking
+      // forces skip; then public-only's positive "only public subnets"
+      // matches and its own negatives (standalone, existing-vpc, on
+      // its own) do NOT fire → public-only returned.
+      expect(
+        registry.detect(
+          "vpc with public and private subnets, but only public subnets",
+        ),
+      ).toBe(vpcPublicOnlyPattern);
+    });
+
+    it("'vpc with public access, networking foundation' skips vpc-networking via mirrored negative → public-only wins", () => {
+      expect(
+        registry.detect("vpc with public access, networking foundation"),
+      ).toBe(vpcPublicOnlyPattern);
+    });
+  });
+});
+
 // ── Auxiliary resources marked provisionable: false ───────────────────────────
 
 describe("VPC pattern provisionable flags", () => {

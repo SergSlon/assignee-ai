@@ -38,6 +38,8 @@ complete -c assignee -n "__fish_seen_subcommand_from apply" -l yes -s y -d 'Auto
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l checkpoint -s c -r -d 'Use a saved plan checkpoint instead of running Phase 1'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l source -s s -r -d 'Path to local files to upload after provisioning (e.g., static site)'
 complete -c assignee -n "__fish_seen_subcommand_from apply" -l set -r -d 'Pre-set wizard field values (repeatable)'
+complete -c assignee -n "__fish_seen_subcommand_from apply" -l output -s o -r -d 'Output format (json|text)'
+complete -c assignee -n "__fish_seen_subcommand_from apply" -l json -d 'Shorthand for --output json (emit machine-readable envelope)'
 
 # Options for 'init'
 complete -c assignee -n "__fish_seen_subcommand_from init" -l global -d 'Create global user config (~/.config/assignee/config.yaml) instead of project config'
@@ -50,6 +52,8 @@ complete -c assignee -n "__fish_seen_subcommand_from destroy" -l yes -s y -d 'Au
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l pending-window-in-days -r -d 'KMS keys only: pending-deletion window (7-30 days, default 7). KMS keys continue billing until the window elapses.'
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l recovery-window-in-days -r -d 'SecretsManager secrets only: recovery window (7-30 days, default 7). Secrets continue billing until the window elapses.'
 complete -c assignee -n "__fish_seen_subcommand_from destroy" -l force-delete-without-recovery -d 'SecretsManager secrets only: skip the recovery window and destroy the secret immediately. Mutually exclusive with --recovery-window-in-days.'
+complete -c assignee -n "__fish_seen_subcommand_from destroy" -l output -s o -r -d 'Output format (json|text)'
+complete -c assignee -n "__fish_seen_subcommand_from destroy" -l json -d 'Shorthand for --output json (emit machine-readable envelope)'
 
 # Options for 'drift'
 complete -c assignee -n "__fish_seen_subcommand_from drift" -l resource -r -d 'Filter by resource type'
@@ -94,6 +98,8 @@ complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l resource -r -
 complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l dry-run -d 'Show what would be reconciled without making changes'
 complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l yes -s y -d 'Non-interactive mode — reconcile every drifted resource without prompting (canonical CI flag)'
 complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l auto-reconcile -d '(deprecated alias for --yes) Reconcile all drifted resources without prompting. Prefer --yes; this alias is retained for backward compatibility and may be removed in a future major version.'
+complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l output -s o -r -d 'Output format (json|text)'
+complete -c assignee -n "__fish_seen_subcommand_from reconcile" -l json -d 'Shorthand for --output json (emit machine-readable envelope)'
 
 # Options for 'doctor'
 complete -c assignee -n "__fish_seen_subcommand_from doctor" -l json -d 'Emit the report as JSON instead of formatted text'

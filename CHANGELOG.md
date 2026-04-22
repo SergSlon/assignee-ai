@@ -12,6 +12,24 @@ later) will land when the project is ready for public release.
 
 ## [Unreleased]
 
+### Epic 94 — Wave 2 stories N1-N5 (2026-04-22)
+
+Five serial stories landing the NEW lane's first half. N6 splits into the final Wave-2 story dispatched alongside Wave 3 as a persistent opus-4-7[1m] team (3 members; file-slice-disjoint so no concurrent-write race).
+
+#### Fixed
+
+- **e94.N1** — VPC "public subnets only" routing. Epic 92 Wave 2.b added `vpcPublicOnlyPattern` but natural phrasings (`"public subnets only"`, `"public only"`, `"without NAT"`, etc.) didn't trigger it — bare VPC returned instead. Extended `vpcPublicOnlyPattern.keywords` with 7 new cues and mirrored them into `vpcNetworkingPattern.negativeKeywords` so the full compound doesn't re-claim them. Bare `"Create a VPC"` still returns a single resource (regression preserved from Wave 1). Closes B-03 (BLOCKER NEW). +15 pattern tests.
+- **e94.N2** — `list --json` envelope shape. Success path now emits `{ok:true, resources:[…], count:N, region:<str>}` instead of a bare array. Error path still emits `{ok:false, error:{code, message, hint}}` (Wave 94.R7 regression preserved). Empty-list case branches before `renderEmptyList()` so scripted consumers get the consistent envelope. Closes A-04 (HIGH NEW). +4 unit tests + 7 e2e.
+- **e94.N3** — `plan --json` envelope for arg-parse errors. Empty intent + malformed `--set` now throw `AssigneeError("MISSING_INTENT"|"BAD_SET_SYNTAX")` routed through Wave 94.R5's outer catch. Messages preserved verbatim for non-JSON consumers. Closes A-03 (HIGH NEW) + A-09 (LOW NEW). +6 unit tests + 4 e2e.
+- **e94.N4** — `--json` + `-o, --output <format>` flags on `apply` / `destroy` / `reconcile`. Envelope shape: `{ok:true, operation:"apply"|"destroy"|"reconcile", ...}` on success; `{ok:false, error:{code, message, hint}}` on failure. Classification mirrors Wave 94.R5 (typed `AssigneeError` preserves `code`/`hint`; untyped → `UNKNOWN_ERROR`). Logger stderr-only discipline preserved. Closes A-14 (MED NEW) + D-08 (LOW NEW). +17 unit tests + e2e.
+- **e94.N5** — Intent-parser umbrella. Three fixes in one story: (1) `COMPOUND_PATTERN_ID_LITERALS` fast-path so `"Create a static-website pattern"` routes to the exact PatternId bypassing negativeKeyword filters (6 compound IDs registered); (2) Retention raise for CloudWatch Logs `RetentionInDays<30` with `BP_ADJUSTED_VALUE` advisory; (3) `NAME_REWRITTEN` comparator in `plan-generator.ts` — when sanitizer rewrites user-supplied name (e.g. IP-shaped → `ip-X-X-X-X`), push advisory showing the `{from, to}` transformation. `intent-parser.ts` fully rewritten via `Write` (now 1217 LOC) — last fixer owning the file this epic. Closes A-11, A-15, C-07, C-08 (classification half — downstream required-field block is a separate UX story), C-09, D-05. +38 new tests.
+
+#### Test totals
+
+8712 → **8791 passing** (+79, all in `packages/core`). `packages/core` 6160 → 6212 (+52 N5-heavy). `apps/cli` 1289 → 1316 (+27 N2/N3/N4 e2e + unit). `apps/mcp-server` 624 unchanged. `packages/best-practices` 639 unchanged. 130 skipped (RUN_E2E=1 gated, up from 103).
+
+Full gate run green: `pnpm lint / check-types / lint:barrels / lint:shims / doc-lint / citation-lint / audit --prod / build / -r test`.
+
 ### Epic 94 — Wave 1 regression lane (2026-04-22)
 
 After Epic 92 shipped 107 findings "closed", Epic 93's post-fix dogfood sweep found **11 REGRESSIONS + 28 NEW + 13 PREEXISTING = 52 new findings**. Several Epic 92 stories shipped inert — the module landed but was never wired into the user-visible path. Epic 94 prioritises the regression lane: 9 stories closing 11 findings, **serial dispatch**. Every Wave 1 story's acceptance criterion is a **CLI-level end-to-end probe**, not just a unit test. 10/10 probes pass at wave close.

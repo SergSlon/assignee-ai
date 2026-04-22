@@ -110,12 +110,23 @@ describe("assignee list command", () => {
       expect.stringContaining('"resourceType"'),
     );
 
-    // Verify valid JSON was written
+    // Story 94-N2 (A-04): `list --json` success path used to emit a
+    // bare array. It now emits `{ok:true, resources:[...], count, region}`
+    // symmetric with the Wave 2.c failure envelope. Clients can switch
+    // on `.ok` to discriminate success from error and distinguish
+    // `resources:[]` (nothing managed) from a broken call. The legacy
+    // `Array.isArray(parsed)` assertion is updated to check the new
+    // envelope's `.resources` field — NOT weakened, just retargeted at
+    // the new shape. See story 94-n2-list-json-envelope.md.
     const writtenData = vi.mocked(stdoutWrite).mock.calls[0]![0] as string;
     const parsed = JSON.parse(writtenData);
-    expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed).toHaveLength(2);
-    expect(parsed[0].arn).toBe("arn:aws:s3:::my-bucket");
+    expect(parsed.ok).toBe(true);
+    expect(Array.isArray(parsed.resources)).toBe(true);
+    expect(parsed.resources).toHaveLength(2);
+    expect(parsed.resources[0].arn).toBe("arn:aws:s3:::my-bucket");
+    expect(parsed.count).toBe(2);
+    expect(typeof parsed.region).toBe("string");
+    expect(parsed.region.length).toBeGreaterThan(0);
     // Command completes without throwing (process.exit removed)
   });
 
@@ -534,6 +545,126 @@ describe("Epic 92 Wave 2.c — list --json error envelope (D-30)", () => {
     const parsed = JSON.parse(stdoutText);
     expect(parsed.ok).toBe(false);
     expect(parsed.error.code).toBe("LIST_ERROR");
+  });
+
+  it("--json empty result emits parseable { ok:true, resources:[], count:0, region } envelope (A-04)", async () => {
+    // Story 94-N2 (A-04): the empty case must NOT fall through to
+    // renderEmptyList() when `--json` is set — a scripted consumer
+    // running `jq -e .` needs the same envelope shape regardless of
+    // how many resources match. Pre-N2 the empty path returned without
+    // writing anything to stdout so jq ate a null input and failed.
+    const { listCommand, fetchManagedResources } = await importFresh();
+    vi.mocked(fetchManagedResources).mockResolvedValueOnce([]);
+
+    await listCommand.parseAsync(["node", "list", "--json"]);
+
+    const stdoutText = vi
+      .mocked(stdoutWrite)
+      .mock.calls.map((c) => String(c[0]))
+      .join("")
+      .trim();
+    expect(stdoutText.length).toBeGreaterThan(0);
+    const parsed = JSON.parse(stdoutText);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.resources).toEqual([]);
+    expect(parsed.count).toBe(0);
+    expect(typeof parsed.region).toBe("string");
+    expect(parsed.region.length).toBeGreaterThan(0);
+  });
+
+  it("--json --region eu-west-1 echoes the explicit region in the envelope (A-04)", async () => {
+    // Story 94-N2 (A-04): when the operator passes `--region`, the
+    // envelope's `.region` field must echo that value (not the default
+    // AWS_REGION). Lets scripts round-trip the request region through
+    // the response without re-deriving it from the ARNs.
+    const { listCommand, fetchManagedResources } = await importFresh();
+    vi.mocked(fetchManagedResources).mockResolvedValueOnce([]);
+
+    await listCommand.parseAsync([
+      "node",
+      "list",
+      "--json",
+      "--region",
+      "eu-west-1",
+    ]);
+
+    const stdoutText = vi
+      .mocked(stdoutWrite)
+      .mock.calls.map((c) => String(c[0]))
+      .join("")
+      .trim();
+    const parsed = JSON.parse(stdoutText);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.region).toBe("eu-west-1");
+    expect(parsed.count).toBe(0);
+  });
+
+  it("--json populated success emits ok:true with count == resources.length (A-04)", async () => {
+    // Story 94-N2 (A-04): `count` is redundant with `resources.length`
+    // but cheap to include — saves scripts a `length` call and lets
+    // them sanity-check the array didn't get truncated.
+    const { listCommand, fetchManagedResources } = await importFresh();
+    const resources = [
+      {
+        resourceType: "AWS::S3::Bucket",
+        arn: "arn:aws:s3:::my-bucket",
+        region: "us-east-1",
+        createdDate: "run-123",
+        estimatedMonthlyCost: "N/A",
+      },
+      {
+        resourceType: "AWS::Lambda::Function",
+        arn: "arn:aws:lambda:us-east-1:210987654321:function:my-fn",
+        region: "us-east-1",
+        createdDate: "run-456",
+        estimatedMonthlyCost: "$0.20",
+      },
+      {
+        resourceType: "AWS::SQS::Queue",
+        arn: "arn:aws:sqs:us-east-1:210987654321:my-queue",
+        region: "us-east-1",
+        createdDate: "run-789",
+        estimatedMonthlyCost: "Free",
+      },
+    ];
+    vi.mocked(fetchManagedResources).mockResolvedValueOnce(resources);
+
+    await listCommand.parseAsync(["node", "list", "--json"]);
+
+    const stdoutText = vi
+      .mocked(stdoutWrite)
+      .mock.calls.map((c) => String(c[0]))
+      .join("")
+      .trim();
+    const parsed = JSON.parse(stdoutText);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.resources).toHaveLength(3);
+    expect(parsed.count).toBe(3);
+    expect(parsed.count).toBe(parsed.resources.length);
+    // Field shape preserved — no renames, no drops.
+    expect(parsed.resources[0]).toEqual(resources[0]);
+    expect(parsed.resources[1]).toEqual(resources[1]);
+    expect(parsed.resources[2]).toEqual(resources[2]);
+  });
+
+  it("--json success envelope is discriminable from error envelope by `.ok` (A-04)", async () => {
+    // Story 94-N2 (A-04): the whole point of the envelope is that a
+    // script can switch on `.ok` without knowing anything else about
+    // the payload. Lock the invariant: success → `ok:true` and NO
+    // `.error`; error → `ok:false` and NO `.resources`.
+    const { listCommand, fetchManagedResources } = await importFresh();
+
+    vi.mocked(fetchManagedResources).mockResolvedValueOnce([]);
+    await listCommand.parseAsync(["node", "list", "--json"]);
+    const successText = vi
+      .mocked(stdoutWrite)
+      .mock.calls.map((c) => String(c[0]))
+      .join("")
+      .trim();
+    const successParsed = JSON.parse(successText);
+    expect(successParsed.ok).toBe(true);
+    expect(successParsed.error).toBeUndefined();
+    expect(successParsed.resources).toBeDefined();
   });
 
   it("text-mode (no --json) does NOT emit any JSON envelope to stdout", async () => {
