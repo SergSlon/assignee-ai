@@ -20,6 +20,25 @@ vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
 }));
 
+// e98.W1.B1: core's list path now reads the provision log via the
+// async MemoryService.readProvisions. Stub node:fs/promises.readFile
+// to return ENOENT so the non-taggable merge sees an empty store
+// (keeping the RGTA-only isolation this suite depends on).
+vi.mock("node:fs/promises", async () => {
+  const actual =
+    await vi.importActual<typeof import("node:fs/promises")>(
+      "node:fs/promises",
+    );
+  return {
+    ...actual,
+    readFile: vi.fn(() => {
+      const err = new Error("ENOENT: no such file");
+      (err as NodeJS.ErrnoException).code = "ENOENT";
+      throw err;
+    }),
+  };
+});
+
 // Mock constants
 vi.mock("../config/constants.js", () => ({
   ASSIGNEE_DIR: ".assignee",
@@ -97,6 +116,11 @@ describe("list-resources service", () => {
       expect(result[0]).toEqual({
         resourceType: "AWS::S3::Bucket",
         arn: "arn:aws:s3:::my-bucket",
+        // e98.W1.B1: taggable rows carry keyKind:"arn" so consumers can
+        // distinguish them from the new primaryIdentifier-keyed rows
+        // (Route / SRTA / VPCGatewayAttachment) that land via the
+        // provision-log merge.
+        keyKind: "arn",
         region: "us-east-1",
         createdDate: "N/A",
         estimatedMonthlyCost: "N/A",

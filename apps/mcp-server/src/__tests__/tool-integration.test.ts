@@ -35,6 +35,24 @@ vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
 }));
 
+// e98.W1.B1: core's list path now reads the provision log via the
+// async MemoryService.readProvisions. Stub to ENOENT so we keep the
+// RGTA-only isolation this suite depends on.
+vi.mock("node:fs/promises", async () => {
+  const actual =
+    await vi.importActual<typeof import("node:fs/promises")>(
+      "node:fs/promises",
+    );
+  return {
+    ...actual,
+    readFile: vi.fn(() => {
+      const err = new Error("ENOENT: no such file");
+      (err as NodeJS.ErrnoException).code = "ENOENT";
+      throw err;
+    }),
+  };
+});
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 type TextContent = Array<{ type: string; text: string }>;

@@ -11,6 +11,8 @@ import {
   ConfigurationError,
   UserCancelledError,
   CostEstimateLabel,
+  findProvisionRecord,
+  isNonTaggableConstruct,
 } from "@assignee/core";
 import { getCostSavingsEstimate } from "../../services/billing.js";
 import { getBillingMcpToolsAsync } from "../../services/mcp-client.js";
@@ -19,6 +21,7 @@ import {
   resolveResource,
   createTaggingClient,
   isAmbiguousResolution,
+  type ResolvedResource,
 } from "../../services/resource-resolver.js";
 import { pickFromMatches } from "./multi-match-prompt.js";
 import { operatorCredentials } from "../../config/operator-credentials.js";
@@ -55,19 +58,37 @@ export async function singleDestroyAction(
 
   stopSpinner();
 
+  // ── Non-taggable fallback (Epic 98 e98.W1.B1 / B-02) ────────────
+  // RGTA-based resolveResource never returns AWS::EC2::Route,
+  // SubnetRouteTableAssociation or VPCGatewayAttachment because AWS
+  // doesn't tag those. Before failing, look up the provision log by
+  // primaryIdentifier and synthesize a ResolvedResource so the rest of
+  // the flow (confirm / delete / render) works uniformly. The provision
+  // log was written by writeProvisionRecord at apply time.
+  let resolved: ResolvedResource;
   if (!resolution) {
-    throw new AssigneeError(
-      `No managed resource found matching "${resource}". Run 'assignee list' to see managed resources.`,
-      ErrorCode.DESTROY_ERROR,
-    );
+    const nonTaggable = await findProvisionRecord(resource);
+    if (!nonTaggable || !isNonTaggableConstruct(nonTaggable.resourceType)) {
+      throw new AssigneeError(
+        `No managed resource found matching "${resource}". Run 'assignee list' to see managed resources.`,
+        ErrorCode.DESTROY_TARGET_NOT_FOUND,
+      );
+    }
+    resolved = {
+      arn: "",
+      resourceType: nonTaggable.resourceType,
+      region: nonTaggable.region || awsConfig.region || AWS_REGION,
+      tags: {},
+      identifier: nonTaggable.key,
+    };
+  } else {
+    // Story 48.6: multi-match disambiguation — user picks one, or --yes /
+    // non-TTY stdin fails fast with an actionable error. Zero AWS mutation
+    // calls fire before disambiguation completes.
+    resolved = isAmbiguousResolution(resolution)
+      ? await pickFromMatches(resolution, { yes: opts.yes })
+      : resolution;
   }
-
-  // Story 48.6: multi-match disambiguation — user picks one, or --yes /
-  // non-TTY stdin fails fast with an actionable error. Zero AWS mutation
-  // calls fire before disambiguation completes.
-  const resolved = isAmbiguousResolution(resolution)
-    ? await pickFromMatches(resolution, { yes: opts.yes })
-    : resolution;
 
   // ── Estimate cost savings (Story 19.7) ──────────────────────────
   const billingTools = await getBillingMcpToolsAsync();

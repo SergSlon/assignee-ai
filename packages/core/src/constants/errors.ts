@@ -23,6 +23,13 @@ export const ProcessExitCode = {
 export const ErrorCode = {
   UNKNOWN: "UNKNOWN",
   DESTROY_ERROR: "DESTROY_ERROR",
+  /**
+   * Epic 98 e98.W1.B1 (B-02 BLOCKER): emitted by destroy when the input
+   * matches neither the RGTA/IAM name index nor the provision-log
+   * primaryIdentifier index. Distinct from DESTROY_ERROR so scripts can
+   * distinguish "typo / stale state" from "CCAPI rejected the delete".
+   */
+  DESTROY_TARGET_NOT_FOUND: "DESTROY_TARGET_NOT_FOUND",
   INVALID_SOURCE_DIR: "INVALID_SOURCE_DIR",
   USAGE_ERROR: "USAGE_ERROR",
   MISSING_REQUIRED_FIELDS: "MISSING_REQUIRED_FIELDS",

@@ -22,6 +22,28 @@ vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
 }));
 
+// e98.W1.B1: `fetchManagedResources` now reads the provision log for
+// non-taggable constructs (Route/SRTA/VPCGatewayAttachment) via the
+// async `readProvisions` path. Mock the MemoryService's underlying
+// fs/promises readFile to return "file not found" so the non-taggable
+// merge sees an empty provision log. Individual tests can override
+// when exercising the non-taggable merge. The `...actual` spread
+// preserves the other fs/promises exports other code paths may need.
+vi.mock("node:fs/promises", async () => {
+  const actual =
+    await vi.importActual<typeof import("node:fs/promises")>(
+      "node:fs/promises",
+    );
+  return {
+    ...actual,
+    readFile: vi.fn(() => {
+      const err = new Error("ENOENT: no such file");
+      (err as NodeJS.ErrnoException).code = "ENOENT";
+      throw err;
+    }),
+  };
+});
+
 import * as fs from "node:fs";
 import { ResourceGroupsTaggingAPIClient } from "@aws-sdk/client-resource-groups-tagging-api";
 import { fetchManagedResources } from "../services/list-resources.js";
@@ -79,9 +101,14 @@ describe("list_managed_resources", () => {
     const resources = await fetchManagedResources("us-east-1");
 
     expect(resources).toHaveLength(2);
+    // e98.W1.B1 added the `keyKind` discriminator to ManagedResource so
+    // CLI + MCP can distinguish ARN-keyed rows (taggable) from the new
+    // primaryIdentifier-keyed rows (Route / SRTA / VPCGatewayAttachment).
+    // Both rows below are taggable → keyKind === "arn".
     expect(resources[0]).toEqual({
       resourceType: "AWS::S3::Bucket",
       arn: "arn:aws:s3:::my-bucket-12345",
+      keyKind: "arn",
       region: "us-east-1",
       createdDate: "2026-03-15T10:30:00Z",
       estimatedMonthlyCost: "N/A",
@@ -89,6 +116,7 @@ describe("list_managed_resources", () => {
     expect(resources[1]).toEqual({
       resourceType: "AWS::Lambda::Function",
       arn: "arn:aws:lambda:us-east-1:123456789012:function:my-function",
+      keyKind: "arn",
       region: "us-east-1",
       createdDate: "2026-03-16T11:00:00Z",
       estimatedMonthlyCost: "N/A",

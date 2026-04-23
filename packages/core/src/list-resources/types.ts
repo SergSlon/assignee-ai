@@ -16,6 +16,22 @@ export interface ManagedResource {
   region: string;
   createdDate: string;
   estimatedMonthlyCost: string;
+  /**
+   * CCAPI primaryIdentifier for resources whose `arn` is empty (non-
+   * taggable constructs: AWS::EC2::Route, SubnetRouteTableAssociation,
+   * VPCGatewayAttachment). Omitted for taggable resources where `arn`
+   * is authoritative.
+   *
+   * Epic 98 e98.W1.B1 (B-02 BLOCKER).
+   */
+  primaryIdentifier?: string;
+  /**
+   * Discriminator for the identifier shape. Defaults to `"arn"` when
+   * unset (backward-compatible with Epic 49's Story 49.2 shape). When
+   * `"primaryIdentifier"`, `arn` is the empty string and consumers
+   * should render the resource from `primaryIdentifier` + type.
+   */
+  keyKind?: "arn" | "primaryIdentifier";
 }
 
 /** Provision log entry from `~/.assignee/memory/provisions.json`. */

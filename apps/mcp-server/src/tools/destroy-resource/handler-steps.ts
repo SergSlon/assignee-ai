@@ -30,6 +30,8 @@ import {
   CCAPI_FALLBACK_TYPES,
   CCAPI_REDIRECT_TYPES,
   MissingAssigneeCredentialsError,
+  findProvisionRecord,
+  isNonTaggableConstruct,
   type ExplicitAwsCredentials,
 } from "@assignee/core";
 import {
@@ -68,6 +70,23 @@ export async function resolveStep(
     };
   }
   if (!resolved) {
+    // Epic 98 e98.W1.B1 (B-02) mirror: RGTA never returns Route / SRTA /
+    // VPCGatewayAttachment because AWS doesn't tag those. Fall back to
+    // the provision log by primaryIdentifier so MCP destroy closes the
+    // same gap the CLI closed. Matches `apps/cli/src/commands/destroy/
+    // single-flow.ts`.
+    const nonTaggable = await findProvisionRecord(identifier);
+    if (nonTaggable && isNonTaggableConstruct(nonTaggable.resourceType)) {
+      return {
+        kind: "continue",
+        context: {
+          arn: "",
+          resourceType: nonTaggable.resourceType,
+          region: nonTaggable.region || region,
+          identifier: nonTaggable.key,
+        },
+      };
+    }
     return { kind: "done", response: unresolvedResponse(identifier) };
   }
   return { kind: "continue", context: resolved };

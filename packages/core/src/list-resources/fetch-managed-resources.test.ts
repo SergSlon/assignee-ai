@@ -7,6 +7,14 @@ vi.mock("./provision-log.js", () => ({
   })),
 }));
 
+// e98.W1.B1: the list path now also reads the provision log for non-
+// taggable constructs. These tests assume an empty store unless they
+// seed something explicit — mock the module to default to an empty
+// projection. Individual tests can override via vi.mocked(...).
+vi.mock("../managed-resources/index.js", () => ({
+  listNonTaggableProvisionRecords: vi.fn(async () => []),
+}));
+
 import {
   fetchManagedResources,
   hasManagedByTag,
