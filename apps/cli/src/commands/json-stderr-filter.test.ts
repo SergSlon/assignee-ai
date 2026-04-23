@@ -234,6 +234,112 @@ describe("installJsonStderrFilter — enabled mode", () => {
   });
 });
 
+// ── Epic 98 e98.W5.N3 — extended prefix set ────────────────────────────────
+describe("installJsonStderrFilter — Epic 98 W5.N3 extended prefixes", () => {
+  it("drops bare `Error: ...` lines (D-01 closure — Commander + throw paths)", () => {
+    startCapture();
+    const { restore } = installJsonStderrFilter(true);
+    try {
+      process.stderr.write(
+        'Error: Missing intent. Usage: assignee plan "Create an S3 bucket..."\n',
+      );
+      process.stderr.write("Error: Schema fetch failed\n");
+    } finally {
+      restore();
+    }
+    stopCapture();
+    expect(captured).toEqual([]);
+  });
+
+  it("drops first-run banner `Assignee v0.1.0 — first run...` (D-02 closure)", () => {
+    startCapture();
+    const { restore } = installJsonStderrFilter(true);
+    try {
+      process.stderr.write(
+        "Assignee v0.1.0 — first run, auto-detecting environment...\n",
+      );
+    } finally {
+      restore();
+    }
+    stopCapture();
+    expect(captured).toEqual([]);
+  });
+
+  it("drops first-run banner across hypothetical version bumps (prefix match)", () => {
+    // Future-proof: the filter matches `Assignee v` so `0.2.0`, `1.0.0`,
+    // etc. all get dropped without manifest churn.
+    startCapture();
+    const { restore } = installJsonStderrFilter(true);
+    try {
+      process.stderr.write(
+        "Assignee v1.0.0 — first run, auto-detecting environment...\n",
+      );
+      process.stderr.write(
+        "Assignee v2.3.4 — first run, auto-detecting environment...\n",
+      );
+    } finally {
+      restore();
+    }
+    stopCapture();
+    expect(captured).toEqual([]);
+  });
+
+  it("drops `[assignee] WARNING: BUDGET EXCEEDED ...` (D-23 closure)", () => {
+    startCapture();
+    const { restore } = installJsonStderrFilter(true);
+    try {
+      process.stderr.write(
+        "[assignee] WARNING: BUDGET EXCEEDED: MCP startup (plan) took 9967ms (budget: 3000ms)\n",
+      );
+      process.stderr.write(
+        "[assignee] WARNING: BUDGET EXCEEDED: Total command runtime took 74472ms (budget: 60000ms)\n",
+      );
+    } finally {
+      restore();
+    }
+    stopCapture();
+    expect(captured).toEqual([]);
+  });
+
+  it('drops ambiguous-shorthand `Shorthand "..." resolved to ...` (D-12 closure)', () => {
+    startCapture();
+    const { restore } = installJsonStderrFilter(true);
+    try {
+      process.stderr.write(
+        'Shorthand "eventbridge" resolved to AWS::Events::Rule, but Events also supports: AWS::Events::EventBus, AWS::Events::Connection. Pass the full CFN type if you meant one of those.\n',
+      );
+    } finally {
+      restore();
+    }
+    stopCapture();
+    expect(captured).toEqual([]);
+  });
+
+  it("passes through legitimate stderr that mentions but doesn't START with the new prefixes", () => {
+    // Leading-prefix-only discipline must hold for the new entries too.
+    startCapture();
+    const { restore } = installJsonStderrFilter(true);
+    try {
+      process.stderr.write(
+        'log: saw "Error: something" inside a CloudTrail record\n',
+      );
+      process.stderr.write("info: running Assignee v0.1.0 plan cycle\n");
+      process.stderr.write("note: [assignee] WARNING: is a prefix we filter\n");
+      process.stderr.write(
+        'record: the Shorthand "x" string appears mid-sentence here\n',
+      );
+    } finally {
+      restore();
+    }
+    stopCapture();
+    expect(captured).toHaveLength(4);
+    expect(captured[0]).toContain("Error: something");
+    expect(captured[1]).toContain("Assignee v0.1.0");
+    expect(captured[2]).toContain("[assignee] WARNING:");
+    expect(captured[3]).toContain('Shorthand "x"');
+  });
+});
+
 describe("installJsonStderrFilter — prefix matching precision", () => {
   it("does NOT drop writes that merely contain '[ERROR]' later in the line", () => {
     // Only LEADING prefix counts. A stdout-like log line that mentions

@@ -980,8 +980,15 @@ describe("drift command definition", () => {
     expect(optionNames).toContain("--output-file");
     expect(optionNames).toContain("--concurrency");
     expect(optionNames).toContain("--detailed");
-    // Negative assertions: removed / renamed local options must NOT come back.
-    expect(optionNames).not.toContain("--output");
+    // Epic 98 e98.W5.N3 (B-07 / D-16): `--output` is now present as
+    // the `-o, --output <format>` enum selector. This REPLACES the
+    // prior "must NOT contain --output" invariant (which defended the
+    // `--output <file>` → `--output-file <file>` rename). The new
+    // `--output` is semantically distinct from `--output-file` and
+    // matches the flag surface of plan/apply/destroy/reconcile.
+    expect(optionNames).toContain("--output");
+    // Negative assertions: globally-scoped local options must NOT come
+    // back (`--no-color` and `--verbose` are global on the root program).
     expect(optionNames).not.toContain("--no-color");
     expect(optionNames).not.toContain("--verbose");
   });

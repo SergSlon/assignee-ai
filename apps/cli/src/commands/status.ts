@@ -52,6 +52,8 @@ import {
   INVALID_RESOURCE_TYPE_CODE,
 } from "./resource-type-filter.js";
 import { log, LOG_ACTIONS, LogLevel } from "../utils/logger.js";
+import { installJsonStderrFilter } from "./json-stderr-filter.js";
+import { resolveJsonMode } from "./output-format.js";
 
 export const statusCommand = new Command(CommandName.STATUS)
   .description(CommandDescription.STATUS)
@@ -64,7 +66,10 @@ export const statusCommand = new Command(CommandName.STATUS)
     "[runId]",
     "Optional run id. `status` is a fleet-level summary and cannot filter by run — when you pass one we emit a warning and point you at `assignee list --json` for the per-run query path.",
   )
-  .option("--json", "Output status data as JSON")
+  // Epic 98 e98.W5.N3 (B-07 / D-16): uniform `--json` + `-o, --output
+  // <format>` across every command.
+  .option("-o, --output <format>", "Output format (json|text)", "text")
+  .option("--json", "Shorthand for --output json")
   .option("--region <region>", "Filter to a specific AWS region")
   .option(
     "--resource-type <type>",
@@ -106,6 +111,7 @@ status is read-only. No --yes required.
       runId: string | undefined,
       opts: {
         json?: boolean;
+        output?: string;
         region?: string;
         resourceType?: string;
         bpCoverage?: boolean;
@@ -113,76 +119,87 @@ status is read-only. No --yes required.
         includeStructuralGaps?: boolean;
       },
     ) => {
-      // Per-invocation correlation id. Used to tag the STATUS_STARTED /
-      // STATUS_COMPLETE events so a single run can be grep'd end-to-end
-      // out of `~/.assignee/logs/cli-YYYY-MM-DD.jsonl`.
-      const invocationId = crypto.randomUUID();
-      const startTs = Date.now();
-
-      log({
-        ts: new Date().toISOString(),
-        runId: invocationId,
-        level: LogLevel.INFO,
-        action: LOG_ACTIONS.STATUS_STARTED,
-        extras: {
-          intent: "status",
-          ...(runId !== undefined ? { suppliedRunId: runId } : {}),
-          ...(opts.bpCoverage === true ? { mode: "bp-coverage" } : {}),
-          ...(opts.json === true ? { json: true } : {}),
-        },
-      });
-
-      // A-12: warn the caller that the positional runId doesn't gate
-      // the summary. We still execute the default flow so the user
-      // isn't punished — they learn about the real query surface
-      // (`list --json`) without losing the output they wanted.
-      if (runId !== undefined && runId.length > 0) {
-        log({
-          ts: new Date().toISOString(),
-          runId: invocationId,
-          level: LogLevel.WARN,
-          action: LOG_ACTIONS.STATUS_STARTED,
-          extras: {
-            warning: "runId-positional-ignored",
-            suppliedRunId: runId,
-            hint: "`assignee status` is a fleet-level summary. Use `assignee list --json` (optionally filtered by --resource-type / --region) to query a specific run's resources.",
-          },
-        });
-        // In non-JSON mode also surface the warning on stderr so a
-        // user who didn't pass --verbose still learns why their
-        // positional is not being honoured. JSON mode keeps stderr
-        // minimal so scripted consumers don't get surprise bytes.
-        if (opts.json !== true) {
-          process.stderr.write(
-            `[WARN] \`status\` ignores the runId positional ("${runId}"). ` +
-              "Use `assignee list --json` for per-run queries; continuing with fleet-level summary.\n",
-          );
-        }
-      }
-
+      // Epic 98 e98.W5.N3: normalise `--json` / `--output json` and
+      // install the stderr filter under JSON mode. opts.json is
+      // kept in sync so the pre-existing branches that still read
+      // `opts.json` (inside `runStatusBody`) remain correct.
+      const jsonMode = resolveJsonMode(opts);
+      opts.json = jsonMode || opts.json;
+      const stderrFilter = installJsonStderrFilter(jsonMode);
       try {
-        await runStatusBody(opts);
+        // Per-invocation correlation id. Used to tag the STATUS_STARTED /
+        // STATUS_COMPLETE events so a single run can be grep'd end-to-end
+        // out of `~/.assignee/logs/cli-YYYY-MM-DD.jsonl`.
+        const invocationId = crypto.randomUUID();
+        const startTs = Date.now();
+
         log({
           ts: new Date().toISOString(),
           runId: invocationId,
           level: LogLevel.INFO,
-          action: LOG_ACTIONS.STATUS_COMPLETE,
-          durationMs: Date.now() - startTs,
-          result: "ok",
-        });
-      } catch (err) {
-        log({
-          ts: new Date().toISOString(),
-          runId: invocationId,
-          level: LogLevel.ERROR,
-          action: LOG_ACTIONS.STATUS_COMPLETE,
-          durationMs: Date.now() - startTs,
-          result: "error",
+          action: LOG_ACTIONS.STATUS_STARTED,
           extras: {
-            errorMessage: err instanceof Error ? err.message : String(err),
+            intent: "status",
+            ...(runId !== undefined ? { suppliedRunId: runId } : {}),
+            ...(opts.bpCoverage === true ? { mode: "bp-coverage" } : {}),
+            ...(opts.json === true ? { json: true } : {}),
           },
         });
-        throw err;
+
+        // A-12: warn the caller that the positional runId doesn't gate
+        // the summary. We still execute the default flow so the user
+        // isn't punished — they learn about the real query surface
+        // (`list --json`) without losing the output they wanted.
+        if (runId !== undefined && runId.length > 0) {
+          log({
+            ts: new Date().toISOString(),
+            runId: invocationId,
+            level: LogLevel.WARN,
+            action: LOG_ACTIONS.STATUS_STARTED,
+            extras: {
+              warning: "runId-positional-ignored",
+              suppliedRunId: runId,
+              hint: "`assignee status` is a fleet-level summary. Use `assignee list --json` (optionally filtered by --resource-type / --region) to query a specific run's resources.",
+            },
+          });
+          // In non-JSON mode also surface the warning on stderr so a
+          // user who didn't pass --verbose still learns why their
+          // positional is not being honoured. JSON mode keeps stderr
+          // minimal so scripted consumers don't get surprise bytes.
+          if (opts.json !== true) {
+            process.stderr.write(
+              `[WARN] \`status\` ignores the runId positional ("${runId}"). ` +
+                "Use `assignee list --json` for per-run queries; continuing with fleet-level summary.\n",
+            );
+          }
+        }
+
+        try {
+          await runStatusBody(opts);
+          log({
+            ts: new Date().toISOString(),
+            runId: invocationId,
+            level: LogLevel.INFO,
+            action: LOG_ACTIONS.STATUS_COMPLETE,
+            durationMs: Date.now() - startTs,
+            result: "ok",
+          });
+        } catch (err) {
+          log({
+            ts: new Date().toISOString(),
+            runId: invocationId,
+            level: LogLevel.ERROR,
+            action: LOG_ACTIONS.STATUS_COMPLETE,
+            durationMs: Date.now() - startTs,
+            result: "error",
+            extras: {
+              errorMessage: err instanceof Error ? err.message : String(err),
+            },
+          });
+          throw err;
+        }
+      } finally {
+        stderrFilter.restore();
       }
     },
   );
@@ -194,6 +211,7 @@ status is read-only. No --yes required.
  */
 async function runStatusBody(opts: {
   json?: boolean;
+  output?: string;
   region?: string;
   resourceType?: string;
   bpCoverage?: boolean;

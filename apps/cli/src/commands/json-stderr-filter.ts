@@ -1,5 +1,8 @@
 /**
- * JSON-mode stderr filter — Epic 96 Wave 3 N4 (D-04).
+ * JSON-mode stderr filter — Epic 96 Wave 3 N4 (D-04), extended by
+ * Epic 98 e98.W5.N3 to cover every human-formatted leak source
+ * identified in Epic 97 slice D (D-01, D-02, D-12, D-23) plus the
+ * cross-command surface (`--json` every command per B-07 / D-16).
  *
  * When a command runs with `--output json` / `--json`, stdout carries a
  * single machine-readable envelope and stderr is supposed to remain
@@ -13,28 +16,46 @@
  * The existing stdout suppressor (per-command) blackholes stdout and
  * flushes a single envelope on completion. This module mirrors the
  * pattern for stderr: while the filter is installed, any write that
- * begins with one of the `renderError` prefixes is dropped. Structured
+ * begins with one of the prefixes below is dropped. Structured
  * log lines (`{"ts":...,"level":"info",...}`) and any other stderr
  * writes pass through unchanged. Stderr is NOT blackholed — the fix is
  * a surgical prefix filter, not a nuke.
  *
- * Scope: imported by `apply.ts` / `destroy.ts` / `reconcile.ts` — the
- * three commands cli-fixer owns. Other JSON-mode commands (plan / list
- * / drift / status) own their own wrappers and can adopt this helper in
- * a follow-up wave; this commit fixes the three within-scope surfaces.
+ * Scope: imported by ALL 9 command files (plan / apply / destroy /
+ * reconcile / list / drift / status / doctor / optimize) so the JSON
+ * contract is uniform across the CLI surface.
  */
 
 /**
- * Prefixes emitted by `renderError` that identify a human-readable
- * error block. Two flavours are supported because the renderer branches
- * on `process.stderr.isTTY`:
- *   - non-TTY: `[ERROR] ...\n[CONTEXT] ...\n[FIX] ...\n`
- *   - TTY: `\u2716 Error: ...\n  Why: ...\n  How to Fix: ...\n`
- *     (wrapped in ANSI colour codes by chalk, so we scan after the
- *     first non-escape character).
+ * Prefixes that identify a human-readable line leaking onto stderr
+ * while the command is in `--json` / `--output json` mode. Sources:
+ *
+ *   1. `renderError()` \u2014 two flavours because the renderer branches
+ *      on `process.stderr.isTTY`:
+ *        - non-TTY: `[ERROR] ...\n[CONTEXT] ...\n[FIX] ...\n`
+ *        - TTY: `\u2716 Error: ...\n  Why: ...\n  How to Fix: ...\n`
+ *          (wrapped in ANSI colour codes by chalk, stripped before match).
+ *
+ *   2. Bare `Error:` prose \u2014 Commander-style usage errors
+ *      (`Error: Missing intent...`) and plain `throw new Error(...)`
+ *      paths that print `Error: <msg>`. Closes D-01.
+ *
+ *   3. First-run banner \u2014 `Assignee v0.1.0 \u2014 first run, auto-detecting
+ *      environment...`. Emitted once, on cold-start, regardless of
+ *      output mode. Closes D-02.
+ *
+ *   4. Budget-exceeded WARN \u2014 `[assignee] WARNING: BUDGET EXCEEDED:
+ *      ...` from `apps/cli/src/telemetry/timing.ts:checkTimingsAgainstBudgets`.
+ *      Closes D-23.
+ *
+ *   5. Ambiguous-shorthand WARN \u2014 `Shorthand "<x>" resolved to ...`
+ *      from `apps/cli/src/commands/resource-type-filter.ts:warnAmbiguousShorthandIfNeeded`.
+ *      Closes D-12.
  *
  * Kept as a readonly string[] so the matcher runs a tight loop without
- * a regex engine per write.
+ * a regex engine per write. Prefixes are intentionally narrow \u2014 we do
+ * NOT blackhole generic messages like "Warning:" or anything without
+ * an identifying marker, so unrelated warnings still reach stderr.
  */
 const HUMAN_ERROR_PREFIXES: readonly string[] = [
   "[ERROR] ",
@@ -43,6 +64,18 @@ const HUMAN_ERROR_PREFIXES: readonly string[] = [
   "\u2716 Error: ",
   "  Why: ",
   "  How to Fix: ",
+  // D-01: Commander-style usage errors + plain `Error:` prose.
+  "Error: ",
+  // D-02: First-run banner. `Assignee v0.1.0 \u2014 first run, ...` \u2014
+  // matches on the "Assignee v" prefix so version bumps don't break
+  // the filter (e.g. `Assignee v0.2.0`, `Assignee v1.0.0`).
+  "Assignee v",
+  // D-23: Budget-exceeded WARN emitted by
+  // `apps/cli/src/telemetry/timing.ts`.
+  "[assignee] WARNING: ",
+  // D-12: Ambiguous-shorthand WARN emitted by
+  // `apps/cli/src/commands/resource-type-filter.ts`.
+  'Shorthand "',
 ];
 
 /**

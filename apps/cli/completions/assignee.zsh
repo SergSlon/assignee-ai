@@ -82,7 +82,8 @@ _assignee() {
             '--status[Filter by drift status]:status:' \
             '--exclude[Exclude a drift status from output (e.g. --exclude BASELINE_MISSING for CI)]:status:' \
             '--baseline[Adopt the given [resource-id] into drift tracking by snapshotting its live CCAPI state as a baseline]' \
-            '--json[Output as JSON]' \
+            '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json]' \
             '--output-file[Write JSON report to file (requires --json)]:file:' \
             '--concurrency[Max parallel drift checks (default 10, max 50)]:n:' \
             '--detailed[Show all fields including matching ones]' \
@@ -91,12 +92,14 @@ _assignee() {
         optimize)
           _arguments \
             '--region[AWS region to scan (defaults to AWS_REGION env var)]:region:' \
-            '--json[Emit recommendations as JSON instead of a table]' \
+            '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json]' \
             '--min-savings[Drop recommendations whose projected monthly savings are below this USD threshold (e.g. 10 for ≥$10/mo)]:usd:'
           ;;
         list)
           _arguments \
-            '--json[Output as JSON array]' \
+            '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json]' \
             '--region[Filter to a specific AWS region]:region:' \
             '--resource-type[Filter to one CFN resource type (e.g. AWS\:\:S3\:\:Bucket or shorthand S3, Lambda)]:type:' \
             '--total-cost[After the table, print a total estimated monthly cost across all resources (skips Free / N/A / unparseable entries)]'
@@ -111,7 +114,8 @@ _assignee() {
           ;;
         status)
           _arguments \
-            '--json[Output status data as JSON]' \
+            '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json]' \
             '--region[Filter to a specific AWS region]:region:' \
             '--resource-type[Filter to one CFN resource type (e.g. AWS\:\:S3\:\:Bucket or shorthand S3, Lambda)]:type:' \
             '--bp-coverage[Show BP rule coverage dashboard]' \
@@ -129,7 +133,8 @@ _assignee() {
           ;;
         doctor)
           _arguments \
-            '--json[Emit the report as JSON instead of formatted text]' \
+            '--output[Output format (json|text)]:format:' \
+            '--json[Shorthand for --output json]' \
             '--skip-bedrock[Skip the Bedrock LLM invoke check]' \
             '--skip-mcp[Skip the MCP server launch probe]' \
             '--short[Fast identity-only summary\: STS account + ARN + region + active config (replaces the removed `whoami` command)]'

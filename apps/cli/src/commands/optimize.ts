@@ -20,6 +20,8 @@ import { runCommand } from "../utils/command-runner.js";
 import { LOG_ACTIONS } from "../utils/logger.js";
 import { runOptimize } from "./optimize/orchestrator.js";
 import type { OptimizeOpts } from "./optimize/types.js";
+import { installJsonStderrFilter } from "./json-stderr-filter.js";
+import { resolveJsonMode } from "./output-format.js";
 
 export const optimizeCommand = new Command("optimize")
   .description("Scan managed resources for cost-rightsizing opportunities")
@@ -28,7 +30,10 @@ export const optimizeCommand = new Command("optimize")
     "--region <region>",
     "AWS region to scan (defaults to AWS_REGION env var)",
   )
-  .option("--json", "Emit recommendations as JSON instead of a table")
+  // Epic 98 e98.W5.N3 (B-07 / D-16): uniform `--json` + `-o, --output
+  // <format>` across every command.
+  .option("-o, --output <format>", "Output format (json|text)", "text")
+  .option("--json", "Shorthand for --output json")
   .option(
     "--min-savings <usd>",
     "Drop recommendations whose projected monthly savings are below this USD threshold (e.g. 10 for ≥$10/mo)",
@@ -53,15 +58,26 @@ colour output.
 `,
   )
   .action(async (resourceId: string | undefined, opts: OptimizeOpts) => {
-    await runCommand({
-      intent: "optimize",
-      commandName: "optimize",
-      startAction: LOG_ACTIONS.PLAN_STARTED,
-      endAction: LOG_ACTIONS.PLAN_COMPLETE,
-      errorPrefix: "Optimize failed",
-      errorHint:
-        "Check that AWS credentials are configured and the Pricing MCP server is reachable.",
-      silent: opts.json === true,
-      run: async (ctx) => runOptimize(ctx, { resourceId, opts }),
-    });
+    // Epic 98 e98.W5.N3: normalise `--json` + `--output json` and
+    // install the stderr filter under JSON mode. `opts.json` is kept
+    // in sync so the downstream `silent: opts.json === true` branch
+    // in `runCommand` still gates correctly.
+    const jsonMode = resolveJsonMode(opts);
+    opts.json = jsonMode || opts.json;
+    const stderrFilter = installJsonStderrFilter(jsonMode);
+    try {
+      await runCommand({
+        intent: "optimize",
+        commandName: "optimize",
+        startAction: LOG_ACTIONS.PLAN_STARTED,
+        endAction: LOG_ACTIONS.PLAN_COMPLETE,
+        errorPrefix: "Optimize failed",
+        errorHint:
+          "Check that AWS credentials are configured and the Pricing MCP server is reachable.",
+        silent: opts.json === true,
+        run: async (ctx) => runOptimize(ctx, { resourceId, opts }),
+      });
+    } finally {
+      stderrFilter.restore();
+    }
   });

@@ -21,6 +21,12 @@ export interface DriftOpts {
   exclude?: string;
   baseline?: boolean;
   json?: boolean;
+  /**
+   * Epic 98 e98.W5.N3 (B-07 / D-16): `-o, --output <format>` added for
+   * surface parity with plan/apply/destroy/reconcile. `--json` is a
+   * shorthand normalised into this value by `resolveJsonMode`.
+   */
+  output?: string;
   outputFile?: string;
   concurrency?: string;
   detailed?: boolean;
