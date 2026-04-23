@@ -105,25 +105,103 @@ const LLM_PATH_PLUGIN_DEFAULT_BACKFILL_ALLOWLIST: readonly string[] = [
 ];
 
 /**
- * Injects plugin-level `defaults` for keys NOT already present in
- * `desiredState`. Runs AFTER `stripPlaceholders` + `mergeElicitedOptions`
- * and BEFORE `sanitizeAgainstSchema`, so:
+ * True when `v` is an "empty leaf" — a value that carries no user or
+ * LLM signal and therefore should be replaced by a plugin default
+ * (not skipped). Covers the four shapes the LLM commonly emits when
+ * it knows a CFN key exists but has nothing to say about it:
  *
- *   1. LLM-emitted values win (plugin default does not clobber them).
+ *   - `undefined`   — the key is absent entirely.
+ *   - `null`        — the LLM emitted a null placeholder.
+ *   - `{}`          — empty object (the C-R1 bug: LLM emits
+ *                     `CreditSpecification: {}` on larger EC2 intents,
+ *                     which the old `!== undefined` check treated as
+ *                     "user-intent present" and skipped the default).
+ *   - `[]`          — empty array (mirror of `{}` for list-valued keys).
+ *   - `""`          — empty string (defensive).
+ *
+ * Non-empty objects, arrays, zeros, false, and all truthy primitives
+ * are NOT empty — they carry signal and the plugin default must yield
+ * to them (with deep-merge backfilling missing sub-keys for objects).
+ *
+ * e98.W2.R2 — exported so callers outside this module (and the unit
+ * tests) can share the same emptiness contract.
+ */
+export function isEmptyLeaf(v: unknown): boolean {
+  if (v === undefined || v === null) return true;
+  if (v === "") return true;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v as object).length === 0;
+  return false;
+}
+
+/**
+ * Deep-merge a plugin default object over an LLM-emitted shell. Used by
+ * `mergePluginDefaults` so partial LLM objects (e.g.
+ * `CreditSpecification: {SomeOther: "x"}`) still pick up missing plugin-
+ * default sub-keys like `CPUCredits: "standard"`.
+ *
+ * Semantics: LLM sub-keys win. Plugin defaults fill empty-leaf sub-keys
+ * (recursive — nested empty objects are themselves backfilled). Arrays
+ * are treated atomically — if the LLM emitted a non-empty array, the
+ * plugin default is NOT merged into it (element-wise merge is out of
+ * scope and would clobber user-ordered lists).
+ */
+function deepMergeDefault(
+  llmValue: Record<string, unknown>,
+  defaultValue: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...llmValue };
+  for (const [subKey, subDefault] of Object.entries(defaultValue)) {
+    const existing = result[subKey];
+    if (isEmptyLeaf(existing)) {
+      result[subKey] = subDefault;
+      continue;
+    }
+    // Recurse into nested objects (both sides plain objects, not arrays).
+    if (
+      existing !== null &&
+      typeof existing === "object" &&
+      !Array.isArray(existing) &&
+      subDefault !== null &&
+      typeof subDefault === "object" &&
+      !Array.isArray(subDefault)
+    ) {
+      result[subKey] = deepMergeDefault(
+        existing as Record<string, unknown>,
+        subDefault as Record<string, unknown>,
+      );
+    }
+    // Otherwise the LLM value is a non-empty primitive / array — keep it.
+  }
+  return result;
+}
+
+/**
+ * Injects plugin-level `defaults` for keys NOT already carrying an
+ * empty-leaf value in `desiredState`. Runs AFTER `stripPlaceholders` +
+ * `mergeElicitedOptions` and BEFORE `sanitizeAgainstSchema`, so:
+ *
+ *   1. LLM-emitted non-empty values win (plugin default does not
+ *      clobber them). For object-valued defaults, missing sub-keys are
+ *      deep-merge backfilled — e.g. a stub-LLM
+ *      `{CreditSpecification: {Something: "x"}}` picks up the plugin's
+ *      `CPUCredits: "standard"` sub-key while keeping `Something`.
  *   2. User-elicited values win (already merged in by
- *      `mergeElicitedOptions`; plugin default does not clobber them either).
+ *      `mergeElicitedOptions`; plugin default does not clobber them).
  *   3. Plugin-default placeholders the LLM emitted verbatim have been
- *      stripped by `stripPlaceholders` first — so the injection fills the
- *      gap created by stripping, with the canonical plugin value.
+ *      stripped by `stripPlaceholders` first — so the injection fills
+ *      the gap created by stripping, with the canonical plugin value.
  *   4. Downstream `sanitizeAgainstSchema` walks the CFN schema; any
  *      injected key that the schema rejects will be stripped cleanly
  *      rather than shipping a bad value.
  *
- * e96.W2.R5-part-2 — this is the missing analogue to compound-plan's
- * `{...patternDefaults, ...transformedOptions}` spread. Without it,
- * plugin defaults lived in the plugin but never reached the plan when
- * the LLM omitted the key entirely. Root cause of the C-01 regression
- * that survived the earlier casing-alignment fix.
+ * e98.W2.R2 (C-R1) — the previous skip-condition
+ * `result[key] !== undefined` treated LLM-emitted `{}` as non-empty,
+ * so the plan-display row for `CreditSpecification` re-blanked on any
+ * EC2 intent where the LLM emitted an empty shell (reproducible on
+ * `Create an EC2 instance t3.large with 100GB gp3 volume`). Replacing
+ * the guard with `!isEmptyLeaf(...)` closes the forcing-flip that the
+ * Epic 96 casing-alignment fix did not address.
  *
  * Scoped to resource types on `LLM_PATH_PLUGIN_DEFAULT_BACKFILL_ALLOWLIST`
  * (today: EC2::Instance only) because blanket backfill silently
@@ -152,10 +230,31 @@ export function mergePluginDefaults(
   if (keys.length === 0) return desiredState;
   const result: Record<string, unknown> = { ...desiredState };
   for (const key of keys) {
-    if (result[key] !== undefined) continue;
-    const value = plugin.defaults[key];
-    if (value === undefined) continue;
-    result[key] = value;
+    const defaultValue = plugin.defaults[key];
+    if (defaultValue === undefined) continue;
+    const existing = result[key];
+    if (isEmptyLeaf(existing)) {
+      // Slot is empty — place the plugin default wholesale.
+      result[key] = defaultValue;
+      continue;
+    }
+    // Slot has content. For object-valued plugin defaults, deep-merge
+    // missing sub-keys so partial LLM shells still surface the default.
+    if (
+      defaultValue !== null &&
+      typeof defaultValue === "object" &&
+      !Array.isArray(defaultValue) &&
+      existing !== null &&
+      typeof existing === "object" &&
+      !Array.isArray(existing)
+    ) {
+      result[key] = deepMergeDefault(
+        existing as Record<string, unknown>,
+        defaultValue as Record<string, unknown>,
+      );
+    }
+    // Otherwise the LLM / user value is a non-empty primitive or array
+    // — keep it untouched (user/LLM wins).
   }
   return result;
 }
