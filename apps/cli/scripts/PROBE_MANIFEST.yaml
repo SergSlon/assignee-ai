@@ -2273,3 +2273,99 @@ probes:
       check_prefix '^Assignee v' 'D-02 first-run banner leak'
       check_prefix '^\[assignee\] WARNING: ' 'D-23 budget WARNING leak'
       check_prefix '^Shorthand "' 'D-12 ambiguous-shorthand leak'
+  - story: e98.W4.B3
+    name: bp-sns-003-no-fire-on-plain-topic
+    description: |
+      e98.W4.B3 — BP-SNS-003 HIGH MISLABELED closure (no-fire
+      baseline / false-positive catcher). Before the fix, BP-SNS-003
+      was `check_type: awareness` on `TopicArn` (a field that always
+      exists on any SNS topic) so it fired on every SNS topic plan.
+      The title mentioned "restricting publish permissions" but the
+      structural check had no connection to publish permissions at
+      all. Fix migrates BP-SNS-003 to
+      `check_type: policy_antipattern`, `expected_value:
+      wildcard-resource`, targeting inline `TopicPolicy`. The rule
+      now fires ONLY when an Allow statement in the inline topic
+      policy has `Resource: "*"` (or `Resource: ["*"]`) — a wildcard
+      Resource silently broadens a per-topic grant to every SNS topic
+      in the account. YAML-only migration — reuses the existing
+      10-antipattern policy-inspector catalogue without touching
+      `src/policy-inspector.ts`. Distinct from BP-SNS-004
+      (wildcard-principal-no-condition) so the two cover orthogonal
+      failure modes: BP-SNS-003 = resource-scope, BP-SNS-004 =
+      principal-scope. Mirrors BP-S3-018 Tier-3 convention.
+
+      DEFERRED (Epic 99 backlog): once the CLI's plan generator
+      emits inline TopicPolicy with Resource grants, add a companion
+      fire-probe asserting `assert_bp_finding_id_present BP-SNS-003`.
+      Today the CLI doesn't emit inline TopicPolicy content, so the
+      fire-path has no CLI probe surface. Unit tests exhaustively
+      cover fire branches
+      (`packages/best-practices/__tests__/bp-sns-003-scope.test.ts`).
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create an SNS topic named order-events" --json'
+        assertions: "BP-SNS-003 does NOT fire on a plain SNS topic (no inline TopicPolicy, no-fire baseline)"
+      - cmd: 'plan "Create an SNS topic for user-signups with KMS encryption" --json'
+        assertions: "BP-SNS-003 does NOT fire on an encrypted SNS topic"
+      - cmd: 'plan "Create an SNS topic for platform alerts" --json'
+        assertions: "BP-SNS-003 does NOT fire on a plain platform alerts topic"
+    known_tripwires: []
+    probe: |
+      assert_no_bp_finding_id BP-SNS-003 \
+        $PROBE_CLI_BIN plan \
+          "Create an SNS topic named order-events" \
+          --json
+  - story: e98.W4.B5
+    name: bp-iam-010-no-fire-on-service-principal-trust
+    description: |
+      e98.W4.B5 — BP-IAM-010 HIGH MISLABELED closure (no-fire
+      baseline / false-positive catcher). Before the fix, BP-IAM-010
+      was `check_type: awareness` and fired on every IAM role plan
+      regardless of whether the trust policy actually granted
+      cross-account access. Fix migrates BP-IAM-010 to
+      `check_type: policy_antipattern` with new expected_value
+      `cross-account-no-external-id` (10th antipattern in
+      packages/best-practices/src/policy-inspector.ts). The rule now
+      fires ONLY when an Allow statement in AssumeRolePolicyDocument
+      grants sts:AssumeRole to a non-wildcard AWS-ARN Principal
+      WITHOUT an sts:ExternalId Condition. Service-principal trusts
+      (lambda/ec2/events/etc.) and Federated (OIDC) trusts are NOT
+      flagged — those aren't vulnerable to the confused-deputy
+      attack. Wildcard Principals are deferred to sibling
+      `wildcard-principal` / `wildcard-principal-no-condition`
+      checks to avoid double-firing.
+
+      RE-ADDED by W4.B3 commit per team-lead request — original W4.B5
+      probe entry was lost by a stale coordinator /tmp backup race
+      before team-lead's per-commit git-show-HEAD workflow fix.
+
+      DEFERRED (Epic 99 backlog): today the CLI's role plans
+      typically emit service-principal trusts (Lambda exec roles,
+      ECS task roles, etc.) — legitimately out-of-scope for this
+      rule. A fire-probe requires an intent that emits a cross-
+      account AWS-ARN trust WITHOUT ExternalId. If/when the plan
+      generator learns to emit such trusts (e.g. "Create an IAM
+      role trusted by account 210987654321"), add a companion
+      fire-probe asserting
+      `assert_bp_finding_id_present BP-IAM-010`. Unit tests already
+      exhaustively cover fire + no-fire branches
+      (`packages/best-practices/__tests__/bp-iam-010-scope.test.ts`
+      + `src/policy-inspector.test.ts` describe
+      "cross-account-no-external-id (Epic 98 W4.B5)").
+    must_fail_pre_fix: false
+    variations:
+      - cmd: 'plan "Create a lambda function called daily-report handler index.main runtime nodejs20.x" --json'
+        assertions: "BP-IAM-010 does NOT fire on a Lambda exec role with service-principal trust (no-fire baseline)"
+      - cmd: 'plan "Create an ECS task with env LOG_LEVEL=debug" --json'
+        assertions: "BP-IAM-010 does NOT fire on an ECS task role (service-principal trust)"
+      - cmd: 'plan "Create a step functions state machine for order processing" --json'
+        assertions: "BP-IAM-010 does NOT fire on a Step Functions role (service-principal trust)"
+      - cmd: 'plan "Create an EC2 instance profile role for app workers" --json'
+        assertions: "BP-IAM-010 does NOT fire on an EC2 instance-profile role (service-principal trust)"
+    known_tripwires: []
+    probe: |
+      assert_no_bp_finding_id BP-IAM-010 \
+        $PROBE_CLI_BIN plan \
+          "Create a lambda function called daily-report handler index.main runtime nodejs20.x" \
+          --json

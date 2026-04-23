@@ -1603,11 +1603,20 @@ const snsRules: RuleSpec[] = [
     expectedValue: true,
   },
   {
+    // Epic 98 W4.B3 — BP-SNS-003 MISLABELED closure. Migrated from
+    // `check_type: awareness` on `TopicArn` (a field that always
+    // exists → rule fired on every topic) to a structural
+    // `wildcard-resource` antipattern on the inline TopicPolicy.
+    // Distinct from BP-SNS-004 (wildcard-principal-no-condition):
+    // this one catches `Resource: "*"` grants, which silently
+    // broaden a per-topic statement to every topic in the account.
+    // Mirrors BP-S3-018 Tier-3 convention. YAML-only migration —
+    // reuses existing policy-inspector catalogue.
     id: "BP-SNS-003",
     resourceType: "AWS::SNS::Topic",
-    propertyPath: "TopicArn",
-    checkType: "awareness",
-    expectedValue: true,
+    propertyPath: "TopicPolicy",
+    checkType: "policy_antipattern",
+    expectedValue: "wildcard-resource",
   },
   {
     // Epic 98 W4.B2 — BP-SNS-004 MISLABELED closure. Migrated from
