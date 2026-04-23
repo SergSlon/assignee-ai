@@ -506,13 +506,15 @@ if [[ "$MODE" == "tripwire-only" ]]; then
   echo "=== --tripwire-only ==="
   printf '  %-14s %-25s %s\n' "STATUS" "STORY" "DETAIL"
   printf '  %-14s %-25s %s\n' "------" "-----" "------"
-  for r in "${RESULTS[@]}"; do
-    status="${r%% *}"
-    rest="${r#* }"
-    story="${rest%% *}"
-    detail="${rest#* }"
-    printf '  %-14s %-25s %s\n' "$status" "$story" "$detail"
-  done
+  if [[ ${#RESULTS[@]} -gt 0 ]]; then
+    for r in "${RESULTS[@]}"; do
+      status="${r%% *}"
+      rest="${r#* }"
+      story="${rest%% *}"
+      detail="${rest#* }"
+      printf '  %-14s %-25s %s\n' "$status" "$story" "$detail"
+    done
+  fi
   echo ""
   echo "Total: $TOTAL  Expected-Fail: $EXPECTED_FAILS  Forcing-Flip: ${#FORCING_FLIPS[@]}  Malformed: ${#MALFORMED[@]}"
 
