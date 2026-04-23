@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "hash": "c0a720ce92e494e5a098a89ae53b35d060b9fc7bd8be13136f16361c8c4e3c50",
+  "hash": "7293b61c572a43a87cc4778b7851251f5875f7ca0c436742f799341c57500dc0",
   "files": {
     "apigateway/BP-APIGW-001.yaml": "bec1fb5d3e88707c41e07e4066bee54bc8290f7886ef02fe8054f89199d59267",
     "apigateway/BP-APIGW-002.yaml": "f0b8df494b6fbb8b1a7793a9e408d692fc01355122692bd6af0099f3bc1767f5",
@@ -99,7 +99,7 @@
     "iam/BP-IAM-007.yaml": "651c5627f57d8619441d95aa331e5cba95d6ab2107d6b93196b94f0bdddf8378",
     "iam/BP-IAM-008.yaml": "8d623841ee0a7267759374be36002bfc5d22021f08040efef5993d4ef48b2f40",
     "iam/BP-IAM-009.yaml": "ca9d415ecdf2c90eea2563541cc89d95f5b93549ab160d4cc1c9ed5414bfeb35",
-    "iam/BP-IAM-010.yaml": "e3b714004014d1c3aec7b4126694e4fcd46b1b80df2af83041ce6b6d639eb549",
+    "iam/BP-IAM-010.yaml": "f383d5b6760674cee007beb69d49cda9befdae7c7a2a64e0ee98d8a23351ee48",
     "iam/BP-IAM-011.yaml": "ecd09e3e7cfda8f2c24cbb3e7bbb1753888dc4b8ea2c6a2a6d746f18ad2527f8",
     "iam/BP-IAM-012.yaml": "b0f09edf3b13e8fde35b8ab5d905b2c1eb006a651c83831d20e306b35b4ece0e",
     "iam/BP-IAM-013.yaml": "7790ee4345a335c1803295e01ffd5101335fabb7176732169292dda2e3df3c0d",
@@ -189,5 +189,5 @@
     "vpc/BP-VPC-002.yaml": "f7c720a24811610df4bac22b00485c0d779ba5452c334bb7266b84afd7160e5f"
   },
   "count": 185,
-  "generatedAt": "2026-04-23T20:05:45.912Z"
+  "generatedAt": "2026-04-23T20:28:27.806Z"
 }

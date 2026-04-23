@@ -657,6 +657,312 @@ describe("inspectPolicyDocument", () => {
     });
   });
 
+  describe("cross-account-no-external-id (Epic 98 W4.B5)", () => {
+    // Epic 98 W4.B5 fixtures — real-shaped IAM trust policies. The
+    // trusted account id uses the reserved test value 210987654321
+    // per the no-real-account-ids rule.
+    const TRUSTED_ACCOUNT_ROOT = "arn:aws:iam::210987654321:root";
+    const TRUSTED_ROLE = "arn:aws:iam::210987654321:role/partner-delivery-role";
+    const EXTERNAL_ID = "32-char-shared-secret-1234567890ab";
+
+    const TRUST_ROOT_NO_CONDITION = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "TrustPartner",
+          Effect: "Allow",
+          Principal: { AWS: TRUSTED_ACCOUNT_ROOT },
+          Action: "sts:AssumeRole",
+        },
+      ],
+    };
+
+    const TRUST_ROOT_WITH_EXTERNAL_ID = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Sid: "TrustPartner",
+          Effect: "Allow",
+          Principal: { AWS: TRUSTED_ACCOUNT_ROOT },
+          Action: "sts:AssumeRole",
+          Condition: {
+            StringEquals: { "sts:ExternalId": EXTERNAL_ID },
+          },
+        },
+      ],
+    };
+
+    const TRUST_ROLE_WITH_EXTERNAL_ID_STRING_LIKE = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { AWS: TRUSTED_ROLE },
+          Action: "sts:AssumeRole",
+          Condition: {
+            StringLike: { "sts:ExternalId": "tenant-*" },
+          },
+        },
+      ],
+    };
+
+    const TRUST_SERVICE_PRINCIPAL_OK = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { Service: "lambda.amazonaws.com" },
+          Action: "sts:AssumeRole",
+        },
+      ],
+    };
+
+    const TRUST_FEDERATED_OK = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: {
+            Federated: "arn:aws:iam::210987654321:oidc-provider/example.com",
+          },
+          Action: "sts:AssumeRoleWithWebIdentity",
+          Condition: {
+            StringEquals: { "example.com:aud": "my-audience" },
+          },
+        },
+      ],
+    };
+
+    const TRUST_ROLE_WITH_EMPTY_EXTERNAL_ID = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { AWS: TRUSTED_ROLE },
+          Action: "sts:AssumeRole",
+          Condition: {
+            StringEquals: { "sts:ExternalId": "" },
+          },
+        },
+      ],
+    };
+
+    const TRUST_ROLE_WITH_UNRELATED_CONDITION = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { AWS: TRUSTED_ROLE },
+          Action: "sts:AssumeRole",
+          Condition: {
+            StringEquals: { "aws:SourceVpc": "vpc-12345" },
+          },
+        },
+      ],
+    };
+
+    const TRUST_ARRAY_OF_ARNS_NO_CONDITION = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { AWS: [TRUSTED_ROLE, TRUSTED_ACCOUNT_ROOT] },
+          Action: "sts:AssumeRole",
+        },
+      ],
+    };
+
+    const TRUST_WILDCARD_PRINCIPAL = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: "*",
+          Action: "sts:AssumeRole",
+        },
+      ],
+    };
+
+    const TRUST_GOVCLOUD_PARTITION = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: { AWS: "arn:aws-us-gov:iam::210987654321:root" },
+          Action: "sts:AssumeRole",
+        },
+      ],
+    };
+
+    const TRUST_DENY_CROSS_ACCOUNT_OK = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Deny",
+          Principal: { AWS: TRUSTED_ROLE },
+          Action: "sts:AssumeRole",
+        },
+      ],
+    };
+
+    it("matches cross-account :root trust with no Condition", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_ROOT_NO_CONDITION,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("does NOT match when sts:ExternalId is present via StringEquals", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_ROOT_WITH_EXTERNAL_ID,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("does NOT match when sts:ExternalId is present via StringLike (prefix pattern)", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_ROLE_WITH_EXTERNAL_ID_STRING_LIKE,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("does NOT match a service-principal trust (Lambda exec role — out of scope)", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_SERVICE_PRINCIPAL_OK,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("does NOT match a Federated (OIDC) trust (different attack surface, out of scope)", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_FEDERATED_OK,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("matches when sts:ExternalId is present but empty-string (stub)", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_ROLE_WITH_EMPTY_EXTERNAL_ID,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("matches when a Condition exists but does not narrow by sts:ExternalId", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_ROLE_WITH_UNRELATED_CONDITION,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("matches when Principal.AWS is an array of ARNs and no Condition", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_ARRAY_OF_ARNS_NO_CONDITION,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("does NOT match a wildcard Principal (flagged by sibling wildcard-* checks, not this one)", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_WILDCARD_PRINCIPAL,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("matches a GovCloud-partition (arn:aws-us-gov:...) cross-account trust", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_GOVCLOUD_PARTITION,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("does NOT match a Deny statement (only Allow trusts are vulnerable)", () => {
+      expect(
+        inspectPolicyDocument(
+          TRUST_DENY_CROSS_ACCOUNT_OK,
+          "cross-account-no-external-id",
+        ),
+      ).toEqual({ matched: false });
+    });
+
+    it("does NOT match when Action is a non-sts wildcard (does not grant sts:AssumeRole)", () => {
+      const trust = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: TRUSTED_ROLE },
+            Action: "s3:GetObject",
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(trust, "cross-account-no-external-id"),
+      ).toEqual({ matched: false });
+    });
+
+    it("matches when Action is '*' (covers sts:AssumeRole) + IAM ARN + no Condition", () => {
+      const trust = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: TRUSTED_ROLE },
+            Action: "*",
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(trust, "cross-account-no-external-id"),
+      ).toEqual({ matched: true, offendingStatementIndex: 0 });
+    });
+
+    it("returns offendingStatementIndex of the first bare-trust statement in a mixed doc", () => {
+      const trust = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Sid: "OKTrustWithExternalId",
+            Effect: "Allow",
+            Principal: { AWS: TRUSTED_ROLE },
+            Action: "sts:AssumeRole",
+            Condition: {
+              StringEquals: { "sts:ExternalId": EXTERNAL_ID },
+            },
+          },
+          {
+            Sid: "LeakyBareTrust",
+            Effect: "Allow",
+            Principal: { AWS: TRUSTED_ACCOUNT_ROOT },
+            Action: "sts:AssumeRole",
+          },
+        ],
+      };
+      expect(
+        inspectPolicyDocument(trust, "cross-account-no-external-id"),
+      ).toEqual({ matched: true, offendingStatementIndex: 1 });
+    });
+  });
+
   describe("missing-secure-transport-deny (Epic 98 W4.B4)", () => {
     // Epic 98 W4.B4 fixtures — real-shaped S3 BucketPolicy documents.
     // Absence check: matched=true means the required Deny-non-SSL

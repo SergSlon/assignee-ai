@@ -1,14 +1,14 @@
 id: BP-IAM-010
-title: "IAM role should have a trust policy with external ID for cross-account"
+title: "IAM role cross-account trust must require sts:ExternalId"
 severity: HIGH
 resource_type: "AWS::IAM::Role"
 property_path: "AssumeRolePolicyDocument"
-check_type: "awareness"
-expected_value: true
+check_type: "policy_antipattern"
+expected_value: "cross-account-no-external-id"
 source: "TrustedAdvisor"
 source_id: "TA-iam-external-id"
-description: "IAM roles that allow cross-account access should require an External ID in the trust policy to prevent confused deputy attacks. Without an External ID, any entity in the trusted account can assume the role."
-remediation: "Add a Condition with sts:ExternalId to the role's trust policy when granting cross-account access. Generate a unique External ID and share it securely with the trusted party."
-consequence: "Any entity in the trusted account can assume your role via confused deputy attack — unauthorized cross-account access to your resources."
+description: "An IAM role whose trust policy allows a cross-account AWS principal (an IAM user/role ARN, including `:root`) to assume it via `sts:AssumeRole` must require an External ID via `Condition.StringEquals[\"sts:ExternalId\"]` (or `StringLike`). Without it, any principal in the trusted account can assume the role via the confused-deputy attack — a malicious tenant in the trusted account induces your role-holder to assume the role on their behalf. Service-principal trusts (e.g. `lambda.amazonaws.com`) are NOT flagged; only ARN-based cross-account grants."
+remediation: "Add a Condition to each Allow-AssumeRole statement whose Principal is an IAM ARN: `Condition: { StringEquals: { 'sts:ExternalId': '<secret-generated-once-shared-with-trusted-party>' } }`. Generate a unique, unguessable External ID (32+ random characters) and share it out-of-band with the trusted party."
+consequence: "Any principal in the trusted account can assume the role via the confused-deputy attack — they inherit its permissions and act on your resources."
 category: security
-lastVerified: "2026-03-24"
+lastVerified: "2026-04-23"
