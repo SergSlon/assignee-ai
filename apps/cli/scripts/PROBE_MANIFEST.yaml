@@ -1,0 +1,108 @@
+# PROBE_MANIFEST.yaml
+#
+# Catalogue of pre-close probes keyed by story-ID. Each probe is a small
+# bash block that sources dogfood-probe-lib.sh and calls one or more
+# assert_* helpers. A probe passes if the assert exits 0; fails otherwise.
+#
+# Schema (minimal; parsed by pre-close-probes.sh with a bash parser):
+#   probes:
+#     - story:              <story-id>
+#       name:               <human-readable name>
+#       description:        <one-line sentence>
+#       must_fail_pre_fix:  true | false  # true = gate tripwire against CURRENT tree
+#       probe: |
+#         <multi-line bash block; runs under `set -euo pipefail`>
+#
+# Conventions:
+#   - Exit 0 = pass, non-zero = fail. The runner flips interpretation when
+#     `must_fail_pre_fix: true`.
+#   - Do not `source .env` inside the probe — the runner exports
+#     PROBE_CLI_BIN and PROBE_REPO_ROOT so probes are portable.
+#   - Keep each probe < 5s wall-clock for normal CI; probes that spawn
+#     the graph may take 20-60s on cold cache — tolerate and cache.
+#
+# Seeded with the 3 Wave-1 BLOCKERs (B1/B2/B3) + two duplicated-Examples
+# tripwires (B4/B5). Subsequent Wave 1/2 stories add their probes here.
+
+probes:
+
+  - story: e96.W1.B1
+    name: lambda-compound-no-fnname-leak
+    description: |
+      Lambda compound pattern (lambda-with-exec-role) must NOT emit
+      FunctionName on the IAM::Role slot. The Role slot is for the
+      exec role; FunctionName belongs on AWS::Lambda::Function only.
+      Catches A-01 redux. Tripwire: when the user provides an explicit
+      function name ("named my-fn"), the name currently leaks into the
+      Role's desiredState. The fix is to scope user-asserted
+      FunctionName to Lambda::Function slots only in the compound
+      dispatcher / sanitize layer.
+    must_fail_pre_fix: true
+    probe: |
+      assert_desired_state_missing_key_on_type \
+        "AWS::IAM::Role" \
+        "FunctionName" \
+        $PROBE_CLI_BIN plan \
+          "create lambda-with-exec-role named my-fn handler handler.main runtime nodejs20.x" \
+          --json
+
+  - story: e96.W1.B2
+    name: apply-exit-matches-ok-on-provision-failure
+    description: |
+      `apply` with an intent that fails at CloudControl provisioning
+      time (e.g. an invalid S3 bucket name like 'invalid..name' that
+      the validator should reject but the apply path currently accepts
+      and then fails at AWS) must report ok:false AND exit non-zero.
+      Currently emits {ok:true, operation:"apply"} with exit 0 despite
+      the internal "result: FAILED" log — this is the canonical A-02
+      BLOCKER still present on HEAD.
+    must_fail_pre_fix: true
+    probe: |
+      # The bucket name "invalid..name" has adjacent dots, which S3
+      # rejects. The validator or apply path must surface that as
+      # ok:false + non-zero exit. Using `true` to swallow the (currently
+      # zero) exit of the CLI inside the pipeline is intentional; the
+      # helper captures and inspects the exit itself.
+      assert_exit_code_matches_ok non-zero false \
+        $PROBE_CLI_BIN apply "create S3 bucket named invalid..name" --yes --json
+
+  - story: e96.W1.B3
+    name: region-regex-no-substring-false-positive
+    description: |
+      Region extraction must not match a region-shaped substring
+      nested inside another token. Example: the bucket name
+      'my-bucket-us-east-1-fake' contains 'us-east-1' as a substring,
+      but the intent also names a real region ('eu-west-2'). The
+      parser currently over-matches — it extracts 'my-bucket-us-east-1'
+      as an "unknown region" and fails the plan, ignoring the real
+      `region eu-west-2` qualifier. Tripwire on HEAD — validates the
+      full-intent probe catches a live false positive that a regex-only
+      unit test misses.
+    must_fail_pre_fix: true
+    probe: |
+      # Expect: plan succeeds (ok:true) because the user IS specifying
+      # a valid region (eu-west-2). The bucket-name substring
+      # "us-east-1" should NOT trigger region-parse failure.
+      assert_exit_code_matches_ok zero true \
+        $PROBE_CLI_BIN plan \
+          "create S3 bucket named my-bucket-us-east-1-fake region eu-west-2" \
+          --json
+
+  - story: e96.W1.B4
+    name: plan-help-single-examples
+    description: |
+      `plan --help` must emit exactly 1 `Examples:` heading.
+      Currently emits 2 (A-04/D-01/D-08). Tripwire proves the gate
+      catches the dup on HEAD.
+    must_fail_pre_fix: true
+    probe: |
+      assert_single_examples_block $PROBE_CLI_BIN plan --help
+
+  - story: e96.W1.B5
+    name: apply-help-single-examples
+    description: |
+      `apply --help` must emit exactly 1 `Examples:` heading. Same
+      class as B4 (A-04/D-01/D-08). Tripwire on HEAD.
+    must_fail_pre_fix: true
+    probe: |
+      assert_single_examples_block $PROBE_CLI_BIN apply --help

@@ -1,1 +1,36 @@
 pnpm lint-staged
+
+# Epic 96 M1 methodology gate — pre-close probe framework.
+#
+# When any hot-path source is staged, run the probe manifest against
+# the built CLI. The probes are fast (< 30s typical for the touched
+# subset) and catch the 6 documented classes of partial-landing that
+# Epics 92/94/95 shipped at 25-35% completion rate with.
+#
+# Hot paths watched:
+#   - apps/cli/src/commands/(plan|apply|destroy|list|init|reconcile).ts
+#   - packages/core/src/graph/create-graph.ts
+#   - packages/core/src/config/help-hints.ts
+#   - packages/core/src/graph/nodes/intent-parser.ts
+#
+# To bypass (emergency only; flag in PR description):
+#   ASSIGNEE_SKIP_PRE_CLOSE_PROBES=1 git commit ...
+#
+# When the dist is missing, skip with a warning — a fresh checkout
+# without build shouldn't block commits, but the contract tests still
+# run in CI under `pnpm -r test`.
+if [[ "${ASSIGNEE_SKIP_PRE_CLOSE_PROBES:-0}" != "1" ]]; then
+  HOT_PATHS='^(apps/cli/src/commands/(plan|apply|destroy|list|init|reconcile)\.ts|packages/core/src/graph/create-graph\.ts|packages/core/src/config/help-hints\.ts|packages/core/src/graph/nodes/intent-parser\.ts)$'
+  if git diff --cached --name-only --diff-filter=ACMR | grep -Eq "$HOT_PATHS"; then
+    if [[ -f apps/cli/dist/index.js ]]; then
+      echo "[pre-close-probes] hot-path file staged — running probe gate"
+      if ! bash apps/cli/scripts/pre-close-probes.sh; then
+        echo "[pre-close-probes] gate failed — see output above. To bypass temporarily:"
+        echo "  ASSIGNEE_SKIP_PRE_CLOSE_PROBES=1 git commit ..."
+        exit 1
+      fi
+    else
+      echo "[pre-close-probes] apps/cli/dist/index.js missing — skipping (run 'pnpm --filter assignee build' to enable)"
+    fi
+  fi
+fi
